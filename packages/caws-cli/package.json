@@ -12,13 +12,18 @@
     "README.md",
     "templates/hook-packs/**",
     "!templates/hook-packs/claude-code/tmp",
-    "!templates/hook-packs/claude-code/tmp/**"
+    "!templates/hook-packs/claude-code/tmp/**",
+    "docs/**"
   ],
   "scripts": {
     "build": "node scripts/build-cli.js",
     "docs:generate": "node scripts/generate-command-reference.mjs",
     "docs:check": "node scripts/generate-command-reference.mjs --check",
+    "docs:stage": "node scripts/stage-consumer-docs.mjs",
+    "docs:clean": "node scripts/clean-staged-docs.mjs",
     "build:docs": "node scripts/build-cli.js && node scripts/generate-command-reference.mjs",
+    "prepack": "node scripts/clean-staged-docs.mjs && node scripts/stage-consumer-docs.mjs",
+    "postpack": "node scripts/clean-staged-docs.mjs",
     "dev": "node scripts/build-cli.js && node dist/index.js",
     "typecheck": "tsc -p tsconfig.vnext.test.json",
     "start": "node dist/index.js",

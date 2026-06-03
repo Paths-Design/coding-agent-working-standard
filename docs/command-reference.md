@@ -1,3 +1,15 @@
+---
+doc_id: command-reference
+authority: reference
+status: active
+title: CAWS CLI command reference
+owner: vNext rewrite team
+updated: 2026-06-03
+audience: consumer
+generated: true
+source: packages/caws-cli/src/shell/command-metadata.ts
+---
+
 <!--
   GENERATED FILE — do not edit by hand.
   Source: packages/caws-cli/src/shell/command-metadata.ts (COMMAND_SURFACE_METADATA).

@@ -1,0 +1,6 @@
+# Staged consumer docs (CAWS-DOCS-SHIP-CONSUMER-SET-001).
+# The authoritative docs live at the repo root (<repo>/docs). At prepack time
+# scripts/stage-consumer-docs.mjs copies the audience:consumer set here as a
+# transport artifact so npm `files: docs/**` can ship them (npm cannot reference
+# paths outside the package). This staged tree is generated, never committed.
+/docs/
