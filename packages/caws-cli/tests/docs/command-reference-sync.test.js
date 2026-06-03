@@ -77,6 +77,21 @@ describe('command-reference.md is in sync with COMMAND_SURFACE_METADATA', () => 
     expect(a.stdout).toBe(b.stdout);
   });
 
+  it('A3 (self-describing): the generated file begins with audience:consumer front-matter, banner follows', () => {
+    const committed = fs.readFileSync(DOC_PATH, 'utf8');
+    // Front-matter block FIRST so the package ship-list derives from it
+    // (CAWS-DOCS-SHIP-CONSUMER-SET-001).
+    expect(committed.startsWith('---\n')).toBe(true);
+    const fmEnd = committed.indexOf('\n---', 4);
+    expect(fmEnd).toBeGreaterThan(0);
+    const fm = committed.slice(4, fmEnd);
+    expect(fm).toMatch(/audience: consumer/);
+    expect(fm).toMatch(/generated: true/);
+    expect(fm).toMatch(/doc_id: command-reference/);
+    // The do-not-edit banner comes AFTER the front-matter, not before it.
+    expect(committed.indexOf('GENERATED FILE')).toBeGreaterThan(fmEnd);
+  });
+
   it('the generated file carries the do-not-edit banner', () => {
     const committed = fs.readFileSync(DOC_PATH, 'utf8');
     expect(committed).toMatch(/GENERATED FILE — do not edit by hand/);

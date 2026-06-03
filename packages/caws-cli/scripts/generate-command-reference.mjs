@@ -100,6 +100,22 @@ function renderLeaf(leaf, prefix, headingLevel) {
 /** Render the whole reference from the metadata array. Returns a string. */
 export function renderReference(metadata) {
   const lines = [];
+  // YAML front-matter FIRST so the generated artifact self-describes as a
+  // consumer doc — the package ship-list derives purely from audience:consumer
+  // (CAWS-DOCS-SHIP-CONSUMER-SET-001). "generated: true" marks it exempt from
+  // hand-authoring; the sync test asserts this block stays current too.
+  lines.push('---');
+  lines.push('doc_id: command-reference');
+  lines.push('authority: reference');
+  lines.push('status: active');
+  lines.push('title: CAWS CLI command reference');
+  lines.push('owner: vNext rewrite team');
+  lines.push('updated: 2026-06-03');
+  lines.push('audience: consumer');
+  lines.push('generated: true');
+  lines.push('source: packages/caws-cli/src/shell/command-metadata.ts');
+  lines.push('---');
+  lines.push('');
   lines.push('<!--');
   lines.push('  GENERATED FILE — do not edit by hand.');
   lines.push('  Source: packages/caws-cli/src/shell/command-metadata.ts (COMMAND_SURFACE_METADATA).');

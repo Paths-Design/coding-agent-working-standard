@@ -1,3 +1,13 @@
+---
+doc_id: migration-v10-to-v11
+authority: reference
+status: active
+title: Migrating from CAWS v10.2 to v11.1
+owner: vNext rewrite team
+updated: 2026-06-03
+audience: consumer
+---
+
 # Migrating from CAWS v10.2 to v11.1
 
 **v11.1 is the canonical CAWS line for new work. It is not a drop-in replacement for every v10.2 workflow.**
