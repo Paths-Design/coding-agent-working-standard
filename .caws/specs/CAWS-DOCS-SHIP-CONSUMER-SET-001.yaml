@@ -7,12 +7,13 @@ created_at: '2026-06-03T15:54:53.468Z'
 updated_at: '2026-06-03T15:55:01.879Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli/docs-tooling
+    - caws-cli/packaging
+    - docs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - docs/migration-v10-to-v11.md
     - packages/caws-cli/scripts/generate-command-reference.mjs
     - docs/command-reference.md
@@ -21,11 +22,28 @@ scope:
     - packages/caws-cli/tests/packaging/consumer-docs-ship-list.test.js
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The package docs ship-list is PURELY front-matter-derived: the exact set of docs the npm package ships equals the set of docs whose front-matter declares audience: consumer. No doc ships by package.json folklore that lacks the front-matter, and no audience:consumer doc is omitted.'
+  - 'The command-reference.md generator emits YAML front-matter (audience: consumer, generated: true, source) BEFORE the do-not-edit banner, so the generated artifact self-describes as a consumer doc; the sync test asserts the generated output INCLUDING front-matter is current.'
+  - 'docs/migration-v10-to-v11.md carries audience: consumer front-matter (it is plainly consumer-facing upgrade doctrine) and therefore ships.'
+  - 'No maintainer-facing doc ships: DOCUMENTATION_STANDARDS.md (audience: maintainer) does NOT ship, and the broad docs/** tree does NOT ship — only the curated audience:consumer set.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'the seven intended consumer docs (command-reference, migration-v10-to-v11, and the five guides) each carrying audience: consumer'
+    when: 'the ship-list test reads every docs/ front-matter and compares to package.json files'
+    then: 'the files-array docs entries exactly equal the audience:consumer set — no missing, no extra'
+  - id: A2
+    given: 'docs/DOCUMENTATION_STANDARDS.md (audience: maintainer)'
+    when: 'npm pack --dry-run --json enumerates the artifact'
+    then: 'DOCUMENTATION_STANDARDS.md is NOT in the artifact and no docs/** path outside the curated seven is present'
+  - id: A3
+    given: 'the command-reference generator now emits front-matter'
+    when: 'the generator runs and the sync test compares'
+    then: 'docs/command-reference.md begins with audience: consumer front-matter, the do-not-edit banner follows, and --check is byte-current'
+  - id: A4
+    given: 'a fresh npm pack of the package'
+    when: 'the artifact file list is inspected'
+    then: 'exactly the curated seven consumer docs ship (command-reference, migration, five guides) and nothing wider'
+non_functional:
+  reliability:
+    - 'The ship-list test must FAIL if a new audience:consumer doc is added without a matching files entry, or a files docs entry loses its audience:consumer front-matter — drift between the declaration and the artifact is a test failure, not a silent divergence.'
 contracts: []
