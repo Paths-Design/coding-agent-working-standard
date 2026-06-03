@@ -1,5 +1,63 @@
 ## [Unreleased]
 
+## [11.1.11] (2026-06-03)
+
+Consumer-docs release, driven by downstream friction: an agent in a consumer
+repo was asked to author a hooks inventory, found no shipped reference, had to
+reverse-engineer one, and was then blocked by a guard from even creating the
+README. This release closes that loop — consumers now receive curated usage
+docs and a hook-pack inventory in the package, and the over-broad guard is
+fixed. CLI-only; no enforcement-semantics, schema, risk-tier, or kernel change;
+kernel dependency stays `^1.2.0` (no kernel publish required).
+
+### Added
+
+* **Curated consumer docs now ship in the npm package**
+  (`CAWS-DOCS-SHIP-CONSUMER-SET-001`). Installing `@paths.design/caws-cli` now
+  delivers seven consumer-facing docs under `docs/`: a generated
+  `command-reference.md`, the v10→v11 `migration` guide, and five guides
+  (developer, multi-agent-workflow, quality-gates, waiver-troubleshooting,
+  worktree-isolation). The ship-list is **derived purely from front-matter** —
+  a doc ships iff its front-matter declares `audience: consumer`. Maintainer
+  docs (e.g. `DOCUMENTATION_STANDARDS.md`) and the broad internal tree do not
+  ship. Staging happens at `prepack` (clean-then-stage) and is removed at
+  `postpack`, so the package boundary stays clean while curation lives in one
+  place.
+
+* **`docs/command-reference.md`, generated from the CLI surface**
+  (`CAWS-DOCS-COMMAND-REFERENCE-GEN-001`). Every command group, subcommand,
+  argument, and visible option is rendered from `COMMAND_SURFACE_METADATA` —
+  the same typed metadata the CLI uses to build `--help` — so the reference
+  cannot drift from the actual surface. A CI drift gate fails the build if the
+  committed doc diverges from a fresh render. Hidden legacy aliases (e.g. the
+  removed `specs create --type`) are omitted; enum options render their allowed
+  values.
+
+* **A hook-pack `README.md` ships in the Claude Code pack**
+  (`CAWS-HOOKPACK-SHIP-README-001`). `caws init --agent-surface claude-code`
+  now installs an authoritative, human-facing hook inventory alongside the
+  existing agent-doctrine `CLAUDE.md` — every dispatcher and handler mapped to
+  its behavior and exit-code semantics, with sourced libraries (e.g.
+  `guard-strikes.sh`) correctly distinguished from wired handlers. It is a
+  managed file, updated on re-install.
+
+* **Docs front-matter schema + validator** (`CAWS-DOCS-FRONTMATTER-VALIDATOR-001`).
+  `docs/DOCUMENTATION_STANDARDS.md` formalizes the front-matter convention
+  (required fields, `authority`/`status`/`audience` enums, `superseded_by`
+  rule). A validator enforces it over a declared strict set, fails closed on
+  unparseable front-matter, and is widened repo-wide by a single data toggle.
+
+### Fixed
+
+* **`protected-paths.sh` no longer blocks documentation under `.claude/hooks/`**
+  (`CAWS-PROTECTED-PATHS-DOCS-NOT-SCRIPTS-001`). The guard matched the whole
+  `.claude/hooks/` directory, so it refused Write/Edit of `README.md` and
+  `CLAUDE.md` — including the installer-managed `CLAUDE.md` it ships itself —
+  pushing agents toward a bypass. It now admits `*.md` docs while still blocking
+  hook scripts (`*.sh`/`*.py`/`*.cjs`, exit 1) and strike-state files (exit 2),
+  fail-closed for any other extension. The fix is in the shipped hook-pack
+  template, so consumers receive it on `caws init`.
+
 ## [11.1.10] (2026-06-02)
 
 Consumer-experience hotfix. The hook pack `caws init` installs into a consumer
