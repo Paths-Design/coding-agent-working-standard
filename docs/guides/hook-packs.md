@@ -1,6 +1,6 @@
 # Hook packs: the edit-time advisory quality plane
 
-CAWS ships a Claude Code hook pack (installed via `caws init --agent-surface claude-code`) that interposes governance between the agent and its Edit/Write/Bash tools. Most of the pack is hard governance — scope guards, worktree guards, dangerous-command blocking. This guide documents one slice of it: the **advisory quality plane** added by `QG-HOOKS-EXTRACT-001`.
+CAWS ships Claude Code and Codex hook packs (installed via `caws init --agent-surface claude-code` or `caws init --agent-surface codex`) that interpose governance between the agent and its edit/write/Bash tools. Most of each pack is hard governance — scope guards, worktree guards, dangerous-command blocking. This guide documents one slice of it: the **advisory quality plane** added by `QG-HOOKS-EXTRACT-001`.
 
 These four hooks are *advisory* edit-time signals. They reimplement the intent of the load-bearing `caws gates run` quality gates (`god_object`, `todo_detection`, functional-duplication, change-budget) so the agent gets feedback *in the loop where it is editing*, instead of only when an operator later runs `caws gates run`.
 
@@ -64,7 +64,9 @@ Per-repo thresholds are environment variables read at hook runtime, so they can 
 }
 ```
 
-The hook scripts themselves are **managed pack files** — they carry a `CAWS-MANAGED-HOOK` header and are updated by `caws init --agent-surface claude-code`, not hand-edited. Tune behavior through env, not by editing the scripts.
+The hook scripts themselves are **managed pack files** — they carry CAWS managed-hook metadata and are updated by `caws init --agent-surface <claude-code|codex>`, not hand-edited. Tune behavior through env, not by editing the scripts.
+
+Codex installs project-local `.codex/hooks.json` plus `.codex/hooks/*`. Codex loads project hooks only after the project layer is trusted, and new or changed non-managed hook definitions must be reviewed through `/hooks`.
 
 ## Lineage
 

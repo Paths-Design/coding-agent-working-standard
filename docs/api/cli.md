@@ -50,11 +50,12 @@ Bootstrap canonical vNext `.caws/` project state. With `--agent-surface`, also i
 ```bash
 caws init
 caws init --agent-surface claude-code
+caws init --agent-surface codex
 ```
 
 | Flag | Description |
 |---|---|
-| `--agent-surface <name>` | Install a hook pack for an agent harness: `claude-code`, `cursor`, `windsurf`, or `none`. When omitted, init attempts filesystem detection and skips hook install when ambiguous. |
+| `--agent-surface <name>` | Install a hook pack for an agent harness: `claude-code`, `codex`, `cursor`, `windsurf`, or `none`. When omitted, init attempts filesystem detection and skips hook install when ambiguous. |
 | `--overwrite` | For hook-pack install: replace drifted or unmanaged files at managed pack paths. CAUTION: local edits to those files will be lost. |
 | `--adopt` | For hook-pack install: leave drifted or unmanaged files in place without enforcing pack contents. CAUTION: pack drift is no longer tracked for those paths. |
 | `--data` | Show structured data block on diagnostics. |

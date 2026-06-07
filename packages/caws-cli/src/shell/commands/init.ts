@@ -37,6 +37,8 @@ import {
   writeSettingsExample,
 } from '../../init/hook-install';
 import {
+  IMPLEMENTED_SURFACES,
+  KNOWN_SURFACES,
   isKnownSurface,
   resolveHookPack,
 } from '../../init/hook-packs/register';
@@ -53,6 +55,7 @@ import {
 } from '../render/init-gitignore';
 import { renderInit } from '../render/init';
 import {
+  renderCodexHookTrust,
   renderActivationContract,
   renderHookPackInstall,
   renderSettingsWiring,
@@ -175,7 +178,7 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     !isKnownSurface(opts.agentSurface)
   ) {
     err(`caws init: unknown --agent-surface "${opts.agentSurface}".`);
-    err('  Known values: claude-code, cursor, windsurf, none.');
+    err(`  Known values: ${KNOWN_SURFACES.join(', ')}.`);
     return 2;
   }
 
@@ -247,8 +250,8 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
       err(
         `caws init: --agent-surface "${opts.agentSurface}" is declared but not yet implemented in this CLI version.`
       );
-      err('  Known values: claude-code, cursor, windsurf, none.');
-      err('  Implemented values: claude-code.');
+      err(`  Known values: ${KNOWN_SURFACES.join(', ')}.`);
+      err(`  Implemented values: ${IMPLEMENTED_SURFACES.join(', ')}.`);
       // Surface the canonical-state success (step 1 already printed) so
       // the user knows .caws/ is set up.
       return 1;
@@ -257,8 +260,9 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
 
   out(renderHookPackInstall(hookPackResult));
 
-  // Step 3: wire .claude/settings.json. Only meaningful when a pack was
-  // actually installed (claude-code in v11.1). For 'none' or
+  // Step 3: wire .claude/settings.json. Only meaningful when the Claude Code
+  // pack was installed. For Codex, hooks.json is the installed activation
+  // surface; the renderer prints a Codex trust/review note instead. For 'none' or
   // 'skipped_ambiguous', skip. Unlike pre-CAWS-INIT-SETTINGS-WIRING-001
   // (which only printed a snippet), init now MERGES the four caws_dispatch
   // entries into settings.json non-destructively, always emits a
@@ -267,7 +271,7 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   let wiringStatus: ReturnType<typeof inspectClaudeSettings> | undefined;
   let mergeResult: SettingsMergeResult | undefined;
   let orphanedDispatchDir: string | null = null;
-  if (hookPackResult.pack !== null) {
+  if (hookPackResult.pack?.id === 'claude-code') {
     mergeResult = mergeClaudeSettings(repoRoot);
     writeSettingsExample(repoRoot);
     orphanedDispatchDir = detectOrphanedDispatchDir(repoRoot);
@@ -276,6 +280,8 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     // an invalid file leaves it 'invalid').
     wiringStatus = inspectClaudeSettings(repoRoot);
     out(renderSettingsWiring(wiringStatus, mergeResult, orphanedDispatchDir));
+  } else if (hookPackResult.pack?.id === 'codex') {
+    out(renderCodexHookTrust());
   }
 
   // Step 4: activation contract. The contract message tailors to whether

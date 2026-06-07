@@ -36,7 +36,7 @@ export function renderHookPackInstall(
         '  This repo is NOT agent-safe for multi-session work without external governance.'
       );
       lines.push(
-        '  If you intended to enable a hook pack, rerun with --agent-surface claude-code.'
+        '  If you intended to enable a hook pack, rerun with --agent-surface claude-code or codex.'
       );
       return lines.join('\n');
     }
@@ -48,6 +48,7 @@ export function renderHookPackInstall(
       lines.push('  No pre-tool-call governance was installed.');
       lines.push('  To enable a hook pack now, rerun with one of:');
       lines.push('    caws init --agent-surface claude-code');
+      lines.push('    caws init --agent-surface codex');
       lines.push('    caws init --agent-surface none      # explicit opt-out');
       return lines.join('\n');
     }
@@ -121,6 +122,24 @@ export function renderHookPackInstall(
     );
   }
 
+  return lines.join('\n');
+}
+
+/** Render Codex-specific activation/trust guidance. Codex reads
+ *  project-local `.codex/hooks.json` only after the project layer is trusted,
+ *  and changed non-managed hook definitions must be reviewed through `/hooks`
+ *  before they run. */
+export function renderCodexHookTrust(): string {
+  const lines: string[] = [];
+  lines.push(section('Step: .codex/hooks.json trust'));
+  lines.push('  Installed project-local Codex hook wiring at .codex/hooks.json.');
+  lines.push(
+    '  Codex loads project .codex hooks only in trusted projects; changed'
+  );
+  lines.push(
+    '  non-managed command hooks are skipped until reviewed and trusted.'
+  );
+  lines.push('  In Codex, run /hooks to inspect and trust the installed hooks.');
   return lines.join('\n');
 }
 
@@ -293,6 +312,7 @@ export function renderActivationContract(
   const changed =
     result.outcome === 'installed' || result.outcome === 'updated';
   const wired = wiringStatus?.kind === 'wired';
+  const isCodex = result.pack.id === 'codex';
 
   switch (result.activation) {
     case 'immediate':
@@ -301,6 +321,25 @@ export function renderActivationContract(
       );
       break;
     case 'restart_required':
+      if (isCodex) {
+        if (changed) {
+          lines.push(
+            '  Hook files were installed or updated. Restart or reopen the'
+          );
+          lines.push(
+            '  Codex session, then use /hooks to review and trust changed'
+          );
+          lines.push('  project-local hook definitions before relying on them.');
+        } else {
+          lines.push(
+            '  Hooks are installed. They are active in trusted Codex projects'
+          );
+          lines.push(
+            '  after the hook definitions have been reviewed and trusted via /hooks.'
+          );
+        }
+        break;
+      }
       if (!changed && wired) {
         // No-op re-run on a fully-wired install. Positive confirmation.
         lines.push(

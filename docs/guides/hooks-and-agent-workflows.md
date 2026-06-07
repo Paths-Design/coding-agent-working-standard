@@ -439,7 +439,9 @@ caws waiver create <id>-w --gate <g> --reason "..." --approved-by "..." --expire
 
 ### Platform-Specific Migration
 
-- **Cursor Users**: Install the Cursor hook pack: `caws init --agent-surface cursor` (there is no interactive hook-enable prompt)
+- **Claude Code Users**: Install the Claude Code hook pack: `caws init --agent-surface claude-code`
+- **Codex Users**: Install the Codex project-local hook pack: `caws init --agent-surface codex`, then restart/reopen Codex and review/trust the project hooks with `/hooks`
+- **Cursor Users**: Cursor is a declared surface but does not have an implemented v11 hook pack yet
 - **VS Code Users**: Install CAWS extension from marketplace
 - **Windsurf Users**: Import CAWS Cascade workflows
 - **Copilot Users**: Use CAWS Preview SDK extensions

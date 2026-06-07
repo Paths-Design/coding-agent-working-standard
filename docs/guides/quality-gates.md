@@ -15,8 +15,9 @@ around the standalone batch-scanner package.
 
 Use the v11 surfaces instead:
 
-- `caws init --agent-surface claude-code` installs advisory hook-pack checks
-  for edit-time feedback.
+- `caws init --agent-surface claude-code` or
+  `caws init --agent-surface codex` installs advisory hook-pack checks for
+  edit-time feedback.
 - `caws gates run --spec <id>` remains the governed policy-gate runner until
   `GATES-RUN-POST-QG-DOCTRINE-001` lands.
 - `caws doctor` reports CAWS state drift and structure findings.

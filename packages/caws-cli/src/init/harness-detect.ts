@@ -30,6 +30,10 @@ const SIGNALS: readonly SurfaceSignal[] = [
     markers: ['.claude', '.claude/settings.json', '.claude/hooks'],
   },
   {
+    surface: 'codex',
+    markers: ['.codex', '.codex/hooks.json', '.codex/hooks'],
+  },
+  {
     surface: 'cursor',
     markers: ['.cursor', '.cursor/settings.json', '.cursor/rules'],
   },

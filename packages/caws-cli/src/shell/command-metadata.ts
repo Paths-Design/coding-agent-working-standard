@@ -457,7 +457,7 @@ export const INIT_COMMAND_META: LeafCommandMeta = {
     {
       flag: '--agent-surface <name>',
       description:
-        'Install a hook pack for an agent harness (claude-code | cursor | windsurf | none). When omitted, init attempts filesystem detection and skips hook install when ambiguous.',
+        'Install a hook pack for an agent harness (claude-code | codex | cursor | windsurf | none). When omitted, init attempts filesystem detection and skips hook install when ambiguous.',
     },
     {
       flag: '--overwrite',

@@ -46,6 +46,41 @@ const KERNEL_ROOT = resolve(__dirname, '..', '..', 'caws-kernel');
 const PACKAGE_NAME = '@paths.design/caws-cli';
 const KERNEL_NAME = '@paths.design/caws-kernel';
 const PACK_ID = 'claude-code';
+const PACKS = {
+  'claude-code': {
+    manifestFile: 'manifest-claude-code.js',
+    exportName: 'CLAUDE_CODE_PACK',
+  },
+  codex: {
+    manifestFile: 'manifest-codex.js',
+    exportName: 'CODEX_PACK',
+  },
+};
+
+function enabledPackIds() {
+  const raw = process.env.CAWS_SMOKE_PACKS ?? process.env.CAWS_SMOKE_PACK ?? PACK_ID;
+  const ids = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  const invalid = ids.filter((id) => !PACKS[id]);
+  if (invalid.length > 0) {
+    fail('unknown CAWS_SMOKE_PACKS value', {
+      got: invalid.join(', '),
+      allowed: Object.keys(PACKS).join(', '),
+    });
+  }
+  return ids.length > 0 ? ids : [PACK_ID];
+}
+
+function smokeParentDir() {
+  return process.env.CAWS_SMOKE_PROJECT_PARENT
+    ? resolve(process.env.CAWS_SMOKE_PROJECT_PARENT)
+    : tmpdir();
+}
+
+function makeSmokeDir(prefix) {
+  const parent = smokeParentDir();
+  mkdirSync(parent, { recursive: true });
+  return mkdtempSync(join(parent, prefix));
+}
 
 // ─── Output helpers ──────────────────────────────────────────────────────
 
@@ -87,6 +122,21 @@ const cleanupPaths = new Set();
 function registerCleanup(path) {
   cleanupPaths.add(path);
 }
+let smokeNpmCacheDir = null;
+function npmEnv() {
+  if (!smokeNpmCacheDir) {
+    smokeNpmCacheDir = process.env.CAWS_SMOKE_NPM_CACHE
+      ? resolve(process.env.CAWS_SMOKE_NPM_CACHE)
+      : mkdtempSync(join(tmpdir(), 'caws-smoke-npm-cache-'));
+    mkdirSync(smokeNpmCacheDir, { recursive: true });
+    registerCleanup(smokeNpmCacheDir);
+  }
+  return {
+    ...process.env,
+    npm_config_cache: smokeNpmCacheDir,
+    npm_config_update_notifier: 'false',
+  };
+}
 function cleanup() {
   for (const path of cleanupPaths) {
     try {
@@ -100,6 +150,13 @@ process.on('exit', cleanup);
 process.on('SIGINT', () => { cleanup(); process.exit(130); });
 process.on('SIGTERM', () => { cleanup(); process.exit(143); });
 
+function preserveCleanupPathsOnSuccess() {
+  if (!process.env.CAWS_SMOKE_KEEP_ON_SUCCESS) return;
+  log(colors.yellow(`[fresh-install-smoke] CAWS_SMOKE_KEEP_ON_SUCCESS set — preserving:`));
+  for (const path of cleanupPaths) log(`  ${path}`);
+  cleanupPaths.clear();
+}
+
 // ─── Pipeline steps ──────────────────────────────────────────────────────
 
 function packOne(packageRoot, label) {
@@ -107,7 +164,7 @@ function packOne(packageRoot, label) {
   registerCleanup(packDir);
   const result = spawnSync(
     'npm', ['pack', '--pack-destination', packDir, '--json'],
-    { cwd: packageRoot, encoding: 'utf8' }
+    { cwd: packageRoot, encoding: 'utf8', env: npmEnv() }
   );
   if (result.status !== 0) {
     fail(`npm pack failed for ${label}`, {
@@ -120,10 +177,10 @@ function packOne(packageRoot, label) {
   if (!Array.isArray(parsed) || parsed.length !== 1) {
     fail(`npm pack returned unexpected shape for ${label}`, { got: JSON.stringify(parsed).slice(0, 500) });
   }
-  const { filename } = parsed[0];
+  const { filename, files = [] } = parsed[0];
   const tarball = join(packDir, filename);
   if (!existsSync(tarball)) fail(`tarball missing after npm pack for ${label}`, { expected: tarball });
-  return { tarball, filename };
+  return { tarball, filename, files };
 }
 
 function packTarball() {
@@ -143,17 +200,17 @@ function packTarball() {
   ok(`packed kernel: ${kernel.filename}`);
   const cli = packOne(PACKAGE_ROOT, 'cli');
   ok(`packed cli: ${cli.filename}`);
-  return { kernelTarball: kernel.tarball, cliTarball: cli.tarball };
+  return { kernelTarball: kernel.tarball, cliTarball: cli.tarball, cliFiles: cli.files };
 }
 
 function installTarball({ kernelTarball, cliTarball }) {
   step('install kernel+cli tarballs into fresh project');
-  const projectDir = mkdtempSync(join(tmpdir(), 'caws-smoke-project-'));
+  const projectDir = makeSmokeDir('caws-smoke-project-');
   registerCleanup(projectDir);
 
   // Minimal package.json so npm install has something to anchor to.
   const pkgJson = { name: 'caws-fresh-install-smoke', version: '0.0.0', private: true };
-  execSync(`printf '%s' '${JSON.stringify(pkgJson)}' > package.json`, { cwd: projectDir });
+  writeFileSync(join(projectDir, 'package.json'), JSON.stringify(pkgJson));
 
   // Install BOTH tarballs in a single npm install call. npm resolves
   // intra-tarball dependencies (the cli's @paths.design/caws-kernel
@@ -164,7 +221,7 @@ function installTarball({ kernelTarball, cliTarball }) {
   const result = spawnSync(
     'npm', ['install', '--no-audit', '--no-fund', '--ignore-scripts',
       kernelTarball, cliTarball],
-    { cwd: projectDir, encoding: 'utf8' }
+    { cwd: projectDir, encoding: 'utf8', env: npmEnv() }
   );
   if (result.status !== 0) {
     fail('npm install of tarballs failed', {
@@ -202,9 +259,10 @@ function installTarball({ kernelTarball, cliTarball }) {
   return { projectDir, installedRoot, installedKernel };
 }
 
-function loadManifest(installedRoot) {
+function loadManifest(installedRoot, packId = PACK_ID) {
   step('load manifest from installed package');
-  const manifestPath = join(installedRoot, 'dist', 'init', 'hook-packs', 'manifest-claude-code.js');
+  const spec = PACKS[packId];
+  const manifestPath = join(installedRoot, 'dist', 'init', 'hook-packs', spec.manifestFile);
   if (!existsSync(manifestPath)) {
     fail('manifest file missing in installed package', {
       expected: manifestPath,
@@ -214,7 +272,7 @@ function loadManifest(installedRoot) {
   // Use require() via child_process for clean ESM/CJS interop with the compiled CJS manifest.
   const result = spawnSync(
     'node',
-    ['-e', `const m = require(${JSON.stringify(manifestPath)}); process.stdout.write(JSON.stringify(m.CLAUDE_CODE_PACK));`],
+    ['-e', `const m = require(${JSON.stringify(manifestPath)}); process.stdout.write(JSON.stringify(m[${JSON.stringify(spec.exportName)}]));`],
     { encoding: 'utf8' }
   );
   if (result.status !== 0) {
@@ -224,13 +282,13 @@ function loadManifest(installedRoot) {
   if (!Array.isArray(pack.installedFiles) || pack.installedFiles.length === 0) {
     fail('manifest installedFiles is empty or missing', { got: pack });
   }
-  ok(`manifest declares ${pack.installedFiles.length} files`);
+  ok(`${packId} manifest declares ${pack.installedFiles.length} files`);
   return pack;
 }
 
-function assertTemplateSourcesPresent(installedRoot, pack) {
+function assertTemplateSourcesPresent(installedRoot, pack, packId = PACK_ID) {
   step('assert template sources present in installed package');
-  const packRoot = join(installedRoot, 'templates', 'hook-packs', PACK_ID);
+  const packRoot = join(installedRoot, 'templates', 'hook-packs', packId);
   const missing = [];
   for (const file of pack.installedFiles) {
     const sourcePath = join(packRoot, file.sourcePath);
@@ -248,20 +306,23 @@ function assertTemplateSourcesPresent(installedRoot, pack) {
   ok(`all ${pack.installedFiles.length} template sources present under ${packRoot}`);
 }
 
-function runInit(projectDir, installedRoot) {
-  step('git init + caws init --agent-surface claude-code');
+function runInit(projectDir, installedRoot, packId = PACK_ID) {
+  step(`git init + caws init --agent-surface ${packId}`);
   // Initialize a git repo so init doesn't refuse.
-  execSync('git init -q', { cwd: projectDir });
-  execSync('git config user.email smoke@local && git config user.name Smoke', { cwd: projectDir });
-  execSync('git commit --allow-empty -q -m init', { cwd: projectDir });
+  if (!existsSync(join(projectDir, '.git'))) {
+    execSync('git init -q', { cwd: projectDir });
+    execSync('git config user.email smoke@local', { cwd: projectDir });
+    execSync('git config user.name Smoke', { cwd: projectDir });
+    execSync('git commit --allow-empty -q -m init', { cwd: projectDir });
+  }
 
   const cli = join(installedRoot, 'dist', 'index.js');
   const result = spawnSync(
-    'node', [cli, 'init', '--agent-surface', PACK_ID],
+    'node', [cli, 'init', '--agent-surface', packId],
     { cwd: projectDir, encoding: 'utf8' }
   );
   if (result.status !== 0) {
-    fail('caws init --agent-surface claude-code exited non-zero', {
+    fail(`caws init --agent-surface ${packId} exited non-zero`, {
       exitCode: result.status,
       stdout: result.stdout.trim().slice(0, 2000),
       stderr: result.stderr.trim().slice(0, 2000),
@@ -832,51 +893,209 @@ function assertHeartbeatWorksWithoutJq(projectDir, installedRoot, shimDir, selfS
   ok('heartbeat hook composes envelope correctly with jq absent from PATH');
 }
 
+// ─── Codex hook-pack tarball smoke ───────────────────────────────────────
+
+function assertCliTarballContainsCodexArtifacts(cliFiles) {
+  step('Codex artifact proof — cli tarball file list');
+  const paths = cliFiles.map((file) => file.path);
+  const required = [
+    'dist/init/hook-packs/manifest-codex.js',
+    'templates/hook-packs/codex/hooks.json',
+    'templates/hook-packs/codex/caws_dispatch/pre_tool_use.sh',
+    'templates/hook-packs/codex/protected-paths.sh',
+    'templates/hook-packs/codex/lib/parse-input.sh',
+    'templates/hook-packs/codex/lib/emit.sh',
+  ];
+  const missing = required.filter((path) => !paths.includes(path));
+  if (missing.length > 0) {
+    fail('cli tarball is missing Codex runtime artifacts', {
+      missing: JSON.stringify(missing, null, 2),
+      hint: 'package.json:files must include dist/** and templates/hook-packs/**',
+    });
+  }
+  for (const path of required) {
+    log(colors.dim(`  artifact tarball:${path}`));
+  }
+  ok(`cli tarball includes ${required.length} Codex manifest/template artifacts`);
+}
+
+function collectCodexCommands(hooksJson) {
+  const commands = [];
+  const events = hooksJson?.hooks ?? {};
+  for (const [eventName, entries] of Object.entries(events)) {
+    for (const entry of entries ?? []) {
+      for (const hook of entry.hooks ?? []) {
+        if (hook?.type === 'command' && typeof hook.command === 'string') {
+          commands.push({ eventName, command: hook.command });
+        }
+      }
+    }
+  }
+  return commands;
+}
+
+function assertCodexHooksJson(projectDir) {
+  step('Codex artifact proof — installed hooks.json');
+  const hooksPath = join(projectDir, '.codex', 'hooks.json');
+  if (!existsSync(hooksPath)) {
+    fail('installed Codex hooks.json missing', { expected: hooksPath });
+  }
+  const raw = readFileSync(hooksPath, 'utf8');
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    fail('installed Codex hooks.json is not valid JSON', {
+      path: hooksPath,
+      error: err.message,
+    });
+  }
+
+  if (!String(parsed.description ?? '').includes('hook_pack=codex')) {
+    fail('installed Codex hooks.json lacks managed codex metadata', {
+      description: String(parsed.description ?? '').slice(0, 300),
+    });
+  }
+
+  const commands = collectCodexCommands(parsed);
+  if (commands.length !== 5) {
+    fail('installed Codex hooks.json should have one command dispatcher per event', {
+      got: commands.length,
+      commands: JSON.stringify(commands, null, 2),
+    });
+  }
+
+  const placeholders = commands.filter(({ command }) => command.includes('__CAWS_CODEX_'));
+  if (placeholders.length > 0) {
+    fail('installed Codex hooks.json still contains unresolved placeholders', {
+      placeholders: JSON.stringify(placeholders, null, 2),
+    });
+  }
+
+  const badCommands = commands.filter(({ command }) => (
+    !command.includes(`CODEX_PROJECT_DIR='${projectDir}'`) ||
+    !command.includes(`'${join(projectDir, '.codex', 'hooks', 'caws_dispatch')}`)
+  ));
+  if (badCommands.length > 0) {
+    fail('installed Codex hook command is not rooted at the fresh project with absolute dispatcher path', {
+      projectDir,
+      badCommands: JSON.stringify(badCommands, null, 2),
+    });
+  }
+
+  for (const { eventName, command } of commands) {
+    log(colors.dim(`  artifact hooks.json:${eventName}: ${command}`));
+  }
+  ok('installed hooks.json has managed metadata and five absolute project-local dispatcher commands');
+}
+
+function assertCodexProtectedPathDispatcher(projectDir) {
+  step('Codex artifact proof — installed dispatcher blocks protected hook edit');
+  const dispatcher = join(projectDir, '.codex', 'hooks', 'caws_dispatch', 'pre_tool_use.sh');
+  const payload = {
+    session_id: 'caws-smoke-codex-protected',
+    cwd: projectDir,
+    hook_event_name: 'PreToolUse',
+    tool_name: 'apply_patch',
+    tool_input: {
+      command:
+        '*** Begin Patch\n' +
+        '*** Update File: .codex/hooks/block-dangerous.sh\n' +
+        '@@\n' +
+        '-echo old\n' +
+        '+echo new\n' +
+        '*** End Patch\n',
+    },
+  };
+  const result = spawnSync('bash', [dispatcher], {
+    cwd: projectDir,
+    input: JSON.stringify(payload),
+    encoding: 'utf8',
+  });
+  log(colors.dim(`  artifact dispatcher_exit=${result.status}`));
+  log(colors.dim(`  artifact dispatcher_stderr=${result.stderr.trim().slice(0, 500)}`));
+  if (result.status !== 1) {
+    fail('Codex PreToolUse dispatcher did not fail closed for a protected hook edit', {
+      exitCode: result.status,
+      stdout: result.stdout.trim().slice(0, 1000),
+      stderr: result.stderr.trim().slice(0, 1000),
+    });
+  }
+  if (!result.stderr.includes('.codex/hooks/block-dangerous.sh is protected')) {
+    fail('Codex protected-path dispatcher did not cite the protected hook path', {
+      stderr: result.stderr.trim().slice(0, 1000),
+    });
+  }
+  ok('installed Codex dispatcher blocked a relative .codex/hooks edit with concrete protected-path evidence');
+}
+
+function runCodexTarballSmoke(tarballs) {
+  step('Codex pack — install from local tarballs into a fresh project');
+  assertCliTarballContainsCodexArtifacts(tarballs.cliFiles);
+  const { projectDir, installedRoot } = installTarball(tarballs);
+  const pack = loadManifest(installedRoot, 'codex');
+  assertTemplateSourcesPresent(installedRoot, pack, 'codex');
+  runInit(projectDir, installedRoot, 'codex');
+  assertDestFilesPresent(projectDir, pack);
+  assertCodexHooksJson(projectDir);
+  assertCodexProtectedPathDispatcher(projectDir);
+  ok(`Codex tarball smoke project: ${projectDir}`);
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────
 
 try {
   const startMs = Date.now();
+  const packIds = enabledPackIds();
   log(colors.dim(`fresh-install-smoke for ${PACKAGE_NAME} (package root: ${PACKAGE_ROOT})`));
+  log(colors.dim(`enabled hook packs: ${packIds.join(', ')}`));
 
   // A14.1-A14.3 — pack, install, init.
   const tarballs = packTarball();
-  const { projectDir, installedRoot } = installTarball(tarballs);
-  const pack = loadManifest(installedRoot);
-  assertTemplateSourcesPresent(installedRoot, pack);
-  runInit(projectDir, installedRoot);
-  assertDestFilesPresent(projectDir, pack);
 
-  // FIX-HOOKPACK-CONSUMER-INSTALL-001 A1/A6 — the oracle must run in an ESM
-  // consumer repo (the regression this slice fixes). Runs against the installed
-  // pack, before the lease-substrate checks.
-  assertOracleRunsUnderTypeModule(projectDir);
+  if (packIds.includes(PACK_ID)) {
+    const { projectDir, installedRoot } = installTarball(tarballs);
+    const pack = loadManifest(installedRoot);
+    assertTemplateSourcesPresent(installedRoot, pack);
+    runInit(projectDir, installedRoot);
+    assertDestFilesPresent(projectDir, pack);
 
-  // A14.4 — hook pack v3 with the three new agent-*.sh templates.
-  assertHookPackV3(pack);
+    // FIX-HOOKPACK-CONSUMER-INSTALL-001 A1/A6 — the oracle must run in an ESM
+    // consumer repo (the regression this slice fixes). Runs against the installed
+    // pack, before the lease-substrate checks.
+    assertOracleRunsUnderTypeModule(projectDir);
 
-  // A14.5-A14.8 — multi-agent lease substrate end-to-end through the
-  // installed dispatchers.
-  const shimDir = setupCliShim(installedRoot);
-  const selfId = assertSessionStartCreatesLease(projectDir, shimDir);
-  assertPreToolUseSilentAtN1(projectDir, shimDir, selfId);
-  seedPeerLeaseAndAssertEnvelope(projectDir, installedRoot, shimDir, selfId);
-  assertStopMarksLeaseStopped(projectDir, shimDir, selfId);
+    // A14.4 — hook pack v3 with the three new agent-*.sh templates.
+    assertHookPackV3(pack);
 
-  // A14.9 — caws status renders Agents panel before Doctor.
-  assertAgentsPanelRendersBeforeDoctor(projectDir, installedRoot);
+    // A14.5-A14.8 — multi-agent lease substrate end-to-end through the
+    // installed dispatchers.
+    const shimDir = setupCliShim(installedRoot);
+    const selfId = assertSessionStartCreatesLease(projectDir, shimDir);
+    assertPreToolUseSilentAtN1(projectDir, shimDir, selfId);
+    seedPeerLeaseAndAssertEnvelope(projectDir, installedRoot, shimDir, selfId);
+    assertStopMarksLeaseStopped(projectDir, shimDir, selfId);
 
-  // A14.10 — installed CLI is hook-protocol-free.
-  assertCliStaysHookProtocolFree(projectDir, installedRoot);
+    // A14.9 — caws status renders Agents panel before Doctor.
+    assertAgentsPanelRendersBeforeDoctor(projectDir, installedRoot);
 
-  // A14.11 — heartbeat hook works without jq on PATH.
-  assertHeartbeatWorksWithoutJq(projectDir, installedRoot, shimDir, selfId);
+    // A14.10 — installed CLI is hook-protocol-free.
+    assertCliStaysHookProtocolFree(projectDir, installedRoot);
 
-  // A14.12 — installed binary refuses legacy v10.2 commands with exit 1 +
-  // typed migration guidance (CAWS-V11-INSTALLED-ARTIFACT-SMOKE-EXTEND-001).
-  assertLegacyCommandDiagnostics(projectDir, installedRoot);
+    // A14.11 — heartbeat hook works without jq on PATH.
+    assertHeartbeatWorksWithoutJq(projectDir, installedRoot, shimDir, selfId);
+
+    // A14.12 — installed binary refuses legacy v10.2 commands with exit 1 +
+    // typed migration guidance (CAWS-V11-INSTALLED-ARTIFACT-SMOKE-EXTEND-001).
+    assertLegacyCommandDiagnostics(projectDir, installedRoot);
+  }
+
+  if (packIds.includes('codex')) {
+    runCodexTarballSmoke(tarballs);
+  }
 
   const elapsedMs = Date.now() - startMs;
-  log(colors.green(`\n[fresh-install-smoke] PASS in ${elapsedMs}ms — published tarball is install-safe AND multi-agent substrate is live from installed artifacts`));
+  log(colors.green(`\n[fresh-install-smoke] PASS in ${elapsedMs}ms — requested hook-pack tarball smoke(s) proved installed runtime artifacts`));
 
   // Chain into the events-migration smoke (CAWS-MIGRATE-V10-EVENTS-001
   // A12). This script (fresh-install-smoke.mjs) is already wired into
@@ -889,36 +1108,41 @@ try {
   // lifecycle against the installed binary. Failure exits 1 with a
   // structured diagnostic; the prepublishOnly chain then halts the
   // publish.
-  step('chain into events-migration-smoke (A12)');
-  const eventsSmokePath = join(__dirname, 'events-migration-smoke.mjs');
-  const eventsResult = spawnSync('node', [eventsSmokePath], {
-    stdio: 'inherit',
-  });
-  if (eventsResult.status !== 0) {
-    fail('events-migration-smoke failed', {
-      exitCode: eventsResult.status,
-      hint: 'See its output above for the specific assertion that failed.',
+  if (packIds.includes(PACK_ID)) {
+    step('chain into events-migration-smoke (A12)');
+    const eventsSmokePath = join(__dirname, 'events-migration-smoke.mjs');
+    const eventsResult = spawnSync('node', [eventsSmokePath], {
+      stdio: 'inherit',
     });
+    if (eventsResult.status !== 0) {
+      fail('events-migration-smoke failed', {
+        exitCode: eventsResult.status,
+        hint: 'See its output above for the specific assertion that failed.',
+      });
+    }
+    log(colors.green(`\n[fresh-install-smoke] events-migration-smoke chained successfully`));
   }
-  log(colors.green(`\n[fresh-install-smoke] events-migration-smoke chained successfully`));
 
   // Chain into specs-migration-smoke (CAWS-MIGRATE-V10-SPECS-001 A12).
   // Same chain pattern as the events smoke above: the smoke does its own
   // npm pack + install + run-from-binary; failure exits 1 and halts the
   // prepublishOnly chain. This certifies the migrator command and its
   // runtime dependencies are present in the published tarballs.
-  step('chain into specs-migration-smoke (A12)');
-  const specsSmokePath = join(__dirname, 'specs-migration-smoke.mjs');
-  const specsResult = spawnSync('node', [specsSmokePath], {
-    stdio: 'inherit',
-  });
-  if (specsResult.status !== 0) {
-    fail('specs-migration-smoke failed', {
-      exitCode: specsResult.status,
-      hint: 'See its output above for the specific assertion that failed.',
+  if (packIds.includes(PACK_ID)) {
+    step('chain into specs-migration-smoke (A12)');
+    const specsSmokePath = join(__dirname, 'specs-migration-smoke.mjs');
+    const specsResult = spawnSync('node', [specsSmokePath], {
+      stdio: 'inherit',
     });
+    if (specsResult.status !== 0) {
+      fail('specs-migration-smoke failed', {
+        exitCode: specsResult.status,
+        hint: 'See its output above for the specific assertion that failed.',
+      });
+    }
+    log(colors.green(`\n[fresh-install-smoke] specs-migration-smoke chained successfully`));
   }
-  log(colors.green(`\n[fresh-install-smoke] specs-migration-smoke chained successfully`));
+  preserveCleanupPathsOnSuccess();
 } catch (err) {
   fail('unexpected error', { message: err.message, stack: err.stack?.slice(0, 1000) });
 }

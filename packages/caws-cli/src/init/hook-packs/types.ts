@@ -25,9 +25,10 @@
 // a pack file requires naming the entry and identifying the replacement
 // mechanism.
 
-/** Supported agent harnesses. v11.1 implements claude-code only. */
+/** Supported agent harnesses. v11.1 implements claude-code and codex. */
 export type AgentSurface =
   | 'claude-code'
+  | 'codex'
   | 'cursor'
   | 'windsurf'
   | 'none';
@@ -38,6 +39,7 @@ export type LifecycleEvent =
   | 'pre_write'
   | 'pre_edit'
   | 'session_start'
+  | 'pre_compact'
   | 'stop';
 
 /** A single file the pack installs, relative to the repo root. */

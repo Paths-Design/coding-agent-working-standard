@@ -63,10 +63,50 @@ function packTemplateRoot(packId: string): string {
  *  HTML/JSDoc comment opener. */
 const HEADER_MARKER = 'CAWS-MANAGED-HOOK';
 
+function parseJsonManagedHeader(content: string): ManagedHeader | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object') return null;
+  const description = (parsed as { description?: unknown }).description;
+  if (typeof description !== 'string' || !description.includes(HEADER_MARKER)) {
+    return null;
+  }
+
+  const readString = (key: string): string => {
+    const match = description.match(new RegExp(`${key}=([^\\s.]+)`));
+    return match ? match[1] ?? '' : '';
+  };
+
+  const hookPack = readString('hook_pack');
+  const hookPackVersion = Number.parseInt(readString('hook_pack_version'), 10);
+  const cawsMinMajor = Number.parseInt(readString('caws_min_major'), 10);
+  const lineageRefs = readString('lineage_refs')
+    .split(',')
+    .map((s) => Number.parseInt(s.trim(), 10))
+    .filter((n) => !Number.isNaN(n));
+
+  if (!hookPack || Number.isNaN(hookPackVersion) || hookPackVersion <= 0) {
+    return null;
+  }
+  return {
+    hookPack,
+    hookPackVersion,
+    cawsMinMajor: Number.isNaN(cawsMinMajor) ? 0 : cawsMinMajor,
+    lineageRefs,
+  };
+}
+
 /** Parse a managed header from file content. Returns null when not
  *  present. Tolerant of leading shebang and of `<!--`/`-->`-style
  *  comment wrappers (for Markdown). */
 export function parseManagedHeader(content: string): ManagedHeader | null {
+  const jsonHeader = parseJsonManagedHeader(content);
+  if (jsonHeader) return jsonHeader;
+
   // Search the first ~30 lines for the marker. This is large enough to
   // tolerate shebang + HTML comment wrapper but small enough to stay
   // fast on big files.
@@ -145,6 +185,41 @@ function readBytes(p: string): Buffer | null {
   }
 }
 
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function codexCommand(repoRoot: string, dispatcher: string): string {
+  const script = path.join(repoRoot, '.codex', 'hooks', 'caws_dispatch', dispatcher);
+  return `CODEX_PROJECT_DIR=${shellQuote(repoRoot)} ${shellQuote(script)}`;
+}
+
+function renderPackFileBytes(
+  sourceBytes: Buffer,
+  repoRoot: string,
+  file: HookPackFile
+): Buffer {
+  if (!file.destPath.endsWith('.codex/hooks.json')) {
+    return sourceBytes;
+  }
+
+  const replacements: Record<string, string> = {
+    __CAWS_CODEX_SESSION_START_COMMAND__: codexCommand(repoRoot, 'session_start.sh'),
+    __CAWS_CODEX_PRE_TOOL_USE_COMMAND__: codexCommand(repoRoot, 'pre_tool_use.sh'),
+    __CAWS_CODEX_POST_TOOL_USE_COMMAND__: codexCommand(repoRoot, 'post_tool_use.sh'),
+    __CAWS_CODEX_PRE_COMPACT_COMMAND__: codexCommand(repoRoot, 'pre_compact.sh'),
+    __CAWS_CODEX_STOP_COMMAND__: codexCommand(repoRoot, 'stop.sh'),
+  };
+
+  let rendered = sourceBytes.toString('utf8');
+  for (const [placeholder, value] of Object.entries(replacements)) {
+    rendered = rendered
+      .split(placeholder)
+      .join(value.replace(/\\/g, '\\\\').replace(/"/g, '\\"'));
+  }
+  return Buffer.from(rendered, 'utf8');
+}
+
 function bytesEqual(a: Buffer, b: Buffer): boolean {
   if (a.length !== b.length) return false;
   return a.compare(b) === 0;
@@ -178,8 +253,8 @@ function evaluateFileState(
   }
 
   const sourceAbs = path.join(packRoot, file.sourcePath);
-  const sourceBytes = readBytes(sourceAbs);
-  if (sourceBytes === null) {
+  const rawSourceBytes = readBytes(sourceAbs);
+  if (rawSourceBytes === null) {
     // Source template missing — this is a bug in the install, not a
     // collision. Surface as drift so we don't silently no-op.
     return { kind: 'managed_drift', header };
@@ -193,6 +268,7 @@ function evaluateFileState(
     };
   }
 
+  const sourceBytes = renderPackFileBytes(rawSourceBytes, repoRoot, file);
   if (bytesEqual(localBytes, sourceBytes)) {
     return { kind: 'managed_clean', header };
   }
@@ -226,10 +302,16 @@ function ensureDir(target: string): void {
 function writeFile(
   destAbs: string,
   sourceAbs: string,
-  executable: boolean
+  executable: boolean,
+  repoRoot: string,
+  file: HookPackFile
 ): void {
   ensureDir(path.dirname(destAbs));
-  fs.copyFileSync(sourceAbs, destAbs);
+  const sourceBytes = readBytes(sourceAbs);
+  if (sourceBytes === null) {
+    throw new Error(`template file missing: ${sourceAbs}`);
+  }
+  fs.writeFileSync(destAbs, renderPackFileBytes(sourceBytes, repoRoot, file));
   if (executable) {
     try {
       fs.chmodSync(destAbs, 0o755);
@@ -255,19 +337,19 @@ function applyOne(
 
   switch (state.kind) {
     case 'absent':
-      writeFile(destAbs, sourceAbs, file.executable);
+      writeFile(destAbs, sourceAbs, file.executable, ctx.repoRoot, file);
       return { destPath: file.destPath, action: 'created' };
 
     case 'managed_clean':
       return { destPath: file.destPath, action: 'unchanged' };
 
     case 'managed_old_version':
-      writeFile(destAbs, sourceAbs, file.executable);
+      writeFile(destAbs, sourceAbs, file.executable, ctx.repoRoot, file);
       return { destPath: file.destPath, action: 'updated' };
 
     case 'managed_drift':
       if (ctx.overwrite) {
-        writeFile(destAbs, sourceAbs, file.executable);
+        writeFile(destAbs, sourceAbs, file.executable, ctx.repoRoot, file);
         return { destPath: file.destPath, action: 'updated' };
       }
       if (ctx.adopt) {
@@ -281,7 +363,7 @@ function applyOne(
 
     case 'unmanaged_collision':
       if (ctx.overwrite) {
-        writeFile(destAbs, sourceAbs, file.executable);
+        writeFile(destAbs, sourceAbs, file.executable, ctx.repoRoot, file);
         return { destPath: file.destPath, action: 'updated' };
       }
       if (ctx.adopt) {

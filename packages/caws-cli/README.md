@@ -44,12 +44,12 @@ replacement is planned in any current milestone): `scaffold`, `validate`,
 `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `archive`,
 `provenance` (superseded by `events.jsonl`), `sidecar`, `mode`,
 `tutorial`, `plan`, `templates`, `workflow`, `quality-monitor`, `tool`,
-`test-analysis`, legacy `hooks` install (users wire their own hooks
-against `caws gates run`).
+`test-analysis`, legacy `hooks` install (hook packs now install through
+`caws init --agent-surface <name>`).
 
-Currently absent from v11.1 and **planned for v11.2** (multi-agent
-authority and observability): `caws agents list/show`, `caws claim
---spec <id>` (bridge claims), `caws worktree prune/repair/reconcile`.
+v11.1 includes the `caws agents list/show` liveness substrate. Still
+planned for v11.2: bridge-claim authority such as `caws claim --spec
+<id>`, plus broader worktree reconciliation surfaces.
 
 Explicitly deferred to v11.3+: `caws session` and `caws parallel`. The
 `caws worktree create` loop pattern replaces `parallel` for multi-agent
@@ -78,6 +78,17 @@ In a fresh repo:
 git init
 caws init
 ```
+
+To install an agent hook pack during init:
+
+```bash
+caws init --agent-surface claude-code
+caws init --agent-surface codex
+```
+
+Codex installs project-local `.codex/hooks.json` plus `.codex/hooks/*`.
+After install, restart/reopen Codex and review or trust changed project
+hooks with `/hooks`.
 
 `caws init` creates the canonical vNext layout:
 

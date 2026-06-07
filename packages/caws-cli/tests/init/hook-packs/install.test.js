@@ -36,6 +36,9 @@ const {
   CLAUDE_CODE_PACK,
 } = require('../../../dist/init/hook-packs/manifest-claude-code');
 const {
+  CODEX_PACK,
+} = require('../../../dist/init/hook-packs/manifest-codex');
+const {
   detectAgentHarness,
 } = require('../../../dist/init/harness-detect');
 const {
@@ -83,6 +86,15 @@ describe('hook-pack registry', () => {
     expect(r.pack.activation).toBe('restart_required');
   });
 
+  it('codex resolves to the canonical pack', () => {
+    const r = resolveHookPack('codex');
+    expect(r.kind).toBe('pack');
+    expect(r.pack.id).toBe('codex');
+    expect(r.pack.targetSurface).toBe('codex');
+    expect(r.pack.cawsMinMajor).toBe(11);
+    expect(r.pack.activation).toBe('restart_required');
+  });
+
   it('cursor and windsurf are declared but not implemented', () => {
     expect(resolveHookPack('cursor').kind).toBe('declared_not_implemented');
     expect(resolveHookPack('windsurf').kind).toBe('declared_not_implemented');
@@ -92,18 +104,19 @@ describe('hook-pack registry', () => {
     expect(resolveHookPack('none').kind).toBe('none');
   });
 
-  it('KNOWN_SURFACES contains exactly the four expected values', () => {
+  it('KNOWN_SURFACES contains exactly the five expected values', () => {
     expect([...KNOWN_SURFACES].sort()).toEqual([
-      'claude-code', 'cursor', 'none', 'windsurf',
+      'claude-code', 'codex', 'cursor', 'none', 'windsurf',
     ]);
   });
 
-  it('IMPLEMENTED_SURFACES is exactly claude-code in v11.1', () => {
-    expect([...IMPLEMENTED_SURFACES]).toEqual(['claude-code']);
+  it('IMPLEMENTED_SURFACES is exactly claude-code + codex in v11.1', () => {
+    expect([...IMPLEMENTED_SURFACES]).toEqual(['claude-code', 'codex']);
   });
 
   it('isKnownSurface accepts and rejects correctly', () => {
     expect(isKnownSurface('claude-code')).toBe(true);
+    expect(isKnownSurface('codex')).toBe(true);
     expect(isKnownSurface('none')).toBe(true);
     expect(isKnownSurface('zed')).toBe(false);
     expect(isKnownSurface('')).toBe(false);
@@ -367,6 +380,41 @@ describe('Claude Code pack manifest', () => {
         }
       }
     });
+  });
+});
+
+// ============================================================
+// Codex manifest shape
+// ============================================================
+describe('Codex pack manifest', () => {
+  it('lists hooks.json and the translated guard files with managed: true', () => {
+    const ids = CODEX_PACK.installedFiles.map((f) => f.destPath);
+    expect(ids).toContain('.codex/hooks.json');
+    expect(ids).toContain('.codex/hooks/scope-guard.sh');
+    expect(ids).toContain('.codex/hooks/worktree-guard.sh');
+    expect(ids).toContain('.codex/hooks/worktree-write-guard.sh');
+    expect(ids).toContain('.codex/hooks/bash-write-guard.sh');
+    expect(ids).toContain('.codex/hooks/block-dangerous.sh');
+    expect(ids).toContain('.codex/hooks/classify_command.py');
+    expect(ids).toContain('.codex/hooks/AGENTS.md');
+    expect(ids).toContain('.codex/hooks/README.md');
+    expect(ids).toContain('.codex/hooks/caws_dispatch/pre_tool_use.sh');
+    expect(ids).toContain('.codex/hooks/caws_dispatch/pre_compact.sh');
+    expect(ids).toContain('.codex/hooks/lib/parse-input.sh');
+    expect(ids).toContain('.codex/hooks/lib/emit.sh');
+
+    for (const f of CODEX_PACK.installedFiles) {
+      expect(f.managed).toBe(true);
+    }
+  });
+
+  it('every sourcePath in the Codex manifest exists in the pack template dir', () => {
+    const packRoot = path.resolve(
+      __dirname, '..', '..', '..', 'templates', 'hook-packs', 'codex'
+    );
+    for (const f of CODEX_PACK.installedFiles) {
+      expect(fs.existsSync(path.join(packRoot, f.sourcePath))).toBe(true);
+    }
   });
 });
 
@@ -657,7 +705,9 @@ describe('A6 / A13: explicit none and ambiguous skip', () => {
     expect(r.code).toBe(0);
     expect(r.stdout).toMatch(/no harness detected/);
     expect(r.stdout).toMatch(/--agent-surface claude-code/);
+    expect(r.stdout).toMatch(/--agent-surface codex/);
     expect(fs.existsSync(path.join(repo, '.claude'))).toBe(false);
+    expect(fs.existsSync(path.join(repo, '.codex'))).toBe(false);
   });
 
   it('no flag + claude-code detection auto-selects the pack', () => {
@@ -673,6 +723,106 @@ describe('A6 / A13: explicit none and ambiguous skip', () => {
     expect(fs.existsSync(
       path.join(repo, '.claude/hooks/scope-guard.sh')
     )).toBe(true);
+  });
+
+  it('no flag + codex detection auto-selects the pack', () => {
+    repo = mkBareGitRepo('caws-pack-detect-codex-');
+    fs.mkdirSync(path.join(repo, '.codex'));
+    const r = capture(runInitCommand, { cwd: repo });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toMatch(
+      new RegExp(`Step: hook-pack install \\(codex v${CODEX_PACK.packVersion}\\)`)
+    );
+    expect(fs.existsSync(path.join(repo, '.codex/hooks.json'))).toBe(true);
+    expect(fs.existsSync(
+      path.join(repo, '.codex/hooks/scope-guard.sh')
+    )).toBe(true);
+  });
+
+  it('no flag + claude and codex signals skips as ambiguous', () => {
+    repo = mkBareGitRepo('caws-pack-detect-ambiguous-');
+    fs.mkdirSync(path.join(repo, '.claude'));
+    fs.mkdirSync(path.join(repo, '.codex'));
+    const r = capture(runInitCommand, { cwd: repo });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toMatch(/no harness detected|Skipped/);
+    expect(fs.existsSync(path.join(repo, '.claude/hooks'))).toBe(false);
+    expect(fs.existsSync(path.join(repo, '.codex/hooks.json'))).toBe(false);
+  });
+});
+
+// ============================================================
+// Codex install behavior
+// ============================================================
+describe('Codex hook-pack install behavior', () => {
+  let repo;
+  afterEach(() => rmrf(repo));
+
+  it('fresh install creates hooks.json with managed metadata and absolute dispatcher commands', () => {
+    repo = mkBareGitRepo('caws-pack-codex-install-');
+    const r = capture(runInitCommand, {
+      cwd: repo,
+      agentSurface: 'codex',
+    });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toMatch(/Step: hook-pack install \(codex v1\)/);
+    expect(r.stdout).toMatch(/\.codex\/hooks\.json trust/);
+
+    const hooksPath = path.join(repo, '.codex/hooks.json');
+    const hooksJson = fs.readFileSync(hooksPath, 'utf8');
+    const header = parseManagedHeader(hooksJson);
+    expect(header).toEqual(
+      expect.objectContaining({
+        hookPack: 'codex',
+        hookPackVersion: CODEX_PACK.packVersion,
+        cawsMinMajor: 11,
+      })
+    );
+
+    const parsed = JSON.parse(hooksJson);
+    const repoReal = fs.realpathSync(repo);
+    const commands = [];
+    for (const entries of Object.values(parsed.hooks)) {
+      for (const block of entries) {
+        for (const hook of block.hooks) {
+          commands.push(hook.command);
+        }
+      }
+    }
+    expect(commands).toHaveLength(5);
+    for (const command of commands) {
+      expect(command).toContain(`CODEX_PROJECT_DIR='${repoReal}'`);
+      expect(command).toContain(`${repoReal}/.codex/hooks/caws_dispatch/`);
+      expect(command).not.toMatch(/"\$CODEX_PROJECT_DIR"|^\.codex\//);
+    }
+
+    expect(fs.existsSync(path.join(repo, '.codex/hooks/lib/parse-input.sh'))).toBe(true);
+    expect(fs.existsSync(path.join(repo, '.codex/hooks/caws_dispatch/pre_compact.sh'))).toBe(true);
+  });
+
+  it('rerun is no-op and managed drift refuses by default', () => {
+    repo = mkBareGitRepo('caws-pack-codex-drift-');
+    const first = capture(runInitCommand, { cwd: repo, agentSurface: 'codex' });
+    expect(first.code).toBe(0);
+
+    const second = capture(runInitCommand, { cwd: repo, agentSurface: 'codex' });
+    expect(second.code).toBe(0);
+    expect(second.stdout).toMatch(/Unchanged \(\d+\)/);
+    expect(second.stdout).not.toMatch(/Updated \(\d+\)|Created \(\d+\)/);
+
+    const target = path.join(repo, '.codex/hooks.json');
+    fs.appendFileSync(target, '\n');
+    const drift = capture(runInitCommand, { cwd: repo, agentSurface: 'codex' });
+    expect(drift.code).toBe(1);
+    expect(drift.stdout).toMatch(/hooks\.json.*managed_drift/);
+
+    const overwrite = capture(runInitCommand, {
+      cwd: repo,
+      agentSurface: 'codex',
+      overwrite: true,
+    });
+    expect(overwrite.code).toBe(0);
+    expect(overwrite.stdout).toMatch(/Updated \(\d+\)/);
   });
 });
 
