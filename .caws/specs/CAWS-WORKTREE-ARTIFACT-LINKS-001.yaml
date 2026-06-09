@@ -2,10 +2,11 @@ id: CAWS-WORKTREE-ARTIFACT-LINKS-001
 title: 'Link safe artifacts into CAWS-created worktrees'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: wt-artifact-links
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-artifact-links at 0d60854cc4169cb92540c4834e2aff2dce70b843'
 created_at: '2026-06-09T16:34:08.511Z'
-updated_at: '2026-06-09T16:34:39.060Z'
+updated_at: '2026-06-09T16:54:05.456Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store
