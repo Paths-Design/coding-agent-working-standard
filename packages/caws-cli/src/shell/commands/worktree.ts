@@ -25,6 +25,10 @@ import { type ActorKind, isOk } from '@paths.design/caws-kernel';
 
 import { loadSpecs, loadWorktrees, resolveRepoRoot, writeFileAtomic } from '../../store';
 import { configureWorktreeSparseCheckout } from '../../store/git-sparse-checkout';
+import type {
+  WorktreeArtifactLinkStatus,
+  WorktreeArtifactLinkSummary,
+} from '../../store/worktree-artifacts';
 import {
   type MigrationPlan,
   type RecordOmissionDecision,
@@ -91,6 +95,65 @@ function surfaceAuditCommit(
         'commit did not land. Commit it manually, then verify with git log.'
     );
   }
+}
+
+function surfaceArtifactLinks(
+  summary: unknown,
+  out: (s: string) => void
+): void {
+  const artifactSummary = coerceArtifactSummary(summary);
+  out('Artifacts:');
+  if (artifactSummary === undefined || artifactSummary.statuses.length === 0) {
+    out('  no recognized dependency/cache artifacts were linked.');
+    out('  If tests report missing dependencies, install them inside the worktree before retrying.');
+    return;
+  }
+
+  for (const item of artifactSummary.statuses) {
+    out(`  ${formatArtifactStatus(item)}`);
+    if (item.unlinkCommand !== undefined) out(`    unlink: ${item.unlinkCommand}`);
+    if (requiresInstall(item)) out(`    install: ${item.installHint}`);
+  }
+}
+
+function coerceArtifactSummary(value: unknown): WorktreeArtifactLinkSummary | undefined {
+  if (value === null || typeof value !== 'object') return undefined;
+  const maybe = value as { statuses?: unknown };
+  if (!Array.isArray(maybe.statuses)) return undefined;
+  return {
+    statuses: maybe.statuses.filter(isArtifactStatus),
+  };
+}
+
+function isArtifactStatus(value: unknown): value is WorktreeArtifactLinkStatus {
+  if (value === null || typeof value !== 'object') return false;
+  const maybe = value as { path?: unknown; kind?: unknown; state?: unknown; installHint?: unknown };
+  return (
+    typeof maybe.path === 'string' &&
+    typeof maybe.kind === 'string' &&
+    typeof maybe.state === 'string' &&
+    typeof maybe.installHint === 'string'
+  );
+}
+
+function formatArtifactStatus(item: WorktreeArtifactLinkStatus): string {
+  if (item.state === 'linked') {
+    return `linked ${item.path} -> ${item.linkTarget ?? item.source ?? '(target unknown)'}`;
+  }
+  if (item.state === 'already_linked') {
+    return `already linked ${item.path} -> ${item.linkTarget ?? item.source ?? '(target unknown)'}`;
+  }
+  const reason = item.reason !== undefined ? `: ${item.reason}` : '';
+  return `${item.state.replace(/_/g, ' ')} ${item.path}${reason}`;
+}
+
+function requiresInstall(item: WorktreeArtifactLinkStatus): boolean {
+  return (
+    item.state === 'missing_target' ||
+    item.state === 'lock_mismatch' ||
+    item.state === 'link_failed' ||
+    item.state === 'skipped_not_ignored'
+  );
 }
 
 function resolveCawsCtx(
@@ -195,6 +258,7 @@ export function runWorktreeCreateCommand(opts: WorktreeCreateOptions): number {
   // Without this hint, users continue editing in the canonical checkout
   // and trigger union-mode scope behavior they can't explain.
   out(`Next: cd ${relWtPath} to start working in the bound worktree.`);
+  surfaceArtifactLinks(outcome.data?.artifact_links, out);
   surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }

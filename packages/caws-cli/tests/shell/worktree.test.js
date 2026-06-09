@@ -77,6 +77,16 @@ function readRegistry(cawsDir) {
   if (!fs.existsSync(p)) return {};
   return JSON.parse(fs.readFileSync(p, 'utf8'));
 }
+function addNodeProject(repoRoot, { withNodeModules = true } = {}) {
+  fs.writeFileSync(path.join(repoRoot, 'package.json'), '{"scripts":{"test":"node -e 1"}}\n');
+  fs.writeFileSync(path.join(repoRoot, 'package-lock.json'), '{"lockfileVersion":3}\n');
+  fs.writeFileSync(path.join(repoRoot, '.gitignore'), 'node_modules/\n');
+  execFileSync('git', ['-C', repoRoot, 'add', 'package.json', 'package-lock.json', '.gitignore']);
+  execFileSync('git', ['-C', repoRoot, 'commit', '--quiet', '-m', 'add node project']);
+  if (withNodeModules) {
+    fs.mkdirSync(path.join(repoRoot, 'node_modules', '.bin'), { recursive: true });
+  }
+}
 function setupRepoWithSpec(prefix, specId = 'FEAT-001') {
   const ctx = setup(prefix);
   capture(runSpecsCreateCommand, {
@@ -131,6 +141,37 @@ describe('A1/A3: caws worktree create', () => {
     const wtPath = path.join(cawsDir, 'worktrees/feat-001-wt');
     expect(fs.existsSync(wtPath)).toBe(true);
     expect(fs.existsSync(path.join(wtPath, '.git'))).toBe(true);
+  });
+
+  it('surfaces linked artifact status and unlink guidance', () => {
+    addNodeProject(repoRoot);
+
+    const r = capture(runWorktreeCreateCommand, {
+      cwd: repoRoot,
+      name: 'feat-001-wt',
+      specId: 'FEAT-001',
+    });
+
+    expect(r.code).toBe(0);
+    expect(r.stdout).toMatch(/Artifacts:/);
+    expect(r.stdout).toMatch(/linked node_modules ->/);
+    expect(r.stdout).toMatch(/unlink: rm 'node_modules'/);
+    expect(fs.lstatSync(path.join(cawsDir, 'worktrees/feat-001-wt', 'node_modules')).isSymbolicLink()).toBe(true);
+  });
+
+  it('surfaces missing artifact status without failing create', () => {
+    addNodeProject(repoRoot, { withNodeModules: false });
+
+    const r = capture(runWorktreeCreateCommand, {
+      cwd: repoRoot,
+      name: 'feat-001-wt',
+      specId: 'FEAT-001',
+    });
+
+    expect(r.code).toBe(0);
+    expect(r.stdout).toMatch(/missing target node_modules/);
+    expect(r.stdout).toMatch(/install: Run the project package-manager install command/);
+    expect(fs.existsSync(path.join(cawsDir, 'worktrees/feat-001-wt', 'node_modules'))).toBe(false);
   });
 });
 

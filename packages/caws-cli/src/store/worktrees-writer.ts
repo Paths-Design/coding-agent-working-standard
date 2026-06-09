@@ -43,6 +43,7 @@ import {
 import { applyRegistryPatch } from './apply-patch';
 import { autoCommit, isPathDirty, type AutoCommitOutcome } from './git-autocommit';
 import { configureWorktreeSparseCheckout } from './git-sparse-checkout';
+import { linkWorktreeArtifacts } from './worktree-artifacts';
 import { closeSpec } from './specs-writer';
 import { loadSpecs } from './specs-store';
 import { loadWorktrees } from './worktrees-store';
@@ -627,6 +628,7 @@ export function createWorktree(
       cause: txnOutcome.value.cause,
     });
   }
+  const artifactLinks = linkWorktreeArtifacts(repoRoot, wtPath);
   const autoCommitOutcome = autoCommitTransition(
     cawsDir,
     input.specId,
@@ -643,6 +645,7 @@ export function createWorktree(
       base_branch: baseBranch,
       path: wtPath,
       spec_id: input.specId,
+      artifact_links: artifactLinks,
       audit_commit: autoCommitOutcome,
     },
   });
