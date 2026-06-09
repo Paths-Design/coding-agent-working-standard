@@ -7,12 +7,13 @@ created_at: '2026-06-09T16:34:08.511Z'
 updated_at: '2026-06-09T16:34:39.060Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store
+    - packages/caws-cli/src/shell/commands
+    - packages/caws-cli/tests
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/store/worktree-artifacts.ts
     - packages/caws-cli/src/store/worktrees-writer.ts
     - packages/caws-cli/src/shell/commands/worktree.ts
@@ -21,12 +22,22 @@ scope:
     - .caws/specs/CAWS-WORKTREE-ARTIFACT-LINKS-001.yaml
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Artifact linking is advisory: caws worktree create must still succeed when no safe artifact target exists or a symlink operation fails.'
+  - 'CAWS links only ignored dependency/cache artifacts into CAWS-created worktrees; source files and build outputs are not linked by default.'
+  - 'The create command surfaces artifact-link status and concrete remediation so an agent knows whether tests can run immediately or dependencies must be installed first.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'A repository root has a safe dependency artifact such as node_modules and a CAWS-created linked worktree is created.'
+    when: 'caws worktree create completes.'
+    then: 'The worktree contains a relative symlink to the canonical artifact and stdout reports the linked artifact plus an unlink command.'
+  - id: A2
+    given: 'A repository has no safe artifact target, or the target cannot be symlinked.'
+    when: 'caws worktree create completes.'
+    then: 'The worktree is still created and stdout reports why artifacts were not linked and that dependency installation may be required before tests run.'
+  - id: A3
+    given: 'A worktree path already contains a real artifact directory or file.'
+    when: 'artifact repair runs during create.'
+    then: 'CAWS leaves that path untouched and reports a skipped status rather than deleting or overwriting it.'
 non_functional: {}
 contracts:
   - name: 'worktree-artifact-links'
