@@ -2,10 +2,11 @@ id: CAWS-POSTLAND-REVIEW-FIXES-001
 title: 'Post-landing review fixes: codex pack messages, artifact-link exclude handling, docs'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: review-fixes
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge review-fixes at 66d3651feaffb314d2937046c98e53953203f766'
 created_at: '2026-06-10T02:02:37.321Z'
-updated_at: '2026-06-10T02:22:23.741Z'
+updated_at: '2026-06-10T02:29:40.460Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
