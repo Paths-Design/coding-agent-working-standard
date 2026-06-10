@@ -3,6 +3,7 @@ title: 'Scope-guard: foreign-repo files get a clean no-authority exit, not a mis
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: scope-foreign
 created_at: '2026-06-10T19:40:19.557Z'
 updated_at: '2026-06-10T19:40:19.557Z'
 blast_radius:
