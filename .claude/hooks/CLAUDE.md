@@ -1,7 +1,7 @@
 <!--
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 11
+# hook_pack_version: 12
 # caws_min_major: 11
 # lineage_refs: 1,4,6,8,11,12,13,16,17,19,20
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
@@ -16,45 +16,89 @@ these hooks **project** that state into refusals at the agent's boundary,
 where the kernel cannot reach (the kernel runs downstream of the tool
 call).
 
-## The contract: every hook here exists because of an incident
+## These are CAWS-managed files
 
-This pack is not optional scaffolding. Every script under
-`.claude/hooks/` traces to a specific entry in
-`docs/failure-lineage.md`. Modifying or removing
-a hook requires:
+These are CAWS-managed hook-pack files installed by
+`caws init --agent-surface claude-code`. Do not hand-edit them during ordinary
+work. If a hook blocks legitimate work, surface the exact block to the user and
+continue only with explicit user authorization or a CAWS-managed update path. Do
+not bypass, delete, or locally weaken guards. (Any internal CAWS provenance
+metadata in a file's header is upstream maintainer context — it is not an
+authority requirement for this repo.)
 
-1. Naming the lineage entry the hook covers.
-2. Identifying the replacement mechanism that preserves the protection.
-3. Documenting the change in the same lineage doc.
+To update the pack, re-run `caws init --agent-surface claude-code` rather than
+editing files here. A managed file's header is how `caws init` recognizes it as
+safe to update; hand-editing turns it into an unmanaged file the installer will
+then refuse to touch.
 
-Hooks may be **evolved** as the v11 state model evolves. They may not be
-removed or weakened by an agent's local judgment. If you think a guard
-is wrong, stop and ask the user.
+## What each hook does
 
-## Lineage map
+| File | What it prevents / does |
+|------|------------------------|
+| `block-dangerous.sh` + `classify_command.py` | catastrophic git operations; tokenized-argv bypasses; danger latch |
+| `worktree-guard.sh` | amend/stash/reset/force-push during active worktrees; cross-boundary file copies; **canonical-checkout mutating git commands (checkout/switch/branch -f/reset non-hard) blocked when worktrees active**; **agent-Bash `git sparse-checkout` (any subcommand) refused, pointing to `caws worktree repair-sparse <name>`**; **the path-restore family (`git restore <path>` / `git checkout -- <path>` / `git clean`) blocked when worktrees active, worded by the actual op — a path restore is NOT a branch switch** |
+| `worktree-write-guard.sh` | base-branch writes when worktrees are active; baseline-clobber; **Read/Write/Edit refusal against `<linked-worktree>/.caws/specs/*` so canonical spec authority is not materialized as a divergent private copy inside a worktree, before the broad `.caws/*` allowlist can exit 0**; **`.caws/worktrees/<name>/<rest>` payload writes routed through `lib/worktree-claim-oracle.cjs` BEFORE the broad `.caws/*` allowlist — a foreign session's write into another worktree's payload hard-blocks instead of being allowlisted** |
+| `bash-write-guard.sh` | **Bash mutation-target authority: self-filters to Bash, extracts targets for a narrow mutation-form set (redirection, `tee`, `sed -i`, `perl -pi`, `truncate`, `touch`, `rm`, `mv`, `cp`, `dd of=`, git path-restore), and routes each through the SAME `lib/worktree-claim-oracle.cjs` as Write/Edit — a Bash mutation of a foreign worktree's payload blocks at the same boundary as a foreign Write/Edit** |
+| `lib/worktree-claim-oracle.cjs` | **the single worktree-ownership oracle (standalone node helper, NOT an inline `node -e` heredoc) shelled out to by worktree-write-guard (Write/Edit) and bash-write-guard (Bash) so both surfaces return the same owner-vs-session answer; lazy `js-yaml` so the foreign-payload block works without a resolvable `js-yaml`; fails closed. Shipped as `.cjs` so it loads as CommonJS even in a repo whose `package.json` declares `"type":"module"`** |
+| `scope-guard.sh` | edits outside the active spec's `scope.in`; cross-spec union interference; unbound → no authority |
+| `session-caws-status.sh` | inherited-dirty-state collision; foreign-claim soft-block; version-skew |
+| `reset-strikes.sh` | human-authorized strike reset (escape hatch, not auto-resettable) |
+| `reset-danger-latch.sh` | human-authorized danger latch reset |
+| `guard-strikes.sh` | progressive enforcement (strike 1 warn → strike 3 block) |
+| `audit.sh` | per-tool-call audit log |
+| `session-log.sh` | per-turn narrative + structured transcripts |
+| `caws_dispatch/*` | wires Claude Code's lifecycle to the registered handler list |
+| `lib/*` | shared input parsing and handler runner |
+| `god-object-check.sh` | advisory: flags a written/edited file whose SLOC exceeds `CAWS_GOD_OBJECT_LOC` (default 2000). Edit-time analogue of the `god_object` gate. Always exit 0. |
+| `shortcut-language-check.sh` | progressive: flags TODO/FIXME/XXX/placeholder/"not implemented" stub language in NON-test source; escalates warn→ask→block via guard-strikes. Edit-time analogue of the `todo_detection` gate. |
+| `duplicate-export-check.sh` | advisory: on Write of a new JS/TS file, flags an exported symbol whose exact name already exists in the enclosing package src tree (generic-name allowlist). Always exit 0. |
+| `loc-delta-check.sh` | advisory: on Edit, flags an added-line delta over `CAWS_LOC_DELTA_WARN_THRESHOLD` (default 300) via the new_string/old_string payload diff. Always exit 0. |
 
-| File | Lineage entries | What it prevents |
-|------|----------------|------------------|
-| `block-dangerous.sh` + `classify_command.py` | 1, 17 | catastrophic git operations; tokenized-argv bypasses; danger latch |
-| `worktree-guard.sh` | 4, 6, 11, 19, 20, 32 | amend/stash/reset/force-push during active worktrees; cross-boundary file copies; **canonical-checkout mutating git commands (checkout/switch/branch -f/reset non-hard) blocked when worktrees active** (CANONICAL-CHECKOUT-WORKTREE-GUARD-001); **agent-Bash `git sparse-checkout` (any subcommand) refused with canonical-spec-materialization wording pointing to `caws worktree repair-sparse <name>`** (WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001 A3); **the path-restore family (`git restore <path>` / `git checkout -- <path>` / `git clean`) blocked when worktrees active, worded by the actual op — a path restore is NOT a branch switch** (WORKTREE-ISOLATION-HARDENING-001 Fix 5) |
-| `worktree-write-guard.sh` | 4, 8, 13, 20, 32 | base-branch writes when worktrees are active (enforcement returns in CLI-WORKTREE-001); baseline-clobber; **Read/Write/Edit refusal against `<linked-worktree>/.caws/specs/*` to prevent canonical spec authority from being materialized as a divergent private copy inside a worktree, before the broad `.caws/*` allowlist can exit 0** (WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001 A1/A2, contract `canonical-spec-authority-materialization-guard-v1`); **`.caws/worktrees/<name>/<rest>` payload writes routed through `lib/worktree-claim-oracle.js` BEFORE the broad `.caws/*` allowlist — a foreign session's write into another worktree's payload hard-blocks instead of being allowlisted** (WORKTREE-ISOLATION-HARDENING-001 Fix 1+2) |
-| `bash-write-guard.sh` | 4, 8, 13, 20, 32 | **Bash mutation-target authority: self-filters to Bash, extracts targets for a narrow mutation-form set (redirection, `tee`, `sed -i`, `perl -pi`, `truncate`, `touch`, `rm`, `mv`, `cp`, `dd of=`, git path-restore), and routes each through the SAME `lib/worktree-claim-oracle.js` as Write/Edit — a Bash mutation of a foreign worktree's payload blocks at the same boundary as a foreign Write/Edit** (WORKTREE-ISOLATION-HARDENING-001 Fix 3) |
-| `lib/worktree-claim-oracle.js` | 4, 8, 13, 20, 32 | **the single worktree-ownership oracle (standalone node helper, NOT an inline `node -e` heredoc) shelled out to by worktree-write-guard (Write/Edit) and bash-write-guard (Bash) so both surfaces return the same owner-vs-session answer; lazy `js-yaml` so the foreign-payload block works without a resolvable `js-yaml`; fails closed** (WORKTREE-ISOLATION-HARDENING-001 Fix 1+2+3) |
-| `scope-guard.sh` | 8, 11, 12, 16 | edits outside the active spec's `scope.in`; cross-spec union interference; unbound → no authority |
-| `session-caws-status.sh` | 4, 11 | inherited-dirty-state collision; foreign-claim soft-block; version-skew |
-| `reset-strikes.sh` | 8, 16 | human-authorized strike reset (escape hatch, not auto-resettable) |
-| `reset-danger-latch.sh` | 17 | human-authorized danger latch reset |
-| `guard-strikes.sh` | 8, 16 | progressive enforcement (strike 1 warn → strike 3 block) |
-| `audit.sh` | 9 | per-tool-call audit log |
-| `session-log.sh` | 10 | per-turn narrative + structured transcripts |
-| `caws_dispatch/*` | 8, 11, 17 | wires Claude Code's lifecycle to the registered handler list |
-| `lib/*` | 8, 16 | shared input parsing and handler runner |
-| `god-object-check.sh` | 28 | advisory: flags a written/edited file whose SLOC exceeds `CAWS_GOD_OBJECT_LOC` (default 2000). Edit-time analogue of the `god_object` gate. Always exit 0. |
-| `shortcut-language-check.sh` | 29 | progressive: flags TODO/FIXME/XXX/placeholder/"not implemented" stub language in NON-test source; escalates warn→ask→block via guard-strikes. Edit-time analogue of the `todo_detection` gate. |
-| `duplicate-export-check.sh` | 30 | advisory: on Write of a new JS/TS file, flags an exported symbol whose exact name already exists in the enclosing package src tree (generic-name allowlist). Always exit 0. |
-| `loc-delta-check.sh` | 31 | advisory: on Edit, flags an added-line delta over `CAWS_LOC_DELTA_WARN_THRESHOLD` (default 300) via the new_string/old_string payload diff. Always exit 0. |
+The four `*-check.sh` hooks above are the **edit-time advisory quality plane**. They reimplement the load-bearing quality-gates detection *intent* in self-contained bash; they do NOT import, shell out to, or runtime-couple with `packages/quality-gates`, and they do NOT change `caws gates run`. `caws gates run` remains the governed policy-gate runner; these hooks are installed utilities the repo tunes via env (`CAWS_GOD_OBJECT_LOC`, `CAWS_LOC_DELTA_WARN_THRESHOLD`).
 
-The four `*-check.sh` hooks above are the **edit-time advisory quality plane** (QG-HOOKS-EXTRACT-001). They reimplement the load-bearing quality-gates detection *intent* in self-contained bash; they do NOT import, shell out to, or runtime-couple with `packages/quality-gates`, and they do NOT change `caws gates run`. `caws gates run` remains the governed policy-gate runner; these hooks are installed utilities the repo tunes via env (option-C doctrine). See `docs/guides/hook-packs.md` for operator usage.
+## Authoring a spec without getting trapped
+
+A handful of CAWS conventions reject an authored spec in ways that are easy to
+hit blind. Each has a concrete fix below. **Validate every authored spec with
+`caws specs show <id>` (or `caws doctor`) before you commit it** — those surface
+a schema rejection immediately, so you never commit a spec that will not load.
+
+- **Tier 1 / tier 2 specs require at least one contract.** A bare
+  `caws specs create <id> --mode feature --risk-tier 2` is rejected
+  (`Tier 2 specs require at least one contract`). Author the contract in the same
+  command — do not hand-edit the YAML afterward:
+
+  ```bash
+  caws specs create FEAT-001 --title "..." --mode feature --risk-tier 2 \
+    --contract "core-api:behavior"
+  ```
+
+  `--contract` is repeatable and takes `"name:type[:path]"`, where `type` is one
+  of `api | schema | contract-test | behavior`. If the slice is a low-blast-radius
+  chore, use `--risk-tier 3` (or `--mode chore`) instead — those need no contract.
+
+- **`non_functional.*` values are arrays of strings, not scalars.** The four
+  admitted subkeys (`accessibility`, `performance`, `reliability`, `security`)
+  each take a list:
+
+  ```yaml
+  non_functional:
+    reliability:
+      - 'the guard must fail closed on a spawn error'
+  ```
+
+  A scalar value is rejected with `spec.schema.violation: Expected array`.
+
+- **Quote YAML scalars that start with a backtick or other special character.**
+  A `given:` / `when:` / `then:` value beginning with a backtick (or `:` `#` `{`
+  `[`) breaks the parse (`bad indentation of a mapping entry`). Quote it, or use a
+  block scalar (`>-`) which takes the text verbatim.
+
+- **Scope paths must match real file extensions.** A test file is usually
+  `*.test.js` even when the code under test is TypeScript — list the path that
+  actually exists on disk in `scope.in`, or the scope guard refuses edits to the
+  real file. Widen scope later with `caws specs amend-scope <id> --add <path>`
+  (governed; no hand-edit).
 
 ## v11 state-model awareness
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 11
+# hook_pack_version: 12
 # caws_min_major: 11
 # lineage_refs: 1,17
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
@@ -106,9 +106,9 @@ DENY_SEGMENT_PATTERNS: list[tuple[str, str]] = [
     (r"\binit\s+[06]\b", "system runlevel change"),
     # CAWS-DANGER-LATCH-CATASTROPHIC-ONLY-001: catastrophic git/shell ops
     # promoted here from CONFIRM (ask) so they HARD-BLOCK. These are the
-    # irreversible / history-rewriting / credential-exposing operations that
-    # the failure lineage (Entry 1 force-push origin, Entry 17, Entry 34)
-    # treats as deny-class. Previously they were "ask" and relied on the
+    # irreversible / history-rewriting / credential-exposing operations
+    # (force-push to origin, history rewrite, deleted-tag push) that are
+    # treated as deny-class. Previously they were "ask" and relied on the
     # warn-then-latch path for enforcement; now that ask-class is allowed
     # without latching, they must be deny to stay enforced.
     (r"\bgit\s+reset\s+--hard\b", "git reset --hard"),
@@ -224,15 +224,13 @@ ALLOWED_SIMPLE_COMMANDS: set[str] = {
 #   - Read-only inspection: status, log, diff, show, branch, tag, remote,
 #     config, rev-parse, ls-files, blame (gated to read-only forms in
 #     classify_allow_list).
-#   - Everyday-workflow writes whose plain form the failure-lineage corpus
-#     has NEVER recorded as a loss or attribution incident
-#     (DANGER-LATCH-WORKFLOW-CALIBRATION-001): "add" and "commit". These
-#     mutate the index / create a new commit object but do not rewrite
-#     history, discard working-tree state, or touch a remote. Their
-#     dangerous variants ("commit" with --amend) are special-cased to
-#     "ask" in classify_allow_list, and worktree-guard.sh independently
-#     governs commit-on-main / inherited-dirty-state coordination
-#     (failure-lineage Entry 17 intro, Entry 18). Branch-creating
+#   - Everyday-workflow writes that have never been a loss or attribution
+#     risk: "add" and "commit". These mutate the index / create a new commit
+#     object but do not rewrite history, discard working-tree state, or touch
+#     a remote. Their dangerous variants ("commit" with --amend) are
+#     special-cased to "ask" in classify_allow_list, and worktree-guard.sh
+#     independently governs commit-on-main / inherited-dirty-state
+#     coordination. Branch-creating
 #     "checkout -b" / "switch -c" are admitted by their own special-cases;
 #     bare "checkout <path>" / "checkout ." stay denied by
 #     CONFIRM_SEGMENT_PATTERNS because they discard changes.
@@ -243,9 +241,9 @@ ALLOWED_SIMPLE_COMMANDS: set[str] = {
 # happy path (commit the spec on main, then create the worktree): the
 # first commit of real work latched the session and hard-blocked every
 # subsequent Bash call. The latch must fire on panic/bypass patterns
-# (the flag-split git-bootstrap of Entry 17, force-push, rm -rf), not on
-# calm everyday commits. See failure-lineage Entry 17 "What it doesn't
-# catch" for why the latch -- not the allow-list -- is the deep control.
+# (flag-split git-bootstrap, force-push, rm -rf), not on calm everyday
+# commits. The latch -- not the allow-list -- is the deep control: the
+# allow-list keeps the happy path calm, the latch catches the bypass.
 ALLOWED_GIT_SUBCOMMANDS: set[str] = {
     "status", "log", "diff", "show", "branch", "tag",
     "remote", "config", "rev-parse", "ls-files", "blame",
@@ -1339,18 +1337,16 @@ def classify_allow_list(segment: str) -> tuple[str, str] | None:
             return None
         # Special-case `git commit` — admit plain commit (creates a new
         # commit object; not destructive). REJECT --amend, which rewrites
-        # the last commit and is the attribution-theft vector of
-        # failure-lineage Entry 17's intro and Entry 18. --amend falls
-        # through to "ask" and is additionally blocked by worktree-guard.sh
-        # while worktrees are active.
+        # the last commit (history-rewrite + attribution-loss risk). --amend
+        # falls through to "ask" and is additionally blocked by
+        # worktree-guard.sh while worktrees are active.
         if sub == "commit":
             try:
                 tokens = shlex.split(segment)
             except ValueError:
                 return None
             # `--amend` rewrites the last commit (history-rewrite +
-            # attribution-theft vector, failure-lineage Entry 17 intro /
-            # Entry 18). Return None so it falls through to the
+            # attribution-loss risk). Return None so it falls through to the
             # governed-family default → "ask"; the allow-list is suppress-
             # only and cannot itself escalate.
             if any(t == "--amend" or t.startswith("--amend=") for t in tokens):
@@ -1522,8 +1518,7 @@ def classify_governed_family_default(segment: str) -> tuple[str, str] | None:
                 return (
                     "ask",
                     "git commit --amend rewrites the last commit — a "
-                    "history-rewrite and attribution-theft vector "
-                    "(failure-lineage Entry 17/18); ask before invoking",
+                    "history-rewrite and attribution-loss risk; ask before invoking",
                 )
             if sub == "switch":
                 return (
