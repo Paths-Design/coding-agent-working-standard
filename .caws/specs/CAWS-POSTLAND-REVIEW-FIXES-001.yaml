@@ -3,6 +3,7 @@ title: 'Post-landing review fixes: codex pack messages, artifact-link exclude ha
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: review-fixes
 created_at: '2026-06-10T02:02:37.321Z'
 updated_at: '2026-06-10T02:02:37.321Z'
 blast_radius:
