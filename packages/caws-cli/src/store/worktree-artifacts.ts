@@ -249,19 +249,20 @@ function linkCandidate(
     });
   }
 
-  const excludeResult = ensureWorktreeExclude(worktreeRoot, candidate.relPath);
-  if (!excludeResult.ok) {
-    return status(candidate, 'skipped_not_ignored', {
-      source,
-      reason: `Could not add a worktree-local git exclude for ${candidate.relPath}: ${excludeResult.reason}`,
-    });
-  }
-
   if (!isIgnored(worktreeRoot, candidate.relPath)) {
-    return status(candidate, 'skipped_not_ignored', {
-      source,
-      reason: `${candidate.relPath} is not ignored by git in this worktree.`,
-    });
+    const excludeResult = ensureSharedExclude(worktreeRoot, candidate.relPath);
+    if (!excludeResult.ok) {
+      return status(candidate, 'skipped_not_ignored', {
+        source,
+        reason: `Could not add a git exclude for ${candidate.relPath}: ${excludeResult.reason}`,
+      });
+    }
+    if (!isIgnored(worktreeRoot, candidate.relPath)) {
+      return status(candidate, 'skipped_not_ignored', {
+        source,
+        reason: `${candidate.relPath} is not ignored by git in this worktree.`,
+      });
+    }
   }
 
   const parent = path.dirname(dest);
@@ -344,7 +345,14 @@ function isIgnored(worktreeRoot: string, relPath: string): boolean {
   return false;
 }
 
-function ensureWorktreeExclude(
+// Append relPath to the repository's info/exclude so the symlink does not
+// show up as an untracked path. `git rev-parse --git-path info/exclude`
+// resolves through the COMMON git dir for linked worktrees, so this exclude
+// is SHARED by the canonical checkout and every worktree — it is not
+// worktree-local. Callers must only invoke this when the path is not
+// already ignored (e.g. via a tracked .gitignore), so repos that already
+// ignore their artifact dirs never have this file touched.
+function ensureSharedExclude(
   worktreeRoot: string,
   relPath: string
 ): { readonly ok: true } | { readonly ok: false; readonly reason: string } {
