@@ -9,7 +9,7 @@
 import type { HookPackFile, HookPackV1 } from './types';
 import { CLAUDE_CODE_PACK } from './manifest-claude-code';
 
-export const CODEX_PACK_VERSION = 1;
+export const CODEX_PACK_VERSION = 2;
 
 function codexFileFromClaude(file: HookPackFile): HookPackFile {
   const sourcePath =

@@ -765,7 +765,7 @@ describe('Codex hook-pack install behavior', () => {
       agentSurface: 'codex',
     });
     expect(r.code).toBe(0);
-    expect(r.stdout).toMatch(/Step: hook-pack install \(codex v1\)/);
+    expect(r.stdout).toMatch(new RegExp(`Step: hook-pack install \\(codex v${CODEX_PACK.packVersion}\\)`));
     expect(r.stdout).toMatch(/\.codex\/hooks\.json trust/);
 
     const hooksPath = path.join(repo, '.codex/hooks.json');
