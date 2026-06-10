@@ -254,11 +254,22 @@ if printf '%s' "$COMMAND" | grep -qF "$PROTECTED_HOOK_REL" || printf '%s' "$COMM
     record_danger_latch "$LATCH_FILE" "block" "shell redirect into protected guard (destination)" "$COMMAND"
     emit_block_json "$PROTECTED_HOOK_REL is protected from Bash-based edits — it is the guard that enforces worktree write boundaries. Do not redirect output into it. Ask the user for permission before modifying this hook. Command was: $COMMAND"
     exit 0
-  elif printf '%s' "$COMMAND" | grep -qE '(^|[;&|[:space:]])(rm|sed|perl|tee|touch|truncate|install|chmod)[[:space:]]'; then
-    # In-place file mutators name the operand AS the target. The guard appearing
-    # as an operand of these IS a destination mutation → latch.
+  elif printf '%s' "$COMMAND" | grep -qE '(^|[;&|[:space:]])(rm|tee|touch|truncate|install|chmod)[[:space:]]'; then
+    # In-place file mutators that ALWAYS name the operand AS the write target.
+    # The guard appearing as an operand of these IS a destination mutation → latch.
+    # NOTE: sed/perl are NOT here — they only mutate in place with -i (handled
+    # in the next arm). HOOK-CAPABILITY-ENGINE-003: `sed -n 40,90p <guard>` is a
+    # READ (print mode) and was the dominant protected-guard false positive.
     record_danger_latch "$LATCH_FILE" "block" "shell edit of protected guard (in-place mutator)" "$COMMAND"
     emit_block_json "$PROTECTED_HOOK_REL is protected from Bash-based edits — it is the guard that enforces worktree write boundaries. Do not modify it via the shell. Ask the user for permission before modifying this hook. Command was: $COMMAND"
+    exit 0
+  elif printf '%s' "$COMMAND" | grep -qE '(^|[;&|[:space:]])(sed|perl)[[:space:]]' \
+       && printf '%s' "$COMMAND" | grep -qE '(^|[[:space:]])(-i|-pi|-ip|--in-place)([[:space:]]|=|$)'; then
+    # sed/perl ONLY with an in-place flag (-i / -pi / --in-place) write the file.
+    # Without it (sed -n, sed -e, perl -ne, perl -pe printing to stdout) they
+    # READ the guard, which is allowed. Latch only the proven in-place write.
+    record_danger_latch "$LATCH_FILE" "block" "shell edit of protected guard (in-place sed/perl)" "$COMMAND"
+    emit_block_json "$PROTECTED_HOOK_REL is protected from Bash-based edits — it is the guard that enforces worktree write boundaries. Do not modify it in place. Ask the user for permission before modifying this hook. Command was: $COMMAND"
     exit 0
   elif printf '%s' "$COMMAND" | grep -qE '(^|[;&|[:space:]])(cp|mv)[[:space:]]' && [[ "$_GUARD_IS_DEST" == "1" ]]; then
     # cp/mv ONLY when the guard is the DESTINATION (last operand). cp/mv with
