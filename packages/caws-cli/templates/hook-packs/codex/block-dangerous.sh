@@ -23,7 +23,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=lib/emit.sh
-# CanonicalCodex envelope emitters (HOOK-LIB-CONSOLIDATION-001 T3a).
+# Canonical Codex envelope emitters (HOOK-LIB-CONSOLIDATION-001 T3a).
 source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
 # shellcheck source=lib/caws-state.sh
 # sanitize_session — the canonical session-id->filename transform shared with
@@ -143,7 +143,7 @@ is_reset_latch_invocation() {
   printf '%s' "$cmd" | grep -qE '^[[:space:]]*((bash|sh|\.)[[:space:]]+)?([^[:space:];|&]*/)?reset-danger-latch\.sh([[:space:]]|$)'
 }
 
-# Read JSON input fromCodex
+# Read JSON input from Codex
 INPUT=$(cat)
 
 # Extract tool info

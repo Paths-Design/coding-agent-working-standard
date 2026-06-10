@@ -309,7 +309,7 @@ case "$WORST" in
       _OWN_WT="$(printf '%s' "$WORST_DETAIL" | cut -d: -f1)"
       echo "[$_BG_ID] BLOCKED: this Bash command mutates worktree '$_OWN_WT''s payload (.caws/worktrees/$_OWN_WT/...), owned by a DIFFERENT session." >&2
       echo "  A Bash mutation of another session's worktree files is the same isolation breach as a foreign Write/Edit — it is blocked at the same boundary." >&2
-      echo "  This is a CAWS governance decision, not aCodex harness prompt." >&2
+      echo "  This is a CAWS governance decision, not a Codex harness prompt." >&2
       echo "  To work in worktree '$_OWN_WT', operate from a SESSION rooted there (caws claim '$_OWN_WT' --takeover to take ownership)." >&2
     else
       # block_claimed detail is a COMMA-separated list of name:pattern pairs —
@@ -333,7 +333,7 @@ case "$WORST" in
         done
         echo "  Route the edit through whichever single worktree should own it." >&2
       fi
-      echo "  This is a CAWS governance decision, not aCodex harness prompt." >&2
+      echo "  This is a CAWS governance decision, not a Codex harness prompt." >&2
     fi
     echo "  Do NOT edit .codex/hooks/ or guard state to bypass this." >&2
     exit 2 ;;

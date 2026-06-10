@@ -78,7 +78,7 @@ emit_scope_progression() {
   else
     _id="CAWS scope-guard"
     _hint="caws specs amend-scope ${spec_id:-<spec-id>} --add $REL_PATH"
-    _note="This is a CAWS governance decision, not aCodex harness prompt."
+    _note="This is a CAWS governance decision, not a Codex harness prompt."
   fi
 
   # Strike-level diagnostic triage: strike 1 fires often (any agent

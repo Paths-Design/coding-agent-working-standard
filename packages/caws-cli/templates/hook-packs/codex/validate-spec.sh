@@ -20,7 +20,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/parse-input.sh
 source "$SCRIPT_DIR/lib/parse-input.sh"
 # shellcheck source=lib/emit.sh
-# CanonicalCodex envelope emitters (HOOK-LIB-CONSOLIDATION-001 T3a).
+# Canonical Codex envelope emitters (HOOK-LIB-CONSOLIDATION-001 T3a).
 source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
 parse_hook_input
 

@@ -239,7 +239,7 @@ if [[ -n "$FILE_PATH" ]]; then
             _OWN_WT="$(printf '%s' "$_ORACLE_DETAIL" | cut -d: -f1)"
             echo "[$_WG_ID] BLOCKED: this is a write into worktree '$_OWN_WT''s payload (.caws/worktrees/$_OWN_WT/...), which is owned by a DIFFERENT session." >&2
             echo "  A worktree's files are owned by the session that created/claimed it; another session must not mutate them directly." >&2
-            echo "  This is a CAWS governance decision, not aCodex harness prompt." >&2
+            echo "  This is a CAWS governance decision, not a Codex harness prompt." >&2
             echo "  To work in worktree '$_OWN_WT', your SESSION must be rooted there (caws claim '$_OWN_WT' --takeover if you intend to take ownership), not writing into its path from a foreign session." >&2
             echo "  Do NOT edit .codex/hooks/ or guard state to bypass this." >&2
             exit 2 ;;
@@ -261,7 +261,7 @@ if [[ -n "$FILE_PATH" ]]; then
               echo "  claimed:$_cw:$_cp — worktree '$_cw' via scope.in '$_cp'" >&2
             done
             [[ "$_CLAIMANT_COUNT" -gt 1 ]] && echo "  $_CLAIMANT_COUNT worktrees claim this path; route the edit through whichever single worktree should own it." >&2
-            echo "  This is a CAWS governance decision, not aCodex harness prompt." >&2
+            echo "  This is a CAWS governance decision, not a Codex harness prompt." >&2
             exit 2 ;;
           ask_uncertain|error_fail_closed)
             # Cannot prove same-session ownership of worktree payload. Fail
@@ -701,7 +701,7 @@ case "${SPEC_CONTENTION_CHECK:-}" in
       [[ -z "$_pair" ]] && continue
       echo "  claimed:$_pair" >&2
     done
-    echo "  This is a CAWS governance decision, not aCodex harness prompt." >&2
+    echo "  This is a CAWS governance decision, not a Codex harness prompt." >&2
     # Name the owning worktree(s) (CAWS-GUARD-ASK-ACTIONABLE-REDIRECT-001 A3),
     # but frame the fix as a SESSION-CONTEXT requirement, not a bare shell cd
     # (run-003 fix): a one-off Bash `cd` does NOT move the Edit/Write tool
