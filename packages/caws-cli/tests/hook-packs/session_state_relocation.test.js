@@ -93,9 +93,16 @@ describe('CAWS-SESSION-LOG-RELOCATE-001 A1: per-session state under .caws/sessio
 
     const newDir = path.join(dir, '.caws', 'sessions', sid);
     expect(fs.existsSync(newDir)).toBe(true);
-    // session.json (or .meta.json) landed under the new home.
+    // The per-session .meta.json pointer landed under the new home. (Since
+    // HOOK-SESSION-LOG-RENDER-CLEANUP-001 the renderer emits only turn-NNN.json
+    // and nothing for an unused/transcript-less session — so .meta.json, written
+    // by session-log.sh itself, is the artifact that proves the relocated home.
+    // The old session.json/session.txt aggregates are gone.)
     const files = fs.readdirSync(newDir);
-    expect(files.length).toBeGreaterThan(0);
+    expect(files).toContain('.meta.json');
+    expect(files).not.toContain('session.json');
+    expect(files).not.toContain('session.txt');
+    expect(files).not.toContain('handoff.json');
 
     // Nothing under repo-root tmp/.
     expect(fs.existsSync(path.join(dir, 'tmp', sid))).toBe(false);
