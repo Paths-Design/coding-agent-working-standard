@@ -94,6 +94,16 @@ describe('SCOPE-GUARD-FOREIGN-REPO-CONTAINMENT-001', () => {
     expect(r.stdout).not.toMatch(/strike 1 of 3/);
   });
 
+  it('SCOPE-GUARD-FOREIGN-REPO-ALLOWPREFIX-ORDER-001: a write under $HOME/.claude/ (harness state) is NOT a foreign-repo block', () => {
+    // The foreign-repo block ran before ALLOW_PREFIXES and shadowed the
+    // $HOME/.claude/ allowance, blocking an agent writing its own memory.
+    writeSpec(dir, 'FEAT-001', ['src/']);
+    const memoryPath = path.join(os.homedir(), '.claude', 'projects', 'x', 'memory', 'note.md');
+    const r = runGuard(dir, memoryPath);
+    expect(r.blocked).toBe(false);
+    expect(r.stdout).not.toMatch(/different repository/i);
+  });
+
   it('the block message instructs a handoff and names the Bash bypass boundary', () => {
     writeSpec(dir, 'FEAT-001', ['src/']);
     const r = runGuard(dir, path.join(foreignDir, 'victim.sh'));
