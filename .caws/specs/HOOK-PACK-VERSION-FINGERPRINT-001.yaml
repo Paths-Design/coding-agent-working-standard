@@ -3,6 +3,7 @@ title: 'Hook pack template changes must bump pack version: fingerprint guard + s
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: latch-propagation
 created_at: '2026-06-10T15:48:12.086Z'
 updated_at: '2026-06-10T15:48:12.086Z'
 blast_radius:
