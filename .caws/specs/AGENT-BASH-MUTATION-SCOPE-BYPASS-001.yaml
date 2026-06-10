@@ -1,0 +1,27 @@
+id: AGENT-BASH-MUTATION-SCOPE-BYPASS-001
+title: 'Reframe failure-lineage Entry 38 to the agent-behavior lens + design the post-Bash scope check for source edits/deletes that route around the scope guard (P3)'
+risk_tier: 3
+mode: doc
+lifecycle_state: active
+created_at: '2026-06-10T20:40:30.519Z'
+updated_at: '2026-06-10T20:40:30.519Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/failure-lineage.md'
+    - 'docs/architecture/agent-bash-mutation-scope-bypass.md'
+    - '.caws/specs/AGENT-BASH-MUTATION-SCOPE-BYPASS-001.yaml'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
