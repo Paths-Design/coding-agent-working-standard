@@ -10,7 +10,7 @@
 # WHY THIS EXISTS. The caws-firsttime-probe run-003 proved every write/exec
 # guard layer (scope-guard, worktree-write-guard, block-dangerous) is reachable
 # and correct — yet a first-timer (the probing agent itself, three times)
-# mis-attributed CAWS refusal prompts to theCodex harness, because the
+# mis-attributed CAWS refusal prompts to the Codex harness, because the
 # REASON string did not say which guard fired or what to do about it. A correct
 # guard that does not name itself reads as harness noise, and noise gets
 # dismissed. This file centralizes two things every guard refusal should carry:
@@ -38,7 +38,7 @@
 #
 #   guard_not_harness_note
 #       Echo a one-line disambiguation reminding the reader this is CAWS
-#       governance, not aCodex harness prompt.
+#       governance, not a Codex harness prompt.
 
 # Guard against double-sourcing.
 if [[ -n "${_CAWS_GUARD_MESSAGE_SH_LOADED:-}" ]]; then
@@ -72,5 +72,5 @@ guard_amend_scope_hint() {
 #   One-line disambiguation. Run-003's core finding: the agent could not tell a
 #   CAWS scope-ask from a harness confirm. This sentence ends that ambiguity.
 guard_not_harness_note() {
-  printf 'This is a CAWS governance decision, not aCodex harness prompt.'
+  printf 'This is a CAWS governance decision, not a Codex harness prompt.'
 }

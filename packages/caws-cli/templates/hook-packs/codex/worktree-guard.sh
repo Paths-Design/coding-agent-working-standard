@@ -25,7 +25,7 @@ source "$SCRIPT_DIR/lib/parse-input.sh"
 # copies that had drifted (HOOK-LIB-CONSOLIDATION-001 T1b).
 source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || true
 # shellcheck source=lib/emit.sh
-# CanonicalCodex envelope emitters (HOOK-LIB-CONSOLIDATION-001 T3a).
+# Canonical Codex envelope emitters (HOOK-LIB-CONSOLIDATION-001 T3a).
 source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
 parse_hook_input
 

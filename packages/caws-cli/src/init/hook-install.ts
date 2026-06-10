@@ -199,7 +199,9 @@ function renderPackFileBytes(
   repoRoot: string,
   file: HookPackFile
 ): Buffer {
-  if (!file.destPath.endsWith('.codex/hooks.json')) {
+  // Exact-match the one templated file: a suffix match would also catch any
+  // future nested *.../hooks.json and run codex substitution over it.
+  if (file.destPath !== '.codex/hooks.json') {
     return sourceBytes;
   }
 

@@ -88,7 +88,7 @@ describe('linkWorktreeArtifacts', () => {
     expect(fs.lstatSync(path.join(ctx.wt, 'node_modules')).isSymbolicLink()).toBe(false);
   });
 
-  it('adds a worktree-local exclude before linking a target not ignored by tracked files', () => {
+  it('adds a shared git exclude before linking a target not ignored by tracked files', () => {
     const ctx = mkRepo({ ignored: false });
     cleanups.push(ctx);
 
@@ -102,6 +102,25 @@ describe('linkWorktreeArtifacts', () => {
       encoding: 'utf8',
     });
     expect(status).toBe('');
+    // info/exclude resolves through the common git dir, so the entry written
+    // for the not-ignored case lands in the canonical repo's exclude file.
+    const exclude = fs.readFileSync(path.join(ctx.root, '.git', 'info', 'exclude'), 'utf8');
+    expect(exclude).toMatch(/^node_modules$/m);
+  });
+
+  it('does not touch the shared exclude when the path is already gitignored', () => {
+    const ctx = mkRepo(); // .gitignore tracks node_modules/
+    cleanups.push(ctx);
+
+    const result = linkWorktreeArtifacts(ctx.root, ctx.wt);
+    const nodeModules = result.statuses.find((s) => s.path === 'node_modules');
+
+    expect(nodeModules).toBeDefined();
+    expect(nodeModules.state).toBe('linked');
+    const excludePath = path.join(ctx.root, '.git', 'info', 'exclude');
+    const exclude = fs.existsSync(excludePath) ? fs.readFileSync(excludePath, 'utf8') : '';
+    expect(exclude).not.toMatch(/node_modules/);
+    expect(exclude).not.toMatch(/CAWS worktree artifact links/);
   });
 
   it('links root Python venv variants such as .venv-smoke', () => {

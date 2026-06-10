@@ -22,7 +22,7 @@
 #   - Non-blocking. Any failure of the CLI surfaces as stderr only;
 #     SessionStart never fails on hook errors.
 #
-# IO boundary: this script is the only place that knows aboutCodex's
+# IO boundary: this script is the only place that knows about Codex's
 # SessionStart payload. The CLI receives explicit flags and returns
 # CAWS-native JSON. The hook script does not produce additionalContext
 # at SessionStart — the parallel-agent surfacing happens at PreToolUse

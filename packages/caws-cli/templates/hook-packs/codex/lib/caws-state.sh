@@ -175,7 +175,7 @@ caws_current_branch() {
 }
 
 # sanitize_session <session-id>
-#   Normalize aCodex session id into a filesystem-safe token for use
+#   Normalize a Codex session id into a filesystem-safe token for use
 #   in state sentinel filenames (e.g. danger-latch-<token>.json). The
 #   danger-latch WRITER (block-dangerous.sh) and CLEARER
 #   (reset-danger-latch.sh) MUST use the identical transform or the clear

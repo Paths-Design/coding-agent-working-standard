@@ -170,5 +170,5 @@ guard_enforce_progressive_strikes \
 # guard_enforce_progressive_strikes emits the decision JSON. For strikes 1/2
 # it is an allow/ask (exit 0). For strike 3 it emits a block decision; exit 0
 # is correct for PostToolUse (the tool already ran) — the block decision in
-# the JSON is whatCodex honors.
+# the JSON is what Codex honors.
 exit 0

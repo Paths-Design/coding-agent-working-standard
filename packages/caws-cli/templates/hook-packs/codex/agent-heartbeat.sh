@@ -19,14 +19,14 @@
 #   - Invokes `caws agents heartbeat --session-id <id> --platform codex
 #     --throttle 30000 --reason pre_tool_use --json --include-active-summary`.
 #   - Parses CAWS-native JSON. When active_agent_count > 1, wraps the
-#     active_agents list intoCodex's hookSpecificOutput.
+#     active_agents list into Codex's hookSpecificOutput.
 #     additionalContext envelope and emits it on stdout. When the count
 #     is 1 (self only), emits nothing — silent in the common case.
 #   - Throttled invocations still return an active_agents summary, so
 #     parallel-presence surfacing fires every tool call even when the
 #     write was skipped.
 #
-# IO BOUNDARY: this script is the ONLY surface that emitsCodex's
+# IO BOUNDARY: this script is the ONLY surface that emits Codex's
 # hookSpecificOutput.additionalContext envelope for lease state. The CLI
 # emits CAWS-native JSON only. A Cursor or terminal integration would
 # rewrite this script to emit its own protocol-specific output while
