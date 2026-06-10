@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: review-fixes
 created_at: '2026-06-10T02:02:37.321Z'
-updated_at: '2026-06-10T02:07:28.172Z'
+updated_at: '2026-06-10T02:22:23.741Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
@@ -29,6 +29,7 @@ scope:
     - packages/caws-cli/templates/hook-packs/codex/worktree-guard.sh
     - packages/caws-cli/templates/hook-packs/codex/validate-spec.sh
     - packages/caws-cli/templates/hook-packs/codex/shortcut-language-check.sh
+    - packages/caws-cli/src/shell/command-metadata.ts
   out: []
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'
