@@ -3,6 +3,7 @@ title: 'Foreign-repo block must honor absolute ALLOW_PREFIXES ($HOME/.claude/) â
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: scope-allowprefix
 created_at: '2026-06-10T20:22:02.885Z'
 updated_at: '2026-06-10T20:22:02.885Z'
 blast_radius:
