@@ -1,5 +1,65 @@
 ## [Unreleased]
 
+## [11.2.0] (2026-06-10)
+
+Feature + hook-pack hardening release. Two new capabilities land on the CLI
+surface, and the Claude Code / Codex hook packs receive a multi-slice safety
+calibration (pack version 11 → 16) driven by a forensic review of how agents
+actually trip the guards.
+
+### Added
+
+- **Codex hook pack install** (`caws init --agent-surface codex`). A full Codex
+  parity hook pack ships alongside the Claude Code pack — same governed-core
+  guards (scope, worktree, danger-latch, write-target) adapted to the Codex hook
+  protocol (`apply_patch` input shape, conservative `deny` where Codex lacks
+  `ask` at PreToolUse, `.codex/` paths). The installer wires `.codex/hooks.json`
+  with rendered absolute dispatcher commands.
+- **Worktree artifact linking.** `caws worktree create` now links recognized
+  git-ignored dependency/cache artifacts from the canonical checkout into the new
+  worktree as relative symlinks (root and nested `node_modules`, `.pnpm-store`,
+  Python `.venv`/`.venv-*`, Rust `target`, Swift `.build`) and reports each under
+  an `Artifacts:` block with unlink/install guidance. Linking is advisory (create
+  never fails on it), skips paths that already exist in the worktree, and skips on
+  lock/manifest divergence. Documented in `docs/command-reference.md`.
+
+### Changed / Fixed (hook packs, claude-code 16 / codex 5)
+
+- **Pack-version fingerprint guard** (`HOOK-PACK-VERSION-FINGERPRINT-001`). Any
+  hook-pack template change now fails CI unless the pack version is bumped and a
+  new fingerprint history entry is appended — closing the propagation gap where
+  template fixes never reached installed hooks (`caws init` treats equal versions
+  as current).
+- **Danger-latch calibration** (`HOOK-CAPABILITY-ENGINE-003`). Closed
+  orchestration/privilege silent-allow gaps in the command classifier
+  (`docker run`, `helm install`, `ansible-playbook`, `kubectl exec`, `doas`, …);
+  restored the warn-first grace for capability-class asks (first warns, second
+  latches) so a single benign capability command no longer freezes a session;
+  and made the protected-guard latch discriminate in-place `sed -i`/`perl -pi`
+  from read-only `sed -n`. The terminal-use corpus is pinned as a regression
+  fixture so future calibration argues against data, not recollection.
+- **Session-log renderer cleanup** (`HOOK-SESSION-LOG-RENDER-CLEANUP-001`). The
+  per-session renderer now emits only substantive `turn-NNN.json` files: phantom
+  slash-command turns (`/copy-turn`, `/replay-last`) are dropped, and the
+  write-only `session.json`/`handoff.json`/`session.txt` aggregates are removed.
+  An unused session writes zero turn files.
+- **Cross-repo write containment** (`SCOPE-GUARD-FOREIGN-REPO-CONTAINMENT-001`,
+  `…-ALLOWPREFIX-ORDER-001`). A Write/Edit to a file in a different repository
+  than the session's project hard-blocks immediately with a handoff instruction
+  (cross-repo reads stay free); `$HOME/.claude/`/`$HOME/.codex/` harness-state
+  writes are exempt. `bash-write-guard` no longer extracts a phantom write target
+  from file-descriptor redirections (`2>&1`, `>&2`), which had gated benign reads
+  like `caws status 2>&1 | head`.
+- **Codex pack message fixes** and **shared-git-exclude correctness** for worktree
+  artifact links (only writes the exclude when a path is not already ignored).
+
+### Internal
+
+- `failure-lineage.md` Entry 38 documents the agent-behavior failure mode behind
+  the scope-guard work (agents edit core source via Bash, sidestepping the
+  Edit/Write-boundary guard), and `docs/architecture/agent-bash-mutation-scope-bypass.md`
+  designs the deferred post-Bash scope check.
+
 ## [11.1.11] (2026-06-03)
 
 Consumer-docs release, driven by downstream friction: an agent in a consumer
