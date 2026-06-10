@@ -187,7 +187,7 @@ import type { HookPackV1 } from './types';
 // (advisory-self-filtering; ordering preserved). No stateModel changes
 // (the hooks read only the file being checked + the existing guard-strikes
 // state path under .claude/, already declared).
-export const CLAUDE_CODE_PACK_VERSION = 14;
+export const CLAUDE_CODE_PACK_VERSION = 15;
 
 export const CLAUDE_CODE_PACK: HookPackV1 = {
   id: 'claude-code',

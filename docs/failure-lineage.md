@@ -1614,3 +1614,47 @@ Doctrine first (the originating fault is a reasoning/preflight gap, not yet a to
 ### Single-line synthesis
 
 **Entry 37: a canonical checkout left parked on a peer's feature branch caused an unbound agent's `caws specs create`/`amend` commits to auto-land on that peer's branch (CAWS lifecycle commits target HEAD, which silently assumes canonical-on-base), polluting it with a third party's spec scaffolding; the cleanest recovery — `git checkout main` + grab the spec file — was correctly sealed by the worktree-guard because a live worktree existed, cornering an agent that then did the right thing and held. The fix is doctrine (verify HEAD == base before any lifecycle auto-commit from canonical; canonical is the base branch's home) plus candidate guards: a `caws doctor` drift finding for a mis-parked canonical, an auto-commit-target check at spec-lifecycle time, and a governed un-park/relocate path so the corner has a sanctioned exit.**
+
+## Entry 38: Tool-boundary guards vs the Bash bypass tail; cross-repo writes uncontained (June 2026)
+
+**Severity:** High (a load-bearing guard issued bogus strikes on out-of-repo files AND let two cross-repo writes through before blocking; a structural class of file mutations routes around the file-tool guards entirely)
+**Era:** v11.1.x hook-pack maintenance (the multi-week danger-latch calibration campaign)
+**Agent:** Claude Code (Fable 5), self-hosting on the caws repo, fixing the hook pack
+
+### What happened
+
+While fixing the session-log renderer in a **sibling** repo (`agent-hooks/`, which is not CAWS-governed) from a session rooted in `caws`, the agent's Edit calls to `agent-hooks/claude/scripts/turn-renderer.py` (and two siblings) triggered the caws `scope-guard`. The guard computed `REL_PATH = the absolute foreign path`, which matched no spec's (repo-relative) `scope.in`, so it issued **"strike 1 of 3 — out of scope"** and let the first two foreign-repo edits succeed; the third hit strike 3 and hard-blocked. Two distinct defects in one observation:
+
+1. **Wrong authority model.** The guard treated a file in a *different repository* as "merely out of this spec's scope" — an amendable in-repo gap — when the truth is the guard has **no authority** over another repo's files, and reaching out to *write* one is itself the dangerous act. The "amend-scope" remediation in the message pointed at the wrong fix.
+2. **Containment leak.** The 3-strike ramp let two cross-repo writes land before the hard block. A session should not be able to silently create or modify files (especially executables) outside its governing repo.
+
+A **forensic mine of 1,478 turn files across 153 sessions** then surfaced the deeper, structural class behind it. The scope/worktree guards are enforced at the **Edit/Write tool boundary**. Bash is the universal bypass, and agents use it *routinely and benignly*:
+
+| Bypass shape | Real mutations found | Why the tool guards miss it |
+|---|---|---|
+| `sed -i` (incl. `\| while read; do sed -i "$f"`) | 88, all real source/hook files | bash-write-guard pattern-matches the command; a looped `"$f"` target is invisible to static extraction |
+| `python3 - <<EOF … Path(x).write_text()` | 52 real source/test writes | the write target is buried in a heredoc payload — the Entry 17 "paraphrase tail" |
+| `cat >> file <<EOF` | 23 source/test/CSS appends | `cat >> "$f"` in a loop is opaque |
+| `cp/mv` into `packages/`,`.caws/`,`.claude/hooks/` | 132 | destination-path scope check absent |
+| cross-repo `cd <other> && mutate/commit` | 3 (this session's agent-hooks branch+commit+merge; surgery-ward re-init+commit) | scope-guard keys on its init repo root; `cd` exits the guarded context entirely |
+
+Separately, a **false-positive** class hit during the same campaign: `bash-write-guard`'s redirect splitter padded `2>&1` into `2 > &1` and extracted a phantom `&1` write target, gating benign reads (`caws status 2>&1 | head`, `pytest … 2>&1 | tail`) with `ask_uncertain:worktree-payload-no-entry`. (The danger-latch's own over-firing on read-only `python3 -c`/`node -e`/`sed -n` was closed earlier in the campaign by warn-first grace + sed `-i` discrimination + opaque-exec calibration.)
+
+### The Entry 17 echo
+
+This is Entry 17's thesis at scale: *"Intent is not enforceable. Matchers only catch known shapes. The behavioral primitive that makes guards work is the agent's discipline to stop when one fires."* Entry 17's own "What it doesn't catch" named `perl -e`, `node -e`, write-a-script-and-exec as the unbounded tail. Two years of agent sessions later, that tail is not exotic — it is the **normal way agents do bulk edits** (`sed -i` version bumps, `python write_text` batch patches, `cp` template regeneration). The honesty cost: a guard that tried to matcher-block all of these would mostly generate friction on legitimate work, which is exactly the over-governance CATASTROPHIC-ONLY-001 correctly removed.
+
+### What we built (and what we deliberately did NOT)
+
+| Change | File | Spec |
+|---|---|---|
+| Foreign-repo write **hard-blocks immediately** (no 3-strike ramp, no in-band escape); message instructs a **handoff** for an agent rooted in the target repo; cross-repo **reads stay un-gated** | `scope-guard.sh` (both packs) | `SCOPE-GUARD-FOREIGN-REPO-CONTAINMENT-001` |
+| fd-redirections (`2>&1`, `>&2`, `N>&M`, `&>`) neutralized before the `>` split so they are never extracted as write targets | `bash-write-guard.sh` (both packs) | same spec |
+
+**The no-in-band-escape design is intentional.** Scope.in matching is repo-root-relative, so an absolute foreign path cannot be cleanly admitted; rather than build a foreign-path allow-list (a new bypass surface), a cross-repo *change* must go through a **handoff** — an agent rooted in that repo applies it. Reads are never blocked because cross-repo reading is useful and safe.
+
+**What this fix does NOT do, stated plainly:** it makes the boundary **correct and legible**, not **unbypassable**. The message tells the agent "do not route around via Bash (sed -i / cp / redirect / node -e)" — but that is currently **unenforced advice**. A determined or thrashing agent can still `cd /other/repo && sed -i …`. Closing the Bash hole structurally (the 88 `sed -i` + 52 `python write_text` class) needs a matcher-independent control — most likely a **post-Bash `git diff` scope check** that gates on what actually changed rather than parsing the command — and is deferred to its own design spec precisely to avoid rushing a fix that re-creates over-governance.
+
+### Single-line synthesis
+
+**Entry 38: the scope/worktree guards are tool-boundary guards and Bash is the universal bypass — 1,478 sessions show agents routinely (and benignly) mutate governed and cross-repo files via `sed -i`/`python write_text`/`cp`/`cd && commit`, entirely sidestepping the Edit/Write guards; the shipped fix makes the cross-repo boundary correct-and-legible (foreign writes hard-block with a handoff instruction, reads stay free, the `2>&1` phantom-target FP is closed) but is honestly not unbypassable, and the structural Bash-bypass close is deferred to a post-diff scope-check design rather than a matcher arms race that would re-create the over-governance CATASTROPHIC-ONLY-001 removed.**
