@@ -2,10 +2,11 @@ id: HOOK-SESSION-LOG-RENDER-CLEANUP-001
 title: 'Session-log renderer: drop phantom command-turns + remove write-only aggregate artifacts (session.json/handoff.json/session.txt)'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: session-render
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge session-render at a18cd48e9d76444d61ef2d9eaa35113b2d42cd65'
 created_at: '2026-06-10T18:50:12.147Z'
-updated_at: '2026-06-10T18:50:12.147Z'
+updated_at: '2026-06-10T19:07:06.447Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
