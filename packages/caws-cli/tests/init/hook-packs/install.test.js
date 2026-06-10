@@ -216,7 +216,7 @@ describe('Claude Code pack manifest', () => {
         const content = fs.readFileSync(src, 'utf8');
         expect(content).toContain('CAWS-MANAGED-HOOK');
         expect(content).toContain('hook_pack: claude-code');
-        expect(content).toContain('hook_pack_version: 11');
+        expect(content).toContain(`hook_pack_version: ${CLAUDE_CODE_PACK.packVersion}`);
         expect(content).toContain('lineage_refs: 19');
         // Templates are executable.
         const mode = fs.statSync(src).mode & 0o777;
@@ -232,13 +232,13 @@ describe('Claude Code pack manifest', () => {
       const sessionStart = fs.readFileSync(
         path.join(packRoot, 'caws_dispatch', 'session_start.sh'), 'utf8'
       );
-      expect(sessionStart).toContain('hook_pack_version: 11');
+      expect(sessionStart).toContain(`hook_pack_version: ${CLAUDE_CODE_PACK.packVersion}`);
       expect(sessionStart).toContain('agent-register.sh');
 
       const preToolUse = fs.readFileSync(
         path.join(packRoot, 'caws_dispatch', 'pre_tool_use.sh'), 'utf8'
       );
-      expect(preToolUse).toContain('hook_pack_version: 11');
+      expect(preToolUse).toContain(`hook_pack_version: ${CLAUDE_CODE_PACK.packVersion}`);
       // Heartbeat MUST run FIRST in PreToolUse — verify it appears in
       // HANDLERS before any other guard so the lease refreshes even if
       // a later guard short-circuits.
@@ -253,7 +253,7 @@ describe('Claude Code pack manifest', () => {
       const stop = fs.readFileSync(
         path.join(packRoot, 'caws_dispatch', 'stop.sh'), 'utf8'
       );
-      expect(stop).toContain('hook_pack_version: 11');
+      expect(stop).toContain(`hook_pack_version: ${CLAUDE_CODE_PACK.packVersion}`);
       expect(stop).toContain('agent-stop.sh');
     });
 
@@ -323,7 +323,7 @@ describe('Claude Code pack manifest', () => {
         const content = fs.readFileSync(src, 'utf8');
         expect(content).toContain('CAWS-MANAGED-HOOK');
         expect(content).toContain('hook_pack: claude-code');
-        expect(content).toContain('hook_pack_version: 11');
+        expect(content).toContain(`hook_pack_version: ${CLAUDE_CODE_PACK.packVersion}`);
         const mode = fs.statSync(src).mode & 0o777;
         expect(mode & 0o111).not.toBe(0);
       }
@@ -336,7 +336,7 @@ describe('Claude Code pack manifest', () => {
       const postToolUse = fs.readFileSync(
         path.join(packRoot, 'caws_dispatch', 'post_tool_use.sh'), 'utf8'
       );
-      expect(postToolUse).toContain('hook_pack_version: 11');
+      expect(postToolUse).toContain(`hook_pack_version: ${CLAUDE_CODE_PACK.packVersion}`);
       // Match the array body up to the closing paren on its own line.
       // A plain [^)]+ would stop early at the "(exit 0)" paren inside an
       // inline comment, so anchor the terminator to a line-leading ")".
@@ -981,7 +981,7 @@ describe('CAWS-HOOK-PACK-RENDERER-MISSING-001 — session_log_renderer.py bundle
     const content = fs.readFileSync(rendererPath, 'utf8');
     expect(content).toContain('CAWS-MANAGED-HOOK');
     expect(content).toContain('hook_pack: claude-code');
-    expect(content).toContain('hook_pack_version: 11');
+    expect(content).toContain(`hook_pack_version: ${CLAUDE_CODE_PACK.packVersion}`);
     expect(content).toContain('caws_min_major: 11');
   });
 
@@ -1081,7 +1081,7 @@ describe('CAWS-HOOK-PACK-PROMOTE-001 — all 7 PORT hooks', () => {
       const content = fs.readFileSync(path.join(packRoot, h.name), 'utf8');
       expect(content).toContain('CAWS-MANAGED-HOOK');
       expect(content).toContain('hook_pack: claude-code');
-      expect(content).toContain('hook_pack_version: 11');
+      expect(content).toContain(`hook_pack_version: ${CLAUDE_CODE_PACK.packVersion}`);
       expect(content).toContain('caws_min_major: 11');
       // Each promoted hook cites at least one lineage entry from
       // the 22-25 range.
@@ -1382,11 +1382,11 @@ describe('CAWS-SCOPE-STRIKE-SOURCE-UNIFY-001 — pack v9', () => {
     expect(CLAUDE_CODE_PACK_VERSION).toBeGreaterThanOrEqual(9);
   });
 
-  it('scope-guard.sh header bumped to v9', () => {
+  it('scope-guard.sh header carries the current pack version', () => {
     const content = fs.readFileSync(
       path.join(packRoot, 'scope-guard.sh'),
       'utf8'
     );
-    expect(content).toMatch(/^# hook_pack_version: 11$/m);
+    expect(content).toMatch(new RegExp(`^# hook_pack_version: ${CLAUDE_CODE_PACK.packVersion}$`, "m"));
   });
 });

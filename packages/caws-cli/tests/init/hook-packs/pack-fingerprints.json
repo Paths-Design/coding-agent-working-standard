@@ -1,0 +1,19 @@
+{
+  "comment": "HOOK-PACK-VERSION-FINGERPRINT-001: per-pack template-tree fingerprints, recorded against the pack version that shipped them. pack-fingerprint.test.js fails when template bytes change without a packVersion bump + an APPENDED history entry. Never edit an entry in place — installed consumers only pick up template changes when the version advances.",
+  "claude-code": {
+    "history": [
+      {
+        "packVersion": 12,
+        "fingerprint": "2c45aef1cc3d84d9e20f0505c3534568487dfea63a37fed1dfa25f3d9fc47583"
+      }
+    ]
+  },
+  "codex": {
+    "history": [
+      {
+        "packVersion": 1,
+        "fingerprint": "ff10a28742f1cabf009bbfa9e9975230f8f84c3a61d3cd1029a804c2a7ea51e4"
+      }
+    ]
+  }
+}
