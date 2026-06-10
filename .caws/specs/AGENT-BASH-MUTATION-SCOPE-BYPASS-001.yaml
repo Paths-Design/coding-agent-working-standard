@@ -2,10 +2,11 @@ id: AGENT-BASH-MUTATION-SCOPE-BYPASS-001
 title: 'Reframe failure-lineage Entry 38 to the agent-behavior lens + design the post-Bash scope check for source edits/deletes that route around the scope guard (P3)'
 risk_tier: 3
 mode: doc
-lifecycle_state: active
-worktree: bash-bypass-doc
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge bash-bypass-doc at 023c05d3c5a389ce0fed4698cba93563bec87414'
 created_at: '2026-06-10T20:40:30.519Z'
-updated_at: '2026-06-10T20:40:30.519Z'
+updated_at: '2026-06-10T20:43:57.711Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
