@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: review-fixes
 created_at: '2026-06-10T02:02:37.321Z'
-updated_at: '2026-06-10T02:02:37.321Z'
+updated_at: '2026-06-10T02:07:28.172Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
@@ -24,6 +24,11 @@ scope:
     - 'packages/caws-cli/src/init/hook-install.ts'
     - 'docs/command-reference.md'
     - '.caws/specs/CAWS-POSTLAND-REVIEW-FIXES-001.yaml'
+    - packages/caws-cli/templates/hook-packs/codex/agent-register.sh
+    - packages/caws-cli/templates/hook-packs/codex/agent-heartbeat.sh
+    - packages/caws-cli/templates/hook-packs/codex/worktree-guard.sh
+    - packages/caws-cli/templates/hook-packs/codex/validate-spec.sh
+    - packages/caws-cli/templates/hook-packs/codex/shortcut-language-check.sh
   out: []
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'
