@@ -1,0 +1,35 @@
+id: CAWS-POSTLAND-REVIEW-FIXES-001
+title: 'Post-landing review fixes: codex pack messages, artifact-link exclude handling, docs'
+risk_tier: 3
+mode: fix
+lifecycle_state: active
+created_at: '2026-06-10T02:02:37.321Z'
+updated_at: '2026-06-10T02:02:37.321Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/codex/scope-guard.sh'
+    - 'packages/caws-cli/templates/hook-packs/codex/bash-write-guard.sh'
+    - 'packages/caws-cli/templates/hook-packs/codex/worktree-write-guard.sh'
+    - 'packages/caws-cli/templates/hook-packs/codex/block-dangerous.sh'
+    - 'packages/caws-cli/templates/hook-packs/codex/lib/guard-message.sh'
+    - 'packages/caws-cli/templates/hook-packs/codex/lib/caws-state.sh'
+    - 'packages/caws-cli/src/store/worktree-artifacts.ts'
+    - 'packages/caws-cli/tests/store/worktree-artifacts.test.js'
+    - 'packages/caws-cli/src/init/hook-install.ts'
+    - 'docs/command-reference.md'
+    - '.caws/specs/CAWS-POSTLAND-REVIEW-FIXES-001.yaml'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
