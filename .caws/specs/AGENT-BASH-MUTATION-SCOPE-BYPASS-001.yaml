@@ -3,6 +3,7 @@ title: 'Reframe failure-lineage Entry 38 to the agent-behavior lens + design the
 risk_tier: 3
 mode: doc
 lifecycle_state: active
+worktree: bash-bypass-doc
 created_at: '2026-06-10T20:40:30.519Z'
 updated_at: '2026-06-10T20:40:30.519Z'
 blast_radius:
