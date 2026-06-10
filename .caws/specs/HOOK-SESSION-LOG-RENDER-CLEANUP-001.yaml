@@ -3,6 +3,7 @@ title: 'Session-log renderer: drop phantom command-turns + remove write-only agg
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: session-render
 created_at: '2026-06-10T18:50:12.147Z'
 updated_at: '2026-06-10T18:50:12.147Z'
 blast_radius:
