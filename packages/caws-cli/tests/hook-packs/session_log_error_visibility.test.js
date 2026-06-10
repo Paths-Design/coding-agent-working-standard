@@ -1,21 +1,26 @@
 /**
  * @fileoverview SESSION-LOG-ERROR-VISIBILITY-001 — errored/blocked commands
- * are surfaced in the session-log handoff regardless of the keyword filter.
+ * remain visible for a continuing agent.
  *
- * The session-log renderer filters its `commands_of_interest` handoff and the
- * markdown `## Commands` list to a curated MEANINGFUL_COMMAND_KW allowlist
- * (git/caws/test/etc.) capped at the last 20. Before this fix, a command that
- * was NOT on the allowlist but ERRORED — e.g. a bare `git worktree list` that
- * tripped the danger latch, or an `ls` into a missing worktree dir — vanished
- * from the handoff entirely. A continuing agent then had to reconstruct the
- * failure from raw transcript JSONL.
+ * Original fix: the renderer's HANDOFF projection (commands_of_interest) and
+ * the session.txt `## Commands` list filtered to a MEANINGFUL_COMMAND_KW
+ * allowlist; an errored-but-non-allowlisted command (a latch-tripping
+ * `git worktree list`, an `ls` into a missing dir) vanished. The
+ * `command_is_of_interest` predicate was widened to surface any errored
+ * command in those aggregate views.
  *
- * Fix: `command_is_of_interest()` returns true for allowlisted commands OR any
- * errored command. The handoff projection also now carries `is_error` and
- * `duration_s` so a continuing agent can see WHICH commands failed.
+ * HOOK-SESSION-LOG-RENDER-CLEANUP-001 removed the aggregate views
+ * (session.json / handoff.json / session.txt) as write-only duplication — so
+ * the predicate and its keyword-curation no longer exist. The error-visibility
+ * INVARIANT is preserved on the surviving surface: every command the agent ran
+ * (allowlisted or not, errored or not) is recorded verbatim in its turn's
+ * `commands` list, each carrying `is_error` and (when known) `duration_s` and
+ * `output_preview`. A continuing agent reads the turn file directly — strictly
+ * MORE visibility than the curated handoff, with nothing dropped.
  *
- * Strategy: import the shipped template renderer via python3 and exercise the
- * predicate directly (it is a pure, side-effect-free module-level function).
+ * Strategy: import the shipped renderer via python3, feed a synthetic turn
+ * through build_turn_payload, and assert every command (especially the errored
+ * non-allowlisted ones) is present with its is_error flag.
  *
  * @author @darianrosebrook
  */
@@ -37,48 +42,65 @@ const RENDERER = path.join(
   'session_log_renderer.py'
 );
 
-/** Call command_is_of_interest(entry) in the shipped renderer; return bool. */
-function isOfInterest(entry) {
+/**
+ * Build a turn payload from a list of command entries via the shipped
+ * renderer's build_turn_payload, and return its `commands` array.
+ */
+function turnCommands(commands) {
   const py = [
     'import importlib.util, json, sys',
     `spec = importlib.util.spec_from_file_location("slr", ${JSON.stringify(RENDERER)})`,
     'm = importlib.util.module_from_spec(spec)',
     'spec.loader.exec_module(m)',
-    'entry = json.loads(sys.argv[1])',
-    'sys.stdout.write("1" if m.command_is_of_interest(entry) else "0")',
+    'turn = m.new_turn("do some work", "2026-01-01T00:00:00Z")',
+    'turn["commands"] = json.loads(sys.argv[1])',
+    'payload = m.build_turn_payload(turn, 1)',
+    'sys.stdout.write(json.dumps((payload.get("refs") or {}).get("commands") or []))',
   ].join('\n');
-  const r = spawnSync('python3', ['-c', py, JSON.stringify(entry)], {
+  const r = spawnSync('python3', ['-c', py, JSON.stringify(commands)], {
     encoding: 'utf8',
     timeout: classifyTimeoutMs(),
   });
   if (r.error) throw r.error;
-  if (r.status !== 0) throw new Error(`renderer import/predicate failed: ${r.stderr}`);
-  return r.stdout.trim() === '1';
+  if (r.status !== 0) throw new Error(`renderer build_turn_payload failed: ${r.stderr}`);
+  return JSON.parse(r.stdout);
 }
 
-describe('SESSION-LOG-ERROR-VISIBILITY-001 — command_is_of_interest', () => {
-  const TABLE = [
-    [{ command: 'git status' }, true, 'allowlisted git command'],
-    [{ command: 'caws status' }, true, 'allowlisted caws command'],
-    [{ command: 'pytest tests/' }, true, 'allowlisted test command'],
-    [{ command: 'ls -la' }, false, 'non-allowlisted, no error → dropped (curation intact)'],
-    [{ command: 'cat foo', is_error: false }, false, 'non-allowlisted, explicit no-error'],
-    // The core fix: non-allowlisted BUT errored commands are surfaced.
-    [{ command: 'ls /missing/worktree', is_error: true }, true, 'non-allowlisted errored → surfaced'],
-    [{ command: 'git worktree list', is_error: true }, true, 'the latch-trip case → surfaced'],
-    [{ command: 'some-random-tool --flag', is_error: true }, true, 'arbitrary errored tool → surfaced'],
-    [{}, false, 'empty entry'],
+describe('SESSION-LOG-ERROR-VISIBILITY-001 — errored commands survive in the turn payload', () => {
+  const INPUT = [
+    { command: 'git status', is_error: false },
+    { command: 'ls -la', is_error: false },
+    { command: 'ls /missing/worktree', is_error: true },
+    { command: 'git worktree list', is_error: true },
+    { command: 'some-random-tool --flag', is_error: true, duration_s: 0.4 },
   ];
 
-  for (const [entry, want, note] of TABLE) {
-    it(`${note}: ${JSON.stringify(entry)} → ${want}`, () => {
-      expect(isOfInterest(entry)).toBe(want);
-    });
-  }
+  let commands;
+  beforeAll(() => {
+    commands = turnCommands(INPUT);
+  });
 
-  it('curation is preserved: a non-erroring non-allowlisted command stays dropped', () => {
-    // Guard against the over-correction of "surface everything" — the
-    // allowlist+cap exists on purpose to keep handoffs small.
-    expect(isOfInterest({ command: 'echo hello', is_error: false })).toBe(false);
+  it('records EVERY command verbatim (no allowlist curation, nothing dropped)', () => {
+    const got = commands.map((c) => c.command).sort();
+    expect(got).toEqual(INPUT.map((c) => c.command).sort());
+  });
+
+  it('the errored non-allowlisted commands are present and carry is_error=true', () => {
+    for (const cmd of ['ls /missing/worktree', 'git worktree list', 'some-random-tool --flag']) {
+      const entry = commands.find((c) => c.command === cmd);
+      expect(entry).toBeDefined();
+      expect(entry.is_error).toBe(true);
+    }
+  });
+
+  it('non-errored commands keep is_error=false (the flag is faithful, not forced)', () => {
+    const ok = commands.find((c) => c.command === 'git status');
+    expect(ok).toBeDefined();
+    expect(ok.is_error).toBe(false);
+  });
+
+  it('duration_s is preserved when present', () => {
+    const timed = commands.find((c) => c.command === 'some-random-tool --flag');
+    expect(timed.duration_s).toBe(0.4);
   });
 });

@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: codex
-# hook_pack_version: 2
+# hook_pack_version: 3
 # caws_min_major: 11
 # lineage_refs: 4,8
 # do_not_edit_directly: update via `caws init --agent-surface codex`
