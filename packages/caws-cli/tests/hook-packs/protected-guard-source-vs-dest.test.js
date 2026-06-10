@@ -97,13 +97,23 @@ describe('DANGER-LATCH-TRIGGER-DISCRIMINATION-001: guard source vs destination',
     expect(JSON.stringify(latch)).toMatch(/redirect into protected guard \(destination\)/);
   });
 
-  it('A3b: sed -i on the guard arms the latch (in-place mutator)', () => {
+  it('A3b: sed -i on the guard arms the latch (in-place sed/perl)', () => {
+    // HOOK-CAPABILITY-ENGINE-003 split sed/perl into their own in-place arm
+    // (latch only with -i/-pi/--in-place) so read-only `sed -n` no longer
+    // latches; the reason label became "in-place sed/perl".
     dir = makeProject();
     const r = block(dir, `sed -i 's/x/y/' ${GUARD_REL}`, SID);
     expect(r.status).toBe(0);
     const latch = latchReason(dir, SID);
     expect(latch).not.toBeNull();
-    expect(JSON.stringify(latch)).toMatch(/in-place mutator/);
+    expect(JSON.stringify(latch)).toMatch(/in-place sed\/perl/);
+  });
+
+  it('A3d: sed -n print of the guard (READ) does NOT latch', () => {
+    dir = makeProject();
+    const r = block(dir, `sed -n 1,5p ${GUARD_REL}`, SID);
+    expect(r.status).toBe(0);
+    expect(latchReason(dir, SID)).toBeNull();
   });
 
   it('A3c: cp <src> <guard> (guard is DESTINATION) arms the latch', () => {

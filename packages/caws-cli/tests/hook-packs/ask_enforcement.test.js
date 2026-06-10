@@ -108,6 +108,14 @@ function latchFiles(dir) {
     .filter((f) => f.startsWith('danger-latch-') && f.endsWith('.json'));
 }
 
+function warnFiles(dir) {
+  const stateDir = path.join(dir, '.claude', 'hooks', 'state');
+  if (!fs.existsSync(stateDir)) return [];
+  return fs
+    .readdirSync(stateDir)
+    .filter((f) => f.startsWith('danger-warn-') && f.endsWith('.json'));
+}
+
 /** A hook "blocks" iff it emitted a block/deny/ask permission envelope. */
 function emittedBlock(result) {
   if (!result.stdout || result.stdout.trim() === '') return null;
@@ -206,18 +214,32 @@ describe('HOOK-ASK-ENFORCEMENT-001 A5: capability confirm propagates through rec
 // ===========================================================================
 // Slice B — block-dangerous.sh branches on enforcement (end-to-end hook)
 // ===========================================================================
-describe('HOOK-ASK-ENFORCEMENT-001 A1: capability ask BLOCKS at the hook with a confirmation message', () => {
-  it('kubectl delete pod mypod -> hook blocks + records a latch', () => {
+describe('HOOK-ASK-ENFORCEMENT-001 A1: capability ask WARNS first, LATCHES on the second (warn-first grace restored)', () => {
+  // DANGER-LATCH-APPROVAL-AND-FEEDBACK-001 restored in HOOK-CAPABILITY-ENGINE-003:
+  // a single capability ask is routine (the dominant field/corpus false-positive
+  // freeze). The FIRST capability ask in a session warns and runs; the SECOND
+  // arms the latch.
+  it('first kubectl delete pod -> WARN (exit 0, warn marker, no latch)', () => {
     const dir = makeProject();
     const sid = freshSid('cap');
     const r = runHook(dir, 'kubectl delete pod mypod', sid);
+    expect(r.status).toBe(0);
+    expect(emittedBlock(r)).toBeNull(); // not blocked
+    expect(r.stderr).toMatch(/WARN, first capability ask/);
+    expect(warnFiles(dir)).toHaveLength(1);
+    expect(latchFiles(dir)).toHaveLength(0);
+  });
+
+  it('second capability ask in the same session -> BLOCK + latch (distinct from catastrophic deny)', () => {
+    const dir = makeProject();
+    const sid = freshSid('cap2');
+    runHook(dir, 'kubectl delete pod mypod', sid); // first: warns
+    const r = runHook(dir, 'helm install x ./chart', sid); // second: latches
     const env = emittedBlock(r);
-    expect(env).not.toBeNull(); // the hook emitted a block/ask envelope
-    // The confirmation message is DISTINCT from a catastrophic deny.
+    expect(env).not.toBeNull();
     const text = JSON.stringify(env);
-    expect(text).toMatch(/USER CONFIRMATION/);
+    expect(text).toMatch(/SECOND capability-risk command/);
     expect(text).not.toMatch(/HARD BLOCK/);
-    // A latch was recorded (sticky for the session).
     expect(latchFiles(dir)).toHaveLength(1);
   });
 });
@@ -270,12 +292,16 @@ describe('HOOK-ASK-ENFORCEMENT-001 A4: fail-closed when the classifier is unavai
   });
 });
 
-describe('HOOK-ASK-ENFORCEMENT-001 A5: nested capability ask blocks at the hook', () => {
-  it('eval "kubectl delete pod mypod" -> hook blocks (confirm propagated)', () => {
+describe('HOOK-ASK-ENFORCEMENT-001 A5: nested capability ask carries the warn-first grace too', () => {
+  it('first eval "kubectl delete pod mypod" -> WARN; second -> latch (confirm propagated through nesting)', () => {
     const dir = makeProject();
-    const r = runHook(dir, 'eval "kubectl delete pod mypod"', freshSid('nest'));
-    const env = emittedBlock(r);
+    const sid = freshSid('nest');
+    const r1 = runHook(dir, 'eval "kubectl delete pod mypod"', sid);
+    expect(emittedBlock(r1)).toBeNull();
+    expect(r1.stderr).toMatch(/WARN, first capability ask/);
+    const r2 = runHook(dir, 'eval "kubectl delete pod mypod"', sid);
+    const env = emittedBlock(r2);
     expect(env).not.toBeNull();
-    expect(JSON.stringify(env)).toMatch(/USER CONFIRMATION/);
+    expect(JSON.stringify(env)).toMatch(/SECOND capability-risk command/);
   });
 });
