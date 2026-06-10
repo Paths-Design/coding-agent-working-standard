@@ -353,7 +353,7 @@ Manage CAWS worktrees (create/list/bind/destroy/merge/migrate-registry/repair-sp
 
 ### `caws worktree create <name>`
 
-Create a new git worktree under .caws/worktrees/<name> bound to an active spec.
+Create a new git worktree under .caws/worktrees/<name> bound to an active spec. Also links recognized git-ignored dependency/cache artifacts (node_modules, .pnpm-store, Python venvs, Rust target, Swift .build) from the canonical checkout into the worktree as relative symlinks, reported under an "Artifacts:" block with unlink/install guidance. Linking is advisory (create never fails on it), skips paths that already exist in the worktree, and skips on lock/manifest divergence. A linked artifact shares the canonical directory: run the printed unlink command before installing if the worktree branch changes dependency manifests.
 
 **Argument:** `name` (required) — Worktree name
 
