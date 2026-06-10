@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: scope-foreign
 created_at: '2026-06-10T19:40:19.557Z'
-updated_at: '2026-06-10T19:40:19.557Z'
+updated_at: '2026-06-10T20:07:39.549Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
@@ -21,6 +21,9 @@ scope:
     - 'packages/caws-cli/tests/init/hook-packs/pack-fingerprints.json'
     - 'docs/failure-lineage.md'
     - '.caws/specs/SCOPE-GUARD-FOREIGN-REPO-CONTAINMENT-001.yaml'
+    - packages/caws-cli/templates/hook-packs/claude-code/bash-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/codex/bash-write-guard.sh
+    - packages/caws-cli/tests/hook-packs/bash_write_guard_fd_redirect.test.js
   out: []
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'
