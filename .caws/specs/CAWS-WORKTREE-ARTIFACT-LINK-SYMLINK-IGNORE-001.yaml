@@ -1,0 +1,30 @@
+id: CAWS-WORKTREE-ARTIFACT-LINK-SYMLINK-IGNORE-001
+title: 'Artifact links: dir-only gitignore patterns do not match symlinks — verify ignore on the live link; merge/destroy treat verified links as removable, not dirt'
+risk_tier: 2
+mode: fix
+lifecycle_state: active
+created_at: '2026-06-11T03:37:40.908Z'
+updated_at: '2026-06-11T03:37:40.908Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/worktree-artifacts.ts'
+    - 'packages/caws-cli/src/store/worktrees-writer.ts'
+    - 'packages/caws-cli/tests/store/worktree-artifacts.test.js'
+    - 'packages/caws-cli/tests/store/worktrees-writer.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'artifact-links-never-dirty-the-worktree'
+    type: behavior
