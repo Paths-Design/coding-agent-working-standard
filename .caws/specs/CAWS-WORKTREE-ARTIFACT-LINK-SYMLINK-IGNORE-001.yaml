@@ -3,6 +3,7 @@ title: 'Artifact links: dir-only gitignore patterns do not match symlinks — ve
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: artifact-symlink-ignore
 created_at: '2026-06-11T03:37:40.908Z'
 updated_at: '2026-06-11T03:42:00.000Z'
 blast_radius:
