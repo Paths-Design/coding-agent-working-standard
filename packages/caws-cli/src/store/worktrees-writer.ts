@@ -43,7 +43,11 @@ import {
 import { applyRegistryPatch } from './apply-patch';
 import { autoCommit, isPathDirty, type AutoCommitOutcome } from './git-autocommit';
 import { configureWorktreeSparseCheckout } from './git-sparse-checkout';
-import { linkWorktreeArtifacts } from './worktree-artifacts';
+import {
+  linkWorktreeArtifacts,
+  listVerifiedArtifactLinks,
+  removeWorktreeArtifactLinks,
+} from './worktree-artifacts';
 import { closeSpec } from './specs-writer';
 import { loadSpecs } from './specs-store';
 import { loadWorktrees } from './worktrees-store';
@@ -294,10 +298,32 @@ function getCurrentBranch(repoRoot: string): string | null {
   return r.stdout.trim();
 }
 
-function isWorkingTreeClean(worktreePath: string): boolean {
+// Clean-tree gate for destroy/merge. Verified CAWS artifact links —
+// untracked symlinks back to the canonical counterpart (see
+// worktree-artifacts.ts) — are CAWS-created conveniences, not work
+// product: a legacy link created before the live-symlink ignore
+// verification shows up as `?? <path>` even though no agent work is at
+// risk, and must not refuse the governed exit paths
+// (CAWS-WORKTREE-ARTIFACT-LINK-SYMLINK-IGNORE-001). Anything staged,
+// modified, or untracked-but-unverified is real dirt and still refuses.
+// Porcelain quotes paths with special characters; a quoted path never
+// matches a candidate relPath and therefore stays treated as dirt —
+// fail closed.
+function isWorkingTreeCleanExceptArtifactLinks(
+  repoRoot: string,
+  worktreePath: string
+): boolean {
   const r = runGit(['status', '--porcelain'], worktreePath);
   if (!r.ok) return false;
-  return r.stdout.trim().length === 0;
+  const lines = r.stdout.split('\n').filter((l) => l.trim().length > 0);
+  if (lines.length === 0) return true;
+  if (!lines.every((l) => l.startsWith('?? '))) return false;
+  const links = new Set(
+    listVerifiedArtifactLinks(repoRoot, worktreePath).map((p) =>
+      p.split(path.sep).join('/')
+    )
+  );
+  return lines.every((l) => links.has(l.slice(3)));
 }
 
 function isBranchMerged(repoRoot: string, branch: string, base: string): boolean {
@@ -895,9 +921,11 @@ export function destroyWorktree(
     }
   }
 
-  // Dirty-tree check.
+  // Dirty-tree check. Verified artifact links are exempt — destroy
+  // removes them itself just before `git worktree remove`.
+  const repoRoot = repoRootFromCawsDir(cawsDir);
   const wtPath = entry.path ?? worktreePathFor(cawsDir, input.name);
-  if (fs.existsSync(wtPath) && !isWorkingTreeClean(wtPath)) {
+  if (fs.existsSync(wtPath) && !isWorkingTreeCleanExceptArtifactLinks(repoRoot, wtPath)) {
     return err(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
@@ -908,7 +936,6 @@ export function destroyWorktree(
   }
 
   // Unmerged-branch check (skipped when --abandon-unmerged is passed).
-  const repoRoot = repoRootFromCawsDir(cawsDir);
   if (
     entry.branch !== undefined &&
     entry.baseBranch !== undefined &&
@@ -924,9 +951,12 @@ export function destroyWorktree(
     );
   }
 
-  // Run git worktree remove. Never rm -rf.
+  // Run git worktree remove. Never rm -rf. Verified artifact links are
+  // unlinked first: a legacy link that is not git-ignored would make
+  // `git worktree remove` refuse on an untracked file CAWS itself created.
   let removedGitWorktree = false;
   if (fs.existsSync(wtPath)) {
+    removeWorktreeArtifactLinks(repoRoot, wtPath);
     const removeResult = runGit(['worktree', 'remove', wtPath], repoRoot);
     if (!removeResult.ok) {
       return err(
@@ -1047,7 +1077,13 @@ export function mergeWorktree(
     }
   }
   const wtPath = entry.path ?? worktreePathFor(cawsDir, input.name);
-  if (fs.existsSync(wtPath) && !isWorkingTreeClean(wtPath)) {
+  // Verified artifact links are exempt from the dirty finding. Merge
+  // never removes them — the worktree keeps working links until destroy
+  // — so this holds for --dry-run too (no mutation).
+  if (
+    fs.existsSync(wtPath) &&
+    !isWorkingTreeCleanExceptArtifactLinks(repoRootFromCawsDir(cawsDir), wtPath)
+  ) {
     findings.push('worktree has uncommitted changes');
   }
   if (entry.specId === undefined) {

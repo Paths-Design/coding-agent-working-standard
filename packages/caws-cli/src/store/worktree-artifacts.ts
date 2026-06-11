@@ -249,22 +249,6 @@ function linkCandidate(
     });
   }
 
-  if (!isIgnored(worktreeRoot, candidate.relPath)) {
-    const excludeResult = ensureSharedExclude(worktreeRoot, candidate.relPath);
-    if (!excludeResult.ok) {
-      return status(candidate, 'skipped_not_ignored', {
-        source,
-        reason: `Could not add a git exclude for ${candidate.relPath}: ${excludeResult.reason}`,
-      });
-    }
-    if (!isIgnored(worktreeRoot, candidate.relPath)) {
-      return status(candidate, 'skipped_not_ignored', {
-        source,
-        reason: `${candidate.relPath} is not ignored by git in this worktree.`,
-      });
-    }
-  }
-
   const parent = path.dirname(dest);
   try {
     fs.mkdirSync(parent, { recursive: true });
@@ -280,6 +264,18 @@ function linkCandidate(
     if (existing.isSymbolicLink()) {
       const resolved = path.resolve(parent, fs.readlinkSync(dest));
       if (samePath(resolved, source)) {
+        const ignored = ensureLinkIgnored(worktreeRoot, candidate.relPath);
+        if (!ignored.ok) {
+          // A CAWS-shape link that git would report as untracked dirt is
+          // worse than no link: it blocks the governed merge/destroy
+          // clean checks. Remove it rather than confirm it.
+          try {
+            fs.unlinkSync(dest);
+          } catch {
+            /* the honest skipped_not_ignored status below still applies */
+          }
+          return status(candidate, 'skipped_not_ignored', { source, reason: ignored.reason });
+        }
         return status(candidate, 'already_linked', linkDetails(source, dest, worktreeRoot));
       }
     }
@@ -297,20 +293,122 @@ function linkCandidate(
     }
   }
 
+  const linkTarget = path.relative(parent, source);
   try {
-    const linkTarget = path.relative(parent, source);
     fs.symlinkSync(linkTarget, dest, 'dir');
-    return status(candidate, 'linked', {
-      source,
-      linkTarget,
-      unlinkCommand: `rm ${shellQuote(candidate.relPath)}`,
-    });
   } catch (e) {
     return status(candidate, 'link_failed', {
       source,
       reason: `Could not symlink ${candidate.relPath}: ${errorMessage(e)}`,
     });
   }
+
+  // Verify ignore status on the LIVE symlink, after creation. A pre-create
+  // probe cannot be trusted: dir-only gitignore patterns (`node_modules/`,
+  // `.venv/`) match a directory at the path but never the symlink CAWS
+  // actually creates, so a pre-create "ignored" answer can leave the link
+  // visible to `git status` — untracked dirt that blocks the governed
+  // merge/destroy clean checks (CAWS-WORKTREE-ARTIFACT-LINK-SYMLINK-
+  // IGNORE-001).
+  const ignored = ensureLinkIgnored(worktreeRoot, candidate.relPath);
+  if (!ignored.ok) {
+    try {
+      fs.unlinkSync(dest);
+    } catch {
+      /* the honest skipped_not_ignored status below still applies */
+    }
+    return status(candidate, 'skipped_not_ignored', { source, reason: ignored.reason });
+  }
+
+  return status(candidate, 'linked', {
+    source,
+    linkTarget,
+    unlinkCommand: `rm ${shellQuote(candidate.relPath)}`,
+  });
+}
+
+// Make sure the artifact path is ignored by git as it exists on disk,
+// writing the shared exclude when the tracked ignore rules do not cover
+// the live symlink.
+function ensureLinkIgnored(
+  worktreeRoot: string,
+  relPath: string
+): { readonly ok: true } | { readonly ok: false; readonly reason: string } {
+  if (isIgnored(worktreeRoot, relPath)) return { ok: true };
+  const excludeResult = ensureSharedExclude(worktreeRoot, relPath);
+  if (!excludeResult.ok) {
+    return {
+      ok: false,
+      reason: `Could not add a git exclude for ${relPath}: ${excludeResult.reason}`,
+    };
+  }
+  if (!isIgnored(worktreeRoot, relPath)) {
+    return {
+      ok: false,
+      reason: `${relPath} is not ignored by git in this worktree (a dir-only pattern like "${relPath}/" does not match a symlink), even after writing the shared exclude.`,
+    };
+  }
+  return { ok: true };
+}
+
+// ─── Verified-link inspection + teardown ────────────────────────────────
+//
+// The destroy/merge clean-tree gates must distinguish CAWS-created artifact
+// links from real work product. A path qualifies as a verified artifact
+// link when it sits at a discovered candidate relPath AND is a symlink
+// whose target resolves to the canonical counterpart at
+// <repoRoot>/<relPath>. Directories, regular files, and foreign-target
+// symlinks never qualify.
+
+export function listVerifiedArtifactLinks(
+  repoRoot: string,
+  worktreeRoot: string
+): readonly string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const candidate of discoverCandidates(repoRoot)) {
+    if (seen.has(candidate.relPath)) continue;
+    seen.add(candidate.relPath);
+    const dest = path.join(worktreeRoot, candidate.relPath);
+    let existing: fs.Stats;
+    try {
+      existing = fs.lstatSync(dest);
+    } catch {
+      continue;
+    }
+    if (!existing.isSymbolicLink()) continue;
+    let target: string;
+    try {
+      target = fs.readlinkSync(dest);
+    } catch {
+      continue;
+    }
+    const resolved = path.resolve(path.dirname(dest), target);
+    if (samePath(resolved, path.join(repoRoot, candidate.relPath))) {
+      out.push(candidate.relPath);
+    }
+  }
+  return out;
+}
+
+// Unlink every verified artifact link in the worktree. Only ever applies
+// fs.unlinkSync to a path that passed the verified-link signature — never
+// a directory, never a foreign symlink, never rm -rf. Unlink failures are
+// skipped so the caller's clean-tree check reports the leftover honestly.
+export function removeWorktreeArtifactLinks(
+  repoRoot: string,
+  worktreeRoot: string
+): readonly string[] {
+  const removed: string[] = [];
+  for (const relPath of listVerifiedArtifactLinks(repoRoot, worktreeRoot)) {
+    try {
+      fs.unlinkSync(path.join(worktreeRoot, relPath));
+      removed.push(relPath);
+    } catch {
+      /* leave it; the clean-tree check surfaces it */
+    }
+  }
+  return removed;
 }
 
 function firstManifestMismatch(
@@ -331,18 +429,21 @@ function firstManifestMismatch(
   return undefined;
 }
 
+// Probe ONLY the plain spelling. The trailing-slash spelling (`relPath/`)
+// asks git about a DIRECTORY at that path; the artifact CAWS creates is a
+// symlink, which dir-only patterns never match, so a trailing-slash probe
+// produces false "ignored" answers that leave the created link visible to
+// `git status`. Callers probe after the link exists, so the plain spelling
+// reflects git's true lstat-based decision.
 function isIgnored(worktreeRoot: string, relPath: string): boolean {
-  for (const candidate of [relPath, `${relPath}/`]) {
-    try {
-      execFileSync('git', ['-C', worktreeRoot, 'check-ignore', '-q', '--', candidate], {
-        stdio: ['ignore', 'ignore', 'ignore'],
-      });
-      return true;
-    } catch {
-      // Try the next spelling; directory patterns often require a trailing slash.
-    }
+  try {
+    execFileSync('git', ['-C', worktreeRoot, 'check-ignore', '-q', '--', relPath], {
+      stdio: ['ignore', 'ignore', 'ignore'],
+    });
+    return true;
+  } catch {
+    return false;
   }
-  return false;
 }
 
 // Append relPath to the repository's info/exclude so the symlink does not

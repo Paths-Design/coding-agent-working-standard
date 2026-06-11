@@ -5,7 +5,11 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const { linkWorktreeArtifacts } = require('../../dist/store/worktree-artifacts');
+const {
+  linkWorktreeArtifacts,
+  listVerifiedArtifactLinks,
+  removeWorktreeArtifactLinks,
+} = require('../../dist/store/worktree-artifacts');
 
 function git(root, args) {
   return execFileSync('git', ['-C', root, ...args], {
@@ -13,14 +17,18 @@ function git(root, args) {
   });
 }
 
-function mkRepo({ ignored = true, withNodeModules = true } = {}) {
+// The default ignorePattern is the dir-only spelling (`node_modules/`)
+// because that is what real repos overwhelmingly use — and it is the
+// spelling that does NOT match a symlink, the trap at the heart of
+// CAWS-WORKTREE-ARTIFACT-LINK-SYMLINK-IGNORE-001.
+function mkRepo({ ignored = true, withNodeModules = true, ignorePattern = 'node_modules/' } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-artifacts-'));
   execFileSync('git', ['init', '--quiet', '-b', 'main', root]);
   git(root, ['config', 'user.email', 'test@test.com']);
   git(root, ['config', 'user.name', 'Test']);
   fs.writeFileSync(path.join(root, 'package.json'), '{"scripts":{"test":"node -e 1"}}\n');
   fs.writeFileSync(path.join(root, 'package-lock.json'), '{"lockfileVersion":3}\n');
-  if (ignored) fs.writeFileSync(path.join(root, '.gitignore'), 'node_modules/\n');
+  if (ignored) fs.writeFileSync(path.join(root, '.gitignore'), `${ignorePattern}\n`);
   git(root, ['add', '-A']);
   git(root, ['commit', '--quiet', '-m', 'init']);
   if (withNodeModules) {
@@ -108,8 +116,11 @@ describe('linkWorktreeArtifacts', () => {
     expect(exclude).toMatch(/^node_modules$/m);
   });
 
-  it('does not touch the shared exclude when the path is already gitignored', () => {
-    const ctx = mkRepo(); // .gitignore tracks node_modules/
+  it('does not touch the shared exclude when the tracked ignore genuinely covers the symlink', () => {
+    // A plain (no trailing slash) pattern matches files, directories AND
+    // symlinks — only this spelling actually covers the live link, so
+    // only here must the exclude stay untouched (spec A2).
+    const ctx = mkRepo({ ignorePattern: 'node_modules' });
     cleanups.push(ctx);
 
     const result = linkWorktreeArtifacts(ctx.root, ctx.wt);
@@ -123,6 +134,30 @@ describe('linkWorktreeArtifacts', () => {
     expect(exclude).not.toMatch(/CAWS worktree artifact links/);
   });
 
+  it('keeps a linked artifact invisible to git status when .gitignore only has a dir-only pattern', () => {
+    // `node_modules/` in .gitignore matches a DIRECTORY at that path but
+    // never the symlink CAWS creates. The pre-fix ignore probe accepted
+    // the trailing-slash spelling, reported `linked`, and left the link
+    // showing as `?? node_modules` — untracked dirt that blocked the
+    // governed merge/destroy clean checks (spec A1, the Sterling repro).
+    const ctx = mkRepo(); // default ignorePattern: 'node_modules/'
+    cleanups.push(ctx);
+
+    const result = linkWorktreeArtifacts(ctx.root, ctx.wt);
+    const nodeModules = result.statuses.find((s) => s.path === 'node_modules');
+
+    expect(nodeModules).toBeDefined();
+    expect(nodeModules.state).toBe('linked');
+    const status = execFileSync('git', ['-C', ctx.wt, 'status', '--porcelain'], {
+      encoding: 'utf8',
+    });
+    expect(status).toBe('');
+    // The dir-only pattern cannot cover the symlink, so the shared
+    // exclude must now carry a plain entry for it.
+    const exclude = fs.readFileSync(path.join(ctx.root, '.git', 'info', 'exclude'), 'utf8');
+    expect(exclude).toMatch(/^node_modules$/m);
+  });
+
   it('links root Python venv variants such as .venv-smoke', () => {
     const ctx = mkRepo();
     cleanups.push(ctx);
@@ -134,5 +169,40 @@ describe('linkWorktreeArtifacts', () => {
     expect(venv).toBeDefined();
     expect(venv.state).toBe('linked');
     expect(fs.lstatSync(path.join(ctx.wt, '.venv-smoke')).isSymbolicLink()).toBe(true);
+  });
+});
+
+describe('listVerifiedArtifactLinks / removeWorktreeArtifactLinks', () => {
+  const cleanups = [];
+  afterEach(() => {
+    while (cleanups.length > 0) cleanup(cleanups.pop());
+  });
+
+  it('lists and removes only verified links; real directories and foreign symlinks are untouched', () => {
+    const ctx = mkRepo();
+    cleanups.push(ctx);
+    // Make `.venv` and `target` discoverable candidates by materializing
+    // them in the canonical checkout.
+    fs.mkdirSync(path.join(ctx.root, '.venv'), { recursive: true });
+    fs.mkdirSync(path.join(ctx.root, 'target'), { recursive: true });
+    // Worktree obstacles: a REAL directory at one candidate path and a
+    // symlink pointing somewhere other than the canonical counterpart at
+    // another (spec A3).
+    fs.mkdirSync(path.join(ctx.wt, '.venv'), { recursive: true });
+    fs.symlinkSync(path.join(ctx.root, 'package.json'), path.join(ctx.wt, 'target'));
+    // The genuine artifact link for node_modules.
+    const linkResult = linkWorktreeArtifacts(ctx.root, ctx.wt);
+    expect(
+      linkResult.statuses.find((s) => s.path === 'node_modules').state
+    ).toBe('linked');
+
+    const links = listVerifiedArtifactLinks(ctx.root, ctx.wt);
+    expect(links).toEqual(['node_modules']);
+
+    const removed = removeWorktreeArtifactLinks(ctx.root, ctx.wt);
+    expect(removed).toEqual(['node_modules']);
+    expect(fs.existsSync(path.join(ctx.wt, 'node_modules'))).toBe(false);
+    expect(fs.lstatSync(path.join(ctx.wt, '.venv')).isDirectory()).toBe(true);
+    expect(fs.lstatSync(path.join(ctx.wt, 'target')).isSymbolicLink()).toBe(true);
   });
 });
