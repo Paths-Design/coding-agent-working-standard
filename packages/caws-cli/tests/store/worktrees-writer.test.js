@@ -46,7 +46,11 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const { createWorktree } = require('../../dist/store/worktrees-writer');
+const {
+  createWorktree,
+  destroyWorktree,
+  mergeWorktree,
+} = require('../../dist/store/worktrees-writer');
 const { initProject } = require('../../dist/store/init-store');
 
 const SESSION = { session_id: 'sess-a1-writer', platform: 'jest' };
@@ -312,5 +316,125 @@ describe('WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001 A1 (createWorktree authority
       'utf8'
     );
     expect(specYaml).toContain('worktree: wt-a1-lifecycle');
+  });
+});
+
+// ─── CAWS-WORKTREE-ARTIFACT-LINK-SYMLINK-IGNORE-001 (A4–A6) ─────────────
+//
+// Legacy worktrees carry artifact symlinks created before the live-symlink
+// ignore verification: CAWS-shape links that git reports as `?? <path>`
+// untracked dirt. The governed exit paths must not refuse on them —
+// destroy unlinks them itself before `git worktree remove`; merge exempts
+// them from the dirty finding without mutating. Real dirt still refuses.
+
+describe('CAWS-WORKTREE-ARTIFACT-LINK-SYMLINK-IGNORE-001 (destroy/merge artifact-link exemption)', () => {
+  let repo;
+  let cawsDir;
+
+  const SESSION_CANDIDATES = {
+    candidates: [{ identity: SESSION, source: 'capsule' }],
+    trace: [{ source: 'capsule', outcome: 'admitted', count: 1 }],
+  };
+
+  beforeEach(() => {
+    repo = mkRepo('caws-artlink-writer-');
+    cawsDir = setupCaws(repo);
+  });
+
+  afterEach(() => {
+    rmrf(repo);
+  });
+
+  // Bind a worktree, then plant the LEGACY state: the canonical artifact
+  // dir appears only after createWorktree ran (so create linked nothing
+  // and wrote no exclude), and the worktree gets a hand-made CAWS-shape
+  // symlink that git does not ignore.
+  function setupWorktreeWithLegacyLink(name, specId) {
+    writeActiveSpec(cawsDir, specId);
+    const createResult = createWorktree(cawsDir, {
+      name,
+      specId,
+      session: SESSION,
+      actor: ACTOR,
+    });
+    expect(createResult.ok).toBe(true);
+    expect(createResult.value.kind).toBe('success');
+    const wtPath = path.join(cawsDir, 'worktrees', name);
+
+    fs.mkdirSync(path.join(repo, 'node_modules'), { recursive: true });
+    fs.symlinkSync(
+      path.relative(wtPath, path.join(repo, 'node_modules')),
+      path.join(wtPath, 'node_modules'),
+      'dir'
+    );
+    // Precondition for every test below: the link IS untracked dirt.
+    const status = execFileSync('git', ['-C', wtPath, 'status', '--porcelain'], {
+      encoding: 'utf8',
+    });
+    expect(status.trim()).toBe('?? node_modules');
+    return wtPath;
+  }
+
+  test('A4: destroy succeeds when the only dirt is an unignored verified artifact link', () => {
+    const wtPath = setupWorktreeWithLegacyLink('wt-artlink-a4', 'ARTLINK-004');
+
+    const result = destroyWorktree(cawsDir, {
+      name: 'wt-artlink-a4',
+      actor: ACTOR,
+      sessionCandidates: SESSION_CANDIDATES,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.value.kind).toBe('success');
+    expect(fs.existsSync(wtPath)).toBe(false);
+  });
+
+  test('A5a: destroy still refuses when real dirt accompanies the link', () => {
+    const wtPath = setupWorktreeWithLegacyLink('wt-artlink-a5', 'ARTLINK-005');
+    fs.appendFileSync(path.join(wtPath, 'README.md'), 'real uncommitted work\n');
+
+    const result = destroyWorktree(cawsDir, {
+      name: 'wt-artlink-a5',
+      actor: ACTOR,
+      sessionCandidates: SESSION_CANDIDATES,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(JSON.stringify(result.errors)).toMatch(/uncommitted changes/);
+    expect(fs.existsSync(wtPath)).toBe(true);
+  });
+
+  test('A5b: an unverified untracked file is still dirt (exemption is link-signature-gated)', () => {
+    const wtPath = setupWorktreeWithLegacyLink('wt-artlink-a5b', 'ARTLINK-105');
+    fs.writeFileSync(path.join(wtPath, 'scratch.txt'), 'not an artifact link\n');
+
+    const result = destroyWorktree(cawsDir, {
+      name: 'wt-artlink-a5b',
+      actor: ACTOR,
+      sessionCandidates: SESSION_CANDIDATES,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(JSON.stringify(result.errors)).toMatch(/uncommitted changes/);
+  });
+
+  test('A6: merge --dry-run reports canProceed with only the link present, and does not remove it', () => {
+    const wtPath = setupWorktreeWithLegacyLink('wt-artlink-a6', 'ARTLINK-006');
+
+    const result = mergeWorktree(cawsDir, {
+      name: 'wt-artlink-a6',
+      actor: ACTOR,
+      sessionCandidates: SESSION_CANDIDATES,
+      dryRun: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.value.kind).toBe('dry_run');
+    expect(result.value.findings).toEqual([]);
+    expect(result.value.canProceed).toBe(true);
+    // Non-mutation: the worktree keeps its working link until destroy.
+    expect(
+      fs.lstatSync(path.join(wtPath, 'node_modules')).isSymbolicLink()
+    ).toBe(true);
   });
 });
