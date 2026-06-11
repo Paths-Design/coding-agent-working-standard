@@ -4,10 +4,11 @@ risk_tier: 2
 mode: fix
 lifecycle_state: active
 created_at: '2026-06-11T03:37:40.908Z'
-updated_at: '2026-06-11T03:37:40.908Z'
+updated_at: '2026-06-11T03:42:00.000Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli store: worktree-artifacts (link creation + ignore verification)'
+    - 'caws-cli store: worktrees-writer (destroy/merge clean-tree gates)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -18,12 +19,35 @@ scope:
     - 'packages/caws-cli/tests/store/worktrees-writer.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A linked/already_linked artifact status guarantees the link does not appear in git status --porcelain in the worktree: ignore status is verified on the LIVE symlink (plain spelling, no trailing slash), because dir-only gitignore patterns (node_modules/, .venv/) never match symlinks. If the link cannot be made ignored (shared exclude write + recheck), the link is removed and skipped_not_ignored is reported — never a linked claim that leaves dirt.'
+  - 'destroyWorktree and mergeWorktree do not count verified CAWS artifact links (symlink at a discovered candidate path resolving to the canonical counterpart) as uncommitted changes; any staged/modified entry or unverified untracked path still refuses as real dirt.'
+  - 'destroyWorktree physically unlinks verified artifact links before git worktree remove (legacy unignored links from pre-fix worktrees would otherwise make git refuse); removal only ever applies fs.unlinkSync to a verified symlink — never directories, never foreign-target symlinks, never rm -rf.'
+  - 'mergeWorktree (including --dry-run) is non-mutating with respect to artifact links: it exempts them from the dirty finding but does not delete them; the worktree keeps working links until destroy.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a canonical repo whose tracked .gitignore ignores node_modules only via the dir-only pattern "node_modules/", with a real node_modules directory, and a fresh linked worktree'
+    when: 'linkWorktreeArtifacts(repoRoot, worktreeRoot) runs'
+    then: 'the node_modules status is linked, git status --porcelain in the worktree is empty (no ?? node_modules), and the shared info/exclude now contains a plain "node_modules" entry because the dir-only pattern cannot cover the symlink'
+  - id: A2
+    given: 'a canonical repo whose tracked .gitignore contains the plain pattern "node_modules" (no trailing slash), which genuinely matches the symlink'
+    when: 'linkWorktreeArtifacts runs'
+    then: 'the status is linked and the shared info/exclude is NOT touched (no duplicate entry written when the tracked ignore already covers the live link)'
+  - id: A3
+    given: 'a worktree containing a verified artifact link (symlink resolving to the canonical counterpart), a real directory at another candidate path, and a foreign-target symlink at a third'
+    when: 'removeWorktreeArtifactLinks(repoRoot, worktreeRoot) runs'
+    then: 'only the verified link is unlinked; the real directory and the foreign-target symlink are untouched'
+  - id: A4
+    given: 'a registered, owned, merged worktree whose only git-status entry is an unignored verified artifact link (legacy pre-fix state)'
+    when: 'destroyWorktree runs'
+    then: 'the destroy succeeds: the dirty gate does not refuse, the link is unlinked before git worktree remove, and the worktree directory is removed'
+  - id: A5
+    given: 'the same worktree state plus a genuinely modified tracked file'
+    when: 'destroyWorktree or mergeWorktree runs'
+    then: 'the operation still refuses with the uncommitted-changes diagnostic (artifact-link exemption never masks real dirt)'
+  - id: A6
+    given: 'a registered, owned worktree with an unignored verified artifact link and committed work on its branch'
+    when: 'mergeWorktree --dry-run evaluates prerequisites'
+    then: 'canProceed is true, no uncommitted-changes finding is reported, and the link still exists afterward (dry-run did not mutate)'
 non_functional: {}
 contracts:
   - name: 'artifact-links-never-dirty-the-worktree'
