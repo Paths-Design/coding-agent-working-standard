@@ -2,10 +2,11 @@ id: CAWS-TEST-CLI-SHELL-001
 title: 'CLI shell layer unit/integration + mutation coverage (push-range classify, gate disposition, waiver-filter, binding resolution)'
 risk_tier: 1
 mode: feature
-lifecycle_state: active
-worktree: test-cli-shell-01
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge test-cli-shell-01 at 6b9ee4baa7708c25d1cd87827367d9afb766def6'
 created_at: '2026-06-13T00:00:00.000Z'
-updated_at: '2026-06-13T23:46:18.669Z'
+updated_at: '2026-06-13T23:53:32.866Z'
 blast_radius:
   modules:
     - packages/caws-cli/tests/shell
