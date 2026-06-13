@@ -1284,7 +1284,7 @@ The canonical `god_object` gate (`packages/quality-gates/check-god-objects.mjs`)
 
 ### What we built or changed because of it
 
-`QG-HOOKS-EXTRACT-001` ships `god-object-check.sh` as an advisory PostToolUse hook firing on Write/Edit. It counts SLOC (blank/comment lines stripped) of the single touched file and emits a `hookSpecificOutput.additionalContext` warning when the count meets a configurable threshold (`CAWS_GOD_OBJECT_LOC`, default 2000). It always exits 0 — advisory, never blocking — and reimplements the detection intent in self-contained bash. It does NOT import, shell out to, or runtime-couple with the quality-gates package, and it does NOT change `caws gates run` (option-C doctrine: the edit-time advisory plane is an installed hook-pack utility, separate from the governed gate runner).
+`QG-HOOKS-EXTRACT-001` ships `god-object-check.sh` as an advisory PostToolUse hook firing on Write/Edit. It counts SLOC (blank/comment lines stripped) of the single touched file and emits a `hookSpecificOutput.additionalContext` warning when the count meets a configurable threshold (`CAWS_GOD_OBJECT_LOC`, default 2000). It always exits 0 — advisory, never blocking — and implements the edit-time quality check in self-contained bash. It does NOT import, shell out to, or runtime-couple with an external quality package, and it does NOT change `caws gates run` (option-C doctrine: the edit-time advisory plane is an installed hook-pack utility, separate from the governed gate runner).
 
 ### What it doesn't catch
 
@@ -1294,7 +1294,7 @@ The canonical `god_object` gate (`packages/quality-gates/check-god-objects.mjs`)
 
 ### Single-line synthesis
 
-**Entry 28: a quality signal that only fires on an explicit gate run is invisible at the moment the agent is making the decision. The smallest fix is an advisory edit-time hook that reimplements the gate's intent — same signal, right timing, no runtime coupling.**
+**Entry 28: a quality signal that only fires on an explicit gate run is invisible at the moment the agent is making the decision. The smallest fix is an advisory edit-time hook that implements the check at the right time, with no runtime coupling to an external package.**
 
 ---
 

@@ -13,16 +13,12 @@
  * the preset's catch-all rules).
  *
  * Cases (synthetic commits, no git mutation):
- *   - fix(quality-gates):       → expect null (no release)
- *   - feat(quality-gates):      → expect null
- *   - perf(quality-gates):      → expect null
- *   - revert(quality-gates):    → expect null
  *   - fix(caws-kernel):         → expect null
  *   - fix(specs):               → expect null
  *   - fix(caws-cli):            → expect 'patch'
  *   - feat(caws-cli):           → expect 'minor'
  *   - fix(packages/caws-cli):   → expect 'patch'
- *   - BREAKING + scope:quality-gates → expect null (deny rule with breaking:true)
+ *   - BREAKING + scope:caws-kernel → expect null (deny rule with breaking:true)
  *
  * Run:  node scripts/release-guard-commit-analyzer-check.mjs
  * Exit: 0 if all cases match expected; 1 otherwise.
@@ -70,15 +66,11 @@ console.log('');
 // commit-analyzer parses the commit message through conventional-commits-parser,
 // so passing just { message } is sufficient — the parser fills in type/scope/subject.
 const CASES = [
-  { id: 'D1', message: 'fix(quality-gates): banner leak fix', expectedRelease: null, note: 'Layer 1 deny rule' },
-  { id: 'D2', message: 'feat(quality-gates): add new gate', expectedRelease: null, note: 'Layer 1 deny rule' },
-  { id: 'D3', message: 'perf(quality-gates): cache improvement', expectedRelease: null, note: 'Layer 1 deny rule' },
-  { id: 'D4', message: 'revert(quality-gates): roll back X', expectedRelease: null, note: 'Layer 1 deny rule' },
-  { id: 'D5', message: 'fix(caws-kernel): event chain repair', expectedRelease: null, note: 'Layer 1 deny rule (kernel scope)' },
-  { id: 'D6', message: 'fix(specs): spec hygiene', expectedRelease: null, note: 'Layer 1 deny rule' },
-  { id: 'D7', message: 'fix(docs): doc fix', expectedRelease: null, note: 'Layer 1 deny rule' },
-  { id: 'D8', message: 'fix(ci): CI fix', expectedRelease: null, note: 'Layer 1 deny rule' },
-  { id: 'D9', message: 'fix(tests): test fix', expectedRelease: null, note: 'Layer 1 deny rule' },
+  { id: 'D1', message: 'fix(caws-kernel): event chain repair', expectedRelease: null, note: 'Layer 1 deny rule (kernel scope)' },
+  { id: 'D2', message: 'fix(specs): spec hygiene', expectedRelease: null, note: 'Layer 1 deny rule' },
+  { id: 'D3', message: 'fix(docs): doc fix', expectedRelease: null, note: 'Layer 1 deny rule' },
+  { id: 'D4', message: 'fix(ci): CI fix', expectedRelease: null, note: 'Layer 1 deny rule' },
+  { id: 'D5', message: 'fix(tests): test fix', expectedRelease: null, note: 'Layer 1 deny rule' },
   { id: 'A1', message: 'fix(cli): real cli fix', expectedRelease: 'patch', note: 'owned scope (short)' },
   { id: 'A2', message: 'feat(cli): real cli feature', expectedRelease: 'minor', note: 'owned scope (short)' },
   { id: 'A3', message: 'fix(packages/caws-cli): real cli fix', expectedRelease: 'patch', note: 'owned scope (path form)' },
@@ -86,9 +78,9 @@ const CASES = [
   // Breaking-change cases. BREAKING CHANGE in footer or "!" before colon.
   {
     id: 'B1',
-    message: 'fix(quality-gates): change\n\nBREAKING CHANGE: scope is non-owned',
+    message: 'fix(caws-kernel): change\n\nBREAKING CHANGE: scope is non-owned',
     expectedRelease: null,
-    note: 'Layer 1 breaking:true + scope:quality-gates deny',
+    note: 'Layer 1 breaking:true + scope:caws-kernel deny',
   },
   {
     id: 'B2',

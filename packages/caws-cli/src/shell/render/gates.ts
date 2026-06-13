@@ -1,7 +1,7 @@
 // Pure formatter for `caws gates run` output.
 //
 // Renders one line per policy gate disposition, plus an unmatched-violations
-// section when subprocess gates that policy doesn't declare have violations.
+// section when report gates that policy doesn't declare have violations.
 // Rule ids are not shown here (this is a command summary, not a Diagnostic
 // stream); each disposition carries enough text for an agent to triage.
 
@@ -43,7 +43,7 @@ export function renderGatesRun(result: DispositionResult): string {
   if (result.unmatchedViolations.length > 0) {
     lines.push('');
     lines.push(
-      `Unmatched violations (subprocess gates not declared in policy): ${result.unmatchedViolations.length}`
+      `Unmatched violations (report gates not declared in policy): ${result.unmatchedViolations.length}`
     );
     // Group by gate for the rendered tally
     const byGate = new Map<string, number>();

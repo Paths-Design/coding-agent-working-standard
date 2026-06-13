@@ -341,14 +341,13 @@ implemented in `packages/caws-cli/src/shell/`, composed atop
 | `caws evidence record` | Append a typed evidence event (`test`/`gate`/`ac`) to `.caws/events.jsonl`. |
 | `caws waiver create/list/show/revoke` | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. |
 
-**Quality-gates package deprecation (2026-05-29).**
-`@paths.design/quality-gates` is deprecated as a standalone batch-scanner
+**Quality-gates package removal (2026-06-12).**
+`@paths.design/quality-gates` is removed as a standalone batch-scanner
 package. The current safety posture is hooks-first for edit-time advisory
-signals, with `caws gates run` remaining the governed policy-gate runner
-under the Option B transition recorded below. The hook-pack checks are the
-canonical replacement for the package's load-bearing detection intent; they
-do not import, execute, or publish `packages/quality-gates`. The
-deprecation rationale and the v11.1.2 release-governance incident are
+signals, with `caws gates run` remaining the governed policy-gate runner.
+The hook-pack checks implement the load-bearing edit-time quality checks;
+they do not import, execute, or publish an external quality package. The
+removal rationale and the v11.1.2 release-governance incident are
 recorded in `docs/architecture/quality-gates-deprecation.md`.
 
 **`caws gates run` post-quality-gates decision (2026-05-29).**
@@ -357,7 +356,7 @@ contract: keep `caws gates run` in the v11 canonical command surface, but
 stop spawning `caws-quality-gates` from the production command path. The
 command now evaluates CAWS-local policy checks (`budget_limit`,
 `scope_boundary`, `spec_completeness`) and still appends one
-`gate_evaluated` event per policy-declared gate. The package-backed
+`gate_evaluated` event per policy-declared gate. The former package-backed
 code-quality checks move to hook-pack advisory surfaces until a later
 doctrine slice decides whether hook-emitted events become the target
 Option A.

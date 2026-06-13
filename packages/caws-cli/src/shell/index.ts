@@ -107,13 +107,6 @@ export type {
   GatesViolation,
   GatesWarning,
 } from './gates/gate-result-contract';
-export { runQualityGates, resolveQualityGatesBin } from './gates/quality-gates-adapter';
-export type {
-  QualityGatesRunner,
-  QualityGatesRunnerInput,
-  RunQualityGatesOptions,
-  SubprocessResult,
-} from './gates/quality-gates-adapter';
 export { deriveDispositions } from './gates/disposition';
 export type {
   DispositionResult,

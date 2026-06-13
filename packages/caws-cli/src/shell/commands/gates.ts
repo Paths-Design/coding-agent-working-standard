@@ -5,8 +5,8 @@
 //   2. composeStoreSnapshot               — we need the policy
 //   3. policy presence check              — gates cannot run without policy
 //   4. resolveSession({ allowMint: true }) — we will append events
-//   5. build external report               — production is empty; tests may inject
-//      a legacy quality-gates-compatible report through `runner`
+//   5. build an in-process report          — production is empty; tests may inject
+//      a report fixture directly
 //   6. deriveDispositions(report, policy)  — policy decides block/warn/skip
 //   6c. zero-disposition guard             — refuse to "succeed" with no evidence
 //   7. For each disposition, appendEvent(`gate_evaluated`); per-gate isolation —
@@ -16,7 +16,7 @@
 //   9. Exit code:
 //      0 if no disposition blocks AND every gate's evidence was durably appended
 //      1 if any disposition blocks AND every gate's evidence was durably appended
-//      2 on hard composition errors (no policy, subprocess contract failure,
+//      2 on hard composition errors (no policy, injected report contract failure,
 //        spec not found, session resolution failure)
 //      3 on evidence-integrity failure: any gate's gate_evaluated event was
 //        rejected by the store (schema violation, lock contention, I/O failure)
@@ -25,10 +25,10 @@
 //        "evidence was lost" — both are non-zero, but only one means the
 //        coverage signal itself is suspect.
 //
-// Policy owns blocking. External reports, when injected by tests, only report
+// Policy owns blocking. Injected reports, when provided by tests, only report
 // violations; this command groups them per policy-declared gate and applies
-// policy.gates[gate].mode to compute outcome. Production no longer spawns the
-// deprecated quality-gates package.
+// policy.gates[gate].mode to compute outcome. Production no longer spawns an
+// external quality package.
 //
 // CAWS-GATES-RUN-ABORT-ON-CORRUPT-CHAIN-001: prior to this slice the append
 // loop fail-fast'd on first failure and returned 2; that masked sibling gates'
@@ -58,11 +58,10 @@ import {
   type GateDisposition,
 } from '../gates/disposition';
 import { runLocalEvaluators } from '../gates/local-evaluators';
-import type { GatesReport } from '../gates/gate-result-contract';
 import {
-  runQualityGates,
-  type QualityGatesRunner,
-} from '../gates/quality-gates-adapter';
+  validateGatesReport,
+  type GatesReport,
+} from '../gates/gate-result-contract';
 import {
   filterWaivedViolations,
   type WaiverEvidence,
@@ -74,10 +73,8 @@ export interface GatesRunCommandOptions {
   readonly env?: NodeJS.ProcessEnv;
   readonly out?: (line: string) => void;
   readonly err?: (line: string) => void;
-  /** Legacy test-only args to pass to an injected report runner. */
-  readonly subprocessArgs?: readonly string[];
-  /** Injected legacy report runner (tests). Production omits this. */
-  readonly runner?: QualityGatesRunner;
+  /** Injected report fixture (tests). Production omits this. */
+  readonly report?: GatesReport | string;
   /** Show structured data on rendered diagnostics. */
   readonly showData?: boolean;
 }
@@ -209,14 +206,12 @@ export function runGatesRunCommand(
     kind: 'agent',
   });
 
-  // 5. External report ingestion.
+  // 5. Injected report ingestion.
   //
-  // GATES-RUN-POST-QG-DOCTRINE-001 chooses Option B (transition): keep
-  // `caws gates run` as the governed policy/event surface, but stop spawning
-  // the deprecated quality-gates package in production. Tests may still inject
-  // a legacy quality-gates-compatible runner so the JSON contract and aliasing
-  // behavior remain covered while downstream code is simplified in follow-up
-  // removal slices.
+  // `caws gates run` is the governed policy/event surface. Production no
+  // longer spawns or resolves an external quality package. Tests may
+  // inject a report fixture directly so the JSON contract and aliasing behavior
+  // remain covered without a package dependency.
   let report: GatesReport = {
     timestamp: now.toISOString(),
     context: 'cli',
@@ -224,15 +219,13 @@ export function runGatesRunCommand(
     warnings: [],
     violations: [],
   };
-  if (opts.runner !== undefined) {
-    const runOpts: { cwd: string; runner: QualityGatesRunner; args?: readonly string[] } = {
-      cwd: repoRoot,
-      runner: opts.runner,
-    };
-    if (opts.subprocessArgs !== undefined) runOpts.args = opts.subprocessArgs;
-    const reportResult = runQualityGates(runOpts);
+  if (opts.report !== undefined) {
+    const reportResult =
+      typeof opts.report === 'string'
+        ? validateGatesReport(opts.report)
+        : validateGatesReport(JSON.stringify(opts.report));
     if (!reportResult.ok) {
-      err('caws gates run: quality-gates report contract failure.');
+      err('caws gates run: injected report contract failure.');
       err(renderDiagnostics(reportResult.errors, { showData }));
       return 2;
     }
@@ -241,9 +234,8 @@ export function runGatesRunCommand(
 
   // 5b. Local CAWS policy evaluators. These produce violations under
   //     canonical policy gate IDs (budget_limit, scope_boundary,
-  //     spec_completeness) that the subprocess does not emit. Locating
-  //     them in caws-cli (not in the generic quality-gates subprocess)
-  //     keeps quality-gates decoupled from spec/policy authority.
+  //     spec_completeness). Locating them in caws-cli keeps gate execution
+  //     coupled to CAWS spec/policy authority rather than a retired package.
   //
   //     The active spec must exist and be loadable. If it isn't,
   //     refuse the run with a typed diagnostic — running gates against

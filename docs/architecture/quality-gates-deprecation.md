@@ -2,17 +2,16 @@
 doc_id: quality-gates-deprecation
 authority: architecture
 status: active
-title: Quality-gates package deprecation
+title: Quality-gates package removal
 owner: vNext rewrite team
-updated: 2026-05-29
+updated: 2026-06-12
 ---
 
-# Quality-gates package deprecation
+# Quality-gates package removal
 
-`@paths.design/quality-gates` is deprecated as a standalone CAWS package.
-It remains in the repository for compatibility while the command-surface
-decision for `caws gates run` is completed, but new safety work should land
-in the hook-pack surface or the governed CAWS CLI surfaces.
+`@paths.design/quality-gates` has been removed as a standalone CAWS package.
+Safety work now lands in the hook-pack surface or the governed CAWS CLI
+surfaces.
 
 The replacement posture is:
 
@@ -20,8 +19,8 @@ The replacement posture is:
   `caws init --agent-surface claude-code`.
 - Governed project state remains in `caws doctor`, `caws gates run`, and
   `caws evidence`.
-- Hook-pack checks reimplement the load-bearing detection intent without
-  importing, requiring, or shelling out to `packages/quality-gates`.
+- Hook-pack checks implement the load-bearing edit-time quality checks without
+  importing, requiring, or shelling out to an external quality package.
 - Registry-side npm deprecation is not part of this change. Existing
   published versions remain installable.
 
@@ -37,16 +36,14 @@ and unpublishing would create more ambiguity than it removes.
 The repository has since moved to tag-driven `caws-cli` publishing. The
 legacy multi-package release script now contains only
 `@paths.design/caws-cli` in its package list, and it explicitly denies
-`quality-gates` as a non-owned release scope. A commit that only touches
-`packages/quality-gates/` therefore does not publish `caws-cli`, and it
-does not publish `quality-gates` without a future explicit release lane.
+`quality-gates` as a non-owned release scope.
 
 ## Current State
 
-`packages/quality-gates/README.md` and `package.json` carry source-level
-deprecation notices. This is repo metadata only; it does not mutate npm
-registry state for already-published versions.
+The repository no longer contains `packages/quality-gates/`, no root script
+invokes it, and `@paths.design/caws-cli` no longer depends on it.
 
 `caws gates run` still exists in the v11 command surface. Its long-term
-contract after quality-gates deprecation is owned by
-`GATES-RUN-POST-QG-DOCTRINE-001`.
+contract after quality-gates removal is the governed policy/evidence runner:
+local evaluators produce CAWS policy violations, policy decides disposition,
+and the command appends `gate_evaluated` evidence.

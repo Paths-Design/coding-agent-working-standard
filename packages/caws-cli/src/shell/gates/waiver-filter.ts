@@ -25,8 +25,8 @@
 //      identity (e.g. by rule + subject) is not yet a thing waivers
 //      address.
 //
-//   5. Subprocess "unmatched" gates (gates the subprocess reports but
-//      policy doesn't declare) are never waiver-suppressed: waivers
+//   5. Unmatched gates (gates the report includes but policy doesn't
+//      declare) are never waiver-suppressed: waivers
 //      filter violations that policy can act on, and unmatched gates
 //      are observational by construction. Leaving them untouched here
 //      preserves the existing `unmatchedViolations` surface.
@@ -46,7 +46,7 @@ export interface WaiverFilterInput {
   /**
    * Gate ids the policy declares. Violations targeting any other gate
    * pass through the filter unmodified — waivers MUST NOT promote an
-   * unmatched (subprocess-only) violation to a policy-suppressed state,
+   * unmatched report violation to a policy-suppressed state,
    * because policy doesn't own that gate. Treating waivers as scoped to
    * policy-declared gates keeps the unmatched bucket purely
    * observational, which is the contract `deriveDispositions` relies on.
@@ -107,8 +107,8 @@ export function filterWaivedViolations(
       : new Set<string>(input.policyGateIds);
 
   function effectiveFor(gate: string): readonly Waiver[] {
-    // Waivers only touch policy-declared gates. An unmatched (subprocess-
-    // only) violation is observational by construction; letting waivers
+    // Waivers only touch policy-declared gates. An unmatched report
+    // violation is observational by construction; letting waivers
     // suppress it would break that contract and confuse the unmatched
     // surface in `deriveDispositions`.
     if (policyGateSet !== undefined && !policyGateSet.has(gate)) {

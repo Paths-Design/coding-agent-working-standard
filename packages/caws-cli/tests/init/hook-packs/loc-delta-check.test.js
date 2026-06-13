@@ -7,7 +7,7 @@
  * warns when it exceeds CAWS_LOC_DELTA_WARN_THRESHOLD (default 300). When the
  * payload lacks old_string/new_string, it exits 0 silently (no false positive
  * from missing data). The hook does NOT import or execute any
- * packages/quality-gates module (A9).
+ * external quality package (A9).
  */
 
 'use strict';

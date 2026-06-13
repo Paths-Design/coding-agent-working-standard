@@ -2,11 +2,11 @@
  * Tests for `caws gates run` and its supporting modules.
  *
  * The slice's load-bearing invariants:
- *   - policy owns block/warn/skip (external reports only report violations)
- *   - injected legacy report JSON shape is validated before trust
+ *   - policy owns block/warn/skip (injected reports only report violations)
+ *   - injected report JSON shape is validated before trust
  *   - events go through events-store.appendEvent ONLY
  *   - missing policy → exit 2 (gates cannot decide mode without it)
- *   - injected legacy report contract failures → exit 2
+ *   - injected report contract failures → exit 2
  */
 
 'use strict';
@@ -86,14 +86,6 @@ function rmrf(p) {
   if (fs.existsSync(p)) fs.rmSync(p, { recursive: true, force: true });
 }
 
-function jsonRunner(payload) {
-  return () => ({
-    status: 0,
-    stdout: typeof payload === 'string' ? payload : JSON.stringify(payload),
-    stderr: '',
-  });
-}
-
 const PASS_REPORT = {
   timestamp: NOW.toISOString(),
   context: 'cli',
@@ -127,7 +119,7 @@ function captureRun(repoRoot, payload, opts = {}) {
       env: { CLAUDE_SESSION_ID: 'sess-me' },
       out: (s) => outLines.push(s),
       err: (s) => errLines.push(s),
-      runner: typeof payload === 'function' ? payload : jsonRunner(payload),
+      report: typeof payload === 'function' ? payload() : payload,
       ...opts,
     }
   );
@@ -228,16 +220,16 @@ describe('deriveDispositions — policy ownership of block/warn/skip', () => {
     expect(r.anyBlocks).toBe(false);
   });
 
-  it('subprocess severity does NOT override policy mode', () => {
-    // The subprocess marks a violation severity='block', but policy is warn.
+  it('reported severity does NOT override policy mode', () => {
+    // The injected report marks a violation severity='block', but policy is warn.
     // Final disposition must follow policy.
     const report = {
       ...PASS_REPORT,
       violations: [
         {
           gate: 'scope_boundary',
-          severity: 'block', // subprocess opinion
-          message: 'subprocess thinks this should block',
+          severity: 'block', // report opinion
+          message: 'report thinks this should block',
         },
       ],
     };
@@ -248,17 +240,17 @@ describe('deriveDispositions — policy ownership of block/warn/skip', () => {
     expect(r.anyBlocks).toBe(false);
   });
 
-  // LEGACY-TEST-RECONCILE-001: mechanical alias mappings. The subprocess
-  // emits violations under implementation-level gate names that differ
-  // from policy KNOWN_GATE_IDS only by mechanical naming (singular vs
-  // plural, hyphen vs underscore). Each alias must be a clear naming
-  // translation, not a semantic repurposing.
-  it('alias: subprocess `god_objects` (plural) maps to policy `god_object`', () => {
+  // LEGACY-TEST-RECONCILE-001: mechanical alias mappings. Legacy reports may
+  // contain implementation-level gate names that differ from policy
+  // KNOWN_GATE_IDS only by mechanical naming (singular vs plural, hyphen vs
+  // underscore). Each alias must be a clear naming translation, not a semantic
+  // repurposing.
+  it('alias: report `god_objects` (plural) maps to policy `god_object`', () => {
     const report = {
       ...PASS_REPORT,
       violations: [
         {
-          gate: 'god_objects', // subprocess plural
+          gate: 'god_objects', // legacy plural
           type: 'file_too_large',
           file: 'src/big.js',
           message: 'File exceeds size threshold',
@@ -277,10 +269,10 @@ describe('deriveDispositions — policy ownership of block/warn/skip', () => {
     expect(r.unmatchedViolations.find((v) => v.gate === 'god_objects')).toBeUndefined();
   });
 
-  it('alias: subprocess `hidden-todo` maps to policy `todo_detection`', () => {
-    // The hidden-todo gate in quality-gates emits violations with
-    // gate: "hidden-todo" (legacy internal name). The disposition layer
-    // aliases this to the canonical policy gate `todo_detection`.
+  it('alias: report `hidden-todo` maps to policy `todo_detection`', () => {
+    // Legacy reports may emit violations with gate: "hidden-todo". The
+    // disposition layer aliases this to the canonical policy gate
+    // `todo_detection`.
     const policyWithTodoBlock = {
       ...policy,
       gates: {
@@ -311,7 +303,7 @@ describe('deriveDispositions — policy ownership of block/warn/skip', () => {
     expect(r.anyBlocks).toBe(true);
   });
 
-  it('refused alias: subprocess `code_freeze` is NOT mapped to `budget_limit`', () => {
+  it('refused alias: report `code_freeze` is NOT mapped to `budget_limit`', () => {
     // code_freeze and budget_limit are semantically distinct (crisis-
     // response new-file block vs risk-tier file/loc budget). Mapping
     // them would be a semantic repurposing, not a mechanical alias.
@@ -400,11 +392,7 @@ describe('runGatesRunCommand — exit codes', () => {
   it('malformed injected report JSON → exit 2, contract failure, NO events', () => {
     repoRoot = mkTempGitRepo('caws-gates-bad-json-');
     fs.writeFileSync(path.join(repoRoot, '.caws', 'policy.yaml'), VALID_POLICY);
-    const r = captureRun(repoRoot, () => ({
-      status: 0,
-      stdout: 'definitely not json',
-      stderr: '',
-    }));
+    const r = captureRun(repoRoot, 'definitely not json');
     expect(r.code).toBe(2);
     expect(r.stderr).toMatch(/report contract failure/);
     expect(r.stderr).toMatch(/report_not_json/);
@@ -414,39 +402,9 @@ describe('runGatesRunCommand — exit codes', () => {
   it('injected report JSON missing required fields → exit 2, contract failure', () => {
     repoRoot = mkTempGitRepo('caws-gates-bad-shape-');
     fs.writeFileSync(path.join(repoRoot, '.caws', 'policy.yaml'), VALID_POLICY);
-    const r = captureRun(repoRoot, () => ({
-      status: 0,
-      stdout: JSON.stringify({ timestamp: 'now' }), // missing context/files_scoped/violations/warnings
-      stderr: '',
-    }));
+    const r = captureRun(repoRoot, JSON.stringify({ timestamp: 'now' })); // missing context/files_scoped/violations/warnings
     expect(r.code).toBe(2);
     expect(r.stderr).toMatch(/report_invalid_shape/);
-  });
-
-  it('injected report ENOENT → exit 2 with subprocess_not_found', () => {
-    repoRoot = mkTempGitRepo('caws-gates-noexec-');
-    fs.writeFileSync(path.join(repoRoot, '.caws', 'policy.yaml'), VALID_POLICY);
-    const enoent = Object.assign(new Error('not found'), { code: 'ENOENT' });
-    const r = captureRun(repoRoot, () => ({
-      status: null,
-      stdout: '',
-      stderr: '',
-      error: enoent,
-    }));
-    expect(r.code).toBe(2);
-    expect(r.stderr).toMatch(/subprocess_not_found/);
-  });
-
-  it('injected report empty stdout (no JSON at all) → exit 2', () => {
-    repoRoot = mkTempGitRepo('caws-gates-emptyout-');
-    fs.writeFileSync(path.join(repoRoot, '.caws', 'policy.yaml'), VALID_POLICY);
-    const r = captureRun(repoRoot, () => ({
-      status: 1,
-      stdout: '',
-      stderr: 'something went wrong',
-    }));
-    expect(r.code).toBe(2);
-    expect(r.stderr).toMatch(/subprocess_failed/);
   });
 
   it('event-store integrity: events are chained, not written directly', () => {

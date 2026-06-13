@@ -112,42 +112,15 @@ function createTestProject(overrides = {}) {
   return { dir, specId };
 }
 
-// This suite used to contend on the quality-gates subprocess lock. The
-// production gates path is now local-only, but the helpers remain conservative
-// because historical CI diagnostics still benefit from the wider timeout.
+// The production gates path is local-only, but keep the wider timeout because
+// historical CI diagnostics still benefit from it.
 jest.setTimeout(240000);
-
-function clearQGLockIn(projectDir) {
-  try {
-    fs.rmSync(path.join(projectDir, 'docs-status', 'quality-gates.lock'), { force: true });
-  } catch { /* no-op */ }
-}
-
-function sleepSync(ms) {
-  // Crude but adequate for retry pacing in a node test runner.
-  const end = Date.now() + ms;
-  while (Date.now() < end) { /* spin */ }
-}
-
-function isLockContention(result) {
-  return (
-    result.exitCode !== 0 &&
-    typeof result.stderr === 'string' &&
-    /Another quality gates process is already running/.test(result.stderr)
-  );
-}
 
 /**
  * Run `caws gates run --spec <id> [...extraArgs]` and return
  * { stdout, stderr, exitCode }. Non-zero exits do not throw.
- *
- * Timeout 30s per attempt. Up to 3 retries on lock contention to handle
- * parallel jest workers competing for the shared
- * <quality-gates-pkg>/docs-status/quality-gates.lock if an older build is
- * under test. Current production code does not spawn quality-gates.
  */
 function runOnce(projectDir, specId, extraArgs) {
-  clearQGLockIn(projectDir);
   const args = [CLI_PATH, 'gates', 'run', '--spec', specId, ...extraArgs];
   try {
     const stdout = execFileSync(process.execPath, args, {
@@ -167,14 +140,7 @@ function runOnce(projectDir, specId, extraArgs) {
 }
 
 function runGatesCli(projectDir, specId, extraArgs = []) {
-  let result = runOnce(projectDir, specId, extraArgs);
-  let attempt = 1;
-  while (isLockContention(result) && attempt < 3) {
-    sleepSync(2000 + attempt * 1000);
-    attempt++;
-    result = runOnce(projectDir, specId, extraArgs);
-  }
-  return result;
+  return runOnce(projectDir, specId, extraArgs);
 }
 
 /**
@@ -456,7 +422,7 @@ describe('gates CLI integration (v11.1)', () => {
   });
 
   describe('unmatched violations', () => {
-    test('production gates run is local-only and emits no unmatched subprocess violations', () => {
+    test('production gates run is local-only and emits no unmatched report violations', () => {
       ctx = createTestProject();
 
       fs.ensureDirSync(path.join(ctx.dir, 'src'));

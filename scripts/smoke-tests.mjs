@@ -64,10 +64,6 @@ function main() {
       desc: 'CLI waivers list',
     },
     {
-      cmd: 'node packages/quality-gates/run-quality-gates.mjs --help',
-      desc: 'Quality gates help',
-    },
-    {
       cmd: 'node scripts/release-check.mjs',
       desc: 'Release verification script',
     },

@@ -10,7 +10,7 @@
  *
  * These tests assert real behavior (exit code + emitted advisory text), not
  * just script presence. They do NOT import or execute any
- * packages/quality-gates module (A9).
+ * external quality package (A9).
  */
 
 'use strict';

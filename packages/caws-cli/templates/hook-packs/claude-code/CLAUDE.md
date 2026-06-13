@@ -54,7 +54,7 @@ then refuse to touch.
 | `duplicate-export-check.sh` | advisory: on Write of a new JS/TS file, flags an exported symbol whose exact name already exists in the enclosing package src tree (generic-name allowlist). Always exit 0. |
 | `loc-delta-check.sh` | advisory: on Edit, flags an added-line delta over `CAWS_LOC_DELTA_WARN_THRESHOLD` (default 300) via the new_string/old_string payload diff. Always exit 0. |
 
-The four `*-check.sh` hooks above are the **edit-time advisory quality plane**. They reimplement the load-bearing quality-gates detection *intent* in self-contained bash; they do NOT import, shell out to, or runtime-couple with `packages/quality-gates`, and they do NOT change `caws gates run`. `caws gates run` remains the governed policy-gate runner; these hooks are installed utilities the repo tunes via env (`CAWS_GOD_OBJECT_LOC`, `CAWS_LOC_DELTA_WARN_THRESHOLD`).
+The four `*-check.sh` hooks above are the **edit-time advisory quality plane**. They implement the load-bearing edit-time quality checks in self-contained bash; they do NOT import, shell out to, or runtime-couple with an external quality package, and they do NOT change `caws gates run`. `caws gates run` remains the governed policy/evidence runner; these hooks are installed utilities the repo tunes via env (`CAWS_GOD_OBJECT_LOC`, `CAWS_LOC_DELTA_WARN_THRESHOLD`).
 
 ## Authoring a spec without getting trapped
 

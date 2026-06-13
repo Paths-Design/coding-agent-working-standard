@@ -10,7 +10,7 @@
  *
  * Each test builds a self-contained package tree under a temp dir so the
  * bounded lookup has a deterministic search root. The hook does NOT import
- * or execute any packages/quality-gates module (A9).
+ * or execute an external quality package (A9).
  */
 
 'use strict';

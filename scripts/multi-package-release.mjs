@@ -72,12 +72,8 @@ const PACKAGES = [
       pkgRoot: 'packages/caws-cli',
     },
   },
-  // caws-types and quality-gates are folded into caws-cli — no longer
-  // published separately. A commit that touches only packages/quality-gates/
-  // cannot publish @paths.design/caws-cli because this PACKAGES list has no
-  // quality-gates entry and NON_OWNED_SCOPES denies scope:quality-gates for
-  // release-capable commit types. A quality-gates package publish would need
-  // an explicit future release lane and maintainer authorization.
+  // caws-types is folded into caws-cli — no longer published separately.
+  // There is intentionally no release lane for retired package surfaces.
 ];
 
 /**
@@ -250,7 +246,7 @@ function hasShippingChanges(pkg) {
  * RELEASE-AUTOMATION-GUARD-NONPUBLISH-COMMITS-001 — Layer 1.
  *
  * Deterministic deny list of non-owned scopes for release-capable commit
- * types. Without these explicit denials, a `fix(quality-gates):` commit
+ * types. Without these explicit denials, a feature-area `fix(...)` commit
  * matched the angular preset's default `fix → patch` rule and produced an
  * unrelated @paths.design/caws-cli@11.1.2 release on 2026-05-18.
  *
@@ -264,7 +260,6 @@ function hasShippingChanges(pkg) {
 // catch new scopes that need explicit denial.
 const NON_OWNED_SCOPES = [
   // Sibling/sub-packages and their aliases
-  'quality-gates',
   'caws-kernel',
   'kernel',
   'caws-types',
@@ -346,7 +341,6 @@ const MULTI_SCOPE_DENIES = [
   'cli,kernel',
   'cli,docs',
   'kernel,cli',
-  'quality-gates,cli',
   'policy+gates',
   'worktree+validation',
   'tests+schema',

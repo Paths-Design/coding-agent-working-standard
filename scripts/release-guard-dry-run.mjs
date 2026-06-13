@@ -20,7 +20,7 @@
  * Each pattern is a tuple of:
  *   - name              human-readable
  *   - commitType        conventional-commit type
- *   - scope             conventional-commit scope (e.g., "cli", "quality-gates")
+ *   - scope             conventional-commit scope (e.g., "cli", "docs")
  *   - changedFiles      list of repo-relative paths in the simulated commit
  *   - expectedOutcome   "publish-caws-cli" | "no-publish"
  *   - expectedReason    short string describing why
@@ -29,9 +29,7 @@
  *   A1 specs-only            → no publish
  *   A2 docs-only             → no publish
  *   A4 tests-only            → no publish (workflow runs, Layer 3 blocks)
- *   A3 quality-gates-only    → no publish (Layer 2 removes path)
  *   A5 caws-cli-shipping     → publish
- *   A8 mixed (cli + qg)      → publish caws-cli only
  */
 
 import { readFileSync } from 'node:fs';
@@ -122,7 +120,7 @@ const PATTERNS = [
     name: 'docs-only',
     commitType: 'docs',
     scope: 'caws',
-    changedFiles: ['docs/architecture/quality-gates-hooks-migration.md'],
+    changedFiles: ['docs/guides/hook-packs.md'],
     expectedOutcome: 'no-publish',
     expectedReason: 'Layer 2 path filter excludes docs/',
   },
@@ -136,15 +134,6 @@ const PATTERNS = [
     expectedReason: 'Layer 2 triggers (path under packages/caws-cli/**); Layer 3 classifies as non-shipping',
   },
   {
-    id: 'A3',
-    name: 'quality-gates-only',
-    commitType: 'fix',
-    scope: 'quality-gates',
-    changedFiles: ['packages/quality-gates/run-quality-gates.mjs'],
-    expectedOutcome: 'no-publish',
-    expectedReason: 'Layer 2 path filter excludes packages/quality-gates/; Layer 1 deny rule blocks scope:quality-gates',
-  },
-  {
     id: 'A5',
     name: 'caws-cli-shipping',
     commitType: 'fix',
@@ -155,18 +144,6 @@ const PATTERNS = [
     ],
     expectedOutcome: 'publish-caws-cli',
     expectedReason: 'Layer 2 triggers; Layer 3 classifies src/ and dist/ as shipping; Layer 1 allows scope:caws-cli',
-  },
-  {
-    id: 'A8',
-    name: 'mixed (caws-cli + quality-gates)',
-    commitType: 'fix',
-    scope: 'caws-cli',
-    changedFiles: [
-      'packages/caws-cli/src/shell/commands/gates.ts',
-      'packages/quality-gates/run-quality-gates.mjs',
-    ],
-    expectedOutcome: 'publish-caws-cli',
-    expectedReason: 'Layer 2 triggers (caws-cli paths present); Layer 3 finds shipping files in caws-cli; quality-gates change ignored',
   },
   // E1-E2: regression cases for bug-fix pass on 2026-05-19.
   {

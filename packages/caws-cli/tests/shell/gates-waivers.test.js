@@ -4,7 +4,7 @@
  * Load-bearing invariants under test:
  *
  *   1. Effective waivers are filtered BEFORE deriveDispositions is called.
- *      The reported subprocess violations remain unchanged on disk; only
+ *      The reported violations remain unchanged on disk; only
  *      the disposition pipeline sees the unwaived subset.
  *
  *   2. Policy continues to own block/warn/skip semantics. Waivers can
@@ -23,7 +23,7 @@
  *        - wrong spec → not effective
  *        - project-wide (no scope.spec_id) → effective for any spec id
  *
- *   5. Subprocess "unmatched" violations (gates not declared in policy)
+ *   5. Unmatched report violations (gates not declared in policy)
  *      remain observational and are NEVER turned into policy decisions
  *      by waiver presence/absence.
  *
@@ -135,14 +135,6 @@ function writeWaiver(root, waiver) {
   );
 }
 
-function jsonRunner(payload) {
-  return () => ({
-    status: 0,
-    stdout: typeof payload === 'string' ? payload : JSON.stringify(payload),
-    stderr: '',
-  });
-}
-
 const REPORT_WITH = (violations) => ({
   timestamp: NOW.toISOString(),
   context: 'cli',
@@ -172,7 +164,7 @@ function captureRun(repoRoot, payload, opts = {}) {
       env: { CLAUDE_SESSION_ID: 'sess-me' },
       out: (s) => outLines.push(s),
       err: (s) => errLines.push(s),
-      runner: typeof payload === 'function' ? payload : jsonRunner(payload),
+      report: typeof payload === 'function' ? payload() : payload,
       ...opts,
     }
   );
@@ -415,9 +407,9 @@ describe('7a.3: project-wide waiver (no scope.spec_id) suppresses for any spec',
 });
 
 // ------------------------------------------------------------------
-// 8. unmatched subprocess violation remains observational and is not waived
+// 8. unmatched report violation remains observational and is not waived
 // ------------------------------------------------------------------
-describe('7a.3: subprocess gates not declared in policy stay observational', () => {
+describe('7a.3: report gates not declared in policy stay observational', () => {
   let repoRoot;
   afterEach(() => rmrf(repoRoot));
 

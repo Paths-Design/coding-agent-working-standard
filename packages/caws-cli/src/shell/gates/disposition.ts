@@ -1,9 +1,9 @@
 // Policy-derived gate disposition.
 //
-// Given (parsed quality-gates report, parsed policy), produce one
+// Given (parsed gates report, parsed policy), produce one
 // `GateDisposition` per policy-declared gate. This is the SOLE place
-// where final block/warn/skip semantics are decided. The subprocess
-// reports violations; this module decides what they mean.
+// where final block/warn/skip semantics are decided. Report producers
+// identify violations; this module decides what they mean.
 //
 // Rules:
 //
@@ -15,9 +15,8 @@
 //
 // A violation is "matched" to a policy gate iff the violation's `gate`
 // field equals the policy gate id. Violations targeting unknown gate
-// names (subprocess-specific checks like 'naming') are surfaced
-// separately as `unmatchedViolations` so the renderer can show them,
-// but they do NOT drive policy disposition.
+// names are surfaced separately as `unmatchedViolations` so the renderer
+// can show them, but they do NOT drive policy disposition.
 
 import type { Policy } from '@paths.design/caws-kernel';
 
@@ -39,7 +38,7 @@ export interface GateDisposition {
 export interface DispositionResult {
   /** One disposition per policy-declared gate. */
   readonly dispositions: readonly GateDisposition[];
-  /** Violations from the subprocess whose gate name was NOT a policy gate. */
+  /** Violations from a report whose gate name was NOT a policy gate. */
   readonly unmatchedViolations: readonly GatesViolation[];
   /** True iff any disposition blocks. */
   readonly anyBlocks: boolean;
@@ -54,20 +53,17 @@ const KNOWN_GATE_IDS = [
 ] as const;
 
 /**
- * Mechanical aliases from subprocess gate names to canonical policy
+ * Mechanical aliases from legacy report gate names to canonical policy
  * gate IDs. Each alias must be a clear naming-only translation, never a
  * semantic repurposing. Adding a new alias here requires evidence that
- * the subprocess gate and the policy gate measure the same thing under
+ * the report gate and the policy gate measure the same thing under
  * different names.
  *
  * Current aliases:
- *   - `god_objects` (subprocess plural) → `god_object` (policy singular).
+ *   - `god_objects` (legacy plural) → `god_object` (policy singular).
  *     Same intent: detect files exceeding size threshold.
- *   - `hidden-todo` (subprocess internal name) → `todo_detection` (policy
+ *   - `hidden-todo` (legacy internal name) → `todo_detection` (policy
  *     canonical). Same intent: detect hidden incomplete implementations.
- *     NOTE: the subprocess `runHiddenTodoQualityGate` currently throws on
- *     errors instead of emitting violations, so this alias is only useful
- *     once that producer path is fixed (LEGACY-TEST-RECONCILE-001 follow-up).
  *
  * Refused aliases (semantically distinct, not naming variants):
  *   - `code_freeze` → `budget_limit` (crisis-response vs risk-tier budget)
@@ -75,13 +71,13 @@ const KNOWN_GATE_IDS = [
  *   - `duplication`, `documentation`, `placeholders`, `simplification`:
  *     no policy correspondent; remain in `unmatchedViolations`.
  */
-const SUBPROCESS_GATE_TO_POLICY_GATE: Readonly<Record<string, string>> = {
+const REPORT_GATE_TO_POLICY_GATE: Readonly<Record<string, string>> = {
   god_objects: 'god_object',
   'hidden-todo': 'todo_detection',
 };
 
-function canonicalGateName(subprocessGate: string): string {
-  return SUBPROCESS_GATE_TO_POLICY_GATE[subprocessGate] ?? subprocessGate;
+function canonicalGateName(reportGate: string): string {
+  return REPORT_GATE_TO_POLICY_GATE[reportGate] ?? reportGate;
 }
 
 // gateId is a plain string: the authoritative iteration set is
@@ -178,8 +174,8 @@ export function deriveDispositions(
     });
   }
 
-  // Whatever remains in byGate are unmatched violations (gates the
-  // subprocess reported but policy doesn't declare).
+  // Whatever remains in byGate are unmatched violations (gates the report
+  // included but policy doesn't declare).
   const unmatchedViolations: GatesViolation[] = [];
   for (const list of byGate.values()) unmatchedViolations.push(...list);
 

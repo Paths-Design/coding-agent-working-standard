@@ -11,7 +11,7 @@
 # PostToolUse hook firing on Write/Edit. Flags "shortcut" / incomplete-work
 # language in committed-bound source — the edit-time analogue of the
 # quality-gates `todo_detection` gate
-# (packages/quality-gates/todo-analyzer.mjs + check-placeholders.mjs). It
+# (TODO/placeholder quality signal). It
 # re-implements the practical intent in self-contained bash: catch the agent
 # leaving a TODO/FIXME/placeholder/"not implemented" stub in a NON-test source
 # file.

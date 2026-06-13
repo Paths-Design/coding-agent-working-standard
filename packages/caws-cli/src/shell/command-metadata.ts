@@ -563,12 +563,12 @@ export const GATES_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'run',
       description:
-        'Run CAWS-local policy evaluators and apply policy.gates[gate].mode to decide block/warn/skip. Appends one gate_evaluated event per policy-declared gate. Exit codes: 0/1 on gate disposition; 2 on hard composition error (no policy / subprocess-contract failure); 3 on evidence-integrity failure (a gate_evaluated event failed to append or validate).',
+        'Run CAWS-local policy evaluators and apply policy.gates[gate].mode to decide block/warn/skip. Appends one gate_evaluated event per policy-declared gate. Exit codes: 0/1 on gate disposition; 2 on hard composition error (no policy / report-contract failure); 3 on evidence-integrity failure (a gate_evaluated event failed to append or validate).',
       options: [
         { flag: '--spec <id>', required: true, description: 'Spec id this gate run is about' },
         {
           flag: '--context <ctx>',
-          description: 'Compatibility no-op retained from the former quality-gates subprocess path',
+          description: 'Compatibility no-op retained from the former external quality package path',
           defaultValue: 'cli',
         },
         DATA_OPTION,

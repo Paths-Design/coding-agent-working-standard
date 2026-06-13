@@ -1,8 +1,8 @@
-// Runtime validator for `caws-quality-gates --json` output.
+// Runtime validator for gate report JSON fixtures.
 //
-// The subprocess emits a SINGLE aggregated JSON payload describing the full
-// gate run. We do NOT trust the shape — TypeScript types do not survive
-// `JSON.parse`. The validator below enforces the minimal contract the
+// Tests and migration fixtures may provide a SINGLE aggregated JSON payload
+// describing a gate run. We do NOT trust the shape — TypeScript types do not
+// survive `JSON.parse`. The validator below enforces the minimal contract the
 // vNext command needs to make a policy-derived decision.
 //
 // Accepted shape (narrowed; the real payload may carry more fields, which
@@ -18,9 +18,8 @@
 //     performance?: { total_execution_time_ms?: number; ... }
 //   }
 //
-// Anything else is rejected. The contract is intentionally tighter than the
-// subprocess's actual payload — the command should only consume fields it
-// has validated.
+// Anything else is rejected. The command should only consume fields it has
+// validated.
 
 import { err, ok, type Diagnostic, type Result } from '@paths.design/caws-kernel';
 
@@ -35,7 +34,7 @@ export interface GatesViolation {
   readonly file?: string;
   readonly line?: number;
   readonly rule?: string;
-  /** Subprocess-reported severity. NOT trusted for blocking — policy decides. */
+  /** Reported severity. NOT trusted for blocking — policy decides. */
   readonly severity?: string;
 }
 
@@ -124,7 +123,7 @@ function validateWarning(value: unknown, idx: number): Result<GatesWarning> {
 }
 
 /**
- * Parse + validate the subprocess JSON. Returns Ok(GatesReport) only when
+ * Parse + validate gate report JSON. Returns Ok(GatesReport) only when
  * EVERY required field is present and well-typed. Returns Err with a
  * specific shell.gates.* rule otherwise. Never throws on bad input.
  */
@@ -136,7 +135,7 @@ export function validateGatesReport(raw: string): Result<GatesReport> {
     return err(
       diag(
         SHELL_RULES.GATES_REPORT_NOT_JSON,
-        `quality-gates output is not valid JSON: ${(e as Error).message}`
+        `gate report is not valid JSON: ${(e as Error).message}`
       )
     );
   }
@@ -144,7 +143,7 @@ export function validateGatesReport(raw: string): Result<GatesReport> {
     return err(
       diag(
         SHELL_RULES.GATES_REPORT_INVALID_SHAPE,
-        'quality-gates output is not a JSON object.'
+        'gate report is not a JSON object.'
       )
     );
   }
@@ -153,7 +152,7 @@ export function validateGatesReport(raw: string): Result<GatesReport> {
     return err(
       diag(
         SHELL_RULES.GATES_REPORT_INVALID_SHAPE,
-        'quality-gates output missing required string field `timestamp`.'
+        'gate report missing required string field `timestamp`.'
       )
     );
   }
@@ -161,7 +160,7 @@ export function validateGatesReport(raw: string): Result<GatesReport> {
     return err(
       diag(
         SHELL_RULES.GATES_REPORT_INVALID_SHAPE,
-        'quality-gates output missing required string field `context`.'
+        'gate report missing required string field `context`.'
       )
     );
   }
@@ -169,7 +168,7 @@ export function validateGatesReport(raw: string): Result<GatesReport> {
     return err(
       diag(
         SHELL_RULES.GATES_REPORT_INVALID_SHAPE,
-        'quality-gates output missing required number field `files_scoped`.'
+        'gate report missing required number field `files_scoped`.'
       )
     );
   }
@@ -179,7 +178,7 @@ export function validateGatesReport(raw: string): Result<GatesReport> {
     return err(
       diag(
         SHELL_RULES.GATES_REPORT_INVALID_SHAPE,
-        'quality-gates output missing required array field `violations`.'
+        'gate report missing required array field `violations`.'
       )
     );
   }
@@ -195,7 +194,7 @@ export function validateGatesReport(raw: string): Result<GatesReport> {
     return err(
       diag(
         SHELL_RULES.GATES_REPORT_INVALID_SHAPE,
-        'quality-gates output missing required array field `warnings`.'
+        'gate report missing required array field `warnings`.'
       )
     );
   }
