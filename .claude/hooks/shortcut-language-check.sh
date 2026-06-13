@@ -1,18 +1,18 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
-# hook_pack: claude-code
-# hook_pack_version: 16
+# hook_pack: shared
+# hook_pack_version: 1
 # caws_min_major: 11
 # lineage_refs: 29
-# do_not_edit_directly: update via `caws init --agent-surface claude-code`
+# do_not_edit_directly: update via `caws init`
 #
 # CAWS Shortcut-Language Progressive Check (QG-HOOKS-EXTRACT-001)
 #
 # PostToolUse hook firing on Write/Edit. Flags "shortcut" / incomplete-work
 # language in committed-bound source — the edit-time analogue of the
-# quality-gates `todo_detection` gate
-# (packages/quality-gates/todo-analyzer.mjs + check-placeholders.mjs). It
-# re-implements the practical intent in self-contained bash: catch the agent
+# quality-gates `todo_detection` gate.
+# Shortcut/placeholder quality signal: re-implements the practical intent in
+# self-contained bash: catch the agent
 # leaving a TODO/FIXME/placeholder/"not implemented" stub in a NON-test source
 # file.
 #
@@ -97,23 +97,10 @@ PATTERN_DESC=""
 
 # Determiner / preposition words that, immediately before a keyword, mark it as
 # a REFERENCED NOUN (a description of the concept) rather than an ACTIVE marker.
-# e.g. "the TODO placeholder", "avoid the placeholder language", "instead of a
-# FIXME" are descriptions; "// TODO implement", "// placeholder, fill later" are
-# markers. Suppressing determiner-preceded references kills the false positive
-# that hard-blocks comments which merely TALK ABOUT shortcut language, without
-# weakening detection of real stubs (CAWS-SHORTCUT-LANG-DESCRIPTIVE-FALSE-POSITIVE-001).
-# Discipline: we only SUPPRESS a category when EVERY one of its keyword hits is
-# determiner-preceded. A single active marker anywhere still strikes.
-# The keyword words themselves are included: in a phrase like "the TODO
-# placeholder" the word "placeholder" is part of a referenced compound noun
-# ("TODO-placeholder"), not an active marker — so a shortcut keyword directly
-# before "placeholder" also marks it as a reference.
 _REFERENCE_DETERMINERS='the|a|an|this|that|these|those|its|our|their|your|my|no|any|some|each|avoid|instead of|without|of|todo|fixme|xxx|hack|tbd'
 
 # active_keyword_hit PATTERN — echo the first content line that contains the
-# keyword PATTERN in ACTIVE (non-reference) position, or nothing. A hit is a
-# reference when the keyword is immediately preceded (same line) by one of the
-# determiner words above + whitespace; such lines are filtered out first.
+# keyword PATTERN in ACTIVE (non-reference) position, or nothing.
 active_keyword_hit() {
   local kw_pattern="$1"
   printf '%s' "$CONTENT" \
@@ -131,8 +118,26 @@ if hit=$(active_keyword_hit '\b(TODO|FIXME|XXX|HACK|TBD)\b'); then
 fi
 
 # 2. Placeholder / not-implemented phrases.
+# The bare word "placeholder" is a real stub marker in prose ("// placeholder,
+# fill later") but ALSO a legitimate identifier/attribute/filename token in
+# normal code: the JSX/HTML `placeholder="..."` input attribute, an imported
+# asset (`placeholder.svg`, `placeholderUrl`), a kebab/snake identifier
+# (`placeholder-text`), or a path segment (`assets/placeholder`). Those are not
+# shortcut language. Match "placeholder" only when it is NOT part of such a
+# token — not followed by `= . / - _ :` or an alphanumeric continuation, and not
+# preceded by `- _ / .` or alphanumeric. The other phrases keep their plain match.
+# (CAWS-SHORTCUT-LANG-PLACEHOLDER-TOKEN-FALSE-POSITIVE-002)
+_PLACEHOLDER_MARKER='(^|[^A-Za-z0-9._/-])placeholder([^A-Za-z0-9=._/:-]|$)'
 if [[ -z "$MATCH" ]]; then
-  if hit=$(active_keyword_hit 'not implemented|implement later|coming soon|placeholder'); then
+  if hit=$(active_keyword_hit 'not implemented|implement later|coming soon'); then
+    if [[ -n "$hit" ]]; then
+      MATCH="$hit"
+      PATTERN_DESC="placeholder / not-implemented language"
+    fi
+  fi
+fi
+if [[ -z "$MATCH" ]]; then
+  if hit=$(active_keyword_hit "$_PLACEHOLDER_MARKER"); then
     if [[ -n "$hit" ]]; then
       MATCH="$hit"
       PATTERN_DESC="placeholder / not-implemented language"
@@ -140,8 +145,7 @@ if [[ -z "$MATCH" ]]; then
   fi
 fi
 
-# 3. Stub-return shapes (throw new Error("not implemented") is caught above;
-#    catch the bare "return null; // TODO" combo and an explicit stub throw).
+# 3. Stub-return shapes.
 if [[ -z "$MATCH" ]]; then
   if hit=$(printf '%s' "$CONTENT" | grep -niE 'throw new Error\(["'"'"']not implemented' 2>/dev/null | head -1); then
     if [[ -n "$hit" ]]; then
@@ -170,5 +174,5 @@ guard_enforce_progressive_strikes \
 # guard_enforce_progressive_strikes emits the decision JSON. For strikes 1/2
 # it is an allow/ask (exit 0). For strike 3 it emits a block decision; exit 0
 # is correct for PostToolUse (the tool already ran) — the block decision in
-# the JSON is what Claude Code honors.
+# the JSON is what the harness honors.
 exit 0
