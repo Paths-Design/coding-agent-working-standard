@@ -7,7 +7,7 @@ created_at: '2026-06-13T20:41:26.601Z'
 updated_at: '2026-06-13T20:41:26.601Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli (shell command surface)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -20,13 +20,84 @@ scope:
     - '.caws/specs/CAWS-SPECS-VALIDATE-FILE-CMD-001.yaml'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Spec YAML validation logic lives in the CAWS CLI, not embedded in shell
+    hooks. `caws specs validate <file>` parses and validates an arbitrary YAML
+    file using the CLI's own bundled parser (js-yaml, a direct caws-cli
+    dependency) and the kernel validators (parse -> shape -> semantics). Hooks
+    and other consumers invoke this command rather than carrying their own
+    parser dependency, so the validation works for any consumer project
+    regardless of language and regardless of whether js-yaml is resolvable from
+    the consumer's own node context.
+  - >-
+    The command takes a filesystem path argument (the file to validate), NOT a
+    spec id. It does not resolve `.caws/`, does not require a repo root, does
+    not read canonical state, and does not mutate anything. It is a pure
+    read-and-validate operation over the bytes at the given path.
+  - >-
+    Exit code is the validation verdict: 0 when the file parses and validates
+    clean, non-zero when validation fails. A genuine parse/schema/semantic
+    failure produces a rendered diagnostic carrying the kernel's distinct rule
+    namespaces (spec.yaml.*, spec.schema.*, spec.semantic.*). A missing or
+    unreadable file produces a distinct, honest error — never a false
+    "YAML syntax error" for a file that was never parsed.
+  - >-
+    The command is registered through the single-source COMMAND_SURFACE_METADATA
+    leaf (SPECS_COMMAND_META) and the register.ts defineLeaf/leafMeta path, so
+    --help, the help-metadata lock test, and the generated
+    docs/command-reference.md stay in parity.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: A syntactically valid, schema-valid spec YAML file on disk.
+    when: '`caws specs validate <file>` is run against it.'
+    then: >-
+      The command exits 0 and emits no diagnostic error. (Proves the happy
+      path: a real spec validates clean via the CLI parser.)
+  - id: A2
+    given: A YAML file with a genuine syntax error (e.g. bad indentation).
+    when: '`caws specs validate <file>` is run against it.'
+    then: >-
+      The command exits non-zero and the rendered diagnostic carries a
+      spec.yaml.* rule (parse-layer) with the offending location. (Proves a
+      real parse failure is reported as a parse failure, with location.)
+  - id: A3
+    given: A YAML file that parses but violates the spec schema (e.g. an
+      unknown top-level field, or a tier-2 spec with no contract).
+    when: '`caws specs validate <file>` is run against it.'
+    then: >-
+      The command exits non-zero and the diagnostic carries a spec.schema.* (or
+      spec.semantic.*) rule, distinct from a parse error. (Proves schema and
+      semantic layers run, not just YAML parsing.)
+  - id: A4
+    given: A path that does not exist on disk.
+    when: '`caws specs validate <missing>` is run.'
+    then: >-
+      The command exits non-zero with an honest file-not-found / unreadable
+      error that does NOT claim a YAML syntax error. (Proves the missing-file
+      case is distinguished from a parse failure — the exact conflation that
+      misled spec authors into "fixing" valid YAML.)
+  - id: A5
+    given: The new command source.
+    when: The help-metadata lock test and command-reference sync test run.
+    then: >-
+      Both pass — the `validate` leaf is present in SPECS_COMMAND_META, wired in
+      register.ts, and reflected in the regenerated docs/command-reference.md.
+      (Proves the metadata single-source parity invariant holds.)
+non_functional:
+  reliability:
+    - >-
+      The command must not assume the consumer is a Node project: it relies only
+      on the CLI's own bundled js-yaml, never on a parser being resolvable from
+      the consumer's node_modules.
+    - >-
+      The command must never misreport a non-parse condition (missing file,
+      unreadable path) as a YAML syntax error.
 contracts:
   - name: 'specs-validate'
     type: behavior
+    description: >-
+      caws specs validate <file>: reads the YAML file at <file>, runs the
+      kernel parse -> shape -> semantics pipeline using the CLI's bundled
+      parser, prints a rendered diagnostic on failure, and returns exit 0
+      (valid) or non-zero (invalid / unreadable). Pure read; no .caws/
+      resolution, no mutation.
