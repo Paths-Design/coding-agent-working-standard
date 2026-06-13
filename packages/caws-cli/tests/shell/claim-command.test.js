@@ -274,10 +274,10 @@ describe('runClaimCommand — foreign owner with --takeover succeeds', () => {
   });
 });
 
-// CLAIM-TAKEOVER-CD-PHANTOM-001: a --takeover whose session root
-// (CLAUDE_PROJECT_DIR) is NOT the target worktree is a cd-phantom — the
-// worktree match came from a transient shell cd, and the write-guard (which
-// keys on CLAUDE_PROJECT_DIR) would never honor the registered ownership.
+// CLAIM-TAKEOVER-CD-PHANTOM-001: a --takeover whose stable harness root
+// (CLAUDE_PROJECT_DIR / CODEX_PROJECT_DIR) is NOT the target worktree is a
+// cd-phantom — the worktree match came from a transient shell cd, and the
+// write-guard would never honor the registered ownership.
 describe('runClaimCommand — cd-phantom takeover refused', () => {
   let env;
   afterEach(() => env && env.cleanup());
@@ -295,6 +295,25 @@ describe('runClaimCommand — cd-phantom takeover refused', () => {
     expect(r.code).toBe(1);
     expect(r.stderr).toMatch(/phantom-root takeover/);
     expect(r.stderr).toMatch(/CLAUDE_PROJECT_DIR/);
+    // Foreign owner intact; NO takeover patch written.
+    const wts = loadWorktrees(path.join(env.mainRoot, '.caws'));
+    expect(wts.value['wt-foo'].owner.session_id).toBe('sess-other');
+    expect(wts.value['wt-foo'].prior_owners).toBeUndefined();
+  });
+
+  it('A2: --takeover with CODEX_PROJECT_DIR = main checkout (cwd = worktree) → REFUSE, exit 1, no patch', () => {
+    env = mkRepoWithWorktree({
+      prefix: 'caws-claim-codex-phantom-',
+      owner: { session_id: 'sess-other', platform: 'cursor' },
+    });
+    const r = captureRun({
+      cwd: env.worktreeRoot,
+      env: { CLAUDE_SESSION_ID: 'sess-me', CODEX_PROJECT_DIR: env.mainRoot },
+      takeover: true,
+    });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toMatch(/phantom-root takeover/);
+    expect(r.stderr).toMatch(/CODEX_PROJECT_DIR/);
     // Foreign owner intact; NO takeover patch written.
     const wts = loadWorktrees(path.join(env.mainRoot, '.caws'));
     expect(wts.value['wt-foo'].owner.session_id).toBe('sess-other');
@@ -319,7 +338,25 @@ describe('runClaimCommand — cd-phantom takeover refused', () => {
     expect(wts.value['wt-foo'].prior_owners[0].session_id).toBe('sess-other');
   });
 
-  it('A4: same-session claim (no --takeover) with CLAUDE_PROJECT_DIR = main is UNAFFECTED, exit 0', () => {
+  it('A4: --takeover with CODEX_PROJECT_DIR = the worktree itself → SUCCEEDS, exit 0', () => {
+    env = mkRepoWithWorktree({
+      prefix: 'caws-claim-codex-rooted-',
+      owner: { session_id: 'sess-other', platform: 'cursor' },
+    });
+    const r = captureRun({
+      cwd: env.worktreeRoot,
+      env: { CLAUDE_SESSION_ID: 'sess-me', CODEX_PROJECT_DIR: env.worktreeRoot },
+      takeover: true,
+    });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toMatch(/OWNED \(you\)/);
+    const wts = loadWorktrees(path.join(env.mainRoot, '.caws'));
+    expect(wts.value['wt-foo'].owner.session_id).toBe('sess-me');
+    expect(wts.value['wt-foo'].prior_owners).toHaveLength(1);
+    expect(wts.value['wt-foo'].prior_owners[0].session_id).toBe('sess-other');
+  });
+
+  it('A5: same-session claim (no --takeover) with CLAUDE_PROJECT_DIR = main is UNAFFECTED, exit 0', () => {
     env = mkRepoWithWorktree({
       prefix: 'caws-claim-phantom-noop-',
       owner: { session_id: 'sess-me', platform: 'claude-code' },
