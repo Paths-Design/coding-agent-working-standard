@@ -5,7 +5,7 @@ mode: chore
 lifecycle_state: active
 worktree: remove-quality-gates-package-01
 created_at: '2026-06-13T02:59:07.559Z'
-updated_at: '2026-06-13T02:59:15.343Z'
+updated_at: '2026-06-13T04:03:03.142Z'
 blast_radius:
   modules:
     - package workspace graph
@@ -26,6 +26,36 @@ scope:
     - 'packages/caws-types/package.json'
     - '.github/workflows/caws-gate.yml'
     - .caws/specs/CAWS-REMOVE-QUALITY-GATES-PACKAGE-001.yaml
+    - packages/caws-cli/package.json
+    - packages/caws-cli/src/shell/commands/gates.ts
+    - packages/caws-cli/src/shell/gates/quality-gates-adapter.ts
+    - packages/caws-cli/src/shell/gates/gate-result-contract.ts
+    - packages/caws-cli/src/shell/index.ts
+    - packages/caws-cli/tests/shell/quality-gates-bin-resolver.test.js
+    - packages/caws-cli/tests/packaging/runtime-dependencies.test.js
+    - packages/caws-cli/tests/shell/gates-command.test.js
+    - packages/caws-cli/tests/shell/scope-match-gate-contract.test.js
+    - packages/caws-cli/src/shell/gates/local-evaluators/index.ts
+    - packages/caws-cli/src/shell/gates/disposition.ts
+    - packages/caws-cli/src/shell/gates/waiver-filter.ts
+    - packages/caws-cli/src/shell/gates/local-evaluators/budget-limit.ts
+    - packages/caws-cli/src/shell/gates/local-evaluators/scope-boundary.ts
+    - packages/caws-cli/src/shell/gates/local-evaluators/spec-completeness.ts
+    - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
+    - packages/caws-cli/src/init/hook-packs/manifest-codex.ts
+    - packages/caws-cli/templates/hook-packs/claude-code
+    - packages/caws-cli/templates/hook-packs/codex
+    - packages/caws-cli/tests/init/hook-packs
+    - packages/caws-cli/src/shell/render/gates.ts
+    - packages/caws-cli/src/shell/rules.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/tests/integration/gates-cli.test.js
+    - packages/caws-cli/tests/shell/gates-waivers.test.js
+    - docs/guides/hook-packs.md
+    - docs/guides/quality-gates.md
+    - docs/architecture/quality-gates-deprecation.md
+    - docs/architecture/caws-vnext-command-surface.md
+    - docs/failure-lineage.md
   out: []
 invariants:
   - >-
