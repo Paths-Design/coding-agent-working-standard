@@ -42,6 +42,7 @@ import {
   isKnownSurface,
   resolveHookPack,
 } from '../../init/hook-packs/register';
+import { SHARED_PACK } from '../../init/hook-packs/manifest-shared';
 import type {
   AgentSurface,
   HookPackInstallResult,
@@ -161,7 +162,46 @@ function performHookPackStep(
   if (options.adopt !== undefined) {
     (installOpts as { adopt?: boolean }).adopt = options.adopt;
   }
-  return installHookPack(resolution.pack, installOpts);
+
+  // CAWS-HOOK-PACK-SHARED-CORE-001: install the surface-neutral shared core
+  // first (writes .caws/hooks/), then install the vendor adapter (writes
+  // .<surface>/ files). The result returned to the caller reports the vendor
+  // pack identity (so downstream pack?.id checks for 'claude-code'/'codex'
+  // keep working) with actions from both installs merged. Activation is
+  // restart_required when either pack requires it.
+  const sharedResult = installHookPack(SHARED_PACK, installOpts);
+  const vendorResult = installHookPack(resolution.pack, installOpts);
+
+  // Merge actions (shared first, then vendor) and derive a combined outcome.
+  const mergedActions = [...sharedResult.actions, ...vendorResult.actions];
+  const anyRefused = mergedActions.some((a) => a.action === 'refused');
+  const allUnchanged = mergedActions.every((a) => a.action === 'unchanged');
+  let mergedOutcome: HookPackInstallResult['outcome'];
+  if (anyRefused) {
+    mergedOutcome = 'installed';
+  } else if (allUnchanged) {
+    mergedOutcome = 'already_installed';
+  } else if (
+    mergedActions.some((a) => a.action === 'updated') &&
+    !mergedActions.some((a) => a.action === 'created')
+  ) {
+    mergedOutcome = 'updated';
+  } else {
+    mergedOutcome = 'installed';
+  }
+
+  return {
+    outcome: mergedOutcome,
+    // Report the vendor pack identity so downstream checks (pack?.id ===
+    // 'claude-code', pack?.id === 'codex') keep working correctly.
+    pack: vendorResult.pack,
+    actions: mergedActions,
+    activation:
+      sharedResult.activation === 'restart_required' ||
+      vendorResult.activation === 'restart_required'
+        ? 'restart_required'
+        : vendorResult.activation,
+  };
 }
 
 export function runInitCommand(opts: InitCommandOptions = {}): number {

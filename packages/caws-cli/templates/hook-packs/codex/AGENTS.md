@@ -1,7 +1,7 @@
 <!--
 # CAWS-MANAGED-HOOK
 # hook_pack: codex
-# hook_pack_version: 6
+# hook_pack_version: 7
 # caws_min_major: 11
 # lineage_refs: 1,4,6,8,11,12,13,16,17,19,20
 # do_not_edit_directly: update via `caws init --agent-surface codex`
@@ -33,8 +33,11 @@ reviewed and trusted through `/hooks` before they run.
     emit.sh             # ask->deny; emit_updated_input for apply_patch rewrites
     parse-input.sh      # apply_patch normalization + HOOK_FILE_PATHS / HOOK_ORIGINAL_TOOL_NAME
     run-handlers.sh     # deny exit-code arm in _rh_stdout_priority + CODEX_HOOK_DRY_RUN
-  session_log_renderer.py  # codex JSONL event types (response_item, write_stdin, exec_command, ...)
 ```
+
+The session log renderer is NOT a codex override: `shared/session-log.sh`
+resolves it from the shared core (`.caws/hooks/session_log_renderer.py`), so
+codex uses the same renderer as every other surface.
 
 The override files are resolved at runtime by `caws_source_lib` (defined in
 `shared/lib/agent-surface.sh`): it checks `$CAWS_PROJECT_DIR/$CAWS_VENDOR_DIR/hooks/lib/<name>`
@@ -47,8 +50,13 @@ before falling back to the shared default. `CAWS_VENDOR_DIR` is `.codex` for thi
 | `hooks/lib/emit.sh` | `emit_ask` emits `deny` (Codex has no PreToolUse `ask`); adds `emit_updated_input` for apply_patch command rewriting |
 | `hooks/lib/parse-input.sh` | Normalizes `apply_patch` tool_name → `Edit`/`Write`; exports `HOOK_FILE_PATHS` and `HOOK_ORIGINAL_TOOL_NAME` |
 | `hooks/lib/run-handlers.sh` | `_rh_stdout_priority` adds `deny` as priority-3 alongside `block`; uses `CODEX_HOOK_DRY_RUN`/`CODEX_HOOK_TIMING` env vars |
-| `session_log_renderer.py` | Handles Codex-specific JSONL event types not present in the Claude transcript format |
-| `hooks.json` PostToolUse | `quality-check.sh` disabled via `CAWS_DISABLED_HANDLERS=quality-check.sh` in the command prefix |
+
+These three lib files are the complete genuine-divergence set. Everything else
+codex needs — the dispatchers, every guard/check hook, the input parser's
+shared baseline, the session log renderer — is the shared core under
+`.caws/hooks/`, identical to every other surface. The PostToolUse handler chain
+is the shared default for all surfaces (quality-check.sh ships commented out for
+everyone; codex does not disable it via any per-surface mechanism).
 
 ## These are CAWS-managed files
 

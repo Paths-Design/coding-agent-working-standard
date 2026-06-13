@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # CAWS-MANAGED-HOOK
-# hook_pack: claude-code
-# hook_pack_version: 17
+# hook_pack: shared
+# hook_pack_version: 1
 # caws_min_major: 11
 # lineage_refs: 10
-# do_not_edit_directly: update via `caws init --agent-surface claude-code`
+# do_not_edit_directly: update via `caws init --agent-surface <surface>`
 """Render lean session artifacts from a Claude transcript JSONL.
 
 This file is invoked by session-log.sh via `python3 <path>`. It is NOT
