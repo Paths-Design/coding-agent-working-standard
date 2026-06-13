@@ -190,8 +190,10 @@ function shellQuote(value: string): string {
 }
 
 function codexCommand(repoRoot: string, dispatcher: string): string {
-  const script = path.join(repoRoot, '.codex', 'hooks', 'caws_dispatch', dispatcher);
-  return `CODEX_PROJECT_DIR=${shellQuote(repoRoot)} ${shellQuote(script)}`;
+  // CAWS-HOOK-PACK-SHARED-CORE-001: commands now route to the shared
+  // dispatcher at .caws/hooks/dispatch/<event>.sh with surface injection.
+  const script = path.join(repoRoot, '.caws', 'hooks', 'dispatch', dispatcher);
+  return `CAWS_AGENT_SURFACE=codex CAWS_PROJECT_DIR=${shellQuote(repoRoot)} ${shellQuote(script)}`;
 }
 
 function renderPackFileBytes(
@@ -214,9 +216,9 @@ function renderPackFileBytes(
   };
 
   let rendered = sourceBytes.toString('utf8');
-  for (const [placeholder, value] of Object.entries(replacements)) {
+  for (const [token, value] of Object.entries(replacements)) {
     rendered = rendered
-      .split(placeholder)
+      .split(token)
       .join(value.replace(/\\/g, '\\\\').replace(/"/g, '\\"'));
   }
   return Buffer.from(rendered, 'utf8');
@@ -480,19 +482,26 @@ export function inspectClaudeSettings(
       missing.push(key);
       continue;
     }
-    // A canonical entry has a hook whose command path references
-    // .claude/hooks/caws_dispatch/<key snake_case>.sh
+    // A canonical entry has a hook whose command path references any of
+    // the known CAWS dispatch tails (shared-core or legacy).
     const snake = key
       .replace(/([a-z])([A-Z])/g, '$1_$2')
       .toLowerCase();
-    const expectedTail = `.claude/hooks/caws_dispatch/${snake}.sh`;
+    const sharedCoreTail = `.caws/hooks/dispatch/${snake}.sh`;
+    const legacyCawsDispatchTail = `.claude/hooks/caws_dispatch/${snake}.sh`;
+    const legacyDispatchTail = `.claude/hooks/dispatch/${snake}.sh`;
     let found = false;
     for (const block of entry as unknown[]) {
       const hookList = (block as { hooks?: unknown }).hooks;
       if (!Array.isArray(hookList)) continue;
       for (const h of hookList as unknown[]) {
         const cmd = (h as { command?: unknown }).command;
-        if (typeof cmd === 'string' && cmd.includes(expectedTail)) {
+        if (
+          typeof cmd === 'string' &&
+          (cmd.includes(sharedCoreTail) ||
+            cmd.includes(legacyCawsDispatchTail) ||
+            cmd.includes(legacyDispatchTail))
+        ) {
           found = true;
           break;
         }
@@ -508,7 +517,14 @@ export function inspectClaudeSettings(
 /** The canonical CAWS hook wiring as a structured object. This is the
  *  single source of truth for both the printed snippet and the in-place
  *  merge — each hook-event key maps to the one CAWS entry that wires the
- *  corresponding caws_dispatch entrypoint. */
+ *  corresponding shared dispatcher entrypoint.
+ *
+ *  CAWS-HOOK-PACK-SHARED-CORE-001: commands now route to the shared
+ *  dispatcher at .caws/hooks/dispatch/<event>.sh with CAWS_AGENT_SURFACE
+ *  and CAWS_PROJECT_DIR injected. The legacy paths
+ *  .claude/hooks/caws_dispatch/<event>.sh and .claude/hooks/dispatch/<event>.sh
+ *  are recognized by arrayHasCawsEntry as already-wired CAWS entries so
+ *  re-running init does not duplicate entries for consumers on the old wiring. */
 export const CANONICAL_HOOK_ENTRIES: Readonly<
   Record<string, Record<string, unknown>>
 > = {
@@ -518,7 +534,7 @@ export const CANONICAL_HOOK_ENTRIES: Readonly<
       {
         type: 'command',
         command:
-          '"$CLAUDE_PROJECT_DIR"/.claude/hooks/caws_dispatch/pre_tool_use.sh',
+          'CAWS_AGENT_SURFACE=claude-code CAWS_PROJECT_DIR="$CLAUDE_PROJECT_DIR" "$CLAUDE_PROJECT_DIR"/.caws/hooks/dispatch/pre_tool_use.sh',
         timeout: 45,
       },
     ],
@@ -529,7 +545,7 @@ export const CANONICAL_HOOK_ENTRIES: Readonly<
       {
         type: 'command',
         command:
-          '"$CLAUDE_PROJECT_DIR"/.claude/hooks/caws_dispatch/post_tool_use.sh',
+          'CAWS_AGENT_SURFACE=claude-code CAWS_PROJECT_DIR="$CLAUDE_PROJECT_DIR" "$CLAUDE_PROJECT_DIR"/.caws/hooks/dispatch/post_tool_use.sh',
         timeout: 60,
       },
     ],
@@ -539,7 +555,7 @@ export const CANONICAL_HOOK_ENTRIES: Readonly<
       {
         type: 'command',
         command:
-          '"$CLAUDE_PROJECT_DIR"/.claude/hooks/caws_dispatch/session_start.sh',
+          'CAWS_AGENT_SURFACE=claude-code CAWS_PROJECT_DIR="$CLAUDE_PROJECT_DIR" "$CLAUDE_PROJECT_DIR"/.caws/hooks/dispatch/session_start.sh',
         timeout: 30,
       },
     ],
@@ -549,7 +565,7 @@ export const CANONICAL_HOOK_ENTRIES: Readonly<
       {
         type: 'command',
         command:
-          '"$CLAUDE_PROJECT_DIR"/.claude/hooks/caws_dispatch/stop.sh',
+          'CAWS_AGENT_SURFACE=claude-code CAWS_PROJECT_DIR="$CLAUDE_PROJECT_DIR" "$CLAUDE_PROJECT_DIR"/.caws/hooks/dispatch/stop.sh',
         timeout: 30,
       },
     ],
@@ -588,21 +604,26 @@ export type SettingsMergeResult =
   | { readonly kind: 'invalid'; readonly path: string; readonly error: string };
 
 /** Does this hook-event's entry array already contain a CAWS-owned entry for
- *  `key`? Matches an entry whose command references EITHER the current
- *  `caws_dispatch/<snake>.sh` entrypoint OR the pre-rename legacy
- *  `dispatch/<snake>.sh` one. Recognizing the legacy path is load-bearing
- *  (CAWS-INIT-LEGACY-DISPATCH-NO-DUP-001): a settings.json wired before the
- *  caws_dispatch/ rename is "already wired", so the merge must NOT append a
- *  caws_dispatch/ twin that would double-fire the hook.
+ *  `key`? Matches an entry whose command references any of the three known
+ *  CAWS dispatch tails so that re-running init on a consumer using an older
+ *  wiring does not append a duplicate entry.
  *
- *  The two tails are anchored with a leading slash. `caws_dispatch/x.sh` ends
- *  with `dispatch/x.sh`, but the char before `dispatch` there is `_`, not `/`,
- *  so `/dispatch/<snake>.sh` matches ONLY the legacy path — no overlap. */
+ *  Recognised tails (all anchored with a leading slash):
+ *   1. `/.caws/hooks/dispatch/<snake>.sh`      — current (shared-core) path
+ *   2. `/.claude/hooks/caws_dispatch/<snake>.sh` — legacy pre-shared-core path
+ *   3. `/.claude/hooks/dispatch/<snake>.sh`     — pre-rename legacy path
+ *
+ *  Decision (CAWS-HOOK-PACK-SHARED-CORE-001): for this slice recognizing all
+ *  three tails to avoid duplicates is sufficient. A fresh install writes the
+ *  new shared-core path; consumers on the old path are detected as wired and
+ *  no duplicate is appended. Whether to rewrite an old-path entry to the new
+ *  path on merge is deferred — idempotent detection is the required invariant. */
 function arrayHasCawsEntry(entryArray: unknown, key: string): boolean {
   if (!Array.isArray(entryArray)) return false;
   const snake = key.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase();
-  const currentTail = `/.claude/hooks/caws_dispatch/${snake}.sh`;
-  const legacyTail = `/.claude/hooks/dispatch/${snake}.sh`;
+  const sharedCoreTail = `/.caws/hooks/dispatch/${snake}.sh`;
+  const legacyCawsDispatchTail = `/.claude/hooks/caws_dispatch/${snake}.sh`;
+  const legacyDispatchTail = `/.claude/hooks/dispatch/${snake}.sh`;
   for (const block of entryArray as unknown[]) {
     const hookList = (block as { hooks?: unknown }).hooks;
     if (!Array.isArray(hookList)) continue;
@@ -610,7 +631,9 @@ function arrayHasCawsEntry(entryArray: unknown, key: string): boolean {
       const cmd = (h as { command?: unknown }).command;
       if (
         typeof cmd === 'string' &&
-        (cmd.includes(currentTail) || cmd.includes(legacyTail))
+        (cmd.includes(sharedCoreTail) ||
+          cmd.includes(legacyCawsDispatchTail) ||
+          cmd.includes(legacyDispatchTail))
       ) {
         return true;
       }
