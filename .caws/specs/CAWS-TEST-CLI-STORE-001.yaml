@@ -1,0 +1,64 @@
+id: CAWS-TEST-CLI-STORE-001
+title: 'CLI store layer unit/integration + mutation coverage (yaml-patch, atomic-write, apply-patch, events-store hash-chain)'
+risk_tier: 1
+mode: feature
+lifecycle_state: active
+created_at: '2026-06-13T00:00:00.000Z'
+updated_at: '2026-06-13T23:31:34.275Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/tests/store
+    - packages/caws-cli/jest.config.js
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - packages/caws-cli/tests/store
+    - packages/caws-cli/tests/helpers
+    - .caws/specs/CAWS-TEST-CLI-STORE-001.yaml
+  out:
+    - packages/caws-cli/src
+    - packages/caws-kernel
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - 'No production source under packages/caws-cli/src is modified by this slice. A test that surfaces a real store bug files a separate tracked defect spec; the test pins correct behavior and is never bent to match buggy code.'
+  - 'Tests load the COMPILED store from dist/ (require of dist/store/*.js), not src/ — the Stryker contract (mutate dist/, run jest) is preserved. turbo build --force runs before any dist-dependent test.'
+  - 'Tests assert SEMANTICS/VALUES: the actual patched YAML bytes, the actual hash-chain link, the actual atomic-write durability outcome — not structure/mocks. Mutation-aware per the methodology established in the kernel slice.'
+  - 'I/O tests use the slice-0 git-repo factory (os.tmpdir, per-worker isolated); no test writes inside the project tree or shares the git index / .caws state across workers.'
+acceptance:
+  - id: A1
+    given: 'yaml-patch (setTopLevelScalar, insertTopLevelScalarAfter, removeTopLevelScalar) — the comment-preserving patcher behind specs lifecycle writes (lineage E14).'
+    when: 'A YAML doc with comments, block scalars, and ordering is patched.'
+    then: 'Comments and unrelated keys are PRESERVED byte-for-byte; the targeted scalar is set/inserted/removed exactly; a mutation that drops comment preservation or mis-targets the key is killed.'
+  - id: A2
+    given: 'atomic-write (writeFileAtomic).'
+    when: 'A file is written, including over an existing file and with a concurrent-failure scenario.'
+    then: 'The write is atomic (temp + rename); on success the full contents land; file mode is preserved on overwrite; a partial/failed write does not corrupt the existing file.'
+  - id: A3
+    given: 'apply-patch (the typed patch envelope applier over real files).'
+    when: 'Each patch kind is applied to a fixture file.'
+    then: 'The on-disk result matches the patch intent; the result routes through atomic-write; an inapplicable patch returns Err with its STORE_RULES code, not a silent partial write.'
+  - id: A4
+    given: 'events-store hash-chain append (lineage E9 audit integrity, E20 event rename).'
+    when: 'Events are appended to a fresh chain and an existing chain.'
+    then: 'seq increments, prev_hash links to the prior event_hash, the genesis event has prev_hash null; a tampered or reordered chain is detectable. Append routes through the kernel computeEventHash.'
+  - id: A5
+    given: 'The store test suite under Stryker (slice 7 wires the run).'
+    when: 'Mutation runs against the covered store modules.'
+    then: 'High mutation-kill on the covered surface; surviving mutants documented, not hidden. Floor set in slice 7.'
+non_functional:
+  reliability:
+    - 'I/O tests are deterministic and isolated (slice-0 factory, os.tmpdir, per-worker); they run green under default parallel workers, not --runInBand.'
+    - 'atomic-write durability is asserted by an actual partial-failure scenario, not just a happy-path write.'
+  security:
+    - 'Event-chain tests prove tamper-detection (a mutated stored event_hash does not validate) so the audit-integrity guarantee stays proven, not assumed.'
+observability:
+  - 'jest run output (pass count + per-suite timing) is the verification artifact; the actual patched-YAML diff and the actual chain link values are printed/asserted, not summarized.'
+rollback:
+  - 'Rollback is a revert of the test commit(s); no production code or data is touched.'
+contracts:
+  - name: store-mutation-ready
+    type: behavior
+    path: packages/caws-cli/tests/store
+    description: 'The store suite asserts concrete on-disk/byte/chain outcomes (preserved comments, atomic durability, hash-chain links) loaded from dist/, such that inverting a covered store function fails a test and the Stryker mutate-dist contract holds.'
