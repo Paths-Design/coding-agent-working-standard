@@ -20,7 +20,7 @@
 
 import * as path from 'node:path';
 
-import { isOk, type Actor, type ActorKind } from '@paths.design/caws-kernel';
+import { isOk, parseAndValidateSpec, type Actor, type ActorKind } from '@paths.design/caws-kernel';
 
 import { resolveRepoRoot, runSpecsMigrateApply } from '../../store';
 import type {
@@ -1102,5 +1102,54 @@ export function runSpecsPruneArchiveCommand(opts: SpecsPruneArchiveOptions): num
   } else {
     out('Dry-run complete. Pass --apply to execute. Unrecoverable bodies will be quarantined (never silently deleted); recoverable bodies will be removed (recoverable via caws specs recover <id>).');
   }
+  return 0;
+}
+
+// ─── caws specs validate <file> ──────────────────────────────────────────
+//
+// CAWS-SPECS-VALIDATE-FILE-CMD-001: validate a spec YAML FILE on disk using
+// the CLI's own bundled parser + the kernel parse->shape->semantics pipeline.
+// The whole point is that the parser lives in CAWS tooling, NOT embedded in
+// shell hooks via `node -e require('js-yaml')`: this works for any consumer
+// project regardless of language, and regardless of whether js-yaml is
+// resolvable from the consumer's own node context. Hooks (validate-spec.sh)
+// and CI shell out to this command instead of carrying a parser dependency.
+//
+// This is path-shaped, NOT id-shaped: it takes the filesystem path to the
+// file to validate, does NOT resolve `.caws/`, does NOT read canonical state,
+// and does NOT mutate anything. Exit code is the verdict (0 valid / non-zero
+// invalid|unreadable). A missing/unreadable file produces an honest error —
+// never a false "YAML syntax error" for a file that was never parsed.
+
+export interface SpecsValidateOptions extends BaseCommandOptions {
+  readonly file: string;
+}
+
+export function runSpecsValidateCommand(opts: SpecsValidateOptions): number {
+  const { out, err, showData } = setupIO(opts);
+  const filePath = opts.file;
+
+  let source: string;
+  try {
+    source = fs.readFileSync(filePath, 'utf8');
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    // Honest file-access error. NOT a YAML syntax error — the parser never
+    // ran (CAWS-SPECS-VALIDATE-FILE-CMD-001 A4). This is the exact conflation
+    // the old embedded-js-yaml hook produced and that this command exists to
+    // eliminate.
+    err(`caws specs validate: cannot read file ${filePath}`);
+    err(`  ${msg}`);
+    return 1;
+  }
+
+  const result = parseAndValidateSpec(source, { sourcePath: filePath });
+  if (!isOk(result)) {
+    err(`caws specs validate: ${filePath} is invalid.`);
+    err(renderDiagnostics(result.errors, { showData }));
+    return 1;
+  }
+
+  out(`caws specs validate: ${filePath} is valid (${result.value.id}).`);
   return 0;
 }

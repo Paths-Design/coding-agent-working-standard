@@ -65,6 +65,7 @@ import {
   runSpecsListCommand,
   runSpecsMigrateCommand,
   runSpecsShowCommand,
+  runSpecsValidateCommand,
   runStatusCommand,
   runWaiverCreateCommand,
   runWaiverListCommand,
@@ -775,6 +776,15 @@ export function registerShellCommands(
         exit(code);
       }
     );
+
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'validate'))
+    .action((file: string, opts: { data?: boolean }) => {
+      const code = runSpecsValidateCommand({
+        file,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
 
   // -------------------------------------------------------------------
   // caws worktree (CLI-WORKTREE-001)

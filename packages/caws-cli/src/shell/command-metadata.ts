@@ -336,6 +336,14 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         DATA_OPTION,
       ],
     },
+    {
+      kind: 'leaf',
+      name: 'validate',
+      argument: { name: 'file', required: true, description: 'Path to the spec YAML file to validate' },
+      description:
+        'Validate a spec YAML FILE on disk using the CLI\'s own bundled parser and the kernel parse->shape->semantics pipeline. Path-shaped (takes a file path, not a spec id); does NOT resolve .caws/, read canonical state, or mutate anything. Exits 0 when valid, non-zero with a rendered diagnostic when invalid or unreadable. Lets hooks/CI validate spec YAML without carrying their own parser dependency — works for any consumer project regardless of language.',
+      options: [DATA_OPTION],
+    },
   ],
 };
 
