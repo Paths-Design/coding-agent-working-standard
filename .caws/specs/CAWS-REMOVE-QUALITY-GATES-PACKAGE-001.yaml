@@ -4,10 +4,13 @@ risk_tier: 2
 mode: chore
 lifecycle_state: active
 created_at: '2026-06-13T02:59:07.559Z'
-updated_at: '2026-06-13T02:59:07.559Z'
+updated_at: '2026-06-13T02:59:15.343Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - package workspace graph
+    - release smoke scripts
+    - release guard package filters
+    - packages/quality-gates
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -21,14 +24,30 @@ scope:
     - 'scripts/release-guard-dry-run.mjs'
     - 'packages/caws-types/package.json'
     - '.github/workflows/caws-gate.yml'
+    - .caws/specs/CAWS-REMOVE-QUALITY-GATES-PACKAGE-001.yaml
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    The standalone `@paths.design/quality-gates` package is no longer a
+    workspace package, publish target, npm binary provider, or release-smoke
+    dependency.
+  - >-
+    The surviving quality feedback substrate is the CAWS hook/gates surface;
+    package scripts and release guards must not retain package-level
+    `packages/quality-gates` assumptions.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'The repository root workspace package graph.'
+    when: '`npm run build` or Turbo workspace discovery runs.'
+    then: '`@paths.design/quality-gates` is not discovered and no quality-gates package build script runs.'
+  - id: A2
+    given: 'The repository file tree and lockfile.'
+    when: 'Searching for package-level quality-gates references.'
+    then: '`packages/quality-gates` and `@paths.design/quality-gates` are absent from the active package graph.'
+  - id: A3
+    given: 'The release smoke scripts.'
+    when: 'They are inspected for command targets.'
+    then: 'They no longer invoke `node packages/quality-gates/run-quality-gates.mjs` or `caws-quality-gates`.'
 non_functional: {}
 contracts:
   - name: 'workspace-build'
