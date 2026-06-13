@@ -2,10 +2,11 @@ id: CAWS-SPECS-VALIDATE-FILE-CMD-001
 title: 'Add caws specs validate <file> so spec YAML validation lives in CAWS tooling, not embedded js-yaml in hooks'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: specs-validate-cmd
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge specs-validate-cmd at 1ad157047bba887de5814f42cd435cbbea34af75'
 created_at: '2026-06-13T20:41:26.601Z'
-updated_at: '2026-06-13T20:44:47.622Z'
+updated_at: '2026-06-13T20:52:08.598Z'
 blast_radius:
   modules:
     - 'packages/caws-cli (shell command surface)'
