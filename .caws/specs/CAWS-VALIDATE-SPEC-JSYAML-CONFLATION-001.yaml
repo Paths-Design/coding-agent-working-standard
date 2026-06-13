@@ -3,6 +3,7 @@ title: 'validate-spec.sh: distinguish missing js-yaml from YAML syntax error'
 risk_tier: 3
 mode: chore
 lifecycle_state: active
+worktree: jsyaml-conflation-01
 created_at: '2026-06-13T08:50:37.220Z'
 updated_at: '2026-06-13T08:50:48.349Z'
 blast_radius:
