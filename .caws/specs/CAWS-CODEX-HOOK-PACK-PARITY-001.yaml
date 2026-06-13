@@ -2,9 +2,11 @@ id: CAWS-CODEX-HOOK-PACK-PARITY-001
 title: 'Add Codex hook pack parity'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: superseded
+closure_notes: 'Superseded by CAWS-HOOK-PACK-SHARED-CORE-001: codex surface becomes a thin vendor adapter over the shared .caws/hooks core; the standalone per-vendor codex pack this spec built is replaced by the shared-core layout.'
 created_at: '2026-06-07T07:06:43.672Z'
-updated_at: '2026-06-07T08:10:43.889Z'
+updated_at: '2026-06-13T10:22:31.577Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/init
