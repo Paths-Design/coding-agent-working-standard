@@ -123,11 +123,15 @@ fi
 # normal code: the JSX/HTML `placeholder="..."` input attribute, an imported
 # asset (`placeholder.svg`, `placeholderUrl`), a kebab/snake identifier
 # (`placeholder-text`), or a path segment (`assets/placeholder`). Those are not
-# shortcut language. Match "placeholder" only when it is NOT part of such a
-# token — not followed by `= . / - _ :` or an alphanumeric continuation, and not
-# preceded by `- _ / .` or alphanumeric. The other phrases keep their plain match.
+# shortcut language. Match "placeholder" only when it is NOT followed by a token
+# continuation (`= . / - _ :` or an alphanumeric). The LEADING boundary is a
+# zero-width `\b`, not a consumed non-token char: a consumed leading char would
+# break composition with the _REFERENCE_DETERMINERS suppression layer, whose
+# `(determiner)[[:space:]]+(pattern)` test needs the pattern to start exactly
+# where the post-space word begins (so "avoid the TODO placeholder" and "the
+# placeholder line" stay suppressed as descriptive references).
 # (CAWS-SHORTCUT-LANG-PLACEHOLDER-TOKEN-FALSE-POSITIVE-002)
-_PLACEHOLDER_MARKER='(^|[^A-Za-z0-9._/-])placeholder([^A-Za-z0-9=._/:-]|$)'
+_PLACEHOLDER_MARKER='\bplaceholder([^A-Za-z0-9=._/:-]|$)'
 if [[ -z "$MATCH" ]]; then
   if hit=$(active_keyword_hit 'not implemented|implement later|coming soon'); then
     if [[ -n "$hit" ]]; then

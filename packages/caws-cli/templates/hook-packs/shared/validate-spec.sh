@@ -6,11 +6,21 @@
 # lineage_refs: 8,13
 # do_not_edit_directly: update via `caws init`
 # CAWS Spec Validation Hook
-# Validates a .caws/specs/*.yaml file when it's edited (YAML syntax +
-# terminal-status AC coverage). OPT-IN: not wired into the default
-# post_tool_use HANDLERS array. Promoted from Sterling per
-# HOOK-PACK-DIVERGENCE-RECONCILE-001 — the v11-correct version that does
-# NOT call the removed `caws validate` command.
+# Validates a .caws/specs/*.yaml file when it's edited. OPT-IN: not wired into
+# the default post_tool_use HANDLERS array.
+#
+# CAWS-SPECS-VALIDATE-FILE-CMD-001 (Half B): validation is delegated to the
+# canonical `caws specs validate <file>` command (parse->shape->semantics via
+# the kernel, using the CLI's OWN bundled js-yaml). The hook no longer embeds a
+# `node -e require('js-yaml')` block — that assumed the consumer is a Node
+# project with js-yaml resolvable from the hook's exec context, which is false
+# for non-Node consumers (Sterling etc.) and caused the
+# CAWS-VALIDATE-SPEC-JSYAML-CONFLATION-001 "YAML syntax error: Cannot find
+# module 'js-yaml'" misreport on every spec edit. Validation now lives in CAWS
+# tooling, language-agnostically. The prior V2 `test_nodeids` advisory block was
+# also dropped: it read v10 `status`/`acceptance_criteria` fields (v11 is
+# `lifecycle_state`/`acceptance`), so it never fired on a v11 spec, and it
+# depended on the same embedded js-yaml.
 # @author @darianrosebrook
 
 set -euo pipefail
@@ -38,84 +48,27 @@ if [[ "$FILE_PATH" != *".caws/"* ]] || ([[ "$FILE_PATH" != *.yaml ]] && [[ "$FIL
   exit 0
 fi
 
-PROJECT_DIR="${CAWS_PROJECT_DIR:-.}"
-
-# First, validate YAML syntax using Node.js if available.
+# Delegate validation to the canonical CLI command. `caws specs validate <file>`
+# is path-shaped (takes a file path, not a spec id), runs the kernel
+# parse->shape->semantics pipeline with the CLI's own bundled parser, and exits
+# 0 valid / non-zero invalid|unreadable. This works for ANY consumer regardless
+# of language — the hook carries no parser dependency of its own.
 #
-# CAWS-VALIDATE-SPEC-JSYAML-CONFLATION-001: `js-yaml` is loaded inside its own
-# try/catch and distinguished from a genuine parse failure. When the parser
-# dependency cannot be resolved from this hook's node execution context, the
-# script prints a `__CAWS_NO_JSYAML__` sentinel and exits 0 — it MUST NOT claim
-# a "YAML syntax error" for a spec it never actually parsed (that misled authors
-# into "fixing" valid YAML). A real parse failure (parser present, yaml.load
-# throws) still produces the syntax-error message below.
-if command -v node >/dev/null 2>&1; then
-  if ! YAML_CHECK=$(node - "$FILE_PATH" <<'NODE' 2>&1
-    let yaml;
-    try {
-      yaml = require('js-yaml');
-    } catch (_depErr) {
-      // Validator dependency unavailable in this execution context — an
-      // environment condition, NOT a spec authoring error. Signal and skip.
-      console.log('__CAWS_NO_JSYAML__');
-      process.exit(0);
-    }
-    try {
-      const fs = require('fs');
-      const content = fs.readFileSync(process.argv[2], 'utf8');
-      yaml.load(content);
-      console.log('valid');
-    } catch (error) {
-      console.error(error.message);
-      if (error.mark) {
-        console.error('Line: ' + (error.mark.line + 1) + ', Column: ' + (error.mark.column + 1));
-      }
-      process.exit(1);
-    }
-NODE
-  ); then
-    emit_post_context "Spec validation failed for ${FILE_PATH}: YAML syntax error.
-
-${YAML_CHECK}
-
-Please fix the syntax before relying on this spec. Common issues: indentation, inconsistent arrays, or duplicate keys."
-    exit 0
-  fi
-  # The node script exited 0. If js-yaml could not be loaded it printed the
-  # sentinel — the parser never ran, so neither the syntax check nor the
-  # downstream test_nodeids check below can run. Exit cleanly and silently
-  # rather than emitting a misleading error.
-  if [[ "$YAML_CHECK" == *"__CAWS_NO_JSYAML__"* ]]; then
-    exit 0
-  fi
+# Resolve the binary via CAWS_BIN (override hook) defaulting to `caws` on PATH.
+# If it is not resolvable, exit 0 silently — same posture as agent-heartbeat.sh.
+# We do NOT emit an advisory on every edit when the validator is absent: that is
+# exactly the per-edit noise CAWS-VALIDATE-SPEC-JSYAML-CONFLATION-001 removed.
+CAWS_BIN="${CAWS_BIN:-caws}"
+if ! command -v "$CAWS_BIN" >/dev/null 2>&1; then
+  exit 0
 fi
 
-# V2: Check test_nodeids coverage for terminal-status specs
-# Specs at proven/complete/completed should have test_nodeids on every AC
-if command -v node >/dev/null 2>&1; then
-  if NODEIDS_CHECK=$(node - "$FILE_PATH" <<'NODE' 2>/dev/null
-    const yaml = require('js-yaml');
-    const fs = require('fs');
-    const doc = yaml.load(fs.readFileSync(process.argv[2], 'utf8'));
-    const status = (doc.status || '').toLowerCase();
-    const terminal = ['proven', 'complete', 'completed'];
-    if (!terminal.includes(status)) process.exit(0);
-    const acs = doc.acceptance_criteria || doc.acceptance || [];
-    const missing = acs
-      .filter(ac => !ac.test_nodeids && !ac.evidence)
-      .map(ac => ac.id);
-    if (missing.length > 0) {
-      // Output the bare advisory text; the bash caller wraps it in the
-      // canonical envelope via lib/emit.sh (HOOK-LIB-CONSOLIDATION-001 T3a).
-      console.log('Spec ' + doc.id + ' has status ' + JSON.stringify(status) +
-        ' but these ACs lack test_nodeids or evidence: ' + missing.join(', ') +
-        '. Terminal-status specs should have mechanical links to their proof tests. ' +
-        'Add test_nodeids: [\"path/to/test.py::TestClass\"] to each AC, or evidence: for doc-only ACs.');
-    }
-NODE
-  ) && [[ -n "$NODEIDS_CHECK" ]]; then
-    emit_additional_context "$NODEIDS_CHECK" "PostToolUse"
-  fi
+if ! VALIDATE_OUT=$("$CAWS_BIN" specs validate "$FILE_PATH" 2>&1); then
+  emit_post_context "Spec validation failed for ${FILE_PATH}:
+
+${VALIDATE_OUT}
+
+Fix the spec before relying on it. Validate locally with: ${CAWS_BIN} specs validate ${FILE_PATH}"
 fi
 
 exit 0

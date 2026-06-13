@@ -30,6 +30,13 @@ THRESHOLD="${CAWS_LOC_DELTA_WARN_THRESHOLD:-300}"
 [[ "$TOOL_NAME" == "Edit" ]] || exit 0
 [[ -z "$FILE_PATH" ]] && exit 0
 
+# Skip generated / vendored / build output — a large edit to those is not a
+# review-burden signal. Matches the dir-skip convention shared by
+# god-object-check.sh, duplicate-export-check.sh, and shortcut-language-check.sh.
+case "$FILE_PATH" in
+  */node_modules/*|*/dist/*|*/build/*|*/coverage/*) exit 0 ;;
+esac
+
 if [[ -n "${HOOK_TOOL_INPUT_JSON:-}" ]] && command -v jq >/dev/null 2>&1; then
   NEW_STRING=$(printf '%s' "$HOOK_TOOL_INPUT_JSON" | jq -r '.new_string // empty' 2>/dev/null || true)
   OLD_STRING=$(printf '%s' "$HOOK_TOOL_INPUT_JSON" | jq -r '.old_string // empty' 2>/dev/null || true)
