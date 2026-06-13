@@ -1,0 +1,23 @@
+{
+  // ts-jest compiles kernel tests against this config (see jest.config.js
+  // transform). It extends the production tsconfig but drops the dist-build-only
+  // options (outDir/rootDir/declaration) and the strictness flags that fight
+  // test ergonomics (noUnusedLocals/noUnusedParameters trip on arrange-only
+  // fixtures). Type-safety flags that catch real test bugs stay on.
+  //
+  // REBUILD NOTE (CAWS-TEST-HARNESS-FOUNDATION-001): recreated after the test
+  // corpus was deleted; the prior file was removed with the corpus and the
+  // kernel jest.config.js still referenced it.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "types": ["node", "jest"]
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
