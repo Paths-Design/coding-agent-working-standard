@@ -9,8 +9,32 @@
 
 # CAWS Claude Code Hook Pack
 
-This directory contains the v11 Claude Code hook pack — pre-tool-call
-governance infrastructure that interposes between the agent and its Edit,
+This directory is the **claude-code vendor adapter** for the CAWS hook pack. It
+contains only the wiring and surface documentation for Claude Code. All shared
+hook logic lives in the CAWS shared core, installed at `.caws/hooks/` in the
+consumer repo.
+
+## Layout (CAWS-HOOK-PACK-SHARED-CORE-001)
+
+```
+.caws/hooks/          # shared core — event dispatchers + all guard/check hooks
+  dispatch/           # pre_tool_use.sh, post_tool_use.sh, session_start.sh, stop.sh, pre_compact.sh
+  lib/                # parse-input.sh, run-handlers.sh, emit.sh, agent-surface.sh, ...
+  <shared hooks>.sh   # scope-guard, block-dangerous, worktree-guard, etc.
+
+.claude/              # claude-code adapter (this directory when installed)
+  settings.json       # wiring -> .caws/hooks/dispatch/<event>.sh
+  CLAUDE.md           # this file
+```
+
+Claude Code has no override hooks — the shared lib files are the claude-code
+baseline (emit.sh uses "ask" permission vocabulary; parse-input.sh is the
+standard parser). The vendor dir is `.claude`; the surface identity is
+`claude-code`.
+
+## Governance infrastructure
+
+Pre-tool-call governance infrastructure that interposes between the agent and its Edit,
 Write, and Bash tools. The kernel/store/shell trinity owns canonical state;
 these hooks **project** that state into refusals at the agent's boundary,
 where the kernel cannot reach (the kernel runs downstream of the tool

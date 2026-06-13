@@ -18,9 +18,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/parse-input.sh
 source "$SCRIPT_DIR/lib/parse-input.sh"
+# shellcheck source=lib/agent-surface.sh
+source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
 # shellcheck source=lib/emit.sh
 # Canonical envelope emitters (HOOK-LIB-CONSOLIDATION-001 T3a).
-source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
+# caws_source_lib prefers vendor override, falls back to shared default.
+caws_source_lib emit.sh 2>/dev/null || true
 parse_hook_input
 
 FILE_PATH="$HOOK_FILE_PATH"

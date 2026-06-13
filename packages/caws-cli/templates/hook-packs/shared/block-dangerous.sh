@@ -20,9 +20,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# shellcheck source=lib/agent-surface.sh
+# Provides CAWS_VENDOR_DIR and caws_source_lib. Must come before caws_source_lib calls.
+source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
 # shellcheck source=lib/emit.sh
 # Canonical envelope emitters (HOOK-LIB-CONSOLIDATION-001 T3a).
-source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
+# Use caws_source_lib so a vendor override is preferred over the shared default.
+caws_source_lib emit.sh 2>/dev/null || true
 # shellcheck source=lib/caws-state.sh
 # sanitize_session — the canonical session-id->filename transform shared with
 # reset-danger-latch.sh so the latch WRITER and CLEARER agree on the sentinel
@@ -32,9 +36,6 @@ source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || true
 # guard_identity (HOOK-GUARD-LEGIBILITY-001) — so latch reasons self-identify
 # as "CAWS command-safety". Non-fatal if absent.
 [[ -f "$SCRIPT_DIR/lib/guard-message.sh" ]] && source "$SCRIPT_DIR/lib/guard-message.sh"
-# shellcheck source=lib/agent-surface.sh
-# Provides CAWS_VENDOR_DIR for state directory path construction.
-source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
 
 # The sticky-latch carve-out (see the latch-armed branch below) exempts
 # read-only commands AND the reset invocation: a latched session can still run

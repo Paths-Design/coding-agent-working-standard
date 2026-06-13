@@ -16,8 +16,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/parse-input.sh
 source "$SCRIPT_DIR/lib/parse-input.sh"
+# shellcheck source=lib/agent-surface.sh
+source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
 # shellcheck source=lib/emit.sh
-source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
+caws_source_lib emit.sh 2>/dev/null || true
 parse_hook_input
 
 TOOL_NAME="$HOOK_TOOL_NAME"

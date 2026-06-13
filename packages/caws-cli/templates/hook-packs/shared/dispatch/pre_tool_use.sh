@@ -40,16 +40,26 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOOKS_DIR="$(dirname "$SCRIPT_DIR")"
 
+# Export shared lib dir so caws_source_lib (defined in agent-surface.sh) knows
+# where the shared fallback lives when invoked from handlers that inherit this
+# environment. Must be set BEFORE sourcing agent-surface.sh.
+export CAWS_SHARED_LIB_DIR="$HOOKS_DIR/lib"
+
 # Resolve surface-specific env (CAWS_VENDOR_DIR, CAWS_LOG_DIR, etc.)
+# Also defines caws_source_lib used below.
 # shellcheck source=../lib/agent-surface.sh
 source "$HOOKS_DIR/lib/agent-surface.sh" 2>/dev/null || true
 
 # shellcheck source=../lib/parse-input.sh
-source "$HOOKS_DIR/lib/parse-input.sh" 2>/dev/null || exit 0
+# Use caws_source_lib so a vendor adapter can override parse-input.sh
+# (e.g. codex normalizes apply_patch -> Edit/Write).
+caws_source_lib parse-input.sh 2>/dev/null || exit 0
 parse_hook_input || exit 0
 
 # shellcheck source=../lib/run-handlers.sh
-source "$HOOKS_DIR/lib/run-handlers.sh" 2>/dev/null || exit 0
+# Use caws_source_lib so a vendor adapter can override run-handlers.sh
+# (e.g. codex adds a deny exit-code arm).
+caws_source_lib run-handlers.sh 2>/dev/null || exit 0
 
 # Registered handlers in execution order. Each handler self-filters
 # on $HOOK_TOOL_NAME; non-matching cases return exit 0 cheaply.

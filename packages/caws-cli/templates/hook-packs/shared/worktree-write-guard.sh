@@ -33,13 +33,15 @@ parse_hook_input
 # shellcheck source=lib/caws-state.sh
 source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || exit 0
 command -v _realpath >/dev/null 2>&1 || exit 0
+# shellcheck source=lib/agent-surface.sh
+# Provides CAWS_PROJECT_DIR, CAWS_VENDOR_DIR, and caws_source_lib.
+# Must come before caws_source_lib calls.
+source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
 # shellcheck source=lib/emit.sh
-source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
+# Use caws_source_lib so a vendor override is preferred over the shared default.
+caws_source_lib emit.sh 2>/dev/null || true
 # shellcheck source=lib/guard-message.sh
 [[ -f "$SCRIPT_DIR/lib/guard-message.sh" ]] && source "$SCRIPT_DIR/lib/guard-message.sh"
-# shellcheck source=lib/agent-surface.sh
-# Provides CAWS_PROJECT_DIR and CAWS_VENDOR_DIR for path resolution.
-source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
 
 # WORKTREE-ISOLATION-HARDENING-001 (Fix 1+2): the shared ownership oracle.
 CAWS_CLAIM_ORACLE="$SCRIPT_DIR/lib/worktree-claim-oracle.cjs"

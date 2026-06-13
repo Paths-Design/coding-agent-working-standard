@@ -21,11 +21,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/parse-input.sh"
 # shellcheck source=lib/caws-state.sh
 source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || true
-# shellcheck source=lib/emit.sh
-source "$SCRIPT_DIR/lib/emit.sh" 2>/dev/null || true
 # shellcheck source=lib/agent-surface.sh
-# Provides CAWS_PROJECT_DIR for the canonical project root.
+# Provides CAWS_PROJECT_DIR and caws_source_lib. Must come before caws_source_lib calls.
 source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
+# shellcheck source=lib/emit.sh
+# Use caws_source_lib so a vendor override is preferred over the shared default.
+caws_source_lib emit.sh 2>/dev/null || true
 parse_hook_input
 
 TOOL_NAME="$HOOK_TOOL_NAME"

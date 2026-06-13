@@ -9,16 +9,46 @@
 
 # CAWS Codex Hook Pack
 
-This directory contains the v11 Codex hook pack — pre-tool-call
-governance infrastructure that interposes between the agent and its Edit,
-Write, and Bash tools. The kernel/store/shell trinity owns canonical state;
-these hooks **project** that state into refusals at the agent's boundary,
-where the kernel cannot reach (the kernel runs downstream of the tool
-call).
+This directory is the **codex vendor adapter** for the CAWS hook pack. It contains
+only the Codex-specific wiring, surface documentation, and override lib files.
+All shared hook logic lives in the CAWS shared core, installed at `.caws/hooks/`
+in the consumer repo.
 
 Codex loads this project-local `.codex/hooks.json` only after the project
 `.codex/` layer is trusted. New or changed non-managed command hooks must be
 reviewed and trusted through `/hooks` before they run.
+
+## Layout (CAWS-HOOK-PACK-SHARED-CORE-001)
+
+```
+.caws/hooks/            # shared core — event dispatchers + all guard/check hooks
+  dispatch/             # pre_tool_use.sh, post_tool_use.sh, session_start.sh, stop.sh, pre_compact.sh
+  lib/                  # parse-input.sh (claude-code baseline), run-handlers.sh, emit.sh, agent-surface.sh, ...
+  <shared hooks>.sh     # scope-guard, block-dangerous, worktree-guard, etc.
+
+.codex/                 # codex adapter (this directory when installed)
+  hooks.json            # wiring -> .caws/hooks/dispatch/<event>.sh
+  AGENTS.md             # this file
+  hooks/lib/            # codex override lib files (sourced in preference to shared lib)
+    emit.sh             # ask->deny; emit_updated_input for apply_patch rewrites
+    parse-input.sh      # apply_patch normalization + HOOK_FILE_PATHS / HOOK_ORIGINAL_TOOL_NAME
+    run-handlers.sh     # deny exit-code arm in _rh_stdout_priority + CODEX_HOOK_DRY_RUN
+  session_log_renderer.py  # codex JSONL event types (response_item, write_stdin, exec_command, ...)
+```
+
+The override files are resolved at runtime by `caws_source_lib` (defined in
+`shared/lib/agent-surface.sh`): it checks `$CAWS_PROJECT_DIR/$CAWS_VENDOR_DIR/hooks/lib/<name>`
+before falling back to the shared default. `CAWS_VENDOR_DIR` is `.codex` for this surface.
+
+## Codex-specific differences from the shared baseline
+
+| Override file | What differs |
+|---------------|-------------|
+| `hooks/lib/emit.sh` | `emit_ask` emits `deny` (Codex has no PreToolUse `ask`); adds `emit_updated_input` for apply_patch command rewriting |
+| `hooks/lib/parse-input.sh` | Normalizes `apply_patch` tool_name → `Edit`/`Write`; exports `HOOK_FILE_PATHS` and `HOOK_ORIGINAL_TOOL_NAME` |
+| `hooks/lib/run-handlers.sh` | `_rh_stdout_priority` adds `deny` as priority-3 alongside `block`; uses `CODEX_HOOK_DRY_RUN`/`CODEX_HOOK_TIMING` env vars |
+| `session_log_renderer.py` | Handles Codex-specific JSONL event types not present in the Claude transcript format |
+| `hooks.json` PostToolUse | `quality-check.sh` disabled via `CAWS_DISABLED_HANDLERS=quality-check.sh` in the command prefix |
 
 ## These are CAWS-managed files
 

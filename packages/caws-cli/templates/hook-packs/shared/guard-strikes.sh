@@ -36,11 +36,14 @@
 # are available regardless of the sourcing hook's cwd
 # (HOOK-LIB-CONSOLIDATION-001 T3a).
 _GUARD_STRIKES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib/emit.sh
-source "$_GUARD_STRIKES_DIR/lib/emit.sh" 2>/dev/null || true
 # shellcheck source=lib/agent-surface.sh
-# Provides CAWS_VENDOR_DIR for the strike file path.
+# Provides CAWS_VENDOR_DIR and caws_source_lib. Must come before caws_source_lib calls.
 source "$_GUARD_STRIKES_DIR/lib/agent-surface.sh" 2>/dev/null || true
+# shellcheck source=lib/emit.sh
+# Use caws_source_lib so a vendor override is preferred over the shared default.
+# guard-strikes.sh is sourced (not executed), so CAWS_SHARED_LIB_DIR is set either
+# by the dispatcher or by agent-surface.sh's own location fallback.
+caws_source_lib emit.sh 2>/dev/null || true
 
 guard_worktree_state_dir() {
   local cwd_hint="${1:-}"

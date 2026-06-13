@@ -45,25 +45,55 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOOKS_DIR="$(dirname "$SCRIPT_DIR")"
 
+# Export shared lib dir so caws_source_lib knows the shared fallback.
+# Must be set before sourcing agent-surface.sh.
+export CAWS_SHARED_LIB_DIR="$HOOKS_DIR/lib"
+
 # Resolve surface-specific env (CAWS_VENDOR_DIR, CAWS_LOG_DIR, etc.)
+# Also defines caws_source_lib used below.
 # shellcheck source=../lib/agent-surface.sh
 source "$HOOKS_DIR/lib/agent-surface.sh" 2>/dev/null || true
 
 # shellcheck source=../lib/parse-input.sh
-source "$HOOKS_DIR/lib/parse-input.sh" 2>/dev/null || exit 0
+caws_source_lib parse-input.sh 2>/dev/null || exit 0
 parse_hook_input || exit 0
 
 # shellcheck source=../lib/run-handlers.sh
-source "$HOOKS_DIR/lib/run-handlers.sh" 2>/dev/null || exit 0
+caws_source_lib run-handlers.sh 2>/dev/null || exit 0
 
 # Registered handlers in execution order. Mirrors the pre-registry
 # vendor wiring groups so ordering-sensitive behavior (stdout "last
 # wins" policy, audit log ordering) is preserved.
-HANDLERS=(
+#
+# Per-surface HANDLERS skip: CAWS_DISABLED_HANDLERS is a colon-separated
+# list of handler basenames to skip. Vendor wiring (or override lib files)
+# can set this to suppress surface-specific entries without forking the
+# dispatcher. Example: codex sets CAWS_DISABLED_HANDLERS=quality-check.sh
+# in its hooks.json command invocation prefix.
+#   CAWS_DISABLED_HANDLERS=quality-check.sh CAWS_AGENT_SURFACE=codex ...
+# The filter is applied at dispatch time, not at install time, so no
+# additional file is needed to express the difference.
+_DISABLED="${CAWS_DISABLED_HANDLERS:-}"
+
+_is_handler_disabled() {
+  local h="$1"
+  [[ -z "$_DISABLED" ]] && return 1
+  local entry
+  # Split colon-separated list and check exact matches.
+  IFS=: read -ra _disabled_arr <<< "$_DISABLED"
+  for entry in "${_disabled_arr[@]}"; do
+    [[ "$entry" == "$h" ]] && return 0
+  done
+  return 1
+}
+
+_ALL_HANDLERS=(
   # "quality-check.sh"
-  # Note: codex disables quality-check.sh — a per-surface HANDLERS
-  # override would omit it for that surface. This shared base includes it
-  # commented out (disabled by default) to surface the override point.
+  # Note: codex disables quality-check.sh by setting
+  #   CAWS_DISABLED_HANDLERS=quality-check.sh
+  # in its vendor wiring command prefix. This shared base includes it
+  # commented out (disabled by default for all surfaces). Enable by
+  # un-commenting AND removing it from CAWS_DISABLED_HANDLERS.
   # "validate-spec.sh"
   "naming-check.sh"
   # -- QG-HOOKS-EXTRACT-001: advisory edit-time quality plane --
@@ -82,5 +112,16 @@ HANDLERS=(
   "plan-transcript-snapshot.sh"
   "session-log.sh"
 )
+
+# Build the effective HANDLERS list, filtering disabled entries.
+HANDLERS=()
+for _h in "${_ALL_HANDLERS[@]}"; do
+  # Extract basename (first whitespace-delimited token) for the disable check.
+  _h_base="${_h%% *}"
+  if ! _is_handler_disabled "$_h_base"; then
+    HANDLERS+=("$_h")
+  fi
+done
+unset _h _h_base _DISABLED _disabled_arr
 
 run_handlers "${HANDLERS[@]}"

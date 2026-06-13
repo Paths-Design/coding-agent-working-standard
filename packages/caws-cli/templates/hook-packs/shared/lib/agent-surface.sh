@@ -125,3 +125,68 @@ else
 fi
 
 export CAWS_VENDOR_DIR CAWS_PLATFORM_FLAG CAWS_PERMISSION_VOCAB CAWS_LOG_DIR
+
+# ---------------------------------------------------------------------------
+# 5. caws_source_lib <basename>
+#
+# Resolve and source a lib file with vendor-override-first priority:
+#
+#   1. Vendor override: ${CAWS_PROJECT_DIR}/${CAWS_VENDOR_DIR}/hooks/lib/<basename>
+#      This is where a per-vendor adapter places overriding lib files (e.g.
+#      codex/hooks/lib/emit.sh). The adapter is installed by `caws init` into
+#      the consumer's vendor dir; shared scripts source from here first.
+#
+#   2. Shared fallback: ${CAWS_SHARED_LIB_DIR}/<basename>
+#      CAWS_SHARED_LIB_DIR must be exported by the dispatcher (or any script
+#      that needs lib resolution) BEFORE sourcing this file, or set to the
+#      invoking script's own lib/ directory. Dispatchers set it as:
+#        CAWS_SHARED_LIB_DIR="$HOOKS_DIR/lib"   (HOOKS_DIR = .caws/hooks)
+#      Individual guard hooks (invoked via run_handlers) inherit
+#      CAWS_SHARED_LIB_DIR from the dispatcher's environment; if it is not
+#      set they fall back to resolving it from BASH_SOURCE[0].
+#
+# Semantics:
+#   - Sources the first candidate that exists as a regular file.
+#   - Returns 0 on success, non-zero if neither candidate exists.
+#   - Fail-open by design: callers should append `|| true` or `|| exit 0`
+#     as appropriate; this function does NOT exit non-zero fatally.
+#
+# IDEMPOTENT: guard files (.sh) typically carry their own
+# double-source guard (e.g. `_CAWS_EMIT_SH_LOADED`), so repeat
+# calls are cheap.
+# ---------------------------------------------------------------------------
+caws_source_lib() {
+  local basename="${1:-}"
+  [[ -z "$basename" ]] && return 1
+
+  # Determine shared lib dir: prefer the exported env var, fall back to
+  # locating it relative to this file (lib/ sibling).
+  local _shared_lib
+  if [[ -n "${CAWS_SHARED_LIB_DIR:-}" ]]; then
+    _shared_lib="$CAWS_SHARED_LIB_DIR"
+  else
+    _shared_lib="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+  fi
+
+  # 1. Vendor override candidate
+  local _vendor_override=""
+  if [[ -n "${CAWS_PROJECT_DIR:-}" && -n "${CAWS_VENDOR_DIR:-}" ]]; then
+    _vendor_override="${CAWS_PROJECT_DIR}/${CAWS_VENDOR_DIR}/hooks/lib/${basename}"
+  fi
+
+  if [[ -n "$_vendor_override" && -f "$_vendor_override" ]]; then
+    # shellcheck disable=SC1090
+    source "$_vendor_override"
+    return $?
+  fi
+
+  # 2. Shared fallback
+  local _shared_candidate="${_shared_lib}/${basename}"
+  if [[ -f "$_shared_candidate" ]]; then
+    # shellcheck disable=SC1090
+    source "$_shared_candidate"
+    return $?
+  fi
+
+  return 1
+}
