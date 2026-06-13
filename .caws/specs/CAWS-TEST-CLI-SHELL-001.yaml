@@ -1,0 +1,64 @@
+id: CAWS-TEST-CLI-SHELL-001
+title: 'CLI shell layer unit/integration + mutation coverage (push-range classify, gate disposition, waiver-filter, binding resolution)'
+risk_tier: 1
+mode: feature
+lifecycle_state: active
+created_at: '2026-06-13T00:00:00.000Z'
+updated_at: '2026-06-13T23:46:18.669Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/tests/shell
+    - packages/caws-cli/jest.config.js
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - packages/caws-cli/tests/shell
+    - packages/caws-cli/tests/helpers
+    - .caws/specs/CAWS-TEST-CLI-SHELL-001.yaml
+  out:
+    - packages/caws-cli/src
+    - packages/caws-kernel
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - 'No production source under packages/caws-cli/src is modified by this slice. A test that surfaces a real shell bug files a separate tracked defect spec; the test pins correct behavior and is never bent to match buggy code.'
+  - 'Tests load the COMPILED shell from dist/ (require of dist/shell/*.js), not src/ — the Stryker contract is preserved. turbo build --force runs before any dist-dependent test.'
+  - 'Command behavior is exercised in-process by require()-ing the dist handlers/functions, NOT by spawning a fresh caws per assertion (the ~247ms cold-start tax). Subprocess is reserved for a thin e2e tier, not unit assertions.'
+  - 'Tests assert SEMANTICS/VALUES: the actual range classification, the actual gate disposition, the actual filtered violation set, the actual binding state — not structure/mocks.'
+acceptance:
+  - id: A1
+    given: 'push-range classify-range + scope-match — the prepush range guard (lineage E18, silent push of a parallel-session commit).'
+    when: 'A commit range is classified against the current slice scope.'
+    then: 'Commits attributable to the slice are admitted and foreign/unattributable commits are refused by the actual classification; scope-match segment semantics are pinned; a mutation that admits a foreign commit is killed.'
+  - id: A2
+    given: 'gates disposition — the block/warn/skip resolution over a GatesReport.'
+    when: 'Violations are resolved against policy gate modes.'
+    then: 'block -> failing disposition, warn -> non-failing-with-warning, skip -> ignored; the actual exit-disposition is asserted, not just that a function ran.'
+  - id: A3
+    given: 'gates waiver-filter — waivers filter violations; they do NOT change gate mode (governed-path doctrine).'
+    when: 'A report with violations is filtered by active/expired/non-matching waivers.'
+    then: 'Only violations covered by an applicable waiver are filtered out; expired/non-matching waivers do not filter; gate mode is unchanged by waivers.'
+  - id: A4
+    given: 'binding resolve-binding — bound / unbound / one_sided classification.'
+    when: 'A worktree/spec pairing is resolved.'
+    then: 'The actual BindingState kind is returned for each shape (both sides present = bound, neither = unbound, one side = one_sided); a mutation that misclassifies a one-sided binding as bound is killed.'
+  - id: A5
+    given: 'The shell test suite under Stryker (slice 7 wires the run).'
+    when: 'Mutation runs against the covered shell modules.'
+    then: 'High mutation-kill on the covered surface; surviving mutants documented, not hidden. Floor set in slice 7.'
+non_functional:
+  reliability:
+    - 'Tests are deterministic and fast: in-process require() of dist handlers, no per-assert subprocess; they run green under default parallel workers.'
+    - 'Any fixture I/O (staged-diff helpers) uses the slice-0 isolated repo factory under os.tmpdir, not the project tree.'
+  security:
+    - 'The push-range tests prove a foreign/unattributable commit is REFUSED (E18 silent-parallel-push guard) so the prepush safety stays proven, not assumed.'
+observability:
+  - 'jest run output (pass count + per-suite timing) is the verification artifact; the actual classification/disposition/filter results are asserted, not summarized.'
+rollback:
+  - 'Rollback is a revert of the test commit(s); no production code or data is touched.'
+contracts:
+  - name: shell-mutation-ready
+    type: behavior
+    path: packages/caws-cli/tests/shell
+    description: 'The shell suite asserts concrete command-layer decisions (range classification, gate disposition, filtered violations, binding state) loaded from dist/ and exercised in-process, such that inverting a covered shell function fails a test and the Stryker contract holds.'
