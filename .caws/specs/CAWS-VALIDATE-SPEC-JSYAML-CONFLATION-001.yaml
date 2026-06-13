@@ -7,12 +7,14 @@ created_at: '2026-06-13T08:50:37.220Z'
 updated_at: '2026-06-13T08:50:48.349Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/claude-code
+    - packages/caws-cli/templates/hook-packs/codex
+    - packages/caws-cli/src/init/hook-packs
+    - packages/caws-cli/tests/init/hook-packs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/templates/hook-packs/claude-code/validate-spec.sh
     - packages/caws-cli/templates/hook-packs/codex/validate-spec.sh
     - .claude/hooks/validate-spec.sh
@@ -23,11 +25,62 @@ scope:
     - .caws/specs/CAWS-VALIDATE-SPEC-JSYAML-CONFLATION-001.yaml
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    When the spec-validation hook cannot resolve its `js-yaml` parser
+    dependency, it does NOT claim a YAML syntax error. It either exits 0
+    silently or emits a message that names the cause as a missing validator
+    dependency (an environment condition), never instructing the author to
+    "fix the syntax" of a spec whose syntax it never actually parsed.
+  - >-
+    A genuinely malformed spec YAML (parser present, `yaml.load` throws) still
+    produces the existing "Spec validation failed ... YAML syntax error"
+    message with the parser's diagnostic, so real authoring errors remain
+    surfaced. The fix narrows the false-positive case only; it does not weaken
+    detection of true syntax errors.
+  - >-
+    The fix is applied identically to every shipped copy of the hook (the
+    claude-code template, the codex template, and the live self-hosted
+    `.claude/hooks` copy) so consumer installs and self-host stay byte-aligned
+    with their managed headers.
+  - >-
+    Because hook template bytes change, the affected pack versions are bumped
+    (claude-code and codex), every managed header in each touched template tree
+    carries the new pack version, and `pack-fingerprints.json` gains a new
+    history entry per bumped pack (existing entries are never edited). The
+    `pack-fingerprint.test.js` and `install.test.js` pack-version assertions
+    pass.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: >-
+      A valid `.caws/specs/<id>.yaml` is written in an execution context where
+      `require('js-yaml')` throws MODULE_NOT_FOUND from the hook's node
+      invocation.
+    when: The spec-validation hook runs on that write.
+    then: >-
+      The hook does NOT emit "Spec validation failed ... YAML syntax error" and
+      does NOT instruct the author to fix the syntax; the missing-dependency
+      case is handled as an environment condition (silent exit 0 or a
+      dependency-unavailable note).
+  - id: A2
+    given: >-
+      A malformed `.caws/specs/<id>.yaml` (e.g. bad indentation) is written in
+      a context where `js-yaml` IS resolvable.
+    when: The spec-validation hook runs on that write.
+    then: >-
+      The hook still emits the "Spec validation failed ... YAML syntax error"
+      message carrying the parser's diagnostic, preserving real-error
+      detection.
+  - id: A3
+    given: The claude-code and codex hook-pack templates plus the live copy.
+    when: The fix is applied and the packs are re-fingerprinted.
+    then: >-
+      Every managed header in each touched template tree carries the bumped
+      pack version, `pack-fingerprints.json` has a new history entry per bumped
+      pack with the recomputed fingerprint, and `pack-fingerprint.test.js` and
+      `install.test.js` pass.
+non_functional:
+  reliability:
+    - >-
+      The hook fails closed on a missing parser: it never blocks a valid spec
+      and never lies about the cause of a non-zero validator exit.
 contracts: []
