@@ -2,10 +2,11 @@ id: CAWS-TEST-KERNEL-PURE-001
 title: 'Kernel pure-function unit + mutation coverage (scope, spec, worktree transitions, evidence, policy, waiver, result)'
 risk_tier: 1
 mode: feature
-lifecycle_state: active
-worktree: test-kernel-pure-01
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge test-kernel-pure-01 at a2fb6b1ce94a805ca4ba03a0c79a8cf0e87c89b2'
 created_at: '2026-06-13T00:00:00.000Z'
-updated_at: '2026-06-13T23:08:23.088Z'
+updated_at: '2026-06-13T23:28:25.051Z'
 blast_radius:
   modules:
     - packages/caws-kernel/tests
