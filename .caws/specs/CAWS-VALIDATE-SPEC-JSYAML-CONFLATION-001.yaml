@@ -2,10 +2,11 @@ id: CAWS-VALIDATE-SPEC-JSYAML-CONFLATION-001
 title: 'validate-spec.sh: distinguish missing js-yaml from YAML syntax error'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
-worktree: jsyaml-conflation-01
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge jsyaml-conflation-01 at c11daa4052c9754eb2ddfa692a8fa73d56b6021c'
 created_at: '2026-06-13T08:50:37.220Z'
-updated_at: '2026-06-13T08:53:58.381Z'
+updated_at: '2026-06-13T09:05:00.015Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/claude-code
