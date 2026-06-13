@@ -2,10 +2,11 @@ id: CAWS-CODEX-CLAIM-ROOT-001
 title: 'Honor Codex session root in worktree takeover'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: codex-claim-root-01
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge codex-claim-root-01 at 8a2720f09967d475fa5752b0e4b013ffb2f74da6'
 created_at: '2026-06-13T01:08:11.737Z'
-updated_at: '2026-06-13T01:08:43.862Z'
+updated_at: '2026-06-13T02:40:18.207Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/claim.ts
