@@ -5,7 +5,7 @@ mode: chore
 lifecycle_state: active
 worktree: jsyaml-conflation-01
 created_at: '2026-06-13T08:50:37.220Z'
-updated_at: '2026-06-13T08:50:48.349Z'
+updated_at: '2026-06-13T08:53:58.381Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/claude-code
@@ -24,6 +24,8 @@ scope:
     - packages/caws-cli/tests/init/hook-packs/pack-fingerprints.json
     - packages/caws-cli/tests/init/hook-packs/validate-spec.fixture.test.js
     - .caws/specs/CAWS-VALIDATE-SPEC-JSYAML-CONFLATION-001.yaml
+    - packages/caws-cli/templates/hook-packs/claude-code
+    - packages/caws-cli/templates/hook-packs/codex
   out: []
 invariants:
   - >-
