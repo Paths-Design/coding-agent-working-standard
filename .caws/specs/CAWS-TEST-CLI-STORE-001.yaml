@@ -3,6 +3,7 @@ title: 'CLI store layer unit/integration + mutation coverage (yaml-patch, atomic
 risk_tier: 1
 mode: feature
 lifecycle_state: active
+worktree: test-cli-store-01
 created_at: '2026-06-13T00:00:00.000Z'
 updated_at: '2026-06-13T23:31:34.275Z'
 blast_radius:
