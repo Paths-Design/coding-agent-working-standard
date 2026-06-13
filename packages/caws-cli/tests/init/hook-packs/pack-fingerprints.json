@@ -21,6 +21,10 @@
       {
         "packVersion": 16,
         "fingerprint": "7bd1ba95e5d48647ac214f4e33f86af211726569c4d455b3ac5c81a0290303a5"
+      },
+      {
+        "packVersion": 17,
+        "fingerprint": "42833a2e87d640175804ba93e7a8cc0fd9637eec66f5954bcbb10c3151611ffa"
       }
     ]
   },
@@ -45,6 +49,10 @@
       {
         "packVersion": 5,
         "fingerprint": "7b80673ae3a1809b714d061d47e32c3f4dafcdcfe671757d4cedf3b6e3f9eb16"
+      },
+      {
+        "packVersion": 6,
+        "fingerprint": "f04220ea88a98d020a5070d9d87b69f666bf456fd42e28c06ca294a8c23a224c"
       }
     ]
   }

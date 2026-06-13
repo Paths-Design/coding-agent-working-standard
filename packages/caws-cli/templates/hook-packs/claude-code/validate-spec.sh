@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 16
+# hook_pack_version: 17
 # caws_min_major: 11
 # lineage_refs: 8,13
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
@@ -38,11 +38,27 @@ fi
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 
-# First, validate YAML syntax using Node.js if available
+# First, validate YAML syntax using Node.js if available.
+#
+# CAWS-VALIDATE-SPEC-JSYAML-CONFLATION-001: `js-yaml` is loaded inside its own
+# try/catch and distinguished from a genuine parse failure. When the parser
+# dependency cannot be resolved from this hook's node execution context, the
+# script prints a `__CAWS_NO_JSYAML__` sentinel and exits 0 — it MUST NOT claim
+# a "YAML syntax error" for a spec it never actually parsed (that misled authors
+# into "fixing" valid YAML). A real parse failure (parser present, yaml.load
+# throws) still produces the syntax-error message below.
 if command -v node >/dev/null 2>&1; then
   if ! YAML_CHECK=$(node - "$FILE_PATH" <<'NODE' 2>&1
+    let yaml;
     try {
-      const yaml = require('js-yaml');
+      yaml = require('js-yaml');
+    } catch (_depErr) {
+      // Validator dependency unavailable in this execution context — an
+      // environment condition, NOT a spec authoring error. Signal and skip.
+      console.log('__CAWS_NO_JSYAML__');
+      process.exit(0);
+    }
+    try {
       const fs = require('fs');
       const content = fs.readFileSync(process.argv[2], 'utf8');
       yaml.load(content);
@@ -61,6 +77,13 @@ NODE
 ${YAML_CHECK}
 
 Please fix the syntax before relying on this spec. Common issues: indentation, inconsistent arrays, or duplicate keys."
+    exit 0
+  fi
+  # The node script exited 0. If js-yaml could not be loaded it printed the
+  # sentinel — the parser never ran, so neither the syntax check nor the
+  # downstream test_nodeids check below can run. Exit cleanly and silently
+  # rather than emitting a misleading error.
+  if [[ "$YAML_CHECK" == *"__CAWS_NO_JSYAML__"* ]]; then
     exit 0
   fi
 fi
