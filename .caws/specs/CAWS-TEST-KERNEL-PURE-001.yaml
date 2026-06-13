@@ -1,0 +1,72 @@
+id: CAWS-TEST-KERNEL-PURE-001
+title: 'Kernel pure-function unit + mutation coverage (scope, spec, worktree transitions, evidence, policy, waiver, result)'
+risk_tier: 1
+mode: feature
+lifecycle_state: active
+created_at: '2026-06-13T00:00:00.000Z'
+updated_at: '2026-06-13T23:08:23.088Z'
+blast_radius:
+  modules:
+    - packages/caws-kernel/tests
+    - packages/caws-kernel/jest.config.js
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - packages/caws-kernel/tests
+    - packages/caws-kernel/jest.config.js
+    - .caws/specs/CAWS-TEST-KERNEL-PURE-001.yaml
+  out:
+    - packages/caws-kernel/src
+    - packages/caws-cli
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - 'No production source under packages/caws-kernel/src is modified by this slice. If a test surfaces a real kernel bug, it is filed as a separate tracked defect spec and fixed under governance — never patched inline, and the test is never bent to match buggy behavior.'
+  - 'Tests assert SEMANTICS and concrete values (the actual decision, the actual computed budget, the actual hash), not structure ("key exists") and not mocks. This is the surface where the mutation-score methodology is established, so assertion quality is the product.'
+  - 'Kernel tests load src directly via ts-jest (the kernel is pure TS with no dist-load contract); they do not require dist/.'
+  - 'Each covered function has at least one test that would FAIL if its core decision were inverted (a mutation-aware assertion), not merely one that exercises the happy path.'
+acceptance:
+  - id: A1
+    given: 'The kernel scope engine (scope/evaluate, scope/normalize, scope/match).'
+    when: 'Tests run paths through admit/refuse, in/out precedence, normalization, and glob vs literal matching.'
+    then: 'Assertions pin the actual ADMIT/REFUSE decision and the reason, including the union-mode and unbound-authority edge cases (failure-lineage E8/E12); a mutation that flips admit<->refuse is killed.'
+  - id: A2
+    given: 'The kernel spec validators (spec/parse, spec/validate-shape, spec/validate-semantics).'
+    when: 'Valid and each class of invalid spec are validated.'
+    then: 'Each closed-enum violation, missing-required-field, and tier-conditional requirement (tier-1 observability/rollback/security, tier-1/2 contracts) is asserted by its specific diagnostic code, not just "throws".'
+  - id: A3
+    given: 'worktree/transitions and worktree/freshness.'
+    when: 'Lifecycle state transitions and freshness/staleness predicates are exercised.'
+    then: 'Legal transitions are accepted and illegal ones rejected by the actual rule; freshness is evidence-not-authority (stale != abandoned, E11/E19) is asserted as a value, not a comment.'
+  - id: A4
+    given: 'evidence/hash and evidence/canonical-json.'
+    when: 'The hash-chain link and canonical JSON serialization are computed.'
+    then: 'A known input yields a pinned hash; canonical-json is deterministic across key ordering (the E9 audit-integrity property); a mutation to the chaining is killed.'
+  - id: A5
+    given: 'policy/derive-budget, policy validators, and waiver/validate + waiver/applicability.'
+    when: 'Budgets are derived from tier and waivers are matched against violations.'
+    then: 'The actual derived budget numbers and the actual applicability decision are asserted; waiver expiry and gate-match semantics are pinned.'
+  - id: A6
+    given: 'result/combinators (ok/err/map/andThen) and the Result-vs-Outcome distinction.'
+    when: 'Results are composed.'
+    then: 'ok/err discrimination and short-circuit behavior are asserted; the partial_failure_recovered-wrapped-in-ok hazard is pinned by a test if the combinators expose it.'
+  - id: A7
+    given: 'The kernel test suite under Stryker mutation (slice 7 wires the run; this slice makes the surface mutation-ready).'
+    when: 'Mutation is run against the covered kernel modules.'
+    then: 'The covered functions have a high mutation-kill rate; surviving mutants are documented, not hidden. The exact floor is set in slice 7 with maintainer input.'
+non_functional:
+  reliability:
+    - 'Tests are deterministic: no reliance on wall-clock, randomness, filesystem, or network. Pure-function in, asserted value out.'
+    - 'The mutation-score methodology established here (assert values not structure) is the template the CLI slices follow.'
+  security:
+    - 'Spec/scope validation tests include the security-relevant rejection paths (unbound = no authority E12, scope escape E8) so the guards behind them stay proven, not assumed.'
+observability:
+  - 'jest run output (pass count + per-suite timing) and, once slice 7 lands, the mutation report are the verification artifacts; surviving mutants are listed explicitly.'
+rollback:
+  - 'Rollback is a revert of the test commit(s); no production code or data is touched, so revert is total and safe.'
+contracts:
+  - name: kernel-pure-mutation-ready
+    type: behavior
+    path: packages/caws-kernel/tests
+    description: 'The kernel pure-function suite asserts concrete decisions/values (admit/refuse, diagnostic codes, derived budgets, pinned hashes) such that inverting a covered function fails a test — the mutation-readiness contract the rest of the campaign inherits.'
