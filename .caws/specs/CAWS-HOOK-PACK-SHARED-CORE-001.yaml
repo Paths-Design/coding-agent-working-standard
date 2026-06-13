@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: hook-shared-core-01
 created_at: '2026-06-13T10:21:25.186Z'
-updated_at: '2026-06-13T12:01:27.190Z'
+updated_at: '2026-06-13T19:54:14.944Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs
@@ -22,6 +22,16 @@ scope:
     - docs/architecture/hook-pack-shared-core.md
     - .caws/specs/CAWS-HOOK-PACK-SHARED-CORE-001.yaml
     - packages/caws-cli/src/shell/commands/init.ts
+    - packages/caws-cli/tests/init/hook-packs/install.test.js
+    - packages/caws-cli/tests/init/hook-packs/pack-fingerprint.test.js
+    - packages/caws-cli/tests/init/hook-packs/pack-fingerprints.json
+    - packages/caws-cli/tests/init/hook-packs/scope-guard.fixture.test.js
+    - packages/caws-cli/tests/init/hook-packs/validate-spec.fixture.test.js
+    - packages/caws-cli/tests/init/hook-packs/god-object-check.test.js
+    - packages/caws-cli/tests/init/hook-packs/duplicate-export-check.test.js
+    - packages/caws-cli/tests/init/hook-packs/loc-delta-check.test.js
+    - packages/caws-cli/tests/init/hook-packs/shortcut-language-check.test.js
+    - packages/caws-cli/tests/init/hook-packs/vendor-adapter-dispatch.test.js
   out: []
 invariants:
   - >-
