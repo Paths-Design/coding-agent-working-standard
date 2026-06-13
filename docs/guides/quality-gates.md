@@ -10,19 +10,19 @@ audience: consumer
 
 # Quality gates in v11
 
-`@paths.design/quality-gates` is deprecated. Do not build new workflows
-around the standalone batch-scanner package.
+`@paths.design/quality-gates` has been removed from the repository package
+graph. Do not build workflows around the former standalone batch-scanner
+package.
 
 Use the v11 surfaces instead:
 
 - `caws init --agent-surface claude-code` or
   `caws init --agent-surface codex` installs advisory hook-pack checks for
   edit-time feedback.
-- `caws gates run --spec <id>` remains the governed policy-gate runner until
-  `GATES-RUN-POST-QG-DOCTRINE-001` lands.
+- `caws gates run --spec <id>` remains the governed policy/evidence runner.
 - `caws doctor` reports CAWS state drift and structure findings.
 - `caws evidence record` captures typed evidence for tests, gates, and
   acceptance criteria.
 
-The deprecation rationale and release incident record live in
+The removal rationale and release incident record live in
 `docs/architecture/quality-gates-deprecation.md`.

@@ -2,16 +2,16 @@
 
 CAWS ships Claude Code and Codex hook packs (installed via `caws init --agent-surface claude-code` or `caws init --agent-surface codex`) that interpose governance between the agent and its edit/write/Bash tools. Most of each pack is hard governance — scope guards, worktree guards, dangerous-command blocking. This guide documents one slice of it: the **advisory quality plane** added by `QG-HOOKS-EXTRACT-001`.
 
-These four hooks are *advisory* edit-time signals. They reimplement the intent of the load-bearing `caws gates run` quality gates (`god_object`, `todo_detection`, functional-duplication, change-budget) so the agent gets feedback *in the loop where it is editing*, instead of only when an operator later runs `caws gates run`.
+These four hooks are *advisory* edit-time signals. They implement the load-bearing edit-time quality checks (`god_object`, `todo_detection`, functional-duplication, change-budget) so the agent gets feedback *in the loop where it is editing*, instead of only when an operator later runs `caws gates run`.
 
 ## The doctrine boundary (option C)
 
 These hooks are an **edit-time advisory plane**, not a replacement for `caws gates run`:
 
 - `caws gates run` is the **governed policy-gate runner**. It reads `.caws/policy.yaml`, evaluates gates in `block`/`warn`/`skip` mode, and appends a `gate_evaluated` event per gate. It is the canonical disposition surface.
-- The four hooks below are **installed hook-pack utilities** that the repo tunes locally (via env vars). They never write events, never block a gate, and have **no runtime coupling** to `packages/quality-gates` — they reimplement detection intent in self-contained bash.
+- The four hooks below are **installed hook-pack utilities** that the repo tunes locally (via env vars). They never write events, never block a gate, and have **no runtime coupling** to an external quality package. They implement the edit-time checks in self-contained bash.
 
-This is deliberate: the canonical gate evaluators evolve centrally, but the edit-time hooks start from the governance floor and are shaped per-repo. Installing the pack does not change `caws gates run` behavior in any way.
+This is deliberate: `caws gates run` owns governed policy/event disposition, while the edit-time hooks start from the governance floor and are shaped per-repo. Installing the pack does not change `caws gates run` behavior in any way.
 
 ## The four hooks
 
@@ -23,7 +23,7 @@ All four are registered as `PostToolUse` handlers in `dispatch/post_tool_use.sh`
 - **Mode:** advisory (always exits 0; never blocks).
 - **What it flags:** a touched file whose source-lines-of-code (blank and whole-line `//`/`#`/`*` comments stripped) meets or exceeds the threshold.
 - **Threshold env:** `CAWS_GOD_OBJECT_LOC` (default `2000`).
-- **Edit-time analogue of:** the `god_object` gate (`check-god-objects.mjs`, which tiers at 1750/2000/3000).
+- **Policy counterpart:** the `god_object` gate.
 - **Output:** a `hookSpecificOutput.additionalContext` warning naming the file, its SLOC, and the threshold.
 
 ### `shortcut-language-check.sh` — placeholder/stub advisory (progressive)
@@ -31,7 +31,7 @@ All four are registered as `PostToolUse` handlers in `dispatch/post_tool_use.sh`
 - **Trigger:** Write or Edit, on NON-test source (`*.test.*`, `*.spec.*`, `tests/`, `__tests__/`, and markdown/docs are exempt — placeholder language there is routine).
 - **Mode:** **progressive** — the only one of the four that can block. It escalates through the shared guard-strikes mechanism: **strike 1 → warn**, **strike 2 → ask** (permission prompt), **strike 3 → block**. Strikes are per-session.
 - **What it flags:** incomplete-work markers (`TODO`, `FIXME`, `XXX`, `HACK`, `TBD`), placeholder/not-implemented phrases (`not implemented`, `implement later`, `coming soon`, `placeholder`), and explicit `throw new Error("not implemented")` stub shapes.
-- **Edit-time analogue of:** the `todo_detection` gate (`todo-analyzer.mjs`). The hook ships the high-signal subset of that analyzer's vocabulary to stay single-file and fast.
+- **Policy counterpart:** the `todo_detection` gate. The hook ships the high-signal subset of that vocabulary to stay single-file and fast.
 - **Doctrine:** enforces the CAWS key rule "No fake implementations — no placeholder stubs, no TODO in committed code."
 
 ### `duplicate-export-check.sh` — shadow-export advisory
@@ -40,7 +40,7 @@ All four are registered as `PostToolUse` handlers in `dispatch/post_tool_use.sh`
 - **Mode:** advisory (always exits 0).
 - **What it flags:** a newly-written JS/TS file that exports a symbol whose **exact** name already exists as an export elsewhere in the enclosing package's `src` tree. Generic names are allowlisted (`main`, `init`, `setup`, `run`, `handle`, `render`, `index`, `default`). Matching is exact, not heuristic similarity.
 - **Lookup:** bounded to the enclosing `packages/<pkg>/src` (or repo-root `src`); uses ripgrep when available, `grep -r` fallback; never scans `node_modules`.
-- **Edit-time analogue of:** the functional-duplication gate's name/shape collision check (`check-functional-duplication.mjs`).
+- **Policy counterpart:** the functional-duplication name/shape collision check.
 - **Doctrine:** the symbol-level companion to `naming-check.sh`'s filename-level "No shadow files" enforcement.
 
 ### `loc-delta-check.sh` — oversized-edit advisory

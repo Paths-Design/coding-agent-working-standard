@@ -2,26 +2,22 @@
 //
 // Why local evaluators exist
 // ──────────────────────────
-// The quality-gates subprocess implements *code-quality* checks (naming,
-// duplication, god objects, hidden TODOs, etc.). Those checks live in
-// `@paths.design/quality-gates` because they're general-purpose and
-// language-agnostic.
+// The hook pack implements edit-time quality checks (name duplication,
+// god-object size, hidden TODOs/placeholders, and large edit deltas) where an
+// agent can still react immediately.
 //
 // CAWS *policy* gates (`budget_limit`, `scope_boundary`,
 // `spec_completeness`) are different in kind: they need the active spec
-// id, the spec YAML, the policy YAML, and the staged diff. Pushing them
-// into the generic subprocess would couple quality-gates to caws-cli's
-// state shape. Keeping them local preserves layering:
+// id, the spec YAML, the policy YAML, and the staged diff. Keeping them local
+// preserves layering:
 //
-//   quality-gates package  : code-quality checks → JSON violations[]
-//   caws-cli local         : policy/spec/diff authority checks
-//                             → additional JSON violations[]
-//   gates command          : merge violations, apply waivers,
-//                             derive disposition, emit events
+//   hook pack       : edit-time quality feedback
+//   caws-cli local  : policy/spec/diff authority checks → JSON violations[]
+//   gates command   : merge violations, apply waivers, derive disposition,
+//                     emit events
 //
 // Each evaluator returns the same `GatesViolation[]` shape the
-// subprocess emits, so the downstream disposition/waiver pipeline is
-// uniform.
+// downstream disposition/waiver pipeline consumes.
 
 import type { Spec, Policy } from '@paths.design/caws-kernel';
 

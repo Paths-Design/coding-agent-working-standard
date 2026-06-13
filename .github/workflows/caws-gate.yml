@@ -44,7 +44,7 @@ jobs:
         # The caws-cli `bin` entry points to dist/index.js (a build artifact).
         # `npm ci` does not run build scripts on workspace packages, so the
         # dist/ output does not exist on a fresh checkout. Build via Turbo
-        # with `...` so upstream package builds (kernel, quality-gates) run
+        # with `...` so upstream package builds (kernel) run
         # first in dependency order.
         run: npx turbo run build --filter=@paths.design/caws-cli...
 

@@ -8,10 +8,9 @@
 //   - A violation fires when files_changed > max_files or
 //     loc_changed > max_loc. Each threshold breach is one violation.
 //
-// This evaluator is local (caws-cli concern). The quality-gates
-// subprocess does not emit `budget_limit` violations; v11 deliberately
-// keeps risk-tier budget enforcement in the CLI where the active spec
-// and staged diff are authoritative.
+// This evaluator is local (caws-cli concern). v11 deliberately keeps
+// risk-tier budget enforcement in the CLI where the active spec and
+// staged diff are authoritative.
 
 import type { Spec } from '@paths.design/caws-kernel';
 import type { Policy } from '@paths.design/caws-kernel';

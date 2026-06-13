@@ -11,7 +11,7 @@
 # Advisory-only PostToolUse hook firing on Write/Edit. Flags source files
 # whose source-lines-of-code (SLOC) exceed a configurable threshold, the
 # edit-time analogue of the quality-gates `god_object` gate
-# (packages/quality-gates/check-god-objects.mjs, which classifies at
+# (god-object size signal, classified at
 # warning=1750/critical=2000/severe=3000 SLOC). This hook uses a single
 # configurable warn threshold (default 2000, the critical tier) for advisory
 # simplicity — it NEVER blocks, NEVER mutates, and does NOT import or invoke

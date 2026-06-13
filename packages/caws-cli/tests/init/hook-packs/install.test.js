@@ -351,14 +351,13 @@ describe('Claude Code pack manifest', () => {
       }
     });
 
-    it('advisory hooks do not couple to the quality-gates package at runtime', () => {
-      // Option-C boundary: the hooks reimplement detection intent in bash.
+    it('advisory hooks do not couple to an external quality package at runtime', () => {
+      // Boundary: the hooks implement edit-time quality checks in bash.
       // They must not shell out to, require, or import any quality-gates
-      // module. Reading source for design reference is permitted and the
-      // hooks DO cite packages/quality-gates in lineage comments — so the
-      // assertion targets RUNTIME coupling (executable references), not
-      // documentation mentions. We scan only non-comment code lines for any
-      // invocation/source/require of a quality-gates module or a .mjs file.
+      // module. The assertion targets RUNTIME coupling (executable
+      // references), not design-provenance comments. We scan only non-comment
+      // code lines for any invocation/source/require of a quality-gates module
+      // or a .mjs file.
       const packRoot = path.resolve(
         __dirname, '..', '..', '..', 'templates', 'hook-packs', 'claude-code'
       );
@@ -369,7 +368,7 @@ describe('Claude Code pack manifest', () => {
           .map((l) => l.trim())
           .filter((l) => l.length > 0 && !l.startsWith('#'));
         for (const line of codeLines) {
-          // No executable reference to the quality-gates package from the
+          // No executable reference to the removed external quality package from the
           // hook body. (`.mjs` is intentionally NOT banned: duplicate-export-
           // check.sh legitimately lists *.mjs as a JS/TS source extension it
           // inspects — that is a file-type predicate, not a quality-gates

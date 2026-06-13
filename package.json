@@ -45,7 +45,6 @@
     "// CAWS-specific tools": "",
     "caws:validate": "caws doctor",
     "caws:verify": "exec bash scripts/verify.sh",
-    "quality-gates": "node packages/quality-gates/run-quality-gates.mjs",
 
     "// Code modification tools": "",
     "codemod:dry": "node docs/*/codemod/refactor.js",

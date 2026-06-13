@@ -9,7 +9,7 @@
  * so each test uses a unique session_id to isolate its strike count.
  *
  * Test files (*.test.* / *.spec.*) are exempt. Clean prose produces no strike.
- * The hook does NOT import or execute any packages/quality-gates module (A9).
+ * The hook does NOT import or execute an external quality package (A9).
  */
 
 'use strict';

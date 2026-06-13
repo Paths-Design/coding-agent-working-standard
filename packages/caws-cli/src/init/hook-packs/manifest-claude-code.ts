@@ -159,8 +159,7 @@ import type { HookPackV1 } from './types';
 // gains the pointer write path.
 //
 // Version 11: QG-HOOKS-EXTRACT-001. Adds four advisory PostToolUse hooks
-// that form the edit-time quality plane, the boundary analogue of the
-// load-bearing quality-gates signals (packages/quality-gates/*.mjs):
+// that implement the edit-time quality plane:
 //   - god-object-check.sh (lineage 28): SLOC-threshold advisory; warns
 //     when a written/edited file exceeds CAWS_GOD_OBJECT_LOC (default
 //     2000). Always exit 0. Edit-time analogue of the `god_object` gate.
@@ -177,12 +176,11 @@ import type { HookPackV1 } from './types';
 //     new_string vs old_string newline delta exceeds
 //     CAWS_LOC_DELTA_WARN_THRESHOLD (default 300). Always advisory.
 //
-// These hooks reimplement detection INTENT in self-contained bash; they
-// do NOT import, require, or shell out to any packages/quality-gates
-// module, and they do NOT alter `caws gates run` (the governed policy-gate
-// runner). This is option-C doctrine: the edit-time advisory plane is an
-// installed hook-pack utility the repo tunes via env; the gates command
-// remains a separate governed surface. Dispatcher update: caws_dispatch/
+// These hooks implement the edit-time quality checks in self-contained bash.
+// They do NOT import, require, or shell out to an external quality package, and
+// they do NOT alter `caws gates run` (the governed policy/evidence runner).
+// The edit-time quality plane is an installed hook-pack utility the repo tunes
+// via env; the gates command remains a separate governed surface. Dispatcher update: caws_dispatch/
 // post_tool_use.sh registers the four new handlers in its HANDLERS array
 // (advisory-self-filtering; ordering preserved). No stateModel changes
 // (the hooks read only the file being checked + the existing guard-strikes
@@ -512,11 +510,10 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
     },
 
     // -- QG-HOOKS-EXTRACT-001 (v11): edit-time advisory quality plane --
-    // Four PostToolUse hooks that reimplement the load-bearing
-    // quality-gates detection INTENT (god_object, todo_detection,
-    // functional-duplication name collision, LOC-delta) in self-contained
-    // bash. They do NOT import or invoke any packages/quality-gates module
-    // and do NOT change `caws gates run` (option-C doctrine). Three are
+    // Four PostToolUse hooks that implement the edit-time quality checks
+    // (god_object, todo_detection, functional-duplication name collision,
+    // LOC-delta) in self-contained bash. They do NOT import or invoke an
+    // external quality package and do NOT change `caws gates run`. Three are
     // always-advisory (exit 0); shortcut-language-check escalates via
     // guard-strikes on the third session strike. See failure-lineage
     // entries 28-31.

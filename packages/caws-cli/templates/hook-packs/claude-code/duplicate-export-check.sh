@@ -12,7 +12,7 @@
 # newly-written file that exports a symbol whose name already exists as an
 # export elsewhere in the local project tree — the edit-time analogue of the
 # quality-gates functional-duplication "name/shape collision" signal
-# (packages/quality-gates/check-functional-duplication.mjs nameDuplication).
+# (name-duplication signal).
 # It re-implements the practical 80%: the most common shadow-export incident
 # is the agent CREATING a new file whose export collides with an existing one
 # (the "*-v2 / *-enhanced re-export" failure mode the naming-check covers by
