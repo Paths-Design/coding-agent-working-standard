@@ -7,12 +7,14 @@ created_at: '2026-06-13T10:21:25.186Z'
 updated_at: '2026-06-13T10:21:35.387Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs
+    - packages/caws-cli/src/init
+    - packages/caws-cli/tests/init
+    - docs/architecture
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/templates/hook-packs
     - packages/caws-cli/src/init
     - packages/caws-cli/tests/init
@@ -20,13 +22,123 @@ scope:
     - .caws/specs/CAWS-HOOK-PACK-SHARED-CORE-001.yaml
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Shared hook logic — the dispatcher, lib/*, and every guard/check hook whose
+    behavior is harness-independent — exists exactly ONCE, in the shared core
+    (installed under `.caws/hooks/`). It is not physically duplicated per vendor
+    surface. The per-change maintenance tax (editing N copies + bumping N
+    headers across N trees) is eliminated for shared logic.
+  - >-
+    Vendor surfaces (`.claude/`, `.codex/`, and any future `.cursor/`,
+    `.windsurf/`, ...) carry ONLY the harness-specific adapter: the wiring file
+    the harness reads (settings.json / hooks.json), the env that injects harness
+    identity into the shared dispatcher, and an explicit, named override set for
+    the few hooks whose logic genuinely differs by harness (IO-envelope shape,
+    permission-decision vocabulary, tool-name normalization). A vendor adapter
+    is a surface a maintainer/agent MAY tailor when a harness API changes.
+  - >-
+    Harness specifics reach the shared core by dependency injection, not by
+    branching on hardcoded names inside shared scripts. The vendor wiring sets
+    an environment contract (at minimum the agent-surface identity and the
+    project-root directory) that the shared dispatcher consumes; the shared
+    dispatcher and lib resolve harness-dependent values (env-var names, log dir,
+    platform flag, permission vocabulary) from that injected context.
+  - >-
+    The installed runtime behavior is preserved. For every event, the same
+    ordered handler chain runs with the same exit-code aggregation and the same
+    fail-open semantics as before this change; a block still blocks, an advisory
+    still advises, and a guard's own bug still cannot turn into a tool-call
+    block.
+  - >-
+    The shared dispatcher resolves its lib/handlers from its own location
+    (`.caws/hooks/`) so sibling sourcing works without a per-vendor lib copy. The
+    vendor wiring repoints the harness command from the old
+    `<vendor>/hooks/caws_dispatch/<event>.sh` to the shared
+    `.caws/hooks/dispatch/<event>.sh`, passing the injected env (the same
+    project-root env pattern both Sterling vendor configs already use).
+  - >-
+    Install drift detection and the version/fingerprint propagation guard remain
+    enforceable after the layout change: managed headers, the per-pack version
+    bump rule, and a fingerprint (or equivalent) over the shared core + each
+    vendor adapter still fail loudly when content changes without a version
+    bump. A change to a shared hook is detected once; it does not require
+    touching a second tree to satisfy the guard.
+  - >-
+    `caws init --agent-surface <surface>` installs the shared core plus the
+    requested vendor adapter, is idempotent (byte-identical re-run is a no-op),
+    refuses managed drift by default, and does not clobber user-authored wiring
+    content (the settings.json/hooks.json merge stays non-destructive).
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: A repo with no CAWS hooks installed.
+    when: '`caws init --agent-surface claude-code` runs.'
+    then: >-
+      The shared core is installed under `.caws/hooks/` (dispatcher + lib +
+      shared hooks, once), and `.claude/` receives only the adapter (settings.json
+      wiring pointing at the shared dispatcher plus any claude-code override
+      files). No shared hook logic is duplicated into `.claude/`.
+  - id: A2
+    given: A repo with no CAWS hooks installed.
+    when: '`caws init --agent-surface codex` runs.'
+    then: >-
+      The shared core is installed under `.caws/hooks/` and `.codex/` receives
+      only the adapter (hooks.json wiring pointing at the shared dispatcher plus
+      the codex override set). The codex surface no longer carries a full
+      duplicate of the shared hook tree.
+  - id: A3
+    given: A repo with both surfaces installed.
+    when: A PreToolUse event fires on each surface (a Bash command and a Write).
+    then: >-
+      Both surfaces execute the SAME shared dispatcher and the same ordered
+      handler chain; a scope/worktree/danger block still returns the blocking
+      exit code, and an advisory still returns non-blocking — identical to the
+      pre-change behavior captured as a baseline.
+  - id: A4
+    given: A change to a shared hook (e.g. a one-line fix in scope-guard logic).
+    when: The change is made and the propagation guard is run.
+    then: >-
+      The change is made in exactly ONE shared file; the guard requires exactly
+      one version bump for the shared core (not a parallel edit + header bump in
+      a second per-vendor tree), and the install/fingerprint tests pass.
+  - id: A5
+    given: A harness whose IO contract genuinely differs (codex lacks PreToolUse
+      `ask`; codex uses `apply_patch`).
+    when: The shared dispatcher runs under that surface via the injected context.
+    then: >-
+      The harness-specific behavior is produced by the injected context +
+      the named override set (e.g. codex emits the deny-form permission
+      decision and normalizes `apply_patch`), without forking the shared logic
+      those overrides sit beside.
+  - id: A6
+    given: An installed shared core + vendor adapter.
+    when: '`caws init --agent-surface <surface>` is re-run unchanged.'
+    then: >-
+      It is a byte-identical no-op (reports unchanged), refuses managed drift
+      without adopt/overwrite, and preserves user-authored settings.json/hooks.json
+      content.
+  - id: A7
+    given: The architecture is non-trivial and affects every consumer install.
+    when: The change lands.
+    then: >-
+      A design doc at `docs/architecture/hook-pack-shared-core.md` records the
+      layout (shared core vs vendor adapter), the dependency-injection
+      environment contract, the dispatcher resolution mechanism, the override-set
+      rules, and the consumer migration path from the old per-vendor layout.
+non_functional:
+  reliability:
+    - >-
+      The shared dispatcher fails open: a parser crash or missing lib in the
+      shared core exits 0 rather than blocking the tool call, preserving the
+      pre-change guarantee that guard infrastructure bugs never become blocks.
+    - >-
+      Migration is non-destructive: re-running init over an old per-vendor
+      layout does not delete user content and either migrates cleanly or refuses
+      loudly with a typed diagnostic.
+  security:
+    - >-
+      The vendor wiring injects only the agent-surface identity and project root;
+      it does not widen what the shared guards enforce. Scope, worktree, and
+      danger guards run with the same authority under the shared core as before.
 contracts:
   - name: 'hook-install-output'
     type: behavior
