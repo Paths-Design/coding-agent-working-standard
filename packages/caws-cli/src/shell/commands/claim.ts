@@ -120,30 +120,37 @@ function safeRealpath(p: string): string {
  * from `cd <wt> && caws claim <wt> --takeover` registers ownership the guard
  * will never honor — a phantom claim.
  *
- * The session-stable root is CLAUDE_PROJECT_DIR. The contradiction exists only
- * when CLAUDE_PROJECT_DIR is PRESENT and resolves to a path that is neither the
- * worktree itself nor inside it. When CLAUDE_PROJECT_DIR is absent, no
- * contradicting root is asserted (e.g. a plain shell genuinely operating in the
- * worktree) and the takeover proceeds unchanged.
+ * The session-stable root is the harness project-dir env var. Claude Code uses
+ * CLAUDE_PROJECT_DIR; Codex uses CODEX_PROJECT_DIR. The contradiction exists
+ * only when one is PRESENT and resolves to a path that is neither the worktree
+ * itself nor inside it. When neither is present, no contradicting root is
+ * asserted (e.g. a plain shell genuinely operating in the worktree) and the
+ * takeover proceeds unchanged.
  *
- * Returns the resolved session root (for the error message) when a phantom is
- * detected, else null.
+ * Returns the env var name and resolved session root (for the error message)
+ * when a phantom is detected, else null.
  */
 function detectPhantomSessionRoot(
   env: NodeJS.ProcessEnv,
   worktreePath: string | undefined
-): string | null {
-  const projectDir = env['CLAUDE_PROJECT_DIR'];
-  if (typeof projectDir !== 'string' || projectDir.length === 0) return null;
+): { varName: string; root: string } | null {
+  const projectDirEntries = [
+    ['CLAUDE_PROJECT_DIR', env['CLAUDE_PROJECT_DIR']],
+    ['CODEX_PROJECT_DIR', env['CODEX_PROJECT_DIR']],
+  ] as const;
   if (typeof worktreePath !== 'string' || worktreePath.length === 0) return null;
-  const rootReal = safeRealpath(projectDir);
   const wtReal = safeRealpath(worktreePath);
-  // Genuinely rooted in (or at) the worktree → not a phantom.
-  if (rootReal === wtReal) return null;
-  if (rootReal.startsWith(wtReal + path.sep)) return null;
-  // CLAUDE_PROJECT_DIR points somewhere else (canonical main, a sibling, …) →
-  // the worktree match came from a transient cwd, not the session root.
-  return rootReal;
+  for (const [varName, projectDir] of projectDirEntries) {
+    if (typeof projectDir !== 'string' || projectDir.length === 0) continue;
+    const rootReal = safeRealpath(projectDir);
+    // Genuinely rooted in (or at) the worktree -> not a phantom.
+    if (rootReal === wtReal) continue;
+    if (rootReal.startsWith(wtReal + path.sep)) continue;
+    // Project-dir points somewhere else (canonical main, a sibling, ...) ->
+    // the worktree match came from a transient cwd, not the session root.
+    return { varName, root: rootReal };
+  }
+  return null;
 }
 
 export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
@@ -261,10 +268,10 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
     if (phantomRoot !== null) {
       err('caws claim: refusing a phantom-root takeover.');
       err(
-        `  Your session root (CLAUDE_PROJECT_DIR=${phantomRoot}) is not the ` +
+        `  Your session root (${phantomRoot.varName}=${phantomRoot.root}) is not the ` +
           `worktree '${worktreeName}'. A one-off shell \`cd\` into the worktree ` +
           `does NOT root your session there — the Write/Edit guard still keys ` +
-          `file authority on CLAUDE_PROJECT_DIR, so this takeover would register ` +
+          `file authority on the harness project root, so this takeover would register ` +
           `ownership you cannot exercise (a phantom claim).`
       );
       err(
