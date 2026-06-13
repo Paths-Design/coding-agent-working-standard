@@ -3,6 +3,7 @@ title: 'Honor Codex session root in worktree takeover'
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: codex-claim-root-01
 created_at: '2026-06-13T01:08:11.737Z'
 updated_at: '2026-06-13T01:08:43.862Z'
 blast_radius:
