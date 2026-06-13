@@ -3,6 +3,7 @@ title: 'Shared hook core in .caws/hooks with thin per-vendor adapters (DRY/SOLID
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: hook-shared-core-01
 created_at: '2026-06-13T10:21:25.186Z'
 updated_at: '2026-06-13T10:21:35.387Z'
 blast_radius:
