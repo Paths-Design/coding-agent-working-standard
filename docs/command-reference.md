@@ -105,12 +105,12 @@ Run quality gates against the current changes (policy-driven)
 
 ### `caws gates run`
 
-Run CAWS-local policy evaluators and apply policy.gates[gate].mode to decide block/warn/skip. Appends one gate_evaluated event per policy-declared gate. Exit codes: 0/1 on gate disposition; 2 on hard composition error (no policy / subprocess-contract failure); 3 on evidence-integrity failure (a gate_evaluated event failed to append or validate).
+Run CAWS-local policy evaluators and apply policy.gates[gate].mode to decide block/warn/skip. Appends one gate_evaluated event per policy-declared gate. Exit codes: 0/1 on gate disposition; 2 on hard composition error (no policy / report-contract failure); 3 on evidence-integrity failure (a gate_evaluated event failed to append or validate).
 
 **Options:**
 
 - `--spec <id>` (**required**) — Spec id this gate run is about
-- `--context <ctx>` (default: `cli`) — Compatibility no-op retained from the former quality-gates subprocess path
+- `--context <ctx>` (default: `cli`) — Compatibility no-op retained from the former external quality package path
 - `--data` — Show structured data block on diagnostics
 
 ## `caws evidence`
@@ -345,6 +345,16 @@ v10→v11 spec YAML migrator (CAWS-MIGRATE-V10-SPECS-001). Default is dry-run; -
 - `--partial` — Allow apply to proceed even when some specs are refused (only meaningful with --apply)
 - `--lifecycle-mapping <path>` — Path to a JSON file mapping spec ids to v11 lifecycle values, for v10 lifecycles outside the v11 enum (superseded/proven/frozen). Operator-owned; the transformer never auto-defaults.
 - `--json` — Emit machine-readable JSON output instead of human text
+- `--data` — Show structured data block on diagnostics
+
+### `caws specs validate <file>`
+
+Validate a spec YAML FILE on disk using the CLI's own bundled parser and the kernel parse->shape->semantics pipeline. Path-shaped (takes a file path, not a spec id); does NOT resolve .caws/, read canonical state, or mutate anything. Exits 0 when valid, non-zero with a rendered diagnostic when invalid or unreadable. Lets hooks/CI validate spec YAML without carrying their own parser dependency — works for any consumer project regardless of language.
+
+**Argument:** `file` (required) — Path to the spec YAML file to validate
+
+**Options:**
+
 - `--data` — Show structured data block on diagnostics
 
 ## `caws worktree`
