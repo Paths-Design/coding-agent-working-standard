@@ -3,6 +3,7 @@ title: 'Add caws specs validate <file> so spec YAML validation lives in CAWS too
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: specs-validate-cmd
 created_at: '2026-06-13T20:41:26.601Z'
 updated_at: '2026-06-13T20:41:26.601Z'
 blast_radius:
