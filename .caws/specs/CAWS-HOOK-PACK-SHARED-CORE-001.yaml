@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: hook-shared-core-01
 created_at: '2026-06-13T10:21:25.186Z'
-updated_at: '2026-06-13T10:21:35.387Z'
+updated_at: '2026-06-13T12:01:27.190Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs
@@ -21,6 +21,7 @@ scope:
     - packages/caws-cli/tests/init
     - docs/architecture/hook-pack-shared-core.md
     - .caws/specs/CAWS-HOOK-PACK-SHARED-CORE-001.yaml
+    - packages/caws-cli/src/shell/commands/init.ts
   out: []
 invariants:
   - >-
