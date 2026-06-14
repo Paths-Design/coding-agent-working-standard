@@ -459,3 +459,90 @@ describe('yaml-patch: inline-comment prev-char boundary + quote state', () => {
     expect(out).toContain('v: fresh  # note');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening round 5: the remove/insert-path diagnostic MESSAGES +
+// subjects (slice-2 asserted only .rule), removeTopLevelScalar CRLF handling,
+// the insert-after-block TAB-indent boundary, and a single-quote-inside-double
+// quote-state case. Targets the L236/L271/L280/L289 + insert/remove message
+// survivors that round 1-4 left alive.
+// ---------------------------------------------------------------------------
+
+describe('yaml-patch round 5: remove/insert diagnostic messages + subjects', () => {
+  test('remove duplicate-key message says "removal" and names the count + subject', () => {
+    const e = expectErr(removeTopLevelScalar('dup: 1\ndup: 2\ndup: 3\n', 'dup'));
+    expect(e.rule).toBe(AMBIGUOUS);
+    expect(e.message).toContain('dup');
+    expect(e.message).toContain('3'); // "appears 3 times"
+    expect(e.message.toLowerCase()).toContain('removal'); // remove-specific wording
+    expect(e.subject).toBe('dup');
+    expect(e.data.occurrences).toBe(3);
+  });
+
+  test('remove multi-line-value message mentions block/flow + names the subject', () => {
+    const e = expectErr(removeTopLevelScalar(DOC, 'closure_notes'));
+    expect(e.rule).toBe(AMBIGUOUS);
+    expect(e.message.toLowerCase()).toMatch(/multi-line|block scalar|nested|flow/);
+    expect(e.message.toLowerCase()).toContain('removal');
+    expect(e.subject).toBe('closure_notes');
+  });
+
+  test('insert missing-anchor message names the anchor + subject', () => {
+    const e = expectErr(insertTopLevelScalarAfter(DOC, 'no-such-anchor', 'k', 'v'));
+    expect(e.rule).toBe(KEY_NOT_FOUND);
+    expect(e.message).toContain('no-such-anchor');
+    expect(e.subject).toBe('no-such-anchor');
+  });
+
+  test('insert duplicate-anchor message names the anchor count + subject', () => {
+    const e = expectErr(insertTopLevelScalarAfter('a: 1\na: 2\n', 'a', 'new', 'v'));
+    expect(e.rule).toBe(AMBIGUOUS);
+    expect(e.message).toContain('a');
+    expect(e.message).toContain('2'); // "appears 2 times"
+    expect(e.subject).toBe('a');
+  });
+});
+
+describe('yaml-patch round 5: removeTopLevelScalar CRLF + trailing permutations', () => {
+  test('remove preserves CRLF line endings (kills the L271 sep-detection literals)', () => {
+    const crlf = 'a: 1\r\nb: 2\r\nc: 3\r\n';
+    const out = expectOk(removeTopLevelScalar(crlf, 'b'));
+    expect(out).toBe('a: 1\r\nc: 3\r\n');
+    expect(out).toContain('\r\n');
+    expect(out).not.toContain('b: 2');
+  });
+
+  test('remove on an LF doc uses LF, not CRLF', () => {
+    const out = expectOk(removeTopLevelScalar('a: 1\nb: 2\nc: 3\n', 'b'));
+    expect(out).toBe('a: 1\nc: 3\n');
+    expect(out).not.toContain('\r');
+  });
+});
+
+describe('yaml-patch round 5: insert-after-block TAB-indent boundary + quote-state', () => {
+  test('insert after a block whose continuation is TAB-indented lands after the WHOLE block', () => {
+    // The block-scan boundary is `ln[0] !== ' ' && ln[0] !== '\t'`; a TAB-indented
+    // continuation line must be recognized as still-in-block (not a top-level key).
+    const doc = 'note: |\n\ttab-indented line\n\tsecond line\nafter: 1\n';
+    const out = expectOk(insertTopLevelScalarAfter(doc, 'note', 'inserted', 'x'));
+    const idxBlock = out.indexOf('second line');
+    const idxNew = out.indexOf('inserted: x');
+    const idxAfter = out.indexOf('after: 1');
+    // inserted lands AFTER the tab-indented block, BEFORE the next top-level key.
+    expect(idxBlock).toBeLessThan(idxNew);
+    expect(idxNew).toBeLessThan(idxAfter);
+  });
+
+  test('a single-quote INSIDE a double-quoted value does not toggle comment detection', () => {
+    // inDouble is true across the "...'..." region; the inner ' must NOT flip
+    // inSingle (the `ch === "'" && !inDouble` guard). The trailing # is the only
+    // real comment.
+    const out = expectOk(setTopLevelScalar(`v: "it's a value"  # real\n`, 'v', 'new'));
+    expect(out).toContain('v: new  # real');
+  });
+
+  test('a double-quote INSIDE a single-quoted value does not toggle comment detection', () => {
+    const out = expectOk(setTopLevelScalar(`v: 'say "hi"'  # real\n`, 'v', 'new'));
+    expect(out).toContain('v: new  # real');
+  });
+});
