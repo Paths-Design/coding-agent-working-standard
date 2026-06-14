@@ -1045,3 +1045,110 @@ describe('events-store round 4: fd-close nets via closeSync call-observation', (
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening round 5: the last clearly-killable survivors to clear 80 —
+// tolerantScan tail typeof guards (non-string hash / non-number seq must NOT be
+// taken as tail), the i===last tail-only rule, interior-empty line-number,
+// invalid_event_shape kernel-data preservation, and the rotate genesis-write
+// message content. The residual after this is the genuinely-equivalent floor
+// (lock-retry convergence, sleepSyncMs spin, the attempt<MAX loop bound).
+// ---------------------------------------------------------------------------
+
+describe('events-store round 5: tolerantScan tail typeof guards + tail-only rule', () => {
+  test('a NON-STRING event_hash on the tail is not taken (kills the typeof===string -> if true mutant)', () => {
+    const dir = cawsDir();
+    // event_hash is a NUMBER, not a string. The real guard rejects it -> null tail.
+    fs.writeFileSync(ev(dir), JSON.stringify({ actor: 'x', seq: 4, event_hash: 12345 }) + '\n');
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    expect(r.value.data.prior_tail_hash).toBeNull(); // number rejected by typeof guard
+    expect(r.value.data.prior_seq).toBe(4); // seq is a valid number, still taken
+  });
+
+  test('a NON-NUMBER seq on the tail is not taken (kills the typeof===number -> if true mutant)', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(
+      ev(dir),
+      JSON.stringify({ actor: 'x', seq: 'seven', event_hash: 'sha256:' + 'f'.repeat(64) }) + '\n'
+    );
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    expect('prior_seq' in r.value.data).toBe(false); // string seq rejected
+    expect(r.value.data.prior_tail_hash).toBe('sha256:' + 'f'.repeat(64)); // hash valid
+  });
+
+  test('only the LAST line contributes the tail hash/seq (kills the i===last -> if true mutant)', () => {
+    const dir = cawsDir();
+    // FIRST line has a valid hash+seq; LAST line has none. If the i===last guard
+    // were forced true, the FIRST line's hash/seq would wrongly be captured.
+    fs.writeFileSync(
+      ev(dir),
+      [
+        JSON.stringify({ actor: 'first', seq: 1, event_hash: 'sha256:' + '1'.repeat(64) }),
+        JSON.stringify({ actor: 'last' }), // no hash, no seq
+      ].join('\n') + '\n'
+    );
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    // The LAST line has no hash/seq -> tail is null, NOT the first line's values.
+    expect(r.value.data.prior_tail_hash).toBeNull();
+    expect('prior_seq' in r.value.data).toBe(false);
+  });
+});
+
+describe('events-store round 5: interior-line number + invalid-shape data + genesis message', () => {
+  test('interior-EMPTY line reports the exact 1-based line number (kills i+1 -> i-1)', () => {
+    const dir = cawsDir();
+    const valid = appendEvent(dir, body()).value;
+    // line1 valid, line2 valid, line3 EMPTY (interior), line4 valid + trailing \n.
+    fs.writeFileSync(
+      ev(dir),
+      JSON.stringify(valid) + '\n' + JSON.stringify(valid) + '\n\n' + JSON.stringify(valid) + '\n'
+    );
+    const r = loadEvents(dir);
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(INTERIOR_MALFORMED);
+    expect(r.errors[0].data.line).toBe(3); // the empty interior line, i+1 where i=2
+    expect(r.errors[0].message).toContain('line 3');
+  });
+
+  test('invalid_event_shape PRESERVES the kernel diagnostic data (kills d.data ?? {} -> d.data && {})', () => {
+    const dir = cawsDir();
+    // A valid-JSON object that fails validateChainedEvent. The kernel diagnostic
+    // carries its own data; the wrap must spread it (d.data ?? {}), then add line.
+    fs.writeFileSync(ev(dir), JSON.stringify({ event: 'x', seq: 'not-a-number' }) + '\n');
+    const r = loadEvents(dir);
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(INVALID_SHAPE);
+    // line is added on top of the spread kernel data.
+    expect(r.errors[0].data.line).toBe(1);
+    expect(typeof r.errors[0].data.source_rule).toBe('string');
+    // The data object is non-empty even if the kernel diagnostic had no data
+    // (the ?? {} fallback still yields an object with line + source_rule).
+    expect(Object.keys(r.errors[0].data).length).toBeGreaterThanOrEqual(2);
+  });
+
+  test('rotate genesis-write fault message says "Failed to write" + names the archive', () => {
+    const dir = cawsDir();
+    seedV10Chain(dir, 1);
+    const realWrite = fs.writeFileSync;
+    fs.writeFileSync = (t, d, ...rest) => {
+      if (typeof t === 'number') {
+        const e = new Error('genesis disk fault');
+        e.code = 'EIO';
+        throw e;
+      }
+      return realWrite.call(fs, t, d, ...rest);
+    };
+    let r;
+    try {
+      r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    } finally {
+      fs.writeFileSync = realWrite;
+    }
+    expect(r.errors[0].message).toContain('Failed to write');
+    expect(r.errors[0].message).toContain('genesis disk fault'); // cause.message preserved
+    expect(r.errors[0].data.archivePath).toContain('archive-'); // data non-empty
+  });
+});
