@@ -1,0 +1,5 @@
+# Pinned dev dependencies for the CAWS python-classifier pytest tier
+# (CAWS-TEST-HOOKS-PYTHON-001). Installed into a dedicated, gitignored venv by
+# the `test:pytest` npm script — the system python is PEP-668 externally-managed
+# and must not be pip-installed into.
+pytest==8.3.4

@@ -38,6 +38,7 @@
     "perf:budgets": "npm run build && jest --testPathPatterns=perf && npm run test:cleanup",
     "test:watch": "npm run build && jest --watch",
     "test:bats": "npm run build && bats tests/hooks/bats",
+    "test:pytest": "python3 -m venv tests/hooks/pytest/.venv && tests/hooks/pytest/.venv/bin/pip install -q -r tests/hooks/pytest/requirements.txt && tests/hooks/pytest/.venv/bin/pytest tests/hooks/pytest",
     "test:cleanup": "node scripts/cleanup-tests.js",
     "lint": "npx eslint 'src/**/*.{js,ts}' 'tests/**/*.{js,ts}'",
     "lint:fix": "npx eslint 'src/**/*.{js,ts}' 'tests/**/*.{js,ts}' --fix",

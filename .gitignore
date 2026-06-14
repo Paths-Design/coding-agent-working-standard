@@ -567,6 +567,11 @@ bun.lockb
 __pycache__/
 *.pyc
 
+# CAWS python-classifier pytest tier (CAWS-TEST-HOOKS-PYTHON-001): the dedicated
+# venv + pytest cache are local toolchain artifacts, never committed.
+packages/caws-cli/tests/hooks/pytest/.venv/
+.pytest_cache/
+
 # Slice 7a rehearsal scratch dirs
 .rehearsal-gates/
 .rehearsal-*.log
