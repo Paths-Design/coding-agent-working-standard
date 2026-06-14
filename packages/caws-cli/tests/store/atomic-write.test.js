@@ -204,3 +204,119 @@ describe('atomic-write: preserveMode exact value + omitted-does-not-preserve', (
     expect(fs.statSync(target).mode & 0o7777).not.toBe(0o700);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening round 2 (fs-fault injection): the defensive try/catch
+// nets in writeFileAtomic are REACHABLE and load-bearing — they only fire when
+// a filesystem op fails mid-write, which a healthy test FS never does. We
+// simulate the fault by swapping one fs method to throw, and assert the REAL
+// recovery outcome (correct final mode after a chmod fault; Err + no temp
+// residue after a write fault; the unknown-error message fallback). These
+// assert on-disk STATE, not on the mock's return — the mock only injects the
+// fault. (atomic-write real-logic 43% -> target >=80.)
+//
+// The SUT captures fs via `const fs = __importStar(require('fs'))`; the
+// __importStar getters read fs live, so swapping fs.<method> here is visible
+// inside writeFileAtomic (verified empirically).
+// ---------------------------------------------------------------------------
+
+/** Swap fs[method] for `fake` for the duration of `fn`, always restoring. */
+function withFsFault(method, fake, fn) {
+  const real = fs[method];
+  fs[method] = fake;
+  try {
+    return fn(real);
+  } finally {
+    fs[method] = real;
+  }
+}
+
+describe('atomic-write: fs-fault injection exercises the defensive recovery nets', () => {
+  test('post-rename verify net: a pre-rename chmod fault is recovered, final mode is still correct', () => {
+    const dir = tmpDir();
+    const target = path.join(dir, 'recover.sh');
+    writeFileAtomic(target, 'a');
+    fs.chmodSync(target, 0o751);
+    const real = fs.chmodSync;
+    let n = 0;
+    // Fail the PRE-rename chmod (call #1); let the post-rename verify chmod
+    // (call #2) succeed via the real impl — that net is what must recover 0o751.
+    fs.chmodSync = (p, m) => {
+      n += 1;
+      if (n === 1) {
+        const e = new Error('mock pre-rename chmod fault');
+        e.code = 'EPERM';
+        throw e;
+      }
+      return real.call(fs, p, m);
+    };
+    let r;
+    try {
+      r = writeFileAtomic(target, 'b', { preserveMode: true });
+    } finally {
+      fs.chmodSync = real;
+    }
+    expect(r.ok).toBe(true);
+    expect(n).toBeGreaterThanOrEqual(2); // pre-fault + post-rename recovery chmod
+    // The post-rename verify net re-applied 0o751 after the pre fault.
+    expect(fs.statSync(target).mode & 0o7777).toBe(0o751);
+  });
+
+  test('error-path: a writeFileSync fault returns Err io_failed, closes fd, leaves NO temp residue', () => {
+    const dir = tmpDir();
+    const target = path.join(dir, 'wfail.txt');
+    const r = withFsFault(
+      'writeFileSync',
+      () => {
+        const e = new Error('mock write fault');
+        e.code = 'EIO';
+        throw e;
+      },
+      () => writeFileAtomic(target, 'data')
+    );
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(IO_FAILED);
+    expect(r.errors[0].data.code).toBe('EIO');
+    // The catch's fd-close + temp-unlink nets ran: no .tmp sibling left behind.
+    expect(fs.readdirSync(dir).filter((f) => f.includes('.tmp.'))).toEqual([]);
+    // The target was never created (write failed before rename).
+    expect(fs.existsSync(target)).toBe(false);
+  });
+
+  test('error-path: io_failed message falls back to "unknown error" when the cause has no message', () => {
+    const dir = tmpDir();
+    const target = path.join(dir, 'nomsg.txt');
+    const r = withFsFault(
+      'writeFileSync',
+      () => {
+        // Throw a bare object with no `.message` so `cause.message ?? 'unknown error'` fires.
+        const e = {};
+        e.code = 'EUNKNOWN';
+        throw e;
+      },
+      () => writeFileAtomic(target, 'data')
+    );
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].message).toContain('unknown error');
+    expect(r.errors[0].data.code).toBe('EUNKNOWN');
+  });
+
+  test('error-path: an fsyncSync fault is also caught and reported as io_failed', () => {
+    const dir = tmpDir();
+    const target = path.join(dir, 'fsfail.txt');
+    const r = withFsFault(
+      'fsyncSync',
+      () => {
+        const e = new Error('mock fsync fault');
+        e.code = 'EIO';
+        throw e;
+      },
+      () => writeFileAtomic(target, 'data')
+    );
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(IO_FAILED);
+    // fd was open when fsync threw; the fd-close net ran. No residue, no target.
+    expect(fs.readdirSync(dir).filter((f) => f.includes('.tmp.'))).toEqual([]);
+    expect(fs.existsSync(target)).toBe(false);
+  });
+});
