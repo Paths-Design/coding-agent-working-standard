@@ -1,0 +1,65 @@
+id: CAWS-TEST-HOOK-INSTALL-FINGERPRINT-001
+title: 'Hook-install 3-tier layout coverage + re-author the pack-fingerprint guard from zero'
+risk_tier: 1
+mode: feature
+lifecycle_state: active
+created_at: '2026-06-14T00:00:00.000Z'
+updated_at: '2026-06-14T15:52:03.306Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/tests/init
+    - packages/caws-cli/jest.config.js
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - packages/caws-cli/tests/init
+    - packages/caws-cli/tests/helpers
+    - .caws/specs/CAWS-TEST-HOOK-INSTALL-FINGERPRINT-001.yaml
+  out:
+    - packages/caws-cli/src
+    - packages/caws-cli/templates
+    - packages/caws-kernel
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - 'No production source under packages/caws-cli/src or templates/hook-packs is modified by this slice. A test that surfaces a real install/manifest bug files a separate tracked defect spec; the test pins correct behavior and is never bent to match buggy code.'
+  - 'The pack-fingerprint guard is RE-AUTHORED from zero: the recorded pack-fingerprints.json values are RECOMPUTED from the live template tree in this slice, NEVER copied from the deleted corpus or main history. The guard exists to detect a template change without a packVersion bump (the stale-installed-fix class), so its recorded baseline must be derived, not trusted.'
+  - 'Tests load the compiled install/manifest from dist/ where they exercise install behavior; the fingerprint computation reads the on-disk template files directly (the artifact being fingerprinted is the shipped template, not dist).'
+  - 'The fingerprint algorithm is documented in-test and deterministic: sha256 over the sorted list of [relpath, sha256(fileContent)] pairs for every file under a pack dir, excluding dirs tmp/.caws/__pycache__/node_modules and the file .DS_Store.'
+acceptance:
+  - id: A1
+    given: 'The hook pack installed to a temp repo via the slice-0 install primitive (claude-code surface).'
+    when: 'The install completes.'
+    then: 'The 3-tier layout exists: the shared core under .caws/hooks/ (dispatch + lib + guards), and the vendor wiring under .claude/; the installed files match the union of the SHARED_PACK + CLAUDE_CODE_PACK manifests installedFiles destPaths.'
+  - id: A2
+    given: 'Each pack manifest (shared, claude-code, codex) and its template directory.'
+    when: 'The manifest installedFiles sourcePaths are compared to the actual files on disk under the template dir.'
+    then: 'Every manifest-declared sourcePath exists on disk, and every on-disk template file (excluding tmp/.caws/__pycache__/node_modules/.DS_Store) is declared in the manifest — no drift in either direction.'
+  - id: A3
+    given: 'The pack-fingerprint guard (re-authored): pack-fingerprints.json recording one fingerprint per pack at its current packVersion.'
+    when: 'The live fingerprint of each pack template dir is recomputed and compared to the recorded value.'
+    then: 'They match. If a template file changes without a recorded-fingerprint update (and packVersion bump), the test FAILS — this is the stale-installed-fix guard. The recorded values are recomputed fresh in this slice, not trusted from history.'
+  - id: A4
+    given: 'The fingerprint computation function.'
+    when: 'It is run twice on the same pack dir, and on a dir with a tmp/.DS_Store/__pycache__ file added.'
+    then: 'It is deterministic (same input -> same hash) and the excluded paths do not affect the fingerprint (adding a .DS_Store or tmp/ file does not change the hash).'
+  - id: A5
+    given: 'The install + fingerprint test suite under Stryker (slice 7).'
+    when: 'Mutation runs against the covered install/fingerprint surface.'
+    then: 'High kill on the fingerprint computation + the install layout assertions; surviving mutants documented. Floor set in slice 7.'
+non_functional:
+  reliability:
+    - 'Install tests use the slice-0 isolated temp repo (os.tmpdir, per-worker); the shared install runs once per suite (beforeAll), not per test.'
+    - 'The fingerprint computation is deterministic and self-contained — it reads only the template files, sorts before hashing, and excludes the documented runtime/junk paths so the baseline is stable across machines.'
+  security:
+    - 'The fingerprint guard is a supply-chain-integrity control (it detects an unversioned change to shipped hook scripts); the test proves the guard FAILS on an undeclared change, so the protection stays live rather than asserted.'
+observability:
+  - 'jest run output (pass count + per-suite timing) is the verification artifact; the actual recomputed fingerprints and the installed-vs-manifest file lists are asserted/printed, not summarized.'
+rollback:
+  - 'Rollback is a revert of the test + pack-fingerprints.json commit(s); no production code is touched.'
+contracts:
+  - name: pack-fingerprint-guard-restored
+    type: behavior
+    path: packages/caws-cli/tests/init
+    description: 'The re-authored fingerprint guard recomputes each pack template dir fingerprint (sha256 over sorted [relpath, sha256(content)] pairs, documented exclusions) and fails on any undeclared change; the recorded baseline is derived fresh, not trusted; the install produces the 3-tier layout matching the manifests.'
