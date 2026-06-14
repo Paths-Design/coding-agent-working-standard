@@ -2,10 +2,11 @@ id: CAWS-TEST-HOOK-INSTALL-FINGERPRINT-001
 title: 'Hook-install 3-tier layout coverage + re-author the pack-fingerprint guard from zero'
 risk_tier: 1
 mode: feature
-lifecycle_state: active
-worktree: test-hook-install-01
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge test-hook-install-01 at 70f6b323fe5036a1849fd2510fefd976fdce0fce'
 created_at: '2026-06-14T00:00:00.000Z'
-updated_at: '2026-06-14T15:52:03.306Z'
+updated_at: '2026-06-14T15:56:48.950Z'
 blast_radius:
   modules:
     - packages/caws-cli/tests/init
