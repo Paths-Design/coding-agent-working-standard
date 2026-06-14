@@ -415,3 +415,47 @@ describe('yaml-patch: bare-key value-block 3-way indent detection (space/tab/das
     expect(expectOk(setTopLevelScalar(doc, 'empty', 'set'))).toContain('empty: set');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening round 4: the inline-comment scanner's prev-char boundary
+// (a # is a comment only when preceded by space/tab or at the value start) and
+// the quote-state machine (single vs double). Targets the L176-184 survivor
+// cluster in setTopLevelScalar's comment-preservation path.
+// ---------------------------------------------------------------------------
+
+describe('yaml-patch: inline-comment prev-char boundary + quote state', () => {
+  test('a # immediately preceded by a NON-space char is NOT a comment (part of the value)', () => {
+    // `v: a#b` — the # has prev='a', so it is value content, not a comment.
+    const out = expectOk(setTopLevelScalar('v: a#b\n', 'v', 'new'));
+    // No trailing comment is preserved because there was none.
+    expect(out).toBe('v: new\n');
+  });
+
+  test('a # preceded by a SPACE IS a comment and is preserved', () => {
+    const out = expectOk(setTopLevelScalar('v: a #c\n', 'v', 'new'));
+    expect(out).toContain('# c'.replace(' ', '')); // "#c" preserved
+    expect(out).toContain('v: new');
+  });
+
+  test('a # preceded by a TAB is a comment and is preserved', () => {
+    const out = expectOk(setTopLevelScalar('v: a\t#c\n', 'v', 'new'));
+    expect(out).toContain('#c');
+  });
+
+  test("a # inside a SINGLE-quoted value is not a comment", () => {
+    const out = expectOk(setTopLevelScalar("v: 'a # b'  # real\n", 'v', 'new'));
+    // The in-quote ' # b' is value; only the trailing '# real' is the comment.
+    expect(out).toContain('# real');
+  });
+
+  test('a # inside a DOUBLE-quoted value is not a comment', () => {
+    const out = expectOk(setTopLevelScalar('v: "x # y"  # real\n', 'v', 'new'));
+    expect(out).toContain('# real');
+  });
+
+  test('a value that is ENTIRELY a comment after the key keeps the comment', () => {
+    // `v:   # only comment` -> value empty, trailing comment preserved.
+    const out = expectOk(setTopLevelScalar('v: old  # note\nother: 1\n', 'v', 'fresh'));
+    expect(out).toContain('v: fresh  # note');
+  });
+});
