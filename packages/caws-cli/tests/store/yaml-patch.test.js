@@ -160,3 +160,392 @@ describe('removeTopLevelScalar: removes a line, no-op when absent', () => {
     expect(out).toBe(DOC); // `in:` is nested under scope:, untouched
   });
 });
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening (CAWS-TEST-MUTATION-GATE-001): the slice-2 tests asserted
+// rule CODES but not the diagnostic MESSAGE/SUBJECT/DATA, and exercised the
+// matching helpers only through the public API. These tests pin the message
+// content + data payloads + the exact boundary branches so a Stryker mutant
+// that blanks a message, drops a data field, or flips a boundary condition is
+// KILLED. (Baseline 54% -> target >=80%.)
+// ---------------------------------------------------------------------------
+
+describe('yaml-patch: diagnostic message + data payloads are asserted (kills StringLiteral/ObjectLiteral mutants)', () => {
+  test('key_not_found message names the key and the subject is the key', () => {
+    const e = expectErr(setTopLevelScalar(DOC, 'nope', 'x'));
+    expect(e.message).toContain('nope');
+    expect(e.message.toLowerCase()).toContain('not found');
+    expect(e.subject).toBe('nope');
+  });
+
+  test('ambiguous-duplicate message names the count and data.occurrences is set', () => {
+    const e = expectErr(setTopLevelScalar('k: 1\nk: 2\nk: 3\n', 'k', '9'));
+    expect(e.message).toContain('k');
+    expect(e.message).toContain('3'); // "appears 3 times"
+    expect(e.data.occurrences).toBe(3);
+    expect(e.subject).toBe('k');
+  });
+
+  test('multi-line-value ambiguous message mentions the block/flow reason', () => {
+    const e = expectErr(setTopLevelScalar(DOC, 'closure_notes', 'x'));
+    expect(e.message.toLowerCase()).toMatch(/multi-line|block scalar|nested|flow/);
+    expect(e.subject).toBe('closure_notes');
+  });
+
+  test('insert: pre-existing-key ambiguous message says to use set instead', () => {
+    const e = expectErr(insertTopLevelScalarAfter(DOC, 'id', 'lifecycle_state', 'closed'));
+    expect(e.message.toLowerCase()).toContain('already exists');
+    expect(e.message).toContain('setTopLevelScalar');
+    // The subject is the duplicate KEY (not the anchor) — kills the L214
+    // ObjectLiteral mutant that blanks { subject: key }.
+    expect(e.subject).toBe('lifecycle_state');
+  });
+
+  test('remove: duplicate-key ambiguous carries data.occurrences', () => {
+    const e = expectErr(removeTopLevelScalar('k: 1\nk: 2\n', 'k'));
+    expect(e.data.occurrences).toBe(2);
+  });
+});
+
+describe('yaml-patch: matching-boundary branches (kills Conditional/Boolean/Equality mutants)', () => {
+  test('a TAB-indented key is nested, not top-level (leading \\t is not column 0)', () => {
+    // isTopLevelKeyLine rejects line[0] === ' ' OR '\t'. Pin the tab branch.
+    const doc = 'top: 1\n\tnested: 2\n';
+    expect(expectErr(setTopLevelScalar(doc, 'nested', 'x')).rule).toBe(KEY_NOT_FOUND);
+  });
+
+  test('a comment line beginning with # is not a key even if it contains key:', () => {
+    // isTopLevelKeyLine rejects line[0] === '#'.
+    const doc = '# fake: not-a-key\nreal: 1\n';
+    expect(expectErr(setTopLevelScalar(doc, 'fake', 'x')).rule).toBe(KEY_NOT_FOUND);
+    expect(expectOk(setTopLevelScalar(doc, 'real', '2'))).toContain('real: 2');
+  });
+
+  test('a line with no colon is not a key', () => {
+    expect(expectErr(setTopLevelScalar('noColonHere\nreal: 1\n', 'noColonHere', 'x')).rule).toBe(
+      KEY_NOT_FOUND
+    );
+  });
+
+  test('block scalar marker > (folded) is multi-line ambiguous, like |', () => {
+    const doc = 'note: >\n  folded text\nother: 1\n';
+    expect(expectErr(setTopLevelScalar(doc, 'note', 'x')).rule).toBe(AMBIGUOUS);
+  });
+
+  test('an UNCLOSED flow mapping ({ without }) is multi-line ambiguous', () => {
+    const doc = 'm: { a: 1,\n    b: 2 }\nother: 1\n';
+    expect(expectErr(setTopLevelScalar(doc, 'm', 'x')).rule).toBe(AMBIGUOUS);
+  });
+
+  test('a CLOSED flow mapping on one line IS a replaceable scalar (not ambiguous)', () => {
+    const doc = 'm: {a: 1}\nother: 2\n';
+    expect(expectOk(setTopLevelScalar(doc, 'm', 'replaced'))).toContain('m: replaced');
+  });
+
+  test('an empty top-level value (bare key:) is replaceable', () => {
+    const doc = 'empty:\nother: 1\n';
+    // bare `empty:` with a NON-indented next line -> replaceable scalar.
+    expect(expectOk(setTopLevelScalar(doc, 'empty', 'now-set'))).toContain('empty: now-set');
+  });
+
+  test('a bare key: followed by an indented block is a nested mapping -> ambiguous', () => {
+    const doc = 'parent:\n  child: 1\nother: 2\n';
+    expect(expectErr(setTopLevelScalar(doc, 'parent', 'x')).rule).toBe(AMBIGUOUS);
+  });
+
+  test('a bare key: followed by a sequence (- item) is multi-line -> ambiguous', () => {
+    const doc = 'list:\n  - a\n  - b\nother: 1\n';
+    expect(expectErr(setTopLevelScalar(doc, 'list', 'x')).rule).toBe(AMBIGUOUS);
+  });
+
+  test('prefix-key matching is exact: keyfoo: is not key:, key: is not keyfoo:', () => {
+    const doc = 'key: 1\nkeyfoo: 2\n';
+    expect(expectOk(setTopLevelScalar(doc, 'key', '9'))).toContain('key: 9');
+    expect(expectOk(setTopLevelScalar(doc, 'key', '9'))).toContain('keyfoo: 2'); // untouched
+  });
+});
+
+describe('yaml-patch: inline-comment preservation precision (kills the comment-scan mutants)', () => {
+  test('an inline comment with a # inside a quoted value is NOT mistaken for the comment', () => {
+    // The comment scanner tracks single/double quote state; a # inside quotes
+    // is part of the value, not a comment.
+    const doc = `tag: "a#b"  # real comment\n`;
+    const out = expectOk(setTopLevelScalar(doc, 'tag', 'new'));
+    // The real trailing comment survives; the in-quote # was never a comment.
+    expect(out).toContain('tag: new  # real comment');
+  });
+
+  test('a value with no comment gets no spurious trailing comment', () => {
+    const out = expectOk(setTopLevelScalar('plain: old\n', 'plain', 'new'));
+    expect(out).toBe('plain: new\n');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening round 2: valueSpansMultipleLines sub-branches + flow
+// sequence + the bare-key inner loop + insert-after-block-block + CRLF/trailing
+// permutations. Targets the L85-176 survivor cluster.
+// ---------------------------------------------------------------------------
+
+describe('yaml-patch: valueSpansMultipleLines block/flow sub-branches', () => {
+  test('block scalar with a chomp indicator (|-) is ambiguous (startsWith |, not exact)', () => {
+    const doc = 'note: |-\n  text\nother: 1\n';
+    expect(expectErr(setTopLevelScalar(doc, 'note', 'x')).rule).toBe(AMBIGUOUS);
+  });
+
+  test('folded scalar with an indent indicator (>2) is ambiguous (startsWith >)', () => {
+    const doc = 'note: >2\n  text\nother: 1\n';
+    expect(expectErr(setTopLevelScalar(doc, 'note', 'x')).rule).toBe(AMBIGUOUS);
+  });
+
+  test('an UNCLOSED flow SEQUENCE ([ without ]) is ambiguous', () => {
+    const doc = 'arr: [1, 2,\n      3]\nother: 1\n';
+    expect(expectErr(setTopLevelScalar(doc, 'arr', 'x')).rule).toBe(AMBIGUOUS);
+  });
+
+  test('a CLOSED flow sequence on one line IS a replaceable scalar', () => {
+    const doc = 'arr: [1, 2, 3]\nother: 1\n';
+    expect(expectOk(setTopLevelScalar(doc, 'arr', 'replaced'))).toContain('arr: replaced');
+  });
+
+  test('a normal inline scalar value (not |, >, {, [) is replaceable', () => {
+    expect(expectOk(setTopLevelScalar('k: somevalue\n', 'k', 'x'))).toContain('k: x');
+  });
+});
+
+describe('yaml-patch: bare-key inner-loop branches (blank lines, sequence marker, break)', () => {
+  test('bare key whose value block starts after a BLANK line is still nested -> ambiguous', () => {
+    // The inner loop skips next.length===0 (blank) lines before judging indent.
+    const doc = 'parent:\n\n  child: 1\nother: 2\n';
+    expect(expectErr(setTopLevelScalar(doc, 'parent', 'x')).rule).toBe(AMBIGUOUS);
+  });
+
+  test('bare key as the LAST line of the doc (no following block) is replaceable', () => {
+    // Inner loop finds no indented next line -> returns false (replaceable).
+    const doc = 'a: 1\nempty:';
+    const out = expectOk(setTopLevelScalar(doc, 'empty', 'now'));
+    expect(out).toContain('empty: now');
+  });
+
+  test('bare key followed directly by ANOTHER top-level key is replaceable (break on non-indent)', () => {
+    const doc = 'empty:\nnext: 1\n';
+    expect(expectOk(setTopLevelScalar(doc, 'empty', 'set'))).toContain('empty: set');
+  });
+});
+
+describe('yaml-patch: insert/remove with CRLF + trailing-newline permutations', () => {
+  test('insert preserves CRLF and lands the new line after the anchor', () => {
+    const crlf = 'a: 1\r\nb: 2\r\n';
+    const out = expectOk(insertTopLevelScalarAfter(crlf, 'a', 'c', '3'));
+    expect(out).toBe('a: 1\r\nc: 3\r\nb: 2\r\n');
+  });
+
+  test('insert after a multi-line block lands after the WHOLE block', () => {
+    const out = expectOk(insertTopLevelScalarAfter(DOC, 'closure_notes', 'newkey', 'v'));
+    // newkey must appear after the block scalar, before updated_at.
+    const idxBlock = out.indexOf('block scalar');
+    const idxNew = out.indexOf('newkey: v');
+    const idxUpdated = out.indexOf('updated_at:');
+    expect(idxBlock).toBeLessThan(idxNew);
+    expect(idxNew).toBeLessThan(idxUpdated);
+  });
+
+  test('remove preserves the absence of a trailing newline', () => {
+    const noTrailing = 'a: 1\nb: 2'; // no final newline
+    const out = expectOk(removeTopLevelScalar(noTrailing, 'a'));
+    expect(out).toBe('b: 2');
+    expect(out.endsWith('\n')).toBe(false);
+  });
+
+  test('remove of the only line yields an empty (or near-empty) doc without crashing', () => {
+    const out = expectOk(removeTopLevelScalar('only: 1\n', 'only'));
+    expect(out).not.toContain('only:');
+  });
+
+  test('insert: anchor that appears twice -> ambiguous (insert refuses)', () => {
+    const e = expectErr(insertTopLevelScalarAfter('k: 1\nk: 2\n', 'k', 'new', 'v'));
+    expect(e.rule).toBe(AMBIGUOUS);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening round 3: the isTopLevelKeyLine guards (empty line,
+// space-indent vs tab-indent distinctly) + the bare-key loop's 3-way indent
+// test (space / tab / dash) + blank lines inside a doc. Targets the L49-L106
+// EqualityOperator/LogicalOperator/BooleanLiteral survivors.
+// ---------------------------------------------------------------------------
+
+describe('yaml-patch: isTopLevelKeyLine empty + indent guards (precise)', () => {
+  test('a blank line in the doc is never matched as a key; the real key after it is', () => {
+    const doc = 'a: 1\n\nb: 2\n'; // blank line between
+    expect(expectOk(setTopLevelScalar(doc, 'b', '9'))).toBe('a: 1\n\nb: 9\n');
+  });
+
+  test('a SPACE-indented key is nested, not top-level (distinct from the tab case)', () => {
+    const doc = 'top: 1\n  spaced: 2\n';
+    expect(expectErr(setTopLevelScalar(doc, 'spaced', 'x')).rule).toBe(KEY_NOT_FOUND);
+  });
+
+  test('both a space-indented AND a tab-indented sibling are rejected (|| both arms)', () => {
+    const doc = 'top: 1\n  spaced: 2\n\ttabbed: 3\n';
+    expect(expectErr(setTopLevelScalar(doc, 'spaced', 'x')).rule).toBe(KEY_NOT_FOUND);
+    expect(expectErr(setTopLevelScalar(doc, 'tabbed', 'x')).rule).toBe(KEY_NOT_FOUND);
+    // ...but the column-0 key IS matched.
+    expect(expectOk(setTopLevelScalar(doc, 'top', '9'))).toContain('top: 9');
+  });
+});
+
+describe('yaml-patch: bare-key value-block 3-way indent detection (space/tab/dash)', () => {
+  test('a TAB-indented child block makes the bare key ambiguous', () => {
+    const doc = 'parent:\n\tchild: 1\nother: 2\n';
+    expect(expectErr(setTopLevelScalar(doc, 'parent', 'x')).rule).toBe(AMBIGUOUS);
+  });
+
+  test('a SPACE-indented child block makes the bare key ambiguous', () => {
+    const doc = 'parent:\n  child: 1\nother: 2\n';
+    expect(expectErr(setTopLevelScalar(doc, 'parent', 'x')).rule).toBe(AMBIGUOUS);
+  });
+
+  test('a DASH-prefixed sequence item makes the bare key ambiguous', () => {
+    const doc = 'parent:\n- item\nother: 2\n';
+    expect(expectErr(setTopLevelScalar(doc, 'parent', 'x')).rule).toBe(AMBIGUOUS);
+  });
+
+  test('a bare key followed by a column-0 NON-key text line is replaceable (none of space/tab/dash)', () => {
+    // The next line starts at column 0 and is not indented/dash -> break ->
+    // replaceable (the bare key has an empty value).
+    const doc = 'empty:\nplaintext\n';
+    expect(expectOk(setTopLevelScalar(doc, 'empty', 'set'))).toContain('empty: set');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening round 4: the inline-comment scanner's prev-char boundary
+// (a # is a comment only when preceded by space/tab or at the value start) and
+// the quote-state machine (single vs double). Targets the L176-184 survivor
+// cluster in setTopLevelScalar's comment-preservation path.
+// ---------------------------------------------------------------------------
+
+describe('yaml-patch: inline-comment prev-char boundary + quote state', () => {
+  test('a # immediately preceded by a NON-space char is NOT a comment (part of the value)', () => {
+    // `v: a#b` — the # has prev='a', so it is value content, not a comment.
+    const out = expectOk(setTopLevelScalar('v: a#b\n', 'v', 'new'));
+    // No trailing comment is preserved because there was none.
+    expect(out).toBe('v: new\n');
+  });
+
+  test('a # preceded by a SPACE IS a comment and is preserved', () => {
+    const out = expectOk(setTopLevelScalar('v: a #c\n', 'v', 'new'));
+    expect(out).toContain('# c'.replace(' ', '')); // "#c" preserved
+    expect(out).toContain('v: new');
+  });
+
+  test('a # preceded by a TAB is a comment and is preserved', () => {
+    const out = expectOk(setTopLevelScalar('v: a\t#c\n', 'v', 'new'));
+    expect(out).toContain('#c');
+  });
+
+  test("a # inside a SINGLE-quoted value is not a comment", () => {
+    const out = expectOk(setTopLevelScalar("v: 'a # b'  # real\n", 'v', 'new'));
+    // The in-quote ' # b' is value; only the trailing '# real' is the comment.
+    expect(out).toContain('# real');
+  });
+
+  test('a # inside a DOUBLE-quoted value is not a comment', () => {
+    const out = expectOk(setTopLevelScalar('v: "x # y"  # real\n', 'v', 'new'));
+    expect(out).toContain('# real');
+  });
+
+  test('a value that is ENTIRELY a comment after the key keeps the comment', () => {
+    // `v:   # only comment` -> value empty, trailing comment preserved.
+    const out = expectOk(setTopLevelScalar('v: old  # note\nother: 1\n', 'v', 'fresh'));
+    expect(out).toContain('v: fresh  # note');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening round 5: the remove/insert-path diagnostic MESSAGES +
+// subjects (slice-2 asserted only .rule), removeTopLevelScalar CRLF handling,
+// the insert-after-block TAB-indent boundary, and a single-quote-inside-double
+// quote-state case. Targets the L236/L271/L280/L289 + insert/remove message
+// survivors that round 1-4 left alive.
+// ---------------------------------------------------------------------------
+
+describe('yaml-patch round 5: remove/insert diagnostic messages + subjects', () => {
+  test('remove duplicate-key message says "removal" and names the count + subject', () => {
+    const e = expectErr(removeTopLevelScalar('dup: 1\ndup: 2\ndup: 3\n', 'dup'));
+    expect(e.rule).toBe(AMBIGUOUS);
+    expect(e.message).toContain('dup');
+    expect(e.message).toContain('3'); // "appears 3 times"
+    expect(e.message.toLowerCase()).toContain('removal'); // remove-specific wording
+    expect(e.subject).toBe('dup');
+    expect(e.data.occurrences).toBe(3);
+  });
+
+  test('remove multi-line-value message mentions block/flow + names the subject', () => {
+    const e = expectErr(removeTopLevelScalar(DOC, 'closure_notes'));
+    expect(e.rule).toBe(AMBIGUOUS);
+    expect(e.message.toLowerCase()).toMatch(/multi-line|block scalar|nested|flow/);
+    expect(e.message.toLowerCase()).toContain('removal');
+    expect(e.subject).toBe('closure_notes');
+  });
+
+  test('insert missing-anchor message names the anchor + subject', () => {
+    const e = expectErr(insertTopLevelScalarAfter(DOC, 'no-such-anchor', 'k', 'v'));
+    expect(e.rule).toBe(KEY_NOT_FOUND);
+    expect(e.message).toContain('no-such-anchor');
+    expect(e.subject).toBe('no-such-anchor');
+  });
+
+  test('insert duplicate-anchor message names the anchor count + subject', () => {
+    const e = expectErr(insertTopLevelScalarAfter('a: 1\na: 2\n', 'a', 'new', 'v'));
+    expect(e.rule).toBe(AMBIGUOUS);
+    expect(e.message).toContain('a');
+    expect(e.message).toContain('2'); // "appears 2 times"
+    expect(e.subject).toBe('a');
+  });
+});
+
+describe('yaml-patch round 5: removeTopLevelScalar CRLF + trailing permutations', () => {
+  test('remove preserves CRLF line endings (kills the L271 sep-detection literals)', () => {
+    const crlf = 'a: 1\r\nb: 2\r\nc: 3\r\n';
+    const out = expectOk(removeTopLevelScalar(crlf, 'b'));
+    expect(out).toBe('a: 1\r\nc: 3\r\n');
+    expect(out).toContain('\r\n');
+    expect(out).not.toContain('b: 2');
+  });
+
+  test('remove on an LF doc uses LF, not CRLF', () => {
+    const out = expectOk(removeTopLevelScalar('a: 1\nb: 2\nc: 3\n', 'b'));
+    expect(out).toBe('a: 1\nc: 3\n');
+    expect(out).not.toContain('\r');
+  });
+});
+
+describe('yaml-patch round 5: insert-after-block TAB-indent boundary + quote-state', () => {
+  test('insert after a block whose continuation is TAB-indented lands after the WHOLE block', () => {
+    // The block-scan boundary is `ln[0] !== ' ' && ln[0] !== '\t'`; a TAB-indented
+    // continuation line must be recognized as still-in-block (not a top-level key).
+    const doc = 'note: |\n\ttab-indented line\n\tsecond line\nafter: 1\n';
+    const out = expectOk(insertTopLevelScalarAfter(doc, 'note', 'inserted', 'x'));
+    const idxBlock = out.indexOf('second line');
+    const idxNew = out.indexOf('inserted: x');
+    const idxAfter = out.indexOf('after: 1');
+    // inserted lands AFTER the tab-indented block, BEFORE the next top-level key.
+    expect(idxBlock).toBeLessThan(idxNew);
+    expect(idxNew).toBeLessThan(idxAfter);
+  });
+
+  test('a single-quote INSIDE a double-quoted value does not toggle comment detection', () => {
+    // inDouble is true across the "...'..." region; the inner ' must NOT flip
+    // inSingle (the `ch === "'" && !inDouble` guard). The trailing # is the only
+    // real comment.
+    const out = expectOk(setTopLevelScalar(`v: "it's a value"  # real\n`, 'v', 'new'));
+    expect(out).toContain('v: new  # real');
+  });
+
+  test('a double-quote INSIDE a single-quoted value does not toggle comment detection', () => {
+    const out = expectOk(setTopLevelScalar(`v: 'say "hi"'  # real\n`, 'v', 'new'));
+    expect(out).toContain('v: new  # real');
+  });
+});
