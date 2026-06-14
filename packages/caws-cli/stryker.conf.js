@@ -1,55 +1,45 @@
 /**
- * Stryker mutation testing config.
+ * Stryker mutation testing config — the CLI store mutation gate.
  *
- * Scoped per MUTATION-STRYKER-TS-COVERAGE-001 to the tombstone-enforcement
- * surface added by CAWS-SPECS-ARCHIVE-COLLISION-REFUSAL-001 in specs-writer.
+ * CAWS-TEST-MUTATION-GATE-001 widened this from the original 2-line tombstone
+ * range to the store surface the test-reconciliation campaign covered:
+ * yaml-patch, atomic-write, apply-patch, events-store. The mutation floor is
+ * thresholds.break = 80 — a tier-1 gate that FAILS the build below 80% (a
+ * deliberate change from the prior break:null non-gating posture).
  *
  * IMPORTANT: this repo's Jest tests load implementation from `dist/`
- * (e.g. `require('../../dist/store/specs-writer')`), not from src/, because
- * the vNext TS layer is compiled before tests run (`test:unit` does
- * `npm run build && jest`). Stryker must therefore mutate the compiled
- * `dist/store/specs-writer.js`, not the .ts source, or the tests will run
+ * (e.g. `require('../../dist/store/yaml-patch')`), not from src/, because the
+ * vNext TS layer is compiled before tests run. Stryker must therefore mutate
+ * the compiled `dist/store/*.js`, not the .ts source, or the tests will run
  * against the unmodified compiled file and report every mutant as killed
- * regardless of test quality.
- *
- * The dist file is per-file `tsc` output (not a bundle); mutating it
- * preserves the same line-level semantics as the source.
- *
- * Mutation surface is narrowed to two line ranges in dist/store/specs-writer.js:
- *   - 122-133: function isArchivedViaTombstone (the tombstone detector)
- *   - 300-380: the two call sites inside createSpec that refuse on tombstone
- *
- * Test surface is narrowed to the three tests that exercise this code path,
- * keeping the dry-run timeout tractable.
+ * regardless of test quality. The dist file is per-file `tsc` output (not a
+ * bundle); mutating it preserves the same line-level semantics as the source.
  *
  * Run prerequisite: `npm run build` must succeed before `npx stryker run`.
+ * Remaining areas (shell, hooks, init) get their own mutation slices — the bar
+ * is everything-covered-at->=80%, reached incrementally.
  */
 module.exports = {
   mutate: [
-    'dist/store/specs-writer.js:122-133',
-    'dist/store/specs-writer.js:300-380',
+    'dist/store/yaml-patch.js',
+    'dist/store/atomic-write.js',
+    'dist/store/apply-patch.js',
+    'dist/store/events-store.js',
   ],
   testRunner: 'jest',
   testRunnerNodeArgs: [],
   reporters: ['clear-text', 'json', 'html'],
   htmlReporter: { fileName: 'reports/mutation/index.html' },
   jsonReporter: { fileName: 'reports/mutation/mutation-report.json' },
-  // perTest would require Stryker to inject coverage probes; the compiled
-  // dist code is plain JS without ts-jest in the path, so 'off' is the
-  // safe default. With the narrow line ranges + narrow test set, the
-  // mutant count stays in the dozens.
   coverageAnalysis: 'off',
   concurrency: 2,
-  // 60s per mutant test run; the three relevant tests together take ~27s
-  // baseline, so 60s leaves headroom for slower mutants.
   timeoutMS: 120000,
-  // The initial dry run runs the full test set once to baseline. 5 min was
-  // not enough on this codebase; raise it.
   dryRunTimeoutMinutes: 15,
+  // Tier-1 mutation gate: a score below 80% FAILS the build (was break: null).
   thresholds: {
-    high: 80,
-    low: 60,
-    break: null,
+    high: 90,
+    low: 80,
+    break: 80,
   },
   ignorePatterns: [
     'reports',
@@ -60,19 +50,14 @@ module.exports = {
     'src',
   ],
   tempDirName: '.stryker-tmp',
-  // Restrict Jest to only the tests that exercise the tombstone surface.
-  // Without this, the dry run executes ~100 test files and exceeds the
-  // dry-run timeout.
+  // Restrict Jest to the store suite that exercises the mutated modules so the
+  // dry run + per-mutant runs stay tractable.
   jest: {
     projectType: 'custom',
     configFile: 'jest.config.js',
     enableFindRelatedTests: false,
     config: {
-      testMatch: [
-        '<rootDir>/tests/shell/specs-archive-edge-cases.test.js',
-        '<rootDir>/tests/shell/specs-archive-collision-refusal.test.js',
-        '<rootDir>/tests/store/specs-writer-archive-tombstone.test.js',
-      ],
+      testMatch: ['<rootDir>/tests/store/*.test.js'],
     },
   },
 };
