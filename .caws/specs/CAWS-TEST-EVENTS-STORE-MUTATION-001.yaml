@@ -1,0 +1,28 @@
+id: CAWS-TEST-EVENTS-STORE-MUTATION-001
+title: 'Mutation-harden events-store (hash-chain audit log) to >=80%, add to the store mutate gate'
+risk_tier: 2
+mode: feature
+lifecycle_state: active
+created_at: '2026-06-14T18:45:57.770Z'
+updated_at: '2026-06-14T18:45:57.770Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/store/events-store.test.js'
+    - 'packages/caws-cli/stryker.conf.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'events-store-audit-chain'
+    type: behavior
