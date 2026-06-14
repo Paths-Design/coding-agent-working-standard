@@ -1,0 +1,68 @@
+id: CAWS-TEST-HOOKS-BASH-001
+title: 'Hook bash-guard behavioral coverage via bats, anchored to the failure lineage'
+risk_tier: 1
+mode: feature
+lifecycle_state: active
+created_at: '2026-06-14T00:00:00.000Z'
+updated_at: '2026-06-14T15:12:12.880Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/tests/hooks
+    - packages/caws-cli/package.json
+    - package-lock.json
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - packages/caws-cli/tests/hooks
+    - packages/caws-cli/tests/helpers
+    - packages/caws-cli/package.json
+    - package-lock.json
+    - .caws/specs/CAWS-TEST-HOOKS-BASH-001.yaml
+  out:
+    - packages/caws-cli/src
+    - packages/caws-cli/templates
+    - packages/caws-kernel
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - 'No production source under packages/caws-cli/src or templates/hook-packs is modified by this slice. A test that surfaces a real hook bug files a separate tracked defect spec; the test pins correct behavior and is never bent to match a buggy guard (the "see, tainted" pathology this campaign exists to eliminate).'
+  - 'Bash guards are tested in their NATIVE runner (bats), not by jest-spawns-bash. The guard is invoked as the real installed artifact under .caws/hooks/ with a controlled stdin envelope + env, and stdout/stderr/exit are asserted — this is the 3-tier shared-core layout, not the old per-vendor shape.'
+  - 'Each bats test reproduces its failure-lineage condition and asserts the guard FIRES (the do-as-I-do bar): the standard is credible because it is verified entry-by-entry, not asserted.'
+  - 'New dev dependencies are bats + bats-assert + bats-support (npm), added to packages/caws-cli devDependencies. No production dependency is added.'
+acceptance:
+  - id: A1
+    given: 'bats + bats-assert + bats-support are added as caws-cli devDependencies and an npm script test:bats runs the bats suite.'
+    when: 'npm run test:bats (or the bats binary directly) is invoked.'
+    then: 'The bats suite runs and reports per-test results; the toolchain is reproducible (deps in package.json + lockfile), not a system-tool assumption.'
+  - id: A2
+    given: 'The hook pack installed to a temp repo via the slice-0 install primitive (.caws/hooks/ shared-core layout).'
+    when: 'A guard is invoked with a stdin envelope {tool_name, tool_input:{file_path|command}} and the relevant env (CAWS_PROJECT_DIR, CAWS_AGENT_SURFACE).'
+    then: 'The guard exits and emits its decision deterministically; the test asserts the actual exit code + emitted text, fail-open vs fail-closed as designed.'
+  - id: A3
+    given: 'block-dangerous.sh (lineage E1 git-init, E17 pattern-bypass) — via its bash path or the classify delegation.'
+    when: 'A dangerous command (git init at a catastrophic target / a known-dangerous pattern) is presented.'
+    then: 'The guard refuses/flags it; a safe command (git status) passes. The Entry-1 catastrophe condition is reproduced and the guard is shown to fire.'
+  - id: A4
+    given: 'scope-guard.sh (E8 scope violation, E12 unbound = no authority).'
+    when: 'An edit to an out-of-scope path under a bound spec, and any edit under no binding, are presented.'
+    then: 'The out-of-scope edit is refused; the unbound edit is treated as no-authority per the guard contract (CAWS-GUARD-NO-WORKTREE-NO-BLOCK semantics where applicable). The actual decision is asserted.'
+  - id: A5
+    given: 'A representative set of the remaining bash guards anchored to their lineage entries (naming-check E2/E25, scan-secrets E24, protected-paths E23, worktree-write-guard E7/E35, cwd-guard E22).'
+    when: 'Each guard is presented with the condition its lineage entry describes.'
+    then: 'Each guard fires (refuses/flags) on the bad condition and passes on the good condition; each test names its lineage entry.'
+non_functional:
+  reliability:
+    - 'Each bats suite installs the hook pack ONCE (setup_file / beforeAll-equivalent) into an isolated temp repo under the OS temp dir, not the project tree; tests do not share state.'
+    - 'Tests are deterministic: a fixed stdin envelope + env yields a fixed decision; no reliance on the developer git config or wall clock.'
+  security:
+    - 'scan-secrets and protected-paths tests use SYNTHETIC secrets/paths only; no real secret is written or transmitted. The guard-fires assertion proves the redaction/refusal path stays live.'
+observability:
+  - 'bats TAP/pretty output (per-test pass/fail) is the verification artifact; the actual guard exit code + emitted decision text is asserted, not summarized.'
+rollback:
+  - 'Rollback is a revert of the test + devDependency commit(s); no production code or data is touched. Removing the bats devDeps restores the prior toolchain.'
+contracts:
+  - name: hook-bash-guard-fires
+    type: behavior
+    path: packages/caws-cli/tests/hooks
+    description: 'Each covered bash guard, invoked as the installed .caws/hooks/ artifact with its lineage-entry bad condition on stdin, fires (refuses/flags with the expected exit + text); the good condition passes. Verified in bats, the native runner.'
