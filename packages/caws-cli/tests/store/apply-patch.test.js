@@ -340,4 +340,123 @@ describe('apply-patch: field writes + merge preservation (kills the field-assign
     expect(a.bound_spec_id).toBe('SPEC-1');
     expect(a.last_active).toBe('2026-06-14T00:00:00.000Z');
   });
+
+  test('takeover onto an entry with NO prior_owners initializes the audit array (?? [] default)', () => {
+    const dir = cawsDir();
+    // Seed an entry that has owner but no prior_owners key at all.
+    fs.writeFileSync(
+      path.join(dir, 'worktrees.json'),
+      JSON.stringify({ 'wt-a': { specId: 'S', owner } }, null, 2)
+    );
+    const priorOwner = { session_id: 's-1', platform: 'claude-code' };
+    const r = applyRegistryPatch(dir, {
+      kind: 'takeover_claim',
+      worktree_name: 'wt-a',
+      owner: owner2,
+      prior_owner: priorOwner,
+      when: '2026-06-14T00:00:00.000Z',
+    });
+    expect(r.ok).toBe(true);
+    const e = readWorktrees(dir)['wt-a'];
+    // The ?? [] default must produce exactly [priorOwner], not undefined-push.
+    expect(e.prior_owners).toEqual([priorOwner]);
+    expect(e.owner).toEqual(owner2);
+    // takeover also writes last_heartbeat = patch.when.
+    expect(e.last_heartbeat).toBe('2026-06-14T00:00:00.000Z');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening round 2: the refresh_agent optional-field conditional
+// spreads (platform / bound_worktree / bound_spec_id are `!== undefined ?
+// {x} : {}`), the merge-onto-existing-agent path, and the storeErr no-data
+// branch. A mutant that flips `!== undefined` to `=== undefined`, drops the
+// conditional, or always-spreads `data` is killed by asserting field PRESENCE
+// vs ABSENCE precisely.
+// ---------------------------------------------------------------------------
+
+describe('apply-patch round 2: refresh_agent optional-field conditionals (present vs absent)', () => {
+  test('refresh_agent OMITS platform when the session has none (!== undefined arm)', () => {
+    const dir = cawsDir();
+    applyRegistryPatch(dir, {
+      kind: 'refresh_agent',
+      session: { session_id: 's-noplat' }, // no platform
+      last_active: '2026-06-14T01:00:00.000Z',
+    });
+    const a = readAgents(dir)['s-noplat'];
+    expect(a.session_id).toBe('s-noplat');
+    expect(a.last_active).toBe('2026-06-14T01:00:00.000Z');
+    // platform must be ABSENT, not present-as-undefined.
+    expect('platform' in a).toBe(false);
+  });
+
+  test('refresh_agent OMITS bound_worktree / bound_spec_id when the patch omits them', () => {
+    const dir = cawsDir();
+    applyRegistryPatch(dir, {
+      kind: 'refresh_agent',
+      session: { session_id: 's-1', platform: 'claude-code' },
+      last_active: '2026-06-14T01:00:00.000Z',
+      // no bound_worktree, no bound_spec_id
+    });
+    const a = readAgents(dir)['s-1'];
+    expect('bound_worktree' in a).toBe(false);
+    expect('bound_spec_id' in a).toBe(false);
+    expect(a.platform).toBe('claude-code'); // present arm still fires
+  });
+
+  test('refresh_agent merges onto an EXISTING agent record, preserving unrelated fields', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(
+      path.join(dir, 'agents.json'),
+      JSON.stringify(
+        { 's-1': { session_id: 's-1', platform: 'old-plat', extra: 'keep', last_active: 'OLD' } },
+        null,
+        2
+      )
+    );
+    applyRegistryPatch(dir, {
+      kind: 'refresh_agent',
+      session: { session_id: 's-1', platform: 'new-plat' },
+      last_active: '2026-06-14T02:00:00.000Z',
+    });
+    const a = readAgents(dir)['s-1'];
+    expect(a.last_active).toBe('2026-06-14T02:00:00.000Z'); // updated
+    expect(a.platform).toBe('new-plat'); // updated from the present arm
+    expect(a.extra).toBe('keep'); // unrelated field preserved by spread
+  });
+
+  test('refresh_agent onto a NEW session seeds session_id + last_active from the ?? default', () => {
+    const dir = cawsDir();
+    applyRegistryPatch(dir, {
+      kind: 'refresh_agent',
+      session: { session_id: 's-fresh' },
+      last_active: '2026-06-14T03:00:00.000Z',
+    });
+    const a = readAgents(dir)['s-fresh'];
+    expect(a.session_id).toBe('s-fresh');
+    expect(a.last_active).toBe('2026-06-14T03:00:00.000Z');
+  });
+});
+
+describe('apply-patch round 2: storeErr data-conditional (no-data errors carry no data key)', () => {
+  test('not_object error has NO data field (storeErr data === undefined arm)', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(path.join(dir, 'worktrees.json'), '[]');
+    const e = applyRegistryPatch(dir, bind('wt-a', 'SPEC-1')).errors[0];
+    expect(e.rule).toBe(NOT_OBJECT);
+    // storeErr(NOT_OBJECT, msg) is called WITHOUT data -> the base object,
+    // no `data` key. A mutant that always spreads `{ ...base, data }` (with
+    // data === undefined) would add an own `data: undefined` key.
+    expect('data' in e).toBe(false);
+  });
+
+  test('json_invalid error DOES carry data.filePath (storeErr data !== undefined arm)', () => {
+    const dir = cawsDir();
+    const file = path.join(dir, 'worktrees.json');
+    fs.writeFileSync(file, '{ broken');
+    const e = applyRegistryPatch(dir, bind('wt-a', 'SPEC-1')).errors[0];
+    expect(e.rule).toBe(JSON_INVALID);
+    expect('data' in e).toBe(true);
+    expect(e.data.filePath).toBe(file);
+  });
 });
