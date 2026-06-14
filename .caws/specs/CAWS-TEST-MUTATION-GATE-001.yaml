@@ -2,10 +2,11 @@ id: CAWS-TEST-MUTATION-GATE-001
 title: 'Mutation gate: widen Stryker from the tombstone scope to kernel + CLI store, enforce a >=80% floor that gates CI'
 risk_tier: 1
 mode: feature
-lifecycle_state: active
-worktree: test-mutation-gate-01
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge test-mutation-gate-01 at f6634cbb7fafccdb2edd07101b49476702113f1b'
 created_at: '2026-06-14T00:00:00.000Z'
-updated_at: '2026-06-14T16:27:54.074Z'
+updated_at: '2026-06-14T18:44:07.845Z'
 blast_radius:
   modules:
     - packages/caws-cli/stryker.conf.js
