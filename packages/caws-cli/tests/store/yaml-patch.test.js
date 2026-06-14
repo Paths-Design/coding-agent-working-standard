@@ -277,3 +277,90 @@ describe('yaml-patch: inline-comment preservation precision (kills the comment-s
     expect(out).toBe('plain: new\n');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening round 2: valueSpansMultipleLines sub-branches + flow
+// sequence + the bare-key inner loop + insert-after-block-block + CRLF/trailing
+// permutations. Targets the L85-176 survivor cluster.
+// ---------------------------------------------------------------------------
+
+describe('yaml-patch: valueSpansMultipleLines block/flow sub-branches', () => {
+  test('block scalar with a chomp indicator (|-) is ambiguous (startsWith |, not exact)', () => {
+    const doc = 'note: |-\n  text\nother: 1\n';
+    expect(expectErr(setTopLevelScalar(doc, 'note', 'x')).rule).toBe(AMBIGUOUS);
+  });
+
+  test('folded scalar with an indent indicator (>2) is ambiguous (startsWith >)', () => {
+    const doc = 'note: >2\n  text\nother: 1\n';
+    expect(expectErr(setTopLevelScalar(doc, 'note', 'x')).rule).toBe(AMBIGUOUS);
+  });
+
+  test('an UNCLOSED flow SEQUENCE ([ without ]) is ambiguous', () => {
+    const doc = 'arr: [1, 2,\n      3]\nother: 1\n';
+    expect(expectErr(setTopLevelScalar(doc, 'arr', 'x')).rule).toBe(AMBIGUOUS);
+  });
+
+  test('a CLOSED flow sequence on one line IS a replaceable scalar', () => {
+    const doc = 'arr: [1, 2, 3]\nother: 1\n';
+    expect(expectOk(setTopLevelScalar(doc, 'arr', 'replaced'))).toContain('arr: replaced');
+  });
+
+  test('a normal inline scalar value (not |, >, {, [) is replaceable', () => {
+    expect(expectOk(setTopLevelScalar('k: somevalue\n', 'k', 'x'))).toContain('k: x');
+  });
+});
+
+describe('yaml-patch: bare-key inner-loop branches (blank lines, sequence marker, break)', () => {
+  test('bare key whose value block starts after a BLANK line is still nested -> ambiguous', () => {
+    // The inner loop skips next.length===0 (blank) lines before judging indent.
+    const doc = 'parent:\n\n  child: 1\nother: 2\n';
+    expect(expectErr(setTopLevelScalar(doc, 'parent', 'x')).rule).toBe(AMBIGUOUS);
+  });
+
+  test('bare key as the LAST line of the doc (no following block) is replaceable', () => {
+    // Inner loop finds no indented next line -> returns false (replaceable).
+    const doc = 'a: 1\nempty:';
+    const out = expectOk(setTopLevelScalar(doc, 'empty', 'now'));
+    expect(out).toContain('empty: now');
+  });
+
+  test('bare key followed directly by ANOTHER top-level key is replaceable (break on non-indent)', () => {
+    const doc = 'empty:\nnext: 1\n';
+    expect(expectOk(setTopLevelScalar(doc, 'empty', 'set'))).toContain('empty: set');
+  });
+});
+
+describe('yaml-patch: insert/remove with CRLF + trailing-newline permutations', () => {
+  test('insert preserves CRLF and lands the new line after the anchor', () => {
+    const crlf = 'a: 1\r\nb: 2\r\n';
+    const out = expectOk(insertTopLevelScalarAfter(crlf, 'a', 'c', '3'));
+    expect(out).toBe('a: 1\r\nc: 3\r\nb: 2\r\n');
+  });
+
+  test('insert after a multi-line block lands after the WHOLE block', () => {
+    const out = expectOk(insertTopLevelScalarAfter(DOC, 'closure_notes', 'newkey', 'v'));
+    // newkey must appear after the block scalar, before updated_at.
+    const idxBlock = out.indexOf('block scalar');
+    const idxNew = out.indexOf('newkey: v');
+    const idxUpdated = out.indexOf('updated_at:');
+    expect(idxBlock).toBeLessThan(idxNew);
+    expect(idxNew).toBeLessThan(idxUpdated);
+  });
+
+  test('remove preserves the absence of a trailing newline', () => {
+    const noTrailing = 'a: 1\nb: 2'; // no final newline
+    const out = expectOk(removeTopLevelScalar(noTrailing, 'a'));
+    expect(out).toBe('b: 2');
+    expect(out.endsWith('\n')).toBe(false);
+  });
+
+  test('remove of the only line yields an empty (or near-empty) doc without crashing', () => {
+    const out = expectOk(removeTopLevelScalar('only: 1\n', 'only'));
+    expect(out).not.toContain('only:');
+  });
+
+  test('insert: anchor that appears twice -> ambiguous (insert refuses)', () => {
+    const e = expectErr(insertTopLevelScalarAfter('k: 1\nk: 2\n', 'k', 'new', 'v'));
+    expect(e.rule).toBe(AMBIGUOUS);
+  });
+});
