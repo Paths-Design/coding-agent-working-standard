@@ -683,3 +683,210 @@ describe('rotateEvents round 2: rename + genesis-write fault injection', () => {
     expect(fs.existsSync(lockOf(dir))).toBe(false); // lock released
   });
 });
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening round 3: diagnostic MESSAGE content on every fault path
+// (kills the StringLiteral + `cause.message ?? 'unknown error'` LogicalOperator
+// survivors), the priorChainStatus enum combos + clean-chain v11 predicate, the
+// tail seq===1 and sha256 regex-anchor boundaries, and the tryRecoverStaleLock
+// return values. Targets the round-2 residual in rotate(41)/scan(21)/parse(14)/
+// lock(13).
+// ---------------------------------------------------------------------------
+
+describe('events-store round 3: diagnostic message content on fault paths', () => {
+  test('append write-fault message says "Failed to append" and preserves cause.message', () => {
+    const dir = cawsDir();
+    appendEvent(dir, body());
+    const realWrite = fs.writeFileSync;
+    fs.writeFileSync = (t, d, ...rest) => {
+      if (typeof t === 'number') {
+        const e = new Error('disk on fire');
+        e.code = 'EIO';
+        throw e;
+      }
+      return realWrite.call(fs, t, d, ...rest);
+    };
+    let r;
+    try {
+      r = appendEvent(dir, body());
+    } finally {
+      fs.writeFileSync = realWrite;
+    }
+    expect(r.errors[0].message).toContain('Failed to append');
+    // `cause.message ?? 'unknown error'` -> the real message survives (kills the
+    // && mutant that would yield 'unknown error').
+    expect(r.errors[0].message).toContain('disk on fire');
+  });
+
+  test('append write-fault with a message-less cause falls back to "unknown error"', () => {
+    const dir = cawsDir();
+    appendEvent(dir, body());
+    const realWrite = fs.writeFileSync;
+    fs.writeFileSync = (t, d, ...rest) => {
+      if (typeof t === 'number') {
+        const e = { code: 'EIO' }; // no .message
+        throw e;
+      }
+      return realWrite.call(fs, t, d, ...rest);
+    };
+    let r;
+    try {
+      r = appendEvent(dir, body());
+    } finally {
+      fs.writeFileSync = realWrite;
+    }
+    expect(r.errors[0].message).toContain('unknown error');
+  });
+
+  test('rotate nothing-to-rotate (ENOENT) message says "does not exist"', () => {
+    const dir = cawsDir();
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.errors[0].message.toLowerCase()).toContain('does not exist');
+  });
+
+  test('rotate nothing-to-rotate (empty) message says "empty"', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(ev(dir), '');
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.errors[0].message.toLowerCase()).toContain('empty');
+  });
+
+  test('rotate partial-corruption message names the unparseable + parseable counts + carries data', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(ev(dir), JSON.stringify({ actor: 'v10' }) + '\n{ bad\n');
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.errors[0].message.toLowerCase()).toContain('unparseable');
+    // data block is non-empty (kills the {} ObjectLiteral mutant).
+    expect(r.errors[0].data.actor_shape_stats).toBeDefined();
+    expect(r.errors[0].data.lineCount).toBe(2);
+  });
+
+  test('rotate clean-chain refusal message mentions allowClean + carries stats data', () => {
+    const dir = cawsDir();
+    appendEvent(dir, body());
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.errors[0].message.toLowerCase()).toContain('allowclean');
+    expect(r.errors[0].data.actor_shape_stats.v11_object_actor).toBeGreaterThan(0);
+  });
+
+  test('rotate rename-fault message says "Failed to rename" + preserves cause.message', () => {
+    const dir = cawsDir();
+    seedV10Chain(dir, 1);
+    const realRename = fs.renameSync;
+    fs.renameSync = () => {
+      const e = new Error('cross-device link');
+      e.code = 'EXDEV';
+      throw e;
+    };
+    let r;
+    try {
+      r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    } finally {
+      fs.renameSync = realRename;
+    }
+    expect(r.errors[0].message).toContain('Failed to rename');
+    expect(r.errors[0].message).toContain('cross-device link');
+  });
+});
+
+describe('events-store round 3: priorChainStatus enum + clean-v11 predicate combos', () => {
+  test('a v10-only chain (no unparseable) yields prior_chain_status parseable_unverified', () => {
+    const dir = cawsDir();
+    seedV10Chain(dir, 2);
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    expect(r.value.data.prior_chain_status).toBe('parseable_unverified');
+  });
+
+  test('a fully-unparseable chain yields prior_chain_status unparseable (the other enum arm)', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(ev(dir), '{ bad1\n{ bad2\n{ bad3\n');
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    expect(r.value.data.prior_chain_status).toBe('unparseable');
+  });
+
+  test('a chain with v10 actors is NOT treated as clean-v11 (rotates without allowClean)', () => {
+    // The clean-v11 predicate requires v10===0 AND unparseable===0 AND v11>0.
+    // A v10-present chain fails it -> no friction-flag refusal -> rotates freely.
+    const dir = cawsDir();
+    seedV10Chain(dir, 1);
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor }); // no allowClean
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe('events-store round 3: tolerantScan tail boundaries (seq===1, regex anchors)', () => {
+  test('a tail seq of EXACTLY 1 is accepted as prior_seq (kills the sq > 1 mutant)', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(ev(dir), JSON.stringify({ actor: 'x', seq: 1, event_hash: 'sha256:' + 'c'.repeat(64) }) + '\n');
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    expect(r.value.data.prior_seq).toBe(1); // seq 1 IS >= 1
+  });
+
+  test('a hash with extra leading chars is rejected (the ^ anchor matters)', () => {
+    const dir = cawsDir();
+    // "XXsha256:<64hex>" — without ^, an unanchored regex would match the substring.
+    fs.writeFileSync(ev(dir), JSON.stringify({ actor: 'x', seq: 5, event_hash: 'XXsha256:' + 'd'.repeat(64) }) + '\n');
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    expect(r.value.data.prior_tail_hash).toBeNull(); // ^ anchor rejects the prefix
+  });
+
+  test('a hash with extra trailing chars is rejected (the $ anchor matters)', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(ev(dir), JSON.stringify({ actor: 'x', seq: 5, event_hash: 'sha256:' + 'e'.repeat(64) + 'EXTRA' }) + '\n');
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    expect(r.value.data.prior_tail_hash).toBeNull(); // $ anchor rejects the suffix
+  });
+});
+
+describe('events-store round 3: tryRecoverStaleLock return values', () => {
+  test('a FRESH lock is not recovered: append cannot steal it (return false path)', () => {
+    // If tryRecoverStaleLock wrongly returned true for a fresh lock, append would
+    // steal it and succeed. We assert it does NOT -> the false return is load-bearing.
+    const dir = cawsDir();
+    appendEvent(dir, body());
+    fs.writeFileSync(lockOf(dir), '{}');
+    const fresh = new Date(); // mtime now -> not stale
+    fs.utimesSync(lockOf(dir), fresh, fresh);
+    const r = appendEvent(dir, body());
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(LOCK_CONTENTION);
+    expect(fs.existsSync(lockOf(dir))).toBe(true); // fresh lock NOT stolen
+    fs.unlinkSync(lockOf(dir));
+  });
+
+  test('a vanished lock (statSync throws) is treated as recovered: append proceeds', () => {
+    // tryRecoverStaleLock catch-branch returns true (the file disappeared between
+    // attempts). We simulate by making the lock present for openSync(wx) EEXIST
+    // but absent for statSync — easier: place a lock then delete it racily via a
+    // statSync stub that throws ENOENT, proving the catch->return true path.
+    const dir = cawsDir();
+    appendEvent(dir, body());
+    fs.writeFileSync(lockOf(dir), '{}');
+    const realStat = fs.statSync;
+    let stubbed = true;
+    fs.statSync = (p, ...rest) => {
+      if (stubbed && typeof p === 'string' && p.endsWith('.lock')) {
+        stubbed = false; // one-shot: first stale-check sees "vanished"
+        fs.unlinkSync(lockOf(dir)); // actually remove so the retry openSync succeeds
+        const e = new Error('vanished');
+        e.code = 'ENOENT';
+        throw e;
+      }
+      return realStat.call(fs, p, ...rest);
+    };
+    let r;
+    try {
+      r = appendEvent(dir, body());
+    } finally {
+      fs.statSync = realStat;
+    }
+    // The catch->return true treated the vanished lock as recovered -> retry succeeded.
+    expect(r.ok).toBe(true);
+    expect(r.value.seq).toBe(2);
+  });
+});
