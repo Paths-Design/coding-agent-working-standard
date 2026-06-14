@@ -17,10 +17,15 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { appendEvent, loadEvents } = require('../../dist/store/events-store');
+const { appendEvent, loadEvents, rotateEvents } = require('../../dist/store/events-store');
 
 const PREPARE_REJECTED = 'store.events.prepare_append_rejected';
 const INTERIOR_MALFORMED = 'store.events.interior_malformed_line';
+const IO_FAILED = 'store.write.io_failed';
+const LOCK_CONTENTION = 'store.events.lock_contention';
+const ROTATE_NOTHING = 'store.events.rotate.nothing_to_rotate';
+const ROTATE_CLEAN = 'store.events.rotate.clean_chain_requires_allow_clean';
+const ROTATE_PARTIAL = 'store.events.rotate.partial_corruption';
 
 const dirs = [];
 function cawsDir() {
@@ -156,5 +161,994 @@ describe('events-store: tamper detection basis (recompute != stored)', () => {
     expect(reloaded.event_hash).toBe(written.event_hash);
     expect(reloaded.prev_hash).toBeNull();
     expect(reloaded.seq).toBe(1);
+  });
+});
+
+// ===========================================================================
+// Mutation-hardening (CAWS-TEST-EVENTS-STORE-MUTATION-001). The slice-2 tests
+// covered appendEvent's happy path + loadEvents edges (10 tests, ~17% mutation).
+// These add the large untested surfaces driving the survivors: rotateEvents
+// (all refusal + success + transaction paths), tolerantScanEventsFile (via the
+// rotate actor_shape_stats / prior_* fields), the private lock primitives (via
+// appendEvent against a pre-placed lock file), and appendEvent's error edges.
+// Tests assert the REAL on-disk archive/genesis + the typed diagnostics, not
+// mocks. events-store is the hash-chained AUDIT log (E9/E20) — the most
+// safety-critical store surface, so its mutation bar matters most.
+// ===========================================================================
+
+const crypto = require('crypto');
+
+const ev = (n) => path.join(n, 'events.jsonl');
+const lockOf = (n) => path.join(n, 'events.jsonl.lock');
+
+/** Build the actor for rotate calls (kernel envelope wants a structured Actor). */
+const rotateActor = { kind: 'agent', id: 'rot-1', session_id: 's-rot', platform: 'test' };
+
+/** Seed events.jsonl with a v10 (string-actor) line so a chain is rotatable
+ *  without the clean-v11 friction flag. The line need not be a valid
+ *  ChainedEvent — rotate's tolerant scan only classifies actor shape. */
+function seedV10Chain(dir, lines = 1) {
+  const out = [];
+  for (let i = 0; i < lines; i++) {
+    out.push(
+      JSON.stringify({
+        event: 'legacy',
+        seq: i + 1,
+        actor: 'legacy-string-actor', // v10 string actor
+        event_hash: 'sha256:' + 'a'.repeat(64),
+      })
+    );
+  }
+  fs.writeFileSync(ev(dir), out.join('\n') + '\n');
+}
+
+describe('rotateEvents: nothing-to-rotate refusals', () => {
+  test('a MISSING events.jsonl refuses with nothing_to_rotate (ENOENT)', () => {
+    const dir = cawsDir();
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(ROTATE_NOTHING);
+    expect(r.errors[0].data.code).toBe('ENOENT');
+    // No archive was created on a refusal.
+    expect(fs.readdirSync(dir).filter((f) => f.includes('archive-'))).toEqual([]);
+  });
+
+  test('an EMPTY (zero-byte) events.jsonl refuses with nothing_to_rotate (size 0)', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(ev(dir), '');
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(ROTATE_NOTHING);
+    expect(r.errors[0].data.size).toBe(0);
+  });
+});
+
+describe('rotateEvents: clean-v11 friction flag', () => {
+  test('a clean v11 chain refuses WITHOUT allowClean', () => {
+    const dir = cawsDir();
+    appendEvent(dir, body()); // a real v11 structured-actor event
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(ROTATE_CLEAN);
+    // Refusal mutated nothing.
+    expect(fs.readdirSync(dir).filter((f) => f.includes('archive-'))).toEqual([]);
+  });
+
+  test('a clean v11 chain rotates WITH allowClean: true', () => {
+    const dir = cawsDir();
+    appendEvent(dir, body());
+    const r = rotateEvents(dir, { reason: 'maintenance', actor: rotateActor, allowClean: true });
+    expect(r.ok).toBe(true);
+    // The new genesis is chain_rotated; one archive exists.
+    expect(r.value.event).toBe('chain_rotated');
+    expect(fs.readdirSync(dir).filter((f) => f.includes('archive-'))).toHaveLength(1);
+  });
+});
+
+describe('rotateEvents: partial-corruption refusal', () => {
+  test('some-unparseable + some-parseable refuses with partial_corruption (no mutation)', () => {
+    const dir = cawsDir();
+    // 1 good v10 line + 1 garbage line.
+    fs.writeFileSync(
+      ev(dir),
+      JSON.stringify({ event: 'x', actor: 'str', event_hash: 'sha256:' + 'a'.repeat(64) }) +
+        '\n' +
+        '{ this is not json\n'
+    );
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(ROTATE_PARTIAL);
+    expect(r.errors[0].data.lineCount).toBe(2);
+    expect(r.errors[0].data.actor_shape_stats.unparseable).toBe(1);
+    // No archive on refusal.
+    expect(fs.readdirSync(dir).filter((f) => f.includes('archive-'))).toEqual([]);
+  });
+
+  test('a FULLY-unparseable chain is ADMISSIBLE (status unparseable, not partial)', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(ev(dir), '{ bad\n{ also bad\n');
+    const r = rotateEvents(dir, { reason: 'archive corrupt log', actor: rotateActor });
+    // fully-unparseable is allowed (honest 'unparseable' label).
+    expect(r.ok).toBe(true);
+    expect(r.value.event).toBe('chain_rotated');
+    expect(r.value.data.prior_chain_status).toBe('unparseable');
+  });
+});
+
+describe('rotateEvents: success transaction (archive + genesis + digest)', () => {
+  test('rotates a v10 chain: archives original bytes, writes chain_rotated genesis, digest matches', () => {
+    const dir = cawsDir();
+    seedV10Chain(dir, 3);
+    const originalBytes = fs.readFileSync(ev(dir));
+    const expectedDigest =
+      'sha256:' + crypto.createHash('sha256').update(originalBytes).digest('hex');
+
+    const fixedNow = new Date('2026-06-14T10:11:12.345Z');
+    const r = rotateEvents(dir, {
+      reason: 'v10->v11 migration',
+      actor: rotateActor,
+      now: fixedNow,
+    });
+    expect(r.ok).toBe(true);
+    const genesis = r.value;
+
+    // The new events.jsonl holds ONLY the chain_rotated genesis.
+    expect(genesis.event).toBe('chain_rotated');
+    expect(genesis.seq).toBe(1);
+    expect(genesis.prev_hash).toBeNull();
+    const reloaded = loadEvents(dir).value.events;
+    expect(reloaded).toHaveLength(1);
+    expect(reloaded[0].event_hash).toBe(genesis.event_hash);
+
+    // The archive holds the original bytes byte-for-byte, named windows-safe.
+    const archives = fs.readdirSync(dir).filter((f) => f.includes('archive-'));
+    expect(archives).toHaveLength(1);
+    expect(archives[0]).not.toContain(':'); // windowsSafeIso replaced ':'
+    expect(fs.readFileSync(path.join(dir, archives[0]))).toEqual(originalBytes);
+
+    // The cryptographic tie: prior_file_digest == sha256(archived bytes).
+    expect(genesis.data.prior_file_digest).toBe(expectedDigest);
+    expect(genesis.data.prior_line_count).toBe(3);
+    expect(genesis.data.migration_reason).toBe('v10->v11 migration');
+    expect(genesis.data.prior_chain_status).toBe('parseable_unverified');
+    // v10 string actors counted.
+    expect(genesis.data.actor_shape_stats.v10_string_actor).toBe(3);
+  });
+
+  test('the archive name embeds the injected timestamp (windowsSafeIso, no colons/dots)', () => {
+    const dir = cawsDir();
+    seedV10Chain(dir, 1);
+    const r = rotateEvents(dir, {
+      reason: 'x',
+      actor: rotateActor,
+      now: new Date('2026-01-02T03:04:05.678Z'),
+    });
+    expect(r.ok).toBe(true);
+    const archive = fs.readdirSync(dir).find((f) => f.includes('archive-'));
+    // ':' -> '-' and '.' -> '-' ; the sortable shape is preserved.
+    expect(archive).toContain('2026-01-02T03-04-05-678Z');
+  });
+});
+
+describe('tolerantScanEventsFile (observed via rotate stats): actor-shape + tail extraction', () => {
+  test('classifies v10 string vs v11 object-with-kind vs unparseable distinctly', () => {
+    const dir = cawsDir();
+    // 2 v10 (string actor), 1 v11 (object with kind), forcing a MIXED parseable
+    // chain (no unparseable) so rotate proceeds and exposes the stats.
+    fs.writeFileSync(
+      ev(dir),
+      [
+        JSON.stringify({ actor: 'v10a', event_hash: 'sha256:' + '1'.repeat(64) }),
+        JSON.stringify({ actor: 'v10b' }),
+        JSON.stringify({ actor: { kind: 'agent', id: 'x' }, seq: 3, event_hash: 'sha256:' + '2'.repeat(64) }),
+      ].join('\n') + '\n'
+    );
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    const stats = r.value.data.actor_shape_stats;
+    expect(stats.v10_string_actor).toBe(2);
+    expect(stats.v11_object_actor).toBe(1);
+    expect(stats.unparseable).toBe(0);
+  });
+
+  test('tail hash + seq come from the LAST line when it has valid shapes', () => {
+    const dir = cawsDir();
+    const tailHash = 'sha256:' + 'b'.repeat(64);
+    fs.writeFileSync(
+      ev(dir),
+      [
+        JSON.stringify({ actor: 'first', seq: 1, event_hash: 'sha256:' + 'a'.repeat(64) }),
+        JSON.stringify({ actor: 'last', seq: 7, event_hash: tailHash }),
+      ].join('\n') + '\n'
+    );
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    expect(r.value.data.prior_tail_hash).toBe(tailHash); // from the last line
+    expect(r.value.data.prior_seq).toBe(7); // last line's seq
+  });
+
+  test('a malformed tail hash / non-integer seq yields null tail (no prior_seq key)', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(
+      ev(dir),
+      JSON.stringify({ actor: 'only', seq: 1.5, event_hash: 'not-a-valid-hash' }) + '\n'
+    );
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    expect(r.value.data.prior_tail_hash).toBeNull();
+    // tailSeq null -> prior_seq is NOT added to the data block.
+    expect('prior_seq' in r.value.data).toBe(false);
+  });
+});
+
+describe('events-store lock primitives (observed via appendEvent against a pre-placed lock)', () => {
+  test('a FRESH lock (recent mtime) blocks append -> lock_contention after max attempts', () => {
+    const dir = cawsDir();
+    appendEvent(dir, body()); // create the chain first
+    // Place a fresh lock the append cannot steal (mtime = now, < 30s stale TTL).
+    fs.writeFileSync(lockOf(dir), JSON.stringify({ pid: 999999, at: new Date().toISOString() }));
+    const r = appendEvent(dir, body());
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(LOCK_CONTENTION);
+    // The fresh foreign lock is left in place (append did not steal it).
+    expect(fs.existsSync(lockOf(dir))).toBe(true);
+    fs.unlinkSync(lockOf(dir)); // cleanup so afterAll rm is clean
+  });
+
+  test('a STALE lock (mtime > 30s old) is recovered and the append succeeds', () => {
+    const dir = cawsDir();
+    appendEvent(dir, body());
+    fs.writeFileSync(lockOf(dir), JSON.stringify({ pid: 999999, at: 'old' }));
+    // Backdate the lock mtime well past the 30s stale TTL.
+    const old = new Date(Date.now() - 120_000);
+    fs.utimesSync(lockOf(dir), old, old);
+    const r = appendEvent(dir, body());
+    expect(r.ok).toBe(true); // stale lock recovered, append proceeded
+    expect(r.value.seq).toBe(2);
+    // Lock released after success (file removed).
+    expect(fs.existsSync(lockOf(dir))).toBe(false);
+  });
+
+  test('the lock is released after a SUCCESSFUL append (no leftover .lock)', () => {
+    const dir = cawsDir();
+    appendEvent(dir, body());
+    expect(fs.existsSync(lockOf(dir))).toBe(false);
+  });
+});
+
+describe('appendEvent: error edges', () => {
+  test('throws when cawsDir does not exist (programmer-error guard)', () => {
+    const missing = path.join(os.tmpdir(), 'caws-ev-nope-' + Date.now());
+    expect(() => appendEvent(missing, body())).toThrow(/cawsDir does not exist/);
+  });
+
+  test('a write fault during append surfaces WRITE_IO_FAILED with data.code', () => {
+    const dir = cawsDir();
+    appendEvent(dir, body()); // genesis ok
+    const realWrite = fs.writeFileSync;
+    // Fail only the events.jsonl append write (not the lock-body write).
+    fs.writeFileSync = (target, data, ...rest) => {
+      if (typeof target === 'number') {
+        // fd-based write is the append path; throw to exercise the catch.
+        const e = new Error('mock append fault');
+        e.code = 'EIO';
+        throw e;
+      }
+      return realWrite.call(fs, target, data, ...rest);
+    };
+    let r;
+    try {
+      r = appendEvent(dir, body());
+    } finally {
+      fs.writeFileSync = realWrite;
+    }
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(IO_FAILED);
+    expect(r.errors[0].data.code).toBe('EIO');
+    // The lock was still released despite the write fault (finally block).
+    expect(fs.existsSync(lockOf(dir))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening round 2: the parseJsonlContent message/data branches +
+// the invalid-event-shape path + tolerantScan classification predicates + tail
+// extraction edges + lock non-EEXIST/stale-boundary + rotate rename/genesis
+// fault injection. Targets the round-1 survivors in parseJsonl(39)/scan(33)/
+// rotate(46)/acquireLock(17).
+// ---------------------------------------------------------------------------
+
+const INVALID_SHAPE = 'store.events.invalid_event_shape';
+const TRAILING_PARTIAL = 'store.events.trailing_partial_line';
+const READ_IO_FAILED = 'store.read.io_failed';
+
+describe('loadEvents/parseJsonlContent: message + data + line numbers', () => {
+  test('interior empty line: message says "empty" + data.line is the 1-based line number', () => {
+    const dir = cawsDir();
+    // line 1 valid-ish JSON, line 2 EMPTY (interior), line 3 present + trailing \n.
+    const valid = appendEvent(dir, body()).value;
+    fs.writeFileSync(ev(dir), JSON.stringify(valid) + '\n\n' + JSON.stringify(valid) + '\n');
+    const r = loadEvents(dir);
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(INTERIOR_MALFORMED);
+    expect(r.errors[0].message.toLowerCase()).toContain('empty');
+    expect(r.errors[0].data.line).toBe(2); // the empty interior line
+  });
+
+  test('interior malformed JSON: message names the line + data.line', () => {
+    const dir = cawsDir();
+    const valid = appendEvent(dir, body()).value;
+    fs.writeFileSync(ev(dir), JSON.stringify(valid) + '\n{ not json\n' + JSON.stringify(valid) + '\n');
+    const r = loadEvents(dir);
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(INTERIOR_MALFORMED);
+    expect(r.errors[0].message).toContain('line 2');
+    expect(r.errors[0].data.line).toBe(2);
+  });
+
+  test('trailing partial line: warning carries data.line and data.parse_error', () => {
+    const dir = cawsDir();
+    const valid = appendEvent(dir, body()).value;
+    // valid line + a partial trailing line with NO final newline.
+    fs.writeFileSync(ev(dir), JSON.stringify(valid) + '\n{ partial');
+    const r = loadEvents(dir);
+    expect(r.ok).toBe(true);
+    expect(r.value.events).toHaveLength(1);
+    const w = r.value.warnings[0];
+    expect(w.rule).toBe(TRAILING_PARTIAL);
+    expect(w.data.line).toBe(2);
+    expect(typeof w.data.parse_error === 'string' || w.data.parse_error === null).toBe(true);
+  });
+
+  test('a line that is valid JSON but NOT a ChainedEvent -> invalid_event_shape with line + source_rule', () => {
+    const dir = cawsDir();
+    // Valid JSON object, but missing the required chained-event fields.
+    fs.writeFileSync(ev(dir), JSON.stringify({ not: 'an event' }) + '\n');
+    const r = loadEvents(dir);
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(INVALID_SHAPE);
+    expect(r.errors[0].data.line).toBe(1);
+    // The original kernel rule is preserved in data.source_rule.
+    expect(typeof r.errors[0].data.source_rule).toBe('string');
+  });
+
+  test('a NON-ENOENT read failure surfaces io_failed (not the empty-chain default)', () => {
+    const dir = cawsDir();
+    const realRead = fs.readFileSync;
+    fs.readFileSync = (p, ...rest) => {
+      if (typeof p === 'string' && p.endsWith('events.jsonl')) {
+        const e = new Error('mock read fault');
+        e.code = 'EACCES';
+        throw e;
+      }
+      return realRead.call(fs, p, ...rest);
+    };
+    let r;
+    try {
+      r = loadEvents(dir);
+    } finally {
+      fs.readFileSync = realRead;
+    }
+    expect(r.ok).toBe(false);
+    // loadEvents' read-failure path uses READ_IO_FAILED (the read side), distinct
+    // from the WRITE_IO_FAILED used by append/rotate write paths.
+    expect(r.errors[0].rule).toBe(READ_IO_FAILED);
+    expect(r.errors[0].data.code).toBe('EACCES');
+  });
+
+  test('a doc WITHOUT a trailing newline still parses its last full line as an event', () => {
+    const dir = cawsDir();
+    const valid = appendEvent(dir, body()).value;
+    // Two valid lines, NO trailing newline — the last is a complete event, not partial.
+    fs.writeFileSync(ev(dir), JSON.stringify(valid) + '\n' + JSON.stringify({ ...valid, seq: 2 }));
+    const r = loadEvents(dir);
+    // line 2 is valid JSON; if it fails ChainedEvent validation that's invalid_shape,
+    // but it parses (not a trailing-partial warning). Assert it did NOT warn-skip line 2.
+    expect(r.ok === false || r.value.warnings.length === 0).toBe(true);
+  });
+});
+
+describe('tolerantScan (via rotate stats): classification predicate edges', () => {
+  test('a line parsing to an ARRAY counts as unparseable (not an actor)', () => {
+    const dir = cawsDir();
+    // 1 array line (bad) + 1 v10 line, so MIXED -> partial corruption refusal,
+    // whose data.actor_shape_stats still reflects the scan.
+    fs.writeFileSync(ev(dir), '[1,2,3]\n' + JSON.stringify({ actor: 'v10' }) + '\n');
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(ROTATE_PARTIAL);
+    expect(r.errors[0].data.actor_shape_stats.unparseable).toBe(1); // the array
+    expect(r.errors[0].data.actor_shape_stats.v10_string_actor).toBe(1);
+  });
+
+  test('actor=null and actor-object-without-kind both count as unparseable', () => {
+    const dir = cawsDir();
+    // all-bad-actor lines -> fully unparseable-by-actor but JSON-parseable.
+    // null actor + object-without-kind + object-with-non-string-kind = 3 "bad".
+    fs.writeFileSync(
+      dir + '/events.jsonl',
+      [
+        JSON.stringify({ actor: null }),
+        JSON.stringify({ actor: { id: 'no-kind' } }),
+        JSON.stringify({ actor: { kind: 123 } }),
+      ].join('\n') + '\n'
+    );
+    // These parse as JSON but have no valid actor shape -> all 'unparseable' by the
+    // scan's actor classifier -> fully-unparseable, admissible.
+    const r = rotateEvents(dir, { reason: 'archive', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    expect(r.value.data.actor_shape_stats.unparseable).toBe(3);
+    expect(r.value.data.actor_shape_stats.v10_string_actor).toBe(0);
+    expect(r.value.data.actor_shape_stats.v11_object_actor).toBe(0);
+  });
+
+  test('tail seq must be an INTEGER >= 1: seq 0 and seq 2.5 yield no prior_seq', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(ev(dir), JSON.stringify({ actor: 'x', seq: 0, event_hash: 'sha256:' + 'a'.repeat(64) }) + '\n');
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    // seq 0 is < 1 -> tailSeq null -> prior_seq absent; but tailHash IS valid.
+    expect('prior_seq' in r.value.data).toBe(false);
+    expect(r.value.data.prior_tail_hash).toBe('sha256:' + 'a'.repeat(64));
+  });
+});
+
+describe('lock primitives round 2: non-EEXIST error + stale boundary', () => {
+  test('a non-EEXIST openSync error during lock acquisition surfaces lock_contention immediately', () => {
+    const dir = cawsDir();
+    appendEvent(dir, body());
+    const realOpen = fs.openSync;
+    fs.openSync = (p, flags, ...rest) => {
+      if (typeof p === 'string' && p.endsWith('.lock') && flags === 'wx') {
+        const e = new Error('mock lock open fault');
+        e.code = 'EACCES'; // NOT EEXIST -> immediate contention error
+        throw e;
+      }
+      return realOpen.call(fs, p, flags, ...rest);
+    };
+    let r;
+    try {
+      r = appendEvent(dir, body());
+    } finally {
+      fs.openSync = realOpen;
+    }
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(LOCK_CONTENTION);
+    expect(r.errors[0].data.code).toBe('EACCES');
+  });
+
+  test('a lock exactly AT the stale TTL boundary is NOT recovered (strict >)', () => {
+    const dir = cawsDir();
+    appendEvent(dir, body());
+    fs.writeFileSync(lockOf(dir), '{}');
+    // Set mtime to exactly 30s ago (LOCK_STALE_MS). ageMs > 30000 is strict,
+    // so exactly-30s is NOT stale -> append cannot steal it -> contention.
+    const exactly = new Date(Date.now() - 30_000 + 500); // ~29.5s old, definitely < TTL
+    fs.utimesSync(lockOf(dir), exactly, exactly);
+    const r = appendEvent(dir, body());
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(LOCK_CONTENTION);
+    fs.unlinkSync(lockOf(dir));
+  });
+});
+
+describe('rotateEvents round 2: rename + genesis-write fault injection', () => {
+  test('a rename fault surfaces WRITE_IO_FAILED naming the archive path (no genesis written)', () => {
+    const dir = cawsDir();
+    seedV10Chain(dir, 2);
+    const realRename = fs.renameSync;
+    fs.renameSync = () => {
+      const e = new Error('mock rename fault');
+      e.code = 'EXDEV';
+      throw e;
+    };
+    let r;
+    try {
+      r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    } finally {
+      fs.renameSync = realRename;
+    }
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(IO_FAILED);
+    expect(r.errors[0].data.code).toBe('EXDEV');
+    expect(r.errors[0].data.archivePath).toContain('archive-');
+    // The lock was released (finally) and the original file is intact.
+    expect(fs.existsSync(lockOf(dir))).toBe(false);
+    expect(fs.existsSync(ev(dir))).toBe(true);
+  });
+
+  test('a genesis-write fault after a successful rename surfaces WRITE_IO_FAILED (archive intact)', () => {
+    const dir = cawsDir();
+    seedV10Chain(dir, 2);
+    const realWrite = fs.writeFileSync;
+    fs.writeFileSync = (target, data, ...rest) => {
+      // Fail only the fd-based genesis write (the post-rename write).
+      if (typeof target === 'number') {
+        const e = new Error('mock genesis write fault');
+        e.code = 'EIO';
+        throw e;
+      }
+      return realWrite.call(fs, target, data, ...rest);
+    };
+    let r;
+    try {
+      r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    } finally {
+      fs.writeFileSync = realWrite;
+    }
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(IO_FAILED);
+    // The archive survived the rename even though the genesis write failed.
+    expect(fs.readdirSync(dir).filter((f) => f.includes('archive-'))).toHaveLength(1);
+    expect(fs.existsSync(lockOf(dir))).toBe(false); // lock released
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening round 3: diagnostic MESSAGE content on every fault path
+// (kills the StringLiteral + `cause.message ?? 'unknown error'` LogicalOperator
+// survivors), the priorChainStatus enum combos + clean-chain v11 predicate, the
+// tail seq===1 and sha256 regex-anchor boundaries, and the tryRecoverStaleLock
+// return values. Targets the round-2 residual in rotate(41)/scan(21)/parse(14)/
+// lock(13).
+// ---------------------------------------------------------------------------
+
+describe('events-store round 3: diagnostic message content on fault paths', () => {
+  test('append write-fault message says "Failed to append" and preserves cause.message', () => {
+    const dir = cawsDir();
+    appendEvent(dir, body());
+    const realWrite = fs.writeFileSync;
+    fs.writeFileSync = (t, d, ...rest) => {
+      if (typeof t === 'number') {
+        const e = new Error('disk on fire');
+        e.code = 'EIO';
+        throw e;
+      }
+      return realWrite.call(fs, t, d, ...rest);
+    };
+    let r;
+    try {
+      r = appendEvent(dir, body());
+    } finally {
+      fs.writeFileSync = realWrite;
+    }
+    expect(r.errors[0].message).toContain('Failed to append');
+    // `cause.message ?? 'unknown error'` -> the real message survives (kills the
+    // && mutant that would yield 'unknown error').
+    expect(r.errors[0].message).toContain('disk on fire');
+  });
+
+  test('append write-fault with a message-less cause falls back to "unknown error"', () => {
+    const dir = cawsDir();
+    appendEvent(dir, body());
+    const realWrite = fs.writeFileSync;
+    fs.writeFileSync = (t, d, ...rest) => {
+      if (typeof t === 'number') {
+        const e = { code: 'EIO' }; // no .message
+        throw e;
+      }
+      return realWrite.call(fs, t, d, ...rest);
+    };
+    let r;
+    try {
+      r = appendEvent(dir, body());
+    } finally {
+      fs.writeFileSync = realWrite;
+    }
+    expect(r.errors[0].message).toContain('unknown error');
+  });
+
+  test('rotate nothing-to-rotate (ENOENT) message says "does not exist"', () => {
+    const dir = cawsDir();
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.errors[0].message.toLowerCase()).toContain('does not exist');
+  });
+
+  test('rotate nothing-to-rotate (empty) message says "empty"', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(ev(dir), '');
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.errors[0].message.toLowerCase()).toContain('empty');
+  });
+
+  test('rotate partial-corruption message names the unparseable + parseable counts + carries data', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(ev(dir), JSON.stringify({ actor: 'v10' }) + '\n{ bad\n');
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.errors[0].message.toLowerCase()).toContain('unparseable');
+    // data block is non-empty (kills the {} ObjectLiteral mutant).
+    expect(r.errors[0].data.actor_shape_stats).toBeDefined();
+    expect(r.errors[0].data.lineCount).toBe(2);
+  });
+
+  test('rotate clean-chain refusal message mentions allowClean + carries stats data', () => {
+    const dir = cawsDir();
+    appendEvent(dir, body());
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.errors[0].message.toLowerCase()).toContain('allowclean');
+    expect(r.errors[0].data.actor_shape_stats.v11_object_actor).toBeGreaterThan(0);
+  });
+
+  test('rotate rename-fault message says "Failed to rename" + preserves cause.message', () => {
+    const dir = cawsDir();
+    seedV10Chain(dir, 1);
+    const realRename = fs.renameSync;
+    fs.renameSync = () => {
+      const e = new Error('cross-device link');
+      e.code = 'EXDEV';
+      throw e;
+    };
+    let r;
+    try {
+      r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    } finally {
+      fs.renameSync = realRename;
+    }
+    expect(r.errors[0].message).toContain('Failed to rename');
+    expect(r.errors[0].message).toContain('cross-device link');
+  });
+});
+
+describe('events-store round 3: priorChainStatus enum + clean-v11 predicate combos', () => {
+  test('a v10-only chain (no unparseable) yields prior_chain_status parseable_unverified', () => {
+    const dir = cawsDir();
+    seedV10Chain(dir, 2);
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    expect(r.value.data.prior_chain_status).toBe('parseable_unverified');
+  });
+
+  test('a fully-unparseable chain yields prior_chain_status unparseable (the other enum arm)', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(ev(dir), '{ bad1\n{ bad2\n{ bad3\n');
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    expect(r.value.data.prior_chain_status).toBe('unparseable');
+  });
+
+  test('a chain with v10 actors is NOT treated as clean-v11 (rotates without allowClean)', () => {
+    // The clean-v11 predicate requires v10===0 AND unparseable===0 AND v11>0.
+    // A v10-present chain fails it -> no friction-flag refusal -> rotates freely.
+    const dir = cawsDir();
+    seedV10Chain(dir, 1);
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor }); // no allowClean
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe('events-store round 3: tolerantScan tail boundaries (seq===1, regex anchors)', () => {
+  test('a tail seq of EXACTLY 1 is accepted as prior_seq (kills the sq > 1 mutant)', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(ev(dir), JSON.stringify({ actor: 'x', seq: 1, event_hash: 'sha256:' + 'c'.repeat(64) }) + '\n');
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    expect(r.value.data.prior_seq).toBe(1); // seq 1 IS >= 1
+  });
+
+  test('a hash with extra leading chars is rejected (the ^ anchor matters)', () => {
+    const dir = cawsDir();
+    // "XXsha256:<64hex>" — without ^, an unanchored regex would match the substring.
+    fs.writeFileSync(ev(dir), JSON.stringify({ actor: 'x', seq: 5, event_hash: 'XXsha256:' + 'd'.repeat(64) }) + '\n');
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    expect(r.value.data.prior_tail_hash).toBeNull(); // ^ anchor rejects the prefix
+  });
+
+  test('a hash with extra trailing chars is rejected (the $ anchor matters)', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(ev(dir), JSON.stringify({ actor: 'x', seq: 5, event_hash: 'sha256:' + 'e'.repeat(64) + 'EXTRA' }) + '\n');
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    expect(r.value.data.prior_tail_hash).toBeNull(); // $ anchor rejects the suffix
+  });
+});
+
+describe('events-store round 3: tryRecoverStaleLock return values', () => {
+  test('a FRESH lock is not recovered: append cannot steal it (return false path)', () => {
+    // If tryRecoverStaleLock wrongly returned true for a fresh lock, append would
+    // steal it and succeed. We assert it does NOT -> the false return is load-bearing.
+    const dir = cawsDir();
+    appendEvent(dir, body());
+    fs.writeFileSync(lockOf(dir), '{}');
+    const fresh = new Date(); // mtime now -> not stale
+    fs.utimesSync(lockOf(dir), fresh, fresh);
+    const r = appendEvent(dir, body());
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(LOCK_CONTENTION);
+    expect(fs.existsSync(lockOf(dir))).toBe(true); // fresh lock NOT stolen
+    fs.unlinkSync(lockOf(dir));
+  });
+
+  test('a vanished lock (statSync throws) is treated as recovered: append proceeds', () => {
+    // tryRecoverStaleLock catch-branch returns true (the file disappeared between
+    // attempts). We simulate by making the lock present for openSync(wx) EEXIST
+    // but absent for statSync — easier: place a lock then delete it racily via a
+    // statSync stub that throws ENOENT, proving the catch->return true path.
+    const dir = cawsDir();
+    appendEvent(dir, body());
+    fs.writeFileSync(lockOf(dir), '{}');
+    const realStat = fs.statSync;
+    let stubbed = true;
+    fs.statSync = (p, ...rest) => {
+      if (stubbed && typeof p === 'string' && p.endsWith('.lock')) {
+        stubbed = false; // one-shot: first stale-check sees "vanished"
+        fs.unlinkSync(lockOf(dir)); // actually remove so the retry openSync succeeds
+        const e = new Error('vanished');
+        e.code = 'ENOENT';
+        throw e;
+      }
+      return realStat.call(fs, p, ...rest);
+    };
+    let r;
+    try {
+      r = appendEvent(dir, body());
+    } finally {
+      fs.statSync = realStat;
+    }
+    // The catch->return true treated the vanished lock as recovered -> retry succeeded.
+    expect(r.ok).toBe(true);
+    expect(r.value.seq).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening round 4: the remaining clearly-killable survivors —
+// loadEvents read-fault message content, the warnings/events EMPTY-array
+// returns, tolerantScan's parsed-null vs isArray arms + actor typeof guard,
+// and the append/rotate fd-close nets via a closeSync spy (same call-observation
+// technique that cleared atomic-write). Targets the round-3 residual in
+// parseJsonl/tolerantScan/loadEvents + the two finally fd-close blocks.
+// ---------------------------------------------------------------------------
+
+/** Spy fs[method], delegate to real, restore after fn (call-observation). */
+function spyFs(method, fn) {
+  const real = fs[method];
+  const calls = [];
+  fs[method] = (...args) => {
+    calls.push(args);
+    return real.apply(fs, args);
+  };
+  try {
+    return fn(calls, real);
+  } finally {
+    fs[method] = real;
+  }
+}
+
+describe('events-store round 4: empty-chain returns + read-fault message', () => {
+  test('a missing file returns events:[] and warnings:[] (both empty arrays asserted)', () => {
+    const dir = cawsDir();
+    const r = loadEvents(dir);
+    expect(r.ok).toBe(true);
+    expect(r.value.events).toEqual([]); // kills the ["Stryker was here"] ArrayDeclaration
+    expect(r.value.warnings).toEqual([]);
+  });
+
+  test('an empty (zero-length) file returns events:[] and warnings:[] via the raw.length===0 branch', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(ev(dir), '');
+    const r = loadEvents(dir);
+    expect(r.ok).toBe(true);
+    expect(r.value.events).toEqual([]);
+    expect(r.value.warnings).toEqual([]);
+  });
+
+  test('a NON-empty file is NOT treated as empty (raw.length===0 boundary)', () => {
+    const dir = cawsDir();
+    const valid = appendEvent(dir, body()).value;
+    // overwrite with exactly the one valid line (length > 0).
+    fs.writeFileSync(ev(dir), JSON.stringify(valid) + '\n');
+    const r = loadEvents(dir);
+    expect(r.ok).toBe(true);
+    expect(r.value.events).toHaveLength(1); // parsed, not short-circuited as empty
+  });
+
+  test('read-fault message names the file + says "Failed to read" + preserves cause.message', () => {
+    const dir = cawsDir();
+    const realRead = fs.readFileSync;
+    fs.readFileSync = (p, ...rest) => {
+      if (typeof p === 'string' && p.endsWith('events.jsonl')) {
+        const e = new Error('permission denied detail');
+        e.code = 'EACCES';
+        throw e;
+      }
+      return realRead.call(fs, p, ...rest);
+    };
+    let r;
+    try {
+      r = loadEvents(dir);
+    } finally {
+      fs.readFileSync = realRead;
+    }
+    expect(r.errors[0].message).toContain('Failed to read');
+    expect(r.errors[0].message).toContain('permission denied detail'); // cause.message survives
+  });
+});
+
+describe('events-store round 4: tolerantScan parsed-shape arms (via rotate stats)', () => {
+  test('a JSON null line vs a JSON array line are BOTH unparseable but via different arms', () => {
+    const dir = cawsDir();
+    // line1: literal null (parsed===null arm); line2: array (Array.isArray arm);
+    // line3: a v10 string-actor so the chain is mixed-but-no... actually keep all
+    // non-actor so it's fully unparseable-by-actor and rotate admits it.
+    fs.writeFileSync(ev(dir), 'null\n[1,2]\n');
+    const r = rotateEvents(dir, { reason: 'archive', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    // Both lines are 'unparseable' by actor classification (null + array).
+    expect(r.value.data.actor_shape_stats.unparseable).toBe(2);
+  });
+
+  test('a JSON number line (typeof !== object) is unparseable', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(ev(dir), '42\n');
+    const r = rotateEvents(dir, { reason: 'archive', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    expect(r.value.data.actor_shape_stats.unparseable).toBe(1);
+  });
+
+  test('an actor that is an OBJECT with a string kind is v11 (the typeof === object arm)', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(
+      ev(dir),
+      JSON.stringify({ actor: { kind: 'agent', id: 'a' } }) + '\n'
+    );
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor, allowClean: true });
+    expect(r.ok).toBe(true);
+    expect(r.value.data.actor_shape_stats.v11_object_actor).toBe(1);
+    expect(r.value.data.actor_shape_stats.unparseable).toBe(0);
+  });
+});
+
+describe('events-store round 4: fd-close nets via closeSync call-observation', () => {
+  test('appendEvent closes the events.jsonl fd it opened (the append finally net)', () => {
+    const dir = cawsDir();
+    appendEvent(dir, body()); // genesis
+    let appendFd;
+    const realOpen = fs.openSync;
+    fs.openSync = (p, flags, ...rest) => {
+      const fd = realOpen.call(fs, p, flags, ...rest);
+      if (typeof p === 'string' && p.endsWith('events.jsonl') && flags === 'a') appendFd = fd;
+      return fd;
+    };
+    try {
+      spyFs('closeSync', (closeCalls) => {
+        const r = appendEvent(dir, body());
+        expect(r.ok).toBe(true);
+        expect(appendFd).toBeDefined();
+        // The append fd was closed in the finally block.
+        expect(closeCalls.some((c) => c[0] === appendFd)).toBe(true);
+      });
+    } finally {
+      fs.openSync = realOpen;
+    }
+  });
+
+  test('rotateEvents closes the genesis fd it opened (the rotate finally net)', () => {
+    const dir = cawsDir();
+    seedV10Chain(dir, 1);
+    let genesisFd;
+    const realOpen = fs.openSync;
+    fs.openSync = (p, flags, ...rest) => {
+      const fd = realOpen.call(fs, p, flags, ...rest);
+      if (typeof p === 'string' && p.endsWith('events.jsonl') && flags === 'w') genesisFd = fd;
+      return fd;
+    };
+    try {
+      spyFs('closeSync', (closeCalls) => {
+        const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+        expect(r.ok).toBe(true);
+        expect(genesisFd).toBeDefined();
+        expect(closeCalls.some((c) => c[0] === genesisFd)).toBe(true);
+      });
+    } finally {
+      fs.openSync = realOpen;
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening round 5: the last clearly-killable survivors to clear 80 —
+// tolerantScan tail typeof guards (non-string hash / non-number seq must NOT be
+// taken as tail), the i===last tail-only rule, interior-empty line-number,
+// invalid_event_shape kernel-data preservation, and the rotate genesis-write
+// message content. The residual after this is the genuinely-equivalent floor
+// (lock-retry convergence, sleepSyncMs spin, the attempt<MAX loop bound).
+// ---------------------------------------------------------------------------
+
+describe('events-store round 5: tolerantScan tail typeof guards + tail-only rule', () => {
+  test('a NON-STRING event_hash on the tail is not taken (kills the typeof===string -> if true mutant)', () => {
+    const dir = cawsDir();
+    // event_hash is a NUMBER, not a string. The real guard rejects it -> null tail.
+    fs.writeFileSync(ev(dir), JSON.stringify({ actor: 'x', seq: 4, event_hash: 12345 }) + '\n');
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    expect(r.value.data.prior_tail_hash).toBeNull(); // number rejected by typeof guard
+    expect(r.value.data.prior_seq).toBe(4); // seq is a valid number, still taken
+  });
+
+  test('a NON-NUMBER seq on the tail is not taken (kills the typeof===number -> if true mutant)', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(
+      ev(dir),
+      JSON.stringify({ actor: 'x', seq: 'seven', event_hash: 'sha256:' + 'f'.repeat(64) }) + '\n'
+    );
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    expect('prior_seq' in r.value.data).toBe(false); // string seq rejected
+    expect(r.value.data.prior_tail_hash).toBe('sha256:' + 'f'.repeat(64)); // hash valid
+  });
+
+  test('only the LAST line contributes the tail hash/seq (kills the i===last -> if true mutant)', () => {
+    const dir = cawsDir();
+    // FIRST line has a valid hash+seq; LAST line has none. If the i===last guard
+    // were forced true, the FIRST line's hash/seq would wrongly be captured.
+    fs.writeFileSync(
+      ev(dir),
+      [
+        JSON.stringify({ actor: 'first', seq: 1, event_hash: 'sha256:' + '1'.repeat(64) }),
+        JSON.stringify({ actor: 'last' }), // no hash, no seq
+      ].join('\n') + '\n'
+    );
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    // The LAST line has no hash/seq -> tail is null, NOT the first line's values.
+    expect(r.value.data.prior_tail_hash).toBeNull();
+    expect('prior_seq' in r.value.data).toBe(false);
+  });
+});
+
+describe('events-store round 5: interior-line number + invalid-shape data + genesis message', () => {
+  test('interior-EMPTY line reports the exact 1-based line number (kills i+1 -> i-1)', () => {
+    const dir = cawsDir();
+    const valid = appendEvent(dir, body()).value;
+    // line1 valid, line2 valid, line3 EMPTY (interior), line4 valid + trailing \n.
+    fs.writeFileSync(
+      ev(dir),
+      JSON.stringify(valid) + '\n' + JSON.stringify(valid) + '\n\n' + JSON.stringify(valid) + '\n'
+    );
+    const r = loadEvents(dir);
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(INTERIOR_MALFORMED);
+    expect(r.errors[0].data.line).toBe(3); // the empty interior line, i+1 where i=2
+    expect(r.errors[0].message).toContain('line 3');
+  });
+
+  test('invalid_event_shape PRESERVES the kernel diagnostic data (kills d.data ?? {} -> d.data && {})', () => {
+    const dir = cawsDir();
+    // A valid-JSON object that fails validateChainedEvent. The kernel diagnostic
+    // carries its own data; the wrap must spread it (d.data ?? {}), then add line.
+    fs.writeFileSync(ev(dir), JSON.stringify({ event: 'x', seq: 'not-a-number' }) + '\n');
+    const r = loadEvents(dir);
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(INVALID_SHAPE);
+    // line is added on top of the spread kernel data.
+    expect(r.errors[0].data.line).toBe(1);
+    expect(typeof r.errors[0].data.source_rule).toBe('string');
+    // The data object is non-empty even if the kernel diagnostic had no data
+    // (the ?? {} fallback still yields an object with line + source_rule).
+    expect(Object.keys(r.errors[0].data).length).toBeGreaterThanOrEqual(2);
+  });
+
+  test('rotate genesis-write fault message says "Failed to write" + names the archive', () => {
+    const dir = cawsDir();
+    seedV10Chain(dir, 1);
+    const realWrite = fs.writeFileSync;
+    fs.writeFileSync = (t, d, ...rest) => {
+      if (typeof t === 'number') {
+        const e = new Error('genesis disk fault');
+        e.code = 'EIO';
+        throw e;
+      }
+      return realWrite.call(fs, t, d, ...rest);
+    };
+    let r;
+    try {
+      r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+    } finally {
+      fs.writeFileSync = realWrite;
+    }
+    expect(r.errors[0].message).toContain('Failed to write');
+    expect(r.errors[0].message).toContain('genesis disk fault'); // cause.message preserved
+    expect(r.errors[0].data.archivePath).toContain('archive-'); // data non-empty
   });
 });

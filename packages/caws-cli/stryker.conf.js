@@ -33,8 +33,8 @@
  *
  * The line ranges are tied to the compiled dist; the tsc preamble is stable
  * (it only shifts if the import style changes), but if a build moves the first
- * real declaration, re-derive the start line. events-store is measured under
- * its own slice (CAWS-TEST-EVENTS-STORE-MUTATION-001), not here.
+ * real declaration, re-derive the start line. All four store files are now
+ * gated (events-store joined under CAWS-TEST-EVENTS-STORE-MUTATION-001).
  *
  * Run prerequisite: `npm run build` must succeed before `npx stryker run`.
  * Remaining areas (shell, hooks, init) get their own mutation slices — the bar
@@ -44,9 +44,11 @@ module.exports = {
   mutate: [
     // yaml-patch uses require(); real logic starts at the first function.
     'dist/store/yaml-patch.js:47-296',
-    // apply-patch / atomic-write use `import *`; skip the tsc interop preamble.
+    // apply-patch / atomic-write / events-store use `import *`; skip the tsc
+    // interop preamble (real logic starts after the __importStar block).
     'dist/store/apply-patch.js:76-205',
     'dist/store/atomic-write.js:58-173',
+    'dist/store/events-store.js:64-574',
   ],
   testRunner: 'jest',
   testRunnerNodeArgs: [],
