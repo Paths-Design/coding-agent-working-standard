@@ -15,16 +15,38 @@
  * regardless of test quality. The dist file is per-file `tsc` output (not a
  * bundle); mutating it preserves the same line-level semantics as the source.
  *
+ * COMPILER-BOILERPLATE EXCLUSION (line ranges): files that use `import * as`
+ * (apply-patch, atomic-write) compile to a ~40-line tsc ESM-interop preamble
+ * (`__createBinding` / `__setModuleDefault` / `__importStar`) plus the
+ * `Object.defineProperty(exports, ...)` / `exports.X = X` / `require(...)`
+ * cluster. That preamble is NOT this module's source logic — it is identical
+ * downlevel-emit boilerplate present in every TS file that uses a namespace
+ * import, and no unit test can (or should) kill mutations inside it. Measuring
+ * it as if it were source depressed the score with non-source noise
+ * (atomic-write: real logic 43%, but boilerplate dragged the total to 32%;
+ * yaml-patch hit 80% only because it uses `require()` and has no such preamble).
+ * We therefore restrict each `import *` file's mutate range to its real-logic
+ * lines (first declaration after the preamble through the last statement before
+ * the sourceMappingURL comment). This excludes NON-SOURCE compiler emit — it is
+ * NOT an equivalent-mutant exclusion (the doctrine forbids those): the 80%
+ * floor still applies to every line of code we actually wrote.
+ *
+ * The line ranges are tied to the compiled dist; the tsc preamble is stable
+ * (it only shifts if the import style changes), but if a build moves the first
+ * real declaration, re-derive the start line. events-store is measured under
+ * its own slice (CAWS-TEST-EVENTS-STORE-MUTATION-001), not here.
+ *
  * Run prerequisite: `npm run build` must succeed before `npx stryker run`.
  * Remaining areas (shell, hooks, init) get their own mutation slices — the bar
  * is everything-covered-at->=80%, reached incrementally.
  */
 module.exports = {
   mutate: [
-    'dist/store/yaml-patch.js',
-    'dist/store/atomic-write.js',
-    'dist/store/apply-patch.js',
-    'dist/store/events-store.js',
+    // yaml-patch uses require(); real logic starts at the first function.
+    'dist/store/yaml-patch.js:47-296',
+    // apply-patch / atomic-write use `import *`; skip the tsc interop preamble.
+    'dist/store/apply-patch.js:76-205',
+    'dist/store/atomic-write.js:58-173',
   ],
   testRunner: 'jest',
   testRunnerNodeArgs: [],
