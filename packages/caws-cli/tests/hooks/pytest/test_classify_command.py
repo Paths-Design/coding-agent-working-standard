@@ -64,18 +64,59 @@ class TestCherryPickCarveout:
         # A cherry-pick that is NOT provably spec-only stays governed (ask).
         assert decision_of(classify("git cherry-pick abc123")) == "ask"
 
-    def test_cherry_pick_helper_spec_only_detection(self, classify_module):
-        # The carveout predicate itself: with no repo facts it must FAIL CLOSED
+    def test_cherry_pick_helper_fails_closed_on_unresolvable_sha(self, classify_module):
+        # The carveout predicate: with no repo facts it must FAIL CLOSED
         # (cannot prove spec-only -> False -> the generic ask path).
         from pathlib import Path
-        import tempfile
+        import tempfile, shutil
         tmp = Path(tempfile.mkdtemp(prefix="caws-cp-"))
         try:
-            # Unresolvable sha in an empty repo: cannot prove spec-only -> False.
             assert classify_module.cherry_pick_touches_only_specs("git cherry-pick deadbeef", tmp) is False
         finally:
-            import shutil
             shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_cherry_pick_spec_only_commit_is_admitted_E32(self, classify_module):
+        """The E32 carveout POSITIVE case: a real commit touching ONLY
+        .caws/specs/*.yaml is provably spec-only -> the helper returns True
+        (so classify_command admits it without the danger latch).
+
+        This builds a real git repo with a spec-only commit and resolves the
+        sha through the same `git show` path the helper uses — the actual
+        scope-amendment-sync scenario from CAWS-SCOPE-AMEND-COMMAND-001.
+        """
+        import subprocess, tempfile, shutil
+        from pathlib import Path
+
+        repo = Path(tempfile.mkdtemp(prefix="caws-cp-pos-"))
+        try:
+            env = {
+                **__import__("os").environ,
+                "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t.invalid",
+                "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t.invalid",
+            }
+            def g(*args):
+                return subprocess.run(["git", *args], cwd=repo, env=env, capture_output=True, text=True, check=True)
+            g("init", "-q", "-b", "main")
+            g("commit", "-q", "--allow-empty", "-m", "root")
+            specs = repo / ".caws" / "specs"
+            specs.mkdir(parents=True)
+            (specs / "FOO-1.yaml").write_text("id: FOO-1\n")
+            g("add", ".caws/specs/FOO-1.yaml")
+            g("commit", "-q", "-m", "chore(caws): amend FOO-1 scope")
+            sha = g("rev-parse", "HEAD").stdout.strip()
+
+            # Positive: a spec-only commit is provably spec-only -> True (admit).
+            assert classify_module.cherry_pick_touches_only_specs(f"git cherry-pick {sha}", repo) is True
+
+            # Negative control in the SAME repo: a commit touching source is NOT
+            # spec-only -> False (stays governed).
+            (repo / "src.txt").write_text("x\n")
+            g("add", "src.txt")
+            g("commit", "-q", "-m", "feat: touch source")
+            src_sha = g("rev-parse", "HEAD").stdout.strip()
+            assert classify_module.cherry_pick_touches_only_specs(f"git cherry-pick {src_sha}", repo) is False
+        finally:
+            shutil.rmtree(repo, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------
