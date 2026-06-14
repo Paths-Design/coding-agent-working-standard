@@ -196,6 +196,9 @@ describe('yaml-patch: diagnostic message + data payloads are asserted (kills Str
     const e = expectErr(insertTopLevelScalarAfter(DOC, 'id', 'lifecycle_state', 'closed'));
     expect(e.message.toLowerCase()).toContain('already exists');
     expect(e.message).toContain('setTopLevelScalar');
+    // The subject is the duplicate KEY (not the anchor) — kills the L214
+    // ObjectLiteral mutant that blanks { subject: key }.
+    expect(e.subject).toBe('lifecycle_state');
   });
 
   test('remove: duplicate-key ambiguous carries data.occurrences', () => {
