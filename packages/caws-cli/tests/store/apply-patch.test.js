@@ -209,3 +209,135 @@ describe('applyRegistryPatch: refuses to overwrite malformed on-disk JSON', () =
     expect(r.errors[0].rule).toBe(NOT_OBJECT);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening (CAWS-TEST-MUTATION-GATE-001): the slice-2 tests asserted
+// rule CODES + on-disk JSON but not the readRegistryJson read-edge branches,
+// the diagnostic MESSAGE/data payloads, or the heartbeat-field writes. These
+// pin those so a mutant that swaps a default, blanks a message, drops a field,
+// or flips a read-branch is KILLED. (Baseline apply-patch 49.68% -> target 80.)
+// ---------------------------------------------------------------------------
+
+describe('apply-patch: readRegistryJson read-edge branches', () => {
+  test('a MISSING worktrees.json reads as the default {} -> first bind creates it', () => {
+    const dir = cawsDir();
+    // No file exists yet; bind must succeed against the {} default.
+    const r = applyRegistryPatch(dir, bind('wt-a', 'SPEC-1'));
+    expect(r.ok).toBe(true);
+    expect(readWorktrees(dir)['wt-a'].specId).toBe('SPEC-1');
+  });
+
+  test('an EMPTY (whitespace-only) worktrees.json reads as default, bind succeeds', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(path.join(dir, 'worktrees.json'), '   \n  ');
+    const r = applyRegistryPatch(dir, bind('wt-a', 'SPEC-1'));
+    expect(r.ok).toBe(true);
+    expect(readWorktrees(dir)['wt-a'].specId).toBe('SPEC-1');
+  });
+
+  test('a JSON null (not an object) -> registry.not_object (distinct from array)', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(path.join(dir, 'worktrees.json'), 'null');
+    const r = applyRegistryPatch(dir, bind('wt-a', 'SPEC-1'));
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].rule).toBe(NOT_OBJECT);
+  });
+
+  test('a JSON number (not an object) -> registry.not_object', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(path.join(dir, 'worktrees.json'), '42');
+    expect(applyRegistryPatch(dir, bind('wt-a', 'SPEC-1')).errors[0].rule).toBe(NOT_OBJECT);
+  });
+});
+
+describe('apply-patch: diagnostic message + data payloads (kills StringLiteral/ObjectLiteral)', () => {
+  test('json_invalid message names the file + carries data.filePath', () => {
+    const dir = cawsDir();
+    const file = path.join(dir, 'worktrees.json');
+    fs.writeFileSync(file, '{ broken');
+    const e = applyRegistryPatch(dir, bind('wt-a', 'SPEC-1')).errors[0];
+    expect(e.message.toLowerCase()).toContain('invalid json');
+    expect(e.message).toContain('worktrees.json');
+    expect(e.data.filePath).toBe(file);
+  });
+
+  test('not_object message names the file and says "not a JSON object"', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(path.join(dir, 'worktrees.json'), '[]');
+    const e = applyRegistryPatch(dir, bind('wt-a', 'SPEC-1')).errors[0];
+    expect(e.message).toContain('worktrees.json');
+    expect(e.message.toLowerCase()).toContain('not a json object');
+  });
+
+  test('patch_target_missing message names the worktree + carries data.worktree_name', () => {
+    const dir = cawsDir();
+    const e = applyRegistryPatch(dir, {
+      kind: 'rebind_worktree',
+      worktree_name: 'ghost',
+      from_spec_id: 'A',
+      to_spec_id: 'B',
+      owner,
+      when: '2026-06-14T00:00:00.000Z',
+    }).errors[0];
+    expect(e.message).toContain('ghost');
+    expect(e.data.worktree_name).toBe('ghost');
+  });
+});
+
+describe('apply-patch: field writes + merge preservation (kills the field-assignment mutants)', () => {
+  test('bind writes last_heartbeat = patch.when exactly', () => {
+    const dir = cawsDir();
+    applyRegistryPatch(dir, bind('wt-a', 'SPEC-1'));
+    expect(readWorktrees(dir)['wt-a'].last_heartbeat).toBe('2026-06-13T12:00:00.000Z');
+  });
+
+  test('bind onto an EXISTING entry preserves its other fields (spread merge)', () => {
+    const dir = cawsDir();
+    // Seed an entry with an extra field the bind must not drop.
+    fs.writeFileSync(
+      path.join(dir, 'worktrees.json'),
+      JSON.stringify({ 'wt-a': { specId: 'OLD', path: '/keep/me', custom: 'x' } }, null, 2)
+    );
+    applyRegistryPatch(dir, bind('wt-a', 'SPEC-NEW'));
+    const e = readWorktrees(dir)['wt-a'];
+    expect(e.specId).toBe('SPEC-NEW'); // updated
+    expect(e.path).toBe('/keep/me'); // preserved
+    expect(e.custom).toBe('x'); // preserved
+  });
+
+  test('rebind preserves owner + path while changing specId', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(
+      path.join(dir, 'worktrees.json'),
+      JSON.stringify({ 'wt-a': { specId: 'OLD', owner, path: '/p' } }, null, 2)
+    );
+    applyRegistryPatch(dir, {
+      kind: 'rebind_worktree',
+      worktree_name: 'wt-a',
+      from_spec_id: 'OLD',
+      to_spec_id: 'NEW',
+      owner,
+      when: '2026-06-14T00:00:00.000Z',
+    });
+    const e = readWorktrees(dir)['wt-a'];
+    expect(e.specId).toBe('NEW');
+    expect(e.path).toBe('/p');
+    expect(e.owner).toEqual(owner);
+  });
+
+  test('refresh_agent writes platform + bound fields when present', () => {
+    const dir = cawsDir();
+    applyRegistryPatch(dir, {
+      kind: 'refresh_agent',
+      session: { session_id: 's-1', platform: 'claude-code' },
+      last_active: '2026-06-14T00:00:00.000Z',
+      bound_worktree: 'wt-a',
+      bound_spec_id: 'SPEC-1',
+    });
+    const a = readAgents(dir)['s-1'];
+    expect(a.platform).toBe('claude-code');
+    expect(a.bound_worktree).toBe('wt-a');
+    expect(a.bound_spec_id).toBe('SPEC-1');
+    expect(a.last_active).toBe('2026-06-14T00:00:00.000Z');
+  });
+});
