@@ -1,0 +1,75 @@
+id: CAWS-TEST-HOOKS-PYTHON-001
+title: 'Hook python-classifier coverage via pytest, anchored to the failure lineage'
+risk_tier: 1
+mode: feature
+lifecycle_state: active
+created_at: '2026-06-14T00:00:00.000Z'
+updated_at: '2026-06-14T15:34:20.229Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/tests/hooks/pytest
+    - packages/caws-cli/package.json
+    - .gitignore
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - packages/caws-cli/tests/hooks/pytest
+    - packages/caws-cli/package.json
+    - .gitignore
+    - .caws/specs/CAWS-TEST-HOOKS-PYTHON-001.yaml
+  out:
+    - packages/caws-cli/src
+    - packages/caws-cli/templates
+    - packages/caws-kernel
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - 'No production source under packages/caws-cli/src or templates/hook-packs is modified by this slice. A test that surfaces a real classifier bug files a separate tracked defect spec; the test pins correct behavior and is never bent to match a buggy classifier.'
+  - 'classify_command.py is tested in its NATIVE runner (pytest) by IMPORTING the module from templates/hook-packs/shared and calling its pure functions / the classify_command entry directly — no jest-spawns-python shim. The module under test is the real shipped classifier source.'
+  - 'pytest is provisioned reproducibly via a dedicated venv + a pinned requirements.txt under tests/hooks/pytest; the system python is PEP-668 externally-managed and must not be pip-installed into. The venv dir is gitignored.'
+  - 'Each pytest test reproduces its failure-lineage condition and asserts the classifier decision (allow|ask|deny) — the do-as-I-do bar, verified entry-by-entry.'
+acceptance:
+  - id: A1
+    given: 'A pinned requirements.txt (pytest) + a test:pytest npm script that creates/uses a venv under tests/hooks/pytest and runs pytest.'
+    when: 'npm run test:pytest is invoked.'
+    then: 'pytest runs against the classifier with per-test results; the toolchain is reproducible (pinned requirements + venv), not a system-pip assumption. The venv is gitignored.'
+  - id: A2
+    given: 'classify_command imported from templates/hook-packs/shared/classify_command.py.'
+    when: 'classify_command(raw, repo_root, home, cwd) is called with temp paths.'
+    then: 'It returns a (decision, reason, source, enforcement) tuple with decision in {allow, ask, deny}; tests assert the actual decision, not just that it ran.'
+  - id: A3
+    given: 'The git-init catastrophe family (lineage E1) and its bypass variants (E17 — flag-split, alias-config, env-prefix, nested-shell).'
+    when: 'git init / git --bare init / a git-init alias / env-prefixed git init are classified.'
+    then: 'Each is denied or asked (not silently allowed); a plain safe git command (git status) is allowed. The Entry-1/Entry-17 conditions are reproduced and the classifier shown to fire.'
+  - id: A4
+    given: 'The scope-amend cherry-pick carveout (lineage E32 — the scope-amendment protocol tripped its own danger latch).'
+    when: 'A cherry-pick that touches ONLY .caws/specs/*.yaml is classified vs one that touches source.'
+    then: 'The spec-only cherry-pick is admitted without the danger-class verdict the generic cherry-pick gets; the source-touching cherry-pick stays governed. The carveout is pinned.'
+  - id: A5
+    given: 'Representative safe + dangerous commands across the segmentation/quoting surface (rm of a safe prefix vs catastrophic target, pipe-to-shell, quoted dangerous string).'
+    when: 'Each is classified.'
+    then: 'Quote-stripping does not false-positive (echo of a dangerous string is allowed); a real catastrophic rm / curl|sh is denied; the segmentation handles &&/;/| correctly.'
+  - id: A6
+    given: 'session_log_renderer.py (lineage E10 — session transcripts).'
+    when: 'It renders a representative session-log input.'
+    then: 'It produces the expected rendered output deterministically; a malformed input is handled without a crash.'
+  - id: A7
+    given: 'The classifier test suite under mutation (slice 7 may wire python mutation separately; this slice makes the surface mutation-ready).'
+    when: 'Mutation runs against classify_command.'
+    then: 'The covered functions have a high kill rate; surviving mutants documented. Floor set in slice 7.'
+non_functional:
+  reliability:
+    - 'Tests are deterministic: classify_command is called with explicit temp repo_root/home/cwd, no reliance on the real filesystem layout or the developer environment.'
+    - 'The venv provisioning is idempotent and isolated under tests/hooks/pytest; it does not touch the system python.'
+  security:
+    - 'The git-init / rm / pipe-to-shell tests assert the DENY path stays live (E1/E17) so the command-safety brain behind block-dangerous.sh stays proven, not assumed; no dangerous command is actually executed (the classifier is pure — it only decides).'
+observability:
+  - 'pytest output (per-test pass/fail) is the verification artifact; the actual (decision, source, enforcement) tuple is asserted, not summarized.'
+rollback:
+  - 'Rollback is a revert of the test + requirements + script commit(s); no production code is touched. Removing the venv + requirements restores the prior toolchain.'
+contracts:
+  - name: classify-command-decision-pinned
+    type: behavior
+    path: packages/caws-cli/tests/hooks/pytest
+    description: 'classify_command, imported from the shipped classifier source and called with explicit paths, returns the correct (decision) for each lineage-anchored command class (git-init deny/ask, spec-only cherry-pick allow, catastrophic rm/pipe deny, quote-safe allow); a mutation that flips a covered decision fails a pytest.'
