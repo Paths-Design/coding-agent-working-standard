@@ -890,3 +890,158 @@ describe('events-store round 3: tryRecoverStaleLock return values', () => {
     expect(r.value.seq).toBe(2);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening round 4: the remaining clearly-killable survivors —
+// loadEvents read-fault message content, the warnings/events EMPTY-array
+// returns, tolerantScan's parsed-null vs isArray arms + actor typeof guard,
+// and the append/rotate fd-close nets via a closeSync spy (same call-observation
+// technique that cleared atomic-write). Targets the round-3 residual in
+// parseJsonl/tolerantScan/loadEvents + the two finally fd-close blocks.
+// ---------------------------------------------------------------------------
+
+/** Spy fs[method], delegate to real, restore after fn (call-observation). */
+function spyFs(method, fn) {
+  const real = fs[method];
+  const calls = [];
+  fs[method] = (...args) => {
+    calls.push(args);
+    return real.apply(fs, args);
+  };
+  try {
+    return fn(calls, real);
+  } finally {
+    fs[method] = real;
+  }
+}
+
+describe('events-store round 4: empty-chain returns + read-fault message', () => {
+  test('a missing file returns events:[] and warnings:[] (both empty arrays asserted)', () => {
+    const dir = cawsDir();
+    const r = loadEvents(dir);
+    expect(r.ok).toBe(true);
+    expect(r.value.events).toEqual([]); // kills the ["Stryker was here"] ArrayDeclaration
+    expect(r.value.warnings).toEqual([]);
+  });
+
+  test('an empty (zero-length) file returns events:[] and warnings:[] via the raw.length===0 branch', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(ev(dir), '');
+    const r = loadEvents(dir);
+    expect(r.ok).toBe(true);
+    expect(r.value.events).toEqual([]);
+    expect(r.value.warnings).toEqual([]);
+  });
+
+  test('a NON-empty file is NOT treated as empty (raw.length===0 boundary)', () => {
+    const dir = cawsDir();
+    const valid = appendEvent(dir, body()).value;
+    // overwrite with exactly the one valid line (length > 0).
+    fs.writeFileSync(ev(dir), JSON.stringify(valid) + '\n');
+    const r = loadEvents(dir);
+    expect(r.ok).toBe(true);
+    expect(r.value.events).toHaveLength(1); // parsed, not short-circuited as empty
+  });
+
+  test('read-fault message names the file + says "Failed to read" + preserves cause.message', () => {
+    const dir = cawsDir();
+    const realRead = fs.readFileSync;
+    fs.readFileSync = (p, ...rest) => {
+      if (typeof p === 'string' && p.endsWith('events.jsonl')) {
+        const e = new Error('permission denied detail');
+        e.code = 'EACCES';
+        throw e;
+      }
+      return realRead.call(fs, p, ...rest);
+    };
+    let r;
+    try {
+      r = loadEvents(dir);
+    } finally {
+      fs.readFileSync = realRead;
+    }
+    expect(r.errors[0].message).toContain('Failed to read');
+    expect(r.errors[0].message).toContain('permission denied detail'); // cause.message survives
+  });
+});
+
+describe('events-store round 4: tolerantScan parsed-shape arms (via rotate stats)', () => {
+  test('a JSON null line vs a JSON array line are BOTH unparseable but via different arms', () => {
+    const dir = cawsDir();
+    // line1: literal null (parsed===null arm); line2: array (Array.isArray arm);
+    // line3: a v10 string-actor so the chain is mixed-but-no... actually keep all
+    // non-actor so it's fully unparseable-by-actor and rotate admits it.
+    fs.writeFileSync(ev(dir), 'null\n[1,2]\n');
+    const r = rotateEvents(dir, { reason: 'archive', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    // Both lines are 'unparseable' by actor classification (null + array).
+    expect(r.value.data.actor_shape_stats.unparseable).toBe(2);
+  });
+
+  test('a JSON number line (typeof !== object) is unparseable', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(ev(dir), '42\n');
+    const r = rotateEvents(dir, { reason: 'archive', actor: rotateActor });
+    expect(r.ok).toBe(true);
+    expect(r.value.data.actor_shape_stats.unparseable).toBe(1);
+  });
+
+  test('an actor that is an OBJECT with a string kind is v11 (the typeof === object arm)', () => {
+    const dir = cawsDir();
+    fs.writeFileSync(
+      ev(dir),
+      JSON.stringify({ actor: { kind: 'agent', id: 'a' } }) + '\n'
+    );
+    const r = rotateEvents(dir, { reason: 'x', actor: rotateActor, allowClean: true });
+    expect(r.ok).toBe(true);
+    expect(r.value.data.actor_shape_stats.v11_object_actor).toBe(1);
+    expect(r.value.data.actor_shape_stats.unparseable).toBe(0);
+  });
+});
+
+describe('events-store round 4: fd-close nets via closeSync call-observation', () => {
+  test('appendEvent closes the events.jsonl fd it opened (the append finally net)', () => {
+    const dir = cawsDir();
+    appendEvent(dir, body()); // genesis
+    let appendFd;
+    const realOpen = fs.openSync;
+    fs.openSync = (p, flags, ...rest) => {
+      const fd = realOpen.call(fs, p, flags, ...rest);
+      if (typeof p === 'string' && p.endsWith('events.jsonl') && flags === 'a') appendFd = fd;
+      return fd;
+    };
+    try {
+      spyFs('closeSync', (closeCalls) => {
+        const r = appendEvent(dir, body());
+        expect(r.ok).toBe(true);
+        expect(appendFd).toBeDefined();
+        // The append fd was closed in the finally block.
+        expect(closeCalls.some((c) => c[0] === appendFd)).toBe(true);
+      });
+    } finally {
+      fs.openSync = realOpen;
+    }
+  });
+
+  test('rotateEvents closes the genesis fd it opened (the rotate finally net)', () => {
+    const dir = cawsDir();
+    seedV10Chain(dir, 1);
+    let genesisFd;
+    const realOpen = fs.openSync;
+    fs.openSync = (p, flags, ...rest) => {
+      const fd = realOpen.call(fs, p, flags, ...rest);
+      if (typeof p === 'string' && p.endsWith('events.jsonl') && flags === 'w') genesisFd = fd;
+      return fd;
+    };
+    try {
+      spyFs('closeSync', (closeCalls) => {
+        const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
+        expect(r.ok).toBe(true);
+        expect(genesisFd).toBeDefined();
+        expect(closeCalls.some((c) => c[0] === genesisFd)).toBe(true);
+      });
+    } finally {
+      fs.openSync = realOpen;
+    }
+  });
+});
