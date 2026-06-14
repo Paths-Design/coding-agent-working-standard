@@ -364,3 +364,54 @@ describe('yaml-patch: insert/remove with CRLF + trailing-newline permutations', 
     expect(e.rule).toBe(AMBIGUOUS);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening round 3: the isTopLevelKeyLine guards (empty line,
+// space-indent vs tab-indent distinctly) + the bare-key loop's 3-way indent
+// test (space / tab / dash) + blank lines inside a doc. Targets the L49-L106
+// EqualityOperator/LogicalOperator/BooleanLiteral survivors.
+// ---------------------------------------------------------------------------
+
+describe('yaml-patch: isTopLevelKeyLine empty + indent guards (precise)', () => {
+  test('a blank line in the doc is never matched as a key; the real key after it is', () => {
+    const doc = 'a: 1\n\nb: 2\n'; // blank line between
+    expect(expectOk(setTopLevelScalar(doc, 'b', '9'))).toBe('a: 1\n\nb: 9\n');
+  });
+
+  test('a SPACE-indented key is nested, not top-level (distinct from the tab case)', () => {
+    const doc = 'top: 1\n  spaced: 2\n';
+    expect(expectErr(setTopLevelScalar(doc, 'spaced', 'x')).rule).toBe(KEY_NOT_FOUND);
+  });
+
+  test('both a space-indented AND a tab-indented sibling are rejected (|| both arms)', () => {
+    const doc = 'top: 1\n  spaced: 2\n\ttabbed: 3\n';
+    expect(expectErr(setTopLevelScalar(doc, 'spaced', 'x')).rule).toBe(KEY_NOT_FOUND);
+    expect(expectErr(setTopLevelScalar(doc, 'tabbed', 'x')).rule).toBe(KEY_NOT_FOUND);
+    // ...but the column-0 key IS matched.
+    expect(expectOk(setTopLevelScalar(doc, 'top', '9'))).toContain('top: 9');
+  });
+});
+
+describe('yaml-patch: bare-key value-block 3-way indent detection (space/tab/dash)', () => {
+  test('a TAB-indented child block makes the bare key ambiguous', () => {
+    const doc = 'parent:\n\tchild: 1\nother: 2\n';
+    expect(expectErr(setTopLevelScalar(doc, 'parent', 'x')).rule).toBe(AMBIGUOUS);
+  });
+
+  test('a SPACE-indented child block makes the bare key ambiguous', () => {
+    const doc = 'parent:\n  child: 1\nother: 2\n';
+    expect(expectErr(setTopLevelScalar(doc, 'parent', 'x')).rule).toBe(AMBIGUOUS);
+  });
+
+  test('a DASH-prefixed sequence item makes the bare key ambiguous', () => {
+    const doc = 'parent:\n- item\nother: 2\n';
+    expect(expectErr(setTopLevelScalar(doc, 'parent', 'x')).rule).toBe(AMBIGUOUS);
+  });
+
+  test('a bare key followed by a column-0 NON-key text line is replaceable (none of space/tab/dash)', () => {
+    // The next line starts at column 0 and is not indented/dash -> break ->
+    // replaceable (the bare key has an empty value).
+    const doc = 'empty:\nplaintext\n';
+    expect(expectOk(setTopLevelScalar(doc, 'empty', 'set'))).toContain('empty: set');
+  });
+});
