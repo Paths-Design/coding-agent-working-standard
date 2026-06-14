@@ -1,0 +1,72 @@
+id: CAWS-TEST-MUTATION-GATE-001
+title: 'Mutation gate: widen Stryker from the tombstone scope to kernel + CLI store, enforce a >=80% floor that gates CI'
+risk_tier: 1
+mode: feature
+lifecycle_state: active
+created_at: '2026-06-14T00:00:00.000Z'
+updated_at: '2026-06-14T16:27:54.074Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/stryker.conf.js
+    - packages/caws-cli/tests/store
+    - packages/caws-kernel
+    - packages/caws-cli/package.json
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - packages/caws-cli/stryker.conf.js
+    - packages/caws-cli/tests/store
+    - packages/caws-cli/tests/helpers
+    - packages/caws-kernel/stryker.conf.js
+    - packages/caws-kernel/tests
+    - packages/caws-kernel/package.json
+    - packages/caws-cli/package.json
+    - .caws/specs/CAWS-TEST-MUTATION-GATE-001.yaml
+  out:
+    - packages/caws-cli/src
+    - packages/caws-kernel/src
+    - packages/caws-cli/templates
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - 'No production source under packages/*/src or templates is modified by this slice. If mutation reveals a real SUT bug (a surviving mutant that exposes wrong behavior), it is filed as a separate tracked defect; the gate config + tests are what this slice changes.'
+  - 'The mutation floor is >=80% and BREAKS the build (thresholds.break = 80) — a deliberate change from the prior "mutation never blocks CI" posture, per the tier-1 bar. The floor is NOT lowered to pass; if the measured score is under 80, ADD TESTS to kill the surviving mutants.'
+  - 'Stryker mutates the COMPILED dist for the CLI (tests load dist/) and the src for the kernel (ts-jest runs src directly). The mutate-target and the test-load-target must agree per package, or every mutant reports as killed regardless of test quality.'
+  - 'This slice covers the kernel + CLI store surfaces only. The remaining covered areas (shell, hooks-bash, hooks-python, init) each get their OWN follow-up mutation slice — the bar is everything-covered-at->=80%, reached incrementally, not in one slice.'
+acceptance:
+  - id: A1
+    given: 'The CLI Stryker config currently mutates only a 2-line tombstone range in dist/store/specs-writer.js and does not break the build (break: null).'
+    when: 'The config is widened to the store surface this campaign covered (yaml-patch, atomic-write, apply-patch, events-store) with the store test suite as the runner.'
+    then: 'Stryker mutates those store modules against tests/store, reports a kill rate, and thresholds.break is set to 80.'
+  - id: A2
+    given: 'The kernel has no Stryker config; its tests run src-direct via ts-jest.'
+    when: 'A kernel Stryker config is added mutating the covered kernel surface (scope, spec validators, evidence, policy, worktree transitions, result) against tests/unit.'
+    then: 'Stryker mutates the kernel src against the kernel suite, reports a kill rate, and breaks under 80.'
+  - id: A3
+    given: 'The measured mutation score on each surface.'
+    when: 'It is below 80% on any covered module.'
+    then: 'Tests are ADDED to kill the surviving mutants until the score is >=80% — the floor is never lowered to pass. Surviving mutants that cannot be killed (equivalent mutants) are documented with rationale.'
+  - id: A4
+    given: 'The mutation gate.'
+    when: 'A covered function is mutated (its core decision inverted) and the suite is run.'
+    then: 'The mutant is KILLED (a test fails) — proving the mutation-readiness the earlier slices claimed is real, measured, not asserted.'
+  - id: A5
+    given: 'The npm scripts + (later) CI.'
+    when: 'The mutation run is invoked.'
+    then: 'A documented npm script runs the widened mutation for each package; the >=80% break makes a regression a red result. (CI wiring of the script is slice 8; this slice makes the gate real and runnable.)'
+non_functional:
+  reliability:
+    - 'The mutation run is deterministic and bounded: the mutate-target line/file ranges and the test subset are scoped so the run completes in a tractable time (dry-run + per-mutant timeouts tuned), not an open-ended full-tree mutation.'
+    - 'The mutate-target (dist for CLI, src for kernel) matches the test-load-target so the score is real, not a false 100%.'
+  security:
+    - 'The mutation gate is the strongest evidence that the security-relevant guards (scope admit/refuse, hash-chain, deny-class) are actually tested — a surviving mutant on those paths is a hole the gate now surfaces.'
+observability:
+  - 'The Stryker clear-text + json + html reports are the verification artifacts; the actual mutation score per module and the surviving-mutant list are reported, not summarized.'
+rollback:
+  - 'Rollback is a revert of the stryker config + test commits; thresholds.break returns to null (non-gating). No production code is touched.'
+contracts:
+  - name: mutation-gate-80-kernel-store
+    type: behavior
+    path: packages/caws-cli/stryker.conf.js
+    description: 'Stryker mutates the covered kernel + CLI store surface against their real test suites, the mutation score is >=80%, and thresholds.break=80 makes a drop below the floor a build failure — the tier-1 mutation gate, measured not asserted.'
