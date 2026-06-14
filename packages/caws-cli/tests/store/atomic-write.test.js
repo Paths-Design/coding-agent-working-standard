@@ -320,3 +320,134 @@ describe('atomic-write: fs-fault injection exercises the defensive recovery nets
     expect(fs.existsSync(target)).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening round 3 (call-observation): the resource-cleanup and
+// idempotent-guard branches have no on-disk STATE difference (closing a fd, or
+// re-applying an already-correct mode, leaves disk identical), so state asserts
+// can't kill them. But their CONTRACT is observable at the fs-call boundary:
+// "the error path closes the fd it opened", "the pre-rename chmod targets the
+// TEMP file", "the post-verify chmod targets the FINAL file after a fault".
+// We spy on the relevant fs method and assert the call happened on the right
+// path — asserting the real cleanup/ordering contract, with the fault injected
+// by mock. This kills the fd-close (L126-128, L163-165) and chmod-guard
+// (L97/L111/L114) mutants that round 2 left alive. (Only the tmpCounter ++/--
+// mutant remains genuinely equivalent — any distinct counter yields unique
+// temp names.)
+// ---------------------------------------------------------------------------
+
+/** Spy fs[method]: record calls, delegate to the real impl, restore after fn. */
+function withFsSpy(method, fn) {
+  const real = fs[method];
+  const calls = [];
+  fs[method] = (...args) => {
+    calls.push(args);
+    return real.apply(fs, args);
+  };
+  try {
+    return fn(calls, real);
+  } finally {
+    fs[method] = real;
+  }
+}
+
+describe('atomic-write: call-observation kills the resource-cleanup + guard mutants', () => {
+  test('error path CLOSES the fd it opened (kills the catch fd-close net)', () => {
+    const dir = tmpDir();
+    const target = path.join(dir, 'closefd.txt');
+    // Capture the fd that openSync returns, then fail the next write so the
+    // catch's `if (fd !== undefined) closeSync(fd)` must fire on THAT fd.
+    let openedFd;
+    const realOpen = fs.openSync;
+    fs.openSync = (...a) => {
+      openedFd = realOpen.apply(fs, a);
+      return openedFd;
+    };
+    try {
+      withFsFault(
+        'writeFileSync',
+        () => {
+          const e = new Error('mock');
+          e.code = 'EIO';
+          throw e;
+        },
+        () =>
+          withFsSpy('closeSync', (closeCalls) => {
+            const r = writeFileAtomic(target, 'data');
+            expect(r.ok).toBe(false);
+            // The opened fd must have been closed by the error-path net.
+            expect(openedFd).toBeDefined();
+            expect(closeCalls.some((c) => c[0] === openedFd)).toBe(true);
+          })
+      );
+    } finally {
+      fs.openSync = realOpen;
+    }
+  });
+
+  test('preserveMode applies the PRE-rename chmod to the TEMP file (kills L97 guard->false)', () => {
+    const dir = tmpDir();
+    const target = path.join(dir, 'prechmod.sh');
+    writeFileAtomic(target, 'a');
+    fs.chmodSync(target, 0o751);
+    withFsSpy('chmodSync', (chmodCalls) => {
+      const r = writeFileAtomic(target, 'b', { preserveMode: true });
+      expect(r.ok).toBe(true);
+      // The pre-rename chmod targets the .tmp. sibling (not yet the final path).
+      const preRename = chmodCalls.find((c) => path.basename(c[0]).includes('.tmp.'));
+      expect(preRename).toBeDefined();
+      expect(preRename[1] & 0o7777).toBe(0o751);
+    });
+  });
+
+  test('post-verify chmod targets the FINAL file after a pre-rename chmod fault (kills L111/L114->false)', () => {
+    const dir = tmpDir();
+    const target = path.join(dir, 'postverify.sh');
+    writeFileAtomic(target, 'a');
+    fs.chmodSync(target, 0o751);
+    const real = fs.chmodSync;
+    let n = 0;
+    const targetCalls = [];
+    fs.chmodSync = (p, m) => {
+      n += 1;
+      if (n === 1) {
+        const e = new Error('mock pre fault');
+        e.code = 'EPERM';
+        throw e; // fail the pre-rename chmod
+      }
+      if (!path.basename(p).includes('.tmp.')) targetCalls.push({ p, m });
+      return real.call(fs, p, m);
+    };
+    let r;
+    try {
+      r = writeFileAtomic(target, 'b', { preserveMode: true });
+    } finally {
+      fs.chmodSync = real;
+    }
+    expect(r.ok).toBe(true);
+    // The post-verify net re-chmodded the FINAL target after the pre fault.
+    expect(targetCalls.length).toBeGreaterThanOrEqual(1);
+    expect(targetCalls[targetCalls.length - 1].m & 0o7777).toBe(0o751);
+    expect(fs.statSync(target).mode & 0o7777).toBe(0o751);
+  });
+
+  test('fsyncDir closes the directory fd it opened (kills the finally fd-close net)', () => {
+    const dir = tmpDir();
+    let openedFd;
+    const realOpen = fs.openSync;
+    fs.openSync = (...a) => {
+      openedFd = realOpen.apply(fs, a);
+      return openedFd;
+    };
+    try {
+      withFsSpy('closeSync', (closeCalls) => {
+        expect(fsyncDir(dir)).toBe(true);
+        expect(openedFd).toBeDefined();
+        // The dir fd opened in fsyncDir must be closed by its finally block.
+        expect(closeCalls.some((c) => c[0] === openedFd)).toBe(true);
+      });
+    } finally {
+      fs.openSync = realOpen;
+    }
+  });
+});
