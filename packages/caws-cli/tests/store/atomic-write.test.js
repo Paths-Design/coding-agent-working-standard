@@ -122,3 +122,85 @@ describe('fsyncDir: best-effort, never throws', () => {
     expect(fsyncDir('/no/such/dir/anywhere')).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening (CAWS-TEST-MUTATION-GATE-001): the slice-2 atomic-write
+// tests asserted happy-path content + the io_failed RULE, but not the
+// io_failed MESSAGE/data.code, the EXACT preserved mode value, the
+// preserveMode-OMITTED-does-not-preserve branch, the Ok(true) payload, or
+// distinct-temp-path behavior. These pin the value-level outcomes so a mutant
+// that blanks the message, drops data.code, flips `preserveMode === true`, or
+// changes the mode mask is KILLED. (Baseline 26.7% -> target >=80.)
+// ---------------------------------------------------------------------------
+
+describe('atomic-write: io_failed diagnostic message + data.code', () => {
+  test('io_failed names the target path and carries data.code (ENOENT for a missing dir)', () => {
+    const dir = tmpDir();
+    const missing = path.join(dir, 'no', 'such', 'sub', 'f.txt');
+    const e = writeFileAtomic(missing, 'x').errors[0];
+    expect(e.rule).toBe(IO_FAILED);
+    // Message names the actual target path and says it failed to write.
+    expect(e.message.toLowerCase()).toContain('failed to write');
+    expect(e.message).toContain(missing);
+    // data.code is the underlying errno code, propagated for callers to branch.
+    expect(e.data.code).toBe('ENOENT');
+    // subject is the target path.
+    expect(e.subject).toBe(missing);
+  });
+});
+
+describe('atomic-write: Ok payload + content atomicity', () => {
+  test('a successful write returns Ok with the literal value true', () => {
+    const target = path.join(tmpDir(), 'ok.txt');
+    const r = writeFileAtomic(target, 'data');
+    expect(r.ok).toBe(true);
+    expect(r.value).toBe(true); // kills a mutant that returns ok(false) / ok({})
+    expect(fs.readFileSync(target, 'utf8')).toBe('data');
+  });
+
+  test('two writes to the SAME dir both succeed (distinct temp paths, no collision)', () => {
+    const dir = tmpDir();
+    const a = path.join(dir, 'a.txt');
+    const b = path.join(dir, 'b.txt');
+    expect(writeFileAtomic(a, 'aaa').ok).toBe(true);
+    expect(writeFileAtomic(b, 'bbb').ok).toBe(true);
+    expect(fs.readFileSync(a, 'utf8')).toBe('aaa');
+    expect(fs.readFileSync(b, 'utf8')).toBe('bbb');
+    // No temp residue from either write.
+    expect(fs.readdirSync(dir).filter((f) => f.includes('.tmp.'))).toEqual([]);
+  });
+});
+
+describe('atomic-write: preserveMode exact value + omitted-does-not-preserve', () => {
+  test('preserveMode keeps the EXACT prior mode bits (not just "some exec bit")', () => {
+    const target = path.join(tmpDir(), 'exact.sh');
+    writeFileAtomic(target, 'a');
+    fs.chmodSync(target, 0o751); // a distinctive, non-default mode
+    const r = writeFileAtomic(target, 'b', { preserveMode: true });
+    expect(r.ok).toBe(true);
+    // The post-rename mode must equal 0o751 exactly — kills the & 0o7777 mask
+    // mutant and the preserved-value mutants.
+    expect(fs.statSync(target).mode & 0o7777).toBe(0o751);
+  });
+
+  test('OMITTING preserveMode does NOT preserve the prior mode (the === true branch)', () => {
+    const target = path.join(tmpDir(), 'noflag.sh');
+    writeFileAtomic(target, 'a');
+    fs.chmodSync(target, 0o777); // make it world-writable+exec
+    // Overwrite with NO preserveMode option.
+    const r = writeFileAtomic(target, 'b');
+    expect(r.ok).toBe(true);
+    // The new file came from openSync('w') default (0o666 & ~umask); it must
+    // NOT have retained 0o777. This kills a mutant flipping `=== true` so the
+    // mode is always preserved.
+    expect(fs.statSync(target).mode & 0o7777).not.toBe(0o777);
+  });
+
+  test('preserveMode:false (explicit) also does not preserve', () => {
+    const target = path.join(tmpDir(), 'falseflag.sh');
+    writeFileAtomic(target, 'a');
+    fs.chmodSync(target, 0o700);
+    writeFileAtomic(target, 'b', { preserveMode: false });
+    expect(fs.statSync(target).mode & 0o7777).not.toBe(0o700);
+  });
+});
