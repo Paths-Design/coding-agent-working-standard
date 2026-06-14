@@ -1,0 +1,74 @@
+id: CAWS-WORKTREE-GUARD-CHECKOUT-PATHSPEC-MISCLASSIFY-001
+title: 'worktree-guard misclassifies git checkout <pathspec> as a branch switch (false-positive + mislabeled diagnostic)'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-06-14T00:00:00.000Z'
+updated_at: '2026-06-14T00:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/templates/hook-packs/shared/worktree-guard.sh
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - packages/caws-cli/templates/hook-packs/shared/worktree-guard.sh
+    - packages/caws-cli/tests/hooks
+    - .caws/specs/CAWS-WORKTREE-GUARD-CHECKOUT-PATHSPEC-MISCLASSIFY-001.yaml
+  out:
+    - packages/caws-cli/src
+    - packages/caws-kernel
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - 'The canonical-checkout branch-switch guard (worktree-guard.sh ~L110) must distinguish a branch checkout (git checkout <ref>) from a pathspec checkout (git checkout <path>). A pathspec checkout is NOT a branch switch and must not be labeled as one.'
+  - 'A pathspec checkout of a generated/gitignored artifact (e.g. package-lock.json) must have a SANCTIONED path — either admitted, or refused with an accurate diagnostic that names the real hazard (working-tree discard) and the correct alternative, never the wrong category ("branch switch").'
+  - 'Discipline preserved: a pathspec checkout of a TRACKED source file that would discard uncommitted work stays refused (same hazard class as git checkout -- <path> at L242) — but with an accurate label, not "branch switch".'
+acceptance:
+  - id: A1
+    given: 'Active worktrees and a canonical checkout. The command is `git checkout package-lock.json` (a pathspec restore of a generated artifact, no `--`).'
+    when: 'worktree-guard.sh classifies the command.'
+    then: 'It is NOT reported as a "branch switch". Either it is admitted (preferred for generated/gitignored artifacts), or it is refused with a diagnostic that correctly names it a working-tree/path restore and offers the sanctioned alternative.'
+  - id: A2
+    given: 'The same context. The command is `git checkout main` (a real branch switch).'
+    when: 'worktree-guard.sh classifies the command.'
+    then: 'It is refused as a branch switch (the existing CANONICAL-CHECKOUT-WORKTREE-GUARD-001 behavior is preserved for real branch switches).'
+  - id: A3
+    given: 'The same context. The command is `git checkout -b new-branch` (branch creation).'
+    when: 'worktree-guard.sh classifies the command.'
+    then: 'It is admitted (the existing auto-admit for `checkout -b` is preserved).'
+  - id: A4
+    given: 'The fix.'
+    when: 'A bats test exercises each of the three forms (pathspec / branch-switch / branch-create).'
+    then: 'Each is classified correctly and asserted by exit code + diagnostic text; the misclassification is pinned so it cannot regress.'
+non_functional:
+  reliability:
+    - 'The classifier change is purely additive disambiguation; no existing real-branch-switch or branch-create behavior changes.'
+  security:
+    - 'No relaxation of the work-loss protection for tracked-source pathspec discards; only the category label + the generated-artifact escape are corrected.'
+observability:
+  - 'The bats test output (exit code + diagnostic text per checkout form) is the verification artifact.'
+rollback:
+  - 'Rollback is a revert of the worktree-guard.sh commit; the prior (over-broad) matcher is restored. No data migration.'
+contracts:
+  - name: checkout-pathspec-not-branch-switch
+    type: behavior
+    path: packages/caws-cli/templates/hook-packs/shared/worktree-guard.sh
+    description: 'worktree-guard.sh distinguishes git checkout <pathspec> from git checkout <ref>; a pathspec checkout is never labeled a branch switch, and a generated-artifact restore has a sanctioned outcome.'
+# --- Discovery note (informational) ---------------------------------------
+# Found during CAWS-TEST-HOOKS-BASH-001 (slice 4 of the test-reconciliation
+# campaign). While adding bats devDeps, a stray canonical `npm install` (reading
+# the bats-less canonical package.json) churned package-lock.json; the natural
+# recovery `git checkout package-lock.json` was BLOCKED by worktree-guard.sh as
+# a "branch switch" (worktree-guard.sh:~110, regex
+# `git\s+checkout\s+[^[:space:]-]` matches the `p` of `package-lock.json`).
+#
+# Per the CAWS release stance ("we do not ship buggy runtime code"; a guard that
+# refuses a legitimate op pushes the agent toward a bypass), this is a tracked
+# defect, not a workaround. Filed as a DRAFT here; the FIX is sequenced as its
+# own slice AFTER the slice-4 worktree-guard bats coverage exists, so the bats
+# test asserts the corrected behavior rather than codifying the bug.
+#
+# Tier 2 / mode fix: it changes a governed hook template (cross-cutting safety
+# surface) and needs the behavior contract above, but it is a narrow,
+# additive disambiguation, not a feature.
