@@ -160,3 +160,120 @@ describe('removeTopLevelScalar: removes a line, no-op when absent', () => {
     expect(out).toBe(DOC); // `in:` is nested under scope:, untouched
   });
 });
+
+// ---------------------------------------------------------------------------
+// Mutation-hardening (CAWS-TEST-MUTATION-GATE-001): the slice-2 tests asserted
+// rule CODES but not the diagnostic MESSAGE/SUBJECT/DATA, and exercised the
+// matching helpers only through the public API. These tests pin the message
+// content + data payloads + the exact boundary branches so a Stryker mutant
+// that blanks a message, drops a data field, or flips a boundary condition is
+// KILLED. (Baseline 54% -> target >=80%.)
+// ---------------------------------------------------------------------------
+
+describe('yaml-patch: diagnostic message + data payloads are asserted (kills StringLiteral/ObjectLiteral mutants)', () => {
+  test('key_not_found message names the key and the subject is the key', () => {
+    const e = expectErr(setTopLevelScalar(DOC, 'nope', 'x'));
+    expect(e.message).toContain('nope');
+    expect(e.message.toLowerCase()).toContain('not found');
+    expect(e.subject).toBe('nope');
+  });
+
+  test('ambiguous-duplicate message names the count and data.occurrences is set', () => {
+    const e = expectErr(setTopLevelScalar('k: 1\nk: 2\nk: 3\n', 'k', '9'));
+    expect(e.message).toContain('k');
+    expect(e.message).toContain('3'); // "appears 3 times"
+    expect(e.data.occurrences).toBe(3);
+    expect(e.subject).toBe('k');
+  });
+
+  test('multi-line-value ambiguous message mentions the block/flow reason', () => {
+    const e = expectErr(setTopLevelScalar(DOC, 'closure_notes', 'x'));
+    expect(e.message.toLowerCase()).toMatch(/multi-line|block scalar|nested|flow/);
+    expect(e.subject).toBe('closure_notes');
+  });
+
+  test('insert: pre-existing-key ambiguous message says to use set instead', () => {
+    const e = expectErr(insertTopLevelScalarAfter(DOC, 'id', 'lifecycle_state', 'closed'));
+    expect(e.message.toLowerCase()).toContain('already exists');
+    expect(e.message).toContain('setTopLevelScalar');
+  });
+
+  test('remove: duplicate-key ambiguous carries data.occurrences', () => {
+    const e = expectErr(removeTopLevelScalar('k: 1\nk: 2\n', 'k'));
+    expect(e.data.occurrences).toBe(2);
+  });
+});
+
+describe('yaml-patch: matching-boundary branches (kills Conditional/Boolean/Equality mutants)', () => {
+  test('a TAB-indented key is nested, not top-level (leading \\t is not column 0)', () => {
+    // isTopLevelKeyLine rejects line[0] === ' ' OR '\t'. Pin the tab branch.
+    const doc = 'top: 1\n\tnested: 2\n';
+    expect(expectErr(setTopLevelScalar(doc, 'nested', 'x')).rule).toBe(KEY_NOT_FOUND);
+  });
+
+  test('a comment line beginning with # is not a key even if it contains key:', () => {
+    // isTopLevelKeyLine rejects line[0] === '#'.
+    const doc = '# fake: not-a-key\nreal: 1\n';
+    expect(expectErr(setTopLevelScalar(doc, 'fake', 'x')).rule).toBe(KEY_NOT_FOUND);
+    expect(expectOk(setTopLevelScalar(doc, 'real', '2'))).toContain('real: 2');
+  });
+
+  test('a line with no colon is not a key', () => {
+    expect(expectErr(setTopLevelScalar('noColonHere\nreal: 1\n', 'noColonHere', 'x')).rule).toBe(
+      KEY_NOT_FOUND
+    );
+  });
+
+  test('block scalar marker > (folded) is multi-line ambiguous, like |', () => {
+    const doc = 'note: >\n  folded text\nother: 1\n';
+    expect(expectErr(setTopLevelScalar(doc, 'note', 'x')).rule).toBe(AMBIGUOUS);
+  });
+
+  test('an UNCLOSED flow mapping ({ without }) is multi-line ambiguous', () => {
+    const doc = 'm: { a: 1,\n    b: 2 }\nother: 1\n';
+    expect(expectErr(setTopLevelScalar(doc, 'm', 'x')).rule).toBe(AMBIGUOUS);
+  });
+
+  test('a CLOSED flow mapping on one line IS a replaceable scalar (not ambiguous)', () => {
+    const doc = 'm: {a: 1}\nother: 2\n';
+    expect(expectOk(setTopLevelScalar(doc, 'm', 'replaced'))).toContain('m: replaced');
+  });
+
+  test('an empty top-level value (bare key:) is replaceable', () => {
+    const doc = 'empty:\nother: 1\n';
+    // bare `empty:` with a NON-indented next line -> replaceable scalar.
+    expect(expectOk(setTopLevelScalar(doc, 'empty', 'now-set'))).toContain('empty: now-set');
+  });
+
+  test('a bare key: followed by an indented block is a nested mapping -> ambiguous', () => {
+    const doc = 'parent:\n  child: 1\nother: 2\n';
+    expect(expectErr(setTopLevelScalar(doc, 'parent', 'x')).rule).toBe(AMBIGUOUS);
+  });
+
+  test('a bare key: followed by a sequence (- item) is multi-line -> ambiguous', () => {
+    const doc = 'list:\n  - a\n  - b\nother: 1\n';
+    expect(expectErr(setTopLevelScalar(doc, 'list', 'x')).rule).toBe(AMBIGUOUS);
+  });
+
+  test('prefix-key matching is exact: keyfoo: is not key:, key: is not keyfoo:', () => {
+    const doc = 'key: 1\nkeyfoo: 2\n';
+    expect(expectOk(setTopLevelScalar(doc, 'key', '9'))).toContain('key: 9');
+    expect(expectOk(setTopLevelScalar(doc, 'key', '9'))).toContain('keyfoo: 2'); // untouched
+  });
+});
+
+describe('yaml-patch: inline-comment preservation precision (kills the comment-scan mutants)', () => {
+  test('an inline comment with a # inside a quoted value is NOT mistaken for the comment', () => {
+    // The comment scanner tracks single/double quote state; a # inside quotes
+    // is part of the value, not a comment.
+    const doc = `tag: "a#b"  # real comment\n`;
+    const out = expectOk(setTopLevelScalar(doc, 'tag', 'new'));
+    // The real trailing comment survives; the in-quote # was never a comment.
+    expect(out).toContain('tag: new  # real comment');
+  });
+
+  test('a value with no comment gets no spurious trailing comment', () => {
+    const out = expectOk(setTopLevelScalar('plain: old\n', 'plain', 'new'));
+    expect(out).toBe('plain: new\n');
+  });
+});
