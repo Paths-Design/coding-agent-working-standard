@@ -37,6 +37,7 @@
     "test:axe": "npm run build && jest --testPathPatterns=axe && npm run test:cleanup",
     "perf:budgets": "npm run build && jest --testPathPatterns=perf && npm run test:cleanup",
     "test:watch": "npm run build && jest --watch",
+    "test:bats": "npm run build && bats tests/hooks/bats",
     "test:cleanup": "node scripts/cleanup-tests.js",
     "lint": "npx eslint 'src/**/*.{js,ts}' 'tests/**/*.{js,ts}'",
     "lint:fix": "npx eslint 'src/**/*.{js,ts}' 'tests/**/*.{js,ts}' --fix",
@@ -82,6 +83,9 @@
   "devDependencies": {
     "@eslint/js": "^9.0.0",
     "@semantic-release/changelog": "6.0.3",
+    "bats": "1.13.0",
+    "bats-assert": "2.2.4",
+    "bats-support": "0.3.0",
     "@semantic-release/exec": "7.1.0",
     "@semantic-release/git": "10.0.1",
     "@semantic-release/npm": "12.0.2",
