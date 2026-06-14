@@ -108,10 +108,14 @@ describe('fingerprintPack: deterministic + exclusions (A4)', () => {
       const baseCopyFp = fingerprintPack(copy);
       expect(baseCopyFp).toBe(before); // a plain copy fingerprints identically
       // Now add each excluded artifact and confirm the fingerprint is stable.
+      // mkdir is recursive (idempotent): the live template tree may ALREADY
+      // contain __pycache__/tmp (e.g. pytest writing bytecode into shared/ when
+      // it imports classify_command.py), and cpSync copies those over. The
+      // fingerprint excludes them either way; the test must not crash on EEXIST.
       fs.writeFileSync(path.join(copy, '.DS_Store'), 'junk');
-      fs.mkdirSync(path.join(copy, 'tmp'));
+      fs.mkdirSync(path.join(copy, 'tmp'), { recursive: true });
       fs.writeFileSync(path.join(copy, 'tmp', 'scratch.log'), 'junk');
-      fs.mkdirSync(path.join(copy, '__pycache__'));
+      fs.mkdirSync(path.join(copy, '__pycache__'), { recursive: true });
       fs.writeFileSync(path.join(copy, '__pycache__', 'x.pyc'), 'junk');
       expect(fingerprintPack(copy)).toBe(before);
     } finally {
