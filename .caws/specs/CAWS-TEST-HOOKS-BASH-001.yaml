@@ -2,10 +2,11 @@ id: CAWS-TEST-HOOKS-BASH-001
 title: 'Hook bash-guard behavioral coverage via bats, anchored to the failure lineage'
 risk_tier: 1
 mode: feature
-lifecycle_state: active
-worktree: test-hooks-bash-01
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge test-hooks-bash-01 at d96893af7cf69551d783875db15c26aa9f940941'
 created_at: '2026-06-14T00:00:00.000Z'
-updated_at: '2026-06-14T15:12:12.880Z'
+updated_at: '2026-06-14T15:28:50.387Z'
 blast_radius:
   modules:
     - packages/caws-cli/tests/hooks
