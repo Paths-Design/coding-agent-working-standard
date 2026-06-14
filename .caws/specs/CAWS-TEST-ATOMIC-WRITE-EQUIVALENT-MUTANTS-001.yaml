@@ -2,9 +2,11 @@ id: CAWS-TEST-ATOMIC-WRITE-EQUIVALENT-MUTANTS-001
 title: 'Investigate killing atomic-write''s 15 equivalent mutants via fd-leak detection or refactor'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Investigation complete: the ''70.59% ceiling'' was falsified. atomic-write''s apparently-equivalent survivors split into killable and genuinely-equivalent. Call-observation tests (spy the fs method, assert the call landed on the right path) kill the resource-cleanup (fd-close on error path + fsyncDir finally) and chmod-guard (pre-rename targets temp, post-verify targets final after a fault) mutants — their CONTRACT is observable at the fs-call boundary even when on-disk STATE is identical. Kills landed in atomic-write.test.js under CAWS-TEST-MUTATION-GATE-001 (commit e245907d); atomic-write reached 88.24% (45/51). 6 residual survivors are proven-equivalent: 5 force-true guards whose inner ops are caught/no-op (chmod(undefined) / closeSync(undefined)) and tmpCounter ++/--. No waiver or lowered floor needed; the literal-80 mutation floor holds uniformly across the store. Finding: low-level primitives need call-observation, not just state assertion.'
 created_at: '2026-06-14T18:32:23.721Z'
-updated_at: '2026-06-14T18:32:23.721Z'
+updated_at: '2026-06-14T18:35:37.106Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
