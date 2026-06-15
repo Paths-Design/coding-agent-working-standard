@@ -2,10 +2,11 @@ id: WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-002
 title: 'Worktree/spec authority policy (Decide): control-plane invariant + H-class decision matrix, no repair'
 risk_tier: 1
 mode: feature
-lifecycle_state: active
-worktree: authority-decide-01
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge authority-decide-01 at 272ac523ac372b42eafbaa9df099e73711cd84c2'
 created_at: '2026-06-15T00:00:00.000Z'
-updated_at: '2026-06-15T18:33:45.416Z'
+updated_at: '2026-06-15T18:39:11.950Z'
 blast_radius:
   modules:
     - docs/architecture/caws-vnext-command-surface.md
