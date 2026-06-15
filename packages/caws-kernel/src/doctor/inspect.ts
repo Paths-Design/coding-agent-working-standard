@@ -608,10 +608,12 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
           `Event log records worktree_created for "${name}" (event seq ${ev.seq}), but no live registry entry or spec binding exists. The worktree's creation is in the audit chain but the control plane was rolled back (governance-half-state).`,
           {
             subject: name,
-            // DIAGNOSE ONLY — no mutating command; repair is the later gated
-            // control-plane/repair slice (PRUNE-REPAIR-WORKTREE-001).
+            // DIAGNOSE ONLY — no mutating command. caws worktree repair
+            // (PRUNE-REPAIR-WORKTREE-001) intentionally REFUSES this class: the
+            // created-event is immutable audit history, so the only correct
+            // "repair" is authority reconciliation, never a mechanical prune.
             narrowRepair:
-              'Reconcilable governance residue from a partially-failed worktree creation. Repair is deferred to the worktree control-plane/repair slice; no safe automatic action exists yet.',
+              'Governance residue from a partially-failed worktree creation. Automatic repair is intentionally refused for this class: the worktree_created event is immutable audit history, so no control-plane mutation is safe — reconcile authority manually (recreate the binding or accept the residue) rather than deleting the record.',
             data: {
               worktree_name: name,
               created_event_seq: ev.seq,
