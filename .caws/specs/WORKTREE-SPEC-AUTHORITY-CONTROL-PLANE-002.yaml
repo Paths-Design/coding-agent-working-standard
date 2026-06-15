@@ -3,6 +3,7 @@ title: 'Worktree/spec authority policy (Decide): control-plane invariant + H-cla
 risk_tier: 1
 mode: feature
 lifecycle_state: active
+worktree: authority-decide-01
 created_at: '2026-06-15T00:00:00.000Z'
 updated_at: '2026-06-15T18:33:45.416Z'
 blast_radius:
