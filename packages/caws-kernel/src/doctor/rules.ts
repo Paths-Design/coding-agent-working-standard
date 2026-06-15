@@ -46,6 +46,23 @@ export const DOCTOR_RULES = {
    */
   WORKTREE_FOREIGN_PHYSICAL: 'doctor.worktree.foreign_physical',
   /**
+   * Event-backed governance-half-state: the event log contains a
+   * `worktree_created` event for a worktree name, but `.caws/worktrees.json`
+   * has no live registry entry for that name AND no loaded spec carries a live
+   * `worktree:` binding to it. This is the createWorktree second-event
+   * divergence proven by CAWS-LIFECYCLE-ROLLBACK-HARNESS-COMPLETE-001: the
+   * worktree_created event was appended to the immutable hash chain, then the
+   * worktree_bound event failed and the transaction rolled back the registry +
+   * filesystem writes — leaving an event recording a worktree the control plane
+   * does not reflect. WORKTREE-DOCTOR-HALF-STATE-001. Severity WARN — it is
+   * reconcilable governance residue (the audit record is honest), not active
+   * corruption; the repair is a later gated slice, so the diagnostic is a
+   * pointer, not a command. Suppressed when a later `worktree_destroyed` event
+   * for the same name closes the lifecycle, or when the worktree is live.
+   */
+  WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING:
+    'doctor.worktree.event_without_control_plane_binding',
+  /**
    * `git worktree list --porcelain` failed (no git, repo corruption,
    * permission error). Doctor still produces a full report; this
    * finding signals that git-backed half-state classes (H1, H6) and
