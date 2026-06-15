@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: repair-executor-01
 created_at: '2026-05-18T00:00:00.000Z'
-updated_at: '2026-06-15T22:32:02.876Z'
+updated_at: '2026-06-15T22:35:41.891Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/worktree.ts
@@ -26,6 +26,7 @@ scope:
     - .caws/specs/PRUNE-REPAIR-WORKTREE-001.yaml
     - packages/caws-cli/src/shell/command-metadata.ts
     - packages/caws-cli/src/shell/index.ts
+    - packages/caws-kernel/tests/unit/doctor-authority-policy.test.ts
   out:
     - packages/caws-cli/src/shell/commands/specs.ts
     - packages/caws-cli/src/shell/commands/claim.ts
