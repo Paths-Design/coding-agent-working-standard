@@ -3,6 +3,7 @@ title: 'Half-state repair executor: caws worktree repair for the unambiguous cla
 risk_tier: 1
 mode: feature
 lifecycle_state: active
+worktree: repair-executor-01
 created_at: '2026-05-18T00:00:00.000Z'
 updated_at: '2026-06-15T19:36:12.800Z'
 blast_radius:
