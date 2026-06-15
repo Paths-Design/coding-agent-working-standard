@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: shell-mutation-01
 created_at: '2026-06-15T00:00:00.000Z'
-updated_at: '2026-06-15T05:23:19.919Z'
+updated_at: '2026-06-15T06:57:19.691Z'
 blast_radius:
   modules:
     - packages/caws-cli/stryker.shell.conf.js
@@ -22,6 +22,7 @@ scope:
     - packages/caws-cli/tests/shell/gates-waiver-filter.test.js
     - packages/caws-cli/tests/shell/binding-resolve.test.js
     - .caws/specs/CAWS-TEST-SHELL-MUTATION-001.yaml
+    - .gitignore
   out:
     - packages/caws-cli/src
     - packages/caws-cli/stryker.conf.js
