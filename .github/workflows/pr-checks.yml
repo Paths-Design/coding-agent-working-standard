@@ -176,6 +176,60 @@ jobs:
         if: hashFiles('tests/e2e/**') != ''
         run: npm run test:e2e:smoke
 
+  # Hook bash-guard behavioral suite (lineage-anchored). These prove each
+  # failure-lineage guard still FIRES (block-dangerous, protected-paths,
+  # scan-secrets, cwd-guard, naming-check) — the "do as I do" proof. Blocking.
+  # Previously absent from every workflow (CAWS-TEST-CI-WIRING-001 A2).
+  hook_bats:
+    name: Hook Guards (bats)
+    runs-on: ubuntu-latest
+    needs: sanity
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Bats hook guard tests
+        working-directory: packages/caws-cli
+        run: npm run test:bats
+
+  # Hook python-classifier suite (classify_command decision matrix +
+  # session_log_renderer). Proves the git-init/rebase/hard-reset classifications
+  # and the allow/ask/deny enforcement vocabulary. Blocking (CAWS-TEST-CI-WIRING-001 A2).
+  hook_pytest:
+    name: Hook Classifier (pytest)
+    runs-on: ubuntu-latest
+    needs: sanity
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Pytest hook classifier tests
+        working-directory: packages/caws-cli
+        run: npm run test:pytest
+
   # Quality gates (can run in parallel with tests)
   quality_gates:
     name: Quality Gates
@@ -194,9 +248,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Mutation testing
-        if: hashFiles('tests/mutation/**') != ''
-        run: npm run test:mutation
+      # Mutation testing is NOT a per-PR step. The store run alone is ~22min and
+      # the kernel run adds more; gating every PR on it would dominate the
+      # critical path. It runs on a schedule + label + dispatch in
+      # .github/workflows/mutation.yml (break:80, incremental-cached) instead.
+      # The prior `if: hashFiles('tests/mutation/**')` step silently skipped
+      # because that directory was removed in the test-corpus rebuild — a dead
+      # guard that enforced nothing. Removed under CAWS-TEST-CI-WIRING-001.
 
       - name: Accessibility testing
         if: hashFiles('tests/axe/**') != ''
@@ -209,7 +267,7 @@ jobs:
   pr_comment:
     name: PR Summary
     runs-on: ubuntu-latest
-    needs: [caws_guards, test_suite, quality_gates]
+    needs: [caws_guards, test_suite, hook_bats, hook_pytest, quality_gates]
     if: always()
     steps:
       - name: Checkout
