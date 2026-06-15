@@ -2,10 +2,11 @@ id: CAWS-TEST-CI-WIRING-001
 title: 'CI wiring: run bats + pytest + mutation on PRs/schedule so the rebuilt tier-1 suite actually gates merges (close the dead hashFiles guard)'
 risk_tier: 1
 mode: feature
-lifecycle_state: active
-worktree: honest-tier1-03
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge honest-tier1-03 at 7f54cda0cd1263bb1b83be49b425b1f3d2b06836'
 created_at: '2026-06-14T00:00:00.000Z'
-updated_at: '2026-06-15T03:59:32.852Z'
+updated_at: '2026-06-15T05:06:28.707Z'
 blast_radius:
   modules:
     - .github/workflows/pr-checks.yml
