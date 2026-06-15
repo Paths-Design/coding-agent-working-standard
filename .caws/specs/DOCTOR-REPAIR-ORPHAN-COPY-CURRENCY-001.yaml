@@ -3,6 +3,7 @@ title: 'Refresh stale event-orphan diagnostic copy post-repair-ship (text-only, 
 risk_tier: 3
 mode: chore
 lifecycle_state: active
+worktree: orphan-copy-01
 created_at: '2026-06-15T23:16:41.568Z'
 updated_at: '2026-06-15T23:16:51.746Z'
 blast_radius:
