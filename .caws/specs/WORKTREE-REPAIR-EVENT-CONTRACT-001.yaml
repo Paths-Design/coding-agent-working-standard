@@ -1,0 +1,73 @@
+id: WORKTREE-REPAIR-EVENT-CONTRACT-001
+title: 'Honest audit events for half-state repair: worktree_pruned + spec_binding_cleared (pre-repair contract)'
+risk_tier: 1
+mode: feature
+lifecycle_state: active
+created_at: '2026-06-15T00:00:00.000Z'
+updated_at: '2026-06-15T18:54:34.145Z'
+blast_radius:
+  modules:
+    - packages/caws-kernel/src/evidence/types.ts
+    - packages/caws-kernel/src/evidence/validate.ts
+    - packages/caws-kernel/src/schemas/events.v1.json
+    - packages/caws-kernel/src/schemas/events/worktree_pruned.v1.json
+    - packages/caws-kernel/src/schemas/events/spec_binding_cleared.v1.json
+    - packages/caws-kernel/tests/unit/repair-event-contract.test.ts
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - packages/caws-kernel/src/evidence/types.ts
+    - packages/caws-kernel/src/evidence/validate.ts
+    - packages/caws-kernel/src/schemas/events.v1.json
+    - packages/caws-kernel/src/schemas/events/worktree_pruned.v1.json
+    - packages/caws-kernel/src/schemas/events/spec_binding_cleared.v1.json
+    - packages/caws-kernel/tests/unit/repair-event-contract.test.ts
+    - .caws/specs/WORKTREE-REPAIR-EVENT-CONTRACT-001.yaml
+  out:
+    - packages/caws-cli/src/store
+    - packages/caws-kernel/src/doctor
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - 'This slice adds VOCABULARY, not behavior. It defines two event types so the later PRUNE-REPAIR-WORKTREE-001 repair can append an HONEST, schema-valid audit record. It adds NO writer (invariant 14 holds — the only events.jsonl writers remain appendEvent + rotateEvents), NO repair command, NO doctor change, NO CLI change.'
+  - 'The events are honest by construction. worktree_pruned records "a stale registry entry was removed for a worktree with no live git/canonical backing" — it does NOT reuse worktree_destroyed, which asserts "git worktree was removed" (required branch/path; dishonest for a ghost). spec_binding_cleared records "a stale worktree: field was cleared from a spec the registry+git agree has no live worktree" — it does NOT reuse the schema-less spec_updated/spec_drift_detected (which cannot be appended).'
+  - 'Each event carries an h_class enum field (the authorized half-state class it repairs: ghost_registry for worktree_pruned via H1; ghost_spec_binding or dormant_spec_binding for spec_binding_cleared via H4 / H3-closed-archived) so the audit log names WHICH decided class was repaired. The matrix in §1.4 is the authority for which classes are repairable; this event records the execution of that decision, it does not re-decide it.'
+  - 'spec-id class: worktree_pruned is OPTIONAL_SPEC_ID (a ghost may or may not name a spec); spec_binding_cleared is REQUIRES_SPEC_ID (it always clears a field on a named spec). Both schema files use additionalProperties:false and enumerate their fields, matching every existing event schema.'
+  - 'No event is emitted by this slice; it only makes the types appendable. Adding a type touches exactly: events.v1.json envelope enum, evidence/types.ts (EventType union + EVENT_TYPES array + the OPTIONAL/REQUIRES spec-id Set), evidence/validate.ts (schema import + schema map + writer allowlist), and the two schema files. The kernel test proves a valid payload validates and a malformed/extra-field payload is rejected.'
+acceptance:
+  - id: A1
+    given: 'The EventType union, EVENT_TYPES array, spec-id-class Sets, the events.v1.json envelope enum, and the validate.ts schema map + writer allowlist currently have no worktree_pruned or spec_binding_cleared.'
+    when: 'The two types are added to every one of those surfaces.'
+    then: 'getSpecIdClass returns optional for worktree_pruned and requires for spec_binding_cleared; the envelope enum admits both; validateChainedEvent resolves a schema for both.'
+  - id: A2
+    given: 'A well-formed worktree_pruned payload { worktree_name, h_class: "ghost_registry", reason } (+ optional spec_id).'
+    when: 'It is validated via the kernel event validator.'
+    then: 'It passes; a payload with an extra property, a missing required field, or an h_class outside the enum is REJECTED with a typed diagnostic (additionalProperties:false + required + enum enforced).'
+  - id: A3
+    given: 'A well-formed spec_binding_cleared payload { spec_id, cleared_worktree_name, h_class: "ghost_spec_binding"|"dormant_spec_binding", reason }.'
+    when: 'It is validated.'
+    then: 'It passes; a missing spec_id (REQUIRES_SPEC_ID) or an h_class outside the enum is rejected.'
+  - id: A4
+    given: 'The hash chain over a real appended sequence including the two new event types.'
+    when: 'A chain containing worktree_pruned and spec_binding_cleared is built and verified.'
+    then: 'computeEventHash + verifyChain accept them like any other event (the new types do not break canonical hashing or chain integrity).'
+  - id: A5
+    given: 'invariant 14 (closed/enumerated writers).'
+    when: 'This slice is complete.'
+    then: 'No new writer is introduced — appendEvent + rotateEvents remain the only events.jsonl writers; the new types are appendable THROUGH appendEvent, not by a third writer.'
+non_functional:
+  reliability:
+    - 'The new schemas are deterministic JSON-Schema validators (additionalProperties:false, required, enum); validation is pure and total. The kernel test runs under default parallel jest workers with no I/O.'
+  security:
+    - 'These events are the HONEST audit substrate for a future governance mutation (repair). The whole Diagnose->Decide->Repair arc exists to keep the audit log truthful; reusing worktree_destroyed for a prune would have written a false "destroyed" record. Honest, distinct event types are the precondition for repair that does not corrupt the audit chain. h_class on the event ties each repair back to the §1.4 authorized class.'
+observability:
+  - 'The kernel validation-test output (valid accepted, malformed rejected, chain verifies) is the verification artifact, captured in closure evidence.'
+  - 'The two new schema files + their EventType registration are the durable contract artifact PRUNE-REPAIR-WORKTREE-001 consumes.'
+rollback:
+  - 'Rollback is a revert of the vocabulary additions + schema files + test. No event of these types exists in any chain yet (no writer emits them this slice), so removal strands nothing.'
+contracts:
+  - name: half-state-repair-events
+    type: schema
+    path: packages/caws-kernel/src/schemas/events/worktree_pruned.v1.json
+    description: 'worktree_pruned (OPTIONAL_SPEC_ID) and spec_binding_cleared (REQUIRES_SPEC_ID) are registered event types with additionalProperties:false schemas carrying an h_class enum + reason; valid payloads validate and append + hash + verify, malformed payloads are rejected; no new writer is added.'
