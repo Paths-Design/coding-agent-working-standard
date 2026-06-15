@@ -182,6 +182,7 @@ export {
   runWorktreeMergeCommand,
   runWorktreeMigrateRegistryCommand,
   runWorktreeRepairSparseCommand,
+  runWorktreeRepairCommand,
 } from './commands/worktree';
 export type {
   WorktreeCreateOptions,
@@ -191,6 +192,7 @@ export type {
   WorktreeMergeOptions,
   WorktreeMigrateRegistryOptions,
   WorktreeRepairSparseOptions,
+  WorktreeRepairOptions,
 } from './commands/worktree';
 
 export { renderInit } from './render/init';

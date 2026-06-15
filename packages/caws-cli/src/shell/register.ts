@@ -78,6 +78,7 @@ import {
   runWorktreeMergeCommand,
   runWorktreeMigrateRegistryCommand,
   runWorktreeRepairSparseCommand,
+  runWorktreeRepairCommand,
   type EvidenceKind,
 } from './index';
 import type { LeaseReason } from '@paths.design/caws-kernel';
@@ -883,6 +884,15 @@ export function registerShellCommands(
     .action((name: string, opts: { data?: boolean }) => {
       const code = runWorktreeRepairSparseCommand({
         name,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'repair'))
+    .action((opts: { dryRun?: boolean; data?: boolean }) => {
+      const code = runWorktreeRepairCommand({
+        ...(opts.dryRun === true ? { dryRun: true } : {}),
         showData: opts.data === true,
       });
       exit(code);

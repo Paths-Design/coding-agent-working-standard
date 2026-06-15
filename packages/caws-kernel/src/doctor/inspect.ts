@@ -470,7 +470,8 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   //     H5 doctor-UX rule (locked by spec invariant): the repair string
   //     MUST NOT contain a shell command. It is intentionally
   //     non-actionable. Picking a winner requires authority policy from
-  //     WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001.
+  //     WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-002 (the live resolution;
+  //     -001 was superseded by the Decide slice).
   // -------------------------------------------------------------------------
 
   const specsByWorktreeClaim = new Map<string, Array<typeof specs[number]>>();
@@ -499,7 +500,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
         {
           subject: worktreeName,
           narrowRepair:
-            'Ambiguous authority split; no automatic repair available under current doctrine. See WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001.',
+            'Ambiguous authority split; no automatic repair available under current doctrine. See WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-002.',
           data: {
             worktree_name: worktreeName,
             registry_spec_id: registrySpecId,

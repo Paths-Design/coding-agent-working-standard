@@ -80,6 +80,12 @@ describe('authority policy lock: forbidden/ambiguous classes carry NO repair com
     expect(f).toBeDefined();
     // The matrix marks H5 FORBIDDEN — no winner, no command.
     expect(hasExecutableCommand(f?.narrowRepair)).toBe(false);
+    // PRUNE-REPAIR-WORKTREE-001 A6: the pointer is the LIVE resolution (-002),
+    // not the superseded Decide-predecessor (-001). The string is the only
+    // place an operator learns where authority policy is decided, so a stale
+    // pointer silently sends them to a closed spec.
+    expect(f?.narrowRepair).toContain('WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-002');
+    expect(f?.narrowRepair).not.toContain('CONTROL-PLANE-001');
   });
 
   test('event-backed orphan (governance-half-state) repair is a doctrine pointer, not a command', () => {
