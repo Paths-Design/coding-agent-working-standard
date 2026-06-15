@@ -2,10 +2,11 @@ id: CAWS-TEST-KERNEL-MUTATION-GATE-001
 title: 'Kernel mutation gate: add the kernel Stryker config CAWS-TEST-MUTATION-GATE-001 A2 claimed but never shipped; mutate the covered kernel surface at break:80'
 risk_tier: 1
 mode: feature
-lifecycle_state: active
-worktree: honest-tier1-02
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge honest-tier1-02 at b891d199ae9ce372fe9476c70739e47b81997a74'
 created_at: '2026-06-14T00:00:00.000Z'
-updated_at: '2026-06-15T04:57:57.143Z'
+updated_at: '2026-06-15T05:06:17.779Z'
 blast_radius:
   modules:
     - packages/caws-kernel/stryker.conf.js
