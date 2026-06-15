@@ -104,6 +104,7 @@ describe('deriveBudget: an applicable waiver RAISES the budget by its delta', ()
       [waiver({ waiver_id: 'W-1' }), waiver({ waiver_id: 'W-2', delta: { max_files: 3, max_loc: 30 } })],
       { now: NOW }
     );
+    expect(isOk(r)).toBe(true);
     if (isOk(r)) expect(r.value.budget).toEqual({ max_files: 18, max_loc: 180 });
   });
 });
@@ -119,6 +120,7 @@ describe('deriveBudget: each waiver-skip reason is enforced (mutation-rich decis
 
   test('non-active status is skipped (status_not_active), budget stays baseline', () => {
     const r = deriveBudget(base(), { risk_tier: 1 }, [waiver({ status: 'revoked' })], { now: NOW });
+    expect(isOk(r)).toBe(true);
     if (isOk(r)) {
       expect(r.value.budget).toEqual({ max_files: 10, max_loc: 100 });
       expect(r.value.trace.skippedWaivers[0]?.reason).toBe('status_not_active');
@@ -140,6 +142,7 @@ describe('deriveBudget: each waiver-skip reason is enforced (mutation-rich decis
     const r = deriveBudget(base(), { risk_tier: 1 }, [waiver({ expires_at: '2026-06-13T12:00:00.001Z' })], {
       now: NOW,
     });
+    expect(isOk(r)).toBe(true);
     if (isOk(r)) expect(r.value.trace.appliedWaivers).toHaveLength(1);
   });
 
@@ -160,6 +163,7 @@ describe('deriveBudget: each waiver-skip reason is enforced (mutation-rich decis
     const r = deriveBudget(base(), { risk_tier: 1 }, [waiver({ delta: { max_files: 0, max_loc: 0 }, approvers: [] })], {
       now: NOW,
     });
+    expect(isOk(r)).toBe(true);
     if (isOk(r)) {
       // No skip for approvers because delta does not raise budget.
       expect(r.value.trace.appliedWaivers).toHaveLength(1);
@@ -171,6 +175,7 @@ describe('deriveBudget: each waiver-skip reason is enforced (mutation-rich decis
     const p = policy({ waivers: { min_approvers_for_budget_raise: 2 } });
     // One approver < required 2 -> skipped.
     const r = deriveBudget(p, { risk_tier: 1 }, [waiver({ approvers: [{ name: 'a' }] })], { now: NOW });
+    expect(isOk(r)).toBe(true);
     if (isOk(r)) expect(r.value.trace.skippedWaivers[0]?.reason).toBe('insufficient_approvers');
   });
 });
@@ -183,6 +188,7 @@ describe('deriveBudget: trace records baseline, applied, skipped, effective', ()
       [waiver(), waiver({ waiver_id: 'W-skip', status: 'revoked' })],
       { now: NOW }
     );
+    expect(isOk(r)).toBe(true);
     if (isOk(r)) {
       const t = r.value.trace;
       expect(t.tier).toBe(2);
@@ -191,6 +197,308 @@ describe('deriveBudget: trace records baseline, applied, skipped, effective', ()
       expect(t.skippedWaivers.map((w) => w.waiver_id)).toEqual(['W-skip']);
       expect(t.effective).toEqual({ max_files: 25, max_loc: 250 });
       expect(t.evaluatedAt).toBe(NOW);
+    }
+  });
+});
+
+describe('deriveBudget: diagnostic fields for tier-not-found error (L59-64 StringLiteral/ObjectLiteral)', () => {
+  test('err diagnostic has exact authority, message, subject, location pointer, narrowRepair', () => {
+    const p = policy();
+    delete (p.risk_tiers as Record<string, unknown>)['2'];
+    const r = deriveBudget(p, { risk_tier: 2 }, [], { now: NOW });
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) {
+      const d = r.errors[0]!;
+      expect(d.rule).toBe(POLICY_RULES.BUDGET_TIER_NOT_FOUND);
+      expect(d.authority).toBe('kernel/policy');
+      expect(d.message).toBe('Policy has no risk_tiers entry for tier 2.');
+      expect(d.subject).toBe('.caws/policy.yaml');
+      // location is an object with a pointer field — not {}
+      expect((d as any).location).toEqual({ pointer: '/risk_tiers/2' });
+      expect((d as any).narrowRepair).toBe('Add risk_tiers["2"] with max_files and max_loc.');
+    }
+  });
+
+  test('err diagnostic message encodes the tier key correctly for tier 3', () => {
+    const p = policy();
+    delete (p.risk_tiers as Record<string, unknown>)['3'];
+    const r = deriveBudget(p, { risk_tier: 3 }, [], { now: NOW });
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) {
+      const d = r.errors[0]!;
+      expect(d.message).toBe('Policy has no risk_tiers entry for tier 3.');
+      expect((d as any).location).toEqual({ pointer: '/risk_tiers/3' });
+      expect((d as any).narrowRepair).toBe('Add risk_tiers["3"] with max_files and max_loc.');
+    }
+  });
+});
+
+describe('deriveBudget: skipped waiver detail field presence/absence (L83 ConditionalExpression/ObjectLiteral)', () => {
+  // The spread `...(decision.detail !== undefined && { detail: decision.detail })`
+  // means: detail is PRESENT when the skip reason provides one, ABSENT otherwise.
+  // We need to assert the EXACT detail string to kill StringLiteral mutants too.
+
+  test('status_not_active skip: detail field is present with exact status value', () => {
+    const r = deriveBudget(policy(), { risk_tier: 1 }, [waiver({ status: 'revoked' })], { now: NOW });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      const skipped = r.value.trace.skippedWaivers[0]!;
+      expect(skipped.reason).toBe('status_not_active');
+      expect(skipped.detail).toBe('status=revoked');
+    }
+  });
+
+  test('status_not_active skip: detail encodes the actual status (expired_license)', () => {
+    const r = deriveBudget(policy(), { risk_tier: 1 }, [waiver({ status: 'expired' as any })], { now: NOW });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      const skipped = r.value.trace.skippedWaivers[0]!;
+      expect(skipped.detail).toBe('status=expired');
+    }
+  });
+
+  test('gate_not_covered skip: detail is present with exact string', () => {
+    const r = deriveBudget(policy(), { risk_tier: 1 }, [waiver({ gates: ['scope_boundary'] })], { now: NOW });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      const skipped = r.value.trace.skippedWaivers[0]!;
+      expect(skipped.reason).toBe('gate_not_covered');
+      expect(skipped.detail).toBe('budget_limit not in waiver.gates');
+    }
+  });
+
+  test('malformed expires_at skip: detail encodes the bad value', () => {
+    const badDate = 'totally-unparseable';
+    const r = deriveBudget(policy(), { risk_tier: 1 }, [waiver({ expires_at: badDate })], { now: NOW });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      const skipped = r.value.trace.skippedWaivers[0]!;
+      expect(skipped.reason).toBe('malformed');
+      expect(skipped.detail).toBe(`unparseable expires_at=${badDate}`);
+    }
+  });
+
+  test('expired skip: detail encodes the expires_at timestamp', () => {
+    const exp = '2024-01-01T00:00:00.000Z';
+    const r = deriveBudget(policy(), { risk_tier: 1 }, [waiver({ expires_at: exp })], { now: NOW });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      const skipped = r.value.trace.skippedWaivers[0]!;
+      expect(skipped.reason).toBe('expired');
+      expect(skipped.detail).toBe(`expired_at=${exp}`);
+    }
+  });
+
+  test('negative_delta skip: detail encodes the actual file and loc counts', () => {
+    const r = deriveBudget(
+      policy(),
+      { risk_tier: 1 },
+      [waiver({ delta: { max_files: -3, max_loc: 0 } })],
+      { now: NOW }
+    );
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      const skipped = r.value.trace.skippedWaivers[0]!;
+      expect(skipped.reason).toBe('negative_delta');
+      expect(skipped.detail).toBe('delta files=-3 loc=0');
+    }
+  });
+
+  test('insufficient_approvers skip: detail encodes counts as "N < required M"', () => {
+    const p = policy({ waivers: { min_approvers_for_budget_raise: 3 } });
+    const r = deriveBudget(p, { risk_tier: 1 }, [waiver({ approvers: [{ name: 'a' }] })], { now: NOW });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      const skipped = r.value.trace.skippedWaivers[0]!;
+      expect(skipped.reason).toBe('insufficient_approvers');
+      expect(skipped.detail).toBe('1 < required 3');
+    }
+  });
+
+  test('applied waiver has NO detail field (detail is absent, not undefined)', () => {
+    const r = deriveBudget(policy(), { risk_tier: 1 }, [waiver()], { now: NOW });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      // Applied entry has no detail — the skippedWaivers list is empty
+      expect(r.value.trace.skippedWaivers).toHaveLength(0);
+      const applied = r.value.trace.appliedWaivers[0]!;
+      // Applied entries do not have a detail field
+      expect('detail' in applied).toBe(false);
+    }
+  });
+});
+
+describe('deriveBudget: optional chaining — delta and approvers may be undefined (L133, L134, L142)', () => {
+  test('waiver with no delta field (undefined) -> treated as 0/0 -> applied (no crash)', () => {
+    const w = waiver({ delta: undefined as any });
+    const r = deriveBudget(policy(), { risk_tier: 1 }, [w], { now: NOW });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      // dFiles=0, dLoc=0 -> zero-delta waiver applied (approver gate skipped for zero delta)
+      expect(r.value.trace.appliedWaivers).toHaveLength(1);
+      expect(r.value.budget).toEqual({ max_files: 10, max_loc: 100 });
+    }
+  });
+
+  test('waiver with no approvers field (undefined) and delta=0 -> applied (no crash on ?.length)', () => {
+    const w = waiver({ delta: { max_files: 0, max_loc: 0 }, approvers: undefined as any });
+    const r = deriveBudget(policy(), { risk_tier: 1 }, [w], { now: NOW });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      // zero delta -> approver gate skipped entirely -> applied
+      expect(r.value.trace.appliedWaivers).toHaveLength(1);
+    }
+  });
+
+  test('waiver with no approvers field (undefined) but positive delta -> insufficient_approvers', () => {
+    // approvers is undefined -> ?.length ?? 0 = 0 < minApprovers(1) -> skip
+    const w = waiver({ approvers: undefined as any });
+    const r = deriveBudget(policy(), { risk_tier: 1 }, [w], { now: NOW });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      const skipped = r.value.trace.skippedWaivers[0]!;
+      expect(skipped.reason).toBe('insufficient_approvers');
+      expect(skipped.detail).toBe('0 < required 1');
+    }
+  });
+});
+
+describe('deriveBudget: approver-gate dFiles>0||dLoc>0 boundary (L141 LogicalOperator)', () => {
+  // The guard is `dFiles > 0 || dLoc > 0` — mutant flips to `&&`.
+  // If only ONE side is positive, the || fires but && would not.
+
+  test('only dFiles > 0, dLoc = 0 -> approver gate activates (proves || not &&)', () => {
+    const r = deriveBudget(
+      policy(),
+      { risk_tier: 1 },
+      [waiver({ delta: { max_files: 5, max_loc: 0 }, approvers: [] })],
+      { now: NOW }
+    );
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      // With 0 approvers and a raising-files-only waiver, must be skipped
+      expect(r.value.trace.skippedWaivers[0]?.reason).toBe('insufficient_approvers');
+    }
+  });
+
+  test('only dLoc > 0, dFiles = 0 -> approver gate activates (proves || not &&)', () => {
+    const r = deriveBudget(
+      policy(),
+      { risk_tier: 1 },
+      [waiver({ delta: { max_files: 0, max_loc: 50 }, approvers: [] })],
+      { now: NOW }
+    );
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      expect(r.value.trace.skippedWaivers[0]?.reason).toBe('insufficient_approvers');
+    }
+  });
+
+  test('only dFiles > 0, dLoc = 0 -> applying with sufficient approvers raises files only', () => {
+    const r = deriveBudget(
+      policy(),
+      { risk_tier: 1 },
+      [waiver({ delta: { max_files: 7, max_loc: 0 } })],
+      { now: NOW }
+    );
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      expect(r.value.budget).toEqual({ max_files: 17, max_loc: 100 });
+    }
+  });
+
+  test('only dLoc > 0, dFiles = 0 -> applying with sufficient approvers raises loc only', () => {
+    const r = deriveBudget(
+      policy(),
+      { risk_tier: 1 },
+      [waiver({ delta: { max_files: 0, max_loc: 75 } })],
+      { now: NOW }
+    );
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      expect(r.value.budget).toEqual({ max_files: 10, max_loc: 175 });
+    }
+  });
+});
+
+describe('deriveBudget: expires_at absent branch (L123 ConditionalExpression)', () => {
+  test('waiver with no expires_at field -> expiry check skipped -> waiver applied', () => {
+    // If ConditionalExpression mutant forces "true", the absent-expires_at case
+    // would enter the expiry block and hit parseDate(undefined) or crash.
+    const w = waiver({ expires_at: undefined as any });
+    const r = deriveBudget(policy(), { risk_tier: 1 }, [w], { now: NOW });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      expect(r.value.trace.appliedWaivers).toHaveLength(1);
+      expect(r.value.budget).toEqual({ max_files: 15, max_loc: 150 });
+    }
+  });
+});
+
+describe('deriveBudget: negative_delta both-sides branch (L136 ConditionalExpression)', () => {
+  test('dLoc negative only -> negative_delta skip', () => {
+    const r = deriveBudget(
+      policy(),
+      { risk_tier: 1 },
+      [waiver({ delta: { max_files: 0, max_loc: -10 } })],
+      { now: NOW }
+    );
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      const skipped = r.value.trace.skippedWaivers[0]!;
+      expect(skipped.reason).toBe('negative_delta');
+      expect(skipped.detail).toBe('delta files=0 loc=-10');
+    }
+  });
+
+  test('both dFiles and dLoc negative -> negative_delta skip with exact detail', () => {
+    const r = deriveBudget(
+      policy(),
+      { risk_tier: 1 },
+      [waiver({ delta: { max_files: -2, max_loc: -20 } })],
+      { now: NOW }
+    );
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      const skipped = r.value.trace.skippedWaivers[0]!;
+      expect(skipped.reason).toBe('negative_delta');
+      expect(skipped.detail).toBe('delta files=-2 loc=-20');
+    }
+  });
+});
+
+describe('deriveBudget: resolveNow accepts Date object (L163 ConditionalExpression)', () => {
+  test('passing a Date object works (not just ISO string)', () => {
+    const nowDate = new Date(NOW);
+    const r = deriveBudget(policy(), { risk_tier: 1 }, [], { now: nowDate });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      expect(r.value.budget).toEqual({ max_files: 10, max_loc: 100 });
+      expect(r.value.trace.evaluatedAt).toBe(NOW);
+    }
+  });
+
+  test('Date object used for expiry comparison (active waiver with Date-form now)', () => {
+    const nowDate = new Date(NOW);
+    const r = deriveBudget(policy(), { risk_tier: 1 }, [waiver()], { now: nowDate });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      expect(r.value.trace.appliedWaivers).toHaveLength(1);
+      expect(r.value.budget).toEqual({ max_files: 15, max_loc: 150 });
+    }
+  });
+
+  test('Date object: expired waiver correctly skipped', () => {
+    const nowDate = new Date(NOW);
+    const r = deriveBudget(
+      policy(),
+      { risk_tier: 1 },
+      [waiver({ expires_at: '2025-01-01T00:00:00.000Z' })],
+      { now: nowDate }
+    );
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      expect(r.value.trace.skippedWaivers[0]?.reason).toBe('expired');
     }
   });
 });

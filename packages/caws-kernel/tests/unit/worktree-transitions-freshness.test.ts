@@ -16,11 +16,17 @@
  */
 
 import { canTransitionSpecWithWorktree } from '../../src/worktree/transitions';
-import { heartbeatAge, isStaleByTTL } from '../../src/worktree/freshness';
+import { heartbeatAge, isStaleByTTL, refreshAgentClaim } from '../../src/worktree/freshness';
 import { WORKTREE_RULES } from '../../src/worktree/rules';
 import { isOk, isErr } from '../../src/result/construct';
 import type { Spec } from '../../src/spec/types';
-import type { SpecTransition, WorktreeRegistry, AgentRecord } from '../../src/worktree/types';
+import type {
+  SpecTransition,
+  WorktreeRegistry,
+  AgentRecord,
+  AgentRegistry,
+  SessionIdentity,
+} from '../../src/worktree/types';
 
 const spec = { id: 'SPEC-1' } as unknown as Spec;
 
@@ -125,5 +131,107 @@ describe('freshness: isStaleByTTL (display/hygiene predicate, NEVER authority �
     const a: AgentRecord = { session_id: 'a', last_active: '2026-06-13T11:50:00.000Z', bound_worktree: 'wt-a' };
     const b: AgentRecord = { session_id: 'b', last_active: '2026-06-13T11:50:00.000Z' };
     expect(isStaleByTTL(a, ttl, now)).toBe(isStaleByTTL(b, ttl, now));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// refreshAgentClaim — the freshness-patch builder. Previously had ZERO test
+// coverage (the whole function was NoCoverage in the mutation report). It
+// records "this session is alive now" as a refresh_agent RegistryPatch; it
+// NEVER mutates ownership or authorizes takeover (E11/E19 doctrine).
+// ---------------------------------------------------------------------------
+
+const NO_AGENTS = {} as unknown as AgentRegistry;
+const NOW = new Date('2026-06-13T12:00:00.000Z');
+
+describe('refreshAgentClaim: valid session -> refresh_agent patch', () => {
+  test('returns Ok with a refresh_agent patch echoing the session and now', () => {
+    const session: SessionIdentity = { session_id: 's-1', platform: 'claude-code' };
+    const r = refreshAgentClaim(NO_AGENTS, session, NOW);
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      // kills L40 ObjectLiteral ({}) — the patch object must carry these fields.
+      expect(r.value.kind).toBe('refresh_agent');
+      expect(r.value.session).toEqual(session);
+      // kills L41 StringLiteral — last_active is now.toISOString(), not "".
+      expect(r.value.last_active).toBe('2026-06-13T12:00:00.000Z');
+    }
+  });
+
+  test('records ONLY freshness — no ownership/takeover field on the patch', () => {
+    const session: SessionIdentity = { session_id: 's-1' };
+    const r = refreshAgentClaim(NO_AGENTS, session, NOW);
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      // Doctrine: refresh is freshness only. No bound_worktree/bound_spec_id
+      // unless explicitly opted in, and never an ownership-seizing field.
+      expect(r.value).not.toHaveProperty('bound_worktree');
+      expect(r.value).not.toHaveProperty('bound_spec_id');
+      expect(r.value.kind).toBe('refresh_agent');
+    }
+  });
+
+  test('bound_worktree opt-in is included when provided (kills L44 conditional spread)', () => {
+    const session: SessionIdentity = { session_id: 's-1' };
+    const r = refreshAgentClaim(NO_AGENTS, session, NOW, { bound_worktree: 'wt-x' });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      expect(r.value.bound_worktree).toBe('wt-x');
+      // the false arm: bound_spec_id NOT provided -> absent
+      expect(r.value).not.toHaveProperty('bound_spec_id');
+    }
+  });
+
+  test('bound_spec_id opt-in is included when provided (kills L45 conditional spread)', () => {
+    const session: SessionIdentity = { session_id: 's-1' };
+    const r = refreshAgentClaim(NO_AGENTS, session, NOW, { bound_spec_id: 'SPEC-9' });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      expect(r.value.bound_spec_id).toBe('SPEC-9');
+      expect(r.value).not.toHaveProperty('bound_worktree');
+    }
+  });
+
+  test('both opt-ins together are both present', () => {
+    const session: SessionIdentity = { session_id: 's-1' };
+    const r = refreshAgentClaim(NO_AGENTS, session, NOW, {
+      bound_worktree: 'wt-x',
+      bound_spec_id: 'SPEC-9',
+    });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      expect(r.value.bound_worktree).toBe('wt-x');
+      expect(r.value.bound_spec_id).toBe('SPEC-9');
+    }
+  });
+
+  test('empty-string opt-ins are treated as absent (falsy guard, not included)', () => {
+    const session: SessionIdentity = { session_id: 's-1' };
+    const r = refreshAgentClaim(NO_AGENTS, session, NOW, {
+      bound_worktree: '',
+      bound_spec_id: '',
+    });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      // The `opts.bound_worktree ? ... : {}` guard drops empty strings.
+      expect(r.value).not.toHaveProperty('bound_worktree');
+      expect(r.value).not.toHaveProperty('bound_spec_id');
+    }
+  });
+});
+
+describe('refreshAgentClaim: invalid session -> Err passthrough (kills L37 early-return)', () => {
+  test('an empty session_id propagates the validation Err (does NOT build a patch)', () => {
+    const bad: SessionIdentity = { session_id: '' };
+    const r = refreshAgentClaim(NO_AGENTS, bad, NOW);
+    // kills L37 ConditionalExpression/EqualityOperator: if the `ok === false`
+    // guard is inverted/removed, an invalid session would wrongly yield a patch.
+    expect(isErr(r)).toBe(true);
+  });
+
+  test('a whitespace-only session_id is rejected (validation trims)', () => {
+    const bad: SessionIdentity = { session_id: '   ' };
+    const r = refreshAgentClaim(NO_AGENTS, bad, NOW);
+    expect(isErr(r)).toBe(true);
   });
 });

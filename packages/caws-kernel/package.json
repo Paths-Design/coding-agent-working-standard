@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "test:watch": "jest --watch",
+    "mutation:run": "stryker run",
     "clean": "rm -rf dist coverage",
     "lint": "echo 'kernel lint deferred to Slice 1.9'",
     "format": "echo 'kernel format deferred to Slice 1.9'",

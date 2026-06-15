@@ -119,3 +119,312 @@ describe('canonicalJson: throws on programmer errors (no silent corruption)', ()
     expect(canonicalJson({ a: shared, b: shared })).toBe('{"a":{"x":1},"b":{"x":1}}');
   });
 });
+
+// ---------------------------------------------------------------------------
+// EvidenceCanonicalError field assertions (kills StringLiteral survivors in
+// the constructor and the error-construction sites).
+// Existing tests check instanceof and .rule but never .path, .name, or
+// .message content. The constructor at L36 has StringLiteral survivors on the
+// `name` field ('EvidenceCanonicalError'), the message format string, and the
+// path fallback ('<root>').
+// ---------------------------------------------------------------------------
+
+describe('canonicalJson: EvidenceCanonicalError fields (StringLiteral killers)', () => {
+  test('error name is exactly "EvidenceCanonicalError" (not the base "Error")', () => {
+    // Mutant that blanks the name assignment would leave name as "Error".
+    try {
+      canonicalJson(NaN);
+      throw new Error('should have thrown');
+    } catch (e) {
+      expect((e as EvidenceCanonicalError).name).toBe('EvidenceCanonicalError');
+    }
+  });
+
+  test('non-finite number: .path is "<root>" for top-level values', () => {
+    // L36 has a ConditionalExpression mutant [path && "<root>"] and a StringLiteral
+    // mutant for the empty-string fallback ("<root>"). Assert the actual path.
+    try {
+      canonicalJson(NaN);
+      throw new Error('should have thrown');
+    } catch (e) {
+      expect((e as EvidenceCanonicalError).path).toBe('');
+      // But the message ends with "at <root>" because path is '' and the
+      // constructor formats `${message} at ${path || '<root>'}`.
+      expect((e as EvidenceCanonicalError).message).toContain('<root>');
+    }
+  });
+
+  test('non-finite number: .message contains the number value', () => {
+    // L80 StringLiteral survivor (the template literal for the error message).
+    try {
+      canonicalJson(Infinity);
+      throw new Error('should have thrown');
+    } catch (e) {
+      expect((e as EvidenceCanonicalError).message).toContain('Infinity');
+    }
+    try {
+      canonicalJson(-Infinity);
+      throw new Error('should have thrown');
+    } catch (e) {
+      expect((e as EvidenceCanonicalError).message).toContain('-Infinity');
+    }
+  });
+
+  test('non-finite nested: .path is the dotted property path (not empty)', () => {
+    // Assertion on L90 path construction for object values.
+    try {
+      canonicalJson({ outer: { inner: NaN } });
+      throw new Error('should have thrown');
+    } catch (e) {
+      expect((e as EvidenceCanonicalError).path).toBe('outer.inner');
+      expect((e as EvidenceCanonicalError).message).toContain('outer.inner');
+    }
+  });
+
+  test('circular reference: .path is the path where the cycle was detected', () => {
+    // L108 StringLiteral: the 'circular reference' message text.
+    const obj: Record<string, unknown> = { level1: {} };
+    (obj['level1'] as Record<string, unknown>)['back'] = obj;
+    try {
+      canonicalJson(obj);
+      throw new Error('should have thrown');
+    } catch (e) {
+      expect((e as EvidenceCanonicalError).rule).toBe(EVIDENCE_RULES.CANONICAL_CIRCULAR_REFERENCE);
+      expect((e as EvidenceCanonicalError).message).toContain('circular');
+      // Path points to where the cycle was detected (level1.back)
+      expect((e as EvidenceCanonicalError).path).toContain('level1');
+    }
+  });
+
+  test('unsupported type undefined: .message contains "undefined"', () => {
+    // L90 StringLiteral: the template `unsupported type ${t}`.
+    try {
+      canonicalJson(undefined);
+      throw new Error('should have thrown');
+    } catch (e) {
+      expect((e as EvidenceCanonicalError).message).toContain('undefined');
+      expect((e as EvidenceCanonicalError).rule).toBe(EVIDENCE_RULES.CANONICAL_UNSUPPORTED_TYPE);
+    }
+  });
+
+  test('unsupported type function: .message contains "function"', () => {
+    try {
+      canonicalJson(() => 1);
+      throw new Error('should have thrown');
+    } catch (e) {
+      expect((e as EvidenceCanonicalError).message).toContain('function');
+    }
+  });
+
+  test('unsupported type symbol: .message contains "symbol"', () => {
+    try {
+      canonicalJson(Symbol('s'));
+      throw new Error('should have thrown');
+    } catch (e) {
+      expect((e as EvidenceCanonicalError).message).toContain('symbol');
+    }
+  });
+
+  test('unsupported type bigint: .message contains "bigint"', () => {
+    try {
+      canonicalJson(10n);
+      throw new Error('should have thrown');
+    } catch (e) {
+      expect((e as EvidenceCanonicalError).message).toContain('bigint');
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ConditionalExpression / LogicalOperator killers for the OR chains
+// at L87 (top-level type check), L128 (array element check), L153 (object
+// value check). Each sub-check is exercised independently so mutants that
+// eliminate one branch of the OR are detected.
+// ---------------------------------------------------------------------------
+
+describe('canonicalJson: each individual unsupported type is independently rejected (OR-chain killers)', () => {
+  // Top-level (L87): t === 'undefined' || t === 'function' || t === 'symbol' || t === 'bigint'
+  // Mutants short-circuit the chain:
+  //   LogicalOperator [t==='undefined' && t==='function'] would allow symbol top-level
+  //   LogicalOperator [(t==='undefined'||t==='function') && t==='symbol'] would allow bigint
+  // Each test exercises one arm in isolation.
+
+  test('L87: undefined top-level throws CANONICAL_UNSUPPORTED_TYPE', () => {
+    let caught: unknown;
+    try { canonicalJson(undefined); } catch (e) { caught = e; }
+    expect(caught).toBeInstanceOf(EvidenceCanonicalError);
+    expect((caught as EvidenceCanonicalError).rule).toBe(EVIDENCE_RULES.CANONICAL_UNSUPPORTED_TYPE);
+  });
+
+  test('L87: function top-level throws CANONICAL_UNSUPPORTED_TYPE', () => {
+    let caught: unknown;
+    try { canonicalJson(function noop() {}); } catch (e) { caught = e; }
+    expect(caught).toBeInstanceOf(EvidenceCanonicalError);
+    expect((caught as EvidenceCanonicalError).rule).toBe(EVIDENCE_RULES.CANONICAL_UNSUPPORTED_TYPE);
+  });
+
+  test('L87: symbol top-level throws CANONICAL_UNSUPPORTED_TYPE', () => {
+    let caught: unknown;
+    try { canonicalJson(Symbol('x')); } catch (e) { caught = e; }
+    expect(caught).toBeInstanceOf(EvidenceCanonicalError);
+    expect((caught as EvidenceCanonicalError).rule).toBe(EVIDENCE_RULES.CANONICAL_UNSUPPORTED_TYPE);
+  });
+
+  test('L87: bigint top-level throws CANONICAL_UNSUPPORTED_TYPE', () => {
+    let caught: unknown;
+    try { canonicalJson(42n); } catch (e) { caught = e; }
+    expect(caught).toBeInstanceOf(EvidenceCanonicalError);
+    expect((caught as EvidenceCanonicalError).rule).toBe(EVIDENCE_RULES.CANONICAL_UNSUPPORTED_TYPE);
+  });
+
+  // L128: array element checks
+  // typeof item === 'function' || typeof item === 'symbol' || typeof item === 'bigint'
+  // undefined array slots are ALLOWED (emit null). function/symbol/bigint throw.
+
+  test('L128: function in array element throws with "in array element" message (distinct from top-level L87)', () => {
+    // L128 message: `unsupported type ${typeof item} in array element`
+    // If L128 check is bypassed, the recursive call falls through to L87 which
+    // produces `unsupported type function` WITHOUT "in array element".
+    // Asserting the "in array element" text kills both L128 ConditionalExpression
+    // and LogicalOperator mutants that short-circuit the OR.
+    let caught: unknown;
+    try { canonicalJson([1, function noop() {}, 3]); } catch (e) { caught = e; }
+    expect(caught).toBeInstanceOf(EvidenceCanonicalError);
+    expect((caught as EvidenceCanonicalError).rule).toBe(EVIDENCE_RULES.CANONICAL_UNSUPPORTED_TYPE);
+    expect((caught as EvidenceCanonicalError).path).toBe('[1]');
+    expect((caught as EvidenceCanonicalError).message).toContain('function');
+    expect((caught as EvidenceCanonicalError).message).toContain('in array element');
+  });
+
+  test('L128: symbol in array element throws with "in array element" message', () => {
+    let caught: unknown;
+    try { canonicalJson([Symbol('s')]); } catch (e) { caught = e; }
+    expect(caught).toBeInstanceOf(EvidenceCanonicalError);
+    expect((caught as EvidenceCanonicalError).rule).toBe(EVIDENCE_RULES.CANONICAL_UNSUPPORTED_TYPE);
+    expect((caught as EvidenceCanonicalError).path).toBe('[0]');
+    expect((caught as EvidenceCanonicalError).message).toContain('in array element');
+    expect((caught as EvidenceCanonicalError).message).toContain('symbol');
+  });
+
+  test('L128: bigint in array element throws with "in array element" message', () => {
+    let caught: unknown;
+    try { canonicalJson([1n]); } catch (e) { caught = e; }
+    expect(caught).toBeInstanceOf(EvidenceCanonicalError);
+    expect((caught as EvidenceCanonicalError).rule).toBe(EVIDENCE_RULES.CANONICAL_UNSUPPORTED_TYPE);
+    expect((caught as EvidenceCanonicalError).path).toBe('[0]');
+    expect((caught as EvidenceCanonicalError).message).toContain('bigint');
+    expect((caught as EvidenceCanonicalError).message).toContain('in array element');
+  });
+
+  test('L128: undefined array element is NOT thrown — emitted as null (branch contrast)', () => {
+    // This is NOT the throw branch. Proves the undefined-in-array special case is
+    // distinct from function/symbol/bigint.
+    expect(canonicalJson([undefined])).toBe('[null]');
+  });
+
+  // L153: object value checks
+  // typeof v === 'function' || typeof v === 'symbol' || typeof v === 'bigint'
+
+  test('L153: function object value throws with "for property" message (distinct from top-level L87)', () => {
+    // L153 message: `unsupported type ${typeof v} for property ${JSON.stringify(k)}`
+    // If L153 check is bypassed, recursive call falls through to L87 which
+    // produces `unsupported type function` WITHOUT "for property".
+    // Asserting "for property" text kills both L153 ConditionalExpression and
+    // LogicalOperator mutants.
+    let caught: unknown;
+    try { canonicalJson({ fn: function noop() {} }); } catch (e) { caught = e; }
+    expect(caught).toBeInstanceOf(EvidenceCanonicalError);
+    expect((caught as EvidenceCanonicalError).rule).toBe(EVIDENCE_RULES.CANONICAL_UNSUPPORTED_TYPE);
+    expect((caught as EvidenceCanonicalError).path).toBe('fn');
+    expect((caught as EvidenceCanonicalError).message).toContain('function');
+    expect((caught as EvidenceCanonicalError).message).toContain('for property');
+    // The key name is JSON-quoted in the message
+    expect((caught as EvidenceCanonicalError).message).toContain('"fn"');
+  });
+
+  test('L153: symbol object value throws with "for property" message', () => {
+    let caught: unknown;
+    try { canonicalJson({ sym: Symbol('s') }); } catch (e) { caught = e; }
+    expect(caught).toBeInstanceOf(EvidenceCanonicalError);
+    expect((caught as EvidenceCanonicalError).rule).toBe(EVIDENCE_RULES.CANONICAL_UNSUPPORTED_TYPE);
+    expect((caught as EvidenceCanonicalError).path).toBe('sym');
+    expect((caught as EvidenceCanonicalError).message).toContain('symbol');
+    expect((caught as EvidenceCanonicalError).message).toContain('for property');
+    expect((caught as EvidenceCanonicalError).message).toContain('"sym"');
+  });
+
+  test('L153: bigint object value throws with "for property" message', () => {
+    let caught: unknown;
+    try { canonicalJson({ bi: 1n }); } catch (e) { caught = e; }
+    expect(caught).toBeInstanceOf(EvidenceCanonicalError);
+    expect((caught as EvidenceCanonicalError).rule).toBe(EVIDENCE_RULES.CANONICAL_UNSUPPORTED_TYPE);
+    expect((caught as EvidenceCanonicalError).path).toBe('bi');
+    expect((caught as EvidenceCanonicalError).message).toContain('bigint');
+    expect((caught as EvidenceCanonicalError).message).toContain('for property');
+    expect((caught as EvidenceCanonicalError).message).toContain('"bi"');
+  });
+
+  test('L153: undefined object value is OMITTED, not thrown', () => {
+    // Proves the undefined-skip path is distinct from the throw path.
+    expect(canonicalJson({ a: undefined, b: 1 })).toBe('{"b":1}');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Path construction assertions (StringLiteral survivors in path-building
+// template literals at L119 and L156).
+// ---------------------------------------------------------------------------
+
+describe('canonicalJson: path construction in error messages (StringLiteral killers)', () => {
+  test('L119: array child path is `${path}[${i}]` — nested array in object', () => {
+    // Path in an array element nested inside an object: "arr[0]"
+    try {
+      canonicalJson({ arr: [NaN] });
+      throw new Error('should have thrown');
+    } catch (e) {
+      expect((e as EvidenceCanonicalError).path).toBe('arr[0]');
+    }
+  });
+
+  test('L119: top-level array path is `[${i}]` — root-level array', () => {
+    try {
+      canonicalJson([NaN]);
+      throw new Error('should have thrown');
+    } catch (e) {
+      // path was '' at root, so childPath = '[0]'
+      expect((e as EvidenceCanonicalError).path).toBe('[0]');
+    }
+  });
+
+  test('L156: root-level object key path is just the key name (no leading dot)', () => {
+    // When path === '' and we're in an object, childPath = k (not `.k`).
+    // Mutant that omits the conditional would produce `.fn` not `fn`.
+    try {
+      canonicalJson({ fn: function noop() {} });
+      throw new Error('should have thrown');
+    } catch (e) {
+      expect((e as EvidenceCanonicalError).path).toBe('fn');
+      // No leading dot
+      expect((e as EvidenceCanonicalError).path).not.toMatch(/^\./);
+    }
+  });
+
+  test('L156: nested object key path uses dot separator', () => {
+    // When path !== '' and we're in a nested object, childPath = `${path}.${k}`.
+    try {
+      canonicalJson({ outer: { fn: function noop() {} } });
+      throw new Error('should have thrown');
+    } catch (e) {
+      expect((e as EvidenceCanonicalError).path).toBe('outer.fn');
+    }
+  });
+
+  test('L156: deeply nested path uses multiple dots', () => {
+    try {
+      canonicalJson({ a: { b: { c: NaN } } });
+      throw new Error('should have thrown');
+    } catch (e) {
+      expect((e as EvidenceCanonicalError).path).toBe('a.b.c');
+    }
+  });
+});
