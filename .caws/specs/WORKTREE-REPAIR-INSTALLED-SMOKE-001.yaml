@@ -3,6 +3,7 @@ title: 'Installed-artifact smoke for caws worktree repair + coupled kernel event
 risk_tier: 2
 mode: chore
 lifecycle_state: active
+worktree: repair-smoke-01
 created_at: '2026-06-15T23:25:18.421Z'
 updated_at: '2026-06-15T23:25:25.851Z'
 blast_radius:
