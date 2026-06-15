@@ -1,0 +1,65 @@
+id: CAWS-TEST-SHELL-MUTATION-001
+title: 'CLI shell mutation gate: mutate the 5 shell pure-logic files (push-range, gates, binding) at break:80'
+risk_tier: 1
+mode: feature
+lifecycle_state: active
+created_at: '2026-06-15T00:00:00.000Z'
+updated_at: '2026-06-15T05:23:19.919Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/stryker.shell.conf.js
+    - packages/caws-cli/package.json
+    - packages/caws-cli/tests/shell
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - packages/caws-cli/stryker.shell.conf.js
+    - packages/caws-cli/package.json
+    - packages/caws-cli/tests/shell/push-range.test.js
+    - packages/caws-cli/tests/shell/gates-disposition.test.js
+    - packages/caws-cli/tests/shell/gates-waiver-filter.test.js
+    - packages/caws-cli/tests/shell/binding-resolve.test.js
+    - .caws/specs/CAWS-TEST-SHELL-MUTATION-001.yaml
+  out:
+    - packages/caws-cli/src
+    - packages/caws-cli/stryker.conf.js
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - 'The shell Stryker config mutates ONLY the 5 shell pure-logic dist files the shell suite covers: push-range/classify-range, push-range/scope-match, gates/disposition, gates/waiver-filter, binding/resolve-binding. These are decision logic (no I/O), the right mutation surface — unlike init (static data + FS-side-effect install code, behaviorally tested, no Stryker gate per CAWS-TEST-SHELL-MUTATION decision).'
+  - 'Stryker mutates the COMPILED dist (CLI jest loads dist), NOT src — same contract as the store config. resolve-binding.js uses import* so its mutate range excludes the tsc interop preamble (NON-source boilerplate, not an equivalent-mutant exclusion); the other 4 use require() and mutate whole-file.'
+  - 'thresholds.break = 80: every gated shell file clears 80% raw by tests. The floor is never lowered to pass; survivors are killed by added tests or documented as genuinely equivalent with rationale in docs/internal/mutation-source-findings.md.'
+  - 'No production src is modified by this slice; only the shell config, a package.json script, and the 4 shell test files (raising their kill rate). Any real source defect surfaced is filed as a separate spec, never fixed inline.'
+  - 'Vacuous-pass guards (if(isOk(r)){...} / if(isErr(r)){...} without a preceding outcome assertion) are eliminated — every guarded assertion has a preceding expect on the outcome, so a flipped result fails loudly instead of passing with zero assertions.'
+acceptance:
+  - id: A1
+    given: 'The CLI has a store-only Stryker config; the shell pure-logic files (push-range, gates, binding — 52 covering tests) have no mutation gate.'
+    when: 'A separate stryker.shell.conf.js is added mutating the 5 shell dist files against tests/shell, with a package.json mutation:run:shell script.'
+    then: 'Stryker mutates those files against the shell suite, reports a per-file kill rate, and writes a JSON report.'
+  - id: A2
+    given: 'The shell mutation config with thresholds.break = 80.'
+    when: 'The measured score is computed per file.'
+    then: 'Every gated shell file reports >= 80% raw; the run exits 0. If any file is below 80, tests are ADDED until it clears (floor never lowered); the actual measured scores are recorded in closure evidence.'
+  - id: A3
+    given: 'A covered shell decision function (e.g. classifyRange refusing an unattributable commit, or deriveDispositions block-vs-warn) has its core decision mutated.'
+    when: 'The shell suite runs under Stryker.'
+    then: 'The mutant is killed, demonstrating the gate exerts real pressure on the push-range guard (E18) and the gate-disposition logic, not just structure.'
+  - id: A4
+    given: 'Genuinely-equivalent survivors (if any) after exhausting test-based kills incl. call-observation.'
+    when: 'They cannot be killed without a source change.'
+    then: 'They are documented in docs/internal/mutation-source-findings.md with a classification (cleanup/smell/defect) and rationale, NOT excluded silently.'
+non_functional:
+  reliability:
+    - 'The mutation run is bounded and deterministic: dist mutate-target + tests/shell runner; per-mutant timeout tuned so the run completes in tractable time.'
+  security:
+    - 'The push-range classifier (E18 — refuses commits not attributable to the current slice) is a multi-agent safety guard. A mutation gate on it is the regression guard that a future change cannot silently weaken push-range attribution while keeping tests green.'
+observability:
+  - 'The Stryker clear-text + JSON report (per-file killed/survived/score) is the verification artifact, captured in closure evidence with the actual per-file scores cited.'
+rollback:
+  - 'Rollback is a revert of the config + package.json + test commits; no production source is touched and no gate remains.'
+contracts:
+  - name: shell-mutation-gate-80
+    type: behavior
+    path: packages/caws-cli/stryker.shell.conf.js
+    description: 'A shell Stryker config mutates the 5 shell pure-logic dist files against tests/shell at break:80; every gated file clears 80% raw and a sub-80 score fails the run.'
