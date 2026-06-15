@@ -1,0 +1,101 @@
+name: Mutation Gate
+
+# Mutation testing is the tier-1 proof that the test suite kills real mutants
+# (not just passes). It is deliberately OFF the per-PR critical path: the CLI
+# store run alone is ~22 minutes and the kernel run adds more, so gating every
+# PR on it would dominate review latency. Instead it runs:
+#
+#   - nightly on a schedule (the standing floor enforcement on main),
+#   - on demand via the `run-mutation` PR label,
+#   - on demand via workflow_dispatch.
+#
+# Both the kernel and the CLI store are gated at thresholds.break = 80 — a
+# score below 80 FAILS the job. Stryker incremental mode caches per-file mutant
+# verdicts keyed on source+test byte hashes; actions/cache persists that file
+# across runs so a warm run only re-tests mutants whose covering bytes changed.
+#
+# Governed by CAWS-TEST-CI-WIRING-001.
+
+on:
+  schedule:
+    # 07:00 UTC nightly (after most US-day commits have landed on main).
+    - cron: "0 7 * * *"
+  workflow_dispatch: {}
+  pull_request:
+    types: [labeled, synchronize]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  kernel_mutation:
+    name: Kernel Mutation (break:80)
+    # Only run on PRs when the run-mutation label is present; always run on
+    # schedule and manual dispatch.
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'run-mutation')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # Cache the Stryker incremental file keyed on the mutated kernel source +
+      # the kernel test suite. A change to either invalidates the relevant
+      # mutants only; an unchanged tree restores a full warm cache.
+      - name: Restore kernel mutation cache
+        uses: actions/cache@v4
+        with:
+          path: packages/caws-kernel/reports/stryker-incremental.json
+          key: stryker-kernel-${{ hashFiles('packages/caws-kernel/src/**/*.ts', 'packages/caws-kernel/tests/unit/**/*.test.ts') }}
+          restore-keys: |
+            stryker-kernel-
+
+      - name: Kernel mutation run
+        working-directory: packages/caws-kernel
+        run: npm run mutation:run
+
+  store_mutation:
+    name: CLI Store Mutation (break:80)
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'run-mutation')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # mutation:run builds the CLI dist first (the store config mutates dist/).
+      - name: Restore store mutation cache
+        uses: actions/cache@v4
+        with:
+          path: packages/caws-cli/reports/stryker-incremental.json
+          key: stryker-store-${{ hashFiles('packages/caws-cli/src/store/**/*.ts', 'packages/caws-cli/tests/store/**/*.test.js') }}
+          restore-keys: |
+            stryker-store-
+
+      - name: Store mutation run
+        working-directory: packages/caws-cli
+        run: npm run mutation:run
