@@ -1,0 +1,62 @@
+id: CAWS-TEST-KERNEL-VERIFYCHAIN-001
+title: 'verifyChain end-to-end tamper-detection test: prove each chain-integrity rule fires (E9/E20 audit integrity)'
+risk_tier: 1
+mode: feature
+lifecycle_state: active
+created_at: '2026-06-14T00:00:00.000Z'
+updated_at: '2026-06-15T03:59:31.650Z'
+blast_radius:
+  modules:
+    - packages/caws-kernel/tests/unit/verify-chain.test.ts
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - packages/caws-kernel/tests/unit/verify-chain.test.ts
+    - .caws/specs/CAWS-TEST-KERNEL-VERIFYCHAIN-001.yaml
+  out:
+    - packages/caws-kernel/src
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - 'No production source under packages/caws-kernel/src is modified; verify.ts is the system under test, pinned by the test, never bent to pass. If a real defect surfaces it is filed as a separate spec.'
+  - 'Every assertion runs verifyChain over a constructed ChainedEvent[] and asserts the SPECIFIC rule id in the returned errors (e.g. evidence.chain.event_hash_mismatch), not merely Result.ok === false — a structural-only test would pass while the wrong rule fired.'
+  - 'Each tamper class mutates exactly one field of an otherwise-valid chain so the asserted rule is the only one that should fire (no shotgun corruption that masks which detector ran).'
+  - 'A valid multi-event chain returns ok with the input echoed back, proving the happy path is not over-eager (false positives would break every real audit read).'
+acceptance:
+  - id: A1
+    given: 'verify.ts exports verifyChain, a pure detector with 10 documented rule ids, and currently has NO unit test (only computeEventHash is tested).'
+    when: 'A new verify-chain.test.ts builds a valid chain and asserts verifyChain returns ok with the events echoed.'
+    then: 'The happy path passes: ok === true, value === input, zero errors — proving the detector does not false-positive on a sound chain.'
+  - id: A2
+    given: 'A valid chain whose second event has one content field (data/seq/ts/actor/spec_id) altered after its event_hash was computed.'
+    when: 'verifyChain runs over the tampered chain.'
+    then: 'It returns err containing evidence.chain.event_hash_mismatch for that index, with data.expected (recomputed) != data.actual (stored).'
+  - id: A3
+    given: 'A valid chain whose second event prev_hash is changed to not equal the first event_hash.'
+    when: 'verifyChain runs.'
+    then: 'It returns err containing evidence.chain.prev_hash_mismatch for that index.'
+  - id: A4
+    given: 'Chains exercising each remaining rule: seq_gap (1,2,4), seq_duplicate, seq_not_integer, seq_not_positive, genesis_prev_hash_not_null, non_genesis_prev_hash_null, prev_hash_malformed, event_hash_malformed.'
+    when: 'verifyChain runs over each.'
+    then: 'Each returns err containing exactly its corresponding rule id; midchain tampering does not hide later tampering (allErrors-style accumulation is asserted with a chain bearing two independent faults).'
+  - id: A5
+    given: 'An empty chain.'
+    when: 'verifyChain runs.'
+    then: 'It returns ok (empty chain is consistent by definition).'
+non_functional:
+  reliability:
+    - 'The test is pure and deterministic: it constructs ChainedEvents in-memory and calls computeEventHash from the same kernel build, so no I/O, no clock, no flakiness. Same input -> same Result every run.'
+  security:
+    - 'This test is the proof that the audit log tamper-detection (the E9 hash-chain integrity property) actually fires end-to-end. It uses synthetic event bodies only; it neither reads real .caws/events.jsonl nor emits secrets. It is the security-relevant regression guard for the audit substrate.'
+observability:
+  - 'jest output enumerating each rule-specific test (one test per chain-integrity rule) is the verification artifact, captured in closure evidence.'
+  - 'The returned diagnostic data block (expected vs actual hash) is asserted, giving a concrete artifact of detection per A2.'
+rollback:
+  - 'Rollback is a revert of the test commit; no production code, event-log, or migration is touched.'
+  - 'Recovery baseline is the prior kernel test suite at HEAD; verify.ts behavior is unchanged by this slice.'
+contracts:
+  - name: verifychain-detects-tamper
+    type: behavior
+    path: packages/caws-kernel/src/evidence/verify.ts
+    description: 'verifyChain returns err with the specific rule id for each tamper class (event_hash_mismatch, prev_hash_mismatch, seq_gap/duplicate/not-integer/not-positive, genesis/non-genesis prev_hash, malformed hashes) and ok for a sound or empty chain.'

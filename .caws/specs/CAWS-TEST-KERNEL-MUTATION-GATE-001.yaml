@@ -1,0 +1,62 @@
+id: CAWS-TEST-KERNEL-MUTATION-GATE-001
+title: 'Kernel mutation gate: add the kernel Stryker config CAWS-TEST-MUTATION-GATE-001 A2 claimed but never shipped; mutate the covered kernel surface at break:80'
+risk_tier: 1
+mode: feature
+lifecycle_state: active
+created_at: '2026-06-14T00:00:00.000Z'
+updated_at: '2026-06-15T03:59:32.337Z'
+blast_radius:
+  modules:
+    - packages/caws-kernel/stryker.conf.js
+    - packages/caws-kernel/package.json
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - packages/caws-kernel/stryker.conf.js
+    - packages/caws-kernel/package.json
+    - .caws/specs/CAWS-TEST-KERNEL-MUTATION-GATE-001.yaml
+  out:
+    - packages/caws-kernel/src
+    - packages/caws-kernel/tests
+    - packages/caws-cli
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - 'The kernel Stryker config mutates ONLY src modules that have a corresponding unit test (evidence, scope, spec, policy, worktree/transitions+freshness, result). Mutating untested code yields guaranteed survivors that would falsely depress the score; the gate measures test quality on covered surface, not coverage breadth.'
+  - 'Stryker mutates the kernel .ts SOURCE directly (the kernel jest preset is ts-jest running src), NOT a dist build. This is the inverse of the CLI store config (which mutates dist because CLI jest loads dist) — mutate-target and test-load-target must agree per package or every mutant reports killed regardless of test quality.'
+  - 'thresholds.break = 80: a kernel mutation score below 80% FAILS the run. The floor is never lowered to pass; surviving mutants are either killed by added tests (a separate test-scope spec) or documented as equivalent with rationale.'
+  - 'incremental mode is enabled (incremental: true) so warm runs only re-test mutants whose covering source/test bytes changed; the incrementalFile is gitignored runtime state, not committed.'
+  - 'No production source and no test file is modified by THIS slice; it adds config + an npm script only. If the measured score is below 80, that is reported as evidence and the test-adding work is a follow-up test-scope spec — this slice makes the gate real and runnable.'
+acceptance:
+  - id: A1
+    given: 'The kernel has no stryker.conf.js and no mutation script; CAWS-TEST-MUTATION-GATE-001 A2 asserted a kernel config exists but it was never written (verified: no file on disk, no kernel mutation in run-mutation.mjs which runs only in caws-cli).'
+    when: 'A kernel stryker.conf.js is added mutating the covered kernel src surface against tests/unit, with a kernel package.json mutation:run script.'
+    then: 'npm run mutation:run in packages/caws-kernel mutates the kernel src, runs the kernel jest suite per mutant, and writes a JSON report with a per-file mutation score.'
+  - id: A2
+    given: 'The kernel mutation config with thresholds.break = 80.'
+    when: 'The measured kernel score is computed.'
+    then: 'If >= 80 the run exits 0; if < 80 the run exits non-zero (gate is real). The actual measured score is recorded in closure evidence — pass or fail is reported honestly, the floor is not adjusted to manufacture a green.'
+  - id: A3
+    given: 'Incremental mode configured.'
+    when: 'mutation:run is invoked twice with no source change between runs.'
+    then: 'The second run reuses the incremental cache and completes substantially faster, demonstrating the byte-hash cache the maintainer asked for; incrementalFile is in .gitignore (or reports/, already ignored).'
+  - id: A4
+    given: 'A covered kernel function (e.g. verifyChain or evaluatePath) has its core decision mutated.'
+    when: 'The kernel suite runs under Stryker.'
+    then: 'The mutant is killed by the existing/added kernel tests, demonstrating the gate exerts real pressure on the kernel safety surface (scope authority + audit integrity), not just the CLI store.'
+non_functional:
+  reliability:
+    - 'The mutation run is bounded and deterministic: per-mutant timeout and concurrency are tuned so the run completes in tractable time; the mutate set is the covered surface, not the whole tree.'
+  security:
+    - 'The kernel surface being gated includes the scope-authority evaluator and the audit hash-chain verifier — the two load-bearing safety primitives. A mutation gate on them is the regression guard that a future refactor cannot silently weaken tamper-detection or scope admission while keeping tests green.'
+observability:
+  - 'The Stryker clear-text + JSON report (per-file killed/survived/score) is the verification artifact, captured in closure evidence with the actual kernel score cited.'
+  - 'The two-run timing comparison (cold vs warm incremental) is recorded per A3.'
+rollback:
+  - 'Rollback is a revert of the config + package.json script commit; thresholds return to non-existent (no kernel gate). No production source is touched.'
+contracts:
+  - name: kernel-mutation-gate-80
+    type: behavior
+    path: packages/caws-kernel/stryker.conf.js
+    description: 'A kernel Stryker config mutates the covered kernel src surface against tests/unit at break:80 with incremental caching; the documented npm script runs it and a sub-80 score fails the run.'

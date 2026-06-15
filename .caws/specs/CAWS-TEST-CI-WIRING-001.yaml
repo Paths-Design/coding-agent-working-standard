@@ -1,0 +1,61 @@
+id: CAWS-TEST-CI-WIRING-001
+title: 'CI wiring: run bats + pytest + mutation on PRs/schedule so the rebuilt tier-1 suite actually gates merges (close the dead hashFiles guard)'
+risk_tier: 1
+mode: feature
+lifecycle_state: active
+created_at: '2026-06-14T00:00:00.000Z'
+updated_at: '2026-06-15T03:59:32.852Z'
+blast_radius:
+  modules:
+    - .github/workflows/pr-checks.yml
+    - .github/workflows
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - .github/workflows/pr-checks.yml
+    - .github/workflows/mutation.yml
+    - .caws/specs/CAWS-TEST-CI-WIRING-001.yaml
+  out:
+    - packages/caws-cli/src
+    - packages/caws-kernel/src
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - 'The mutation CI step no longer gates on hashFiles(tests/mutation/**) — that path was deleted with the old corpus, so the step silently skipped. Mutation is triggered by schedule (nightly cron) + a PR label + workflow_dispatch, never as a blocking per-PR critical-path job (the cold run is ~22min for store alone).'
+  - 'The fast lineage-anchored guard suites (bats: 26 guard tests, pytest: 57 classifier tests) run as BLOCKING PR checks — they are the "do as I do" proof that each failure-lineage guard still fires, and were previously absent from every workflow.'
+  - 'The scheduled/label mutation job runs kernel + store at break:80 and is blocking for its trigger; a sub-80 score fails the job. The job uses actions/cache for the Stryker incremental file keyed on a source hash so warm runs are cheap.'
+  - 'No production source, no test file, and no spec other than this one is modified; this slice edits CI workflow YAML only.'
+  - 'bats and pytest jobs install their runtimes hermetically (bats via the repo devDependency or action; pytest via a venv from the in-repo requirements) and run the existing npm scripts (test:bats, test:pytest), not reimplemented invocations.'
+acceptance:
+  - id: A1
+    given: 'pr-checks.yml has a Mutation step gated on hashFiles(tests/mutation/**) != "", and that directory no longer exists, so mutation silently skips on every PR.'
+    when: 'The workflow set is updated.'
+    then: 'The dead-path mutation step is removed from the per-PR job; mutation lives in a schedule + label + dispatch-triggered job instead, so it can no longer silently no-op.'
+  - id: A2
+    given: 'No workflow runs bats or pytest (grep of .github/workflows returns nothing for either).'
+    when: 'pr-checks.yml is updated.'
+    then: 'A bats job (npm run test:bats, 26 tests) and a pytest job (npm run test:pytest, 57 tests) run as required PR checks; a red bats/pytest result blocks the PR.'
+  - id: A3
+    given: 'The mutation job triggers (nightly cron, the run-mutation label, or workflow_dispatch).'
+    when: 'It runs.'
+    then: 'It executes the store mutation (npm run mutation:run) and the kernel mutation at break:80; a score below 80 on either fails the job. The job restores/saves reports/stryker-incremental.json via actions/cache keyed on a hash of the mutated source.'
+  - id: A4
+    given: 'A workflow_dispatch / label run of the mutation job on an unchanged tree after a prior run populated the cache.'
+    when: 'It runs with the incremental cache restored.'
+    then: 'It completes substantially faster than the cold ~22min baseline, demonstrating the cache hit (CI log shows cache restored + reduced mutant count).'
+non_functional:
+  reliability:
+    - 'PR feedback stays fast: the blocking PR path is lint/typecheck/build + jest + bats + pytest (minutes), with mutation off the critical path on a schedule/label. A flaky-runtime mutation job cannot wedge unrelated PRs.'
+  security:
+    - 'CI runs the guard suites (block-dangerous, protected-paths, scan-secrets, classify_command) on every PR, so a change that weakens a security guard is caught at PR time rather than after merge. Workflow changes touch no secrets and grant no new token scopes beyond what the existing jobs use.'
+observability:
+  - 'The CI run logs (bats TAP output, pytest summary, Stryker score + cache-restore line) are the verification artifacts, linked in closure evidence.'
+  - 'The cold-vs-warm mutation job duration is recorded per A4 from the Actions run timings.'
+rollback:
+  - 'Rollback is a revert of the workflow YAML commit; CI returns to its prior shape (mutation skipping, no bats/pytest). No production code or data is affected.'
+contracts:
+  - name: ci-runs-guard-and-mutation-suites
+    type: behavior
+    path: .github/workflows/pr-checks.yml
+    description: 'bats + pytest run as blocking PR checks; mutation (kernel+store, break:80, incremental-cached) runs on schedule + label + dispatch, never as a silent hashFiles-gated no-op.'
