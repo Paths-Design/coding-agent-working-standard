@@ -1,0 +1,73 @@
+id: WORKTREE-DOCTOR-HALF-STATE-001
+title: 'Doctor half-state diagnostics: typed read-only detection for H1-H6 (diagnose only, no repair)'
+risk_tier: 1
+mode: feature
+lifecycle_state: active
+created_at: '2026-06-15T00:00:00.000Z'
+updated_at: '2026-06-15T17:31:20.602Z'
+blast_radius:
+  modules:
+    - packages/caws-kernel/src/doctor/inspect.ts
+    - packages/caws-kernel/src/doctor/rules.ts
+    - packages/caws-kernel/src/doctor/types.ts
+    - packages/caws-kernel/tests/unit/doctor-half-state.test.ts
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - packages/caws-kernel/src/doctor/inspect.ts
+    - packages/caws-kernel/src/doctor/rules.ts
+    - packages/caws-kernel/src/doctor/types.ts
+    - packages/caws-kernel/tests/unit/doctor-half-state.test.ts
+    - .caws/specs/WORKTREE-DOCTOR-HALF-STATE-001.yaml
+  out:
+    - packages/caws-cli/src/store
+    - packages/caws-kernel/src/doctor/index.ts
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - 'DIAGNOSE ONLY. This slice adds detection + tests. It does NOT prune, repair, reconcile, rename a result kind, or change any lifecycle writer behavior. The Diagnose/Decide/Repair separation (doctrine §1.4) holds: detection is authority-free; repair is a later gated slice.'
+  - 'Doctor is READ-ONLY. inspectProjectState is a pure function over a DoctorInput projection — it performs no I/O and writes nothing. Tests assert no byte changes to specs, registry, events.jsonl, git worktree list, or filesystem fixtures after a doctor run.'
+  - 'H5 (3-way contradiction) MUST NOT suggest a mutating command. Its repair field is a non-actionable doctrine pointer to the authority-control-plane decision slice (WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001), never a copy-paste shell command. H5 cannot be safely auto-repaired before authority policy exists.'
+  - 'Event-backed diagnostics use seq/prev_hash as the causal/ordering authority, NOT ts (timestamps are observational metadata per the event-order doctrine). The new worktree_created-orphan detection consults events.jsonl already present on DoctorInput.events (the CLI doctor-snapshot already loads + passes events — no snapshot wiring change).'
+  - 'The H-class detection for H1/H2/H3/H4/H5/H6 is ALREADY IMPLEMENTED in inspect.ts but has ZERO test coverage. The primary deliverable is the regression test suite that proves each H-class emits its typed diagnostic against fixtures. The ONE new detection added is the event-backed governance-half-state (worktree_created event with no live registry entry AND no live spec worktree: binding) — the createWorktree second-event divergence the harness proved.'
+acceptance:
+  - id: A1
+    given: 'inspect.ts already emits WORKTREE_GHOST_REGISTRY_ENTRY (H1), BINDING_REGISTRY_MISSING_SPEC/BINDING_SPEC_MISSING_REGISTRY (H2/H3 + H4 enrichment), WORKTREE_BINDING_CONTRADICTION_3WAY (H5), WORKTREE_FOREIGN_PHYSICAL (H6), but no test exercises them.'
+    when: 'A doctor test suite is added with one fixture per H-class.'
+    then: 'Each of H1-H6 produces its stable typed diagnostic (rule id asserted) against its fixture; the suite is the regression guard the doctrine marked Pending.'
+  - id: A2
+    given: 'The createWorktree second-event divergence: events.jsonl contains worktree_created for a worktree, but worktrees.json has no live entry and no spec carries a live worktree: binding to it (governance-half-state).'
+    when: 'inspectProjectState runs with that event log + registry + specs.'
+    then: 'A new typed event-backed diagnostic fires naming the worktree, the spec id where knowable, and the worktree_created event seq + hash as evidence. It does NOT fire when a matching live registry entry OR spec binding exists (no false positive on a healthy worktree).'
+  - id: A3
+    given: 'The destroyWorktree external-half-state (registry entry absent, git worktree dir gone, governance recovered).'
+    when: 'inspectProjectState runs on that residue.'
+    then: 'Either the existing H4/ghost machinery detects the observable residue, OR the spec documents that this case is not generically inferable from current state without new event/result metadata (a conservative diagnostic only when residue is sufficient). No false claim of detection.'
+  - id: A4
+    given: 'An H5 3-way-contradiction fixture.'
+    when: 'The H5 diagnostic is emitted.'
+    then: 'Its repair field is a doctrine pointer (no shell command); a test asserts the repair text contains no executable caws command and references the authority-control-plane slice.'
+  - id: A5
+    given: 'Any doctor run over a fixture.'
+    when: 'inspectProjectState returns.'
+    then: 'A test re-reads every fixture surface (spec YAML bytes, worktrees.json, events.jsonl) before and after and asserts byte-equality — doctor mutated nothing.'
+  - id: A6
+    given: 'The two divergence cases proven by CAWS-LIFECYCLE-ROLLBACK-HARNESS-COMPLETE-001 (governance-half-state after createWorktree 2nd-event; external-half-state after destroyWorktree).'
+    when: 'The doctor test suite is built.'
+    then: 'Both are included as regression fixtures (constructed from the same factual on-disk shapes the harness produces), so the doctor detection is anchored to empirically-proven half-states, not invented ones.'
+non_functional:
+  reliability:
+    - 'inspectProjectState stays a pure, deterministic function of DoctorInput. The new event-orphan detection iterates events in chain order (seq) and is O(events + worktrees); it does not depend on wall-clock or filesystem nondeterminism. Tests run under default parallel jest workers.'
+  security:
+    - 'This converts the harness epistemic proof into an operational surface: an operator who hit an honest partial-failure result can now SEE the named half-state instead of being blind to control-plane/event-log/filesystem contradiction. Detection is read-only and authority-free — it surfaces the contradiction, it does not act on it (acting requires the gated Decide/Repair slices).'
+observability:
+  - 'The doctor diagnostic output (rule id + severity + subject + evidence fields: worktree name, spec id, event seq/hash, registry/git facts) is the verification artifact, captured per H-class in closure evidence.'
+  - 'The closure note carries the H-class table: H-class | fixture | diagnostic code | evidence fields | repair text | mutability proof.'
+rollback:
+  - 'Rollback is a revert of the inspect.ts detection addition + the new rule id + the test commit. No lifecycle writer, no migration, no repair surface is introduced.'
+contracts:
+  - name: doctor-half-state-diagnose-only
+    type: behavior
+    path: packages/caws-kernel/src/doctor/inspect.ts
+    description: 'inspectProjectState emits a stable typed diagnostic for each of H1-H6 (including the new event-backed worktree_created-orphan governance-half-state) with evidence fields, H5 carries a non-actionable doctrine-pointer repair, and the function writes nothing.'
