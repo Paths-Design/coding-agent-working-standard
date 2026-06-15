@@ -7,20 +7,31 @@ created_at: '2026-06-15T23:16:41.568Z'
 updated_at: '2026-06-15T23:16:51.746Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-kernel/src/doctor/inspect.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-kernel/src/doctor/inspect.ts
-  out: []
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'TEXT-ONLY. This slice changes exactly one string literal — the event-orphan (WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING) narrowRepair copy in inspect.ts — and nothing else. No detection logic, no rule id, no severity, no event schema, no other finding text changes. The diff is a single narrowRepair value.'
+  - 'The new copy MUST remain command-free: no backtick-quoted shell command, no `caws <verb>` or `git <verb>` imperative. The existing doctor-authority-policy lock test asserts hasExecutableCommand(orphan.narrowRepair) === false (the orphan is a FORBIDDEN-as-deletion class); the refreshed wording must keep that property green. The text states WHY repair is refused (immutable audit record, no safe control-plane mutation), not a command to run.'
+  - 'The wording removes the now-stale "Repair is deferred to the worktree control-plane/repair slice ... no safe automatic action exists yet" framing (false since PRUNE-REPAIR-WORKTREE-001 shipped caws worktree repair, which intentionally REFUSES this class) and replaces it with a present-tense statement that the refusal is by-design, not pending. Behavior is unchanged: caws worktree repair already refuses the event-orphan; only the operator-facing explanation is corrected.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'A repo whose event chain records a worktree_created with no live registry/spec binding (the event-orphan governance-half-state), so inspectProjectState emits WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING.'
+    when: 'The finding is rendered.'
+    then: 'Its narrowRepair no longer contains the stale "Repair is deferred ... no safe automatic action exists yet" text, and instead states present-tense that automatic repair is intentionally refused because the audit record is immutable and no control-plane mutation is safe.'
+  - id: A2
+    given: 'The refreshed copy.'
+    when: 'The doctor-authority-policy lock test runs.'
+    then: 'hasExecutableCommand(orphan.narrowRepair) still returns false — the new wording carries no executable command. The full kernel suite stays green; the kernel builds.'
+  - id: A3
+    given: 'The full diff of this slice.'
+    when: 'It is reviewed.'
+    then: 'It touches only the single narrowRepair string literal (and, if present, the adjacent explanatory comment) in inspect.ts. No other file, rule, severity, or behavior changes.'
 non_functional: {}
 contracts: []
