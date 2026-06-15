@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/worktree_pruned.v1.json",
+  "title": "worktree_pruned event payload",
+  "$comment": "Class: OPTIONAL_SPEC_ID. Records the half-state REPAIR event 'a stale registry entry was removed for a worktree with no live git/canonical backing.' Distinct from worktree_destroyed, which records that a LIVE git worktree was removed (required branch/path). Emitted by caws worktree prune/repair for the unambiguous ghost-registry class (H1) authorized by WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-002. WORKTREE-REPAIR-EVENT-CONTRACT-001.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["worktree_name", "h_class", "reason"],
+  "properties": {
+    "worktree_name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "description": "Name of the pruned worktree (the stale key removed from worktrees.json)."
+    },
+    "h_class": {
+      "type": "string",
+      "enum": ["ghost_registry"],
+      "description": "The §1.4 authorized half-state class this prune repaired. Only ghost_registry (H1) is repairable by prune; the enum is closed so a future class cannot be silently pruned without a doctrine update."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable authority reason, e.g. 'no backing git worktree and canonical dir absent (H1 ghost)'."
+    },
+    "spec_id": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$",
+      "description": "Optional: the spec id the ghost registry entry claimed, when present. A legitimate ghost may lack one."
+    }
+  }
+}

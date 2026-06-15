@@ -66,11 +66,13 @@ export type EventType =
   | 'spec_retired'
   | 'spec_deleted'
   | 'spec_scope_amended'
+  | 'spec_binding_cleared'
   | 'spec_drift_detected'
   | 'worktree_created'
   | 'worktree_bound'
   | 'worktree_merged'
   | 'worktree_destroyed'
+  | 'worktree_pruned'
   | 'worktree_ownership_seized'
   | 'claim_taken_over'
   | 'evidence_recorded'
@@ -105,6 +107,9 @@ export const REQUIRES_SPEC_ID: ReadonlySet<EventType> = new Set<EventType>([
   'spec_deleted',
   'spec_scope_amended',
   'spec_drift_detected',
+  // WORKTREE-REPAIR-EVENT-CONTRACT-001: clearing a stale worktree: field always
+  // names the spec whose binding is being cleared.
+  'spec_binding_cleared',
   'evidence_recorded',
   'ac_recorded',
   'test_recorded',
@@ -127,6 +132,9 @@ export const OPTIONAL_SPEC_ID: ReadonlySet<EventType> = new Set<EventType>([
   'worktree_created',
   'worktree_merged',
   'worktree_destroyed',
+  // WORKTREE-REPAIR-EVENT-CONTRACT-001: a pruned ghost registry entry MAY name
+  // the spec it claimed, but a legitimate ghost can lack one.
+  'worktree_pruned',
   'claim_taken_over',
   'commit_made',
 ]);

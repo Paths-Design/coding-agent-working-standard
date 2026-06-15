@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/spec_binding_cleared.v1.json",
+  "title": "spec_binding_cleared event payload",
+  "$comment": "Class: REQUIRES_SPEC_ID. Records the half-state REPAIR event 'a stale worktree: field was cleared from a spec the registry + git agree has no live worktree.' Distinct from spec_updated (which has no schema and is not appendable) and from worktree_destroyed (which is about a worktree, not a spec field). Emitted by caws worktree prune/repair for the unambiguous ghost-spec-binding (H4) and dormant closed/archived spec-binding (H3-closed/archived) classes authorized by WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-002. WORKTREE-REPAIR-EVENT-CONTRACT-001.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["spec_id", "cleared_worktree_name", "h_class", "reason"],
+  "properties": {
+    "spec_id": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$",
+      "description": "The spec whose stale worktree: field was cleared. REQUIRES_SPEC_ID: clearing a binding always names a spec. (Mirrored on the event envelope as spec_id; included here so the payload is self-describing.)"
+    },
+    "cleared_worktree_name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "description": "The worktree name the spec's worktree: field referenced before it was cleared."
+    },
+    "h_class": {
+      "type": "string",
+      "enum": ["ghost_spec_binding", "dormant_spec_binding"],
+      "description": "The §1.4 authorized class: ghost_spec_binding (H4 — registry + git both absent) or dormant_spec_binding (H3 on a closed/archived spec). The enum is closed so H3-active (ambiguous) can never be cleared without a doctrine update."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable authority reason, e.g. 'registry and git both confirm no live worktree (H4 ghost spec binding)'."
+    }
+  }
+}
