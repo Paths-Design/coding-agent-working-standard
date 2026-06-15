@@ -2,10 +2,11 @@ id: WORKTREE-DOCTOR-HALF-STATE-001
 title: 'Doctor half-state diagnostics: typed read-only detection for H1-H6 (diagnose only, no repair)'
 risk_tier: 1
 mode: feature
-lifecycle_state: active
-worktree: doctor-halfstate-01
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge doctor-halfstate-01 at 2da7dee3f00b2205a899e755892747a91fee7495'
 created_at: '2026-06-15T00:00:00.000Z'
-updated_at: '2026-06-15T17:31:20.602Z'
+updated_at: '2026-06-15T17:42:09.288Z'
 blast_radius:
   modules:
     - packages/caws-kernel/src/doctor/inspect.ts
