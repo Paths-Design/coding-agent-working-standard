@@ -37,6 +37,7 @@
     "test:axe": "npm run build && jest --testPathPatterns=axe && npm run test:cleanup",
     "perf:budgets": "npm run build && jest --testPathPatterns=perf && npm run test:cleanup",
     "test:watch": "npm run build && jest --watch",
+    "mutation:run:shell": "npm run build && npx stryker run stryker.shell.conf.js",
     "test:bats": "npm run build && bats tests/hooks/bats",
     "test:pytest": "python3 -m venv tests/hooks/pytest/.venv && tests/hooks/pytest/.venv/bin/pip install -q -r tests/hooks/pytest/requirements.txt && tests/hooks/pytest/.venv/bin/pytest tests/hooks/pytest",
     "test:cleanup": "node scripts/cleanup-tests.js",
