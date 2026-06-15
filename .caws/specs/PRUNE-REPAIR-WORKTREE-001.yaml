@@ -1,130 +1,82 @@
 id: PRUNE-REPAIR-WORKTREE-001
-title: 'Restore v10.2 worktree prune/reconcile/repair ergonomics on v11 substrate'
-risk_tier: 2
+title: 'Half-state repair executor: caws worktree repair for the unambiguous classes (H1/H4/H3-closed) only'
+risk_tier: 1
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
 created_at: '2026-05-18T00:00:00.000Z'
-updated_at: '2026-05-18T00:00:00.000Z'
+updated_at: '2026-06-15T19:36:12.800Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/shell/register.ts
     - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-kernel/src/doctor/inspect.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
     - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/shell/register.ts
     - packages/caws-cli/src/store/worktrees-writer.ts
-    - packages/caws-cli/tests/shell/worktree-prune-repair.test.js
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-kernel/src/doctor/inspect.ts
+    - packages/caws-cli/tests/shell/worktree-repair.test.js
     - .caws/specs/PRUNE-REPAIR-WORKTREE-001.yaml
   out:
     - packages/caws-cli/src/shell/commands/specs.ts
     - packages/caws-cli/src/shell/commands/claim.ts
+    - packages/caws-kernel/src/evidence
     - .caws/policy.yaml
-    - .caws/events.jsonl
+    - CODEOWNERS
 invariants:
-  - 'prune removes registry entries whose backing git worktree no longer exists; it never removes a live git worktree.'
-  - 'repair reconciles one-sided bindings (registry has specId but spec.worktree missing, or vice versa) into the canonical bidirectional state, or refuses with a typed diagnostic when there is genuine ambiguity.'
-  - 'reconcile is a read-only diagnostic: it reports drift between git worktree state, .caws/worktrees.json, and spec.worktree fields, but performs no mutations.'
-  - 'All three commands respect foreign-session ownership: they refuse to mutate entries owned by a different session unless --takeover is supplied (which writes a prior_owners audit).'
-  - 'prune and repair emit one event per mutation through appendEvent; reconcile emits zero events.'
+  - 'Repair is an EXECUTOR of already-decided doctrine, NOT a second authority engine. It consumes the §1.4 half-state decision matrix (via the doctor diagnostics from inspectProjectState) to classify; it never re-derives which surface wins. The classes it may mutate are EXACTLY the matrix-unambiguous set: H1 (ghost registry), H4 (ghost spec binding), and H3 on a closed/archived spec. Nothing else.'
+  - 'Ambiguous and forbidden classes are REFUSED with a doctrine-pointer diagnostic and ZERO mutation: H2 (registry->missing-spec), H3 on an ACTIVE spec (recreate-vs-clear ambiguity), H5 (3-way), H6 (foreign physical), and the event-backed orphan. This slice does NOT reconcile one-sided bindings in general (the old draft framing) — H3-active and H2 are out by authority.'
+  - 'Every mutation appends the honest audit event from WORKTREE-REPAIR-EVENT-CONTRACT-001 through the store writer inside runLifecycleTransaction (the shell never calls appendEvent directly; invariant 14 holds — no new writer). H1 prune appends worktree_pruned (h_class: ghost_registry); H4 / H3-closed clear appends spec_binding_cleared (h_class: ghost_spec_binding / dormant_spec_binding). No new event type, schema, or result kind is introduced.'
+  - 'No git worktree directory is ever created or deleted by repair. H1 prune removes only the stale worktrees.json entry (the backing dir is already absent — that is what makes it a ghost). H4/H3-closed clear only the canonical spec.worktree field. The destroyWorktree external-half-state (irreversible git removal) is explicitly out of scope and needs the deferred external_state_recovered result kind first.'
+  - 'Repair is dry-run-first: caws worktree repair --dry-run reports exactly the H-class, subject, planned mutation, and the event that WOULD be appended, mutating nothing. The actual run performs only the mutation the dry-run predicted. Foreign-session-owned entries are refused without --takeover (matching destroy/merge), which writes a prior_owners audit.'
+  - 'The H5 doctor narrowRepair string is redirected from the superseded WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001 to -002 (the live resolution) since this slice touches inspect.ts; no other detection logic changes.'
 acceptance:
   - id: A1
-    given: 'A v11-initialized repo with .caws/worktrees.json containing an entry for ghost-wt whose backing git worktree was manually deleted.'
-    when: 'caws worktree prune is invoked.'
-    then: 'The ghost-wt entry is removed from worktrees.json. The bound spec.worktree field is cleared. A worktree_destroyed event (or new worktree_pruned event, TBD) is appended with reason: ghost.'
+    given: 'A repo with a ghost registry entry (H1: worktrees.json[name] present, backing git/canonical dir absent), confirmed by doctor evidence.'
+    when: 'caws worktree repair --dry-run is invoked.'
+    then: 'It reports the exact H-class (ghost_registry), subject (the worktree name), the planned mutation (remove the registry entry), and the event that would be appended (worktree_pruned). NOTHING is mutated: worktrees.json, specs, git worktrees, and events.jsonl are byte-unchanged.'
   - id: A2
-    given: 'A worktree feat-001-wt with worktrees.json[feat-001-wt].specId=FEAT-001 but the spec file has no worktree field.'
-    when: 'caws worktree repair feat-001-wt is invoked.'
-    then: 'The spec file gains the worktree: feat-001-wt field; a worktree_bound event is appended; previously_bound_to is null (because this is repairing a one-sided binding, not changing one).'
+    given: 'The same H1 ghost.'
+    when: 'caws worktree repair is invoked (not dry-run).'
+    then: 'It performs ONLY the mutation the dry-run predicted: the registry entry is removed; a worktree_pruned event (h_class: ghost_registry) is appended via the store writer; the chain verifies; no git worktree dir is touched.'
   - id: A3
-    given: 'A worktree feat-001-wt with spec.worktree=feat-001-wt but no entry in worktrees.json AND the git worktree still exists at .caws/worktrees/feat-001-wt.'
-    when: 'caws worktree repair feat-001-wt is invoked.'
-    then: 'A new worktrees.json entry is created for feat-001-wt, bound to the spec; a worktree_bound event is appended.'
+    given: 'An H4 ghost spec binding (registry absent, git/canonical dir absent, spec still has worktree:) and an H3 dormant binding (closed/archived spec with a stale worktree:).'
+    when: 'caws worktree repair is invoked.'
+    then: 'H4 clears the canonical spec.worktree and appends spec_binding_cleared (h_class: ghost_spec_binding); H3-closed/archived clears it and appends spec_binding_cleared (h_class: dormant_spec_binding). Both mutate only the spec field, never a git dir.'
   - id: A4
-    given: 'A repo with multiple drift scenarios (ghost worktrees, one-sided bindings, conflicting bindings).'
-    when: 'caws worktree reconcile is invoked.'
-    then: 'A structured drift report is printed (table or JSON with --json). No mutations occur. Exit code 0 if no drift, 1 if drift detected.'
+    given: 'Ambiguous/forbidden states: H2 (registry->missing-spec), H3 on an ACTIVE spec, H5 (3-way), H6 (foreign physical), and an event-backed orphan.'
+    when: 'caws worktree repair is invoked against each.'
+    then: 'Each is REFUSED with a typed doctrine-pointer diagnostic and ZERO mutation — specs, registry, git worktrees, and events.jsonl are byte-unchanged. No spec_binding_cleared or worktree_pruned event is appended for any of them.'
   - id: A5
-    given: 'A worktree owned by a foreign session.'
-    when: 'caws worktree prune or repair is invoked without --takeover.'
-    then: 'The command refuses with a typed foreign-ownership diagnostic. No mutations occur.'
+    given: 'Any repair invocation.'
+    when: 'It runs (dry-run or actual).'
+    then: 'A test proves no repair code path creates or deletes a git worktree directory (the repair surface mutates only worktrees.json and canonical spec YAML, never the filesystem worktree).'
+  - id: A6
+    given: 'The shipped H5 doctor diagnostic.'
+    when: 'inspectProjectState emits WORKTREE_BINDING_CONTRADICTION_3WAY.'
+    then: 'Its narrowRepair points at WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-002 (not the superseded -001), and the existing doctor-authority-policy lock test still proves it carries no executable command.'
+  - id: A7
+    given: 'The full slice.'
+    when: 'Verification runs.'
+    then: 'Store, shell, and doctor test suites pass; the kernel repair-event-contract tests stay green; both packages build; the store mutation gate is unchanged unless a touched store file is already gated.'
 non_functional:
   reliability:
-    - 'All three commands acquire the lifecycle lock for any mutation.'
-    - 'reconcile is safe to run while other agents hold lifecycle operations in progress (read-only, no lock contention beyond a snapshot read).'
+    - 'Every mutation acquires the lifecycle lock via the store writer and runs inside runLifecycleTransaction, so an injected event-append failure rolls back the registry/spec write (the partial-failure honesty the rollback harness proved). Dry-run holds no lock and mutates nothing.'
   security:
-    - '--takeover writes a prior_owners audit entry, matching the existing claim --takeover semantics.'
+    - 'This is the terminal slice of the Diagnose->Decide->Repair arc. Repair mutates governance state, so it is the highest-risk surface: it acts ONLY on classes the §1.4 matrix decided are unambiguous, refuses everything else, and writes an honest h_class-tagged audit event for every mutation. A repair that touched an ambiguous class would encode the wrong source of truth — the matrix-consumption + refusal is the guard against that.'
+observability:
+  - 'Dry-run output (H-class + subject + planned mutation + event) and actual-run output (the mutation performed + event appended + chain-verifies) are the verification artifacts, captured per class in closure evidence.'
+  - 'The refusal diagnostics for the ambiguous/forbidden classes (doctrine pointer, no command, no mutation) are the regression artifact proving repair stays inside its authorized scope.'
+rollback:
+  - 'Rollback is a revert of the command + writer + test commits. The two repair event types remain registered (from WORKTREE-REPAIR-EVENT-CONTRACT-001) but unused; no chain contains them until repair runs, so reverting strands nothing.'
 contracts:
-  - name: prune/repair event emissions
+  - name: half-state-repair-executor
     type: behavior
     path: packages/caws-cli/src/store/worktrees-writer.ts
-    description: 'prune appends worktree_destroyed (or worktree_pruned, TBD) per removed ghost entry. repair appends worktree_bound per resolved one-sided binding. reconcile appends nothing.'
-# --- Triage (deferred from v11.1.0) -----------------------------------------
-# v10.2 shipped caws worktree prune (commits 5957a33, b8828c7), reconcile/
-# repair (commit 2127e3b), and the adversarial test suite (commit 4e6d28e).
-# v11.0 removed the entire worktree surface; v11.1 restored create/list/bind/
-# destroy/merge but NOT prune/reconcile/repair. Upgrading v10.2 users will
-# immediately ask "where did prune go?"
-#
-# Open questions before implementation:
-#   - Should prune emit worktree_destroyed (same event) or a new
-#     worktree_pruned event with reason: ghost? worktree_destroyed implies
-#     the user destroyed it; worktree_pruned implies recovery from prior
-#     destruction.
-#   - Should reconcile have a --fix shortcut that combines prune + repair,
-#     or should the user always run them explicitly?
-#   - Does repair handle the conflicting-bindings case (registry says
-#     spec A, spec file says worktree X, but spec A.worktree != X)?
-#     Refusing with a diagnostic seems right, but the diagnostic needs
-#     careful design.
-#
-# --- Recon outcome (2026-05-22 / PRUNE-REPAIR-WORKTREE-RECON-001) ---------
-# This spec stays DRAFT and is now BLOCKED on
-# WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001. Recon reframed the work per
-# §1.4 of caws-vnext-command-surface.md as a Diagnose / Decide / Repair
-# stratification across three authority levels:
-#
-#   - Diagnose (no authority required, ship now):
-#       WORKTREE-DOCTOR-HALF-STATE-001 — detect-only doctor diagnostics
-#       for half-state classes H1-H6.
-#
-#   - Decide (control-plane authority doctrine required):
-#       WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001 — picks which state
-#       surface wins for each contradiction class.
-#
-#   - Repair (requires Decide to have produced a policy):
-#       THIS SPEC. Only the classes the authority rule has made
-#       unambiguous become repairable. H5 (3-way registry/spec
-#       contradiction) is EXPLICITLY NOT repairable here without
-#       future doctrine that admits a decision rule — registry wins
-#       vs. spec_A wins vs. spec_B wins are three different doctrine
-#       answers and choosing one in code without doctrine would
-#       permanently encode the wrong source of truth.
-#
-# scope.out change (2026-05-22): .caws/worktrees.json was removed from
-# scope.out because A1-A3 acceptance criteria require mutating that file.
-# Listing it in scope.out was an internal contradiction. The recon did
-# NOT preemptively add it to scope.in either; that admit decision belongs
-# to the implementing slice when the authority doctrine is known and the
-# concrete planned mutations are scoped accordingly.
-#
-# H4 and H5 (new half-state classes mechanically witnessed by
-# LIFECYCLE-ROLLBACK-FAILURE-HARNESS-001, closed 2026-05-22 per ee92234)
-# also imply this spec's eventual acceptance set will need amendment to
-# fold in H4 as a repairable class (single defensible repair: clear
-# spec.worktree). A4 (reconcile) is moving to WORKTREE-DOCTOR-HALF-STATE-001
-# as a read-only diagnostic; whether `caws worktree reconcile` survives
-# as a thin shell alias is an implementation decision deferred to that
-# slice. Do not start implementation here until the authority spec
-# closes and the scope/acceptance amendments above land.
-#
-# Activation prerequisites (must all be true before flipping to active):
-#   1. WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001 closed with a written
-#      authority rule per H-class.
-#   2. WORKTREE-DOCTOR-HALF-STATE-001 closed (Diagnose surface exists
-#      so repair can be tested against detection regressions).
-#   3. This spec's acceptance amended to remove A4 reconcile (moved to
-#      Diagnose), fold in H4 explicitly, and refuse H5.
-#   4. scope.in expanded to match the concrete planned mutations under
-#      the authority rule.
+    description: 'caws worktree repair mutates ONLY the matrix-unambiguous classes (H1 prune -> worktree_pruned; H4/H3-closed clear -> spec_binding_cleared), refuses H2/H3-active/H5/H6/orphan with a doctrine pointer and no mutation, never touches a git worktree dir, and dry-run predicts exactly the actual mutation.'
