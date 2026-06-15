@@ -2,10 +2,11 @@ id: CAWS-TEST-SHELL-MUTATION-CI-001
 title: 'Wire the shell mutation gate into the scheduled/label mutation CI workflow'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
-worktree: shell-ci-01
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge shell-ci-01 at c7b4b42aeb1f8c563fc1d3e6e9479f6e41d64615'
 created_at: '2026-06-15T07:05:05.011Z'
-updated_at: '2026-06-15T07:05:05.011Z'
+updated_at: '2026-06-15T07:06:12.810Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
