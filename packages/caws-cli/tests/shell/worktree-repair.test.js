@@ -30,10 +30,13 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const { runWorktreeRepairCommand } = require('../../dist/shell/commands/worktree');
+const {
+  runWorktreeRepairCommand,
+  decideRepair,
+} = require('../../dist/shell/commands/worktree');
 const { initProject } = require('../../dist/store/init-store');
 const { loadEvents } = require('../../dist/store/events-store');
-const { verifyChain } = require('@paths.design/caws-kernel');
+const { verifyChain, DOCTOR_RULES } = require('@paths.design/caws-kernel');
 
 const repos = [];
 
@@ -405,5 +408,79 @@ describe('A7: no repair path touches a git worktree directory', () => {
     });
     const worktreeCount = (wtList.match(/^worktree /gm) || []).length;
     expect(worktreeCount).toBe(1);
+  });
+});
+
+// =========================================================================
+// A6 (classifier-level) — H6 foreign-physical and the event-orphan are
+// refuse-only classes whose end-to-end fixtures need a real git worktree / a
+// hand-built hash chain. Their dispatch is byte-identical to the H5/H2 refuse
+// arms proven end-to-end above, so we pin the DECISION directly through the
+// exported pure classifier. This keeps A6 honest for ALL forbidden classes
+// without a heavyweight fixture that would only re-exercise the same branch.
+// =========================================================================
+
+describe('A6 (classifier): refuse-only classes never resolve to a mutation', () => {
+  test('H6 (foreign physical worktree) decides REFUSE — repair never touches a git dir', () => {
+    const decision = decideRepair({
+      rule: DOCTOR_RULES.WORKTREE_FOREIGN_PHYSICAL,
+      severity: 'info',
+      message: 'foreign',
+      subject: '/some/path',
+      data: { path: '/some/path' },
+    });
+    expect(decision.kind).toBe('refuse');
+    expect(decision.reason).toMatch(/never touches git worktree directories/i);
+  });
+
+  test('event-backed orphan decides REFUSE — immutable history, reconcile not delete', () => {
+    const decision = decideRepair({
+      rule: DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING,
+      severity: 'warning',
+      message: 'orphan',
+      subject: 'wt-orphan',
+      data: { worktree_name: 'wt-orphan' },
+    });
+    expect(decision.kind).toBe('refuse');
+    expect(decision.reason).toMatch(/authority reconciliation/i);
+  });
+
+  test('classifier is NOT vacuously refusing — the unambiguous classes decide to ACT', () => {
+    // If decideRepair returned 'refuse' for everything, the two assertions above
+    // would pass trivially. Pin the positive arms so the refusals mean something.
+    const h1 = decideRepair({
+      rule: DOCTOR_RULES.WORKTREE_GHOST_REGISTRY_ENTRY,
+      severity: 'error',
+      message: 'ghost',
+      subject: 'wt-g',
+      data: { worktree_name: 'wt-g' },
+    });
+    expect(h1.kind).toBe('prune_ghost_registry');
+
+    const h4 = decideRepair({
+      rule: DOCTOR_RULES.BINDING_SPEC_MISSING_REGISTRY,
+      severity: 'error',
+      message: 'ghost bind',
+      subject: 'GHOST-1',
+      data: {
+        spec_id: 'GHOST-1',
+        worktree_name: 'wt-dead',
+        lifecycle_state: 'active',
+        canonical_dir_observed: true,
+        canonical_dir_present: false,
+      },
+    });
+    expect(h4.kind).toBe('clear_spec_binding');
+    expect(h4.hClass).toBe('ghost_spec_binding');
+
+    const h3 = decideRepair({
+      rule: DOCTOR_RULES.BINDING_SPEC_MISSING_REGISTRY,
+      severity: 'info',
+      message: 'dormant',
+      subject: 'DORMANT-1',
+      data: { spec_id: 'DORMANT-1', worktree_name: 'wt-old', lifecycle_state: 'closed' },
+    });
+    expect(h3.kind).toBe('clear_spec_binding');
+    expect(h3.hClass).toBe('dormant_spec_binding');
   });
 });

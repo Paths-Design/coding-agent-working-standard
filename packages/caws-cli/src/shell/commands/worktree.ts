@@ -911,8 +911,14 @@ type RepairDecision =
  * `refuse` carries the doctrine-pointer reason; `ignore` is for findings
  * outside the half-state taxonomy (e.g. a gitignore-drift info) that repair
  * neither acts on nor refuses.
+ *
+ * Exported so the classifier can be unit-tested directly for the refuse-only
+ * classes (H6 foreign-physical, event-orphan) whose end-to-end fixtures would
+ * require a real git worktree / a hand-built hash chain — the dispatch is
+ * identical to the H5/H2 refuse arms proven end-to-end, so the cheaper proof is
+ * to pin the decision here.
  */
-function decideRepair(finding: DoctorFinding): RepairDecision {
+export function decideRepair(finding: DoctorFinding): RepairDecision {
   const data = (finding.data ?? {}) as Record<string, unknown>;
   switch (finding.rule) {
     case DOCTOR_RULES.WORKTREE_GHOST_REGISTRY_ENTRY: {
