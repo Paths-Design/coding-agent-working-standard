@@ -3,6 +3,7 @@ title: 'CI wiring: run bats + pytest + mutation on PRs/schedule so the rebuilt t
 risk_tier: 1
 mode: feature
 lifecycle_state: active
+worktree: honest-tier1-03
 created_at: '2026-06-14T00:00:00.000Z'
 updated_at: '2026-06-15T03:59:32.852Z'
 blast_radius:
