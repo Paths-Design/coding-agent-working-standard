@@ -2,10 +2,11 @@ id: WORKTREE-REPAIR-EVENT-CONTRACT-001
 title: 'Honest audit events for half-state repair: worktree_pruned + spec_binding_cleared (pre-repair contract)'
 risk_tier: 1
 mode: feature
-lifecycle_state: active
-worktree: repair-event-contract-01
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge repair-event-contract-01 at c0fa4b6be32c7fdf1dc6029b8725bc2aab94961d'
 created_at: '2026-06-15T00:00:00.000Z'
-updated_at: '2026-06-15T18:54:34.145Z'
+updated_at: '2026-06-15T19:00:42.587Z'
 blast_radius:
   modules:
     - packages/caws-kernel/src/evidence/types.ts
