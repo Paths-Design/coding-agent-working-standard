@@ -551,6 +551,79 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   }
 
   // -------------------------------------------------------------------------
+  // 2e. WORKTREE-DOCTOR-HALF-STATE-001: event-backed governance-half-state.
+  //
+  //     The createWorktree second-event divergence (proven by
+  //     CAWS-LIFECYCLE-ROLLBACK-HARNESS-COMPLETE-001): a `worktree_created`
+  //     event is in the immutable hash chain, but the worktree_bound event
+  //     failed and the transaction rolled back the registry + filesystem
+  //     writes. The result is an event recording a worktree the control plane
+  //     does not reflect — governance-half-state.
+  //
+  //     Detection (read-only, events-backed): walk the chain in seq order. For
+  //     each `worktree_created`, take data.name. If a later `worktree_destroyed`
+  //     for the same name closes the lifecycle, OR a live registry entry exists,
+  //     OR a loaded spec carries a live `worktree:` binding to it, the worktree
+  //     is accounted for — no finding. Otherwise the created-event is orphaned.
+  //
+  //     seq/prev_hash are the ordering authority (ts is observational only): we
+  //     iterate in array order, which loadEvents guarantees is chain order.
+  // -------------------------------------------------------------------------
+  if (input.events !== undefined && input.events.length > 0) {
+    // Names whose lifecycle a worktree_destroyed event has closed.
+    const destroyedNames = new Set<string>();
+    for (const ev of input.events) {
+      if (ev.event === 'worktree_destroyed') {
+        const d = ev.data as Record<string, unknown> | undefined;
+        const name = typeof d?.worktree_name === 'string' ? d.worktree_name : undefined;
+        if (name) destroyedNames.add(name);
+      }
+    }
+    // Names that a live spec back-binds (any lifecycle_state — a binding is a
+    // binding for accounting purposes here).
+    const specBoundNames = new Set<string>();
+    for (const s of specs) {
+      if (typeof s.worktree === 'string' && s.worktree.length > 0) {
+        specBoundNames.add(s.worktree);
+      }
+    }
+    // Avoid duplicate findings if the same name was created more than once.
+    const reportedOrphans = new Set<string>();
+    for (const ev of input.events) {
+      if (ev.event !== 'worktree_created') continue;
+      const d = ev.data as Record<string, unknown> | undefined;
+      const name = typeof d?.name === 'string' ? d.name : undefined;
+      if (name === undefined || reportedOrphans.has(name)) continue;
+      const hasLiveRegistry = Object.prototype.hasOwnProperty.call(registry, name);
+      const hasSpecBinding = specBoundNames.has(name);
+      const wasDestroyed = destroyedNames.has(name);
+      if (hasLiveRegistry || hasSpecBinding || wasDestroyed) continue;
+      // Orphan: created-event with no live control-plane representation.
+      reportedOrphans.add(name);
+      findings.push(
+        finding(
+          DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING,
+          'warning',
+          `Event log records worktree_created for "${name}" (event seq ${ev.seq}), but no live registry entry or spec binding exists. The worktree's creation is in the audit chain but the control plane was rolled back (governance-half-state).`,
+          {
+            subject: name,
+            // DIAGNOSE ONLY — no mutating command; repair is the later gated
+            // control-plane/repair slice (PRUNE-REPAIR-WORKTREE-001).
+            narrowRepair:
+              'Reconcilable governance residue from a partially-failed worktree creation. Repair is deferred to the worktree control-plane/repair slice; no safe automatic action exists yet.',
+            data: {
+              worktree_name: name,
+              created_event_seq: ev.seq,
+              created_event_hash: ev.event_hash,
+              ...(typeof ev.spec_id === 'string' ? { spec_id: ev.spec_id } : {}),
+            },
+          }
+        )
+      );
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // 2f. WORKTREE-DOCTOR-HALF-STATE-001: git observation unavailable.
   //
   //     When the store layer's `git worktree list --porcelain` call
