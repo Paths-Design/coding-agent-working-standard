@@ -7,23 +7,45 @@ created_at: '2026-06-15T23:25:18.421Z'
 updated_at: '2026-06-15T23:25:25.851Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/scripts/fresh-install-smoke.mjs
+    - packages/caws-cli/src/shell/legacy-command-map.js
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/scripts/fresh-install-smoke.mjs
     - packages/caws-cli/src/shell/legacy-command-map.js
-  out: []
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The fresh-install smoke (prepublishOnly gate) proves the PRUNE-REPAIR-WORKTREE-001 coupled CLI/kernel surface survives a real tarball install — the release-doctrine footgun being that source tests pass while installed users crash when the CLI resolves a registry-stale kernel lacking newly-added symbols. Three installed-artifact assertions are added, all run against the binary/kernel INSTALLED FROM THE LOCAL TARBALLS (never the source tree): (1) caws worktree repair --help exits 0 and renders the repair description through the installed binary; (2) the installed kernel exports DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING (the rule decideRepair consumes — if the published kernel lacked it the CLI switch would silently mis-classify); (3) the installed kernel validateEventBody ACCEPTS a well-formed worktree_pruned and spec_binding_cleared event and REJECTS one with a bad h_class (proving the event vocabulary shipped and its additionalProperties:false schema is enforced).'
+  - 'The new assertions mirror the existing installed-kernel symbol probe (the registerAgentSession check) — they read process .status / require() output directly from the installed package, never a shell pipe, so a wrong exit code cannot be masked. A missing rule, a help failure, or a kernel that accepts a malformed event each fail the smoke with a structured diagnostic naming the symbol/command and the publish halts.'
+  - 'COPY CURRENCY (sibling to DOCTOR-REPAIR-ORPHAN-COPY-CURRENCY-001): the legacy-command-map deferred entries for worktree prune / worktree reconcile are corrected to point at the now-shipped caws worktree repair for the unambiguous half-states, and the stale worktree repair entry (which falsely says "planned for v11.2" though the real leaf shipped and shadows it) is removed so the dead-but-wrong doctrine cannot mislead. prune/reconcile remain genuinely deferred (they cover the broader/ambiguous reconcile that repair intentionally does NOT do) — the copy says so. No behavior change: the real repair leaf already shadows the map entry; this only corrects operator-facing text + removes an unreachable false entry.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'A fresh temp project with the locally-packed kernel + cli tarballs installed (the existing smoke pipeline).'
+    when: 'The smoke invokes `node <installed>/dist/index.js worktree repair --help`.'
+    then: 'It exits 0 and stdout contains the repair command description (e.g. matrix/half-state/ghost wording), proving the new CLI surface is present in the published tarball.'
+  - id: A2
+    given: 'The installed kernel package.'
+    when: 'The smoke requires it and reads DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING and the two repair event types from KNOWN_EVENT_TYPES / the rule map.'
+    then: 'The rule constant is a non-empty string and the installed kernel recognizes worktree_pruned and spec_binding_cleared as known event types — proving the CLI is not coupled to a registry-stale kernel that predates the rule/event vocabulary.'
+  - id: A3
+    given: 'The installed kernel validateEventBody.'
+    when: 'The smoke validates a well-formed worktree_pruned and spec_binding_cleared event, then one with an out-of-enum h_class.'
+    then: 'The well-formed events validate ok; the bad-h_class event is rejected. This proves the per-event additionalProperties:false schemas shipped and are enforced by the installed kernel, not just present as type names.'
+  - id: A4
+    given: 'The legacy-command-map deferred entries.'
+    when: 'A user runs caws worktree prune / reconcile on the installed binary.'
+    then: 'The deferred message names caws worktree repair as the path for the unambiguous half-states (while stating full prune/reconcile remains planned), and there is no stale "worktree repair is planned for v11.2" entry — the real repair leaf is what answers `caws worktree repair`.'
+  - id: A5
+    given: 'The full smoke run.'
+    when: 'npm run smoke:fresh-install -w @paths.design/caws-cli executes (or prepublishOnly).'
+    then: 'It passes end-to-end including the three new assertions; the cli + kernel both build; no existing smoke assertion regresses.'
+non_functional:
+  reliability:
+    - 'The smoke is the release gate that converts PRUNE-REPAIR-WORKTREE-001 from source-test evidence to installed-artifact evidence. It MUST install from the local tarballs (kernel + cli together) so it models exactly what a coupled release ships; reading the source tree would defeat the purpose. Failure exits 1 and halts prepublishOnly.'
 contracts:
   - name: 'worktree-repair-installed-smoke'
     type: contract-test
