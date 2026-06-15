@@ -3,6 +3,7 @@ title: 'Kernel mutation gate: add the kernel Stryker config CAWS-TEST-MUTATION-G
 risk_tier: 1
 mode: feature
 lifecycle_state: active
+worktree: honest-tier1-02
 created_at: '2026-06-14T00:00:00.000Z'
 updated_at: '2026-06-15T03:59:32.337Z'
 blast_radius:
