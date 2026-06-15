@@ -2,10 +2,11 @@ id: DOCTOR-REPAIR-ORPHAN-COPY-CURRENCY-001
 title: 'Refresh stale event-orphan diagnostic copy post-repair-ship (text-only, behavior unchanged)'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
-worktree: orphan-copy-01
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge orphan-copy-01 at 26f8e4cba2f5e9e9efcc971b47e45e78ac645b91'
 created_at: '2026-06-15T23:16:41.568Z'
-updated_at: '2026-06-15T23:16:51.746Z'
+updated_at: '2026-06-15T23:19:20.533Z'
 blast_radius:
   modules:
     - packages/caws-kernel/src/doctor/inspect.ts
