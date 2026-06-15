@@ -1,0 +1,73 @@
+id: WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-002
+title: 'Worktree/spec authority policy (Decide): control-plane invariant + H-class decision matrix, no repair'
+risk_tier: 1
+mode: feature
+lifecycle_state: active
+created_at: '2026-06-15T00:00:00.000Z'
+updated_at: '2026-06-15T18:33:45.416Z'
+blast_radius:
+  modules:
+    - docs/architecture/caws-vnext-command-surface.md
+    - packages/caws-kernel/tests/unit/doctor-authority-policy.test.ts
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - docs/architecture/caws-vnext-command-surface.md
+    - packages/caws-kernel/tests/unit/doctor-authority-policy.test.ts
+    - .caws/specs/WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-002.yaml
+  out:
+    - packages/caws-kernel/src/doctor
+    - packages/caws-cli/src/store
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - 'DECIDE ONLY. This slice produces authority DOCTRINE (a §6 invariant + a §1.4 decision matrix) and a regression test that locks the machine-checkable doctrine claims. It introduces NO prune/repair/reconcile mutation, NO new result kind, NO change to lifecycle writers or doctor detection logic. Repair remains gated on this policy (PRUNE-REPAIR-WORKTREE-001 stays blocked except for classes this matrix marks unambiguous).'
+  - 'The -001 spec id (WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001) is closed with resolution: superseded — it was deferred to the v11.2 authority line, spec-only, no stranded code. This -002 carries the actual Decide deliverable; the doctrine doc references the -001 name as the lineage anchor, which this slice resolves.'
+  - 'H5 (3-way contradiction) remains AMBIGUOUS and NON-ACTIONABLE: the matrix names no winner and the diagnostic carries a doctrine pointer, never a command. A UX that implies H5 is auto-repairable would permanently encode the wrong source of truth at first use (the §1.4 H5 doctor-UX rule). Any future H5 resolution is a separate, explicitly-justified slice.'
+  - 'Authority is single-sourced: CAWS control-plane state (worktrees.json + claims/bridge.json bindings, events.jsonl audit, policy.yaml config, the canonical .caws/specs/*) is the authority. Linked worktrees are execution sandboxes. Worktree-local .caws/specs/* bytes are NEVER mutable truth — the sparse-checkout exclusion (/* + !/.caws/specs/) is the mechanical guard, and the materialization policy is: worktree-local spec bytes are sparse-excluded; if materialized by a hostile/manual write they are ignored-as-authority and may be diagnosed, never consulted.'
+  - 'No production code path is changed. The decision matrix is descriptive doctrine that future Repair/Decide code MUST conform to; it does not itself execute. WORKTREE-CAWS-SHARED-STATE-001 needs no closure action here — it was never created on disk (only a recon candidate) and the -001 closure already recorded its supersession relationship.'
+acceptance:
+  - id: A1
+    given: 'Authority doctrine is currently Partial — phrased in the superseded -001 spec but NOT yet a top-level §6 invariant (per the v11.2 success-criteria table).'
+    when: 'A new §6 v11.2 invariant (#10) is added: control-plane state is authority; linked worktrees are execution sandboxes; control-plane state is not duplicated as mutable truth in a worktree.'
+    then: 'The authority doctrine is explicit and testable as a top-level invariant with the same authority as invariants 1-9; a violation is a regression or an explicit doctrine shift.'
+  - id: A2
+    given: 'The §1.4 half-state taxonomy names H1-H6 + the doctor surface adds WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING, but there is no per-class authority/repair decision matrix.'
+    when: 'A decision matrix is added to §1.4.'
+    then: 'Each of H1, H2, H3, H4, H5, H6, and the event-backed orphan has a policy row stating: the observable contradiction, the authority source(s) that win, whether repair is unambiguous / ambiguous / forbidden, whether automatic repair is permitted in a later slice, and whether the operator receives a doctrine pointer instead of a command.'
+  - id: A3
+    given: 'H5 is the 3-way contradiction with no safe winner.'
+    when: 'The matrix row for H5 is written.'
+    then: 'H5 is marked ambiguous; no winner is named; repair is forbidden under current doctrine; auto-repair is not permitted later until a separate slice explicitly resolves it; the operator receives a doctrine pointer, not a command.'
+  - id: A4
+    given: 'Worktree-local .caws/specs/* bytes could be mistaken for authority (the v10.2 split-brain class).'
+    when: 'The materialization policy is stated in doctrine.'
+    then: 'The matrix/invariant makes explicit that worktree-local spec copies are sparse-excluded and ignored-as-authority; doctrine and diagnostics never treat them as a winning state surface.'
+  - id: A5
+    given: 'PRUNE-REPAIR-WORKTREE-001 is blocked pending this policy.'
+    when: 'The matrix is complete.'
+    then: 'It remains blocked for every class the matrix marks ambiguous/forbidden (at minimum H5), and is unblocked ONLY for classes the matrix marks unambiguous — each named explicitly so the Repair slice has a precise, non-creative target list.'
+  - id: A6
+    given: 'This is a Decide slice.'
+    when: 'The slice is complete.'
+    then: 'No production repair mutation, no new result kind, and no lifecycle-writer or doctor-detection change is introduced; git diff touches only the doctrine doc, the new lock test, and this spec.'
+  - id: A7
+    given: 'The doctrine claims that are machine-checkable (H5 diagnostic carries no command; the event-orphan diagnostic carries a doctrine pointer; ambiguous/forbidden classes never emit an executable repair).'
+    when: 'A regression test (doctor-authority-policy.test.ts) runs over the shipped doctor diagnostics.'
+    then: 'It asserts every diagnostic the matrix marks ambiguous/forbidden carries a non-executable repair (no `caws <subcmd>` / `git <subcmd>`), locking the policy as a regression so a future change cannot silently make an ambiguous class look auto-repairable.'
+non_functional:
+  reliability:
+    - 'The lock test is deterministic: it constructs the H5 + event-orphan fixtures in-memory (as in doctor-half-state.test.ts) and asserts the repair-text shape. No I/O, no flakiness.'
+  security:
+    - 'This slice closes the authority-correctness gap that precedes repair: it ensures repair, when it ships, acts only on classes whose winning state surface is doctrinally decided — so an automatic repair can never silently pick the wrong source of truth (the most dangerous outcome for a governance substrate). Encoding the wrong authority at first repair is unrecoverable trust damage; the matrix prevents it by forbidding repair on ambiguous classes.'
+observability:
+  - 'The §1.4 decision matrix table (H-class -> authority -> repair eligibility) is the verification artifact, captured in closure evidence as the closure table.'
+  - 'The lock-test output (per-class repair-text assertion) is the regression artifact proving the non-actionable classes stay non-actionable.'
+rollback:
+  - 'Rollback is a revert of the doc + test commit. No production code, no migration, no repair surface is introduced; reverting restores the prior doctrine state with no stranded behavior.'
+contracts:
+  - name: worktree-authority-decision-matrix
+    type: behavior
+    path: docs/architecture/caws-vnext-command-surface.md
+    description: 'A §6 authority invariant + a §1.4 H-class decision matrix decide, per half-state class, the winning authority surface and repair eligibility (unambiguous/ambiguous/forbidden); H5 stays ambiguous/non-actionable; a regression test locks that ambiguous/forbidden classes emit no executable repair command.'
