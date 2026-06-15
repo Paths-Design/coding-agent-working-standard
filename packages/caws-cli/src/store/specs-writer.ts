@@ -1324,6 +1324,106 @@ export function retireDraftSpec(
   });
 }
 
+// ─── clearSpecBinding (PRUNE-REPAIR-WORKTREE-001) ────────────────────────
+//
+// H4 ghost-spec-binding / H3 dormant-spec-binding repair: clear a stale
+// `worktree:` field from the canonical spec when the §1.4 matrix has decided the
+// binding is dead (registry + git agree no live worktree, OR the spec is
+// closed/archived). The h_class is supplied by the caller (doctor-determined);
+// this writer does not re-classify — it executes the decided clear and appends
+// one honest spec_binding_cleared audit event. It NEVER touches a git worktree.
+
+export interface ClearSpecBindingInput {
+  readonly id: string;
+  /** The worktree name the stale worktree: field referenced (for the audit). */
+  readonly clearedWorktreeName: string;
+  /** Doctor-decided class. Closed enum on the event schema bars unauthorized classes. */
+  readonly hClass: 'ghost_spec_binding' | 'dormant_spec_binding';
+  readonly reason: string;
+  readonly actor: EventBody['actor'];
+  readonly now?: () => Date;
+  readonly dryRun?: boolean;
+}
+
+export function clearSpecBinding(
+  cawsDir: string,
+  input: ClearSpecBindingInput
+): Result<SpecWriterOutcome> {
+  const idValidation = validateSpecId(input.id);
+  if (!idValidation.ok) return idValidation;
+
+  const targetPath = specPath(cawsDir, input.id);
+  if (!fs.existsSync(targetPath)) {
+    return err(
+      storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, `Spec "${input.id}" not found at ${targetPath}.`, {
+        subject: input.id,
+      })
+    );
+  }
+  const sourceResult = readYamlSource(targetPath);
+  if (!isOk(sourceResult)) return err(sourceResult.errors);
+  const originalBytes = sourceResult.value;
+
+  // The clear is a no-op if there is no worktree: field — refuse rather than
+  // append a misleading event for a spec that has nothing to clear.
+  const cleared = removeTopLevelScalar(originalBytes, 'worktree');
+  if (!isOk(cleared)) return err(cleared.errors);
+  if (cleared.value === originalBytes) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${input.id}" has no worktree: field to clear (nothing to repair).`,
+        { subject: input.id }
+      )
+    );
+  }
+
+  const now = (input.now ?? (() => new Date()))().toISOString();
+  const withUpdatedAt = setTopLevelScalar(cleared.value, 'updated_at', `'${now}'`);
+  const newBytes = isOk(withUpdatedAt) ? withUpdatedAt.value : cleared.value;
+
+  if (input.dryRun === true) {
+    return ok({
+      kind: 'success',
+      id: input.id,
+      path: targetPath,
+      data: { audit_commit: { kind: 'skipped', reason: 'dry_run' } as unknown as AutoCommitOutcome },
+    });
+  }
+
+  const event: EventBody = {
+    event: 'spec_binding_cleared',
+    ts: now,
+    actor: input.actor,
+    spec_id: input.id,
+    data: {
+      spec_id: input.id,
+      cleared_worktree_name: input.clearedWorktreeName,
+      h_class: input.hClass,
+      reason: input.reason,
+    },
+  } as unknown as EventBody;
+
+  const txnOutcome = withLifecycleLock(cawsDir, () =>
+    runLifecycleTransaction({
+      cawsDir,
+      plannedWrites: [{ path: targetPath, contents: newBytes }],
+      events: [event],
+    })
+  );
+
+  if (!txnOutcome.ok) return err(txnOutcome.errors);
+  if (txnOutcome.value.kind !== 'success') {
+    return err(txnOutcome.value.cause);
+  }
+  // The lifecycle transaction (spec write + event) is the authoritative result.
+  // The git audit-commit is a non-fatal nicety; defer it like the skipped path
+  // rather than replicate autoCommit's repoRoot/dirty-capture machinery here —
+  // the spec_binding_cleared event already records the repair in the audit chain.
+  const audit = { kind: 'skipped', reason: 'deferred' } as unknown as AutoCommitOutcome;
+  return ok({ kind: 'success', id: input.id, path: targetPath, data: { audit_commit: audit } });
+}
+
 // ─── amendScopeSpec (CAWS-SCOPE-AMEND-COMMAND-001) ───────────────────────
 //
 // Governed scope.in/scope.out amendment without an agent-issued cherry-pick.

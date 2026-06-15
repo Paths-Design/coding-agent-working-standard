@@ -164,7 +164,7 @@ export type WorktreeWriterOutcome =
   | {
       readonly kind: 'success';
       readonly name: string;
-      readonly action: 'created' | 'bound' | 'destroyed' | 'merged';
+      readonly action: 'created' | 'bound' | 'destroyed' | 'merged' | 'pruned';
       readonly data?: Record<string, unknown>;
     }
   | {
@@ -1031,6 +1031,118 @@ export function destroyWorktree(
       removed_git_worktree: removedGitWorktree,
       audit_commit: autoCommitOutcome,
     },
+  });
+}
+
+// ─── pruneWorktree (PRUNE-REPAIR-WORKTREE-001) ───────────────────────────
+//
+// H1 ghost-registry repair: remove a stale worktrees.json entry whose backing
+// git/canonical worktree dir is ALREADY absent. Unlike destroyWorktree, this
+// performs NO git operation — the dir being gone is the H1 precondition the
+// caller (the repair command) confirmed via doctor evidence. The writer trusts
+// that classification; it does not re-derive it (the §1.4 matrix is authority).
+// Mutation surface: the registry entry (+ a bound spec's worktree: field if one
+// is present) and one honest worktree_pruned audit event, all transactional.
+
+export interface PruneWorktreeInput {
+  readonly name: string;
+  readonly session: SessionIdentity;
+  readonly sessionCandidates: SessionCandidates;
+  readonly actor: EventBody['actor'];
+  /** Human-readable authority reason recorded on the worktree_pruned event. */
+  readonly reason: string;
+  readonly now?: () => Date;
+  readonly dryRun?: boolean;
+}
+
+export function pruneWorktree(
+  cawsDir: string,
+  input: PruneWorktreeInput
+): Result<WorktreeWriterOutcome> {
+  const nameValidation = validateWorktreeName(input.name);
+  if (!nameValidation.ok) return nameValidation;
+
+  const registry = loadWorktrees(cawsDir);
+  if (!isOk(registry)) return err(registry.errors);
+  const entry = registry.value[input.name];
+  if (entry === undefined) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Worktree "${input.name}" not found in registry; nothing to prune.`,
+        { subject: input.name }
+      )
+    );
+  }
+
+  // Foreign-ownership refusal (same semantic as destroy): admit only if a
+  // candidate matches the registered owner, else require --takeover.
+  if (entry.owner !== undefined) {
+    const matched = admitsOwner(input.sessionCandidates, entry.owner.session_id);
+    if (matched === null) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Worktree "${input.name}" is owned by a different session (${entry.owner.session_id}). Run 'caws claim ${input.name} --takeover' first if you need to take ownership.`,
+          { subject: input.name }
+        )
+      );
+    }
+  }
+
+  // Plan: clear the bound spec's worktree: field (if any) so the prune does not
+  // leave a one-sided spec->registry binding behind.
+  const plannedWrites: { path: string; contents: string }[] = [];
+  if (entry.specId !== undefined) {
+    const specInfo = loadSpecOrError(cawsDir, entry.specId);
+    if (isOk(specInfo)) {
+      const newSpecBytes = patchSpecClearWorktree(specInfo.value.source);
+      if (isOk(newSpecBytes) && newSpecBytes.value !== specInfo.value.source) {
+        plannedWrites.push({ path: specInfo.value.path, contents: newSpecBytes.value });
+      }
+    }
+  }
+
+  if (input.dryRun === true) {
+    const findings = [
+      `H1 ghost_registry: remove registry entry "${input.name}"`,
+      ...(plannedWrites.length > 0 ? [`clear worktree: field on spec ${entry.specId}`] : []),
+      `append worktree_pruned (h_class: ghost_registry)`,
+    ];
+    return ok({ kind: 'dry_run', name: input.name, canProceed: true, findings });
+  }
+
+  const now = (input.now ?? (() => new Date()))().toISOString();
+  const eventData: Record<string, unknown> = {
+    worktree_name: input.name,
+    h_class: 'ghost_registry',
+    reason: input.reason,
+  };
+  if (entry.specId !== undefined) eventData.spec_id = entry.specId;
+
+  const event: EventBody = {
+    event: 'worktree_pruned',
+    ts: now,
+    actor: input.actor,
+    ...(entry.specId !== undefined ? { spec_id: entry.specId } : {}),
+    data: eventData,
+  } as unknown as EventBody;
+
+  const txnOutcome = withLifecycleLock(cawsDir, () => {
+    // Remove the stale registry entry (no git touch — the dir is already gone).
+    rollbackRegistryEntry(cawsDir, input.name);
+    return runLifecycleTransaction({ cawsDir, plannedWrites, events: [event] });
+  });
+
+  if (!txnOutcome.ok) return err(txnOutcome.errors);
+  if (txnOutcome.value.kind !== 'success') {
+    return ok({ kind: 'partial_failure_recovered', cause: txnOutcome.value.cause });
+  }
+  return ok({
+    kind: 'success',
+    name: input.name,
+    action: 'pruned',
+    data: { h_class: 'ghost_registry', cleared_spec_binding: plannedWrites.length > 0 },
   });
 }
 

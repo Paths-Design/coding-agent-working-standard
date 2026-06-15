@@ -448,6 +448,16 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
         'Restore the .caws/specs sparse-checkout invariant on a linked worktree. Idempotent and non-destructive: refuses if .caws/specs/ has dirty or untracked content rather than stashing, cleaning, resetting, or deleting it. Use this after a `git sparse-checkout disable` has materialized canonical spec files into the worktree.',
       options: [DATA_OPTION],
     },
+    {
+      kind: 'leaf',
+      name: 'repair',
+      description:
+        'Repair the unambiguous worktree/spec half-states the doctor surfaces: prune a ghost registry entry (H1) and clear a dead spec->worktree binding (H4 ghost, H3 dormant). Consumes the doctor diagnostics + §1.4 decision matrix as authority; never re-derives policy. Refuses ambiguous/forbidden classes (H2, H3-active, H5, H6, event-orphan) with a doctrine pointer and zero mutation. NEVER creates or deletes a git worktree directory.',
+      options: [
+        { flag: '--dry-run', description: 'Report each H-class, subject, planned mutation, and event; write nothing.' },
+        DATA_OPTION,
+      ],
+    },
   ],
 };
 

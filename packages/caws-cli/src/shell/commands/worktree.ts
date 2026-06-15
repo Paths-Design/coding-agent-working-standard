@@ -21,9 +21,16 @@ import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { type ActorKind, isOk } from '@paths.design/caws-kernel';
+import {
+  type ActorKind,
+  type DoctorFinding,
+  DOCTOR_RULES,
+  inspectProjectState,
+  isOk,
+} from '@paths.design/caws-kernel';
 
 import { loadSpecs, loadWorktrees, resolveRepoRoot, writeFileAtomic } from '../../store';
+import { composeDoctorSnapshot } from '../../store/doctor-snapshot';
 import { configureWorktreeSparseCheckout } from '../../store/git-sparse-checkout';
 import type {
   WorktreeArtifactLinkStatus,
@@ -40,7 +47,9 @@ import {
   destroyWorktree,
   listWorktreesPretty,
   mergeWorktree,
+  pruneWorktree,
 } from '../../store/worktrees-writer';
+import { clearSpecBinding } from '../../store/specs-writer';
 import { buildActor } from '../session/actor';
 import { resolveSession, resolveSessionCandidates } from '../session/resolve-session';
 import { renderDiagnostics } from '../render/diagnostic';
@@ -851,4 +860,251 @@ export function runWorktreeRepairSparseCommand(opts: WorktreeRepairSparseOptions
 
   out(`caws worktree repair-sparse: ${opts.name} sparse invariant restored (core.sparseCheckout=true, .caws/specs absent).`);
   return 0;
+}
+
+// ─── caws worktree repair (PRUNE-REPAIR-WORKTREE-001) ─────────────────────
+//
+// The terminal slice of the Diagnose -> Decide -> Repair arc. This command is
+// an EXECUTOR of doctor doctrine, NOT a second authority engine. It runs the
+// exact doctor pipeline (composeDoctorSnapshot -> inspectProjectState), then
+// classifies each finding through the §1.4 half-state decision matrix and
+// dispatches ONLY the matrix-unambiguous classes to the store writers:
+//
+//   H1  ghost registry  (doctor.worktree.ghost_registry_entry)
+//        -> pruneWorktree           (worktree_pruned, h_class: ghost_registry)
+//   H4  ghost spec binding  (doctor.binding.spec_missing_registry, active,
+//        canonical_dir_present === false)
+//        -> clearSpecBinding        (spec_binding_cleared, ghost_spec_binding)
+//   H3-dormant  (doctor.binding.spec_missing_registry, closed/archived)
+//        -> clearSpecBinding        (spec_binding_cleared, dormant_spec_binding)
+//
+// Everything else is REFUSED with a doctrine-pointer diagnostic and ZERO
+// mutation: H2 (registry->missing-spec), H3 on an ACTIVE spec whose dir still
+// exists (recreate-vs-clear ambiguity), H5 (3-way), H6 (foreign physical), the
+// event-backed orphan, and any one-sided/foreign binding the matrix did not
+// authorize. The command NEVER touches a git worktree directory — the writers
+// mutate only worktrees.json and canonical spec YAML.
+//
+// The classification reads doctor EVIDENCE (the finding rule + its data
+// payload: lifecycle_state, canonical_dir_present); it does not re-derive which
+// surface wins. The matrix decides; the writers execute.
+
+export interface WorktreeRepairOptions extends BaseCommandOptions {
+  readonly dryRun?: boolean;
+}
+
+/** What the matrix decided for a single doctor finding. */
+type RepairDecision =
+  | { kind: 'prune_ghost_registry'; worktreeName: string }
+  | {
+      kind: 'clear_spec_binding';
+      specId: string;
+      worktreeName: string;
+      hClass: 'ghost_spec_binding' | 'dormant_spec_binding';
+    }
+  | { kind: 'refuse'; reason: string }
+  | { kind: 'ignore' };
+
+/**
+ * The §1.4 decision matrix as a pure function over doctor evidence. Reads only
+ * the finding's rule and its data payload — never re-derives classification.
+ * `refuse` carries the doctrine-pointer reason; `ignore` is for findings
+ * outside the half-state taxonomy (e.g. a gitignore-drift info) that repair
+ * neither acts on nor refuses.
+ *
+ * Exported so the classifier can be unit-tested directly for the refuse-only
+ * classes (H6 foreign-physical, event-orphan) whose end-to-end fixtures would
+ * require a real git worktree / a hand-built hash chain — the dispatch is
+ * identical to the H5/H2 refuse arms proven end-to-end, so the cheaper proof is
+ * to pin the decision here.
+ */
+export function decideRepair(finding: DoctorFinding): RepairDecision {
+  const data = (finding.data ?? {}) as Record<string, unknown>;
+  switch (finding.rule) {
+    case DOCTOR_RULES.WORKTREE_GHOST_REGISTRY_ENTRY: {
+      const worktreeName =
+        typeof data.worktree_name === 'string'
+          ? data.worktree_name
+          : finding.subject;
+      if (typeof worktreeName !== 'string' || worktreeName.length === 0) {
+        return { kind: 'refuse', reason: 'H1 ghost finding has no worktree name; cannot prune safely.' };
+      }
+      return { kind: 'prune_ghost_registry', worktreeName };
+    }
+    case DOCTOR_RULES.BINDING_SPEC_MISSING_REGISTRY: {
+      // Spec points to a worktree with no registry entry. The matrix splits on
+      // lifecycle + canonical-dir observation:
+      //   closed/archived          -> H3-dormant: clear (dormant_spec_binding)
+      //   active + dir absent       -> H4 ghost:   clear (ghost_spec_binding)
+      //   active + dir present/unk  -> H3-active ambiguity: REFUSE
+      const specId =
+        typeof data.spec_id === 'string' ? data.spec_id : finding.subject;
+      const worktreeName =
+        typeof data.worktree_name === 'string' ? data.worktree_name : '(unknown)';
+      if (typeof specId !== 'string' || specId.length === 0) {
+        return { kind: 'refuse', reason: 'binding finding has no spec id; cannot clear safely.' };
+      }
+      const lifecycle = data.lifecycle_state;
+      if (lifecycle === 'closed' || lifecycle === 'archived') {
+        return { kind: 'clear_spec_binding', specId, worktreeName, hClass: 'dormant_spec_binding' };
+      }
+      // Active spec. Only an OBSERVED-absent canonical dir makes this an
+      // unambiguous H4 ghost. If the dir is present, or observation was
+      // unavailable, recreate-vs-clear is ambiguous — refuse.
+      if (data.canonical_dir_observed === true && data.canonical_dir_present === false) {
+        return { kind: 'clear_spec_binding', specId, worktreeName, hClass: 'ghost_spec_binding' };
+      }
+      return {
+        kind: 'refuse',
+        reason:
+          `H3 on an active spec (${specId}): the worktree dir is present or unobserved, so recreate-vs-clear is ambiguous. ` +
+          'Resolve under WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-002, or destroy/recreate the worktree explicitly.',
+      };
+    }
+    case DOCTOR_RULES.BINDING_REGISTRY_MISSING_SPEC:
+      return {
+        kind: 'refuse',
+        reason:
+          'H2 (registry binds a spec that is not loaded): restore the spec file or destroy the worktree. ' +
+          'Repair does not delete registry entries that still claim a (possibly recoverable) spec.',
+      };
+    case DOCTOR_RULES.WORKTREE_BINDING_CONTRADICTION_3WAY:
+      return {
+        kind: 'refuse',
+        reason:
+          'H5 (3-way authority contradiction): ambiguous authority split, no automatic repair. ' +
+          'See WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-002.',
+      };
+    case DOCTOR_RULES.WORKTREE_FOREIGN_PHYSICAL:
+      return {
+        kind: 'refuse',
+        reason:
+          'H6 (foreign physical worktree): a git worktree dir exists that CAWS did not register. ' +
+          'Repair never touches git worktree directories; resolve manually.',
+      };
+    case DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING:
+      return {
+        kind: 'refuse',
+        reason:
+          'Event-backed orphan: events reference a worktree with no live control-plane binding. ' +
+          'This needs authority reconciliation, not a mechanical prune.',
+      };
+    case DOCTOR_RULES.BINDING_ONE_SIDED:
+    case DOCTOR_RULES.BINDING_SPEC_POINTS_TO_FOREIGN_BINDING:
+      return {
+        kind: 'refuse',
+        reason:
+          'One-sided / foreign binding: this slice does not reconcile general one-sided bindings ' +
+          '(that was the superseded draft framing). The matrix authorizes only ghost prune and dead-binding clear.',
+      };
+    default:
+      return { kind: 'ignore' };
+  }
+}
+
+export function runWorktreeRepairCommand(opts: WorktreeRepairOptions): number {
+  const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
+  const dryRun = opts.dryRun === true;
+  const ctx = resolveCawsCtx(cwd, err, showData, 'repair');
+  if (ctx === null) return 2;
+
+  // Run the exact doctor pipeline — repair consumes doctor evidence, it does
+  // not maintain its own state model.
+  let findings: readonly DoctorFinding[];
+  try {
+    const { doctorInput } = composeDoctorSnapshot({
+      repoRoot: ctx.repoRoot,
+      cawsDir: ctx.cawsDir,
+      now: nowFn(),
+    });
+    findings = inspectProjectState(doctorInput).findings;
+  } catch (e) {
+    err(`caws worktree repair: doctor composition failed: ${(e as Error).message}`);
+    return 2;
+  }
+
+  // Actor + ownership candidates (only needed for an actual mutation, but
+  // resolving up front keeps the dispatch loop simple and lets dry-run report
+  // accurately even when no mutation will occur).
+  const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'repair');
+  if (id === null) return 2;
+  const sessionCandidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env });
+
+  let repaired = 0;
+  let refused = 0;
+  let failed = 0;
+
+  for (const finding of findings) {
+    const decision = decideRepair(finding);
+    if (decision.kind === 'ignore') continue;
+
+    if (decision.kind === 'refuse') {
+      refused += 1;
+      out(`REFUSE ${finding.subject ?? finding.rule}: ${decision.reason}`);
+      continue;
+    }
+
+    if (decision.kind === 'prune_ghost_registry') {
+      const verb = dryRun ? 'WOULD PRUNE' : 'PRUNE';
+      out(
+        `${verb} ${decision.worktreeName} (H1 ghost_registry): remove registry entry; ` +
+          'append worktree_pruned.'
+      );
+      const result = pruneWorktree(ctx.cawsDir, {
+        name: decision.worktreeName,
+        session: id.session,
+        sessionCandidates,
+        actor: id.actor,
+        reason: 'caws worktree repair: H1 ghost registry entry (backing dir absent).',
+        now: nowFn,
+        dryRun,
+      });
+      if (!isOk(result)) {
+        failed += 1;
+        err(`  failed: ${decision.worktreeName}`);
+        err(renderDiagnostics(result.errors, { showData }));
+        continue;
+      }
+      if (result.value.kind === 'partial_failure_recovered') {
+        failed += 1;
+        err(`  partial failure recovered (no state change): ${decision.worktreeName}`);
+        continue;
+      }
+      repaired += 1;
+      continue;
+    }
+
+    // clear_spec_binding (H4 / H3-dormant)
+    const verb = dryRun ? 'WOULD CLEAR' : 'CLEAR';
+    out(
+      `${verb} ${decision.specId} (${decision.hClass}): clear stale worktree: field ` +
+        `(was "${decision.worktreeName}"); append spec_binding_cleared.`
+    );
+    const result = clearSpecBinding(ctx.cawsDir, {
+      id: decision.specId,
+      clearedWorktreeName: decision.worktreeName,
+      hClass: decision.hClass,
+      reason: `caws worktree repair: ${decision.hClass} (dead spec->worktree binding).`,
+      actor: id.actor,
+      now: nowFn,
+      dryRun,
+    });
+    if (!isOk(result)) {
+      failed += 1;
+      err(`  failed: ${decision.specId}`);
+      err(renderDiagnostics(result.errors, { showData }));
+      continue;
+    }
+    repaired += 1;
+  }
+
+  const verb = dryRun ? 'planned' : 'applied';
+  out(
+    `caws worktree repair: ${repaired} ${verb}, ${refused} refused, ${failed} failed ` +
+      `(${dryRun ? 'dry-run — nothing mutated' : 'mutations committed via lifecycle transaction'}).`
+  );
+  // Exit non-zero when any repair failed (an honest operation error). A pure
+  // refusal set is exit 0: refusing an ambiguous class is correct behavior, not
+  // a failure. dry-run is always exit 0 (it reports, never fails).
+  return failed > 0 && !dryRun ? 1 : 0;
 }
