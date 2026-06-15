@@ -2,10 +2,11 @@ id: CAWS-TEST-SHELL-MUTATION-001
 title: 'CLI shell mutation gate: mutate the 5 shell pure-logic files (push-range, gates, binding) at break:80'
 risk_tier: 1
 mode: feature
-lifecycle_state: active
-worktree: shell-mutation-01
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge shell-mutation-01 at 64b43fb596a2aaeefeef3366aa79fc5bdc6876bb'
 created_at: '2026-06-15T00:00:00.000Z'
-updated_at: '2026-06-15T06:57:19.691Z'
+updated_at: '2026-06-15T07:04:42.413Z'
 blast_radius:
   modules:
     - packages/caws-cli/stryker.shell.conf.js
