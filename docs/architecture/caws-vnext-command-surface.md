@@ -224,7 +224,7 @@ source of truth before the authority rule is written.
 | Level | Capability | Authority required | Status |
 |---|---|---|---|
 | **Diagnose** | Name contradictions; classify; surface evidence | None beyond read-only fs/git access | Implementable now under existing doctor invariants (§6.3 purity, §6.7 status/observability) |
-| **Decide** | Pick which state surface wins for a given contradiction class: registry, spec YAML, git worktree list, filesystem, event log, control-plane binding | Control-plane authority doctrine | Deliverable of `WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001` |
+| **Decide** | Pick which state surface wins for a given contradiction class: registry, spec YAML, git worktree list, filesystem, event log, control-plane binding | Control-plane authority doctrine | Delivered by `WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-002` (§1.4 decision matrix + §6 invariant 16) |
 | **Repair** | Mutate state to resolve a contradiction | Decide must have produced a policy first | Gated on Decide; `PRUNE-REPAIR-WORKTREE-001` blocked until then |
 
 Each level requires the prior one. Detection is the only authority-free level and the only one safe to ship in the next slice.
@@ -267,27 +267,81 @@ Stricter result kinds (`transaction_recovered`, `governance_recovered`,
 `external_state_recovered`) are deferred doctrinal debt; not required
 for v11.2 unless half-state detection surfaces a concrete UX failure.
 
+#### Half-state authority decision matrix (Decide)
+
+`WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-002` (the Decide slice; the `-001`
+id is closed `superseded`, deferred from v11.1.x) resolves, per half-state
+class, **which state surface is authoritative** and **whether repair is
+eligible**. This is doctrine that the future Repair slice
+(`PRUNE-REPAIR-WORKTREE-001`) MUST conform to — it does not itself execute.
+
+Authority surfaces, ranked by what each is the source of truth *for*:
+
+- **`worktrees.json` + `claims/bridge.json`** — authority for *which worktrees
+  are bound and to whom* (the binding control plane).
+- **git worktree list + canonical filesystem** — ground truth for *whether a
+  worktree physically exists*.
+- **canonical `.caws/specs/*`** — authority for *spec existence and the spec's
+  declared `worktree:` binding*. Worktree-local `.caws/specs/*` bytes are
+  **never** authoritative (see invariant 10).
+- **`events.jsonl`** — immutable audit history; authority for *what happened*,
+  never a target to mutate into agreement.
+
+| Class | Observable contradiction | Authoritative surface(s) | Repair | Auto-repair later? | Operator UX |
+|---|---|---|---|---|---|
+| **H1** Ghost registry entry | `worktrees.json[name]` exists; git + canonical fs show no worktree dir | git/fs (existence) win → the registry entry is stale | **Unambiguous** — drop the stale registry entry | **Yes** | Command |
+| **H2** Registry → missing spec | `worktrees.json[name].specId === id`; spec `id` not loaded | spec store (existence) is authority, **but** "not loaded" ≠ "deleted" (parse error / transient) | **Ambiguous** — could be a recoverable spec | No (until disambiguated: confirmed-absent vs unloadable) | Doctrine pointer |
+| **H3** Spec → registry one-sided | spec has `worktree: <name>`; no `worktrees.json[name]` | registry (live worktrees) is authority → the spec field is stale **iff** the spec is closed/archived | **Unambiguous for closed/archived** (clear the field); **ambiguous for active** (recreate-vs-clear) | Yes for closed/archived; no for active | Command (closed/archived) / pointer (active) |
+| **H4** Ghost spec binding (`destroyWorktree` post-fault) | registry absent; git worktree absent; spec still has `worktree: <name>` | registry + git agree the worktree is gone → spec field is stale | **Unambiguous** — clear the spec `worktree:` field | **Yes** | Command |
+| **H5** 3-way contradiction (`bindWorktreeRepair` post-fault) | `worktrees.json[name].specId === idB`; spec `idA` has `worktree: <name>`; spec `idB` lacks `worktree:` | **No surface wins** — registry, specA, and specB make three mutually-incompatible claims | **Forbidden** — no winner under current doctrine | **No** — requires a separate, explicitly-justified resolution slice | Doctrine pointer (never a command) |
+| **H6** Foreign physical worktree | git lists a worktree path; no `worktrees.json` entry references it | git (it physically exists) — but **CAWS does not own it** | **Forbidden** — not CAWS's state to mutate | No — advisory only | Doctrine pointer / informational (INFO) |
+| **Event orphan** `worktree_created` w/ no live binding | `events.jsonl` has `worktree_created` for `name`; no live registry entry, no spec binding, no later `worktree_destroyed` | control plane (registry + spec) says it does not exist; the event is honest immutable history | **Forbidden as deletion** — the event cannot be un-appended; "repair" here is reconciliation/acknowledgement, not mutation | No — the audit record is correct; residue is informational | Doctrine pointer |
+
+Reading the matrix:
+
+- **Unambiguous (H1, H4, H3-closed/archived)** — exactly one surface is the
+  source of truth and the contradiction is a stale *copy* of a decided fact.
+  These are the *only* classes `PRUNE-REPAIR-WORKTREE-001` may mutate, and only
+  in the direction the matrix names. They are the Repair slice's precise,
+  non-creative target list.
+- **Ambiguous (H2, H3-active)** — the winning surface is knowable but requires a
+  disambiguating observation the current snapshot does not carry (e.g. "spec
+  unloadable vs. genuinely deleted"). Repair waits on that observation; the
+  diagnostic points to doctrine, not a command.
+- **Forbidden (H5, H6, event orphan)** — repair is doctrinally refused. H5 has no
+  winner; H6 is not CAWS's state; the event orphan's authority record is already
+  correct and immutable. A UX that implies any of these is auto-repairable would
+  encode a wrong source of truth at first use.
+
+The **`destroyWorktree` external-half-state** boundary from
+`CAWS-LIFECYCLE-ROLLBACK-HARNESS-COMPLETE-001` holds: when the event lifecycle is
+coherent (`created`+`bound`+`destroyed` all chained) but the external git dir was
+already irreversibly removed, this is **not** generically inferable from current
+state — it is **out of scope for this Decide slice** and would need new result
+metadata (the deferred `external_state_recovered` result kind) before doctor or
+repair could distinguish it. The matrix does not pretend to decide it.
+
 #### Functional-complete bar for the v11.2 worktree/authority line
 
 | # | Criterion | Current state |
 |---|---|---|
-| 1 | Authority doctrine is explicit: CAWS state is control-plane; worktrees are execution sandboxes; bindings may be present locally but control-plane state is not duplicated as mutable truth | Partial — phrased in `WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001` draft; not yet a top-level §6 invariant |
-| 2 | Overlapping specs reconciled: `WORKTREE-CAWS-SHARED-STATE-001` superseded, absorbed, or sequenced behind `WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001` | Pending — §1.1 disposition recorded ("likely absorbed"); not yet acted on |
-| 3 | Doctor detects all known half-states: H1–H6 have typed diagnostics and regression fixtures | Pending — `WORKTREE-DOCTOR-HALF-STATE-001` created by this recon, implementation-ready |
+| 1 | Authority doctrine is explicit: CAWS state is control-plane; worktrees are execution sandboxes; bindings may be present locally but control-plane state is not duplicated as mutable truth | **Done** — promoted to §6 invariant 16 by `WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-002` |
+| 2 | Overlapping specs reconciled: `WORKTREE-CAWS-SHARED-STATE-001` superseded, absorbed, or sequenced behind the authority spec | **Done** — `WORKTREE-CAWS-SHARED-STATE-001` was never created on disk (recon candidate only); its supersession was recorded in the `-001` closure. No further action. |
+| 3 | Doctor detects all known half-states: H1–H6 have typed diagnostics and regression fixtures | **Done** — `WORKTREE-DOCTOR-HALF-STATE-001` shipped H1–H6 diagnostics + the event-backed orphan rule, with a regression suite |
 | 4 | Detection is mutation-free: doctor/reconcile never writes specs, registry, event log, git worktrees, or repairs | Doctrinally true (§6.3); to be locked as a regression in slice #2 |
-| 5 | Repair is explicit and scoped: `prune`/`repair` operate only on unambiguous classes; H5 refuses until control-plane policy resolves it | Pending — `PRUNE-REPAIR-WORKTREE-001` blocked |
+| 5 | Repair is explicit and scoped: `prune`/`repair` operate only on unambiguous classes; H5 refuses until control-plane policy resolves it | **Policy decided** (§1.4 decision matrix): unambiguous = H1, H4, H3-closed/archived; forbidden = H5, H6, event orphan; ambiguous = H2, H3-active. `PRUNE-REPAIR-WORKTREE-001` is now unblocked **for the unambiguous set only** |
 | 6 | Lifecycle results stop overclaiming: either result naming changes, or every caller that mutates outside the transaction maps transaction-layer partial recovery into an honest diagnostic | Doctrinal phrase recorded (above); production-code change deferred |
-| 7 | Worktree-local spec copies are neutralized: editing `.caws/specs/*.yaml` inside a worktree cannot silently create false truth | Pending — `WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001` deliverable; doctor diagnostics alone are necessary but not sufficient (Bash hooks do not catch Edit/Write tool operations) |
+| 7 | Worktree-local spec copies are neutralized: editing `.caws/specs/*.yaml` inside a worktree cannot silently create false truth | **Policy decided** — invariant 16 + §1.4 materialization row: worktree-local spec bytes are ignored-as-authority; sparse-checkout exclusion (invariant 15) is the mechanical guard. (Edit/Write tool-surface enforcement is `worktree-write-guard.sh`, already shipped; Bash-surface gap is tracked separately.) |
 | 8 | Migration covered: pre-v11.2 and 10.2-created worktrees with materialized `.caws` state produce explicit diagnostics and a safe migration path | Pending — control-plane spec A7; H1/H6 diagnostics are partial coverage |
 | 9 | CI locks behavior: store/doctor tests cover all known states; a future refactor cannot reintroduce hidden split-brain without failing tests | Pending — slice #2 down payment |
 | 10 | Release discipline stays intact: branch pushes remain non-release | Holds — tag-driven release contract from `CAWS-RELEASE-TAG-DRIVEN-001` |
 
 #### Slice ordering for the v11.2 worktree/authority line
 
-1. `PRUNE-REPAIR-WORKTREE-RECON-001` (this slice) — recon/amendment; no implementation.
-2. `WORKTREE-DOCTOR-HALF-STATE-001` — mutation-free diagnostics for H1–H6. Diagnose only.
-3. `WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001` — authority rule per H-class (especially H5) and worktree-local spec materialization policy.
-4. `PRUNE-REPAIR-WORKTREE-001` — repair only for classes the authority rule has made unambiguous.
+1. `PRUNE-REPAIR-WORKTREE-RECON-001` — recon/amendment; no implementation. **Done.**
+2. `WORKTREE-DOCTOR-HALF-STATE-001` — mutation-free diagnostics for H1–H6 + event-backed orphan. Diagnose only. **Done.**
+3. `WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-002` — authority rule per H-class (especially H5) and worktree-local spec materialization policy. Decide only. **Done** (the `-001` id is closed `superseded`; `-002` carries the deliverable: §6 invariant 16 + §1.4 decision matrix).
+4. `PRUNE-REPAIR-WORKTREE-001` — repair only for the classes the matrix marks **unambiguous** (H1, H4, H3-closed/archived). Now unblocked for that set; H2/H3-active (ambiguous) and H5/H6/event-orphan (forbidden) stay out of scope. **Optional pre-repair contract slice** first if a class needs new event/result metadata (e.g. the deferred `external_state_recovered` result kind for the `destroyWorktree` external-half-state) — otherwise proceed directly.
 5. `WORKTREE-NODE-MODULES-001` (or equivalent) — execution ergonomics so agents stop falling back to main for builds/tests. Promoted from deferred only if friction blocks every worktree slice.
 
 Other v11.2 deliverables from the §1 plan list — leases,
@@ -758,6 +812,29 @@ fix or an explicit doctrine shift requiring an update to this document.
     **materialization/recovery invariant**, NOT the authority model
     and NOT the scope-enforcement model — scope authority is
     `scope-guard.sh` reading the canonical spec's `scope.in`/`scope.out`.
+
+16. **Control-plane state is authority; linked worktrees are execution
+    sandboxes.** Promoted by `WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-002`
+    (the Decide slice; the `-001` id is closed `superseded`). The CAWS
+    control plane — `.caws/worktrees.json` + `.caws/claims/bridge.json`
+    (authority bindings), `.caws/events.jsonl` (durable audit),
+    `.caws/policy.yaml` (config), and the **canonical** `.caws/specs/*`
+    (spec authority, per invariant 15) — is the single source of truth.
+    A linked worktree is an execution sandbox: it carries a *reference*
+    to its binding, never a mutable *copy* of control-plane truth. No
+    control-plane state is duplicated as authoritative bytes inside a
+    worktree; where a worktree-local copy exists (e.g. a materialized
+    `.caws/specs/*` from a hostile or manual write), it is
+    **ignored-as-authority** and may be diagnosed, never consulted (the
+    mechanical guard is invariant 15's sparse-checkout exclusion). This
+    generalizes invariant 9 (liveness ≠ authority) and invariant 15
+    (spec materialization) to the whole control plane, and it is the
+    precondition for the half-state authority decision matrix in §1.4:
+    "which surface wins" is answerable *because* authority is
+    single-sourced. Repair (`PRUNE-REPAIR-WORKTREE-001`) may mutate only
+    the classes that matrix marks **unambiguous**, and only in the
+    direction it names; ambiguous/forbidden classes (H2, H3-active, H5,
+    H6, the event orphan) carry a doctrine pointer, not a command.
 
 ---
 
