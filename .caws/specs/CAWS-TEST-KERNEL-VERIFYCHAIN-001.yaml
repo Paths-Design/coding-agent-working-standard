@@ -2,10 +2,11 @@ id: CAWS-TEST-KERNEL-VERIFYCHAIN-001
 title: 'verifyChain end-to-end tamper-detection test: prove each chain-integrity rule fires (E9/E20 audit integrity)'
 risk_tier: 1
 mode: feature
-lifecycle_state: active
-worktree: honest-tier1-01
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge honest-tier1-01 at a92fc8bd2b10a0130866bdc13e68d10cc9dd443e'
 created_at: '2026-06-14T00:00:00.000Z'
-updated_at: '2026-06-15T03:59:31.650Z'
+updated_at: '2026-06-15T04:03:35.972Z'
 blast_radius:
   modules:
     - packages/caws-kernel/tests/unit/verify-chain.test.ts
