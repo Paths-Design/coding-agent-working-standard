@@ -1,0 +1,70 @@
+id: CAWS-LIFECYCLE-ROLLBACK-HARNESS-COMPLETE-001
+title: 'Lifecycle rollback-failure harness (complete): injected-failure honesty proof across all 8 lifecycle writers'
+risk_tier: 1
+mode: feature
+lifecycle_state: active
+created_at: '2026-06-15T00:00:00.000Z'
+updated_at: '2026-06-15T17:01:43.420Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/tests/store/lifecycle-rollback-harness.test.js
+    - packages/caws-cli/src/store/lifecycle-transaction.ts
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - packages/caws-cli/tests/store/lifecycle-rollback-harness.test.js
+    - .caws/specs/CAWS-LIFECYCLE-ROLLBACK-HARNESS-COMPLETE-001.yaml
+  out:
+    - packages/caws-cli/src/store/lifecycle-transaction.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - 'This slice is a PROOF HARNESS, not a repair feature. It documents the truth of partial-failure outcomes; it does NOT fix any half-state it discovers. Half-states found are CLASSIFIED (transaction-contained / governance-half-state / external-half-state / ambiguous) and recorded as the factual basis for later WORKTREE-DOCTOR-HALF-STATE / PRUNE-REPAIR slices.'
+  - 'No production source is modified. Tests use ONLY the shipped CAWS_TEST_INJECT_LIFECYCLE_FAULT seam (WORKTREE-MERGE-A2-FAULT-INJECTION-001) — no second injection mechanism, no sabotage of the filesystem, no hand-rolled bad payloads. lifecycle-transaction.ts is listed scope.out and stays out unless the classification PROVES a test-only multi-boundary seam extension is required, in which case the spec is amended first.'
+  - 'The Result kind is the oracle. Every injected case asserts result.value.kind explicitly: success vs partial_failure_recovered (BOTH ok()-wrapped — the trap) vs Err[LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED] vs Err[LIFECYCLE_WRITE_FAILED]. A test that only checks isOk(result) is forbidden — it would pass a rolled-back transaction as success.'
+  - 'After every injected failure, events.jsonl is RE-VERIFIED with the kernel verifyChain (read back from disk), OR the test proves the failed event was never appended. A broken chain after a partial failure is a tier-1 audit-integrity defect (E9) and is filed, not tolerated.'
+  - 'Any surviving registry/spec/event mismatch is asserted as a NAMED half-state, never silently treated as clean. The result string must not claim rollback/recovery beyond what was actually recovered (no "recovered" wording for an UNRECOVERED outcome).'
+  - 'The harness is deterministic and leaks nothing: each case runs in its own os.tmpdir CAWS dir, the inject env var is set/cleared per case (no bleed), and no temp repo is left dirty between cases.'
+acceptance:
+  - id: A1
+    given: 'The 8 lifecycle writers (createSpec, closeSpec, archiveSpec, retireDraftSpec, createWorktree, bindWorktreeRepair, destroyWorktree, mergeWorktree) all thread runLifecycleTransaction, and the original event-append regression suite was deleted in the corpus wipe (51b4d00d) — zero injected-failure coverage exists today.'
+    when: 'The harness is built using CAWS_TEST_INJECT_LIFECYCLE_FAULT.'
+    then: 'Every one of the 8 writers has at least one injected-failure fixture exercising its first planned event.'
+  - id: A2
+    given: 'An injected event-append failure on a single-event writer (e.g. spec_created, spec_closed).'
+    when: 'The writer runs under the fault.'
+    then: 'Result is ok({kind: partial_failure_recovered}); the state write is rolled back (no spec file / spec stays in prior lifecycle_state); and events.jsonl contains NO event for that operation. verifyChain over the post-failure log returns ok.'
+  - id: A3
+    given: 'A multi-event writer where injection hits the SECOND event (e.g. worktree_bound after worktree_created already appended; mergeWorktree where the bound-spec close composes a second event).'
+    when: 'The writer runs under the fault.'
+    then: 'The divergence is proven and CLASSIFIED: the first event remains in the hash chain (cannot un-append), the outcome is Err[LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED] (NOT partial_failure_recovered), and the residual is named as governance-half-state. This is the case where transaction recovery, governance recovery, and external-state recovery diverge.'
+  - id: A4
+    given: 'A writer that also mutates EXTERNAL state (archiveSpec source-file unlink, createWorktree git dir + sparse checkout, destroyWorktree git worktree removal, mergeWorktree git merge).'
+    when: 'The injected failure fires relative to that external mutation.'
+    then: 'The test asserts whether the external state was rolled back (transaction-contained), left dangling (external-half-state), or unreachable-by-this-seam (classified as not-covered-by-event-append-injection). No test claims external recovery the seam cannot provide.'
+  - id: A5
+    given: 'The full harness across all 8 writers.'
+    when: 'It runs under jest default parallel workers.'
+    then: 'It is deterministic and hermetic: per-case os.tmpdir, env var set/cleared per case with no cross-case bleed, no temp repo left dirty; the full store suite stays green and the existing mutation gates are unchanged (mutation scope is NOT expanded in this slice).'
+  - id: A6
+    given: 'The classification produced by A2-A4.'
+    when: 'The harness completes.'
+    then: 'Each writer is tagged transaction-contained | governance-half-state | external-half-state | ambiguous in test descriptions and the closure evidence, forming the factual matrix the doctrine (§1.4 half-state) and later doctor/repair slices build on.'
+non_functional:
+  reliability:
+    - 'Deterministic under default parallel jest workers (no --runInBand crutch). Per-case temp-dir isolation prevents cross-worker contention on the events log, registry, or lock file. The inject env var is process-global, so cases that set it MUST clear it in finally to avoid bleed into sibling cases.'
+  security:
+    - 'This harness is the regression guard for partial-failure HONESTY of the governance substrate — the property that a half-succeeded lifecycle mutation cannot report full success and strand the agent trusting a state that never fully landed (the most dangerous CLAUDE.md class: "reports success while doing nothing"). It uses synthetic specs/worktrees in temp dirs only; it reads no real secrets and mutates no real .caws.'
+observability:
+  - 'jest output enumerating per-writer outcome (kind asserted) + the verifyChain result after each injection is the verification artifact, captured in closure evidence.'
+  - 'The four-way classification matrix (writer -> failure-point class) is recorded in the closure notes as the factual basis for WORKTREE-DOCTOR-HALF-STATE / PRUNE-REPAIR.'
+rollback:
+  - 'Rollback is a revert of the test commit; no production code, event-log, or migration is introduced. The shipped fault-injection seam is untouched.'
+contracts:
+  - name: lifecycle-partial-failure-honesty
+    type: behavior
+    path: packages/caws-cli/src/store/lifecycle-transaction.ts
+    description: 'Every lifecycle writer reports a Result kind that matches on-disk reality under an injected event-append failure: partial_failure_recovered only when fully rolled back, UNRECOVERED when a prior event is already chained; events.jsonl stays verifiable or the failed event is absent; no result claims recovery beyond what occurred.'
