@@ -3,6 +3,7 @@ title: 'Honest audit events for half-state repair: worktree_pruned + spec_bindin
 risk_tier: 1
 mode: feature
 lifecycle_state: active
+worktree: repair-event-contract-01
 created_at: '2026-06-15T00:00:00.000Z'
 updated_at: '2026-06-15T18:54:34.145Z'
 blast_radius:
