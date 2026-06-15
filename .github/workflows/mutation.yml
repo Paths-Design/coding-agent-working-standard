@@ -99,3 +99,35 @@ jobs:
       - name: Store mutation run
         working-directory: packages/caws-cli
         run: npm run mutation:run
+
+  shell_mutation:
+    name: CLI Shell Mutation (break:80)
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'run-mutation')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # mutation:run:shell builds the CLI dist first (the shell config mutates dist/).
+      - name: Restore shell mutation cache
+        uses: actions/cache@v4
+        with:
+          path: packages/caws-cli/reports/stryker-shell-incremental.json
+          key: stryker-shell-${{ hashFiles('packages/caws-cli/src/shell/**/*.ts', 'packages/caws-cli/tests/shell/**/*.test.js') }}
+          restore-keys: |
+            stryker-shell-
+
+      - name: Shell mutation run
+        working-directory: packages/caws-cli
+        run: npm run mutation:run:shell
