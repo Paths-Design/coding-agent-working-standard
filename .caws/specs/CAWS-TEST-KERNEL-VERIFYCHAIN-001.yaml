@@ -3,6 +3,7 @@ title: 'verifyChain end-to-end tamper-detection test: prove each chain-integrity
 risk_tier: 1
 mode: feature
 lifecycle_state: active
+worktree: honest-tier1-01
 created_at: '2026-06-14T00:00:00.000Z'
 updated_at: '2026-06-15T03:59:31.650Z'
 blast_radius:
