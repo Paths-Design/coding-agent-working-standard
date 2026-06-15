@@ -44,6 +44,8 @@ import specArchivePrunedSchema from '../schemas/events/spec_archive_pruned.v1.js
 import specActivatedSchema from '../schemas/events/spec_activated.v1.json';
 import specRetiredSchema from '../schemas/events/spec_retired.v1.json';
 import specScopeAmendedSchema from '../schemas/events/spec_scope_amended.v1.json';
+import specBindingClearedSchema from '../schemas/events/spec_binding_cleared.v1.json';
+import worktreePrunedSchema from '../schemas/events/worktree_pruned.v1.json';
 import specClosedSchema from '../schemas/events/spec_closed.v1.json';
 import specCreatedSchema from '../schemas/events/spec_created.v1.json';
 import specValidatedSchema from '../schemas/events/spec_validated.v1.json';
@@ -102,6 +104,7 @@ const PAYLOAD_SCHEMAS: Readonly<Partial<Record<EventType, object>>> = {
   spec_activated: specActivatedSchema,
   spec_retired: specRetiredSchema,
   spec_scope_amended: specScopeAmendedSchema,
+  spec_binding_cleared: specBindingClearedSchema,
   spec_closed: specClosedSchema,
   spec_created: specCreatedSchema,
   spec_validated: specValidatedSchema,
@@ -110,6 +113,7 @@ const PAYLOAD_SCHEMAS: Readonly<Partial<Record<EventType, object>>> = {
   worktree_bound: worktreeBoundSchema,
   worktree_created: worktreeCreatedSchema,
   worktree_destroyed: worktreeDestroyedSchema,
+  worktree_pruned: worktreePrunedSchema,
   worktree_merged: worktreeMergedSchema,
   worktree_ownership_seized: worktreeOwnershipSeizedSchema,
 } as const;
@@ -601,10 +605,12 @@ const KNOWN_EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   'spec_deleted',
   'spec_scope_amended',
   'spec_drift_detected',
+  'spec_binding_cleared',
   'worktree_created',
   'worktree_bound',
   'worktree_merged',
   'worktree_destroyed',
+  'worktree_pruned',
   'worktree_ownership_seized',
   'claim_taken_over',
   'evidence_recorded',
