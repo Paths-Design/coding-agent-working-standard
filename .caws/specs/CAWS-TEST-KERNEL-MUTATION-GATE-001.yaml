@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: honest-tier1-02
 created_at: '2026-06-14T00:00:00.000Z'
-updated_at: '2026-06-15T04:54:07.329Z'
+updated_at: '2026-06-15T04:57:57.143Z'
 blast_radius:
   modules:
     - packages/caws-kernel/stryker.conf.js
@@ -23,6 +23,8 @@ scope:
     - packages/caws-kernel/tests/unit/evidence-canonical-json.test.ts
     - packages/caws-kernel/tests/unit/policy-derive-budget.test.ts
     - .gitignore
+    - packages/caws-kernel/tests/unit/evidence-hash.test.ts
+    - packages/caws-kernel/tests/unit/worktree-transitions-freshness.test.ts
   out:
     - packages/caws-kernel/src
     - packages/caws-cli
