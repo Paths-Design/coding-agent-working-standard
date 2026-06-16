@@ -679,23 +679,13 @@ const LEGACY_COMMAND_MAP = Object.freeze([
     runtimeDiagnostic: {
       kind: 'deferred',
       message:
-        'caws worktree prune is planned for v11.2. Until then, use caws status to inspect worktree state and clean up via git worktree directly.',
+        'caws worktree prune is planned for v11.2. For the unambiguous half-states (ghost registry entry, dead spec->worktree binding), use caws worktree repair (shipped) — it prunes those safely via the doctor diagnostics. Broader prune/reconcile over ambiguous classes remains planned.',
     },
   }),
-  entry({
-    command: 'worktree repair',
-    disposition: 'deferred',
-    v11Status: 'planned',
-    replacement: null,
-    since: null,
-    sourceDocs: ['docs/migration-v10-to-v11.md#deferred'],
-    implementationProbe: { group: null },
-    runtimeDiagnostic: {
-      kind: 'deferred',
-      message:
-        'caws worktree repair is planned for v11.2. Distinct from worktree repair-sparse (shipped).',
-    },
-  }),
+  // NOTE: there is intentionally NO 'worktree repair' legacy entry. caws
+  // worktree repair SHIPPED (PRUNE-REPAIR-WORKTREE-001) as a registered leaf,
+  // so the real command answers `caws worktree repair` — a deferred map entry
+  // here would be dead (the leaf shadows it) AND wrong ("planned for v11.2").
   entry({
     command: 'worktree reconcile',
     disposition: 'deferred',
@@ -706,7 +696,8 @@ const LEGACY_COMMAND_MAP = Object.freeze([
     implementationProbe: { group: null },
     runtimeDiagnostic: {
       kind: 'deferred',
-      message: 'caws worktree reconcile is planned for v11.2.',
+      message:
+        'caws worktree reconcile is planned for v11.2. For the unambiguous half-states, use caws worktree repair (shipped); reconcile over the ambiguous authority-split classes (H2, H3-active, H5) remains planned.',
     },
   }),
 
