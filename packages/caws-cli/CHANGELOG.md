@@ -1,5 +1,48 @@
 ## [Unreleased]
 
+## [11.4.0] (2026-06-16)
+
+Hook-de-duplication release — "caws governs caws artifacts". Three coupled
+slices move scope/contention/exec-safety logic out of the per-consumer shell
+hooks and into the governed CLI/kernel, so every consumer's hook becomes a thin
+caller of a single evaluator instead of a parallel re-implementation. Coupled to
+kernel **1.4.0** (new `evaluateContention`) — kernel 1.4.0 must be published
+before this tag (see `docs/release-procedure.md`). Shared hook pack bumped to
+**v5**, so `caws init` re-propagates the de-duplicated hooks to consumers
+(installed hooks are copied, not linked).
+
+### Added
+
+- **`caws scope show --json <path>`** — a stable, single-line machine-readable
+  scope-decision contract (`decision`, `rule`, `path`, `bindingState`, `mode`,
+  `boundSpecId`, `worktreeName`, `source`, `matchedPattern`, `ambiguousClaimants`,
+  `message`, `repair`), built entirely from the kernel `Decision` + shell
+  `ResolvedBinding` (no spec I/O). The default human render and `caws scope check`
+  exit codes are unchanged (additive). (`CAWS-SCOPE-SHOW-JSON-CONTRACT-001`)
+- **`caws scope contention <path>`** (and `--json`) — reports which other active
+  worktrees on the same base branch have a bound active spec whose `scope.in`
+  claims the path, via the kernel `evaluateContention`. Always exits 0; reads the
+  store snapshot, never re-parses spec YAML. (`CAWS-SCOPE-CONTENTION-CMD-001`)
+
+### Changed
+
+- **Hook pack `shared` v2 → v5: no shared hook re-parses spec YAML anymore.**
+  - `block-dangerous.sh` — an opaque-exec ask (`python3 -c` / `node -e` with
+    `$VAR`/`$()`/backtick) is now refused with a prescriptive remediation (write
+    the probe to a `.py`/`.js` file, or use the Read tool) **without arming the
+    sticky session danger latch**. Recall is unchanged (the command is still
+    refused); only the session-wide freeze + human-reset round-trip is removed.
+    (`CAWS-CLASSIFY-LITERAL-OPAQUE-EXEC-READONLY-001`)
+  - `scope-guard.sh` — deletes its inline `node -e` + `js-yaml` spec re-parser;
+    the scope diagnostic now comes from `caws scope show --json` (decision still
+    from `caws scope check`). (`CAWS-SCOPE-SHOW-JSON-CONTRACT-001`)
+  - `worktree-write-guard.sh` — deletes its last inline `js-yaml` block (the
+    cross-worktree contention scan); now delegates to `caws scope contention
+    --json`. The JSON-only `worktrees.json` reads are retained.
+    (`CAWS-SCOPE-CONTENTION-CMD-001`)
+  - Net effect: the kernel is the single scope/contention evaluator; consumer
+    hooks are thin CLI callers. Re-run `caws init` in consumers to propagate.
+
 ## [11.3.0] (2026-06-16)
 
 Feature release: `caws worktree repair`, the terminal slice of the

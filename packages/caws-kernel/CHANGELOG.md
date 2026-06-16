@@ -5,6 +5,28 @@ pure-TypeScript governance primitive layer (spec/policy/scope/evidence/worktree
 types, parsers, validators, lifecycle transitions; no I/O) consumed by
 `caws-cli@^11` and external integrators.
 
+## [1.4.0] (2026-06-16)
+
+Additive governance-primitive surface for the caws-cli 11.4.0 hook-de-duplication
+release ("caws governs caws artifacts"). No breaking changes — one new pure
+scope evaluator. The caws-cli 11.4.0 runtime imports it (`caws scope contention`
+consumes it; the worktree-write-guard hook delegates to that command), so **this
+kernel 1.4.0 must be published before the caws-cli 11.4.0 tag** (coupled-release
+ordering; see `docs/release-procedure.md`).
+
+### Added
+
+- **`evaluateContention(path, worktrees, specs, currentBranch)`** — a pure,
+  I/O-free cross-worktree scope-claim evaluator (`scope/contention.ts`). Returns
+  a typed `ContentionResult` (`claimed` with `{worktreeName, specId,
+  matchedPattern}` / `clear` / `undetermined` with a `missing-specId |
+  missing-spec | missing-scope` reason). Uses the kernel's own `matchGlob` — the
+  single scope matcher — so a consumer cannot disagree with the kernel on a
+  `(path, spec)` contention decision. Exported types: `ContentionResult`,
+  `ContentionClaimant`, `ContentionUndeterminedReason`, `EvaluateContentionInput`.
+  This is the substrate that lets `worktree-write-guard.sh` delete its last
+  inline `js-yaml` spec re-parser and delegate to `caws scope contention`.
+
 ## [1.3.0] (2026-06-16)
 
 Additive governance-primitive surface for the caws-cli 11.3.0 worktree-repair
