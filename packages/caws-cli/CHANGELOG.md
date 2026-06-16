@@ -1,5 +1,55 @@
 ## [Unreleased]
 
+## [11.3.0] (2026-06-16)
+
+Feature release: `caws worktree repair`, the terminal slice of the
+Diagnose → Decide → Repair arc for worktree/spec half-states, plus the
+release-readiness work that makes it safe to ship. Coupled to kernel **1.3.0**
+(new repair event vocabulary + doctor diagnostics) — the published kernel 1.2.0
+lacked those symbols, so the kernel dependency floor is raised to `^1.3.0` and
+kernel 1.3.0 must be published before this tag (see `docs/release-procedure.md`).
+
+### Added
+
+- **`caws worktree repair`** — a governed executor for the *unambiguous*
+  worktree/spec half-states the doctor surfaces. It is a dispatcher over doctor
+  evidence (`composeDoctorSnapshot` → `inspectProjectState` → the §1.4 decision
+  matrix), not a second policy engine. It repairs only the matrix-unambiguous
+  classes: **H1** ghost registry entry (prune the stale `worktrees.json` entry),
+  **H4** ghost spec binding and **H3** dormant binding on a closed/archived spec
+  (clear the stale `spec.worktree`). It **refuses** every ambiguous/forbidden
+  class (H2, H3-active, H5 3-way, H6 foreign-physical, event-orphan) with a
+  doctrine pointer and **zero mutation**, supports `--dry-run`, and **never
+  creates or deletes a git worktree directory**.
+- **Honest repair audit events** `worktree_pruned` and `spec_binding_cleared`
+  (from kernel 1.3.0), appended transactionally with the repair mutation so the
+  audit names what actually happened (a stale record cleared) rather than a
+  fictional git removal.
+
+### Fixed
+
+- **Shared hook Stop handler** (`templates/hook-packs/shared/agent-stop.sh`) called
+  the nonexistent `caws agents deregister`; the error was swallowed by `|| true`,
+  so every Stop hook silently no-op'd and left zombie `active` leases. It now calls
+  the real `caws agents stop`. The shared hook pack is bumped to v2 so `caws init`
+  re-propagates the fix to consumers.
+- **Prepublish fresh-install smoke** was red on `main`: it predated the shared-core
+  hook refactor and asserted the old `.claude/hooks/` layout. Reconciled to the
+  3-tier layout (loads the shared manifest, asserts oracle/agent/dispatcher hooks
+  under `.caws/hooks/`), and extended to prove the installed binary exposes
+  `caws worktree repair --help` and the installed kernel carries the repair
+  rule + event schemas (the registry-stale-kernel guard).
+- **Docs/help/reference cohesion for `caws worktree repair`**: the `worktree`
+  group `--help` blurb, the generated `docs/command-reference.md`, and the
+  worktree-lifecycle command lists in `CLAUDE.md`, `AGENTS.md`, `README.md`, the
+  architecture surface doc, and the worktree-isolation guide now include `repair`.
+
+### Changed
+
+- **Event-orphan repair wording** is present-tense: automatic repair is
+  *intentionally refused* for the orphan class (immutable audit record; no safe
+  control-plane mutation), not "deferred to a later slice."
+
 ## [11.2.0] (2026-06-10)
 
 Feature + hook-pack hardening release. Two new capabilities land on the CLI
