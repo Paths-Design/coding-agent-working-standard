@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: scope-contention
 created_at: '2026-06-16T19:28:14.011Z'
-updated_at: '2026-06-16T19:28:34.621Z'
+updated_at: '2026-06-16T19:33:46.069Z'
 blast_radius:
   modules:
     - 'kernel/scope/contention (new pure evaluateContention over worktrees + specs)'
@@ -26,6 +26,7 @@ scope:
     - packages/caws-cli/tests/hooks/bats/worktree-write-guard.bats
     - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
     - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/src/shell/index.ts
   out: []
 invariants:
   - 'A new pure kernel function evaluateContention(path, worktrees, specs, currentBranch) returns, for the given path, every ACTIVE worktree (status not destroyed/missing, baseBranch === currentBranch, directory present per registry) whose bound ACTIVE spec scope.in admits the path — using the kernel scope matcher (matchGlob), NOT a re-implemented glob. The result is a typed value (claimants[] with {worktreeName, specId, matchedPattern}, or an "undetermined" reason for missing specId/spec/scope), never a string protocol.'
