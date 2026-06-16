@@ -54,6 +54,7 @@ import {
   runInitCommand,
   runPrepushCommand,
   runScopeCommand,
+  runScopeContentionCommand,
   runSpecsActivateCommand,
   runSpecsAmendScopeCommand,
   runSpecsArchiveCommand,
@@ -311,6 +312,15 @@ export function registerShellCommands(
         path: p,
         mode: 'check',
         showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  defineLeaf(scopeCmd, leafMeta(SCOPE_COMMAND_META, 'contention'))
+    .action((p: string, opts: { json?: boolean }) => {
+      const code = runScopeContentionCommand({
+        path: p,
+        json: opts.json === true,
       });
       exit(code);
     });

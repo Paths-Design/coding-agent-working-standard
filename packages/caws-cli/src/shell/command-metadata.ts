@@ -575,6 +575,20 @@ export const SCOPE_COMMAND_META: GroupCommandMeta = {
       description: 'Enforce the scope decision for <path>; exits 0 on admit, 1 otherwise',
       options: [{ flag: '--data', description: 'Show structured data block' }],
     },
+    {
+      kind: 'leaf',
+      name: 'contention',
+      argument: { name: 'path', required: true, description: 'File path to check for cross-worktree claims' },
+      description:
+        'Report which other active worktrees (same base branch) have a bound spec whose scope.in claims <path>; always exits 0',
+      options: [
+        {
+          flag: '--json',
+          description:
+            'Emit the contention result as a single-line stable JSON contract (for hooks/tooling)',
+        },
+      ],
+    },
   ],
 };
 

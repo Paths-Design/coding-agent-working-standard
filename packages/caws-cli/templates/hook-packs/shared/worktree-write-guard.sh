@@ -319,94 +319,37 @@ if [[ -n "$FILE_PATH" ]] && [[ "$WT_COUNT" -gt 0 ]] 2>/dev/null; then
     REL_PATH="${REL_PATH#$PROJECT_DIR/}"
   fi
 
-  SPEC_CONTENTION_CHECK=$(PROJECT_DIR="$PROJECT_DIR" CURRENT_BRANCH="$CURRENT_BRANCH" REL_PATH="$REL_PATH" node -e "
-    var fs = require('fs');
-    var path = require('path');
-    var yaml;
-
-    try {
-      yaml = require('js-yaml');
-    } catch (_) {
-      console.log('unknown:no-js-yaml');
-      process.exit(0);
-    }
-
-    $CAWS_NODE_ENTRIES_OF
-    $CAWS_NODE_ENTRY_SPEC_ID
-    $CAWS_NODE_LIFECYCLE
-    $CAWS_NODE_GLOB_TO_SCOPE_REGEXP
-
-    try {
-      var projectDir = process.env.PROJECT_DIR;
-      var currentBranch = process.env.CURRENT_BRANCH;
-      var relPath = process.env.REL_PATH;
-      var registryPath = path.join(projectDir, '.caws', 'worktrees.json');
-      var registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
-      var worktrees = entriesOf(registry).filter(function(w) {
-        if (w.status === 'destroyed' || w.status === 'missing') return false;
-        if (w.baseBranch !== currentBranch) return false;
-        var wtPath = (typeof w.path === 'string' && w.path)
-          ? w.path
-          : path.join(projectDir, '.caws', 'worktrees', String(w.name || ''));
-        return fs.existsSync(wtPath);
-      });
-
-      if (worktrees.length === 0) {
-        console.log('unknown:no-registry-worktrees');
-        process.exit(0);
-      }
-
-      var _claimants = [];
-      for (var wi = 0; wi < worktrees.length; wi++) {
-        var wt = worktrees[wi];
-        var wtSpecId = entrySpecId(wt);
-        if (!wtSpecId) {
-          console.log('unknown:missing-specId:' + (wt.name || 'unnamed'));
-          process.exit(0);
-        }
-
-        var specPath = path.join(projectDir, '.caws', 'specs', wtSpecId + '.yaml');
-        if (!fs.existsSync(specPath)) {
-          specPath = path.join(projectDir, '.caws', 'specs', wtSpecId + '.yml');
-        }
-        if (!fs.existsSync(specPath)) {
-          console.log('unknown:missing-spec:' + wtSpecId);
-          process.exit(0);
-        }
-
-        var spec = yaml.load(fs.readFileSync(specPath, 'utf8')) || {};
-
-        if (lifecycle(spec) !== 'active') {
-          continue;
-        }
-
-        var scope = spec.scope || {};
-        var patterns = Array.isArray(scope.in) ? scope.in : [];
-
-        if (patterns.length === 0) {
-          console.log('unknown:missing-scope:' + wtSpecId);
-          process.exit(0);
-        }
-
-        for (var pi = 0; pi < patterns.length; pi++) {
-          if (globToRegExp(patterns[pi]).test(relPath)) {
-            _claimants.push((wt.name || wtSpecId) + ':' + patterns[pi]);
-            break;
-          }
-        }
-      }
-
-      if (_claimants.length > 0) {
-        console.log('claimed:' + _claimants.join(','));
-        process.exit(0);
-      }
-
-      console.log('clear');
-    } catch (error) {
-      console.log('unknown:' + error.message);
-    }
-  " 2>/dev/null || echo "unknown:node-error")
-  :
+  # CAWS-SCOPE-CONTENTION-CMD-001: the cross-worktree scope-claim check is the
+  # kernel's `caws scope contention` (which reads the canonical store — NO
+  # js-yaml, NO inline spec re-parse). We map its stable JSON contract onto the
+  # legacy SPEC_CONTENTION_CHECK token format the downstream `case` blocks
+  # consume (claimed:<wt>:<pattern>,... | clear | unknown:<reason>), so the
+  # refusal/advisory behavior below is unchanged.
+  SPEC_CONTENTION_CHECK="unknown:caws-unavailable"
+  if command -v caws >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+    _CONTENTION_JSON="$(caws scope contention "$REL_PATH" --json 2>/dev/null)"
+    if [[ -n "$_CONTENTION_JSON" ]] && printf '%s' "$_CONTENTION_JSON" | jq -e . >/dev/null 2>&1; then
+      _CONTENTION_STATUS="$(printf '%s' "$_CONTENTION_JSON" | jq -r '.status // "unknown"')"
+      case "$_CONTENTION_STATUS" in
+        claimed)
+          # Rebuild claimed:<wt>:<pattern>,<wt>:<pattern>,...
+          _CLAIM_TOKENS="$(printf '%s' "$_CONTENTION_JSON" \
+            | jq -r '.claimants | map(.worktreeName + ":" + .matchedPattern) | join(",")')"
+          SPEC_CONTENTION_CHECK="claimed:${_CLAIM_TOKENS}"
+          ;;
+        clear)
+          SPEC_CONTENTION_CHECK="clear"
+          ;;
+        undetermined)
+          _CONTENTION_REASON="$(printf '%s' "$_CONTENTION_JSON" | jq -r '.reason // "undetermined"')"
+          SPEC_CONTENTION_CHECK="unknown:${_CONTENTION_REASON}"
+          ;;
+        *)
+          SPEC_CONTENTION_CHECK="unknown:${_CONTENTION_STATUS}"
+          ;;
+      esac
+    fi
+  fi
 fi
 
 if [[ -z "${REL_PATH:-}" ]]; then
