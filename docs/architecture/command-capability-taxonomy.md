@@ -139,14 +139,31 @@ rule keys on them — it is **not** `ask -> block`:
 ```text
 decision=allow                         -> enforcement=pass      (exit 0)
 decision=deny                          -> enforcement=block     (hard block + latch, as before)
-decision=ask, source=capability        -> enforcement=confirm   (block FIRST occurrence with a
-                                                                  human-confirmation message,
-                                                                  distinct from a catastrophic deny)
+decision=ask, source=capability,       -> enforcement=block     (refuse THIS command with a
+  reason="opaque execution …"             prescriptive remediation, but DO NOT arm the latch —
+                                          CAWS-CLASSIFY-LITERAL-OPAQUE-EXEC-READONLY-001; see below)
+decision=ask, source=capability        -> enforcement=confirm   (warn FIRST occurrence, then block +
+  (all other reasons)                     latch the SECOND — distinct from a catastrophic deny)
 decision=ask, source=classifier_error  -> enforcement=confirm   (fail-closed; cannot prove safe)
 decision=ask, source=legacy_family|regex|rm_classifier|find_delete
                                        -> enforcement=advisory  (reason on stderr, exit 0, no latch —
                                                                   CATASTROPHIC-ONLY-001 preserved)
 ```
+
+**Opaque-exec is refused without arming the latch (CAWS-CLASSIFY-LITERAL-OPAQUE-EXEC-READONLY-001).**
+An inline interpreter payload the classifier cannot prove (`python3 -c`/`node -e` with a `$VAR`,
+`$()`, or backtick — `kind=EXEC`, `opacity=opaque`, lattice rule 5) is still `decision=ask,
+source=capability`, but `block-dangerous.sh` gives it a dedicated enforcement: it emits a `block`
+with an actionable remediation (write the probe to a `.py`/`.js` file and run it by path, or use the
+Read tool for inspection) and **does not** write the per-session danger latch. The command itself is
+still refused — it never runs — so recall is unchanged; what is removed is the sticky session-wide
+freeze and the human-only reset round-trip. The motivating evidence: the danger latch's benign
+false-positive resets were dominated by read-only `$VAR`-in-path recon one-liners (e.g.
+`python3 -c "json.load(open('$ART'))"`) that armed the latch and forced a human reset for a command
+that only needed rewriting to a file. The carve-out is keyed to the exact opaque-exec reason string,
+so it does not weaken catastrophic deny (`rm -rf /` still latches) or the warn-first→arm escalation
+for other capability asks (`HTTP_MUTATE`, `PROC_KILL`, `DESTROY`). This is the protected-paths.sh
+pattern — refuse the specific command with a self-service alternative — minus the latch.
 
 `enforcement` is **additive**: a consumer reading only `.decision`/`.reason` is unaffected; both new
 fields are always present for a stable contract. `block-dangerous.sh` is the first consumer that
