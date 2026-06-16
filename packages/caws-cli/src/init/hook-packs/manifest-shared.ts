@@ -22,7 +22,12 @@
 
 import type { HookPackV1 } from './types';
 
-export const SHARED_PACK_VERSION = 1;
+// v2 (WORKTREE-REPAIR-INSTALLED-SMOKE-001): agent-stop.sh corrected from the
+// nonexistent `caws agents deregister` to `caws agents stop` (the Stop hook was
+// silently no-op'ing — `|| true` swallowed the unknown-command error — leaving
+// zombie active leases on every install). A shared-template content change
+// requires this bump so `caws init` re-propagates the fix to consumers.
+export const SHARED_PACK_VERSION = 2;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.

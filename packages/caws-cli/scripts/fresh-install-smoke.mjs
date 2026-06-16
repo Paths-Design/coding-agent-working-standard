@@ -55,6 +55,15 @@ const PACKS = {
     manifestFile: 'manifest-codex.js',
     exportName: 'CODEX_PACK',
   },
+  // CAWS-HOOK-PACK-SHARED-CORE-001: the real hook logic (oracle, agent-*.sh,
+  // guards, dispatchers, libs) lives in the `shared` pack and installs under
+  // .caws/hooks/. The vendor packs (claude-code/codex) are now thin adapters.
+  // `caws init --agent-surface <vendor>` installs BOTH shared + vendor
+  // (init.ts: installHookPack(SHARED_PACK) then installHookPack(vendor)).
+  shared: {
+    manifestFile: 'manifest-shared.js',
+    exportName: 'SHARED_PACK',
+  },
 };
 
 function enabledPackIds() {
@@ -439,27 +448,27 @@ function readLease(projectDir, sessionId) {
   }
 }
 
-function assertHookPackV3(pack) {
-  step('A14.4 — installed hook pack reports v>=3 with three agent-*.sh');
-  // The three agent-*.sh files were introduced in hook pack v3. This check
-  // validates they are present/managed/executable, so the version floor is
-  // 3 — NOT an exact pin. A later pack bump (v9, v10, …) must not fail this
-  // assertion; pinning the exact version here is what made the smoke go
-  // stale at literal `3` while the pack advanced (caught by
-  // CAWS-V11-INSTALLED-ARTIFACT-SMOKE-EXTEND-001). Assert the floor.
-  if (typeof pack.packVersion !== 'number' || pack.packVersion < 3) {
-    fail('installed manifest pack version below the v3 floor', {
-      minimum: 3, got: pack.packVersion,
+function assertSharedAgentHooks(sharedPack) {
+  step('A14.4 — installed SHARED pack carries the three agent-*.sh (managed+executable)');
+  // CAWS-HOOK-PACK-SHARED-CORE-001: the three agent-*.sh moved from the
+  // claude-code pack (.claude/hooks/, where they were introduced in pack v3)
+  // to the SHARED pack (.caws/hooks/). The version floor that used to gate this
+  // (claude-code >= 3) no longer applies — the shared pack has its own
+  // versioning (v1). What MUST hold is structural: the three agent hooks are
+  // declared, managed, executable, and rooted under .caws/hooks/.
+  if (typeof sharedPack.packVersion !== 'number' || sharedPack.packVersion < 1) {
+    fail('installed shared manifest pack version below the v1 floor', {
+      minimum: 1, got: sharedPack.packVersion,
     });
   }
   const required = ['agent-register.sh', 'agent-heartbeat.sh', 'agent-stop.sh'];
   for (const name of required) {
-    const entry = pack.installedFiles.find((f) => f.destPath === `.claude/hooks/${name}`);
-    if (!entry) fail(`manifest missing ${name}`);
+    const entry = sharedPack.installedFiles.find((f) => f.destPath === `.caws/hooks/${name}`);
+    if (!entry) fail(`shared manifest missing ${name} at .caws/hooks/${name}`);
     if (!entry.managed) fail(`${name} is not managed:true`);
     if (!entry.executable) fail(`${name} is not executable:true`);
   }
-  ok(`hook pack v${pack.packVersion} (>=3) with all three agent-*.sh as managed+executable`);
+  ok(`shared pack v${sharedPack.packVersion} carries all three agent-*.sh under .caws/hooks/ (managed+executable)`);
 }
 
 function assertOracleRunsUnderTypeModule(projectDir) {
@@ -473,11 +482,13 @@ function assertOracleRunsUnderTypeModule(projectDir) {
   // prove the INSTALLED oracle still runs.
   step('A1/A6 — ownership oracle runs under a consumer "type":"module" repo');
 
-  const oracle = join(projectDir, '.claude', 'hooks', 'lib', 'worktree-claim-oracle.cjs');
+  // CAWS-HOOK-PACK-SHARED-CORE-001: the oracle moved from the claude-code pack
+  // (.claude/hooks/lib/) to the shared pack (.caws/hooks/lib/).
+  const oracle = join(projectDir, '.caws', 'hooks', 'lib', 'worktree-claim-oracle.cjs');
   if (!existsSync(oracle)) {
     fail('installed oracle not found at the .cjs path', {
       expected: oracle,
-      hint: 'manifest destPath must be lib/worktree-claim-oracle.cjs',
+      hint: 'shared pack manifest destPath must be lib/worktree-claim-oracle.cjs (installs under .caws/hooks/)',
     });
   }
 
@@ -531,7 +542,7 @@ function assertOracleRunsUnderTypeModule(projectDir) {
 function assertSessionStartCreatesLease(projectDir, shimDir) {
   step('A14.5 — SessionStart dispatcher creates a lease file');
   const sessionId = 'caws-smoke-session-a';
-  const dispatcher = join(projectDir, '.claude', 'hooks', 'caws_dispatch', 'session_start.sh');
+  const dispatcher = join(projectDir, '.caws', 'hooks', 'dispatch','session_start.sh');
   const r = runDispatcher(projectDir, dispatcher, {
     hook_event_name: 'SessionStart',
     session_id: sessionId,
@@ -566,7 +577,7 @@ function assertSessionStartCreatesLease(projectDir, shimDir) {
 
 function assertPreToolUseSilentAtN1(projectDir, shimDir, sessionId) {
   step('A14.6 — PreToolUse is silent when only one lease exists');
-  const dispatcher = join(projectDir, '.claude', 'hooks', 'caws_dispatch', 'pre_tool_use.sh');
+  const dispatcher = join(projectDir, '.caws', 'hooks', 'dispatch','pre_tool_use.sh');
   const r = runDispatcher(projectDir, dispatcher, {
     hook_event_name: 'PreToolUse',
     session_id: sessionId,
@@ -603,7 +614,7 @@ function seedPeerLeaseAndAssertEnvelope(projectDir, installedRoot, shimDir, self
     });
   }
 
-  const dispatcher = join(projectDir, '.claude', 'hooks', 'caws_dispatch', 'pre_tool_use.sh');
+  const dispatcher = join(projectDir, '.caws', 'hooks', 'dispatch','pre_tool_use.sh');
   const r = runDispatcher(projectDir, dispatcher, {
     hook_event_name: 'PreToolUse',
     session_id: selfSessionId,
@@ -636,7 +647,7 @@ function seedPeerLeaseAndAssertEnvelope(projectDir, installedRoot, shimDir, self
 
 function assertStopMarksLeaseStopped(projectDir, shimDir, sessionId) {
   step('A14.8 — Stop dispatcher flips lease to stopped with stopped_at');
-  const dispatcher = join(projectDir, '.claude', 'hooks', 'caws_dispatch', 'stop.sh');
+  const dispatcher = join(projectDir, '.caws', 'hooks', 'dispatch','stop.sh');
   const r = runDispatcher(projectDir, dispatcher, {
     hook_event_name: 'Stop',
     session_id: sessionId,
@@ -829,6 +840,116 @@ function assertLegacyCommandDiagnostics(projectDir, installedRoot) {
   ok(`installed binary refuses all ${cases.length} legacy/typo cases with exit 1 + typed guidance`);
 }
 
+// A14.13 — WORKTREE-REPAIR-INSTALLED-SMOKE-001: prove the PRUNE-REPAIR-
+// WORKTREE-001 coupled CLI/kernel surface survives a real tarball install.
+//
+// The release footgun this guards: the CLI's `caws worktree repair` consumes
+// kernel symbols added in the same train — DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_
+// CONTROL_PLANE_BINDING and the worktree_pruned / spec_binding_cleared event
+// vocabulary. Source tests pass, but if the published CLI resolves a registry-
+// STALE kernel that predates those symbols, `decideRepair`'s switch silently
+// mis-classifies and the lifecycle event validation rejects the new events.
+// This asserts the INSTALLED kernel (from the local tarball) actually carries
+// them — the same class as the existing registerAgentSession symbol probe.
+//
+// All reads are from the installed package via require()/.status directly,
+// never a shell pipe (a wrong exit cannot be masked).
+function assertWorktreeRepairCoupledSurface(projectDir, installedRoot, installedKernel) {
+  step('A14.13 — worktree repair CLI surface + coupled kernel event/rule are installed');
+  const cli = join(installedRoot, 'dist', 'index.js');
+
+  // A1: caws worktree repair --help exits 0 through the installed binary and
+  // renders the repair description (proves the new CLI leaf is in the tarball).
+  const help = spawnSync('node', [cli, 'worktree', 'repair', '--help'], {
+    cwd: projectDir, encoding: 'utf8',
+  });
+  if (help.status !== 0) {
+    fail('caws worktree repair --help exited non-zero on the installed binary', {
+      exitCode: help.status,
+      stdout: (help.stdout || '').trim().slice(0, 1000),
+      stderr: (help.stderr || '').trim().slice(0, 1000),
+      hint: 'the worktree repair leaf may be missing from the published dist',
+    });
+  }
+  const helpOut = `${help.stdout || ''}`;
+  // The leaf description names the half-state vocabulary. Assert a stable token
+  // (not the whole string) so wording tweaks don't make this brittle.
+  if (!/repair/i.test(helpOut) || !/(half-state|ghost|matrix)/i.test(helpOut)) {
+    fail('caws worktree repair --help did not render the repair description', {
+      stdout: helpOut.trim().slice(0, 1000),
+      hint: 'expected the repair leaf help with half-state/ghost/matrix wording',
+    });
+  }
+  ok('caws worktree repair --help renders on the installed binary (exit 0)');
+
+  // A2 + A3: probe the INSTALLED kernel for the coupled rule + event vocabulary
+  // and that validateEventBody enforces the new event schemas. Run as a single
+  // node -e against the installed kernel so we test exactly what npm resolved.
+  const probeSrc = `
+    const k = require(${JSON.stringify(installedKernel)});
+    const out = { steps: [] };
+    // A2a: the doctor rule decideRepair consumes must exist and be a string.
+    const rule = k.DOCTOR_RULES && k.DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING;
+    out.rule = typeof rule === 'string' && rule.length > 0 ? rule : null;
+    // A3: validateEventBody accepts well-formed repair events and rejects a bad h_class.
+    // spec_binding_cleared is in the kernel's REQUIRES-spec-id class, so a
+    // TOP-LEVEL spec_id is mandatory (the real clearSpecBinding writer sets it);
+    // worktree_pruned takes spec_id as OPTIONAL (only when a binding was cleared).
+    const base = (event, data, extra) => ({
+      event, ts: '2026-06-15T00:00:00.000Z',
+      actor: { kind: 'agent', id: 'smoke', session_id: 'smoke' },
+      ...(extra || {}),
+      data,
+    });
+    const pruned = k.validateEventBody(base('worktree_pruned', {
+      worktree_name: 'wt-x', h_class: 'ghost_registry', reason: 'smoke',
+    }));
+    const cleared = k.validateEventBody(base('spec_binding_cleared', {
+      spec_id: 'S-1', cleared_worktree_name: 'wt-x',
+      h_class: 'ghost_spec_binding', reason: 'smoke',
+    }, { spec_id: 'S-1' }));
+    const badHClass = k.validateEventBody(base('worktree_pruned', {
+      worktree_name: 'wt-x', h_class: 'not_a_real_class', reason: 'smoke',
+    }));
+    out.prunedOk = pruned && pruned.ok === true;
+    out.clearedOk = cleared && cleared.ok === true;
+    out.badRejected = badHClass && badHClass.ok === false;
+    process.stdout.write(JSON.stringify(out));
+  `;
+  const probe = spawnSync('node', ['-e', probeSrc], { encoding: 'utf8' });
+  if (probe.status !== 0) {
+    fail('installed-kernel coupled-surface probe crashed', {
+      exitCode: probe.status,
+      stderr: (probe.stderr || '').trim().slice(0, 1000),
+      hint: 'the installed kernel may predate the repair event vocabulary or validateEventBody export',
+    });
+  }
+  let result;
+  try {
+    result = JSON.parse(probe.stdout);
+  } catch {
+    fail('installed-kernel probe did not emit JSON', { stdout: (probe.stdout || '').slice(0, 800) });
+  }
+  if (!result.rule) {
+    fail('installed kernel is missing DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING', {
+      installedKernel,
+      hint: 'npm likely resolved a registry-stale kernel — check the cli tarball dependency range',
+    });
+  }
+  if (!result.prunedOk || !result.clearedOk) {
+    fail('installed kernel rejected a well-formed repair event', {
+      prunedOk: result.prunedOk, clearedOk: result.clearedOk,
+      hint: 'worktree_pruned / spec_binding_cleared schema missing from the published kernel',
+    });
+  }
+  if (!result.badRejected) {
+    fail('installed kernel ACCEPTED a worktree_pruned event with an out-of-enum h_class', {
+      hint: 'the h_class enum / additionalProperties:false schema did not ship or is not enforced',
+    });
+  }
+  ok(`installed kernel carries the repair rule (${result.rule}) and enforces both event schemas (bad h_class rejected)`);
+}
+
 function assertHeartbeatWorksWithoutJq(projectDir, installedRoot, shimDir, selfSessionId) {
   step('A14.11 — heartbeat hook composes envelope without jq on PATH');
   const pathNoJq = pathWithoutJq(shimDir);
@@ -852,7 +973,7 @@ function assertHeartbeatWorksWithoutJq(projectDir, installedRoot, shimDir, selfS
     fail('failed to seed no-jq peer', { stderr: reg.stderr.trim().slice(0, 500) });
   }
 
-  const hookPath = join(projectDir, '.claude', 'hooks', 'agent-heartbeat.sh');
+  const hookPath = join(projectDir, '.caws', 'hooks', 'agent-heartbeat.sh');
   // Sanity-check: jq is actually not reachable on this PATH.
   const jqCheck = spawnSync('bash', ['-c', 'command -v jq || echo NOT_FOUND'], {
     encoding: 'utf8', env: { PATH: pathNoJq },
@@ -1054,19 +1175,27 @@ try {
   const tarballs = packTarball();
 
   if (packIds.includes(PACK_ID)) {
-    const { projectDir, installedRoot } = installTarball(tarballs);
+    const { projectDir, installedRoot, installedKernel } = installTarball(tarballs);
+    // CAWS-HOOK-PACK-SHARED-CORE-001: `caws init --agent-surface claude-code`
+    // installs BOTH the shared pack (real hook logic, under .caws/hooks/) and
+    // the thin claude-code vendor adapter (docs, under .claude/hooks/). The
+    // smoke must verify BOTH manifests' template sources + materialized dest
+    // files — the shared pack is where the oracle/agent/dispatcher hooks live.
     const pack = loadManifest(installedRoot);
+    const sharedPack = loadManifest(installedRoot, 'shared');
     assertTemplateSourcesPresent(installedRoot, pack);
+    assertTemplateSourcesPresent(installedRoot, sharedPack, 'shared');
     runInit(projectDir, installedRoot);
     assertDestFilesPresent(projectDir, pack);
+    assertDestFilesPresent(projectDir, sharedPack);
 
     // FIX-HOOKPACK-CONSUMER-INSTALL-001 A1/A6 — the oracle must run in an ESM
     // consumer repo (the regression this slice fixes). Runs against the installed
-    // pack, before the lease-substrate checks.
+    // shared pack (.caws/hooks/lib/), before the lease-substrate checks.
     assertOracleRunsUnderTypeModule(projectDir);
 
-    // A14.4 — hook pack v3 with the three new agent-*.sh templates.
-    assertHookPackV3(pack);
+    // A14.4 — the shared pack carries the three agent-*.sh under .caws/hooks/.
+    assertSharedAgentHooks(sharedPack);
 
     // A14.5-A14.8 — multi-agent lease substrate end-to-end through the
     // installed dispatchers.
@@ -1088,6 +1217,11 @@ try {
     // A14.12 — installed binary refuses legacy v10.2 commands with exit 1 +
     // typed migration guidance (CAWS-V11-INSTALLED-ARTIFACT-SMOKE-EXTEND-001).
     assertLegacyCommandDiagnostics(projectDir, installedRoot);
+
+    // A14.13 — worktree repair CLI surface + coupled kernel event/rule
+    // vocabulary are present in the installed tarballs
+    // (WORKTREE-REPAIR-INSTALLED-SMOKE-001).
+    assertWorktreeRepairCoupledSurface(projectDir, installedRoot, installedKernel);
   }
 
   if (packIds.includes('codex')) {

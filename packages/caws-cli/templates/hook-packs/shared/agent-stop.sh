@@ -1,13 +1,13 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 1
+# hook_pack_version: 2
 # caws_min_major: 11
 # lineage_refs: 19
 # do_not_edit_directly: update via `caws init`
 #
-# Stop handler — deregisters the current session from the CAWS agent registry
-# (MULTI-AGENT-ACTIVITY-REGISTRY-001).
+# Stop handler — marks the current session's lease stopped via
+# `caws agents stop` (MULTI-AGENT-ACTIVITY-REGISTRY-001).
 
 set -uo pipefail
 
@@ -28,7 +28,7 @@ if ! command -v "$CAWS_BIN" >/dev/null 2>&1; then
   exit 0
 fi
 
-"$CAWS_BIN" agents deregister \
+"$CAWS_BIN" agents stop \
   --session-id "$HOOK_SESSION_ID" \
   --platform "$CAWS_PLATFORM_FLAG" \
   2>/dev/null || true
