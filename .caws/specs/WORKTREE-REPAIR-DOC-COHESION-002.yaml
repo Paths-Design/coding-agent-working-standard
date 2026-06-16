@@ -2,10 +2,11 @@ id: WORKTREE-REPAIR-DOC-COHESION-002
 title: 'Add caws worktree repair to the README + AGENTS.md current-surface command tables (sibling cohesion fix)'
 risk_tier: 3
 mode: doc
-lifecycle_state: active
-worktree: repair-doc-02
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge repair-doc-02 at 16fc4964aeff124bcd545dfe079c5129304db208'
 created_at: '2026-06-16T00:09:46.985Z'
-updated_at: '2026-06-16T00:09:48.261Z'
+updated_at: '2026-06-16T00:11:20.384Z'
 blast_radius:
   modules:
     - README.md
