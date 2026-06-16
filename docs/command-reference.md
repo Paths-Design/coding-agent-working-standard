@@ -34,7 +34,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws events`](#caws-events) — Maintenance commands for .caws/events.jsonl (rotate, migrate, verify-archive)
 - [`caws waiver`](#caws-waiver) — Manage CAWS waivers (bounded exception records that suppress matching gate violations)
 - [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/retire-draft/activate/close/archive/prune-archive/migrate)
-- [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/bind/destroy/merge/migrate-registry/repair-sparse). Worktrees are git worktrees bound to active specs.
+- [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/bind/destroy/merge/migrate-registry/repair-sparse/repair). Worktrees are git worktrees bound to active specs.
 - [`caws agents`](#caws-agents) — Agent liveness substrate: register/heartbeat/stop/list/show/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.
 - [`caws prepush`](#caws-prepush) — Classify the outgoing commit range before publish and refuse commits not attributable to the current slice. Diagnose/decide only — does NOT run git push.
 
@@ -359,7 +359,7 @@ Validate a spec YAML FILE on disk using the CLI's own bundled parser and the ker
 
 ## `caws worktree`
 
-Manage CAWS worktrees (create/list/bind/destroy/merge/migrate-registry/repair-sparse). Worktrees are git worktrees bound to active specs.
+Manage CAWS worktrees (create/list/bind/destroy/merge/migrate-registry/repair-sparse/repair). Worktrees are git worktrees bound to active specs.
 
 ### `caws worktree create <name>`
 
@@ -435,6 +435,15 @@ Restore the .caws/specs sparse-checkout invariant on a linked worktree. Idempote
 
 **Options:**
 
+- `--data` — Show structured data block on diagnostics
+
+### `caws worktree repair`
+
+Repair the unambiguous worktree/spec half-states the doctor surfaces: prune a ghost registry entry (H1) and clear a dead spec->worktree binding (H4 ghost, H3 dormant). Consumes the doctor diagnostics + §1.4 decision matrix as authority; never re-derives policy. Refuses ambiguous/forbidden classes (H2, H3-active, H5, H6, event-orphan) with a doctrine pointer and zero mutation. NEVER creates or deletes a git worktree directory.
+
+**Options:**
+
+- `--dry-run` — Report each H-class, subject, planned mutation, and event; write nothing.
 - `--data` — Show structured data block on diagnostics
 
 ## `caws agents`
