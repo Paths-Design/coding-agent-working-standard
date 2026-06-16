@@ -4,7 +4,7 @@ risk_tier: 2
 mode: fix
 lifecycle_state: active
 created_at: '2026-06-16T19:28:14.011Z'
-updated_at: '2026-06-16T19:28:14.011Z'
+updated_at: '2026-06-16T19:28:34.621Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
@@ -12,7 +12,17 @@ blast_radius:
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-kernel/src/scope/contention.ts
+    - packages/caws-kernel/src/scope/index.ts
+    - packages/caws-kernel/tests/unit/scope-contention.test.ts
+    - packages/caws-cli/src/shell/commands/scope.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/tests/shell/scope-contention.test.js
+    - packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh
+    - packages/caws-cli/tests/hooks/bats/worktree-write-guard.bats
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
   out: []
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'
