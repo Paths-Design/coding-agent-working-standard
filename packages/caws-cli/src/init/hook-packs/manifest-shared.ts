@@ -27,7 +27,12 @@ import type { HookPackV1 } from './types';
 // silently no-op'ing — `|| true` swallowed the unknown-command error — leaving
 // zombie active leases on every install). A shared-template content change
 // requires this bump so `caws init` re-propagates the fix to consumers.
-export const SHARED_PACK_VERSION = 2;
+// v3 (CAWS-CLASSIFY-LITERAL-OPAQUE-EXEC-READONLY-001): block-dangerous.sh now
+// refuses an opaque-exec ask (python3 -c / node -e with $VAR/$()/backtick) with
+// a prescriptive remediation INSTEAD of arming the sticky session danger latch.
+// A shared-template content change requires this bump so `caws init`
+// re-propagates the fix to consumers (installed hooks are copied, not linked).
+export const SHARED_PACK_VERSION = 3;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.

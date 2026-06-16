@@ -260,6 +260,21 @@ case "$DECISION" in
     ;;
   ask)
     if [[ "$ENFORCEMENT" == "confirm" ]]; then
+      # Opaque-exec carve-out (CAWS-CLASSIFY-LITERAL-OPAQUE-EXEC-READONLY-001):
+      # an inline interpreter payload the classifier cannot prove (python3/node
+      # -c/-e with $VAR / $() / backtick expansion) is REFUSED with an actionable
+      # remediation — modeled on protected-paths.sh: block THIS command and tell
+      # the agent the sanctioned alternative — but it does NOT arm the sticky
+      # session latch. Recall is unchanged (the command still never runs); only
+      # the session-wide freeze + human-reset round-trip is removed, because the
+      # safe fix (write the probe to a file by path, or use the Read tool) is
+      # entirely in the agent's own hands. Keyed to the exact classifier reason
+      # so it cannot swallow any other capability ask or a deny.
+      if [[ "$SOURCE" == "capability" && "$REASON" == "opaque execution — cannot prove payload"* ]]; then
+        FULL_REASON="CAWS command-safety: $REASON. This inline payload cannot be verified, so it is refused — but the session danger latch was NOT armed and you can proceed immediately by rewriting it. Do this instead: (1) write the probe to a script file in your scope (e.g. a .py or .js file) and run it by path — file payloads are inspectable and are not opaque; or (2) for read-only inspection, use the Read tool / cat / jq against the file directly; or (3) if the payload is genuinely a literal with no \$VAR/\$()/backtick, inline it without shell interpolation. Do NOT rephrase the same opaque -c/-e to evade this. Command was: $COMMAND"
+        emit_block_json "$FULL_REASON"
+        exit 0
+      fi
       if [[ "$SOURCE" == "capability" ]]; then
         WARN_FILE="$(danger_warn_file "$SESSION_ID")"
         if [[ ! -f "$WARN_FILE" ]]; then
