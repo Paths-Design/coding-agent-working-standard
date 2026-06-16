@@ -3,6 +3,7 @@ title: 'caws scope contention <path> surfaces cross-worktree spec claims so work
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: scope-contention
 created_at: '2026-06-16T19:28:14.011Z'
 updated_at: '2026-06-16T19:28:34.621Z'
 blast_radius:
