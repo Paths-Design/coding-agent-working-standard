@@ -47,6 +47,14 @@ acceptance:
     given: 'The full smoke run.'
     when: 'npm run smoke:fresh-install -w @paths.design/caws-cli executes (or prepublishOnly).'
     then: 'It passes end-to-end including the three new assertions; the cli + kernel both build; no existing smoke assertion regresses.'
+  - id: A6
+    given: 'The fresh-install smoke was RED on clean main before this slice — the CAWS-HOOK-PACK-SHARED-CORE-001 refactor moved oracle/agent-*.sh/dispatchers from the claude-code pack (.claude/hooks/) into the shared pack (.caws/hooks/), but the smoke still loaded only the claude-code manifest and asserted the old .claude/hooks/ paths (it died at assertOracleRunsUnderTypeModule).'
+    when: 'The smoke is reconciled to the 3-tier shared-core layout.'
+    then: 'It loads BOTH the claude-code and shared manifests, asserts both packs template sources + materialized dest files, and the oracle / agent-*.sh / lease-dispatcher assertions resolve under .caws/hooks/ (dispatch/, not the legacy caws_dispatch/). The release gate runs green to completion.'
+  - id: A7
+    given: 'A runtime governance bug the reconciled smoke surfaced at A14.8: templates/hook-packs/shared/agent-stop.sh called `caws agents deregister` (a nonexistent command; the real one is `caws agents stop`). The `|| true` swallowed the unknown-command error, so every Stop hook silently no-op''d and left zombie active leases.'
+    when: 'agent-stop.sh is corrected to `caws agents stop` (with SHARED_PACK_VERSION 1->2, the agent-stop.sh header bump, and the regenerated shared pack-fingerprints baseline so `caws init` re-propagates the fix).'
+    then: 'The installed Stop dispatcher flips the lease status to stopped with a stopped_at timestamp (smoke A14.8 passes), the pack-fingerprint guard stays green, and no existing init/shell test regresses.'
 non_functional:
   reliability:
     - 'The smoke is the release gate that converts PRUNE-REPAIR-WORKTREE-001 from source-test evidence to installed-artifact evidence. It MUST install from the local tarballs (kernel + cli together) so it models exactly what a coupled release ships; reading the source tree would defeat the purpose. Failure exits 1 and halts prepublishOnly.'
