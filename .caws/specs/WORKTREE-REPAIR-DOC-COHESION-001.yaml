@@ -4,7 +4,7 @@ risk_tier: 3
 mode: doc
 lifecycle_state: active
 created_at: '2026-06-16T00:04:19.667Z'
-updated_at: '2026-06-16T00:04:29.301Z'
+updated_at: '2026-06-16T00:04:37.569Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
@@ -17,6 +17,7 @@ scope:
     - docs/command-reference.md
     - docs/architecture/caws-vnext-command-surface.md
     - docs/guides/worktree-isolation.md
+    - CLAUDE.md
   out: []
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'
