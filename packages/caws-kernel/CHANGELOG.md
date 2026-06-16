@@ -5,6 +5,47 @@ pure-TypeScript governance primitive layer (spec/policy/scope/evidence/worktree
 types, parsers, validators, lifecycle transitions; no I/O) consumed by
 `caws-cli@^11` and external integrators.
 
+## [1.3.0] (2026-06-16)
+
+Additive governance-primitive surface for the caws-cli 11.3.0 worktree-repair
+release. No breaking changes — new event-vocabulary entries and new doctor
+diagnostic rules. The caws-cli 11.3.0 runtime imports these symbols
+(`caws worktree repair` consumes the doctor diagnostics and appends the repair
+events), so **this kernel 1.3.0 must be published before the caws-cli 11.3.0 tag**
+(coupled-release ordering; see `docs/release-procedure.md`). The published kernel
+1.2.0 did not carry these symbols, so the caws-cli 11.3.0 dependency floor is
+raised to `^1.3.0` to prevent a fresh install from resolving a stale kernel.
+
+### Added
+
+* **Half-state repair event vocabulary** (`evidence/types.ts`, `evidence/validate.ts`,
+  `schemas/events.v1.json`, `schemas/events/worktree_pruned.v1.json`,
+  `schemas/events/spec_binding_cleared.v1.json`): two honest audit event types for
+  the worktree/spec half-state repair executor —
+  * `worktree_pruned` (`h_class`, `worktree_name`, `reason`, optional `spec_id`) —
+    a ghost registry entry was removed; the backing git worktree was already gone,
+    so the event does NOT claim a git removal.
+  * `spec_binding_cleared` (`h_class`, `spec_id`, `cleared_worktree_name`, `reason`)
+    — a dead `spec.worktree` binding was cleared. Requires a top-level `spec_id`.
+  Both registered across `EventType`, the spec-id-class Sets, the `events.v1.json`
+  envelope enum, the `validate.ts` schema map, and `KNOWN_EVENT_TYPES`
+  (`additionalProperties: false`, `h_class` closed enum).
+* **Typed worktree/spec half-state diagnostics** (`doctor/inspect.ts`, `doctor/rules.ts`):
+  the H1–H6 taxonomy plus the event-backed orphan rule
+  `WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING` (a `worktree_created` event with no
+  live control-plane binding), with lifecycle/canonical-dir enrichment on
+  `BINDING_SPEC_MISSING_REGISTRY` so a consumer can distinguish a ghost binding from
+  an active recreate-vs-clear ambiguity.
+
+### Changed
+
+* **Event-orphan diagnostic copy** is present-tense: automatic repair is
+  *intentionally refused* for the orphan class (the `worktree_created` event is
+  immutable audit history; no control-plane mutation is safe), not "deferred." The
+  3-way contradiction (H5) `narrowRepair` points at
+  `WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-002`. Both remain command-free (the
+  authority-policy lock holds).
+
 ## [1.2.0] (2026-06-01)
 
 Additive governance-primitive surface for the caws-cli 11.1.9 batch
