@@ -559,7 +559,14 @@ export const SCOPE_COMMAND_META: GroupCommandMeta = {
       name: 'show',
       argument: { name: 'path', required: true, description: 'File path to evaluate' },
       description: 'Explain the scope decision for <path>; always exits 0',
-      options: [{ flag: '--data', description: 'Show structured data block' }],
+      options: [
+        { flag: '--data', description: 'Show structured data block' },
+        {
+          flag: '--json',
+          description:
+            'Emit the scope decision as a single-line stable JSON contract (for hooks/tooling)',
+        },
+      ],
     },
     {
       kind: 'leaf',

@@ -295,11 +295,12 @@ export function registerShellCommands(
   applyGroupMeta(scopeCmd, SCOPE_COMMAND_META);
 
   defineLeaf(scopeCmd, leafMeta(SCOPE_COMMAND_META, 'show'))
-    .action((p: string, opts: { data?: boolean }) => {
+    .action((p: string, opts: { data?: boolean; json?: boolean }) => {
       const code = runScopeCommand({
         path: p,
         mode: 'show',
         showData: opts.data === true,
+        json: opts.json === true,
       });
       exit(code);
     });
