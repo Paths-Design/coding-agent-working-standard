@@ -4,7 +4,7 @@ risk_tier: 2
 mode: fix
 lifecycle_state: active
 created_at: '2026-06-16T17:16:03.675Z'
-updated_at: '2026-06-16T17:16:03.675Z'
+updated_at: '2026-06-16T17:16:22.050Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
@@ -12,7 +12,15 @@ blast_radius:
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/src/shell/render/decision.ts
+    - packages/caws-cli/src/shell/commands/scope.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/tests/shell/scope-show-json.test.js
+    - packages/caws-cli/templates/hook-packs/shared/scope-guard.sh
+    - packages/caws-cli/tests/hooks/bats/scope-guard.bats
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
   out: []
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'
