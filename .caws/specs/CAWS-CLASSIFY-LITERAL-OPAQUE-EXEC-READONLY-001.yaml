@@ -7,7 +7,8 @@ created_at: '2026-06-16T16:25:48.456Z'
 updated_at: '2026-06-16T16:26:46.359Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'hook-pack/shared/classify_command (capability lattice EXEC/opaque decision)'
+    - 'hook-pack/danger-latch (downstream — block-dangerous.sh consumes the decision; not edited)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -18,13 +19,30 @@ scope:
   out:
     - packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A literal -c/-e payload (no shell expansion, command substitution, or backticks) whose body contains only read-only operations classifies as non-escalating (decision allow / no opinion), so a benign recon one-liner does NOT arm the danger latch.'
+  - 'Genuine opacity is preserved as a refuse-admittance signal: a payload containing an unexpanded $VAR, a $() substitution, or a backtick substitution stays opacity=opaque and therefore stays decision=ask. The fix narrows admittance to provably read-only literal payloads only.'
+  - 'Zero false-negative regression: every payload that performs a write, delete, network call, subprocess spawn, or interpreter re-exec stays decision=ask (or stronger). The read-only allowlist is a closed set of inspectable operations; an unrecognized token in a literal payload fails closed to ask, never to allow.'
+  - 'The change lives entirely in the classifier facet/lattice layer (classify_command.py); block-dangerous.sh is unchanged and keeps consuming the classifier decision verbatim (the latch arming policy is not touched).'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'a literal read-only inline payload such as python3 -c with yaml.safe_load(open(...)) / json.load, or node -e with fs.readFileSync(...)'
+    when: 'classify_command classifies it'
+    then: 'the decision is allow (or non-escalating) and it does NOT return the opaque-execution ask — verified by the pytest corpus drawn from the 14 benign false positives in Sterling danger-latch-resets.log'
+  - id: A2
+    given: 'an opaque inline payload that interpolates shell state, e.g. python3 -c printing $SOMEVAR, python -c referencing $PWD, or a backtick / $() payload'
+    when: 'classify_command classifies it'
+    then: 'the decision stays ask with reason opaque execution — cannot prove payload (recall preserved; the documented opaque-payload trap still fires)'
+  - id: A3
+    given: 'a literal inline payload that performs a mutation/exec/network/delete, e.g. python3 -c shutil.rmtree(...), node -e child_process.execSync(...), or python3 -c os.remove(...)'
+    when: 'classify_command classifies it'
+    then: 'the decision stays ask or stronger (NOT allow) — literal-read-only admittance must not leak a write/exec/network/delete payload through'
+  - id: A4
+    given: 'the full shipped pytest classifier suite at packages/caws-cli/tests/hooks/pytest/test_classify_command.py'
+    when: 'it runs against the modified shipped classifier'
+    then: 'all prior tests still pass (no regression on git/rm/curl/mutation classification) and the new corpus tests for A1-A3 pass'
+non_functional:
+  reliability:
+    - 'The literal-read-only admittance is fail-closed: ambiguous or unparseable literal payloads, and any payload containing a token outside the read-only allowlist, remain decision=ask. Precision improves without lowering recall on dangerous payloads.'
 contracts:
   - name: 'classify-decision'
     type: behavior
