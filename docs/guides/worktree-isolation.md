@@ -14,7 +14,7 @@ audience: consumer
 
 Multiple AI agents working on the same repo in parallel must work in **isolated git worktrees**. This guide covers the v11.1 workflow: create worktrees with `caws worktree create`, surface and govern ownership with `caws claim`.
 
-> **v11.1 surface.** v11.1 ships full worktree lifecycle: `caws worktree create | list | bind | destroy | merge | migrate-registry | repair-sparse`. Use these commands — they write bidirectional bindings, emit audit events, and enforce ownership. `caws parallel setup` does not exist and is not planned; loop `caws worktree create` per spec instead.
+> **v11.1 surface.** v11.1 ships full worktree lifecycle: `caws worktree create | list | bind | destroy | merge | migrate-registry | repair-sparse | repair`. Use these commands — they write bidirectional bindings, emit audit events, and enforce ownership. (`caws worktree repair` is the governed half-state executor for ghost registry entries and dead spec→worktree bindings; `repair-sparse` restores the `.caws/specs` sparse-checkout invariant — the two are unrelated.) `caws parallel setup` does not exist and is not planned; loop `caws worktree create` per spec instead.
 
 ## Why worktrees?
 
