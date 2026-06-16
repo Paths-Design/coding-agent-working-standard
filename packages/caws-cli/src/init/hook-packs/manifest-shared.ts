@@ -37,7 +37,11 @@ import type { HookPackV1 } from './types';
 // stable kernel-backed diagnostic contract) instead. The kernel is the single
 // scope evaluator; the hook is a thin caller. Bump re-propagates the de-duped
 // hook to consumers (whose agents cannot edit the CLI themselves).
-export const SHARED_PACK_VERSION = 4;
+// v5 (CAWS-SCOPE-CONTENTION-CMD-001): worktree-write-guard.sh deletes its LAST
+// inline js-yaml block (the cross-worktree SPEC_CONTENTION_CHECK) and consumes
+// `caws scope contention --json` (kernel evaluateContention). After this no
+// shared hook re-parses spec YAML. Bump re-propagates the de-duped hook.
+export const SHARED_PACK_VERSION = 5;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.
