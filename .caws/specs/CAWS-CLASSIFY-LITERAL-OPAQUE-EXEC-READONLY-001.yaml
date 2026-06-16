@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: classify-literal-readonly
 created_at: '2026-06-16T16:25:48.456Z'
-updated_at: '2026-06-16T16:26:46.359Z'
+updated_at: '2026-06-16T16:37:53.581Z'
 blast_radius:
   modules:
     - 'hook-pack/shared/classify_command (capability lattice EXEC/opaque decision)'
@@ -14,9 +14,9 @@ blast_radius:
 operational_rollback_slo: 5m
 scope:
   in:
-    - packages/caws-cli/templates/hook-packs/shared/classify_command.py
-    - packages/caws-cli/tests/hooks/pytest/test_classify_command.py
     - docs/architecture/command-capability-taxonomy.md
+    - packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh
+    - packages/caws-cli/tests/hooks/bats/block-dangerous.bats
   out:
     - packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh
 invariants:
