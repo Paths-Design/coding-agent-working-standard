@@ -7,7 +7,9 @@ created_at: '2026-06-16T19:28:14.011Z'
 updated_at: '2026-06-16T19:28:34.621Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'kernel/scope/contention (new pure evaluateContention over worktrees + specs)'
+    - 'cli/shell/commands/scope (new `contention` subcommand)'
+    - 'hook-pack/shared/worktree-write-guard (consumes it; deletes last inline js-yaml block)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -25,13 +27,39 @@ scope:
     - packages/caws-cli/tests/init/pack-fingerprints.json
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A new pure kernel function evaluateContention(path, worktrees, specs, currentBranch) returns, for the given path, every ACTIVE worktree (status not destroyed/missing, baseBranch === currentBranch, directory present per registry) whose bound ACTIVE spec scope.in admits the path — using the kernel scope matcher (matchGlob), NOT a re-implemented glob. The result is a typed value (claimants[] with {worktreeName, specId, matchedPattern}, or an "undetermined" reason for missing specId/spec/scope), never a string protocol.'
+  - '`caws scope contention <path>` renders that result. With --json it emits a stable single-line contract { path, status: claimed|clear|undetermined, claimants: [{worktreeName, specId, matchedPattern}], reason? }. The command does NOT re-parse spec YAML — it reads the already-loaded composeStoreSnapshot specs + worktrees, mirroring how scope show/check resolve through the canonical store.'
+  - 'worktree-write-guard.sh deletes its inline `node -e` + `require(js-yaml)` SPEC_CONTENTION_CHECK block (the parallel evaluator that loaded js-yaml, re-globbed each active worktree spec scope.in, and emitted claimed:/clear/unknown: tokens). It calls `caws scope contention <path> --json` and maps the contract onto the SAME refusal/advisory behavior (claimed → name the owning worktree(s); undetermined → the prior "scope contention undetermined" advisory; clear → proceed).'
+  - 'The two NON-js-yaml node blocks that read worktrees.json (IS_REGISTERED_WORKTREE, WT_INFO) are JSON reads, not spec parsing, and are out of scope for THIS slice — only the js-yaml SPEC_CONTENTION_CHECK block is retired. After this slice no shared hook re-parses spec YAML (scope-guard already delegated in CAWS-SCOPE-SHOW-JSON-CONTRACT-001; validate-spec via caws specs validate; this retires the last one).'
+  - 'Fail-closed parity: if `caws` or the contract is unavailable/unparseable, the guard preserves its existing conservative posture (treat as undetermined → advisory, the prior no-js-yaml behavior), never silently dropping isolation. It does not resurrect an inline parser.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'two active worktrees on the same base branch whose bound specs scope.in claim path P (worktree A) and not-P (worktree B), evaluated for path P'
+    when: 'evaluateContention(P, worktrees, specs, branch) runs'
+    then: 'it returns status=claimed with exactly one claimant {worktreeName: A, specId, matchedPattern} — B is not a claimant; a closed/non-active spec is never a claimant'
+  - id: A2
+    given: 'a path no active worktree spec claims'
+    when: 'evaluateContention runs'
+    then: 'status=clear, claimants empty'
+  - id: A3
+    given: 'an active worktree whose registry entry has no specId, or whose bound spec is missing/has empty scope.in'
+    when: 'evaluateContention runs'
+    then: 'status=undetermined with a reason naming the cause (missing-specId / missing-spec / missing-scope) — the guard must not treat undetermined as clear'
+  - id: A4
+    given: '`caws scope contention <path> --json` against a repo with a claiming worktree'
+    when: 'the command runs'
+    then: 'stdout is one JSON line {path, status:"claimed", claimants:[{worktreeName, specId, matchedPattern}]}; no spec YAML is re-parsed by the command (it reads the store snapshot)'
+  - id: A5
+    given: 'the installed worktree-write-guard.sh after caws init'
+    when: 'it processes a base-branch Write to a path another active worktree claims, and (separately) a path none claim'
+    then: 'the claimed path is refused naming the owning worktree; the unclaimed path proceeds — both via `caws scope contention`, with NO node -e/js-yaml in the hook (grep-asserted) and the IS_REGISTERED/WT_INFO JSON reads still present'
+  - id: A6
+    given: 'the kernel unit suite, the CLI shell suite, the bats hook suite, the fingerprint guard, and a real caws init smoke'
+    when: 'they run against the modified kernel + CLI + hook'
+    then: 'new contention unit + contract + bats tests pass; prior scope/binding/worktree-write-guard tests unchanged; fingerprint guard passes with the SHARED_PACK_VERSION bump; the installed hook delegates'
+non_functional:
+  reliability:
+    - 'evaluateContention is a pure function of (path, registry, specs, branch) with no I/O — deterministic and unit-testable in isolation, mirroring evaluatePath. The CLI command and the hook are thin layers over it; the kernel remains the single evaluator so the hook can never disagree with it on a (path, spec) contention decision.'
 contracts:
   - name: 'scope-contention'
     type: behavior
