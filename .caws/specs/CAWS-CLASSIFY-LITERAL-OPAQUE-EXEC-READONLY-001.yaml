@@ -3,6 +3,7 @@ title: 'classify_command admits literal read-only python/node -c/-e payloads so 
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: classify-literal-readonly
 created_at: '2026-06-16T16:25:48.456Z'
 updated_at: '2026-06-16T16:26:46.359Z'
 blast_radius:
