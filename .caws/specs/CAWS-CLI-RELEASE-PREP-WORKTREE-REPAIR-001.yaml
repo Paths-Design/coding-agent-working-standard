@@ -7,26 +7,46 @@ created_at: '2026-06-16T00:17:51.220Z'
 updated_at: '2026-06-16T00:18:08.104Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/package.json
+    - packages/caws-kernel/package.json
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/package.json
     - packages/caws-cli/CHANGELOG.md
     - packages/caws-kernel/package.json
     - packages/caws-kernel/CHANGELOG.md
     - package-lock.json
-  out: []
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'COUPLED RELEASE — the registry-stale-kernel footgun is LIVE and must be closed. Published kernel 1.2.0 on npm LACKS the new symbols (worktree_pruned, spec_binding_cleared, WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING) — verified by npm pack of the published tarball. The local kernel 1.2.0 added them WITHOUT a version bump. cli depends on kernel ^1.2.0, so a fresh install of the new cli would resolve the stale published 1.2.0 and caws worktree repair would break at runtime. Fix: bump kernel 1.2.0 -> 1.3.0 (additive: new event vocabulary + H1-H6/orphan doctor diagnostics, no breaking change) AND bump the cli dependency ^1.2.0 -> ^1.3.0 so the new cli can only resolve a kernel that carries the symbols. The kernel 1.3.0 must be published BEFORE the cli tag (the established coupled-release ordering, already documented in the kernel CHANGELOG [1.2.0] section and docs/release-procedure.md).'
+  - 'VERSION DECISION. cli 11.2.0 is already published on npm, so the new content (caws worktree repair surface, repair event vocabulary, installed-smoke reconcile + hook Stop bugfix, doc/help cohesion) ships as cli 11.3.0 — a feature release (new CLI subcommand) coupled to kernel 1.3.0 (additive minor). package-lock.json is regenerated to mirror both bumps.'
+  - 'PREP ONLY — no tag, no publish. This slice commits the version bumps + CHANGELOG sections + dependency pin + regenerated lock so the maintainer can publish kernel 1.3.0 then push the caws-cli-v11.3.0 tag against this SHA. CI does not choose the version, write the changelog, or bump package.json; branch push alone never publishes (CAWS-RELEASE-TAG-DRIVEN-001). This slice touches NO workflow file and NO runtime code.'
+  - 'EVIDENCE GATE — the final pre-tag checks run from clean main: build kernel + cli, kernel tests, cli store/shell/init suites, npm run smoke:fresh-install (which packs+installs the LOCAL kernel tarball, so it proves the new coupling end-to-end), caws doctor, git status. All must be green before the commit is considered tag-ready.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'The published kernel 1.2.0 lacks the new symbols and cli depends on ^1.2.0.'
+    when: 'The kernel is bumped to 1.3.0 and the cli dependency to ^1.3.0.'
+    then: 'A fresh install of the new cli can no longer resolve a kernel without the repair event/rule symbols; the dependency range floor (^1.3.0) excludes the stale published 1.2.0.'
+  - id: A2
+    given: 'cli 11.2.0 is already on npm.'
+    when: 'The cli version is set to 11.3.0 and package-lock.json regenerated.'
+    then: 'packages/caws-cli/package.json is 11.3.0, packages/caws-kernel/package.json is 1.3.0, the cli kernel dependency is ^1.3.0, and package-lock.json mirrors all three with no other drift.'
+  - id: A3
+    given: 'The two CHANGELOGs.'
+    when: 'Release sections are authored.'
+    then: 'caws-cli CHANGELOG [11.3.0] lists Added (worktree repair + worktree_pruned/spec_binding_cleared events), Fixed (shared hook Stop calls caws agents stop not agents deregister; fresh-install smoke reconciled to shared-core; docs/help/reference cohesion), and Changed (event-orphan repair wording = present-tense intentional refusal); kernel CHANGELOG [1.3.0] lists the additive event vocabulary + doctor diagnostics and restates the coupled-release ordering.'
+  - id: A4
+    given: 'The release-prep commit on clean main.'
+    when: 'The final pre-tag checks run (build, kernel tests, cli suites, fresh-install smoke, doctor, git status).'
+    then: 'All pass; git status is clean except the planned version/changelog/lock files; the commit is tag-ready. No tag is pushed and no publish occurs in this slice.'
+non_functional:
+  reliability:
+    - 'The fresh-install smoke is the proof that the coupling is sound: it packs both the local kernel 1.3.0 and cli 11.3.0 tarballs and installs them together, then asserts (A14.13) the installed kernel carries the repair rule + event schemas. A passing smoke after the bump is the runtime evidence that the published artifacts will not strand a consumer on a stale kernel.'
 contracts:
   - name: 'release-prep'
     type: behavior
