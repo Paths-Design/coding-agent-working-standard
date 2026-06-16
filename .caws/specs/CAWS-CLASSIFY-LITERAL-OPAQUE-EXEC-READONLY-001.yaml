@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: classify-literal-readonly
 created_at: '2026-06-16T16:25:48.456Z'
-updated_at: '2026-06-16T16:37:55.814Z'
+updated_at: '2026-06-16T16:47:02.200Z'
 blast_radius:
   modules:
     - 'hook-pack/shared/block-dangerous (opaque-exec ask handling — block vs latch decision)'
@@ -17,6 +17,8 @@ scope:
     - docs/architecture/command-capability-taxonomy.md
     - packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh
     - packages/caws-cli/tests/hooks/bats/block-dangerous.bats
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
   out:
     - packages/caws-cli/templates/hook-packs/shared/classify_command.py
 invariants:
