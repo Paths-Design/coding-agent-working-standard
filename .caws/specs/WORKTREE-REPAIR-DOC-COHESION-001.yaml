@@ -4,7 +4,7 @@ risk_tier: 3
 mode: doc
 lifecycle_state: active
 created_at: '2026-06-16T00:04:19.667Z'
-updated_at: '2026-06-16T00:04:19.667Z'
+updated_at: '2026-06-16T00:04:29.301Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
@@ -13,6 +13,10 @@ operational_rollback_slo: 5m
 scope:
   in:
     - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - docs/command-reference.md
+    - docs/architecture/caws-vnext-command-surface.md
+    - docs/guides/worktree-isolation.md
   out: []
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'
