@@ -7,21 +7,29 @@ created_at: '2026-06-16T00:09:46.985Z'
 updated_at: '2026-06-16T00:09:48.261Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - README.md
+    - AGENTS.md
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - README.md
     - AGENTS.md
-  out: []
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'README.md and AGENTS.md each carry a current-surface "Manage CAWS worktrees" command table whose worktree-subcommand enumeration MUST include repair now that the leaf shipped (PRUNE-REPAIR-WORKTREE-001). These were missed by WORKTREE-REPAIR-DOC-COHESION-001 (which covered --help + command-reference + the architecture/guide/CLAUDE doctrine); this sibling slice closes them. Identical one-line table edit in each (add repair to the create/list/bind/destroy/merge/repair-sparse/migrate-registry list).'
+  - 'Scope boundary: ONLY the two authoritative present-tense surface tables. Historical/point-in-time docs that mention the pre-repair list (docs/failure-lineage.md lesson record, dated docs/reports/* transcripts) are deliberately NOT edited — they are point-in-time records and rewriting them would falsify the history they exist to preserve.'
+  - 'DOC-ONLY: no runtime, registration, generated-file, or test change.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'The README.md and AGENTS.md worktree command tables.'
+    when: 'They are read after this slice.'
+    then: 'Each lists repair among the worktree subcommands; neither presents a worktree command set that omits the shipped command. No other line changes.'
+  - id: A2
+    given: 'The historical docs (docs/failure-lineage.md, docs/reports/*).'
+    when: 'The repo is swept for stale worktree lists.'
+    then: 'They are intentionally left as point-in-time records — only README + AGENTS (current-surface authority) are corrected.'
 non_functional: {}
 contracts: []
