@@ -215,212 +215,97 @@ for prefix in "${ALLOW_PREFIXES[@]}"; do
   fi
 done
 
-# Full mode: per-feature specs under .caws/specs/ (v11-shape aware)
-SPECS_DIR="$SPECS_BASE/.caws/specs"
-
-# CAWS-SCOPE-STRIKE-SOURCE-UNIFY-001: delegate to `caws scope check`
-# (the kernel-backed authority) before falling back to the inline node
-# block below.
-if command -v caws >/dev/null 2>&1; then
-  if caws scope check "$REL_PATH" >/dev/null 2>&1; then
-    # Kernel-authoritative ADMIT. Skip strike counter entirely.
-    exit 0
+# CAWS-SCOPE-SHOW-JSON-CONTRACT-001: the scope DECISION and its DIAGNOSTIC both
+# come from the kernel via the `caws` CLI. The hook no longer re-parses specs.
+#
+#   1. `caws scope check` gives the admit/refuse decision (exit 0/1) — the
+#      kernel-authoritative ADMIT short-circuits the strike counter entirely.
+#   2. On refuse, `caws scope show --json` renders the stable diagnostic
+#      contract (decision / rule / mode / boundSpecId / matchedPattern /
+#      bindingState / ambiguousClaimants). The hook parses that with jq and maps
+#      it onto the progressive-strike refusal — it does NOT reconstruct the
+#      kernel's scope evaluation with its own js-yaml require.
+#
+# This is the "caws governs caws artifacts" boundary: one evaluator (the
+# kernel), consulted by every consumer's thin hook, instead of an inline
+# parallel evaluator that drifts and depends on a hook-resolvable js-yaml.
+# Fail closed on an ENVIRONMENT fault (no CLI / no jq / unparseable diagnostic)
+# with a direct hard block, NOT the progressive-strike ramp: a missing toolchain
+# is not a scope strike, and emit_block does not depend on strike-file state.
+_scope_env_block() {
+  local msg="$1"
+  local _id="CAWS scope-guard"
+  command -v guard_identity >/dev/null 2>&1 && _id="$(guard_identity scope-guard)"
+  if command -v emit_block >/dev/null 2>&1; then
+    emit_block "$_id: $msg"
+  else
+    printf '%s\n' "$_id: $msg" >&2
   fi
+}
+
+if ! command -v caws >/dev/null 2>&1; then
+  # Fail closed: without the CLI we cannot evaluate scope. Refuse rather than
+  # silently admit, and do NOT resurrect an inline parser.
+  _scope_env_block "cannot evaluate scope — the \`caws\` CLI is not on PATH. Scope.in/scope.out cannot be enforced, so the edit is refused rather than silently admitted. Install/restore the caws CLI and retry."
+  exit 0
 fi
 
-if command -v node >/dev/null 2>&1; then
-  SCOPE_CHECK=$(node -e "
-    var yaml = require('js-yaml');
-    var fs = require('fs');
-    var path = require('path');
-
-    $CAWS_NODE_GLOB_TO_SCOPE_REGEXP
-
-    try {
-      var filePath = '$REL_PATH';
-      var projectDir = '$PROJECT_DIR';
-      var worktreeName = '$WORKTREE_NAME';
-
-      // v11-shape lifecycle resolution.
-      function lifecycleOf(s) {
-        return (s && (s.lifecycle_state || s.status)) || 'active';
-      }
-      var TERMINAL = { closed: 1, archived: 1, completed: 1 };
-      function isDraft(state) { return state === 'draft'; }
-
-      var specs = [];
-      var malformedSpecs = [];
-
-      var specsDir = '$SPECS_DIR';
-      if (fs.existsSync(specsDir)) {
-        var files = fs.readdirSync(specsDir).filter(function(f) { return f.endsWith('.yaml') || f.endsWith('.yml'); });
-        for (var fi = 0; fi < files.length; fi++) {
-          try {
-            var s = yaml.load(fs.readFileSync(path.join(specsDir, files[fi]), 'utf8'));
-            if (!s) continue;
-            var state = lifecycleOf(s);
-            if (TERMINAL[state]) continue;
-            specs.push({ source: files[fi], spec: s, state: state });
-          } catch (parseErr) {
-            malformedSpecs.push(files[fi]);
-            process.stderr.write('scope-guard: malformed spec at ' +
-              files[fi] + ': ' + (parseErr && parseErr.message) + '\n');
-          }
-        }
-      }
-
-      if (specs.length === 0) {
-        console.log('in_scope');
-        process.exit(0);
-      }
-
-      function worktreeEntry(registry, name) {
-        if (!registry) return null;
-        if (registry.worktrees && registry.worktrees[name]) return registry.worktrees[name];
-        if (registry[name] && typeof registry[name] === 'object') return registry[name];
-        return null;
-      }
-      function boundSpecIdOf(entry) {
-        if (!entry) return null;
-        return entry.specId || entry.spec_id || null;
-      }
-
-      var authoritativeSpec = null;
-      if (worktreeName) {
-        try {
-          var registryPath = path.join(projectDir, '.caws', 'worktrees.json');
-          if (fs.existsSync(registryPath)) {
-            var registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
-            var entry = worktreeEntry(registry, worktreeName);
-            var boundId = boundSpecIdOf(entry);
-            if (boundId) {
-              for (var si = 0; si < specs.length; si++) {
-                var candidate = specs[si].spec || {};
-                if (candidate.id === boundId && candidate.worktree === worktreeName) {
-                  authoritativeSpec = specs[si];
-                  break;
-                }
-              }
-            }
-          }
-        } catch (_) {}
-      }
-
-      if (worktreeName && malformedSpecs.length > 0) {
-        try {
-          var mRegistryPath = path.join(projectDir, '.caws', 'worktrees.json');
-          if (fs.existsSync(mRegistryPath)) {
-            var mRegistry = JSON.parse(fs.readFileSync(mRegistryPath, 'utf8'));
-            var mEntry = worktreeEntry(mRegistry, worktreeName);
-            var mBoundId = boundSpecIdOf(mEntry);
-            if (mBoundId) {
-              for (var mi = 0; mi < malformedSpecs.length; mi++) {
-                var mFileBase = malformedSpecs[mi].replace(/\.ya?ml$/i, '');
-                if (mFileBase === mBoundId) {
-                  console.log('malformed_bound_spec:' + malformedSpecs[mi]);
-                  process.exit(0);
-                }
-              }
-            }
-          }
-        } catch (_) {}
-      }
-
-      var mode = authoritativeSpec ? 'authoritative' : 'union';
-      var specsToCheck;
-      if (authoritativeSpec) {
-        specsToCheck = [authoritativeSpec];
-      } else {
-        specsToCheck = specs.filter(function(s) { return !isDraft(s.state); });
-        if (specsToCheck.length === 0) {
-          console.log('in_scope');
-          process.exit(0);
-        }
-      }
-
-      for (var si = 0; si < specsToCheck.length; si++) {
-        var outPatterns = (specsToCheck[si].spec.scope && specsToCheck[si].spec.scope.out) || [];
-        for (var pi = 0; pi < outPatterns.length; pi++) {
-          var regex = globToRegExp(outPatterns[pi]);
-          if (regex.test(filePath)) {
-            console.log('out_of_scope:' + mode + ':' + specsToCheck[si].source + ':' + outPatterns[pi]);
-            process.exit(0);
-          }
-        }
-      }
-
-      var allInScope = [];
-      for (var si = 0; si < specsToCheck.length; si++) {
-        var inPatterns = (specsToCheck[si].spec.scope && specsToCheck[si].spec.scope.in) || [];
-        for (var pi = 0; pi < inPatterns.length; pi++) {
-          allInScope.push(inPatterns[pi]);
-        }
-        var supportPatterns = (specsToCheck[si].spec.scope && specsToCheck[si].spec.scope.support) || [];
-        for (var sp = 0; sp < supportPatterns.length; sp++) {
-          allInScope.push(supportPatterns[sp]);
-        }
-      }
-      if (allInScope.length > 0) {
-        var found = false;
-        for (var pi = 0; pi < allInScope.length; pi++) {
-          var regex = globToRegExp(allInScope[pi]);
-          if (regex.test(filePath)) {
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          var boundIdForHint = (authoritativeSpec && authoritativeSpec.spec && authoritativeSpec.spec.id) || '';
-          console.log('not_in_scope:' + mode + ':' + boundIdForHint);
-          process.exit(0);
-        }
-      }
-
-      console.log('in_scope');
-    } catch (error) {
-      console.log('error:' + error.message);
-    }
-  " 2>&1)
-
-  if [[ "$SCOPE_CHECK" == out_of_scope:* ]]; then
-    DETAIL="${SCOPE_CHECK#out_of_scope:}"
-    MODE="${DETAIL%%:*}"
-    REST="${DETAIL#*:}"
-    SOURCE="${REST%%:*}"
-    PATTERN="${REST#*:}"
-    if [[ "$MODE" == "union" ]]; then
-      emit_scope_progression "This file is marked out-of-scope in '$SOURCE' by pattern '$PATTERN'. Mode: union (no authoritative spec bound). An unrelated spec may be blocking this edit. Diagnose: caws scope show."
-    else
-      emit_scope_progression "This file is marked out-of-scope in '$SOURCE' by pattern '$PATTERN'. Mode: authoritative (checking only your bound spec)."
-    fi
-    exit 0
-  fi
-
-  if [[ "$SCOPE_CHECK" == malformed_bound_spec:* ]]; then
-    MALFORMED_FILE="${SCOPE_CHECK#malformed_bound_spec:}"
-    emit_scope_progression "Your worktree's bound spec '.caws/specs/$MALFORMED_FILE' failed to parse (invalid YAML). Scope cannot be enforced authoritatively, so the edit is refused rather than falling back to weaker union-mode checks. Fix the YAML in '$MALFORMED_FILE', then retry."
-    exit 0
-  fi
-
-  if [[ "$SCOPE_CHECK" == not_in_scope:* ]]; then
-    REST="${SCOPE_CHECK#not_in_scope:}"
-    MODE="${REST%%:*}"
-    BOUND_SPEC_ID=""
-    if [[ "$REST" == *:* ]]; then
-      BOUND_SPEC_ID="${REST#*:}"
-    fi
-    if [[ "$MODE" == "union" ]]; then
-      emit_scope_progression "This file is not in the defined scope of any active spec. Mode: union (no authoritative spec bound). Diagnose: caws scope show."
-    else
-      emit_scope_progression "This file is not in the defined scope of your bound spec '${BOUND_SPEC_ID:-<unknown>}'. Mode: authoritative." "$BOUND_SPEC_ID"
-    fi
-    exit 0
-  fi
-
-  if [[ "$SCOPE_CHECK" == "not_in_scope" ]]; then
-    emit_scope_progression "This file is not in the defined scope of any active spec. Diagnose: caws scope show."
-    exit 0
-  fi
+if caws scope check "$REL_PATH" >/dev/null 2>&1; then
+  # Kernel-authoritative ADMIT. Skip strike counter entirely.
+  exit 0
 fi
 
+# Refused (or no-authority). Pull the structured diagnostic from the kernel.
+SCOPE_JSON="$(caws scope show "$REL_PATH" --json 2>/dev/null)"
+
+# Fail closed if the diagnostic is unavailable/unparseable: refuse, don't admit.
+if [[ -z "$SCOPE_JSON" ]] || ! command -v jq >/dev/null 2>&1 \
+   || ! printf '%s' "$SCOPE_JSON" | jq -e . >/dev/null 2>&1; then
+  _scope_env_block "refused '$REL_PATH' but could not render the structured diagnostic (\`caws scope show --json\` unavailable or unparseable). The edit is refused rather than silently admitted. Diagnose: caws scope show $REL_PATH."
+  exit 0
+fi
+
+_jq() { printf '%s' "$SCOPE_JSON" | jq -r "$1 // empty" 2>/dev/null; }
+SC_DECISION="$(_jq '.decision')"
+SC_RULE="$(_jq '.rule')"
+SC_MODE="$(_jq '.mode')"
+SC_BOUND_SPEC="$(_jq '.boundSpecId')"
+SC_PATTERN="$(_jq '.matchedPattern')"
+SC_BINDING="$(_jq '.bindingState')"
+SC_CLAIMANTS="$(printf '%s' "$SCOPE_JSON" | jq -r '(.ambiguousClaimants // []) | join(", ")' 2>/dev/null)"
+
+# A one_sided binding means the worktree's bound spec is missing/malformed (it
+# did not load). Scope cannot be enforced authoritatively, so refuse rather than
+# fall back to weaker union-mode checks (preserves the prior malformed-bound-spec
+# refusal — the kernel now surfaces it as one_sided/no_authority).
+if [[ "$SC_BINDING" == "one_sided" ]]; then
+  emit_scope_progression "Your worktree's bound spec did not load (missing or invalid YAML), so scope cannot be enforced authoritatively and the edit is refused rather than falling back to weaker union-mode checks. Fix the bound spec, then retry. Diagnose: caws scope show $REL_PATH."
+  exit 0
+fi
+
+# More than one active spec claims this path: ambiguous authority. Surface the
+# claimants (the kernel already refuses to guess).
+if [[ -n "$SC_CLAIMANTS" ]]; then
+  emit_scope_progression "Ambiguous scope authority for '$REL_PATH': multiple active specs claim it ($SC_CLAIMANTS). CAWS will not guess which governs — narrow one spec's scope.in or route the edit through the single owning worktree. Diagnose: caws scope show $REL_PATH."
+  exit 0
+fi
+
+# A reject whose matched rule is a scope.out pattern is "marked out-of-scope";
+# any other reject/no_authority is "not in the defined scope". The kernel's
+# stable `rule` id carries the distinction (…scope_out vs …not in scope.in).
+if [[ "$SC_DECISION" == "reject" && "$SC_RULE" == *scope_out* ]]; then
+  if [[ "$SC_MODE" == "union" ]]; then
+    emit_scope_progression "This file is marked out-of-scope by pattern '${SC_PATTERN:-<unknown>}'. Mode: union (no authoritative spec bound). An unrelated spec may be blocking this edit. Diagnose: caws scope show $REL_PATH."
+  else
+    emit_scope_progression "This file is marked out-of-scope by pattern '${SC_PATTERN:-<unknown>}' in spec '${SC_BOUND_SPEC:-<unknown>}'. Mode: authoritative (checking only your bound spec)."
+  fi
+  exit 0
+fi
+
+# Default refusal: not in any admitting scope.
+if [[ "$SC_MODE" == "union" ]]; then
+  emit_scope_progression "This file is not in the defined scope of any active spec. Mode: union (no authoritative spec bound). Diagnose: caws scope show $REL_PATH."
+else
+  emit_scope_progression "This file is not in the defined scope of your bound spec '${SC_BOUND_SPEC:-<unknown>}'. Mode: authoritative." "$SC_BOUND_SPEC"
+fi
 exit 0
