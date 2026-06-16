@@ -2,10 +2,11 @@ id: WORKTREE-REPAIR-DOC-COHESION-001
 title: 'Add caws worktree repair to the worktree group --help blurb + regenerate command-reference + doctrine docs (no runtime lie)'
 risk_tier: 3
 mode: doc
-lifecycle_state: active
-worktree: repair-doc-01
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge repair-doc-01 at 0623118563209b59f72e38969c73c5838a1f968d'
 created_at: '2026-06-16T00:04:19.667Z'
-updated_at: '2026-06-16T00:04:37.569Z'
+updated_at: '2026-06-16T00:08:23.120Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/command-metadata.ts
