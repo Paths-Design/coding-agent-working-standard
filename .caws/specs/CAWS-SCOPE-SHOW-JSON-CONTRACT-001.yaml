@@ -7,7 +7,9 @@ created_at: '2026-06-16T17:16:03.675Z'
 updated_at: '2026-06-16T17:16:22.050Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'cli/shell/render/decision (new structured JSON emitter for a scope decision)'
+    - 'cli/shell/commands/scope (--json wiring)'
+    - 'hook-pack/shared/scope-guard (consumes the JSON contract; deletes inline js-yaml spec re-parser)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -23,13 +25,35 @@ scope:
     - packages/caws-cli/tests/init/pack-fingerprints.json
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - '`caws scope show --json <path>` emits a single-line JSON object to stdout (and nothing else on stdout) carrying a STABLE contract: decision (admit|reject|no_authority|invalid_path), rule (kernel SCOPE_RULES id), path, normalizedPath?, bindingState (bound|one_sided|unbound), mode (authoritative when a spec is bound, else union), boundSpecId?, worktreeName?, source, matchedPattern? (from decision.data), message, repair?. The object is built entirely from the kernel Decision + shell ResolvedBinding — NO spec YAML is re-parsed by the renderer.'
+  - 'The contract is additive and does not change existing surfaces: the default `caws scope show` human render is byte-identical, `--data` still emits its decision.data block, and `caws scope check` exit codes are unchanged (0 admit / 1 otherwise). --json only adds a machine-readable rendering mode on `show`.'
+  - 'scope-guard.sh no longer re-parses specs: its inline `node -e` + `require(js-yaml)` block (the parallel scope evaluator reconstructing mode/pattern/source/malformed-spec/bound-spec-id) is DELETED. The decision comes from `caws scope check` (exit code, already delegated) and the diagnostic fields come from `caws scope show --json` parsed with jq. The kernel is the single scope evaluator; the hook is a thin caller that maps the answer onto the harness block/ask/advisory envelope.'
+  - 'Fail-closed posture is preserved at the hook: if `caws` is unavailable or `--json` cannot be parsed, scope-guard refuses (or routes through its progressive-strike refusal) rather than silently admitting — it does NOT resurrect an inline parser. Removing the js-yaml re-implementation removes the hook-side js-yaml dependency for scope evaluation entirely.'
+  - 'Ambiguous binding (>1 active spec claims the path) is represented in the JSON contract (decision=no_authority or an explicit ambiguous marker with the claimant spec ids), so the hook surfaces the same refuse-on-conflict the human render already shows, without re-deriving it.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'a bound worktree whose spec scope.in admits the target path'
+    when: '`caws scope show --json <path>` runs'
+    then: 'stdout is one JSON line with decision="admit", mode="authoritative", boundSpecId set to the bound spec, worktreeName set, and rule = the kernel admit rule id — and the default (non-json) render for the same path is unchanged'
+  - id: A2
+    given: 'a path that no active spec admits, under a bound worktree (authoritative) and under no binding (union)'
+    when: '`caws scope show --json <path>` runs in each'
+    then: 'decision="reject" (authoritative, boundSpecId set) or "no_authority" (union/unbound, mode="union"), with matchedPattern present when the kernel matched a scope.out pattern — i.e. the JSON distinguishes authoritative-reject from union/unbound exactly as the inline block did'
+  - id: A3
+    given: 'the modified scope-guard.sh hook installed via caws init, on a fresh repo with a bound spec'
+    when: 'an in-scope and an out-of-scope Write are processed'
+    then: 'the in-scope edit is admitted (exit 0) and the out-of-scope edit drives the progressive-strike refusal — using `caws scope check` + `caws scope show --json`, with NO `node -e`/js-yaml present in the hook (asserted by grep) and the strike escalation message intact'
+  - id: A4
+    given: 'caws unavailable on PATH (or --json output unparseable) when scope-guard runs on an out-of-scope path'
+    when: 'the hook processes the edit'
+    then: 'the hook fails closed (refuses / strikes) rather than admitting; it never falls back to an inline spec parser'
+  - id: A5
+    given: 'the full shell jest suite, the bats hook suite, and a real `caws init` smoke'
+    when: 'they run against the modified CLI + hook'
+    then: 'the new render/decision JSON contract tests pass, scope-guard.bats passes (incl. the no-js-yaml grep assertion), prior scope/decision/binding tests are unchanged, and the installed scope-guard.sh carries no inline js-yaml'
+non_functional:
+  reliability:
+    - 'The JSON contract is the stable hook-facing interface: field names and the decision enum are a public contract (mirroring the existing stable `rule` id contract). A renderer change that drops or renames a contract field is a breaking change and must be caught by the render/decision contract test, not discovered by a consumer hook at runtime.'
 contracts:
   - name: 'scope-show-json'
     type: behavior
