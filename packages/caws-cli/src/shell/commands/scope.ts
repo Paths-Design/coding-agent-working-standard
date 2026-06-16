@@ -20,8 +20,14 @@
 // The command does NOT compute its own scope rules. The kernel decides;
 // the command only renders and picks the exit.
 
+import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import * as nodePath from 'node:path';
+
 import {
+  evaluateContention,
   evaluatePath,
+  type ContentionClaimant,
   type Decision,
   type Policy,
 } from '@paths.design/caws-kernel';
@@ -198,4 +204,135 @@ export function runScopeCommand(opts: ScopeCommandOptions): number {
   }
   // mode === 'check'
   return decision.kind === 'admit' ? 0 : 1;
+}
+
+// ---------------------------------------------------------------------------
+// caws scope contention <path>  (CAWS-SCOPE-CONTENTION-CMD-001)
+// ---------------------------------------------------------------------------
+// "Which OTHER active worktrees, on this base branch, have a bound active spec
+// whose scope.in claims this path?" The kernel `evaluateContention` is the
+// single matcher; this command is a thin layer that loads the store snapshot,
+// resolves the current branch, and renders. It replaces the inline node -e +
+// js-yaml SPEC_CONTENTION_CHECK block worktree-write-guard.sh used to carry.
+
+export interface ScopeContentionOptions {
+  readonly path: string;
+  readonly cwd?: string;
+  readonly out?: (line: string) => void;
+  readonly err?: (line: string) => void;
+  /** Emit the stable single-line JSON contract (hook-facing). */
+  readonly json?: boolean;
+  /** Injectable current-branch resolver (tests). Defaults to git rev-parse. */
+  readonly currentBranch?: () => string | undefined;
+}
+
+export function runScopeContentionCommand(opts: ScopeContentionOptions): number {
+  const cwd = opts.cwd ?? process.cwd();
+  const out = opts.out ?? ((s: string) => process.stdout.write(s + '\n'));
+  const err = opts.err ?? ((s: string) => process.stderr.write(s + '\n'));
+  const asJson = opts.json === true;
+
+  const repoRootResult = resolveRepoRoot(cwd);
+  if (!repoRootResult.ok) {
+    err('caws scope contention: failed to resolve repo root.');
+    err(renderDiagnostics(repoRootResult.errors, { showData: false }));
+    return 2;
+  }
+  const { repoRoot, cawsDir } = repoRootResult.value;
+
+  let snapshot: ReturnType<typeof composeStoreSnapshot>;
+  try {
+    snapshot = composeStoreSnapshot({ repoRoot, cawsDir });
+  } catch (e) {
+    err(`caws scope contention: store composition failed: ${(e as Error).message}`);
+    return 2;
+  }
+
+  const branch = resolveCurrentBranch(repoRoot, opts.currentBranch);
+  if (branch === undefined) {
+    // No branch (detached HEAD / no git): cannot compute base-branch contention.
+    // Fail closed — report undetermined, do not claim "clear".
+    return emitContention(
+      out,
+      asJson,
+      opts.path,
+      { status: 'undetermined', reason: 'missing-scope', worktreeName: '' },
+      'current branch could not be resolved'
+    );
+  }
+
+  const result = evaluateContention({
+    path: opts.path,
+    worktrees: snapshot.worktrees,
+    specs: snapshot.specs,
+    currentBranch: branch,
+    worktreeExists: (record) => {
+      const p =
+        typeof record.path === 'string' && record.path.length > 0
+          ? record.path
+          : nodePath.join(repoRoot, '.caws', 'worktrees', record.name);
+      return existsSync(p);
+    },
+  });
+
+  return emitContention(out, asJson, opts.path, result);
+}
+
+function resolveCurrentBranch(
+  repoRoot: string,
+  injected?: () => string | undefined
+): string | undefined {
+  if (injected !== undefined) return injected();
+  try {
+    const b = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    }).trim();
+    return b.length > 0 && b !== 'HEAD' ? b : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function emitContention(
+  out: (line: string) => void,
+  asJson: boolean,
+  path: string,
+  result: ReturnType<typeof evaluateContention>,
+  reasonNote?: string
+): number {
+  if (asJson) {
+    const claimants: readonly ContentionClaimant[] =
+      result.status === 'claimed' ? result.claimants : [];
+    const payload: Record<string, unknown> = {
+      path,
+      status: result.status,
+      claimants: claimants.map((c) => ({
+        worktreeName: c.worktreeName,
+        specId: c.specId,
+        matchedPattern: c.matchedPattern,
+      })),
+    };
+    if (result.status === 'undetermined') {
+      payload['reason'] = reasonNote ?? result.reason;
+      if (result.worktreeName.length > 0) payload['worktreeName'] = result.worktreeName;
+    }
+    out(JSON.stringify(payload));
+    return 0;
+  }
+
+  if (result.status === 'claimed') {
+    out(`CLAIMED ${path}`);
+    for (const c of result.claimants) {
+      out(`  worktree '${c.worktreeName}' (spec ${c.specId}) via scope.in '${c.matchedPattern}'`);
+    }
+  } else if (result.status === 'clear') {
+    out(`CLEAR ${path} — no other active worktree's spec claims this path`);
+  } else {
+    out(
+      `UNDETERMINED ${path} — ${reasonNote ?? result.reason}` +
+        (result.worktreeName.length > 0 ? ` (worktree '${result.worktreeName}')` : '')
+    );
+  }
+  return 0;
 }

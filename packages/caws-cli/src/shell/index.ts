@@ -57,8 +57,12 @@ export type { RenderDecisionOptions } from './render/decision';
 export { runDoctorCommand } from './commands/doctor';
 export type { DoctorCommandOptions } from './commands/doctor';
 
-export { runScopeCommand } from './commands/scope';
-export type { ScopeCommandOptions, ScopeMode } from './commands/scope';
+export { runScopeCommand, runScopeContentionCommand } from './commands/scope';
+export type {
+  ScopeCommandOptions,
+  ScopeMode,
+  ScopeContentionOptions,
+} from './commands/scope';
 
 export { runEvidenceRecordCommand } from './commands/evidence';
 export type {
