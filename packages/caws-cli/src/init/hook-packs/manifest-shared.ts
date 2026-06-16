@@ -32,7 +32,12 @@ import type { HookPackV1 } from './types';
 // a prescriptive remediation INSTEAD of arming the sticky session danger latch.
 // A shared-template content change requires this bump so `caws init`
 // re-propagates the fix to consumers (installed hooks are copied, not linked).
-export const SHARED_PACK_VERSION = 3;
+// v4 (CAWS-SCOPE-SHOW-JSON-CONTRACT-001): scope-guard.sh deletes its inline
+// node -e + js-yaml spec re-parser and consumes `caws scope show --json` (the
+// stable kernel-backed diagnostic contract) instead. The kernel is the single
+// scope evaluator; the hook is a thin caller. Bump re-propagates the de-duped
+// hook to consumers (whose agents cannot edit the CLI themselves).
+export const SHARED_PACK_VERSION = 4;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.

@@ -28,7 +28,7 @@ import {
 
 import { composeStoreSnapshot, resolveRepoRoot } from '../../store';
 import { resolveBinding } from '../binding/resolve-binding';
-import { renderDecision } from '../render/decision';
+import { renderDecision, renderDecisionJson } from '../render/decision';
 import { renderDiagnostics } from '../render/diagnostic';
 
 export type ScopeMode = 'show' | 'check';
@@ -40,6 +40,12 @@ export interface ScopeCommandOptions {
   readonly out?: (line: string) => void;
   readonly err?: (line: string) => void;
   readonly showData?: boolean;
+  /**
+   * Emit the stable machine-readable JSON contract (one line) instead of the
+   * human render. Only meaningful on `show` (CAWS-SCOPE-SHOW-JSON-CONTRACT-001);
+   * the hook-facing consumer is scope-guard.sh. Exit codes are unchanged.
+   */
+  readonly json?: boolean;
 }
 
 export function runScopeCommand(opts: ScopeCommandOptions): number {
@@ -47,6 +53,7 @@ export function runScopeCommand(opts: ScopeCommandOptions): number {
   const out = opts.out ?? ((s: string) => process.stdout.write(s + '\n'));
   const err = opts.err ?? ((s: string) => process.stderr.write(s + '\n'));
   const showData = opts.showData === true;
+  const asJson = opts.json === true;
   const mode = opts.mode;
 
   // 1. Repo root
@@ -86,6 +93,23 @@ export function runScopeCommand(opts: ScopeCommandOptions): number {
   //     options, then exit non-zero (check) / 0 with the detail (show).
   if (bound.ambiguous !== undefined) {
     const { targetPath, claimants } = bound.ambiguous;
+    // --json: emit the stable contract for the ambiguous case (the kernel does
+    // not produce a Decision here — authority is ambiguous by construction —
+    // so build the object directly). decision=no_authority + the claimant ids.
+    if (asJson && mode === 'show') {
+      out(
+        JSON.stringify({
+          decision: 'no_authority',
+          rule: 'scope.no_authority.ambiguous_binding',
+          path: targetPath,
+          bindingState: 'unbound',
+          mode: 'union',
+          ambiguousClaimants: claimants.map((c) => c.specId),
+          message: `Ambiguous binding: ${claimants.length} active bound specs claim "${targetPath}" via scope.in; CAWS will not guess which governs.`,
+        })
+      );
+      return 0;
+    }
     const cwdClaimant =
       bound.worktreeName !== undefined
         ? claimants.find((c) => c.worktreeName === bound.worktreeName)
@@ -131,9 +155,14 @@ export function runScopeCommand(opts: ScopeCommandOptions): number {
     return 2;
   }
 
-  // 6. Render — both modes use the same renderer with the same
-  //    boundContext hint so the human-readable nuance for unbound is
-  //    consistent.
+  // 6. Render. --json (show only) emits the stable single-line machine
+  //    contract for hook consumption (CAWS-SCOPE-SHOW-JSON-CONTRACT-001) and
+  //    returns immediately — no human prose, no caveat lines. Otherwise both
+  //    modes use the human renderer with the same boundContext hint.
+  if (asJson && mode === 'show') {
+    out(renderDecisionJson(decision, bound));
+    return 0;
+  }
   out(renderDecision(decision, { boundContext: bound, showData }));
 
   // 6a. Worktree-claim caveat (CAWS-SCOPE-CHECK-WORKTREE-CLAIM-CAVEAT-001).
