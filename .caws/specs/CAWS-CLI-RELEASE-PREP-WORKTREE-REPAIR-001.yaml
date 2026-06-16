@@ -2,10 +2,11 @@ id: CAWS-CLI-RELEASE-PREP-WORKTREE-REPAIR-001
 title: 'Release-prep: bump kernel 1.2.0->1.3.0 + cli 11.2.0->11.3.0, dependency pin, CHANGELOGs (coupled, tag SHA only)'
 risk_tier: 2
 mode: chore
-lifecycle_state: active
-worktree: release-prep-01
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge release-prep-01 at 4816bb4e3ce5e4a5d450ccf67fcb0b91d890953d'
 created_at: '2026-06-16T00:17:51.220Z'
-updated_at: '2026-06-16T00:18:08.104Z'
+updated_at: '2026-06-16T00:24:48.549Z'
 blast_radius:
   modules:
     - packages/caws-cli/package.json
