@@ -25,7 +25,7 @@ The v11 cutover is complete. `main` runs the v11.1 surface (kernel/store/shell a
 | `caws waiver create / list / show / revoke` | Manage waiver records. Singular surface — no plural alias. |
 | `caws events migrate / rotate / verify-archive` | Maintenance for the hash-chained `.caws/events.jsonl`. |
 | `caws specs create / list / show / recover / close / archive / prune-archive / migrate` | Manage spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. |
-| `caws worktree create / list / bind / destroy / merge / repair-sparse / migrate-registry` | Manage CAWS worktrees bound to active specs. |
+| `caws worktree create / list / bind / destroy / merge / repair-sparse / repair / migrate-registry` | Manage CAWS worktrees bound to active specs (`repair` prunes ghost registry entries + clears dead spec→worktree bindings; `repair-sparse` restores the `.caws/specs` sparse-checkout invariant). |
 | `caws agents register / heartbeat / stop / list / show / prune` | Agent-liveness substrate (`.caws/leases/`). Operational cache only — never authority. |
 
 Run `caws <group> --help` for full options and flag details.
