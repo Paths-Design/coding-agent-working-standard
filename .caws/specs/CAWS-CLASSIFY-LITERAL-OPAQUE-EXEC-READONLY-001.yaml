@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: classify-literal-readonly
 created_at: '2026-06-16T16:25:48.456Z'
-updated_at: '2026-06-16T16:37:53.581Z'
+updated_at: '2026-06-16T16:37:54.797Z'
 blast_radius:
   modules:
     - 'hook-pack/shared/classify_command (capability lattice EXEC/opaque decision)'
@@ -19,6 +19,7 @@ scope:
     - packages/caws-cli/tests/hooks/bats/block-dangerous.bats
   out:
     - packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh
+    - packages/caws-cli/templates/hook-packs/shared/classify_command.py
 invariants:
   - 'A literal -c/-e payload (no shell expansion, command substitution, or backticks) whose body contains only read-only operations classifies as non-escalating (decision allow / no opinion), so a benign recon one-liner does NOT arm the danger latch.'
   - 'Genuine opacity is preserved as a refuse-admittance signal: a payload containing an unexpanded $VAR, a $() substitution, or a backtick substitution stays opacity=opaque and therefore stays decision=ask. The fix narrows admittance to provably read-only literal payloads only.'
