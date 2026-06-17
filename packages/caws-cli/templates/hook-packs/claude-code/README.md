@@ -1,7 +1,7 @@
 <!--
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 18
+# hook_pack_version: 19
 # caws_min_major: 11
 # lineage_refs: 8,11,16,17,19,22,23,24,27
 # do_not_edit_directly: update via `caws init --agent-surface claude-code`
@@ -14,9 +14,15 @@ doctrine** (managed-file rules, spec-authoring traps, v10/v11 state model,
 `settings.json` wiring) see [`CLAUDE.md`](./CLAUDE.md) in this directory —
 that file is authoritative for behavior; this README is the at-a-glance map.
 
-These are CAWS-managed files. **Do not hand-edit them.** Update the pack with
-`caws init --agent-surface claude-code`. Hand-editing a managed file turns it
-into an unmanaged snowflake the installer will then refuse to touch.
+These are CAWS-managed files — a **starting point, not an end state**. CAWS owns
+the WHY/WHAT (why each guard exists, what it enforces); your repo owns the HOW
+(thresholds, env tuning, repo-specific checks). Do not hand-edit a managed file
+to dodge a block during ordinary work; update the baseline with `caws init
+--agent-surface claude-code`. But shaping the pack to your repo as it grows is
+the intended path — a deliberately hand-edited hook becomes an unmanaged file
+the installer will then leave alone (by design, so it won't clobber your work).
+See [`CLAUDE.md`](./CLAUDE.md) § *This pack is a starting point* for the full
+stance.
 
 ## How the pack runs
 

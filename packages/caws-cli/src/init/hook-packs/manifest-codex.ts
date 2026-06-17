@@ -38,7 +38,7 @@
 
 import type { HookPackV1 } from './types';
 
-export const CODEX_PACK_VERSION = 7;
+export const CODEX_PACK_VERSION = 8;
 
 export const CODEX_PACK: HookPackV1 = {
   id: 'codex',
