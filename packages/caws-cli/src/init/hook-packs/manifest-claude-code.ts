@@ -193,7 +193,7 @@ import type { HookPackV1 } from './types';
 // settings.json wiring is updated to route through the shared dispatcher
 // at .caws/hooks/dispatch/<event>.sh with CAWS_AGENT_SURFACE=claude-code
 // injected.
-export const CLAUDE_CODE_PACK_VERSION = 18;
+export const CLAUDE_CODE_PACK_VERSION = 19;
 
 export const CLAUDE_CODE_PACK: HookPackV1 = {
   id: 'claude-code',

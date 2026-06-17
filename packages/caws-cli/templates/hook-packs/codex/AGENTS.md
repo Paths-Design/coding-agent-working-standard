@@ -1,7 +1,7 @@
 <!--
 # CAWS-MANAGED-HOOK
 # hook_pack: codex
-# hook_pack_version: 7
+# hook_pack_version: 8
 # caws_min_major: 11
 # lineage_refs: 1,4,6,8,11,12,13,16,17,19,20
 # do_not_edit_directly: update via `caws init --agent-surface codex`
@@ -58,20 +58,47 @@ shared baseline, the session log renderer — is the shared core under
 is the shared default for all surfaces (quality-check.sh ships commented out for
 everyone; codex does not disable it via any per-surface mechanism).
 
+## This pack is a starting point, not an end state
+
+CAWS cannot anticipate every situation your repository will run into as it
+grows. The shipped hook pack is the **governance floor** — a baseline you start
+from and grow as your project matures. The division of authority is deliberate:
+
+- **CAWS owns the WHY and the WHAT** — the hard adjudication and the mechanisms.
+  *Why* a guard exists (the failure class it prevents), and *what* invariant it
+  enforces, are CAWS's contribution. Those are the load-bearing parts you should
+  not silently weaken or delete.
+- **Your repo owns the HOW** — the specific behavior, thresholds, and added
+  rules. These hooks are installed templates the repo is **meant to shape**:
+  tune them via env (`CAWS_GOD_OBJECT_LOC`, `CAWS_LOC_DELTA_WARN_THRESHOLD`, the
+  `.caws/command-adapters.json` sidecar), add repo-specific checks, and let the
+  governance surface evolve with the shape of your codebase. A consuming repo's
+  installed `.caws/hooks/` is expected to drift ahead of the shipped template
+  over time — that is the design, not a defect.
+
+This is why the quality plane lives in shapeable hook scripts rather than a
+fixed subprocess that must be patched centrally for every repo-specific need.
+Equipping your agents with the tools you recommend for effective work is not a
+loss of governance — it is governance you can grow.
+
 ## These are CAWS-managed files
 
-These are CAWS-managed hook-pack files installed by
-`caws init --agent-surface codex`. Do not hand-edit them during ordinary
-work. If a hook blocks legitimate work, surface the exact block to the user and
-continue only with explicit user authorization or a CAWS-managed update path. Do
-not bypass, delete, or locally weaken guards. (Any internal CAWS provenance
-metadata in a file's header is upstream maintainer context — it is not an
-authority requirement for this repo.)
+The hooks ship as **managed** files so `caws init` can update the baseline
+cleanly. During ordinary work, do not hand-edit them: if a hook blocks
+legitimate work, surface the exact block to the user and continue only with
+explicit user authorization. Do not bypass, delete, or locally weaken a guard on
+an agent's own judgment — that crosses into the WHY/WHAT that CAWS owns. (Any
+internal CAWS provenance metadata in a file's header is upstream maintainer
+context — it is not an authority requirement for this repo.)
 
-To update the pack, re-run `caws init --agent-surface codex` rather than
-editing files here. A managed file's header is how `caws init` recognizes it as
-safe to update; hand-editing turns it into an unmanaged file the installer will
-then refuse to touch.
+Shaping the pack (the HOW above) is a **deliberate, human-authorized** act, not
+an in-the-moment edit to dodge a block. When you intend to evolve a hook for
+your repo, do it openly: re-run `caws init --agent-surface codex` to take a
+baseline update, or hand-edit with intent and accept that the file becomes
+**unmanaged** — `caws init` will then refuse to touch it (by design: it will not
+clobber a hook you have deliberately shaped). A managed file's header is how
+`caws init` recognizes it as safe to update; removing or editing the header is
+what marks the file as yours.
 
 ## What each hook does
 
