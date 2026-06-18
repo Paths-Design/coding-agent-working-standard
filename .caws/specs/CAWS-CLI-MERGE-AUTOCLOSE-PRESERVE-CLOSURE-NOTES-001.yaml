@@ -6,6 +6,31 @@ lifecycle_state: active
 worktree: merge-autoclose-notes
 created_at: '2026-06-18T03:11:37.154Z'
 updated_at: '2026-06-18T03:11:44.223Z'
+closure_notes: |
+  Root cause: mergeWorktree's auto-close passed an unconditional machine stub
+  reason ("Auto-closed by caws worktree merge <name> at <sha>") to closeSpec.
+  closeSpec's closure_notes branch overwrote an inline single-line value with
+  that stub; block scalars survived only by accident of the
+  hasComplexTopLevelValue carve-out. The governed merge reported success while
+  silently clobbering author-written audit content — the "reports success
+  while destroying data" class the release stance prioritizes.
+
+  Fix: CloseSpecInput gains preserveExistingNotes (insert-only mode). When set,
+  an existing non-empty closure_notes is preserved verbatim regardless of
+  inline-vs-block shape; the stub fills closure_notes only when the spec
+  carried none (audit provenance for note-less specs is retained). mergeWorktree
+  sets the flag; the explicit `caws specs close --reason` path leaves it unset,
+  so a user-supplied reason still updates existing notes (user intent wins).
+
+  Evidence: lifecycle-rollback-harness adds A1 (inline preserved, stub absent),
+  A1b (block preserved), A2 (absent-notes filled with stub), A3 (explicit reason
+  without flag still replaces inline notes). Full store suite 205/205 green; the
+  123 `tsc --noEmit` errors are the pre-existing Result<T>-union-narrowing
+  posture (the build gate is build-cli.js, not tsc), none on the edited lines.
+
+  These very notes are authored as a block scalar so the still-old live merge
+  binary preserves them through the auto-close; the fix itself is what makes the
+  inline shape equally safe going forward.
 blast_radius:
   modules:
     - caws-cli-store
