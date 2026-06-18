@@ -159,9 +159,10 @@ export interface StoreSnapshot {
     readonly worktreeDirByName: Readonly<Record<string, boolean>>;
     readonly specClaimedWorktreeDirByName: Readonly<Record<string, boolean>>;
     /**
-     * CAWS-ARCHIVE-AS-TOMBSTONE-001: count of yaml files at the top
-     * of .caws/specs/.archive/. Excludes .unrecoverable/ subdir.
-     * Surfaced as doctor.archive.legacy_bodies_present WARN when >0.
+     * Count of yaml files at the top of .caws/specs/.archive/.
+     * Excludes .unrecoverable/ subdir. Retained for compatibility;
+     * current doctor rules do not warn merely because archive bodies
+     * exist.
      */
     readonly legacyArchiveBodyCount: number;
   };

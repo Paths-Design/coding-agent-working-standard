@@ -8,8 +8,9 @@
 //   activateSpec — raw-byte patch lifecycle_state draft→active + spec_activated
 //   closeSpec   — raw-byte patch lifecycle_state/resolution/closure_notes
 //                  /updated_at on existing spec + spec_closed
-//   archiveSpec — move .caws/specs/<id>.yaml → .caws/specs/.archive/<id>.yaml,
-//                  patch lifecycle_state → archived + spec_archived
+//   archiveSpec — patch lifecycle_state → archived, move
+//                  .caws/specs/<id>.yaml → .caws/specs/.archive/<id>.yaml,
+//                  append spec_archived
 //
 // Every operation:
 //   - acquires the lifecycle lock
@@ -255,14 +256,13 @@ function isArchivedViaTombstone(cawsDir: string, id: string): boolean {
   return false;
 }
 
-// ─── Git query helpers (CAWS-ARCHIVE-AS-TOMBSTONE-001) ─────────────────
+// ─── Git query helpers ──────────────────────────────────────────────────
 //
-// archiveSpec needs to capture the spec yaml's blob_sha + optional
-// source_commit_sha BEFORE removing the file. These helpers wrap
-// execFileSync with the CAWS shell discipline (array args, never raw
-// shell strings) and return null on failure rather than throwing.
-// Failure-tolerant by design: a missing blob means "not in HEAD," not
-// "system is broken."
+// These helpers wrap execFileSync with the CAWS shell discipline (array
+// args, never raw shell strings) and return null/false on failure rather
+// than throwing. Most callers use them for cold-path diagnostics or
+// advisory output; lifecycle validity must not depend on brittle git
+// plumbing unless the caller explicitly makes that part of its contract.
 
 function runGitQuery(
   args: ReadonlyArray<string>,
@@ -318,6 +318,18 @@ function gitLastCommitForPath(
   );
   if (output === null || output.length === 0) return null;
   return /^[0-9a-f]{40}$/.test(output) ? output : null;
+}
+
+function gitPathIgnored(repoRoot: string, relPath: string): boolean {
+  try {
+    execFileSync('git', ['check-ignore', '-q', '--', relPath], {
+      cwd: repoRoot,
+      stdio: ['ignore', 'ignore', 'ignore'],
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ─── Auto-commit helper (CAWS-SPECS-WRITER-AUTOCOMMIT-001) ──────────────
@@ -1038,67 +1050,67 @@ export function archiveSpec(
   }
 
   const now = (input.now ?? (() => new Date()))().toISOString();
-
-  // CAWS-ARCHIVE-AS-TOMBSTONE-001 invariant: archive does NOT write
-  // a body to .caws/specs/.archive/<id>.yaml. The body is recoverable
-  // via git history; the only on-disk mutation is the deletion of the
-  // active path.
-  //
-  // Step ordering (locked inside the lifecycle txn):
-  //   1. Capture blob_sha + source_commit_sha BEFORE any mutation
-  //      (so even if the txn fails, no state has been written).
-  //   2. unlink fromPath inside the txn's plannedWrites (modelled as
-  //      a delete via the new lifecycle-transaction shape, OR
-  //      executed inside the txn callback for v1).
-  //   3. Append the spec_archived event carrying blob_sha (new
-  //      tombstone shape) — NOT to_path.
-  //   4. Post-txn, autoCommit stages the deletion via `git add` (which
-  //      stages deletions when the file is gone).
-  //
-  // v1 ordering note: lifecycle-transaction.plannedWrites expects
-  // {path, contents} pairs (creates/overwrites). It does not model
-  // deletions natively. For v1 we execute the unlink inside the
-  // txn callback AFTER the event write succeeds; if the unlink
-  // fails post-event, we surface partial_failure_unrecovered
-  // (same shape as the legacy code did).
-  //
-  // void input.reason: archive accepts --reason for parity with
-  // close but the spec_archived schema does not carry it.
-  //
-  // CAWS-MERGE-CLOSE-MISSING-UPDATED-AT-001 reconciliation: the
-  // archiveSpec absent-`updated_at` patch from this slice was
-  // superseded by CAWS-ARCHIVE-AS-TOMBSTONE-001 (merge 2a4cc30).
-  // Tombstone eliminates archiveSpec's YAML patch step entirely —
-  // there is no `updated_at` to insert into a body that no longer
-  // gets written. The closeSpec absent-`updated_at` fix at line ~540
-  // remains in force; the archiveSpec branch is now dead code in
-  // tombstone-world and has been removed from this slice on merge.
-
   const repoRoot = repoRootFromCawsDir(cawsDir);
   const fromRel = path.relative(repoRoot, fromPath);
+  const archiveDir = path.join(cawsDir, 'specs', '.archive');
+  const toPath = archivedSpecPath(cawsDir, input.id);
+  const toRel = path.relative(repoRoot, toPath);
 
-  // Capture BEFORE any mutation. blob_sha is the authoritative
-  // recovery target. source_commit_sha is optional human audit.
-  const blobSha = gitBlobShaAtHead(repoRoot, fromRel);
-  if (blobSha === null) {
+  if (fs.existsSync(toPath)) {
     return err(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        `Spec "${input.id}" is not tracked at HEAD. Cannot archive: blob_sha is the authoritative recovery target, and without it the archive event would have no recovery path. Commit the spec first (or run \`caws specs close <id>\` which auto-commits per CAWS-SPECS-WRITER-AUTOCOMMIT-001), then re-run archive.`,
-        { subject: input.id, data: { from_path: fromRel } }
+        `Spec "${input.id}" already has an archived body at ${toPath}. Refusing to overwrite it.`,
+        { subject: input.id, data: { from_path: fromRel, to_path: toRel } }
       )
     );
   }
-  const sourceCommitSha = gitLastCommitForPath(repoRoot, fromRel);
 
-  // Build the event payload in tombstone shape.
-  const eventData: Record<string, unknown> = {
-    from_path: fromRel,
-    blob_sha: blobSha,
-  };
-  if (sourceCommitSha !== null) {
-    eventData.source_commit_sha = sourceCommitSha;
+  let patched = originalBytes;
+  const step1 = setTopLevelScalar(patched, 'lifecycle_state', 'archived');
+  if (!step1.ok) return err(step1.errors);
+  patched = step1.value;
+
+  const hasUpdatedAt = /^updated_at:/m.test(patched);
+  if (hasUpdatedAt) {
+    const step2 = setTopLevelScalar(patched, 'updated_at', `'${now}'`);
+    if (!step2.ok) return err(step2.errors);
+    patched = step2.value;
+  } else {
+    const anchor = /^resolution:/m.test(patched) ? 'resolution' : 'lifecycle_state';
+    const step2 = insertTopLevelScalarAfter(patched, anchor, 'updated_at', `'${now}'`);
+    if (!step2.ok) return err(step2.errors);
+    patched = step2.value;
   }
+
+  const reparsed = parseAndValidateSpec(patched);
+  if (!isOk(reparsed)) {
+    return err(
+      reparsed.errors.map((d) =>
+        storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
+          subject: d.subject ?? input.id,
+          data: { source_rule: d.rule, hint: 'planned-archive-bytes validation failed' },
+        })
+      )
+    );
+  }
+
+  try {
+    fs.mkdirSync(archiveDir, { recursive: true });
+  } catch (e) {
+    const cause = e as { message?: string; code?: string };
+    return err(
+      storeDiagnostic(
+        STORE_RULES.WRITE_IO_FAILED,
+        `Failed to create archive directory ${archiveDir}: ${cause.message ?? 'unknown error'}.`,
+        { subject: archiveDir, data: { code: cause.code } }
+      )
+    );
+  }
+
+  const archivePathIgnored = gitPathIgnored(repoRoot, toRel);
+  const eventData: Record<string, unknown> = { from_path: fromRel, to_path: toRel };
+
   const event: EventBody = {
     event: 'spec_archived',
     ts: now,
@@ -1107,26 +1119,20 @@ export function archiveSpec(
     data: eventData,
   } as unknown as EventBody;
 
-  // Pre-write dirty state on the path being deleted.
-  const wasDirtyBeforeWrite = isPathDirty(repoRoot, fromRel);
-
-  // The "fake plannedWrite" pattern: lifecycle-transaction's contract
-  // is "write these files atomically and append these events." We have
-  // no file to write, so we feed it an empty plannedWrites and append
-  // the event only. The unlink happens AFTER txn success but BEFORE
-  // autocommit, so the autocommit's `git add` stages the deletion.
+  const wasDirtyBeforeWrite =
+    isPathDirty(repoRoot, fromRel) || isPathDirty(repoRoot, toRel);
   let unlinkOk = false;
   let unlinkError: string | null = null;
 
   const txnResult = withLifecycleLock(cawsDir, () => {
     const r = runLifecycleTransaction({
       cawsDir,
-      plannedWrites: [],
+      plannedWrites: [{ path: toPath, contents: patched }],
       events: [event],
     });
     if (!r.ok) return r;
     if (r.value.kind !== 'success') return r;
-    // Event appended. Now unlink the active path.
+    // Event appended and archived body written. Now remove the active path.
     try {
       fs.unlinkSync(fromPath);
       unlinkOk = true;
@@ -1152,34 +1158,43 @@ export function archiveSpec(
     return err(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
-        `spec_archived event appended (blob_sha=${blobSha}) but unlink of ${fromPath} failed (${unlinkError}). The body is recoverable via \`git show ${blobSha}\` but the active file still exists on disk.`,
+        `spec_archived event appended and ${toPath} written, but unlink of ${fromPath} failed (${unlinkError}). The archived body exists, but the active file still exists on disk.`,
         {
           subject: input.id,
           data: {
             from_path: fromPath,
-            blob_sha: blobSha,
-            recovery_instruction: `Manually remove ${fromPath}; the body is in git history at blob ${blobSha}.`,
+            to_path: toPath,
+            recovery_instruction: `Inspect ${fromPath} and ${toPath}. If the archived body is correct, remove ${fromPath} and commit the archive transition.`,
           },
         }
       )
     );
   }
 
-  // CAWS-SPECS-WRITER-AUTOCOMMIT-001: autoCommit the deletion. `git
-  // add -- <fromRel>` stages a deletion when the file is gone, so the
-  // resulting commit records the removal.
+  // CAWS-SPECS-WRITER-AUTOCOMMIT-001: autoCommit the source deletion
+  // and archive destination when the destination is trackable. The
+  // shared autoCommit helper filters gitignored paths, so an ignored
+  // .archive/ directory yields a deletion-only audit commit and leaves
+  // the archived body on disk for the operator.
   const audit = autoCommit({
     repoRoot,
-    paths: [fromRel],
+    paths: [fromRel, toRel],
     message: `chore(caws): archive ${input.id}`,
     wasDirtyBeforeWrite,
   });
 
+  const warnings = archivePathIgnored
+    ? [
+        `${toRel} is ignored by git, so it was not staged in the audit commit. The archived YAML remains on disk. To track archived specs, remove or narrow the ignore rule for .caws/specs/.archive/ and run git add ${toRel} && git commit.`,
+      ]
+    : undefined;
+
   return ok({
     kind: 'success',
     id: input.id,
-    path: fromPath,
+    path: toPath,
     data: { audit_commit: audit },
+    ...(warnings !== undefined ? { warnings } : {}),
   });
 }
 
@@ -1901,20 +1916,9 @@ export interface SpecsListEntry {
   readonly path: string;
 }
 
-/**
- * CAWS-ARCHIVE-AS-TOMBSTONE-001: archived entries do NOT have an
- * on-disk path post-tombstone. They are reconstructed from the event
- * log's spec_archived events. `blob_sha` is the recovery target;
- * `path` carries the from_path (where the spec was BEFORE archiving)
- * for human-readable identification.
- */
 export interface ArchivedSpecsListEntry {
   readonly id: string;
-  /**
-   * Pre-archive from_path. For new-shape events, taken verbatim from
-   * the event's from_path. For legacy events, the same field
-   * (legacy events also carry from_path).
-   */
+  /** Archive destination when known; otherwise the pre-archive source path. */
   readonly path: string;
   readonly archived_at: string;
   /**
@@ -1933,16 +1937,11 @@ export interface SpecsListResult {
 /**
  * List specs by lifecycle state, optionally including archived ones.
  *
- * CAWS-ARCHIVE-AS-TOMBSTONE-001: the `--include-archived` path now
- * reads from `.caws/events.jsonl` (most recent spec_archived event
- * per spec_id), NOT from `.caws/specs/.archive/`. Post-tombstone the
- * .archive/ directory is not populated; reading it would either
- * surface nothing (steady state) or surface legacy bodies the
- * doctor warning already flags for migration.
- *
- * Includes legacy events (with only from_path + to_path, no
- * blob_sha) → blob_sha is reported as null; recover falls back to
- * git log --follow.
+ * The `--include-archived` path reads the event log for the most
+ * recent spec_archived event per spec_id. Move-shaped events carry
+ * to_path; tombstone-shaped events carry blob_sha. `blob_sha` is null
+ * for move-shaped events, where recovery prefers the on-disk archive
+ * body and then falls back to git history.
  *
  * Latest-write-wins per spec_id: if a spec was archived, recovered,
  * recreated, and re-archived, only the most recent spec_archived
@@ -1989,7 +1988,7 @@ function readArchivedFromEventLog(
   // Map: spec_id → most recent spec_archived event payload+ts.
   const latest = new Map<
     string,
-    { ts: string; from_path: string; blob_sha: string | null }
+    { ts: string; path: string; blob_sha: string | null }
   >();
   for (const line of raw.split('\n')) {
     if (line.length === 0) continue;
@@ -2009,7 +2008,7 @@ function readArchivedFromEventLog(
     const evt = parsed as {
       ts?: string;
       spec_id?: string;
-      data?: { from_path?: string; blob_sha?: string };
+      data?: { from_path?: string; to_path?: string; blob_sha?: string };
     };
     if (
       typeof evt.ts !== 'string' ||
@@ -2022,7 +2021,10 @@ function readArchivedFromEventLog(
     }
     latest.set(evt.spec_id, {
       ts: evt.ts,
-      from_path: evt.data.from_path,
+      path:
+        typeof evt.data.to_path === 'string'
+          ? evt.data.to_path
+          : evt.data.from_path,
       blob_sha: typeof evt.data.blob_sha === 'string' ? evt.data.blob_sha : null,
     });
   }
@@ -2031,7 +2033,7 @@ function readArchivedFromEventLog(
     if (activeIds.has(specId)) continue; // re-created after archive — active wins
     out.push({
       id: specId,
-      path: info.from_path,
+      path: info.path,
       archived_at: info.ts,
       blob_sha: info.blob_sha,
     });
@@ -2180,13 +2182,14 @@ function findArchivedSpecEvent(
 }
 
 /**
- * Recover an archived spec's body from git history.
+ * Recover an archived spec's body.
  *
  * Resolution order:
  *   1. New-shape event with blob_sha → `git show <blob_sha>`.
- *   2. Legacy event with to_path only → `git log --all --follow --
- *      <from_path>` to find a containing commit, then
- *      `git show <commit>:<from_path>`. If zero commits, Err.
+ *   2. Move-shaped event with to_path → read the archive file from
+ *      disk when it exists (covers gitignored .archive/), else search
+ *      git history for to_path.
+ *   3. Legacy fallback → search git history for from_path.
  *
  * NEVER mutates .caws/specs/. Returns the raw yaml bytes.
  */
@@ -2236,57 +2239,73 @@ export function recoverArchivedSpec(
     return ok({ source: body, blob_sha: evt.blob_sha, from_path: evt.from_path });
   }
 
-  // Legacy shape: fall back to git log --follow on from_path. Walk
-  // commits in newest-first order and pick the first one where the
-  // file exists at from_path (skip deletion commits). The `git log
-  // --follow` output includes BOTH commits where the file existed
-  // and the commit that removed it; we want the first one before
-  // the deletion.
+  if (evt.to_path !== undefined) {
+    const archivePath = path.join(repoRoot, evt.to_path);
+    if (fs.existsSync(archivePath)) {
+      const source = readYamlSource(archivePath);
+      if (!isOk(source)) return err(source.errors);
+      return ok({ source: source.value, blob_sha: null, from_path: evt.from_path });
+    }
+    const recoveredFromArchivePath = recoverPathFromGitHistory(
+      repoRoot,
+      evt.to_path
+    );
+    if (recoveredFromArchivePath !== null) {
+      return ok({
+        source: recoveredFromArchivePath,
+        blob_sha: null,
+        from_path: evt.from_path,
+      });
+    }
+  }
+
+  const recoveredFromSourcePath = recoverPathFromGitHistory(
+    repoRoot,
+    evt.from_path
+  );
+  if (recoveredFromSourcePath !== null) {
+    return ok({
+      source: recoveredFromSourcePath,
+      blob_sha: null,
+      from_path: evt.from_path,
+    });
+  }
+
+  return err(
+    storeDiagnostic(
+      STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+      `Spec "${id}" is archived but its body was not found on disk or in local git history.`,
+      {
+        subject: id,
+        data: {
+          from_path: evt.from_path,
+          ...(evt.to_path !== undefined ? { to_path: evt.to_path } : {}),
+        },
+      }
+    )
+  );
+}
+
+function recoverPathFromGitHistory(
+  repoRoot: string,
+  relPath: string
+): string | null {
   const commitListing = runGitQuery(
-    ['log', '--all', '--follow', '--format=%H', '--', evt.from_path],
+    ['log', '--all', '--follow', '--format=%H', '--', relPath],
     repoRoot
   );
-  if (commitListing === null || commitListing.length === 0) {
-    return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        `Spec "${id}" is a legacy archive (event has no blob_sha) and no commit on the current branch contains "${evt.from_path}". The body is unrecoverable from this clone.`,
-        { subject: id, data: { from_path: evt.from_path } }
-      )
-    );
-  }
+  if (commitListing === null || commitListing.length === 0) return null;
   const commits = commitListing
     .split('\n')
     .map((c) => c.trim())
     .filter((c) => /^[0-9a-f]{40}$/.test(c));
-  if (commits.length === 0) {
-    return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        `git log returned no valid commit shas for "${evt.from_path}".`,
-        { subject: id }
-      )
-    );
-  }
-  // Walk newest-first; pick the first commit where the file blob
-  // exists at from_path. trim:false preserves trailing newlines.
   for (const commit of commits) {
-    const body = runGitQuery(
-      ['show', `${commit}:${evt.from_path}`],
-      repoRoot,
-      { trim: false }
-    );
-    if (body !== null) {
-      return ok({ source: body, blob_sha: null, from_path: evt.from_path });
-    }
+    const body = runGitQuery(['show', `${commit}:${relPath}`], repoRoot, {
+      trim: false,
+    });
+    if (body !== null) return body;
   }
-  return err(
-    storeDiagnostic(
-      STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-      `Spec "${id}" is a legacy archive; git log --follow returned ${commits.length} commits referencing "${evt.from_path}" but none contained the file body (all were deletion commits or renames). Body unrecoverable from this clone.`,
-      { subject: id, data: { from_path: evt.from_path, candidates: commits.length } }
-    )
-  );
+  return null;
 }
 
 // ─── pruneArchive (CAWS-ARCHIVE-AS-TOMBSTONE-001 A8/A9) ─────────────────

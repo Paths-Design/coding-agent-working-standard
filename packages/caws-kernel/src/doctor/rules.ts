@@ -249,15 +249,10 @@ export const DOCTOR_RULES = {
    */
   WAIVER_EXPIRES_SOON: 'doctor.waiver.expires_soon',
   /**
-   * CAWS-ARCHIVE-AS-TOMBSTONE-001: a legacy
-   * `.caws/specs/.archive/<id>.yaml` body exists on disk. Post-
-   * tombstone, archive does not write bodies to `.archive/` — these
-   * are leftovers from pre-slice archive operations. Severity WARN
-   * (not error): the bodies are harmless on disk but pollute agent
-   * grep/RAG surfaces with stale spec content. Repair: run
-   * `caws specs prune-archive --dry-run` to preview migration;
-   * `--apply` to execute (recoverable bodies removed, unrecoverable
-   * quarantined).
+   * Deprecated compatibility rule name from the tombstone-only archive
+   * era. Current archive operations intentionally write bodies under
+   * `.caws/specs/.archive/`, so doctor no longer emits this finding
+   * for ordinary archive bodies.
    */
   ARCHIVE_LEGACY_BODIES_PRESENT: 'doctor.archive.legacy_bodies_present',
 } as const;

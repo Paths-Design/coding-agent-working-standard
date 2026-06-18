@@ -204,7 +204,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         {
           flag: '--archived',
           description:
-            'Recover an archived spec body via the event log + git show <blob_sha>. The body is NOT loaded from .caws/specs/.archive/ (which the post-CAWS-ARCHIVE-AS-TOMBSTONE-001 archive flow does not write).',
+            'Recover an archived spec body. Move-shaped archives are read from .caws/specs/.archive/ when present; tombstone-shaped archives fall back to git show <blob_sha>.',
         },
       ],
     },
@@ -213,7 +213,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
       name: 'recover',
       argument: { name: 'id', required: true, description: 'Archived spec id to recover' },
       description:
-        'Recover an archived spec body via the event log + git show <blob_sha>. Topology-independent (works with merge commits, rebases, cherry-picks). Reads .caws/events.jsonl for the spec_archived event, validates the blob_sha, runs git show, prints to stdout (or --out <path>). Does NOT mutate .caws/specs/.',
+        'Recover an archived spec body. Reads .caws/events.jsonl for the spec_archived event, prefers an on-disk .caws/specs/.archive/<id>.yaml body for move-shaped archives, and falls back to git history/blob recovery. Prints to stdout (or --out <path>) and does not mutate .caws/specs/.',
       options: [
         DATA_OPTION,
         {
@@ -291,11 +291,11 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
       name: 'archive',
       argument: { name: 'id', required: true, description: 'Closed spec id to archive' },
       description:
-        'Archive a closed spec (tombstone, not a move): deletes the spec YAML and appends a recoverable spec_archived event carrying its blob_sha. Recover the body with caws specs show <id> --archived or caws specs recover <id>.',
+        'Archive a closed spec by moving its YAML to .caws/specs/.archive/<id>.yaml and appending spec_archived. If the archive destination is gitignored, the file is preserved on disk but not staged; the command prints follow-up instructions.',
       options: [
         {
           flag: '--reason <text>',
-          description: 'Archive reason (advisory; the spec_archived schema does not carry it)',
+          description: 'Archive reason (advisory; the spec_archived event does not carry it)',
         },
         DATA_OPTION,
       ],
@@ -304,9 +304,9 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'prune-archive',
       description:
-        'Migrate legacy .caws/specs/.archive/<id>.yaml bodies (CAWS-ARCHIVE-AS-TOMBSTONE-001). Dry-run by default — pass --apply to execute. Recoverable bodies (reachable via git log --follow) are removed from the working tree; unrecoverable bodies are QUARANTINED to .caws/specs/.archive/.unrecoverable/ (never silently deleted, no override flag). Emits one spec_archive_pruned event per id on --apply.',
+        'Compatibility no-op. Archived spec bodies under .caws/specs/.archive/ are canonical again and are not pruned by CAWS.',
       options: [
-        { flag: '--apply', description: 'Execute the migration. Default is dry-run.' },
+        { flag: '--apply', description: 'Accepted for compatibility; no files are pruned.' },
         DATA_OPTION,
       ],
     },

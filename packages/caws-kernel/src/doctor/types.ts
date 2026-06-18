@@ -205,15 +205,10 @@ export interface DoctorInput {
     readonly worktreeDirByName?: Readonly<Record<string, boolean>>;
     readonly specClaimedWorktreeDirByName?: Readonly<Record<string, boolean>>;
     /**
-     * CAWS-ARCHIVE-AS-TOMBSTONE-001: count of yaml files at the top
-     * of `.caws/specs/.archive/` (excludes `.unrecoverable/`
-     * subdirectory). When >0, doctor emits
-     * `doctor.archive.legacy_bodies_present` WARN finding pointing
-     * at `caws specs prune-archive`.
-     *
-     * Optional for compatibility with older snapshot writers; when
-     * undefined, doctor skips the check (treats as "unobserved" not
-     * "absent").
+     * Count of yaml files at the top of `.caws/specs/.archive/`
+     * (excludes `.unrecoverable/` subdirectory). Retained for
+     * compatibility with older snapshot writers; current doctor rules
+     * do not warn merely because archive bodies exist.
      */
     readonly legacyArchiveBodyCount?: number;
   };
