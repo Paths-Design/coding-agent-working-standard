@@ -103,6 +103,17 @@ export interface CloseSpecInput {
   readonly supersededBy?: string;
   readonly now?: () => Date;
   readonly actor: EventBody['actor'];
+  /**
+   * Insert-only mode for closure_notes. When true, `reason` is written to
+   * closure_notes ONLY if the field is absent (or empty); an existing
+   * non-empty value is preserved verbatim. Set by the worktree-merge
+   * auto-close path (mergeWorktree → closeSpec), whose `reason` is a
+   * machine-generated stub that must never clobber author-written notes.
+   * The explicit `caws specs close --reason` path leaves this unset, so a
+   * user-supplied reason still updates existing notes (user intent wins).
+   * See CAWS-CLI-MERGE-AUTOCLOSE-PRESERVE-CLOSURE-NOTES-001.
+   */
+  readonly preserveExistingNotes?: boolean;
 }
 
 export interface ActivateSpecInput {
@@ -822,7 +833,25 @@ export function closeSpec(
     const escaped = `'${input.reason.replace(/'/g, "''")}'`;
     const hasNotes = /^closure_notes:/m.test(patched);
     if (hasNotes) {
-      if (!hasComplexTopLevelValue(patched, 'closure_notes')) {
+      // CAWS-CLI-MERGE-AUTOCLOSE-PRESERVE-CLOSURE-NOTES-001:
+      // `hasComplexTopLevelValue` is true for empty / block-scalar / flow
+      // values and false for an inline single-line scalar. The historical
+      // behavior overwrote inline scalars (preserving block scalars only by
+      // accident of that carve-out). Under preserveExistingNotes (the merge
+      // auto-close path), any closure_notes that already carries author
+      // content is left untouched regardless of inline-vs-block shape — the
+      // machine stub must never replace author-written notes.
+      //
+      // `isEmptyNotes` (key present, no content after it) gates the
+      // preserve so we don't widen the guard to a degenerate empty field;
+      // its overwrite disposition is then unchanged from the historical
+      // path (hasComplexTopLevelValue treats empty as complex → not
+      // overwritten either way). The fillable case for a stub is *absent*
+      // notes, handled by the `else` insert branch below.
+      const isEmptyNotes = /^closure_notes:[ \t]*(#.*)?$/m.test(patched);
+      const preserve =
+        input.preserveExistingNotes === true && !isEmptyNotes;
+      if (!preserve && !hasComplexTopLevelValue(patched, 'closure_notes')) {
         const step3 = setTopLevelScalar(patched, 'closure_notes', escaped);
         if (!step3.ok) return err(step3.errors);
         patched = step3.value;
