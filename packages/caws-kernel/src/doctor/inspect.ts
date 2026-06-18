@@ -656,41 +656,6 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   }
 
   // -------------------------------------------------------------------------
-  // 2g. CAWS-ARCHIVE-AS-TOMBSTONE-001: legacy .caws/specs/.archive/ bodies.
-  //
-  //     Post-tombstone, `caws specs archive` does not write a yaml
-  //     body to `.caws/specs/.archive/`. Any body present at the top
-  //     of that directory is a leftover from pre-slice archive
-  //     operations. Emit a WARN finding pointing the operator at
-  //     `caws specs prune-archive --dry-run` for migration.
-  //
-  //     The .unrecoverable/ subdir is intentionally excluded from
-  //     the count: it is the destination of prune's quarantine
-  //     action and its presence is not itself a finding.
-  // -------------------------------------------------------------------------
-
-  if (
-    input.filesystem !== undefined &&
-    typeof input.filesystem.legacyArchiveBodyCount === 'number' &&
-    input.filesystem.legacyArchiveBodyCount > 0
-  ) {
-    const count = input.filesystem.legacyArchiveBodyCount;
-    findings.push(
-      finding(
-        DOCTOR_RULES.ARCHIVE_LEGACY_BODIES_PRESENT,
-        'warning',
-        `${count} legacy archived spec ${count === 1 ? 'body' : 'bodies'} present at .caws/specs/.archive/. Post-CAWS-ARCHIVE-AS-TOMBSTONE-001 archive operations do not write bodies to this location; these are leftovers from pre-slice archive runs.`,
-        {
-          subject: '.caws/specs/.archive/',
-          narrowRepair:
-            'Run `caws specs prune-archive --dry-run` to preview migration; `--apply` to execute. Recoverable bodies are removed from the working tree (recoverable via `caws specs recover <id>`); unrecoverable bodies are quarantined to .caws/specs/.archive/.unrecoverable/ for human review (never silently deleted).',
-          data: { legacy_body_count: count },
-        }
-      )
-    );
-  }
-
-  // -------------------------------------------------------------------------
   // 3. Agent freshness (display-only).
   // -------------------------------------------------------------------------
 

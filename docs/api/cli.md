@@ -357,7 +357,7 @@ caws specs recover FEAT-1
 caws specs recover FEAT-1 --out path/to/output.yaml
 ```
 
-Recover an archived spec body via the event log and `git show <blob_sha>`. Topology-independent (works with merge commits, rebases, cherry-picks). Reads `.caws/events.jsonl` for the `spec_archived` event, validates the blob_sha, runs `git show`, prints to stdout (or `--out <path>`). Does NOT mutate `.caws/specs/`.
+Recover an archived spec body. Reads `.caws/events.jsonl` for the `spec_archived` event, prefers an on-disk `.caws/specs/.archive/<id>.yaml` body for move-shaped archives, and falls back to git history/blob recovery. Prints to stdout (or `--out <path>`). Does NOT mutate `.caws/specs/`.
 
 ### `caws specs close <id>`
 
@@ -382,7 +382,7 @@ caws specs prune-archive
 caws specs prune-archive --apply
 ```
 
-Migrate legacy `.caws/specs/.archive/<id>.yaml` bodies (CAWS-ARCHIVE-AS-TOMBSTONE-001). Dry-run by default — pass `--apply` to execute. Recoverable bodies (reachable via `git log --follow`) are removed from the working tree; unrecoverable bodies are quarantined to `.caws/specs/.archive/.unrecoverable/` (never silently deleted). Emits one `spec_archive_pruned` event per id on `--apply`.
+Compatibility no-op. Archived spec bodies under `.caws/specs/.archive/` are canonical again and are not pruned by CAWS. `--apply` is accepted for compatibility and does not remove files.
 
 ### `caws specs migrate`
 

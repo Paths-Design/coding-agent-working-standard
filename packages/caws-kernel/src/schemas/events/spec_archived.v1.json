@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://caws.paths.design/schemas/events/spec_archived.v1.json",
   "title": "spec_archived event payload",
-  "$comment": "Class: REQUIRES_SPEC_ID. Records the lifecycle transition closed -> archived. ADDITIVE EVOLUTION (CAWS-ARCHIVE-AS-TOMBSTONE-001): admits TWO shapes under oneOf. Legacy shape ({from_path, to_path}) preserved for events written before the tombstone slice; the writer no longer produces this shape but historical events in events.jsonl remain valid. New shape ({from_path, blob_sha, source_commit_sha?}) used by the post-tombstone writer; blob_sha is the authoritative recovery target via `git show <blob_sha>` (topology-independent — works under fast-forward, no-ff merge, rebase, cherry-pick, and squash-merge).",
+  "$comment": "Class: REQUIRES_SPEC_ID. Records the lifecycle transition closed -> archived. Admits TWO shapes under oneOf. Move shape ({from_path, to_path}) records the filesystem move into .caws/specs/.archive/<id>.yaml and is the current archive writer shape. Tombstone shape ({from_path, blob_sha, source_commit_sha?}) is preserved for events written by the CAWS-ARCHIVE-AS-TOMBSTONE-001 writer; blob_sha remains a valid topology-independent recovery target via `git show <blob_sha>`.",
   "type": "object",
   "oneOf": [
     {

@@ -211,18 +211,17 @@ function observeFilesystem(
     hookPackInstalled: observeHookPackInstalled(repoRoot),
     worktreeDirByName,
     specClaimedWorktreeDirByName,
-    legacyArchiveBodyCount: countLegacyArchiveBodies(cawsDir),
+    legacyArchiveBodyCount: countArchiveBodies(cawsDir),
   };
 }
 
 /**
- * CAWS-ARCHIVE-AS-TOMBSTONE-001: count .yaml files at the TOP of
- * .caws/specs/.archive/. Excludes the .unrecoverable/ subdirectory
- * (that's the quarantine destination, not a source). Returns 0 when
- * the directory doesn't exist (which is the post-tombstone steady
- * state).
+ * Count .yaml files at the TOP of .caws/specs/.archive/. Excludes
+ * the .unrecoverable/ subdirectory. This remains in the snapshot for
+ * compatibility with older kernel callers; current doctor rules do
+ * not warn merely because archive bodies exist.
  */
-function countLegacyArchiveBodies(cawsDir: string): number {
+function countArchiveBodies(cawsDir: string): number {
   const archiveDir = path.join(cawsDir, 'specs', '.archive');
   let entries: fs.Dirent[];
   try {

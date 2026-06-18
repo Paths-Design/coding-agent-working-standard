@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://caws.paths.design/schemas/events/spec_archive_pruned.v1.json",
   "title": "spec_archive_pruned event payload",
-  "$comment": "Class: REQUIRES_SPEC_ID. Records the migration of a legacy .caws/specs/.archive/<id>.yaml body during `caws specs prune-archive --apply` (CAWS-ARCHIVE-AS-TOMBSTONE-001). The legacy archive body either: (a) is recoverable via git history → removed from working tree with action='removed' and blob_sha recorded so a later recover call has the same authority as a tombstone-shape archive; or (b) is not recoverable from git history (local-only body) → moved to .caws/specs/.archive/.unrecoverable/<id>.yaml with action='quarantined' (no blob_sha because there is none). The prove-recovery-or-quarantine invariant is absolute: prune-archive will REFUSE to delete a body it cannot prove recoverable, even when --apply is passed.",
+  "$comment": "Class: REQUIRES_SPEC_ID. Historical event emitted by the tombstone-era `caws specs prune-archive --apply` command. The current prune-archive command is a compatibility no-op because archive bodies under .caws/specs/.archive/ are canonical again. This schema remains to validate existing event logs.",
   "type": "object",
   "oneOf": [
     {
