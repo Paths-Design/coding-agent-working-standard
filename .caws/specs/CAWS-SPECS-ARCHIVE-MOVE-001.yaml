@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: archive-move
 created_at: '2026-06-18T19:21:30.351Z'
-updated_at: '2026-06-18T19:31:38.331Z'
+updated_at: '2026-06-18T19:34:36.611Z'
 blast_radius:
   modules:
     - 'packages/caws-cli spec lifecycle writer'
@@ -27,6 +27,7 @@ scope:
     - packages/caws-kernel/src/doctor/inspect.ts
     - packages/caws-kernel/src/doctor/types.ts
     - packages/caws-kernel/src/doctor/rules.ts
+    - packages/caws-cli/src/store/types.ts
   out: []
 invariants:
   - 'caws specs archive preserves the spec body by moving it to .caws/specs/.archive/<id>.yaml instead of deleting it.'
