@@ -3,6 +3,7 @@ title: 'worktree merge auto-close must preserve existing closure_notes'
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: merge-autoclose-notes
 created_at: '2026-06-18T03:11:37.154Z'
 updated_at: '2026-06-18T03:11:44.223Z'
 blast_radius:
