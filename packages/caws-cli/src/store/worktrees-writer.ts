@@ -1300,6 +1300,11 @@ export function mergeWorktree(
     mergeCommit,
     actor: input.actor,
     now: sharedNowFactory,
+    // CAWS-CLI-MERGE-AUTOCLOSE-PRESERVE-CLOSURE-NOTES-001: the `reason`
+    // above is a machine-generated stub. Insert-only mode keeps it from
+    // clobbering closure_notes an author wrote on the bound spec — the
+    // stub fills closure_notes only when the spec carried none.
+    preserveExistingNotes: true,
   });
 
   if (!isOk(closeResult)) {

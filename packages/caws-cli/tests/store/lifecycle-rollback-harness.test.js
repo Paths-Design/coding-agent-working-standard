@@ -143,6 +143,50 @@ contracts: []
   fs.writeFileSync(path.join(cawsDir, 'specs', `${id}.yaml`), body);
 }
 
+/**
+ * Write an active fixture spec carrying a pre-existing `closure_notes` block.
+ * `notesBlock` is spliced verbatim after `updated_at` (so the caller controls
+ * inline-vs-block shape). Used by the merge-auto-close preservation tests
+ * (CAWS-CLI-MERGE-AUTOCLOSE-PRESERVE-CLOSURE-NOTES-001). A close has to set
+ * lifecycle_state/resolution; closure_notes is positioned before those so the
+ * writer's resolution-insert and notes-handling exercise the realistic
+ * already-present-notes layout. The spec is intentionally NOT yet closed —
+ * the field is present on a still-active spec, which is the shape an author
+ * who pre-authored closure notes before merge produces.
+ */
+function writeActiveSpecWithNotes(cawsDir, id, notesBlock) {
+  const body = `id: ${id}
+title: 'Notes fixture spec'
+risk_tier: 3
+mode: chore
+lifecycle_state: active
+created_at: '2026-06-15T00:00:00.000Z'
+updated_at: '2026-06-15T00:00:00.000Z'
+${notesBlock}
+blast_radius:
+  modules:
+    - tests
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - tests
+  out: []
+invariants:
+  - 'fixture spec'
+acceptance:
+  - id: A1
+    given: 'fixture'
+    when: 'fixture'
+    then: 'fixture'
+non_functional:
+  reliability:
+    - 'fixture'
+contracts: []
+`;
+  fs.writeFileSync(path.join(cawsDir, 'specs', `${id}.yaml`), body);
+}
+
 const SESSION = { session_id: 'sess-harness', platform: 'jest' };
 const ACTOR = { kind: 'agent', id: 'harness-agent', session_id: 'sess-harness' };
 // SessionCandidates shape: { candidates: [{ identity, source }], ... }. The
@@ -210,6 +254,130 @@ describe('closeSpec — inject on spec_closed [classify: transaction-contained]'
     const evs = readEventsRaw(caws);
     expect(evs.filter((e) => e.spec_id === id).map((e) => e.event)).not.toContain('spec_closed');
     expect(evs.length).toBe(preCount);
+    expect(chainIsVerifiable(caws).ok).toBe(true);
+  });
+});
+
+// =========================================================================
+// closure_notes preservation on auto-close
+// CAWS-CLI-MERGE-AUTOCLOSE-PRESERVE-CLOSURE-NOTES-001
+//
+// mergeWorktree's auto-close passes a machine stub `reason` to closeSpec.
+// Under preserveExistingNotes (the merge shape) author-written notes must
+// survive verbatim; the stub may only fill notes that were absent. The
+// explicit `caws specs close --reason` path leaves the flag unset, so a
+// user-supplied reason still updates an existing inline value (user intent).
+// =========================================================================
+
+const AUTHOR_NOTES = 'Detailed author notes: closed after Sterling smoke + mutation run.';
+const MERGE_STUB = 'Auto-closed by caws worktree merge wt-x at deadbeef0';
+
+function readSpecYaml(cawsDir, id) {
+  return fs.readFileSync(path.join(cawsDir, 'specs', `${id}.yaml`), 'utf8');
+}
+
+describe('closeSpec closure_notes preservation [CAWS-CLI-MERGE-AUTOCLOSE-PRESERVE-CLOSURE-NOTES-001]', () => {
+  test('A1: preserveExistingNotes leaves an existing inline closure_notes scalar untouched; the stub is not written', () => {
+    const caws = setupCaws(mkRepo('rbh-notes-a1-'));
+    const id = 'HARNESS-NOTES-INLINE-001';
+    // Inline single-line scalar — the shape the old code overwrote.
+    writeActiveSpecWithNotes(caws, id, `closure_notes: '${AUTHOR_NOTES}'`);
+
+    const result = closeSpec(caws, {
+      id,
+      resolution: 'completed',
+      reason: MERGE_STUB,
+      preserveExistingNotes: true,
+      actor: ACTOR,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.value.kind).toBe('success');
+
+    const yaml = readSpecYaml(caws, id);
+    // The author content survives verbatim; the stub is absent from the file.
+    expect(yaml).toContain(`closure_notes: '${AUTHOR_NOTES}'`);
+    expect(yaml).not.toContain(MERGE_STUB);
+    // Close still happened: state flipped, exactly one closure_notes line.
+    expect(yaml).toContain('lifecycle_state: closed');
+    expect((yaml.match(/^closure_notes:/gm) || []).length).toBe(1);
+    expect(chainIsVerifiable(caws).ok).toBe(true);
+  });
+
+  test('A1b: preserveExistingNotes leaves an existing block-scalar closure_notes untouched', () => {
+    const caws = setupCaws(mkRepo('rbh-notes-a1b-'));
+    const id = 'HARNESS-NOTES-BLOCK-001';
+    // Block scalar — preserved before the fix too; pinned so a future
+    // refactor of the preserve logic cannot regress the block-scalar path.
+    const block = ['closure_notes: |', '  line one of author notes', '  line two of author notes'].join('\n');
+    writeActiveSpecWithNotes(caws, id, block);
+
+    const result = closeSpec(caws, {
+      id,
+      resolution: 'completed',
+      reason: MERGE_STUB,
+      preserveExistingNotes: true,
+      actor: ACTOR,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.value.kind).toBe('success');
+
+    const yaml = readSpecYaml(caws, id);
+    expect(yaml).toContain('line one of author notes');
+    expect(yaml).toContain('line two of author notes');
+    expect(yaml).not.toContain(MERGE_STUB);
+    expect(yaml).toContain('lifecycle_state: closed');
+    expect(chainIsVerifiable(caws).ok).toBe(true);
+  });
+
+  test('A2: preserveExistingNotes inserts the stub when the spec carried NO closure_notes (audit provenance preserved)', () => {
+    const caws = setupCaws(mkRepo('rbh-notes-a2-'));
+    const id = 'HARNESS-NOTES-ABSENT-001';
+    // No closure_notes field at all — writeActiveSpec writes none.
+    writeActiveSpec(caws, id, 'active');
+
+    const result = closeSpec(caws, {
+      id,
+      resolution: 'completed',
+      reason: MERGE_STUB,
+      preserveExistingNotes: true,
+      actor: ACTOR,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.value.kind).toBe('success');
+
+    const yaml = readSpecYaml(caws, id);
+    // Absent notes get filled with the stub so the merge audit records why.
+    expect(yaml).toContain(`closure_notes: '${MERGE_STUB}'`);
+    expect(yaml).toContain('lifecycle_state: closed');
+    expect(chainIsVerifiable(caws).ok).toBe(true);
+  });
+
+  test('A3: WITHOUT preserveExistingNotes, an explicit reason replaces an existing inline closure_notes (user intent wins)', () => {
+    const caws = setupCaws(mkRepo('rbh-notes-a3-'));
+    const id = 'HARNESS-NOTES-EXPLICIT-001';
+    writeActiveSpecWithNotes(caws, id, `closure_notes: '${AUTHOR_NOTES}'`);
+    const explicit = 'Superseded by FOO-002 per maintainer review.';
+
+    // No preserveExistingNotes flag — the caws specs close --reason path.
+    const result = closeSpec(caws, {
+      id,
+      resolution: 'completed',
+      reason: explicit,
+      actor: ACTOR,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.value.kind).toBe('success');
+
+    const yaml = readSpecYaml(caws, id);
+    // The explicit reason wins; the prior inline value is gone.
+    expect(yaml).toContain(`closure_notes: '${explicit}'`);
+    expect(yaml).not.toContain(AUTHOR_NOTES);
+    expect(yaml).toContain('lifecycle_state: closed');
+    expect((yaml.match(/^closure_notes:/gm) || []).length).toBe(1);
     expect(chainIsVerifiable(caws).ok).toBe(true);
   });
 });
