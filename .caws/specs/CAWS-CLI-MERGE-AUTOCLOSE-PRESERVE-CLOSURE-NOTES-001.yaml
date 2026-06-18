@@ -7,22 +7,31 @@ created_at: '2026-06-18T03:11:37.154Z'
 updated_at: '2026-06-18T03:11:44.223Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli-store
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/store/specs-writer.ts
     - packages/caws-cli/src/store/worktrees-writer.ts
     - packages/caws-cli/tests/store/lifecycle-rollback-harness.test.js
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'closeSpec called with preserveExistingNotes never overwrites a closure_notes value that is already present and non-empty, regardless of whether that value is an inline scalar or a block scalar.'
+  - 'mergeWorktree''s auto-close path always invokes closeSpec with preserveExistingNotes set, so its machine-generated stub reason can only insert closure_notes where none exist — it can never replace author-written notes.'
+  - 'The explicit caws specs close --reason path is unchanged: without preserveExistingNotes, an explicit reason still updates an existing inline closure_notes value (user intent wins).'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'an active spec whose closure_notes is an inline single-line scalar with detailed author notes'
+    when: 'closeSpec is called with a stub reason and preserveExistingNotes=true (the merge auto-close shape)'
+    then: 'the inline closure_notes value is preserved verbatim and the stub reason is not written to the spec YAML'
+  - id: A2
+    given: 'an active spec with no closure_notes field'
+    when: 'closeSpec is called with a stub reason and preserveExistingNotes=true'
+    then: 'the stub reason is inserted as closure_notes so the merge audit still records the auto-close provenance'
+  - id: A3
+    given: 'an active spec whose closure_notes is an inline single-line scalar'
+    when: 'closeSpec is called with an explicit reason and preserveExistingNotes unset (the caws specs close --reason shape)'
+    then: 'the explicit reason replaces the existing inline closure_notes, preserving the user-intent semantics of the explicit close path'
 non_functional: {}
 contracts: []
