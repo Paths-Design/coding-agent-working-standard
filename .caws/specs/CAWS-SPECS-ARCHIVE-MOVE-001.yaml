@@ -7,7 +7,8 @@ created_at: '2026-06-18T19:21:30.351Z'
 updated_at: '2026-06-18T19:21:30.351Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli spec lifecycle writer'
+    - 'packages/caws-cli spec archive command output'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -22,12 +23,21 @@ scope:
     - 'docs/command-reference.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'caws specs archive preserves the spec body by moving it to .caws/specs/.archive/<id>.yaml instead of deleting it.'
+  - 'The archive move must account for gitignore state so ignored archive destinations are not staged while tracked destinations are committed as a rename/delete-add transition.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'A closed spec exists at .caws/specs/<id>.yaml and .caws/specs/.archive/ is not ignored by git.'
+    when: 'caws specs archive <id> runs successfully.'
+    then: 'The source file is removed, .caws/specs/.archive/<id>.yaml exists with lifecycle_state: archived, the spec_archived event is appended, and the audit commit stages the tracked archive path.'
+  - id: A2
+    given: 'A closed spec exists and .caws/specs/.archive/ is ignored by git.'
+    when: 'caws specs archive <id> runs successfully.'
+    then: 'The source file is removed, the archive file remains in the ignored archive directory, and the git audit commit does not attempt to stage the ignored archive path.'
+  - id: A3
+    given: 'The archive destination already exists for the same spec id.'
+    when: 'caws specs archive <id> is invoked.'
+    then: 'The command refuses before mutating the source or destination files.'
 non_functional: {}
 contracts:
   - name: 'archive-move-behavior'
