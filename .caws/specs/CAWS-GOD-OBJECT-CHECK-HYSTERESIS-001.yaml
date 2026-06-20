@@ -1,0 +1,25 @@
+id: CAWS-GOD-OBJECT-CHECK-HYSTERESIS-001
+title: 'god-object-check: warn only on threshold-crossing or large additions, not every edit to an already-over file'
+risk_tier: 3
+mode: fix
+lifecycle_state: active
+created_at: '2026-06-20T23:27:53.846Z'
+updated_at: '2026-06-20T23:27:53.846Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
