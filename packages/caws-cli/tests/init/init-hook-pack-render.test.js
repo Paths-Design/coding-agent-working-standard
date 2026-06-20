@@ -29,7 +29,9 @@ const path = require('path');
 const CLI_PKG_ROOT = path.resolve(__dirname, '..', '..');
 const PACKS_ROOT = path.join(CLI_PKG_ROOT, 'templates', 'hook-packs');
 
-const { parseManagedHeader } = require('../../dist/init/hook-install');
+const os = require('os');
+const { parseManagedHeader, installHookPack } = require('../../dist/init/hook-install');
+const { SHARED_PACK } = require('../../dist/init/hook-packs/manifest-shared');
 const {
   renderHookPackInstall,
 } = require('../../dist/shell/render/init-hook-pack');
@@ -208,5 +210,107 @@ describe('A3: render frames a grown (drifted) managed hook as expected, not a pr
     expect(out).toMatch(/Created \(1\)/);
     expect(out).not.toMatch(/Kept your edits/);
     expect(out).not.toMatch(/unmanaged file at a managed path/i);
+  });
+});
+
+describe('A4: caws init preserves a grown hook and never silently clobbers it', () => {
+  // These drive the real install pipeline (installHookPack) against a temp repo,
+  // because the bug — a version bump silently overwriting an edited hook — lives
+  // in the interaction between version stamping (renderPackFileBytes) and the
+  // file-state decision (evaluateFileState), not in either alone.
+  let repoRoot;
+  // A representative shared hook with a multi-line body, so a real edit is
+  // unambiguous.
+  const REL = '.caws/hooks/scope-guard.sh';
+
+  beforeEach(() => {
+    repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-growth-'));
+    // Fresh install.
+    const r = installHookPack(SHARED_PACK, { repoRoot });
+    const created = r.actions.find((a) => a.destPath === REL);
+    expect(created && created.action).toBe('created');
+  });
+
+  afterEach(() => {
+    fs.rmSync(repoRoot, { recursive: true, force: true });
+  });
+
+  function abs(rel) {
+    return path.join(repoRoot, rel);
+  }
+
+  test('the installed header version is STAMPED to the manifest pack version (not the frozen template literal)', () => {
+    const installed = fs.readFileSync(abs(REL), 'utf8');
+    const header = parseManagedHeader(installed);
+    // The template literal is 1/2; the stamp must lift it to the current pack
+    // version. If this reads 1, the version-line is frozen and the
+    // old-version-overwrite bug is live.
+    expect(header.hookPackVersion).toBe(SHARED_PACK.packVersion);
+  });
+
+  test('re-init of an UNMODIFIED hook is a no-op (unchanged), not an overwrite churn', () => {
+    const before = fs.readFileSync(abs(REL));
+    const r = installHookPack(SHARED_PACK, { repoRoot });
+    const a = r.actions.find((x) => x.destPath === REL);
+    expect(a.action).toBe('unchanged');
+    expect(fs.readFileSync(abs(REL)).equals(before)).toBe(true);
+  });
+
+  test('re-init of a GROWN (edited) hook is REFUSED as drift and the edit SURVIVES', () => {
+    const grown =
+      fs.readFileSync(abs(REL), 'utf8') +
+      '\n# repo-specific growth: extra CI logging\necho "[our-ci] ran" >&2\n';
+    fs.writeFileSync(abs(REL), grown);
+
+    const r = installHookPack(SHARED_PACK, { repoRoot });
+    const a = r.actions.find((x) => x.destPath === REL);
+    // The grown hook must NOT be overwritten. It is preserved as drift.
+    expect(a.action).toBe('refused');
+    expect(a.refusalReason).toBe('managed_drift');
+    // The growth survives byte-for-byte.
+    expect(fs.readFileSync(abs(REL), 'utf8')).toBe(grown);
+  });
+
+  test('--overwrite on a grown hook DOES take the upstream template (the one path that discards edits)', () => {
+    const grown =
+      fs.readFileSync(abs(REL), 'utf8') + '\n# growth that will be discarded\n';
+    fs.writeFileSync(abs(REL), grown);
+
+    const r = installHookPack(SHARED_PACK, { repoRoot, overwrite: true });
+    const a = r.actions.find((x) => x.destPath === REL);
+    expect(a.action).toBe('updated');
+    expect(fs.readFileSync(abs(REL), 'utf8')).not.toContain('growth that will be discarded');
+  });
+
+  test('--adopt on a grown hook keeps the edit and reports unchanged', () => {
+    const grown =
+      fs.readFileSync(abs(REL), 'utf8') + '\n# adopted growth\n';
+    fs.writeFileSync(abs(REL), grown);
+
+    const r = installHookPack(SHARED_PACK, { repoRoot, adopt: true });
+    const a = r.actions.find((x) => x.destPath === REL);
+    expect(a.action).toBe('unchanged');
+    expect(fs.readFileSync(abs(REL), 'utf8')).toBe(grown);
+  });
+
+  test('a hook carrying only an OLD version stamp (unedited body) is safely re-stamped, not preserved as drift', () => {
+    // Simulate a consumer who installed before version stamping: same body, but
+    // the header version line reads an older number. This must update (re-stamp)
+    // — it is NOT an edit to preserve — so existing consumers are not all shown
+    // spurious drift on first upgrade.
+    const installed = fs.readFileSync(abs(REL), 'utf8');
+    const downgraded = installed.replace(
+      /^(#\s*hook_pack_version:\s*)\d+/m,
+      '$11'
+    );
+    expect(downgraded).not.toBe(installed); // sanity: the stamp actually changed
+    fs.writeFileSync(abs(REL), downgraded);
+
+    const r = installHookPack(SHARED_PACK, { repoRoot });
+    const a = r.actions.find((x) => x.destPath === REL);
+    expect(a.action).toBe('updated');
+    // After re-stamp the body is unchanged and the version is current again.
+    const after = parseManagedHeader(fs.readFileSync(abs(REL), 'utf8'));
+    expect(after.hookPackVersion).toBe(SHARED_PACK.packVersion);
   });
 });
