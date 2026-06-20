@@ -3,6 +3,7 @@ title: 'Hook-pack managed headers + init drift framing must teach growth, not ''
 risk_tier: 2
 mode: chore
 lifecycle_state: active
+worktree: wt-hook-header-doctrine
 created_at: '2026-06-20T18:32:41.322Z'
 updated_at: '2026-06-20T18:32:53.853Z'
 blast_radius:
