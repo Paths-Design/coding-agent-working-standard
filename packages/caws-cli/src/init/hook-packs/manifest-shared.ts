@@ -41,7 +41,15 @@ import type { HookPackV1 } from './types';
 // inline js-yaml block (the cross-worktree SPEC_CONTENTION_CHECK) and consumes
 // `caws scope contention --json` (kernel evaluateContention). After this no
 // shared hook re-parses spec YAML. Bump re-propagates the de-duped hook.
-export const SHARED_PACK_VERSION = 5;
+// v6 (CAWS-HOOK-PACK-MANAGED-HEADER-GROWTH-DOCTRINE-001): the managed-hook
+// header no longer carries the "do_not_edit_directly: update via caws init"
+// directive (which contradicted the growth doctrine and trained agents to hunt
+// for an upstream fix instead of editing their own hook). Every header now
+// carries an `edit_stance:` line stating the repo OWNS and may grow the hook,
+// that edits are preserved (caws init refuses to overwrite a changed managed
+// hook), and that only editing-to-bypass is out of bounds. The machine-read
+// marker keys are untouched. Bump re-propagates the reframed header.
+export const SHARED_PACK_VERSION = 6;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.

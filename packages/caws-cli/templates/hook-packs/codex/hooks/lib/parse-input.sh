@@ -4,7 +4,11 @@
 # hook_pack_version: 7
 # caws_min_major: 11
 # lineage_refs: 8,16
-# do_not_edit_directly: update via `caws init --agent-surface codex`
+# edit_stance: this repo OWNS and may grow this hook. Edits are expected and
+#   preserved — `caws init` refuses to overwrite a changed managed hook (re-run
+#   with --adopt to keep yours, or --overwrite to pull this upstream template).
+#   CAWS owns the failure-class invariant (the why/what you must not silently
+#   weaken); you own the how. Do not edit it to BYPASS the guard; do grow it.
 # Codex hook input parser (codex override).
 #
 # This file overrides the shared lib/parse-input.sh for the codex surface. It

@@ -38,7 +38,13 @@
 
 import type { HookPackV1 } from './types';
 
-export const CODEX_PACK_VERSION = 8;
+// Version 9: CAWS-HOOK-PACK-MANAGED-HEADER-GROWTH-DOCTRINE-001. The codex
+// surface files (AGENTS.md + the codex hook libs) drop the
+// "do_not_edit_directly: update via caws init" header directive for the
+// `edit_stance:` growth framing (repo owns/grows the hook; edits preserved;
+// only editing-to-bypass is out of bounds). Bump re-propagates on next
+// caws init --agent-surface codex.
+export const CODEX_PACK_VERSION = 9;
 
 export const CODEX_PACK: HookPackV1 = {
   id: 'codex',

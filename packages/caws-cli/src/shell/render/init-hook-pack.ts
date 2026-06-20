@@ -63,7 +63,13 @@ export function renderHookPackInstall(
   const created: string[] = [];
   const updated: string[] = [];
   const unchanged: string[] = [];
-  const refused: string[] = [];
+  // Refusals split by cause: a repo-edited managed hook (managed_drift) is the
+  // EXPECTED, healthy case (the repo grew its hook — that is the point); a
+  // foreign file at a managed path (unmanaged_collision) is the one that
+  // actually wants attention. Framing them identically as a problem to
+  // "resolve" is what trains agents to treat their own growth as an error.
+  const drifted: string[] = [];
+  const collided: string[] = [];
   for (const a of result.actions) {
     switch (a.action) {
       case 'created':
@@ -76,9 +82,11 @@ export function renderHookPackInstall(
         unchanged.push(a.destPath);
         break;
       case 'refused':
-        refused.push(
-          `${a.destPath}  [refused: ${a.refusalReason ?? 'unknown'}]`
-        );
+        if (a.refusalReason === 'managed_drift') {
+          drifted.push(a.destPath);
+        } else {
+          collided.push(a.destPath);
+        }
         break;
     }
   }
@@ -95,27 +103,69 @@ export function renderHookPackInstall(
     lines.push(`  Unchanged (${unchanged.length}):`);
     for (const p of unchanged) lines.push(`    = ${p}`);
   }
-  if (refused.length > 0) {
-    lines.push(`  Refused (${refused.length}):`);
-    for (const p of refused) lines.push(`    ! ${p}`);
+  if (drifted.length > 0) {
+    lines.push(`  Kept your edits — left in place (${drifted.length}):`);
+    for (const p of drifted) lines.push(`    ~ ${p}`);
     lines.push('');
     lines.push(
-      '  One or more files were refused. To resolve, choose one of:'
+      '  These managed hooks differ from the shipped template because this repo'
     );
     lines.push(
-      '    --overwrite   Replace the file with the canonical pack version.'
+      '  edited them. That is expected: CAWS hooks are a starting point you grow'
     );
     lines.push(
-      '                  CAUTION: local edits to that file will be lost.'
+      '  as your repo matures — you own the how, CAWS owns the failure-class why.'
     );
     lines.push(
-      '    --adopt       Leave the file in place; do not enforce that it'
+      '  init did NOT overwrite them, so no growth was lost. Your options:'
     );
     lines.push(
-      '                  matches the pack. CAUTION: pack drift is no longer'
+      '    (default)     Do nothing — keep your edits. This is the right choice'
     );
     lines.push(
-      '                  tracked for this file until the marker is restored.'
+      '                  when you intended to grow these hooks.'
+    );
+    lines.push(
+      '    --adopt       Same outcome made explicit: keep your version and stop'
+    );
+    lines.push(
+      '                  reporting it as drift on future runs.'
+    );
+    lines.push(
+      '    --overwrite   Pull the upstream template, replacing your version.'
+    );
+    lines.push(
+      '                  Only this path discards local edits — use it when you'
+    );
+    lines.push(
+      '                  want the new CAWS baseline over your changes.'
+    );
+  }
+
+  if (collided.length > 0) {
+    lines.push(`  Refused — unmanaged file at a managed path (${collided.length}):`);
+    for (const p of collided) lines.push(`    ! ${p}`);
+    lines.push('');
+    lines.push(
+      '  A file exists at a managed hook path but carries no CAWS-MANAGED-HOOK'
+    );
+    lines.push(
+      '  marker, so init cannot tell whether it is yours to keep. To resolve:'
+    );
+    lines.push(
+      '    --overwrite   Replace it with the canonical pack version.'
+    );
+    lines.push(
+      '                  CAUTION: the existing file is discarded.'
+    );
+    lines.push(
+      '    --adopt       Leave it in place; do not enforce that it matches the'
+    );
+    lines.push(
+      '                  pack (drift is no longer tracked until the marker'
+    );
+    lines.push(
+      '                  is restored).'
     );
     lines.push(
       '  Alternative: rename or remove the conflicting file, then re-run init.'

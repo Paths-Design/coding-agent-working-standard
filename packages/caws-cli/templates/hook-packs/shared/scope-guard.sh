@@ -4,7 +4,11 @@
 # hook_pack_version: 1
 # caws_min_major: 11
 # lineage_refs: 8,11,12,16
-# do_not_edit_directly: update via `caws init`
+# edit_stance: this repo OWNS and may grow this hook. Edits are expected and
+#   preserved — `caws init` refuses to overwrite a changed managed hook (re-run
+#   with --adopt to keep yours, or --overwrite to pull this upstream template).
+#   CAWS owns the failure-class invariant (the why/what you must not silently
+#   weaken); you own the how. Do not edit it to BYPASS the guard; do grow it.
 #
 # CAWS Scope Guard Hook (v11-shape).
 # Validates file edits against scope boundaries from per-feature specs under .caws/specs/.
