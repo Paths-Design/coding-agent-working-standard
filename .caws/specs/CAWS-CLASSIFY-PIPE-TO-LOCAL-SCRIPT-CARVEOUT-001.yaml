@@ -57,7 +57,7 @@ invariants:
   - 'A bare pipe-to-interpreter still hard-denies: `| bash`, `| bash -s`, `| bash -`, `| bash -c "..."`, `| sh` with no script-file argument stay in the catastrophic deny set.'
   - 'The curl/wget pipe-to-shell rule (`(curl|wget) ... | sh`) at classify_command.py:83 is UNCHANGED — `curl https://x | sh` still hard-denies even though it has no explicit script file.'
   - 'Quote-safety is preserved: a quoted string CONTAINING "| bash foo.sh" (e.g. an echo label or grep pattern) is not classified by the pipeline rule, because strip_quoted_regions runs first (unchanged).'
-  - 'SHARED_PACK_VERSION is bumped (6->7) and pack-fingerprints.json re-baselined so the propagation guard (pack-fingerprint.test.js) passes and consumer re-installs pick up the change. The live .claude/hooks copy is edited identically to the shared template.'
+  - 'SHARED_PACK_VERSION is bumped (6->7) and pack-fingerprints.json re-baselined so the propagation guard (pack-fingerprint.test.js) passes and consumer re-installs pick up the change. The live .claude/hooks copy is NOT hand-patched: this repo''s live surface is a pre-shared-core v16 snapshot (different version namespace) refreshed via `caws init`, not a byte mirror of the shared template — hand-patching it would create a third drift state. Live refresh follows the version bump.'
 acceptance:
   - id: A1
     given: 'the updated classify_command.py'
