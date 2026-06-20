@@ -1,5 +1,57 @@
 ## [Unreleased]
 
+## [11.5.0] (2026-06-20)
+
+Hook-pack growth-doctrine release. The shipped hooks are a starting point the
+consuming repo OWNS and grows — CAWS owns the *why/what* (the failure class and
+the invariant each guard enforces), the repo owns the *how*. This release makes
+both the hook headers and `caws init`'s behavior tell that truth, where before
+they contradicted it. Shared hook pack bumped to **v6** (claude-code **v20**,
+codex **v9**), so `caws init` re-propagates the reframed headers and the new
+install semantics to consumers.
+
+### Fixed
+
+- **`caws init` no longer silently clobbers a hook the repo has grown.**
+  The managed-hook header literals carry a frozen `hook_pack_version` (`1`/`2`)
+  while the manifest pack version climbs, so an installed hook's recorded version
+  was almost always below the manifest version. `evaluateFileState` returned
+  `managed_old_version` (→ auto-overwrite) **before** any content comparison, so
+  a hook the repo had deliberately edited was reverted on essentially every
+  re-init. Now the pack version is **stamped into the header on write** (the
+  installed header tracks the pack version), and **content is the authority** for
+  whether the consumer edited a hook: byte-identical to the current template →
+  no-op; differs only by the version stamp (unedited, predates the current
+  version) → safe re-stamp update; body genuinely differs → preserved as drift
+  (refused unless `--overwrite`/`--adopt`). A version bump alone never silently
+  overwrites an edited hook. (`CAWS-HOOK-PACK-MANAGED-HEADER-GROWTH-DOCTRINE-001`)
+
+### Changed
+
+- **Managed-hook headers reframed from "do not edit" to "you own and may grow
+  this".** The `# do_not_edit_directly: update via caws init` directive (on ~49
+  shared/vendor templates) is replaced with an `edit_stance:` block stating the
+  repo owns and may grow the hook, that edits are preserved (`caws init` refuses
+  to overwrite a changed managed hook; `--adopt` keeps yours, `--overwrite`
+  pulls upstream), and that the one out-of-bounds edit is one that *bypasses or
+  weakens* a guard. The machine-read marker keys (`CAWS-MANAGED-HOOK`,
+  `hook_pack`, `hook_pack_version`, `caws_min_major`, `lineage_refs`) are
+  unchanged, so the install layer still recognizes every template as managed.
+  (`CAWS-HOOK-PACK-MANAGED-HEADER-GROWTH-DOCTRINE-001`)
+- **`caws init` refused-files output distinguishes a grown hook from a foreign
+  collision.** A repo-edited managed hook (`managed_drift`) now renders as
+  "Kept your edits — left in place" with growth framing (`init did NOT overwrite
+  them, so no growth was lost`), instead of the previous "were refused. To
+  resolve" problem framing. An unmanaged file at a managed path
+  (`unmanaged_collision`) is still surfaced as a genuine refusal needing
+  attention. (`CAWS-HOOK-PACK-MANAGED-HEADER-GROWTH-DOCTRINE-001`)
+- **Hook-pack growth doctrine reconciled across the doctrine docs** (claude-code
+  `CLAUDE.md`, codex `AGENTS.md`, claude-code `README.md`, root template
+  `CLAUDE.md`): editing to grow is expected and welcome; an edited-but-marked
+  hook stays managed and is preserved (correcting the prior false "a
+  hand-edited hook becomes an unmanaged file" claim).
+  (`CAWS-HOOK-PACK-MANAGED-HEADER-GROWTH-DOCTRINE-001`)
+
 ## [11.4.0] (2026-06-16)
 
 Hook-de-duplication release — "caws governs caws artifacts". Three coupled
