@@ -57,6 +57,31 @@ teardown_file() {
   [[ -n "$output" ]] # emitted a non-passthrough decision/advisory for curl|sh
 }
 
+# --- pipe-to-LOCAL-SCRIPT carve-out (CAWS-CLASSIFY-PIPE-TO-LOCAL-SCRIPT-CARVEOUT-001) ---
+#
+# Piping a JSON payload into a NAMED local hook script (`printf json | bash
+# hook.sh`) is the natural way to smoke-test a hook. It is NOT curl|sh of a
+# remote interpreter, so it must pass through cleanly AND arm no latch. The bare
+# interpreter form (`| bash`) and curl|sh stay denied (tests above + below).
+
+@test "block-dangerous: pipe a JSON payload into a NAMED local script passes (carve-out) and arms NO latch" {
+  local sid="carveout-$$"
+  run_guard block-dangerous.sh "$(_cmd_envelope_sid "$sid" "printf '{\"x\":1}' | bash .caws/hooks/dispatch/pre_compact.sh")"
+  # No block decision — the pipe target is a named, inspectable script file.
+  refute_output --partial '"decision": "block"'
+  # And critically: no danger latch sentinel for this session (the migration
+  # foot-gun was that this exact form armed the catastrophic latch).
+  ! _latch_exists_for "$sid"
+}
+
+@test "block-dangerous: a BARE pipe-to-interpreter (no script file) still blocks (carve-out is narrow)" {
+  local sid="carveout-bare-$$"
+  run_guard block-dangerous.sh "$(_cmd_envelope_sid "$sid" 'tail -f x | bash')"
+  # Bare `| bash` reads the piped bytes as a script — the carve-out does NOT
+  # cover it; it stays a catastrophic deny.
+  assert_output --partial '"decision": "block"'
+}
+
 # --- opaque-exec block-not-latch (CAWS-CLASSIFY-LITERAL-OPAQUE-EXEC-READONLY-001) ---
 #
 # An inline interpreter payload the classifier cannot prove (python3/node -c/-e
