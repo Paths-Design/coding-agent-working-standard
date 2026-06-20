@@ -49,7 +49,14 @@ import type { HookPackV1 } from './types';
 // that edits are preserved (caws init refuses to overwrite a changed managed
 // hook), and that only editing-to-bypass is out of bounds. The machine-read
 // marker keys are untouched. Bump re-propagates the reframed header.
-export const SHARED_PACK_VERSION = 6;
+//
+// v7 (CAWS-CLASSIFY-PIPE-TO-LOCAL-SCRIPT-CARVEOUT-001): classify_command.py
+// carves the pipe-to-LOCAL-SCRIPT form (`printf json | bash hook.sh`) back to
+// allow — piping a payload into a NAMED, inspectable script file is not curl|sh
+// of a remote interpreter and must not arm the catastrophic latch. Bare
+// `| bash`/`| sh`, flagged/redirected forms, and the curl/wget rule still deny.
+// This was the #1 deny-class danger-latch reset in the repo's own telemetry.
+export const SHARED_PACK_VERSION = 7;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.
