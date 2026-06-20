@@ -2,10 +2,11 @@ id: CAWS-HOOK-PACK-MANAGED-HEADER-GROWTH-DOCTRINE-001
 title: 'Hook-pack managed headers + init drift framing must teach growth, not ''do not edit'''
 risk_tier: 2
 mode: chore
-lifecycle_state: active
-worktree: wt-hook-header-doctrine
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-hook-header-doctrine at 256927044587b7a70fa40876e180056687ecc347'
 created_at: '2026-06-20T18:32:41.322Z'
-updated_at: '2026-06-20T18:32:53.853Z'
+updated_at: '2026-06-20T18:58:31.492Z'
 blast_radius:
   modules:
     - caws-cli hook-pack templates
