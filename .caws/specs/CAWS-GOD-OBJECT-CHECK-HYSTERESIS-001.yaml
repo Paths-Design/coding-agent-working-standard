@@ -3,6 +3,7 @@ title: 'god-object-check: warn only on threshold-crossing or large additions, no
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: wt-god-object-hysteresis
 created_at: '2026-06-20T23:27:53.846Z'
 updated_at: '2026-06-20T23:27:53.846Z'
 # DIAGNOSIS (grounded against canonical source, 2026-06-20):
