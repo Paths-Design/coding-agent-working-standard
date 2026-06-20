@@ -1,0 +1,25 @@
+id: CAWS-DANGER-LATCH-AGENT-RESETTABLE-DESIGN-001
+title: 'DESIGN EVAL: should the danger latch be agent-resettable in-band? (76% friction telemetry; impl gated on maintainer approval)'
+risk_tier: 3
+mode: doc
+lifecycle_state: active
+created_at: '2026-06-20T23:27:56.180Z'
+updated_at: '2026-06-20T23:27:56.180Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
