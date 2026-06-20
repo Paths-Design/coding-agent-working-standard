@@ -7,12 +7,12 @@ created_at: '2026-06-20T18:32:41.322Z'
 updated_at: '2026-06-20T18:32:53.853Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli hook-pack templates
+    - caws-cli init hook-install + render
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/templates/hook-packs/shared
     - packages/caws-cli/templates/hook-packs/claude-code
     - packages/caws-cli/templates/hook-packs/codex
@@ -26,11 +26,51 @@ scope:
     - packages/caws-cli/templates/CLAUDE.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    No managed hook template carries the directive "do_not_edit_directly" or any
+    "do not edit / update via caws init" framing that contradicts the growth
+    doctrine. Managed-hook headers state the repo OWNS the hook and is expected
+    to grow it; CAWS owns WHY/WHAT (the failure-class invariant), the repo owns
+    HOW.
+  - >-
+    The managed-header marker that the install layer parses (CAWS-MANAGED-HOOK +
+    hook_pack / hook_pack_version / caws_min_major / lineage_refs) is preserved
+    on every template; only the human-facing edit-stance language changes. The
+    header parser continues to identify every shipped template as managed.
+  - >-
+    caws init's drift handling, when it encounters a repo-edited (grown) managed
+    hook, does NOT frame the edit as an error to be "resolved". The refusal
+    output restates the growth doctrine: edits are expected; --adopt keeps the
+    repo's version (the default-correct choice for a grown hook); --overwrite
+    takes the upstream template (and only that path loses local edits).
+  - >-
+    Any change to a shared/vendor template bumps that pack's packVersion AND
+    updates the recorded pack-fingerprints.json baseline in the same change, so
+    the fix propagates on the next caws init and the pack-fingerprint guard
+    stays green (the stale-installed-fix guard).
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: the shipped hook-pack templates (shared, claude-code, codex)
+    when: grepping every template for "do_not_edit_directly" or "do not edit"/"update via caws init" edit-prohibition framing
+    then: zero matches remain; every managed header instead carries growth-doctrine framing (repo owns the hook, edits expected, CAWS owns the why/what)
+  - id: A2
+    given: a managed hook header rewritten to the new framing
+    when: parseManagedHeader runs against it (the install layer's header parser)
+    then: it still resolves hookPack + hookPackVersion + caws_min_major + lineageRefs and classifies the file as managed (the marker and machine-read keys are untouched)
+  - id: A3
+    given: a repo that edited (grew) an installed managed hook and re-runs caws init without --adopt/--overwrite
+    when: the install renders the refused/drift outcome for that grown file
+    then: the output restates the growth doctrine (edits are expected; --adopt keeps your version; --overwrite replaces with upstream and only that loses local edits) rather than framing the edit as a problem to resolve
+  - id: A4
+    given: the template edits in this slice
+    when: the pack-fingerprint guard test runs against the live template tree
+    then: it passes because each touched pack's packVersion was bumped and pack-fingerprints.json was recomputed in lockstep
 non_functional: {}
-contracts: []
+contracts:
+  - name: managed-hook-header-growth-framing
+    type: behavior
+    description: >-
+      Managed hook templates and caws init's drift output express the hook-pack
+      growth doctrine (repo owns/grows the hook; CAWS owns the failure-class
+      invariant), not an "do not edit, wait for a CAWS release" prohibition,
+      while preserving the machine-read managed marker the install layer parses.
