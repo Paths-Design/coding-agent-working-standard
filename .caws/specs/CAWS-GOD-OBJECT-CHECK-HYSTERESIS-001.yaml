@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-god-object-hysteresis
 created_at: '2026-06-20T23:27:53.846Z'
-updated_at: '2026-06-20T23:27:53.846Z'
+updated_at: '2026-06-20T23:58:08.141Z'
 # DIAGNOSIS (grounded against canonical source, 2026-06-20):
 #
 # god-object-check.sh fires the advisory whenever SLOC > THRESHOLD
@@ -45,9 +45,9 @@ operational_rollback_slo: 5m
 scope:
   in:
     - packages/caws-cli/templates/hook-packs/shared/god-object-check.sh
-    - .claude/hooks/god-object-check.sh
     - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
     - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/tests/hooks/bats/god-object-check.bats
   out:
     - .caws/policy.yaml
 invariants:
