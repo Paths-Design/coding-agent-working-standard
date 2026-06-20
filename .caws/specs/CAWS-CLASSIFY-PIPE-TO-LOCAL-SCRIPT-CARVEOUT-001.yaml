@@ -3,6 +3,7 @@ title: 'Pipe-to-shell deny: carve out ''... | bash <named-script-file>'' from th
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: wt-pipe-carveout
 created_at: '2026-06-20T23:27:42.149Z'
 updated_at: '2026-06-20T23:27:42.149Z'
 # DIAGNOSIS (grounded against canonical source + repo telemetry, 2026-06-20):
