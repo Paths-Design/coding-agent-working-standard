@@ -226,6 +226,8 @@ This project has Claude Code hooks configured in `.claude/settings.json`:
 
 See `.claude/hooks/CLAUDE.md` for the canonical pack lineage map (which hook covers which incident class) and `.claude/README.md` for project-specific extension wiring.
 
+**These hooks are a starting point you grow, not a frozen baseline.** CAWS ships them from its failure lineage as a sensible default; CAWS owns the *why/what* (the failure class and the invariant each guard enforces — do not weaken those to dodge a block), and your repo owns the *how* (thresholds, env tuning, repo-specific checks). Editing a managed hook to grow your governance is expected and welcome. Your edits are preserved: as long as a hook keeps its `CAWS-MANAGED-HOOK` header, `caws init` classifies a changed hook as drift and refuses to overwrite it (re-run with `--adopt` to keep yours, `--overwrite` to pull the upstream baseline). The only out-of-bounds edit is one that bypasses or weakens a guard.
+
 ### Dangerous-command latch
 
 `block-dangerous.sh` is a human-review boundary, not a syntax check.

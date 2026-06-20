@@ -193,7 +193,13 @@ import type { HookPackV1 } from './types';
 // settings.json wiring is updated to route through the shared dispatcher
 // at .caws/hooks/dispatch/<event>.sh with CAWS_AGENT_SURFACE=claude-code
 // injected.
-export const CLAUDE_CODE_PACK_VERSION = 19;
+// Version 20: CAWS-HOOK-PACK-MANAGED-HEADER-GROWTH-DOCTRINE-001. The
+// claude-code surface docs (CLAUDE.md, README.md) drop the
+// "do_not_edit_directly: update via caws init" header directive in favor of the
+// `edit_stance:` growth framing (repo owns/grows the hook; edits preserved;
+// only editing-to-bypass is out of bounds). Bump re-propagates the reframed
+// header to consumers on next caws init.
+export const CLAUDE_CODE_PACK_VERSION = 20;
 
 export const CLAUDE_CODE_PACK: HookPackV1 = {
   id: 'claude-code',

@@ -4,7 +4,11 @@
 # hook_pack_version: 19
 # caws_min_major: 11
 # lineage_refs: 1,4,6,8,11,12,13,16,17,19,20
-# do_not_edit_directly: update via `caws init --agent-surface claude-code`
+# edit_stance: this repo OWNS and may grow this hook. Edits are expected and
+#   preserved — `caws init` refuses to overwrite a changed managed hook (re-run
+#   with --adopt to keep yours, or --overwrite to pull this upstream template).
+#   CAWS owns the failure-class invariant (the why/what you must not silently
+#   weaken); you own the how. Do not edit it to BYPASS the guard; do grow it.
 -->
 
 # CAWS Claude Code Hook Pack
@@ -63,24 +67,38 @@ fixed subprocess that must be patched centrally for every repo-specific need.
 Equipping your agents with the tools you recommend for effective work is not a
 loss of governance — it is governance you can grow.
 
-## These are CAWS-managed files
+## These are CAWS-managed files — and you may grow them
 
-The hooks ship as **managed** files so `caws init` can update the baseline
-cleanly. During ordinary work, do not hand-edit them: if a hook blocks
-legitimate work, surface the exact block to the user and continue only with
-explicit user authorization. Do not bypass, delete, or locally weaken a guard on
-an agent's own judgment — that crosses into the WHY/WHAT that CAWS owns. (Any
-internal CAWS provenance metadata in a file's header is upstream maintainer
-context — it is not an authority requirement for this repo.)
+The hooks ship as **managed** files. "Managed" means `caws init` recognizes them
+(via the `CAWS-MANAGED-HOOK` header) and can offer a baseline update — it does
+**not** mean "frozen" or "hands off." Per the section above, this repo owns the
+HOW: **editing these hooks to grow your governance is expected and welcome.**
 
-Shaping the pack (the HOW above) is a **deliberate, human-authorized** act, not
-an in-the-moment edit to dodge a block. When you intend to evolve a hook for
-your repo, do it openly: re-run `caws init --agent-surface claude-code` to take
-a baseline update, or hand-edit with intent and accept that the file becomes
-**unmanaged** — `caws init` will then refuse to touch it (by design: it will not
-clobber a hook you have deliberately shaped). A managed file's header is how
-`caws init` recognizes it as safe to update; removing or editing the header is
-what marks the file as yours.
+There is exactly **one** edit that is out of bounds: editing a hook to **bypass,
+delete, or locally weaken a guard** in order to dodge a block. That crosses into
+the WHY/WHAT that CAWS owns (the failure class and the invariant). If a hook
+blocks work you believe is legitimate, the answer is to fix the cause or raise it
+with the user — not to defang the guard. Growing a hook (tuning thresholds,
+adding repo-specific checks, extending coverage) is the opposite of that and
+needs no apology. (Any internal CAWS provenance metadata in a file's header is
+upstream maintainer context — it is not an authority requirement for this repo.)
+
+**Your edits are preserved — `caws init` will not clobber them.** As long as a
+hook keeps its `CAWS-MANAGED-HOOK` header, an edited hook is classified as
+*drift* and `caws init` **refuses to overwrite it** (it stays managed; it does
+not silently become unmanaged). On a re-init you choose:
+
+- **do nothing / `--adopt`** — keep your grown version (the default-correct
+  choice once you have shaped a hook);
+- **`--overwrite`** — pull the upstream template, replacing your version (the
+  only path that discards your edits — use it when you want the new CAWS
+  baseline).
+
+So you do not have to choose between "grow the hook" and "keep getting updates":
+edit freely, and decide per file at re-init time whether to keep yours or take
+upstream. (Deleting the header is the only thing that makes a file fully
+unmanaged — rarely what you want, since it opts the file out of update offers
+entirely.)
 
 ## What each hook does
 
@@ -267,7 +285,11 @@ Every managed file in this pack carries a header like:
 # hook_pack_version: <N>
 # caws_min_major: 11
 # lineage_refs: <comma-separated entries>
-# do_not_edit_directly: update via `caws init --agent-surface claude-code`
+# edit_stance: this repo OWNS and may grow this hook. Edits are expected and
+#   preserved — `caws init` refuses to overwrite a changed managed hook (re-run
+#   with --adopt to keep yours, or --overwrite to pull this upstream template).
+#   CAWS owns the failure-class invariant (the why/what you must not silently
+#   weaken); you own the how. Do not edit it to BYPASS the guard; do grow it.
 ```
 
 The header is what `caws init` uses to distinguish managed files (safe to

@@ -196,31 +196,53 @@ function codexCommand(repoRoot: string, dispatcher: string): string {
   return `CAWS_AGENT_SURFACE=codex CAWS_PROJECT_DIR=${shellQuote(repoRoot)} ${shellQuote(script)}`;
 }
 
+/** Stamp the manifest pack version into a file's managed header so the installed
+ *  header tracks the pack version (the template literals are frozen at their
+ *  authoring value and would otherwise always read as "old version"). Both
+ *  header forms are stamped: the `#`-comment form `# hook_pack_version: N` and
+ *  the JSON `description`-field form `hook_pack_version=N`. This is a pure string
+ *  rewrite — it must run on BOTH the write path and the comparison path so an
+ *  unmodified installed file is byte-identical to the rendered template. */
+function stampPackVersion(content: string, packVersion: number): string {
+  return content
+    .replace(/^(#\s*hook_pack_version:\s*)\d+/m, `$1${packVersion}`)
+    .replace(/(hook_pack_version=)\d+/, `$1${packVersion}`);
+}
+
+/** Normalize the version stamp to a sentinel so two files can be compared on
+ *  body alone — used to tell "differs only by the version line" (an unedited
+ *  file predating the current pack version) from a genuinely edited body. */
+function stripPackVersion(content: string): string {
+  return content
+    .replace(/^(#\s*hook_pack_version:\s*)\d+/m, '$1#')
+    .replace(/(hook_pack_version=)\d+/, '$1#');
+}
+
 function renderPackFileBytes(
   sourceBytes: Buffer,
   repoRoot: string,
-  file: HookPackFile
+  file: HookPackFile,
+  packVersion: number
 ): Buffer {
+  let rendered = stampPackVersion(sourceBytes.toString('utf8'), packVersion);
+
   // Exact-match the one templated file: a suffix match would also catch any
   // future nested *.../hooks.json and run codex substitution over it.
-  if (file.destPath !== '.codex/hooks.json') {
-    return sourceBytes;
+  if (file.destPath === '.codex/hooks.json') {
+    const replacements: Record<string, string> = {
+      __CAWS_CODEX_SESSION_START_COMMAND__: codexCommand(repoRoot, 'session_start.sh'),
+      __CAWS_CODEX_PRE_TOOL_USE_COMMAND__: codexCommand(repoRoot, 'pre_tool_use.sh'),
+      __CAWS_CODEX_POST_TOOL_USE_COMMAND__: codexCommand(repoRoot, 'post_tool_use.sh'),
+      __CAWS_CODEX_PRE_COMPACT_COMMAND__: codexCommand(repoRoot, 'pre_compact.sh'),
+      __CAWS_CODEX_STOP_COMMAND__: codexCommand(repoRoot, 'stop.sh'),
+    };
+    for (const [token, value] of Object.entries(replacements)) {
+      rendered = rendered
+        .split(token)
+        .join(value.replace(/\\/g, '\\\\').replace(/"/g, '\\"'));
+    }
   }
 
-  const replacements: Record<string, string> = {
-    __CAWS_CODEX_SESSION_START_COMMAND__: codexCommand(repoRoot, 'session_start.sh'),
-    __CAWS_CODEX_PRE_TOOL_USE_COMMAND__: codexCommand(repoRoot, 'pre_tool_use.sh'),
-    __CAWS_CODEX_POST_TOOL_USE_COMMAND__: codexCommand(repoRoot, 'post_tool_use.sh'),
-    __CAWS_CODEX_PRE_COMPACT_COMMAND__: codexCommand(repoRoot, 'pre_compact.sh'),
-    __CAWS_CODEX_STOP_COMMAND__: codexCommand(repoRoot, 'stop.sh'),
-  };
-
-  let rendered = sourceBytes.toString('utf8');
-  for (const [token, value] of Object.entries(replacements)) {
-    rendered = rendered
-      .split(token)
-      .join(value.replace(/\\/g, '\\\\').replace(/"/g, '\\"'));
-  }
   return Buffer.from(rendered, 'utf8');
 }
 
@@ -264,18 +286,54 @@ function evaluateFileState(
     return { kind: 'managed_drift', header };
   }
 
-  if (header.hookPackVersion < packVersion) {
-    return {
-      kind: 'managed_old_version',
-      header,
-      currentVersion: header.hookPackVersion,
-    };
-  }
-
-  const sourceBytes = renderPackFileBytes(rawSourceBytes, repoRoot, file);
+  // Content is the authority for "did the consumer edit this"; the header
+  // version is only the authority for "is a newer template available". We MUST
+  // compare content before deciding to overwrite, or a version bump silently
+  // clobbers a hook the repo deliberately grew (the template version literals
+  // are frozen at their authoring value, so an installed file's header version
+  // is almost always below the manifest version — making the old version-first
+  // branch overwrite edited content on essentially every re-init).
+  //
+  // CAWS-HOOK-PACK-MANAGED-HEADER-GROWTH-DOCTRINE-001.
+  const sourceBytes = renderPackFileBytes(
+    rawSourceBytes,
+    repoRoot,
+    file,
+    packVersion
+  );
   if (bytesEqual(localBytes, sourceBytes)) {
+    // Byte-identical to the (version-stamped) current template. Whether or not
+    // the recorded header version was behind, there is no edit to preserve, so
+    // this is a clean no-op — never an overwrite that could lose growth.
     return { kind: 'managed_clean', header };
   }
+
+  // Not byte-identical. Distinguish "differs ONLY by the version stamp" (an
+  // unedited file carrying an older header version — safe to re-stamp) from
+  // "the body was edited" (must be preserved). This is the byte/hash check the
+  // version bump relies on: compare the two with the version line normalized.
+  const localBody = stripPackVersion(localBytes.toString('utf8'));
+  const templateBody = stripPackVersion(sourceBytes.toString('utf8'));
+  if (localBody === templateBody) {
+    // Bodies match; only the version stamp differs. The file was not edited —
+    // it just predates the current pack version. Safe to update (re-stamp);
+    // applyOne writes the version-stamped template, losing no growth.
+    if (header.hookPackVersion < packVersion) {
+      return {
+        kind: 'managed_old_version',
+        header,
+        currentVersion: header.hookPackVersion,
+      };
+    }
+    // Same version, body matches but bytes differ — should be unreachable, but
+    // treat as clean rather than refusing a non-edit.
+    return { kind: 'managed_clean', header };
+  }
+
+  // The body genuinely differs — the consumer grew this hook. Preserve it: the
+  // applyOne handler refuses (drift) unless --overwrite/--adopt. A version bump
+  // alone never silently clobbers an edited hook.
+  // CAWS-HOOK-PACK-MANAGED-HEADER-GROWTH-DOCTRINE-001.
   return { kind: 'managed_drift', header };
 }
 
@@ -308,14 +366,18 @@ function writeFile(
   sourceAbs: string,
   executable: boolean,
   repoRoot: string,
-  file: HookPackFile
+  file: HookPackFile,
+  packVersion: number
 ): void {
   ensureDir(path.dirname(destAbs));
   const sourceBytes = readBytes(sourceAbs);
   if (sourceBytes === null) {
     throw new Error(`template file missing: ${sourceAbs}`);
   }
-  fs.writeFileSync(destAbs, renderPackFileBytes(sourceBytes, repoRoot, file));
+  fs.writeFileSync(
+    destAbs,
+    renderPackFileBytes(sourceBytes, repoRoot, file, packVersion)
+  );
   if (executable) {
     try {
       fs.chmodSync(destAbs, 0o755);
@@ -339,21 +401,27 @@ function applyOne(
     file
   );
 
+  const pv = ctx.pack.packVersion;
   switch (state.kind) {
     case 'absent':
-      writeFile(destAbs, sourceAbs, file.executable, ctx.repoRoot, file);
+      writeFile(destAbs, sourceAbs, file.executable, ctx.repoRoot, file, pv);
       return { destPath: file.destPath, action: 'created' };
 
     case 'managed_clean':
       return { destPath: file.destPath, action: 'unchanged' };
 
     case 'managed_old_version':
-      writeFile(destAbs, sourceAbs, file.executable, ctx.repoRoot, file);
+      // The body matches the current template; only the header version stamp is
+      // behind. The file was NOT edited (evaluateFileState already proved the
+      // bodies are equal modulo the version line), so updating it loses no
+      // growth — it just re-stamps the version. Safe to write.
+      // (CAWS-HOOK-PACK-MANAGED-HEADER-GROWTH-DOCTRINE-001.)
+      writeFile(destAbs, sourceAbs, file.executable, ctx.repoRoot, file, pv);
       return { destPath: file.destPath, action: 'updated' };
 
     case 'managed_drift':
       if (ctx.overwrite) {
-        writeFile(destAbs, sourceAbs, file.executable, ctx.repoRoot, file);
+        writeFile(destAbs, sourceAbs, file.executable, ctx.repoRoot, file, pv);
         return { destPath: file.destPath, action: 'updated' };
       }
       if (ctx.adopt) {
@@ -367,7 +435,7 @@ function applyOne(
 
     case 'unmanaged_collision':
       if (ctx.overwrite) {
-        writeFile(destAbs, sourceAbs, file.executable, ctx.repoRoot, file);
+        writeFile(destAbs, sourceAbs, file.executable, ctx.repoRoot, file, pv);
         return { destPath: file.destPath, action: 'updated' };
       }
       if (ctx.adopt) {

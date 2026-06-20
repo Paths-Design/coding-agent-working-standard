@@ -1,5 +1,5 @@
 {
-  "description": "CAWS-MANAGED-HOOK hook_pack=codex hook_pack_version=7 caws_min_major=11 lineage_refs=1,4,6,8,11,12,13,16,17,19,22,23,24,25,26,27,28,29,30,31. Project-local Codex hooks require project trust and hook review through /hooks when changed. CAWS-HOOK-PACK-SHARED-CORE-001: commands now route to .caws/hooks/dispatch/<event>.sh with CAWS_AGENT_SURFACE=codex injected.",
+  "description": "CAWS-MANAGED-HOOK hook_pack=codex hook_pack_version=9 caws_min_major=11 lineage_refs=1,4,6,8,11,12,13,16,17,19,22,23,24,25,26,27,28,29,30,31. edit_stance: this repo OWNS and may grow these hooks — edits are expected and preserved (caws init refuses to overwrite a changed managed hook; re-run with --adopt to keep yours or --overwrite to pull the upstream template). CAWS owns the failure-class why/what you must not silently weaken; you own the how. The one out-of-bounds edit is one that bypasses or weakens a guard. Project-local Codex hooks require project trust and hook review through /hooks when changed. CAWS-HOOK-PACK-SHARED-CORE-001: commands now route to .caws/hooks/dispatch/<event>.sh with CAWS_AGENT_SURFACE=codex injected.",
   "hooks": {
     "SessionStart": [
       {

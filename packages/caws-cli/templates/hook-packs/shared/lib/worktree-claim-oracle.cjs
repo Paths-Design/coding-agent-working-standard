@@ -5,7 +5,11 @@
 # hook_pack_version: 1
 # caws_min_major: 11
 # lineage_refs: 4,8,13,20,32
-# do_not_edit_directly: update via caws init
+# edit_stance: this repo OWNS and may grow this hook. Edits are expected and
+#   preserved — `caws init` refuses to overwrite a changed managed hook (re-run
+#   with --adopt to keep yours, or --overwrite to pull this upstream template).
+#   CAWS owns the failure-class invariant (the why/what you must not silently
+#   weaken); you own the how. Do not edit it to BYPASS the guard; do grow it.
 
  * worktree-claim-oracle.cjs  (WORKTREE-ISOLATION-HARDENING-001)
  *
