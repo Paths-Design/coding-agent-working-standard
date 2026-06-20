@@ -5,21 +5,107 @@ mode: fix
 lifecycle_state: active
 created_at: '2026-06-20T23:27:52.723Z'
 updated_at: '2026-06-20T23:27:52.723Z'
+# DIAGNOSIS (grounded against canonical source, 2026-06-20) — REPRO REQUIRED FIRST:
+#
+# Reported symptom (language-corpus migration postmortem §3.4b): after re-enabling
+# bash-write-guard.sh, it asked for approval on EVERY Bash command — even read-only
+# wc/ls/grep — with `error_fail_closed:no-js-yaml`, because the oracle require()s
+# js-yaml and js-yaml was not installed in that repo's .caws/hooks/.
+#
+# IMPORTANT — the canonical oracle ALREADY guards against this:
+#   worktree-claim-oracle.cjs:73-92 requires js-yaml LAZILY (loadYaml), and the
+#   header comment states yaml absence "only degrades the canonical-claim check,
+#   not the payload-ownership check." And bash-write-guard.sh:82-204 self-filters
+#   to a narrow mutation-form set (redirect/tee/sed -i/rm/mv/cp/...) BEFORE
+#   reaching the oracle — a bare `wc`/`ls`/`grep` has no mutation target and
+#   should exit 0 early, never invoking the oracle at all.
+#
+# So the postmortem symptom may be a FORK-LOCAL regression (their oracle/guard
+# predates the lazy-require + mutation-form filter) and may NOT reproduce against
+# canonical. STEP 1 of this slice is to REPRODUCE upstream, not assume:
+#   - Temporarily make js-yaml unresolvable for the oracle and drive
+#     bash-write-guard.sh with (a) a benign read-only `wc x`, (b) a benign
+#     mutation on a NON-worktree path `echo hi > /tmp-equivalent-in-scope`, and
+#     (c) a real foreign-worktree-payload mutation. Capture each verdict.
+#   - If (a)/(b) emit `error_fail_closed` WITHOUT js-yaml, that is the real bug
+#     and the fix below applies. If they emit `pass`, the canonical code is
+#     already correct and the fork was stale — close this with that finding and
+#     the only residual is the dependency-provisioning half (improvement 7).
+#
+# THE REAL DESIGN ISSUE (regardless of repro): bash-write-guard.sh:245 maps BOTH
+# `ask_uncertain` AND `error_fail_closed` -> `escalate ask`. A genuine ownership
+# ambiguity SHOULD ask. But a TOOLCHAIN FAULT (js-yaml unresolvable) is not a
+# danger signal — it is the same class as the classifier-unavailable fail-closed
+# that CAWS-CLASSIFY-LITERAL-OPAQUE-EXEC-READONLY-001 already relaxed. A missing
+# runtime dependency on a path the oracle can otherwise answer payload-ownership
+# for (yaml-free) should DEGRADE (allow / fall back to the yaml-free answer),
+# not ask-on-everything. Only a TRUE ownership ambiguity fail-closes.
+#
+# FIX (two parts, gated on STEP 1):
+#   Part A (degrade vs fail-closed): the oracle should emit a distinct verdict
+#     for "dependency missing on a path I could otherwise pass" vs "ownership
+#     genuinely ambiguous", and bash-write-guard / worktree-write-guard should
+#     treat the former as pass (or fall back to the yaml-free payload answer),
+#     reserving ask for true ambiguity. Do NOT weaken the foreign-worktree block.
+#   Part B (provisioning): ship the pack's node deps so the canonical-claim check
+#     is not silently degraded in the first place — either a package.json next to
+#     the oracle (mirroring Sterling, which documents this exact failure) so
+#     `caws init` / a documented step installs js-yaml, or vendor a minimal YAML
+#     reader. Part B is independent of Part A and can ship even if A finds no bug.
+#
+# NON-CLAIM: this must NOT relax the foreign-worktree-payload block
+# (block_foreign_worktree / block_claimed). A real foreign-session write into
+# another worktree's payload still hard-blocks. The degrade applies ONLY to the
+# toolchain-fault path, never to a proven ownership conflict.
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'oracle: lib/worktree-claim-oracle.cjs (shared template + live .claude copy)'
+    - 'guards: bash-write-guard.sh, worktree-write-guard.sh (oracle verdict consumers)'
+    - 'pack dependency provisioning (package.json for js-yaml) and/or init wiring'
+    - 'hook-pack manifest (SHARED_PACK_VERSION) + pack-fingerprints baseline'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/templates/hook-packs/shared/lib/worktree-claim-oracle.cjs
+    - packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh
+    - .claude/hooks/lib/worktree-claim-oracle.cjs
+    - .claude/hooks/bash-write-guard.sh
+    - .claude/hooks/worktree-write-guard.sh
+    - packages/caws-cli/tests/hooks/bats/worktree-write-guard.bats
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+  out:
+    - .caws/policy.yaml
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A real foreign-session mutation of another worktree''s payload still hard-blocks (block_foreign_worktree) regardless of js-yaml availability — the degrade does NOT weaken the isolation block.'
+  - 'With js-yaml unresolvable, a benign mutation on a NON-worktree, in-scope path does NOT ask-on-everything: the oracle returns the yaml-free payload-ownership answer (pass) rather than error_fail_closed.'
+  - 'A GENUINE ownership ambiguity (the oracle truly cannot decide, not a missing dep) still fail-closes to ask — the degrade is scoped to toolchain faults only.'
+  - 'If the provisioning half ships, js-yaml is resolvable for the canonical-claim check after the documented install step, so the canonical-claim path is no longer silently degraded.'
+  - 'SHARED_PACK_VERSION is bumped and pack-fingerprints.json re-baselined for any shared-template change; live .claude copies edited identically.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'the oracle with js-yaml made unresolvable, driven via bash-write-guard.sh'
+    when: 'a benign read-only command (wc x) is run'
+    then: 'the guard exits 0 with no ask prompt — read-only commands have no mutation target and never reach the oracle (repro confirms or refutes the postmortem symptom)'
+  - id: A2
+    given: 'the oracle with js-yaml made unresolvable, driven via bash-write-guard.sh'
+    when: 'a benign mutation on a NON-worktree in-scope path is run'
+    then: 'the guard exits 0 (degrade) rather than asking with error_fail_closed:no-js-yaml'
+  - id: A3
+    given: 'the oracle with js-yaml unresolvable'
+    when: 'a real foreign-session mutation of another worktree''s payload is attempted'
+    then: 'the guard hard-blocks (block_foreign_worktree) — the degrade did NOT open the isolation hole'
+  - id: A4
+    given: 'a genuine ownership ambiguity (not a missing dependency)'
+    when: 'the oracle cannot decide'
+    then: 'the guard still asks (fail-closed) — the toolchain-fault degrade is distinct from true ambiguity'
+  - id: A5
+    given: 'the provisioning half is implemented'
+    when: 'the documented dependency step runs'
+    then: 'js-yaml resolves for the oracle''s canonical-claim check, so that path is no longer degraded'
+non_functional:
+  security:
+    - 'The toolchain-fault degrade must never apply to a proven foreign-ownership conflict; only to a missing-dependency path the oracle could otherwise answer yaml-free.'
 contracts: []

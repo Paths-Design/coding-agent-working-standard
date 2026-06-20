@@ -5,21 +5,88 @@ mode: doc
 lifecycle_state: active
 created_at: '2026-06-20T23:27:56.180Z'
 updated_at: '2026-06-20T23:27:56.180Z'
+# DIAGNOSIS / FRAMING (grounded, 2026-06-20):
+#
+# UPSTREAM TRUTH: the canonical danger latch is HUMAN-ONLY by design.
+# block-dangerous.sh repeats at all five block paths (lines ~169, 226, 261, 297,
+# 302, 312): "you CANNOT clear this in-band: the reset is human-only by design.
+# Ask the USER to run reset-danger-latch.sh." The agent-resettable latch the
+# language-corpus/Sterling fork celebrates is NOT in the canonical pack — it was
+# built in the migration session under maintainer guidance and lives only in
+# those forks.
+#
+# THE CASE FOR upstreaming agent-resettability (from the fork session + repo
+# telemetry):
+#   - Canonical .claude/logs/danger-latch-resets.log: 34 resets, 26 (76%) were
+#     friction not danger (21 ask-class + 5 protected-guard block FPs). Each was
+#     a human round-trip to clear a latch that armed on a benign command.
+#   - The fork's session self-cleared 4 latch arms in-band (2 genuine pipe-to-
+#     shell FPs, 2 deliberate probes) that would otherwise have been human
+#     interrupts mid-migration.
+#   - The fork implementation closed the obvious escape holes adversarially:
+#     `reset && <mutating>`, trailing-danger after the reset token, and embedded
+#     `$()` command-substitution in the --reason argument. Reference impl exists.
+#
+# THE CASE AGAINST (why this is a maintainer decision, not a drive-by fix):
+#   - The latch is a deliberate HUMAN-REVIEW BOUNDARY. Making it agent-resettable
+#     converts a hard stop into a self-service log entry — it removes the human
+#     from the loop on exactly the command class CAWS most wants a human to see.
+#   - The 76%-friction telemetry equally supports a DIFFERENT remedy: stop the
+#     latch arming on benign commands (the path CAWS-DANGER-LATCH-CATASTROPHIC-
+#     ONLY-001 already started by de-latching the ask-class, and that the
+#     pipe-to-shell carve-out, god-object hysteresis, and oracle-degrade specs in
+#     this same triage continue). If the FPs are fixed at the source, the
+#     friction argument for agent-resettability weakens substantially.
+#   - Adversarial risk: any agent-resettable escape hatch is an attack surface.
+#     The fork closed the holes it found, but "the holes I found" is not "all
+#     holes." A self-reset that an injected/hostile prompt can drive defeats the
+#     boundary's purpose.
+#
+# DELIVERABLE OF THIS SLICE: a written design memo (NOT an implementation) that
+# lays out the two remedies (a: agent-resettable latch; b: fix-the-FPs-so-it-
+# stops-arming), the telemetry, the fork's reference impl + its escape-hole
+# closures, the adversarial surface, and a recommendation — for the maintainer to
+# decide. IMPLEMENTATION IS EXPLICITLY GATED: this spec does NOT change
+# block-dangerous.sh or reset-danger-latch.sh. If the maintainer chooses remedy
+# (a), a SEPARATE fix spec implements it; if (b), the triage's FP-fix specs are
+# the implementation and this closes recommending them.
+#
+# NON-CLAIM: this slice ships analysis only. It makes no guard behavior change and
+# does not loosen the human-review boundary. The memo's recommendation is advisory
+# until the maintainer rules.
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'design memo: docs/architecture/danger-latch-reset-doctrine-eval.md (new analysis doc)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - docs/architecture/danger-latch-reset-doctrine-eval.md
+  out:
+    - packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh
+    - packages/caws-cli/templates/hook-packs/shared/reset-danger-latch.sh
+    - .claude/hooks/block-dangerous.sh
+    - .claude/hooks/reset-danger-latch.sh
+    - .caws/policy.yaml
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'This slice produces ONLY a design memo; it changes no guard, no classifier, and no reset script (block-dangerous.sh and reset-danger-latch.sh are in scope.out).'
+  - 'The memo presents BOTH remedies (agent-resettable latch; fix-the-FPs-at-source) with the telemetry and adversarial surface, and a recommendation — it does not unilaterally adopt agent-resettability.'
+  - 'The memo cites the concrete evidence: the 34-reset / 76%-friction canonical telemetry and the fork''s escape-hole closures, so a maintainer can decide from data.'
+  - 'Implementation of either remedy is explicitly deferred to a separate spec gated on the maintainer''s decision.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'the design memo'
+    when: 'the maintainer reads it'
+    then: 'both remedies are presented with evidence (telemetry, reference impl, adversarial risk) and a clear recommendation, enabling a decision'
+  - id: A2
+    given: 'this slice''s diff'
+    when: 'reviewed'
+    then: 'no change exists to block-dangerous.sh, reset-danger-latch.sh, or any guard — only the new memo (the human-review boundary is untouched)'
+  - id: A3
+    given: 'the memo''s recommendation'
+    when: 'the maintainer rules'
+    then: 'a follow-up spec is identified for implementation (agent-resettable impl, OR the FP-fix triage specs) — this spec closes on the decision, not on an implementation'
+non_functional:
+  security:
+    - 'Any agent-resettable escape hatch is an attack surface; the memo must treat hostile-prompt-driven self-reset as a first-class risk, not an edge case.'
 contracts: []

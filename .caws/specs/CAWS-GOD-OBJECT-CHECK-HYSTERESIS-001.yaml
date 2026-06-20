@@ -5,21 +5,72 @@ mode: fix
 lifecycle_state: active
 created_at: '2026-06-20T23:27:53.846Z'
 updated_at: '2026-06-20T23:27:53.846Z'
+# DIAGNOSIS (grounded against canonical source, 2026-06-20):
+#
+# god-object-check.sh fires the advisory whenever SLOC > THRESHOLD
+# (CAWS_GOD_OBJECT_LOC, default 2000) on EVERY Write/Edit. It has no memory of
+# the prior size, so a file already over the threshold re-warns on every single
+# edit — even a 2-line change. Observed in the migration session: adding ~30
+# lines to classify_command.py pushed it 2004 -> 2006 and tripped the advisory
+# on every edit. A 2-over advisory on a small addition to an already-over file
+# is noise, not signal — and noise trains the agent to ignore the advisory,
+# which defeats the one job an advisory hook has.
+#
+# FIX: make the advisory delta/hysteresis-aware. Warn only when EITHER (a) this
+# edit crosses the threshold (was under, now over), OR (b) this edit adds a
+# large delta (e.g. >= CAWS_GOD_OBJECT_DELTA, default ~100 SLOC). An edit that
+# leaves an already-over file roughly the same size (or shrinks it) is silent.
+#
+# DESIGN NOTE — where does "prior size" come from? Two candidate sources, to be
+# decided in implementation: (1) the Edit payload's old_string/new_string diff
+# (no state file needed — compute the SLOC delta of the edit itself; this is the
+# loc-delta-check.sh approach and is preferable — stateless, no on-disk sentinel
+# to gitignore); (2) a per-file last-seen-SLOC sentinel (stateful, more precise
+# for threshold-crossing but adds a state file). Prefer (1): for Edit, derive
+# delta from the payload; for Write of a wholly new file, the file IS the delta
+# so warn iff the new file is itself over threshold. This keeps the hook
+# stateless and consistent with loc-delta-check.sh.
+#
+# NON-CLAIM: this does not change the SLOC counter (still the simple strip-
+# comments/blanks heuristic) and does not couple to packages/quality-gates.
+# It changes ONLY when the advisory fires, never that it stays advisory/exit-0.
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'advisory hook: god-object-check.sh (shared template + live .claude copy)'
+    - 'hook-pack manifest (SHARED_PACK_VERSION) + pack-fingerprints baseline'
+    - 'god-object-check bats test'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/templates/hook-packs/shared/god-object-check.sh
+    - .claude/hooks/god-object-check.sh
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+  out:
+    - .caws/policy.yaml
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'An Edit that leaves an already-over-threshold file at roughly the same SLOC (delta below the large-addition threshold) produces NO advisory output and exits 0.'
+  - 'An Edit (or Write) that CROSSES the threshold (file was under, now over) still produces the advisory.'
+  - 'An Edit that adds a large delta (>= CAWS_GOD_OBJECT_DELTA) to an already-over file still produces the advisory (a big growth is still signal even past threshold).'
+  - 'The hook remains advisory: it NEVER blocks and ALWAYS exits 0, unchanged.'
+  - 'SHARED_PACK_VERSION is bumped and pack-fingerprints.json re-baselined; the live .claude/hooks copy is edited identically to the shared template.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'an already-over-threshold file (SLOC 2004, threshold 2000)'
+    when: 'an Edit adds 2 lines (SLOC 2004 -> 2006, delta below the large-addition threshold)'
+    then: 'the hook emits no advisory and exits 0 — the noise-on-every-edit behavior is gone'
+  - id: A2
+    given: 'a file at SLOC 1990 (under threshold 2000)'
+    when: 'an Edit adds 20 lines (SLOC 1990 -> 2010, crossing the threshold)'
+    then: 'the hook emits the advisory (threshold-crossing is still signal)'
+  - id: A3
+    given: 'an already-over-threshold file'
+    when: 'an Edit adds a large delta (>= CAWS_GOD_OBJECT_DELTA lines)'
+    then: 'the hook emits the advisory (large growth past threshold is still signal)'
+  - id: A4
+    given: 'any of the above'
+    when: 'the hook runs'
+    then: 'it exits 0 in all cases — the change never makes the advisory blocking'
 non_functional: {}
 contracts: []
