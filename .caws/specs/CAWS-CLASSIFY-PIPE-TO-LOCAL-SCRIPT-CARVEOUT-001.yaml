@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-pipe-carveout
 created_at: '2026-06-20T23:27:42.149Z'
-updated_at: '2026-06-20T23:27:42.149Z'
+updated_at: '2026-06-20T23:44:41.583Z'
 # DIAGNOSIS (grounded against canonical source + repo telemetry, 2026-06-20):
 #
 # classify_command.py:90 DENY_PIPELINE_PATTERNS contains the generic rule
@@ -46,7 +46,6 @@ operational_rollback_slo: 5m
 scope:
   in:
     - packages/caws-cli/templates/hook-packs/shared/classify_command.py
-    - .claude/hooks/classify_command.py
     - packages/caws-cli/tests/hooks/pytest/test_classify_command.py
     - packages/caws-cli/tests/hooks/bats/block-dangerous.bats
     - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
