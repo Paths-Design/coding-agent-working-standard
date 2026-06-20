@@ -4,7 +4,7 @@ risk_tier: 2
 mode: chore
 lifecycle_state: active
 created_at: '2026-06-20T18:32:41.322Z'
-updated_at: '2026-06-20T18:32:41.322Z'
+updated_at: '2026-06-20T18:32:53.853Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
@@ -13,6 +13,17 @@ operational_rollback_slo: 5m
 scope:
   in:
     - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/templates/hook-packs/shared
+    - packages/caws-cli/templates/hook-packs/claude-code
+    - packages/caws-cli/templates/hook-packs/codex
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
+    - packages/caws-cli/src/init/hook-packs/manifest-codex.ts
+    - packages/caws-cli/src/init/hook-install.ts
+    - packages/caws-cli/src/shell/render/init-hook-pack.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/tests/init/init-hook-pack-render.test.js
+    - packages/caws-cli/templates/CLAUDE.md
   out: []
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'
