@@ -2,10 +2,11 @@ id: CAWS-CLASSIFY-PIPE-TO-LOCAL-SCRIPT-CARVEOUT-001
 title: 'Pipe-to-shell deny: carve out ''... | bash <named-script-file>'' from the catastrophic latch'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: wt-pipe-carveout
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-pipe-carveout at 6cd89a53e1281cfc965b9c96e34eb804a557a869'
 created_at: '2026-06-20T23:27:42.149Z'
-updated_at: '2026-06-20T23:44:41.583Z'
+updated_at: '2026-06-20T23:50:04.725Z'
 # DIAGNOSIS (grounded against canonical source + repo telemetry, 2026-06-20):
 #
 # classify_command.py:90 DENY_PIPELINE_PATTERNS contains the generic rule
