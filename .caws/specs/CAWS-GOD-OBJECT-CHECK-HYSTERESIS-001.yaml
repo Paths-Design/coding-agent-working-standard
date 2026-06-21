@@ -55,7 +55,7 @@ invariants:
   - 'An Edit (or Write) that CROSSES the threshold (file was under, now over) still produces the advisory.'
   - 'An Edit that adds a large delta (>= CAWS_GOD_OBJECT_DELTA) to an already-over file still produces the advisory (a big growth is still signal even past threshold).'
   - 'The hook remains advisory: it NEVER blocks and ALWAYS exits 0, unchanged.'
-  - 'SHARED_PACK_VERSION is bumped and pack-fingerprints.json re-baselined; the live .claude/hooks copy is edited identically to the shared template.'
+  - 'SHARED_PACK_VERSION is bumped (7->8) and pack-fingerprints.json re-baselined. The live .claude/hooks copy is NOT hand-patched: this repo''s live surface is a pre-shared-core v16 snapshot (different version namespace) refreshed via `caws init`, not a byte mirror of the shared template.'
 acceptance:
   - id: A1
     given: 'an already-over-threshold file (SLOC 2004, threshold 2000)'
