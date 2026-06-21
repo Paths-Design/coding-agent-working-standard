@@ -2,10 +2,11 @@ id: CAWS-GOD-OBJECT-CHECK-HYSTERESIS-001
 title: 'god-object-check: warn only on threshold-crossing or large additions, not every edit to an already-over file'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: wt-god-object-hysteresis
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-god-object-hysteresis at c919137a32eda1bb10642d63d5161c4a195df300'
 created_at: '2026-06-20T23:27:53.846Z'
-updated_at: '2026-06-20T23:58:08.141Z'
+updated_at: '2026-06-21T00:11:38.055Z'
 # DIAGNOSIS (grounded against canonical source, 2026-06-20):
 #
 # god-object-check.sh fires the advisory whenever SLOC > THRESHOLD
