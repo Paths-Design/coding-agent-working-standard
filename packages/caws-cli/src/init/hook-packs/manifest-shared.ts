@@ -56,7 +56,14 @@ import type { HookPackV1 } from './types';
 // of a remote interpreter and must not arm the catastrophic latch. Bare
 // `| bash`/`| sh`, flagged/redirected forms, and the curl/wget rule still deny.
 // This was the #1 deny-class danger-latch reset in the repo's own telemetry.
-export const SHARED_PACK_VERSION = 7;
+//
+// v8 (CAWS-GOD-OBJECT-CHECK-HYSTERESIS-001): god-object-check.sh is now
+// hysteresis-aware. It no longer re-warns on every edit to an already-over-
+// threshold file (noise that trains the agent to ignore the advisory); for an
+// Edit it warns only when the edit CROSSES the threshold or adds a large delta
+// (>= CAWS_GOD_OBJECT_DELTA, default 100), derived statelessly from the Edit
+// payload. A Write of a whole over-threshold file still warns; always exit 0.
+export const SHARED_PACK_VERSION = 8;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.
