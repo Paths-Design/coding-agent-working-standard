@@ -80,8 +80,8 @@ invariants:
   - 'A real foreign-session mutation of another worktree''s payload still hard-blocks (block_foreign_worktree) regardless of js-yaml availability — the degrade does NOT weaken the isolation block.'
   - 'With js-yaml unresolvable, a benign mutation on a NON-worktree, in-scope path does NOT ask-on-everything: the oracle returns the yaml-free payload-ownership answer (pass) rather than error_fail_closed.'
   - 'A GENUINE ownership ambiguity (the oracle truly cannot decide, not a missing dep) still fail-closes to ask — the degrade is scoped to toolchain faults only.'
-  - 'If the provisioning half ships, js-yaml is resolvable for the canonical-claim check after the documented install step, so the canonical-claim path is no longer silently degraded.'
-  - 'SHARED_PACK_VERSION is bumped and pack-fingerprints.json re-baselined for any shared-template change; live .claude copies edited identically.'
+  - 'The degrade verdict is DISTINCT from error_fail_closed: the oracle emits `degraded_no_yaml` for the canonical-claim path when js-yaml is unresolvable, and both guards map it to pass-with-advisory (the cross-worktree canonical-claim check was skipped) — NOT ask, NOT silent. The message names it a toolchain fault, not an ownership conflict. (Provisioning a package.json was investigated and rejected: hook files are copied individually, not installed as an npm package, so a package.json next to the oracle would not install js-yaml. The degrade makes js-yaml optional-by-design instead.)'
+  - 'SHARED_PACK_VERSION is bumped (8->9) and pack-fingerprints.json re-baselined for the shared-template change. The live .claude/hooks copies are NOT hand-patched (pre-shared-core v16 snapshot, refreshed via `caws init`).'
 acceptance:
   - id: A1
     given: 'the oracle with js-yaml made unresolvable, driven via bash-write-guard.sh'
@@ -100,9 +100,9 @@ acceptance:
     when: 'the oracle cannot decide'
     then: 'the guard still asks (fail-closed) — the toolchain-fault degrade is distinct from true ambiguity'
   - id: A5
-    given: 'the provisioning half is implemented'
-    when: 'the documented dependency step runs'
-    then: 'js-yaml resolves for the oracle''s canonical-claim check, so that path is no longer degraded'
+    given: 'the oracle with js-yaml unresolvable, on a canonical (non-worktree-payload) path'
+    when: 'findClaimants cannot read spec YAML'
+    then: 'the oracle emits `degraded_no_yaml` (not error_fail_closed), and the guards map it to pass-with-advisory naming it a toolchain fault — restoring the sanctioned path while surfacing that the cross-worktree claim check was skipped'
 non_functional:
   security:
     - 'The toolchain-fault degrade must never apply to a proven foreign-ownership conflict; only to a missing-dependency path the oracle could otherwise answer yaml-free.'
