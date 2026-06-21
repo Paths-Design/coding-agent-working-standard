@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-oracle-degrade
 created_at: '2026-06-20T23:27:52.723Z'
-updated_at: '2026-06-21T00:12:53.428Z'
+updated_at: '2026-06-21T00:17:57.847Z'
 # DIAGNOSIS (grounded against canonical source, 2026-06-20) — REPRO REQUIRED FIRST:
 #
 # Reported symptom (language-corpus migration postmortem §3.4b): after re-enabling
@@ -75,6 +75,7 @@ scope:
     - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
     - packages/caws-cli/tests/init/pack-fingerprints.json
     - packages/caws-cli/tests/hooks/pytest/test_worktree_claim_oracle.py
+    - packages/caws-cli/tests/hooks/bats/bash-write-guard.bats
   out:
     - .caws/policy.yaml
 invariants:
