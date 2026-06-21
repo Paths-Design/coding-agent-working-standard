@@ -231,7 +231,7 @@ while IFS= read -r cand; do
     node "$CAWS_CLAIM_ORACLE" 2>&1 || true)"
   _first="${out%%$'\n'*}"
   case "${_first%%:*}" in
-    pass|block_foreign_worktree|block_claimed|ask_uncertain|error_fail_closed)
+    pass|block_foreign_worktree|block_claimed|ask_uncertain|error_fail_closed|degraded_no_yaml)
       out="$_first" ;;
     *)
       _reason="$(printf '%s' "$_first" | cut -c1-200)"
@@ -241,6 +241,12 @@ while IFS= read -r cand; do
   detail="${out#*:}"
   case "$outcome" in
     pass) ;;
+    # degraded_no_yaml is a TOOLCHAIN FAULT, not an ownership signal: the oracle
+    # got PAST the yaml-free foreign-payload block and only the cross-worktree
+    # canonical-claim check could not run (js-yaml unresolvable). Do NOT escalate
+    # (it would turn every canonical mutation into an approval prompt when js-yaml
+    # is absent). Record it for a single post-loop advisory; the mutation flows.
+    degraded_no_yaml) _DEGRADED_NO_YAML=1 ;;
     block_foreign_worktree|block_claimed) escalate block "$detail" "$outcome" ;;
     ask_uncertain|error_fail_closed)      escalate ask "$detail" "$outcome" ;;
   esac
@@ -278,7 +284,15 @@ case "$WORST" in
     echo "  Do NOT edit ${CAWS_VENDOR_DIR}/hooks/ or guard state to bypass this." >&2
     exit 2 ;;
   ask)
-    _REASON="[$_BG_ID] This Bash command targets a worktree-claimed or worktree-payload path and ownership could not be confirmed ($WORST_KIND:$WORST_DETAIL). Approve only if you own the target worktree; otherwise route the mutation through the owning worktree's session."
+    case "$WORST_KIND" in
+      error_fail_closed)
+        # A toolchain fault (oracle spawn failure, registry parse error, etc.) —
+        # NOT an ownership conflict. Name it as such so the user is not misled
+        # into thinking this path is worktree-claimed.
+        _REASON="[$_BG_ID] Worktree-ownership could not be verified for this Bash mutation due to a TOOLCHAIN FAULT ($WORST_DETAIL), not a known ownership conflict. Approve if the target is safe to mutate from this session." ;;
+      *)
+        _REASON="[$_BG_ID] This Bash command targets a worktree-claimed or worktree-payload path and ownership could not be confirmed ($WORST_KIND:$WORST_DETAIL). Approve only if you own the target worktree; otherwise route the mutation through the owning worktree's session." ;;
+    esac
     if [[ "${CAWS_GUARD_NO_ASK:-0}" == "1" ]] || ! command -v emit_ask >/dev/null 2>&1; then
       echo "$_REASON" >&2
       echo "  (ask-incapable harness — degraded to block; no silent allow)" >&2
@@ -287,5 +301,12 @@ case "$WORST" in
     emit_ask "$_REASON"
     exit 0 ;;
   *)
+    # No claim/ownership escalation. If the cross-worktree canonical-claim check
+    # degraded (js-yaml unresolvable), surface a single advisory so the skipped
+    # check is visible — but the mutation is allowed (toolchain fault, not an
+    # ownership conflict; the foreign-payload block already ran yaml-free).
+    if [[ "${_DEGRADED_NO_YAML:-0}" == "1" ]]; then
+      echo "[$_BG_ID] advisory: the cross-worktree scope.in claim check was SKIPPED for this mutation because js-yaml is unresolvable in the hook pack (toolchain fault, not an ownership conflict). The foreign-worktree-payload block still ran. Install js-yaml in the hook pack to restore the canonical-claim check." >&2
+    fi
     exit 0 ;;
 esac

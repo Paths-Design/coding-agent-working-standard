@@ -152,7 +152,7 @@ if [[ -n "$FILE_PATH" ]]; then
           node "$CAWS_CLAIM_ORACLE" 2>&1 || true)"
         _ORACLE_FIRST="${_ORACLE_OUT%%$'\n'*}"
         case "${_ORACLE_FIRST%%:*}" in
-          pass|block_foreign_worktree|block_claimed|ask_uncertain|error_fail_closed)
+          pass|block_foreign_worktree|block_claimed|ask_uncertain|error_fail_closed|degraded_no_yaml)
             _ORACLE_OUT="$_ORACLE_FIRST" ;;
           *)
             _ORACLE_REASON="$(printf '%s' "$_ORACLE_FIRST" | cut -c1-200)"
@@ -162,6 +162,16 @@ if [[ -n "$FILE_PATH" ]]; then
         _ORACLE_DETAIL="${_ORACLE_OUT#*:}"
         case "$_ORACLE_OUTCOME" in
           pass)
+            exit 0 ;;
+          degraded_no_yaml)
+            # Toolchain fault on the canonical-claim check (js-yaml unresolvable).
+            # For a worktree-PAYLOAD path this verdict should not normally arise
+            # (the yaml-free foreign-payload block decides payload paths first),
+            # but if it does, the isolation-critical block already ran — degrade
+            # to allow with a single advisory rather than prompting on every edit.
+            _WG_ID="CAWS worktree-write-guard"
+            command -v guard_identity >/dev/null 2>&1 && _WG_ID="$(guard_identity worktree-write-guard)"
+            echo "[$_WG_ID] advisory: the cross-worktree scope.in claim check was SKIPPED (js-yaml unresolvable in the hook pack — a toolchain fault, not an ownership conflict). The foreign-worktree-payload block still ran. Install js-yaml to restore the canonical-claim check." >&2
             exit 0 ;;
           block_foreign_worktree)
             _WG_ID="CAWS worktree-write-guard"
