@@ -4,7 +4,7 @@ risk_tier: 3
 mode: fix
 lifecycle_state: active
 created_at: '2026-06-20T23:27:52.723Z'
-updated_at: '2026-06-20T23:27:52.723Z'
+updated_at: '2026-06-21T00:12:53.428Z'
 # DIAGNOSIS (grounded against canonical source, 2026-06-20) — REPRO REQUIRED FIRST:
 #
 # Reported symptom (language-corpus migration postmortem §3.4b): after re-enabling
@@ -70,12 +70,10 @@ scope:
     - packages/caws-cli/templates/hook-packs/shared/lib/worktree-claim-oracle.cjs
     - packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh
     - packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh
-    - .claude/hooks/lib/worktree-claim-oracle.cjs
-    - .claude/hooks/bash-write-guard.sh
-    - .claude/hooks/worktree-write-guard.sh
     - packages/caws-cli/tests/hooks/bats/worktree-write-guard.bats
     - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
     - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/tests/hooks/pytest/test_worktree_claim_oracle.py
   out:
     - .caws/policy.yaml
 invariants:
