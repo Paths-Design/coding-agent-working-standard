@@ -63,7 +63,17 @@ import type { HookPackV1 } from './types';
 // Edit it warns only when the edit CROSSES the threshold or adds a large delta
 // (>= CAWS_GOD_OBJECT_DELTA, default 100), derived statelessly from the Edit
 // payload. A Write of a whole over-threshold file still warns; always exit 0.
-export const SHARED_PACK_VERSION = 8;
+//
+// v9 (CAWS-HOOKPACK-ORACLE-JSYAML-DEGRADE-001): worktree-claim-oracle.cjs now
+// emits `degraded_no_yaml` (not `error_fail_closed`) when the cross-worktree
+// canonical-claim check cannot run because js-yaml is unresolvable. bash-write-
+// guard.sh and worktree-write-guard.sh map it to allow-with-advisory, not ask —
+// a missing dependency is a toolchain fault, not an ownership signal, and the
+// old fail-closed turned every canonical mutation into an approval prompt when
+// js-yaml was absent. The yaml-free foreign-worktree-payload block is unchanged
+// and still hard-blocks. The error_fail_closed ask message is also reworded to
+// name a toolchain fault rather than a (false) ownership conflict.
+export const SHARED_PACK_VERSION = 9;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.
