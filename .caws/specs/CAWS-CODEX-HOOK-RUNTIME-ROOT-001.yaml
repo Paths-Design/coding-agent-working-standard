@@ -1,0 +1,29 @@
+id: CAWS-CODEX-HOOK-RUNTIME-ROOT-001
+title: 'Resolve Codex hook dispatchers from active git root'
+risk_tier: 3
+mode: fix
+lifecycle_state: active
+created_at: '2026-06-26T23:17:23.693Z'
+updated_at: '2026-06-26T23:17:23.693Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/init/hook-install.ts'
+    - 'packages/caws-cli/scripts/fresh-install-smoke.mjs'
+    - 'packages/caws-cli/templates/hook-packs/codex/hooks.json'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-codex.ts'
+    - 'packages/caws-cli/tests/init'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
