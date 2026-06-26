@@ -52,3 +52,15 @@ teardown_file() {
   run_guard protected-paths.sh "$(hook_envelope Bash '' 'cat .claude/hooks/scope-guard.sh')"
   assert_success
 }
+
+# --- missing load-bearing lib must fail CLOSED, not silently admit a hook edit ---
+# CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001. protected-paths sources agent-surface.sh
+# for CAWS_VENDOR_DIR (the protected-dir prefix). Under `set -euo pipefail` the
+# old `source <missing> 2>/dev/null || true` died at the source line, so a Write
+# to a guard script silently passed — defeating the hook-edit protection.
+
+@test "protected-paths: with agent-surface.sh missing, an edit to a guard SCRIPT does NOT silently pass — fails CLOSED" {
+  run_guard_missing_lib protected-paths.sh agent-surface.sh "$(hook_envelope Edit '.claude/hooks/scope-guard.sh')"
+  refute [ "$status" -eq 0 ]
+  assert_output --partial 'agent-surface.sh'
+}

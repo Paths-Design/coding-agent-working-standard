@@ -42,8 +42,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/parse-input.sh
 source "$SCRIPT_DIR/lib/parse-input.sh"
 # shellcheck source=lib/agent-surface.sh
-# Provides CAWS_VENDOR_DIR for path matching.
-source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
+# Provides CAWS_VENDOR_DIR for protected-path matching — load-bearing. A fatal
+# `source <missing>` under `set -euo pipefail` is NOT caught by `|| true`, so
+# guard with an existence test and fail CLOSED if absent: a guard that protects
+# hook files from edits must not silently disappear when its lib is missing
+# (CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001).
+if [[ -f "$SCRIPT_DIR/lib/agent-surface.sh" ]]; then
+  source "$SCRIPT_DIR/lib/agent-surface.sh"
+else
+  echo "[protected-paths] CAWS hook infrastructure incomplete: lib/agent-surface.sh is missing — cannot resolve protected hook paths. Failing CLOSED (refusing the edit). Restore the shared hook libs with: caws init --adopt" >&2
+  printf '{"decision":"block","reason":"CAWS protected-paths: cannot load lib/agent-surface.sh, so protected-path matching cannot run. Failing closed. Restore the hook pack: caws init --adopt"}\n'
+  exit 2
+fi
 parse_hook_input
 
 case "$HOOK_TOOL_NAME" in
