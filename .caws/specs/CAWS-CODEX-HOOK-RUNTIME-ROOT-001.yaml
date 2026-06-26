@@ -3,6 +3,7 @@ title: 'Resolve Codex hook dispatchers from active git root'
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: wt-codex-hook-runtime-root
 created_at: '2026-06-26T23:17:23.693Z'
 updated_at: '2026-06-26T23:17:23.693Z'
 blast_radius:
