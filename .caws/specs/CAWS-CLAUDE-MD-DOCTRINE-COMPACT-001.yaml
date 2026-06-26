@@ -7,21 +7,54 @@ created_at: '2026-06-26T20:46:19.650Z'
 updated_at: '2026-06-26T20:46:35.552Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - repo doctrine docs (Claude-facing CLAUDE.md + docs/agents)
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - CLAUDE.md
     - docs/agents/scope-discipline.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    CLAUDE.md carries DOCTRINE (durable why/what that shapes agent behavior) and
+    POINTERS, not status. Version/command-surface enumeration (the "v11.1 ships
+    thirteen", "removed in v11.0", "deferred to v11.3+", cutover/dist-tag prose)
+    is deleted and replaced by a pointer to its authoritative owner
+    (docs/architecture/caws-vnext-command-surface.md + the `caws` skill), which
+    tracks the live surface and does not drift.
+  - >-
+    Doctrine-by-incident prose is PRESERVED, not flattened to a one-liner. The
+    release stance, the pre-edit admission protocol's "why this is here and not
+    just a hook" argument, "demote intuition; trust proof", the latch-reset and
+    governed-worktree-merge sections keep the reasoning that makes them
+    behavior-changing — because the hook fires AFTER the strike, so the prose is
+    the only thing that prevents it. Compression removes dates/shas/duplication,
+    never the load-bearing "why".
+  - >-
+    The four overlapping scope sections (authoring traps, strike state, scope
+    discipline, pre-edit admission) collapse to ONE doctrine block in CLAUDE.md
+    plus the literal preflight proof-block template (a hard gate kept inline);
+    the operational recipes (recovery checklists, strike-reset steps, the
+    file-list/amend-before-edit procedure) move verbatim into
+    docs/agents/scope-discipline.md, linked from the doctrine block. No procedure
+    is deleted — it is relocated to where it belongs.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: the refactored CLAUDE.md
+    when: grepping for version/status enumeration (removed-in-v11, deferred-to-v11.3, "ships thirteen", dist-tag/cutover prose)
+    then: those enumerations are gone and a single pointer to caws-vnext-command-surface.md + the caws skill remains in their place
+  - id: A2
+    given: the refactored CLAUDE.md
+    when: checking the release-stance and pre-edit-admission doctrine sections
+    then: their load-bearing reasoning and worked examples are preserved (not flattened), and the preflight proof-block template is still present inline
+  - id: A3
+    given: the scope procedure removed from CLAUDE.md
+    when: opening docs/agents/scope-discipline.md
+    then: the recovery checklists, strike-reset steps, and amend-before-edit recipe are present there and linked from CLAUDE.md, so no procedure was lost
+  - id: A4
+    given: the refactored CLAUDE.md
+    when: measuring size and scanning the top of the file
+    then: it is materially smaller (target ~half) and opens with a scannable doctrine spine rather than version status
 non_functional: {}
 contracts: []
