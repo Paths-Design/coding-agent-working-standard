@@ -3,6 +3,7 @@ title: 'Load-bearing guards must survive a missing shared lib, not silently die 
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: source-guard-failsoft
 created_at: '2026-06-26T18:16:02.909Z'
 updated_at: '2026-06-26T18:20:00.000Z'
 blast_radius:
