@@ -100,3 +100,19 @@ _run_bwg_nojsyaml() {
   assert_success
   refute_output --partial 'SKIPPED'                # never reached the oracle
 }
+
+# --- missing load-bearing SHELL lib must fail CLOSED (distinct from js-yaml degrade) ---
+# CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001. The js-yaml DEGRADE above is about the
+# ORACLE subprocess's runtime dep and is a deliberate ALLOW-with-advisory. THIS
+# is the prior shell-source defect: `source caws-state.sh 2>/dev/null || exit 0`
+# fail-OPEN, run BEFORE the oracle. A missing shell state lib must refuse, not
+# silently exit 0 and admit a Bash mutation.
+
+@test "bash-write-guard: with caws-state.sh missing, a Bash mutation does NOT silently admit (exit 0) — fails CLOSED" {
+  local envelope
+  envelope="$(jq -nc --arg c "echo hi > some/canonical/scratch.txt" --arg s "my-session" \
+    '{tool_name:"Bash", tool_input:{command:$c}, session_id:$s}')"
+  run_guard_missing_lib bash-write-guard.sh caws-state.sh "$envelope"
+  refute [ "$status" -eq 0 ]
+  assert_output --partial 'caws-state.sh'
+}

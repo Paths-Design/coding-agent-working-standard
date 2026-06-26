@@ -88,3 +88,30 @@ run_guard() {
     HOOK_CWD="$CAWS_TEST_REPO" \
     bash -c "printf '%s' '$envelope' | bash '$CAWS_TEST_HOOKS_DIR/$guard'"
 }
+
+# Run an installed guard against an ISOLATED COPY of the hooks dir with one
+# shared lib deleted, to reproduce the missing-load-bearing-lib failure class
+# (CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001 — a guard that sources a missing lib
+# under `set -euo pipefail` must NOT silently die / fail open).
+#
+# Usage: run_guard_missing_lib <guard-basename.sh> <lib-basename.sh> <envelope-json>
+#
+# The copy is per-invocation and torn down by the next mktemp/teardown of the
+# OS temp dir; the shared per-file install (CAWS_TEST_HOOKS_DIR) is never
+# mutated, so other tests in the file see the complete pack.
+run_guard_missing_lib() {
+  local guard="$1" missing_lib="$2" envelope="$3"
+  local broken_repo broken_hooks
+  broken_repo="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-broken-XXXXXX")"
+  # Copy the whole installed .caws tree so vendor/state paths resolve, then
+  # remove exactly the one lib under test.
+  cp -R "$CAWS_TEST_REPO/.caws" "$broken_repo/.caws"
+  broken_hooks="$broken_repo/.caws/hooks"
+  rm -f "$broken_hooks/lib/$missing_lib"
+  run env \
+    CAWS_PROJECT_DIR="$broken_repo" \
+    CAWS_AGENT_SURFACE="claude-code" \
+    HOOK_CWD="$broken_repo" \
+    bash -c "printf '%s' '$envelope' | bash '$broken_hooks/$guard'"
+  rm -rf "$broken_repo"
+}
