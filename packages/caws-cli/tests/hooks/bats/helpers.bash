@@ -115,3 +115,26 @@ run_guard_missing_lib() {
     bash -c "printf '%s' '$envelope' | bash '$broken_hooks/$guard'"
   rm -rf "$broken_repo"
 }
+
+# Drive the FULL PreToolUse dispatcher (dispatch/pre_tool_use.sh) against an
+# isolated copy with one shared lib deleted. The dispatcher sources
+# agent-surface.sh to define caws_source_lib; without it the chain was skipped
+# at the first `|| exit 0` BEFORE any guard ran — silently disabling the whole
+# guard set (CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001). This exercises the
+# dispatcher-level fail-loud-and-safe path, not just a single guard.
+#
+# Usage: run_dispatcher_missing_lib <lib-basename.sh> <envelope-json>
+run_dispatcher_missing_lib() {
+  local missing_lib="$1" envelope="$2"
+  local broken_repo broken_hooks
+  broken_repo="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-disp-XXXXXX")"
+  cp -R "$CAWS_TEST_REPO/.caws" "$broken_repo/.caws"
+  broken_hooks="$broken_repo/.caws/hooks"
+  rm -f "$broken_hooks/lib/$missing_lib"
+  run env \
+    CAWS_PROJECT_DIR="$broken_repo" \
+    CAWS_AGENT_SURFACE="claude-code" \
+    HOOK_CWD="$broken_repo" \
+    bash -c "printf '%s' '$envelope' | bash '$broken_hooks/dispatch/pre_tool_use.sh'"
+  rm -rf "$broken_repo"
+}

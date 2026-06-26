@@ -177,3 +177,27 @@ _cmd_envelope_sid() {
   ! { [ "$status" -eq 0 ] && [ -z "$output" ]; }
   assert_output --partial 'agent-surface.sh'
 }
+
+# --- DISPATCHER-level: a missing core lib disables the WHOLE chain, not just
+# one guard. The dispatcher sources agent-surface.sh to define caws_source_lib;
+# without it the old `caws_source_lib parse-input.sh ... || exit 0` skipped every
+# handler BEFORE block-dangerous ran, so a catastrophic command sailed through.
+# This is the actual Sterling failure path (agent-surface.sh never vendored).
+
+@test "block-dangerous: with agent-surface.sh missing, the DISPATCHER fails safe — a catastrophic command is blocked, not silently allowed" {
+  run_dispatcher_missing_lib agent-surface.sh "$(hook_envelope Bash '' 'rm -rf /')"
+  # Pre-fix: dispatcher exited 0 with empty output (whole chain skipped) and the
+  # tool call would proceed. Post-fix: a block decision is emitted and a self-
+  # identifying diagnostic names the missing core lib.
+  assert_output --partial '"decision":"block"'
+  assert_output --partial 'agent-surface.sh'
+  assert_equal "$status" 2
+}
+
+@test "block-dangerous: with agent-surface.sh missing, the DISPATCHER does not silently exit 0 on a benign command either" {
+  run_dispatcher_missing_lib agent-surface.sh "$(hook_envelope Bash '' 'ls -la')"
+  # A broken hook install must be loud + recoverable, never a silent exit-0 that
+  # leaves the user believing enforcement is live when it is not.
+  ! { [ "$status" -eq 0 ] && [ -z "$output" ]; }
+  assert_output --partial 'agent-surface.sh'
+}

@@ -31,10 +31,27 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/parse-input.sh
 source "$SCRIPT_DIR/lib/parse-input.sh"
 # shellcheck source=lib/caws-state.sh
-source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || exit 0
+# caws-state.sh provides the Bash-mutation-target machinery this guard needs to
+# route a write through the worktree-claim oracle. A fatal `source <missing>`
+# under `set -euo pipefail` is not caught by `|| exit 0`, and `|| exit 0` would
+# SILENTLY ADMIT the mutation (fail-open). Fail CLOSED if it cannot load
+# (CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001).
+if ! { [[ -f "$SCRIPT_DIR/lib/caws-state.sh" ]] && source "$SCRIPT_DIR/lib/caws-state.sh"; }; then
+  echo "[bash-write-guard] CAWS hook infrastructure incomplete: lib/caws-state.sh is missing or did not load — cannot evaluate Bash-mutation ownership. Failing CLOSED. Restore the shared hook libs with: caws init --adopt" >&2
+  printf '{"decision":"block","reason":"CAWS bash-write-guard: cannot load lib/caws-state.sh, so Bash-mutation worktree isolation cannot be evaluated. Failing closed. Restore the hook pack: caws init --adopt"}\n'
+  exit 2
+fi
 # shellcheck source=lib/agent-surface.sh
-# Provides CAWS_PROJECT_DIR and caws_source_lib. Must come before caws_source_lib calls.
-source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
+# Provides CAWS_PROJECT_DIR and caws_source_lib — load-bearing. Guard the source
+# (a fatal `source <missing>` is not caught by `|| true` under set -e) and fail
+# CLOSED if absent.
+if [[ -f "$SCRIPT_DIR/lib/agent-surface.sh" ]]; then
+  source "$SCRIPT_DIR/lib/agent-surface.sh"
+else
+  echo "[bash-write-guard] CAWS hook infrastructure incomplete: lib/agent-surface.sh is missing. Failing CLOSED. Restore the shared hook libs with: caws init --adopt" >&2
+  printf '{"decision":"block","reason":"CAWS bash-write-guard: cannot load lib/agent-surface.sh. Failing closed. Restore the hook pack: caws init --adopt"}\n'
+  exit 2
+fi
 # shellcheck source=lib/emit.sh
 # Use caws_source_lib so a vendor override is preferred over the shared default.
 caws_source_lib emit.sh 2>/dev/null || true

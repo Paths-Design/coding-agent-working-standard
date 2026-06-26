@@ -73,7 +73,20 @@ import type { HookPackV1 } from './types';
 // js-yaml was absent. The yaml-free foreign-worktree-payload block is unchanged
 // and still hard-blocks. The error_fail_closed ask message is also reworded to
 // name a toolchain fault rather than a (false) ownership conflict.
-export const SHARED_PACK_VERSION = 9;
+//
+// v10 (CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001): the load-bearing guards
+// (block-dangerous, scope-guard, worktree-guard, worktree-write-guard,
+// bash-write-guard, scan-secrets, quiet-merge) now source agent-surface.sh /
+// caws-state.sh through a survivable `[[ -f ]] && source` form instead of
+// `source <missing> 2>/dev/null || true`. Under `set -euo pipefail` the old
+// form was a fatal builtin error that `|| true` did NOT catch, so a missing
+// shared lib silently killed every guard that sourced it — including the danger
+// latch (the Sterling consumer incident). On a missing load-bearing lib the
+// enforcement guards now fail LOUD: block-dangerous + the two write guards emit
+// a self-identifying block decision and exit 2 (the write guards' prior
+// `|| exit 0` fail-OPEN on caws-state.sh is removed); advisories (scan-secrets,
+// quiet-merge) fail soft-but-loud (diagnostic + exit 0).
+export const SHARED_PACK_VERSION = 10;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.
