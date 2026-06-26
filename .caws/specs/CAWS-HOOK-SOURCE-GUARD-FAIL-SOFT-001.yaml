@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: source-guard-failsoft
 created_at: '2026-06-26T18:16:02.909Z'
-updated_at: '2026-06-26T18:39:45.218Z'
+updated_at: '2026-06-26T18:40:22.600Z'
 blast_radius:
   modules:
     - caws-cli shared hook pack (load-bearing guard templates)
@@ -31,6 +31,7 @@ scope:
     - packages/caws-cli/tests/hooks/bats/helpers.bash
     - packages/caws-cli/templates/hook-packs/shared/dispatch/pre_tool_use.sh
     - packages/caws-cli/templates/hook-packs/shared/protected-paths.sh
+    - packages/caws-cli/tests/hooks/bats/protected-paths.bats
   out: []
 invariants:
   - >-
