@@ -4,15 +4,15 @@ risk_tier: 2
 mode: fix
 lifecycle_state: active
 created_at: '2026-06-26T18:16:02.909Z'
-updated_at: '2026-06-26T18:17:59.401Z'
+updated_at: '2026-06-26T18:20:00.000Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli shared hook pack (load-bearing guard templates)
+    - caws-cli hook-pack manifest + fingerprint baseline
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh
     - packages/caws-cli/templates/hook-packs/shared/scope-guard.sh
     - packages/caws-cli/templates/hook-packs/shared/worktree-guard.sh
@@ -30,12 +30,44 @@ scope:
     - packages/caws-cli/tests/hooks/bats/helpers.bash
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    A load-bearing guard (block-dangerous, scope-guard, worktree-guard,
+    worktree-write-guard, bash-write-guard, scan-secrets, quiet-merge) MUST NOT
+    become silently inert when a sourced shared lib (agent-surface.sh,
+    caws-state.sh) is absent or unsourceable. Under `set -euo pipefail` a bare
+    `source <missing>` is a fatal builtin error that a trailing `|| true` does
+    NOT catch; the guard dies before running its check. The fix replaces every
+    such source with a survivable guarded form.
+  - >-
+    The fail DIRECTION on a missing/unsourceable load-bearing lib is by guard
+    class and is never fail-OPEN. Enforcement guards (the two write guards and
+    block-dangerous) fail LOUD: they emit a single self-identifying diagnostic
+    to stderr and exit non-zero so the harness surfaces the broken guard rather
+    than admitting the operation. The pre-existing `|| exit 0` on caws-state.sh
+    in the write guards (which silently ADMITTED the write) is removed.
+  - >-
+    The fix is purely the sourcing contract in the guard templates; the libs
+    themselves are unchanged. Any shared-template byte change is accompanied by
+    a SHARED_PACK_VERSION bump and a regenerated pack-fingerprints.json baseline
+    so the supply-chain fingerprint guard stays green and installed copies are
+    not left stale.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: an installed shared hook pack in a temp repo with agent-surface.sh deleted from .caws/hooks/lib/
+    when: block-dangerous.sh is run with a benign command envelope on stdin
+    then: the guard exits non-zero with a self-identifying stderr diagnostic (fails LOUD, not a silent exit-0 passthrough that would mean a disarmed danger latch)
+  - id: A2
+    given: an installed shared hook pack with caws-state.sh deleted from .caws/hooks/lib/
+    when: worktree-write-guard.sh (and bash-write-guard.sh) is run with a Write envelope on stdin
+    then: the guard exits non-zero (fails CLOSED) and does NOT exit 0 — the prior `|| exit 0` fail-open behavior is gone
+  - id: A3
+    given: a complete, unmodified installed shared hook pack (all libs present)
+    when: each load-bearing guard is run with a benign envelope
+    then: the guard behaves exactly as before the fix (benign passes, dangerous blocks) — the survivable source form is transparent when the lib is present
+  - id: A4
+    given: the shared template tree after the source-guard edits
+    when: the pack-fingerprint test runs
+    then: it passes because SHARED_PACK_VERSION was bumped and pack-fingerprints.json was regenerated from the live template tree
 non_functional: {}
 contracts:
   - name: 'guards-fail-loud-not-inert'
