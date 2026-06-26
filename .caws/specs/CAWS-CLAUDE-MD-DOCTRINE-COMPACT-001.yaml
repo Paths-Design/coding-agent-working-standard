@@ -2,10 +2,11 @@ id: CAWS-CLAUDE-MD-DOCTRINE-COMPACT-001
 title: 'Compress repo CLAUDE.md to doctrine+pointers: delete version/status barnacles, move scope procedure to docs/agents'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
-worktree: claude-md-compact
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge claude-md-compact at e69447ad3b5df19cfdfce4fc994460495129e2d7'
 created_at: '2026-06-26T20:46:19.650Z'
-updated_at: '2026-06-26T20:46:35.552Z'
+updated_at: '2026-06-26T20:51:56.710Z'
 blast_radius:
   modules:
     - repo doctrine docs (Claude-facing CLAUDE.md + docs/agents)
