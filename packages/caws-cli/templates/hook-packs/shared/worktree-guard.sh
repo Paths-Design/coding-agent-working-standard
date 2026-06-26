@@ -24,10 +24,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/parse-input.sh
 source "$SCRIPT_DIR/lib/parse-input.sh"
 # shellcheck source=lib/caws-state.sh
-source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || true
+# Guard the source: a fatal `source <missing>` under `set -euo pipefail` is NOT
+# caught by `|| true`. caws-state.sh is optional here (worktree-guard reads the
+# registry via node), so a missing file is non-fatal but must not abort the
+# guard (CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001).
+[[ -f "$SCRIPT_DIR/lib/caws-state.sh" ]] && source "$SCRIPT_DIR/lib/caws-state.sh"
 # shellcheck source=lib/agent-surface.sh
-# Provides CAWS_PROJECT_DIR and caws_source_lib. Must come before caws_source_lib calls.
-source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
+# Provides CAWS_PROJECT_DIR and caws_source_lib — load-bearing (caws_source_lib
+# is called below). Fail CLOSED if absent: a guard that blocks dangerous git ops
+# while worktrees are active must not silently disappear because a lib is missing.
+if [[ -f "$SCRIPT_DIR/lib/agent-surface.sh" ]]; then
+  source "$SCRIPT_DIR/lib/agent-surface.sh"
+else
+  echo "[worktree-guard] CAWS hook infrastructure incomplete: lib/agent-surface.sh is missing — cannot evaluate worktree-active git safety. Failing CLOSED. Restore the shared hook libs with: caws init --adopt" >&2
+  printf '{"decision":"block","reason":"CAWS worktree-guard: cannot load lib/agent-surface.sh, so worktree-active git safety cannot be evaluated. Failing closed. Restore the hook pack: caws init --adopt"}\n'
+  exit 2
+fi
 # shellcheck source=lib/emit.sh
 # Use caws_source_lib so a vendor override is preferred over the shared default.
 caws_source_lib emit.sh 2>/dev/null || true

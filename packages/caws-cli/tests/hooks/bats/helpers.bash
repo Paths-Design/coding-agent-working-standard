@@ -88,3 +88,53 @@ run_guard() {
     HOOK_CWD="$CAWS_TEST_REPO" \
     bash -c "printf '%s' '$envelope' | bash '$CAWS_TEST_HOOKS_DIR/$guard'"
 }
+
+# Run an installed guard against an ISOLATED COPY of the hooks dir with one
+# shared lib deleted, to reproduce the missing-load-bearing-lib failure class
+# (CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001 — a guard that sources a missing lib
+# under `set -euo pipefail` must NOT silently die / fail open).
+#
+# Usage: run_guard_missing_lib <guard-basename.sh> <lib-basename.sh> <envelope-json>
+#
+# The copy is per-invocation and torn down by the next mktemp/teardown of the
+# OS temp dir; the shared per-file install (CAWS_TEST_HOOKS_DIR) is never
+# mutated, so other tests in the file see the complete pack.
+run_guard_missing_lib() {
+  local guard="$1" missing_lib="$2" envelope="$3"
+  local broken_repo broken_hooks
+  broken_repo="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-broken-XXXXXX")"
+  # Copy the whole installed .caws tree so vendor/state paths resolve, then
+  # remove exactly the one lib under test.
+  cp -R "$CAWS_TEST_REPO/.caws" "$broken_repo/.caws"
+  broken_hooks="$broken_repo/.caws/hooks"
+  rm -f "$broken_hooks/lib/$missing_lib"
+  run env \
+    CAWS_PROJECT_DIR="$broken_repo" \
+    CAWS_AGENT_SURFACE="claude-code" \
+    HOOK_CWD="$broken_repo" \
+    bash -c "printf '%s' '$envelope' | bash '$broken_hooks/$guard'"
+  rm -rf "$broken_repo"
+}
+
+# Drive the FULL PreToolUse dispatcher (dispatch/pre_tool_use.sh) against an
+# isolated copy with one shared lib deleted. The dispatcher sources
+# agent-surface.sh to define caws_source_lib; without it the chain was skipped
+# at the first `|| exit 0` BEFORE any guard ran — silently disabling the whole
+# guard set (CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001). This exercises the
+# dispatcher-level fail-loud-and-safe path, not just a single guard.
+#
+# Usage: run_dispatcher_missing_lib <lib-basename.sh> <envelope-json>
+run_dispatcher_missing_lib() {
+  local missing_lib="$1" envelope="$2"
+  local broken_repo broken_hooks
+  broken_repo="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-disp-XXXXXX")"
+  cp -R "$CAWS_TEST_REPO/.caws" "$broken_repo/.caws"
+  broken_hooks="$broken_repo/.caws/hooks"
+  rm -f "$broken_hooks/lib/$missing_lib"
+  run env \
+    CAWS_PROJECT_DIR="$broken_repo" \
+    CAWS_AGENT_SURFACE="claude-code" \
+    HOOK_CWD="$broken_repo" \
+    bash -c "printf '%s' '$envelope' | bash '$broken_hooks/dispatch/pre_tool_use.sh'"
+  rm -rf "$broken_repo"
+}

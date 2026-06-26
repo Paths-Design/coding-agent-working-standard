@@ -35,12 +35,29 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/parse-input.sh"
 parse_hook_input
 # shellcheck source=lib/caws-state.sh
-source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || exit 0
-command -v _realpath >/dev/null 2>&1 || exit 0
+# caws-state.sh provides _realpath + the canonical scope-glob matcher — without
+# them this guard CANNOT decide whether a write crosses a worktree claim.
+# Sourcing a missing file under `set -euo pipefail` is fatal and `|| exit 0`
+# would SILENTLY ADMIT the write (fail-open). A write guard that cannot load its
+# decision machinery must fail CLOSED, not admit (CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001).
+if [[ -f "$SCRIPT_DIR/lib/caws-state.sh" ]] && source "$SCRIPT_DIR/lib/caws-state.sh" && command -v _realpath >/dev/null 2>&1; then
+  :
+else
+  echo "[worktree-write-guard] CAWS hook infrastructure incomplete: lib/caws-state.sh is missing or did not load — cannot evaluate worktree-claim isolation. Failing CLOSED (refusing the write). Restore the shared hook libs with: caws init --adopt" >&2
+  printf '{"decision":"block","reason":"CAWS worktree-write-guard: cannot load lib/caws-state.sh, so cross-worktree write isolation cannot be evaluated. Failing closed. Restore the hook pack: caws init --adopt"}\n'
+  exit 2
+fi
 # shellcheck source=lib/agent-surface.sh
-# Provides CAWS_PROJECT_DIR, CAWS_VENDOR_DIR, and caws_source_lib.
-# Must come before caws_source_lib calls.
-source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
+# Provides CAWS_PROJECT_DIR, CAWS_VENDOR_DIR, and caws_source_lib — load-bearing.
+# Must come before caws_source_lib calls. Guard the source (a fatal `source
+# <missing>` is not caught by `|| true` under set -e) and fail CLOSED if absent.
+if [[ -f "$SCRIPT_DIR/lib/agent-surface.sh" ]]; then
+  source "$SCRIPT_DIR/lib/agent-surface.sh"
+else
+  echo "[worktree-write-guard] CAWS hook infrastructure incomplete: lib/agent-surface.sh is missing. Failing CLOSED (refusing the write). Restore the shared hook libs with: caws init --adopt" >&2
+  printf '{"decision":"block","reason":"CAWS worktree-write-guard: cannot load lib/agent-surface.sh. Failing closed. Restore the hook pack: caws init --adopt"}\n'
+  exit 2
+fi
 # shellcheck source=lib/emit.sh
 # Use caws_source_lib so a vendor override is preferred over the shared default.
 caws_source_lib emit.sh 2>/dev/null || true

@@ -105,3 +105,24 @@ STUB
   assert_output --partial "undetermined"
   refute_output --partial "claimed by an active worktree"
 }
+
+# --- missing load-bearing lib must fail CLOSED, not silently admit the write ---
+# CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001. The pre-fix guard sourced caws-state.sh
+# as `source <missing> 2>/dev/null || exit 0` — fail-OPEN: a missing/unsourceable
+# state lib made the guard exit 0 and SILENTLY ADMIT the write. A write guard
+# that cannot load the machinery it needs to decide must refuse, not admit.
+
+@test "wt-write-guard: with caws-state.sh missing, a Write does NOT silently admit (exit 0) — fails CLOSED (A2)" {
+  run_guard_missing_lib worktree-write-guard.sh caws-state.sh "$(hook_envelope Write 'packages/owned/x.ts' '')"
+  # The defining regression: the old `|| exit 0` made this a silent admit.
+  # Post-fix it must NOT be a clean exit-0 passthrough.
+  refute [ "$status" -eq 0 ]
+  # And it names the missing infrastructure so the broken install is legible.
+  assert_output --partial 'caws-state.sh'
+}
+
+@test "wt-write-guard: with agent-surface.sh missing, a Write does NOT silently die empty — fails LOUD (A1)" {
+  run_guard_missing_lib worktree-write-guard.sh agent-surface.sh "$(hook_envelope Write 'packages/owned/x.ts' '')"
+  refute [ "$status" -eq 0 ]
+  assert_output --partial 'agent-surface.sh'
+}

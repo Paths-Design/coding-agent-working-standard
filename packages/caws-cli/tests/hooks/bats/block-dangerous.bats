@@ -149,3 +149,55 @@ _cmd_envelope_sid() {
   # catastrophic deny is unchanged: it DOES write the sticky latch for this session
   assert _latch_exists_for "$sid"
 }
+
+# --- missing load-bearing lib must fail LOUD, not silently disarm the latch ---
+# CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001. The danger latch lives in this guard;
+# block-dangerous sources lib/agent-surface.sh for CAWS_VENDOR_DIR / caws_source_lib
+# (the latch-state path and the emit helper). Under `set -euo pipefail` the old
+# `source <missing> 2>/dev/null || true` died at the source line with empty
+# output, so a catastrophic command produced NO block decision — the latch was
+# silently disarmed (the exact Sterling consumer failure that motivated this spec).
+
+@test "block-dangerous: with agent-surface.sh missing, a benign command does NOT silently pass clean — guard fails LOUD (A1)" {
+  run_guard_missing_lib block-dangerous.sh agent-surface.sh "$(hook_envelope Bash '' 'ls -la')"
+  # A self-identifying diagnostic naming the missing infrastructure is emitted
+  # (to stderr or stdout — `run` merges both), instead of the empty-output death
+  # the dispatcher surfaced as a generic "hook error / No stderr output".
+  assert_output --partial 'agent-surface.sh'
+  # And it is NOT a clean exit-0 passthrough — a guard that cannot load its
+  # latch infrastructure must not report "all clear".
+  refute [ "$status" -eq 0 ]
+}
+
+@test "block-dangerous: with agent-surface.sh missing, a catastrophic command is NOT silently allowed — block is NOT dropped (A1)" {
+  run_guard_missing_lib block-dangerous.sh agent-surface.sh "$(hook_envelope Bash '' 'rm -rf /')"
+  # The guard cannot have silently swallowed the safety boundary: it either
+  # still emits a block decision or fails loud with a non-zero exit + diagnostic.
+  # What it must NEVER do is exit 0 with empty output (a disarmed latch).
+  ! { [ "$status" -eq 0 ] && [ -z "$output" ]; }
+  assert_output --partial 'agent-surface.sh'
+}
+
+# --- DISPATCHER-level: a missing core lib disables the WHOLE chain, not just
+# one guard. The dispatcher sources agent-surface.sh to define caws_source_lib;
+# without it the old `caws_source_lib parse-input.sh ... || exit 0` skipped every
+# handler BEFORE block-dangerous ran, so a catastrophic command sailed through.
+# This is the actual Sterling failure path (agent-surface.sh never vendored).
+
+@test "block-dangerous: with agent-surface.sh missing, the DISPATCHER fails safe — a catastrophic command is blocked, not silently allowed" {
+  run_dispatcher_missing_lib agent-surface.sh "$(hook_envelope Bash '' 'rm -rf /')"
+  # Pre-fix: dispatcher exited 0 with empty output (whole chain skipped) and the
+  # tool call would proceed. Post-fix: a block decision is emitted and a self-
+  # identifying diagnostic names the missing core lib.
+  assert_output --partial '"decision":"block"'
+  assert_output --partial 'agent-surface.sh'
+  assert_equal "$status" 2
+}
+
+@test "block-dangerous: with agent-surface.sh missing, the DISPATCHER does not silently exit 0 on a benign command either" {
+  run_dispatcher_missing_lib agent-surface.sh "$(hook_envelope Bash '' 'ls -la')"
+  # A broken hook install must be loud + recoverable, never a silent exit-0 that
+  # leaves the user believing enforcement is live when it is not.
+  ! { [ "$status" -eq 0 ] && [ -z "$output" ]; }
+  assert_output --partial 'agent-surface.sh'
+}

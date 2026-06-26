@@ -44,10 +44,22 @@ source "$SCRIPT_DIR/guard-strikes.sh"
 # Provides $CAWS_NODE_GLOB_TO_SCOPE_REGEXP — the single canonical scope-glob
 # matcher shared with worktree-write-guard so the two guards can never
 # disagree on a (path, pattern) scope decision (HOOK-LIB-CONSOLIDATION-001 T1a).
-source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || true
+# Guard the source: a fatal `source <missing>` under `set -euo pipefail` is NOT
+# caught by `|| true` (CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001). caws-state.sh is
+# optional here (scope-guard delegates the decision to `caws scope check`), so a
+# missing file is non-fatal — but the source must not abort the guard.
+[[ -f "$SCRIPT_DIR/lib/caws-state.sh" ]] && source "$SCRIPT_DIR/lib/caws-state.sh"
 # shellcheck source=lib/agent-surface.sh
-# Provides CAWS_PROJECT_DIR, CAWS_VENDOR_DIR for path resolution.
-source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
+# Provides CAWS_PROJECT_DIR, CAWS_VENDOR_DIR for path resolution — load-bearing.
+# Fail CLOSED (refuse the edit) if absent: a scope guard that cannot resolve the
+# project/vendor paths must not silently admit an out-of-scope write.
+if [[ -f "$SCRIPT_DIR/lib/agent-surface.sh" ]]; then
+  source "$SCRIPT_DIR/lib/agent-surface.sh"
+else
+  echo "[scope-guard] CAWS hook infrastructure incomplete: lib/agent-surface.sh is missing — cannot resolve scope authority. Failing CLOSED (refusing the edit). Restore the shared hook libs with: caws init --adopt" >&2
+  printf '{"decision":"block","reason":"CAWS scope-guard: cannot load lib/agent-surface.sh, so scope cannot be evaluated. Failing closed. Restore the hook pack: caws init --adopt"}\n'
+  exit 2
+fi
 parse_hook_input
 
 # Back-compat aliases kept to minimize diff in the scope-resolution logic below.

@@ -38,10 +38,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/parse-input.sh
 source "$SCRIPT_DIR/lib/parse-input.sh"
 # shellcheck source=lib/caws-state.sh
-# Provides resolve_canonical_dir (HOOK-LIB-CONSOLIDATION-001 T2a).
-source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || true
+# Provides resolve_canonical_dir (HOOK-LIB-CONSOLIDATION-001 T2a). Guard the
+# source: a fatal `source <missing>` under `set -euo pipefail` is NOT caught by
+# `|| true` (CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001). quiet-merge is a cosmetic
+# output rewriter with NO block authority, so a missing lib fails SOFT but LOUD
+# (diagnostic + exit 0) rather than silently dying or blocking the merge.
+if ! { [[ -f "$SCRIPT_DIR/lib/caws-state.sh" ]] && source "$SCRIPT_DIR/lib/caws-state.sh"; }; then
+  echo "[quiet-merge] CAWS hook infrastructure incomplete: lib/caws-state.sh is missing — merge-output quieting is skipped. Restore the shared hook libs with: caws init --adopt" >&2
+  exit 0
+fi
 # shellcheck source=lib/agent-surface.sh
-source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
+if ! { [[ -f "$SCRIPT_DIR/lib/agent-surface.sh" ]] && source "$SCRIPT_DIR/lib/agent-surface.sh"; }; then
+  echo "[quiet-merge] CAWS hook infrastructure incomplete: lib/agent-surface.sh is missing — merge-output quieting is skipped. Restore the shared hook libs with: caws init --adopt" >&2
+  exit 0
+fi
 parse_hook_input
 
 TOOL_NAME="$HOOK_TOOL_NAME"
