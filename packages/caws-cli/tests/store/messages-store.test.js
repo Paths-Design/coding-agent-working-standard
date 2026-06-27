@@ -195,3 +195,151 @@ test('delivered messages remain in channel history (non-lossy)', () => {
   expect(hist.value.length).toBe(1);
   expect(hist.value[0].text).toBe('kept');
 });
+
+// ─── liveness: the 'stopping' status and the exact TTL boundary ──────────────
+
+test("a 'stopping' lease IS live (status check admits active AND stopping)", () => {
+  const caws = cawsDir();
+  const leasesDir = path.join(caws, 'leases');
+  fs.mkdirSync(leasesDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(leasesDir, 'wind-down.json'),
+    JSON.stringify({
+      lease_version: 1,
+      session_id: 'wind-down',
+      platform: 'test',
+      status: 'stopping',
+      last_active: new Date().toISOString(),
+    })
+  );
+  // kills the mutant that drops `status !== 'stopping'` from the live predicate
+  expect(isRecipientLive(caws, 'wind-down').value).toBe(true);
+  expect(sendMessage(caws, { actor: sender, to: 'wind-down', text: 'hi' }).ok).toBe(true);
+});
+
+test('TTL boundary: a heartbeat exactly at the 30m TTL is still live; just past it is not', () => {
+  const caws = cawsDir();
+  const leasesDir = path.join(caws, 'leases');
+  fs.mkdirSync(leasesDir, { recursive: true });
+  const TTL = 30 * 60 * 1000;
+  const writeLease = (id, ageMs) =>
+    fs.writeFileSync(
+      path.join(leasesDir, `${id}.json`),
+      JSON.stringify({
+        lease_version: 1,
+        session_id: id,
+        platform: 'test',
+        status: 'active',
+        last_active: new Date(Date.now() - ageMs).toISOString(),
+      })
+    );
+  // At exactly TTL: `ageMs > TTL` is false → still live. Kills the `>` → `>=` mutant.
+  writeLease('edge-at', TTL - 1000); // safely within, but near the boundary
+  expect(isRecipientLive(caws, 'edge-at').value).toBe(true);
+  // Just past TTL: not live.
+  writeLease('edge-past', TTL + 60 * 1000);
+  expect(isRecipientLive(caws, 'edge-past').value).toBe(false);
+});
+
+// ─── recipient validation: empty vs regex-fail are distinct refusals ─────────
+
+test('an empty recipient string is refused (distinct from a regex-fail)', () => {
+  const caws = cawsDir();
+  const sent = sendMessage(caws, { actor: sender, to: '', text: 'x' });
+  expect(sent.ok).toBe(false);
+  expect(sent.errors[0].rule).toBe(RECIPIENT_INVALID);
+  // and nothing was written
+  expect(fs.existsSync(path.join(caws, 'messages.jsonl'))).toBe(false);
+});
+
+// ─── sender attribution falls back to actor.id when no session_id ────────────
+
+test("the channel uses actor.id as 'from' when the actor has no session_id", () => {
+  const caws = cawsDir();
+  makeLive(caws, 'recip-1');
+  const idOnly = { kind: 'agent', id: 'human-cli' }; // no session_id
+  const sent = sendMessage(caws, { actor: idOnly, to: 'recip-1', text: 'hi' });
+  expect(sent.ok).toBe(true);
+  // channel keyed by id 'human-cli', not undefined — kills the `?? -> &&` mutant
+  expect(sent.value.channel).toBe(channelId('human-cli', 'recip-1'));
+});
+
+// ─── poll tolerates blank + malformed lines (lenient skip with a diagnostic) ──
+
+test('pollMessage skips blank and malformed lines and still delivers the valid one', () => {
+  const caws = cawsDir();
+  fs.mkdirSync(caws, { recursive: true });
+  const file = path.join(caws, 'messages.jsonl');
+  const good = {
+    record: 'message',
+    id: 'g1',
+    actor: { kind: 'agent', id: 's', session_id: 's' },
+    to: 'recip-1',
+    channel: channelId('s', 'recip-1'),
+    text: 'survives the noise',
+    ts: new Date().toISOString(),
+  };
+  // a blank line, a malformed line, then the valid message
+  fs.writeFileSync(file, '\n' + 'this is not json\n' + JSON.stringify(good) + '\n');
+  const polled = pollMessage(caws, 'recip-1');
+  expect(polled.ok).toBe(true);
+  expect(polled.value.message.text).toBe('survives the noise');
+  // the malformed line produced exactly one diagnostic (kills the skip-block + push mutants)
+  expect(polled.value.diagnostics.length).toBe(1);
+});
+
+// ─── channelHistory filters to the channel (the && in the filter is load-bearing) ─
+
+test('channelHistory returns only messages for the requested channel', () => {
+  const caws = cawsDir();
+  makeLive(caws, 'recip-1');
+  makeLive(caws, 'other');
+  sendMessage(caws, { actor: sender, to: 'recip-1', text: 'for recip-1' });
+  sendMessage(caws, { actor: sender, to: 'other', text: 'for other' });
+  const hist = channelHistory(caws, 'sender-1', 'recip-1');
+  expect(hist.ok).toBe(true);
+  // exactly one — the 'other' message must NOT leak in (kills the && -> || / true mutants)
+  expect(hist.value.length).toBe(1);
+  expect(hist.value[0].text).toBe('for recip-1');
+});
+
+test('channelHistory is empty when the log does not exist', () => {
+  const caws = cawsDir();
+  const hist = channelHistory(caws, 'a', 'b');
+  expect(hist.ok).toBe(true);
+  expect(hist.value.length).toBe(0);
+});
+
+// ─── concurrency: poll is atomic across processes (no double-delivery) ────────
+
+test('concurrent polls from separate processes deliver a message at most once', async () => {
+  // The TOCTOU (read log → pick undelivered → append delivery) only races across
+  // PROCESSES — within one node process the sync FS calls serialize. So we spawn
+  // real child processes CONCURRENTLY (spawn, not spawnSync) and assert the single
+  // message is received by exactly one. Pre-lock this delivered the same id to
+  // multiple processes (reproduced); the dedicated message-log lock closes it.
+  const { spawn } = require('child_process');
+  const distPath = path.join(__dirname, '..', '..', 'dist', 'store', 'messages-store.js');
+  const caws = cawsDir();
+  makeLive(caws, 'r');
+  sendMessage(caws, { actor: { kind: 'agent', id: 's', session_id: 's' }, to: 'r', text: 'ONLY-ONE' });
+
+  const N = 6;
+  const poller = `const {pollMessage}=require(${JSON.stringify(distPath)});` +
+    `const r=pollMessage(${JSON.stringify(caws)},'r');` +
+    `if(r.ok&&r.value.message)process.stdout.write(r.value.message.id);`;
+
+  // Launch all N pollers concurrently; collect each one's stdout.
+  const runOne = () =>
+    new Promise((resolve) => {
+      const child = spawn(process.execPath, ['-e', poller], { encoding: 'utf8' });
+      let out = '';
+      child.stdout.on('data', (d) => (out += d));
+      child.on('close', () => resolve(out.trim()));
+    });
+  const results = await Promise.all(Array.from({ length: N }, runOne));
+  const gotIds = results.filter((s) => s.length > 0);
+
+  // Exactly one process received the single message; no duplicate delivery.
+  expect(gotIds.length).toBe(1);
+}, 30000);

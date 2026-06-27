@@ -49,6 +49,8 @@ module.exports = {
     'dist/store/apply-patch.js:76-205',
     'dist/store/atomic-write.js:58-173',
     'dist/store/events-store.js:64-574',
+    // messages-store uses `import *`; skip the __importStar interop preamble.
+    'dist/store/messages-store.js:69-251',
   ],
   testRunner: 'jest',
   testRunnerNodeArgs: [],

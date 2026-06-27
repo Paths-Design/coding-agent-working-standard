@@ -24,6 +24,7 @@ import * as path from 'node:path';
 import { type Diagnostic, type Result, ok, err } from '@paths.design/caws-kernel';
 
 import { loadLeases } from './leases-store';
+import { withLifecycleLock } from './lifecycle-lock';
 import { storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
 
@@ -166,8 +167,22 @@ export interface PollResult {
  *
  * Lenient per line: a malformed line is skipped with a diagnostic, not fatal.
  * Strict on directory: an unreadable .caws dir returns err.
+ *
+ * CONCURRENCY: the read→pick→append-delivery sequence is a TOCTOU — two processes
+ * polling the SAME recipient at once could otherwise both pick the same message
+ * and deliver it twice (verified reproducible across processes). We serialize the
+ * whole critical section under a DEDICATED message-log lock (not the global
+ * lifecycle lock — chat traffic must not contend with governance ops like spec
+ * close / worktree merge). `sendMessage` needs no lock: a single appendFileSync
+ * line is atomic, and sends never read-modify-write.
  */
 export function pollMessage(cawsDir: string, me: string): Result<PollResult> {
+  return withLifecycleLock(cawsDir, () => pollMessageLocked(cawsDir, me), {
+    lockPath: path.join(cawsDir, MESSAGES_FILENAME + '.lock'),
+  });
+}
+
+function pollMessageLocked(cawsDir: string, me: string): Result<PollResult> {
   const file = messagesPath(cawsDir);
   if (!fs.existsSync(file)) return ok({ message: null, diagnostics: [] });
 
