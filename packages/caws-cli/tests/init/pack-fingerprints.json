@@ -1,5 +1,14 @@
 {
-  "shared": { "version": 11, "fingerprint": "331565da368c7fb0ccfad5fb25193e6689913ec1eb1e01d82030451f5e143d70" },
-  "claude-code": { "version": 20, "fingerprint": "926a6442a6d8b62c1847aba9048bbc12a15c07897aa92679fcea987a9d39005b" },
-  "codex": { "version": 9, "fingerprint": "e94ef3b8a328ebc86acfdb17e244a8ea269ee1b57cf642e3cf1c1da790d52658" }
+  "shared": {
+    "version": 12,
+    "fingerprint": "2f39cf45a02323891738d1f56f43f15e5b0ed7e42fbe6b949a3e646b5f89e69d"
+  },
+  "claude-code": {
+    "version": 20,
+    "fingerprint": "926a6442a6d8b62c1847aba9048bbc12a15c07897aa92679fcea987a9d39005b"
+  },
+  "codex": {
+    "version": 9,
+    "fingerprint": "e94ef3b8a328ebc86acfdb17e244a8ea269ee1b57cf642e3cf1c1da790d52658"
+  }
 }
