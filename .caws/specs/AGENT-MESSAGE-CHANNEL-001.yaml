@@ -2,10 +2,11 @@ id: AGENT-MESSAGE-CHANNEL-001
 title: 'Inter-agent message channel: caws message send/poll over a chained messages log, addressed by session id, liveness-checked against the agent registry'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: wt-agent-message-channel
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-agent-message-channel at 0b99de556a34672ef207eb0ae058610770e3af93'
 created_at: '2026-06-27T04:29:56.508Z'
-updated_at: '2026-06-27T05:08:26.956Z'
+updated_at: '2026-06-27T05:45:01.927Z'
 blast_radius:
   modules:
     - 'caws-cli: new message command + messages store'
