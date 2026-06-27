@@ -2,10 +2,11 @@ id: AGENT-HEARTBEAT-MESSAGE-HINT-001
 title: 'Heartbeat multi-agent notice tells agents to use caws message for peer-to-peer comms'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: wt-heartbeat-msg-hint
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-heartbeat-msg-hint at 248437cdad66f14480f5692ed854766654bf8436'
 created_at: '2026-06-27T06:09:34.584Z'
-updated_at: '2026-06-27T06:09:34.584Z'
+updated_at: '2026-06-27T06:12:45.462Z'
 blast_radius:
   modules:
     - 'caws-cli: shared hook-pack template + manifest version + fingerprint baseline'
