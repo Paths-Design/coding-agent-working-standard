@@ -7,7 +7,8 @@ created_at: '2026-06-27T04:29:56.508Z'
 updated_at: '2026-06-27T04:29:56.508Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli: new message command + messages store'
+    - 'caws-kernel: messages.v1 schema'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -15,15 +16,30 @@ scope:
     - 'packages/caws-cli/src/shell/commands/message.ts'
     - 'packages/caws-cli/src/store/messages-store.ts'
     - 'packages/caws-kernel/src/schemas/messages.v1.json'
-  out: []
+  out:
+    - 'packages/caws-cli/src/store/events-store.ts'
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Messages are written to a SEPARATE append-only log (.caws/messages.jsonl), never interleaved into events.jsonl — the integrity-critical audit chain must not be diluted by chat-rate traffic.'
+  - 'Every message carries a kernel-attributed actor (session_id/platform), so a message''s provenance is recorded, not self-claimed; a recipient can trust WHO sent it even though it must still verify WHAT was said.'
+  - 'A message is addressed by recipient session_id; the channel between two sessions is their unordered id pair, so A->B and B->A share one channel.'
+  - 'A send to a session that is not live in the agent registry fails loudly (non-zero, explicit reason) rather than silently queueing into a void — silence must mean "no reply", never "send was dropped".'
+  - 'Reading/polling a message marks it delivered durably, so a relay/process restart does not re-deliver an already-consumed message, and never loses an unconsumed one.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'two known session ids and a running caws CLI'
+    when: 'caws message send --to <sid> --text <t> is run, then caws message poll --me <sid> is run for the recipient'
+    then: 'the recipient receives exactly the sent text with the sender''s actor attribution, and a second poll does not re-deliver it'
+  - id: A2
+    given: 'a recipient session id that is not present/live in the agent registry'
+    when: 'caws message send --to <that sid> is run'
+    then: 'the command exits non-zero with an explicit "recipient not live" reason and writes no message record'
+  - id: A3
+    given: 'messages written to .caws/messages.jsonl'
+    when: 'the message log is inspected'
+    then: 'events.jsonl is byte-unchanged (messages never appended to the audit chain), and each message line validates against messages.v1.json'
+non_functional:
+  security:
+    - 'Message text is opaque payload; the channel attributes the sender but does not vouch for message content — consumers must treat the body as an unverified claim.'
 contracts:
   - name: 'message-channel'
     type: schema
