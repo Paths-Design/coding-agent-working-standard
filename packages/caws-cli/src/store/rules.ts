@@ -172,6 +172,20 @@ export const STORE_RULES = {
    *  Warning, not error — the store does NOT fabricate a historical record;
    *  the caller is told that the stop is a lifecycle mismatch no-op. */
   LEASE_STOP_NO_PRIOR_LEASE: 'store.leases.stop_no_prior_lease',
+  /** Recipient endpoint id is empty or contains characters outside the strict
+   *  allowlist ^[A-Za-z0-9._:-]+$. Refused before any message is written. */
+  MESSAGES_RECIPIENT_INVALID: 'store.messages.recipient_invalid',
+  /** Send refused because the recipient session is not live in the lease
+   *  registry (no active lease within the heartbeat TTL). No message written —
+   *  a send to a dead session would be indistinguishable from silence. */
+  MESSAGES_RECIPIENT_NOT_LIVE: 'store.messages.recipient_not_live',
+  /** Append to messages.jsonl failed (directory creation or write). */
+  MESSAGES_APPEND_FAILED: 'store.messages.append_failed',
+  /** messages.jsonl exists but is unreadable (permission denied, etc). */
+  MESSAGES_LOG_UNREADABLE: 'store.messages.log_unreadable',
+  /** A single line in messages.jsonl is not valid JSON. Skipped with a
+   *  diagnostic; never fatal — a corrupt chat line is not an integrity failure. */
+  MESSAGES_LINE_MALFORMED: 'store.messages.line_malformed',
 } as const;
 
 export type StoreRule = (typeof STORE_RULES)[keyof typeof STORE_RULES];
@@ -186,4 +200,5 @@ export const STORE_RULE_PREFIXES = [
   'store.events.',
   'store.init.',
   'store.leases.',
+  'store.messages.',
 ] as const;

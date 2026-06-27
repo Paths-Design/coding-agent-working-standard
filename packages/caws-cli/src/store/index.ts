@@ -88,3 +88,15 @@ export type {
   ComposeDoctorResult,
   ComposeOptions,
 } from './doctor-snapshot';
+
+// ─── messages (AGENT-MESSAGE-CHANNEL-001) ───────────────────────────────
+// Inter-agent message channel over .caws/messages.jsonl — separate from the
+// events audit chain by design. sendMessage refuses a non-live recipient.
+export {
+  sendMessage,
+  pollMessage,
+  channelHistory,
+  isRecipientLive,
+  channelId,
+} from './messages-store';
+export type { MessageRecord, MessageActor, PollResult } from './messages-store';

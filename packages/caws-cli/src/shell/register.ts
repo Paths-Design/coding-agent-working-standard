@@ -31,6 +31,7 @@ import {
   EVENTS_COMMAND_META,
   WAIVER_COMMAND_META,
   AGENTS_COMMAND_META,
+  MESSAGE_COMMAND_META,
   SPECS_COMMAND_META,
   WORKTREE_COMMAND_META,
   type GroupCommandMeta,
@@ -44,6 +45,8 @@ import {
   runAgentsRegisterCommand,
   runAgentsShowCommand,
   runAgentsStopCommand,
+  runMessageSendCommand,
+  runMessagePollCommand,
   runClaimCommand,
   runDoctorCommand,
   runEventsMigrateCommand,
@@ -1056,4 +1059,36 @@ export function registerShellCommands(
         exit(code);
       }
     );
+
+  // -------------------------------------------------------------------
+  // caws message send / poll
+  //
+  // Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): directed
+  // messages between running sessions over .caws/messages.jsonl, addressed
+  // by session id, liveness-checked against the agent registry. Separate
+  // from the events audit chain.
+  // -------------------------------------------------------------------
+  const messageCmd = program.command(MESSAGE_COMMAND_META.name);
+  applyGroupMeta(messageCmd, MESSAGE_COMMAND_META);
+
+  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'send'))
+    .action((opts: { to?: string; text?: string; allowDead?: boolean; data?: boolean }) => {
+      const code = runMessageSendCommand({
+        to: opts.to ?? '',
+        text: opts.text ?? '',
+        ...(opts.allowDead === true ? { allowDead: true } : {}),
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'poll'))
+    .action((opts: { me?: string; json?: boolean; data?: boolean }) => {
+      const code = runMessagePollCommand({
+        ...(opts.me !== undefined ? { me: opts.me } : {}),
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
 }
