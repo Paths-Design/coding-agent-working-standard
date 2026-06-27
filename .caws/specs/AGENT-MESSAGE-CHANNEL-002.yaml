@@ -3,6 +3,7 @@ title: 'caws message: --wait long-poll, --peek/inbox triage, command-level tests
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: wt-message-channel-002
 created_at: '2026-06-27T06:15:21.138Z'
 updated_at: '2026-06-27T06:15:21.138Z'
 blast_radius:
