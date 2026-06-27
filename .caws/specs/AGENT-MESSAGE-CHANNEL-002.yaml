@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-message-channel-002
 created_at: '2026-06-27T06:15:21.138Z'
-updated_at: '2026-06-27T06:15:21.138Z'
+updated_at: '2026-06-27T06:17:11.801Z'
 blast_radius:
   modules:
     - 'caws-cli: message store (wait/peek/count) + command + flags + tests + gitignore + mutation config'
@@ -21,6 +21,7 @@ scope:
     - 'packages/caws-cli/tests/shell/message-command.test.js'
     - 'packages/caws-cli/stryker.conf.js'
     - '.gitignore'
+    - packages/caws-cli/src/store/index.ts
   out: []
 invariants:
   - '`caws message poll --wait <ms>` blocks up to ms for a message, returning as soon as one arrives or the window elapses; it releases the message-log lock between attempts so a waiting poller never starves senders or other pollers. Default (no --wait) returns immediately.'
