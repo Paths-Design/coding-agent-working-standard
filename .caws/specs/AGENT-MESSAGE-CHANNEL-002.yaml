@@ -7,7 +7,7 @@ created_at: '2026-06-27T06:15:21.138Z'
 updated_at: '2026-06-27T06:15:21.138Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli: message store (wait/peek/count) + command + flags + tests + gitignore + mutation config'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -22,12 +22,32 @@ scope:
     - '.gitignore'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - '`caws message poll --wait <ms>` blocks up to ms for a message, returning as soon as one arrives or the window elapses; it releases the message-log lock between attempts so a waiting poller never starves senders or other pollers. Default (no --wait) returns immediately.'
+  - '`caws message poll --peek` returns the next waiting message WITHOUT consuming it (no delivery record appended): a subsequent normal poll still delivers that same message. Peek is read-only on the mailbox.'
+  - 'The command handlers have direct tests asserting exact exit codes: send 0 (sent) / 1 (refused: not live, empty args) / 2 (no repo); poll 0 (message or empty) / 2 (repo error); --allow-dead bypasses the liveness refusal.'
+  - 'The mutation gate covers messages-store by an anchor that does not silently drift when the file length changes — the gated range is derived/asserted, not a bare hardcoded line span that could un-gate the file on the next edit.'
+  - '.caws/messages.jsonl and its .lock are gitignored (runtime chat data, never authority — same class as .caws/leases/).'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'an empty mailbox, then a message sent ~100ms later'
+    when: 'caws message poll --wait 2000 is run'
+    then: 'it blocks, then returns the message once it arrives (well under the 2s cap), not {no messages}'
+  - id: A2
+    given: 'one waiting message'
+    when: 'caws message poll --peek is run, then caws message poll is run'
+    then: 'peek shows the message without consuming it; the following normal poll still delivers the same message id'
+  - id: A3
+    given: 'the message command handlers'
+    when: 'the command-level test suite runs'
+    then: 'send returns exit 0/1/2 and poll 0/2 for the documented cases (incl --allow-dead bypass), asserted directly against runMessageSendCommand/runMessagePollCommand'
+  - id: A4
+    given: 'the stryker store gate'
+    when: 'messages-store mutation runs'
+    then: 'the gated range provably covers the file''s real logic (no preamble-only / un-gated regression), and the mutation score stays >= the break:80 floor'
+  - id: A5
+    given: 'a fresh send+poll in a repo'
+    when: 'git status is checked'
+    then: '.caws/messages.jsonl is ignored (does not appear as untracked)'
 non_functional: {}
 contracts:
   - name: 'message-cli'
