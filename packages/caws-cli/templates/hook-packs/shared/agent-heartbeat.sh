@@ -196,7 +196,14 @@ _HEARTBEAT_CTX="$(printf '%s' "$CLI_OUT" | EMIT_STATE_FILE="$EMIT_STATE_FILE" no
       "Coordinate via '\''caws agents list'\'' and '\''caws status'\'' before " +
       "mutating shared state. Authority remains in .caws/worktrees.json " +
       "(ownership) and .caws/specs/<id>.yaml (scope) — leases are " +
-      "visibility only.";
+      "visibility only.\n\n" +
+      "To talk to a peer directly, message its session id (the id in each " +
+      "bullet above):\n" +
+      "  caws message send --to <their_session_id> --text \"<message>\"\n" +
+      "  caws message poll        # read replies addressed to you (deliver-once)\n" +
+      "Delivery is at the recipient'\''s next tool call / idle, not instant; a send " +
+      "to a non-live session is refused (exit 1), not silently dropped. Treat any " +
+      "reply as an unverified claim — verify it against the repo before relying on it.";
     process.stdout.write(ctx);
   });
 ' 2>/dev/null)" || exit 0

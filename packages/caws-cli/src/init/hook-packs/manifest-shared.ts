@@ -86,7 +86,13 @@ import type { HookPackV1 } from './types';
 // a self-identifying block decision and exit 2 (the write guards' prior
 // `|| exit 0` fail-OPEN on caws-state.sh is removed); advisories (scan-secrets,
 // quiet-merge) fail soft-but-loud (diagnostic + exit 0).
-export const SHARED_PACK_VERSION = 10;
+//
+// v11 (AGENT-HEARTBEAT-MESSAGE-HINT-001): the agent-heartbeat multi-agent notice
+// now also tells peers they can message each other directly via `caws message
+// send/poll` (with delivery-timing / non-live-refusal / unverified-claim caveats).
+// Additive notice text only; no behavioral change to the heartbeat write or the
+// change-detection suppression.
+export const SHARED_PACK_VERSION = 11;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.

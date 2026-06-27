@@ -1,5 +1,5 @@
 {
-  "shared": { "version": 10, "fingerprint": "b4e0a3b2b59bc6c4e0489828300c8c073e1ff3f25400f95288fc9c9af0755bf4" },
+  "shared": { "version": 11, "fingerprint": "331565da368c7fb0ccfad5fb25193e6689913ec1eb1e01d82030451f5e143d70" },
   "claude-code": { "version": 20, "fingerprint": "926a6442a6d8b62c1847aba9048bbc12a15c07897aa92679fcea987a9d39005b" },
   "codex": { "version": 9, "fingerprint": "e94ef3b8a328ebc86acfdb17e244a8ea269ee1b57cf642e3cf1c1da790d52658" }
 }
