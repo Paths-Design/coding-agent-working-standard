@@ -99,7 +99,14 @@ import type { HookPackV1 } from './types';
 // context (consume + inject, one per tool call, fail-closed-non-blocking). Fixes
 // the pull-model gap where a recipient only saw mail when manually polling. Also
 // lowers the heartbeat write-throttle 30s -> 15s for snappier peer-presence.
-export const SHARED_PACK_VERSION = 12;
+//
+// v13 (AGENT-HEARTBEAT-NOTICE-TRAPS-01): peer-notice text corrected — replies
+// auto-surface at the next tool call (poll [--wait] is check-now, not how you
+// receive replies), and two real footguns warned: judge a send by its printed
+// output not a chained `echo $?` (which reports the echo, not the send; also no
+// 2>/dev/null), and liveness is repo-local (a peer running elsewhere is refused
+// here). Notice text only — no behavioral change.
+export const SHARED_PACK_VERSION = 13;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.
