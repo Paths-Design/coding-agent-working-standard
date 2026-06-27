@@ -22,6 +22,7 @@ const path = require('path');
 const {
   sendMessage,
   pollMessage,
+  inboxCount,
   channelHistory,
   isRecipientLive,
   channelId,
@@ -343,3 +344,78 @@ test('concurrent polls from separate processes deliver a message at most once', 
   // Exactly one process received the single message; no duplicate delivery.
   expect(gotIds.length).toBe(1);
 }, 30000);
+
+// ─── peek: read without consuming (AGENT-MESSAGE-CHANNEL-002) ─────────────────
+
+test('peek returns the next message without consuming it', () => {
+  const caws = cawsDir();
+  makeLive(caws, 'recip-1');
+  sendMessage(caws, { actor: sender, to: 'recip-1', text: 'peek me' });
+
+  const peeked = pollMessage(caws, 'recip-1', { peek: true });
+  expect(peeked.ok).toBe(true);
+  expect(peeked.value.message.text).toBe('peek me');
+
+  // a peek must NOT write a delivery record — a normal poll still gets it
+  const real = pollMessage(caws, 'recip-1');
+  expect(real.value.message.text).toBe('peek me');
+  // and now it's consumed
+  expect(pollMessage(caws, 'recip-1').value.message).toBeNull();
+});
+
+test('two peeks in a row both return the same message (idempotent read)', () => {
+  const caws = cawsDir();
+  makeLive(caws, 'recip-1');
+  sendMessage(caws, { actor: sender, to: 'recip-1', text: 'stable' });
+  const a = pollMessage(caws, 'recip-1', { peek: true }).value.message;
+  const b = pollMessage(caws, 'recip-1', { peek: true }).value.message;
+  expect(a.id).toBe(b.id);
+});
+
+// ─── inboxCount: triage depth ────────────────────────────────────────────────
+
+test('inboxCount reflects undelivered messages and drops to zero after consume', () => {
+  const caws = cawsDir();
+  makeLive(caws, 'recip-1');
+  expect(inboxCount(caws, 'recip-1').value).toBe(0);
+  sendMessage(caws, { actor: sender, to: 'recip-1', text: 'm1' });
+  sendMessage(caws, { actor: sender, to: 'recip-1', text: 'm2' });
+  expect(inboxCount(caws, 'recip-1').value).toBe(2);
+  // peek does not change the count
+  pollMessage(caws, 'recip-1', { peek: true });
+  expect(inboxCount(caws, 'recip-1').value).toBe(2);
+  // a real poll consumes one
+  pollMessage(caws, 'recip-1');
+  expect(inboxCount(caws, 'recip-1').value).toBe(1);
+});
+
+test('inboxCount counts only messages addressed to me', () => {
+  const caws = cawsDir();
+  makeLive(caws, 'recip-1');
+  makeLive(caws, 'other');
+  sendMessage(caws, { actor: sender, to: 'recip-1', text: 'mine' });
+  sendMessage(caws, { actor: sender, to: 'other', text: 'not mine' });
+  expect(inboxCount(caws, 'recip-1').value).toBe(1);
+});
+
+// ─── wait: long-poll returns on arrival, times out cleanly when empty ─────────
+
+test('poll --wait returns null after the window when the mailbox stays empty', () => {
+  const caws = cawsDir();
+  const t0 = Date.now();
+  const r = pollMessage(caws, 'recip-1', { waitMs: 250 });
+  expect(r.ok).toBe(true);
+  expect(r.value.message).toBeNull();
+  // actually waited the window (proves the retry loop ran, not an instant return)
+  expect(Date.now() - t0).toBeGreaterThanOrEqual(200);
+});
+
+test('poll --wait returns immediately when a message is already present', () => {
+  const caws = cawsDir();
+  makeLive(caws, 'recip-1');
+  sendMessage(caws, { actor: sender, to: 'recip-1', text: 'here now' });
+  const t0 = Date.now();
+  const r = pollMessage(caws, 'recip-1', { waitMs: 5000 });
+  expect(r.value.message.text).toBe('here now');
+  expect(Date.now() - t0).toBeLessThan(1000); // did not burn the 5s window
+});

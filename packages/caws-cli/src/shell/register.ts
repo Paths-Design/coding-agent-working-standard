@@ -1083,9 +1083,12 @@ export function registerShellCommands(
     });
 
   defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'poll'))
-    .action((opts: { me?: string; json?: boolean; data?: boolean }) => {
+    .action((opts: { me?: string; wait?: string; peek?: boolean; json?: boolean; data?: boolean }) => {
+      const waitMs = opts.wait !== undefined ? Number(opts.wait) : undefined;
       const code = runMessagePollCommand({
         ...(opts.me !== undefined ? { me: opts.me } : {}),
+        ...(waitMs !== undefined && Number.isFinite(waitMs) ? { waitMs } : {}),
+        ...(opts.peek === true ? { peek: true } : {}),
         json: opts.json === true,
         showData: opts.data === true,
       });

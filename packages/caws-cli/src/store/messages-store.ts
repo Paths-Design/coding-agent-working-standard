@@ -159,30 +159,62 @@ export interface PollResult {
   readonly diagnostics: ReadonlyArray<Diagnostic>;
 }
 
-/**
- * Pull the next undelivered message addressed to `me`. Replays the log to find
- * the earliest 'message' record with to===me whose id has no 'delivery' record,
- * appends a delivery record for it, and returns it. Returns {message:null} when
- * the mailbox is empty.
- *
- * Lenient per line: a malformed line is skipped with a diagnostic, not fatal.
- * Strict on directory: an unreadable .caws dir returns err.
- *
- * CONCURRENCY: the read→pick→append-delivery sequence is a TOCTOU — two processes
- * polling the SAME recipient at once could otherwise both pick the same message
- * and deliver it twice (verified reproducible across processes). We serialize the
- * whole critical section under a DEDICATED message-log lock (not the global
- * lifecycle lock — chat traffic must not contend with governance ops like spec
- * close / worktree merge). `sendMessage` needs no lock: a single appendFileSync
- * line is atomic, and sends never read-modify-write.
- */
-export function pollMessage(cawsDir: string, me: string): Result<PollResult> {
-  return withLifecycleLock(cawsDir, () => pollMessageLocked(cawsDir, me), {
-    lockPath: path.join(cawsDir, MESSAGES_FILENAME + '.lock'),
-  });
+export interface PollOptions {
+  /** Block up to this many ms for a message before giving up (long-poll). 0/undefined = return immediately. */
+  readonly waitMs?: number;
+  /** Read the next message WITHOUT consuming it (no delivery record appended). */
+  readonly peek?: boolean;
 }
 
-function pollMessageLocked(cawsDir: string, me: string): Result<PollResult> {
+/** Server-side cap on --wait so a caller can't hold a poll open indefinitely. */
+const MAX_WAIT_MS = 60_000;
+/** Sleep between poll attempts while waiting. Lock is RELEASED during the sleep. */
+const POLL_RETRY_MS = 150;
+
+function sleepSync(ms: number): void {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    /* busy-wait; matches the lifecycle-lock idiom. Short interval, lock not held. */
+  }
+}
+
+/**
+ * Pull the next undelivered message addressed to `me`.
+ *
+ * Options:
+ *   - waitMs: long-poll. Re-attempts every POLL_RETRY_MS until a message arrives
+ *     or the window elapses. The message-log lock is acquired PER ATTEMPT and
+ *     RELEASED during the sleep, so a waiting poller never starves senders (which
+ *     are lock-free anyway) or other pollers.
+ *   - peek: return the next message without consuming it (no delivery record).
+ *
+ * CONCURRENCY: the read→pick→append-delivery sequence is a TOCTOU — two processes
+ * polling the SAME recipient at once could otherwise both pick the same message and
+ * deliver it twice (verified reproducible). We serialize each attempt under a
+ * DEDICATED message-log lock (not the global lifecycle lock — chat traffic must not
+ * contend with governance ops). `sendMessage` needs no lock: a single appendFileSync
+ * line is atomic, and sends never read-modify-write. Peek takes the lock too (a
+ * consistent read), but appends nothing.
+ */
+export function pollMessage(cawsDir: string, me: string, options: PollOptions = {}): Result<PollResult> {
+  const waitMs = Math.min(Math.max(0, options.waitMs ?? 0), MAX_WAIT_MS);
+  const deadline = Date.now() + waitMs;
+  const attempt = () =>
+    withLifecycleLock(cawsDir, () => pollMessageLocked(cawsDir, me, options.peek === true), {
+      lockPath: path.join(cawsDir, MESSAGES_FILENAME + '.lock'),
+    });
+
+  // First attempt is always made. If waiting and empty, retry until the deadline,
+  // releasing the lock between tries (the lock is scoped to each attempt() call).
+  for (;;) {
+    const r = attempt();
+    if (!r.ok) return r;
+    if (r.value.message || waitMs === 0 || Date.now() >= deadline) return r;
+    sleepSync(POLL_RETRY_MS);
+  }
+}
+
+function pollMessageLocked(cawsDir: string, me: string, peek: boolean): Result<PollResult> {
   const file = messagesPath(cawsDir);
   if (!fs.existsSync(file)) return ok({ message: null, diagnostics: [] });
 
@@ -229,6 +261,10 @@ function pollMessageLocked(cawsDir: string, me: string): Result<PollResult> {
   const next = messages.find((m) => m.to === me && !delivered.has(m.id));
   if (!next) return ok({ message: null, diagnostics });
 
+  // Peek: return the message but do NOT consume it — no delivery record, so a
+  // subsequent normal poll still delivers it.
+  if (peek) return ok({ message: next, diagnostics });
+
   const deliveryAppend = appendLine(cawsDir, {
     record: 'delivery',
     deliver_id: next.id,
@@ -236,6 +272,44 @@ function pollMessageLocked(cawsDir: string, me: string): Result<PollResult> {
   });
   if (!deliveryAppend.ok) return err(deliveryAppend.errors);
   return ok({ message: next, diagnostics });
+}
+
+/**
+ * Count undelivered messages addressed to `me` (mailbox depth) — read-only triage,
+ * no consumption. Used by `caws message poll --peek` / inbox display.
+ */
+export function inboxCount(cawsDir: string, me: string): Result<number> {
+  const file = messagesPath(cawsDir);
+  if (!fs.existsSync(file)) return ok(0);
+  let raw: string;
+  try {
+    raw = fs.readFileSync(file, 'utf8');
+  } catch (e) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.MESSAGES_LOG_UNREADABLE,
+        `Failed to read ${MESSAGES_FILENAME}: ${(e as Error).message}`
+      )
+    );
+  }
+  const messages: MessageRecord[] = [];
+  const delivered = new Set<string>();
+  for (const line of raw.split('\n')) {
+    if (line.length === 0) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const rec = parsed as { record?: string };
+    if (rec.record === 'message') messages.push(parsed as MessageRecord);
+    else if (rec.record === 'delivery') {
+      const d = parsed as DeliveryRecord;
+      if (typeof d.deliver_id === 'string') delivered.add(d.deliver_id);
+    }
+  }
+  return ok(messages.filter((m) => m.to === me && !delivered.has(m.id)).length);
 }
 
 /** Full, non-lossy history between two endpoints (both directions, in order). */

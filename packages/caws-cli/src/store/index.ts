@@ -95,8 +95,9 @@ export type {
 export {
   sendMessage,
   pollMessage,
+  inboxCount,
   channelHistory,
   isRecipientLive,
   channelId,
 } from './messages-store';
-export type { MessageRecord, MessageActor, PollResult } from './messages-store';
+export type { MessageRecord, MessageActor, PollResult, PollOptions } from './messages-store';

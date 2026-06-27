@@ -12,6 +12,7 @@ import {
   pollMessage,
   resolveRepoRoot,
   sendMessage,
+  inboxCount,
   type MessageActor,
 } from '../../store';
 import { buildActor } from '../session/actor';
@@ -94,10 +95,17 @@ export interface MessagePollCommandOptions extends BaseCommandOptions {
   readonly me?: string;
   /** Emit JSON instead of human text. */
   readonly json?: boolean;
+  /** Block up to this many ms for a message before returning (long-poll). */
+  readonly waitMs?: number;
+  /** Show the next message without consuming it (no delivery record). */
+  readonly peek?: boolean;
 }
 
 /**
  * `caws message poll` — pull the next undelivered message addressed to me.
+ *   --wait <ms>  block up to ms for a message (long-poll)
+ *   --peek       show the next message without consuming it
+ *   --json       emit JSON ({message, waiting})
  * Exit codes: 0 (message printed OR mailbox empty), 1 no session, 2 repo error.
  */
 export function runMessagePollCommand(opts: MessagePollCommandOptions): number {
@@ -126,22 +134,40 @@ export function runMessagePollCommand(opts: MessagePollCommandOptions): number {
     }
   }
 
-  const polled = pollMessage(cawsDir, me);
+  const pollOpts: { waitMs?: number; peek?: boolean } = {};
+  if (typeof opts.waitMs === 'number' && opts.waitMs > 0) pollOpts.waitMs = opts.waitMs;
+  if (opts.peek === true) pollOpts.peek = true;
+
+  const polled = pollMessage(cawsDir, me, pollOpts);
   if (!polled.ok) {
     err('caws message poll: failed to read the message log.');
     err(renderDiagnostics(polled.errors, { showData }));
     return 2;
   }
   const { message } = polled.value;
+
+  // Mailbox depth for triage. On a peek/empty result this tells the agent how
+  // many more are waiting; best-effort (a count failure does not fail the poll).
+  const countResult = inboxCount(cawsDir, me);
+  const waiting = countResult.ok ? countResult.value : null;
+
   if (opts.json === true) {
-    out(JSON.stringify({ message }));
+    out(JSON.stringify({ message, waiting }));
     return 0;
   }
   if (!message) {
     out('(no messages)');
     return 0;
   }
-  out(`from ${message.actor.session_id ?? message.actor.id}:`);
+  const peekTag = opts.peek === true ? ' (peek — not consumed)' : '';
+  out(`from ${message.actor.session_id ?? message.actor.id}${peekTag}:`);
   out(message.text);
+  // `waiting` is computed AFTER this poll: on a consume it's the post-delivery
+  // remainder; on a peek it still includes the message just shown. Report how many
+  // others remain, so the threshold differs by one between the two modes.
+  if (typeof waiting === 'number') {
+    const others = opts.peek === true ? waiting - 1 : waiting;
+    if (others > 0) out(`(${others} more message(s) waiting)`);
+  }
   return 0;
 }
