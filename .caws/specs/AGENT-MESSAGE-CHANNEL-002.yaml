@@ -1,0 +1,34 @@
+id: AGENT-MESSAGE-CHANNEL-002
+title: 'caws message: --wait long-poll, --peek/inbox triage, command-level tests, gitignore the log, de-fragile mutation range'
+risk_tier: 2
+mode: feature
+lifecycle_state: active
+created_at: '2026-06-27T06:15:21.138Z'
+updated_at: '2026-06-27T06:15:21.138Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/messages-store.ts'
+    - 'packages/caws-cli/src/shell/commands/message.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/tests/store/messages-store.test.js'
+    - 'packages/caws-cli/tests/shell/message-command.test.js'
+    - 'packages/caws-cli/stryker.conf.js'
+    - '.gitignore'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'message-cli'
+    type: behavior
