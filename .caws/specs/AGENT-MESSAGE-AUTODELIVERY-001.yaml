@@ -2,10 +2,11 @@ id: AGENT-MESSAGE-AUTODELIVERY-001
 title: 'Heartbeat hook auto-delivers waiting messages into the recipient session (consume + inject at PreToolUse)'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: wt-msg-autodelivery
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-msg-autodelivery at b6d1ec6096ac646d1c4f9dbc6ec0cddd060cf2a7'
 created_at: '2026-06-27T19:27:11.694Z'
-updated_at: '2026-06-27T19:27:11.694Z'
+updated_at: '2026-06-27T19:36:52.614Z'
 blast_radius:
   modules:
     - 'caws-cli: shared heartbeat hook template + manifest version + fingerprint baseline'
