@@ -7,7 +7,7 @@ created_at: '2026-06-27T06:09:34.584Z'
 updated_at: '2026-06-27T06:09:34.584Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli: shared hook-pack template + manifest version + fingerprint baseline'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -17,11 +17,21 @@ scope:
     - 'packages/caws-cli/tests/init/pack-fingerprints.json'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The PreToolUse multi-agent presence notice, when it lists active peers, also tells the agent it can message a peer directly via `caws message send --to <session_id>` / `caws message poll`, with the honest caveats (delivery at recipient''s next yield not instant; a non-live recipient is refused not silently dropped; a reply is an unverified claim).'
+  - 'Editing the template content is accompanied by a SHARED_PACK_VERSION bump and a refreshed pack-fingerprints.json baseline, so the pack-fingerprint guard stays green (unchanged-or-version-bumped contract) rather than being weakened.'
+  - 'The change is additive to the notice text only — it does not alter the heartbeat write, the change-detection/hysteresis suppression, or the fail-closed-non-blocking behavior.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a CAWS repo with >=2 active agent leases'
+    when: 'the agent-heartbeat hook emits its multi-agent notice'
+    then: 'the notice contains the `caws message send --to`/`caws message poll` guidance and the delivery/refusal/unverified-claim caveats'
+  - id: A2
+    given: 'the edited shared hook-pack template'
+    when: 'the pack-fingerprint test runs'
+    then: 'it passes because SHARED_PACK_VERSION was bumped and pack-fingerprints.json updated to the new content hash'
+  - id: A3
+    given: 'the edited hook script'
+    when: 'bash -n and an embedded-node syntax check run against it'
+    then: 'both pass (valid bash; the embedded node script parses)'
 non_functional: {}
 contracts: []
