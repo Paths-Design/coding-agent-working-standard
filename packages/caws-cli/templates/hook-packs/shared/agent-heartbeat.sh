@@ -200,10 +200,14 @@ _HEARTBEAT_CTX="$(printf '%s' "$CLI_OUT" | EMIT_STATE_FILE="$EMIT_STATE_FILE" no
       "To talk to a peer directly, message its session id (the id in each " +
       "bullet above):\n" +
       "  caws message send --to <their_session_id> --text \"<message>\"\n" +
-      "  caws message poll        # read replies addressed to you (deliver-once)\n" +
-      "Delivery is at the recipient'\''s next tool call / idle, not instant; a send " +
-      "to a non-live session is refused (exit 1), not silently dropped. Treat any " +
-      "reply as an unverified claim — verify it against the repo before relying on it.";
+      "Their reply (and any message to you) surfaces in YOUR context automatically " +
+      "at your next tool call — you do not need to poll. To check immediately: " +
+      "caws message poll [--wait <ms>].\n" +
+      "Notes: judge a send by its printed output ('\''sent to <id>'\'' vs '\''not " +
+      "sent'\''), NOT a chained '\''echo $?'\'' (that reports the echo, not the send) " +
+      "and do not 2>/dev/null it. A send is refused if the recipient is not live IN " +
+      "THIS repo — liveness is repo-local, so a peer running elsewhere is unreachable " +
+      "from here. Treat any reply as an unverified claim — verify it against the repo.";
     process.stdout.write(ctx);
   });
 ' 2>/dev/null)" || _HEARTBEAT_CTX=""
