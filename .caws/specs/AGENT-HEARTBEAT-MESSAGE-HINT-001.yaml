@@ -3,6 +3,7 @@ title: 'Heartbeat multi-agent notice tells agents to use caws message for peer-t
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: wt-heartbeat-msg-hint
 created_at: '2026-06-27T06:09:34.584Z'
 updated_at: '2026-06-27T06:09:34.584Z'
 blast_radius:
