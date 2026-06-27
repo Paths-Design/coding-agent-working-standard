@@ -7,7 +7,7 @@ created_at: '2026-06-27T19:27:11.694Z'
 updated_at: '2026-06-27T19:27:11.694Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli: shared heartbeat hook template + manifest version + fingerprint baseline'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -17,12 +17,32 @@ scope:
     - 'packages/caws-cli/tests/init/pack-fingerprints.json'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'On every PreToolUse, the heartbeat hook polls the current session''s mailbox (caws message poll --json) and, when a message is waiting, injects its sender + text into the harness hookSpecificOutput.additionalContext envelope — so a recipient sees mail at its next tool call WITHOUT manually running poll.'
+  - 'Message delivery is NOT gated by the heartbeat write-throttle: the lease write is throttled (30s) but the mailbox poll runs every PreToolUse, so a waiting message surfaces on the very next tool call, not up to 30s later.'
+  - 'At most ONE message is consumed and injected per tool call (poll is deliver-once); a backlog drains one-per-tool-call rather than dumping the whole mailbox into a single injection. When >1 remain, the notice says how many more are waiting.'
+  - 'Delivery is fail-closed-non-blocking: if caws message poll is absent, errors, or returns malformed JSON, the hook emits nothing for messages and the tool call proceeds (never blocks on a message-delivery failure).'
+  - 'The peer-presence MULTI-AGENT notice and the message-delivery notice are independent: each fires on its own condition; neither suppresses the other.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a CAWS repo where session B has one undelivered message from A'
+    when: 'B triggers a PreToolUse (any tool call) and the heartbeat hook runs'
+    then: 'the hook stdout additionalContext contains A''s session id and the message text, and a subsequent caws message poll finds the mailbox empty (it was consumed by the hook)'
+  - id: A2
+    given: 'session B with an empty mailbox'
+    when: 'the heartbeat hook runs on PreToolUse'
+    then: 'no message notice is emitted (silent in the common case); the hook still exits 0'
+  - id: A3
+    given: 'caws message poll erroring or absent'
+    when: 'the heartbeat hook runs'
+    then: 'the hook exits 0 and emits no message notice — the tool call is not blocked'
+  - id: A4
+    given: 'the edited shared hook-pack template'
+    when: 'the pack-fingerprint test runs'
+    then: 'it passes because SHARED_PACK_VERSION was bumped and pack-fingerprints.json updated'
+  - id: A5
+    given: 'the edited hook script'
+    when: 'bash -n and an embedded-node syntax check run'
+    then: 'both pass'
 non_functional: {}
 contracts:
   - name: 'autodelivery'
