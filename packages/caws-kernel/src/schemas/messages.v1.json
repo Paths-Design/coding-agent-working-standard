@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/messages.v1.json",
+  "title": "CAWS Inter-Agent Message",
+  "description": "One line in .caws/messages.jsonl — a directed message between two CAWS sessions (or a session and a named human/automation client). This log is SEPARATE from events.jsonl by design: chat-rate traffic must never dilute the integrity-critical audit chain. Two record kinds share the file: a 'message' record (a directed send) and a 'delivery' record (marks a message consumed). Like events, the actor is a structured, kernel-attributed envelope so a message's PROVENANCE (who sent it) is recorded rather than self-claimed — but the channel does NOT vouch for the message BODY, which a consumer must treat as an unverified claim.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["record", "ts"],
+  "properties": {
+    "record": {
+      "type": "string",
+      "enum": ["message", "delivery"],
+      "description": "Discriminator. 'message': a directed send (carries id/actor/to/text/channel). 'delivery': marks a prior message id consumed by its recipient."
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp. Informational ordering aid; the file's line order is authoritative for replay."
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique message id (UUID). Required on 'message' records; absent on 'delivery' records (which reference via deliver_id)."
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["human", "agent", "system", "automation"],
+          "description": "Sender class, mirroring the events envelope actor."
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Non-empty actor identifier."
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Sender session id (e.g. CLAUDE_CODE_SESSION_ID). This is the sender's address on the channel."
+        },
+        "platform": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Platform identifier (e.g. 'claude-code')."
+        }
+      },
+      "description": "Sender's structured actor. Required on 'message' records. Records WHO sent the message (provenance), not whether the body is true."
+    },
+    "to": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Recipient endpoint id (a session_id, or a named human/automation client). Required on 'message' records."
+    },
+    "channel": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Normalized unordered pair of the two endpoint ids joined by '::' (sorted), so A->B and B->A share one channel. Required on 'message' records. Derived, not user-supplied."
+    },
+    "text": {
+      "type": "string",
+      "description": "Opaque message body. The channel attributes the sender but does not vouch for this content. Required on 'message' records."
+    },
+    "deliver_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "On 'delivery' records: the id of the message that was consumed. Required on 'delivery' records."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "record": { "const": "message" } } },
+      "then": { "required": ["id", "actor", "to", "channel", "text"] }
+    },
+    {
+      "if": { "properties": { "record": { "const": "delivery" } } },
+      "then": { "required": ["deliver_id"] }
+    }
+  ]
+}
