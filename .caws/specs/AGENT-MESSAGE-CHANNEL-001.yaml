@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-agent-message-channel
 created_at: '2026-06-27T04:29:56.508Z'
-updated_at: '2026-06-27T04:51:11.623Z'
+updated_at: '2026-06-27T05:07:42.085Z'
 blast_radius:
   modules:
     - 'caws-cli: new message command + messages store'
@@ -23,6 +23,7 @@ scope:
     - packages/caws-cli/src/shell/register.ts
     - packages/caws-cli/src/shell/command-metadata.ts
     - packages/caws-cli/src/shell/index.ts
+    - docs/command-reference.md
   out:
     - 'packages/caws-cli/src/store/events-store.ts'
 invariants:
