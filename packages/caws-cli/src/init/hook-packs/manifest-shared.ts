@@ -92,7 +92,14 @@ import type { HookPackV1 } from './types';
 // send/poll` (with delivery-timing / non-live-refusal / unverified-claim caveats).
 // Additive notice text only; no behavioral change to the heartbeat write or the
 // change-detection suppression.
-export const SHARED_PACK_VERSION = 11;
+//
+// v12 (AGENT-MESSAGE-AUTODELIVERY-001): the agent-heartbeat hook now AUTO-DELIVERS
+// inter-agent mail — on every PreToolUse it polls the session's mailbox (NOT gated
+// by the heartbeat write-throttle) and injects the next waiting message into
+// context (consume + inject, one per tool call, fail-closed-non-blocking). Fixes
+// the pull-model gap where a recipient only saw mail when manually polling. Also
+// lowers the heartbeat write-throttle 30s -> 15s for snappier peer-presence.
+export const SHARED_PACK_VERSION = 12;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.
