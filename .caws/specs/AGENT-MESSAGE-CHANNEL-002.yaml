@@ -2,10 +2,11 @@ id: AGENT-MESSAGE-CHANNEL-002
 title: 'caws message: --wait long-poll, --peek/inbox triage, command-level tests, gitignore the log, de-fragile mutation range'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: wt-message-channel-002
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-message-channel-002 at e5a2e9d7625a58df8b60df21e2a180c86af88d41'
 created_at: '2026-06-27T06:15:21.138Z'
-updated_at: '2026-06-27T06:17:11.801Z'
+updated_at: '2026-06-27T06:36:24.245Z'
 blast_radius:
   modules:
     - 'caws-cli: message store (wait/peek/count) + command + flags + tests + gitignore + mutation config'
