@@ -470,6 +470,13 @@ public
 .caws/leases/
 **/.caws/leases/
 
+# AGENT-MESSAGE-CHANNEL-001: inter-agent message log + its poll lock. Runtime
+# chat traffic, NEVER authority (same class as leases) — must not be committed.
+.caws/messages.jsonl
+.caws/messages.jsonl.lock
+**/.caws/messages.jsonl
+**/.caws/messages.jsonl.lock
+
 # EVLOG-001: append-only event log — runtime, not versioned
 **/.caws/events.jsonl
 **/.caws/events.jsonl.lock

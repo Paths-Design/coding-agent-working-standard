@@ -911,7 +911,12 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
         'Pull the next undelivered message addressed to you. Deliver-once. Defaults --me to this session id.',
       options: [
         { flag: '--me <session_id>', description: 'Endpoint to poll for (default: this session id)' },
-        { flag: '--json', description: 'Emit JSON ({message}) instead of human text' },
+        {
+          flag: '--wait <ms>',
+          description: 'Block up to <ms> for a message before returning (long-poll; capped at 60000)',
+        },
+        { flag: '--peek', description: 'Show the next message without consuming it (no delivery record)' },
+        { flag: '--json', description: 'Emit JSON ({message, waiting}) instead of human text' },
         DATA_OPTION,
       ],
     },

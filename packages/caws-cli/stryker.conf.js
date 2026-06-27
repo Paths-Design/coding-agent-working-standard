@@ -40,6 +40,36 @@
  * Remaining areas (shell, hooks, init) get their own mutation slices — the bar
  * is everything-covered-at->=80%, reached incrementally.
  */
+// Non-fragile mutate range for an `import *`-compiled dist file: skip the tsc
+// `__importStar` interop preamble (which produces only equivalent mutants) but
+// run from the first real statement THROUGH end-of-file, computed at load time so
+// the range can never go stale when the file changes length. The preceding
+// entries use hardcoded spans (a known footgun — a span silently un-gates the tail
+// when the file grows); messages-store derives its range instead.
+const fs = require('node:fs');
+const path = require('node:path');
+function rangeAfterPreamble(distRelPath) {
+  // The mutation run always builds first (mutation:run = `npm run build && stryker`),
+  // so dist exists. Read via __dirname (the config's own dir) so range derivation
+  // is independent of Stryker's cwd; Stryker still receives the repo-RELATIVE path.
+  // If dist somehow isn't built, fall back to the bare path (whole-file) rather
+  // than throw at config load — the gate still runs, just without the preamble trim.
+  let lines;
+  try {
+    lines = fs.readFileSync(path.join(__dirname, distRelPath), 'utf8').split('\n');
+  } catch {
+    return distRelPath;
+  }
+  // The interop preamble ends at the last `__importStar(require(...))` line; real
+  // logic begins on the next line. Fall back to line 1 if no preamble is present.
+  let lastPreamble = 0;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes('__importStar(require(')) lastPreamble = i + 1; // 1-based
+  }
+  const start = lastPreamble > 0 ? lastPreamble + 1 : 1;
+  return `${distRelPath}:${start}-${lines.length}`;
+}
+
 module.exports = {
   mutate: [
     // yaml-patch uses require(); real logic starts at the first function.
@@ -49,8 +79,9 @@ module.exports = {
     'dist/store/apply-patch.js:76-205',
     'dist/store/atomic-write.js:58-173',
     'dist/store/events-store.js:64-574',
-    // messages-store uses `import *`; skip the __importStar interop preamble.
-    'dist/store/messages-store.js:69-251',
+    // messages-store: range derived at load time (preamble-end .. EOF) — never
+    // drifts on length change, and excludes the equivalent-only interop preamble.
+    rangeAfterPreamble('dist/store/messages-store.js'),
   ],
   testRunner: 'jest',
   testRunnerNodeArgs: [],
