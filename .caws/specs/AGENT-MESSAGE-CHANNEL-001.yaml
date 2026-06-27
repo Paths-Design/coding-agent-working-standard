@@ -33,6 +33,7 @@ invariants:
   - 'A message is addressed by recipient session_id; the channel between two sessions is their unordered id pair, so A->B and B->A share one channel.'
   - 'A send to a session that is not live in the agent registry fails loudly (non-zero, explicit reason) rather than silently queueing into a void — silence must mean "no reply", never "send was dropped".'
   - 'Reading/polling a message marks it delivered durably, so a relay/process restart does not re-deliver an already-consumed message, and never loses an unconsumed one.'
+  - 'Polling is atomic across concurrent consumers: the read->pick->mark-delivered critical section is serialized under a dedicated message-log lock, so two processes polling the same recipient at once never both receive the same message (no double-delivery).'
 acceptance:
   - id: A1
     given: 'two known session ids and a running caws CLI'
@@ -46,6 +47,10 @@ acceptance:
     given: 'messages written to .caws/messages.jsonl'
     when: 'the message log is inspected'
     then: 'events.jsonl is byte-unchanged (messages never appended to the audit chain), and each message line validates against messages.v1.json'
+  - id: A4
+    given: 'a single message addressed to one recipient'
+    when: 'N separate processes poll that recipient concurrently'
+    then: 'exactly one process receives the message; no two receive the same id (proven by a falsifiable child-process test that fails when the lock is bypassed)'
 non_functional:
   security:
     - 'Message text is opaque payload; the channel attributes the sender but does not vouch for message content — consumers must treat the body as an unverified claim.'
