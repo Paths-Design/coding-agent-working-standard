@@ -883,6 +883,41 @@ export const AGENTS_COMMAND_META: GroupCommandMeta = {
   ],
 };
 
+export const MESSAGE_COMMAND_META: GroupCommandMeta = {
+  kind: 'group',
+  name: 'message',
+  description:
+    'Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/poll directed messages between running sessions, addressed by session id, over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.',
+  subcommands: [
+    {
+      kind: 'leaf',
+      name: 'send',
+      description:
+        "Send a message to another session. Attributes the sender via this session's identity; refuses a recipient that is not live in the agent registry.",
+      options: [
+        { flag: '--to <session_id>', description: 'Recipient session id (required)' },
+        { flag: '--text <message>', description: 'Message body (required, non-empty)' },
+        {
+          flag: '--allow-dead',
+          description: 'Send even if the recipient is not live in the registry (escape hatch; default off)',
+        },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'poll',
+      description:
+        'Pull the next undelivered message addressed to you. Deliver-once. Defaults --me to this session id.',
+      options: [
+        { flag: '--me <session_id>', description: 'Endpoint to poll for (default: this session id)' },
+        { flag: '--json', description: 'Emit JSON ({message}) instead of human text' },
+        DATA_OPTION,
+      ],
+    },
+  ],
+};
+
 /**
  * The complete v11 command-surface metadata — the single authority for every
  * `.description()` / `.argument()` / `.option()` in register.ts.
@@ -908,5 +943,6 @@ export const COMMAND_SURFACE_METADATA: readonly CommandMeta[] = Object.freeze([
   SPECS_COMMAND_META,
   WORKTREE_COMMAND_META,
   AGENTS_COMMAND_META,
+  MESSAGE_COMMAND_META,
   PREPUSH_COMMAND_META,
 ]);

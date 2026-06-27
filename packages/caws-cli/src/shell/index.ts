@@ -220,6 +220,13 @@ export type {
   PruneOpts as AgentsPruneOptions,
 } from './commands/agents';
 
+// ─── caws message (AGENT-MESSAGE-CHANNEL-001) ────────────────────────────
+export { runMessageSendCommand, runMessagePollCommand } from './commands/message';
+export type {
+  MessageSendCommandOptions,
+  MessagePollCommandOptions,
+} from './commands/message';
+
 export { registerShellCommands } from './register';
 export type { RegisterShellCommandsOptions } from './register';
 
