@@ -7,7 +7,7 @@ created_at: '2026-06-27T23:13:03.814Z'
 updated_at: '2026-06-27T23:13:03.814Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli: shared heartbeat template notice text + manifest version + fingerprint'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -17,11 +17,22 @@ scope:
     - 'packages/caws-cli/tests/init/pack-fingerprints.json'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The peer-presence notice tells agents that a reply (and any inbound message) surfaces in their context automatically at their next tool call (because this same hook auto-delivers), and frames caws message poll [--wait] as the check-now path, not the way to receive replies.'
+  - 'The notice warns that a send must be judged by its printed output (sent to <id> vs not sent), NOT by a chained echo $? (which reports the echo, not the send) and not under 2>/dev/null — the exact false-success that produced a phantom ack this session.'
+  - 'The notice warns that liveness is repo-local: a send is refused if the recipient is not live IN THIS repo, so a peer running elsewhere is unreachable from here.'
+  - 'Notice text only — no change to the heartbeat write, the auto-delivery poll/inject, the change-detection suppression, or the single-merged-JSON-block emit. Accompanied by a SHARED_PACK_VERSION bump + refreshed fingerprint so the pack-fingerprint guard stays green.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a repo with >=2 active agents'
+    when: 'the heartbeat peer notice is emitted'
+    then: 'its text states replies auto-surface at the next tool call, warns against chained echo $? / 2>/dev/null on a send, and warns liveness is repo-local'
+  - id: A2
+    given: 'the edited template'
+    when: 'pack-fingerprint test + bash -n + embedded-node --check run'
+    then: 'all pass (version bumped + fingerprint refreshed; valid bash; node parses)'
+  - id: A3
+    given: 'the rendered hook with a waiting message'
+    when: 'its stdout is parsed'
+    then: 'it is one valid JSON object (the notice change did not break the merged-block emit)'
 non_functional: {}
 contracts: []
