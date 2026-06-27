@@ -36,6 +36,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/retire-draft/activate/close/archive/prune-archive/migrate)
 - [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/bind/destroy/merge/migrate-registry/repair-sparse/repair). Worktrees are git worktrees bound to active specs.
 - [`caws agents`](#caws-agents) — Agent liveness substrate: register/heartbeat/stop/list/show/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.
+- [`caws message`](#caws-message) — Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/poll directed messages between running sessions, addressed by session id, over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
 - [`caws prepush`](#caws-prepush) — Classify the outgoing commit range before publish and refuse commits not attributable to the current slice. Diagnose/decide only — does NOT run git push.
 
 ## `caws init`
@@ -535,6 +536,31 @@ Operator-invoked cleanup. Defaults to dry-run; pass --apply to actually delete. 
 - `--stale-ttl-ms <ms>` — TTL for stale classification (used with --status stale; default 30m)
 - `--apply` — Actually delete (default: dry-run)
 - `--json` — Emit CAWS-native JSON to stdout
+- `--data` — Show structured data block on diagnostics
+
+## `caws message`
+
+Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/poll directed messages between running sessions, addressed by session id, over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
+
+### `caws message send`
+
+Send a message to another session. Attributes the sender via this session's identity; refuses a recipient that is not live in the agent registry.
+
+**Options:**
+
+- `--to <session_id>` — Recipient session id (required)
+- `--text <message>` — Message body (required, non-empty)
+- `--allow-dead` — Send even if the recipient is not live in the registry (escape hatch; default off)
+- `--data` — Show structured data block on diagnostics
+
+### `caws message poll`
+
+Pull the next undelivered message addressed to you. Deliver-once. Defaults --me to this session id.
+
+**Options:**
+
+- `--me <session_id>` — Endpoint to poll for (default: this session id)
+- `--json` — Emit JSON ({message}) instead of human text
 - `--data` — Show structured data block on diagnostics
 
 ## `caws prepush`
