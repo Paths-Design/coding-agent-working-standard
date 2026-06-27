@@ -2,10 +2,11 @@ id: AGENT-HEARTBEAT-NOTICE-TRAPS-01
 title: 'Heartbeat peer notice: replies auto-surface; warn exit-code-chaining + repo-local liveness traps'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: wt-heartbeat-notice-traps
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-heartbeat-notice-traps at e5cd1b5a41ee1da03e4d36e9ca0bbab3f5ef29b7'
 created_at: '2026-06-27T23:13:03.814Z'
-updated_at: '2026-06-27T23:13:03.814Z'
+updated_at: '2026-06-27T23:15:12.622Z'
 blast_radius:
   modules:
     - 'caws-cli: shared heartbeat template notice text + manifest version + fingerprint'
