@@ -10,9 +10,9 @@ audience: consumer
 
 # Migrating from CAWS v10.2 to v11.1
 
-**v11.1 is the canonical CAWS line for new work. It is not a drop-in replacement for every v10.2 workflow.**
+**v11 is the canonical CAWS line for new work. It is not a drop-in replacement for every v10.2 workflow.**
 
-If you are starting a new project, use v11.1.x. If you are running a stateful v10.2 repo today, read this guide before upgrading — some commands you depend on have been removed, some renamed, and some are deferred to a later release.
+If you are starting a new project, use v11.x. If you are running a stateful v10.2 repo today, read this guide before upgrading — some commands you depend on have been removed, some renamed, and some are deferred to a later release.
 
 This guide does not promise compatibility. It documents the gap, the workarounds, and the rollback path.
 
@@ -350,7 +350,7 @@ If you pin back, no manual cleanup is required. You can re-upgrade to v11.1 late
 
 ```
 Is your project new (no existing .caws/ state)?
-  YES → Use v11.1.x. This is the canonical line. ✓
+  YES → Use v11.x. This is the canonical line. ✓
   NO  → Continue.
 
 Does your team rely DAILY on any of:

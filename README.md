@@ -6,15 +6,15 @@ CAWS is a kernel/store/shell architecture that gives coding agents and humans a 
 
 This repository is the source for the `@paths.design/caws-cli` and `@paths.design/caws-kernel` npm packages. CAWS self-hosts: `.caws/` drives real quality gates on this codebase.
 
-## Status: v11.1.x is the canonical line
+## Status: v11.x is the canonical line
 
-The v11 cutover is complete. `main` runs the v11.1 surface published to npm as `@paths.design/caws-cli`. v11.1 restored the spec and worktree lifecycle on top of the v11.0 governed core and shipped the agent-liveness visibility substrate (`caws agents`, `.caws/leases/`). v11.2 is in planning (multi-agent *authority* — bridge claims, lease-backed enforcement — see the doctrine doc §1).
+The v11 cutover is complete. `main` runs the v11 surface published to npm as `@paths.design/caws-cli`. v11.1 restored the spec and worktree lifecycle on top of the v11.0 governed core and shipped the agent-liveness visibility substrate (`caws agents`, `.caws/leases/`). v11.2 is in planning (multi-agent *authority* — bridge claims, lease-backed enforcement — see the doctrine doc §1).
 
 **Doctrine source:** [`docs/architecture/caws-vnext-command-surface.md`](docs/architecture/caws-vnext-command-surface.md). Read it before relying on any other doc in this repo — historical context in deeper docs may still describe v10 behavior.
 
-**Migrating from v10.2?** Read [`docs/migration-v10-to-v11.md`](docs/migration-v10-to-v11.md) first. v11.1 is not a drop-in replacement for every v10.2 workflow — some commands are removed, some renamed, some deferred. The guide classifies every v10.2 command and includes a rollback one-liner.
+**Migrating from v10.2?** Read [`docs/migration-v10-to-v11.md`](docs/migration-v10-to-v11.md) first. v11 is not a drop-in replacement for every v10.2 workflow — some commands are removed, some renamed, some deferred. The guide classifies every v10.2 command and includes a rollback one-liner.
 
-## What v11.1 ships
+## What the v11 line ships
 
 Thirteen command groups (plus the auto-generated `help`).
 
@@ -47,7 +47,7 @@ Run `caws <group> --help` for full options.
 ### Install
 
 ```bash
-npm install -g @paths.design/caws-cli@^11.1.0
+npm install -g @paths.design/caws-cli@^11.5.0
 caws --version
 ```
 

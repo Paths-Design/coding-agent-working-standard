@@ -1,6 +1,6 @@
 # @paths.design/caws-cli
 
-**CAWS CLI v11.1 — the governed core plus lifecycle for the Coding Agent
+**CAWS CLI v11 — the governed core plus lifecycle for the Coding Agent
 Working Standard.**
 
 CAWS (Coding Agent Working Standard) gives coding agents a deterministic
@@ -24,7 +24,7 @@ store, and a thin shell. It replaces v10.x.
 | `caws evidence record --type <kind> --spec <id> --data <json>` | Append a typed evidence event (`test`/`gate`/`ac`) to `.caws/events.jsonl`. |
 | `caws waiver create/list/show/revoke` | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. |
 
-### Lifecycle (v11.1)
+### Lifecycle (v11)
 
 | Command | What it does |
 |---|---|
@@ -47,7 +47,7 @@ replacement is planned in any current milestone): `scaffold`, `validate`,
 `test-analysis`, legacy `hooks` install (hook packs now install through
 `caws init --agent-surface <name>`).
 
-v11.1 includes the `caws agents list/show` liveness substrate. Still
+The v11 line includes the `caws agents list/show` liveness substrate. Still
 planned for v11.2: bridge-claim authority such as `caws claim --spec
 <id>`, plus broader worktree reconciliation surfaces.
 
@@ -61,7 +61,7 @@ the complete doctrine, command surface, and architectural invariants.
 ## Installation
 
 ```bash
-npm install -g @paths.design/caws-cli@^11.1.0
+npm install -g @paths.design/caws-cli@^11.5.0
 ```
 
 The package depends on `@paths.design/caws-kernel@^1.0.0` (the pure
@@ -84,6 +84,7 @@ To install an agent hook pack during init:
 ```bash
 caws init --agent-surface claude-code
 caws init --agent-surface codex
+caws init --agent-surface opencode
 ```
 
 Codex installs project-local `.codex/hooks.json` plus `.codex/hooks/*`.

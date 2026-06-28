@@ -2,23 +2,23 @@
 doc_id: caws-cli-api-reference
 authority: reference
 status: active
-title: CAWS CLI API Reference (v11.1.6)
+title: CAWS CLI API Reference (v11.5.0)
 owner: vNext rewrite team
 updated: 2026-05-28
 ---
 
-# CAWS CLI API Reference (v11.1.6)
+# CAWS CLI API Reference (v11.5.0)
 
-The CAWS CLI (`@paths.design/caws-cli`) is the governance surface for the Coding Agent Working Standard. v11.1.6 ships thirteen command groups: `init`, `doctor`, `scope`, `status`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents`, and the auto-generated `help`.
+The CAWS CLI (`@paths.design/caws-cli`) is the governance surface for the Coding Agent Working Standard. The v11 line ships thirteen command groups: `init`, `doctor`, `scope`, `status`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents`, and the auto-generated `help`.
 
 **Doctrine source:** [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md). When this reference and the doctrine doc disagree, the doctrine doc wins.
 
-Commands that existed in v10.x and do not ship in v11.1 are listed in [§ Removed in v11](#removed-in-v11). `caws parallel` and `caws session` are deferred to v11.3+ and are not replaceable by pinning to v10.2.x.
+Commands that existed in v10.x and do not ship in the v11 line are listed in [§ Removed in v11](#removed-in-v11). `caws parallel` and `caws session` are deferred to v11.3+ and are not replaceable by pinning to v10.2.x.
 
 ## Installation
 
 ```bash
-npm install -g @paths.design/caws-cli@^11.1.0
+npm install -g @paths.design/caws-cli@^11.5.0
 caws --version
 ```
 

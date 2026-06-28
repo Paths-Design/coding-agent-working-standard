@@ -1,16 +1,16 @@
-# CAWS — Agent Quick Reference (v11.1)
+# CAWS — Agent Quick Reference (v11)
 
-**Agent quickstart for working in CAWS-managed projects on the v11.1 substrate.**
+**Agent quickstart for working in CAWS-managed projects on the v11 substrate.**
 
 ## Read this first
 
-The v11 cutover is complete. `main` runs the v11.1 surface (kernel/store/shell architecture, A1 posture). The doctrine source is [`docs/architecture/caws-vnext-command-surface.md`](docs/architecture/caws-vnext-command-surface.md). When this doc and the doctrine doc disagree, the doctrine doc wins.
+The v11 cutover is complete. `main` runs the v11 surface (kernel/store/shell architecture, A1 posture). The doctrine source is [`docs/architecture/caws-vnext-command-surface.md`](docs/architecture/caws-vnext-command-surface.md). When this doc and the doctrine doc disagree, the doctrine doc wins.
 
-**v11.1 ships thirteen command groups** (plus the auto-generated `help`): the governed core plus `specs`, `worktree`, `events`, `agents`, and `prepush`. Commands removed in v11.0 and not planned to return (`validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `provenance`, `hooks`, `scaffold`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `templates`, `sidecar`) will fail if invoked. `caws agents list/show` **ship in v11.1** (liveness substrate). `caws prepush` is the governed pre-push range check (MULTI-AGENT-PUSH-RANGE-GUARD-001): it classifies the outgoing commit range and refuses commits not attributable to the current slice; it does NOT run `git push`. Only `caws session` and `caws parallel` are deferred (v11.3+); bridge claims and lease-backed *authority* are the v11.2 plan.
+**The v11 line ships thirteen command groups** (plus the auto-generated `help`): the governed core plus `specs`, `worktree`, `events`, `agents`, and `prepush`. Commands removed in v11.0 and not planned to return (`validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `provenance`, `hooks`, `scaffold`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `templates`, `sidecar`) will fail if invoked. `caws agents list/show` **ship in v11.1** (liveness substrate). `caws prepush` is the governed pre-push range check (MULTI-AGENT-PUSH-RANGE-GUARD-001): it classifies the outgoing commit range and refuses commits not attributable to the current slice; it does NOT run `git push`. Only `caws session` and `caws parallel` are deferred (v11.3+); bridge claims and lease-backed *authority* are the v11.2 plan.
 
-**Migrating from v10.2?** Read [`docs/migration-v10-to-v11.md`](docs/migration-v10-to-v11.md) before upgrading. It classifies every v10.2 command (Replaced / Renamed / Removed-no-replacement / Deferred) and includes a rollback one-liner. v11.1 is not a drop-in replacement for every v10.2 workflow.
+**Migrating from v10.2?** Read [`docs/migration-v10-to-v11.md`](docs/migration-v10-to-v11.md) before upgrading. It classifies every v10.2 command (Replaced / Renamed / Removed-no-replacement / Deferred) and includes a rollback one-liner. v11 is not a drop-in replacement for every v10.2 workflow.
 
-## v11.1 command surface
+## v11 command surface
 
 | Command | Purpose |
 |---|---|
@@ -33,7 +33,7 @@ Run `caws <group> --help` for full options and flag details.
 ## Specs in v11
 
 - Specs live at `.caws/specs/<id>.yaml`. There is no project-level `working-spec.yaml`.
-- v11.1 ships `caws specs create/list/show/recover/close/archive/prune-archive/migrate`. Create with `caws specs create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3>`, then edit the generated YAML. See existing specs in `.caws/specs/` for the shape.
+- The v11 line ships `caws specs create/list/show/recover/close/archive/prune-archive/migrate`. Create with `caws specs create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3>`, then edit the generated YAML. See existing specs in `.caws/specs/` for the shape.
 - v11 does **not** ship `caws validate` (removed in v11.0, not returning). Validation happens via `caws doctor` (drift / structure) and `caws gates run --spec <id>` (policy / quality).
 - Acceptance criteria use Given/When/Then format.
 - A spec's `scope.in` / `scope.out` defines what files an agent may touch. `caws scope check <path>` enforces it.

@@ -2,20 +2,20 @@
 doc_id: agent-integration-guide
 authority: reference
 status: active
-title: Agent integration guide (v11.1)
+title: Agent integration guide (v11)
 owner: vNext rewrite team
 updated: 2026-05-28
 ---
 
-# Agent integration guide (v11.1)
+# Agent integration guide (v11)
 
-This guide explains how to integrate an AI agent runtime (Claude Code, Cursor, custom orchestrator, etc.) with CAWS v11.1 as a quality and audit substrate.
+This guide explains how to integrate an AI agent runtime (Claude Code, Cursor, custom orchestrator, etc.) with CAWS v11 as a quality and audit substrate.
 
-> **v11.1 surface.** v11.1 ships twelve command groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents` (plus the auto-generated `help`). The legacy `caws evaluate`, `caws iterate`, `caws diagnose`, `caws agent evaluate` surfaces are removed. The integration patterns below use only the v11.1 surface.
+> **v11 surface.** The v11 line ships thirteen command groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents`, `prepush` (plus the auto-generated `help`). The legacy `caws evaluate`, `caws iterate`, `caws diagnose`, `caws agent evaluate` surfaces are removed. The integration patterns below use only the v11 surface.
 >
 > Doctrine source: [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md). Full CLI reference: [`docs/api/cli.md`](../api/cli.md).
 
-## What CAWS v11.1 gives an agent
+## What CAWS v11 gives an agent
 
 | Capability | Surface |
 |---|---|
@@ -35,7 +35,7 @@ All commands are scriptable. Exit codes are uniform: 0 success/observation, 1 do
 
 ## Prerequisites
 
-- v11.1 CLI installed: `npm install -g @paths.design/caws-cli@^11.1.0` (or `@latest`)
+- v11 CLI installed: `npm install -g @paths.design/caws-cli@^11.5.0` (or `@latest`)
 - Project initialized: `caws init` (idempotent; refuses legacy `.caws/working-spec.yaml` residue)
 - At least one spec created: `caws specs create <id> --title "..." --risk-tier T1`
 
@@ -174,11 +174,11 @@ caws doctor && \
   caws evidence record --type ac --spec <id> --data '{"id":"A_FINAL","status":"satisfied"}'
 ```
 
-## What CAWS v11.1 does NOT provide
+## What CAWS v11 does NOT provide
 
 - **No agent guidance API** (`caws iterate`, `caws workflow guidance` are removed). The runtime decides the loop.
 - **No quality scoring API** (`caws evaluate` is removed). Use `caws gates run` exit code + the per-gate event in `events.jsonl`.
-- **No git-hook installer** (`caws hooks install` is removed). Use `caws init --agent-surface <claude-code|codex|cursor|windsurf|none>` to install a hook pack. `claude-code` and `codex` are implemented; `cursor` and `windsurf` are declared surfaces but not implemented in v11.1.
+- **No git-hook installer** (`caws hooks install` is removed). Use `caws init --agent-surface <claude-code|codex|opencode|cursor|windsurf|none>` to install a hook pack. `claude-code`, `codex`, and `opencode` are implemented; `cursor` and `windsurf` are declared surfaces but not implemented.
 - **No provenance subsystem** (`caws provenance` is removed). The hash-chained `events.jsonl` is the audit surface.
 - **No `caws parallel setup`** (deferred to v11.3+). Loop `caws worktree create` per spec instead.
 
@@ -188,7 +188,7 @@ A v11-shaped CI step:
 
 ```yaml
 - name: Setup CAWS
-  run: npm install -g @paths.design/caws-cli@^11.1.0
+  run: npm install -g @paths.design/caws-cli@^11.5.0
 
 - name: CAWS health check
   run: caws doctor
