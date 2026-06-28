@@ -4,7 +4,7 @@ authority: architecture
 status: active
 title: Quality-gates package removal
 owner: vNext rewrite team
-updated: 2026-06-12
+updated: 2026-06-28
 ---
 
 # Quality-gates package removal
@@ -12,6 +12,32 @@ updated: 2026-06-12
 `@paths.design/quality-gates` has been removed as a standalone CAWS package.
 Safety work now lands in the hook-pack surface or the governed CAWS CLI
 surfaces.
+
+## Why it was retired
+
+The standalone batch-scanner was retired for a **timing** reason, not a
+capability reason. Its checks only ran when an operator invoked
+`caws gates run`, so an agent writing or growing a module received no
+feedback in the loop where the decision was being made — the signal
+existed, but its timing was wrong for agent-driven workflows. The
+god-object and todo-detection gates both taught this lesson (recorded in
+`docs/failure-lineage.md`).
+
+The hook-pack surface replaced it by firing checks where agent harnesses
+actually operate: **PostToolUse on Write/Edit**. The four
+`QG-HOOKS-EXTRACT-001` advisory hooks reimplement the load-bearing
+detection intent of the old gates at edit time, with no runtime coupling
+to any external quality package:
+
+| Hook | Replaces (old gate intent) |
+|---|---|
+| `god-object-check.sh` | `god_object` — SLOC against warning/critical thresholds |
+| `shortcut-language-check.sh` | `todo_detection` — TODO/FIXME/placeholder/"not implemented" stubs |
+| `duplicate-export-check.sh` | shadowed-export detection on new-file Write |
+| `loc-delta-check.sh` | large per-edit growth (advisory; never blocks) |
+
+Install them with `caws init --agent-surface claude-code|codex`. Governed
+policy/evidence still runs out-of-band via `caws gates run --spec <id>`.
 
 The replacement posture is:
 

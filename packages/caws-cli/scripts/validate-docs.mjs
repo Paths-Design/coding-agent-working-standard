@@ -64,7 +64,6 @@ export const STRICT_SET = [
   'docs/DOCUMENTATION_STANDARDS.md',
   'docs/guides/caws-developer-guide.md',
   'docs/guides/multi-agent-workflow.md',
-  'docs/guides/quality-gates.md',
   'docs/guides/waiver-troubleshooting.md',
   'docs/guides/worktree-isolation.md',
 ];
