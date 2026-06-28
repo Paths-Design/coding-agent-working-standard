@@ -273,6 +273,7 @@ export function renderActivationContract(
   const changed = result.outcome === 'installed' || result.outcome === 'updated';
   const wired = wiringStatus?.kind === 'wired';
   const isCodex = result.pack.id === 'codex';
+  const isOpencode = result.pack.id === 'opencode';
 
   switch (result.activation) {
     case 'immediate':
@@ -287,6 +288,17 @@ export function renderActivationContract(
         } else {
           lines.push('  Hooks are installed. They are active in trusted Codex projects');
           lines.push('  after the hook definitions have been reviewed and trusted via /hooks.');
+        }
+        break;
+      }
+      if (isOpencode) {
+        if (changed) {
+          lines.push('  Hook files were installed or updated. Quit and restart opencode so');
+          lines.push('  the plugin at .opencode/plugins/caws.ts loads. It is auto-discovered');
+          lines.push('  at startup — no opencode.json entry is needed.');
+        } else {
+          lines.push('  The CAWS plugin is installed. It is active once opencode loads it at');
+          lines.push('  startup; restart opencode if this session pre-dates the install.');
         }
         break;
       }
