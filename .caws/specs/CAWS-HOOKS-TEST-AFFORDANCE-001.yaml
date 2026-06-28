@@ -2,9 +2,10 @@ id: CAWS-HOOKS-TEST-AFFORDANCE-001
 title: 'First-class ''test a hook'' affordance so piping a payload into a local hook is not the foot-gun'
 risk_tier: 3
 mode: doc
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
 created_at: '2026-06-20T23:27:55.033Z'
-updated_at: '2026-06-20T23:27:55.033Z'
+updated_at: '2026-06-28T23:21:46.054Z'
 # DIAGNOSIS (grounded, 2026-06-20):
 #
 # The natural way an agent tests a hook is `printf '{json}' | bash hook.sh`,
