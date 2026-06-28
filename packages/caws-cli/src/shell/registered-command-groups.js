@@ -4,8 +4,8 @@
 //
 // CAWS-REMOVED-COMMAND-DIAGNOSTICS-001 (Slice 2). Before this module,
 // packages/caws-cli/src/index.js carried a hand-maintained 8-entry
-// VALID_COMMANDS array that drifted out of sync with the 12 groups
-// actually registered by packages/caws-cli/src/shell/register.ts. That
+// VALID_COMMANDS array that drifted out of sync with the registered groups
+// in packages/caws-cli/src/shell/register.ts (twelve at the time). That
 // drift meant unknown-command fuzzy suggestions never fired for events,
 // specs, worktree, or agents.
 //
@@ -17,9 +17,9 @@
 //     v11_registered_groups and the legacy-command-map mirror's
 //     V11_REGISTERED_GROUPS.
 //
-// Ordering matches the help-banner order emitted by register.ts
-// (.command() call order at lines 106, 163, 178, 211, 227, 272, 306,
-// 369, 453, 578, 793, 928).
+// Ordering matches the help-banner order emitted by register.ts (the
+// .command() call order). Line numbers are intentionally omitted — they
+// drift on every register.ts edit and added no checkable value.
 //
 // NOTE: register.ts is not yet refactored to consume this constant
 // (it stays in scope.out for this slice). The mechanical lock is

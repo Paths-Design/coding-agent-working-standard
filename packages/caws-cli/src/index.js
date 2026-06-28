@@ -40,13 +40,14 @@ const {
 // docs/architecture/caws-vnext-command-surface.md for the doctrine,
 // removal table, and the canonical v11 surface.
 //
-// What v11.1 ships: the twelve registered command groups — init,
+// What v11.1 ships: the thirteen registered command groups — init,
 // doctor, status, scope, claim, gates, evidence, events, waiver, specs,
-// worktree, agents. The authoritative list is REGISTERED_COMMAND_GROUPS
-// (./shell/registered-command-groups), consumed by both register.ts and
-// the unknown-command suggester below. (The original v11.0.0 governed
-// core was eight groups; specs + worktree were restored in v11.1, and
-// events + agents shipped ahead of the broader v11.2 multi-agent plan.)
+// worktree, agents, prepush. The authoritative list is
+// REGISTERED_COMMAND_GROUPS (./shell/registered-command-groups), consumed by
+// both register.ts and the unknown-command suggester below. (The original
+// v11.0.0 governed core was eight groups; v11.1 restored specs and worktree
+// and added events, agents, and prepush. v11.2 multi-agent authority and
+// v11.3 session/parallel remain in planning.)
 
 // Initialize global configuration
 const program = new Command();
@@ -66,7 +67,7 @@ program.configureHelp({
 // authority for the registered v11 surface. The previous hand-maintained
 // 8-entry VALID_COMMANDS array was removed in
 // CAWS-REMOVED-COMMAND-DIAGNOSTICS-001: it had drifted to 8 entries while
-// register.ts registers 12 groups, so suggestions never fired for events,
+// register.ts registered 12 groups, so suggestions never fired for events,
 // specs, worktree, or agents.
 
 // Shared unknown-command handler. First classifies the argv against the
