@@ -67,27 +67,36 @@ const RECORDED = JSON.parse(
 const { SHARED_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-shared');
 const { CLAUDE_CODE_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-claude-code');
 const { CODEX_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-codex');
+const { OPENCODE_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-opencode');
 
 const PACKS = [
   { id: 'shared', dir: path.join(PACKS_ROOT, 'shared'), version: SHARED_PACK_VERSION },
-  { id: 'claude-code', dir: path.join(PACKS_ROOT, 'claude-code'), version: CLAUDE_CODE_PACK_VERSION },
+  {
+    id: 'claude-code',
+    dir: path.join(PACKS_ROOT, 'claude-code'),
+    version: CLAUDE_CODE_PACK_VERSION,
+  },
   { id: 'codex', dir: path.join(PACKS_ROOT, 'codex'), version: CODEX_PACK_VERSION },
+  { id: 'opencode', dir: path.join(PACKS_ROOT, 'opencode'), version: OPENCODE_PACK_VERSION },
 ];
 
 describe('pack-fingerprint guard: live template fingerprint matches the recorded baseline', () => {
-  test.each(PACKS)('$id pack fingerprint is unchanged (or version bumped)', ({ id, dir, version }) => {
-    const live = fingerprintPack(dir);
-    const recorded = RECORDED[id];
-    expect(recorded).toBeDefined();
-    // The recorded version must match the manifest's current version: a template
-    // change requires BOTH a new fingerprint AND a packVersion bump.
-    expect(recorded.version).toBe(version);
-    // If this fails, a template file changed without updating the recorded
-    // fingerprint + bumping packVersion (the stale-installed-fix guard firing).
-    // The failure message prints the live value so the baseline can be updated
-    // deliberately alongside a version bump.
-    expect({ id, fingerprint: live }).toEqual({ id, fingerprint: recorded.fingerprint });
-  });
+  test.each(PACKS)(
+    '$id pack fingerprint is unchanged (or version bumped)',
+    ({ id, dir, version }) => {
+      const live = fingerprintPack(dir);
+      const recorded = RECORDED[id];
+      expect(recorded).toBeDefined();
+      // The recorded version must match the manifest's current version: a template
+      // change requires BOTH a new fingerprint AND a packVersion bump.
+      expect(recorded.version).toBe(version);
+      // If this fails, a template file changed without updating the recorded
+      // fingerprint + bumping packVersion (the stale-installed-fix guard firing).
+      // The failure message prints the live value so the baseline can be updated
+      // deliberately alongside a version bump.
+      expect({ id, fingerprint: live }).toEqual({ id, fingerprint: recorded.fingerprint });
+    }
+  );
 });
 
 describe('fingerprintPack: deterministic + exclusions (A4)', () => {

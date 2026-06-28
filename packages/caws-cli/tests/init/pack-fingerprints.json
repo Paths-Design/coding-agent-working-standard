@@ -10,5 +10,9 @@
   "codex": {
     "version": 9,
     "fingerprint": "e94ef3b8a328ebc86acfdb17e244a8ea269ee1b57cf642e3cf1c1da790d52658"
+  },
+  "opencode": {
+    "version": 1,
+    "fingerprint": "7a6e705c3bb94c0bea0b50e8dc79955ef5b70efdcdbc69d52e78eda53bd05296"
   }
 }

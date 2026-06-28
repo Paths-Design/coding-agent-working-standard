@@ -32,9 +32,9 @@ const PACKS_ROOT = path.join(CLI_PKG_ROOT, 'templates', 'hook-packs');
 const os = require('os');
 const { parseManagedHeader, installHookPack } = require('../../dist/init/hook-install');
 const { SHARED_PACK } = require('../../dist/init/hook-packs/manifest-shared');
-const {
-  renderHookPackInstall,
-} = require('../../dist/shell/render/init-hook-pack');
+const { CLAUDE_CODE_PACK } = require('../../dist/init/hook-packs/manifest-claude-code');
+const { OPENCODE_PACK } = require('../../dist/init/hook-packs/manifest-opencode');
+const { renderHookPackInstall } = require('../../dist/shell/render/init-hook-pack');
 
 const EXCLUDED_DIRS = new Set(['tmp', '.caws', '__pycache__', 'node_modules']);
 const EXCLUDED_FILES = new Set(['.DS_Store']);
@@ -53,7 +53,7 @@ function listTemplateFiles(dir, baseDir = dir) {
   return out;
 }
 
-const ALL_TEMPLATE_FILES = ['shared', 'claude-code', 'codex'].flatMap((pack) =>
+const ALL_TEMPLATE_FILES = ['shared', 'claude-code', 'codex', 'opencode'].flatMap((pack) =>
   listTemplateFiles(path.join(PACKS_ROOT, pack))
 );
 
@@ -97,10 +97,7 @@ describe('A1: no managed header carries the contradicting edit-prohibition', () 
   test('the edit_stance line states the repo owns/may grow the hook and that bypass is the one out-of-bounds edit', () => {
     // Assert the SEMANTICS of one representative header, not just presence —
     // an empty or watered-down edit_stance line must fail.
-    const sample = fs.readFileSync(
-      path.join(PACKS_ROOT, 'shared', 'scope-guard.sh'),
-      'utf8'
-    );
+    const sample = fs.readFileSync(path.join(PACKS_ROOT, 'shared', 'scope-guard.sh'), 'utf8');
     expect(sample).toMatch(/OWNS and may grow this hook/);
     expect(sample).toMatch(/--adopt to keep yours/);
     expect(sample).toMatch(/--overwrite to pull this upstream/);
@@ -110,10 +107,7 @@ describe('A1: no managed header carries the contradicting edit-prohibition', () 
 
 describe('A2: parseManagedHeader still recognizes a rewritten header as managed', () => {
   test('the live scope-guard.sh header parses to its marker keys', () => {
-    const content = fs.readFileSync(
-      path.join(PACKS_ROOT, 'shared', 'scope-guard.sh'),
-      'utf8'
-    );
+    const content = fs.readFileSync(path.join(PACKS_ROOT, 'shared', 'scope-guard.sh'), 'utf8');
     const header = parseManagedHeader(content);
     expect(header).not.toBeNull();
     expect(header.hookPack).toBe('shared');
@@ -204,9 +198,7 @@ describe('A3: render frames a grown (drifted) managed hook as expected, not a pr
   });
 
   test('a clean create/update run says nothing about drift or collision', () => {
-    const out = renderWith([
-      { destPath: '.caws/hooks/scope-guard.sh', action: 'created' },
-    ]);
+    const out = renderWith([{ destPath: '.caws/hooks/scope-guard.sh', action: 'created' }]);
     expect(out).toMatch(/Created \(1\)/);
     expect(out).not.toMatch(/Kept your edits/);
     expect(out).not.toMatch(/unmanaged file at a managed path/i);
@@ -272,8 +264,7 @@ describe('A4: caws init preserves a grown hook and never silently clobbers it', 
   });
 
   test('--overwrite on a grown hook DOES take the upstream template (the one path that discards edits)', () => {
-    const grown =
-      fs.readFileSync(abs(REL), 'utf8') + '\n# growth that will be discarded\n';
+    const grown = fs.readFileSync(abs(REL), 'utf8') + '\n# growth that will be discarded\n';
     fs.writeFileSync(abs(REL), grown);
 
     const r = installHookPack(SHARED_PACK, { repoRoot, overwrite: true });
@@ -283,8 +274,7 @@ describe('A4: caws init preserves a grown hook and never silently clobbers it', 
   });
 
   test('--adopt on a grown hook keeps the edit and reports unchanged', () => {
-    const grown =
-      fs.readFileSync(abs(REL), 'utf8') + '\n# adopted growth\n';
+    const grown = fs.readFileSync(abs(REL), 'utf8') + '\n# adopted growth\n';
     fs.writeFileSync(abs(REL), grown);
 
     const r = installHookPack(SHARED_PACK, { repoRoot, adopt: true });
@@ -299,10 +289,7 @@ describe('A4: caws init preserves a grown hook and never silently clobbers it', 
     // — it is NOT an edit to preserve — so existing consumers are not all shown
     // spurious drift on first upgrade.
     const installed = fs.readFileSync(abs(REL), 'utf8');
-    const downgraded = installed.replace(
-      /^(#\s*hook_pack_version:\s*)\d+/m,
-      '$11'
-    );
+    const downgraded = installed.replace(/^(#\s*hook_pack_version:\s*)\d+/m, '$11');
     expect(downgraded).not.toBe(installed); // sanity: the stamp actually changed
     fs.writeFileSync(abs(REL), downgraded);
 
@@ -312,5 +299,86 @@ describe('A4: caws init preserves a grown hook and never silently clobbers it', 
     // After re-stamp the body is unchanged and the version is current again.
     const after = parseManagedHeader(fs.readFileSync(abs(REL), 'utf8'));
     expect(after.hookPackVersion).toBe(SHARED_PACK.packVersion);
+  });
+});
+
+/**
+ * A5 — multi-surface additivity. `caws init --agent-surface <X>` runs
+ * installHookPack(SHARED_PACK) + installHookPack(<vendor>). A repo can carry
+ * several surfaces at once (claude-code + codex + opencode). Adding a surface
+ * MUST be additive: it must not clobber a shared hook the repo has grown, and
+ * it must not touch another surface's vendor dir. The vendor dirs (.claude/,
+ * .codex/, .opencode/) are disjoint by design; the shared core (.caws/hooks/)
+ * is common, so its drift-refusal machinery is what protects hand-edits when a
+ * second surface re-installs SHARED_PACK.
+ */
+describe('A5: installing a second surface is additive — preserves a grown shared hook and leaves other surfaces untouched', () => {
+  const SHARED_REL = '.caws/hooks/scope-guard.sh';
+  const CLAUDE_REL = '.claude/hooks/CLAUDE.md';
+  const OPENCODE_PLUGIN = '.opencode/plugins/caws.ts';
+  const OPENCODE_DOCTRINE = '.opencode/AGENTS.md';
+  let repoRoot;
+  let claudeBodyAfterFirst;
+
+  beforeEach(() => {
+    repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-multisurf-'));
+    // Simulate `caws init --agent-surface claude-code`: shared core + vendor.
+    installHookPack(SHARED_PACK, { repoRoot });
+    installHookPack(CLAUDE_CODE_PACK, { repoRoot });
+    claudeBodyAfterFirst = fs.readFileSync(abs(CLAUDE_REL), 'utf8');
+  });
+
+  afterEach(() => {
+    fs.rmSync(repoRoot, { recursive: true, force: true });
+  });
+
+  function abs(rel) {
+    return path.join(repoRoot, rel);
+  }
+
+  test('a hand-edited shared hook survives installing a second surface', () => {
+    // Grow a shared hook after the claude-code install.
+    const grown = fs.readFileSync(abs(SHARED_REL), 'utf8') + '\n# repo-specific growth\n';
+    fs.writeFileSync(abs(SHARED_REL), grown);
+
+    // Simulate `caws init --agent-surface opencode` in the same repo.
+    const sharedR = installHookPack(SHARED_PACK, { repoRoot });
+    const opencodeR = installHookPack(OPENCODE_PACK, { repoRoot });
+
+    // The grown shared hook is preserved as drift — NOT clobbered.
+    const sharedAction = sharedR.actions.find((a) => a.destPath === SHARED_REL);
+    expect(sharedAction.action).toBe('refused');
+    expect(sharedAction.refusalReason).toBe('managed_drift');
+    expect(fs.readFileSync(abs(SHARED_REL), 'utf8')).toBe(grown);
+
+    // The opencode vendor files still landed.
+    expect(opencodeR.actions.find((a) => a.destPath === OPENCODE_PLUGIN).action).toBe('created');
+    expect(opencodeR.actions.find((a) => a.destPath === OPENCODE_DOCTRINE).action).toBe('created');
+  });
+
+  test('the first surface vendor files are untouched by the second surface install', () => {
+    // Even with no shared-hook edit, installing opencode must not write under .claude/.
+    installHookPack(SHARED_PACK, { repoRoot });
+    installHookPack(OPENCODE_PACK, { repoRoot });
+
+    // Claude vendor file is byte-identical to right after the claude install.
+    expect(fs.readFileSync(abs(CLAUDE_REL), 'utf8')).toBe(claudeBodyAfterFirst);
+    // opencode files landed in .opencode/, nothing leaked into .claude/.
+    expect(fs.existsSync(abs(OPENCODE_PLUGIN))).toBe(true);
+    expect(fs.existsSync(abs(OPENCODE_DOCTRINE))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, '.claude', 'plugins'))).toBe(false);
+  });
+
+  test('opencode install refuses to clobber an existing unmanaged .opencode/plugins/caws.ts', () => {
+    // A user who already authored their own opencode plugin at this path.
+    fs.mkdirSync(path.dirname(abs(OPENCODE_PLUGIN)), { recursive: true });
+    fs.writeFileSync(abs(OPENCODE_PLUGIN), '// my own plugin, no managed header\n');
+
+    const opencodeR = installHookPack(OPENCODE_PACK, { repoRoot });
+    const a = opencodeR.actions.find((x) => x.destPath === OPENCODE_PLUGIN);
+    expect(a.action).toBe('refused');
+    expect(a.refusalReason).toBe('unmanaged_collision');
+    // The user's file is intact.
+    expect(fs.readFileSync(abs(OPENCODE_PLUGIN), 'utf8')).toContain('my own plugin');
   });
 });

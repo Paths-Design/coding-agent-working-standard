@@ -25,13 +25,8 @@
 // a pack file requires naming the entry and identifying the replacement
 // mechanism.
 
-/** Supported agent harnesses. v11.1 implements claude-code and codex. */
-export type AgentSurface =
-  | 'claude-code'
-  | 'codex'
-  | 'cursor'
-  | 'windsurf'
-  | 'none';
+/** Supported agent harnesses. Implemented packs: claude-code, codex, opencode. */
+export type AgentSurface = 'claude-code' | 'codex' | 'opencode' | 'cursor' | 'windsurf' | 'none';
 
 /** Lifecycle interception points a pack may register on a harness. */
 export type LifecycleEvent =
@@ -142,9 +137,7 @@ export interface HookPackFileAction {
   readonly destPath: string;
   readonly action: 'created' | 'updated' | 'unchanged' | 'refused';
   /** When action === 'refused', the reason. */
-  readonly refusalReason?:
-    | 'unmanaged_collision'
-    | 'managed_drift';
+  readonly refusalReason?: 'unmanaged_collision' | 'managed_drift';
 }
 
 /** Result of installing a pack into a repo. */

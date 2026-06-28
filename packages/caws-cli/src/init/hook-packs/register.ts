@@ -8,6 +8,7 @@
 import type { AgentSurface, HookPackV1 } from './types';
 import { CLAUDE_CODE_PACK } from './manifest-claude-code';
 import { CODEX_PACK } from './manifest-codex';
+import { OPENCODE_PACK } from './manifest-opencode';
 
 export type PackResolution =
   | { readonly kind: 'pack'; readonly pack: HookPackV1 }
@@ -28,6 +29,9 @@ export function resolveHookPack(surface: AgentSurface): PackResolution {
   if (surface === 'codex') {
     return { kind: 'pack', pack: CODEX_PACK };
   }
+  if (surface === 'opencode') {
+    return { kind: 'pack', pack: OPENCODE_PACK };
+  }
   // cursor / windsurf: recognized but not yet implemented.
   return { kind: 'declared_not_implemented', surface };
 }
@@ -37,16 +41,14 @@ export function resolveHookPack(surface: AgentSurface): PackResolution {
 export const KNOWN_SURFACES: readonly AgentSurface[] = [
   'claude-code',
   'codex',
+  'opencode',
   'cursor',
   'windsurf',
   'none',
 ];
 
 /** Surfaces that have a fully-implemented pack in this CLI version. */
-export const IMPLEMENTED_SURFACES: readonly AgentSurface[] = [
-  'claude-code',
-  'codex',
-];
+export const IMPLEMENTED_SURFACES: readonly AgentSurface[] = ['claude-code', 'codex', 'opencode'];
 
 export function isKnownSurface(value: string): value is AgentSurface {
   return (KNOWN_SURFACES as readonly string[]).includes(value);

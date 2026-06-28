@@ -22,9 +22,7 @@ function section(title: string): string {
 }
 
 /** Render the install result. */
-export function renderHookPackInstall(
-  result: HookPackInstallResult
-): string {
+export function renderHookPackInstall(result: HookPackInstallResult): string {
   const lines: string[] = [];
 
   if (!result.pack) {
@@ -36,19 +34,18 @@ export function renderHookPackInstall(
         '  This repo is NOT agent-safe for multi-session work without external governance.'
       );
       lines.push(
-        '  If you intended to enable a hook pack, rerun with --agent-surface claude-code or codex.'
+        '  If you intended to enable a hook pack, rerun with --agent-surface claude-code, codex, or opencode.'
       );
       return lines.join('\n');
     }
     if (result.outcome === 'skipped_ambiguous') {
       lines.push(section('Step: hook-pack install'));
-      lines.push(
-        '  Skipped — no harness detected and no --agent-surface flag passed.'
-      );
+      lines.push('  Skipped — no harness detected and no --agent-surface flag passed.');
       lines.push('  No pre-tool-call governance was installed.');
       lines.push('  To enable a hook pack now, rerun with one of:');
       lines.push('    caws init --agent-surface claude-code');
       lines.push('    caws init --agent-surface codex');
+      lines.push('    caws init --agent-surface opencode');
       lines.push('    caws init --agent-surface none      # explicit opt-out');
       return lines.join('\n');
     }
@@ -107,69 +104,31 @@ export function renderHookPackInstall(
     lines.push(`  Kept your edits — left in place (${drifted.length}):`);
     for (const p of drifted) lines.push(`    ~ ${p}`);
     lines.push('');
-    lines.push(
-      '  These managed hooks differ from the shipped template because this repo'
-    );
-    lines.push(
-      '  edited them. That is expected: CAWS hooks are a starting point you grow'
-    );
-    lines.push(
-      '  as your repo matures — you own the how, CAWS owns the failure-class why.'
-    );
-    lines.push(
-      '  init did NOT overwrite them, so no growth was lost. Your options:'
-    );
-    lines.push(
-      '    (default)     Do nothing — keep your edits. This is the right choice'
-    );
-    lines.push(
-      '                  when you intended to grow these hooks.'
-    );
-    lines.push(
-      '    --adopt       Same outcome made explicit: keep your version and stop'
-    );
-    lines.push(
-      '                  reporting it as drift on future runs.'
-    );
-    lines.push(
-      '    --overwrite   Pull the upstream template, replacing your version.'
-    );
-    lines.push(
-      '                  Only this path discards local edits — use it when you'
-    );
-    lines.push(
-      '                  want the new CAWS baseline over your changes.'
-    );
+    lines.push('  These managed hooks differ from the shipped template because this repo');
+    lines.push('  edited them. That is expected: CAWS hooks are a starting point you grow');
+    lines.push('  as your repo matures — you own the how, CAWS owns the failure-class why.');
+    lines.push('  init did NOT overwrite them, so no growth was lost. Your options:');
+    lines.push('    (default)     Do nothing — keep your edits. This is the right choice');
+    lines.push('                  when you intended to grow these hooks.');
+    lines.push('    --adopt       Same outcome made explicit: keep your version and stop');
+    lines.push('                  reporting it as drift on future runs.');
+    lines.push('    --overwrite   Pull the upstream template, replacing your version.');
+    lines.push('                  Only this path discards local edits — use it when you');
+    lines.push('                  want the new CAWS baseline over your changes.');
   }
 
   if (collided.length > 0) {
     lines.push(`  Refused — unmanaged file at a managed path (${collided.length}):`);
     for (const p of collided) lines.push(`    ! ${p}`);
     lines.push('');
-    lines.push(
-      '  A file exists at a managed hook path but carries no CAWS-MANAGED-HOOK'
-    );
-    lines.push(
-      '  marker, so init cannot tell whether it is yours to keep. To resolve:'
-    );
-    lines.push(
-      '    --overwrite   Replace it with the canonical pack version.'
-    );
-    lines.push(
-      '                  CAUTION: the existing file is discarded.'
-    );
-    lines.push(
-      '    --adopt       Leave it in place; do not enforce that it matches the'
-    );
-    lines.push(
-      '                  pack (drift is no longer tracked until the marker'
-    );
-    lines.push(
-      '                  is restored).'
-    );
-    lines.push(
-      '  Alternative: rename or remove the conflicting file, then re-run init.'
-    );
+    lines.push('  A file exists at a managed hook path but carries no CAWS-MANAGED-HOOK');
+    lines.push('  marker, so init cannot tell whether it is yours to keep. To resolve:');
+    lines.push('    --overwrite   Replace it with the canonical pack version.');
+    lines.push('                  CAUTION: the existing file is discarded.');
+    lines.push('    --adopt       Leave it in place; do not enforce that it matches the');
+    lines.push('                  pack (drift is no longer tracked until the marker');
+    lines.push('                  is restored).');
+    lines.push('  Alternative: rename or remove the conflicting file, then re-run init.');
   }
 
   return lines.join('\n');
@@ -183,12 +142,8 @@ export function renderCodexHookTrust(): string {
   const lines: string[] = [];
   lines.push(section('Step: .codex/hooks.json trust'));
   lines.push('  Installed project-local Codex hook wiring at .codex/hooks.json.');
-  lines.push(
-    '  Codex loads project .codex hooks only in trusted projects; changed'
-  );
-  lines.push(
-    '  non-managed command hooks are skipped until reviewed and trusted.'
-  );
+  lines.push('  Codex loads project .codex hooks only in trusted projects; changed');
+  lines.push('  non-managed command hooks are skipped until reviewed and trusted.');
   lines.push('  In Codex, run /hooks to inspect and trust the installed hooks.');
   return lines.join('\n');
 }
@@ -212,36 +167,22 @@ export function renderSettingsWiring(
   if (mergeResult) {
     switch (mergeResult.kind) {
       case 'created':
-        lines.push(
-          '  Created .claude/settings.json wiring the four CAWS caws_dispatch'
-        );
+        lines.push('  Created .claude/settings.json wiring the four CAWS caws_dispatch');
         lines.push('  entrypoints (PreToolUse/PostToolUse/SessionStart/Stop).');
         break;
       case 'merged':
-        lines.push(
-          `  Merged the CAWS caws_dispatch wiring into your existing`
-        );
-        lines.push(
-          `  .claude/settings.json (added: ${mergeResult.added.join(', ')}).`
-        );
-        lines.push(
-          '  Your other settings — permissions, env, and any existing hooks —'
-        );
+        lines.push(`  Merged the CAWS caws_dispatch wiring into your existing`);
+        lines.push(`  .claude/settings.json (added: ${mergeResult.added.join(', ')}).`);
+        lines.push('  Your other settings — permissions, env, and any existing hooks —');
         lines.push('  were preserved unchanged.');
         break;
       case 'unchanged':
-        lines.push(
-          '  OK — .claude/settings.json already wires all four CAWS caws_dispatch'
-        );
+        lines.push('  OK — .claude/settings.json already wires all four CAWS caws_dispatch');
         lines.push('  entrypoints. No change.');
         break;
       case 'invalid':
-        lines.push(
-          `  ERROR — .claude/settings.json could not be parsed: ${mergeResult.error}`
-        );
-        lines.push(
-          '  init did NOT modify the file. Repair the JSON, then re-run init or'
-        );
+        lines.push(`  ERROR — .claude/settings.json could not be parsed: ${mergeResult.error}`);
+        lines.push('  init did NOT modify the file. Repair the JSON, then re-run init or');
         lines.push('  merge the canonical wiring by hand:');
         lines.push('');
         for (const line of CANONICAL_SETTINGS_SNIPPET.split('\n')) {
@@ -250,26 +191,16 @@ export function renderSettingsWiring(
         break;
     }
     lines.push('');
-    lines.push(
-      '  A .claude/settings.json.example with the canonical wiring was also'
-    );
+    lines.push('  A .claude/settings.json.example with the canonical wiring was also');
     lines.push('  written for reference.');
 
     if (orphanedDispatchDir) {
       lines.push('');
-      lines.push(
-        '  WARNING — a pre-rename hook dispatcher directory is still present:'
-      );
+      lines.push('  WARNING — a pre-rename hook dispatcher directory is still present:');
       lines.push(`    ${orphanedDispatchDir}`);
-      lines.push(
-        '  The dispatcher moved to .claude/hooks/caws_dispatch/. The old dir is'
-      );
-      lines.push(
-        '  no longer wired and was left untouched (it may carry your edits).'
-      );
-      lines.push(
-        '  Port any net-benefit customizations into caws_dispatch/, then remove'
-      );
+      lines.push('  The dispatcher moved to .claude/hooks/caws_dispatch/. The old dir is');
+      lines.push('  no longer wired and was left untouched (it may carry your edits).');
+      lines.push('  Port any net-benefit customizations into caws_dispatch/, then remove');
       lines.push('  the old dispatch/ directory by hand.');
     }
     return lines.join('\n');
@@ -277,31 +208,21 @@ export function renderSettingsWiring(
 
   // ── Fallback: advisory inspection-only output (no merge performed) ──
   if (status.kind === 'wired') {
-    lines.push(
-      '  OK — .claude/settings.json already wires all four CAWS dispatch entrypoints.'
-    );
+    lines.push('  OK — .claude/settings.json already wires all four CAWS dispatch entrypoints.');
     lines.push('  No action needed.');
     return lines.join('\n');
   }
 
   if (status.kind === 'invalid') {
-    lines.push(
-      `  ERROR — .claude/settings.json exists but could not be parsed: ${status.error}`
-    );
+    lines.push(`  ERROR — .claude/settings.json exists but could not be parsed: ${status.error}`);
     lines.push('  Repair the JSON syntax, then re-run `caws doctor` to verify.');
-    lines.push(
-      '  The CAWS init does NOT modify settings.json; you must fix this by hand.'
-    );
+    lines.push('  The CAWS init does NOT modify settings.json; you must fix this by hand.');
     return lines.join('\n');
   }
 
   if (status.kind === 'absent') {
-    lines.push(
-      '  No .claude/settings.json present. Hooks are installed but will'
-    );
-    lines.push(
-      '  NOT fire until Claude Code reads a settings.json that wires them.'
-    );
+    lines.push('  No .claude/settings.json present. Hooks are installed but will');
+    lines.push('  NOT fire until Claude Code reads a settings.json that wires them.');
     lines.push('');
     lines.push('  Create .claude/settings.json with the following content:');
     lines.push('');
@@ -312,18 +233,12 @@ export function renderSettingsWiring(
   }
 
   // partial
-  lines.push(
-    '  .claude/settings.json exists but is missing one or more canonical'
-  );
+  lines.push('  .claude/settings.json exists but is missing one or more canonical');
   lines.push('  CAWS hook entries. Hooks may not fire as expected.');
   lines.push('');
-  lines.push(
-    `  Missing entries (${status.missing.length}): ${status.missing.join(', ')}`
-  );
+  lines.push(`  Missing entries (${status.missing.length}): ${status.missing.join(', ')}`);
   lines.push('');
-  lines.push(
-    '  Add the following blocks to the `hooks` object in your settings.json:'
-  );
+  lines.push('  Add the following blocks to the `hooks` object in your settings.json:');
   lines.push('');
   for (const line of CANONICAL_SETTINGS_SNIPPET.split('\n')) {
     lines.push(`    ${line}`);
@@ -347,107 +262,64 @@ export function renderActivationContract(
   lines.push(section('Step: activation'));
 
   if (!result.pack || result.outcome === 'skipped_explicit_none') {
-    lines.push(
-      '  No hook pack was installed. Pre-tool-call governance is NOT in effect.'
-    );
+    lines.push('  No hook pack was installed. Pre-tool-call governance is NOT in effect.');
     return lines.join('\n');
   }
   if (result.outcome === 'skipped_ambiguous') {
-    lines.push(
-      '  No hook pack was selected. Pre-tool-call governance is NOT in effect.'
-    );
+    lines.push('  No hook pack was selected. Pre-tool-call governance is NOT in effect.');
     return lines.join('\n');
   }
 
-  const changed =
-    result.outcome === 'installed' || result.outcome === 'updated';
+  const changed = result.outcome === 'installed' || result.outcome === 'updated';
   const wired = wiringStatus?.kind === 'wired';
   const isCodex = result.pack.id === 'codex';
 
   switch (result.activation) {
     case 'immediate':
-      lines.push(
-        '  Hooks are active in the current session. No restart required.'
-      );
+      lines.push('  Hooks are active in the current session. No restart required.');
       break;
     case 'restart_required':
       if (isCodex) {
         if (changed) {
-          lines.push(
-            '  Hook files were installed or updated. Restart or reopen the'
-          );
-          lines.push(
-            '  Codex session, then use /hooks to review and trust changed'
-          );
+          lines.push('  Hook files were installed or updated. Restart or reopen the');
+          lines.push('  Codex session, then use /hooks to review and trust changed');
           lines.push('  project-local hook definitions before relying on them.');
         } else {
-          lines.push(
-            '  Hooks are installed. They are active in trusted Codex projects'
-          );
-          lines.push(
-            '  after the hook definitions have been reviewed and trusted via /hooks.'
-          );
+          lines.push('  Hooks are installed. They are active in trusted Codex projects');
+          lines.push('  after the hook definitions have been reviewed and trusted via /hooks.');
         }
         break;
       }
       if (!changed && wired) {
         // No-op re-run on a fully-wired install. Positive confirmation.
-        lines.push(
-          '  Hooks are installed and wired. They are active in any Claude Code'
-        );
-        lines.push(
-          '  session started AFTER the install. If you are running in a session'
-        );
-        lines.push(
-          '  that pre-dates the install, restart the session to load them.'
-        );
+        lines.push('  Hooks are installed and wired. They are active in any Claude Code');
+        lines.push('  session started AFTER the install. If you are running in a session');
+        lines.push('  that pre-dates the install, restart the session to load them.');
       } else if (changed && wired) {
         // Files updated; wiring is already in place but the new versions
         // need a session restart to load.
-        lines.push(
-          '  Hook files were installed or updated. Settings.json is wired.'
-        );
-        lines.push(
-          '  Restart the Claude Code session so the updated hooks load.'
-        );
+        lines.push('  Hook files were installed or updated. Settings.json is wired.');
+        lines.push('  Restart the Claude Code session so the updated hooks load.');
       } else if (changed && !wired) {
         // The original STOP-sign case. Files just landed AND wiring is
         // missing or partial. Agent must not continue.
-        lines.push(
-          '  RESTART REQUIRED: Claude Code reads .claude/settings.json at session'
-        );
-        lines.push(
-          '  start. The hooks you just installed are NOT enforcing in this session.'
-        );
+        lines.push('  RESTART REQUIRED: Claude Code reads .claude/settings.json at session');
+        lines.push('  start. The hooks you just installed are NOT enforcing in this session.');
         lines.push('');
-        lines.push(
-          '  STOP. Do not continue substantive work. Wire .claude/settings.json'
-        );
-        lines.push(
-          '  (see the previous panel) and ask the user to restart or reopen'
-        );
-        lines.push(
-          '  the Claude Code session so the hooks become active.'
-        );
+        lines.push('  STOP. Do not continue substantive work. Wire .claude/settings.json');
+        lines.push('  (see the previous panel) and ask the user to restart or reopen');
+        lines.push('  the Claude Code session so the hooks become active.');
       } else {
         // Idempotent re-run with wiring still missing or invalid.
-        lines.push(
-          '  Hook files are installed but settings.json wiring is not complete.'
-        );
-        lines.push(
-          '  Hooks will not fire until the wiring is finished (see the previous'
-        );
+        lines.push('  Hook files are installed but settings.json wiring is not complete.');
+        lines.push('  Hooks will not fire until the wiring is finished (see the previous');
         lines.push('  panel) and the Claude Code session is restarted.');
       }
       break;
     case 'unknown':
     case 'not_applicable':
-      lines.push(
-        '  Activation semantics for this harness are not known. Consult the'
-      );
-      lines.push(
-        '  harness documentation for whether hooks take effect mid-session.'
-      );
+      lines.push('  Activation semantics for this harness are not known. Consult the');
+      lines.push('  harness documentation for whether hooks take effect mid-session.');
       break;
   }
   return lines.join('\n');
