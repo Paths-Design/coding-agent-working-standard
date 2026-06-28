@@ -4,29 +4,29 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**", "apps/**", ".caws/**", "!**/*.test.*"],
+      "inputs": ["src/**", ".caws/**", "!**/*.test.*"],
       "outputs": ["dist/**", "build/**", ".agent/**"]
     },
     "lint": {
       "dependsOn": [],
-      "inputs": ["src/**", "apps/**", ".caws/**", "*.js", "*.json"]
+      "inputs": ["src/**", ".caws/**", "*.js", "*.json"]
     },
     "lint:fix": {
       "dependsOn": [],
-      "inputs": ["src/**", "apps/**", ".caws/**", "*.js", "*.json"]
+      "inputs": ["src/**", ".caws/**", "*.js", "*.json"]
     },
     "format": {
       "dependsOn": [],
-      "inputs": ["src/**", "apps/**", ".caws/**", "*.js", "*.json", "*.md"]
+      "inputs": ["src/**", ".caws/**", "*.js", "*.json", "*.md"]
     },
     "test": {
       "dependsOn": ["^build", "lint"],
-      "inputs": ["src/**", "tests/**", "apps/**", ".caws/**"],
+      "inputs": ["src/**", "tests/**", ".caws/**"],
       "outputs": ["coverage/**"]
     },
     "test:unit": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**", "tests/**", "apps/**"],
+      "inputs": ["src/**", "tests/**"],
       "outputs": []
     },
     "test:watch": {
@@ -36,7 +36,7 @@
     },
     "validate": {
       "dependsOn": [],
-      "inputs": [".caws/**", "apps/tools/caws/**"]
+      "inputs": [".caws/**"]
     },
     "typecheck": {
       "dependsOn": ["^build"],
