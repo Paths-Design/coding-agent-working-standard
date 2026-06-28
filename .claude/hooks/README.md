@@ -1,10 +1,14 @@
 <!--
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 16
+# hook_pack_version: 20
 # caws_min_major: 11
 # lineage_refs: 8,11,16,17,19,22,23,24,27
-# do_not_edit_directly: update via `caws init --agent-surface claude-code`
+# edit_stance: this repo OWNS and may grow this hook. Edits are expected and
+#   preserved — `caws init` refuses to overwrite a changed managed hook (re-run
+#   with --adopt to keep yours, or --overwrite to pull this upstream template).
+#   CAWS owns the failure-class invariant (the why/what you must not silently
+#   weaken); you own the how. Do not edit it to BYPASS the guard; do grow it.
 -->
 
 # CAWS Claude Code Hook Pack — Inventory
@@ -14,9 +18,17 @@ doctrine** (managed-file rules, spec-authoring traps, v10/v11 state model,
 `settings.json` wiring) see [`CLAUDE.md`](./CLAUDE.md) in this directory —
 that file is authoritative for behavior; this README is the at-a-glance map.
 
-These are CAWS-managed files. **Do not hand-edit them.** Update the pack with
-`caws init --agent-surface claude-code`. Hand-editing a managed file turns it
-into an unmanaged snowflake the installer will then refuse to touch.
+These are CAWS-managed files — a **starting point, not an end state**. CAWS owns
+the WHY/WHAT (why each guard exists, what it enforces); your repo owns the HOW
+(thresholds, env tuning, repo-specific checks). **Editing these hooks to grow
+your governance is expected and welcome.** The one edit that is out of bounds is
+editing a hook to *bypass or weaken a guard* to dodge a block — that crosses
+into the WHY/WHAT CAWS owns. Your grown edits are preserved: as long as a hook
+keeps its `CAWS-MANAGED-HOOK` header, `caws init` classifies it as drift and
+**refuses to overwrite it** — re-run with `--adopt` to keep yours or
+`--overwrite` to pull the upstream baseline. (Editing a marked hook does not make
+it unmanaged; only deleting the header does.) See [`CLAUDE.md`](./CLAUDE.md)
+§ *This pack is a starting point* for the full stance.
 
 ## How the pack runs
 

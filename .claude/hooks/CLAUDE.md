@@ -1,35 +1,104 @@
 <!--
 # CAWS-MANAGED-HOOK
 # hook_pack: claude-code
-# hook_pack_version: 16
+# hook_pack_version: 20
 # caws_min_major: 11
 # lineage_refs: 1,4,6,8,11,12,13,16,17,19,20
-# do_not_edit_directly: update via `caws init --agent-surface claude-code`
+# edit_stance: this repo OWNS and may grow this hook. Edits are expected and
+#   preserved — `caws init` refuses to overwrite a changed managed hook (re-run
+#   with --adopt to keep yours, or --overwrite to pull this upstream template).
+#   CAWS owns the failure-class invariant (the why/what you must not silently
+#   weaken); you own the how. Do not edit it to BYPASS the guard; do grow it.
 -->
 
 # CAWS Claude Code Hook Pack
 
-This directory contains the v11 Claude Code hook pack — pre-tool-call
-governance infrastructure that interposes between the agent and its Edit,
+This directory is the **claude-code vendor adapter** for the CAWS hook pack. It
+contains only the wiring and surface documentation for Claude Code. All shared
+hook logic lives in the CAWS shared core, installed at `.caws/hooks/` in the
+consumer repo.
+
+## Layout (CAWS-HOOK-PACK-SHARED-CORE-001)
+
+```
+.caws/hooks/          # shared core — event dispatchers + all guard/check hooks
+  dispatch/           # pre_tool_use.sh, post_tool_use.sh, session_start.sh, stop.sh, pre_compact.sh
+  lib/                # parse-input.sh, run-handlers.sh, emit.sh, agent-surface.sh, ...
+  <shared hooks>.sh   # scope-guard, block-dangerous, worktree-guard, etc.
+
+.claude/              # claude-code adapter (this directory when installed)
+  settings.json       # wiring -> .caws/hooks/dispatch/<event>.sh
+  CLAUDE.md           # this file
+```
+
+Claude Code has no override hooks — the shared lib files are the claude-code
+baseline (emit.sh uses "ask" permission vocabulary; parse-input.sh is the
+standard parser). The vendor dir is `.claude`; the surface identity is
+`claude-code`.
+
+## Governance infrastructure
+
+Pre-tool-call governance infrastructure that interposes between the agent and its Edit,
 Write, and Bash tools. The kernel/store/shell trinity owns canonical state;
 these hooks **project** that state into refusals at the agent's boundary,
 where the kernel cannot reach (the kernel runs downstream of the tool
 call).
 
-## These are CAWS-managed files
+## This pack is a starting point, not an end state
 
-These are CAWS-managed hook-pack files installed by
-`caws init --agent-surface claude-code`. Do not hand-edit them during ordinary
-work. If a hook blocks legitimate work, surface the exact block to the user and
-continue only with explicit user authorization or a CAWS-managed update path. Do
-not bypass, delete, or locally weaken guards. (Any internal CAWS provenance
-metadata in a file's header is upstream maintainer context — it is not an
-authority requirement for this repo.)
+CAWS cannot anticipate every situation your repository will run into as it
+grows. The shipped hook pack is the **governance floor** — a baseline you start
+from and grow as your project matures. The division of authority is deliberate:
 
-To update the pack, re-run `caws init --agent-surface claude-code` rather than
-editing files here. A managed file's header is how `caws init` recognizes it as
-safe to update; hand-editing turns it into an unmanaged file the installer will
-then refuse to touch.
+- **CAWS owns the WHY and the WHAT** — the hard adjudication and the mechanisms.
+  *Why* a guard exists (the failure class it prevents), and *what* invariant it
+  enforces, are CAWS's contribution. Those are the load-bearing parts you should
+  not silently weaken or delete.
+- **Your repo owns the HOW** — the specific behavior, thresholds, and added
+  rules. These hooks are installed templates the repo is **meant to shape**:
+  tune them via env (`CAWS_GOD_OBJECT_LOC`, `CAWS_LOC_DELTA_WARN_THRESHOLD`, the
+  `.caws/command-adapters.json` sidecar), add repo-specific checks, and let the
+  governance surface evolve with the shape of your codebase. A consuming repo's
+  installed `.caws/hooks/` is expected to drift ahead of the shipped template
+  over time — that is the design, not a defect.
+
+This is why the quality plane lives in shapeable hook scripts rather than a
+fixed subprocess that must be patched centrally for every repo-specific need.
+Equipping your agents with the tools you recommend for effective work is not a
+loss of governance — it is governance you can grow.
+
+## These are CAWS-managed files — and you may grow them
+
+The hooks ship as **managed** files. "Managed" means `caws init` recognizes them
+(via the `CAWS-MANAGED-HOOK` header) and can offer a baseline update — it does
+**not** mean "frozen" or "hands off." Per the section above, this repo owns the
+HOW: **editing these hooks to grow your governance is expected and welcome.**
+
+There is exactly **one** edit that is out of bounds: editing a hook to **bypass,
+delete, or locally weaken a guard** in order to dodge a block. That crosses into
+the WHY/WHAT that CAWS owns (the failure class and the invariant). If a hook
+blocks work you believe is legitimate, the answer is to fix the cause or raise it
+with the user — not to defang the guard. Growing a hook (tuning thresholds,
+adding repo-specific checks, extending coverage) is the opposite of that and
+needs no apology. (Any internal CAWS provenance metadata in a file's header is
+upstream maintainer context — it is not an authority requirement for this repo.)
+
+**Your edits are preserved — `caws init` will not clobber them.** As long as a
+hook keeps its `CAWS-MANAGED-HOOK` header, an edited hook is classified as
+*drift* and `caws init` **refuses to overwrite it** (it stays managed; it does
+not silently become unmanaged). On a re-init you choose:
+
+- **do nothing / `--adopt`** — keep your grown version (the default-correct
+  choice once you have shaped a hook);
+- **`--overwrite`** — pull the upstream template, replacing your version (the
+  only path that discards your edits — use it when you want the new CAWS
+  baseline).
+
+So you do not have to choose between "grow the hook" and "keep getting updates":
+edit freely, and decide per file at re-init time whether to keep yours or take
+upstream. (Deleting the header is the only thing that makes a file fully
+unmanaged — rarely what you want, since it opts the file out of update offers
+entirely.)
 
 ## What each hook does
 
@@ -54,7 +123,7 @@ then refuse to touch.
 | `duplicate-export-check.sh` | advisory: on Write of a new JS/TS file, flags an exported symbol whose exact name already exists in the enclosing package src tree (generic-name allowlist). Always exit 0. |
 | `loc-delta-check.sh` | advisory: on Edit, flags an added-line delta over `CAWS_LOC_DELTA_WARN_THRESHOLD` (default 300) via the new_string/old_string payload diff. Always exit 0. |
 
-The four `*-check.sh` hooks above are the **edit-time advisory quality plane**. They reimplement the load-bearing quality-gates detection *intent* in self-contained bash; they do NOT import, shell out to, or runtime-couple with `packages/quality-gates`, and they do NOT change `caws gates run`. `caws gates run` remains the governed policy-gate runner; these hooks are installed utilities the repo tunes via env (`CAWS_GOD_OBJECT_LOC`, `CAWS_LOC_DELTA_WARN_THRESHOLD`).
+The four `*-check.sh` hooks above are the **edit-time advisory quality plane**. They implement the load-bearing edit-time quality checks in self-contained bash; they do NOT import, shell out to, or runtime-couple with an external quality package, and they do NOT change `caws gates run`. `caws gates run` remains the governed policy/evidence runner; these hooks are installed utilities the repo tunes via env (`CAWS_GOD_OBJECT_LOC`, `CAWS_LOC_DELTA_WARN_THRESHOLD`).
 
 ## Authoring a spec without getting trapped
 
@@ -216,7 +285,11 @@ Every managed file in this pack carries a header like:
 # hook_pack_version: <N>
 # caws_min_major: 11
 # lineage_refs: <comma-separated entries>
-# do_not_edit_directly: update via `caws init --agent-surface claude-code`
+# edit_stance: this repo OWNS and may grow this hook. Edits are expected and
+#   preserved — `caws init` refuses to overwrite a changed managed hook (re-run
+#   with --adopt to keep yours, or --overwrite to pull this upstream template).
+#   CAWS owns the failure-class invariant (the why/what you must not silently
+#   weaken); you own the how. Do not edit it to BYPASS the guard; do grow it.
 ```
 
 The header is what `caws init` uses to distinguish managed files (safe to
