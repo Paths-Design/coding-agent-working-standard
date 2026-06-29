@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: codex-hooks-json-schema
 created_at: '2026-06-29T14:53:49.542Z'
-updated_at: '2026-06-29T14:53:59.866Z'
+updated_at: '2026-06-29T15:11:20.831Z'
 blast_radius:
   modules:
     - packages/caws-cli init hook-pack installer
@@ -20,6 +20,8 @@ scope:
     - packages/caws-cli/scripts/fresh-install-smoke.mjs
     - packages/caws-cli/tests/init/init-hook-pack-render.test.js
     - .caws/specs/CAWS-CODEX-HOOKS-JSON-SCHEMA-001.yaml
+    - packages/caws-cli/src/init/hook-packs/manifest-codex.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
   out: []
 invariants:
   - 'Codex hooks.json installed by CAWS must conform to the Codex parser schema: top-level hooks only, no CAWS metadata fields.'
