@@ -2,10 +2,11 @@ id: CAWS-CODEX-SHARED-CORE-FRESH-INSTALL-001
 title: 'Align Codex fresh-install smoke with shared hook core'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: codex-shared-core-install
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge codex-shared-core-install at 41a1a107d526259c4d7d5607f32a7cdb2edbccb5'
 created_at: '2026-06-29T06:34:18.470Z'
-updated_at: '2026-06-29T06:34:30.720Z'
+updated_at: '2026-06-29T06:41:39.913Z'
 blast_radius:
   modules:
     - packages/caws-cli/init
