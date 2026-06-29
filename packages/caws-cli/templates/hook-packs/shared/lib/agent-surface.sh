@@ -105,6 +105,14 @@ case "$CAWS_AGENT_SURFACE" in
     CAWS_PLATFORM_FLAG="windsurf"
     CAWS_PERMISSION_VOCAB="ask"
     ;;
+  opencode)
+    CAWS_VENDOR_DIR=".opencode"
+    CAWS_PLATFORM_FLAG="opencode"
+    # opencode has no PreToolUse "ask" — its only block primitive is throw
+    # inside tool.execute.before (see .opencode/plugins/caws.ts). Map ask ->
+    # deny, matching the codex adapter precedent.
+    CAWS_PERMISSION_VOCAB="deny"
+    ;;
   *)
     # Unknown surface — fall through to claude-code defaults so a
     # misconfigured wiring does not become a hard block. Emit a warning to

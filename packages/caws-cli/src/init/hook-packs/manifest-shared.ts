@@ -106,7 +106,14 @@ import type { HookPackV1 } from './types';
 // output not a chained `echo $?` (which reports the echo, not the send; also no
 // 2>/dev/null), and liveness is repo-local (a peer running elsewhere is refused
 // here). Notice text only — no behavioral change.
-export const SHARED_PACK_VERSION = 13;
+// v14 (OPENCODE-HOOK-PACK-001): agent-surface.sh now recognizes the opencode
+// surface — CAWS_VENDOR_DIR=.opencode, CAWS_PERMISSION_VOCAB=deny (opencode
+// has no PreToolUse ask; its block primitive is throw inside
+// tool.execute.before). Without this, an opencode plugin dispatch set
+// CAWS_AGENT_SURFACE=opencode but every guard fell through to the claude-code
+// default and spammed "unknown CAWS_AGENT_SURFACE=opencode" warnings while
+// misrouting logs to .claude/logs/. No other behavioral change.
+export const SHARED_PACK_VERSION = 14;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.
