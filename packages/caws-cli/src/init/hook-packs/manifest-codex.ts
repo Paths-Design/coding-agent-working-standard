@@ -44,7 +44,12 @@ import type { HookPackV1 } from './types';
 // `edit_stance:` growth framing (repo owns/grows the hook; edits preserved;
 // only editing-to-bypass is out of bounds). Bump re-propagates on next
 // caws init --agent-surface codex.
-export const CODEX_PACK_VERSION = 9;
+//
+// Version 10: CAWS-CODEX-HOOKS-JSON-SCHEMA-001. Remove the top-level
+// CAWS metadata field from hooks.json because Codex only accepts `hooks` at the
+// top level. Installer recognition now uses the runtime-root dispatcher shape
+// for this one JSON file instead of unsupported embedded metadata.
+export const CODEX_PACK_VERSION = 10;
 
 export const CODEX_PACK: HookPackV1 = {
   id: 'codex',

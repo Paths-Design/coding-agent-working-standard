@@ -214,6 +214,119 @@ function stripPackVersion(content: string): string {
     .replace(/(hook_pack_version=)\d+/, '$1#');
 }
 
+const CODEX_EVENT_DISPATCHERS: Record<string, string> = {
+  SessionStart: 'session_start.sh',
+  PreToolUse: 'pre_tool_use.sh',
+  PostToolUse: 'post_tool_use.sh',
+  PreCompact: 'pre_compact.sh',
+  Stop: 'stop.sh',
+};
+
+function parseJsonObject(content: string): Record<string, unknown> | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return null;
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function normalizeCodexHooksJson(content: string): string | null {
+  const parsed = parseJsonObject(content);
+  if (!parsed) return null;
+  const description = parsed.description;
+  if (typeof description === 'string' && description.includes(HEADER_MARKER)) {
+    delete parsed.description;
+  }
+  return JSON.stringify(parsed);
+}
+
+function codexHooksJsonEquivalentIgnoringManagedDescription(
+  left: string,
+  right: string
+): boolean {
+  const normalizedLeft = normalizeCodexHooksJson(left);
+  const normalizedRight = normalizeCodexHooksJson(right);
+  return (
+    normalizedLeft !== null &&
+    normalizedRight !== null &&
+    normalizedLeft === normalizedRight
+  );
+}
+
+function parseCodexHooksJsonManagedHeader(content: string): ManagedHeader | null {
+  const parsed = parseJsonObject(content);
+  if (!parsed) return null;
+
+  const topLevelKeys = Object.keys(parsed).sort();
+  if (topLevelKeys.length !== 1 || topLevelKeys[0] !== 'hooks') {
+    return null;
+  }
+
+  const hooks = parsed.hooks;
+  if (!hooks || typeof hooks !== 'object' || Array.isArray(hooks)) {
+    return null;
+  }
+
+  const commands: Array<{ eventName: string; command: string }> = [];
+  for (const [eventName, rawEntries] of Object.entries(hooks as Record<string, unknown>)) {
+    if (!Array.isArray(rawEntries)) return null;
+    for (const rawEntry of rawEntries) {
+      if (!rawEntry || typeof rawEntry !== 'object' || Array.isArray(rawEntry)) {
+        return null;
+      }
+      const rawHooks = (rawEntry as { hooks?: unknown }).hooks;
+      if (!Array.isArray(rawHooks)) return null;
+      for (const rawHook of rawHooks) {
+        if (!rawHook || typeof rawHook !== 'object' || Array.isArray(rawHook)) {
+          return null;
+        }
+        const hook = rawHook as { type?: unknown; command?: unknown };
+        if (hook.type === 'command' && typeof hook.command === 'string') {
+          commands.push({ eventName, command: hook.command });
+        }
+      }
+    }
+  }
+
+  if (commands.length !== Object.keys(CODEX_EVENT_DISPATCHERS).length) {
+    return null;
+  }
+
+  const seen = new Set<string>();
+  for (const { eventName, command } of commands) {
+    const dispatcher = CODEX_EVENT_DISPATCHERS[eventName];
+    if (!dispatcher || seen.has(eventName)) return null;
+    if (
+      !command.includes('git rev-parse --show-toplevel') ||
+      !command.includes('CAWS_AGENT_SURFACE=codex') ||
+      !command.includes('CAWS_PROJECT_DIR="$REPO_ROOT"') ||
+      !command.includes('CODEX_PROJECT_DIR="$REPO_ROOT"') ||
+      !command.includes(`"$REPO_ROOT/.caws/hooks/dispatch/${dispatcher}"`) ||
+      command.includes('.codex/hooks/caws_dispatch') ||
+      command.includes('__CAWS_CODEX_')
+    ) {
+      return null;
+    }
+    seen.add(eventName);
+  }
+
+  if (seen.size !== Object.keys(CODEX_EVENT_DISPATCHERS).length) {
+    return null;
+  }
+
+  return {
+    hookPack: 'codex',
+    hookPackVersion: 0,
+    cawsMinMajor: 11,
+    lineageRefs: [],
+  };
+}
+
 function renderPackFileBytes(
   sourceBytes: Buffer,
   repoRoot: string,
@@ -265,7 +378,10 @@ function evaluateFileState(
   }
 
   const localContent = localBytes.toString('utf8');
-  const header = parseManagedHeader(localContent);
+  let header = parseManagedHeader(localContent);
+  if (!header && packId === 'codex' && file.destPath === '.codex/hooks.json') {
+    header = parseCodexHooksJsonManagedHeader(localContent);
+  }
   if (!header) return { kind: 'unmanaged_collision' };
 
   if (header.hookPack !== packId) {
@@ -302,6 +418,21 @@ function evaluateFileState(
     // the recorded header version was behind, there is no edit to preserve, so
     // this is a clean no-op — never an overwrite that could lose growth.
     return { kind: 'managed_clean', header };
+  }
+
+  if (
+    packId === 'codex' &&
+    file.destPath === '.codex/hooks.json' &&
+    codexHooksJsonEquivalentIgnoringManagedDescription(
+      localBytes.toString('utf8'),
+      sourceBytes.toString('utf8')
+    )
+  ) {
+    return {
+      kind: 'managed_old_version',
+      header,
+      currentVersion: header.hookPackVersion,
+    };
   }
 
   // Not byte-identical. Distinguish "differs ONLY by the version stamp" (an
