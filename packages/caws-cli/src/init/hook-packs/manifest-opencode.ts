@@ -49,13 +49,18 @@
 
 import type { HookPackV1 } from './types';
 
-// Version 3: updatedInput / quiet-merge handling. The shim now applies
-// hookSpecificOutput.updatedInput (mutating output.args.command) so the
-// shared quiet-merge.sh handler's rewrite of `caws worktree merge|destroy`
-// bash commands reaches the tool — closing the CWD-crash/context-overflow
-// gap vs claude-code/codex. Build on v2 (session-id capture + session.prompt
-// context injection).
-export const OPENCODE_PACK_VERSION = 3;
+// Version 4: context injection pivoted to experimental.chat.system.transform.
+// v2/v3 tried client.session.prompt({noReply:true}) from inside
+// tool.execute.before — that silently no-ops (sending a prompt from within a
+// tool hook is disallowed/re-entrant; live-verified: the injected marker never
+// reached the session). system.transform is the type-confirmed injection point
+// (Hooks["experimental.chat.system.transform"] mutates output.system[]):
+// tool.execute.before stashes additionalContext; system.transform appends it
+// to the system prompt on the next model call. Includes a temporary
+// /tmp/caws-opencode-inject.log trace to confirm the hook fires (remove once
+// verified). Builds on v3 (updatedInput/quiet-merge) and v2 (session-id
+// capture in the dispatcher payload).
+export const OPENCODE_PACK_VERSION = 4;
 
 export const OPENCODE_PACK: HookPackV1 = {
   id: 'opencode',

@@ -1,7 +1,7 @@
 <!--
 # CAWS-MANAGED-HOOK
 # hook_pack: opencode
-# hook_pack_version: 3
+# hook_pack_version: 4
 # caws_min_major: 11
 # lineage_refs: 1,4,6,8,11,12,13,16,17,19,22,23,24,25,26,27,28,29,30,31
 # edit_stance: this repo OWNS and may grow this hook. Edits are expected and
@@ -52,7 +52,7 @@ guard code.
 
 | opencode callback             | Routes to                               | Effect                                                                                                                                                                                                           |
 | ----------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tool.execute.before`         | `.caws/hooks/dispatch/pre_tool_use.sh`  | Runs the guard chain. On a `block` decision (or `ask`, degraded), `throw new Error(reason)` — opencode blocks the tool and surfaces `reason` to the agent. Otherwise surfaces any `additionalContext` (peer notice / messages / advisories) via `session.prompt({noReply:true})`. |
+| `tool.execute.before`         | `.caws/hooks/dispatch/pre_tool_use.sh`  | Runs the guard chain. On a `block` decision (or `ask`, degraded), `throw new Error(reason)` — opencode blocks the tool and surfaces `reason` to the agent. Otherwise stashes any `additionalContext` (peer notice / messages / advisories) for the next `system.transform` to inject. Applies `updatedInput` (quiet-merge) by mutating `output.args`. |
 | `tool.execute.after`          | `.caws/hooks/dispatch/post_tool_use.sh` | Audit + advisory quality checks (god-object, loc-delta, duplicate-export). Never blocks.                                                                                                                         |
 | `event` (`session.created`)   | `.caws/hooks/dispatch/session_start.sh` | Lease registration / session log open. Best-effort.                                                                                                                                                              |
 | `event` (`session.idle`)      | `.caws/hooks/dispatch/stop.sh`          | Session log finalize / lease stop. Best-effort.                                                                                                                                                                  |
@@ -85,31 +85,38 @@ The shared core PRODUCES context for the agent — the multi-agent peer notice
 (`agent-heartbeat.sh`), inter-agent message delivery (`caws message poll`),
 and advisory quality findings — as `hookSpecificOutput.additionalContext` on
 the dispatcher's stdout. claude-code injects that natively; opencode does not,
-so the shim surfaces it via opencode's sanctioned injection API,
-`client.session.prompt({ noReply: true })` — "Inject context without triggering
-AI response (useful for plugins)" per the SDK docs. The text lands as a user
-message the model sees on its next turn, matching the cadence of claude-code's
-`additionalContext`. This is the single mechanism for heartbeat, message
-delivery, and advisory surfacing in opencode; any `additionalContext` a shared
-handler emits falls out of it for free.
+so the shim surfaces it via opencode's `experimental.chat.system.transform`
+hook — the type-confirmed injection point
+(`Hooks["experimental.chat.system.transform"]` mutates `output.system[]`).
+`tool.execute.before` stashes the `additionalContext`; `system.transform`
+appends it to the system prompt on the next model call, so the model sees the
+peer notice / message / advisory when it processes the tool result. This is
+the single mechanism for heartbeat, message delivery, and advisory surfacing
+in opencode; any `additionalContext` a shared handler emits falls out of it
+for free.
+
+Why not `client.session.prompt({noReply:true})`: that API is documented for
+injecting context, but calling it from *inside* a `tool.execute.before` hook
+silently no-ops (sending a prompt from within a tool hook is disallowed /
+re-entrant). `system.transform` is fired by the chat loop itself, so it has no
+such constraint.
 
 Two load-bearing details:
 
-- **Session id.** The opencode session id is captured from `session.*` bus
-  events (and defensively from the tool input) and passed in the dispatcher
-  payload as `session_id`. Without it, `parse_hook_input` resolves
+- **Session id.** The opencode session id is captured from the `sessionID`
+  field on the hook inputs (and from `session.*` bus events) and passed in the
+  dispatcher payload as `session_id`. Without it, `parse_hook_input` resolves
   `HOOK_SESSION_ID="unknown"` and `agent-register`/`agent-heartbeat` exit
-  early — no lease, no peer notice, no message delivery. The same id addresses
-  `session.prompt` for injection.
-- **Change-detection cadence.** `agent-heartbeat.sh` already emits the peer
-  notice only when the active peer set changes (and at most once per ~60s), so
+  early — no lease, no peer notice, no message delivery.
+- **Change-detection cadence.** `agent-heartbeat.sh` emits the peer notice
+  only when the active peer set changes (and at most once per ~60s), so
   injection is rare and non-spammy. Message delivery is one-per-tool-call
   (poll is deliver-once).
 
-If injection is unavailable (session id not yet captured, client missing, or
-the call errors), the shim falls back to `client.app.log({level:"warn"})` so
-the context is at least visible in the opencode log view. Injection never
-blocks a tool call.
+If `system.transform` does not fire (an opencode build that doesn't wire this
+experimental hook), the stashed context is simply not injected — it never
+blocks a tool call. The shared core still produces the context; only the
+surfacing depends on the hook firing.
 
 ## Fail posture
 
