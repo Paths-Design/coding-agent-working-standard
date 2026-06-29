@@ -157,17 +157,53 @@ interface Decision {
   updatedInput: Record<string, unknown> | null;
 }
 
+// Extract every top-level {...} object from a string, respecting string
+// literals (so braces inside a JSON string value don't trip depth tracking).
+// The dispatcher's stdout contains one JSON object per handler, and jq-emitted
+// objects (additionalContext) are pretty-printed across multiple lines — so a
+// naive line-by-line parse misses them. This scans for balanced objects.
+function extractJsonObjects(s: string): Record<string, any>[] {
+  const objs: Record<string, any>[] = [];
+  let i = 0;
+  while (i < s.length) {
+    const start = s.indexOf('{', i);
+    if (start < 0) break;
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+    let end = -1;
+    for (let j = start; j < s.length; j++) {
+      const ch = s[j];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (ch === '\\') esc = true;
+        else if (ch === '"') inStr = false;
+      } else if (ch === '"') {
+        inStr = true;
+      } else if (ch === '{') {
+        depth++;
+      } else if (ch === '}') {
+        depth--;
+        if (depth === 0) {
+          end = j;
+          break;
+        }
+      }
+    }
+    if (end < 0) break;
+    try {
+      objs.push(JSON.parse(s.slice(start, end + 1)));
+    } catch {
+      // not a valid object boundary; advance and continue
+    }
+    i = end + 1;
+  }
+  return objs;
+}
+
 function readDecision(stdout: string, exitCode: number): Decision {
   const empty: Decision = { block: false, reason: '', warn: '', context: '', updatedInput: null };
-  for (const line of stdout.split(/\r?\n/)) {
-    const t = line.trim();
-    if (!t.startsWith('{')) continue;
-    let obj: Record<string, any>;
-    try {
-      obj = JSON.parse(t);
-    } catch {
-      continue;
-    }
+  for (const obj of extractJsonObjects(stdout)) {
     const decision = obj.decision;
     const hso = obj.hookSpecificOutput;
     const perm = hso?.permissionDecision;
