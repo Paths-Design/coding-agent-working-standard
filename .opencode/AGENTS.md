@@ -1,7 +1,7 @@
 <!--
 # CAWS-MANAGED-HOOK
 # hook_pack: opencode
-# hook_pack_version: 2
+# hook_pack_version: 3
 # caws_min_major: 11
 # lineage_refs: 1,4,6,8,11,12,13,16,17,19,22,23,24,25,26,27,28,29,30,31
 # edit_stance: this repo OWNS and may grow this hook. Edits are expected and

@@ -1,7 +1,7 @@
 /*
 CAWS-MANAGED-HOOK
 # hook_pack: opencode
-# hook_pack_version: 2
+# hook_pack_version: 3
 # caws_min_major: 11
 # lineage_refs: 1,4,6,11,12,13,16,17,19,22,23,24,25,26,27,28,29,30,31
 # edit_stance: this repo OWNS and may grow this hook. Edits are expected and
@@ -31,11 +31,15 @@ CAWS-MANAGED-HOOK
 // stdout (agent-heartbeat.sh). claude-code injects that natively; opencode
 // does not. The shim surfaces it via opencode's sanctioned injection API,
 // `client.session.prompt({ noReply: true })` — "Inject context without
-// triggering AI response (useful for plugins)" per the SDK docs. The context
-// lands as a user message the model sees on its next turn, matching the
-// cadence of claude-code's additionalContext. This is the single mechanism
-// for heartbeat / message delivery / advisory surfacing in opencode; any
-// additionalContext a handler emits falls out of it for free.
+// triggering AI response (useful for plugins)" per the SDK docs.
+//
+// updatedInput (v3): the shared `quiet-merge.sh` handler rewrites
+// `caws worktree merge|destroy` bash commands (to cd to repo root + suppress
+// output) so subagents don't CWD-crash or overflow context on verbose merge
+// output. claude-code/codex honor `hookSpecificOutput.updatedInput` natively;
+// the shim applies it by mutating output.args.command before the tool runs.
+// Without this, opencode agents would hit the exact crash class quiet-merge
+// exists to prevent.
 //
 // Fail posture: if .caws/hooks/ is absent (CAWS not installed for this repo),
 // the shim fails OPEN (allow) and logs once — it never blocks every tool.
@@ -156,13 +160,17 @@ interface Decision {
   reason: string;
   warn: string;
   context: string;
+  // hookSpecificOutput.updatedInput — a handler's request to rewrite the
+  // tool's args before it runs (currently quiet-merge rewrites bash commands).
+  updatedInput: Record<string, unknown> | null;
 }
 
 // Interpret a shared dispatcher's stdout JSON + exit code. Aggregates every
 // hookSpecificOutput.additionalContext across all emitted JSON objects (the
-// heartbeat peer notice, inter-agent messages, advisory warns) into `context`.
+// heartbeat peer notice, inter-agent messages, advisory warns) into `context`,
+// and captures the last updatedInput seen (a single rewrite per call).
 function readDecision(stdout: string, exitCode: number): Decision {
-  const empty: Decision = { block: false, reason: '', warn: '', context: '' };
+  const empty: Decision = { block: false, reason: '', warn: '', context: '', updatedInput: null };
   for (const line of stdout.split(/\r?\n/)) {
     const t = line.trim();
     if (!t.startsWith('{')) continue;
@@ -177,9 +185,9 @@ function readDecision(stdout: string, exitCode: number): Decision {
     const perm = hso?.permissionDecision;
     const reason =
       obj.reason || hso?.permissionDecisionReason || 'CAWS guard blocked this operation.';
-    if (decision === 'block') return { block: true, reason, warn: '', context: '' };
+    if (decision === 'block') return { block: true, reason, warn: '', context: '', updatedInput: null };
     // ask degrades to block (opencode has no PreToolUse ask; codex precedent).
-    if (perm === 'ask' || perm === 'deny') return { block: true, reason, warn: '', context: '' };
+    if (perm === 'ask' || perm === 'deny') return { block: true, reason, warn: '', context: '', updatedInput: null };
     if (decision === 'warn' || (typeof obj.advisory === 'string' && obj.advisory)) {
       empty.warn = obj.advisory || reason;
     }
@@ -187,6 +195,11 @@ function readDecision(stdout: string, exitCode: number): Decision {
     const ac = hso?.additionalContext;
     if (typeof ac === 'string' && ac) {
       empty.context = empty.context ? empty.context + '\n\n' + ac : ac;
+    }
+    // updatedInput is a handler's request to rewrite the tool args (quiet-merge).
+    const ui = hso?.updatedInput ?? obj.updatedInput;
+    if (ui && typeof ui === 'object') {
+      empty.updatedInput = ui as Record<string, unknown>;
     }
   }
   // Exit 2 is the dispatcher's hard-block convention even without parseable JSON.
@@ -196,9 +209,20 @@ function readDecision(stdout: string, exitCode: number): Decision {
       reason: stdout.trim() || 'CAWS guard blocked this operation (dispatcher exit 2).',
       warn: '',
       context: '',
+      updatedInput: null,
     };
   }
   return empty;
+}
+
+// Apply a handler's updatedInput to the tool's args. Currently only
+// quiet-merge rewrites the bash command; if a future handler emits
+// updatedInput for another tool, add the per-tool mapping here (do not
+// silently drop it).
+function applyUpdatedInput(args: Record<string, unknown>, updated: Record<string, unknown>): void {
+  if (typeof updated.command === 'string' && typeof args.command === 'string') {
+    args.command = updated.command;
+  }
 }
 
 interface ToolInput {
@@ -299,8 +323,8 @@ function buildPayload(toolName: string, toolInput: Record<string, unknown>): str
 
 export const CawsPlugin = async (ctx: CawsPluginCtx) => {
   return {
-    // PreToolUse analogue. Blocking path: throw on a block/ask decision.
-    // Context path: surface heartbeat/messages/advisories via session.prompt.
+    // PreToolUse analogue. Blocking: throw on block/ask. Rewrite: apply
+    // updatedInput (quiet-merge). Context: inject heartbeat/messages/advisories.
     'tool.execute.before': async (input: ToolInput, output: { args: Record<string, unknown> }) => {
       // Capture the session id opportunistically from the tool input.
       const sidFromInput = extractSessionId(input);
@@ -327,6 +351,12 @@ export const CawsPlugin = async (ctx: CawsPluginCtx) => {
       // Block takes precedence — the reason is what the agent should see.
       if (decision.block) {
         throw new Error(decision.reason);
+      }
+      // Apply a handler's request to rewrite the tool args (quiet-merge).
+      // Must happen before the tool runs, so the agent executes the rewritten
+      // command (e.g. quiet-merge's cd-to-root + output-suppressed merge).
+      if (decision.updatedInput && output?.args && typeof output.args === 'object') {
+        applyUpdatedInput(output.args, decision.updatedInput);
       }
       // Surface CAWS context (peer notice / messages / advisories) to the
       // agent. Inject via session.prompt; fall back to structured log if the

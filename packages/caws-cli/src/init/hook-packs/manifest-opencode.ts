@@ -49,16 +49,13 @@
 
 import type { HookPackV1 } from './types';
 
-// Version 2: OPENCODE-HOOK-PACK-001 + context-injection mechanism. The shim
-// now (a) captures the opencode session id from session.* events and passes it
-// in the dispatcher payload as session_id (without it, parse_hook_input
-// resolves HOOK_SESSION_ID="unknown" and agent-register/agent-heartbeat exit
-// early — no lease, no peer notice, no message delivery), and (b) surfaces the
-// shared core's additionalContext (multi-agent peer notice, inter-agent
-// messages, advisory warns) via opencode's `client.session.prompt({noReply:
-// true})` injection API, falling back to client.app.log. Bump re-propagates on
-// next caws init --agent-surface opencode.
-export const OPENCODE_PACK_VERSION = 2;
+// Version 3: updatedInput / quiet-merge handling. The shim now applies
+// hookSpecificOutput.updatedInput (mutating output.args.command) so the
+// shared quiet-merge.sh handler's rewrite of `caws worktree merge|destroy`
+// bash commands reaches the tool — closing the CWD-crash/context-overflow
+// gap vs claude-code/codex. Build on v2 (session-id capture + session.prompt
+// context injection).
+export const OPENCODE_PACK_VERSION = 3;
 
 export const OPENCODE_PACK: HookPackV1 = {
   id: 'opencode',
