@@ -7,12 +7,13 @@ created_at: '2026-06-29T06:34:18.470Z'
 updated_at: '2026-06-29T06:34:30.720Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/init
+    - packages/caws-cli/hook-packs/codex
+    - packages/caws-cli/fresh-install-smoke
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/init/hook-install.ts
     - packages/caws-cli/scripts/fresh-install-smoke.mjs
     - packages/caws-cli/templates/hook-packs/codex/AGENTS.md
@@ -21,11 +22,30 @@ scope:
     - .caws/specs/CAWS-CODEX-SHARED-CORE-FRESH-INSTALL-001.yaml
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Fresh Codex installs render .codex/hooks.json commands that resolve the
+    active Git root at hook invocation time, export CAWS_AGENT_SURFACE=codex,
+    bind CAWS_PROJECT_DIR/CODEX_PROJECT_DIR to that runtime root, and invoke
+    .caws/hooks/dispatch/<event>.sh.
+  - >-
+    Codex install verification and docs assert the shared-core layout, not
+    obsolete .codex/hooks/caws_dispatch files or install-time absolute project
+    roots.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'A fresh install created by caws init --agent-surface codex.'
+    when: 'The generated .codex/hooks.json command strings are inspected.'
+    then: >-
+      Every command contains git rev-parse --show-toplevel fallback logic,
+      exports CAWS_AGENT_SURFACE=codex and CAWS_PROJECT_DIR/CODEX_PROJECT_DIR,
+      and calls .caws/hooks/dispatch/<event>.sh without referencing
+      .codex/hooks/caws_dispatch.
+  - id: A2
+    given: 'The packaged fresh-install smoke validates Codex artifacts.'
+    when: 'It checks tarball contents, hooks.json, and the protected-path guard.'
+    then: >-
+      It asserts the shared pack plus Codex adapter files, runs the installed
+      PreToolUse command from hooks.json, and no longer relies on a
+      .codex/hooks/caws_dispatch dispatcher path.
 non_functional: {}
 contracts: []
