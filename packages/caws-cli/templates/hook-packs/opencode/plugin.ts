@@ -1,7 +1,7 @@
 /*
 CAWS-MANAGED-HOOK
 # hook_pack: opencode
-# hook_pack_version: 4
+# hook_pack_version: 5
 # caws_min_major: 11
 # lineage_refs: 1,4,6,11,12,13,16,17,19,22,23,24,25,26,27,28,29,30,31
 # edit_stance: this repo OWNS and may grow this hook. Edits are expected and
@@ -22,31 +22,32 @@ CAWS-MANAGED-HOOK
 // Blocking: throw on block/ask in tool.execute.before (ask degrades to block
 // — opencode has no PreToolUse ask; codex precedent).
 //
-// Context surfacing (v4): the shared core PRODUCES context — multi-agent peer
+// Context surfacing: the shared core PRODUCES context — multi-agent peer
 // notice, inter-agent message delivery, advisories — as
 // hookSpecificOutput.additionalContext on the dispatcher's stdout.
 // tool.execute.before stashes it; experimental.chat.system.transform appends
-// it to the system prompt on the next model call. (v2/v3 tried
-// client.session.prompt({noReply:true}) from inside tool.execute.before — that
-// silently no-ops, likely because sending a prompt from within a tool hook is
-// disallowed/re-entrant. system.transform is the type-confirmed injection
-// point: Hooks["experimental.chat.system.transform"] mutates output.system[].)
+// it to the system prompt on the next model call. (client.session.prompt from
+// inside a tool hook silently no-ops; system.transform is the type-confirmed
+// injection point.)
 //
-// updatedInput (v3): quiet-merge rewrites caws worktree merge|destroy bash
-// commands; applied by mutating output.args.command before the tool runs.
+// updatedInput: the shared quiet-merge.sh rewrites caws worktree merge|destroy
+// bash commands; applied by mutating output.args.command before the tool runs.
 //
-// DIAGNOSTIC (temporary, remove once injection is verified): appends a trace
-// to /tmp/caws-opencode-inject.log so a restart-verification can confirm
-// whether system.transform fires and what it injects.
+// JSON parsing: the dispatcher's stdout contains one JSON object per handler,
+// and jq-emitted objects (additionalContext) are pretty-printed across
+// multiple lines. extractJsonObjects() scans for balanced {...} objects so
+// both single-line (printf) and pretty-printed (jq) hook output parse.
+//
+// Fail posture: if .caws/hooks/ is absent, the shim fails OPEN. A plugin-
+// internal error in tool.execute.before is caught and fails open (only a CAWS
+// block decision throws); a plugin error must never block a tool call.
 
 import { spawnSync } from 'node:child_process';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 
 const SURFACE = 'opencode';
 const UNKNOWN_ROOT = '';
-const DIAG_FILE = path.join(os.tmpdir(), 'caws-opencode-inject.log');
 
 let cachedRoot: string | null = null;
 let warnedMissing = false;
@@ -55,14 +56,6 @@ let currentSessionId: string | null = null;
 // Context stashed by tool.execute.before, consumed (and cleared) by the next
 // experimental.chat.system.transform firing.
 let pendingContext: string | null = null;
-
-function diag(msg: string): void {
-  try {
-    fs.appendFileSync(DIAG_FILE, `${new Date().toISOString()} ${msg}\n`);
-  } catch {
-    // best-effort
-  }
-}
 
 interface ProjectRoot {
   worktree?: string | null;
@@ -201,6 +194,10 @@ function extractJsonObjects(s: string): Record<string, any>[] {
   return objs;
 }
 
+// Interpret a shared dispatcher's stdout JSON + exit code. Aggregates every
+// hookSpecificOutput.additionalContext across all emitted JSON objects (the
+// heartbeat peer notice, inter-agent messages, advisory warns) into `context`,
+// and captures the last updatedInput seen (a single rewrite per call).
 function readDecision(stdout: string, exitCode: number): Decision {
   const empty: Decision = { block: false, reason: '', warn: '', context: '', updatedInput: null };
   for (const obj of extractJsonObjects(stdout)) {
@@ -255,14 +252,7 @@ interface CawsClient {
 
 function extractSessionId(obj: any): string | null {
   if (!obj || typeof obj !== 'object') return null;
-  const candidates = [
-    obj.sessionID,
-    obj.id,
-    obj.sessionId,
-    obj.session?.id,
-    obj.properties?.id,
-    obj.properties?.session?.id,
-  ];
+  const candidates = [obj.sessionID, obj.id, obj.sessionId, obj.session?.id, obj.properties?.id, obj.properties?.session?.id];
   for (const c of candidates) {
     if (typeof c === 'string' && c.length > 0 && c !== 'unknown') return c;
   }
@@ -295,11 +285,9 @@ async function advisoryLog(client: CawsClient | undefined, message: string) {
 }
 
 export const CawsPlugin = async (ctx: CawsPluginCtx) => {
-  diag('plugin loaded');
   return {
     'tool.execute.before': async (input: ToolInput, output: { args: Record<string, unknown> }) => {
       try {
-        diag(`tool.execute.before entry tool=${input?.tool} sessionID=${input?.sessionID ?? '(none)'}`);
         const sidFromInput = extractSessionId(input);
         if (sidFromInput) currentSessionId = sidFromInput;
 
@@ -320,25 +308,22 @@ export const CawsPlugin = async (ctx: CawsPluginCtx) => {
         const payload = buildPayload(toolName, toolInput);
 
         const res = dispatch(root, 'pre_tool_use.sh', payload);
-        diag(`dispatch exit=${res.exitCode} stdoutLen=${res.stdout.length} head=${res.stdout.slice(0, 160)}`);
         const decision = readDecision(res.stdout, res.exitCode);
-        diag(`decision block=${decision.block} warnLen=${decision.warn.length} contextLen=${decision.context.length} updatedInput=${!!decision.updatedInput}`);
         if (decision.block) {
           throw new Error(decision.reason);
         }
         if (decision.updatedInput && output?.args && typeof output.args === 'object') {
           applyUpdatedInput(output.args, decision.updatedInput);
         }
+        // Stash context for the next system.transform to inject. Combine warn +
+        // additionalContext so advisories surface too.
         const combined = [decision.warn, decision.context].filter(Boolean).join('\n\n');
         if (combined) {
           pendingContext = combined;
-          diag(`tool.execute.before stashed context (${combined.length} chars): ${combined.slice(0, 100)}`);
         }
       } catch (e) {
-        diag(`tool.execute.before ERROR: ${e instanceof Error ? e.message : String(e)}`);
-        // A deliberate block throw must propagate.
+        // A deliberate CAWS block must propagate; everything else fails open.
         if (e instanceof Error && /^CAWS/.test(e.message)) throw e;
-        // Otherwise fail-open (do not block the tool over a plugin-internal error).
       }
     },
 
@@ -353,9 +338,7 @@ export const CawsPlugin = async (ctx: CawsPluginCtx) => {
         const decision = readDecision(res.stdout, res.exitCode);
         const combined = [decision.warn, decision.context].filter(Boolean).join('\n\n');
         if (combined) {
-          // Merge into any pending pre-tool context.
           pendingContext = pendingContext ? pendingContext + '\n\n' + combined : combined;
-          diag(`tool.execute.after stashed context (${combined.length} chars)`);
         }
       } catch {
         // post-tool audit must never interfere with a completed tool call
@@ -369,10 +352,8 @@ export const CawsPlugin = async (ctx: CawsPluginCtx) => {
       _input: { sessionID?: string; model?: unknown },
       output: { system: string[] }
     ) => {
-      diag(`system.transform fired; pending=${pendingContext ? 'yes' : 'no'}`);
       if (pendingContext) {
         output.system.push('CAWS context (peer notice / message / advisory):\n' + pendingContext);
-        diag(`system.transform INJECTED (${pendingContext.length} chars): ${pendingContext.slice(0, 100)}`);
         pendingContext = null;
       }
     },

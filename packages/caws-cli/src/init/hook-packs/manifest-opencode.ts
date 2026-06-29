@@ -49,18 +49,18 @@
 
 import type { HookPackV1 } from './types';
 
-// Version 4: context injection pivoted to experimental.chat.system.transform.
-// v2/v3 tried client.session.prompt({noReply:true}) from inside
-// tool.execute.before — that silently no-ops (sending a prompt from within a
-// tool hook is disallowed/re-entrant; live-verified: the injected marker never
-// reached the session). system.transform is the type-confirmed injection point
-// (Hooks["experimental.chat.system.transform"] mutates output.system[]):
-// tool.execute.before stashes additionalContext; system.transform appends it
-// to the system prompt on the next model call. Includes a temporary
-// /tmp/caws-opencode-inject.log trace to confirm the hook fires (remove once
-// verified). Builds on v3 (updatedInput/quiet-merge) and v2 (session-id
-// capture in the dispatcher payload).
-export const OPENCODE_PACK_VERSION = 4;
+// Version 5: production. Removes the v4 diagnostic trace and lands the two
+// fixes that made the opencode surface fully functional end-to-end (verified
+// live): (1) extractJsonObjects — the dispatcher's stdout is multi-line
+// (jq pretty-prints additionalContext), so the old line-by-line parse missed
+// every additionalContext and contextLen was always 0; (2) context injection
+// via experimental.chat.system.transform (v2/v3 session.prompt no-ops from a
+// tool hook). tool.execute.before stashes additionalContext; system.transform
+// appends it to the system prompt on the next model call. Live-verified:
+// message → heartbeat poll → additionalContext → stash → system.transform
+// INJECTED → model perceives it. Builds on v3 (updatedInput/quiet-merge) and
+// v2 (session-id in the dispatcher payload).
+export const OPENCODE_PACK_VERSION = 5;
 
 export const OPENCODE_PACK: HookPackV1 = {
   id: 'opencode',
