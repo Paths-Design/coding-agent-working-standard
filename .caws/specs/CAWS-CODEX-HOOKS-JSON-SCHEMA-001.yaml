@@ -21,9 +21,9 @@ scope:
     - .caws/specs/CAWS-CODEX-HOOKS-JSON-SCHEMA-001.yaml
   out: []
 invariants:
-  - Codex hooks.json installed by CAWS must conform to the Codex parser schema: top-level hooks only, no CAWS metadata fields.
-  - CAWS reinstall/adopt/overwrite decisions must still distinguish CAWS-generated Codex hooks.json from unmanaged user-authored JSON without hidden unsupported fields.
-  - Fresh-install smoke must prove runtime-root shared-core Codex commands and schema validity from the installed artifact.
+  - 'Codex hooks.json installed by CAWS must conform to the Codex parser schema: top-level hooks only, no CAWS metadata fields.'
+  - 'CAWS reinstall/adopt/overwrite decisions must still distinguish CAWS-generated Codex hooks.json from unmanaged user-authored JSON without hidden unsupported fields.'
+  - 'Fresh-install smoke must prove runtime-root shared-core Codex commands and schema validity from the installed artifact.'
 acceptance:
   - id: A1
     given: a fresh project initialized with the Codex hook pack
