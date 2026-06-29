@@ -262,39 +262,47 @@ export const CawsPlugin = async (ctx: CawsPluginCtx) => {
   diag('plugin loaded');
   return {
     'tool.execute.before': async (input: ToolInput, output: { args: Record<string, unknown> }) => {
-      const sidFromInput = extractSessionId(input);
-      if (sidFromInput) currentSessionId = sidFromInput;
+      try {
+        diag(`tool.execute.before entry tool=${input?.tool} sessionID=${input?.sessionID ?? '(none)'}`);
+        const sidFromInput = extractSessionId(input);
+        if (sidFromInput) currentSessionId = sidFromInput;
 
-      const root = resolveProjectRoot(ctx);
-      if (root === UNKNOWN_ROOT || !fs.existsSync(path.join(root, '.caws', 'hooks', 'dispatch'))) {
-        if (!warnedMissing) {
-          warnedMissing = true;
-          await advisoryLog(
-            ctx.client,
-            'CAWS hook core not found at .caws/hooks/dispatch/ — run `caws init --agent-surface opencode`. Allowing tools (governance off).'
-          );
+        const root = resolveProjectRoot(ctx);
+        if (root === UNKNOWN_ROOT || !fs.existsSync(path.join(root, '.caws', 'hooks', 'dispatch'))) {
+          if (!warnedMissing) {
+            warnedMissing = true;
+            await advisoryLog(
+              ctx.client,
+              'CAWS hook core not found at .caws/hooks/dispatch/ — run `caws init --agent-surface opencode`. Allowing tools (governance off).'
+            );
+          }
+          return;
         }
-        return;
-      }
 
-      const toolName = mapToolName(input?.tool || '');
-      const toolInput = normalizeArgs(output?.args);
-      const payload = buildPayload(toolName, toolInput);
+        const toolName = mapToolName(input?.tool || '');
+        const toolInput = normalizeArgs(output?.args);
+        const payload = buildPayload(toolName, toolInput);
 
-      const res = dispatch(root, 'pre_tool_use.sh', payload);
-      const decision = readDecision(res.stdout, res.exitCode);
-      if (decision.block) {
-        throw new Error(decision.reason);
-      }
-      if (decision.updatedInput && output?.args && typeof output.args === 'object') {
-        applyUpdatedInput(output.args, decision.updatedInput);
-      }
-      // Stash context for the next system.transform to inject. Combine warn +
-      // additionalContext so advisories surface too.
-      const combined = [decision.warn, decision.context].filter(Boolean).join('\n\n');
-      if (combined) {
-        pendingContext = combined;
-        diag(`tool.execute.before stashed context (${combined.length} chars): ${combined.slice(0, 100)}`);
+        const res = dispatch(root, 'pre_tool_use.sh', payload);
+        diag(`dispatch exit=${res.exitCode} stdoutLen=${res.stdout.length} head=${res.stdout.slice(0, 160)}`);
+        const decision = readDecision(res.stdout, res.exitCode);
+        diag(`decision block=${decision.block} warnLen=${decision.warn.length} contextLen=${decision.context.length} updatedInput=${!!decision.updatedInput}`);
+        if (decision.block) {
+          throw new Error(decision.reason);
+        }
+        if (decision.updatedInput && output?.args && typeof output.args === 'object') {
+          applyUpdatedInput(output.args, decision.updatedInput);
+        }
+        const combined = [decision.warn, decision.context].filter(Boolean).join('\n\n');
+        if (combined) {
+          pendingContext = combined;
+          diag(`tool.execute.before stashed context (${combined.length} chars): ${combined.slice(0, 100)}`);
+        }
+      } catch (e) {
+        diag(`tool.execute.before ERROR: ${e instanceof Error ? e.message : String(e)}`);
+        // A deliberate block throw must propagate.
+        if (e instanceof Error && /^CAWS/.test(e.message)) throw e;
+        // Otherwise fail-open (do not block the tool over a plugin-internal error).
       }
     },
 
