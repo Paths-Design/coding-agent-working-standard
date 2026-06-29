@@ -1090,9 +1090,10 @@ function assertCodexHooksJson(projectDir) {
     });
   }
 
-  if (!String(parsed.description ?? '').includes('hook_pack=codex')) {
-    fail('installed Codex hooks.json lacks managed codex metadata', {
-      description: String(parsed.description ?? '').slice(0, 300),
+  const topLevelKeys = Object.keys(parsed).sort();
+  if (topLevelKeys.length !== 1 || topLevelKeys[0] !== 'hooks') {
+    fail('installed Codex hooks.json contains unsupported top-level keys', {
+      keys: topLevelKeys,
     });
   }
 
@@ -1141,7 +1142,7 @@ function assertCodexHooksJson(projectDir) {
   for (const { eventName, command } of commands) {
     log(colors.dim(`  artifact hooks.json:${eventName}: ${command}`));
   }
-  ok('installed hooks.json has managed metadata and five runtime-root shared-core dispatcher commands');
+  ok('installed hooks.json has Codex-valid schema and five runtime-root shared-core dispatcher commands');
 }
 
 function assertCodexProtectedPathDispatcher(projectDir) {

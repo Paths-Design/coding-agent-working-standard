@@ -8,7 +8,7 @@
  * contradicts the maintainer doctrine that hooks are a starting point the repo
  * OWNS and grows. That contradiction trained agents to treat a hook needing a
  * tweak as an upstream CAWS bug instead of editing their own hook. This suite
- * pins three things so the contradiction cannot return:
+ * pins these things so the contradiction cannot return:
  *
  *   A1 — no managed template carries the "do_not_edit_directly" /
  *        "update via caws init" edit-prohibition header line; the growth-stance
@@ -34,6 +34,7 @@ const { parseManagedHeader, installHookPack } = require('../../dist/init/hook-in
 const { SHARED_PACK } = require('../../dist/init/hook-packs/manifest-shared');
 const { CLAUDE_CODE_PACK } = require('../../dist/init/hook-packs/manifest-claude-code');
 const { OPENCODE_PACK } = require('../../dist/init/hook-packs/manifest-opencode');
+const { CODEX_PACK } = require('../../dist/init/hook-packs/manifest-codex');
 const { renderHookPackInstall } = require('../../dist/shell/render/init-hook-pack');
 
 const EXCLUDED_DIRS = new Set(['tmp', '.caws', '__pycache__', 'node_modules']);
@@ -85,9 +86,9 @@ describe('A1: no managed header carries the contradicting edit-prohibition', () 
   });
 
   test('every managed file carries the growth-stance edit_stance marker', () => {
-    // Both header forms must carry it: the `#`-comment form (shell/py/cjs) uses
-    // `# edit_stance:`; the JSON `description`-field form (codex/hooks.json)
-    // embeds `edit_stance:` inside the description string. Accept either.
+    // Managed templates with CAWS headers must carry `edit_stance:`. Codex
+    // hooks.json is intentionally excluded now because Codex rejects extra
+    // top-level JSON metadata.
     const missing = MANAGED_FILES.filter(
       (f) => !/edit_stance:/.test(fs.readFileSync(f, 'utf8'))
     ).map((f) => path.relative(PACKS_ROOT, f));
@@ -380,5 +381,85 @@ describe('A5: installing a second surface is additive — preserves a grown shar
     expect(a.refusalReason).toBe('unmanaged_collision');
     // The user's file is intact.
     expect(fs.readFileSync(abs(OPENCODE_PLUGIN), 'utf8')).toContain('my own plugin');
+  });
+});
+
+describe('A6: Codex hooks.json stays parser-valid while reinstall keeps ownership boundaries', () => {
+  const CODEX_HOOKS_REL = '.codex/hooks.json';
+  let repoRoot;
+
+  beforeEach(() => {
+    repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-codex-hooks-json-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(repoRoot, { recursive: true, force: true });
+  });
+
+  function abs(rel) {
+    return path.join(repoRoot, rel);
+  }
+
+  function readHooksJson() {
+    return JSON.parse(fs.readFileSync(abs(CODEX_HOOKS_REL), 'utf8'));
+  }
+
+  test('fresh Codex install writes only the supported top-level hooks key', () => {
+    const r = installHookPack(CODEX_PACK, { repoRoot });
+    expect(r.actions.find((a) => a.destPath === CODEX_HOOKS_REL).action).toBe('created');
+
+    const parsed = readHooksJson();
+    expect(Object.keys(parsed).sort()).toEqual(['hooks']);
+    expect(parseManagedHeader(fs.readFileSync(abs(CODEX_HOOKS_REL), 'utf8'))).toBeNull();
+  });
+
+  test('re-init of the current Codex hooks.json is unchanged without hidden metadata', () => {
+    installHookPack(CODEX_PACK, { repoRoot });
+    const before = fs.readFileSync(abs(CODEX_HOOKS_REL));
+
+    const r = installHookPack(CODEX_PACK, { repoRoot });
+    const a = r.actions.find((x) => x.destPath === CODEX_HOOKS_REL);
+    expect(a.action).toBe('unchanged');
+    expect(fs.readFileSync(abs(CODEX_HOOKS_REL)).equals(before)).toBe(true);
+  });
+
+  test('re-init repairs the previous generated metadata-bearing Codex hooks.json shape', () => {
+    installHookPack(CODEX_PACK, { repoRoot });
+    const parsed = readHooksJson();
+    parsed.description =
+      'CAWS-MANAGED-HOOK hook_pack=codex hook_pack_version=9 caws_min_major=11 lineage_refs=1,4. edit_stance: previous metadata carrier.';
+    fs.writeFileSync(abs(CODEX_HOOKS_REL), JSON.stringify(parsed, null, 2) + '\n');
+
+    const r = installHookPack(CODEX_PACK, { repoRoot });
+    const a = r.actions.find((x) => x.destPath === CODEX_HOOKS_REL);
+    expect(a.action).toBe('updated');
+    expect(Object.keys(readHooksJson()).sort()).toEqual(['hooks']);
+  });
+
+  test('arbitrary user-authored hooks.json is still refused as unmanaged', () => {
+    fs.mkdirSync(path.dirname(abs(CODEX_HOOKS_REL)), { recursive: true });
+    fs.writeFileSync(
+      abs(CODEX_HOOKS_REL),
+      JSON.stringify(
+        {
+          hooks: {
+            PreToolUse: [
+              {
+                hooks: [{ type: 'command', command: 'echo user-hook' }],
+              },
+            ],
+          },
+        },
+        null,
+        2
+      ) + '\n'
+    );
+
+    const before = fs.readFileSync(abs(CODEX_HOOKS_REL), 'utf8');
+    const r = installHookPack(CODEX_PACK, { repoRoot });
+    const a = r.actions.find((x) => x.destPath === CODEX_HOOKS_REL);
+    expect(a.action).toBe('refused');
+    expect(a.refusalReason).toBe('unmanaged_collision');
+    expect(fs.readFileSync(abs(CODEX_HOOKS_REL), 'utf8')).toBe(before);
   });
 });
