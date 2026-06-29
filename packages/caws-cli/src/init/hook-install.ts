@@ -185,15 +185,11 @@ function readBytes(p: string): Buffer | null {
   }
 }
 
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
-
-function codexCommand(repoRoot: string, dispatcher: string): string {
-  // CAWS-HOOK-PACK-SHARED-CORE-001: commands now route to the shared
-  // dispatcher at .caws/hooks/dispatch/<event>.sh with surface injection.
-  const script = path.join(repoRoot, '.caws', 'hooks', 'dispatch', dispatcher);
-  return `CAWS_AGENT_SURFACE=codex CAWS_PROJECT_DIR=${shellQuote(repoRoot)} ${shellQuote(script)}`;
+function codexCommand(_repoRoot: string, dispatcher: string): string {
+  // CAWS-CODEX-HOOK-RUNTIME-ROOT-001: resolve the active Git checkout at
+  // hook invocation time, not at install time. Codex sessions may start from a
+  // subdirectory, and copied worktrees must not keep stale absolute paths.
+  return `REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"; CAWS_AGENT_SURFACE=codex CAWS_PROJECT_DIR="$REPO_ROOT" CODEX_PROJECT_DIR="$REPO_ROOT" "$REPO_ROOT/.caws/hooks/dispatch/${dispatcher}"`;
 }
 
 /** Stamp the manifest pack version into a file's managed header so the installed
