@@ -1,5 +1,50 @@
 ## [Unreleased]
 
+## [11.6.0] (2026-06-29)
+
+The **opencode** agent surface — the fourth harness CAWS supports (after
+claude-code, codex). opencode's lifecycle interposition is an in-process
+TypeScript plugin (there is no "run this bash command on PreToolUse" config
+field), so this release ships a TS plugin shim that reuses the entire shared
+`.caws/hooks/` core with zero duplicated guard logic. Plus a shared-core fix
+all surfaces benefit from. Live-verified end-to-end on the self-hosting repo.
+
+### Added
+
+- **`caws init --agent-surface opencode`.** Installs `.opencode/plugins/caws.ts`
+  (the shim) + `.opencode/AGENTS.md`. The shim translates opencode's
+  `tool.execute.before`/`after` and `experimental.chat.system.transform` onto
+  the shared dispatchers. Blocking via `throw` (ask degrades to block — opencode
+  has no PreToolUse ask; codex precedent). Context surfacing — multi-agent peer
+  notice, inter-agent message delivery, advisories — via
+  `experimental.chat.system.transform`: the shared core emits
+  `additionalContext`; the shim stashes it in `tool.execute.before` and
+  `system.transform` appends it to the system prompt on the next model call.
+  `updatedInput`/quiet-merge handled (mutates `output.args`). The shim resolves
+  `.caws/` at runtime from the plugin ctx (no install-time token substitution)
+  and fails open if the hook core is absent.
+- **opencode in `--agent-surface` help + the activation banner** (the banner
+  previously fell through to the claude-code message for non-codex surfaces).
+
+### Fixed
+
+- **`agent-surface.sh` recognizes the opencode surface** (shared pack v14).
+  Without it, `CAWS_AGENT_SURFACE=opencode` fell through to the claude-code
+  default, so opencode sessions registered as `platform: claude-code` and logs
+  misrouted to `.claude/logs/`. The register/heartbeat handlers were already
+  surface-agnostic (`$CAWS_PLATFORM_FLAG`); the bug was solely the missing case.
+- **opencode plugin JSON parsing.** The dispatcher's stdout is multi-line (jq
+  pretty-prints the `additionalContext` object), but the plugin parsed
+  line-by-line — every fragment failed `JSON.parse` and `additionalContext` was
+  silently dropped. Replaced with `extractJsonObjects`, a brace-depth scanner
+  that handles both single-line (printf) and pretty-printed (jq) hook output.
+
+### Changed
+
+- Shared hook pack **v6 → v14** (opencode surface case in `agent-surface.sh`).
+- opencode hook pack ships at **v5** (v1 initial → v2 session-id capture → v3
+  updatedInput/quiet-merge → v4 system.transform pivot → v5 production).
+
 ## [11.5.0] (2026-06-20)
 
 Hook-pack growth-doctrine release. The shipped hooks are a starting point the
