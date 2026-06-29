@@ -1,7 +1,7 @@
 <!--
 # CAWS-MANAGED-HOOK
 # hook_pack: opencode
-# hook_pack_version: 1
+# hook_pack_version: 2
 # caws_min_major: 11
 # lineage_refs: 1,4,6,8,11,12,13,16,17,19,22,23,24,25,26,27,28,29,30,31
 # edit_stance: this repo OWNS and may grow this hook. Edits are expected and
@@ -52,7 +52,7 @@ guard code.
 
 | opencode callback             | Routes to                               | Effect                                                                                                                                                                                                           |
 | ----------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tool.execute.before`         | `.caws/hooks/dispatch/pre_tool_use.sh`  | Runs the guard chain. On a `block` decision (or `ask`, degraded), `throw new Error(reason)` — opencode blocks the tool and surfaces `reason` to the agent. On `warn`, logs via `client.app.log({level:"warn"})`. |
+| `tool.execute.before`         | `.caws/hooks/dispatch/pre_tool_use.sh`  | Runs the guard chain. On a `block` decision (or `ask`, degraded), `throw new Error(reason)` — opencode blocks the tool and surfaces `reason` to the agent. Otherwise surfaces any `additionalContext` (peer notice / messages / advisories) via `session.prompt({noReply:true})`. |
 | `tool.execute.after`          | `.caws/hooks/dispatch/post_tool_use.sh` | Audit + advisory quality checks (god-object, loc-delta, duplicate-export). Never blocks.                                                                                                                         |
 | `event` (`session.created`)   | `.caws/hooks/dispatch/session_start.sh` | Lease registration / session log open. Best-effort.                                                                                                                                                              |
 | `event` (`session.idle`)      | `.caws/hooks/dispatch/stop.sh`          | Session log finalize / lease stop. Best-effort.                                                                                                                                                                  |
@@ -79,16 +79,37 @@ precedent (`.codex/hooks/lib/emit.sh` degrades ask → deny), ask-level
 escalations degrade to block here as well, so governance never silently allows
 an operation because an unsupported ask field was ignored.
 
-## Known limitation: advisory-warn surfacing
+## Context surfacing: heartbeat, message delivery, advisories
 
-`tool.execute.before` is binary — throw (block) or return (allow); there is no
-native "allow but show the agent a warning." The four advisory quality hooks
-(god-object, loc-delta, duplicate-export, shortcut-language warn-strike) emit
-their findings to opencode's structured log via `client.app.log({level:"warn"})`
-rather than the model's context. This is weaker than the claude-code/codex
-stderr surface (which reaches the agent's context directly). A future iteration
-may inject advisories into the message stream; until then, warnings land in the
-opencode log view, not the conversation.
+The shared core PRODUCES context for the agent — the multi-agent peer notice
+(`agent-heartbeat.sh`), inter-agent message delivery (`caws message poll`),
+and advisory quality findings — as `hookSpecificOutput.additionalContext` on
+the dispatcher's stdout. claude-code injects that natively; opencode does not,
+so the shim surfaces it via opencode's sanctioned injection API,
+`client.session.prompt({ noReply: true })` — "Inject context without triggering
+AI response (useful for plugins)" per the SDK docs. The text lands as a user
+message the model sees on its next turn, matching the cadence of claude-code's
+`additionalContext`. This is the single mechanism for heartbeat, message
+delivery, and advisory surfacing in opencode; any `additionalContext` a shared
+handler emits falls out of it for free.
+
+Two load-bearing details:
+
+- **Session id.** The opencode session id is captured from `session.*` bus
+  events (and defensively from the tool input) and passed in the dispatcher
+  payload as `session_id`. Without it, `parse_hook_input` resolves
+  `HOOK_SESSION_ID="unknown"` and `agent-register`/`agent-heartbeat` exit
+  early — no lease, no peer notice, no message delivery. The same id addresses
+  `session.prompt` for injection.
+- **Change-detection cadence.** `agent-heartbeat.sh` already emits the peer
+  notice only when the active peer set changes (and at most once per ~60s), so
+  injection is rare and non-spammy. Message delivery is one-per-tool-call
+  (poll is deliver-once).
+
+If injection is unavailable (session id not yet captured, client missing, or
+the call errors), the shim falls back to `client.app.log({level:"warn"})` so
+the context is at least visible in the opencode log view. Injection never
+blocks a tool call.
 
 ## Fail posture
 

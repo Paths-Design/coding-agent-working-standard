@@ -49,11 +49,16 @@
 
 import type { HookPackV1 } from './types';
 
-// Version 1: OPENCODE-HOOK-PACK-001. Initial opencode vendor adapter. Ships
-// the TS plugin shim that wires tool.execute.before/after + session bus
-// events to the shared dispatchers, plus the surface doctrine doc. Reuses
-// the entire shared core (every guard/check hook) unchanged.
-export const OPENCODE_PACK_VERSION = 1;
+// Version 2: OPENCODE-HOOK-PACK-001 + context-injection mechanism. The shim
+// now (a) captures the opencode session id from session.* events and passes it
+// in the dispatcher payload as session_id (without it, parse_hook_input
+// resolves HOOK_SESSION_ID="unknown" and agent-register/agent-heartbeat exit
+// early — no lease, no peer notice, no message delivery), and (b) surfaces the
+// shared core's additionalContext (multi-agent peer notice, inter-agent
+// messages, advisory warns) via opencode's `client.session.prompt({noReply:
+// true})` injection API, falling back to client.app.log. Bump re-propagates on
+// next caws init --agent-surface opencode.
+export const OPENCODE_PACK_VERSION = 2;
 
 export const OPENCODE_PACK: HookPackV1 = {
   id: 'opencode',

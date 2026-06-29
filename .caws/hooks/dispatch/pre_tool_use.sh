@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 13
+# hook_pack_version: 14
 # caws_min_major: 11
 # lineage_refs: 8,11,17,19,22,23,24,26
 # edit_stance: this repo OWNS and may grow this hook. Edits are expected and

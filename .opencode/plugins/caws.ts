@@ -1,9 +1,9 @@
 /*
 CAWS-MANAGED-HOOK
 # hook_pack: opencode
-# hook_pack_version: 1
+# hook_pack_version: 2
 # caws_min_major: 11
-# lineage_refs: 1,4,6,8,11,12,13,16,17,19,22,23,24,25,26,27,28,29,30,31
+# lineage_refs: 1,4,6,11,12,13,16,17,19,22,23,24,25,26,27,28,29,30,31
 # edit_stance: this repo OWNS and may grow this hook. Edits are expected and
 #   preserved — caws init refuses to overwrite a changed managed hook (re-run
 #   with --adopt to keep yours, or --overwrite to pull this upstream template).
@@ -21,14 +21,24 @@ CAWS-MANAGED-HOOK
 // (.caws/hooks/dispatch/<event>.sh), reusing 100% of the guard/check logic.
 //
 // Blocking: opencode's only PreToolUse block primitive is `throw new Error(msg)`
-// inside tool.execute.before (the message becomes the tool-failure reason the
-// agent sees). The shim parses the dispatcher's stdout decision + exit code
-// and throws on block / ask (ask degrades to block — opencode has no
-// PreToolUse ask; matches the codex adapter precedent).
+// inside tool.execute.before. The shim parses the dispatcher's stdout decision
+// + exit code and throws on block / ask (ask degrades to block — opencode has
+// no PreToolUse ask; matches the codex adapter precedent).
+//
+// Context surfacing (v2): the shared core PRODUCES context for the agent —
+// the multi-agent peer notice, inter-agent message delivery, advisory quality
+// warns — as `hookSpecificOutput.additionalContext` on the dispatcher's
+// stdout (agent-heartbeat.sh). claude-code injects that natively; opencode
+// does not. The shim surfaces it via opencode's sanctioned injection API,
+// `client.session.prompt({ noReply: true })` — "Inject context without
+// triggering AI response (useful for plugins)" per the SDK docs. The context
+// lands as a user message the model sees on its next turn, matching the
+// cadence of claude-code's additionalContext. This is the single mechanism
+// for heartbeat / message delivery / advisory surfacing in opencode; any
+// additionalContext a handler emits falls out of it for free.
 //
 // Fail posture: if .caws/hooks/ is absent (CAWS not installed for this repo),
 // the shim fails OPEN (allow) and logs once — it never blocks every tool.
-// The shared dispatchers' own fail posture handles the "core lib missing" case.
 
 import { spawnSync } from 'node:child_process';
 import * as path from 'node:path';
@@ -39,6 +49,16 @@ const UNKNOWN_ROOT = '';
 
 let cachedRoot: string | null = null;
 let warnedMissing = false;
+
+// The opencode session id, captured from session.* bus events (and defensively
+// from tool.execute.before input). Required for (a) the dispatcher payload so
+// agent-register/heartbeat run with a real HOOK_SESSION_ID instead of "unknown",
+// and (b) addressing client.session.prompt for context injection.
+let currentSessionId: string | null = null;
+
+// Re-entrancy guard: session.prompt({noReply:true}) should not re-trigger
+// tool.execute.before, but guard against any path that could recurse.
+let injecting = false;
 
 interface ProjectRoot {
   worktree?: string | null;
@@ -135,11 +155,14 @@ interface Decision {
   block: boolean;
   reason: string;
   warn: string;
+  context: string;
 }
 
-// Interpret a shared dispatcher's stdout JSON + exit code as a block/warn/allow.
+// Interpret a shared dispatcher's stdout JSON + exit code. Aggregates every
+// hookSpecificOutput.additionalContext across all emitted JSON objects (the
+// heartbeat peer notice, inter-agent messages, advisory warns) into `context`.
 function readDecision(stdout: string, exitCode: number): Decision {
-  const empty: Decision = { block: false, reason: '', warn: '' };
+  const empty: Decision = { block: false, reason: '', warn: '', context: '' };
   for (const line of stdout.split(/\r?\n/)) {
     const t = line.trim();
     if (!t.startsWith('{')) continue;
@@ -154,11 +177,16 @@ function readDecision(stdout: string, exitCode: number): Decision {
     const perm = hso?.permissionDecision;
     const reason =
       obj.reason || hso?.permissionDecisionReason || 'CAWS guard blocked this operation.';
-    if (decision === 'block') return { block: true, reason, warn: '' };
+    if (decision === 'block') return { block: true, reason, warn: '', context: '' };
     // ask degrades to block (opencode has no PreToolUse ask; codex precedent).
-    if (perm === 'ask' || perm === 'deny') return { block: true, reason, warn: '' };
+    if (perm === 'ask' || perm === 'deny') return { block: true, reason, warn: '', context: '' };
     if (decision === 'warn' || (typeof obj.advisory === 'string' && obj.advisory)) {
       empty.warn = obj.advisory || reason;
+    }
+    // additionalContext is the multi-agent notice + message-delivery channel.
+    const ac = hso?.additionalContext;
+    if (typeof ac === 'string' && ac) {
+      empty.context = empty.context ? empty.context + '\n\n' + ac : ac;
     }
   }
   // Exit 2 is the dispatcher's hard-block convention even without parseable JSON.
@@ -167,24 +195,32 @@ function readDecision(stdout: string, exitCode: number): Decision {
       block: true,
       reason: stdout.trim() || 'CAWS guard blocked this operation (dispatcher exit 2).',
       warn: '',
+      context: '',
     };
   }
   return empty;
 }
 
 interface ToolInput {
-  tool: string;
+  tool?: string;
+  [k: string]: unknown;
 }
 
-interface LogClient {
+interface CawsClient {
   app?: {
     log?: (args: {
       body: { level: string; message: string; service?: string };
     }) => Promise<unknown>;
   };
+  session?: {
+    prompt?: (args: {
+      path: { id: string };
+      body: { noReply?: boolean; parts: { type: string; text: string }[] };
+    }) => Promise<unknown>;
+  };
 }
 
-async function advisoryLog(client: LogClient | undefined, message: string) {
+async function advisoryLog(client: CawsClient | undefined, message: string) {
   if (!message) return;
   try {
     await client?.app?.log?.({
@@ -195,17 +231,81 @@ async function advisoryLog(client: LogClient | undefined, message: string) {
   }
 }
 
+// Inject context as a noReply user message — opencode's sanctioned "inject
+// context without triggering AI response" API (SDK: session.prompt). The
+// model sees `text` on its next turn. Returns false if injection was not
+// possible (no session id, client missing, or error) so the caller can fall
+// back to client.app.log.
+async function injectContext(
+  client: CawsClient | undefined,
+  sessionId: string | null,
+  text: string
+): Promise<boolean> {
+  if (!text || !sessionId || injecting) return false;
+  injecting = true;
+  try {
+    await client?.session?.prompt?.({
+      path: { id: sessionId },
+      body: { noReply: true, parts: [{ type: 'text', text }] },
+    });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    injecting = false;
+  }
+}
+
+// Defensive session-id extraction across plausible opencode event/input shapes.
+// The exact property layout of session.* events isn't fixed by the plugin
+// contract, so probe the common nests.
+function extractSessionId(obj: any): string | null {
+  if (!obj || typeof obj !== 'object') return null;
+  const candidates = [
+    obj.id,
+    obj.sessionID,
+    obj.sessionId,
+    obj.session?.id,
+    obj.session?.info?.id,
+    obj.info?.id,
+    obj.properties?.id,
+    obj.properties?.session?.id,
+    obj.data?.id,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.length > 0 && c !== 'unknown') return c;
+  }
+  return null;
+}
+
 interface CawsPluginCtx {
   worktree?: string | null;
   directory?: string | null;
   project?: { path?: string | null } | null;
-  client?: LogClient;
+  client?: CawsClient;
+}
+
+function buildPayload(toolName: string, toolInput: Record<string, unknown>): string {
+  return JSON.stringify({
+    tool_name: toolName,
+    tool_input: toolInput,
+    tool_use_id: '',
+    // session_id is load-bearing: parse_hook_input reads it into HOOK_SESSION_ID,
+    // without which agent-register/heartbeat exit early ("unknown") and produce
+    // no peer notice, no message delivery, no registration.
+    session_id: currentSessionId || '',
+  });
 }
 
 export const CawsPlugin = async (ctx: CawsPluginCtx) => {
   return {
     // PreToolUse analogue. Blocking path: throw on a block/ask decision.
+    // Context path: surface heartbeat/messages/advisories via session.prompt.
     'tool.execute.before': async (input: ToolInput, output: { args: Record<string, unknown> }) => {
+      // Capture the session id opportunistically from the tool input.
+      const sidFromInput = extractSessionId(input);
+      if (sidFromInput) currentSessionId = sidFromInput;
+
       const root = resolveProjectRoot(ctx);
       if (root === UNKNOWN_ROOT || !fs.existsSync(path.join(root, '.caws', 'hooks', 'dispatch'))) {
         if (!warnedMissing) {
@@ -220,44 +320,55 @@ export const CawsPlugin = async (ctx: CawsPluginCtx) => {
 
       const toolName = mapToolName(input?.tool || '');
       const toolInput = normalizeArgs(output?.args);
-      const payload = JSON.stringify({
-        tool_name: toolName,
-        tool_input: toolInput,
-        tool_use_id: '',
-      });
+      const payload = buildPayload(toolName, toolInput);
 
       const res = dispatch(root, 'pre_tool_use.sh', payload);
       const decision = readDecision(res.stdout, res.exitCode);
-      if (decision.warn) await advisoryLog(ctx.client, decision.warn);
+      // Block takes precedence — the reason is what the agent should see.
       if (decision.block) {
         throw new Error(decision.reason);
+      }
+      // Surface CAWS context (peer notice / messages / advisories) to the
+      // agent. Inject via session.prompt; fall back to structured log if the
+      // session id isn't known yet or injection is unavailable.
+      const combined = [decision.warn, decision.context].filter(Boolean).join('\n\n');
+      if (combined) {
+        const ok = await injectContext(ctx.client, currentSessionId, combined);
+        if (!ok) await advisoryLog(ctx.client, combined);
       }
     },
 
     // PostToolUse analogue: audit + advisory quality checks. Never blocks.
+    // Also surfaces any post-tool additionalContext (quality advisories).
     'tool.execute.after': async (input: ToolInput, output: { args: Record<string, unknown> }) => {
       try {
         const root = resolveProjectRoot(ctx);
         if (root === UNKNOWN_ROOT) return;
         const toolName = mapToolName(input?.tool || '');
         const toolInput = normalizeArgs(output?.args);
-        const payload = JSON.stringify({
-          tool_name: toolName,
-          tool_input: toolInput,
-          tool_use_id: '',
-        });
+        const payload = buildPayload(toolName, toolInput);
         const res = dispatch(root, 'post_tool_use.sh', payload);
         const decision = readDecision(res.stdout, res.exitCode);
-        if (decision.warn) await advisoryLog(ctx.client, decision.warn);
+        const combined = [decision.warn, decision.context].filter(Boolean).join('\n\n');
+        if (combined) {
+          const ok = await injectContext(ctx.client, currentSessionId, combined);
+          if (!ok) await advisoryLog(ctx.client, combined);
+        }
       } catch {
         // post-tool audit must never interfere with a completed tool call
       }
     },
 
-    // Session lifecycle via the bus. Best-effort; never throws.
+    // Session lifecycle via the bus. Best-effort; never throws. Also the
+    // primary source of the opencode session id (captured from session.* events).
     event: async (ev: { event?: { type?: string; properties?: any } } | undefined) => {
       try {
         const type = ev?.event?.type;
+        const props = ev?.event?.properties;
+        if (type && String(type).startsWith('session.')) {
+          const sid = extractSessionId(props) || extractSessionId(props?.session);
+          if (sid) currentSessionId = sid;
+        }
         if (!type) return;
         const root = resolveProjectRoot(ctx);
         if (root === UNKNOWN_ROOT) return;
@@ -266,7 +377,8 @@ export const CawsPlugin = async (ctx: CawsPluginCtx) => {
         else if (type === 'session.idle') dispatcher = 'stop.sh';
         else if (type === 'session.compacted') dispatcher = 'pre_compact.sh';
         if (!dispatcher) return;
-        dispatch(root, dispatcher, '{}');
+        // session_id in the payload so session_start registers the lease.
+        dispatch(root, dispatcher, JSON.stringify({ session_id: currentSessionId || '' }));
       } catch {
         // lifecycle hooks are advisory; never fail the session over them
       }
