@@ -3,6 +3,7 @@ title: 'Keep Codex hooks.json schema valid'
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: codex-hooks-json-schema
 created_at: '2026-06-29T14:53:49.542Z'
 updated_at: '2026-06-29T14:53:59.866Z'
 blast_radius:
