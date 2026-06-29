@@ -134,8 +134,8 @@ entirely.)
 | `guard-strikes.sh` | progressive enforcement (strike 1 warn → strike 3 block) |
 | `audit.sh` | per-tool-call audit log |
 | `session-log.sh` | per-turn narrative + structured transcripts |
-| `caws_dispatch/*` | wires Codex's lifecycle to the registered handler list |
-| `lib/*` | shared input parsing and handler runner |
+| `.caws/hooks/dispatch/*` | wires Codex's lifecycle to the registered handler list through the shared core |
+| `lib/*` | Codex-specific overrides for input parsing, output emission, and handler output aggregation |
 | `god-object-check.sh` | advisory: flags a written/edited file whose SLOC exceeds `CAWS_GOD_OBJECT_LOC` (default 2000). Edit-time analogue of the `god_object` gate. Always exit 0. |
 | `shortcut-language-check.sh` | progressive: flags TODO/FIXME/XXX/placeholder/"not implemented" stub language in NON-test source; escalates warn→ask→block via guard-strikes. Edit-time analogue of the `todo_detection` gate. |
 | `duplicate-export-check.sh` | advisory: on Write of a new JS/TS file, flags an exported symbol whose exact name already exists in the enclosing package src tree (generic-name allowlist). Always exit 0. |
@@ -221,9 +221,10 @@ diagnostics may be invalid. Consider matching major versions:
 Codex reads `.codex/hooks.json` from trusted project config layers. Installing
 the pack mid-session does NOT activate it until the session is restarted.
 `caws init --agent-surface codex` writes `.codex/hooks.json` with one
-git-root-resolved CAWS dispatcher command per event. The installed commands are
-absolute and bind `CODEX_PROJECT_DIR` to the repo root so hooks still resolve
-correctly when Codex starts from a subdirectory.
+git-root-resolved CAWS dispatcher command per event. The installed commands
+resolve the active Git root at invocation time, bind `CAWS_PROJECT_DIR` and
+`CODEX_PROJECT_DIR` to that root, and call `.caws/hooks/dispatch/<event>.sh` so
+Codex does not carry a separate dispatcher copy.
 
 Project-local hooks also require Codex trust review. After install or update,
 restart/reopen the Codex session and run `/hooks` to inspect and trust the

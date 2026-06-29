@@ -106,11 +106,10 @@ a not-yet-migrated wiring keeps working during the transition.
 
 ## Dispatcher resolution
 
-Vendor wiring repoints the harness command from the old
-`<vendor>/hooks/caws_dispatch/<event>.sh` to the shared
-`.caws/hooks/dispatch/<event>.sh`, passing the injected env. Both Sterling
-vendor configs already pass the project root this way, so this is an
-incremental change to the command string, not a new mechanism.
+Vendor wiring points harness commands at the shared
+`.caws/hooks/dispatch/<event>.sh`, passing the injected env. Older installs
+used `<vendor>/hooks/caws_dispatch/<event>.sh`; current Codex wiring must not
+materialize that per-vendor dispatcher copy.
 
 claude-code `settings.json` (env-expansion form):
 
@@ -119,11 +118,11 @@ claude-code `settings.json` (env-expansion form):
   "command": "CAWS_AGENT_SURFACE=claude-code CAWS_PROJECT_DIR=\"$CLAUDE_PROJECT_DIR\" \"$CLAUDE_PROJECT_DIR\"/.caws/hooks/dispatch/pre_tool_use.sh" }
 ```
 
-codex `hooks.json` (absolute-path form):
+codex `hooks.json` (runtime-root form):
 
 ```jsonc
 { "type": "command",
-  "command": "CAWS_AGENT_SURFACE=codex CAWS_PROJECT_DIR='<root>' '<root>/.caws/hooks/dispatch/pre_tool_use.sh'" }
+  "command": "REPO_ROOT=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)\"; CAWS_AGENT_SURFACE=codex CAWS_PROJECT_DIR=\"$REPO_ROOT\" CODEX_PROJECT_DIR=\"$REPO_ROOT\" \"$REPO_ROOT/.caws/hooks/dispatch/pre_tool_use.sh\"" }
 ```
 
 The shared dispatcher resolves its lib/handlers from its own location
@@ -153,8 +152,8 @@ genuine-divergence set (from the codex/claude-code comparison) is:
 - `classify_command.py` — minor codex-side refactor + state path (review whether
   this is genuine divergence or can be folded into the shared file via the
   surface resolver; prefer folding).
-- `caws_dispatch/post_tool_use.sh` HANDLERS — codex disables `quality-check.sh`;
-  model this as a per-surface HANDLERS list, not a forked dispatcher.
+- `dispatch/post_tool_use.sh` HANDLERS — codex disables `quality-check.sh`;
+  model this as a per-surface HANDLERS list, not a forked vendor dispatcher.
 
 Resolution rule at install time: for each shared file, the vendor adapter MAY
 provide an override; if present, the override is installed in place of the

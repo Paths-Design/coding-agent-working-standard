@@ -192,6 +192,21 @@ function packOne(packageRoot, label) {
   return { tarball, filename, files };
 }
 
+function buildKernelForPack() {
+  const result = spawnSync('npm', ['run', 'build'], {
+    cwd: KERNEL_ROOT,
+    encoding: 'utf8',
+    env: npmEnv(),
+  });
+  if (result.status !== 0) {
+    fail('kernel build failed before npm pack', {
+      exitCode: result.status,
+      stdout: result.stdout.trim().slice(0, 1000),
+      stderr: result.stderr.trim().slice(0, 1000),
+    });
+  }
+}
+
 function packTarball() {
   // Pack BOTH the kernel and the CLI from this worktree. The published
   // CLI tarball depends on the latest registry-published kernel by
@@ -205,6 +220,7 @@ function packTarball() {
   // Both tarballs are needed for the smoke to faithfully model what a
   // user gets when both packages release together.
   step('npm pack (kernel + cli)');
+  buildKernelForPack();
   const kernel = packOne(KERNEL_ROOT, 'kernel');
   ok(`packed kernel: ${kernel.filename}`);
   const cli = packOne(PACKAGE_ROOT, 'cli');
@@ -1021,11 +1037,13 @@ function assertCliTarballContainsCodexArtifacts(cliFiles) {
   const paths = cliFiles.map((file) => file.path);
   const required = [
     'dist/init/hook-packs/manifest-codex.js',
+    'dist/init/hook-packs/manifest-shared.js',
     'templates/hook-packs/codex/hooks.json',
-    'templates/hook-packs/codex/caws_dispatch/pre_tool_use.sh',
-    'templates/hook-packs/codex/protected-paths.sh',
-    'templates/hook-packs/codex/lib/parse-input.sh',
-    'templates/hook-packs/codex/lib/emit.sh',
+    'templates/hook-packs/codex/hooks/lib/parse-input.sh',
+    'templates/hook-packs/codex/hooks/lib/emit.sh',
+    'templates/hook-packs/codex/hooks/lib/run-handlers.sh',
+    'templates/hook-packs/shared/dispatch/pre_tool_use.sh',
+    'templates/hook-packs/shared/protected-paths.sh',
   ];
   const missing = required.filter((path) => !paths.includes(path));
   if (missing.length > 0) {
@@ -1037,7 +1055,7 @@ function assertCliTarballContainsCodexArtifacts(cliFiles) {
   for (const path of required) {
     log(colors.dim(`  artifact tarball:${path}`));
   }
-  ok(`cli tarball includes ${required.length} Codex manifest/template artifacts`);
+  ok(`cli tarball includes ${required.length} Codex adapter/shared-core artifacts`);
 }
 
 function collectCodexCommands(hooksJson) {
@@ -1093,12 +1111,28 @@ function assertCodexHooksJson(projectDir) {
     });
   }
 
-  const badCommands = commands.filter(({ command }) => (
-    !command.includes(`CODEX_PROJECT_DIR='${projectDir}'`) ||
-    !command.includes(`'${join(projectDir, '.codex', 'hooks', 'caws_dispatch')}`)
-  ));
+  const eventToDispatcher = new Map([
+    ['SessionStart', 'session_start.sh'],
+    ['PreToolUse', 'pre_tool_use.sh'],
+    ['PostToolUse', 'post_tool_use.sh'],
+    ['PreCompact', 'pre_compact.sh'],
+    ['Stop', 'stop.sh'],
+  ]);
+  const badCommands = commands.filter(({ eventName, command }) => {
+    const dispatcher = eventToDispatcher.get(eventName);
+    return (
+      !dispatcher ||
+      !command.includes('git rev-parse --show-toplevel') ||
+      !command.includes('CAWS_AGENT_SURFACE=codex') ||
+      !command.includes('CAWS_PROJECT_DIR="$REPO_ROOT"') ||
+      !command.includes('CODEX_PROJECT_DIR="$REPO_ROOT"') ||
+      !command.includes(`"$REPO_ROOT/.caws/hooks/dispatch/${dispatcher}"`) ||
+      command.includes('.codex/hooks/caws_dispatch') ||
+      command.includes(projectDir)
+    );
+  });
   if (badCommands.length > 0) {
-    fail('installed Codex hook command is not rooted at the fresh project with absolute dispatcher path', {
+    fail('installed Codex hook command does not use runtime-root shared-core dispatch', {
       projectDir,
       badCommands: JSON.stringify(badCommands, null, 2),
     });
@@ -1107,12 +1141,17 @@ function assertCodexHooksJson(projectDir) {
   for (const { eventName, command } of commands) {
     log(colors.dim(`  artifact hooks.json:${eventName}: ${command}`));
   }
-  ok('installed hooks.json has managed metadata and five absolute project-local dispatcher commands');
+  ok('installed hooks.json has managed metadata and five runtime-root shared-core dispatcher commands');
 }
 
 function assertCodexProtectedPathDispatcher(projectDir) {
-  step('Codex artifact proof — installed dispatcher blocks protected hook edit');
-  const dispatcher = join(projectDir, '.codex', 'hooks', 'caws_dispatch', 'pre_tool_use.sh');
+  step('Codex artifact proof — installed hooks.json command blocks protected hook edit');
+  const hooksPath = join(projectDir, '.codex', 'hooks.json');
+  const parsed = JSON.parse(readFileSync(hooksPath, 'utf8'));
+  const preToolUse = collectCodexCommands(parsed).find(({ eventName }) => eventName === 'PreToolUse');
+  if (!preToolUse) {
+    fail('installed Codex hooks.json has no PreToolUse command', { hooksPath });
+  }
   const payload = {
     session_id: 'caws-smoke-codex-protected',
     cwd: projectDir,
@@ -1121,15 +1160,17 @@ function assertCodexProtectedPathDispatcher(projectDir) {
     tool_input: {
       command:
         '*** Begin Patch\n' +
-        '*** Update File: .codex/hooks/block-dangerous.sh\n' +
+        '*** Update File: .codex/hooks/lib/emit.sh\n' +
         '@@\n' +
         '-echo old\n' +
         '+echo new\n' +
         '*** End Patch\n',
     },
   };
-  const result = spawnSync('bash', [dispatcher], {
-    cwd: projectDir,
+  const subdir = join(projectDir, 'subdir');
+  mkdirSync(subdir, { recursive: true });
+  const result = spawnSync('bash', ['-lc', preToolUse.command], {
+    cwd: subdir,
     input: JSON.stringify(payload),
     encoding: 'utf8',
   });
@@ -1142,12 +1183,12 @@ function assertCodexProtectedPathDispatcher(projectDir) {
       stderr: result.stderr.trim().slice(0, 1000),
     });
   }
-  if (!result.stderr.includes('.codex/hooks/block-dangerous.sh is protected')) {
+  if (!result.stderr.includes('.codex/hooks/lib/emit.sh is protected')) {
     fail('Codex protected-path dispatcher did not cite the protected hook path', {
       stderr: result.stderr.trim().slice(0, 1000),
     });
   }
-  ok('installed Codex dispatcher blocked a relative .codex/hooks edit with concrete protected-path evidence');
+  ok('installed Codex hooks.json command blocked a relative .codex/hooks edit with concrete protected-path evidence');
 }
 
 function runCodexTarballSmoke(tarballs) {
