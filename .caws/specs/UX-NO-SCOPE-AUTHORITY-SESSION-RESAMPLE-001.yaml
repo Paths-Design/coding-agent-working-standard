@@ -2,10 +2,11 @@ id: UX-NO-SCOPE-AUTHORITY-SESSION-RESAMPLE-001
 title: 'Reconcile residual no-scope-authority session evidence'
 risk_tier: 3
 mode: doc
-lifecycle_state: active
-worktree: no-scope-authority-resample
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge no-scope-authority-resample at 2747b2d958b34106f4b02c7e2204b42e6023f86a'
 created_at: '2026-07-04T18:06:23.638Z'
-updated_at: '2026-07-04T18:06:23.638Z'
+updated_at: '2026-07-04T18:09:51.777Z'
 blast_radius:
   modules:
     - docs/architecture
