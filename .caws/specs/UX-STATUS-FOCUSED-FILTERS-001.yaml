@@ -3,6 +3,7 @@ title: 'Focused status filters'
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: status-focused-filters
 created_at: '2026-07-04T11:42:30.423Z'
 updated_at: '2026-07-04T11:42:36.871Z'
 blast_radius:
