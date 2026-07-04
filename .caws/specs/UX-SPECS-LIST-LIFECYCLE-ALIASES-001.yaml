@@ -2,10 +2,11 @@ id: UX-SPECS-LIST-LIFECYCLE-ALIASES-001
 title: 'Add specs list lifecycle aliases'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: specs-list-lifecycle-aliases
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge specs-list-lifecycle-aliases at 94516f604c8079a7fdd80afef7c0ef0b6888a0aa'
 created_at: '2026-07-04T18:55:41.040Z'
-updated_at: '2026-07-04T18:55:41.040Z'
+updated_at: '2026-07-04T18:58:41.810Z'
 blast_radius:
   modules:
     - 'packages/caws-cli specs list command'
