@@ -1348,6 +1348,7 @@ export interface SpecsCloseOptions extends BaseCommandOptions {
   readonly reason?: string;
   readonly closureNotes?: string;
   readonly notes?: string;
+  readonly note?: string;
   readonly mergeCommit?: string;
   readonly supersededBy?: string;
 }
@@ -1366,6 +1367,7 @@ export function runSpecsCloseCommand(opts: SpecsCloseOptions): number {
     opts.reason !== undefined ? '--reason' : null,
     opts.closureNotes !== undefined ? '--closure-notes' : null,
     opts.notes !== undefined ? '--notes' : null,
+    opts.note !== undefined ? '--note' : null,
   ].filter((value): value is string => value !== null);
 
   if (suppliedNoteAliases.length > 1) {
@@ -1375,7 +1377,7 @@ export function runSpecsCloseCommand(opts: SpecsCloseOptions): number {
     return 1;
   }
 
-  const closureNotes = opts.closureNotes ?? opts.notes ?? opts.reason;
+  const closureNotes = opts.closureNotes ?? opts.notes ?? opts.note ?? opts.reason;
 
   const ctx = resolveCawsCtx(cwd, err, showData, 'close');
   if (ctx === null) return 2;

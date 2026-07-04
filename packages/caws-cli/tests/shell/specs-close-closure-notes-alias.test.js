@@ -2,11 +2,14 @@
 
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 const { runSpecsCloseCommand } = require('../../dist/shell/commands/specs');
 const { COMMAND_SURFACE_METADATA } = require('../../dist/shell/command-metadata');
 const { initProject } = require('../../dist/store/init-store');
 const { cleanupAll, makeTempRepo } = require('../helpers/git-repo-factory');
+
+const CLI = path.resolve(__dirname, '..', '..', 'dist', 'index.js');
 
 afterAll(() => {
   cleanupAll();
@@ -77,6 +80,18 @@ function runClose(root, id, opts = {}) {
   return { code, out: out.join('\n'), err: err.join('\n') };
 }
 
+function runCli(root, args) {
+  return spawnSync(process.execPath, [CLI, ...args], {
+    cwd: root,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      CAWS_QUIET: '1',
+      CLAUDE_CODE_SESSION_ID: 'specs-close-note-cli-test',
+    },
+  });
+}
+
 function findLeaf(groupName, leafName) {
   const group = COMMAND_SURFACE_METADATA.find((command) => command.name === groupName);
   if (!group) throw new Error(`missing group ${groupName}`);
@@ -117,6 +132,41 @@ describe('caws specs close --closure-notes alias', () => {
     expect(readBytes(path.join(cawsDir, 'events.jsonl'))).toContain('spec_closed');
   });
 
+  test('accepts --note as singular closure_notes shorthand', () => {
+    const root = mkRepo();
+    const cawsDir = path.join(root, '.caws');
+    writeActiveSpec(cawsDir, 'CLOSE-NOTES-004');
+
+    const result = runClose(root, 'CLOSE-NOTES-004', { note: 'completed through note' });
+
+    expect(result.code).toBe(0);
+    expect(result.out).toContain('closed CLOSE-NOTES-004');
+    const spec = readBytes(path.join(cawsDir, 'specs', 'CLOSE-NOTES-004.yaml'));
+    expect(spec).toContain('lifecycle_state: closed');
+    expect(spec).toContain("closure_notes: 'completed through note'");
+    expect(readBytes(path.join(cawsDir, 'events.jsonl'))).toContain('spec_closed');
+  });
+
+  test('spawned CLI accepts --note before commander unknown-option handling', () => {
+    const root = mkRepo();
+    const cawsDir = path.join(root, '.caws');
+    writeActiveSpec(cawsDir, 'CLOSE-NOTES-005');
+
+    const result = runCli(root, [
+      'specs',
+      'close',
+      'CLOSE-NOTES-005',
+      '--note',
+      'completed through spawned note',
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).not.toContain('unknown option');
+    expect(result.stdout).toContain('closed CLOSE-NOTES-005');
+    const spec = readBytes(path.join(cawsDir, 'specs', 'CLOSE-NOTES-005.yaml'));
+    expect(spec).toContain("closure_notes: 'completed through spawned note'");
+  });
+
   test('refuses competing note aliases before mutation', () => {
     const root = mkRepo();
     const cawsDir = path.join(root, '.caws');
@@ -127,10 +177,11 @@ describe('caws specs close --closure-notes alias', () => {
       reason: 'reason note',
       closureNotes: 'alias note',
       notes: 'notes shorthand',
+      note: 'note shorthand',
     });
 
     expect(result.code).toBe(1);
-    expect(result.err).toContain('--reason and --closure-notes and --notes');
+    expect(result.err).toContain('--reason and --closure-notes and --notes and --note');
     expect(result.err).toContain('pass only one');
     expect(snapshot(cawsDir, 'CLOSE-NOTES-003')).toEqual(before);
   });
@@ -140,5 +191,6 @@ describe('caws specs close --closure-notes alias', () => {
 
     expect(close.options.map((option) => option.flag)).toContain('--closure-notes <text>');
     expect(close.options.map((option) => option.flag)).toContain('--notes <text>');
+    expect(close.options.map((option) => option.flag)).toContain('--note <text>');
   });
 });
