@@ -34,6 +34,9 @@ import {
   inspectClaudeSettings,
   installHookPack,
   mergeClaudeSettings,
+  planClaudeSettingsMerge,
+  planHookPackInstall,
+  planSettingsExample,
   writeSettingsExample,
 } from '../../init/hook-install';
 import {
@@ -47,8 +50,17 @@ import type {
   AgentSurface,
   HookPackInstallResult,
 } from '../../init/hook-packs/types';
-import { manageGitignore } from '../../init/gitignore-manage';
-import { initProject, resolveRepoRoot } from '../../store';
+import {
+  manageGitignore,
+  planGitignore,
+  type GitignorePlanResult,
+} from '../../init/gitignore-manage';
+import {
+  initProject,
+  planInitProject,
+  resolveRepoRoot,
+  type InitProjectPlan,
+} from '../../store';
 import { renderDiagnostics } from '../render/diagnostic';
 import {
   renderGitignore,
@@ -63,6 +75,8 @@ import {
 } from '../render/init-hook-pack';
 import type {
   SettingsMergeResult,
+  SettingsMergePlanResult,
+  SettingsExamplePlanResult,
 } from '../../init/hook-install';
 
 function isInsideGitWorkingTree(cwd: string): boolean {
@@ -91,6 +105,10 @@ export interface InitCommandOptions {
   /** When true, leave drifted/unmanaged files in place; do not enforce
    *  pack contents at those paths. */
   readonly adopt?: boolean;
+  /** When true, emit a read-only preview of what init would do. */
+  readonly plan?: boolean;
+  /** When true with --plan, emit machine-readable JSON. */
+  readonly json?: boolean;
 }
 
 function chooseSurface(
@@ -154,6 +172,14 @@ function performHookPackStep(
       activation: 'not_applicable',
     };
   }
+  if (resolution.kind !== 'pack') {
+    return {
+      outcome: 'skipped_ambiguous',
+      pack: null,
+      actions: [],
+      activation: 'not_applicable',
+    };
+  }
 
   const installOpts: Parameters<typeof installHookPack>[1] = { repoRoot };
   if (options.overwrite !== undefined) {
@@ -163,15 +189,16 @@ function performHookPackStep(
     (installOpts as { adopt?: boolean }).adopt = options.adopt;
   }
 
-  // CAWS-HOOK-PACK-SHARED-CORE-001: install the surface-neutral shared core
-  // first (writes .caws/hooks/), then install the vendor adapter (writes
-  // .<surface>/ files). The result returned to the caller reports the vendor
-  // pack identity (so downstream pack?.id checks for 'claude-code'/'codex'
-  // keep working) with actions from both installs merged. Activation is
-  // restart_required when either pack requires it.
   const sharedResult = installHookPack(SHARED_PACK, installOpts);
   const vendorResult = installHookPack(resolution.pack, installOpts);
 
+  return mergeHookPackResults(sharedResult, vendorResult);
+}
+
+function mergeHookPackResults(
+  sharedResult: HookPackInstallResult,
+  vendorResult: HookPackInstallResult
+): HookPackInstallResult {
   // Merge actions (shared first, then vendor) and derive a combined outcome.
   const mergedActions = [...sharedResult.actions, ...vendorResult.actions];
   const anyRefused = mergedActions.some((a) => a.action === 'refused');
@@ -204,11 +231,288 @@ function performHookPackStep(
   };
 }
 
+function planHookPackStep(
+  repoRoot: string,
+  surface: AgentSurface | null,
+  options: InitCommandOptions
+): HookPackInstallResult {
+  if (surface === null) {
+    return {
+      outcome: 'skipped_ambiguous',
+      pack: null,
+      actions: [],
+      activation: 'not_applicable',
+    };
+  }
+  if (surface === 'none') {
+    return {
+      outcome: 'skipped_explicit_none',
+      pack: null,
+      actions: [],
+      activation: 'not_applicable',
+    };
+  }
+
+  const resolution = resolveHookPack(surface);
+  if (resolution.kind !== 'pack') {
+    return {
+      outcome:
+        resolution.kind === 'none'
+          ? 'skipped_explicit_none'
+          : 'skipped_ambiguous',
+      pack: null,
+      actions: [],
+      activation: 'not_applicable',
+    };
+  }
+
+  const planOpts: Parameters<typeof planHookPackInstall>[1] = { repoRoot };
+  if (options.overwrite !== undefined) {
+    (planOpts as { overwrite?: boolean }).overwrite = options.overwrite;
+  }
+  if (options.adopt !== undefined) {
+    (planOpts as { adopt?: boolean }).adopt = options.adopt;
+  }
+
+  const sharedResult = planHookPackInstall(SHARED_PACK, planOpts);
+  const vendorResult = planHookPackInstall(resolution.pack, planOpts);
+  return mergeHookPackResults(sharedResult, vendorResult);
+}
+
+interface InitPlanDocument {
+  readonly ok: boolean;
+  readonly read_only: true;
+  readonly command: 'init';
+  readonly repo_root: string;
+  readonly selected_surface: {
+    readonly surface: AgentSurface | null;
+    readonly reason: 'explicit' | 'detected' | 'ambiguous' | 'none';
+    readonly implemented: boolean | null;
+    readonly refusal?: string;
+  };
+  readonly canonical_state: InitProjectPlan;
+  readonly gitignore:
+    | (GitignorePlanResult & { readonly skipped?: false })
+    | { readonly skipped: true; readonly reason: 'not_git_working_tree' };
+  readonly hook_pack: HookPackInstallResult & { readonly read_only?: true };
+  readonly claude_settings?: {
+    readonly settings_json: SettingsMergePlanResult;
+    readonly settings_example: SettingsExamplePlanResult;
+    readonly orphaned_dispatch_dir: string | null;
+  };
+  readonly codex_trust_note?: string;
+  readonly next_apply_command: string;
+}
+
+function jsonOut(out: (line: string) => void, payload: unknown): void {
+  out(JSON.stringify(payload, null, 2));
+}
+
+function applyCommand(opts: InitCommandOptions): string {
+  const parts = ['caws', 'init'];
+  if (opts.agentSurface !== undefined) {
+    parts.push('--agent-surface', opts.agentSurface);
+  }
+  if (opts.overwrite === true) parts.push('--overwrite');
+  if (opts.adopt === true) parts.push('--adopt');
+  if (opts.showData === true) parts.push('--data');
+  return parts.join(' ');
+}
+
+function renderActionList(
+  actions: readonly HookPackInstallResult['actions'][number][]
+): string[] {
+  const lines: string[] = [];
+  const groups: Record<string, string[]> = {
+    created: [],
+    updated: [],
+    unchanged: [],
+    refused: [],
+  };
+  for (const action of actions) {
+    groups[action.action]?.push(action.destPath);
+  }
+  const labels: Record<string, string> = {
+    created: 'Would create',
+    updated: 'Would update',
+    unchanged: 'Unchanged',
+    refused: 'Would refuse',
+  };
+  for (const key of ['created', 'updated', 'unchanged', 'refused']) {
+    const values = groups[key] ?? [];
+    if (values.length === 0) continue;
+    lines.push(`  ${labels[key]} (${values.length}):`);
+    for (const value of values) lines.push(`    - ${value}`);
+  }
+  return lines;
+}
+
+function renderInitPlan(plan: InitPlanDocument): string {
+  const lines: string[] = ['caws init plan: read-only preview; no changes made.'];
+  lines.push(`repo: ${plan.repo_root}`);
+  lines.push('');
+  lines.push('Canonical .caws state:');
+  lines.push(`  outcome: ${plan.canonical_state.outcome}`);
+  for (const p of plan.canonical_state.paths) {
+    lines.push(`  - ${p.action}: ${p.relPath}`);
+  }
+
+  lines.push('');
+  lines.push('.gitignore ephemeral-state block:');
+  if ('skipped' in plan.gitignore && plan.gitignore.skipped) {
+    lines.push(`  skipped: ${plan.gitignore.reason}`);
+  } else {
+    lines.push(`  outcome: ${plan.gitignore.outcome}`);
+  }
+
+  lines.push('');
+  lines.push('Hook pack:');
+  if (plan.selected_surface.refusal) {
+    lines.push(`  refused: ${plan.selected_surface.refusal}`);
+  } else if (!plan.hook_pack.pack) {
+    lines.push(`  outcome: ${plan.hook_pack.outcome}`);
+  } else {
+    lines.push(`  pack: ${plan.hook_pack.pack.id} v${plan.hook_pack.pack.packVersion}`);
+    lines.push(`  outcome: ${plan.hook_pack.outcome}`);
+    lines.push(...renderActionList(plan.hook_pack.actions));
+  }
+
+  if (plan.claude_settings) {
+    lines.push('');
+    lines.push('.claude settings wiring:');
+    lines.push(`  settings.json: ${plan.claude_settings.settings_json.kind}`);
+    if (plan.claude_settings.settings_json.kind === 'merged') {
+      lines.push(
+        `  would add: ${plan.claude_settings.settings_json.added.join(', ')}`
+      );
+    }
+    if (plan.claude_settings.settings_json.kind === 'invalid') {
+      lines.push(`  error: ${plan.claude_settings.settings_json.error}`);
+    }
+    lines.push(
+      `  settings.json.example: ${plan.claude_settings.settings_example.action}`
+    );
+    if (plan.claude_settings.orphaned_dispatch_dir) {
+      lines.push(
+        `  orphaned dispatch dir: ${plan.claude_settings.orphaned_dispatch_dir}`
+      );
+    }
+  }
+
+  if (plan.codex_trust_note) {
+    lines.push('');
+    lines.push(plan.codex_trust_note);
+  }
+
+  lines.push('');
+  if (plan.ok) {
+    lines.push(`Next apply command: ${plan.next_apply_command}`);
+  } else {
+    lines.push('Plan refused; resolve the refusal above before applying init.');
+  }
+  return lines.join('\n');
+}
+
+function runInitPlan(
+  repoRoot: string,
+  opts: InitCommandOptions,
+  out: (line: string) => void,
+  err: (line: string) => void,
+  showData: boolean
+): number {
+  const projectPlan = planInitProject(repoRoot);
+  if (!projectPlan.ok) {
+    const isLegacy = projectPlan.errors.some(
+      (d) => d.rule === 'store.init.legacy_residue'
+    );
+    if (opts.json === true) {
+      jsonOut(out, {
+        ok: false,
+        read_only: true,
+        command: 'init',
+        repo_root: repoRoot,
+        errors: projectPlan.errors,
+      });
+    } else {
+      err(
+        isLegacy
+          ? 'caws init plan: refusing to overwrite legacy state.'
+          : 'caws init plan: failed to compose plan.'
+      );
+      err(renderDiagnostics(projectPlan.errors, { showData }));
+    }
+    return isLegacy ? 1 : 2;
+  }
+
+  const detection = detectAgentHarness(repoRoot);
+  const chosen = chooseSurface(opts.agentSurface, detection);
+  const hookPlan = planHookPackStep(repoRoot, chosen.surface, opts);
+  const resolution =
+    chosen.surface && chosen.surface !== 'none'
+      ? resolveHookPack(chosen.surface)
+      : null;
+  const unimplemented =
+    resolution?.kind === 'declared_not_implemented'
+      ? `--agent-surface "${chosen.surface}" is declared but not yet implemented in this CLI version.`
+      : undefined;
+
+  const anyRefused = hookPlan.actions.some((a) => a.action === 'refused');
+  const gitignore = isInsideGitWorkingTree(repoRoot)
+    ? planGitignore(repoRoot, { adopt: opts.adopt === true })
+    : ({ skipped: true, reason: 'not_git_working_tree' } as const);
+  const claudeSettings =
+    hookPlan.pack?.id === 'claude-code'
+      ? {
+          settings_json: planClaudeSettingsMerge(repoRoot),
+          settings_example: planSettingsExample(repoRoot),
+          orphaned_dispatch_dir: detectOrphanedDispatchDir(repoRoot),
+        }
+      : undefined;
+  const codexTrustNote =
+    hookPlan.pack?.id === 'codex'
+      ? 'Codex project hooks require project trust and /hooks review before changed command hooks run.'
+      : undefined;
+
+  const plan: InitPlanDocument = {
+    ok: !unimplemented && !anyRefused,
+    read_only: true,
+    command: 'init',
+    repo_root: repoRoot,
+    selected_surface: {
+      surface: chosen.surface,
+      reason: chosen.reason,
+      implemented:
+        chosen.surface === null || chosen.surface === 'none'
+          ? null
+        : resolution?.kind === 'pack',
+      ...(unimplemented ? { refusal: unimplemented } : {}),
+    },
+    canonical_state: projectPlan.value,
+    gitignore,
+    hook_pack: { ...hookPlan, read_only: true },
+    ...(claudeSettings ? { claude_settings: claudeSettings } : {}),
+    ...(codexTrustNote ? { codex_trust_note: codexTrustNote } : {}),
+    next_apply_command: applyCommand(opts),
+  };
+
+  if (opts.json === true) {
+    jsonOut(out, plan);
+  } else {
+    out(renderInitPlan(plan));
+  }
+  return plan.ok ? 0 : 1;
+}
+
 export function runInitCommand(opts: InitCommandOptions = {}): number {
   const cwd = opts.cwd ?? process.cwd();
   const out = opts.out ?? ((s: string) => process.stdout.write(s + '\n'));
   const err = opts.err ?? ((s: string) => process.stderr.write(s + '\n'));
   const showData = opts.showData === true;
+
+  if (opts.json === true && opts.plan !== true) {
+    err('caws init: --json is only supported with --plan.');
+    return 2;
+  }
 
   // Validate --agent-surface early. An unknown value is a programmer
   // error from the caller (or a typo at the CLI); fail fast with a
@@ -230,6 +534,10 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     return 2;
   }
   const { repoRoot } = root.value;
+
+  if (opts.plan === true) {
+    return runInitPlan(repoRoot, opts, out, err, showData);
+  }
 
   // Step 1: bootstrap canonical .caws/ state.
   const result = initProject(repoRoot);

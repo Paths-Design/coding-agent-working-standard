@@ -290,6 +290,8 @@ export function registerShellCommands(
         agentSurface?: string;
         overwrite?: boolean;
         adopt?: boolean;
+        plan?: boolean;
+        json?: boolean;
       }) => {
         // Commander hands back the raw string for agentSurface; the
         // runInitCommand validator rejects unknown values with exit 2.
@@ -305,6 +307,12 @@ export function registerShellCommands(
         }
         if (opts.adopt !== undefined) {
           (runOpts as { adopt?: boolean }).adopt = opts.adopt;
+        }
+        if (opts.plan !== undefined) {
+          (runOpts as { plan?: boolean }).plan = opts.plan;
+        }
+        if (opts.json !== undefined) {
+          (runOpts as { json?: boolean }).json = opts.json;
         }
         const code = runInitCommand(runOpts);
         exit(code);

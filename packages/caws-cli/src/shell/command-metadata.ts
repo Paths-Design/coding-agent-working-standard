@@ -639,6 +639,15 @@ export const INIT_COMMAND_META: LeafCommandMeta = {
   options: [
     DATA_OPTION,
     {
+      flag: '--plan',
+      description:
+        'Preview the canonical state, gitignore, hook-pack, and settings changes without writing anything.',
+    },
+    {
+      flag: '--json',
+      description: 'Emit the read-only init plan as JSON with --plan.',
+    },
+    {
       flag: '--agent-surface <name>',
       description:
         'Install a hook pack for an agent harness (claude-code | codex | opencode | cursor | windsurf | none). When omitted, init attempts filesystem detection and skips hook install when ambiguous.',

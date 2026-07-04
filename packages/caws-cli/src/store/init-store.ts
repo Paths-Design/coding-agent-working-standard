@@ -133,12 +133,29 @@ edit_rules:
 // ---------------------------------------------------------------------------
 
 export type InitOutcome = 'created' | 'already_initialized';
+export type InitPlanOutcome = 'would_create' | 'already_initialized';
+export type InitPlanPathKind = 'dir' | 'file';
+export type InitPlanPathAction = 'would_create' | 'exists';
 
 export interface InitProjectResult {
   readonly outcome: InitOutcome;
   /** Absolute paths of files/dirs newly created. Empty when already initialized. */
   readonly created: readonly string[];
   /** Validated policy (whether freshly seeded or already on disk). */
+  readonly policy: Policy;
+}
+
+export interface InitPlanPath {
+  readonly relPath: string;
+  readonly absPath: string;
+  readonly kind: InitPlanPathKind;
+  readonly action: InitPlanPathAction;
+}
+
+export interface InitProjectPlan {
+  readonly outcome: InitPlanOutcome;
+  readonly readOnly: true;
+  readonly paths: readonly InitPlanPath[];
   readonly policy: Policy;
 }
 
@@ -187,6 +204,18 @@ function findLegacyResidue(repoRoot: string): string[] {
     }
   }
   return found;
+}
+
+function validatedDefaultPolicy(): Result<Policy> {
+  const validatedPolicy = parseAndValidatePolicy(DEFAULT_POLICY_YAML);
+  if (isOk(validatedPolicy)) return validatedPolicy;
+  return err(
+    storeDiagnostic(
+      STORE_RULES.INIT_DEFAULT_POLICY_INVALID,
+      `Default policy failed kernel validation: ${validatedPolicy.errors.map((d) => d.rule).join(', ')}.`,
+      { data: { kernel_diagnostics: validatedPolicy.errors.slice() } }
+    )
+  );
 }
 
 function legacyDiag(found: readonly string[]): Diagnostic {
@@ -242,16 +271,8 @@ export function initProject(
   // 2. Validate the default policy through the kernel. If our seed is
   //    bad, surface that as INIT_DEFAULT_POLICY_INVALID — do NOT write
   //    a known-invalid policy to disk just to keep init succeeding.
-  const validatedPolicy = parseAndValidatePolicy(DEFAULT_POLICY_YAML);
-  if (!isOk(validatedPolicy)) {
-    return err(
-      storeDiagnostic(
-        STORE_RULES.INIT_DEFAULT_POLICY_INVALID,
-        `Default policy failed kernel validation: ${validatedPolicy.errors.map((d) => d.rule).join(', ')}.`,
-        { data: { kernel_diagnostics: validatedPolicy.errors.slice() } }
-      )
-    );
-  }
+  const validatedPolicy = validatedDefaultPolicy();
+  if (!isOk(validatedPolicy)) return validatedPolicy;
   const policy = validatedPolicy.value;
 
   // 3. Decide outcome. If every canonical file/dir is present, do nothing.
@@ -320,6 +341,76 @@ export function initProject(
   return ok({
     outcome: 'created',
     created,
+    policy,
+  });
+}
+
+/**
+ * Read-only preview of the canonical init store step. It uses the same legacy
+ * residue and default-policy validation as initProject, but writes nothing.
+ */
+export function planInitProject(repoRoot: string): Result<InitProjectPlan> {
+  if (typeof repoRoot !== 'string' || repoRoot.length === 0) {
+    throw new TypeError('planInitProject: repoRoot must be a non-empty string.');
+  }
+
+  const residue = findLegacyResidue(repoRoot);
+  if (residue.length > 0) {
+    return err(legacyDiag(residue));
+  }
+
+  const validatedPolicy = validatedDefaultPolicy();
+  if (!isOk(validatedPolicy)) return validatedPolicy;
+  const policy = validatedPolicy.value;
+  const present = existsCanonical(repoRoot);
+
+  const paths: InitPlanPath[] = [
+    {
+      relPath: CANONICAL_PATHS.cawsDir,
+      absPath: abs(repoRoot, CANONICAL_PATHS.cawsDir),
+      kind: 'dir',
+      action: present.cawsDir ? 'exists' : 'would_create',
+    },
+    {
+      relPath: CANONICAL_PATHS.specsDir,
+      absPath: abs(repoRoot, CANONICAL_PATHS.specsDir),
+      kind: 'dir',
+      action: present.specsDir ? 'exists' : 'would_create',
+    },
+    {
+      relPath: CANONICAL_PATHS.waiversDir,
+      absPath: abs(repoRoot, CANONICAL_PATHS.waiversDir),
+      kind: 'dir',
+      action: present.waiversDir ? 'exists' : 'would_create',
+    },
+    {
+      relPath: CANONICAL_PATHS.policyFile,
+      absPath: abs(repoRoot, CANONICAL_PATHS.policyFile),
+      kind: 'file',
+      action: present.policyFile ? 'exists' : 'would_create',
+    },
+    {
+      relPath: CANONICAL_PATHS.worktreesFile,
+      absPath: abs(repoRoot, CANONICAL_PATHS.worktreesFile),
+      kind: 'file',
+      action: present.worktreesFile ? 'exists' : 'would_create',
+    },
+    {
+      relPath: CANONICAL_PATHS.agentsFile,
+      absPath: abs(repoRoot, CANONICAL_PATHS.agentsFile),
+      kind: 'file',
+      action: present.agentsFile ? 'exists' : 'would_create',
+    },
+  ];
+
+  const outcome = paths.some((p) => p.action === 'would_create')
+    ? 'would_create'
+    : 'already_initialized';
+
+  return ok({
+    outcome,
+    readOnly: true,
+    paths,
     policy,
   });
 }

@@ -93,6 +93,12 @@ export interface GitignoreManageResult {
   readonly error?: string;
 }
 
+export interface GitignorePlanResult {
+  readonly outcome: Exclude<GitignoreOutcome, 'write_failed'>;
+  readonly gitignorePath: string;
+  readonly readOnly: true;
+}
+
 /** Find the [start,end] line indices (inclusive) of an existing managed block,
  * or null if absent. Detection keys on the marker lines, not entry contents,
  * so a stale (different-version) block is still found and replaced. */
@@ -206,4 +212,25 @@ export function manageGitignore(
       error: (e as Error).message,
     };
   }
+}
+
+/** Read-only counterpart to manageGitignore. It reads the existing .gitignore
+ * and runs the same pure computeGitignore classifier, but never writes. */
+export function planGitignore(
+  repoRoot: string,
+  opts: { adopt?: boolean } = {}
+): GitignorePlanResult {
+  const gitignorePath = path.join(repoRoot, '.gitignore');
+  let existing: string | null = null;
+  try {
+    existing = fs.readFileSync(gitignorePath, 'utf8');
+  } catch {
+    existing = null;
+  }
+  const { outcome } = computeGitignore(existing, opts);
+  return {
+    outcome: outcome as Exclude<GitignoreOutcome, 'write_failed'>,
+    gitignorePath,
+    readOnly: true,
+  };
 }

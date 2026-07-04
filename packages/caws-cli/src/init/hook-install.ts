@@ -476,6 +476,10 @@ export interface HookPackInstallOptions {
   readonly packRootOverride?: string;
 }
 
+export interface HookPackPlanResult extends HookPackInstallResult {
+  readonly readOnly: true;
+}
+
 interface InstallContext {
   readonly repoRoot: string;
   readonly packRoot: string;
@@ -576,6 +580,76 @@ function applyOne(
   }
 }
 
+function actionForState(
+  state: InstallFileState,
+  overwrite: boolean,
+  adopt: boolean
+): HookPackFileAction['action'] {
+  switch (state.kind) {
+    case 'absent':
+      return 'created';
+    case 'managed_clean':
+      return 'unchanged';
+    case 'managed_old_version':
+      return 'updated';
+    case 'managed_drift':
+    case 'unmanaged_collision':
+      if (overwrite) return 'updated';
+      if (adopt) return 'unchanged';
+      return 'refused';
+  }
+}
+
+function refusalForState(
+  state: InstallFileState
+): HookPackFileAction['refusalReason'] {
+  if (state.kind === 'managed_drift') return 'managed_drift';
+  if (state.kind === 'unmanaged_collision') return 'unmanaged_collision';
+  return undefined;
+}
+
+function planOne(
+  ctx: InstallContext,
+  file: HookPackFile
+): HookPackFileAction {
+  const state = evaluateFileState(
+    ctx.repoRoot,
+    ctx.packRoot,
+    ctx.pack.id,
+    ctx.pack.packVersion,
+    file
+  );
+  const action = actionForState(state, ctx.overwrite, ctx.adopt);
+  const refusalReason =
+    action === 'refused' ? refusalForState(state) : undefined;
+  return {
+    destPath: file.destPath,
+    action,
+    ...(refusalReason ? { refusalReason } : {}),
+  };
+}
+
+function outcomeForActions(
+  actions: readonly HookPackFileAction[]
+): HookPackInstallResult['outcome'] {
+  const anyRefused = actions.some((a) => a.action === 'refused');
+  const allUnchanged = actions.every((a) => a.action === 'unchanged');
+
+  if (anyRefused) {
+    return 'installed';
+  }
+  if (allUnchanged) {
+    return 'already_installed';
+  }
+  if (
+    actions.some((a) => a.action === 'updated') &&
+    !actions.some((a) => a.action === 'created')
+  ) {
+    return 'updated';
+  }
+  return 'installed';
+}
+
 /** Install a pack into repoRoot. Pure with respect to its inputs except
  *  for the filesystem writes it performs. Returns a typed result the
  *  caller renders. */
@@ -596,32 +670,36 @@ export function installHookPack(
     actions.push(applyOne(ctx, file));
   }
 
-  // Determine outcome.
-  const anyRefused = actions.some((a) => a.action === 'refused');
-  const allUnchanged = actions.every((a) => a.action === 'unchanged');
-
-  let outcome: HookPackInstallResult['outcome'];
-  if (anyRefused) {
-    // Even a single refusal blocks the outcome from being clean —
-    // 'installed' on partial success would imply more than was done.
-    // Caller reads action[].refusalReason to decide diagnostic.
-    outcome = 'installed';
-  } else if (allUnchanged) {
-    outcome = 'already_installed';
-  } else if (
-    actions.some((a) => a.action === 'updated') &&
-    !actions.some((a) => a.action === 'created')
-  ) {
-    outcome = 'updated';
-  } else {
-    outcome = 'installed';
-  }
-
   return {
-    outcome,
+    outcome: outcomeForActions(actions),
     pack,
     actions,
     activation: pack.activation,
+  };
+}
+
+/** Read-only hook-pack preview. Uses the same file-state evaluator as install
+ * but never writes template bytes, chmods files, or creates directories. */
+export function planHookPackInstall(
+  pack: HookPackV1,
+  options: HookPackInstallOptions
+): HookPackPlanResult {
+  const ctx: InstallContext = {
+    repoRoot: options.repoRoot,
+    packRoot: options.packRootOverride ?? packTemplateRoot(pack.id),
+    pack,
+    overwrite: options.overwrite === true,
+    adopt: options.adopt === true,
+  };
+
+  const actions = pack.installedFiles.map((file) => planOne(ctx, file));
+
+  return {
+    outcome: outcomeForActions(actions),
+    pack,
+    actions,
+    activation: pack.activation,
+    readOnly: true,
   };
 }
 
@@ -798,6 +876,16 @@ export type SettingsMergeResult =
   /** settings.json existed but could not be parsed; left untouched. */
   | { readonly kind: 'invalid'; readonly path: string; readonly error: string };
 
+export type SettingsMergePlanResult = SettingsMergeResult & {
+  readonly readOnly: true;
+};
+
+export interface SettingsExamplePlanResult {
+  readonly path: string;
+  readonly action: 'would_create' | 'would_update' | 'unchanged';
+  readonly readOnly: true;
+}
+
 /** Does this hook-event's entry array already contain a CAWS-owned entry for
  *  `key`? Matches an entry whose command references any of the three known
  *  CAWS dispatch tails so that re-running init on a consumer using an older
@@ -905,6 +993,56 @@ export function mergeClaudeSettings(repoRoot: string): SettingsMergeResult {
   return { kind: 'merged', path: settingsPath, added };
 }
 
+/** Read-only counterpart to mergeClaudeSettings. Computes the same created /
+ * merged / unchanged / invalid outcome without writing settings.json. */
+export function planClaudeSettingsMerge(
+  repoRoot: string
+): SettingsMergePlanResult {
+  const settingsPath = path.join(repoRoot, '.claude', 'settings.json');
+
+  if (!fs.existsSync(settingsPath)) {
+    return { kind: 'created', path: settingsPath, readOnly: true };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  } catch (e) {
+    return {
+      kind: 'invalid',
+      path: settingsPath,
+      error: (e as Error).message,
+      readOnly: true,
+    };
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return {
+      kind: 'invalid',
+      path: settingsPath,
+      error: 'settings.json root is not an object',
+      readOnly: true,
+    };
+  }
+
+  const root = parsed as Record<string, unknown>;
+  const hooks: Record<string, unknown> =
+    root.hooks && typeof root.hooks === 'object' && !Array.isArray(root.hooks)
+      ? (root.hooks as Record<string, unknown>)
+      : {};
+
+  const added: string[] = [];
+  for (const key of Object.keys(CANONICAL_HOOK_ENTRIES)) {
+    if (arrayHasCawsEntry(hooks[key], key)) continue;
+    added.push(key);
+  }
+
+  if (added.length === 0) {
+    return { kind: 'unchanged', path: settingsPath, readOnly: true };
+  }
+
+  return { kind: 'merged', path: settingsPath, added, readOnly: true };
+}
+
 /** Write `.claude/settings.json.example` with the canonical CAWS wiring.
  *  Idempotent (always writes the same bytes). This is the reference
  *  artifact for users who decline the in-place merge. */
@@ -917,6 +1055,31 @@ export function writeSettingsExample(repoRoot: string): string {
   ensureDir(path.dirname(examplePath));
   fs.writeFileSync(examplePath, `${CANONICAL_SETTINGS_SNIPPET}\n`, 'utf8');
   return examplePath;
+}
+
+export function planSettingsExample(repoRoot: string): SettingsExamplePlanResult {
+  const examplePath = path.join(
+    repoRoot,
+    '.claude',
+    'settings.json.example'
+  );
+  const desired = `${CANONICAL_SETTINGS_SNIPPET}\n`;
+  let existing: string | null = null;
+  try {
+    existing = fs.readFileSync(examplePath, 'utf8');
+  } catch {
+    existing = null;
+  }
+  return {
+    path: examplePath,
+    action:
+      existing === null
+        ? 'would_create'
+        : existing === desired
+          ? 'unchanged'
+          : 'would_update',
+    readOnly: true,
+  };
 }
 
 /** Detect a leftover pre-rename `.claude/hooks/dispatch/` directory from a
