@@ -865,6 +865,8 @@ export function registerShellCommands(
       include?: string;
       exclude?: string;
       includeBound?: boolean;
+      apply?: boolean;
+      reason?: string;
       json?: boolean;
       data?: boolean;
     }) => {
@@ -875,6 +877,8 @@ export function registerShellCommands(
         ...(include !== undefined ? { include } : {}),
         ...(exclude !== undefined ? { exclude } : {}),
         ...(opts.includeBound === true ? { includeBound: true } : {}),
+        ...(opts.apply === true ? { apply: true } : {}),
+        ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
         ...(opts.json === true ? { json: true } : {}),
         showData: opts.data === true,
       });

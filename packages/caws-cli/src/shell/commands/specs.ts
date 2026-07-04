@@ -39,6 +39,7 @@ import {
   recoverArchivedSpec,
   restoreArchivedSpec,
   retireDraftSpec,
+  retireDraftSpecs,
   selectDraftSpecsForPrune,
   selectClosedSpecsForArchive,
   showSpec,
@@ -822,6 +823,8 @@ export interface SpecsPruneDraftsOptions extends BaseCommandOptions {
   readonly include?: readonly string[];
   readonly exclude?: readonly string[];
   readonly includeBound?: boolean;
+  readonly apply?: boolean;
+  readonly reason?: string;
   readonly json?: boolean;
 }
 
@@ -838,7 +841,7 @@ function parseNonNegativeIntegerOption(
 }
 
 export function runSpecsPruneDraftsCommand(opts: SpecsPruneDraftsOptions = {}): number {
-  const { cwd, nowFn, out, err, showData } = setupIO(opts);
+  const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
 
   const olderThanMs = parseNonNegativeIntegerOption(opts.olderThanMs, '--older-than-ms');
   if (typeof olderThanMs === 'object') {
@@ -849,13 +852,76 @@ export function runSpecsPruneDraftsCommand(opts: SpecsPruneDraftsOptions = {}): 
   const ctx = resolveCawsCtx(cwd, err, showData, 'prune-drafts');
   if (ctx === null) return 2;
 
-  const result = selectDraftSpecsForPrune(ctx.cawsDir, {
+  const selectionInput = {
     ...(olderThanMs !== undefined ? { olderThanMs } : {}),
     ...(opts.include !== undefined ? { include: opts.include } : {}),
     ...(opts.exclude !== undefined ? { exclude: opts.exclude } : {}),
     ...(opts.includeBound === true ? { includeBound: true } : {}),
     now: nowFn,
-  });
+  };
+
+  if (opts.apply === true) {
+    const actor = buildActorOrError(
+      ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'prune-drafts'
+    );
+    if (actor === null) return 2;
+
+    const result = retireDraftSpecs(ctx.cawsDir, {
+      ...selectionInput,
+      actor,
+      ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+      explicitSelector: (opts.include?.length ?? 0) > 0 || olderThanMs !== undefined,
+    });
+    if (!isOk(result)) {
+      err('caws specs prune-drafts: failed.');
+      err(renderDiagnostics(result.errors, { showData }));
+      return 1;
+    }
+    const outcome = result.value;
+    const ok = outcome.refused.length === 0 && outcome.failed.length === 0;
+    if (opts.json === true) {
+      emitJson(out, {
+        ok,
+        dry_run: false,
+        read_only: false,
+        selector: outcome.selector,
+        counts: {
+          retired: outcome.retired.length,
+          skipped: outcome.skipped.length,
+          refused: outcome.refused.length,
+          failed: outcome.failed.length,
+        },
+        retired: outcome.retired.map((entry) => ({
+          id: entry.id,
+          path: path.relative(ctx.repoRoot, entry.path),
+        })),
+        skipped: outcome.skipped,
+        refused: outcome.refused,
+        failed: outcome.failed,
+      });
+    } else {
+      out(
+        `caws specs prune-drafts (apply): retired ${outcome.retired.length}; skipped ${outcome.skipped.length}; refused ${outcome.refused.length}; failed ${outcome.failed.length}`
+      );
+      for (const entry of outcome.retired) {
+        out(`  retired ${entry.id} (${path.relative(ctx.repoRoot, entry.path)})`);
+      }
+      for (const entry of outcome.skipped) {
+        out(`  skipped ${entry.id}: ${entry.state} (${entry.reason})`);
+      }
+      for (const entry of outcome.refused) {
+        out(`  refused ${entry.id}: ${entry.state} (${entry.reason})`);
+        if (entry.next_command !== undefined) out(`    next: ${entry.next_command}`);
+      }
+      for (const entry of outcome.failed) {
+        out(`  failed ${entry.id}: ${entry.reason}`);
+      }
+    }
+    surfaceAuditCommit(outcome.data?.audit_commit, err);
+    return ok ? 0 : 1;
+  }
+
+  const result = selectDraftSpecsForPrune(ctx.cawsDir, selectionInput);
   if (!isOk(result)) {
     err('caws specs prune-drafts: failed.');
     err(renderDiagnostics(result.errors, { showData }));

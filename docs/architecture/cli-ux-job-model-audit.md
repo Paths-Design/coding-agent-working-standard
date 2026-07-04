@@ -56,7 +56,7 @@ default for every cleanup or bulk lifecycle surface.
 | `evidence` | `record`, `list`, `show`, `schema` | Help surfaces typed `--type`, `--spec`, JSON payload, actor fields, read-only list filters, JSON output, event-ref lookup by seq/hash/prefix, and kernel-derived payload schema discovery. | Strong read/write symmetry: evidence can be appended, inspected, and prepared with a copy-pasteable schema/example path without direct `events.jsonl` parsing. | Good model to copy. Remaining gap is broader event-log discovery under `events`, not typed evidence inspection. |
 | `events` | `list`, `show`, `migrate`, `rotate`, `verify-archive` | Group help lists read and maintenance leaves. `list` verifies the chain and reports counts/latest/rotation archive status; `show` resolves seq/hash/prefix/latest-rotation; `migrate` has `--apply`; `rotate` requires `--reason` and supports `--dry-run`/`--json`; `verify-archive` is read-only. | Stronger audit-log model: operators can discover current chain state and rotation history before rotate/verify operations. | Good model to copy. Remaining event-log gap is retention/prune policy, which should stay separate from rotate/archive verification. |
 | `waiver` | `create`, `list`, `show`, `revoke`, `prune` | Help covers CRUD-like waiver lifecycle; create/revoke require audit metadata, create supports dry-run validation, and prune exposes expired-waiver cleanup as dry-run/apply with JSON. | Stronger exception lifecycle model: operators can preview candidate creation and clean expired active waivers without hand-editing waiver files. | Good model to copy. Remaining gap is richer waiver matching diagnostics from a gate violation back to candidate waiver scope. |
-| `specs` | `create`, `list`, `show`, `recover`, `restore`, `retire-draft`, `prune-drafts`, `activate`, `amend-scope`, `close`, `archive`, `prune-archive`, `migrate`, `validate` | Group help now names every leaf. Leaf help exposes lifecycle state transitions, create preflight, restore dry-run/apply, draft cleanup planning, batch archive selectors, migration apply/partial, and file-path validation. Archive batch mode now supports include/exclude, age/date selectors, and worktree-binding exclusion. | Strongest lifecycle surface after the archive fix: scoped creation, read-only create planning, governed scope amendment, recover/restore, draft prune planning, batch archive with refined selectors, migration preview/apply. | Remaining spec lifecycle cleanup gap is guarded apply for stale draft pruning; `prune-drafts` is still read-only. |
+| `specs` | `create`, `list`, `show`, `recover`, `restore`, `retire-draft`, `prune-drafts`, `activate`, `amend-scope`, `close`, `archive`, `prune-archive`, `migrate`, `validate` | Group help now names every leaf. Leaf help exposes lifecycle state transitions, create preflight, restore dry-run/apply, draft cleanup dry-run/apply, batch archive selectors, migration apply/partial, and file-path validation. Archive batch mode now supports include/exclude, age/date selectors, and worktree-binding exclusion. | Strong lifecycle surface after the archive and draft-prune fixes: scoped creation, read-only create planning, governed scope amendment, recover/restore, guarded draft prune apply, batch archive with refined selectors, migration preview/apply. | Good model to copy. Remaining spec lifecycle gaps are smaller refusal-handoff improvements, such as turning draft-bind refusal into a direct `specs activate` handoff. |
 | `worktree` | `create`, `list`, `bind`, `destroy`, `untrack`, `merge`, `migrate-registry`, `repair-sparse`, `repair`, `prune`, `cleanup-plan` | Group help lists lifecycle, untrack, migration, sparse repair, control-plane repair, doctor-evidence prune, and physical cleanup planning/apply. Leaf help distinguishes create vs bind, dry-run merge, destroy guardrails, untrack dry-run/apply, repair dry-run, prune dry-run/apply, cleanup-plan dry-run, and guarded cleanup-plan apply. | Strong lifecycle and cleanup model. `prune` covers safe control-plane residue classes, `untrack` preserves files after releasing a CAWS binding, and `cleanup-plan` classifies real git worktrees by clean/dirty, merged/unmerged, bound lifecycle, ownership, and registry presence. `cleanup-plan --apply` requires explicit selectors and destroys only `destroy-ready` items through `destroyWorktree`. | Good model to copy. Future expansion could consider `unbound-clean-candidate` apply, but only after field evidence proves it is safe. |
 | `agents` | `register`, `heartbeat`, `stop`, `list`, `show`, `prune` | Help exposes hook-writer verbs, read-only list/show, JSON, stale TTLs, `--dead`, retention filters, dry-run default, `--apply`. | Best cleanup UX model in the CLI. It cleanly separates display-only stale state from deletion and supports machine output. | Good model to copy. Minor gap: no `explain <id>` that says why a lease is active/stale/stopped/dead, but list/show largely cover it. |
 | `message` | `send`, `poll` | Help surfaces directed send, optional dead recipient escape hatch, poll wait/peek/JSON. | Adequate communication model and correctly says messages are not authority. | No inbox/list/history management or prune/retention surface. That may be intentional, but long-running projects will accumulate message-log state. |
@@ -75,7 +75,7 @@ default for every cleanup or bulk lifecycle surface.
 | Inspect evidence history and payload shape | `evidence list/show/schema` | `waiver list/show`, `agents list/show` | Now closed for typed evidence events: list filters by spec/type, show resolves seq/hash/prefix after chain verification, and schema derives required payload fields from the kernel contracts. | Use this read/write/schema loop as a model for other append-heavy commands. |
 | Rotate audit chain safely | `events list/show`, `events rotate --dry-run --reason ...`, `events verify-archive` | `events migrate --apply` | Now closed for first-order preview/read/verify parity: list/show summarize current chain and rotation archive status, rotate dry-run reports target archive path/line count/digest/stats/genesis, and verify-archive confirms archived bytes. | Future retention/prune semantics should be designed separately from rotation verification. |
 | Clean expired waivers safely | `waiver prune --status expired [--apply]` | `agents prune --status ... --apply` | Now closed for expired active waivers: prune defaults to dry-run, supports JSON, and apply requires revocation audit metadata. | Future waiver UX should focus on explaining which waiver scope would match a gate violation, not broad deletion. |
-| Retire stale draft specs in bulk | `specs retire-draft <id>`, `specs prune-drafts` | `specs archive --status closed --include/--exclude --apply` | Now closed for read-only planning: stale means age by `updated_at`/`created_at` beyond `--older-than-ms`, with include/exclude selectors and bound-draft refusal by default. No batch apply path yet. | Add guarded `--apply` only after enough field use proves the state classes are right. |
+| Retire stale draft specs in bulk | `specs prune-drafts --older-than-ms ... --apply`, `specs retire-draft <id>` | `specs archive --status closed --include/--exclude --apply` | Now closed for guarded apply: dry-run remains default, apply requires `--include` or explicit `--older-than-ms`, bound drafts stay refused unless `--include-bound`, refused plans do not mutate, and candidates retire through `retireDraftSpec` with one aggregate audit commit. | Future spec lifecycle UX should focus on refusal handoff and history/readback, not broader deletion semantics. |
 | Plan tiered spec creation | `specs create --plan` | `waiver create --dry-run`, `events rotate --dry-run` | Now closed for creation preflight: plan validates the same candidate as create, reports missing semantic fields, supports JSON, and writes no spec/event state. | Future creation UX can add templates, but the read-only preflight is the durable base. |
 
 ## Session Evidence
@@ -173,24 +173,22 @@ By top-level command:
 | `UX-WORKTREE-PHYSICAL-CLEANUP-PLAN-001` | Implemented in sixteenth repair slice | `worktree cleanup-plan` read-only physical worktree cleanup planning | Adds `caws worktree cleanup-plan [--state <classes>] [--include <subjects>] [--exclude <subjects>] [--json]`. The command classifies registered and unregistered physical git worktrees by clean/dirty, merged/unmerged, bound spec lifecycle, ownership, and registry presence, names the safe next command, and writes no registry, spec, event, or git worktree state. Covered by `packages/caws-cli/tests/shell/worktree-physical-cleanup-plan.test.js`. |
 | `UX-WORKTREE-PHYSICAL-CLEANUP-APPLY-001` | Implemented in seventeenth repair slice | `worktree cleanup-plan --apply` guarded physical cleanup | Adds guarded apply to `caws worktree cleanup-plan`. Apply refuses unfiltered runs, mutates only selected `destroy-ready` registered worktrees, re-enters `destroyWorktree` for every deletion, and reports selected refused classes without mutation. Covered by `packages/caws-cli/tests/shell/worktree-physical-cleanup-plan.test.js`. |
 | `UX-SPECS-ARCHIVE-SELECTORS-001` | Implemented in eighteenth repair slice | `specs archive --status closed` refined selectors | Adds `--older-than-ms`, `--updated-before`, and `--without-worktree` to batch archive. Dry-run and apply share the store selector, included non-matches report skip reasons, and apply archives only selected closed specs through the existing archive path. Covered by `packages/caws-cli/tests/store/specs-archive-batch-selector.test.js` and `packages/caws-cli/tests/shell/specs-archive-batch.test.js`. |
+| `UX-SPECS-DRAFT-PRUNE-APPLY-001` | Implemented in nineteenth repair slice | `specs prune-drafts --apply` guarded stale draft retirement | Adds `--apply` and optional `--reason` to `caws specs prune-drafts`. Apply requires `--include` or explicit `--older-than-ms`, refuses selected plans with refused entries without mutation, retires only candidates through `retireDraftSpec`, and creates one aggregate audit commit for the batch. Covered by `packages/caws-cli/tests/shell/specs-prune-drafts.test.js`. |
 
 ## Next Slice
 
-The next implementation slice should address guarded draft-prune apply.
-`specs prune-drafts` now gives a reliable read-only plan for stale drafts, but
-there is no batch apply path. Add `--apply` only for candidate draft specs,
-keep dry-run as the default, require explicit `--include` or stale threshold
-selection, preserve the bound-draft refusal unless `--include-bound` is present,
-and retire each selected draft through the existing governed draft retirement
-path.
+The next implementation slice should address a doctor repair-plan surface.
+`doctor` emits rich findings and repair text, but agents still translate those
+classes into separate commands by hand. Add a read-only `caws doctor plan`
+or equivalent JSON mode that groups findings by state class, subject, safe
+next command, and refusal reason without mutating governed state.
 
 ## Findings
 
 1. **The CLI has a good cleanup UX pattern, but it is not consistently applied.**
-   `agents prune` and batch `specs archive` have the right operator shape:
+   `agents prune`, batch `specs archive`, and `specs prune-drafts --apply` have the right operator shape:
    filter, preview, explicit apply, and JSON. Cleanup-heavy surfaces under
-   `worktree` now share that model; draft spec lifecycle still lacks guarded
-   apply.
+   `worktree` and `specs` now share that model.
 
 2. **Worktree cleanup now has the right diagnosis/apply split.**
    `worktree repair` handles safe control-plane half-states, `prune` plans and
@@ -236,10 +234,10 @@ path.
    `prune` is doctor/control-plane cleanup; `cleanup-plan` is physical git
    worktree classification.
 
-4. Add guarded stale-draft prune apply:
-   keep `specs prune-drafts` dry-run by default, require selectors, preserve
-   bound-draft refusals by default, and dispatch every mutation through the
-   existing `retireDraftSpec` path.
+4. Add doctor repair-plan output:
+   publish doctor finding state classes as a read-only plan with subject, safe
+   next command, allowed mutation class, and refusal reason, so agents do not
+   have to infer repair steps from prose.
 
 5. Add help regression tests for any group description that names subcommands
    and for cleanup leaves that claim dry-run/apply semantics. The CLI already
