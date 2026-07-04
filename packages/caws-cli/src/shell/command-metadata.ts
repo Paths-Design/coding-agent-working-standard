@@ -414,9 +414,13 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'prune-archive',
       description:
-        'Compatibility no-op. Archived spec bodies under .caws/specs/.archive/ are canonical again and are not pruned by CAWS.',
+        'Compatibility no-op. Archived spec bodies under .caws/specs/.archive/ are canonical again and are not pruned by CAWS. To archive closed specs, use caws specs archive --status closed; to bring an archived spec back, use caws specs restore or caws specs recover.',
       options: [
-        { flag: '--apply', description: 'Accepted for compatibility; no files are pruned.' },
+        {
+          flag: '--apply',
+          description:
+            'Accepted for compatibility; no files are pruned. Use caws specs archive --status closed --apply to archive closed specs.',
+        },
         DATA_OPTION,
       ],
     },

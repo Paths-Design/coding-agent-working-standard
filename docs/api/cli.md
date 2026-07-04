@@ -749,6 +749,10 @@ caws specs prune-archive --apply
 ```
 
 Compatibility no-op. Archived spec bodies under `.caws/specs/.archive/` are canonical again and are not pruned by CAWS. `--apply` is accepted for compatibility and does not remove files.
+Use `caws specs archive --status closed` to archive closed canonical specs,
+`caws specs restore <id> --as draft|active` to bring an archived spec back into
+`.caws/specs/`, or `caws specs recover <id> --out <path>` to copy the archived
+body elsewhere for inspection.
 
 ### `caws specs migrate`
 
