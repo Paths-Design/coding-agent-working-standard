@@ -159,6 +159,12 @@ export interface PollResult {
   readonly diagnostics: ReadonlyArray<Diagnostic>;
 }
 
+export interface MessageInboxListResult {
+  readonly messages: readonly MessageRecord[];
+  readonly waiting: number;
+  readonly diagnostics: ReadonlyArray<Diagnostic>;
+}
+
 export interface PollOptions {
   /** Block up to this many ms for a message before giving up (long-poll). 0/undefined = return immediately. */
   readonly waitMs?: number;
@@ -310,6 +316,68 @@ export function inboxCount(cawsDir: string, me: string): Result<number> {
     }
   }
   return ok(messages.filter((m) => m.to === me && !delivered.has(m.id)).length);
+}
+
+/**
+ * List undelivered messages addressed to `me` without consuming them.
+ * Returns oldest-waiting first so the result mirrors the order poll would
+ * deliver. `limit` caps the returned list only; `waiting` is the full mailbox
+ * depth.
+ */
+export function inboxMessages(
+  cawsDir: string,
+  me: string,
+  opts: { readonly limit?: number } = {}
+): Result<MessageInboxListResult> {
+  const file = messagesPath(cawsDir);
+  if (!fs.existsSync(file)) return ok({ messages: [], waiting: 0, diagnostics: [] });
+  let raw: string;
+  try {
+    raw = fs.readFileSync(file, 'utf8');
+  } catch (e) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.MESSAGES_LOG_UNREADABLE,
+        `Failed to read ${MESSAGES_FILENAME}: ${(e as Error).message}`
+      )
+    );
+  }
+  const diagnostics: Diagnostic[] = [];
+  const messages: MessageRecord[] = [];
+  const delivered = new Set<string>();
+  let lineNo = 0;
+  for (const line of raw.split('\n')) {
+    lineNo++;
+    if (line.length === 0) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      diagnostics.push(
+        storeDiagnostic(
+          STORE_RULES.MESSAGES_LINE_MALFORMED,
+          `${MESSAGES_FILENAME}:${lineNo} is not valid JSON — skipped.`
+        )
+      );
+      continue;
+    }
+    const rec = parsed as { record?: string };
+    if (rec.record === 'message') messages.push(parsed as MessageRecord);
+    else if (rec.record === 'delivery') {
+      const d = parsed as DeliveryRecord;
+      if (typeof d.deliver_id === 'string') delivered.add(d.deliver_id);
+    }
+  }
+  const waitingMessages = messages.filter((m) => m.to === me && !delivered.has(m.id));
+  const limit =
+    typeof opts.limit === 'number' && Number.isFinite(opts.limit) && opts.limit >= 0
+      ? Math.floor(opts.limit)
+      : waitingMessages.length;
+  return ok({
+    messages: waitingMessages.slice(0, limit),
+    waiting: waitingMessages.length,
+    diagnostics,
+  });
 }
 
 /** Full, non-lossy history between two endpoints (both directions, in order). */

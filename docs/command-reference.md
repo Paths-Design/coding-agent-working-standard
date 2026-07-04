@@ -758,6 +758,29 @@ Pull the next undelivered message addressed to you. Deliver-once. Defaults --me 
 - `--json` — Emit JSON ({message, waiting}) instead of human text
 - `--data` — Show structured data block on diagnostics
 
+### `caws message inbox`
+
+List undelivered messages addressed to you without consuming them. Read-only; poll remains the delivery-consuming command.
+
+**Options:**
+
+- `--me <session_id>` — Endpoint inbox to list (default: this session id)
+- `--limit <n>` — Maximum messages to print from the waiting queue
+- `--json` — Emit JSON ({ok, read_only, me, waiting, messages})
+- `--data` — Show structured data block on diagnostics
+
+### `caws message history`
+
+Show retained channel history between this session and another endpoint. Read-only; message bodies are communication, not authority.
+
+**Options:**
+
+- `--me <session_id>` — This endpoint (default: this session id)
+- `--with <session_id>` — Other endpoint in the channel (required)
+- `--limit <n>` — Maximum recent messages to print, preserving log order
+- `--json` — Emit JSON ({ok, read_only, channel, total, messages})
+- `--data` — Show structured data block on diagnostics
+
 ## `caws prepush`
 
 Classify the outgoing commit range before publish and refuse commits not attributable to the current slice. Diagnose/decide only — does NOT run git push.

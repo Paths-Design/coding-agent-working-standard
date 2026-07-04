@@ -266,10 +266,17 @@ export type {
 } from './commands/agents';
 
 // ─── caws message (AGENT-MESSAGE-CHANNEL-001) ────────────────────────────
-export { runMessageSendCommand, runMessagePollCommand } from './commands/message';
+export {
+  runMessageSendCommand,
+  runMessagePollCommand,
+  runMessageInboxCommand,
+  runMessageHistoryCommand,
+} from './commands/message';
 export type {
   MessageSendCommandOptions,
   MessagePollCommandOptions,
+  MessageInboxCommandOptions,
+  MessageHistoryCommandOptions,
 } from './commands/message';
 
 export { registerShellCommands } from './register';

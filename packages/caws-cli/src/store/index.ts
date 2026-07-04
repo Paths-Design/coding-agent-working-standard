@@ -104,6 +104,7 @@ export {
   sendMessage,
   pollMessage,
   inboxCount,
+  inboxMessages,
   channelHistory,
   isRecipientLive,
   channelId,
