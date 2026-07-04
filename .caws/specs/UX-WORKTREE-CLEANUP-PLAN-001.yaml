@@ -7,7 +7,9 @@ created_at: '2026-07-04T04:13:45.838Z'
 updated_at: '2026-07-04T04:13:45.838Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli worktree command surface'
+    - 'worktree cleanup planning diagnostics'
+    - 'CLI UX audit documentation'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -18,11 +20,25 @@ scope:
     - 'docs/command-reference.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The first worktree cleanup slice is read-only: it must not delete directories, mutate worktrees.json, mutate specs, or append events.'
+  - 'The cleanup plan must expose explicit state classes and next safe commands rather than forcing agents to infer cleanup actions from failed destroy/repair attempts.'
+  - 'Human-readable and JSON output must agree on candidate state classes and refusal/allowed-action semantics.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a repo has registered, spec-bound, stale, or doctor-observed worktree residue'
+    when: 'an agent runs the new worktree cleanup plan command'
+    then: 'the command prints a read-only plan with state class, subject, allowed mutation, refusal reason when applicable, and next safe command'
+  - id: A2
+    given: 'an agent requests machine-readable output'
+    when: 'the cleanup plan is run with JSON output'
+    then: 'the JSON payload exposes the same candidates and state classes without mutating CAWS state'
+  - id: A3
+    given: 'an agent inspects nested worktree help'
+    when: 'caws worktree --help and the leaf help render'
+    then: 'the cleanup plan surface is discoverable and documented as read-only'
+  - id: A4
+    given: 'the slice lands'
+    when: 'docs/architecture/cli-ux-job-model-audit.md is updated'
+    then: 'the implementation ledger marks the worktree cleanup plan slice complete and scopes the next mutation-capable slice separately'
 non_functional: {}
 contracts: []
