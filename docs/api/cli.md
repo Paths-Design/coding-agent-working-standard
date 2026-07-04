@@ -111,7 +111,13 @@ Explain the scope decision for `<path>`. Always exits 0 (pure observation).
 
 ```bash
 caws scope show src/foo.ts
+caws scope show src/foo.ts --json
 ```
+
+`--json` emits the stable decision contract used by hooks and automation. For
+repairable refusals, the payload includes a `remediation` object with safe
+handoff commands such as `caws specs amend-scope`, `caws worktree bind`, or
+claimant inspection commands.
 
 ### `caws scope check <path>`
 
@@ -119,7 +125,11 @@ Enforce the scope decision for `<path>`.
 
 ```bash
 caws scope check src/foo.ts
+caws scope check src/foo.ts --json
 ```
+
+`--json` emits the same decision/remediation contract as `scope show --json`
+while preserving enforcement exit codes.
 
 Exit codes: 0 (admit), 1 (refuse).
 

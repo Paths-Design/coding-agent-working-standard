@@ -636,8 +636,16 @@ export const SCOPE_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'check',
       argument: { name: 'path', required: true, description: 'File path to enforce' },
-      description: 'Enforce the scope decision for <path>; exits 0 on admit, 1 otherwise',
-      options: [{ flag: '--data', description: 'Show structured data block' }],
+      description:
+        'Enforce the scope decision for <path>; exits 0 on admit, 1 otherwise. --json emits the same decision/remediation contract as scope show while preserving check exit codes.',
+      options: [
+        { flag: '--data', description: 'Show structured data block' },
+        {
+          flag: '--json',
+          description:
+            'Emit the scope decision and remediation guidance as a single-line JSON contract',
+        },
+      ],
     },
     {
       kind: 'leaf',

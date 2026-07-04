@@ -83,13 +83,14 @@ Explain the scope decision for <path>; always exits 0
 
 ### `caws scope check <path>`
 
-Enforce the scope decision for <path>; exits 0 on admit, 1 otherwise
+Enforce the scope decision for <path>; exits 0 on admit, 1 otherwise. --json emits the same decision/remediation contract as scope show while preserving check exit codes.
 
 **Argument:** `path` (required) — File path to enforce
 
 **Options:**
 
 - `--data` — Show structured data block
+- `--json` — Emit the scope decision and remediation guidance as a single-line JSON contract
 
 ### `caws scope contention <path>`
 
