@@ -189,6 +189,8 @@ export interface SpecsCreateOptions extends BaseCommandOptions {
    * (CAWS-SPECS-CREATE-SCOPE-IN-001).
    */
   readonly scopeIn?: readonly string[];
+  /** Alias for --scope-in using the YAML field spelling. */
+  readonly scopeInDot?: readonly string[];
   /**
    * Repeatable --contract "name:type[:path]". Tier-1/2 specs require at least
    * one contract; supplying it here creates the spec valid in one command
@@ -263,7 +265,7 @@ function parseContractFlags(
 
 const SPECS_CREATE_USAGE = [
   'Usage:',
-  '  caws specs create <id> --title "<short title>" --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3> [--tier <1|2|3>] [--scope-in <path>]... [--contract "name:type[:path]"]... [--plan] [--json]',
+  '  caws specs create <id> --title "<short title>" --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3> [--tier <1|2|3>] [--scope-in <path>]... [--scope.in <path>]... [--contract "name:type[:path]"]... [--plan] [--json]',
   '',
   'Example:',
   '  caws specs create FEAT-001 --title "Trivial first slice" --mode chore --risk-tier 3',
@@ -277,6 +279,7 @@ const SPECS_CREATE_USAGE = [
   '  Tier 1/2 specs require at least one contract: pass --contract "name:type[:path]"',
   '    (repeatable); type is one of api|schema|contract-test|behavior. Or use --risk-tier 3 / --mode chore.',
   '  --scope-in (repeatable) writes scope.in at creation time, so you never hand-edit it.',
+  '  --scope.in is an alias for --scope-in; both write the canonical scope.in field.',
   '  --plan validates and prints the candidate without writing .caws/specs or events.',
   '  To widen scope later, use `caws specs amend-scope <id> --add <path>` (governed; no hand-edit).',
   '  Invariants and acceptance still need filling in via the spec YAML before iteration.',
@@ -448,6 +451,12 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     return 1;
   }
 
+  if (opts.scopeIn !== undefined && opts.scopeInDot !== undefined) {
+    err('caws specs create: --scope-in and --scope.in both write scope.in; pass only one.');
+    return 1;
+  }
+  const scopeIn = opts.scopeIn ?? opts.scopeInDot;
+
   if (!VALID_MODES.includes(mode as ValidMode)) {
     err(
       `caws specs create: invalid --mode "${mode}". Expected one of: ${VALID_MODES.join(', ')}.`
@@ -493,8 +502,8 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     initialState: 'active',
     now: nowFn,
     actor,
-    ...(opts.scopeIn !== undefined && opts.scopeIn.length > 0
-      ? { scopeIn: opts.scopeIn }
+    ...(scopeIn !== undefined && scopeIn.length > 0
+      ? { scopeIn }
       : {}),
     ...(parsedContracts !== undefined && parsedContracts.length > 0
       ? { contracts: parsedContracts }
@@ -517,8 +526,8 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
       title,
       mode: mode as ValidMode,
       riskTier: riskTier as 1 | 2 | 3,
-      ...(opts.scopeIn !== undefined && opts.scopeIn.length > 0
-        ? { scopeIn: opts.scopeIn }
+      ...(scopeIn !== undefined && scopeIn.length > 0
+        ? { scopeIn }
         : {}),
       ...(opts.contract !== undefined && opts.contract.length > 0
         ? { contract: opts.contract }
@@ -541,7 +550,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
           mode,
           risk_tier: riskTier,
           lifecycle_state: 'active',
-          scope_in: opts.scopeIn ?? [],
+          scope_in: scopeIn ?? [],
           contracts: parsedContracts ?? [],
         },
         command,
@@ -617,7 +626,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   // authoritative inside the spec's bound worktree; base-branch writes are
   // governed by the worktree-write-guard, not scope-guard. State that truth.
   const scopeInWasPopulated =
-    opts.scopeIn !== undefined && opts.scopeIn.length > 0;
+    scopeIn !== undefined && scopeIn.length > 0;
   out('');
   // CAWS-SPECS-CREATE-COMMIT-BEFORE-WORKTREE-GUIDANCE-001: both branches must
   // tell the first-timer to COMMIT the spec (after filling in the body) BEFORE
@@ -628,7 +637,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   // the audit commit clean. We also name how to inspect the filled-in spec —
   // there is intentionally no `caws specs validate` verb in v11.
   if (scopeInWasPopulated) {
-    out('Next: scope.in is set from --scope-in. Fill in invariants + acceptance, then:');
+    out('Next: scope.in is set from create-time scope flags. Fill in invariants + acceptance, then:');
     out(
       `  1. caws specs show ${outcome.id}   (re-read the spec; or run \`caws doctor\` to check for drift)`
     );
