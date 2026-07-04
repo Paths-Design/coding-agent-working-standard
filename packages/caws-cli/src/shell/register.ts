@@ -494,9 +494,17 @@ export function registerShellCommands(
 
   defineLeaf(gatesCmd, leafMeta(GATES_COMMAND_META, 'run'))
     .action(
-      (opts: { spec: string; context: string; data?: boolean }) => {
+      (specArg: string | undefined, opts: { spec?: string; context: string; data?: boolean }) => {
+        if (specArg !== undefined && opts.spec !== undefined) {
+          process.stderr.write(
+            'caws gates run: positional <spec> and --spec both name the spec id; supply only one.\n'
+          );
+          exit(1);
+          return;
+        }
+        const specId = opts.spec ?? specArg ?? '';
         const code = runGatesRunCommand(
-          { specId: opts.spec },
+          { specId },
           {
             showData: opts.data === true,
           }

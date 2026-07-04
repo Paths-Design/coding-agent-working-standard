@@ -167,13 +167,15 @@ Explain one policy gate: enabled state, mode, thresholds, waiver policy, and eff
 - `--json` — Emit the gate explanation as JSON.
 - `--data` — Show structured data block on diagnostics
 
-### `caws gates run`
+### `caws gates run [spec]`
 
 Run CAWS-local policy evaluators and apply policy.gates[gate].mode to decide block/warn/skip. Appends one gate_evaluated event per policy-declared gate. Exit codes: 0/1 on gate disposition; 2 on hard composition error (no policy / report-contract failure); 3 on evidence-integrity failure (a gate_evaluated event failed to append or validate).
 
+**Argument:** `spec` (optional) — Spec id this gate run is about; alias for --spec <id>
+
 **Options:**
 
-- `--spec <id>` (**required**) — Spec id this gate run is about
+- `--spec <id>` — Spec id this gate run is about; aliases positional <spec>
 - `--context <ctx>` (default: `cli`) — Compatibility no-op retained from the former external quality package path
 - `--data` — Show structured data block on diagnostics
 
