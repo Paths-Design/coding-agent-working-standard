@@ -7,7 +7,8 @@ created_at: '2026-07-04T18:06:23.638Z'
 updated_at: '2026-07-04T18:06:23.638Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - docs/architecture
+    - packages/caws-cli/tests/docs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -16,12 +17,17 @@ scope:
     - 'packages/caws-cli/tests/docs/cli-ux-no-scope-authority-reconciliation.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The CLI UX audit must not leave no_scope_authority marked open when linked-dist reproduction shows the current renderer provides active-spec authority guidance.'
+  - 'The audit ledger must name the slices and regression coverage that keep no-scope-authority remediation current.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'current CAWS and Sterling session logs still contain historical no_scope_authority transcripts'
+    when: 'the linked dist CLI is reproduced from an unbound checkout with active specs'
+    then: 'the audit records that the residual transcripts are stale and that current output includes active-spec candidates, read-only --spec checks, and worktree create/enter handoffs'
+  - id: A2
+    given: 'future edits may accidentally reopen the audit bucket'
+    when: 'the docs regression test runs'
+    then: 'it fails unless the friction table, representative patterns, findings, implementation ledger, and next-slice pointer consistently mark no_scope_authority reconciled'
 non_functional: {}
 contracts:
   - name: 'no-scope-authority-resample'
