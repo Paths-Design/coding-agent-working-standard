@@ -2,10 +2,11 @@ id: UX-EVIDENCE-SCHEMA-DISCOVERY-001
 title: 'Add evidence payload schema discovery'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
-worktree: evidence-schema-discovery
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge evidence-schema-discovery at c122aefea2a8707840f725541f7ab4c8b6048f87'
 created_at: '2026-07-04T05:02:41.783Z'
-updated_at: '2026-07-04T05:02:43.246Z'
+updated_at: '2026-07-04T05:09:07.570Z'
 blast_radius:
   modules:
     - packages/caws-cli
