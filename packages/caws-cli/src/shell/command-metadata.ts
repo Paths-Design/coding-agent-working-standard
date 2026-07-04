@@ -134,7 +134,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'specs',
   description:
-    'Manage CAWS spec lifecycle (create/list/show/recover/retire-draft/activate/close/archive/prune-archive/migrate)',
+    'Manage CAWS spec lifecycle (create/list/show/recover/retire-draft/activate/amend-scope/close/archive/prune-archive/migrate/validate)',
   subcommands: [
     {
       kind: 'leaf',
