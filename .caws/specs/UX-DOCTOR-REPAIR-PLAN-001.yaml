@@ -7,12 +7,12 @@ created_at: '2026-07-04T11:35:21.609Z'
 updated_at: '2026-07-04T11:35:27.288Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli/doctor
+    - caws-cli/docs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/shell/commands/doctor.ts
     - packages/caws-cli/src/shell/command-metadata.ts
     - packages/caws-cli/src/shell/register.ts
@@ -22,11 +22,22 @@ scope:
     - docs/architecture/cli-ux-job-model-audit.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'caws doctor remains read-only; repair-plan output must not mutate specs, worktrees, events, leases, waivers, policy, or git worktree directories.'
+  - 'doctor repair-plan output is derived from the same composed snapshot and doctor findings as caws doctor.'
+  - 'every planned item exposes source rule, subject, severity, state class, safe next command, and either allowed mutation or refusal reason.'
+  - 'existing caws doctor behavior and exit-code semantics are preserved when repair-plan mode is not requested.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a project with doctor findings'
+    when: 'caws doctor --repair-plan --json is run'
+    then: 'the command emits grouped read-only plan items with counts, state classes, source rules, subjects, and next commands without mutating CAWS state'
+  - id: A2
+    given: 'a project with no doctor findings'
+    when: 'caws doctor --repair-plan is run'
+    then: 'the command reports an empty read-only plan and exits successfully'
+  - id: A3
+    given: 'the existing caws doctor command without repair-plan flags'
+    when: 'the command is run'
+    then: 'the current diagnostic rendering and exit-code behavior are unchanged'
 non_functional: {}
 contracts: []
