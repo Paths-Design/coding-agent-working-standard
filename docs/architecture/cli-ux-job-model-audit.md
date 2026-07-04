@@ -129,7 +129,7 @@ By top-level command:
 | `tier_requires_metadata` | 87 | Fixed at the create-plan layer: `specs create --plan` now reports missing semantic fields and emits copy-pasteable YAML examples in human and JSON output. |
 | `danger_latch` | 66 | CAWS hook UX still matters for CLI workflows; blocked shell forms often interrupt otherwise correct CAWS procedures. |
 | `worktree_not_found` | 62 | Fixed for `worktree destroy`: missing registry entries now remain non-mutating refusals but include a CAWS-native handoff to `worktree list`, `worktree prune --include <name>`, and `worktree cleanup-plan --include <name>` so agents can distinguish registry residue from unregistered physical worktrees. |
-| `merge_failed` | 43 | Merge is a complex mutating job; failed merges need better plan/state output and post-failure recovery guidance. |
+| `merge_failed` | 43 | Fixed for first-order merge readiness: `worktree merge --dry-run --data` now emits read-only readiness/recovery data, and merge prerequisite/git failures include repair guidance for inventory, cleanup planning, branch range checks, and merge-tree probes. |
 | `missing_bulk_archive` | 19 | This is the exact class fixed by batch `specs archive`; agents had to inspect help, count closed specs, and infer that no bulk path existed. |
 | `contract_arg_invalid` | 14 | Fixed by `specs create` help/diagnostics: inverted tuples print the accepted shape and a corrected `--contract "name:behavior"` suggestion. |
 | `draft_spec_create_refused` | 13 | Fixed for worktree create/bind: draft-spec refusals now hand off to `caws specs activate <id>` and explain activation preflight. |
@@ -198,16 +198,17 @@ By top-level command:
 | `UX-SPECS-STATUS-LIST-HANDOFF-001` | Implemented in thirty-fifth repair slice | Specs status list filter and group-level handoff | Adds read-only `caws specs list --status <active|draft|closed|archived>` and routes `caws specs --status <state>` to the same list filter. Invalid statuses name accepted values and distinguish read-only listing from `caws specs archive --status closed`. Covered by `packages/caws-cli/tests/shell/specs-status-list.test.js`. |
 | `UX-SPECS-STATUS-POSITIONAL-FIX-001` | Implemented in thirty-sixth repair slice | Specs status positional parsing fix | Fixes the Commander parent-option interaction found by linked-dist smoke: `caws specs --status <state>` still works, while `caws specs list --status <state>` is parsed by the list leaf and filters correctly. Covered by spawned CLI assertions in `packages/caws-cli/tests/shell/specs-status-list.test.js`. |
 | `UX-WORKTREE-DESTROY-NOT-FOUND-HANDOFF-001` | Implemented in thirty-seventh repair slice | Worktree destroy not-found cleanup handoff | Adds a narrow repair block to the missing-registry destroy refusal. `caws worktree destroy <name>` still refuses without mutation when `<name>` is absent from `worktrees.json`, but it now points to inventory, control-plane prune, and physical cleanup-plan commands. Covered by `packages/caws-cli/tests/shell/worktree-destroy-not-found-handoff.test.js`. |
+| `UX-WORKTREE-MERGE-RECOVERY-GUIDANCE-001` | Implemented in thirty-eighth repair slice | Worktree merge readiness and recovery guidance | Adds structured read-only recovery output to `caws worktree merge <name> --dry-run --data` and attaches repair guidance to prerequisite refusals plus checkout/merge git failures. Covered by `packages/caws-cli/tests/shell/worktree-merge-recovery-guidance.test.js`. |
 
 ## Next Slice
 
-The next implementation slice should move to the `merge_failed` class. Session
-evidence shows failed merge attempts are costly because agents need to know
-whether to retry, inspect branch divergence, repair ownership, or abandon the
-merge. Start by verifying current `caws worktree merge --dry-run` and failed
-merge diagnostics, then decide whether merge needs a read-only recovery plan or
-sharper refusal handoffs to `worktree list`, `worktree cleanup-plan`, branch
-range checks, or ownership guidance.
+The next implementation slice should move to the remaining `no_scope_authority`
+class. Session evidence shows agents repeatedly ask scope questions from
+canonical/unbound contexts and then need a bridge into an authoritative edit
+context. Start by verifying current `caws scope check/show/plan` unbound
+diagnostics and decide whether the refusal should hand off more directly to
+`caws worktree create`, `caws worktree bind`, `caws claim`, or
+`caws specs amend-scope` depending on the observed state.
 
 ## Findings
 
@@ -324,6 +325,13 @@ range checks, or ownership guidance.
    diagnostic now tells agents to list registered worktrees, run a targeted
    prune plan for closed/ghost control-plane residue, or run a physical
    cleanup-plan when an unregistered git worktree may still exist.
+
+20. **Worktree merge now has a recovery-oriented dry-run payload.**
+   `worktree merge --dry-run --data` reports `read_only`, `can_proceed`,
+   findings, worktree branch/base/spec details, and next commands for CAWS
+   inventory, cleanup planning, branch range checks, and merge-tree probes.
+   The same command set appears as `repair:` guidance on prerequisite and git
+   merge failures.
 
 ## Recommendations
 

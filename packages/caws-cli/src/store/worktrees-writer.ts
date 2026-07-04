@@ -185,6 +185,7 @@ export type WorktreeWriterOutcome =
       readonly name: string;
       readonly canProceed: boolean;
       readonly findings: readonly string[];
+      readonly data?: Record<string, unknown>;
     }
   | {
       readonly kind: 'partial_failure_recovered';
@@ -310,6 +311,44 @@ function getCurrentBranch(repoRoot: string): string | null {
   const r = runGit(['rev-parse', '--abbrev-ref', 'HEAD'], repoRoot);
   if (!r.ok) return null;
   return r.stdout.trim();
+}
+
+function mergeRecoveryNextCommands(
+  name: string,
+  entry:
+    | {
+        readonly branch?: string;
+        readonly baseBranch?: string;
+        readonly path?: string;
+      }
+    | undefined
+): string[] {
+  const commands = [
+    `caws worktree merge ${name} --dry-run --data`,
+    'caws worktree list --data',
+    `caws worktree cleanup-plan --include ${name} --json`,
+  ];
+  if (entry?.branch !== undefined && entry.baseBranch !== undefined) {
+    commands.push(`git rev-list --left-right --count ${entry.baseBranch}...${entry.branch}`);
+    commands.push(`git merge-tree --write-tree ${entry.baseBranch} ${entry.branch}`);
+  }
+  if (entry?.path !== undefined) {
+    commands.push(`git -C ${entry.path} status --short`);
+  }
+  return commands;
+}
+
+function mergeRepairHint(
+  name: string,
+  entry:
+    | {
+        readonly branch?: string;
+        readonly baseBranch?: string;
+        readonly path?: string;
+      }
+    | undefined
+): string {
+  return `Run ${mergeRecoveryNextCommands(name, entry).map((command) => `\`${command}\``).join('; ')}.`;
 }
 
 // Clean-tree gate for destroy/merge. Verified CAWS artifact links —
@@ -1383,7 +1422,10 @@ export function mergeWorktree(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
         `Worktree "${input.name}" not found in registry.`,
-        { subject: input.name }
+        {
+          subject: input.name,
+          narrowRepair: mergeRepairHint(input.name, undefined),
+        }
       )
     );
   }
@@ -1426,6 +1468,20 @@ export function mergeWorktree(
       name: input.name,
       canProceed: findings.length === 0,
       findings,
+      data: {
+        read_only: true,
+        dry_run: true,
+        can_proceed: findings.length === 0,
+        findings,
+        next_commands: mergeRecoveryNextCommands(input.name, entry),
+        worktree: {
+          name: input.name,
+          path: wtPath,
+          ...(entry.branch !== undefined ? { branch: entry.branch } : {}),
+          ...(entry.baseBranch !== undefined ? { base_branch: entry.baseBranch } : {}),
+          ...(entry.specId !== undefined ? { spec_id: entry.specId } : {}),
+        },
+      },
     });
   }
 
@@ -1434,7 +1490,11 @@ export function mergeWorktree(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
         `caws worktree merge ${input.name}: prerequisites unmet (${findings.join('; ')}).`,
-        { subject: input.name, data: { findings } }
+        {
+          subject: input.name,
+          narrowRepair: mergeRepairHint(input.name, entry),
+          data: { findings, next_commands: mergeRecoveryNextCommands(input.name, entry) },
+        }
       )
     );
   }
@@ -1451,7 +1511,10 @@ export function mergeWorktree(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_WRITE_FAILED,
         `git checkout ${baseBranch} failed: ${checkoutResult.reason}`,
-        { subject: input.name }
+        {
+          subject: input.name,
+          narrowRepair: mergeRepairHint(input.name, entry),
+        }
       )
     );
   }
@@ -1466,7 +1529,12 @@ export function mergeWorktree(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_WRITE_FAILED,
         `git merge --no-ff ${branch} failed: ${mergeResult.reason}`,
-        { subject: input.name }
+        {
+          subject: input.name,
+          narrowRepair:
+            `${mergeRepairHint(input.name, entry)} ` +
+            'If git left a conflicted merge in progress, inspect `git status --short` before aborting or resolving it.',
+        }
       )
     );
   }
