@@ -53,7 +53,7 @@ default for every cleanup or bulk lifecycle surface.
 | `scope` | `show`, `check`, `contention` | `caws scope --help` lists the three path-focused leaves. Leaf help distinguishes observation, enforcement, and cross-worktree contention; `show`/`contention` expose JSON. | Strong path-level refusal/explanation model. | No batch path check and no direct "amend this spec to admit these paths" handoff. The repair model lives in `specs amend-scope`, but the scope refusal does not produce a ready command. |
 | `claim` | flat leaf | `caws claim --help` surfaces `--takeover`, repeatable `--paths`, and diagnostics. | Good ownership surfacing. Takeover is explicit and audited. | No release/clear path for path claims. No preview of a takeover's impact beyond the refusal text. |
 | `gates` | `run` | `caws gates --help` and `caws gates run --help` surface required `--spec`, context, and diagnostics. | Good governed-check model; appends gate evidence. | No list/explain surface for available gates, policy modes, or waiver matches before running. |
-| `evidence` | `record` | Help surfaces typed `--type`, `--spec`, JSON payload, actor fields. | Adequate append-only record model. | No `list/show` read model for evidence. Agents must inspect events directly when auditing what was recorded. |
+| `evidence` | `record`, `list`, `show` | Help surfaces typed `--type`, `--spec`, JSON payload, actor fields, read-only list filters, JSON output, and event-ref lookup by seq/hash/prefix. | Improved read/write symmetry: evidence can now be appended and inspected without direct `events.jsonl` parsing. | Record payload schemas are still under-discoverable from help; a future `evidence schema --type <kind>` would reduce rejected writes. |
 | `events` | `migrate`, `rotate`, `verify-archive` | Group help lists maintenance leaves. `migrate` has `--apply` and reason/actor flags; `rotate` requires `--reason`; `verify-archive` is read-only. | Partial maintenance model. `migrate` fits preview/apply; `verify-archive` fits verification. | `rotate` has no dry-run/plan flag even though it mutates audit storage. `events` has no `list`/`show latest rotation` convenience. |
 | `waiver` | `create`, `list`, `show`, `revoke` | Help covers CRUD-like waiver lifecycle; create/revoke require audit metadata. | Good exception lifecycle model. | No dry-run validation for `create`, and no `prune expired` cleanup model. |
 | `specs` | `create`, `list`, `show`, `recover`, `retire-draft`, `activate`, `amend-scope`, `close`, `archive`, `prune-archive`, `migrate`, `validate` | Group help now names every leaf. Leaf help exposes lifecycle state transitions, batch archive selectors, migration apply/partial, and file-path validation. | Strongest lifecycle surface after the archive fix: scoped creation, governed scope amendment, recover, batch archive, migration preview/apply. | Missing a general lifecycle cleanup model across states: e.g. "archive all closed older than X", "retire all stale drafts", "restore archived body to a chosen path/state". `recover` is read/output only; there is no governed `restore`. |
@@ -72,7 +72,7 @@ default for every cleanup or bulk lifecycle surface.
 | Untrack without deleting files | `worktree untrack <name> --reason ... --apply` | `worktree repair` clears dead bindings but only by doctor class | Now closed for single registered worktrees: dry-run default, required reason, clean/owned/existing-directory preconditions, and `worktree_untracked` audit evidence. | Future batch cleanup can compose this model, but should remain separate from physical deletion. |
 | Restore an archived spec body | `specs recover <id> --out` | `specs activate`, `specs amend-scope` | Recovery is output-only. There is no governed restore to `.caws/specs/<id>.yaml` as draft/active. | Add `specs restore <id> --as draft --out canonical --apply` only if lifecycle semantics are accepted; otherwise keep `recover` read-only and document the manual path. |
 | Convert a refusal into next command | `scope check`, `doctor` repair text | `specs amend-scope` | The user has to copy/paste and infer the exact next command. | Add structured remediation JSON fields and copy-paste commands for common safe repairs. |
-| Inspect evidence history | direct `events.jsonl` read | `waiver list/show`, `agents list/show` | Evidence has a write command but no first-class read command. | Add `evidence list/show --spec <id> --type <kind> --json`, or document events as the only read path. |
+| Inspect evidence history | `evidence list/show` | `waiver list/show`, `agents list/show` | Now closed for typed evidence events: list filters by spec/type and show resolves seq/hash/prefix after chain verification. | Remaining gap is schema discoverability before writes: add `evidence schema --type <kind>` or richer examples. |
 | Rotate audit chain safely | `events rotate --reason` | `events migrate --apply` | Rotate mutates immediately; no preview. | Add `events rotate --dry-run` showing target archive path, line count, digest, and genesis event payload. |
 | Retire stale draft specs in bulk | `specs retire-draft <id>` | `specs archive --status closed --include/--exclude --apply` | Draft cleanup is one-at-a-time and lacks selectors. | Add batch selectors only after "stale draft" is defined: age, no worktree binding, no scope changes, or explicit include list. |
 
@@ -157,16 +157,17 @@ By top-level command:
 | `UX-WORKTREE-CLEANUP-PLAN-001` | Implemented in second repair slice | `worktree prune` read-only cleanup planning | Adds `caws worktree prune` as a non-mutating plan command over doctor evidence, with `--state`, `--include`, `--exclude`, and `--json`. The plan exposes subject, state class, source rule, allowed mutation or refusal reason, and next safe command without touching `worktrees.json`, specs, events, or git worktree directories. Covered by `packages/caws-cli/tests/shell/worktree-cleanup-plan.test.js`. |
 | `UX-WORKTREE-PRUNE-APPLY-001` | Implemented in third repair slice | `worktree prune --apply` for repairable classes | Adds explicit apply mode to `caws worktree prune`. Dry-run remains default; `--apply` mutates only `ghost-registry`, `dead-binding`, and `closed-spec-residue` through the same writer paths proven by `caws worktree repair`. Refused classes such as event orphans and stale-owner drift remain non-mutating and return nonzero when selected. Covered by `packages/caws-cli/tests/shell/worktree-cleanup-plan.test.js`. |
 | `UX-WORKTREE-UNTRACK-001` | Implemented in fourth repair slice | `worktree untrack` control-plane release while preserving files | Adds `caws worktree untrack <name> --reason ... [--apply] [--json]`. Dry-run remains default; apply requires a reason, admitted ownership, an existing clean physical worktree directory, and clears only registry/spec bindings while preserving files. Successful apply appends `worktree_untracked`. Covered by `packages/caws-cli/tests/shell/worktree-untrack.test.js`. |
+| `UX-EVIDENCE-READBACK-001` | Implemented in fifth repair slice | `evidence list/show` read-only evidence inspection | Adds `caws evidence list --spec <id> [--type <kind>] [--json]` and `caws evidence show <event-ref> [--json]`. Both commands load through the event store, verify the hash chain, leave `events.jsonl` byte-identical, and expose stable seq/hash handles. Covered by `packages/caws-cli/tests/shell/evidence-readback.test.js`. |
 
 ## Next Slice
 
-The next implementation slice should add first-class evidence readback:
-`caws evidence list --spec <id> [--type <kind>] [--json]` and
-`caws evidence show <event-ref>`. Session evidence shows agents currently
-inspect `events.jsonl` directly after `evidence record`, which breaks the
-read/write symmetry that `waiver list/show` and `agents list/show` already
-provide. Keep it read-only, preserve the append-only event authority, and make
-the JSON shape suitable for proof reviews.
+The next implementation slice should add a safe events rotation preview:
+`caws events rotate --dry-run --reason <text> [--json]`, plus enough readback
+context to answer "what would be archived?" without mutating audit storage. It
+should report the target archive path, event count, prior-chain status, prior
+file digest, and the genesis `chain_rotated` payload that apply would append.
+This closes the remaining gap where `events migrate` has preview/apply but
+`events rotate` mutates immediately.
 
 ## Findings
 
@@ -194,11 +195,11 @@ the JSON shape suitable for proof reviews.
    prose. A machine-readable plan with state class, subject, allowed mutation,
    refusal reason, and next command would let agents avoid guessing.
 
-5. **Read/write symmetry is uneven.**
-   `evidence record` can write durable events, but there is no `evidence list`
-   or `show`. `message send/poll` can append and consume messages, but there is
-   no log-management surface. That may be acceptable for narrow workflows, but
-   it is weak for audit-driven agent projects.
+5. **Read/write symmetry is still uneven outside evidence.**
+   `evidence record/list/show` now has an append/read loop, but `message
+   send/poll` can append and consume messages without a broader log-management
+   surface. That may be acceptable for narrow workflows, but it is weak for
+   audit-driven agent projects.
 
 6. **Help context is now closer to reality, but nested help should keep naming
    adjacent alternatives.** The recent `specs archive` and `specs validate`
@@ -220,8 +221,8 @@ the JSON shape suitable for proof reviews.
    default before adding any apply behavior. Sterling needs a trustworthy plan
    more than it needs another destructive verb.
 
-4. Consider `evidence list/show` before adding more event writers. It would
-   reduce direct event-log parsing and make proof-oriented reviews easier.
+4. Add schema discoverability for `evidence record`, either through
+   `evidence schema --type <kind>` or complete per-type examples in help.
 
 5. Add help regression tests for any group description that names subcommands
    and for cleanup leaves that claim dry-run/apply semantics. The CLI already

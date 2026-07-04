@@ -52,7 +52,9 @@ import {
   runEventsMigrateCommand,
   runEventsRotateCommand,
   runEventsVerifyArchiveCommand,
+  runEvidenceListCommand,
   runEvidenceRecordCommand,
+  runEvidenceShowCommand,
   runGatesRunCommand,
   runInitCommand,
   runPrepushCommand,
@@ -456,6 +458,36 @@ export function registerShellCommands(
         exit(code);
       }
     );
+
+  defineLeaf(evidenceCmd, leafMeta(EVIDENCE_COMMAND_META, 'list'))
+    .action(
+      (opts: { spec: string; type?: string; json?: boolean; data?: boolean }) => {
+        if (opts.type !== undefined && !isEvidenceKind(opts.type)) {
+          process.stderr.write(
+            `caws evidence list: invalid --type ${JSON.stringify(opts.type)}; expected test|gate|ac.\n`
+          );
+          exit(1);
+          return;
+        }
+        const code = runEvidenceListCommand({
+          specId: opts.spec,
+          ...(opts.type !== undefined ? { kind: opts.type } : {}),
+          json: opts.json === true,
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  defineLeaf(evidenceCmd, leafMeta(EVIDENCE_COMMAND_META, 'show'))
+    .action((eventRef: string, opts: { json?: boolean; data?: boolean }) => {
+      const code = runEvidenceShowCommand({
+        ref: eventRef,
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
 
   // -------------------------------------------------------------------
   // caws events migrate / rotate / verify-archive

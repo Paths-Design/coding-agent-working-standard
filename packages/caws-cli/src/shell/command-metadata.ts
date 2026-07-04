@@ -684,7 +684,7 @@ export const GATES_COMMAND_META: GroupCommandMeta = {
 export const EVIDENCE_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'evidence',
-  description: 'Record typed evidence events into .caws/events.jsonl',
+  description: 'Record and inspect typed evidence events in .caws/events.jsonl',
   subcommands: [
     {
       kind: 'leaf',
@@ -700,6 +700,33 @@ export const EVIDENCE_COMMAND_META: GroupCommandMeta = {
           defaultValue: 'agent',
         },
         { flag: '--actor-id <id>', description: 'Override actor id (defaults to session id)' },
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'list',
+      description:
+        'Read typed evidence events for a spec from the hash-chained events log. Read-only; verifies the event chain before listing. Filters to test|gate|ac evidence and can narrow by --type.',
+      options: [
+        { flag: '--spec <id>', required: true, description: 'Spec id whose evidence should be listed' },
+        { flag: '--type <kind>', description: 'Optional evidence kind filter: test | gate | ac' },
+        { flag: '--json', description: 'Emit the evidence list as JSON.' },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'show',
+      argument: {
+        name: 'event-ref',
+        required: true,
+        description: 'Event sequence number, full event hash, or unique event-hash prefix.',
+      },
+      description:
+        'Show one event from the hash-chained events log by sequence number, exact event hash, or unique event-hash prefix. Read-only; verifies the event chain before resolving the reference.',
+      options: [
+        { flag: '--json', description: 'Emit the matched event as JSON.' },
+        DATA_OPTION,
       ],
     },
   ],

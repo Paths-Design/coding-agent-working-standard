@@ -26,11 +26,14 @@ import * as path from 'node:path';
 import {
   type Actor,
   type ActorKind,
+  type ChainedEvent,
   type EventBody,
   type EventType,
+  isOk,
+  verifyChain,
 } from '@paths.design/caws-kernel';
 
-import { appendEvent, resolveRepoRoot } from '../../store';
+import { appendEvent, loadEvents, resolveRepoRoot } from '../../store';
 import { buildActor } from '../session/actor';
 import { resolveSession } from '../session/resolve-session';
 import { renderDiagnostics } from '../render/diagnostic';
@@ -42,6 +45,12 @@ const KIND_TO_EVENT_TYPE: Record<EvidenceKind, EventType> = {
   test: 'test_recorded',
   gate: 'gate_evaluated',
   ac: 'ac_recorded',
+};
+
+const EVENT_TYPE_TO_KIND: Partial<Record<EventType, EvidenceKind>> = {
+  test_recorded: 'test',
+  gate_evaluated: 'gate',
+  ac_recorded: 'ac',
 };
 
 export interface EvidenceRecordOptions {
@@ -69,6 +78,34 @@ export interface EvidenceRecordOptions {
   readonly showData?: boolean;
 }
 
+export interface EvidenceListOptions {
+  /** Required: the spec id whose typed evidence should be listed. */
+  readonly specId: string;
+  /** Optional evidence kind filter. */
+  readonly kind?: EvidenceKind;
+  /** Emit machine-readable JSON instead of human summary lines. */
+  readonly json?: boolean;
+  /** Working directory. Defaults to process.cwd(). */
+  readonly cwd?: string;
+  readonly out?: (line: string) => void;
+  readonly err?: (line: string) => void;
+  /** Show optional `data` blocks on rendered errors. */
+  readonly showData?: boolean;
+}
+
+export interface EvidenceShowOptions {
+  /** Sequence number, full event_hash, or unique event_hash prefix. */
+  readonly ref: string;
+  /** Emit machine-readable JSON instead of a human summary + payload. */
+  readonly json?: boolean;
+  /** Working directory. Defaults to process.cwd(). */
+  readonly cwd?: string;
+  readonly out?: (line: string) => void;
+  readonly err?: (line: string) => void;
+  /** Show optional `data` blocks on rendered errors. */
+  readonly showData?: boolean;
+}
+
 function rejectPreChainedFields(data: Record<string, unknown>): string | null {
   for (const banned of ['seq', 'prev_hash', 'event_hash']) {
     if (Object.prototype.hasOwnProperty.call(data, banned)) {
@@ -80,6 +117,66 @@ function rejectPreChainedFields(data: Record<string, unknown>): string | null {
 
 function isEvidenceKind(value: unknown): value is EvidenceKind {
   return value === 'test' || value === 'gate' || value === 'ac';
+}
+
+function evidenceKindForEvent(event: ChainedEvent): EvidenceKind | undefined {
+  return EVENT_TYPE_TO_KIND[event.event];
+}
+
+function evidenceSummary(event: ChainedEvent): Record<string, unknown> {
+  return {
+    seq: event.seq,
+    hash: event.event_hash,
+    type: evidenceKindForEvent(event),
+    event: event.event,
+    spec_id: event.spec_id,
+    ts: event.ts,
+    actor: event.actor,
+    data: event.data,
+  };
+}
+
+function loadVerifiedEventsForRead(
+  cwd: string,
+  err: (line: string) => void,
+  showData: boolean,
+  commandName: string
+): { repoRoot: string; cawsDir: string; events: readonly ChainedEvent[] } | null {
+  const repoRootResult = resolveRepoRoot(cwd);
+  if (!repoRootResult.ok) {
+    err(`caws evidence ${commandName}: failed to resolve repo root.`);
+    err(renderDiagnostics(repoRootResult.errors, { showData }));
+    return null;
+  }
+  const { repoRoot, cawsDir } = repoRootResult.value;
+  const loaded = loadEvents(cawsDir);
+  if (!loaded.ok) {
+    err(`caws evidence ${commandName}: failed to load events.jsonl.`);
+    err(renderDiagnostics(loaded.errors, { showData }));
+    return null;
+  }
+  const verified = verifyChain(loaded.value.events);
+  if (!isOk(verified)) {
+    err(`caws evidence ${commandName}: event chain verification failed.`);
+    err(renderDiagnostics(verified.errors, { showData }));
+    return null;
+  }
+  return { repoRoot, cawsDir, events: loaded.value.events };
+}
+
+function eventMatchesRef(event: ChainedEvent, ref: string): boolean {
+  if (/^\d+$/.test(ref)) return event.seq === Number(ref);
+  return event.event_hash === ref || event.event_hash.startsWith(ref);
+}
+
+function resolveEventRef(events: readonly ChainedEvent[], ref: string):
+  | { kind: 'found'; event: ChainedEvent }
+  | { kind: 'not_found' }
+  | { kind: 'ambiguous'; matches: readonly ChainedEvent[] } {
+  const matches = events.filter((event) => eventMatchesRef(event, ref));
+  if (matches.length === 0) return { kind: 'not_found' };
+  if (matches.length > 1) return { kind: 'ambiguous', matches };
+  return { kind: 'found', event: matches[0]! };
 }
 
 export function runEvidenceRecordCommand(opts: EvidenceRecordOptions): number {
@@ -182,5 +279,107 @@ export function runEvidenceRecordCommand(opts: EvidenceRecordOptions): number {
   );
   // Print the relative events file path for ergonomics.
   out(`  written to ${path.relative(repoRoot, path.join(cawsDir, 'events.jsonl'))}`);
+  return 0;
+}
+
+export function runEvidenceListCommand(opts: EvidenceListOptions): number {
+  const cwd = opts.cwd ?? process.cwd();
+  const out = opts.out ?? ((s: string) => process.stdout.write(s + '\n'));
+  const err = opts.err ?? ((s: string) => process.stderr.write(s + '\n'));
+  const showData = opts.showData === true;
+
+  if (typeof opts.specId !== 'string' || opts.specId.length === 0) {
+    err('caws evidence list: --spec is required.');
+    err(`(rule: ${SHELL_RULES.COMMAND_MISSING_SPEC_ID})`);
+    return 1;
+  }
+  if (opts.kind !== undefined && !isEvidenceKind(opts.kind)) {
+    err(
+      `caws evidence list: invalid --type. Got ${JSON.stringify(opts.kind)}; expected test|gate|ac.`
+    );
+    err(`(rule: ${SHELL_RULES.COMMAND_INVALID_EVIDENCE_TYPE})`);
+    return 1;
+  }
+
+  const loaded = loadVerifiedEventsForRead(cwd, err, showData, 'list');
+  if (loaded === null) return 2;
+
+  const candidates = loaded.events.filter((event) => {
+    const kind = evidenceKindForEvent(event);
+    return (
+      kind !== undefined &&
+      event.spec_id === opts.specId &&
+      (opts.kind === undefined || kind === opts.kind)
+    );
+  });
+  const summaries = candidates.map(evidenceSummary);
+
+  if (opts.json === true) {
+    out(JSON.stringify({
+      ok: true,
+      read_only: true,
+      spec_id: opts.specId,
+      type: opts.kind ?? null,
+      count: summaries.length,
+      events: summaries,
+    }, null, 2));
+  } else {
+    out(
+      `caws evidence list: ${summaries.length} event(s) for spec ${opts.specId}` +
+        (opts.kind !== undefined ? ` type=${opts.kind}` : '')
+    );
+    for (const item of summaries) {
+      out(
+        `- seq=${item.seq} type=${item.type} hash=${item.hash} ts=${item.ts}`
+      );
+    }
+    if (summaries.length === 0) out('  (none)');
+  }
+  return 0;
+}
+
+export function runEvidenceShowCommand(opts: EvidenceShowOptions): number {
+  const cwd = opts.cwd ?? process.cwd();
+  const out = opts.out ?? ((s: string) => process.stdout.write(s + '\n'));
+  const err = opts.err ?? ((s: string) => process.stderr.write(s + '\n'));
+  const showData = opts.showData === true;
+  const ref = opts.ref.trim();
+  if (ref.length === 0) {
+    err('caws evidence show: event-ref is required.');
+    return 1;
+  }
+
+  const loaded = loadVerifiedEventsForRead(cwd, err, showData, 'show');
+  if (loaded === null) return 2;
+
+  const resolved = resolveEventRef(loaded.events, ref);
+  if (resolved.kind === 'not_found') {
+    err(`caws evidence show: event-ref ${JSON.stringify(ref)} not found.`);
+    return 1;
+  }
+  if (resolved.kind === 'ambiguous') {
+    err(
+      `caws evidence show: event-ref ${JSON.stringify(ref)} is ambiguous (${resolved.matches.length} matches).`
+    );
+    for (const match of resolved.matches.slice(0, 10)) {
+      err(`- seq=${match.seq} hash=${match.event_hash} event=${match.event}`);
+    }
+    return 1;
+  }
+
+  const summary = evidenceSummary(resolved.event);
+  if (opts.json === true) {
+    out(JSON.stringify({
+      ok: true,
+      read_only: true,
+      event: summary,
+    }, null, 2));
+  } else {
+    out(
+      `seq=${summary.seq} event=${summary.event} type=${summary.type ?? '(non-evidence)'} ` +
+        `spec=${summary.spec_id ?? '(none)'} hash=${summary.hash}`
+    );
+    out(JSON.stringify(summary.data, null, 2));
+  }
   return 0;
 }
