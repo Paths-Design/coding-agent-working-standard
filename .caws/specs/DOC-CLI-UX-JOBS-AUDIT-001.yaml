@@ -2,10 +2,11 @@ id: DOC-CLI-UX-JOBS-AUDIT-001
 title: 'Audit CLI UX jobs across command leaves'
 risk_tier: 3
 mode: doc
-lifecycle_state: active
-worktree: cli-ux-jobs-audit
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge cli-ux-jobs-audit at d8cbeecafd67c16a410ecc3055df5c3a40f9461d'
 created_at: '2026-07-04T03:57:27.350Z'
-updated_at: '2026-07-04T03:57:27.350Z'
+updated_at: '2026-07-04T04:04:32.269Z'
 blast_radius:
   modules:
     - 'docs/architecture/cli-ux-job-model-audit.md'
