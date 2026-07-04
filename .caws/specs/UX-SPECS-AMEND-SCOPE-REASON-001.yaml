@@ -1,0 +1,36 @@
+id: UX-SPECS-AMEND-SCOPE-REASON-001
+title: 'Add specs amend-scope reason option'
+risk_tier: 3
+mode: fix
+lifecycle_state: active
+created_at: '2026-07-04T18:18:56.366Z'
+updated_at: '2026-07-04T18:18:56.366Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/store/specs-writer.ts'
+    - 'packages/caws-kernel/src/schemas/events/spec_scope_amended.v1.json'
+    - 'packages/caws-cli/tests/shell/specs-amend-scope-reason.test.js'
+    - 'docs/api/cli.md'
+    - 'docs/command-reference.md'
+    - 'docs/architecture/cli-ux-job-model-audit.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'specs-amend-scope-reason'
+    type: behavior
+    path: 'packages/caws-cli/tests/shell/specs-amend-scope-reason.test.js'
