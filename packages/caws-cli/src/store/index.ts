@@ -76,8 +76,16 @@ export type {
 export { loadWaivers, writeWaiver, markRevoked } from './waivers-store';
 export type { WaiversLoadResult } from './waivers-store';
 
-export { initProject, DEFAULT_POLICY_YAML } from './init-store';
-export type { InitOutcome, InitProjectResult } from './init-store';
+export { initProject, planInitProject, DEFAULT_POLICY_YAML } from './init-store';
+export type {
+  InitOutcome,
+  InitPlanOutcome,
+  InitPlanPath,
+  InitPlanPathAction,
+  InitPlanPathKind,
+  InitProjectPlan,
+  InitProjectResult,
+} from './init-store';
 
 export {
   composeDoctorSnapshot,

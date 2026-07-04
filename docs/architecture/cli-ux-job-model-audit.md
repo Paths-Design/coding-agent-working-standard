@@ -47,7 +47,7 @@ default for every cleanup or bulk lifecycle surface.
 
 | Top-level command | Branches / leaves | Help commands and surfaced context | Current UX fit | Missing or uneven job model |
 |---|---|---|---|---|
-| `init` | flat leaf | `caws init --help` surfaces hook-pack install options, adoption/overwrite choices, diagnostics `--data`. | Good bootstrap model: idempotent, explicit adoption/overwrite semantics. | No dry-run/advice mode for "what would init install or overwrite?" A preview would match package managers' install-plan UX. |
+| `init` | flat leaf | `caws init --help` surfaces read-only `--plan`/`--json`, hook-pack install options, adoption/overwrite choices, diagnostics `--data`. | Good bootstrap model: idempotent, explicit adoption/overwrite semantics, and a preview path that reports canonical state, `.gitignore`, hook-pack, and settings actions before mutation. | Good model to copy. Future init UX should keep plan/apply sharing the same classifiers. |
 | `doctor` | flat leaf | `caws doctor --help` surfaces `--data`, `--repair-plan`, and repair-plan JSON. Runtime output includes findings and repair text; repair-plan mode groups findings into state classes with subject, source rule, safe next command, and allowed mutation or refusal reason. | Strong discovery/repair-orientation model with machine-readable handoff. | Good model to copy. Future expansion should keep mutation delegated to existing lifecycle commands. |
 | `status` | flat leaf | `caws status --help` surfaces `--data`, focused panel filters (`--specs`, `--worktrees`, `--agents`, `--doctor`), and JSON output. Runtime dashboard remains read-only; focused filters render only requested panels from the same composed snapshot. | Good orientation model with large-project filters. | Future status UX could add saved profiles, but the main scan-cost gap is closed. |
 | `scope` | `show`, `check`, `plan`, `contention` | `caws scope --help` lists the path-focused leaves. Leaf help distinguishes observation, enforcement, batch planning, and cross-worktree contention; `show`, `check`, `plan`, and `contention` expose JSON. `show/check/plan` JSON includes structured remediation for common refusals. | Strong path-level refusal/explanation model: `scope check --json` preserves enforcement exit codes; `scope plan` evaluates many paths in one read-only run and groups remediation commands. | Good model to copy. Remaining gap is optional apply handoff ergonomics outside `scope`: `scope` now delegates mutation to `specs amend-scope` by design. |
@@ -176,15 +176,15 @@ By top-level command:
 | `UX-SPECS-DRAFT-PRUNE-APPLY-001` | Implemented in nineteenth repair slice | `specs prune-drafts --apply` guarded stale draft retirement | Adds `--apply` and optional `--reason` to `caws specs prune-drafts`. Apply requires `--include` or explicit `--older-than-ms`, refuses selected plans with refused entries without mutation, retires only candidates through `retireDraftSpec`, and creates one aggregate audit commit for the batch. Covered by `packages/caws-cli/tests/shell/specs-prune-drafts.test.js`. |
 | `UX-DOCTOR-REPAIR-PLAN-001` | Implemented in twentieth repair slice | `doctor --repair-plan` read-only finding handoff | Adds `caws doctor --repair-plan [--json]`. The plan is derived from the same composed snapshot and doctor findings as normal doctor output, writes no governed state, and emits one item per finding with state class, source rule, subject, safe next command, and allowed mutation or refusal reason. Covered by `packages/caws-cli/tests/shell/doctor-plan.test.js`. |
 | `UX-STATUS-FOCUSED-FILTERS-001` | Implemented in twenty-first repair slice | `status` focused read-only panels | Adds `caws status --specs/--worktrees/--agents/--doctor [--json]`. Default `caws status` remains the full dashboard; focused filters render only requested panels from the same snapshot, and JSON includes the selected panel payloads with `read_only: true`. Covered by `packages/caws-cli/tests/shell/status-filters.test.js`. |
+| `UX-INIT-PREVIEW-PLAN-001` | Implemented in twenty-second repair slice | `init --plan` read-only bootstrap preview | Adds `caws init --plan [--json]`. The plan reuses canonical-state, `.gitignore`, hook-pack, and settings classifiers without creating `.caws`, `.gitignore`, hook files, settings files, or events, and reports refusal reasons plus the next apply command. Covered by `packages/caws-cli/tests/shell/init-plan.test.js`. |
 
 ## Next Slice
 
-The next implementation slice should address `init` preview/advice mode.
-`init` is idempotent and explicit, but agents cannot currently ask what it
-would create, adopt, or overwrite before running it. Add a read-only
-`caws init --plan` or `--dry-run` surface that reports intended directories,
-files, hook-pack writes, adoption/overwrite decisions, and refusal reasons
-without mutating the project.
+The next implementation slice should address `claim` release/preview UX.
+`claim --takeover` is explicit and audited, but agents still lack a read-only
+takeover impact preview and a normal release/clear path for path claims. Add a
+surface that reports current owner, prior-owner audit impact, path-claim rows,
+and safe release semantics without requiring manual registry edits.
 
 ## Findings
 
@@ -217,13 +217,19 @@ without mutating the project.
    the relevant orientation panel, and `--json` exposes the same selection
    for scripted workflows.
 
-6. **Read/write/schema symmetry is still uneven outside evidence.**
+6. **Init now has a preview-before-mutation path.**
+   `init --plan` lets agents inspect canonical bootstrap, gitignore, hook-pack,
+   and settings wiring decisions before any filesystem writes. This closes the
+   install-plan gap and gives other setup commands a model for shared
+   classifier plan/apply implementation.
+
+7. **Read/write/schema symmetry is still uneven outside evidence.**
    `evidence record/list/show/schema` now has an append/read/schema loop, but `message
    send/poll` can append and consume messages without a broader log-management
    surface. That may be acceptable for narrow workflows, but it is weak for
    audit-driven agent projects.
 
-6. **Help context is now closer to reality, but nested help should keep naming
+8. **Help context is now closer to reality, but nested help should keep naming
    adjacent alternatives.** The recent `specs archive` and `specs validate`
    fixes show that group and leaf help need to explain neighboring commands:
    archive vs recover, create vs amend-scope, repair vs destroy, prune vs
@@ -243,9 +249,9 @@ without mutating the project.
    `prune` is doctor/control-plane cleanup; `cleanup-plan` is physical git
    worktree classification.
 
-4. Add `init` preview/advice mode:
-   keep `init` idempotent, but let agents preview what bootstrap/adoption
-   would write or refuse before mutating a repository.
+4. Add `claim` release/preview mode:
+   keep takeover explicit and audited, but let agents preview takeover impact
+   and release their own path claims without editing registry state by hand.
 
 5. Add help regression tests for any group description that names subcommands
    and for cleanup leaves that claim dry-run/apply semantics. The CLI already
