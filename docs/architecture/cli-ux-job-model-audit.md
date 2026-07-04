@@ -149,6 +149,26 @@ By top-level command:
 | Contract tuple inversion | `invalid --contract "behavior:verifychain-detects-tamper": type "verifychain-detects-tamper" is not one of ...` | Error should print the accepted tuple shape and a corrected example. |
 | Evidence schema rejection | `data: must have required property 'command'` for `evidence record --type test`. | `evidence record --help` should show per-type payload schemas or examples; longer term add `evidence schema --type test`. |
 
+## Implementation Ledger
+
+| Slice | Status | Scope | Evidence |
+|---|---|---|---|
+| `UX-CLI-SPECS-CREATE-HELP-001` | Implemented in first repair slice | `specs create` help metadata and invalid `--contract` diagnostics | Adds an inline `--contract "core-api:behavior"` example to nested help metadata; invalid inverted tuples such as `behavior:verifychain-detects-tamper` now print the accepted tuple shape and a corrected `--contract "verifychain-detects-tamper:behavior"` suggestion. Covered by `packages/caws-cli/tests/shell/specs-create-ux.test.js`. |
+
+## Next Slice
+
+The next implementation slice should address the largest Sterling-scale gap:
+`worktree` cleanup planning. Scope it as a read-only first pass before mutation:
+
+- add a `caws worktree prune` dry-run/default plan surface, or a
+  `caws worktree cleanup plan` leaf if the command vocabulary needs review;
+- classify candidates into state classes such as `ghost-registry`,
+  `dead-binding`, `closed-spec-residue`, `merged-clean`, `dirty-refused`,
+  `foreign-owned-refused`, and `event-orphan-refused`;
+- emit JSON with subject, state class, allowed mutation, refusal reason, and
+  next safe command;
+- do not delete real worktree directories in the first slice.
+
 ## Findings
 
 1. **The CLI has a good cleanup UX pattern, but it is not consistently applied.**
