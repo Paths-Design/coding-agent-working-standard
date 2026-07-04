@@ -7,7 +7,9 @@ created_at: '2026-07-04T18:41:48.949Z'
 updated_at: '2026-07-04T18:41:48.949Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli specs writer'
+    - 'packages/caws-cli shell specs create'
+    - 'CLI reference documentation'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -22,12 +24,22 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - '`caws specs create --acceptance <text>` renders valid v11 acceptance entries at creation time.'
+  - 'Repeatable --acceptance values are ordered A1, A2, ... and do not reintroduce acceptance_criteria.'
+  - 'Create plan and normal create use the same acceptance renderer and validation path.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a CAWS repository with no existing target spec'
+    when: 'an operator runs caws specs create --id <id> ... --acceptance "Runs cleanly"'
+    then: 'the command succeeds and the created spec contains acceptance id A1 with then: Runs cleanly.'
+  - id: A2
+    given: 'a CAWS repository with no existing target spec'
+    when: 'an operator repeats --acceptance with two values'
+    then: 'the created spec contains A1 and A2 in caller order.'
+  - id: A3
+    given: 'the built CLI command surface'
+    when: 'an operator runs caws specs create --help'
+    then: 'help lists --acceptance <text> with the v11 acceptance context.'
 non_functional: {}
 contracts:
   - name: 'specs-create-acceptance-flag'
