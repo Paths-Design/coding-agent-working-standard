@@ -7,7 +7,8 @@ created_at: '2026-07-04T18:48:44.049Z'
 updated_at: '2026-07-04T18:48:44.049Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli status command'
+    - 'CLI reference documentation'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -22,12 +23,22 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - '`caws status --short` is read-only and uses the same composed status snapshot as the full dashboard.'
+  - 'Short status renders compact counts for specs, worktrees, agents, doctor findings, events, and binding without full dashboard panels.'
+  - '`--short --json` preserves existing JSON status behavior rather than inventing a second JSON schema.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a CAWS repository with specs and worktree registry state'
+    when: 'an operator runs caws status --short'
+    then: 'the command exits 0 and prints compact status lines without full Project/Current context panels.'
+  - id: A2
+    given: 'a CAWS repository with existing governed files'
+    when: 'an operator runs caws status --short'
+    then: 'spec files, events, and worktree registry bytes are unchanged.'
+  - id: A3
+    given: 'the built CLI command surface'
+    when: 'an operator runs caws status --help'
+    then: 'help lists --short as a compact read-only status view.'
 non_functional: {}
 contracts:
   - name: 'status-short'
