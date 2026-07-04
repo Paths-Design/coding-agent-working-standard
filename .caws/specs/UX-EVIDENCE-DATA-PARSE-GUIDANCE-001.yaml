@@ -2,10 +2,11 @@ id: UX-EVIDENCE-DATA-PARSE-GUIDANCE-001
 title: 'Guide evidence data JSON parse errors'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: evidence-data-parse-guidance
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge evidence-data-parse-guidance at 9f4b692ebea48b2498da46ab306563bd0d7d5ab5'
 created_at: '2026-07-04T17:21:55.033Z'
-updated_at: '2026-07-04T17:26:17.758Z'
+updated_at: '2026-07-04T17:27:27.453Z'
 blast_radius:
   modules:
     - 'packages/caws-cli/evidence-shell'
