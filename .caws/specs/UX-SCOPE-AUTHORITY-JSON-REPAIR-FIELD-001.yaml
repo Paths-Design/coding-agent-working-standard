@@ -3,6 +3,7 @@ title: 'Align no-authority JSON repair guidance'
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: scope-json-repair-field
 created_at: '2026-07-04T17:59:29.556Z'
 updated_at: '2026-07-04T17:59:29.556Z'
 blast_radius:
