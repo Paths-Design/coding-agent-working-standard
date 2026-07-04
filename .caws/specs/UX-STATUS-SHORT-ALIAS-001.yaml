@@ -2,10 +2,11 @@ id: UX-STATUS-SHORT-ALIAS-001
 title: 'Add compact status short flag'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: status-short
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge status-short at e584a1420ec7e92d2833b27010f1d969d7bd7f30'
 created_at: '2026-07-04T18:48:44.049Z'
-updated_at: '2026-07-04T18:48:44.049Z'
+updated_at: '2026-07-04T18:52:48.856Z'
 blast_radius:
   modules:
     - 'packages/caws-cli status command'
