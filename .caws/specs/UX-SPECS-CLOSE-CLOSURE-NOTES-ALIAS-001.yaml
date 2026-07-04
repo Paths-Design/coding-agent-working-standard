@@ -3,6 +3,7 @@ title: 'Add specs close closure notes alias'
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: specs-close-closure-notes
 created_at: '2026-07-04T12:57:06.995Z'
 updated_at: '2026-07-04T12:57:13.392Z'
 blast_radius:
