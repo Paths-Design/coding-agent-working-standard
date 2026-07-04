@@ -47,7 +47,8 @@ Bootstrap the canonical vNext .caws/ project state (idempotent; refuses to overw
 
 - `--data` — Show structured data block on diagnostics
 - `--plan` — Preview the canonical state, gitignore, hook-pack, and settings changes without writing anything.
-- `--json` — Emit the read-only init plan as JSON with --plan.
+- `--dry-run` — Compatibility alias for --plan; previews init changes without writing anything.
+- `--json` — Emit the read-only init plan as JSON with --plan or --dry-run.
 - `--agent-surface <name>` — Install a hook pack for an agent harness (claude-code | codex | opencode | cursor | windsurf | none). When omitted, init attempts filesystem detection and skips hook install when ambiguous.
 - `--overwrite` — For hook-pack install: replace drifted or unmanaged files at managed pack paths. CAUTION: local edits to those files will be lost.
 - `--adopt` — For hook-pack install: leave drifted or unmanaged files in place without enforcing pack contents. CAUTION: pack drift is no longer tracked for those paths.

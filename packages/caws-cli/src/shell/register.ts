@@ -318,6 +318,7 @@ export function registerShellCommands(
         overwrite?: boolean;
         adopt?: boolean;
         plan?: boolean;
+        dryRun?: boolean;
         json?: boolean;
       }) => {
         // Commander hands back the raw string for agentSurface; the
@@ -335,8 +336,8 @@ export function registerShellCommands(
         if (opts.adopt !== undefined) {
           (runOpts as { adopt?: boolean }).adopt = opts.adopt;
         }
-        if (opts.plan !== undefined) {
-          (runOpts as { plan?: boolean }).plan = opts.plan;
+        if (opts.plan === true || opts.dryRun === true) {
+          (runOpts as { plan?: boolean }).plan = true;
         }
         if (opts.json !== undefined) {
           (runOpts as { json?: boolean }).json = opts.json;
