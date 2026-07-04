@@ -60,7 +60,7 @@ default for every cleanup or bulk lifecycle surface.
 | `worktree` | `create`, `list`, `bind`, `destroy`, `untrack`, `merge`, `migrate-registry`, `repair-sparse`, `repair`, `prune`, `cleanup-plan` | Group help lists lifecycle, untrack, migration, sparse repair, control-plane repair, doctor-evidence prune, and physical cleanup planning/apply. Leaf help distinguishes create vs bind, dry-run merge, destroy guardrails, untrack dry-run/apply, repair dry-run, prune dry-run/apply, cleanup-plan dry-run, and guarded cleanup-plan apply. | Strong lifecycle and cleanup model. `prune` covers safe control-plane residue classes, `untrack` preserves files after releasing a CAWS binding, and `cleanup-plan` classifies real git worktrees by clean/dirty, merged/unmerged, bound lifecycle, ownership, and registry presence. `cleanup-plan --apply` requires explicit selectors and destroys only `destroy-ready` items through `destroyWorktree`. | Good model to copy. Future expansion could consider `unbound-clean-candidate` apply, but only after field evidence proves it is safe. |
 | `agents` | `register`, `heartbeat`, `stop`, `list`, `show`, `prune` | Help exposes hook-writer verbs, read-only list/show, JSON, stale TTLs, `--dead`, retention filters, dry-run default, `--apply`. | Best cleanup UX model in the CLI. It cleanly separates display-only stale state from deletion and supports machine output. | Good model to copy. Minor gap: no `explain <id>` that says why a lease is active/stale/stopped/dead, but list/show largely cover it. |
 | `message` | `send`, `poll`, `inbox`, `history`, `prune` | Help surfaces directed send, optional dead recipient escape hatch, deliver-once poll wait/peek/JSON, read-only inbox listing, read-only channel history, and dry-run-first delivered-message retention cleanup. | Strong communication model: messages remain explicitly non-authority, agents can inspect waiting inbox and retained channel history without consuming messages, and operators can prune old delivered chat records without touching undelivered inbox messages or events evidence. | Good model to copy. Future message UX should focus on channel/export ergonomics rather than broader deletion semantics. |
-| `prepush` | flat leaf | `caws prepush --help` surfaces remote/branch/base/spec/ack and diagnostics. | Good preflight model; `--ack` is an explicit exception path. | No "write an ack file" or "explain all unexpected commits grouped by spec/worktree" model for large ranges. |
+| `prepush` | flat leaf | `caws prepush --help` surfaces remote/branch/base/spec/ack and diagnostics. Runtime also normalizes shell-quoted repeated `--ack` bundles into ordinary repeatable ack flags. | Good preflight model; `--ack` is an explicit exception path. | No "write an ack file" or "explain all unexpected commits grouped by spec/worktree" model for large ranges. |
 
 ## Parity Gaps by Job
 
@@ -177,12 +177,17 @@ option mismatch after excluding stale `prepush --ack` evidence. `--dry-run` is
 now fixed as an alias for the existing read-only `init --plan` preview path and
 does not add a second init mode.
 
+The following pass revisited the `prepush --ack` transcript and found it was not
+missing the ordinary repeatable flag; the agent had passed a whole repeated-flag
+sequence as one shell-quoted argv token. `prepush` now normalizes only that
+`--ack <sha> --ack <sha>` bundle shape before Commander parses the command.
+
 ### Friction Classes
 
 | Friction marker | Count | UX implication |
 |---|---:|---|
 | `no_scope_authority` | 126 | Reconciled against the current linked-dist CLI: residual session transcripts still contain old generic unbound repair text, but direct reproduction in Sterling now shows active-spec authority candidates, read-only `scope --spec` checks, and create/bind/enter worktree handoffs in human and JSON output. |
-| `unknown_or_missing_option` | 91 | Further fixed for `specs close`, `scope`, `agents prune`, `specs create`, validation-era removed commands, specs status listing, worktree cleanup state filters, specs archive/prune-archive discoverability, governed scope amendment rationale, worktree destroy compatibility, and init preview compatibility: `--closure-notes` and `--notes` are now supported aliases for close notes, `scope show/check/plan --spec <id>` supports read-only explicit spec-context evaluation, `agents prune --dead --json` is verified, `specs create --tier <n>` aliases `--risk-tier <n>`, `specs create --id <id>` aliases the positional create id, legacy validation diagnostics are pinned, `specs --status <state>` hands off to `specs list --status <state>`, `worktree prune/cleanup-plan --status <classes>` aliases `--state <classes>`, `worktree destroy --force` aliases `--abandon-unmerged` only, `init --dry-run` aliases `init --plan`, `specs prune-archive` hands off to archive/restore/recover workflows, and `specs amend-scope --reason <text>` records rationale on `spec_scope_amended` evidence. Remaining work should resample the newest option mismatches after these fixes before selecting another leaf. |
+| `unknown_or_missing_option` | 91 | Further fixed for `specs close`, `scope`, `agents prune`, `specs create`, validation-era removed commands, specs status listing, worktree cleanup state filters, specs archive/prune-archive discoverability, governed scope amendment rationale, worktree destroy compatibility, init preview compatibility, and prepush ack bundle compatibility: `--closure-notes` and `--notes` are now supported aliases for close notes, `scope show/check/plan --spec <id>` supports read-only explicit spec-context evaluation, `agents prune --dead --json` is verified, `specs create --tier <n>` aliases `--risk-tier <n>`, `specs create --id <id>` aliases the positional create id, legacy validation diagnostics are pinned, `specs --status <state>` hands off to `specs list --status <state>`, `worktree prune/cleanup-plan --status <classes>` aliases `--state <classes>`, `worktree destroy --force` aliases `--abandon-unmerged` only, `init --dry-run` aliases `init --plan`, shell-quoted `prepush "--ack <sha> --ack <sha>"` bundles normalize to repeated `--ack`, `specs prune-archive` hands off to archive/restore/recover workflows, and `specs amend-scope --reason <text>` records rationale on `spec_scope_amended` evidence. Remaining work should resample the newest option mismatches after these fixes before selecting another leaf. |
 | `tier_requires_metadata` | 87 | Fixed at the create-plan layer: `specs create --plan` now reports missing semantic fields and emits copy-pasteable YAML examples in human and JSON output. |
 | `danger_latch` | 66 | CAWS hook UX still matters for CLI workflows; blocked shell forms often interrupt otherwise correct CAWS procedures. |
 | `worktree_not_found` | 62 | Fixed for `worktree destroy`: missing registry entries now remain non-mutating refusals but include a CAWS-native handoff to `worktree list`, `worktree prune --include <name>`, and `worktree cleanup-plan --include <name>` so agents can distinguish registry residue from unregistered physical worktrees. |
@@ -285,6 +290,7 @@ does not add a second init mode.
 | `UX-SPECS-LIST-LIFECYCLE-ALIASES-001` | Implemented in fifty-sixth repair slice | Specs list lifecycle selector aliases | Adds `caws specs list --active`, `--draft`, `--closed`, `--lifecycle <state>`, and `--state <state>` as compatibility selectors for the existing read-only `--status <state>` filter. Conflicting lifecycle selectors refuse before mutation, and `--archived` keeps its include-archived meaning. Covered by `packages/caws-cli/tests/shell/specs-list-lifecycle-aliases.test.js`. |
 | `UX-WORKTREE-DESTROY-FORCE-COMPAT-001` | Implemented in fifty-seventh repair slice | Worktree destroy force compatibility alias | Adds `caws worktree destroy <name> --force` as a compatibility alias for `--abandon-unmerged` only. The alias reaches the same unmerged-branch override but still refuses foreign ownership, dirty checkout, missing registry entries, and other guarded destroy failures. Covered by `packages/caws-cli/tests/shell/worktree-destroy-force-compat.test.js`. |
 | `UX-INIT-DRY-RUN-ALIAS-001` | Implemented in fifty-eighth repair slice | Init dry-run preview alias | Adds `caws init --dry-run` as a compatibility alias for `--plan`, including `--dry-run --json`. The alias uses the same read-only init preview path and writes no `.caws`, `.gitignore`, hook-pack, settings, or event state. Covered by `packages/caws-cli/tests/shell/init-dry-run-alias.test.js`. |
+| `UX-PREPUSH-ACK-BUNDLE-NORMALIZE-001` | Implemented in fifty-ninth repair slice | Prepush shell-quoted ack bundle normalization | Normalizes a single `prepush` argv token shaped like `--ack <sha> --ack <sha>` into ordinary repeated `--ack` flags before Commander validation. The compatibility path is limited to `prepush --ack` bundles; other commands and options retain normal unknown-option behavior. Covered by `packages/caws-cli/tests/shell/prepush-ack-bundle-normalize.test.js`. |
 
 ## Next Slice
 
@@ -292,13 +298,14 @@ The next implementation slice should resample the newest CAWS and Sterling
 session evidence for residual `unknown_or_missing_option` after the `--notes`,
 `amend-scope --reason`, `specs create --id`, `specs create --scope.in`, and
 `specs create --acceptance`, `status --short`, and `specs list --active`
-fixes, plus `worktree destroy --force` and `init --dry-run`. Treat stale fixed
+fixes, plus `worktree destroy --force`, `init --dry-run`, and shell-quoted
+`prepush --ack` bundles. Treat stale fixed
 examples (`--tier`, `--status`, `--closure-notes`, `--notes`,
 `amend-scope --reason`, `specs create --id`, `specs create --scope.in`,
 `specs create --acceptance`, `status --short`, `specs list --active`,
 `specs list --lifecycle`, `specs list --state`, `worktree destroy --force`,
-`init --dry-run`) as closed and select the newest current leaf mismatch for the
-next concrete fix, if any.
+`init --dry-run`, shell-quoted `prepush --ack` bundles) as closed and select the
+newest current leaf mismatch for the next concrete fix, if any.
 
 ## Findings
 
@@ -522,6 +529,12 @@ next concrete fix, if any.
    bootstrap preview as `init --plan`. The alias preserves the existing
    classifier path and does not create `.caws`, `.gitignore`, hook-pack files,
    settings files, or events.
+
+36. **Prepush tolerates shell-quoted repeated ack bundles.**
+   Ordinary `prepush --ack <sha> --ack <sha>` already worked. The observed
+   failure was a generated command where that whole sequence arrived as one argv
+   token. The entrypoint now expands only `prepush` ack bundles before Commander
+   validation, preserving normal unknown-option handling elsewhere.
 
 ## Recommendations
 
