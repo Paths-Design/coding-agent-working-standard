@@ -893,6 +893,38 @@ export interface WorktreeRepairOptions extends BaseCommandOptions {
   readonly dryRun?: boolean;
 }
 
+export type WorktreePruneStateClass =
+  | 'ghost-registry'
+  | 'dead-binding'
+  | 'closed-spec-residue'
+  | 'missing-spec-refused'
+  | 'active-binding-refused'
+  | 'binding-contradiction-refused'
+  | 'foreign-physical-refused'
+  | 'event-orphan-refused'
+  | 'one-sided-binding-refused'
+  | 'non-governable-binding-refused'
+  | 'owner-lease-missing-refused'
+  | 'git-observation-unavailable';
+
+export interface WorktreePrunePlanItem {
+  readonly subject: string;
+  readonly state_class: WorktreePruneStateClass;
+  readonly source_rule: string;
+  readonly severity: DoctorFinding['severity'];
+  readonly allowed_mutation: string | null;
+  readonly refusal_reason?: string;
+  readonly next_command: string;
+  readonly details: Record<string, unknown>;
+}
+
+export interface WorktreePruneOptions extends BaseCommandOptions {
+  readonly state?: readonly string[];
+  readonly include?: readonly string[];
+  readonly exclude?: readonly string[];
+  readonly json?: boolean;
+}
+
 /** What the matrix decided for a single doctor finding. */
 type RepairDecision =
   | { kind: 'prune_ghost_registry'; worktreeName: string }
@@ -1000,6 +1032,292 @@ export function decideRepair(finding: DoctorFinding): RepairDecision {
     default:
       return { kind: 'ignore' };
   }
+}
+
+const WORKTREE_PRUNE_STATES: readonly WorktreePruneStateClass[] = [
+  'ghost-registry',
+  'dead-binding',
+  'closed-spec-residue',
+  'missing-spec-refused',
+  'active-binding-refused',
+  'binding-contradiction-refused',
+  'foreign-physical-refused',
+  'event-orphan-refused',
+  'one-sided-binding-refused',
+  'non-governable-binding-refused',
+  'owner-lease-missing-refused',
+  'git-observation-unavailable',
+] as const;
+
+function findingSubject(finding: DoctorFinding, data: Record<string, unknown>): string {
+  if (typeof data.worktree_name === 'string' && data.worktree_name.length > 0) {
+    return data.worktree_name;
+  }
+  if (typeof data.spec_id === 'string' && data.spec_id.length > 0) {
+    return data.spec_id;
+  }
+  if (typeof data.path === 'string' && data.path.length > 0) {
+    return data.path;
+  }
+  return typeof finding.subject === 'string' && finding.subject.length > 0
+    ? finding.subject
+    : finding.rule;
+}
+
+function repairItemFromDecision(
+  finding: DoctorFinding,
+  decision: RepairDecision
+): WorktreePrunePlanItem | null {
+  const data = (finding.data ?? {}) as Record<string, unknown>;
+  const subject = findingSubject(finding, data);
+  if (decision.kind === 'ignore') return null;
+  if (decision.kind === 'prune_ghost_registry') {
+    return {
+      subject: decision.worktreeName,
+      state_class: 'ghost-registry',
+      source_rule: finding.rule,
+      severity: finding.severity,
+      allowed_mutation: 'prune registry entry and append worktree_pruned via caws worktree repair',
+      next_command: `caws worktree repair --dry-run && caws worktree repair`,
+      details: data,
+    };
+  }
+  if (decision.kind === 'clear_spec_binding') {
+    const stateClass =
+      decision.hClass === 'dormant_spec_binding' ? 'closed-spec-residue' : 'dead-binding';
+    return {
+      subject: decision.specId,
+      state_class: stateClass,
+      source_rule: finding.rule,
+      severity: finding.severity,
+      allowed_mutation: 'clear stale spec worktree binding and append spec_binding_cleared via caws worktree repair',
+      next_command: `caws worktree repair --dry-run && caws worktree repair`,
+      details: {
+        ...data,
+        worktree_name: decision.worktreeName,
+        h_class: decision.hClass,
+      },
+    };
+  }
+
+  let stateClass: WorktreePruneStateClass;
+  switch (finding.rule) {
+    case DOCTOR_RULES.BINDING_REGISTRY_MISSING_SPEC:
+      stateClass = 'missing-spec-refused';
+      break;
+    case DOCTOR_RULES.BINDING_SPEC_MISSING_REGISTRY:
+      stateClass = 'active-binding-refused';
+      break;
+    case DOCTOR_RULES.WORKTREE_BINDING_CONTRADICTION_3WAY:
+      stateClass = 'binding-contradiction-refused';
+      break;
+    case DOCTOR_RULES.WORKTREE_FOREIGN_PHYSICAL:
+      stateClass = 'foreign-physical-refused';
+      break;
+    case DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING:
+      stateClass = 'event-orphan-refused';
+      break;
+    case DOCTOR_RULES.BINDING_ONE_SIDED:
+    case DOCTOR_RULES.BINDING_SPEC_POINTS_TO_FOREIGN_BINDING:
+      stateClass = 'one-sided-binding-refused';
+      break;
+    default:
+      stateClass = 'one-sided-binding-refused';
+      break;
+  }
+  return {
+    subject,
+    state_class: stateClass,
+    source_rule: finding.rule,
+    severity: finding.severity,
+    allowed_mutation: null,
+    refusal_reason: decision.reason,
+    next_command: finding.narrowRepair ?? 'Inspect with caws doctor --data before mutating.',
+    details: data,
+  };
+}
+
+export function worktreePruneItemFromFinding(
+  finding: DoctorFinding
+): WorktreePrunePlanItem | null {
+  const data = (finding.data ?? {}) as Record<string, unknown>;
+  const repairDecision = decideRepair(finding);
+  const repairItem = repairItemFromDecision(finding, repairDecision);
+  if (repairItem !== null) return repairItem;
+
+  if (finding.rule === DOCTOR_RULES.BINDING_SPEC_NOT_GOVERNABLE) {
+    return {
+      subject: findingSubject(finding, data),
+      state_class: 'non-governable-binding-refused',
+      source_rule: finding.rule,
+      severity: finding.severity,
+      allowed_mutation: null,
+      refusal_reason:
+        'The registry/spec binding points at a non-active spec; choose archive/recover/destroy intent explicitly.',
+      next_command: finding.narrowRepair ?? 'Inspect with caws doctor --data before mutating.',
+      details: data,
+    };
+  }
+  if (finding.rule === DOCTOR_RULES.WORKTREE_OWNER_LEASE_MISSING) {
+    return {
+      subject: findingSubject(finding, data),
+      state_class: 'owner-lease-missing-refused',
+      source_rule: finding.rule,
+      severity: finding.severity,
+      allowed_mutation: null,
+      refusal_reason:
+        'The owner lease is stale or absent, but leases are not authority; cleanup requires explicit handoff/takeover intent.',
+      next_command: finding.narrowRepair ?? 'Inspect owner state with caws worktree list and caws agents list.',
+      details: data,
+    };
+  }
+  if (finding.rule === DOCTOR_RULES.WORKTREE_GIT_OBSERVATION_UNAVAILABLE) {
+    return {
+      subject: findingSubject(finding, data),
+      state_class: 'git-observation-unavailable',
+      source_rule: finding.rule,
+      severity: finding.severity,
+      allowed_mutation: null,
+      refusal_reason:
+        'Git worktree observation failed, so cleanup classes that depend on git state are incomplete.',
+      next_command: finding.narrowRepair ?? 'Fix git observation and rerun caws worktree prune.',
+      details: data,
+    };
+  }
+  return null;
+}
+
+function selectedByFilters(
+  item: WorktreePrunePlanItem,
+  filters: {
+    readonly states?: ReadonlySet<string>;
+    readonly include?: ReadonlySet<string>;
+    readonly exclude?: ReadonlySet<string>;
+  }
+): boolean {
+  if (filters.states !== undefined && !filters.states.has(item.state_class)) return false;
+  if (filters.include !== undefined && !filters.include.has(item.subject)) return false;
+  if (filters.exclude !== undefined && filters.exclude.has(item.subject)) return false;
+  return true;
+}
+
+export function buildWorktreePrunePlan(
+  findings: readonly DoctorFinding[],
+  filters: {
+    readonly states?: readonly string[];
+    readonly include?: readonly string[];
+    readonly exclude?: readonly string[];
+  } = {}
+): { readonly ok: true; readonly items: readonly WorktreePrunePlanItem[] } | { readonly ok: false; readonly message: string } {
+  const stateSet =
+    filters.states !== undefined && filters.states.length > 0
+      ? new Set(filters.states)
+      : undefined;
+  if (stateSet !== undefined) {
+    const unknown = [...stateSet].filter((state) => !WORKTREE_PRUNE_STATES.includes(state as WorktreePruneStateClass));
+    if (unknown.length > 0) {
+      return {
+        ok: false,
+        message: `unknown --state value(s): ${unknown.join(', ')}. Expected one of: ${WORKTREE_PRUNE_STATES.join(', ')}`,
+      };
+    }
+  }
+  const includeSet =
+    filters.include !== undefined && filters.include.length > 0
+      ? new Set(filters.include)
+      : undefined;
+  const excludeSet =
+    filters.exclude !== undefined && filters.exclude.length > 0
+      ? new Set(filters.exclude)
+      : undefined;
+  const normalizedFilters: {
+    states?: ReadonlySet<string>;
+    include?: ReadonlySet<string>;
+    exclude?: ReadonlySet<string>;
+  } = {
+    ...(stateSet !== undefined ? { states: stateSet } : {}),
+    ...(includeSet !== undefined ? { include: includeSet } : {}),
+    ...(excludeSet !== undefined ? { exclude: excludeSet } : {}),
+  };
+  const selected = findings
+    .map(worktreePruneItemFromFinding)
+    .filter((item): item is WorktreePrunePlanItem => item !== null)
+    .filter((item) => selectedByFilters(item, normalizedFilters));
+  return { ok: true, items: selected };
+}
+
+function countsByState(items: readonly WorktreePrunePlanItem[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const item of items) {
+    counts[item.state_class] = (counts[item.state_class] ?? 0) + 1;
+  }
+  return counts;
+}
+
+function renderWorktreePrunePlan(
+  items: readonly WorktreePrunePlanItem[],
+  out: (line: string) => void
+): void {
+  out(`caws worktree prune: read-only cleanup plan (${items.length} candidate(s))`);
+  if (items.length === 0) {
+    out('(no worktree cleanup candidates)');
+    return;
+  }
+  for (const item of items) {
+    const allowed = item.allowed_mutation ?? 'refused';
+    out(`- ${item.state_class} ${item.subject}`);
+    out(`  source: ${item.source_rule} (${item.severity})`);
+    out(`  allowed: ${allowed}`);
+    if (item.refusal_reason !== undefined) out(`  refusal: ${item.refusal_reason}`);
+    out(`  next: ${item.next_command}`);
+  }
+}
+
+export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
+  const { cwd, nowFn, out, err, showData } = setupIO(opts);
+  const ctx = resolveCawsCtx(cwd, err, showData, 'prune');
+  if (ctx === null) return 2;
+
+  let findings: readonly DoctorFinding[];
+  try {
+    const { doctorInput } = composeDoctorSnapshot({
+      repoRoot: ctx.repoRoot,
+      cawsDir: ctx.cawsDir,
+      now: nowFn(),
+    });
+    findings = inspectProjectState(doctorInput).findings;
+  } catch (e) {
+    err(`caws worktree prune: doctor composition failed: ${(e as Error).message}`);
+    return 2;
+  }
+
+  const plan = buildWorktreePrunePlan(findings, {
+    ...(opts.state !== undefined ? { states: opts.state } : {}),
+    ...(opts.include !== undefined ? { include: opts.include } : {}),
+    ...(opts.exclude !== undefined ? { exclude: opts.exclude } : {}),
+  });
+  if (!plan.ok) {
+    err(`caws worktree prune: ${plan.message}`);
+    return 1;
+  }
+
+  if (opts.json === true) {
+    out(JSON.stringify({
+      ok: true,
+      read_only: true,
+      candidates: plan.items,
+      counts_by_state: countsByState(plan.items),
+      filters: {
+        state: opts.state ?? [],
+        include: opts.include ?? [],
+        exclude: opts.exclude ?? [],
+      },
+    }, null, 2));
+    return 0;
+  }
+
+  renderWorktreePrunePlan(plan.items, out);
+  return 0;
 }
 
 export function runWorktreeRepairCommand(opts: WorktreeRepairOptions): number {
