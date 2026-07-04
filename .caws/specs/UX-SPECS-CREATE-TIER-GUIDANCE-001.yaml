@@ -7,24 +7,34 @@ created_at: '2026-07-04T12:47:58.435Z'
 updated_at: '2026-07-04T12:48:09.062Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/specs
+    - docs/cli-ux-audit
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/shell/commands/specs.ts
     - packages/caws-cli/tests/shell/specs-create-plan.test.js
     - docs/api/cli.md
     - docs/architecture/cli-ux-job-model-audit.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'specs create --plan remains read-only and writes no spec files, events, or registry state.'
+  - 'Tier-1/2 missing semantic fields are accompanied by concrete YAML examples in human and JSON output.'
+  - 'The existing valid create path and contract tuple validation remain unchanged.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a tier-1 specs create --plan candidate missing observability, rollback, and security fields'
+    when: 'the plan is rendered for a human'
+    then: 'the output includes copy-pasteable YAML examples for each missing field'
+  - id: A2
+    given: 'the same tier-1 candidate rendered with --json'
+    when: 'an agent reads the plan payload'
+    then: 'the payload includes field_examples keyed by missing JSON pointers'
+  - id: A3
+    given: 'the CLI UX audit and specs create docs'
+    when: 'the slice is complete'
+    then: 'the tier metadata failure gap is marked implemented and docs mention the plan examples'
 non_functional: {}
 contracts:
   - name: 'specs-create-tier-guidance'
