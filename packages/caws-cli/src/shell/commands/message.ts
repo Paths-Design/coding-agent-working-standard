@@ -15,8 +15,10 @@ import {
   inboxCount,
   inboxMessages,
   channelHistory,
+  pruneMessages,
   type MessageActor,
   type MessageRecord,
+  type MessagePruneEntry,
 } from '../../store';
 import { buildActor } from '../session/actor';
 import { resolveSession } from '../session/resolve-session';
@@ -191,6 +193,15 @@ export interface MessageHistoryCommandOptions extends BaseCommandOptions {
   readonly json?: boolean;
 }
 
+export interface MessagePruneCommandOptions extends BaseCommandOptions {
+  readonly status?: string;
+  readonly olderThanMs?: number;
+  readonly include?: readonly string[];
+  readonly exclude?: readonly string[];
+  readonly apply?: boolean;
+  readonly json?: boolean;
+}
+
 function resolveMe(
   commandName: string,
   cawsDir: string,
@@ -222,6 +233,10 @@ function sanitizeLimit(limit: number | undefined): number | undefined {
 
 function renderMessageLine(message: MessageRecord): string {
   return `${message.ts} ${message.actor.session_id ?? message.actor.id} -> ${message.to}: ${message.text}`;
+}
+
+function renderPruneEntry(entry: MessagePruneEntry): string {
+  return `${entry.id} ${entry.ts} ${entry.from} -> ${entry.to} (${entry.reason})`;
 }
 
 export function runMessageInboxCommand(opts: MessageInboxCommandOptions = {}): number {
@@ -317,6 +332,64 @@ export function runMessageHistoryCommand(opts: MessageHistoryCommandOptions): nu
   for (const message of messages) out(renderMessageLine(message));
   if (messages.length < result.value.length) {
     out(`(${result.value.length - messages.length} earlier not shown)`);
+  }
+  return 0;
+}
+
+export function runMessagePruneCommand(opts: MessagePruneCommandOptions = {}): number {
+  const { cwd, out, err, showData } = defaults(opts);
+  if (opts.status !== 'delivered') {
+    err('caws message prune: --status delivered is required.');
+    return 1;
+  }
+
+  const rootResult = resolveRepoRoot(cwd);
+  if (!rootResult.ok) {
+    err('caws message prune: failed to resolve repo root.');
+    err(renderDiagnostics(rootResult.errors, { showData }));
+    return 2;
+  }
+
+  const result = pruneMessages(rootResult.value.cawsDir, {
+    status: 'delivered',
+    ...(typeof opts.olderThanMs === 'number' && Number.isFinite(opts.olderThanMs)
+      ? { olderThanMs: Math.max(0, Math.floor(opts.olderThanMs)) }
+      : {}),
+    ...(opts.include !== undefined ? { include: opts.include } : {}),
+    ...(opts.exclude !== undefined ? { exclude: opts.exclude } : {}),
+    ...(opts.apply === true ? { apply: true } : {}),
+  });
+  if (!result.ok) {
+    err('caws message prune: failed.');
+    err(renderDiagnostics(result.errors, { showData }));
+    return 1;
+  }
+
+  if (opts.json === true) {
+    out(JSON.stringify({
+      ok: true,
+      dry_run: opts.apply !== true,
+      ...result.value,
+    }));
+    return 0;
+  }
+
+  const mode = opts.apply === true ? 'applied' : 'dry-run';
+  out(`Message prune (${mode}, status=delivered): ${result.value.candidates.length} candidate(s), ${result.value.skipped.length} skipped`);
+  if (opts.apply === true) {
+    out(`Pruned ${result.value.pruned_messages} delivered message(s); removed ${result.value.pruned_delivery_records} delivery marker(s).`);
+  } else {
+    out('No changes written. Pass --apply with --older-than-ms or --include to prune selected delivered chat records.');
+  }
+  for (const candidate of result.value.candidates) {
+    out(`candidate ${renderPruneEntry(candidate)}`);
+  }
+  const undelivered = result.value.skipped.filter((entry) => entry.reason === 'undelivered').length;
+  if (undelivered > 0) {
+    out(`Preserved ${undelivered} undelivered inbox message(s).`);
+  }
+  if (result.value.diagnostics.length > 0) {
+    err(renderDiagnostics(result.value.diagnostics, { showData }));
   }
   return 0;
 }

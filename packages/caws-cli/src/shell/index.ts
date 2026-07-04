@@ -271,12 +271,14 @@ export {
   runMessagePollCommand,
   runMessageInboxCommand,
   runMessageHistoryCommand,
+  runMessagePruneCommand,
 } from './commands/message';
 export type {
   MessageSendCommandOptions,
   MessagePollCommandOptions,
   MessageInboxCommandOptions,
   MessageHistoryCommandOptions,
+  MessagePruneCommandOptions,
 } from './commands/message';
 
 export { registerShellCommands } from './register';

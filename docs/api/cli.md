@@ -1020,6 +1020,16 @@ caws message history --with <session-id> --json
 
 Read-only channel history between two endpoints. History includes both directions in message-log order; `--limit` returns the most recent messages while preserving log order. Message bodies remain communication, not authority or evidence.
 
+### `caws message prune`
+
+```bash
+caws message prune --status delivered
+caws message prune --status delivered --older-than-ms 604800000 --apply
+caws message prune --status delivered --include <message-id>,<message-id> --exclude <message-id> --json
+```
+
+Dry-run-first retention cleanup for non-authoritative chat logs. Only delivered message records are candidates; undelivered inbox messages are preserved and reported as skipped. `--apply` rewrites `.caws/messages.jsonl` only when paired with an explicit retention selector such as `--older-than-ms` or `--include`, and removes selected delivered messages plus their delivery markers.
+
 ---
 
 ## 14. `caws prepush`

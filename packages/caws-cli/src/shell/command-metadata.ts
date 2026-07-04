@@ -1315,6 +1315,38 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
         DATA_OPTION,
       ],
     },
+    {
+      kind: 'leaf',
+      name: 'prune',
+      description:
+        'Plan or apply retention cleanup for delivered non-authoritative chat messages. Dry-run by default; undelivered inbox messages are preserved.',
+      options: [
+        {
+          flag: '--status <status>',
+          required: true,
+          description: 'Message retention selector',
+          allowedValues: ['delivered'],
+        },
+        {
+          flag: '--older-than-ms <ms>',
+          description: 'Select delivered messages older than this many milliseconds',
+        },
+        {
+          flag: '--include <ids>',
+          description: 'Comma-separated message ids to include',
+        },
+        {
+          flag: '--exclude <ids>',
+          description: 'Comma-separated message ids to exclude',
+        },
+        {
+          flag: '--apply',
+          description: 'Rewrite .caws/messages.jsonl to remove selected delivered messages and their delivery markers',
+        },
+        { flag: '--json', description: 'Emit JSON prune plan/result' },
+        DATA_OPTION,
+      ],
+    },
   ],
 };
 

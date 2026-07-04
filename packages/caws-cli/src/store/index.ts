@@ -106,7 +106,17 @@ export {
   inboxCount,
   inboxMessages,
   channelHistory,
+  pruneMessages,
   isRecipientLive,
   channelId,
 } from './messages-store';
-export type { MessageRecord, MessageActor, PollResult, PollOptions } from './messages-store';
+export type {
+  MessageRecord,
+  MessageActor,
+  PollResult,
+  PollOptions,
+  MessagePruneOptions,
+  MessagePruneEntry,
+  MessagePrunePlan,
+  MessagePruneResult,
+} from './messages-store';
