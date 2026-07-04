@@ -7,7 +7,14 @@ created_at: '2026-07-04T11:18:08.779Z'
 updated_at: '2026-07-04T11:18:08.779Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/tests
+    - docs/api/cli.md
+    - docs/command-reference.md
+    - docs/architecture/cli-ux-job-model-audit.md
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -19,11 +26,21 @@ scope:
     - 'docs/command-reference.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Closed-spec archive selectors must preserve the existing dry-run/apply contract: dry-run writes nothing; apply archives through the governed archive path.'
+  - 'Age/date selectors must be deterministic from spec updated_at when present and created_at as fallback.'
+  - 'Selectors must compose with include/exclude and surface skipped/refused reasons in human and JSON output.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'closed specs with different updated_at/created_at timestamps'
+    when: 'an agent runs specs archive --status closed with --older-than-ms or --updated-before'
+    then: 'dry-run and apply select only matching closed specs and report non-matching included specs as skipped'
+  - id: A2
+    given: 'closed specs with and without a stale worktree binding'
+    when: 'an agent runs specs archive --status closed --without-worktree'
+    then: 'specs that still carry a worktree binding are skipped unless explicitly archived without that selector'
+  - id: A3
+    given: 'the CLI help and generated command reference'
+    when: 'an agent inspects caws specs archive --help'
+    then: 'the help documents the age/date/worktree selectors and shows that they compose with include/exclude/apply/json'
 non_functional: {}
 contracts: []
