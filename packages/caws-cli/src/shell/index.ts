@@ -105,8 +105,14 @@ export type { StatusCommandOptions } from './commands/status';
 export { renderStatus } from './render/status';
 export type { StatusRenderInput } from './render/status';
 
-export { runGatesRunCommand } from './commands/gates';
+export {
+  runGatesExplainCommand,
+  runGatesListCommand,
+  runGatesRunCommand,
+} from './commands/gates';
 export type {
+  GatesExplainCommandOptions,
+  GatesListCommandOptions,
   GatesRunCommandOptions,
   GatesRunCommandRequest,
 } from './commands/gates';

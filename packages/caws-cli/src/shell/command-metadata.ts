@@ -660,8 +660,31 @@ export const SCOPE_COMMAND_META: GroupCommandMeta = {
 export const GATES_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'gates',
-  description: 'Run quality gates against the current changes (policy-driven)',
+  description: 'Inspect and run quality gates against the current changes (policy-driven)',
   subcommands: [
+    {
+      kind: 'leaf',
+      name: 'list',
+      description:
+        'List policy-declared gates, modes, thresholds, risk-tier budgets, and effective waiver ids. Read-only; does not run evaluators or append gate_evaluated events.',
+      options: [
+        { flag: '--spec <id>', description: 'Optional spec id for spec-scoped waiver matching' },
+        { flag: '--json', description: 'Emit gate summaries, risk tiers, and waiver policy as JSON.' },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'explain',
+      argument: { name: 'gate', required: true, description: 'Gate id to explain' },
+      description:
+        'Explain one policy gate: enabled state, mode, thresholds, waiver policy, and effective waiver ids. Read-only; validates the gate id against policy.gates.',
+      options: [
+        { flag: '--spec <id>', description: 'Optional spec id for spec-scoped waiver matching' },
+        { flag: '--json', description: 'Emit the gate explanation as JSON.' },
+        DATA_OPTION,
+      ],
+    },
     {
       kind: 'leaf',
       name: 'run',

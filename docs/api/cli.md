@@ -179,9 +179,43 @@ Exit codes: 0 (claim succeeds or already owned), 1 (foreign claim without `--tak
 
 ---
 
-## 6. `caws gates run`
+## 6. `caws gates`
 
-Run policy-driven quality gates against current changes.
+Inspect and run policy-driven quality gates against current changes.
+
+### `caws gates list`
+
+```bash
+caws gates list
+caws gates list --spec FEAT-1 --json
+```
+
+| Flag | Description |
+|---|---|
+| `--spec <id>` | Optional spec id for spec-scoped waiver matching. |
+| `--json` | Emit gate summaries, risk tiers, and waiver policy as JSON. |
+| `--data` | Show structured data block on diagnostics. |
+
+Read-only policy discovery. The command reports configured gates, enabled state, mode, thresholds, effective waiver ids, risk-tier budgets, and waiver policy without running evaluators or appending `gate_evaluated` events.
+
+### `caws gates explain <gate>`
+
+```bash
+caws gates explain budget_limit
+caws gates explain budget_limit --spec FEAT-1 --json
+```
+
+| Flag | Description |
+|---|---|
+| `--spec <id>` | Optional spec id for spec-scoped waiver matching. |
+| `--json` | Emit the gate explanation as JSON. |
+| `--data` | Show structured data block on diagnostics. |
+
+Read-only explanation for one configured policy gate. Unknown gate ids exit nonzero and print the accepted gate set.
+
+### `caws gates run`
+
+Run policy-driven quality gates and append evidence.
 
 ```bash
 caws gates run --spec <id>

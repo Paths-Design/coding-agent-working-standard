@@ -58,6 +58,8 @@ import {
   runEvidenceRecordCommand,
   runEvidenceSchemaCommand,
   runEvidenceShowCommand,
+  runGatesExplainCommand,
+  runGatesListCommand,
   runGatesRunCommand,
   runInitCommand,
   runPrepushCommand,
@@ -388,6 +390,27 @@ export function registerShellCommands(
   // -------------------------------------------------------------------
   const gatesCmd = program.command('gates');
   applyGroupMeta(gatesCmd, GATES_COMMAND_META);
+
+  defineLeaf(gatesCmd, leafMeta(GATES_COMMAND_META, 'list'))
+    .action((opts: { spec?: string; json?: boolean; data?: boolean }) => {
+      const code = runGatesListCommand({
+        ...(opts.spec !== undefined ? { specId: opts.spec } : {}),
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  defineLeaf(gatesCmd, leafMeta(GATES_COMMAND_META, 'explain'))
+    .action((gate: string, opts: { spec?: string; json?: boolean; data?: boolean }) => {
+      const code = runGatesExplainCommand({
+        gateId: gate,
+        ...(opts.spec !== undefined ? { specId: opts.spec } : {}),
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
 
   defineLeaf(gatesCmd, leafMeta(GATES_COMMAND_META, 'run'))
     .action(

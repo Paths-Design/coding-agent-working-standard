@@ -52,7 +52,7 @@ default for every cleanup or bulk lifecycle surface.
 | `status` | flat leaf | `caws status --help` surfaces `--data`; runtime dashboard is read-only. | Good orientation model. | No focused filters (`--worktrees`, `--agents`, `--specs`) for large projects; agents may parse a broad dashboard. |
 | `scope` | `show`, `check`, `contention` | `caws scope --help` lists the three path-focused leaves. Leaf help distinguishes observation, enforcement, and cross-worktree contention; `show`/`contention` expose JSON. | Strong path-level refusal/explanation model. | No batch path check and no direct "amend this spec to admit these paths" handoff. The repair model lives in `specs amend-scope`, but the scope refusal does not produce a ready command. |
 | `claim` | flat leaf | `caws claim --help` surfaces `--takeover`, repeatable `--paths`, and diagnostics. | Good ownership surfacing. Takeover is explicit and audited. | No release/clear path for path claims. No preview of a takeover's impact beyond the refusal text. |
-| `gates` | `run` | `caws gates --help` and `caws gates run --help` surface required `--spec`, context, and diagnostics. | Good governed-check model; appends gate evidence. | No list/explain surface for available gates, policy modes, or waiver matches before running. |
+| `gates` | `list`, `explain`, `run` | `caws gates --help`, `caws gates list --help`, `caws gates explain --help`, and `caws gates run --help` surface read-only policy discovery before mutation. `list` reports configured gates, modes, thresholds, risk-tier budgets, and effective waiver ids; `explain` expands one gate; `run` appends gate evidence. | Stronger governed-check model: agents can inspect policy modes and waiver matches before running evaluators or writing `gate_evaluated` events. | Good model to copy. Remaining gate gap is historical trend/readback across prior gate_evaluated evidence, which may belong under `evidence` or a future dashboard. |
 | `evidence` | `record`, `list`, `show`, `schema` | Help surfaces typed `--type`, `--spec`, JSON payload, actor fields, read-only list filters, JSON output, event-ref lookup by seq/hash/prefix, and kernel-derived payload schema discovery. | Strong read/write symmetry: evidence can be appended, inspected, and prepared with a copy-pasteable schema/example path without direct `events.jsonl` parsing. | Good model to copy. Remaining gap is broader event-log discovery under `events`, not typed evidence inspection. |
 | `events` | `list`, `show`, `migrate`, `rotate`, `verify-archive` | Group help lists read and maintenance leaves. `list` verifies the chain and reports counts/latest/rotation archive status; `show` resolves seq/hash/prefix/latest-rotation; `migrate` has `--apply`; `rotate` requires `--reason` and supports `--dry-run`/`--json`; `verify-archive` is read-only. | Stronger audit-log model: operators can discover current chain state and rotation history before rotate/verify operations. | Good model to copy. Remaining event-log gap is retention/prune policy, which should stay separate from rotate/archive verification. |
 | `waiver` | `create`, `list`, `show`, `revoke` | Help covers CRUD-like waiver lifecycle; create/revoke require audit metadata. | Good exception lifecycle model. | No dry-run validation for `create`, and no `prune expired` cleanup model. |
@@ -161,16 +161,17 @@ By top-level command:
 | `UX-EVENTS-ROTATE-DRY-RUN-001` | Implemented in sixth repair slice | `events rotate --dry-run` audit-storage preview | Adds `caws events rotate --dry-run --reason <text> [--allow-clean] [--json]`. The preview computes the target archive path, prior digest, line count, prior-chain status, actor-shape stats, and `chain_rotated` genesis event without renaming, archiving, appending, or rewriting `events.jsonl`. Covered by `packages/caws-cli/tests/shell/events-rotate-dry-run.test.js`. |
 | `UX-EVIDENCE-SCHEMA-DISCOVERY-001` | Implemented in seventh repair slice | `evidence schema` read-only payload discovery | Adds `caws evidence schema --type <test|gate|ac> [--json]` and per-kind `evidence record --help` examples. The schema command validates invalid kinds before filesystem reads, derives required fields and properties from the kernel event payload schemas, emits copy-pasteable record commands, and never reads or writes `.caws/events.jsonl`. Covered by `packages/caws-cli/tests/shell/evidence-schema.test.js`. |
 | `UX-EVENTS-LOG-DISCOVERY-001` | Implemented in eighth repair slice | `events list/show` read-only event-log discovery | Adds `caws events list [--limit <n>] [--json]` and `caws events show <event-ref|latest-rotation> [--json]`. Both commands load through the event store, verify the current hash chain, leave `events.jsonl` byte-identical, and report rotation archive presence plus digest/line-count match when applicable. Covered by `packages/caws-cli/tests/shell/events-log-discovery.test.js`. |
+| `UX-GATES-POLICY-DISCOVERY-001` | Implemented in ninth repair slice | `gates list/explain` read-only policy discovery | Adds `caws gates list [--spec <id>] [--json]` and `caws gates explain <gate> [--spec <id>] [--json]`. Both commands compose the store snapshot, derive gate ids/modes/thresholds/risk-tier budgets from policy, use kernel waiver applicability for spec-scoped effective waiver ids, and never append `gate_evaluated` events. Covered by `packages/caws-cli/tests/shell/gates-policy-discovery.test.js`. |
 
 ## Next Slice
 
-The next implementation slice should address gate/policy discovery:
-`caws gates list [--json]` and/or `caws gates explain <gate> [--spec <id>]`.
-`gates run` appends useful evidence, but agents still need a read-only way to
-see configured gates, policy modes, threshold inputs, and matching effective
-waivers before running a mutating gate evaluation. Keep the first slice
-read-only and derive gate status from `.caws/policy.yaml` plus existing waiver
-effectiveness logic rather than shelling out to quality-gate subprocesses.
+The next implementation slice should address waiver lifecycle cleanup and
+preflight validation: `caws waiver create --dry-run` and/or
+`caws waiver prune --status expired [--apply] [--json]`. Waiver create/revoke
+already require audit metadata, but operators cannot preview validation or
+clean expired waiver records with the same dry-run/apply model used by agents
+and specs cleanup. Keep the first slice read-only by default and make expired
+selection explicit before any revoke/prune mutation.
 
 ## Findings
 
@@ -224,9 +225,8 @@ effectiveness logic rather than shelling out to quality-gate subprocesses.
    default before adding any apply behavior. Sterling needs a trustworthy plan
    more than it needs another destructive verb.
 
-4. Add gate/policy discovery before mutation: a read-only list/explain surface
-   should summarize configured gates, modes, threshold inputs, and matching
-   waivers before `gates run` appends evidence.
+4. Add waiver cleanup/preflight parity: dry-run validation for create and a
+   selector/apply model for expired waiver cleanup.
 
 5. Add help regression tests for any group description that names subcommands
    and for cleanup leaves that claim dry-run/apply semantics. The CLI already
