@@ -983,6 +983,7 @@ Show one lease by session id. Read-only.
 ```bash
 caws agents prune --status stopped --older-than-ms 604800000
 caws agents prune --status stale --older-than-ms 604800000 --apply
+caws agents prune --dead --json
 caws agents prune --dead --apply
 ```
 

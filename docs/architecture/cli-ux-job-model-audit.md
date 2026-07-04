@@ -125,7 +125,7 @@ By top-level command:
 | Friction marker | Count | UX implication |
 |---|---:|---|
 | `no_scope_authority` | 126 | Agents frequently ask scope questions from canonical/unbound contexts and then need a bridge to "what command gets me into an authoritative context?" |
-| `unknown_or_missing_option` | 91 | Partially fixed for `specs close` and `scope`: `--closure-notes` is now a supported alias for the existing `--reason` closure note field, and `scope show/check/plan --spec <id>` now supports read-only explicit spec-context evaluation. Help/flag discoverability still creates retries where adjacent command shapes are close but not parallel. |
+| `unknown_or_missing_option` | 91 | Partially fixed for `specs close`, `scope`, and `agents prune`: `--closure-notes` is now a supported alias for the existing `--reason` closure note field, `scope show/check/plan --spec <id>` now supports read-only explicit spec-context evaluation, and `agents prune --dead --json` is verified as a supported dry-run/apply dead-process cleanup path. Help/flag discoverability still creates retries where adjacent command shapes are close but not parallel. |
 | `tier_requires_metadata` | 87 | Fixed at the create-plan layer: `specs create --plan` now reports missing semantic fields and emits copy-pasteable YAML examples in human and JSON output. |
 | `danger_latch` | 66 | CAWS hook UX still matters for CLI workflows; blocked shell forms often interrupt otherwise correct CAWS procedures. |
 | `worktree_not_found` | 62 | Agents repeatedly try `worktree destroy <name>` after merge/closure or for residue that is no longer a registered CAWS worktree. |
@@ -149,6 +149,7 @@ By top-level command:
 | Draft spec binding | `Spec "..." is in lifecycle_state "draft"; only active specs can be bound to a worktree.` | Now closed for create/bind: the refusal includes `caws specs activate <id>`, explains activation preflight, and does not mutate worktree/spec/event state. |
 | Already-closed close | `Spec "..." is already closed; close is a no-op and no closure metadata was changed.` | Now closed for state-aware refusal: the diagnostic names `caws specs show <id>`, `caws specs archive <id>`, and `caws specs recover <id> --out <path>` without mutating closure metadata. |
 | Closure notes flag mismatch | `Unknown option: --closure-notes` when an agent tried to close a spec using the YAML field name. | Now closed for `specs close`: `--closure-notes <text>` aliases `--reason <text>`, both write `closure_notes`, and supplying both fails before mutation. |
+| Dead-agent prune JSON mismatch | `agents prune --dead --json` was recorded as a prior unknown/missing-option retry. | Now reconciled: current CLI help lists `--dead` and `--json`, dry-run dead-process pruning emits CAWS-native JSON without `--status`, and apply deletes only selected dead-process leases. |
 | Tier metadata failure | `Tier 1 specs require non-empty observability... rollback... contract.` | Now closed for plan guidance: `specs create --plan` lists missing semantic fields and emits copy-pasteable YAML examples in human output plus `field_examples` in JSON. |
 | Contract tuple inversion | `invalid --contract "behavior:verifychain-detects-tamper": type "verifychain-detects-tamper" is not one of ...` | Now closed: linked CLI verification shows the diagnostic prints the accepted tuple shape, `--contract "core-api:behavior"` example, and corrected `--contract "verifychain-detects-tamper:behavior"` suggestion. |
 | Evidence schema rejection | `data: must have required property 'command'` for `evidence record --type test`. | Fixed by `evidence schema --type test` plus per-type examples in `evidence record --help`. |
@@ -188,15 +189,16 @@ By top-level command:
 | `UX-CONTRACT-TUPLE-AUDIT-001` | Implemented in twenty-ninth repair slice | Contract tuple audit reconciliation | Verifies the current linked CLI already emits the accepted tuple shape, inline example, and corrected inverted-tuple suggestion, then updates this audit so the representative row no longer describes the fixed behavior as a missing model. Existing behavior remains covered by `packages/caws-cli/tests/shell/specs-create-ux.test.js`. |
 | `UX-SPECS-CLOSE-CLOSURE-NOTES-ALIAS-001` | Implemented in thirtieth repair slice | Specs close closure note alias | Adds `caws specs close <id> --closure-notes <text>` as an alias for `--reason <text>` because both write the YAML `closure_notes` field. Supplying both flags fails before mutation. Covered by `packages/caws-cli/tests/shell/specs-close-closure-notes-alias.test.js`. |
 | `UX-SCOPE-SPEC-CONTEXT-001` | Implemented in thirty-first repair slice | Scope explicit spec-context evaluation | Adds `caws scope show/check <path> --spec <id>` and `caws scope plan --spec <id> --path ...` as read-only named-spec comparisons. JSON reports `mode: spec_context` and `source: explicit_spec`; human output warns that this is not proof the current checkout owns write authority. Covered by `packages/caws-cli/tests/shell/scope-explicit-spec-context.test.js`. |
+| `UX-AGENTS-PRUNE-DEAD-AUDIT-001` | Implemented in thirty-second repair slice | Agents prune dead-process JSON reconciliation | Verifies and pins `caws agents prune --dead --json` as a supported dry-run/apply path that does not require `--status` or `--older-than-ms`. Dry-run reports CAWS-native JSON without mutation; apply deletes only selected dead-process leases. Covered by `packages/caws-cli/tests/shell/agents-prune-dead-json.test.js`. |
 
 ## Next Slice
 
 The next implementation slice should continue the broad
 `unknown_or_missing_option` class. Session evidence shows agents also tried
-`caws agents prune --dead --json`; start there and decide whether `--dead`
-should be a documented alias for `--status dead`, a sharper refusal that
-points to `--status dead`, or a compatibility path that preserves the prune
-preview/apply model.
+`caws specs create ... --tier <n>`, while current help exposes only
+`--risk-tier <n>`. Start there and decide whether `--tier` should be a
+documented alias for `--risk-tier`, a sharper unknown-option handoff, or a
+compatibility path that preserves the create/plan validation model.
 
 ## Findings
 
@@ -276,7 +278,13 @@ preview/apply model.
    output warns that this does not prove the current checkout owns write
    authority; agents still need the bound worktree for edits.
 
-14. **Help context is now closer to reality, but nested help should keep naming
+14. **Agents dead-process prune JSON was already implemented and is now pinned.**
+   `agents prune --dead --json` is a supported dry-run/apply path and does not
+   require the retention-mode `--status` or `--older-than-ms` flags. Regression
+   coverage now proves dry-run JSON leaves leases unchanged and apply deletes
+   only selected same-host stale dead-process leases.
+
+15. **Help context is now closer to reality, but nested help should keep naming
    adjacent alternatives.** The recent `specs archive` and `specs validate`
    fixes show that group and leaf help need to explain neighboring commands:
    archive vs recover, create vs amend-scope, repair vs destroy, prune vs
