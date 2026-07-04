@@ -7,7 +7,8 @@ created_at: '2026-07-04T19:22:18.578Z'
 updated_at: '2026-07-04T19:22:18.578Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli specs close command'
+    - 'CLI reference documentation'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -21,12 +22,22 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - '`caws specs close <id> --note <text>` writes the same closure_notes field as --notes, --closure-notes, and --reason.'
+  - 'Supplying --note with any other closure note alias refuses before mutation.'
+  - 'Help and docs list --note as a compatibility singular alias so Commander does not stop at unknown-option recovery.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'an active spec'
+    when: 'an operator runs caws specs close <id> --note "done"'
+    then: 'the spec closes successfully and stores closure_notes: done.'
+  - id: A2
+    given: 'an active spec'
+    when: 'an operator supplies --note together with --notes, --closure-notes, or --reason'
+    then: 'the command refuses before writing spec files or events.'
+  - id: A3
+    given: 'the built CLI command surface'
+    when: 'an operator runs caws specs close --help'
+    then: 'help lists --note as a singular alias for closure_notes.'
 non_functional: {}
 contracts:
   - name: 'specs-close-note-alias'
