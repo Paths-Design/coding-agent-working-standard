@@ -605,6 +605,10 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
             'Comma-separated state-class filter (for example: ghost-registry,closed-spec-residue,event-orphan-refused).',
         },
         {
+          flag: '--status <classes>',
+          description: 'Alias for --state <classes>; accepts the same state-class values.',
+        },
+        {
           flag: '--include <subjects>',
           description: 'Comma-separated subjects to include (worktree names, spec ids, or paths).',
         },
@@ -631,6 +635,10 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
           flag: '--state <classes>',
           description:
             'Comma-separated state-class filter (for example: destroy-ready,dirty-refused,foreign-owned-refused,unregistered-physical-refused).',
+        },
+        {
+          flag: '--status <classes>',
+          description: 'Alias for --state <classes>; accepts the same state-class values.',
         },
         {
           flag: '--include <subjects>',
