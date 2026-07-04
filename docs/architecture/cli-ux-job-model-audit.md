@@ -145,7 +145,7 @@ By top-level command:
 | Bulk archive absence | `caws specs archive --help` showed only `Usage: caws specs archive [options] <id>` while the session counted 1,326 closed specs and then asked whether there was a bulk path. | Fixed by batch archive; copy its selector/dry-run/apply model. |
 | Worktree cleanup residue | `caws worktree destroy: failed... Worktree "..." not found in registry` after merge/closure verification. | A `worktree prune` or cleanup-plan state model for closed residue, dead dirs, and unregistered leftovers. |
 | Scope from canonical checkout | `NO AUTHORITY scope.no_authority.unbound ... No spec is bound to this worktree`. | A guided bridge from "no authority" to `worktree create`, `worktree bind`, or `specs amend-scope`, depending on intent. |
-| Draft spec binding | `Spec "..." is in lifecycle_state "draft"; only active specs can be bound to a new worktree.` | The refusal should include the safe next command: `caws specs activate <id>` or explain why activation is not safe. |
+| Draft spec binding | `Spec "..." is in lifecycle_state "draft"; only active specs can be bound to a worktree.` | Now closed for create/bind: the refusal includes `caws specs activate <id>`, explains activation preflight, and does not mutate worktree/spec/event state. |
 | Already-closed close | `Spec "..." is in lifecycle_state "closed"; only active specs can be closed.` | State-aware alternatives: `archive`, `show`, `recover`, or no-op success when closure already matches requested metadata. |
 | Tier metadata failure | `Tier 1 specs require non-empty observability... rollback... contract.` | `specs create --help` needs complete tier-1/2 examples or a `--template tier1`/interactive plan output. |
 | Contract tuple inversion | `invalid --contract "behavior:verifychain-detects-tamper": type "verifychain-detects-tamper" is not one of ...` | Error should print the accepted tuple shape and a corrected example. |
@@ -180,14 +180,15 @@ By top-level command:
 | `UX-CLAIM-RELEASE-PREVIEW-001` | Implemented in twenty-third repair slice | `claim --plan` and `claim --release-paths` | Adds `caws claim --plan [--json]` for read-only ownership/takeover impact preview and `caws claim --release-paths [--apply] [--json]` for dry-run/apply clearing of the current session lease `claimed_paths`. The release path writes only through the lease store and does not mutate worktree ownership, specs, events, or git state. Covered by `packages/caws-cli/tests/shell/claim-release-preview.test.js`. |
 | `UX-MESSAGE-LOG-READBACK-001` | Implemented in twenty-fourth repair slice | `message inbox/history` read-only message-log inspection | Adds `caws message inbox [--me <id>] [--limit <n>] [--json]` and `caws message history --with <id> [--me <id>] [--limit <n>] [--json]`. Inbox lists undelivered messages without consuming them; history returns bidirectional channel messages in log order; both are read-only and append no delivery records. Covered by `packages/caws-cli/tests/shell/message-log-readback.test.js`. |
 | `UX-MESSAGE-RETENTION-PRUNE-001` | Implemented in twenty-fifth repair slice | `message prune` delivered-message retention cleanup | Adds `caws message prune --status delivered [--older-than-ms <ms>] [--include <ids>] [--exclude <ids>] [--apply] [--json]`. Dry-run is default; candidates are delivered message records only; undelivered inbox messages are preserved; apply requires `--older-than-ms` or `--include` and removes selected delivered messages plus delivery markers. Covered by `packages/caws-cli/tests/shell/message-retention-prune.test.js`. |
+| `UX-DRAFT-BIND-HANDOFF-001` | Implemented in twenty-sixth repair slice | Draft spec bind/create activation handoff | Adds a shared active-only binding diagnostic for `worktree create` and `worktree bind`. Draft-spec refusals now include `caws specs activate <id>`, explain that activation preflight must pass before retrying create/bind, and preserve specs, registry, events, and worktree directories. Covered by `packages/caws-cli/tests/shell/worktree-draft-bind-handoff.test.js`. |
 
 ## Next Slice
 
-The next implementation slice should address smaller lifecycle handoff gaps now
-that the main cleanup model is consistent. A good target is the specs draft-bind
-refusal path: when a worktree bind/create operation refuses a draft spec, the
-CLI should surface a direct `caws specs activate <id>` handoff and explain the
-activation preflight instead of leaving agents to infer the next command.
+The next implementation slice should address the already-closed close refusal.
+When an agent runs `caws specs close <id>` on a spec that is already closed, the
+CLI should behave as a state-aware handoff instead of a dead end: surface
+`caws specs show <id>`, `caws specs archive <id>`, and recover/no-op guidance
+without mutating closure metadata unless an explicit idempotent mode is added.
 
 ## Findings
 
@@ -237,7 +238,13 @@ activation preflight instead of leaving agents to infer the next command.
    plans/applies delivered-message cleanup separately from undelivered inbox
    messages and remains distinct from hash-chained governance evidence.
 
-9. **Help context is now closer to reality, but nested help should keep naming
+9. **Draft binding now hands off to activation instead of stopping cold.**
+   `worktree create` and `worktree bind` still refuse draft specs, but the
+   diagnostic now names `caws specs activate <id>` and explains activation
+   preflight. The refusal remains non-mutating across spec, registry, events,
+   and worktree directory state.
+
+10. **Help context is now closer to reality, but nested help should keep naming
    adjacent alternatives.** The recent `specs archive` and `specs validate`
    fixes show that group and leaf help need to explain neighboring commands:
    archive vs recover, create vs amend-scope, repair vs destroy, prune vs
@@ -267,6 +274,6 @@ activation preflight instead of leaving agents to infer the next command.
    has metadata-driven help; the gap is asserting the UX promises that agents
    rely on.
 
-6. Add remaining lifecycle cleanup designs only after their state semantics are
-   explicit: batch stale-draft retirement apply and batch physical worktree
-   deletion need separate plan/apply guardrails.
+6. Add remaining lifecycle refusal handoffs only after their state semantics are
+   explicit: already-closed close, tier metadata failures, and contract tuple
+   mistakes should point at safe read/repair commands without broad mutation.

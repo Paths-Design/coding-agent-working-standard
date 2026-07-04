@@ -754,6 +754,8 @@ caws worktree create my-feature --spec FEAT-1 --base-branch main --branch feat/m
 
 Creates a new git worktree under `.caws/worktrees/<name>` bound to an active spec. Writes the bidirectional worktree↔spec binding, registers ownership, and emits `worktree_created` + `worktree_bound` events.
 
+If `--spec` names a draft spec, the command refuses without creating the worktree and prints the safe handoff `caws specs activate <id>`. Activation must pass its own spec preflight before create/bind is retried.
+
 ### `caws worktree list`
 
 ```bash
@@ -769,6 +771,8 @@ caws worktree bind my-feature --spec FEAT-1
 ```
 
 Repair bidirectional binding between a worktree and a spec (one-sided → bound).
+
+Only active specs can be bound. If the target spec is still draft, the refusal includes `caws specs activate <id>` and leaves the registry, spec file, events, and worktree directory unchanged.
 
 ### `caws worktree destroy <name>`
 
