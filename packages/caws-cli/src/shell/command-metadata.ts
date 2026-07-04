@@ -359,6 +359,18 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
           flag: '--exclude <ids>',
           description: 'Comma-separated spec ids to exclude from batch mode',
         },
+        {
+          flag: '--older-than-ms <ms>',
+          description: 'Batch selector: archive only closed specs whose updated_at/created_at age is at least this many milliseconds',
+        },
+        {
+          flag: '--updated-before <timestamp>',
+          description: 'Batch selector: archive only closed specs whose updated_at/created_at timestamp is before this cutoff',
+        },
+        {
+          flag: '--without-worktree',
+          description: 'Batch selector: archive only closed specs that do not still carry a worktree binding',
+        },
         { flag: '--apply', description: 'Apply batch archive (default: dry-run)' },
         { flag: '--json', description: 'Emit CAWS-native JSON to stdout' },
         DATA_OPTION,

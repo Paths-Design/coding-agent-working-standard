@@ -469,6 +469,9 @@ Archive one closed spec, or batch-archive closed specs with --status closed. Bat
 - `--status <s>` — Batch selector status. Currently only: closed
 - `--include <ids>` — Comma-separated spec ids to include in batch mode
 - `--exclude <ids>` — Comma-separated spec ids to exclude from batch mode
+- `--older-than-ms <ms>` — Batch selector: archive only closed specs whose updated_at/created_at age is at least this many milliseconds
+- `--updated-before <timestamp>` — Batch selector: archive only closed specs whose updated_at/created_at timestamp is before this cutoff
+- `--without-worktree` — Batch selector: archive only closed specs that do not still carry a worktree binding
 - `--apply` — Apply batch archive (default: dry-run)
 - `--json` — Emit CAWS-native JSON to stdout
 - `--data` — Show structured data block on diagnostics
