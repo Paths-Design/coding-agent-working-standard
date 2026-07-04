@@ -2,10 +2,11 @@ id: UX-SPECS-CREATE-TIER-ALIAS-001
 title: 'Add specs create tier alias'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: specs-create-tier-alias
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge specs-create-tier-alias at 80b8d036e949088aab8901dd8b265f2bebcda107'
 created_at: '2026-07-04T13:19:02.332Z'
-updated_at: '2026-07-04T13:19:10.086Z'
+updated_at: '2026-07-04T13:22:33.501Z'
 blast_radius:
   modules:
     - packages/caws-cli/specs
