@@ -7,12 +7,12 @@ created_at: '2026-07-04T11:27:22.308Z'
 updated_at: '2026-07-04T11:27:33.316Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli/specs
+    - caws-cli/docs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/store/specs-writer.ts
     - packages/caws-cli/src/shell/commands/specs.ts
     - packages/caws-cli/src/shell/command-metadata.ts
@@ -23,11 +23,22 @@ scope:
     - docs/architecture/cli-ux-job-model-audit.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'caws specs prune-drafts remains dry-run by default; --apply is required for mutation.'
+  - 'batch draft retirement refuses unfiltered apply unless the operator provides --include or an explicit stale threshold.'
+  - 'apply retires only planner candidates and reuses the governed retireDraftSpec tombstone path for every selected draft.'
+  - 'bound draft refusal remains the default and can only become a candidate with --include-bound.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'draft specs with stale, fresh, bound, and non-draft states'
+    when: 'caws specs prune-drafts is run without --apply'
+    then: 'the command reports the same read-only plan as before and writes no events or spec files'
+  - id: A2
+    given: 'candidate draft specs selected by --include or an explicit stale threshold'
+    when: 'caws specs prune-drafts --apply is run'
+    then: 'only candidate drafts are retired through retireDraftSpec and JSON/human output reports retired, skipped, refused, and failed entries'
+  - id: A3
+    given: 'an unfiltered apply or a bound draft without --include-bound'
+    when: 'caws specs prune-drafts --apply is run'
+    then: 'the command refuses mutation with actionable diagnostics and leaves CAWS state unchanged'
 non_functional: {}
 contracts: []
