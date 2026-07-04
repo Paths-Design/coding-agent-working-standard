@@ -541,6 +541,8 @@ export function registerShellCommands(
     .action(
       (opts: {
         reason: string;
+        dryRun?: boolean;
+        json?: boolean;
         actorKind?: string;
         actorId?: string;
         allowClean?: boolean;
@@ -552,6 +554,8 @@ export function registerShellCommands(
             : {}),
           ...(opts.actorId !== undefined ? { actorId: opts.actorId } : {}),
           ...(opts.allowClean === true ? { allowClean: true } : {}),
+          dryRun: opts.dryRun === true,
+          json: opts.json === true,
         });
         exit(code);
       }

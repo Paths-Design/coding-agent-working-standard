@@ -772,13 +772,18 @@ export const EVENTS_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'rotate',
       description:
-        'Rotate events.jsonl: archive existing chain, start fresh chain with chain_rotated genesis event. Distinct from migrate — admits fully-unparseable logs.',
+        'Rotate events.jsonl: archive existing chain, start fresh chain with chain_rotated genesis event. Distinct from migrate — admits fully-unparseable logs. Supports --dry-run preview.',
       options: [
         {
           flag: '--reason <text>',
           required: true,
           description: 'Operator reason recorded into the chain_rotated payload',
         },
+        {
+          flag: '--dry-run',
+          description: 'Preview archive path, digest, stats, and genesis event without mutating events.jsonl.',
+        },
+        { flag: '--json', description: 'Emit the dry-run plan as JSON.' },
         {
           flag: '--actor-kind <kind>',
           description: 'Actor kind: agent | human | system | automation',
