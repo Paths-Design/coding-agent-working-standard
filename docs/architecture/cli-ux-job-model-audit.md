@@ -125,7 +125,7 @@ By top-level command:
 | Friction marker | Count | UX implication |
 |---|---:|---|
 | `no_scope_authority` | 126 | Agents frequently ask scope questions from canonical/unbound contexts and then need a bridge to "what command gets me into an authoritative context?" |
-| `unknown_or_missing_option` | 91 | Partially fixed for `specs close`, `scope`, `agents prune`, and `specs create`: `--closure-notes` is now a supported alias for the existing `--reason` closure note field, `scope show/check/plan --spec <id>` now supports read-only explicit spec-context evaluation, `agents prune --dead --json` is verified as a supported dry-run/apply dead-process cleanup path, and `specs create --tier <n>` now aliases `--risk-tier <n>`. Help/flag discoverability still creates retries where adjacent command shapes are close but not parallel. |
+| `unknown_or_missing_option` | 91 | Partially fixed for `specs close`, `scope`, `agents prune`, `specs create`, and validation-era removed commands: `--closure-notes` is now a supported alias for the existing `--reason` closure note field, `scope show/check/plan --spec <id>` now supports read-only explicit spec-context evaluation, `agents prune --dead --json` is verified as a supported dry-run/apply dead-process cleanup path, `specs create --tier <n>` now aliases `--risk-tier <n>`, and legacy validation diagnostics are pinned to the correct replacement/removal model. Help/flag discoverability still creates retries where adjacent command shapes are close but not parallel. |
 | `tier_requires_metadata` | 87 | Fixed at the create-plan layer: `specs create --plan` now reports missing semantic fields and emits copy-pasteable YAML examples in human and JSON output. |
 | `danger_latch` | 66 | CAWS hook UX still matters for CLI workflows; blocked shell forms often interrupt otherwise correct CAWS procedures. |
 | `worktree_not_found` | 62 | Agents repeatedly try `worktree destroy <name>` after merge/closure or for residue that is no longer a registered CAWS worktree. |
@@ -151,6 +151,7 @@ By top-level command:
 | Closure notes flag mismatch | `Unknown option: --closure-notes` when an agent tried to close a spec using the YAML field name. | Now closed for `specs close`: `--closure-notes <text>` aliases `--reason <text>`, both write `closure_notes`, and supplying both fails before mutation. |
 | Dead-agent prune JSON mismatch | `agents prune --dead --json` was recorded as a prior unknown/missing-option retry. | Now reconciled: current CLI help lists `--dead` and `--json`, dry-run dead-process pruning emits CAWS-native JSON without `--status`, and apply deletes only selected dead-process leases. |
 | Tier shorthand mismatch | `unknown option '--tier'` when an agent tried `caws specs create ... --tier <n>`. | Now closed for `specs create`: `--tier <n>` aliases `--risk-tier <n>`, nested help documents both, and supplying both fails before spec/event mutation. |
+| Validation-era removed command flattening | `caws validate` and related v10-era commands were previously grouped in `docs/api/cli.md` under one doctor/gates replacement even though runtime diagnostics distinguish replaced commands, direct renames, and removed report/advisory commands. | Now reconciled: `validate`/`verify` hand off to `doctor` plus `gates run`, `diagnose` points only to `doctor`, and `verify-acs`/`evaluate`/`iterate`/`burnup` preserve command-specific removed-without-replacement guidance. |
 | Tier metadata failure | `Tier 1 specs require non-empty observability... rollback... contract.` | Now closed for plan guidance: `specs create --plan` lists missing semantic fields and emits copy-pasteable YAML examples in human output plus `field_examples` in JSON. |
 | Contract tuple inversion | `invalid --contract "behavior:verifychain-detects-tamper": type "verifychain-detects-tamper" is not one of ...` | Now closed: linked CLI verification shows the diagnostic prints the accepted tuple shape, `--contract "core-api:behavior"` example, and corrected `--contract "verifychain-detects-tamper:behavior"` suggestion. |
 | Evidence schema rejection | `data: must have required property 'command'` for `evidence record --type test`. | Fixed by `evidence schema --type test` plus per-type examples in `evidence record --help`. |
@@ -192,15 +193,16 @@ By top-level command:
 | `UX-SCOPE-SPEC-CONTEXT-001` | Implemented in thirty-first repair slice | Scope explicit spec-context evaluation | Adds `caws scope show/check <path> --spec <id>` and `caws scope plan --spec <id> --path ...` as read-only named-spec comparisons. JSON reports `mode: spec_context` and `source: explicit_spec`; human output warns that this is not proof the current checkout owns write authority. Covered by `packages/caws-cli/tests/shell/scope-explicit-spec-context.test.js`. |
 | `UX-AGENTS-PRUNE-DEAD-AUDIT-001` | Implemented in thirty-second repair slice | Agents prune dead-process JSON reconciliation | Verifies and pins `caws agents prune --dead --json` as a supported dry-run/apply path that does not require `--status` or `--older-than-ms`. Dry-run reports CAWS-native JSON without mutation; apply deletes only selected dead-process leases. Covered by `packages/caws-cli/tests/shell/agents-prune-dead-json.test.js`. |
 | `UX-SPECS-CREATE-TIER-ALIAS-001` | Implemented in thirty-third repair slice | Specs create tier shorthand alias | Adds `caws specs create --tier <n>` as an alias for `--risk-tier <n>` for create and plan modes. Both flags write canonical `risk_tier`; supplying both fails before mutation. Covered by `packages/caws-cli/tests/shell/specs-create-tier-alias.test.js`. |
+| `UX-LEGACY-VALIDATION-DIAGNOSTICS-001` | Implemented in thirty-fourth repair slice | Validation-era removed-command diagnostics reconciliation | Pins legacy diagnostics for `validate`/`verify`/`diagnose`/`verify-acs`/`evaluate`/`iterate`/`burnup` and splits the `docs/api` removed-command table so replacement guidance matches runtime. Covered by `packages/caws-cli/tests/shell/legacy-validation-diagnostics.test.js`. |
 
 ## Next Slice
 
 The next implementation slice should continue the broad
-`unknown_or_missing_option` class. Session evidence also shows retry loops
-around removed or renamed lifecycle surfaces such as `caws validate`; start
-there and verify whether current legacy-command diagnostics already provide
-the correct doctor/gates handoff, or whether a sharper nested-help/refusal
-bridge is still needed.
+`unknown_or_missing_option` class. Session evidence also showed agents trying
+`caws specs --status ...` at the group level before reaching the list/archive
+model. Start there and verify whether current `specs` group-level diagnostics
+should hand off to `caws specs list --status <state>`, whether help should name
+that filter more directly, or whether a group-level alias is warranted.
 
 ## Findings
 
@@ -297,6 +299,13 @@ bridge is still needed.
    fixes show that group and leaf help need to explain neighboring commands:
    archive vs recover, create vs amend-scope, repair vs destroy, prune vs
    repair. Agents use help as a decision tree, not only as an option list.
+
+17. **Validation-era removed commands now match their real replacement model.**
+   `validate` and `verify` are replaced by `doctor` plus `gates run`, while
+   `diagnose` is a direct `doctor` rename and `verify-acs`/`evaluate`/`iterate`/
+   `burnup` keep narrower removed-command guidance. The API reference now
+   mirrors the runtime diagnostics instead of flattening them into one generic
+   replacement row.
 
 ## Recommendations
 
