@@ -2,10 +2,11 @@ id: UX-HOOK-INPUT-PARSE-DIAGNOSTIC-001
 title: 'Surface malformed hook input parse diagnostics'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: hook-input-parse-diagnostic
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge hook-input-parse-diagnostic at d22f94a139add55a8ffb80fa3de68b366f9b0493'
 created_at: '2026-07-04T17:36:51.582Z'
-updated_at: '2026-07-04T17:36:51.582Z'
+updated_at: '2026-07-04T17:42:12.297Z'
 blast_radius:
   modules:
     - packages/caws-cli/shared-hook-core
