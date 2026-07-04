@@ -287,7 +287,38 @@ Read-only event lookup by sequence number, exact event hash, or unique event-has
 
 ## 8. `caws events`
 
-Maintenance commands for `.caws/events.jsonl`.
+Read and maintain `.caws/events.jsonl`.
+
+### `caws events list`
+
+```bash
+caws events list
+caws events list --limit 0
+caws events list --json
+```
+
+| Flag | Description |
+|---|---|
+| `--json` | Emit the chain summary, rotation summaries, and recent events as JSON. |
+| `--limit <n>` | Number of recent events to include (default: 20; use `0` for summary only). |
+| `--data` | Show structured data block on diagnostics. |
+
+Read-only event-log discovery. The command verifies the current hash chain, reports the event count, counts by event type, the latest event handle, recent events, and `chain_rotated` archive status. Rotation summaries include archive path, prior digest, prior line count, prior chain status, archive presence, and digest/line-count match when the archive is present.
+
+### `caws events show <event-ref>`
+
+```bash
+caws events show 42
+caws events show sha256:0123456789ab --json
+caws events show latest-rotation --json
+```
+
+| Flag | Description |
+|---|---|
+| `--json` | Emit the matched event and rotation status as JSON. |
+| `--data` | Show structured data block on diagnostics. |
+
+Read-only lookup by sequence number, exact event hash, unique event-hash prefix, or the special `latest-rotation` ref. The command verifies the current chain before resolving the reference. Missing and ambiguous references exit nonzero without mutating `events.jsonl`.
 
 ### `caws events migrate`
 
