@@ -126,15 +126,15 @@ By top-level command:
 |---|---:|---|
 | `no_scope_authority` | 126 | Agents frequently ask scope questions from canonical/unbound contexts and then need a bridge to "what command gets me into an authoritative context?" |
 | `unknown_or_missing_option` | 91 | Help/flag discoverability still creates retries, especially when command shapes are close but not parallel. |
-| `tier_requires_metadata` | 87 | `specs create` for tier 1/2 has required semantic fields that are not fully expressible through current flags, so agents discover requirements by failure. |
+| `tier_requires_metadata` | 87 | Fixed at the create-plan layer: `specs create --plan` now reports missing semantic fields and emits copy-pasteable YAML examples in human and JSON output. |
 | `danger_latch` | 66 | CAWS hook UX still matters for CLI workflows; blocked shell forms often interrupt otherwise correct CAWS procedures. |
 | `worktree_not_found` | 62 | Agents repeatedly try `worktree destroy <name>` after merge/closure or for residue that is no longer a registered CAWS worktree. |
 | `merge_failed` | 43 | Merge is a complex mutating job; failed merges need better plan/state output and post-failure recovery guidance. |
 | `missing_bulk_archive` | 19 | This is the exact class fixed by batch `specs archive`; agents had to inspect help, count closed specs, and infer that no bulk path existed. |
-| `contract_arg_invalid` | 14 | Contract tuple syntax is easy to invert; help should show examples and `specs create` should give a corrected form. |
-| `draft_spec_create_refused` | 13 | Agents try to bind draft specs to worktrees; the next command is `specs activate`, but the flow is not yet a guided handoff. |
+| `contract_arg_invalid` | 14 | Fixed by `specs create` help/diagnostics: inverted tuples print the accepted shape and a corrected `--contract "name:behavior"` suggestion. |
+| `draft_spec_create_refused` | 13 | Fixed for worktree create/bind: draft-spec refusals now hand off to `caws specs activate <id>` and explain activation preflight. |
 | `evidence_schema_rejected` | 10 | Fixed by `evidence schema --type <kind>` and per-kind `evidence record --help` examples. |
-| `already_closed_close_refused` | 7 | Agents try to close specs that are already closed; common next jobs are archive, recover, or inspect closure state. |
+| `already_closed_close_refused` | 7 | Fixed for `specs close`: already-closed refusals now hand off to `specs show`, `specs archive`, and post-archive `specs recover`. |
 | `parse_error` | 6 | Shell quoting and hook parsing failures still interrupt otherwise valid CAWS workflows. |
 | `not_a_git_repo` | 1 | Rare compared with state-model misses. |
 
@@ -148,7 +148,7 @@ By top-level command:
 | Draft spec binding | `Spec "..." is in lifecycle_state "draft"; only active specs can be bound to a worktree.` | Now closed for create/bind: the refusal includes `caws specs activate <id>`, explains activation preflight, and does not mutate worktree/spec/event state. |
 | Already-closed close | `Spec "..." is already closed; close is a no-op and no closure metadata was changed.` | Now closed for state-aware refusal: the diagnostic names `caws specs show <id>`, `caws specs archive <id>`, and `caws specs recover <id> --out <path>` without mutating closure metadata. |
 | Tier metadata failure | `Tier 1 specs require non-empty observability... rollback... contract.` | Now closed for plan guidance: `specs create --plan` lists missing semantic fields and emits copy-pasteable YAML examples in human output plus `field_examples` in JSON. |
-| Contract tuple inversion | `invalid --contract "behavior:verifychain-detects-tamper": type "verifychain-detects-tamper" is not one of ...` | Error should print the accepted tuple shape and a corrected example. |
+| Contract tuple inversion | `invalid --contract "behavior:verifychain-detects-tamper": type "verifychain-detects-tamper" is not one of ...` | Now closed: linked CLI verification shows the diagnostic prints the accepted tuple shape, `--contract "core-api:behavior"` example, and corrected `--contract "verifychain-detects-tamper:behavior"` suggestion. |
 | Evidence schema rejection | `data: must have required property 'command'` for `evidence record --type test`. | Fixed by `evidence schema --type test` plus per-type examples in `evidence record --help`. |
 
 ## Implementation Ledger
@@ -183,14 +183,15 @@ By top-level command:
 | `UX-DRAFT-BIND-HANDOFF-001` | Implemented in twenty-sixth repair slice | Draft spec bind/create activation handoff | Adds a shared active-only binding diagnostic for `worktree create` and `worktree bind`. Draft-spec refusals now include `caws specs activate <id>`, explain that activation preflight must pass before retrying create/bind, and preserve specs, registry, events, and worktree directories. Covered by `packages/caws-cli/tests/shell/worktree-draft-bind-handoff.test.js`. |
 | `UX-SPECS-CLOSE-HANDOFF-001` | Implemented in twenty-seventh repair slice | Already-closed specs close handoff | Adds a state-aware already-closed diagnostic for `caws specs close <id>`. The refusal remains non-mutating, explains that close is a no-op, and points agents at `specs show`, `specs archive`, and post-archive `specs recover`. Covered by `packages/caws-cli/tests/shell/specs-close-handoff.test.js`. |
 | `UX-SPECS-CREATE-TIER-GUIDANCE-001` | Implemented in twenty-eighth repair slice | Tier metadata examples in create plan | Adds concrete YAML examples to `caws specs create --plan` for missing `/contracts`, `/observability`, `/rollback`, and `/non_functional/security` fields. Human output prints an `example YAML additions` block; JSON output exposes `field_examples`; plan remains read-only. Covered by `packages/caws-cli/tests/shell/specs-create-plan.test.js`. |
+| `UX-CONTRACT-TUPLE-AUDIT-001` | Implemented in twenty-ninth repair slice | Contract tuple audit reconciliation | Verifies the current linked CLI already emits the accepted tuple shape, inline example, and corrected inverted-tuple suggestion, then updates this audit so the representative row no longer describes the fixed behavior as a missing model. Existing behavior remains covered by `packages/caws-cli/tests/shell/specs-create-ux.test.js`. |
 
 ## Next Slice
 
-The next implementation slice should re-audit the contract tuple inversion row
-against current behavior. The ledger says `UX-CLI-SPECS-CREATE-HELP-001` fixed
-the corrected-example diagnostic, but the representative table still describes
-it as missing. If the current CLI already passes, update the audit to remove the
-stale open-gap language; if not, close the remaining diagnostic/help gap.
+The next implementation slice should address the broad
+`unknown_or_missing_option` class. Start by sampling the session evidence for
+which command groups are causing retries, then pick one concrete mismatch where
+help and runtime can be brought into alignment with a low-risk alias,
+state-aware refusal, or clearer neighboring-command handoff.
 
 ## Findings
 
@@ -251,7 +252,14 @@ stale open-gap language; if not, close the remaining diagnostic/help gap.
    metadata, but the diagnostic now tells agents to inspect, archive, or
    recover after archive instead of only saying the state is not active.
 
-11. **Help context is now closer to reality, but nested help should keep naming
+11. **Contract tuple inversion is fixed; the audit row was stale.**
+   Linked CLI verification confirms `specs create --contract
+   "behavior:verifychain-detects-tamper"` exits nonzero with the accepted tuple
+   shape, a valid example, and `Did you mean --contract
+   "verifychain-detects-tamper:behavior"?`. The representative row now matches
+   the implementation ledger and existing regression test.
+
+12. **Help context is now closer to reality, but nested help should keep naming
    adjacent alternatives.** The recent `specs archive` and `specs validate`
    fixes show that group and leaf help need to explain neighboring commands:
    archive vs recover, create vs amend-scope, repair vs destroy, prune vs
@@ -281,6 +289,7 @@ stale open-gap language; if not, close the remaining diagnostic/help gap.
    has metadata-driven help; the gap is asserting the UX promises that agents
    rely on.
 
-6. Add remaining lifecycle refusal handoffs only after their state semantics are
-   explicit: already-closed close, tier metadata failures, and contract tuple
-   mistakes should point at safe read/repair commands without broad mutation.
+6. Use the same evidence-first loop for remaining retry-heavy classes:
+   sample the session traces, verify the current linked CLI behavior, then fix
+   one concrete missing-option or parse-error workflow at a time with focused
+   tests and dist-linked smoke.
