@@ -205,14 +205,18 @@ Exit codes: 0 (all blocking gates pass), 1 (a blocking gate fails after waiver f
 
 ---
 
-## 7. `caws evidence record`
+## 7. `caws evidence`
 
-Append a typed evidence event to `.caws/events.jsonl`.
+Record and inspect typed evidence events in `.caws/events.jsonl`.
+
+### `caws evidence record`
+
+Append a typed evidence event.
 
 ```bash
 caws evidence record \
   --type test --spec FEAT-1 \
-  --data '{"name":"unit","status":"pass"}'
+  --data '{"command":"npm test","exit_code":0}'
 ```
 
 | Flag | Description |
@@ -226,6 +230,37 @@ caws evidence record \
 The event is appended through the store's `appendEvent` (hash-chained, atomic, locked). There is no other path that may write `events.jsonl`.
 
 Exit codes: 0 (recorded), 1 (validation failure on `--data`), 2 (composition failure).
+
+### `caws evidence list`
+
+```bash
+caws evidence list --spec FEAT-1
+caws evidence list --spec FEAT-1 --type test --json
+```
+
+| Flag | Description |
+|---|---|
+| `--spec <id>` | Spec id whose typed evidence should be listed. |
+| `--type <kind>` | Optional evidence kind filter: `test`, `gate`, or `ac`. |
+| `--json` | Emit the evidence list as JSON. |
+| `--data` | Show structured data block on diagnostics. |
+
+Read-only evidence history over the hash-chained event log. The command verifies the loaded chain, filters to typed evidence events (`test_recorded`, `gate_evaluated`, `ac_recorded`), and reports stable `seq`/`hash` handles for follow-up inspection.
+
+### `caws evidence show <event-ref>`
+
+```bash
+caws evidence show 42
+caws evidence show sha256:0123456789abcdef...
+caws evidence show sha256:0123456789ab --json
+```
+
+| Flag | Description |
+|---|---|
+| `--json` | Emit the matched event as JSON. |
+| `--data` | Show structured data block on diagnostics. |
+
+Read-only event lookup by sequence number, exact event hash, or unique event-hash prefix. Ambiguous prefixes and missing references exit nonzero without mutating `events.jsonl`.
 
 ---
 

@@ -64,10 +64,16 @@ export type {
   ScopeContentionOptions,
 } from './commands/scope';
 
-export { runEvidenceRecordCommand } from './commands/evidence';
+export {
+  runEvidenceListCommand,
+  runEvidenceRecordCommand,
+  runEvidenceShowCommand,
+} from './commands/evidence';
 export type {
   EvidenceKind,
+  EvidenceListOptions,
   EvidenceRecordOptions,
+  EvidenceShowOptions,
 } from './commands/evidence';
 
 export {
