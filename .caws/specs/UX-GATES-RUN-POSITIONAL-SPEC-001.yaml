@@ -7,7 +7,8 @@ created_at: '2026-07-04T19:35:42.192Z'
 updated_at: '2026-07-04T19:35:42.192Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli shell registration and metadata'
+    - 'CLI UX audit and generated command reference'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -19,12 +20,22 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - '`caws gates run <spec-id>` and `caws gates run --spec <spec-id>` target the same governed gate execution path.'
+  - 'Supplying both positional and --spec ids is refused before policy evaluation or event writes.'
+  - 'Generated command reference and audit documentation describe the positional alias without changing gate semantics.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a CAWS project with an active spec and policy'
+    when: 'an operator runs `caws gates run <spec-id>`'
+    then: 'the command evaluates gates for that spec instead of failing with missing --spec.'
+  - id: A2
+    given: 'a gates run invocation that supplies both a positional spec id and --spec'
+    when: 'the ids are parsed'
+    then: 'the command refuses before policy evaluation or event writes with a clear ambiguity diagnostic.'
+  - id: A3
+    given: 'the CLI UX audit option-mismatch evidence'
+    when: 'this slice lands'
+    then: 'the audit records the positional gates-run alias and the remaining-evidence resample context.'
 non_functional: {}
 contracts:
   - name: 'gates-run-positional-spec'
