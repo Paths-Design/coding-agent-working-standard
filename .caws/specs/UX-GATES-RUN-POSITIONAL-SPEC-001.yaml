@@ -3,6 +3,7 @@ title: 'Accept positional spec id for gates run'
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: gates-run-positional-spec
 created_at: '2026-07-04T19:35:42.192Z'
 updated_at: '2026-07-04T19:35:42.192Z'
 blast_radius:
