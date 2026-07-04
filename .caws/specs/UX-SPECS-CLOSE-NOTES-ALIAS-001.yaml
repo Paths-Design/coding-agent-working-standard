@@ -7,7 +7,11 @@ created_at: '2026-07-04T18:12:17.990Z'
 updated_at: '2026-07-04T18:12:17.990Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/commands
+    - packages/caws-cli/src/shell/command-metadata
+    - packages/caws-cli/tests/shell
+    - docs/api
+    - docs/architecture
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -19,12 +23,22 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'caws specs close --notes <text> must be a compatibility alias for closure_notes, equivalent to --reason and --closure-notes.'
+  - 'Supplying more than one closure-note alias must fail before spec, event, or worktree mutation.'
+  - 'Nested help, generated CLI docs, and the UX audit must document the alias so agents do not rediscover it through retries.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'an active spec'
+    when: 'an operator runs caws specs close <id> --notes <text>'
+    then: 'the spec closes successfully, writes closure_notes with that text, and appends spec_closed evidence through the existing close path'
+  - id: A2
+    given: 'an active spec and multiple supplied note aliases among --reason, --closure-notes, and --notes'
+    when: 'caws specs close is invoked'
+    then: 'the command refuses before mutation and explains that only one closure-note alias may be supplied'
+  - id: A3
+    given: 'the CLI help/docs/audit surfaces are inspected'
+    when: 'nested help and docs checks run'
+    then: 'they list --notes as an alias for closure notes and the audit records this unknown-option class as fixed'
 non_functional: {}
 contracts:
   - name: 'specs-close-notes-alias'
