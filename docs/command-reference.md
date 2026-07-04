@@ -57,6 +57,8 @@ Run drift detection against the current .caws/ state
 **Options:**
 
 - `--data` — Show structured data block on findings/diagnostics
+- `--repair-plan` — Emit a read-only repair plan derived from doctor findings
+- `--json` — Emit the repair plan as JSON with --repair-plan
 
 ## `caws status`
 

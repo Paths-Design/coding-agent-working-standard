@@ -89,13 +89,19 @@ Drift detection over `.caws/` state.
 ```bash
 caws doctor
 caws doctor --data
+caws doctor --repair-plan
+caws doctor --repair-plan --json
 ```
 
 | Flag | Description |
 |---|---|
 | `--data` | Show structured data block on findings/diagnostics. |
+| `--repair-plan` | Emit a read-only repair plan derived from doctor findings. |
+| `--json` | Emit the repair plan as JSON with `--repair-plan`. |
 
 Inspects the snapshot composed by the store and surfaces findings (missing files, malformed YAML, residue, ownership conflicts, etc.). Pure kernel-side inspection; the store composes the snapshot, doctor evaluates it.
+
+`--repair-plan` keeps doctor read-only but reshapes findings into agent-actionable plan items. Each item includes the source rule, subject, severity, state class, safe next command, and either an allowed mutation class or a refusal reason. The plan is derived from the same composed snapshot and findings as `caws doctor`; it does not write specs, events, worktree registry state, leases, waivers, policy, or git worktree directories.
 
 Exit codes: 0 (clean), 1 (findings or load errors), 2 (composition failure).
 
