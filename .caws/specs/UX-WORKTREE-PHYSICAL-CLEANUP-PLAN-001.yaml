@@ -2,10 +2,11 @@ id: UX-WORKTREE-PHYSICAL-CLEANUP-PLAN-001
 title: 'Add physical worktree cleanup planning'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
-worktree: worktree-physical-cleanup-plan
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge worktree-physical-cleanup-plan at 7461a196827911bbd2ccfacc6181ab9b8577f861'
 created_at: '2026-07-04T10:59:47.830Z'
-updated_at: '2026-07-04T10:59:47.830Z'
+updated_at: '2026-07-04T11:08:11.084Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/worktree.ts
