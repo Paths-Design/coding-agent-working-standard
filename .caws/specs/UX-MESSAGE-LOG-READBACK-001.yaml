@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: message-log-readback
 created_at: '2026-07-04T12:16:26.639Z'
-updated_at: '2026-07-04T12:16:53.407Z'
+updated_at: '2026-07-04T12:19:22.766Z'
 blast_radius:
   modules:
     - caws-cli/message
@@ -23,6 +23,7 @@ scope:
     - docs/api/cli.md
     - docs/command-reference.md
     - docs/architecture/cli-ux-job-model-audit.md
+    - packages/caws-cli/src/shell/index.ts
   out: []
 invariants:
   - 'message inbox/history commands are read-only and never append messages, delivery records, events, leases, specs, or registry mutations.'
