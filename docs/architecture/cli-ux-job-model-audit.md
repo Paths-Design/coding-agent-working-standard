@@ -128,7 +128,7 @@ By top-level command:
 | `unknown_or_missing_option` | 91 | Partially fixed for `specs close`, `scope`, `agents prune`, `specs create`, validation-era removed commands, and specs status listing: `--closure-notes` is now a supported alias for the existing `--reason` closure note field, `scope show/check/plan --spec <id>` now supports read-only explicit spec-context evaluation, `agents prune --dead --json` is verified as a supported dry-run/apply dead-process cleanup path, `specs create --tier <n>` now aliases `--risk-tier <n>`, legacy validation diagnostics are pinned to the correct replacement/removal model, and `specs --status <state>` now hands off to `specs list --status <state>`. Help/flag discoverability still creates retries where adjacent command shapes are close but not parallel. |
 | `tier_requires_metadata` | 87 | Fixed at the create-plan layer: `specs create --plan` now reports missing semantic fields and emits copy-pasteable YAML examples in human and JSON output. |
 | `danger_latch` | 66 | CAWS hook UX still matters for CLI workflows; blocked shell forms often interrupt otherwise correct CAWS procedures. |
-| `worktree_not_found` | 62 | Agents repeatedly try `worktree destroy <name>` after merge/closure or for residue that is no longer a registered CAWS worktree. |
+| `worktree_not_found` | 62 | Fixed for `worktree destroy`: missing registry entries now remain non-mutating refusals but include a CAWS-native handoff to `worktree list`, `worktree prune --include <name>`, and `worktree cleanup-plan --include <name>` so agents can distinguish registry residue from unregistered physical worktrees. |
 | `merge_failed` | 43 | Merge is a complex mutating job; failed merges need better plan/state output and post-failure recovery guidance. |
 | `missing_bulk_archive` | 19 | This is the exact class fixed by batch `specs archive`; agents had to inspect help, count closed specs, and infer that no bulk path existed. |
 | `contract_arg_invalid` | 14 | Fixed by `specs create` help/diagnostics: inverted tuples print the accepted shape and a corrected `--contract "name:behavior"` suggestion. |
@@ -143,7 +143,7 @@ By top-level command:
 | Pattern | Representative observed output | Missing model |
 |---|---|---|
 | Bulk archive absence | `caws specs archive --help` showed only `Usage: caws specs archive [options] <id>` while the session counted 1,326 closed specs and then asked whether there was a bulk path. | Fixed by batch archive; copy its selector/dry-run/apply model. |
-| Worktree cleanup residue | `caws worktree destroy: failed... Worktree "..." not found in registry` after merge/closure verification. | A `worktree prune` or cleanup-plan state model for closed residue, dead dirs, and unregistered leftovers. |
+| Worktree cleanup residue | `caws worktree destroy: failed... Worktree "..." not found in registry` after merge/closure verification. | Now closed for destroy not-found handoff: the refusal names `caws worktree list`, `caws worktree prune --include <name>`, and `caws worktree cleanup-plan --include <name>` without mutating registry, specs, events, or physical worktrees. |
 | Scope from canonical checkout | `NO AUTHORITY scope.no_authority.unbound ... No spec is bound to this worktree`. | A guided bridge from "no authority" to `worktree create`, `worktree bind`, or `specs amend-scope`, depending on intent. |
 | Scope against a named spec | `unknown option '--spec'` when an agent tried `caws scope show <path> --spec <id>` from outside the bound worktree. | Now closed for read-only context: `scope show/check/plan --spec <id>` evaluates against the named spec, reports JSON `mode: spec_context`, and prints that this is not current-checkout write authority. |
 | Draft spec binding | `Spec "..." is in lifecycle_state "draft"; only active specs can be bound to a worktree.` | Now closed for create/bind: the refusal includes `caws specs activate <id>`, explains activation preflight, and does not mutate worktree/spec/event state. |
@@ -197,16 +197,17 @@ By top-level command:
 | `UX-LEGACY-VALIDATION-DIAGNOSTICS-001` | Implemented in thirty-fourth repair slice | Validation-era removed-command diagnostics reconciliation | Pins legacy diagnostics for `validate`/`verify`/`diagnose`/`verify-acs`/`evaluate`/`iterate`/`burnup` and splits the `docs/api` removed-command table so replacement guidance matches runtime. Covered by `packages/caws-cli/tests/shell/legacy-validation-diagnostics.test.js`. |
 | `UX-SPECS-STATUS-LIST-HANDOFF-001` | Implemented in thirty-fifth repair slice | Specs status list filter and group-level handoff | Adds read-only `caws specs list --status <active|draft|closed|archived>` and routes `caws specs --status <state>` to the same list filter. Invalid statuses name accepted values and distinguish read-only listing from `caws specs archive --status closed`. Covered by `packages/caws-cli/tests/shell/specs-status-list.test.js`. |
 | `UX-SPECS-STATUS-POSITIONAL-FIX-001` | Implemented in thirty-sixth repair slice | Specs status positional parsing fix | Fixes the Commander parent-option interaction found by linked-dist smoke: `caws specs --status <state>` still works, while `caws specs list --status <state>` is parsed by the list leaf and filters correctly. Covered by spawned CLI assertions in `packages/caws-cli/tests/shell/specs-status-list.test.js`. |
+| `UX-WORKTREE-DESTROY-NOT-FOUND-HANDOFF-001` | Implemented in thirty-seventh repair slice | Worktree destroy not-found cleanup handoff | Adds a narrow repair block to the missing-registry destroy refusal. `caws worktree destroy <name>` still refuses without mutation when `<name>` is absent from `worktrees.json`, but it now points to inventory, control-plane prune, and physical cleanup-plan commands. Covered by `packages/caws-cli/tests/shell/worktree-destroy-not-found-handoff.test.js`. |
 
 ## Next Slice
 
-The next implementation slice should move to the `worktree_not_found` class.
-Session evidence shows agents trying `caws worktree destroy <name>` after merge
-or closure and getting a plain not-found registry failure. Start by verifying
-the current `worktree destroy` diagnostic, then decide whether it should hand
-off to `caws worktree list`, `caws worktree prune`, `caws worktree cleanup-plan`,
-or a narrower not-found explanation when the physical git worktree is already
-gone.
+The next implementation slice should move to the `merge_failed` class. Session
+evidence shows failed merge attempts are costly because agents need to know
+whether to retry, inspect branch divergence, repair ownership, or abandon the
+merge. Start by verifying current `caws worktree merge --dry-run` and failed
+merge diagnostics, then decide whether merge needs a read-only recovery plan or
+sharper refusal handoffs to `worktree list`, `worktree cleanup-plan`, branch
+range checks, or ownership guidance.
 
 ## Findings
 
@@ -317,6 +318,12 @@ gone.
    handoff to that same list path. Invalid status values distinguish listing
    from batch archival by pointing at both `specs list --status <state>` and
    `specs archive --status closed`.
+
+19. **Worktree destroy not-found now routes to cleanup models.**
+   A missing registry entry remains a refusal, not an implicit delete, but the
+   diagnostic now tells agents to list registered worktrees, run a targeted
+   prune plan for closed/ghost control-plane residue, or run a physical
+   cleanup-plan when an unregistered git worktree may still exist.
 
 ## Recommendations
 
