@@ -2,10 +2,11 @@ id: UX-EVENTS-ROTATE-DRY-RUN-001
 title: 'Add events rotate dry-run preview'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
-worktree: events-rotate-dry-run
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge events-rotate-dry-run at b4af5b7cd5f659991f8d5245627e0e5baf803d44'
 created_at: '2026-07-04T04:54:33.067Z'
-updated_at: '2026-07-04T04:54:34.660Z'
+updated_at: '2026-07-04T05:00:50.998Z'
 blast_radius:
   modules:
     - packages/caws-cli
