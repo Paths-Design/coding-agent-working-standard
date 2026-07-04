@@ -58,7 +58,8 @@ export interface ScopeDecisionJson {
    * Enforcement mode the hook should report:
    *   - `authoritative`: a spec is bound to this worktree; only it is checked.
    *   - `spec_context`: caller supplied a spec id for read-only comparison.
-   *   - `union`: no authoritative binding; all active specs are consulted.
+   *   - `union`: no current-checkout authority; all active specs are consulted
+   *      or a target path was resolved to another worktree's scope.in claim.
    */
   readonly mode: 'authoritative' | 'spec_context' | 'union';
   /**
@@ -114,6 +115,8 @@ export function buildScopeDecisionJson(
   const mode: ScopeDecisionJson['mode'] =
     boundContext?.source === 'explicit_spec'
       ? 'spec_context'
+      : boundContext?.source === 'target_scope_in_claim'
+        ? 'union'
       : decision.bindingState === 'bound'
         ? 'authoritative'
         : 'union';
@@ -205,7 +208,43 @@ export function buildScopeRemediation(
   decision: Decision,
   boundContext?: ResolvedBinding
 ): ScopeRemediation | undefined {
-  if (decision.kind === 'admit' || decision.kind === 'invalid_path') {
+  if (decision.kind === 'invalid_path') {
+    return undefined;
+  }
+
+  if (
+    decision.kind === 'admit' &&
+    boundContext?.source === 'target_scope_in_claim' &&
+    typeof boundContext.worktreeName === 'string'
+  ) {
+    const wt = boundContext.worktreeName;
+    return {
+      summary:
+        `Path is admitted by worktree ${wt}'s scope.in claim; enter that worktree before editing.`,
+      commands: [
+        {
+          command: 'caws worktree list --data',
+          description: 'Inspect registered worktrees and their bound specs.',
+          mutates: false,
+        },
+        {
+          command: `cd .caws/worktrees/${shellQuote(wt)}`,
+          description: 'Move into the worktree that owns this path claim.',
+          mutates: false,
+        },
+        {
+          command: 'caws claim',
+          description: 'Inspect current worktree ownership before editing.',
+          mutates: false,
+        },
+      ],
+      notes: [
+        'A base-checkout write to this path can still be blocked by worktree-write-guard.',
+      ],
+    };
+  }
+
+  if (decision.kind === 'admit') {
     return undefined;
   }
 

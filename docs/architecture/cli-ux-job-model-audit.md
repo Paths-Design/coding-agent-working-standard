@@ -124,7 +124,7 @@ By top-level command:
 
 | Friction marker | Count | UX implication |
 |---|---:|---|
-| `no_scope_authority` | 126 | Agents frequently ask scope questions from canonical/unbound contexts and then need a bridge to "what command gets me into an authoritative context?" |
+| `no_scope_authority` | 126 | Partially fixed: unbound/one-sided refusals already print remediation, and target-scope-claim admits now report JSON/plan handoffs to the owning worktree instead of implying base-checkout authority. Remaining work should focus on whether active-spec creation/binding flows need a more guided "authority context" wizard. |
 | `unknown_or_missing_option` | 91 | Partially fixed for `specs close`, `scope`, `agents prune`, `specs create`, validation-era removed commands, and specs status listing: `--closure-notes` is now a supported alias for the existing `--reason` closure note field, `scope show/check/plan --spec <id>` now supports read-only explicit spec-context evaluation, `agents prune --dead --json` is verified as a supported dry-run/apply dead-process cleanup path, `specs create --tier <n>` now aliases `--risk-tier <n>`, legacy validation diagnostics are pinned to the correct replacement/removal model, and `specs --status <state>` now hands off to `specs list --status <state>`. Help/flag discoverability still creates retries where adjacent command shapes are close but not parallel. |
 | `tier_requires_metadata` | 87 | Fixed at the create-plan layer: `specs create --plan` now reports missing semantic fields and emits copy-pasteable YAML examples in human and JSON output. |
 | `danger_latch` | 66 | CAWS hook UX still matters for CLI workflows; blocked shell forms often interrupt otherwise correct CAWS procedures. |
@@ -144,7 +144,7 @@ By top-level command:
 |---|---|---|
 | Bulk archive absence | `caws specs archive --help` showed only `Usage: caws specs archive [options] <id>` while the session counted 1,326 closed specs and then asked whether there was a bulk path. | Fixed by batch archive; copy its selector/dry-run/apply model. |
 | Worktree cleanup residue | `caws worktree destroy: failed... Worktree "..." not found in registry` after merge/closure verification. | Now closed for destroy not-found handoff: the refusal names `caws worktree list`, `caws worktree prune --include <name>`, and `caws worktree cleanup-plan --include <name>` without mutating registry, specs, events, or physical worktrees. |
-| Scope from canonical checkout | `NO AUTHORITY scope.no_authority.unbound ... No spec is bound to this worktree`. | A guided bridge from "no authority" to `worktree create`, `worktree bind`, or `specs amend-scope`, depending on intent. |
+| Scope from canonical checkout | `NO AUTHORITY scope.no_authority.unbound ... No spec is bound to this worktree`. | Partially closed: unbound refusals print `worktree create`/`worktree bind` remediation, named-spec checks stay read-only, and single-claimant ADMITs now hand off to `worktree list --data`, `cd .caws/worktrees/<name>`, and `caws claim` in JSON/plan output. |
 | Scope against a named spec | `unknown option '--spec'` when an agent tried `caws scope show <path> --spec <id>` from outside the bound worktree. | Now closed for read-only context: `scope show/check/plan --spec <id>` evaluates against the named spec, reports JSON `mode: spec_context`, and prints that this is not current-checkout write authority. |
 | Draft spec binding | `Spec "..." is in lifecycle_state "draft"; only active specs can be bound to a worktree.` | Now closed for create/bind: the refusal includes `caws specs activate <id>`, explains activation preflight, and does not mutate worktree/spec/event state. |
 | Already-closed close | `Spec "..." is already closed; close is a no-op and no closure metadata was changed.` | Now closed for state-aware refusal: the diagnostic names `caws specs show <id>`, `caws specs archive <id>`, and `caws specs recover <id> --out <path>` without mutating closure metadata. |
@@ -199,16 +199,17 @@ By top-level command:
 | `UX-SPECS-STATUS-POSITIONAL-FIX-001` | Implemented in thirty-sixth repair slice | Specs status positional parsing fix | Fixes the Commander parent-option interaction found by linked-dist smoke: `caws specs --status <state>` still works, while `caws specs list --status <state>` is parsed by the list leaf and filters correctly. Covered by spawned CLI assertions in `packages/caws-cli/tests/shell/specs-status-list.test.js`. |
 | `UX-WORKTREE-DESTROY-NOT-FOUND-HANDOFF-001` | Implemented in thirty-seventh repair slice | Worktree destroy not-found cleanup handoff | Adds a narrow repair block to the missing-registry destroy refusal. `caws worktree destroy <name>` still refuses without mutation when `<name>` is absent from `worktrees.json`, but it now points to inventory, control-plane prune, and physical cleanup-plan commands. Covered by `packages/caws-cli/tests/shell/worktree-destroy-not-found-handoff.test.js`. |
 | `UX-WORKTREE-MERGE-RECOVERY-GUIDANCE-001` | Implemented in thirty-eighth repair slice | Worktree merge readiness and recovery guidance | Adds structured read-only recovery output to `caws worktree merge <name> --dry-run --data` and attaches repair guidance to prerequisite refusals plus checkout/merge git failures. Covered by `packages/caws-cli/tests/shell/worktree-merge-recovery-guidance.test.js`. |
+| `UX-SCOPE-TARGET-CLAIM-HANDOFF-001` | Implemented in thirty-ninth repair slice | Scope target-claim authority handoff | Keeps single-claimant scope.in paths admitted, but reports target-claim decisions as non-authoritative `mode: union` in JSON and groups non-mutating handoff commands to inspect, enter, and claim the owning worktree. Covered by `packages/caws-cli/tests/shell/scope-target-claim-authority-handoff.test.js` and `packages/caws-cli/tests/shell/scope-show-json.test.js`. |
 
 ## Next Slice
 
-The next implementation slice should move to the remaining `no_scope_authority`
-class. Session evidence shows agents repeatedly ask scope questions from
-canonical/unbound contexts and then need a bridge into an authoritative edit
-context. Start by verifying current `caws scope check/show/plan` unbound
-diagnostics and decide whether the refusal should hand off more directly to
-`caws worktree create`, `caws worktree bind`, `caws claim`, or
-`caws specs amend-scope` depending on the observed state.
+The next implementation slice should move to `unknown_or_missing_option` help
+discoverability. Start with adjacent command pairs where the command exists but
+agents try the neighboring flag shape first: `worktree cleanup-plan` vs
+`worktree prune`, `specs archive` vs `specs prune-archive`, and `claim --plan`
+vs `claim --takeover --plan`. Verify current nested help and diagnostics, then
+add narrow aliases or explicit handoff text only where the runtime shape is
+semantically compatible.
 
 ## Findings
 
@@ -332,6 +333,13 @@ diagnostics and decide whether the refusal should hand off more directly to
    inventory, cleanup planning, branch range checks, and merge-tree probes.
    The same command set appears as `repair:` guidance on prerequisite and git
    merge failures.
+
+21. **Scope target-claim admits no longer masquerade as base-checkout authority.**
+   A base-checkout `scope show/check --json` for a path claimed by one active
+   bound worktree still returns `decision: admit`, but now reports
+   `source: target_scope_in_claim`, `mode: union`, and remediation commands for
+   `caws worktree list --data`, `cd .caws/worktrees/<name>`, and `caws claim`.
+   `scope plan` groups the same read-only handoff commands.
 
 ## Recommendations
 
