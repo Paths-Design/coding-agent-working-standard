@@ -51,7 +51,7 @@ default for every cleanup or bulk lifecycle surface.
 | `doctor` | flat leaf | `caws doctor --help` surfaces `--data`, `--repair-plan`, and repair-plan JSON. Runtime output includes findings and repair text; repair-plan mode groups findings into state classes with subject, source rule, safe next command, and allowed mutation or refusal reason. | Strong discovery/repair-orientation model with machine-readable handoff. | Good model to copy. Future expansion should keep mutation delegated to existing lifecycle commands. |
 | `status` | flat leaf | `caws status --help` surfaces `--data`, focused panel filters (`--specs`, `--worktrees`, `--agents`, `--doctor`), and JSON output. Runtime dashboard remains read-only; focused filters render only requested panels from the same composed snapshot. | Good orientation model with large-project filters. | Future status UX could add saved profiles, but the main scan-cost gap is closed. |
 | `scope` | `show`, `check`, `plan`, `contention` | `caws scope --help` lists the path-focused leaves. Leaf help distinguishes observation, enforcement, batch planning, and cross-worktree contention; `show`, `check`, `plan`, and `contention` expose JSON. `show/check/plan` JSON includes structured remediation for common refusals. | Strong path-level refusal/explanation model: `scope check --json` preserves enforcement exit codes; `scope plan` evaluates many paths in one read-only run and groups remediation commands. | Good model to copy. Remaining gap is optional apply handoff ergonomics outside `scope`: `scope` now delegates mutation to `specs amend-scope` by design. |
-| `claim` | flat leaf | `caws claim --help` surfaces `--takeover`, repeatable `--paths`, and diagnostics. | Good ownership surfacing. Takeover is explicit and audited. | No release/clear path for path claims. No preview of a takeover's impact beyond the refusal text. |
+| `claim` | flat leaf | `caws claim --help` surfaces `--takeover`, read-only `--plan`, JSON output, `--release-paths --apply`, repeatable `--paths`, and diagnostics. | Good ownership surfacing and lease path-claim lifecycle: takeover remains explicit/audited, takeover impact can be previewed without mutation, and current-session lease path claims can be released through a dry-run/apply path. | Good model to copy. Future ownership UX should keep worktree authority (`worktrees.json`) separate from lease path metadata. |
 | `gates` | `list`, `explain`, `run` | `caws gates --help`, `caws gates list --help`, `caws gates explain --help`, and `caws gates run --help` surface read-only policy discovery before mutation. `list` reports configured gates, modes, thresholds, risk-tier budgets, and effective waiver ids; `explain` expands one gate; `run` appends gate evidence. | Stronger governed-check model: agents can inspect policy modes and waiver matches before running evaluators or writing `gate_evaluated` events. | Good model to copy. Remaining gate gap is historical trend/readback across prior gate_evaluated evidence, which may belong under `evidence` or a future dashboard. |
 | `evidence` | `record`, `list`, `show`, `schema` | Help surfaces typed `--type`, `--spec`, JSON payload, actor fields, read-only list filters, JSON output, event-ref lookup by seq/hash/prefix, and kernel-derived payload schema discovery. | Strong read/write symmetry: evidence can be appended, inspected, and prepared with a copy-pasteable schema/example path without direct `events.jsonl` parsing. | Good model to copy. Remaining gap is broader event-log discovery under `events`, not typed evidence inspection. |
 | `events` | `list`, `show`, `migrate`, `rotate`, `verify-archive` | Group help lists read and maintenance leaves. `list` verifies the chain and reports counts/latest/rotation archive status; `show` resolves seq/hash/prefix/latest-rotation; `migrate` has `--apply`; `rotate` requires `--reason` and supports `--dry-run`/`--json`; `verify-archive` is read-only. | Stronger audit-log model: operators can discover current chain state and rotation history before rotate/verify operations. | Good model to copy. Remaining event-log gap is retention/prune policy, which should stay separate from rotate/archive verification. |
@@ -177,14 +177,15 @@ By top-level command:
 | `UX-DOCTOR-REPAIR-PLAN-001` | Implemented in twentieth repair slice | `doctor --repair-plan` read-only finding handoff | Adds `caws doctor --repair-plan [--json]`. The plan is derived from the same composed snapshot and doctor findings as normal doctor output, writes no governed state, and emits one item per finding with state class, source rule, subject, safe next command, and allowed mutation or refusal reason. Covered by `packages/caws-cli/tests/shell/doctor-plan.test.js`. |
 | `UX-STATUS-FOCUSED-FILTERS-001` | Implemented in twenty-first repair slice | `status` focused read-only panels | Adds `caws status --specs/--worktrees/--agents/--doctor [--json]`. Default `caws status` remains the full dashboard; focused filters render only requested panels from the same snapshot, and JSON includes the selected panel payloads with `read_only: true`. Covered by `packages/caws-cli/tests/shell/status-filters.test.js`. |
 | `UX-INIT-PREVIEW-PLAN-001` | Implemented in twenty-second repair slice | `init --plan` read-only bootstrap preview | Adds `caws init --plan [--json]`. The plan reuses canonical-state, `.gitignore`, hook-pack, and settings classifiers without creating `.caws`, `.gitignore`, hook files, settings files, or events, and reports refusal reasons plus the next apply command. Covered by `packages/caws-cli/tests/shell/init-plan.test.js`. |
+| `UX-CLAIM-RELEASE-PREVIEW-001` | Implemented in twenty-third repair slice | `claim --plan` and `claim --release-paths` | Adds `caws claim --plan [--json]` for read-only ownership/takeover impact preview and `caws claim --release-paths [--apply] [--json]` for dry-run/apply clearing of the current session lease `claimed_paths`. The release path writes only through the lease store and does not mutate worktree ownership, specs, events, or git state. Covered by `packages/caws-cli/tests/shell/claim-release-preview.test.js`. |
 
 ## Next Slice
 
-The next implementation slice should address `claim` release/preview UX.
-`claim --takeover` is explicit and audited, but agents still lack a read-only
-takeover impact preview and a normal release/clear path for path claims. Add a
-surface that reports current owner, prior-owner audit impact, path-claim rows,
-and safe release semantics without requiring manual registry edits.
+The next implementation slice should address `message` log management.
+`message send/poll` appends and consumes directed messages, but agents do not
+yet have an inbox/list/history/prune surface for long-running projects. Add
+read-only listing/history first, then a guarded retention/prune model if the
+state classes are unambiguous.
 
 ## Findings
 
@@ -223,13 +224,18 @@ and safe release semantics without requiring manual registry edits.
    install-plan gap and gives other setup commands a model for shared
    classifier plan/apply implementation.
 
-7. **Read/write/schema symmetry is still uneven outside evidence.**
+7. **Claim now separates ownership preview from lease path release.**
+   `claim --plan` previews takeover impact and prior-owner audit rows without
+   writing `worktrees.json`; `claim --release-paths` defaults to a dry-run and
+   `--apply` clears only the current session lease `claimed_paths`.
+
+8. **Read/write/schema symmetry is still uneven outside evidence.**
    `evidence record/list/show/schema` now has an append/read/schema loop, but `message
    send/poll` can append and consume messages without a broader log-management
    surface. That may be acceptable for narrow workflows, but it is weak for
    audit-driven agent projects.
 
-8. **Help context is now closer to reality, but nested help should keep naming
+9. **Help context is now closer to reality, but nested help should keep naming
    adjacent alternatives.** The recent `specs archive` and `specs validate`
    fixes show that group and leaf help need to explain neighboring commands:
    archive vs recover, create vs amend-scope, repair vs destroy, prune vs
@@ -249,9 +255,10 @@ and safe release semantics without requiring manual registry edits.
    `prune` is doctor/control-plane cleanup; `cleanup-plan` is physical git
    worktree classification.
 
-4. Add `claim` release/preview mode:
-   keep takeover explicit and audited, but let agents preview takeover impact
-   and release their own path claims without editing registry state by hand.
+4. Add `message` inbox/history mode:
+   keep messages non-authoritative, but give agents a read-only way to list
+   inbox/history entries and inspect retained message state before any prune
+   semantics are designed.
 
 5. Add help regression tests for any group description that names subcommands
    and for cleanup leaves that claim dry-run/apply semantics. The CLI already

@@ -73,6 +73,10 @@ import { resolveSession } from '../session/resolve-session';
 
 export interface ClaimCommandOptions {
   readonly takeover?: boolean;
+  readonly plan?: boolean;
+  readonly json?: boolean;
+  readonly releasePaths?: boolean;
+  readonly apply?: boolean;
   readonly cwd?: string;
   readonly now?: () => Date;
   readonly env?: NodeJS.ProcessEnv;
@@ -98,6 +102,48 @@ export interface ClaimCommandOptions {
    * exists for the current session (LEASE_NOT_FOUND).
    */
   readonly paths?: readonly string[];
+}
+
+interface ClaimPlanDocument {
+  readonly ok: boolean;
+  readonly read_only: boolean;
+  readonly command: 'claim';
+  readonly mode: 'claim' | 'takeover' | 'release-paths';
+  readonly repo_root: string;
+  readonly worktree_name: string;
+  readonly current_session: {
+    readonly session_id: string;
+    readonly platform?: string;
+  };
+  readonly current_owner: {
+    readonly session_id: string;
+    readonly platform?: string;
+  } | null;
+  readonly ownership_relation: 'you' | 'foreign' | 'unowned';
+  readonly refusal?: string;
+  readonly takeover?: {
+    readonly would_apply: boolean;
+    readonly prior_owner_to_append: {
+      readonly session_id: string;
+      readonly platform?: string;
+      readonly last_seen?: string;
+      readonly takenOver_at: string;
+    } | null;
+    readonly resulting_owner: {
+      readonly session_id: string;
+      readonly platform?: string;
+    };
+    readonly prior_owner_count_before: number;
+    readonly prior_owner_count_after: number;
+  };
+  readonly release_paths?: {
+    readonly apply: boolean;
+    readonly lease_found: boolean;
+    readonly current_claimed_paths: readonly string[];
+    readonly would_clear_count: number;
+    readonly wrote?: boolean;
+  };
+  readonly next_apply_command?: string;
 }
 
 function safeRealpath(p: string): string {
@@ -153,6 +199,80 @@ function detectPhantomSessionRoot(
   return null;
 }
 
+function identityPayload(session: {
+  readonly session_id: string;
+  readonly platform?: string;
+}): { readonly session_id: string; readonly platform?: string } {
+  return {
+    session_id: session.session_id,
+    ...(session.platform !== undefined ? { platform: session.platform } : {}),
+  };
+}
+
+function renderClaimPlan(plan: ClaimPlanDocument): string {
+  const lines: string[] = [];
+  lines.push(
+    plan.read_only
+      ? 'caws claim plan: read-only preview; no changes made.'
+      : 'caws claim release: applied lease path release.'
+  );
+  lines.push(`worktree: ${plan.worktree_name}`);
+  lines.push(`mode: ${plan.mode}`);
+  lines.push(`current session: ${plan.current_session.session_id}`);
+  lines.push(
+    `current owner: ${plan.current_owner ? plan.current_owner.session_id : 'unowned'}`
+  );
+  lines.push(`ownership: ${plan.ownership_relation}`);
+  if (plan.refusal) lines.push(`refusal: ${plan.refusal}`);
+
+  if (plan.takeover) {
+    lines.push('');
+    lines.push('Takeover impact:');
+    lines.push(`  would apply takeover: ${plan.takeover.would_apply ? 'yes' : 'no'}`);
+    lines.push(
+      `  prior owners: ${plan.takeover.prior_owner_count_before} -> ${plan.takeover.prior_owner_count_after}`
+    );
+    if (plan.takeover.prior_owner_to_append) {
+      lines.push(
+        `  prior owner to append: ${plan.takeover.prior_owner_to_append.session_id}`
+      );
+    }
+    lines.push(`  resulting owner: ${plan.takeover.resulting_owner.session_id}`);
+  }
+
+  if (plan.release_paths) {
+    lines.push('');
+    lines.push('Lease path claims:');
+    lines.push(`  lease found: ${plan.release_paths.lease_found ? 'yes' : 'no'}`);
+    lines.push(`  current claimed paths: ${plan.release_paths.current_claimed_paths.length}`);
+    for (const p of plan.release_paths.current_claimed_paths) {
+      lines.push(`    - ${p}`);
+    }
+    lines.push(`  would clear: ${plan.release_paths.would_clear_count}`);
+    if (plan.release_paths.wrote !== undefined) {
+      lines.push(`  wrote: ${plan.release_paths.wrote ? 'yes' : 'no'}`);
+    }
+  }
+
+  if (plan.next_apply_command) {
+    lines.push('');
+    lines.push(`Next apply command: ${plan.next_apply_command}`);
+  }
+  return lines.join('\n');
+}
+
+function emitClaimPlan(
+  plan: ClaimPlanDocument,
+  opts: ClaimCommandOptions,
+  out: (line: string) => void
+): void {
+  if (opts.json === true) {
+    out(JSON.stringify(plan, null, 2));
+    return;
+  }
+  out(renderClaimPlan(plan));
+}
+
 export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
   const cwd = opts.cwd ?? process.cwd();
   const nowFn = opts.now ?? (() => new Date());
@@ -161,6 +281,31 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
   const err = opts.err ?? ((s: string) => process.stderr.write(s + '\n'));
   const showData = opts.showData === true;
   const wantsTakeover = opts.takeover === true;
+  const wantsPlan = opts.plan === true;
+  const wantsReleasePaths = opts.releasePaths === true;
+  const wantsApply = opts.apply === true;
+  const isReadOnly = wantsPlan || (wantsReleasePaths && !wantsApply);
+
+  if (opts.json === true && !wantsPlan && !wantsReleasePaths) {
+    err('caws claim: --json is only supported with --plan or --release-paths.');
+    return 2;
+  }
+  if (wantsApply && !wantsReleasePaths) {
+    err('caws claim: --apply is only supported with --release-paths.');
+    return 2;
+  }
+  if (wantsPlan && wantsApply) {
+    err('caws claim: --plan and --apply cannot be combined.');
+    return 2;
+  }
+  if (wantsReleasePaths && opts.paths !== undefined) {
+    err('caws claim: --release-paths cannot be combined with --paths.');
+    return 2;
+  }
+  if (wantsReleasePaths && wantsTakeover) {
+    err('caws claim: --release-paths cannot be combined with --takeover.');
+    return 2;
+  }
 
   // 1. Repo root.
   const repoRootResult = resolveRepoRoot(cwd);
@@ -186,7 +331,7 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
     worktreeRoot: cwd,
     env,
     now: nowFn,
-    allowMint: true,
+    allowMint: !isReadOnly && !wantsReleasePaths,
   });
   if (!sessionResult.ok) {
     err('caws claim: failed to resolve session identity.');
@@ -237,6 +382,23 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
   // never silently mints unowned-→-owned; if the kernel refused, we
   // surface that as exit 1.
   if (!ownershipResult.ok) {
+    if (wantsPlan || wantsReleasePaths) {
+      const plan: ClaimPlanDocument = {
+        ok: false,
+        read_only: isReadOnly,
+        command: 'claim',
+        mode: wantsReleasePaths ? 'release-paths' : wantsTakeover ? 'takeover' : 'claim',
+        repo_root: repoRoot,
+        worktree_name: worktreeName,
+        current_session: identityPayload(session),
+        current_owner:
+          record.owner !== undefined ? identityPayload(record.owner) : null,
+        ownership_relation: classifyOwnership(record, session),
+        refusal: ownershipResult.errors.map((d) => d.message).join('; '),
+      };
+      emitClaimPlan(plan, opts, out);
+      return 1;
+    }
     err('caws claim: ownership refused.');
     err(renderDiagnostics(ownershipResult.errors, { showData }));
     // Show the current claim panel so the caller can see who holds it.
@@ -256,6 +418,138 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
   }
 
   const patch: RegistryPatch | null = ownershipResult.value;
+  const relation = classifyOwnership(record, session);
+
+  if (wantsPlan) {
+    let refusal: string | undefined;
+    if (patch !== null) {
+      const phantomRoot = detectPhantomSessionRoot(env, record.path);
+      if (phantomRoot !== null) {
+        refusal =
+          `phantom-root takeover: ${phantomRoot.varName}=${phantomRoot.root} is not worktree '${worktreeName}'`;
+      }
+    }
+    const priorCount = record.prior_owners?.length ?? 0;
+    const plan: ClaimPlanDocument = {
+      ok: refusal === undefined,
+      read_only: true,
+      command: 'claim',
+      mode: wantsTakeover ? 'takeover' : 'claim',
+      repo_root: repoRoot,
+      worktree_name: worktreeName,
+      current_session: identityPayload(session),
+      current_owner: record.owner !== undefined ? identityPayload(record.owner) : null,
+      ownership_relation: relation,
+      ...(refusal ? { refusal } : {}),
+      takeover: {
+        would_apply: patch !== null && refusal === undefined,
+        prior_owner_to_append:
+          patch !== null && patch.kind === 'takeover_claim'
+            ? {
+                session_id: patch.prior_owner.session_id,
+                ...(patch.prior_owner.platform !== undefined
+                  ? { platform: patch.prior_owner.platform }
+                  : {}),
+                ...(patch.prior_owner.last_seen !== undefined
+                  ? { last_seen: patch.prior_owner.last_seen }
+                  : {}),
+                takenOver_at: patch.prior_owner.takenOver_at,
+              }
+            : null,
+        resulting_owner: identityPayload(
+          patch !== null && patch.kind === 'takeover_claim' ? patch.owner : session
+        ),
+        prior_owner_count_before: priorCount,
+        prior_owner_count_after:
+          patch !== null && patch.kind === 'takeover_claim' && refusal === undefined
+            ? priorCount + 1
+            : priorCount,
+      },
+      ...(patch !== null && refusal === undefined
+        ? { next_apply_command: 'caws claim --takeover' }
+        : {}),
+    };
+    emitClaimPlan(plan, opts, out);
+    return plan.ok ? 0 : 1;
+  }
+
+  if (wantsReleasePaths) {
+    const leasesResult = loadLeases(cawsDir);
+    if (!leasesResult.ok) {
+      err('caws claim: --release-paths: failed to load leases.');
+      err(renderDiagnostics(leasesResult.errors, { showData }));
+      return 1;
+    }
+    const lease = leasesResult.value.leases[session.session_id];
+    const currentClaimedPaths = Array.isArray(lease?.claimed_paths)
+      ? lease.claimed_paths.filter((p): p is string => typeof p === 'string')
+      : [];
+    const patchResult = updateAgentLeasePaths(leasesResult.value.leases, session, {
+      claimed_paths: [],
+    });
+    if (!patchResult.ok) {
+      const plan: ClaimPlanDocument = {
+        ok: false,
+        read_only: !wantsApply,
+        command: 'claim',
+        mode: 'release-paths',
+        repo_root: repoRoot,
+        worktree_name: worktreeName,
+        current_session: identityPayload(session),
+        current_owner: record.owner !== undefined ? identityPayload(record.owner) : null,
+        ownership_relation: relation,
+        refusal: patchResult.errors.map((d) => d.message).join('; '),
+        release_paths: {
+          apply: wantsApply,
+          lease_found: lease !== undefined,
+          current_claimed_paths: currentClaimedPaths,
+          would_clear_count: currentClaimedPaths.length,
+        },
+        ...(wantsApply ? {} : { next_apply_command: 'caws claim --release-paths --apply' }),
+      };
+      emitClaimPlan(plan, opts, out);
+      return 1;
+    }
+
+    let wrote: boolean | undefined;
+    if (wantsApply) {
+      const applyPathsResult = applyLeasePatch(cawsDir, patchResult.value);
+      if (!applyPathsResult.ok) {
+        err('caws claim: --release-paths: lease apply failed.');
+        err(renderDiagnostics(applyPathsResult.errors, { showData }));
+        return 1;
+      }
+      if (applyPathsResult.value.diagnostics.length > 0) {
+        err('caws claim: --release-paths: lease apply produced diagnostics.');
+        err(renderDiagnostics(applyPathsResult.value.diagnostics, { showData }));
+        if (!applyPathsResult.value.wrote) return 1;
+      }
+      wrote = applyPathsResult.value.wrote;
+    }
+
+    const plan: ClaimPlanDocument = {
+      ok: true,
+      read_only: !wantsApply,
+      command: 'claim',
+      mode: 'release-paths',
+      repo_root: repoRoot,
+      worktree_name: worktreeName,
+      current_session: identityPayload(session),
+      current_owner: record.owner !== undefined ? identityPayload(record.owner) : null,
+      ownership_relation: relation,
+      release_paths: {
+        apply: wantsApply,
+        lease_found: lease !== undefined,
+        current_claimed_paths: currentClaimedPaths,
+        would_clear_count: currentClaimedPaths.length,
+        ...(wrote !== undefined ? { wrote } : {}),
+      },
+      ...(wantsApply ? {} : { next_apply_command: 'caws claim --release-paths --apply' }),
+    };
+    emitClaimPlan(plan, opts, out);
+    return 0;
+  }
+
   if (patch !== null) {
     // Patch must be a takeover_claim (the kernel only emits null or a
     // takeover_claim from assertOwnership). Before applying it, refuse a

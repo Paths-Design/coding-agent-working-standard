@@ -212,19 +212,31 @@ Surface or take ownership of the current worktree; with `--paths`, declare worki
 
 ```bash
 caws claim                  # read-only inspection (default)
+caws claim --plan           # read-only ownership/takeover preview
+caws claim --takeover --plan --json
 caws claim --takeover       # acquire ownership from a foreign session
 caws claim --paths src/foo  # declare path ownership on current session lease
+caws claim --release-paths  # preview clearing current session lease path claims
+caws claim --release-paths --apply
 ```
 
 | Flag | Description |
 |---|---|
 | `--takeover` | Forcibly take ownership of a foreign-owned worktree. Required when the current owner is a different session. |
+| `--plan` | Preview claim ownership or takeover impact without mutating `worktrees.json`, leases, specs, events, or git state. |
+| `--json` | Emit the read-only claim plan or release-paths result as JSON. |
+| `--release-paths` | Clear the current session lease `claimed_paths`. Dry-run by default; pair with `--apply` to write the lease update. |
+| `--apply` | Apply `--release-paths`. Not used for normal claim or takeover, which keep their existing behavior. |
 | `--paths <path>` | Declare a path as claimed by the current session. Repeatable; order preserved; strings stored verbatim. Refused with no write if no lease exists for the current session. (SESSION-OWNERSHIP-METADATA-001) |
 | `--data` | Show structured data block on diagnostics. |
 
 Without `--takeover`: prints the current claim (`<sessionId>:<platform>`, last heartbeat age, any `tmp/<sessionId>/` session-log pointer) and exits non-zero when the worktree is owned by a different session. Modifies nothing.
 
-With `--takeover`: rewrites the owner to the current session id and appends the prior owner (sessionId, platform, lastSeen-at-takeover, takenOver_at) to a `prior_owners` audit array on the worktree entry in `.caws/worktrees.json`. Durable across sessions — postmortems can see what happened.
+With `--takeover --plan`: reports the current owner, resulting owner, and prior-owner audit row that would be appended. No registry, lease, spec, event, or git state is written.
+
+With `--takeover`: rewrites the owner to the current session id and appends the prior owner (sessionId, platform, last_seen, takenOver_at) to a `prior_owners` audit array on the worktree entry in `.caws/worktrees.json`. Durable across sessions — postmortems can see what happened.
+
+With `--release-paths`: previews clearing the current session's lease `claimed_paths` without changing ownership. With `--release-paths --apply`, writes only the current session lease path metadata (`claimed_paths: []`) through the lease store; it does not take over a foreign owner, mutate specs, append events, or touch git state.
 
 **Use `--takeover` only with explicit user authorization.** A stale heartbeat is not authorization — paused sessions are not ended sessions. Read the session log under `tmp/<sessionId>/` first.
 

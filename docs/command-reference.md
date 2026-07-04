@@ -129,6 +129,10 @@ Surface ownership of the current worktree; with --takeover, acquire ownership fr
 **Options:**
 
 - `--takeover` — Forcibly take ownership of a foreign-owned worktree. Required when the current owner is a different session.
+- `--plan` — Preview claim ownership or takeover impact without mutating worktrees.json, leases, specs, events, or git state.
+- `--json` — Emit the read-only claim plan or release-paths result as JSON.
+- `--release-paths` — Clear the current session lease claimed_paths. Dry-run by default; pair with --apply to write the lease update.
+- `--apply` — Apply --release-paths. Not used for normal claim or takeover, which keep their existing behavior.
 - `--paths <path>` (repeatable) — Declare a path as claimed by the current session. Repeatable; order preserved; strings stored verbatim. Refused with no write if no lease exists for the current session.
 - `--data` — Show structured data block on diagnostics
 

@@ -411,11 +411,19 @@ export function registerShellCommands(
     .action(
       (opts: {
         takeover?: boolean;
+        plan?: boolean;
+        json?: boolean;
+        releasePaths?: boolean;
+        apply?: boolean;
         paths?: readonly string[];
         data?: boolean;
       }) => {
         const code = runClaimCommand({
           takeover: opts.takeover === true,
+          plan: opts.plan === true,
+          json: opts.json === true,
+          releasePaths: opts.releasePaths === true,
+          apply: opts.apply === true,
           showData: opts.data === true,
           ...(opts.paths !== undefined ? { paths: opts.paths } : {}),
         });

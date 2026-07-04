@@ -706,6 +706,26 @@ export const CLAIM_COMMAND_META: LeafCommandMeta = {
         'Forcibly take ownership of a foreign-owned worktree. Required when the current owner is a different session.',
     },
     {
+      flag: '--plan',
+      description:
+        'Preview claim ownership or takeover impact without mutating worktrees.json, leases, specs, events, or git state.',
+    },
+    {
+      flag: '--json',
+      description:
+        'Emit the read-only claim plan or release-paths result as JSON.',
+    },
+    {
+      flag: '--release-paths',
+      description:
+        'Clear the current session lease claimed_paths. Dry-run by default; pair with --apply to write the lease update.',
+    },
+    {
+      flag: '--apply',
+      description:
+        'Apply --release-paths. Not used for normal claim or takeover, which keep their existing behavior.',
+    },
+    {
       flag: '--paths <path>',
       description:
         'Declare a path as claimed by the current session. Repeatable; order preserved; strings stored verbatim. Refused with no write if no lease exists for the current session.',
