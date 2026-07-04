@@ -2,10 +2,11 @@ id: UX-DOCTOR-REPAIR-PLAN-001
 title: 'Doctor repair plan output'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
-worktree: doctor-repair-plan
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge doctor-repair-plan at 2de5432c6ef51dc1d34c101da76bd8a0cfcc5a5d'
 created_at: '2026-07-04T11:35:21.609Z'
-updated_at: '2026-07-04T11:35:27.288Z'
+updated_at: '2026-07-04T11:41:17.463Z'
 blast_radius:
   modules:
     - caws-cli/doctor
