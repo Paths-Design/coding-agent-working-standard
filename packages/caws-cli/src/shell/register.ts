@@ -988,6 +988,7 @@ export function registerShellCommands(
           removeOut?: string[];
           addSupport?: string[];
           removeSupport?: string[];
+          reason?: string;
           data?: boolean;
         }
       ) => {
@@ -999,6 +1000,7 @@ export function registerShellCommands(
           ...(opts.removeOut !== undefined ? { removeOut: opts.removeOut } : {}),
           ...(opts.addSupport !== undefined ? { addSupport: opts.addSupport } : {}),
           ...(opts.removeSupport !== undefined ? { removeSupport: opts.removeSupport } : {}),
+          ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
           showData: opts.data === true,
         });
         exit(code);

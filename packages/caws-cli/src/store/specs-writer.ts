@@ -179,6 +179,8 @@ export interface AmendScopeSpecInput {
   readonly addSupport?: readonly string[];
   /** scope.support paths to remove. */
   readonly removeSupport?: readonly string[];
+  /** Optional operator rationale recorded on the spec_scope_amended event. */
+  readonly reason?: string;
   readonly now?: () => Date;
   readonly actor: EventBody['actor'];
 }
@@ -2533,6 +2535,7 @@ export function amendScopeSpec(
       resulting_scope_in: afterIn,
       resulting_scope_out: afterOut,
       resulting_scope_support: afterSupport,
+      ...(input.reason !== undefined ? { reason: input.reason } : {}),
     },
   } as unknown as EventBody;
 

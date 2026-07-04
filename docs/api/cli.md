@@ -721,6 +721,8 @@ caws specs amend-scope FEAT-1 --remove tmp/old.md --reason "scope narrowed"
 
 Governed scope amendments for an active spec. Use one invocation with all `--add`/`--remove` values for a logical amendment.
 
+`--reason <text>` is optional and records the operator rationale on the `spec_scope_amended` event.
+
 ### `caws specs close <id>`
 
 ```bash
