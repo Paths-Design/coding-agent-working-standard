@@ -7,12 +7,12 @@ created_at: '2026-07-04T12:57:06.995Z'
 updated_at: '2026-07-04T12:57:13.392Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/specs
+    - docs/cli-ux-audit
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/shell/commands/specs.ts
     - packages/caws-cli/src/shell/command-metadata.ts
     - packages/caws-cli/src/shell/register.ts
@@ -22,12 +22,22 @@ scope:
     - docs/architecture/cli-ux-job-model-audit.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - '`caws specs close --closure-notes <text>` must write the same closure_notes field as --reason.'
+  - 'Supplying both --reason and --closure-notes must fail before mutation rather than silently choosing one.'
+  - 'Existing --reason close behavior remains unchanged.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'an active spec'
+    when: 'an agent runs caws specs close <id> --closure-notes "..."'
+    then: 'the spec closes and the YAML contains closure_notes with the supplied text'
+  - id: A2
+    given: 'an active spec'
+    when: 'an agent supplies both --reason and --closure-notes'
+    then: 'the CLI refuses with a clear conflict message and leaves spec/events unchanged'
+  - id: A3
+    given: 'the CLI help/docs/audit surfaces'
+    when: 'the slice is complete'
+    then: '--closure-notes appears in nested help and the audit marks this missing-option retry as addressed'
 non_functional: {}
 contracts:
   - name: 'specs-close-closure-notes'
