@@ -185,8 +185,11 @@ export {
   runWorktreeDestroyCommand,
   runWorktreeMergeCommand,
   runWorktreeMigrateRegistryCommand,
+  runWorktreePruneCommand,
   runWorktreeRepairSparseCommand,
   runWorktreeRepairCommand,
+  buildWorktreePrunePlan,
+  worktreePruneItemFromFinding,
 } from './commands/worktree';
 export type {
   WorktreeCreateOptions,
@@ -195,6 +198,9 @@ export type {
   WorktreeDestroyOptions,
   WorktreeMergeOptions,
   WorktreeMigrateRegistryOptions,
+  WorktreePruneOptions,
+  WorktreePrunePlanItem,
+  WorktreePruneStateClass,
   WorktreeRepairSparseOptions,
   WorktreeRepairOptions,
 } from './commands/worktree';

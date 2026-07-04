@@ -81,6 +81,7 @@ import {
   runWorktreeListCommand,
   runWorktreeMergeCommand,
   runWorktreeMigrateRegistryCommand,
+  runWorktreePruneCommand,
   runWorktreeRepairSparseCommand,
   runWorktreeRepairCommand,
   type EvidenceKind,
@@ -938,6 +939,29 @@ export function registerShellCommands(
       });
       exit(code);
     });
+
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'prune'))
+    .action(
+      (opts: {
+        state?: string;
+        include?: string;
+        exclude?: string;
+        json?: boolean;
+        data?: boolean;
+      }) => {
+        const state = parseCommaSeparatedList(opts.state);
+        const include = parseCommaSeparatedList(opts.include);
+        const exclude = parseCommaSeparatedList(opts.exclude);
+        const code = runWorktreePruneCommand({
+          ...(state !== undefined ? { state } : {}),
+          ...(include !== undefined ? { include } : {}),
+          ...(exclude !== undefined ? { exclude } : {}),
+          json: opts.json === true,
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
 
   // ─── caws agents (MULTI-AGENT-ACTIVITY-REGISTRY-001) ────────────────────
   const agentsCmd = program.command('agents');

@@ -361,12 +361,13 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
 // ─── worktree group (CLI-WORKTREE-001) ────────────────────────────────────
 // Co-located authority for `caws worktree` help. The group description here
 // enumerates EVERY subcommand (create/list/bind/destroy/merge/migrate-registry/
-// repair-sparse), unlike the prior inline string that omitted the last two.
+// repair-sparse/repair/prune), unlike the prior inline string that omitted
+// repair leaves.
 export const WORKTREE_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'worktree',
   description:
-    'Manage CAWS worktrees (create/list/bind/destroy/merge/migrate-registry/repair-sparse/repair). Worktrees are git worktrees bound to active specs.',
+    'Manage CAWS worktrees (create/list/bind/destroy/merge/migrate-registry/repair-sparse/repair/prune). Worktrees are git worktrees bound to active specs.',
   subcommands: [
     {
       kind: 'leaf',
@@ -466,6 +467,29 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
         'Repair the unambiguous worktree/spec half-states the doctor surfaces: prune a ghost registry entry (H1) and clear a dead spec->worktree binding (H4 ghost, H3 dormant). Consumes the doctor diagnostics + §1.4 decision matrix as authority; never re-derives policy. Refuses ambiguous/forbidden classes (H2, H3-active, H5, H6, event-orphan) with a doctrine pointer and zero mutation. NEVER creates or deletes a git worktree directory.',
       options: [
         { flag: '--dry-run', description: 'Report each H-class, subject, planned mutation, and event; write nothing.' },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'prune',
+      description:
+        'Print a read-only worktree cleanup plan from doctor evidence. Classifies ghost registry entries, dead spec bindings, closed-spec residue, event orphans, foreign physical worktrees, stale-owner lease drift, and ambiguous/refused classes. Does not mutate worktrees.json, specs, events, or git worktree directories.',
+      options: [
+        {
+          flag: '--state <classes>',
+          description:
+            'Comma-separated state-class filter (for example: ghost-registry,closed-spec-residue,event-orphan-refused).',
+        },
+        {
+          flag: '--include <subjects>',
+          description: 'Comma-separated subjects to include (worktree names, spec ids, or paths).',
+        },
+        {
+          flag: '--exclude <subjects>',
+          description: 'Comma-separated subjects to exclude (worktree names, spec ids, or paths).',
+        },
+        { flag: '--json', description: 'Emit the read-only plan as JSON.' },
         DATA_OPTION,
       ],
     },
