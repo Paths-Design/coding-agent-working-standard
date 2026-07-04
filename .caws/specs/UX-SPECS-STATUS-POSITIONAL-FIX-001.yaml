@@ -2,10 +2,11 @@ id: UX-SPECS-STATUS-POSITIONAL-FIX-001
 title: 'Fix specs status positional parsing'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: specs-status-positional-fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge specs-status-positional-fix at 1cdb63ce2c7686ba510bbdaf156ba911644e4586'
 created_at: '2026-07-04T13:41:01.919Z'
-updated_at: '2026-07-04T13:41:01.919Z'
+updated_at: '2026-07-04T13:43:23.997Z'
 blast_radius:
   modules:
     - packages/caws-cli/specs-command-parser
