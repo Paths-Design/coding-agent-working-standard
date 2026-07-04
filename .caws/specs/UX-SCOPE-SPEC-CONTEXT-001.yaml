@@ -2,10 +2,11 @@ id: UX-SCOPE-SPEC-CONTEXT-001
 title: 'Add explicit spec context for scope commands'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: scope-spec-context
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge scope-spec-context at 4d17ae2804c56b4f1b00c7a45f862d141aff40b9'
 created_at: '2026-07-04T13:06:01.054Z'
-updated_at: '2026-07-04T13:06:14.115Z'
+updated_at: '2026-07-04T13:10:31.418Z'
 blast_radius:
   modules:
     - packages/caws-cli/scope
