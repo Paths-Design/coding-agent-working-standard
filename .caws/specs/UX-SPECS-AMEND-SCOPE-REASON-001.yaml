@@ -7,7 +7,12 @@ created_at: '2026-07-04T18:18:56.366Z'
 updated_at: '2026-07-04T18:18:56.366Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/commands
+    - packages/caws-cli/src/shell/register
+    - packages/caws-cli/src/store
+    - packages/caws-kernel/src/schemas/events
+    - packages/caws-cli/tests/shell
+    - docs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -23,12 +28,22 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'caws specs amend-scope --reason <text> must be accepted anywhere amend-scope currently accepts scope mutations.'
+  - 'When supplied, the reason must be recorded on the spec_scope_amended event payload, not silently ignored.'
+  - 'The option must remain optional so existing amend-scope commands and generated remediation commands continue to work unchanged.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'an active or draft spec with a valid scope block'
+    when: 'an operator runs caws specs amend-scope <id> --add <path> --reason <text>'
+    then: 'the spec scope is amended and the appended spec_scope_amended event records reason: <text>'
+  - id: A2
+    given: 'the amend-scope help, generated reference, and API docs'
+    when: 'docs and help checks run'
+    then: 'they all list --reason as the optional audit rationale for scope amendment'
+  - id: A3
+    given: 'the CLI UX audit tracks unknown_or_missing_option slices'
+    when: 'this slice lands'
+    then: 'the amend-scope --reason mismatch is marked fixed and the next slice is scoped to the next unresolved audit bucket'
 non_functional: {}
 contracts:
   - name: 'specs-amend-scope-reason'
