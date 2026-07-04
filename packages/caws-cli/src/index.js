@@ -73,6 +73,15 @@ function normalizePrepushAckBundleArgv(argv) {
   return normalized;
 }
 
+function normalizeWorktreePruneArgv(argv) {
+  if (argv[2] !== 'worktree' || argv[3] !== '--prune') return argv;
+  return [...argv.slice(0, 3), 'prune', ...argv.slice(4)];
+}
+
+function normalizeCompatibilityArgv(argv) {
+  return normalizeWorktreePruneArgv(normalizePrepushAckBundleArgv(argv));
+}
+
 program
   .name('caws')
   .description('CAWS - Coding Agent Working Standard CLI')
@@ -183,7 +192,7 @@ registerShellCommands(program);
 // Parse and run
 if (require.main === module) {
   try {
-    program.parse(normalizePrepushAckBundleArgv(process.argv));
+    program.parse(normalizeCompatibilityArgv(process.argv));
   } catch (error) {
     // Handle help and version requests gracefully
     if (

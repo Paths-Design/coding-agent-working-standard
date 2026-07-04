@@ -505,7 +505,7 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'worktree',
   description:
-    'Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs.',
+    'Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.',
   subcommands: [
     {
       kind: 'leaf',
