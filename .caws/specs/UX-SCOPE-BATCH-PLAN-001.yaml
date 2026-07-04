@@ -1,0 +1,32 @@
+id: UX-SCOPE-BATCH-PLAN-001
+title: 'Add batch scope planning'
+risk_tier: 3
+mode: feature
+lifecycle_state: active
+created_at: '2026-07-04T05:55:28.290Z'
+updated_at: '2026-07-04T05:55:28.290Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/scope.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/tests/shell/scope-batch-plan.test.js'
+    - 'packages/caws-cli/tests/shell/scope-remediation-guidance.test.js'
+    - 'docs/api/cli.md'
+    - 'docs/command-reference.md'
+    - 'docs/architecture/cli-ux-job-model-audit.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
