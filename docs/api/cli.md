@@ -406,12 +406,19 @@ Manage waiver records that filter matching gate violations.
 ### `caws waiver create <id>`
 
 ```bash
-caws waiver create FEAT-1-w \
+caws waiver create FEAT-001-WAIVER-001 \
   --title "Emergency budget breach" \
   --gate budget_limit \
   --reason "Refactor required emergency budget breach" \
   --approved-by "team-lead@example.com" \
   --expires-at "2026-12-01T00:00:00Z"
+caws waiver create FEAT-001-WAIVER-002 \
+  --title "Preview waiver" \
+  --gate budget_limit \
+  --reason "Preview the waiver record before writing it" \
+  --approved-by "team-lead@example.com" \
+  --expires-at "2026-12-01T00:00:00Z" \
+  --dry-run --json
 ```
 
 | Flag | Description |
@@ -422,9 +429,15 @@ caws waiver create FEAT-1-w \
 | `--approved-by <id>` | Approver identity. |
 | `--expires-at <iso8601>` | Expiry as an ISO-8601 datetime with timezone. |
 | `--spec <id>` | Optional spec id this waiver is scoped to. Omit for project-wide scope. |
+| `--dry-run` | Validate the candidate and duplicate id without writing `.caws/waivers/<id>.yaml`. |
+| `--json` | Emit the dry-run candidate as JSON. |
 | `--data` | Show structured data block on diagnostics. |
 
-Exit codes: 0 (created), 1 (duplicate id, validation failure), 2 (composition failure).
+Dry-run mode is read-only: it validates the same kernel waiver candidate as
+normal create, checks for a duplicate id in loaded waiver records, and does not
+write waiver files or append events.
+
+Exit codes: 0 (created or valid dry-run), 1 (duplicate id, validation failure), 2 (composition failure).
 
 ### `caws waiver list`
 
@@ -437,7 +450,7 @@ Lists active waivers with id, gate, expiry, and approval metadata. By default ex
 ### `caws waiver show <id>`
 
 ```bash
-caws waiver show FEAT-1-w
+caws waiver show FEAT-001-WAIVER-001
 ```
 
 Shows full waiver record (yaml), including its derived effectiveness at now.
@@ -445,12 +458,38 @@ Shows full waiver record (yaml), including its derived effectiveness at now.
 ### `caws waiver revoke <id>`
 
 ```bash
-caws waiver revoke FEAT-1-w
+caws waiver revoke FEAT-001-WAIVER-001
 ```
 
 Marks the waiver revoked. Subsequent `caws gates run` no longer filters violations through it. Refuses double-revoke.
 
 Exit codes: 0 (revoked), 1 (not found, already revoked), 2 (composition failure).
+
+### `caws waiver prune`
+
+```bash
+caws waiver prune --status expired
+caws waiver prune --status expired --json
+caws waiver prune --status expired \
+  --apply \
+  --reason "Expired waiver cleanup" \
+  --revoked-by "agent@example.com"
+```
+
+| Flag | Description |
+|---|---|
+| `--status <status>` | Required selector. Currently only `expired`. |
+| `--apply` | Revoke the selected expired active waivers. Without `--apply`, prune is a dry-run plan. |
+| `--reason <text>` | Required with `--apply`; stored in each revocation record. |
+| `--revoked-by <id>` | Required with `--apply`; stored in each revocation record. |
+| `--json` | Emit the prune plan/result as JSON. |
+| `--data` | Show structured data block on diagnostics. |
+
+Dry-run mode prints the exact target set and does not mutate waiver files.
+Apply mode mutates only expired active waivers by writing normal revocation
+metadata through the waiver store path.
+
+Exit codes: 0 (plan or apply completed), 1 (invalid selector or missing apply metadata), 2 (composition failure).
 
 ---
 
@@ -858,7 +897,7 @@ What v11 owns and writes:
 |---|---|---|
 | `.caws/specs/<id>.yaml` | `caws specs create / retire-draft / activate / amend-scope / close / archive / validate` | store (atomic write + raw-byte YAML patch) |
 | `.caws/specs/.archive/<id>.yaml` | `caws specs archive` | store (move from `.caws/specs/`) |
-| `.caws/waivers/<id>.yaml` | `caws waiver create / revoke` | store (atomic write) |
+| `.caws/waivers/<id>.yaml` | `caws waiver create / revoke / prune --apply` | store (atomic write) |
 | `.caws/policy.yaml` | manual edit (governed) | (none — the CLI reads but does not write this file) |
 | `.caws/worktrees.json` | `caws worktree create/bind/destroy/untrack/merge/repair/prune/migrate-registry`, `caws claim / claim --takeover` | store (atomic write) |
 | `.caws/leases/` | `caws agents register / heartbeat / stop / prune` | store (per-session lease files) |

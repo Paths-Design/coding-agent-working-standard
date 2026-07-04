@@ -146,12 +146,14 @@ export type {
 export {
   runWaiverCreateCommand,
   runWaiverListCommand,
+  runWaiverPruneCommand,
   runWaiverShowCommand,
   runWaiverRevokeCommand,
 } from './commands/waiver';
 export type {
   WaiverCreateOptions,
   WaiverListOptions,
+  WaiverPruneOptions,
   WaiverShowOptions,
   WaiverRevokeOptions,
 } from './commands/waiver';
