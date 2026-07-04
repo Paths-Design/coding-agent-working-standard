@@ -125,6 +125,40 @@ export interface CloseSpecInput {
   readonly preserveExistingNotes?: boolean;
 }
 
+function nonActiveCloseSpecError(id: string, lifecycleState: string): Result<never> {
+  if (lifecycleState === 'closed') {
+    const nextCommands = [
+      `caws specs show ${id}`,
+      `caws specs archive ${id}`,
+      `caws specs recover ${id} --out <path>`,
+    ];
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${id}" is already closed; close is a no-op and no closure metadata was changed.\n\n` +
+          `Next: ${nextCommands[0]}\n` +
+          `Archive when finished: ${nextCommands[1]}\n` +
+          `If you need the body after archive: ${nextCommands[2]}`,
+        {
+          subject: id,
+          data: {
+            current_state: lifecycleState,
+            next_commands: nextCommands,
+          },
+        }
+      )
+    );
+  }
+
+  return err(
+    storeDiagnostic(
+      STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+      `Spec "${id}" is in lifecycle_state "${lifecycleState}"; only active specs can be closed.`,
+      { subject: id, data: { current_state: lifecycleState } }
+    )
+  );
+}
+
 export interface ActivateSpecInput {
   readonly id: string;
   readonly now?: () => Date;
@@ -992,13 +1026,7 @@ export function closeSpec(
   }
   const spec = parsed.value;
   if (spec.lifecycle_state !== 'active') {
-    return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        `Spec "${input.id}" is in lifecycle_state "${spec.lifecycle_state}"; only active specs can be closed.`,
-        { subject: input.id, data: { current_state: spec.lifecycle_state } }
-      )
-    );
+    return nonActiveCloseSpecError(input.id, spec.lifecycle_state);
   }
 
   // Raw-byte patch sequence:

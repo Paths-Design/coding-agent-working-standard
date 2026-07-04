@@ -146,7 +146,7 @@ By top-level command:
 | Worktree cleanup residue | `caws worktree destroy: failed... Worktree "..." not found in registry` after merge/closure verification. | A `worktree prune` or cleanup-plan state model for closed residue, dead dirs, and unregistered leftovers. |
 | Scope from canonical checkout | `NO AUTHORITY scope.no_authority.unbound ... No spec is bound to this worktree`. | A guided bridge from "no authority" to `worktree create`, `worktree bind`, or `specs amend-scope`, depending on intent. |
 | Draft spec binding | `Spec "..." is in lifecycle_state "draft"; only active specs can be bound to a worktree.` | Now closed for create/bind: the refusal includes `caws specs activate <id>`, explains activation preflight, and does not mutate worktree/spec/event state. |
-| Already-closed close | `Spec "..." is in lifecycle_state "closed"; only active specs can be closed.` | State-aware alternatives: `archive`, `show`, `recover`, or no-op success when closure already matches requested metadata. |
+| Already-closed close | `Spec "..." is already closed; close is a no-op and no closure metadata was changed.` | Now closed for state-aware refusal: the diagnostic names `caws specs show <id>`, `caws specs archive <id>`, and `caws specs recover <id> --out <path>` without mutating closure metadata. |
 | Tier metadata failure | `Tier 1 specs require non-empty observability... rollback... contract.` | `specs create --help` needs complete tier-1/2 examples or a `--template tier1`/interactive plan output. |
 | Contract tuple inversion | `invalid --contract "behavior:verifychain-detects-tamper": type "verifychain-detects-tamper" is not one of ...` | Error should print the accepted tuple shape and a corrected example. |
 | Evidence schema rejection | `data: must have required property 'command'` for `evidence record --type test`. | Fixed by `evidence schema --type test` plus per-type examples in `evidence record --help`. |
@@ -181,14 +181,15 @@ By top-level command:
 | `UX-MESSAGE-LOG-READBACK-001` | Implemented in twenty-fourth repair slice | `message inbox/history` read-only message-log inspection | Adds `caws message inbox [--me <id>] [--limit <n>] [--json]` and `caws message history --with <id> [--me <id>] [--limit <n>] [--json]`. Inbox lists undelivered messages without consuming them; history returns bidirectional channel messages in log order; both are read-only and append no delivery records. Covered by `packages/caws-cli/tests/shell/message-log-readback.test.js`. |
 | `UX-MESSAGE-RETENTION-PRUNE-001` | Implemented in twenty-fifth repair slice | `message prune` delivered-message retention cleanup | Adds `caws message prune --status delivered [--older-than-ms <ms>] [--include <ids>] [--exclude <ids>] [--apply] [--json]`. Dry-run is default; candidates are delivered message records only; undelivered inbox messages are preserved; apply requires `--older-than-ms` or `--include` and removes selected delivered messages plus delivery markers. Covered by `packages/caws-cli/tests/shell/message-retention-prune.test.js`. |
 | `UX-DRAFT-BIND-HANDOFF-001` | Implemented in twenty-sixth repair slice | Draft spec bind/create activation handoff | Adds a shared active-only binding diagnostic for `worktree create` and `worktree bind`. Draft-spec refusals now include `caws specs activate <id>`, explain that activation preflight must pass before retrying create/bind, and preserve specs, registry, events, and worktree directories. Covered by `packages/caws-cli/tests/shell/worktree-draft-bind-handoff.test.js`. |
+| `UX-SPECS-CLOSE-HANDOFF-001` | Implemented in twenty-seventh repair slice | Already-closed specs close handoff | Adds a state-aware already-closed diagnostic for `caws specs close <id>`. The refusal remains non-mutating, explains that close is a no-op, and points agents at `specs show`, `specs archive`, and post-archive `specs recover`. Covered by `packages/caws-cli/tests/shell/specs-close-handoff.test.js`. |
 
 ## Next Slice
 
-The next implementation slice should address the already-closed close refusal.
-When an agent runs `caws specs close <id>` on a spec that is already closed, the
-CLI should behave as a state-aware handoff instead of a dead end: surface
-`caws specs show <id>`, `caws specs archive <id>`, and recover/no-op guidance
-without mutating closure metadata unless an explicit idempotent mode is added.
+The next implementation slice should address tier metadata creation failures.
+When `caws specs create` refuses a tier-1 or tier-2 spec for missing semantic
+metadata, the CLI should provide complete examples for the required fields or a
+read-only planning/template path, so agents do not recover by downgrading risk
+tier or hand-editing invalid YAML.
 
 ## Findings
 
@@ -244,7 +245,12 @@ without mutating closure metadata unless an explicit idempotent mode is added.
    preflight. The refusal remains non-mutating across spec, registry, events,
    and worktree directory state.
 
-10. **Help context is now closer to reality, but nested help should keep naming
+10. **Already-closed close now hands off to the next lifecycle job.**
+   `specs close` still refuses closed specs instead of mutating closure
+   metadata, but the diagnostic now tells agents to inspect, archive, or
+   recover after archive instead of only saying the state is not active.
+
+11. **Help context is now closer to reality, but nested help should keep naming
    adjacent alternatives.** The recent `specs archive` and `specs validate`
    fixes show that group and leaf help need to explain neighboring commands:
    archive vs recover, create vs amend-scope, repair vs destroy, prune vs
