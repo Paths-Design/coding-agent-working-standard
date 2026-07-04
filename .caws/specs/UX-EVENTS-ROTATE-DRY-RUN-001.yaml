@@ -7,12 +7,12 @@ created_at: '2026-07-04T04:54:33.067Z'
 updated_at: '2026-07-04T04:54:34.660Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli
+    - docs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/shell/commands/events.ts
     - packages/caws-cli/src/shell/register.ts
     - packages/caws-cli/src/shell/command-metadata.ts
@@ -22,11 +22,26 @@ scope:
     - docs/architecture/cli-ux-job-model-audit.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'caws events rotate --dry-run is read-only and never renames, rewrites, appends, archives, or locks events.jsonl.'
+  - 'The dry-run plan reports the same archive name, digest, line count, prior status, actor-shape stats, and chain_rotated payload that apply would use for the same timestamp and inputs.'
+  - 'Dry-run refusal semantics mirror rotate apply for missing, empty, clean-without-allow-clean, and partially corrupt event logs.'
+  - 'Apply remains explicit and preserves the existing rotate writer path through rotateEvents.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a project with a clean v11 events.jsonl'
+    when: 'an operator runs caws events rotate --dry-run --reason "..." --allow-clean --json'
+    then: 'the command exits 0, prints the target archive path, prior digest, prior line count, prior chain status, actor-shape stats, and chain_rotated genesis payload while leaving events.jsonl byte-identical'
+  - id: A2
+    given: 'a clean v11 events.jsonl and no --allow-clean'
+    when: 'an operator runs caws events rotate --dry-run --reason "..."'
+    then: 'the command refuses with the same clean-chain guard as apply and leaves events.jsonl byte-identical'
+  - id: A3
+    given: 'a dry-run plan and then an apply run with the same timestamp and options'
+    when: 'the operator compares the proposed archive path and digest to the resulting chain_rotated payload'
+    then: 'the dry-run prediction matches the applied rotation payload'
+  - id: A4
+    given: 'the command metadata and docs are regenerated'
+    when: 'an operator runs caws events rotate --help from the built dist-linked caws binary'
+    then: 'the help shows --dry-run, --json, --allow-clean, and the preview/apply context'
 non_functional: {}
 contracts: []
