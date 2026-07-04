@@ -2,10 +2,11 @@ id: UX-INIT-DRY-RUN-ALIAS-001
 title: 'Add init dry-run alias'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: init-dry-run-alias
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge init-dry-run-alias at ba6f148bd979b8db58f00ce5dcddf312bd028aca'
 created_at: '2026-07-04T19:10:59.958Z'
-updated_at: '2026-07-04T19:10:59.958Z'
+updated_at: '2026-07-04T19:14:09.584Z'
 blast_radius:
   modules:
     - 'packages/caws-cli init command surface'
