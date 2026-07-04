@@ -2,10 +2,11 @@ id: UX-EVENTS-LOG-DISCOVERY-001
 title: 'Add event log discovery commands'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
-worktree: events-log-discovery
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge events-log-discovery at ab73669374cb3239e1c25542e9cc9af7b9e8450c'
 created_at: '2026-07-04T05:11:36.838Z'
-updated_at: '2026-07-04T05:11:36.838Z'
+updated_at: '2026-07-04T05:17:47.760Z'
 blast_radius:
   modules:
     - packages/caws-cli
