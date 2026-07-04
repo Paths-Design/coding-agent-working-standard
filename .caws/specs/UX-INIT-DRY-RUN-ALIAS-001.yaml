@@ -7,7 +7,8 @@ created_at: '2026-07-04T19:10:59.958Z'
 updated_at: '2026-07-04T19:10:59.958Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli init command surface'
+    - 'CLI reference documentation'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -20,12 +21,22 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - '`caws init --dry-run` is parsed as a compatibility alias for the existing read-only --plan path.'
+  - '`--dry-run` never initializes .caws, installs hook packs, writes settings, appends events, or mutates gitignore state.'
+  - 'Help and docs present --dry-run as an alias for --plan so agents can discover the preview model without retry loops.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a git repository without CAWS state'
+    when: 'an operator runs caws init --dry-run'
+    then: 'the command prints the same read-only init plan as --plan and leaves the repository unmodified.'
+  - id: A2
+    given: 'a git repository without CAWS state'
+    when: 'an operator runs caws init --dry-run --json'
+    then: 'the command emits the same JSON plan shape as --plan --json with read_only true.'
+  - id: A3
+    given: 'the built CLI command surface'
+    when: 'an operator runs caws init --help'
+    then: 'help lists --dry-run as a compatibility alias for --plan.'
 non_functional: {}
 contracts:
   - name: 'init-dry-run-alias'
