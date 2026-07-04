@@ -856,6 +856,7 @@ export function registerShellCommands(
           riskTier?: string;
           tier?: string;
           scopeIn?: string[];
+          'scope.in'?: string[];
           contract?: string[];
           type?: string;
           plan?: boolean;
@@ -871,6 +872,7 @@ export function registerShellCommands(
           ...(opts.riskTier !== undefined ? { riskTier: opts.riskTier } : {}),
           ...(opts.tier !== undefined ? { tier: opts.tier } : {}),
           ...(opts.scopeIn !== undefined ? { scopeIn: opts.scopeIn } : {}),
+          ...(opts['scope.in'] !== undefined ? { scopeInDot: opts['scope.in'] } : {}),
           // FIX-SPECS-CONTRACT-ORIENTATION-001: forward the repeatable
           // --contract values to the handler. Without this the flag is parsed
           // by Commander (so --help shows it) but dropped at this hand-mapping

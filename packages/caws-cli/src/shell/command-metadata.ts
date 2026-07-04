@@ -184,6 +184,12 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
           collect: true,
         },
         {
+          flag: '--scope.in <path>',
+          description:
+            'Alias for --scope-in using the YAML field name; writes canonical scope.in and is repeatable.',
+          collect: true,
+        },
+        {
           flag: '--contract <spec>',
           description:
             'Add a contract at creation (repeatable), as "name:type[:path]" where type is api|schema|contract-test|behavior. Example: --contract "core-api:behavior". Tier 1/2 specs REQUIRE at least one contract; tier 3 / --mode chore do not.',
