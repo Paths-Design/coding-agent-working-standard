@@ -962,6 +962,7 @@ export function registerShellCommands(
         opts: {
           resolution: string;
           reason?: string;
+          closureNotes?: string;
           mergeCommit?: string;
           supersededBy?: string;
           data?: boolean;
@@ -971,6 +972,9 @@ export function registerShellCommands(
           id,
           resolution: opts.resolution,
           ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+          ...(opts.closureNotes !== undefined
+            ? { closureNotes: opts.closureNotes }
+            : {}),
           ...(opts.mergeCommit !== undefined
             ? { mergeCommit: opts.mergeCommit }
             : {}),
