@@ -135,7 +135,7 @@ By top-level command:
 | `draft_spec_create_refused` | 13 | Fixed for worktree create/bind: draft-spec refusals now hand off to `caws specs activate <id>` and explain activation preflight. |
 | `evidence_schema_rejected` | 10 | Fixed by `evidence schema --type <kind>` and per-kind `evidence record --help` examples. |
 | `already_closed_close_refused` | 7 | Fixed for `specs close`: already-closed refusals now hand off to `specs show`, `specs archive`, and post-archive `specs recover`. |
-| `parse_error` | 6 | Partially fixed for `evidence record --data` JSON, spec YAML/schema failures, malformed hook stdin, and `specs migrate --lifecycle-mapping` JSON files: malformed evidence payloads now print schema/examples/quoting guidance before repo/session resolution, invalid specs point to `caws specs validate <file>` with minimal v11 YAML array examples, shared hook parser fail-open is now observable instead of silent, and migration mapping parse/shape failures print the expected object schema plus an example. Remaining parse work should verify whether any non-test CLI JSON surfaces are still exposed. |
+| `parse_error` | 6 | Reconciled against the current CLI surface: operator-supplied JSON inputs are limited to `evidence record --data <json>` and `specs migrate --lifecycle-mapping <path>`, both now covered by schema/example guidance. Spec YAML/schema failures and malformed hook stdin are also covered. `--json`/`--data` selectors that emit JSON or diagnostics are output controls, not parse-risk inputs. |
 | `not_a_git_repo` | 1 | Rare compared with state-model misses. |
 
 ### Representative Patterns
@@ -162,6 +162,7 @@ By top-level command:
 | Spec YAML/schema shape failure | `spec.schema.violation: Expected array` after an agent authored scalar `invariants` or empty `acceptance` fields and then had to inspect another spec plus `spec.v1.json` by hand. | Now closed for `specs show` and `specs validate`: invalid spec diagnostics point to the exact `caws specs validate <file>` command and print minimal v11 YAML examples for `invariants`, `acceptance`, and `contracts`. |
 | Hook input parse silence | Shared hook dispatchers intentionally fail-open on malformed stdin, but the parser converted unreadable JSON to `{}` with no visible output. | Now closed for the shared hook core: malformed hook JSON still exits 0, but emits a controlled CAWS hook-parse diagnostic to stderr, never echoes the raw payload, and avoids Python tracebacks. |
 | Specs migrate lifecycle-mapping parse failure | `Cannot parse mapping.json as JSON: Expected property name...` when an operator supplied a malformed migration mapping file. | Now closed for `specs migrate --lifecycle-mapping`: parse and lightweight shape failures remain exit-2 composition refusals, but print the expected JSON object shape, an example mapping file, and the retry command without echoing the malformed file body. |
+| JSON input surface drift | The residual `parse_error` bucket could continue to look open because many commands emit `--json` output and several internal paths parse state JSON. | Now reconciled by metadata coverage: `packages/caws-cli/tests/docs/cli-json-input-surface.test.js` fails if a new JSON-like operator input appears without being classified. Output selectors and internal state parsers are excluded from the parse-risk bucket. |
 
 ## Implementation Ledger
 
@@ -212,16 +213,16 @@ By top-level command:
 | `UX-SPECS-SCHEMA-PARSE-GUIDANCE-001` | Implemented in forty-third repair slice | Spec YAML/schema parse guidance | Keeps invalid spec YAML/schema as a refusal, but attaches the exact `caws specs validate <file>` command and minimal v11 array-field examples for `invariants`, `acceptance`, and `contracts` on both canonical `specs show` and standalone `specs validate` failures. Covered by `packages/caws-cli/tests/shell/specs-schema-parse-guidance.test.js`. |
 | `UX-HOOK-INPUT-PARSE-DIAGNOSTIC-001` | Implemented in forty-fourth repair slice | Shared hook input parse diagnostics | Keeps malformed hook stdin fail-open, but emits a controlled CAWS hook-parse diagnostic to stderr instead of silently replacing the payload with `{}`. Shared pack version/fingerprint metadata is bumped so installs can receive the fix. Covered by `packages/caws-cli/tests/hooks/bats/parse-input.bats` and `packages/caws-cli/tests/init/pack-fingerprint.test.js`. |
 | `UX-SPECS-MIGRATE-MAPPING-GUIDANCE-001` | Implemented in forty-fifth repair slice | Specs migrate lifecycle mapping parse guidance | Keeps malformed `--lifecycle-mapping` files as non-mutating exit-2 composition refusals, but adds schema/example guidance for parse and lightweight shape failures and surfaces the mapping shape in nested help/generated command reference. Covered by `packages/caws-cli/tests/shell/specs-migrate-mapping-guidance.test.js`. |
+| `UX-PARSE-ERROR-SURFACE-RECONCILIATION-001` | Implemented in forty-sixth repair slice | Parse-error surface reconciliation | Confirms the current metadata exposes only two operator-supplied JSON inputs: `evidence record --data <json>` and `specs migrate --lifecycle-mapping <path>`. Both already have schema/example guidance; JSON output flags and internal state parsers are excluded from the parse-risk bucket. Covered by `packages/caws-cli/tests/docs/cli-json-input-surface.test.js`. |
 
 ## Next Slice
 
-The next implementation slice should verify whether the remaining
-`parse_error` bucket still maps to current operator-facing CLI JSON inputs.
-Start from current command metadata and session traces rather than old
-transcript labels: inline `evidence record --data`, spec YAML/schema, hook
-stdin, and `specs migrate --lifecycle-mapping` are now covered. If no remaining
-operator-facing parse surface exists, close the bucket as reconciled and move to
-the next highest residual class.
+The next implementation slice should return to the highest residual friction
+class: `no_scope_authority`. The first candidate is a guided authority-context
+handoff for active-spec creation/binding flows, because unbound and one-sided
+scope refusals now have remediation, but agents still need a clearer read-only
+path from "I am in the canonical checkout" to "which active spec/worktree
+should own this edit?"
 
 ## Findings
 
@@ -389,6 +390,13 @@ the next highest residual class.
    mapping files before migration, but the refusal now prints the expected JSON
    object keyed by spec id, a concrete example, and the retry command. The
    malformed file body is not echoed.
+
+28. **The parse-error bucket is reconciled against current CLI inputs.**
+   Current command metadata exposes two operator-supplied JSON inputs:
+   `evidence record --data <json>` and `specs migrate --lifecycle-mapping
+   <path>`. Both now have focused schema/example diagnostics and regression
+   coverage. Other JSON-like options are output selectors such as `--json`, or
+   internal state parsers outside the operator input model.
 
 ## Recommendations
 
