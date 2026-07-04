@@ -80,6 +80,7 @@ import {
   runStatusCommand,
   runWaiverCreateCommand,
   runWaiverListCommand,
+  runWaiverPruneCommand,
   runWaiverRevokeCommand,
   runWaiverShowCommand,
   runWorktreeBindCommand,
@@ -660,6 +661,8 @@ export function registerShellCommands(
           approvedBy: string;
           expiresAt: string;
           spec?: string;
+          dryRun?: boolean;
+          json?: boolean;
           data?: boolean;
         }
       ) => {
@@ -671,6 +674,8 @@ export function registerShellCommands(
           approvedBy: opts.approvedBy,
           expiresAt: opts.expiresAt,
           ...(opts.spec !== undefined ? { specId: opts.spec } : {}),
+          dryRun: opts.dryRun === true,
+          json: opts.json === true,
           showData: opts.data === true,
         });
         exit(code);
@@ -712,6 +717,28 @@ export function registerShellCommands(
           id,
           ...(opts.revokedBy !== undefined ? { revokedBy: opts.revokedBy } : {}),
           ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  defineLeaf(waiverCmd, leafMeta(WAIVER_COMMAND_META, 'prune'))
+    .action(
+      (opts: {
+        status: string;
+        apply?: boolean;
+        reason?: string;
+        revokedBy?: string;
+        json?: boolean;
+        data?: boolean;
+      }) => {
+        const code = runWaiverPruneCommand({
+          status: opts.status as 'expired',
+          apply: opts.apply === true,
+          ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+          ...(opts.revokedBy !== undefined ? { revokedBy: opts.revokedBy } : {}),
+          json: opts.json === true,
           showData: opts.data === true,
         });
         exit(code);

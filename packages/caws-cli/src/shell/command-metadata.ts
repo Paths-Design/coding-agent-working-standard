@@ -880,7 +880,8 @@ export const WAIVER_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'create',
       argument: { name: 'id', required: true, description: 'Waiver id to create' },
-      description: 'Create a new active waiver. Validates against the kernel before writing.',
+      description:
+        'Create a new active waiver. Validates against the kernel before writing; --dry-run validates shape and duplicate id state without creating a file.',
       options: [
         { flag: '--title <title>', required: true, description: 'Short waiver title (≥5 chars)' },
         {
@@ -900,6 +901,11 @@ export const WAIVER_COMMAND_META: GroupCommandMeta = {
           flag: '--spec <id>',
           description: 'Optional spec id this waiver is scoped to (omit for project-wide)',
         },
+        {
+          flag: '--dry-run',
+          description: 'Validate the waiver and duplicate id state without writing .caws/waivers/',
+        },
+        { flag: '--json', description: 'Emit create/dry-run result as JSON.' },
         DATA_OPTION,
       ],
     },
@@ -931,6 +937,31 @@ export const WAIVER_COMMAND_META: GroupCommandMeta = {
           flag: '--reason <reason>',
           description: 'Reason recorded in revocation.reason (recommended for audit)',
         },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'prune',
+      description:
+        'Plan or apply cleanup for derived-expired active waivers. Dry-run by default; --apply revokes the selected waivers through the existing atomic revoke path.',
+      options: [
+        {
+          flag: '--status <status>',
+          required: true,
+          description: 'Waiver effectiveness selector',
+          allowedValues: ['expired'],
+        },
+        { flag: '--apply', description: 'Execute the prune plan by revoking selected waivers' },
+        {
+          flag: '--reason <reason>',
+          description: 'Required with --apply; recorded in each revocation.reason',
+        },
+        {
+          flag: '--revoked-by <id>',
+          description: 'Required with --apply; recorded in each revocation.revoked_by',
+        },
+        { flag: '--json', description: 'Emit the prune plan/result as JSON.' },
         DATA_OPTION,
       ],
     },

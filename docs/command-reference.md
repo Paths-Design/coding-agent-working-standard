@@ -255,7 +255,7 @@ Manage CAWS waivers (bounded exception records that suppress matching gate viola
 
 ### `caws waiver create <id>`
 
-Create a new active waiver. Validates against the kernel before writing.
+Create a new active waiver. Validates against the kernel before writing; --dry-run validates shape and duplicate id state without creating a file.
 
 **Argument:** `id` (required) — Waiver id to create
 
@@ -267,6 +267,8 @@ Create a new active waiver. Validates against the kernel before writing.
 - `--approved-by <id>` (**required**) — Approver identity
 - `--expires-at <iso>` (**required**) — Expiry as an ISO-8601 datetime with timezone
 - `--spec <id>` — Optional spec id this waiver is scoped to (omit for project-wide)
+- `--dry-run` — Validate the waiver and duplicate id state without writing .caws/waivers/
+- `--json` — Emit create/dry-run result as JSON.
 - `--data` — Show structured data block on diagnostics
 
 ### `caws waiver list`
@@ -299,6 +301,19 @@ Revoke a waiver. Writes a revocation record; refuses double-revoke.
 
 - `--revoked-by <id>` — Identity recorded in revocation.revoked_by
 - `--reason <reason>` — Reason recorded in revocation.reason (recommended for audit)
+- `--data` — Show structured data block on diagnostics
+
+### `caws waiver prune`
+
+Plan or apply cleanup for derived-expired active waivers. Dry-run by default; --apply revokes the selected waivers through the existing atomic revoke path.
+
+**Options:**
+
+- `--status <status>` (**required**) — Waiver effectiveness selector: expired
+- `--apply` — Execute the prune plan by revoking selected waivers
+- `--reason <reason>` — Required with --apply; recorded in each revocation.reason
+- `--revoked-by <id>` — Required with --apply; recorded in each revocation.revoked_by
+- `--json` — Emit the prune plan/result as JSON.
 - `--data` — Show structured data block on diagnostics
 
 ## `caws specs`

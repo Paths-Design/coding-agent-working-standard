@@ -123,16 +123,34 @@ export interface WaiverCreateOptions extends WaiverCommandBase {
   readonly expiresAt: string;
   /** Optional. When supplied, scopes the waiver to a single spec id. */
   readonly specId?: string;
+  /** Validate and report only; do not write .caws/waivers/<id>.yaml. */
+  readonly dryRun?: boolean;
+  /** Emit machine-readable JSON for dry-run/create results. */
+  readonly json?: boolean;
 }
 
-export function runWaiverCreateCommand(opts: WaiverCreateOptions): number {
-  const { cwd, nowFn, out, err, showData } = setupIO(opts);
-  const now = nowFn();
-  const ctx = resolveCaws(cwd, err, showData, 'waiver create');
-  if (ctx === null) return 2;
+function waiverJson(args: {
+  readonly waiver: Waiver;
+  readonly effectiveness: WaiverEffectiveness;
+}): Record<string, unknown> {
+  return {
+    id: args.waiver.id,
+    title: args.waiver.title,
+    status: args.waiver.status,
+    effectiveness: args.effectiveness,
+    gates: args.waiver.gates,
+    reason: args.waiver.reason,
+    approved_by: args.waiver.approved_by,
+    created_at: args.waiver.created_at,
+    expires_at: args.waiver.expires_at,
+    scope: args.waiver.scope ?? {},
+    ...(args.waiver.revocation !== undefined
+      ? { revocation: args.waiver.revocation }
+      : {}),
+  };
+}
 
-  // Build the candidate waiver document. Validation is delegated to the
-  // kernel — no parallel field-shape checks here.
+function buildCreateCandidate(opts: WaiverCreateOptions, now: Date): Record<string, unknown> {
   const candidate: Record<string, unknown> = {
     id: opts.id,
     title: opts.title,
@@ -146,12 +164,68 @@ export function runWaiverCreateCommand(opts: WaiverCreateOptions): number {
   if (opts.specId !== undefined) {
     candidate['scope'] = { spec_id: opts.specId };
   }
+  return candidate;
+}
+
+export function runWaiverCreateCommand(opts: WaiverCreateOptions): number {
+  const { cwd, nowFn, out, err, showData } = setupIO(opts);
+  const now = nowFn();
+  const ctx = resolveCaws(cwd, err, showData, 'waiver create');
+  if (ctx === null) return 2;
+
+  // Build the candidate waiver document. Validation is delegated to the
+  // kernel — no parallel field-shape checks here.
+  const candidate = buildCreateCandidate(opts, now);
 
   const validated = validateWaiver(candidate);
   if (!isOk(validated)) {
     err('caws waiver create: invalid waiver shape.');
     err(renderDiagnostics(validated.errors, { showData }));
     return 1;
+  }
+
+  if (opts.dryRun === true) {
+    const load = loadWaivers(ctx.cawsDir);
+    if (load.diagnostics.length > 0) {
+      err(renderDiagnostics(load.diagnostics, { showData }));
+    }
+    const duplicate = load.waivers.find((w) => w.id === validated.value.id);
+    if (duplicate !== undefined) {
+      err(`caws waiver create --dry-run: waiver ${validated.value.id} already exists.`);
+      err(
+        renderDiagnostics(
+          [
+            shellDiag(
+              STORE_RULES.WAIVERS_ALREADY_EXISTS,
+              `Waiver ${validated.value.id} already exists.`,
+              validated.value.id
+            ),
+          ],
+          { showData }
+        )
+      );
+      return 1;
+    }
+    const effectiveness = waiverEffectiveness(validated.value, now);
+    if (opts.json === true) {
+      out(JSON.stringify({
+        ok: true,
+        dry_run: true,
+        read_only: true,
+        would_write: true,
+        waiver: waiverJson({ waiver: validated.value, effectiveness }),
+      }, null, 2));
+    } else {
+      out(`caws waiver create --dry-run: valid waiver; would write .caws/waivers/${validated.value.id}.yaml`);
+      out(
+        renderWaiverDetail({
+          waiver: validated.value,
+          effectiveness,
+          now,
+        })
+      );
+    }
+    return 0;
   }
 
   const write = writeWaiver(ctx.cawsDir, validated.value);
@@ -179,6 +253,137 @@ export function runWaiverCreateCommand(opts: WaiverCreateOptions): number {
       now,
     })
   );
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// caws waiver prune
+// ---------------------------------------------------------------------------
+
+export type WaiverPruneStatus = 'expired';
+
+export interface WaiverPruneOptions extends WaiverCommandBase {
+  readonly status: WaiverPruneStatus;
+  /** Execute the plan. Defaults to dry-run. */
+  readonly apply?: boolean;
+  /** Emit machine-readable JSON. */
+  readonly json?: boolean;
+  /** Required with --apply. Recorded in each revocation.reason. */
+  readonly reason?: string;
+  /** Required with --apply. Recorded in each revocation.revoked_by. */
+  readonly revokedBy?: string;
+}
+
+interface WaiverPruneTarget {
+  readonly id: string;
+  readonly gates: readonly string[];
+  readonly scope: Record<string, unknown>;
+  readonly expires_at: string;
+  readonly effectiveness: WaiverEffectiveness;
+  readonly action: 'revoke';
+}
+
+function isWaiverPruneStatus(value: unknown): value is WaiverPruneStatus {
+  return value === 'expired';
+}
+
+function pruneTarget(w: Waiver, now: Date): WaiverPruneTarget {
+  return {
+    id: w.id,
+    gates: w.gates,
+    scope: w.scope === undefined ? {} : { ...w.scope },
+    expires_at: w.expires_at,
+    effectiveness: waiverEffectiveness(w, now),
+    action: 'revoke',
+  };
+}
+
+export function runWaiverPruneCommand(opts: WaiverPruneOptions): number {
+  const { cwd, nowFn, out, err, showData } = setupIO(opts);
+  const now = nowFn();
+  const isApply = opts.apply === true;
+
+  if (!isWaiverPruneStatus(opts.status)) {
+    err(
+      `caws waiver prune: invalid --status. Got ${JSON.stringify(opts.status)}; expected expired.`
+    );
+    return 1;
+  }
+  if (isApply && (typeof opts.reason !== 'string' || opts.reason.length === 0)) {
+    err('caws waiver prune --apply: --reason "<text>" is required.');
+    return 1;
+  }
+  if (isApply && (typeof opts.revokedBy !== 'string' || opts.revokedBy.length === 0)) {
+    err('caws waiver prune --apply: --revoked-by <id> is required.');
+    return 1;
+  }
+
+  const ctx = resolveCaws(cwd, err, showData, 'waiver prune');
+  if (ctx === null) return 2;
+  const load = loadWaivers(ctx.cawsDir);
+  if (load.diagnostics.length > 0) {
+    err(renderDiagnostics(load.diagnostics, { showData }));
+  }
+
+  const targets = load.waivers
+    .filter((w) => waiverEffectiveness(w, now) === 'expired')
+    .map((w) => pruneTarget(w, now));
+
+  if (!isApply) {
+    if (opts.json === true) {
+      out(JSON.stringify({
+        ok: true,
+        dry_run: true,
+        read_only: true,
+        status: opts.status,
+        count: targets.length,
+        targets,
+      }, null, 2));
+    } else {
+      out(`caws waiver prune: ${targets.length} expired waiver(s) would be revoked.`);
+      if (targets.length === 0) out('  (none)');
+      for (const target of targets) {
+        out(`  - ${target.id} gates=${target.gates.join(',')} expires_at=${target.expires_at}`);
+      }
+      out('  Re-run with --apply --reason "<text>" --revoked-by <id> to revoke these waivers.');
+    }
+    return 0;
+  }
+
+  const revoked: Record<string, unknown>[] = [];
+  for (const target of targets) {
+    const result = markRevoked(ctx.cawsDir, target.id, {
+      now,
+      revoked_by: opts.revokedBy!,
+      reason: opts.reason!,
+    });
+    if (!isOk(result)) {
+      err(`caws waiver prune --apply: failed to revoke ${target.id}.`);
+      err(renderDiagnostics(result.errors, { showData }));
+      return 2;
+    }
+    revoked.push(
+      waiverJson({
+        waiver: result.value,
+        effectiveness: waiverEffectiveness(result.value, now),
+      })
+    );
+  }
+
+  if (opts.json === true) {
+    out(JSON.stringify({
+      ok: true,
+      dry_run: false,
+      read_only: false,
+      status: opts.status,
+      count: revoked.length,
+      revoked,
+    }, null, 2));
+  } else {
+    out(`caws waiver prune --apply: revoked ${revoked.length} expired waiver(s).`);
+    if (revoked.length === 0) out('  (none)');
+    for (const item of revoked) out(`  - ${item.id}`);
+  }
   return 0;
 }
 
