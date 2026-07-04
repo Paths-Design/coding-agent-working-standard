@@ -2,10 +2,11 @@ id: UX-INIT-PREVIEW-PLAN-001
 title: 'Init preview plan'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
-worktree: init-preview-plan
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge init-preview-plan at af7cc594d5ff23de73aa9ff7f55d40ede55cdc4e'
 created_at: '2026-07-04T11:50:19.165Z'
-updated_at: '2026-07-04T12:02:53.568Z'
+updated_at: '2026-07-04T12:04:01.886Z'
 blast_radius:
   modules:
     - caws-cli/init
