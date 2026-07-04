@@ -2,10 +2,11 @@ id: CAWS-SPECS-ARCHIVE-PRUNE-STYLE-001
 title: 'Batch archive closed specs with prune-style dry-run/apply flow'
 risk_tier: 2
 mode: chore
-lifecycle_state: active
-worktree: specs-archive-prune-style
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge specs-archive-prune-style at 4c575146653ba12fa772022657c692ef5b118986'
 created_at: '2026-07-04T02:40:09.860Z'
-updated_at: '2026-07-04T02:40:09.860Z'
+updated_at: '2026-07-04T02:50:50.949Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/specs.ts
