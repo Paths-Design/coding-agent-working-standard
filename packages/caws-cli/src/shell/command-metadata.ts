@@ -551,12 +551,17 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
       name: 'destroy',
       argument: { name: 'name', required: true, description: 'Worktree name' },
       description:
-        'Destroy a worktree. Non-forceful: refuses foreign ownership, dirty checkout, unmerged branch (use --abandon-unmerged to override branch check only).',
+        'Destroy a worktree. Guarded: refuses foreign ownership, dirty checkout, and unmerged branch unless --abandon-unmerged or its --force compatibility alias is supplied.',
       options: [
         {
           flag: '--abandon-unmerged',
           description:
             'Destroy even when the branch is not merged into base. Still respects ownership and clean working tree.',
+        },
+        {
+          flag: '--force',
+          description:
+            'Compatibility alias for --abandon-unmerged only; still respects ownership, clean checkout, and registry guardrails.',
         },
         DATA_OPTION,
       ],

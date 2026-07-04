@@ -891,14 +891,19 @@ Only active specs can be bound. If the target spec is still draft, the refusal i
 ```bash
 caws worktree destroy my-feature
 caws worktree destroy my-feature --abandon-unmerged
+caws worktree destroy my-feature --force
 ```
 
 | Flag | Description |
 |---|---|
 | `--abandon-unmerged` | Destroy even when the branch is not merged into base. Still respects ownership and clean working tree. |
+| `--force` | Compatibility alias for `--abandon-unmerged` only. Still respects ownership, clean checkout, and registry guardrails. |
 | `--data` | Show structured data block on diagnostics. |
 
-Non-forceful: refuses foreign ownership, dirty checkout, unmerged branch (use `--abandon-unmerged` to override branch check only).
+Guarded: refuses foreign ownership, dirty checkout, and unmerged branch unless
+`--abandon-unmerged` or its `--force` compatibility alias is supplied. `--force`
+does not bypass ownership, dirty checkout, missing-registry, or cleanup-plan
+guardrails.
 If the requested name is not registered, the refusal is non-mutating and points
 to `caws worktree list`, `caws worktree prune --include <name>`, and
 `caws worktree cleanup-plan --include <name>` so operators can distinguish

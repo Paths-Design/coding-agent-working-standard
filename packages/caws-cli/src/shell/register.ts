@@ -1200,10 +1200,11 @@ export function registerShellCommands(
 
   defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'destroy'))
     .action(
-      (name: string, opts: { abandonUnmerged?: boolean; data?: boolean }) => {
+      (name: string, opts: { abandonUnmerged?: boolean; force?: boolean; data?: boolean }) => {
         const code = runWorktreeDestroyCommand({
           name,
           ...(opts.abandonUnmerged === true ? { abandonUnmerged: true } : {}),
+          ...(opts.force === true ? { force: true } : {}),
           showData: opts.data === true,
         });
         exit(code);

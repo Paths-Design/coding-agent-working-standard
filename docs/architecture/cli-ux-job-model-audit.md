@@ -166,12 +166,18 @@ the newest still-current CAWS option mismatch. That is now fixed: `--id` is a
 compatibility alias for the positional create id, and supplying both id forms
 refuses before mutation.
 
+The subsequent resample after the create/list/status fixes found `worktree
+destroy --force` as the newest still-current option mismatch. That is now fixed
+as a compatibility alias for the existing `--abandon-unmerged` branch-safety
+override only. It remains guarded by ownership, clean checkout,
+missing-registry, and cleanup-plan refusals.
+
 ### Friction Classes
 
 | Friction marker | Count | UX implication |
 |---|---:|---|
 | `no_scope_authority` | 126 | Reconciled against the current linked-dist CLI: residual session transcripts still contain old generic unbound repair text, but direct reproduction in Sterling now shows active-spec authority candidates, read-only `scope --spec` checks, and create/bind/enter worktree handoffs in human and JSON output. |
-| `unknown_or_missing_option` | 91 | Further fixed for `specs close`, `scope`, `agents prune`, `specs create`, validation-era removed commands, specs status listing, worktree cleanup state filters, specs archive/prune-archive discoverability, and governed scope amendment rationale: `--closure-notes` and `--notes` are now supported aliases for close notes, `scope show/check/plan --spec <id>` supports read-only explicit spec-context evaluation, `agents prune --dead --json` is verified, `specs create --tier <n>` aliases `--risk-tier <n>`, `specs create --id <id>` aliases the positional create id, legacy validation diagnostics are pinned, `specs --status <state>` hands off to `specs list --status <state>`, `worktree prune/cleanup-plan --status <classes>` aliases `--state <classes>`, `specs prune-archive` hands off to archive/restore/recover workflows, and `specs amend-scope --reason <text>` records rationale on `spec_scope_amended` evidence. Remaining work should resample the newest option mismatches after these fixes before selecting another leaf. |
+| `unknown_or_missing_option` | 91 | Further fixed for `specs close`, `scope`, `agents prune`, `specs create`, validation-era removed commands, specs status listing, worktree cleanup state filters, specs archive/prune-archive discoverability, governed scope amendment rationale, and worktree destroy compatibility: `--closure-notes` and `--notes` are now supported aliases for close notes, `scope show/check/plan --spec <id>` supports read-only explicit spec-context evaluation, `agents prune --dead --json` is verified, `specs create --tier <n>` aliases `--risk-tier <n>`, `specs create --id <id>` aliases the positional create id, legacy validation diagnostics are pinned, `specs --status <state>` hands off to `specs list --status <state>`, `worktree prune/cleanup-plan --status <classes>` aliases `--state <classes>`, `worktree destroy --force` aliases `--abandon-unmerged` only, `specs prune-archive` hands off to archive/restore/recover workflows, and `specs amend-scope --reason <text>` records rationale on `spec_scope_amended` evidence. Remaining work should resample the newest option mismatches after these fixes before selecting another leaf. |
 | `tier_requires_metadata` | 87 | Fixed at the create-plan layer: `specs create --plan` now reports missing semantic fields and emits copy-pasteable YAML examples in human and JSON output. |
 | `danger_latch` | 66 | CAWS hook UX still matters for CLI workflows; blocked shell forms often interrupt otherwise correct CAWS procedures. |
 | `worktree_not_found` | 62 | Fixed for `worktree destroy`: missing registry entries now remain non-mutating refusals but include a CAWS-native handoff to `worktree list`, `worktree prune --include <name>`, and `worktree cleanup-plan --include <name>` so agents can distinguish registry residue from unregistered physical worktrees. |
@@ -272,6 +278,7 @@ refuses before mutation.
 | `UX-SPECS-CREATE-ACCEPTANCE-FLAG-001` | Implemented in fifty-fourth repair slice | Specs create acceptance option | Adds repeatable `caws specs create --acceptance <text>` to seed canonical v11 acceptance entries at creation time. Free text becomes the `then` clause with non-TODO Given/When scaffolding; structured `given: ...; when: ...; then: ...` values set all fields. Covered by `packages/caws-cli/tests/shell/specs-create-acceptance-flag.test.js`. |
 | `UX-STATUS-SHORT-ALIAS-001` | Implemented in fifty-fifth repair slice | Status compact output option | Adds `caws status --short` as a compact read-only human summary over the same status snapshot. The flag prints specs/worktrees/agents/doctor/events/binding counts without the full dashboard panels, and `--short --json` preserves the existing JSON status schema. Covered by `packages/caws-cli/tests/shell/status-short.test.js`. |
 | `UX-SPECS-LIST-LIFECYCLE-ALIASES-001` | Implemented in fifty-sixth repair slice | Specs list lifecycle selector aliases | Adds `caws specs list --active`, `--draft`, `--closed`, `--lifecycle <state>`, and `--state <state>` as compatibility selectors for the existing read-only `--status <state>` filter. Conflicting lifecycle selectors refuse before mutation, and `--archived` keeps its include-archived meaning. Covered by `packages/caws-cli/tests/shell/specs-list-lifecycle-aliases.test.js`. |
+| `UX-WORKTREE-DESTROY-FORCE-COMPAT-001` | Implemented in fifty-seventh repair slice | Worktree destroy force compatibility alias | Adds `caws worktree destroy <name> --force` as a compatibility alias for `--abandon-unmerged` only. The alias reaches the same unmerged-branch override but still refuses foreign ownership, dirty checkout, missing registry entries, and other guarded destroy failures. Covered by `packages/caws-cli/tests/shell/worktree-destroy-force-compat.test.js`. |
 
 ## Next Slice
 
@@ -279,12 +286,13 @@ The next implementation slice should resample the newest CAWS and Sterling
 session evidence for residual `unknown_or_missing_option` after the `--notes`,
 `amend-scope --reason`, `specs create --id`, `specs create --scope.in`, and
 `specs create --acceptance`, `status --short`, and `specs list --active`
-fixes. Treat stale fixed
+fixes, plus `worktree destroy --force`. Treat stale fixed
 examples (`--tier`, `--status`, `--closure-notes`, `--notes`,
 `amend-scope --reason`, `specs create --id`, `specs create --scope.in`,
 `specs create --acceptance`, `status --short`, `specs list --active`,
-`specs list --lifecycle`, `specs list --state`) as closed and select the
-newest current leaf mismatch for the next concrete fix, if any.
+`specs list --lifecycle`, `specs list --state`, `worktree destroy --force`) as
+closed and select the newest current leaf mismatch for the next concrete fix, if
+any.
 
 ## Findings
 
@@ -495,6 +503,13 @@ newest current leaf mismatch for the next concrete fix, if any.
    positional create id for agents that build commands from option maps, while
    ambiguous invocations that supply both id forms refuse before writing specs
    or events.
+
+34. **Worktree destroy now accepts force as a narrow compatibility alias.**
+   `worktree destroy --force` is no longer a generic unknown-option dead end,
+   but it is not a broad bypass. It maps only to the existing unmerged-branch
+   override and still routes missing registry entries, dirty checkouts, foreign
+   ownership, and broader cleanup through the governed repair/cleanup-plan
+   commands.
 
 ## Recommendations
 
