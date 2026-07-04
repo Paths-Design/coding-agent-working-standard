@@ -57,10 +57,10 @@ export interface ScopeDecisionJson {
   /**
    * Enforcement mode the hook should report:
    *   - `authoritative`: a spec is bound to this worktree; only it is checked.
+   *   - `spec_context`: caller supplied a spec id for read-only comparison.
    *   - `union`: no authoritative binding; all active specs are consulted.
-   * Derived purely from `bindingState` (bound → authoritative, else union).
    */
-  readonly mode: 'authoritative' | 'union';
+  readonly mode: 'authoritative' | 'spec_context' | 'union';
   /**
    * The spec id that drove the decision, when known. Sourced from the kernel
    * `decision.data.specId` (the spec whose scope.in/out matched), falling back
@@ -108,10 +108,15 @@ export function buildScopeDecisionJson(
   decision: Decision,
   boundContext?: ResolvedBinding
 ): ScopeDecisionJson {
-  // `bindingState: 'bound'` is the only authoritative state; one_sided and
-  // unbound both fall back to union-mode checking at the guard layer.
+  // `bindingState: 'bound'` is authoritative only when it came from worktree
+  // authority. Explicit spec context uses the same kernel bound evaluator, but
+  // remains a read-only comparison and must not be reported as write authority.
   const mode: ScopeDecisionJson['mode'] =
-    decision.bindingState === 'bound' ? 'authoritative' : 'union';
+    boundContext?.source === 'explicit_spec'
+      ? 'spec_context'
+      : decision.bindingState === 'bound'
+        ? 'authoritative'
+        : 'union';
 
   const boundSpecId = extractBoundSpecId(decision, boundContext);
   const matchedPattern = extractMatchedPattern(decision.data);

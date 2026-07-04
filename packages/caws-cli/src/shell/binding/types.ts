@@ -108,11 +108,14 @@ export interface ResolvedBinding {
    * vs `one_sided` decisions to the user.
    *   - target_worktree_location: step (2), path under .caws/worktrees/<name>/
    *   - target_scope_in_claim:    step (3), a bound spec's scope.in admits path
+   *   - explicit_spec:            caller supplied a spec id for read-only
+   *                               scope evaluation, not worktree authority
    */
   readonly source:
     | 'registry_path_match'
     | 'git_porcelain_match'
     | 'target_worktree_location'
     | 'target_scope_in_claim'
+    | 'explicit_spec'
     | 'none';
 }

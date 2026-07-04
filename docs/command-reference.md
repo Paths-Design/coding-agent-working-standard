@@ -88,6 +88,7 @@ Explain the scope decision for <path>; always exits 0
 **Options:**
 
 - `--data` — Show structured data block
+- `--spec <id>` — Evaluate against a named spec as read-only context instead of current worktree authority
 - `--json` — Emit the scope decision as a single-line stable JSON contract (for hooks/tooling)
 
 ### `caws scope check <path>`
@@ -99,6 +100,7 @@ Enforce the scope decision for <path>; exits 0 on admit, 1 otherwise. --json emi
 **Options:**
 
 - `--data` — Show structured data block
+- `--spec <id>` — Evaluate against a named spec as read-only context instead of current worktree authority
 - `--json` — Emit the scope decision and remediation guidance as a single-line JSON contract
 
 ### `caws scope plan`
@@ -109,6 +111,7 @@ Evaluate multiple paths in one read-only run and group remediation commands. Alw
 
 - `--path <path>` (repeatable, default: `[]`) — Path to evaluate; repeat for multiple paths
 - `--paths-file <file>` — Read newline-delimited paths from a file. Blank lines and # comments are ignored.
+- `--spec <id>` — Evaluate every path against a named spec as read-only context instead of current worktree authority
 - `--json` — Emit per-path decisions, counts, and grouped remediation commands as JSON
 - `--data` — Show structured data block on diagnostics
 

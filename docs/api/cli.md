@@ -123,12 +123,17 @@ Explain the scope decision for `<path>`. Always exits 0 (pure observation).
 ```bash
 caws scope show src/foo.ts
 caws scope show src/foo.ts --json
+caws scope show src/foo.ts --spec FEAT-1
 ```
 
 `--json` emits the stable decision contract used by hooks and automation. For
 repairable refusals, the payload includes a `remediation` object with safe
 handoff commands such as `caws specs amend-scope`, `caws worktree bind`, or
 claimant inspection commands.
+
+`--spec <id>` evaluates the path against a named spec as read-only context. It
+answers "does this path fit this spec?" and reports JSON `mode:
+spec_context`; it does not prove the current checkout owns write authority.
 
 ### `caws scope check <path>`
 
@@ -137,10 +142,14 @@ Enforce the scope decision for `<path>`.
 ```bash
 caws scope check src/foo.ts
 caws scope check src/foo.ts --json
+caws scope check src/foo.ts --spec FEAT-1 --json
 ```
 
 `--json` emits the same decision/remediation contract as `scope show --json`
 while preserving enforcement exit codes.
+
+With `--spec <id>`, exit codes enforce the path against the named spec's scope
+only. For write authority, run without `--spec` from the owning worktree.
 
 Exit codes: 0 (admit), 1 (refuse).
 
@@ -151,6 +160,7 @@ commands.
 
 ```bash
 caws scope plan --path src/foo.ts --path docs/foo.md
+caws scope plan --spec FEAT-1 --path src/foo.ts --path docs/foo.md
 caws scope plan --paths-file changed-paths.txt --json
 ```
 
@@ -158,6 +168,7 @@ caws scope plan --paths-file changed-paths.txt --json
 |---|---|
 | `--path <path>` | Path to evaluate; repeat for multiple paths. |
 | `--paths-file <file>` | Read newline-delimited paths from a file. Blank lines and `#` comments are ignored. |
+| `--spec <id>` | Evaluate every path against a named spec as read-only context. |
 | `--json` | Emit per-path decisions, counts, and grouped remediation commands as JSON. |
 | `--data` | Show structured data block on diagnostics. |
 
