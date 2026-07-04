@@ -7,7 +7,8 @@ created_at: '2026-07-04T19:17:27.061Z'
 updated_at: '2026-07-04T19:17:27.061Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli argv entrypoint normalization'
+    - 'CLI reference documentation'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -18,12 +19,22 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Only caws prepush receives shell-quoted --ack bundle normalization before Commander parsing.'
+  - 'A single argv token shaped like "--ack <sha> --ack <sha>" is normalized to the same tokens as repeated --ack flags.'
+  - 'Non-prepush commands and non-ack options keep Commander default unknown-option behavior.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a caws prepush invocation with a single shell-quoted repeated --ack bundle'
+    when: 'Commander parses the command'
+    then: 'the bundle is accepted as repeated --ack values instead of failing as an unknown option.'
+  - id: A2
+    given: 'a caws prepush invocation with ordinary repeated --ack flags'
+    when: 'Commander parses the command'
+    then: 'the existing repeated-flag behavior is preserved.'
+  - id: A3
+    given: 'a non-prepush command or a non-ack bundled option'
+    when: 'Commander parses the command'
+    then: 'the normal unknown-option diagnostic is preserved.'
 non_functional: {}
 contracts:
   - name: 'prepush-ack-bundle-normalize'
