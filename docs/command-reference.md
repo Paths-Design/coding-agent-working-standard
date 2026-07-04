@@ -406,7 +406,7 @@ Retire a never-activated DRAFT spec via tombstone. Refuses active (use close), c
 
 ### `caws specs prune-drafts`
 
-Plan stale draft cleanup. Read-only: classifies draft specs as candidates, skipped, or refused using age, include/exclude selectors, and worktree binding state. Does not retire drafts; use retire-draft for one spec until an apply surface exists.
+Plan or apply stale draft cleanup. Dry-run by default: classifies draft specs as candidates, skipped, or refused using age, include/exclude selectors, and worktree binding state. --apply retires only candidate drafts through the governed retire-draft path.
 
 **Options:**
 
@@ -414,6 +414,8 @@ Plan stale draft cleanup. Read-only: classifies draft specs as candidates, skipp
 - `--include <ids>` — Comma-separated spec ids to include even when not stale
 - `--exclude <ids>` — Comma-separated spec ids to exclude from the plan
 - `--include-bound` — Allow bound draft specs to appear as candidates; default refuses bound drafts
+- `--apply` — Retire selected candidate drafts. Requires --include or explicit --older-than-ms.
+- `--reason <text>` — Optional retirement reason recorded on spec_retired events during --apply
 - `--json` — Emit the draft cleanup plan as JSON
 - `--data` — Show structured data block on diagnostics
 

@@ -264,7 +264,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'prune-drafts',
       description:
-        'Plan stale draft cleanup. Read-only: classifies draft specs as candidates, skipped, or refused using age, include/exclude selectors, and worktree binding state. Does not retire drafts; use retire-draft for one spec until an apply surface exists.',
+        'Plan or apply stale draft cleanup. Dry-run by default: classifies draft specs as candidates, skipped, or refused using age, include/exclude selectors, and worktree binding state. --apply retires only candidate drafts through the governed retire-draft path.',
       options: [
         {
           flag: '--older-than-ms <ms>',
@@ -281,6 +281,14 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         {
           flag: '--include-bound',
           description: 'Allow bound draft specs to appear as candidates; default refuses bound drafts',
+        },
+        {
+          flag: '--apply',
+          description: 'Retire selected candidate drafts. Requires --include or explicit --older-than-ms.',
+        },
+        {
+          flag: '--reason <text>',
+          description: 'Optional retirement reason recorded on spec_retired events during --apply',
         },
         { flag: '--json', description: 'Emit the draft cleanup plan as JSON' },
         DATA_OPTION,

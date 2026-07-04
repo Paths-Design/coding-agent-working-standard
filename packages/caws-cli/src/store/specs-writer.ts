@@ -267,6 +267,33 @@ export interface RetireDraftSpecInput {
   readonly reason?: string;
   readonly now?: () => Date;
   readonly actor: EventBody['actor'];
+  readonly autoCommit?: boolean;
+}
+
+export interface RetireDraftSpecsInput extends SelectDraftSpecsForPruneInput {
+  readonly reason?: string;
+  readonly actor: EventBody['actor'];
+  readonly explicitSelector?: boolean;
+}
+
+export interface RetireDraftSpecsRetired {
+  readonly id: string;
+  readonly path: string;
+}
+
+export interface RetireDraftSpecsFailed {
+  readonly id: string;
+  readonly reason: string;
+}
+
+export interface RetireDraftSpecsOutcome {
+  readonly kind: 'success';
+  readonly selector: DraftPrunePlan['selector'];
+  readonly retired: readonly RetireDraftSpecsRetired[];
+  readonly skipped: readonly DraftPrunePlanEntry[];
+  readonly refused: readonly DraftPrunePlanEntry[];
+  readonly failed: readonly RetireDraftSpecsFailed[];
+  readonly data?: { readonly audit_commit: AutoCommitOutcome };
 }
 
 export interface RestoreArchivedSpecInput {
@@ -1763,6 +1790,92 @@ export function selectDraftSpecsForPrune(
   });
 }
 
+export function retireDraftSpecs(
+  cawsDir: string,
+  input: RetireDraftSpecsInput
+): Result<RetireDraftSpecsOutcome> {
+  if (input.explicitSelector !== true) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        'caws specs prune-drafts --apply requires --include or an explicit --older-than-ms selector.',
+        { subject: 'prune-drafts' }
+      )
+    );
+  }
+
+  const plan = selectDraftSpecsForPrune(cawsDir, input);
+  if (!plan.ok) return plan;
+
+  const repoRoot = repoRootFromCawsDir(cawsDir);
+  const retired: RetireDraftSpecsRetired[] = [];
+  const failed: RetireDraftSpecsFailed[] = [];
+  const commitPaths: string[] = [];
+
+  if (plan.value.refused.length > 0) {
+    return ok({
+      kind: 'success',
+      selector: plan.value.selector,
+      retired,
+      skipped: plan.value.skipped,
+      refused: plan.value.refused,
+      failed,
+    });
+  }
+
+  const wasDirtyBeforeWrite = plan.value.candidates.some((candidate) => {
+    if (candidate.path === undefined) return false;
+    return isPathDirty(repoRoot, candidate.path);
+  });
+
+  for (const candidate of plan.value.candidates) {
+    const result = retireDraftSpec(cawsDir, {
+      id: candidate.id,
+      actor: input.actor,
+      ...(input.reason !== undefined ? { reason: input.reason } : {}),
+      ...(input.now !== undefined ? { now: input.now } : {}),
+      autoCommit: false,
+    });
+    if (!result.ok) {
+      failed.push({
+        id: candidate.id,
+        reason: result.errors.map((d) => d.message).join('; '),
+      });
+      continue;
+    }
+    if (result.value.kind === 'partial_failure_recovered') {
+      failed.push({
+        id: candidate.id,
+        reason: result.value.cause.map((d) => d.message).join('; '),
+      });
+      continue;
+    }
+    retired.push({ id: candidate.id, path: result.value.path });
+    if (candidate.path !== undefined) commitPaths.push(candidate.path);
+  }
+
+  const uniqueCommitPaths = [...new Set(commitPaths)];
+  const audit =
+    uniqueCommitPaths.length > 0
+      ? autoCommit({
+          repoRoot,
+          paths: uniqueCommitPaths,
+          message: `chore(caws): retire ${retired.length} draft specs`,
+          wasDirtyBeforeWrite,
+        })
+      : undefined;
+
+  return ok({
+    kind: 'success',
+    selector: plan.value.selector,
+    retired,
+    skipped: plan.value.skipped,
+    refused: plan.value.refused,
+    failed,
+    ...(audit !== undefined ? { data: { audit_commit: audit } } : {}),
+  });
+}
+
 // ─── retireDraftSpec ─────────────────────────────────────────────────────
 //
 // CAWS-SPECS-RETIRE-DRAFT-001. Governed retirement of a never-activated
@@ -1918,18 +2031,21 @@ export function retireDraftSpec(
     );
   }
 
-  const audit = autoCommit({
-    repoRoot,
-    paths: [fromRel],
-    message: `chore(caws): retire-draft ${input.id}`,
-    wasDirtyBeforeWrite,
-  });
+  const audit =
+    input.autoCommit === false
+      ? undefined
+      : autoCommit({
+          repoRoot,
+          paths: [fromRel],
+          message: `chore(caws): retire-draft ${input.id}`,
+          wasDirtyBeforeWrite,
+        });
 
   return ok({
     kind: 'success',
     id: input.id,
     path: fromPath,
-    data: { audit_commit: audit },
+    ...(audit !== undefined ? { data: { audit_commit: audit } } : {}),
   });
 }
 

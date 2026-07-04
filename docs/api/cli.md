@@ -622,11 +622,12 @@ caws specs prune-drafts
 caws specs prune-drafts --older-than-ms 604800000 --json
 caws specs prune-drafts --include FEAT-1,FEAT-2 --exclude FEAT-2
 caws specs prune-drafts --include FEAT-1 --include-bound
+caws specs prune-drafts --older-than-ms 604800000 --apply --reason "stale draft cleanup"
 ```
 
-Read-only stale draft cleanup planning. Classifies draft specs as `candidate`, `skipped`, or `refused` using age, explicit include/exclude selectors, and worktree binding state. It does not retire drafts, append events, or mutate `.caws/specs/`; use `caws specs retire-draft <id>` for one-spec retirement until a guarded batch apply surface exists.
+Stale draft cleanup planning and guarded apply. Dry-run is the default: the command classifies draft specs as `candidate`, `skipped`, or `refused` using age, explicit include/exclude selectors, and worktree binding state without writing events or spec files.
 
-Default stale threshold is seven days (`604800000` ms) using `updated_at` when present, otherwise `created_at`. Bound drafts are refused by default; `--include-bound` allows explicitly selected bound drafts to appear as candidates in the plan.
+Default stale threshold is seven days (`604800000` ms) using `updated_at` when present, otherwise `created_at`. Bound drafts are refused by default; `--include-bound` allows bound drafts to appear as candidates. `--apply` requires `--include` or an explicit `--older-than-ms`, refuses mutation when the selected plan has refused entries, and retires candidates through the same governed `spec_retired` tombstone path as `caws specs retire-draft <id>`.
 
 ### `caws specs activate <id>`
 
