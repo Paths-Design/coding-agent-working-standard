@@ -312,6 +312,36 @@ function semanticFieldsFromPlanDiagnostics(
   return [...new Set(fields)];
 }
 
+const SEMANTIC_FIELD_EXAMPLES: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  '/contracts': [
+    'contracts:',
+    "  - name: 'core-api'",
+    '    type: behavior',
+  ],
+  '/observability': [
+    'observability:',
+    "  - 'Log the decision path and refusal reason for each governed operation.'",
+  ],
+  '/rollback': [
+    'rollback:',
+    "  - 'Revert the implementation commit and rerun caws doctor plus focused tests.'",
+  ],
+  '/non_functional/security': [
+    'non_functional:',
+    '  security:',
+    "    - 'No new secret material is logged, persisted, or exposed in diagnostics.'",
+  ],
+});
+
+function semanticFieldExamples(missingFields: readonly string[]): Record<string, readonly string[]> {
+  const examples: Record<string, readonly string[]> = {};
+  for (const field of missingFields) {
+    const example = SEMANTIC_FIELD_EXAMPLES[field];
+    if (example !== undefined) examples[field] = example;
+  }
+  return examples;
+}
+
 function diagnosticJson(
   diagnostics: readonly {
     readonly rule: string;
@@ -424,6 +454,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     const relSpecPath = path.relative(ctx.repoRoot, plan.value.path);
     const diagnostics = diagnosticJson(plan.value.diagnostics);
     const missingFields = semanticFieldsFromPlanDiagnostics(plan.value.diagnostics);
+    const fieldExamples = semanticFieldExamples(missingFields);
     const command = createCommandPreview({
       id: opts.id,
       title,
@@ -446,6 +477,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
         valid: plan.value.valid,
         would_write: plan.value.valid,
         missing_fields: missingFields,
+        field_examples: fieldExamples,
         diagnostics,
         candidate: {
           title,
@@ -465,6 +497,13 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
       if (missingFields.length > 0) {
         out('  missing semantic fields:');
         for (const field of missingFields) out(`    - ${field}`);
+      }
+      if (Object.keys(fieldExamples).length > 0) {
+        out('  example YAML additions:');
+        for (const [field, lines] of Object.entries(fieldExamples)) {
+          out(`    ${field}:`);
+          for (const line of lines) out(`      ${line}`);
+        }
       }
       if (plan.value.diagnostics.length > 0) {
         out('  diagnostics:');
