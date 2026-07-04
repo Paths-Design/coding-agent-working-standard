@@ -148,6 +148,13 @@ export function renderReference(metadata) {
       lines.push('');
     }
     if (cmd.kind === 'group') {
+      const groupOptLines = (cmd.options || []).map(renderOption).filter(Boolean);
+      if (groupOptLines.length) {
+        lines.push('**Options:**');
+        lines.push('');
+        lines.push(...groupOptLines);
+        lines.push('');
+      }
       for (const sub of cmd.subcommands) {
         lines.push(...renderLeaf(sub, `${cmd.name} `, 3));
       }

@@ -43,6 +43,8 @@ import {
   selectDraftSpecsForPrune,
   selectClosedSpecsForArchive,
   showSpec,
+  SPECS_LIST_STATUSES,
+  type SpecsListStatus,
 } from '../../store/specs-writer';
 import type { LifecycleMapping } from '@paths.design/caws-kernel';
 import { SPEC_MODES, SPEC_RESOLUTIONS } from '@paths.design/caws-kernel';
@@ -629,15 +631,39 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
 export interface SpecsListOptions extends BaseCommandOptions {
   /** Include archived specs in the listing. */
   readonly includeArchived?: boolean;
+  /** Filter specs by lifecycle status. */
+  readonly status?: string;
+}
+
+function parseSpecsListStatus(raw: string | undefined): SpecsListStatus | undefined | null {
+  if (raw === undefined) return undefined;
+  return (SPECS_LIST_STATUSES as readonly string[]).includes(raw)
+    ? (raw as SpecsListStatus)
+    : null;
+}
+
+function renderSpecsStatusError(status: string, err: (line: string) => void): void {
+  err(
+    `caws specs list: invalid --status ${JSON.stringify(status)}. ` +
+      `Expected one of: ${SPECS_LIST_STATUSES.join(', ')}.`
+  );
+  err('Use: caws specs list --status <active|draft|closed|archived>');
+  err('For batch archival, use: caws specs archive --status closed');
 }
 
 export function runSpecsListCommand(opts: SpecsListOptions = {}): number {
   const { cwd, out, err, showData } = setupIO(opts);
+  const status = parseSpecsListStatus(opts.status);
+  if (status === null) {
+    renderSpecsStatusError(String(opts.status), err);
+    return 1;
+  }
   const ctx = resolveCawsCtx(cwd, err, showData, 'list');
   if (ctx === null) return 2;
 
   const result = listSpecs(ctx.cawsDir, {
     includeArchived: opts.includeArchived === true,
+    ...(status !== undefined ? { status } : {}),
   });
   if (!isOk(result)) {
     err('caws specs list: failed.');
@@ -646,7 +672,11 @@ export function runSpecsListCommand(opts: SpecsListOptions = {}): number {
   }
   const { active, archived } = result.value;
   if (active.length === 0 && archived.length === 0) {
-    out('(no specs)');
+    if (status !== undefined) {
+      out(`(no specs with status ${status})`);
+    } else {
+      out('(no specs)');
+    }
     return 0;
   }
 
@@ -655,7 +685,7 @@ export function runSpecsListCommand(opts: SpecsListOptions = {}): number {
     out(`${entry.id.padEnd(28)} ${entry.lifecycle_state.padEnd(8)} ${entry.title}`);
     void rel;
   }
-  if (opts.includeArchived === true && archived.length > 0) {
+  if ((opts.includeArchived === true || status === 'archived') && archived.length > 0) {
     out('');
     out('-- archived (recoverable from history) --');
     for (const entry of archived) {

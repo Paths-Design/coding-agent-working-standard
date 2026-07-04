@@ -2643,6 +2643,9 @@ export interface SpecsListResult {
   readonly archived: readonly ArchivedSpecsListEntry[];
 }
 
+export const SPECS_LIST_STATUSES = ['active', 'draft', 'closed', 'archived'] as const;
+export type SpecsListStatus = (typeof SPECS_LIST_STATUSES)[number];
+
 /**
  * List specs by lifecycle state, optionally including archived ones.
  *
@@ -2658,20 +2661,33 @@ export interface SpecsListResult {
  */
 export function listSpecs(
   cawsDir: string,
-  options: { readonly includeArchived?: boolean } = {}
+  options: {
+    readonly includeArchived?: boolean;
+    readonly status?: SpecsListStatus;
+  } = {}
 ): Result<SpecsListResult> {
   const activeResult = loadSpecs(cawsDir);
-  const active: SpecsListEntry[] = activeResult.specs.map((spec) => ({
-    id: spec.id,
-    title: spec.title,
-    lifecycle_state: spec.lifecycle_state,
-    path: specPath(cawsDir, spec.id),
-  }));
-  const activeIds = new Set(active.map((s) => s.id));
+  const activeIds = new Set(activeResult.specs.map((s) => s.id));
+  const active: SpecsListEntry[] = activeResult.specs
+    .filter((spec) =>
+      options.status === undefined || options.status === 'archived'
+        ? true
+        : spec.lifecycle_state === options.status
+    )
+    .map((spec) => ({
+      id: spec.id,
+      title: spec.title,
+      lifecycle_state: spec.lifecycle_state,
+      path: specPath(cawsDir, spec.id),
+    }));
 
   let archived: ArchivedSpecsListEntry[] = [];
-  if (options.includeArchived === true) {
+  if (options.includeArchived === true || options.status === 'archived') {
     archived = readArchivedFromEventLog(cawsDir, activeIds);
+    if (options.status !== 'archived') {
+      return ok({ active, archived });
+    }
+    return ok({ active: [], archived });
   }
   return ok({ active, archived });
 }

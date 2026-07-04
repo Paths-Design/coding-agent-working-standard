@@ -245,6 +245,9 @@ function defineLeaf(group: Command, leaf: LeafCommandMeta): Command {
 /** Apply the group-level description from metadata to a Commander group. */
 function applyGroupMeta(group: Command, meta: GroupCommandMeta): void {
   group.description(meta.description);
+  for (const opt of meta.options ?? []) {
+    applyOptionMeta(group, opt);
+  }
 }
 
 /** Register a FLAT top-level command from LeafCommandMeta (init/doctor/status/
@@ -807,6 +810,18 @@ export function registerShellCommands(
   // -------------------------------------------------------------------
   const specsCmd = program.command('specs');
   applyGroupMeta(specsCmd, SPECS_COMMAND_META);
+  specsCmd.action((opts: { status?: string; data?: boolean }) => {
+    if (opts.status === undefined) {
+      specsCmd.outputHelp();
+      exit(0);
+      return;
+    }
+    const code = runSpecsListCommand({
+      status: opts.status,
+      showData: opts.data === true,
+    });
+    exit(code);
+  });
 
   defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'create'))
     .action(
@@ -847,8 +862,9 @@ export function registerShellCommands(
     );
 
   defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'list'))
-    .action((opts: { archived?: boolean; data?: boolean }) => {
+    .action((opts: { status?: string; archived?: boolean; data?: boolean }) => {
       const code = runSpecsListCommand({
+        ...(opts.status !== undefined ? { status: opts.status } : {}),
         includeArchived: opts.archived === true,
         showData: opts.data === true,
       });
