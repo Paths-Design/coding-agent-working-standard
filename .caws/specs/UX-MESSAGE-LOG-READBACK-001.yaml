@@ -7,12 +7,12 @@ created_at: '2026-07-04T12:16:26.639Z'
 updated_at: '2026-07-04T12:16:53.407Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli/message
+    - caws-cli/docs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/shell/commands/message.ts
     - packages/caws-cli/src/store/messages-store.ts
     - packages/caws-cli/src/store/index.ts
@@ -24,12 +24,23 @@ scope:
     - docs/architecture/cli-ux-job-model-audit.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'message inbox/history commands are read-only and never append messages, delivery records, events, leases, specs, or registry mutations.'
+  - 'inbox readback reports undelivered messages without consuming them; poll remains the only delivery-consuming read.'
+  - 'history readback reports channel messages in log order and treats message bodies as non-authoritative communication, not governance evidence.'
+  - 'existing message send/poll behavior and exit codes are preserved.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a message log with delivered and undelivered messages for a session'
+    when: 'an agent runs caws message inbox --me <session> --json'
+    then: 'the command returns only undelivered messages for that session, includes waiting count, and leaves messages.jsonl byte-identical.'
+  - id: A2
+    given: 'a bidirectional channel between two sessions'
+    when: 'an agent runs caws message history --me <a> --with <b> --json'
+    then: 'the command returns both directions in log order, supports limit, and appends no delivery records.'
+  - id: A3
+    given: 'the message group help and CLI API docs'
+    when: 'an agent asks for caws message --help, caws message inbox --help, or caws message history --help'
+    then: 'the read-only context and non-authority warning are surfaced.'
 non_functional: {}
 contracts:
   - name: 'message-log-readback'
