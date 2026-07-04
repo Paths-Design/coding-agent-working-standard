@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: cli-specs-create-ux
 created_at: '2026-07-04T04:07:40.798Z'
-updated_at: '2026-07-04T04:07:40.798Z'
+updated_at: '2026-07-04T04:11:28.295Z'
 blast_radius:
   modules:
     - 'packages/caws-cli specs create command surface'
@@ -17,6 +17,7 @@ scope:
     - 'packages/caws-cli/src'
     - 'packages/caws-cli/tests'
     - 'docs/architecture/cli-ux-job-model-audit.md'
+    - docs/command-reference.md
   out: []
 invariants:
   - 'Invalid --contract diagnostics must name the accepted tuple shape and include a corrected example.'
