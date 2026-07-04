@@ -7,7 +7,10 @@ created_at: '2026-07-04T05:38:02.980Z'
 updated_at: '2026-07-04T05:38:02.980Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli/src/shell/commands/scope.ts'
+    - 'packages/caws-cli/src/shell/render/decision.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -23,11 +26,29 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'scope show/check remain read-only: they never write .caws state, specs, events, or registry files.'
+  - 'Existing scope decision JSON fields remain backward compatible for hook consumers.'
+  - 'Remediation commands are handoffs to existing governed commands; scope does not mutate authority.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a scope check refusal caused by a bound spec scope.in miss'
+    when: 'the operator runs caws scope check <path> --json'
+    then: 'the JSON includes the normal decision fields plus a remediation object with a copy-pasteable specs amend-scope command for the bound spec.'
+  - id: A2
+    given: 'a scope show/check no-authority result in an unbound tracked worktree'
+    when: 'the command renders human output'
+    then: 'the output includes a safe next-command handoff to caws worktree bind or caws worktree create without mutating state.'
+  - id: A3
+    given: 'an ambiguous binding refusal with multiple active claimants'
+    when: 'the operator requests JSON'
+    then: 'the JSON includes remediation guidance that names the claimant specs and inspect commands while refusing to pick an owner.'
+  - id: A4
+    given: 'an admitted path or an invalid path'
+    when: 'scope JSON is rendered'
+    then: 'the JSON preserves the existing contract and omits unsafe mutation handoff commands.'
+  - id: A5
+    given: 'the implemented scope remediation slice'
+    when: 'focused tests, docs generation checks, caws doctor, and caws gates run execute'
+    then: 'they pass without dirtying unrelated repository state.'
 non_functional: {}
 contracts: []
