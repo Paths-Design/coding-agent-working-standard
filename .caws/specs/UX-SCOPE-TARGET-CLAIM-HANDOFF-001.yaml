@@ -2,10 +2,11 @@ id: UX-SCOPE-TARGET-CLAIM-HANDOFF-001
 title: 'Clarify scope target-claim authority handoff'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: scope-target-claim-handoff
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge scope-target-claim-handoff at 6fdb5f9cb47e6f2223a190d4fe64995128f835b7'
 created_at: '2026-07-04T13:58:50.723Z'
-updated_at: '2026-07-04T13:58:50.723Z'
+updated_at: '2026-07-04T14:03:10.918Z'
 blast_radius:
   modules:
     - 'packages/caws-cli/scope-shell'
