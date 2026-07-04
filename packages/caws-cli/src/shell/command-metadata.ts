@@ -362,6 +362,10 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
           description: 'Alias for --reason; writes closure_notes on the closed spec',
         },
         {
+          flag: '--notes <text>',
+          description: 'Alias for --reason; compatibility shorthand for closure_notes',
+        },
+        {
           flag: '--merge-commit <sha>',
           description:
             'Optional merge commit SHA (e.g., when closure follows a worktree merge)',
