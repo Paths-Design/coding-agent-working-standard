@@ -768,6 +768,8 @@ export function registerShellCommands(
           scopeIn?: string[];
           contract?: string[];
           type?: string;
+          plan?: boolean;
+          json?: boolean;
           data?: boolean;
         }
       ) => {
@@ -783,6 +785,8 @@ export function registerShellCommands(
           // layer, so a live `--contract` never reached the writer.
           ...(opts.contract !== undefined ? { contract: opts.contract } : {}),
           ...(opts.type !== undefined ? { legacyType: opts.type } : {}),
+          plan: opts.plan === true,
+          json: opts.json === true,
           showData: opts.data === true,
         });
         exit(code);
