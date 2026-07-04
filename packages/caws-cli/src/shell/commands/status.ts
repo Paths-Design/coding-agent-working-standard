@@ -59,7 +59,7 @@ import {
 } from '../../store';
 import { resolveBinding } from '../binding/resolve-binding';
 import { renderDiagnostics } from '../render/diagnostic';
-import { renderStatus, type StatusPanel } from '../render/status';
+import { renderShortStatus, renderStatus, type StatusPanel } from '../render/status';
 import { resolveSession } from '../session/resolve-session';
 
 const DEFAULT_LEASE_STALE_TTL_MS = 30 * 60 * 1000; // 30m
@@ -138,6 +138,7 @@ export interface StatusCommandOptions {
   readonly worktrees?: boolean;
   readonly agents?: boolean;
   readonly doctor?: boolean;
+  readonly short?: boolean;
   readonly json?: boolean;
 }
 
@@ -442,7 +443,7 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
     return 0;
   }
 
-  out(renderStatus(renderInput));
+  out(opts.short === true ? renderShortStatus(renderInput) : renderStatus(renderInput));
 
   // Surface lease-load diagnostics in showData mode (non-blocking).
   if (showData && Array.isArray(leasesDiagnostics) && leasesDiagnostics.length > 0) {

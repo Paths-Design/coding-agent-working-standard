@@ -746,6 +746,7 @@ export const STATUS_COMMAND_META: LeafCommandMeta = {
     { flag: '--worktrees', description: 'Render only the focused worktrees panel' },
     { flag: '--agents', description: 'Render only the focused agents panel' },
     { flag: '--doctor', description: 'Render only the focused doctor panel' },
+    { flag: '--short', description: 'Render a compact read-only status summary' },
     { flag: '--json', description: 'Emit selected status panels as JSON' },
   ],
 };

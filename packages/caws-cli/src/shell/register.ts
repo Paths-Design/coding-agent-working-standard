@@ -421,6 +421,7 @@ export function registerShellCommands(
       worktrees?: boolean;
       agents?: boolean;
       doctor?: boolean;
+      short?: boolean;
       json?: boolean;
     }) => {
       const code = runStatusCommand({
@@ -429,6 +430,7 @@ export function registerShellCommands(
         worktrees: opts.worktrees === true,
         agents: opts.agents === true,
         doctor: opts.doctor === true,
+        short: opts.short === true,
         json: opts.json === true,
       });
       exit(code);

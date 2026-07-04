@@ -73,6 +73,7 @@ Read-only dashboard: project, current context, claim, and doctor findings
 - `--worktrees` — Render only the focused worktrees panel
 - `--agents` — Render only the focused agents panel
 - `--doctor` — Render only the focused doctor panel
+- `--short` — Render a compact read-only status summary
 - `--json` — Emit selected status panels as JSON
 
 ## `caws scope`
