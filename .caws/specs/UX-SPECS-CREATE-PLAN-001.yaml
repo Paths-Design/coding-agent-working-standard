@@ -2,10 +2,11 @@ id: UX-SPECS-CREATE-PLAN-001
 title: 'Add specs create planning'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
-worktree: specs-create-plan
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge specs-create-plan at e619f1c76364522f4e725fc1a27e0f534c1ee8d6'
 created_at: '2026-07-04T05:46:28.385Z'
-updated_at: '2026-07-04T05:47:55.263Z'
+updated_at: '2026-07-04T05:53:28.230Z'
 blast_radius:
   modules:
     - 'packages/caws-cli/src/shell/commands/specs.ts'
