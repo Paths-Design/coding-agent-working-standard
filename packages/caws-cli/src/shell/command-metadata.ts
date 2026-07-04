@@ -774,6 +774,11 @@ export const SCOPE_COMMAND_META: GroupCommandMeta = {
       options: [
         { flag: '--data', description: 'Show structured data block' },
         {
+          flag: '--spec <id>',
+          description:
+            'Evaluate against a named spec as read-only context instead of current worktree authority',
+        },
+        {
           flag: '--json',
           description:
             'Emit the scope decision as a single-line stable JSON contract (for hooks/tooling)',
@@ -788,6 +793,11 @@ export const SCOPE_COMMAND_META: GroupCommandMeta = {
         'Enforce the scope decision for <path>; exits 0 on admit, 1 otherwise. --json emits the same decision/remediation contract as scope show while preserving check exit codes.',
       options: [
         { flag: '--data', description: 'Show structured data block' },
+        {
+          flag: '--spec <id>',
+          description:
+            'Evaluate against a named spec as read-only context instead of current worktree authority',
+        },
         {
           flag: '--json',
           description:
@@ -811,6 +821,11 @@ export const SCOPE_COMMAND_META: GroupCommandMeta = {
           flag: '--paths-file <file>',
           description:
             'Read newline-delimited paths from a file. Blank lines and # comments are ignored.',
+        },
+        {
+          flag: '--spec <id>',
+          description:
+            'Evaluate every path against a named spec as read-only context instead of current worktree authority',
         },
         {
           flag: '--json',

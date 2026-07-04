@@ -30,10 +30,13 @@ import {
   type ContentionClaimant,
   type Decision,
   type Policy,
+  type Spec,
 } from '@paths.design/caws-kernel';
 
 import { composeStoreSnapshot, resolveRepoRoot } from '../../store';
+import type { StoreSnapshot } from '../../store/types';
 import { resolveBinding } from '../binding/resolve-binding';
+import type { ResolvedBinding } from '../binding/types';
 import {
   buildScopeDecisionJson,
   renderDecision,
@@ -58,6 +61,56 @@ export interface ScopeCommandOptions {
    * enforcement exit codes.
    */
   readonly json?: boolean;
+  /**
+   * Evaluate against this named spec instead of the current/target worktree
+   * binding. Read-only operator context; not proof that the current checkout
+   * owns write authority.
+   */
+  readonly specId?: string;
+}
+
+interface ExplicitSpecContext {
+  readonly spec: Spec;
+  readonly binding: ResolvedBinding;
+}
+
+function resolveExplicitSpecContext(
+  snapshot: StoreSnapshot,
+  specId: string,
+  commandLabel: string,
+  err: (line: string) => void
+): ExplicitSpecContext | null {
+  const spec = snapshot.specs.find((candidate) => candidate.id === specId);
+  if (spec === undefined) {
+    err(`caws ${commandLabel}: spec "${specId}" not found.`);
+    err('  Run: caws specs list');
+    return null;
+  }
+  return {
+    spec,
+    binding: {
+      binding: {
+        kind: 'bound',
+        spec,
+        worktreeName: spec.worktree ?? `(spec:${spec.id})`,
+      },
+      ...(spec.worktree !== undefined ? { worktreeName: spec.worktree } : {}),
+      source: 'explicit_spec',
+    },
+  };
+}
+
+function renderExplicitSpecContextNote(spec: Spec): string[] {
+  const lines = [
+    `  explicit spec context: ${spec.id} (${spec.lifecycle_state}, read-only)`,
+    '  This answers whether the path fits that spec; it does not prove the current checkout owns write authority.',
+  ];
+  if (spec.worktree !== undefined) {
+    lines.push(`  For write authority, use the bound worktree: cd .caws/worktrees/${spec.worktree}`);
+  } else {
+    lines.push('  For write authority, create or bind a worktree for the spec before editing.');
+  }
+  return lines;
 }
 
 export function runScopeCommand(opts: ScopeCommandOptions): number {
@@ -86,12 +139,19 @@ export function runScopeCommand(opts: ScopeCommandOptions): number {
     return 2;
   }
 
-  // 3. Binding — resolved from the TARGET PATH, not just cwd
+  const explicitSpec =
+    opts.specId !== undefined
+      ? resolveExplicitSpecContext(snapshot, opts.specId, `scope ${mode}`, err)
+      : undefined;
+  if (explicitSpec === null) return 1;
+
+  // 3. Binding — resolved from the TARGET PATH, not just cwd, unless the
+  //    caller supplied --spec for an explicit read-only spec-context decision.
   //    (SCOPE-CHECK-CWD-BINDING-RESOLUTION-001). Passing `targetPath` lets
   //    resolveBinding fall back to the path's owning worktree / claiming
   //    spec when cwd is the main checkout, so `caws scope check <path>` is
   //    cwd-independent and matches what the bound author sees.
-  const bound = resolveBinding({
+  const bound = explicitSpec?.binding ?? resolveBinding({
     repoRoot,
     cwd,
     targetPath: opts.path,
@@ -191,6 +251,9 @@ export function runScopeCommand(opts: ScopeCommandOptions): number {
     return mode === 'show' ? 0 : decision.kind === 'admit' ? 0 : 1;
   }
   out(renderDecision(decision, { boundContext: bound, showData }));
+  if (explicitSpec !== undefined) {
+    for (const line of renderExplicitSpecContextNote(explicitSpec.spec)) out(line);
+  }
 
   // 6a. Worktree-claim caveat (CAWS-SCOPE-CHECK-WORKTREE-CLAIM-CAVEAT-001).
   //     When the binding was resolved because an active worktree's scope.in
@@ -239,6 +302,7 @@ export interface ScopePlanOptions {
   readonly err?: (line: string) => void;
   readonly showData?: boolean;
   readonly json?: boolean;
+  readonly specId?: string;
 }
 
 export interface ScopePlanPathResult extends ScopeDecisionJson {
@@ -427,9 +491,15 @@ export function runScopePlanCommand(opts: ScopePlanOptions): number {
     return 2;
   }
 
+  const explicitSpec =
+    opts.specId !== undefined
+      ? resolveExplicitSpecContext(snapshot, opts.specId, 'scope plan', err)
+      : undefined;
+  if (explicitSpec === null) return 1;
+
   const results: ScopePlanPathResult[] = [];
   for (const p of paths) {
-    const bound = resolveBinding({
+    const bound = explicitSpec?.binding ?? resolveBinding({
       repoRoot,
       cwd,
       targetPath: p,
@@ -468,6 +538,9 @@ export function runScopePlanCommand(opts: ScopePlanOptions): number {
   }
 
   out(`caws scope plan: ${results.length} path(s) evaluated (read-only)`);
+  if (explicitSpec !== undefined) {
+    for (const line of renderExplicitSpecContextNote(explicitSpec.spec)) out(line);
+  }
   out(
     `  admit=${counts.admit} reject=${counts.reject} no_authority=${counts.no_authority} invalid_path=${counts.invalid_path}`
   );

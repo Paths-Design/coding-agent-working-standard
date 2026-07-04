@@ -343,32 +343,35 @@ export function registerShellCommands(
   applyGroupMeta(scopeCmd, SCOPE_COMMAND_META);
 
   defineLeaf(scopeCmd, leafMeta(SCOPE_COMMAND_META, 'show'))
-    .action((p: string, opts: { data?: boolean; json?: boolean }) => {
+    .action((p: string, opts: { data?: boolean; json?: boolean; spec?: string }) => {
       const code = runScopeCommand({
         path: p,
         mode: 'show',
         showData: opts.data === true,
         json: opts.json === true,
+        ...(opts.spec !== undefined ? { specId: opts.spec } : {}),
       });
       exit(code);
     });
 
   defineLeaf(scopeCmd, leafMeta(SCOPE_COMMAND_META, 'check'))
-    .action((p: string, opts: { data?: boolean; json?: boolean }) => {
+    .action((p: string, opts: { data?: boolean; json?: boolean; spec?: string }) => {
       const code = runScopeCommand({
         path: p,
         mode: 'check',
         showData: opts.data === true,
         json: opts.json === true,
+        ...(opts.spec !== undefined ? { specId: opts.spec } : {}),
       });
       exit(code);
     });
 
   defineLeaf(scopeCmd, leafMeta(SCOPE_COMMAND_META, 'plan'))
-    .action((opts: { path?: string[]; pathsFile?: string; json?: boolean; data?: boolean }) => {
+    .action((opts: { path?: string[]; pathsFile?: string; json?: boolean; data?: boolean; spec?: string }) => {
       const code = runScopePlanCommand({
         paths: opts.path ?? [],
         ...(opts.pathsFile !== undefined ? { pathsFile: opts.pathsFile } : {}),
+        ...(opts.spec !== undefined ? { specId: opts.spec } : {}),
         json: opts.json === true,
         showData: opts.data === true,
       });
