@@ -2,10 +2,11 @@ id: DOC-CLI-LEAF-COVERAGE-001
 title: 'Reconcile CLI leaf docs with actual command surface'
 risk_tier: 2
 mode: doc
-lifecycle_state: active
-worktree: cli-leaf-docs
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge cli-leaf-docs at 7a6b940ea8116b1b398ef4387a0bdb55b6876cfc'
 created_at: '2026-07-04T03:14:40.329Z'
-updated_at: '2026-07-04T03:14:40.329Z'
+updated_at: '2026-07-04T03:23:20.063Z'
 blast_radius:
   modules:
     - docs/api/cli.md
