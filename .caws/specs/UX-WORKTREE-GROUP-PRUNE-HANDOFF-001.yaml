@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: worktree-group-prune-handoff
 created_at: '2026-07-04T19:43:43.773Z'
-updated_at: '2026-07-04T19:43:43.773Z'
+updated_at: '2026-07-04T19:46:47.397Z'
 blast_radius:
   modules:
     - 'packages/caws-cli shell registration and metadata'
@@ -19,6 +19,7 @@ scope:
     - 'packages/caws-cli/tests/shell/worktree-group-prune-handoff.test.js'
     - 'docs/command-reference.md'
     - 'docs/architecture/cli-ux-job-model-audit.md'
+    - packages/caws-cli/src/index.js
   out: []
 invariants:
   - '`caws worktree --prune` is a compatibility handoff to the existing `caws worktree prune` cleanup model.'
