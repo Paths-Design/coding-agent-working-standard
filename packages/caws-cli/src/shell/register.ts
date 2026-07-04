@@ -810,6 +810,7 @@ export function registerShellCommands(
   // -------------------------------------------------------------------
   const specsCmd = program.command('specs');
   applyGroupMeta(specsCmd, SPECS_COMMAND_META);
+  specsCmd.enablePositionalOptions();
   specsCmd.action((opts: { status?: string; data?: boolean }) => {
     if (opts.status === undefined) {
       specsCmd.outputHelp();
@@ -862,9 +863,16 @@ export function registerShellCommands(
     );
 
   defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'list'))
-    .action((opts: { status?: string; archived?: boolean; data?: boolean }) => {
+    .action((opts: { status?: string; archived?: boolean; data?: boolean }, command: Command) => {
+      const parentStatus = command.parent?.opts().status;
+      const status =
+        opts.status !== undefined
+          ? opts.status
+          : typeof parentStatus === 'string'
+            ? parentStatus
+            : undefined;
       const code = runSpecsListCommand({
-        ...(opts.status !== undefined ? { status: opts.status } : {}),
+        ...(status !== undefined ? { status } : {}),
         includeArchived: opts.archived === true,
         showData: opts.data === true,
       });

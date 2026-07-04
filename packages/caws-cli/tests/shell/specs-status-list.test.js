@@ -148,6 +148,19 @@ describe('caws specs status listing', () => {
     expect(result.stderr).toBe('');
   });
 
+  test('list --status remains a leaf option in the spawned CLI', () => {
+    const { root, cawsDir } = mkRepo();
+    writeSpec(cawsDir, 'STATUS-ACTIVE-001', 'active');
+    writeSpec(cawsDir, 'STATUS-CLOSED-001', 'closed');
+
+    const result = runCli(root, ['specs', 'list', '--status', 'active']);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('STATUS-ACTIVE-001');
+    expect(result.stdout).not.toContain('STATUS-CLOSED-001');
+    expect(result.stderr).toBe('');
+  });
+
   test('invalid status prints accepted values and command handoffs', () => {
     const { root } = mkRepo();
 
