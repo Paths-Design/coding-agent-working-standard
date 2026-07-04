@@ -1,0 +1,29 @@
+id: UX-NO-SCOPE-AUTHORITY-SESSION-RESAMPLE-001
+title: 'Reconcile residual no-scope-authority session evidence'
+risk_tier: 3
+mode: doc
+lifecycle_state: active
+created_at: '2026-07-04T18:06:23.638Z'
+updated_at: '2026-07-04T18:06:23.638Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/architecture/cli-ux-job-model-audit.md'
+    - 'packages/caws-cli/tests/docs/cli-ux-no-scope-authority-reconciliation.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'no-scope-authority-resample'
+    type: behavior
+    path: 'packages/caws-cli/tests/docs/cli-ux-no-scope-authority-reconciliation.test.js'
