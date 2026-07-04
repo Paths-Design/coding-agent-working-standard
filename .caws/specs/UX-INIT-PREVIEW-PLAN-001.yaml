@@ -7,12 +7,12 @@ created_at: '2026-07-04T11:50:19.165Z'
 updated_at: '2026-07-04T11:50:26.903Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli/init
+    - caws-cli/docs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/shell/commands/init.ts
     - packages/caws-cli/src/store/init-store.ts
     - packages/caws-cli/src/init/gitignore-manage.ts
@@ -25,11 +25,22 @@ scope:
     - docs/architecture/cli-ux-job-model-audit.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'caws init --plan is read-only and never creates .caws, .gitignore, hook-pack files, settings files, or events.'
+  - 'init plan output is derived from the same canonical layout, gitignore, hook-pack, detection, adoption, and overwrite decisions as init apply.'
+  - 'plan output names intended writes, unchanged paths, refused paths, adoption/overwrite decisions, and next apply command.'
+  - 'existing caws init behavior is preserved when --plan is not supplied.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'an uninitialized git repository'
+    when: 'caws init --plan --json is run'
+    then: 'the command reports canonical .caws paths, gitignore outcome, selected hook-pack plan, and next apply command without writing files'
+  - id: A2
+    given: 'a repository with legacy .caws/working-spec.yaml residue'
+    when: 'caws init --plan is run'
+    then: 'the command reports a refused plan with the same legacy-residue diagnostics and leaves all files unchanged'
+  - id: A3
+    given: 'an initialized repository'
+    when: 'caws init --plan is run'
+    then: 'the command reports no canonical writes, preserves regular init behavior, and nested help lists the plan/json flags'
 non_functional: {}
 contracts: []
