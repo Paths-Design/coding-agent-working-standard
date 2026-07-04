@@ -7,7 +7,8 @@ created_at: '2026-07-04T13:06:01.054Z'
 updated_at: '2026-07-04T13:06:14.115Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/scope
+    - docs/cli-ux-audit
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -23,12 +24,26 @@ scope:
     - docs/architecture/cli-ux-job-model-audit.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'scope show/check/plan --spec <id> evaluate paths against the named spec without mutating .caws state.'
+  - 'Explicit spec-context decisions are rendered distinctly from current-worktree authority in JSON and human output.'
+  - 'Missing spec ids fail clearly with a specs-list handoff before any scope evaluation.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'An unbound checkout with an active spec whose scope.in admits a path'
+    when: 'An agent runs caws scope show <path> --spec <id>'
+    then: 'The command explains the admit decision using explicit spec context and exits successfully without writing state.'
+  - id: A2
+    given: 'A named spec that does not admit a path'
+    when: 'An agent runs caws scope check <path> --spec <id> --json'
+    then: 'The command exits nonzero, emits a reject decision with mode spec_context, and includes amend-scope remediation.'
+  - id: A3
+    given: 'A batch of paths and a named spec'
+    when: 'An agent runs caws scope plan --spec <id> --path ... --json'
+    then: 'Every planned decision is evaluated against that named spec and the plan remains read-only.'
+  - id: A4
+    given: 'A missing spec id'
+    when: 'An agent runs a scope command with --spec <id>'
+    then: 'The command fails clearly with a caws specs list handoff and leaves spec/event state unchanged.'
 non_functional: {}
 contracts:
   - name: 'scope-spec-context'
