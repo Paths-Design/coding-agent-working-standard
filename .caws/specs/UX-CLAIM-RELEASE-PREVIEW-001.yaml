@@ -2,10 +2,11 @@ id: UX-CLAIM-RELEASE-PREVIEW-001
 title: 'Add claim release and takeover preview UX'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: claim-release-preview
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge claim-release-preview at 35cf74d102fb2296193afe66299637a9027fac07'
 created_at: '2026-07-04T12:06:32.885Z'
-updated_at: '2026-07-04T12:06:57.260Z'
+updated_at: '2026-07-04T12:14:31.030Z'
 blast_radius:
   modules:
     - caws-cli/claim
