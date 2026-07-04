@@ -3,6 +3,7 @@ title: 'Guide malformed specs migrate lifecycle mappings'
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: specs-migrate-mapping-guidance
 created_at: '2026-07-04T17:44:18.823Z'
 updated_at: '2026-07-04T17:44:18.823Z'
 blast_radius:
