@@ -7,7 +7,9 @@ created_at: '2026-07-04T04:23:43.858Z'
 updated_at: '2026-07-04T04:23:43.858Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli worktree prune command'
+    - 'worktree cleanup apply guardrails'
+    - 'CLI UX audit documentation'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -19,11 +21,30 @@ scope:
     - 'docs/api/cli.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'caws worktree prune remains dry-run by default and mutates only when --apply is explicit.'
+  - 'Apply mode may execute only already-proven repairable classes: ghost-registry, dead-binding, and closed-spec-residue.'
+  - 'Refused classes such as event-orphan-refused and foreign-physical-refused must never mutate under prune --apply.'
+  - 'JSON and human output must report applied, refused, and failed counts consistently.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a repo has a ghost registry entry and a dead spec binding'
+    when: 'an agent runs caws worktree prune without --apply'
+    then: 'the command prints the cleanup plan and leaves registry, specs, and events byte-identical'
+  - id: A2
+    given: 'a repo has repairable cleanup plan items selected by --state/--include'
+    when: 'an agent runs caws worktree prune --apply'
+    then: 'the command applies the same writer paths as caws worktree repair and records the expected audit events'
+  - id: A3
+    given: 'a repo has refused cleanup plan items such as event-orphan-refused'
+    when: 'an agent runs caws worktree prune --apply against those items'
+    then: 'the command refuses them without mutating registry, specs, events, or git worktree directories'
+  - id: A4
+    given: 'an agent requests JSON output'
+    when: 'caws worktree prune --apply --json completes'
+    then: 'the JSON payload exposes applied/refused/failed counts and per-item outcomes'
+  - id: A5
+    given: 'the slice lands'
+    when: 'docs/architecture/cli-ux-job-model-audit.md is updated'
+    then: 'the implementation ledger marks prune apply complete and scopes worktree untrack as a separate next slice'
 non_functional: {}
 contracts: []
