@@ -662,6 +662,9 @@ caws specs list --status active
 caws specs list --status draft
 caws specs list --status closed
 caws specs list --status archived
+caws specs list --active
+caws specs list --lifecycle active
+caws specs list --state active
 caws specs --status closed
 caws specs list --archived
 ```
@@ -673,6 +676,11 @@ read-only list filter. Pass `--archived` to include archived/tombstoned spec ids
 recoverable from history alongside current specs. For batch archival, use
 `caws specs archive --status closed`; listing status filters never archive or
 mutate specs.
+Compatibility lifecycle selectors are accepted on `specs list`: `--active`,
+`--draft`, `--closed`, `--lifecycle <state>`, and `--state <state>`. These all
+route to the same read-only `--status` filter; pass only one lifecycle selector
+at a time. `--archived` keeps its include-archived meaning, while
+`--status archived` is the archived-only filter.
 
 ### `caws specs show <id>`
 
