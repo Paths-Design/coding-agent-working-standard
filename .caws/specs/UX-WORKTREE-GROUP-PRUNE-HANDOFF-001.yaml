@@ -7,7 +7,8 @@ created_at: '2026-07-04T19:43:43.773Z'
 updated_at: '2026-07-04T19:43:43.773Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli shell registration and metadata'
+    - 'CLI UX audit and generated command reference'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -19,12 +20,22 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - '`caws worktree --prune` is a compatibility handoff to the existing `caws worktree prune` cleanup model.'
+  - 'Group-level prune selectors and apply/json flags forward to the same dry-run/apply implementation as the prune leaf.'
+  - 'Supplying both --state and --status refuses before cleanup planning or mutation, matching the prune leaf.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a CAWS project with worktree cleanup residue'
+    when: 'an operator runs `caws worktree --prune --status ghost-registry --json`'
+    then: 'the command returns the same read-only cleanup plan as `caws worktree prune --status ghost-registry --json`.'
+  - id: A2
+    given: 'a group-level worktree prune invocation'
+    when: 'both --state and --status are supplied'
+    then: 'the command refuses before cleanup planning or mutation with the same selector ambiguity diagnostic as the prune leaf.'
+  - id: A3
+    given: 'the CLI UX audit option-mismatch evidence'
+    when: 'this slice lands'
+    then: 'the audit records the worktree --prune handoff and next resample scope.'
 non_functional: {}
 contracts:
   - name: 'worktree-group-prune-handoff'
