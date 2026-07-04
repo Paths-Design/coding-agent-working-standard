@@ -579,7 +579,7 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'cleanup-plan',
       description:
-        'Print a read-only physical worktree cleanup plan. Classifies real git worktree directories by clean/dirty, merged/unmerged, bound spec lifecycle, ownership, and registry presence. Does not delete directories or mutate CAWS state.',
+        'Print a physical worktree cleanup plan. Dry-run by default. With --apply, requires an explicit selector and destroys only destroy-ready registered worktrees through the existing destroyWorktree path.',
       options: [
         {
           flag: '--state <classes>',
@@ -594,7 +594,12 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
           flag: '--exclude <subjects>',
           description: 'Comma-separated worktree names, spec ids, or paths to exclude.',
         },
-        { flag: '--json', description: 'Emit the read-only plan as JSON.' },
+        {
+          flag: '--apply',
+          description:
+            'Apply selected destroy-ready candidates only. Requires --state, --include, or --exclude. Refused classes still do not mutate.',
+        },
+        { flag: '--json', description: 'Emit the plan or apply outcome as JSON.' },
         DATA_OPTION,
       ],
     },

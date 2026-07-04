@@ -622,14 +622,15 @@ Print a worktree cleanup plan from doctor evidence. Dry-run by default. With --a
 
 ### `caws worktree cleanup-plan`
 
-Print a read-only physical worktree cleanup plan. Classifies real git worktree directories by clean/dirty, merged/unmerged, bound spec lifecycle, ownership, and registry presence. Does not delete directories or mutate CAWS state.
+Print a physical worktree cleanup plan. Dry-run by default. With --apply, requires an explicit selector and destroys only destroy-ready registered worktrees through the existing destroyWorktree path.
 
 **Options:**
 
 - `--state <classes>` — Comma-separated state-class filter (for example: destroy-ready,dirty-refused,foreign-owned-refused,unregistered-physical-refused).
 - `--include <subjects>` — Comma-separated worktree names, spec ids, or paths to include.
 - `--exclude <subjects>` — Comma-separated worktree names, spec ids, or paths to exclude.
-- `--json` — Emit the read-only plan as JSON.
+- `--apply` — Apply selected destroy-ready candidates only. Requires --state, --include, or --exclude. Refused classes still do not mutate.
+- `--json` — Emit the plan or apply outcome as JSON.
 - `--data` — Show structured data block on diagnostics
 
 ## `caws agents`

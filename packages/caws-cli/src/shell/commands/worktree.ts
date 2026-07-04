@@ -787,8 +787,29 @@ export interface WorktreePhysicalCleanupOptions extends BaseCommandOptions {
   readonly state?: readonly string[];
   readonly include?: readonly string[];
   readonly exclude?: readonly string[];
+  readonly apply?: boolean;
   readonly json?: boolean;
 }
+
+type WorktreePhysicalCleanupApplyOutcome =
+  | {
+      readonly subject: string;
+      readonly state_class: WorktreePhysicalCleanupStateClass;
+      readonly action: 'applied';
+      readonly mutation: string;
+    }
+  | {
+      readonly subject: string;
+      readonly state_class: WorktreePhysicalCleanupStateClass;
+      readonly action: 'refused';
+      readonly reason: string;
+    }
+  | {
+      readonly subject: string;
+      readonly state_class: WorktreePhysicalCleanupStateClass;
+      readonly action: 'failed';
+      readonly reason: string;
+    };
 
 interface PhysicalGitWorktree {
   readonly path: string;
@@ -1168,6 +1189,14 @@ function physicalCountsByState(items: readonly WorktreePhysicalCleanupPlanItem[]
   return counts;
 }
 
+function physicalApplyCounts(outcomes: readonly WorktreePhysicalCleanupApplyOutcome[]): Record<string, number> {
+  return {
+    applied: outcomes.filter((item) => item.action === 'applied').length,
+    refused: outcomes.filter((item) => item.action === 'refused').length,
+    failed: outcomes.filter((item) => item.action === 'failed').length,
+  };
+}
+
 function renderWorktreePhysicalCleanupPlan(
   items: readonly WorktreePhysicalCleanupPlanItem[],
   out: (line: string) => void
@@ -1192,8 +1221,34 @@ function renderWorktreePhysicalCleanupPlan(
   }
 }
 
+function renderWorktreePhysicalCleanupApply(
+  outcomes: readonly WorktreePhysicalCleanupApplyOutcome[],
+  out: (line: string) => void
+): void {
+  const counts = physicalApplyCounts(outcomes);
+  out(
+    `caws worktree cleanup-plan --apply: ${counts.applied} applied, ` +
+      `${counts.refused} refused, ${counts.failed} failed`
+  );
+  for (const item of outcomes) {
+    if (item.action === 'applied') {
+      out(`- APPLIED ${item.state_class} ${item.subject}: ${item.mutation}`);
+    } else {
+      out(`- ${item.action.toUpperCase()} ${item.state_class} ${item.subject}: ${item.reason}`);
+    }
+  }
+}
+
+function hasExplicitPhysicalCleanupSelector(opts: WorktreePhysicalCleanupOptions): boolean {
+  return (
+    (opts.state !== undefined && opts.state.length > 0) ||
+    (opts.include !== undefined && opts.include.length > 0) ||
+    (opts.exclude !== undefined && opts.exclude.length > 0)
+  );
+}
+
 export function runWorktreePhysicalCleanupPlanCommand(opts: WorktreePhysicalCleanupOptions): number {
-  const { cwd, env, out, err, showData } = setupIO(opts);
+  const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
   const ctx = resolveCawsCtx(cwd, err, showData, 'cleanup-plan');
   if (ctx === null) return 2;
 
@@ -1223,6 +1278,82 @@ export function runWorktreePhysicalCleanupPlanCommand(opts: WorktreePhysicalClea
   if (!plan.ok) {
     err(`caws worktree cleanup-plan: ${plan.message}`);
     return 1;
+  }
+
+  if (opts.apply === true) {
+    if (!hasExplicitPhysicalCleanupSelector(opts)) {
+      err('caws worktree cleanup-plan --apply: refused.');
+      err('  Add at least one explicit selector: --state, --include, or --exclude.');
+      err('  First apply class is intentionally narrow; use --state destroy-ready to apply all currently ready candidates.');
+      return 1;
+    }
+
+    const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'cleanup-plan');
+    if (id === null) return 2;
+    const sessionCandidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env });
+    const outcomes: WorktreePhysicalCleanupApplyOutcome[] = [];
+
+    for (const item of plan.items) {
+      if (item.state_class !== 'destroy-ready') {
+        outcomes.push({
+          subject: item.subject,
+          state_class: item.state_class,
+          action: 'refused',
+          reason:
+            item.refusal_reason ??
+            'Only destroy-ready registered worktrees are apply-capable in cleanup-plan --apply.',
+        });
+        continue;
+      }
+
+      const result = destroyWorktree(ctx.cawsDir, {
+        name: item.subject,
+        session: id.session,
+        sessionCandidates,
+        actor: id.actor,
+        now: nowFn,
+      });
+      if (!isOk(result)) {
+        outcomes.push({
+          subject: item.subject,
+          state_class: item.state_class,
+          action: 'failed',
+          reason: firstErrorMessage(result.errors),
+        });
+      } else if (result.value.kind === 'partial_failure_recovered') {
+        outcomes.push({
+          subject: item.subject,
+          state_class: item.state_class,
+          action: 'failed',
+          reason: 'partial failure recovered; no state change',
+        });
+      } else {
+        outcomes.push({
+          subject: item.subject,
+          state_class: item.state_class,
+          action: 'applied',
+          mutation: 'destroyed physical git worktree through destroyWorktree',
+        });
+      }
+    }
+
+    if (opts.json === true) {
+      out(JSON.stringify({
+        ok: !outcomes.some((item) => item.action !== 'applied'),
+        dry_run: false,
+        read_only: false,
+        outcomes,
+        counts: physicalApplyCounts(outcomes),
+        filters: {
+          state: opts.state ?? [],
+          include: opts.include ?? [],
+          exclude: opts.exclude ?? [],
+        },
+      }, null, 2));
+    } else {
+      renderWorktreePhysicalCleanupApply(outcomes, out);
+    }
+    return outcomes.some((item) => item.action !== 'applied') ? 1 : 0;
   }
 
   if (opts.json === true) {
