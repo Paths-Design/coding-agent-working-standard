@@ -67,12 +67,14 @@ export type {
 export {
   runEvidenceListCommand,
   runEvidenceRecordCommand,
+  runEvidenceSchemaCommand,
   runEvidenceShowCommand,
 } from './commands/evidence';
 export type {
   EvidenceKind,
   EvidenceListOptions,
   EvidenceRecordOptions,
+  EvidenceSchemaOptions,
   EvidenceShowOptions,
 } from './commands/evidence';
 

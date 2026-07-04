@@ -54,6 +54,7 @@ import {
   runEventsVerifyArchiveCommand,
   runEvidenceListCommand,
   runEvidenceRecordCommand,
+  runEvidenceSchemaCommand,
   runEvidenceShowCommand,
   runGatesRunCommand,
   runInitCommand,
@@ -485,6 +486,15 @@ export function registerShellCommands(
         ref: eventRef,
         json: opts.json === true,
         showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  defineLeaf(evidenceCmd, leafMeta(EVIDENCE_COMMAND_META, 'schema'))
+    .action((opts: { type: string; json?: boolean }) => {
+      const code = runEvidenceSchemaCommand({
+        kind: opts.type as EvidenceKind,
+        json: opts.json === true,
       });
       exit(code);
     });
