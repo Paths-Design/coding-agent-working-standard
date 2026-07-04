@@ -3,6 +3,7 @@ title: 'Add closed spec archive selectors'
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: specs-archive-selectors
 created_at: '2026-07-04T11:18:08.779Z'
 updated_at: '2026-07-04T11:18:08.779Z'
 blast_radius:
