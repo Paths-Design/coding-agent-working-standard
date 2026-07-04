@@ -816,6 +816,7 @@ export function registerShellCommands(
           title?: string;
           mode?: string;
           riskTier?: string;
+          tier?: string;
           scopeIn?: string[];
           contract?: string[];
           type?: string;
@@ -829,6 +830,7 @@ export function registerShellCommands(
           ...(opts.title !== undefined ? { title: opts.title } : {}),
           ...(opts.mode !== undefined ? { mode: opts.mode } : {}),
           ...(opts.riskTier !== undefined ? { riskTier: opts.riskTier } : {}),
+          ...(opts.tier !== undefined ? { tier: opts.tier } : {}),
           ...(opts.scopeIn !== undefined ? { scopeIn: opts.scopeIn } : {}),
           // FIX-SPECS-CONTRACT-ORIENTATION-001: forward the repeatable
           // --contract values to the handler. Without this the flag is parsed
