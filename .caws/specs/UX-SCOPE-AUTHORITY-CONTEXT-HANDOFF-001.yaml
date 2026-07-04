@@ -3,6 +3,7 @@ title: 'Guide unbound scope authority context'
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: scope-authority-context-handoff
 created_at: '2026-07-04T17:53:57.176Z'
 updated_at: '2026-07-04T17:53:57.176Z'
 blast_radius:
