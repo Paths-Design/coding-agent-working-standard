@@ -103,6 +103,40 @@ describe('buildScopeDecisionJson: admit under a bound worktree (authoritative)',
   });
 });
 
+describe('buildScopeDecisionJson: admit via another worktree claim', () => {
+  const json = buildScopeDecisionJson(
+    admitDecision(),
+    boundContext({ source: 'target_scope_in_claim' })
+  );
+
+  test('mode is union because the current checkout is not authoritative', () => {
+    expect(json.mode).toBe('union');
+  });
+  test('source and owning worktree still identify the authority handoff', () => {
+    expect(json.source).toBe('target_scope_in_claim');
+    expect(json.worktreeName).toBe('foo-wt');
+  });
+  test('remediation points to the owning worktree before edits', () => {
+    expect(json.remediation).toMatchObject({
+      summary: "Path is admitted by worktree foo-wt's scope.in claim; enter that worktree before editing.",
+      commands: [
+        {
+          command: 'caws worktree list --data',
+          mutates: false,
+        },
+        {
+          command: 'cd .caws/worktrees/foo-wt',
+          mutates: false,
+        },
+        {
+          command: 'caws claim',
+          mutates: false,
+        },
+      ],
+    });
+  });
+});
+
 describe('buildScopeDecisionJson: reject under a bound worktree', () => {
   const json = buildScopeDecisionJson(rejectDecision(), boundContext());
 

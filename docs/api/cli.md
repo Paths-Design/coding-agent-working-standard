@@ -134,6 +134,10 @@ claimant inspection commands.
 `--spec <id>` evaluates the path against a named spec as read-only context. It
 answers "does this path fit this spec?" and reports JSON `mode:
 spec_context`; it does not prove the current checkout owns write authority.
+When a base-checkout query is admitted only because another worktree's
+`scope.in` claims the path, JSON reports `source: target_scope_in_claim` with
+`mode: union` and includes non-mutating handoff commands to inspect and enter
+the owning worktree before editing.
 
 ### `caws scope check <path>`
 
@@ -175,7 +179,9 @@ caws scope plan --paths-file changed-paths.txt --json
 `scope plan` is observational: it uses the same decision/remediation contract
 as single-path `scope show/check`, but it does not enforce or mutate. Grouped
 commands are handoffs to existing governed mutation surfaces such as
-`caws specs amend-scope`.
+`caws specs amend-scope`, or to authority-context commands such as
+`caws worktree list --data`, `cd .caws/worktrees/<name>`, and `caws claim`
+when a path is claimed by another worktree.
 
 ### `caws scope contention <path>`
 
