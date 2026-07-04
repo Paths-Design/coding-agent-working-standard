@@ -113,7 +113,11 @@ import type { HookPackV1 } from './types';
 // CAWS_AGENT_SURFACE=opencode but every guard fell through to the claude-code
 // default and spammed "unknown CAWS_AGENT_SURFACE=opencode" warnings while
 // misrouting logs to .claude/logs/. No other behavioral change.
-export const SHARED_PACK_VERSION = 14;
+// v15 (UX-HOOK-INPUT-PARSE-DIAGNOSTIC-001): runtime-paths.sh keeps malformed
+// hook stdin fail-open, but now emits a controlled CAWS hook-parse diagnostic to
+// stderr instead of silently replacing the payload with {}. The diagnostic never
+// echoes raw malformed input and avoids Python tracebacks.
+export const SHARED_PACK_VERSION = 15;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.

@@ -53,34 +53,55 @@ read_hook_input_json() {
 import json
 import sys
 
-raw = sys.stdin.buffer.read()
-if not raw:
+def emit_empty() -> None:
     sys.stdout.write("{}")
-    raise SystemExit(0)
 
-def strip_disallowed_controls(text: str) -> str:
-    return "".join(
-        ch
-        for ch in text
-        if ch in ("\t", "\n", "\r") or ord(ch) >= 0x20
+try:
+    raw = sys.stdin.buffer.read()
+    if not raw:
+        emit_empty()
+        raise SystemExit(0)
+
+    def strip_disallowed_controls(text: str) -> str:
+        return "".join(
+            ch
+            for ch in text
+            if ch in ("\t", "\n", "\r") or ord(ch) >= 0x20
+        )
+
+    text = raw.decode("utf-8", "surrogateescape")
+    sanitized = strip_disallowed_controls(text.replace("\x00", ""))
+
+    parse_errors = []
+    for candidate in (text, sanitized):
+        try:
+            payload = json.loads(candidate, strict=False)
+        except Exception as exc:
+            parse_errors.append(str(exc).splitlines()[0])
+            continue
+        sys.stdout.write(json.dumps(payload))
+        raise SystemExit(0)
+
+    # Never echo malformed raw input back to jq callers. Hook scripts should
+    # fail open on unreadable input rather than turning parse noise into
+    # blocking PreToolUse/PostToolUse errors. The fail-open is now observable:
+    # agents see that the hook parser, not the guarded command, was the problem.
+    reason = parse_errors[0] if parse_errors else "unknown parse error"
+    sys.stderr.write(
+        "[CAWS hook parse] malformed hook input JSON; failing open with an "
+        "empty payload. Expected vendor hook payload JSON on stdin. "
+        f"Parser: {reason}\\n"
     )
-
-text = raw.decode("utf-8", "surrogateescape")
-sanitized = strip_disallowed_controls(text.replace("\x00", ""))
-
-for candidate in (text, sanitized):
-    try:
-        payload = json.loads(candidate, strict=False)
-    except Exception:
-        continue
-    sys.stdout.write(json.dumps(payload))
-    raise SystemExit(0)
-
-# Never echo malformed raw input back to jq callers. Hook scripts should
-# fail open on unreadable input rather than turning parse noise into
-# blocking PreToolUse/PostToolUse errors.
-sys.stdout.write("{}")
-' 2>/dev/null
+    emit_empty()
+except SystemExit:
+    raise
+except Exception as exc:
+    sys.stderr.write(
+        "[CAWS hook parse] hook input parser failed internally; failing open "
+        f"with an empty payload. Parser: {str(exc).splitlines()[0]}\\n"
+    )
+    emit_empty()
+'
 }
 
 ensure_hook_runtime_path
