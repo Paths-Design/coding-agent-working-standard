@@ -36,7 +36,10 @@ import {
 import { composeStoreSnapshot, resolveRepoRoot } from '../../store';
 import type { StoreSnapshot } from '../../store/types';
 import { resolveBinding } from '../binding/resolve-binding';
-import type { ResolvedBinding } from '../binding/types';
+import type {
+  AuthorityContextCandidate,
+  ResolvedBinding,
+} from '../binding/types';
 import {
   buildScopeDecisionJson,
   renderDecision,
@@ -113,6 +116,32 @@ function renderExplicitSpecContextNote(spec: Spec): string[] {
   return lines;
 }
 
+function buildAuthorityContextCandidates(
+  specs: readonly Spec[]
+): AuthorityContextCandidate[] {
+  return specs
+    .filter((spec) => spec.lifecycle_state === 'active')
+    .map((spec) => {
+      const candidate: AuthorityContextCandidate = {
+        specId: spec.id,
+        lifecycleState: spec.lifecycle_state,
+      };
+      if (spec.worktree !== undefined) {
+        return { ...candidate, worktreeName: spec.worktree };
+      }
+      return candidate;
+    })
+    .sort((a, b) => a.specId.localeCompare(b.specId));
+}
+
+function withAuthorityContext(
+  binding: ResolvedBinding,
+  candidates: readonly AuthorityContextCandidate[]
+): ResolvedBinding {
+  if (candidates.length === 0) return binding;
+  return { ...binding, authorityCandidates: candidates };
+}
+
 export function runScopeCommand(opts: ScopeCommandOptions): number {
   const cwd = opts.cwd ?? process.cwd();
   const out = opts.out ?? ((s: string) => process.stdout.write(s + '\n'));
@@ -151,13 +180,17 @@ export function runScopeCommand(opts: ScopeCommandOptions): number {
   //    resolveBinding fall back to the path's owning worktree / claiming
   //    spec when cwd is the main checkout, so `caws scope check <path>` is
   //    cwd-independent and matches what the bound author sees.
-  const bound = explicitSpec?.binding ?? resolveBinding({
-    repoRoot,
-    cwd,
-    targetPath: opts.path,
-    registry: snapshot.worktrees,
-    specs: snapshot.specs,
-  });
+  const authorityCandidates = buildAuthorityContextCandidates(snapshot.specs);
+  const bound = withAuthorityContext(
+    explicitSpec?.binding ?? resolveBinding({
+      repoRoot,
+      cwd,
+      targetPath: opts.path,
+      registry: snapshot.worktrees,
+      specs: snapshot.specs,
+    }),
+    authorityCandidates
+  );
 
   // 3a. Refuse-on-conflict: more than one active bound spec claims this path.
   //     Authority is ambiguous; we do NOT guess. Emit an actionable refusal
@@ -499,13 +532,16 @@ export function runScopePlanCommand(opts: ScopePlanOptions): number {
 
   const results: ScopePlanPathResult[] = [];
   for (const p of paths) {
-    const bound = explicitSpec?.binding ?? resolveBinding({
-      repoRoot,
-      cwd,
-      targetPath: p,
-      registry: snapshot.worktrees,
-      specs: snapshot.specs,
-    });
+    const bound = withAuthorityContext(
+      explicitSpec?.binding ?? resolveBinding({
+        repoRoot,
+        cwd,
+        targetPath: p,
+        registry: snapshot.worktrees,
+        specs: snapshot.specs,
+      }),
+      buildAuthorityContextCandidates(snapshot.specs)
+    );
     if (bound.ambiguous !== undefined) {
       results.push(ambiguousPlanPayload(bound.ambiguous.targetPath, bound.ambiguous.claimants));
       continue;

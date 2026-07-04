@@ -163,7 +163,7 @@ describe('scope remediation JSON contract', () => {
     );
 
     expect(output).toContain('caws worktree bind unbound-wt --spec <spec-id>');
-    expect(output).toContain('caws specs list');
+    expect(output).toContain('caws specs list --status active');
   });
 });
 
@@ -176,6 +176,9 @@ describe('caws scope check --json remediation behavior', () => {
     expect(json.decision).toBe('no_authority');
     expect(json.remediation.commands.map((c) => c.command)).toContain(
       'caws worktree create <name> --spec <spec-id>'
+    );
+    expect(json.remediation.commands.map((c) => c.command)).toContain(
+      'caws specs list --status active'
     );
   });
 

@@ -87,6 +87,12 @@ export interface AmbiguousBindingDetail {
   readonly claimants: readonly BindingClaimant[];
 }
 
+export interface AuthorityContextCandidate {
+  readonly specId: string;
+  readonly lifecycleState: string;
+  readonly worktreeName?: string;
+}
+
 export interface ResolvedBinding {
   /** The kernel's `BindingState`. For an ambiguous result this is `unbound`
    * (the safe default for non-scope-check consumers); inspect `ambiguous`. */
@@ -118,4 +124,10 @@ export interface ResolvedBinding {
     | 'target_scope_in_claim'
     | 'explicit_spec'
     | 'none';
+  /**
+   * Shell-render-only context. Scope decisions remain kernel-derived; these
+   * candidates exist solely to make no-authority handoffs actionable from an
+   * unbound context such as the canonical checkout.
+   */
+  readonly authorityCandidates?: readonly AuthorityContextCandidate[];
 }
