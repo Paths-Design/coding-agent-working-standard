@@ -656,6 +656,11 @@ caws specs show FEAT-1 --archived
 
 Show a spec by id. Pass `--archived` to recover an archived spec body from the event log and git history.
 
+If the canonical spec YAML fails YAML/schema parsing, `specs show` renders the
+kernel diagnostics and a repair block pointing at `caws specs validate
+<path-to-yaml>`, plus minimal examples for common v11 array-shaped fields such
+as `invariants`, `acceptance`, and `contracts`.
+
 ### `caws specs recover <id>`
 
 ```bash
@@ -777,6 +782,11 @@ caws specs validate path/to/spec.yaml --data
 ```
 
 Validate one spec YAML file on disk using the CLI's bundled parser and the kernel parse→shape→semantics pipeline. Path-shaped: takes a file path, not a spec id. It does not resolve canonical `.caws/` state and does not mutate anything.
+
+Invalid YAML/schema output includes the exact validate command for the file and
+minimal v11 YAML examples for common array-shaped fields. This is the
+authoritative hook/CI path; consumers should not shell out to their own
+`js-yaml` parser just to classify CAWS spec YAML.
 
 ---
 

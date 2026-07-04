@@ -20,7 +20,13 @@
 
 import * as path from 'node:path';
 
-import { isOk, parseAndValidateSpec, type Actor, type ActorKind } from '@paths.design/caws-kernel';
+import {
+  isOk,
+  parseAndValidateSpec,
+  type Actor,
+  type ActorKind,
+  type Diagnostic,
+} from '@paths.design/caws-kernel';
 
 import { resolveRepoRoot, runSpecsMigrateApply } from '../../store';
 import type {
@@ -306,6 +312,38 @@ function createCommandPreview(opts: {
 function shellQuote(value: string): string {
   if (/^[A-Za-z0-9_./:@%+=,-]+$/.test(value)) return value;
   return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+const SPEC_PARSE_RULE_PREFIXES = [
+  'spec.yaml.',
+  'spec.schema.',
+] as const;
+
+function hasSpecParseOrSchemaDiagnostics(
+  diagnostics: readonly Diagnostic[]
+): boolean {
+  return diagnostics.some((d) =>
+    SPEC_PARSE_RULE_PREFIXES.some((prefix) => d.rule.startsWith(prefix))
+  );
+}
+
+function renderSpecParseGuidance(filePath: string): string {
+  return [
+    'repair:',
+    `  Validate this file: caws specs validate ${shellQuote(filePath)}`,
+    '  Common v11 YAML array shapes:',
+    '    invariants:',
+    "      - 'State the invariant as a quoted string.'",
+    '    acceptance:',
+    '      - id: A1',
+    "        given: 'Precondition.'",
+    "        when: 'Action.'",
+    "        then: 'Expected result.'",
+    '    contracts:',
+    '      - name: example-contract',
+    '        type: behavior',
+    '        path: path/to/test-or-contract',
+  ].join('\n');
 }
 
 function semanticFieldsFromPlanDiagnostics(
@@ -733,6 +771,9 @@ export function runSpecsShowCommand(opts: SpecsShowOptions): number {
   if (!isOk(result)) {
     err('caws specs show: failed.');
     err(renderDiagnostics(result.errors, { showData }));
+    if (hasSpecParseOrSchemaDiagnostics(result.errors)) {
+      err(renderSpecParseGuidance(path.join(ctx.cawsDir, 'specs', `${opts.id}.yaml`)));
+    }
     return 1;
   }
   out(result.value.source);
@@ -1778,6 +1819,9 @@ export function runSpecsValidateCommand(opts: SpecsValidateOptions): number {
   if (!isOk(result)) {
     err(`caws specs validate: ${filePath} is invalid.`);
     err(renderDiagnostics(result.errors, { showData }));
+    if (hasSpecParseOrSchemaDiagnostics(result.errors)) {
+      err(renderSpecParseGuidance(filePath));
+    }
     return 1;
   }
 

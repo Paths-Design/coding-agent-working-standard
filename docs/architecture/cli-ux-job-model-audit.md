@@ -135,7 +135,7 @@ By top-level command:
 | `draft_spec_create_refused` | 13 | Fixed for worktree create/bind: draft-spec refusals now hand off to `caws specs activate <id>` and explain activation preflight. |
 | `evidence_schema_rejected` | 10 | Fixed by `evidence schema --type <kind>` and per-kind `evidence record --help` examples. |
 | `already_closed_close_refused` | 7 | Fixed for `specs close`: already-closed refusals now hand off to `specs show`, `specs archive`, and post-archive `specs recover`. |
-| `parse_error` | 6 | Partially fixed for `evidence record --data` JSON: malformed payloads now print the parser failure, `caws evidence schema --type <kind>`, a valid per-kind record example, and a shell-quoting tip before repo/session resolution. Remaining parse work should focus on hook parsing, YAML forms, and other shell-quoted JSON surfaces. |
+| `parse_error` | 6 | Partially fixed for `evidence record --data` JSON and spec YAML/schema failures: malformed evidence payloads now print schema/examples/quoting guidance before repo/session resolution, and invalid specs now point to `caws specs validate <file>` with minimal v11 YAML array examples. Remaining parse work should focus on hook parsing and other shell-quoted JSON surfaces. |
 | `not_a_git_repo` | 1 | Rare compared with state-model misses. |
 
 ### Representative Patterns
@@ -159,6 +159,7 @@ By top-level command:
 | Contract tuple inversion | `invalid --contract "behavior:verifychain-detects-tamper": type "verifychain-detects-tamper" is not one of ...` | Now closed: linked CLI verification shows the diagnostic prints the accepted tuple shape, `--contract "core-api:behavior"` example, and corrected `--contract "verifychain-detects-tamper:behavior"` suggestion. |
 | Evidence schema rejection | `data: must have required property 'command'` for `evidence record --type test`. | Fixed by `evidence schema --type test` plus per-type examples in `evidence record --help`. |
 | Evidence data JSON parse failure | `invalid --data JSON: Expected property name or '}'...` after an agent passed shell-like object syntax such as `{command:"npm test"}`. | Now closed for `evidence record`: parse failures happen before CAWS state mutation and print `caws evidence schema --type <kind>`, a copy-pasteable valid `--data` example, and a shell-quoting tip. |
+| Spec YAML/schema shape failure | `spec.schema.violation: Expected array` after an agent authored scalar `invariants` or empty `acceptance` fields and then had to inspect another spec plus `spec.v1.json` by hand. | Now closed for `specs show` and `specs validate`: invalid spec diagnostics point to the exact `caws specs validate <file>` command and print minimal v11 YAML examples for `invariants`, `acceptance`, and `contracts`. |
 
 ## Implementation Ledger
 
@@ -206,14 +207,15 @@ By top-level command:
 | `UX-WORKTREE-PRUNE-STATUS-ALIAS-001` | Implemented in fortieth repair slice | Worktree cleanup status alias | Adds `--status <classes>` as a compatibility alias for `--state <classes>` on `worktree prune` and `worktree cleanup-plan`, with help/docs coverage and a mutual-exclusion refusal when both aliases are supplied. Covered by `packages/caws-cli/tests/shell/worktree-prune-status-alias.test.js`. |
 | `UX-SPECS-PRUNE-ARCHIVE-HANDOFF-001` | Implemented in forty-first repair slice | Specs prune-archive handoff | Keeps `specs prune-archive` as a compatibility no-op that never deletes archived bodies, but updates help/runtime output to hand off to `specs archive --status closed`, `specs restore`, and `specs recover`. Covered by `packages/caws-cli/tests/shell/specs-prune-archive-handoff.test.js` and `packages/caws-cli/tests/store/specs-writer-archive-move.test.js`. |
 | `UX-EVIDENCE-DATA-PARSE-GUIDANCE-001` | Implemented in forty-second repair slice | Evidence record JSON parse guidance | Keeps malformed `--data` JSON as a refusal, but attaches schema discovery, valid per-kind examples, and shell-quoting guidance before repo/session resolution or event/session writes. Covered by `packages/caws-cli/tests/shell/evidence-data-parse-guidance.test.js`. |
+| `UX-SPECS-SCHEMA-PARSE-GUIDANCE-001` | Implemented in forty-third repair slice | Spec YAML/schema parse guidance | Keeps invalid spec YAML/schema as a refusal, but attaches the exact `caws specs validate <file>` command and minimal v11 array-field examples for `invariants`, `acceptance`, and `contracts` on both canonical `specs show` and standalone `specs validate` failures. Covered by `packages/caws-cli/tests/shell/specs-schema-parse-guidance.test.js`. |
 
 ## Next Slice
 
 The next implementation slice should continue the remaining `parse_error`
-class outside `evidence record --data`. Start by sampling session traces for
-hook parsing and YAML/shell-quoting failures, then verify whether the current
-CLI can expose copy-pasteable examples or schema/readback commands before
-agents retry malformed shell forms.
+class outside `evidence record --data` and spec YAML/schema validation. Start
+by sampling hook parser and shell-quoted JSON traces, then verify whether the
+current CLI or hook-pack surfaces can expose copy-pasteable examples or
+schema/readback commands before agents retry malformed shell forms.
 
 ## Findings
 
@@ -362,6 +364,13 @@ agents retry malformed shell forms.
    happens before repo/session resolution and prints the matching `evidence
    schema` command, a valid record example for the selected evidence type, and
    the shell-quoting rule that prevents `{command:"npm test"}` style retries.
+
+25. **Spec schema shape failures now show the YAML repair model.**
+   `specs show` and `specs validate` still refuse invalid spec YAML/schema, but
+   schema parse failures now point to the exact `caws specs validate <file>`
+   command and print minimal v11 examples for array-shaped `invariants`,
+   `acceptance`, and `contracts` fields instead of leaving agents to inspect
+   another spec or `spec.v1.json` by hand.
 
 ## Recommendations
 
