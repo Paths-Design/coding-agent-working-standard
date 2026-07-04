@@ -73,9 +73,13 @@ export interface StatusRenderInput {
   readonly leaseSummary?: ActivitySummary;
   /** Caller's own session id so the panel can mark `← self`. */
   readonly selfSessionId?: string | null;
+  /** Optional focused panel selection. Undefined means full dashboard. */
+  readonly panels?: readonly StatusPanel[];
 }
 
 const DEFAULT_FINDING_CAP = 5;
+
+export type StatusPanel = 'specs' | 'worktrees' | 'agents' | 'doctor';
 
 function countSpecsByLifecycle(specs: readonly Spec[]): Record<string, number> {
   const counts: Record<string, number> = {};
@@ -165,10 +169,113 @@ function describeBindingState(
   }
 }
 
+function renderSpecsPanel(input: StatusRenderInput, lines: string[]): void {
+  const lifecycle = countSpecsByLifecycle(input.specs);
+  lines.push('Specs');
+  lines.push(`  total:       ${input.specs.length}`);
+  if (input.specs.length === 0) {
+    lines.push('  (no specs)');
+    return;
+  }
+  const lifecycleSummary = Object.entries(lifecycle)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${v} ${k}`)
+    .join(', ');
+  lines.push(`  lifecycle:   ${lifecycleSummary}`);
+  for (const spec of [...input.specs].sort((a, b) => a.id.localeCompare(b.id))) {
+    const worktree = spec.worktree !== undefined ? `  wt=${spec.worktree}` : '';
+    lines.push(`  - ${spec.id}  ${spec.lifecycle_state}${worktree}  ${spec.title}`);
+  }
+}
+
+function renderWorktreesPanel(input: StatusRenderInput, lines: string[]): void {
+  const entries = Object.entries(input.worktrees).sort(([a], [b]) => a.localeCompare(b));
+  lines.push('Worktrees');
+  lines.push(`  total:       ${entries.length}`);
+  if (entries.length === 0) {
+    lines.push('  (no registered worktrees)');
+    return;
+  }
+  for (const [name, record] of entries) {
+    const owner = record.owner?.session_id ?? '-';
+    lines.push(`  - ${name}  spec=${record.specId}  owner=${owner}  path=${record.path}`);
+  }
+}
+
+function renderAgentsPanel(input: StatusRenderInput, lines: string[]): void {
+  lines.push('Agents');
+  const s = input.leaseSummary;
+  if (s === undefined || s.total === 0) {
+    lines.push('  (no lease records)');
+    return;
+  }
+  const parallelTag = s.active.length > 1 ? '  (parallel)' : '';
+  lines.push(`  active:   ${s.active.length}${parallelTag}`);
+  lines.push(`  stale:    ${s.stale.length}`);
+  lines.push(`  stopped:  ${s.stopped.length}`);
+  if (s.active.length > 0 || s.stale.length > 0 || s.stopped.length > 0) {
+    lines.push('');
+  }
+  for (const lease of s.active) {
+    lines.push(`  ${renderLeaseRow(lease, input.selfSessionId ?? null, input.now)}`);
+  }
+  for (const lease of s.stale) {
+    lines.push(`  ${renderLeaseRow(lease, input.selfSessionId ?? null, input.now)}  STALE`);
+  }
+  for (const lease of s.stopped) {
+    lines.push(`  ${renderLeaseRow(lease, input.selfSessionId ?? null, input.now)}  stopped`);
+  }
+}
+
+function renderDoctorPanel(input: StatusRenderInput, lines: string[]): void {
+  lines.push('Doctor');
+  const counts = countFindingSeverities(input.doctorFindings);
+  lines.push(
+    `  Summary:   ${counts.errors}E / ${counts.warnings}W / ${counts.infos}I`
+  );
+  if (input.doctorFindings.length === 0) {
+    lines.push('  (no findings)');
+    return;
+  }
+  const cap = input.findingCap ?? DEFAULT_FINDING_CAP;
+  const rank: Record<DoctorFinding['severity'], number> = {
+    error: 0,
+    warning: 1,
+    info: 2,
+  };
+  const top = [...input.doctorFindings]
+    .sort((a, b) => rank[a.severity] - rank[b.severity])
+    .slice(0, cap);
+  lines.push(renderFindings(top, { suppressTakeoverHints: true }));
+  if (input.doctorFindings.length > cap) {
+    lines.push(
+      `  … ${input.doctorFindings.length - cap} more — run \`caws doctor\` for full list`
+    );
+  }
+}
+
 export function renderStatus(input: StatusRenderInput): string {
   const lines: string[] = [];
   lines.push('CAWS Status');
   lines.push('');
+
+  const focusedPanels =
+    input.panels !== undefined && input.panels.length > 0
+      ? new Set(input.panels)
+      : null;
+  if (focusedPanels !== null) {
+    const renderFocused = (panel: StatusPanel, render: () => void) => {
+      if (!focusedPanels.has(panel)) return;
+      if (lines[lines.length - 1] !== '') lines.push('');
+      render();
+    };
+    renderFocused('specs', () => renderSpecsPanel(input, lines));
+    renderFocused('worktrees', () => renderWorktreesPanel(input, lines));
+    renderFocused('agents', () => renderAgentsPanel(input, lines));
+    renderFocused('doctor', () => renderDoctorPanel(input, lines));
+    if (lines.length === 2) lines.push('(no focused panels selected)');
+    return lines.join('\n');
+  }
 
   // -------- Project --------
   lines.push('Project');
@@ -246,58 +353,12 @@ export function renderStatus(input: StatusRenderInput): string {
   // already, when the worktree owner has an agents.json record).
   if (input.leaseSummary !== undefined && input.leaseSummary.total > 0) {
     lines.push('');
-    lines.push('Agents');
-    const s = input.leaseSummary;
-    const parallelTag = s.active.length > 1 ? '  (parallel)' : '';
-    lines.push(`  active:   ${s.active.length}${parallelTag}`);
-    lines.push(`  stale:    ${s.stale.length}`);
-    lines.push(`  stopped:  ${s.stopped.length}`);
-    if (s.active.length > 0 || s.stale.length > 0 || s.stopped.length > 0) {
-      lines.push('');
-    }
-    for (const lease of s.active) {
-      lines.push(`  ${renderLeaseRow(lease, input.selfSessionId ?? null, input.now)}`);
-    }
-    for (const lease of s.stale) {
-      lines.push(`  ${renderLeaseRow(lease, input.selfSessionId ?? null, input.now)}  STALE`);
-    }
-    for (const lease of s.stopped) {
-      lines.push(`  ${renderLeaseRow(lease, input.selfSessionId ?? null, input.now)}  stopped`);
-    }
+    renderAgentsPanel(input, lines);
   }
 
   // -------- Doctor --------
   lines.push('');
-  lines.push('Doctor');
-  const counts = countFindingSeverities(input.doctorFindings);
-  lines.push(
-    `  Summary:   ${counts.errors}E / ${counts.warnings}W / ${counts.infos}I`
-  );
-  if (input.doctorFindings.length === 0) {
-    lines.push('  (no findings)');
-  } else {
-    const cap = input.findingCap ?? DEFAULT_FINDING_CAP;
-    // Sort by severity rank (error > warning > info) and take top `cap`.
-    const rank: Record<DoctorFinding['severity'], number> = {
-      error: 0,
-      warning: 1,
-      info: 2,
-    };
-    const top = [...input.doctorFindings]
-      .sort((a, b) => rank[a.severity] - rank[b.severity])
-      .slice(0, cap);
-    // STATUS-STALE-OWNER-NO-TAKEOVER-001: status is a glance dashboard, not a
-    // hygiene workflow. Suppress `--takeover` hints in the inline Doctor
-    // section so a stale-but-not-abandoned foreign owner is never presented
-    // here with a takeover suggestion. The full `caws doctor` command renders
-    // the repair prose verbatim (suppression off there).
-    lines.push(renderFindings(top, { suppressTakeoverHints: true }));
-    if (input.doctorFindings.length > cap) {
-      lines.push(
-        `  … ${input.doctorFindings.length - cap} more — run \`caws doctor\` for full list`
-      );
-    }
-  }
+  renderDoctorPanel(input, lines);
 
   return lines.join('\n');
 }

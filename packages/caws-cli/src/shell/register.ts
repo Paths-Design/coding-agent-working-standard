@@ -377,9 +377,21 @@ export function registerShellCommands(
   // caws status — read-only dashboard (replaces legacy status)
   // -------------------------------------------------------------------
   defineFlat(program, STATUS_COMMAND_META)
-    .action((opts: { data?: boolean }) => {
+    .action((opts: {
+      data?: boolean;
+      specs?: boolean;
+      worktrees?: boolean;
+      agents?: boolean;
+      doctor?: boolean;
+      json?: boolean;
+    }) => {
       const code = runStatusCommand({
         showData: opts.data === true,
+        specs: opts.specs === true,
+        worktrees: opts.worktrees === true,
+        agents: opts.agents === true,
+        doctor: opts.doctor === true,
+        json: opts.json === true,
       });
       exit(code);
     });

@@ -67,6 +67,11 @@ Read-only dashboard: project, current context, claim, and doctor findings
 **Options:**
 
 - `--data` — Show structured data block on rendered diagnostics
+- `--specs` — Render only the focused specs panel
+- `--worktrees` — Render only the focused worktrees panel
+- `--agents` — Render only the focused agents panel
+- `--doctor` — Render only the focused doctor panel
+- `--json` — Emit selected status panels as JSON
 
 ## `caws scope`
 
