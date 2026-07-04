@@ -81,6 +81,41 @@ const DEFAULT_FINDING_CAP = 5;
 
 export type StatusPanel = 'specs' | 'worktrees' | 'agents' | 'doctor';
 
+export function renderShortStatus(input: StatusRenderInput): string {
+  const lifecycle = countSpecsByLifecycle(input.specs);
+  const lifecycleSummary =
+    input.specs.length === 0
+      ? '0 specs'
+      : Object.entries(lifecycle)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([state, count]) => `${count} ${state}`)
+          .join(', ');
+  const worktreeCount = Object.keys(input.worktrees).length;
+  const counts = countFindingSeverities(input.doctorFindings);
+  const leaseSummary = input.leaseSummary;
+  const agentSummary =
+    leaseSummary === undefined || leaseSummary.total === 0
+      ? '0 active, 0 stale, 0 stopped'
+      : `${leaseSummary.active.length} active, ${leaseSummary.stale.length} stale, ${leaseSummary.stopped.length} stopped`;
+  const eventSummary =
+    input.eventChainOk === undefined
+      ? `${input.eventCount} events`
+      : input.eventChainOk
+      ? `${input.eventCount} events chain=ok`
+      : `${input.eventCount} events chain=broken`;
+  const activeSpecCount = lifecycle['active'] ?? 0;
+  return [
+    'CAWS Status (short)',
+    `  specs:     ${lifecycleSummary}`,
+    `  worktrees: ${worktreeCount}`,
+    `  agents:    ${agentSummary}`,
+    `  doctor:    ${counts.errors}E / ${counts.warnings}W / ${counts.infos}I`,
+    `  events:    ${eventSummary}`,
+    `  cwd:       ${describeCwdRelation(input.binding)}`,
+    `  binding:   ${describeBindingState(input.binding.binding, activeSpecCount)}`,
+  ].join('\n');
+}
+
 function countSpecsByLifecycle(specs: readonly Spec[]): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const s of specs) {
