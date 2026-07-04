@@ -282,9 +282,22 @@ caws events migrate --from v10 --apply --reason "v10 migration"
 Rotate `events.jsonl`: archive existing chain, start fresh chain with `chain_rotated` genesis event. Distinct from `migrate` — admits fully-unparseable logs.
 
 ```bash
+caws events rotate --dry-run --reason "operator maintenance" --allow-clean
+caws events rotate --dry-run --reason "operator maintenance" --allow-clean --json
 caws events rotate --reason "operator maintenance"
 caws events rotate --reason "operator maintenance" --allow-clean
 ```
+
+| Flag | Description |
+|---|---|
+| `--reason <text>` | Operator reason recorded into the `chain_rotated` payload. Required. |
+| `--dry-run` | Preview archive path, digest, actor-shape stats, and genesis event without mutating `events.jsonl`. |
+| `--json` | Emit the dry-run plan as JSON. |
+| `--actor-kind <kind>` | Actor kind: `agent`, `human`, `system`, or `automation` (default: `agent`). |
+| `--actor-id <id>` | Override actor id (defaults to session id). |
+| `--allow-clean` | Allow rotation of a clean v11 chain. Without this flag, clean-chain rotation refuses as an explicit friction guard. |
+
+Dry-run is read-only for audit storage: it does not rename, archive, append, or rewrite `events.jsonl`. The JSON plan includes the target archive path, prior file digest, prior line count, prior chain status, actor-shape stats, and the `chain_rotated` genesis event that an apply run with the same timestamp and inputs would write.
 
 ### `caws events verify-archive`
 

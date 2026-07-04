@@ -40,6 +40,8 @@ import {
   type ActorKind,
   type ChainedEvent,
   type Diagnostic,
+  isOk,
+  prepareAppend,
 } from '@paths.design/caws-kernel';
 
 import {
@@ -405,6 +407,154 @@ export interface EventsRotateCommandOptions extends BaseCommandOptions {
   readonly actorId?: string;
   /** Friction flag: allow rotation against a clean v11 chain. */
   readonly allowClean?: boolean;
+  /** Preview only; do not rename/archive/write events.jsonl. */
+  readonly dryRun?: boolean;
+  /** Emit machine-readable JSON. */
+  readonly json?: boolean;
+}
+
+type RotatePreview =
+  | {
+      readonly kind: 'ok';
+      readonly archiveName: string;
+      readonly archivePath: string;
+      readonly priorFileDigest: string;
+      readonly priorLineCount: number;
+      readonly priorChainStatus: 'parseable_unverified' | 'unparseable';
+      readonly actorShapeStats: {
+        readonly v10_string_actor: number;
+        readonly v11_object_actor: number;
+        readonly unparseable: number;
+      };
+      readonly genesisEvent: ChainedEvent;
+    }
+  | {
+      readonly kind: 'refuse';
+      readonly message: string;
+      readonly data?: Record<string, unknown>;
+    };
+
+function windowsSafeIsoForRotate(d: Date): string {
+  return d.toISOString().replace(/:/g, '-').replace(/\./g, '-');
+}
+
+function planRotatePreview(
+  cawsDir: string,
+  input: {
+    readonly reason: string;
+    readonly actor: Actor;
+    readonly now: Date;
+    readonly allowClean?: boolean;
+  }
+): RotatePreview {
+  const eventsPath = path.join(cawsDir, 'events.jsonl');
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(eventsPath);
+  } catch (e) {
+    const cause = e as { code?: string };
+    if (cause.code === 'ENOENT') {
+      return {
+        kind: 'refuse',
+        message: 'rotateEvents would refuse: events.jsonl does not exist.',
+        data: { code: 'ENOENT' },
+      };
+    }
+    throw e;
+  }
+  if (stat.size === 0) {
+    return {
+      kind: 'refuse',
+      message: 'rotateEvents would refuse: events.jsonl is empty.',
+      data: { size: 0 },
+    };
+  }
+
+  const rawBytes = fs.readFileSync(eventsPath);
+  const priorFileDigest = `sha256:${crypto
+    .createHash('sha256')
+    .update(rawBytes)
+    .digest('hex')}`;
+  const detection = detectEventsLogShape(rawBytes.toString('utf8'));
+  if (!detection.ok) {
+    return {
+      kind: 'refuse',
+      message: 'rotateEvents would refuse: events.jsonl is empty.',
+    };
+  }
+
+  const hasPartialCorruption =
+    detection.value.stats.unparseable > 0 &&
+    detection.value.stats.unparseable < detection.value.lineCount;
+  if (hasPartialCorruption) {
+    return {
+      kind: 'refuse',
+      message:
+        `rotateEvents would refuse: events.jsonl has ${detection.value.stats.unparseable} unparseable line(s) alongside ` +
+        `${detection.value.stats.v10_string_actor + detection.value.stats.v11_object_actor} parseable line(s).`,
+      data: {
+        actor_shape_stats: detection.value.stats,
+        line_count: detection.value.lineCount,
+      },
+    };
+  }
+
+  const isCleanV11 =
+    detection.value.stats.v10_string_actor === 0 &&
+    detection.value.stats.unparseable === 0 &&
+    detection.value.stats.v11_object_actor > 0;
+  if (isCleanV11 && input.allowClean !== true) {
+    return {
+      kind: 'refuse',
+      message:
+        'rotateEvents would refuse: prior chain is a clean v11 chain; pass --allow-clean to rotate it anyway.',
+      data: { actor_shape_stats: detection.value.stats },
+    };
+  }
+
+  const archiveName = `events.jsonl.archive-${windowsSafeIsoForRotate(input.now)}`;
+  const priorChainStatus: 'parseable_unverified' | 'unparseable' =
+    detection.value.stats.unparseable > 0 &&
+    detection.value.stats.v10_string_actor === 0 &&
+    detection.value.stats.v11_object_actor === 0
+      ? 'unparseable'
+      : 'parseable_unverified';
+  const data: Record<string, unknown> = {
+    prior_tail_hash: detection.value.tailHash,
+    prior_file_path: archiveName,
+    prior_file_digest: priorFileDigest,
+    prior_line_count: detection.value.lineCount,
+    prior_chain_status: priorChainStatus,
+    actor_shape_stats: detection.value.stats,
+    migration_reason: input.reason,
+  };
+  if (detection.value.tailSeq !== null) {
+    data.prior_seq = detection.value.tailSeq;
+  }
+  const prepared = prepareAppend(null, {
+    event: 'chain_rotated',
+    ts: input.now.toISOString(),
+    actor: input.actor,
+    data,
+  });
+  if (!isOk(prepared)) {
+    return {
+      kind: 'refuse',
+      message: 'rotateEvents would refuse: constructed chain_rotated payload failed validation.',
+      data: { diagnostics: prepared.errors },
+    };
+  }
+
+  return {
+    kind: 'ok',
+    archiveName,
+    archivePath: path.join('.caws', archiveName),
+    priorFileDigest,
+    priorLineCount: detection.value.lineCount,
+    priorChainStatus,
+    actorShapeStats: detection.value.stats,
+    genesisEvent: prepared.value,
+  };
 }
 
 /**
@@ -457,6 +607,54 @@ export function runEventsRotateCommand(
     kind: opts.actorKind ?? 'agent',
     ...(opts.actorId !== undefined ? { id: opts.actorId } : {}),
   });
+
+  if (opts.dryRun === true) {
+    const preview = planRotatePreview(cawsDir, {
+      reason: opts.reason,
+      actor,
+      now: now(),
+      ...(opts.allowClean === true ? { allowClean: true } : {}),
+    });
+    if (preview.kind === 'refuse') {
+      if (opts.json === true) {
+        out(JSON.stringify({
+          ok: false,
+          dry_run: true,
+          read_only: true,
+          refused: true,
+          reason: preview.message,
+          data: preview.data ?? {},
+        }, null, 2));
+      } else {
+        err('caws events rotate --dry-run: refuse.');
+        err(`  ${preview.message}`);
+      }
+      return 1;
+    }
+    if (opts.json === true) {
+      out(JSON.stringify({
+        ok: true,
+        dry_run: true,
+        read_only: true,
+        archive: preview.archiveName,
+        archive_path: preview.archivePath,
+        prior_file_digest: preview.priorFileDigest,
+        prior_line_count: preview.priorLineCount,
+        prior_chain_status: preview.priorChainStatus,
+        actor_shape_stats: preview.actorShapeStats,
+        genesis_event: preview.genesisEvent,
+      }, null, 2));
+    } else {
+      out('caws events rotate --dry-run: would rotate events.jsonl.');
+      out(`  proposed archive: ${preview.archivePath}`);
+      out(`  prior_file_digest=${preview.priorFileDigest}`);
+      out(`  prior_line_count=${preview.priorLineCount}`);
+      out(`  prior_chain_status=${preview.priorChainStatus}`);
+      out(`  actor_shape_stats=${JSON.stringify(preview.actorShapeStats)}`);
+      out(`  genesis_event_hash=${preview.genesisEvent.event_hash}`);
+    }
+    return 0;
+  }
 
   const rotateResult = rotateEvents(cawsDir, {
     reason: opts.reason,

@@ -182,11 +182,13 @@ Migrate a v10-shape events.jsonl to a v11 chain via chain_rotated rotation. Dry-
 
 ### `caws events rotate`
 
-Rotate events.jsonl: archive existing chain, start fresh chain with chain_rotated genesis event. Distinct from migrate — admits fully-unparseable logs.
+Rotate events.jsonl: archive existing chain, start fresh chain with chain_rotated genesis event. Distinct from migrate — admits fully-unparseable logs. Supports --dry-run preview.
 
 **Options:**
 
 - `--reason <text>` (**required**) — Operator reason recorded into the chain_rotated payload
+- `--dry-run` — Preview archive path, digest, stats, and genesis event without mutating events.jsonl.
+- `--json` — Emit the dry-run plan as JSON.
 - `--actor-kind <kind>` (default: `agent`) — Actor kind: agent | human | system | automation
 - `--actor-id <id>` — Override actor id (defaults to session id)
 - `--allow-clean` — Allow rotation of a clean v11 chain (friction flag)
