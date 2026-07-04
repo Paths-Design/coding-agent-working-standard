@@ -3,6 +3,7 @@ title: 'Add batch scope planning'
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: scope-batch-plan
 created_at: '2026-07-04T05:55:28.290Z'
 updated_at: '2026-07-04T05:55:28.290Z'
 blast_radius:
