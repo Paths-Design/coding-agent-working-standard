@@ -7,12 +7,12 @@ created_at: '2026-07-04T11:42:30.423Z'
 updated_at: '2026-07-04T11:42:36.871Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli/status
+    - caws-cli/docs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/shell/commands/status.ts
     - packages/caws-cli/src/shell/render/status.ts
     - packages/caws-cli/src/shell/command-metadata.ts
@@ -23,11 +23,22 @@ scope:
     - docs/architecture/cli-ux-job-model-audit.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'caws status remains read-only unless the existing --heartbeat flag is explicitly supplied.'
+  - 'default caws status rendering remains the full dashboard.'
+  - 'focused filters render only requested status panels and use the same composed snapshot as the full dashboard.'
+  - 'JSON status output is read-only and reflects the same selected panels as human output.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a CAWS project with specs, worktree registry state, leases, and doctor findings'
+    when: 'caws status --specs --worktrees --agents --doctor is run'
+    then: 'only the requested focused panels are rendered and no CAWS state is mutated'
+  - id: A2
+    given: 'the existing caws status command without focused filters'
+    when: 'caws status is run'
+    then: 'the full dashboard rendering remains available and read-only'
+  - id: A3
+    given: 'focused status filters'
+    when: 'caws status --specs --doctor --json is run'
+    then: 'JSON output includes the selected panels, panel list, counts, and read_only=true'
 non_functional: {}
 contracts: []
