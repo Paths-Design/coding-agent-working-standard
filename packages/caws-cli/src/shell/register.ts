@@ -955,6 +955,9 @@ export function registerShellCommands(
           status?: string;
           include?: string;
           exclude?: string;
+          olderThanMs?: string;
+          updatedBefore?: string;
+          withoutWorktree?: boolean;
           apply?: boolean;
           json?: boolean;
           data?: boolean;
@@ -969,6 +972,9 @@ export function registerShellCommands(
           ...(status !== undefined ? { status } : {}),
           ...(include !== undefined ? { include } : {}),
           ...(exclude !== undefined ? { exclude } : {}),
+          ...(opts.olderThanMs !== undefined ? { olderThanMs: opts.olderThanMs } : {}),
+          ...(opts.updatedBefore !== undefined ? { updatedBefore: opts.updatedBefore } : {}),
+          ...(opts.withoutWorktree === true ? { withoutWorktree: true } : {}),
           ...(opts.apply === true ? { apply: true } : {}),
           ...(opts.json === true ? { json: true } : {}),
           showData: opts.data === true,

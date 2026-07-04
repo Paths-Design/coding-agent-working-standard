@@ -160,6 +160,10 @@ export interface ArchiveSpecInput {
 export interface ArchiveClosedSpecsSelectionInput {
   readonly include?: readonly string[];
   readonly exclude?: readonly string[];
+  readonly olderThanMs?: number;
+  readonly updatedBefore?: string;
+  readonly withoutWorktree?: boolean;
+  readonly now?: () => Date;
 }
 
 export interface ArchiveClosedSpecsCandidate {
@@ -167,12 +171,18 @@ export interface ArchiveClosedSpecsCandidate {
   readonly title: string;
   readonly lifecycle_state: Spec['lifecycle_state'];
   readonly path: string;
+  readonly timestamp?: string;
+  readonly age_ms?: number;
+  readonly worktree?: string;
 }
 
 export interface ArchiveClosedSpecsSkipped {
   readonly id: string;
   readonly reason: string;
   readonly lifecycle_state?: Spec['lifecycle_state'] | 'missing';
+  readonly timestamp?: string;
+  readonly age_ms?: number;
+  readonly worktree?: string;
 }
 
 export interface ArchiveClosedSpecsSelection {
@@ -1356,6 +1366,69 @@ export function archiveSpec(
 
 // ─── selectClosedSpecsForArchive ────────────────────────────────────────
 
+function closedArchiveFreshness(spec: Spec, nowMs: number): {
+  readonly timestamp?: string;
+  readonly timestampMs?: number;
+  readonly age_ms?: number;
+} {
+  const timestamp = spec.updated_at ?? spec.created_at;
+  if (timestamp === undefined || timestamp.length === 0) return {};
+  const parsed = Date.parse(timestamp);
+  if (Number.isNaN(parsed)) return { timestamp };
+  return { timestamp, timestampMs: parsed, age_ms: Math.max(0, nowMs - parsed) };
+}
+
+function archiveCandidateFromSpec(
+  cawsDir: string,
+  spec: Spec,
+  freshness: ReturnType<typeof closedArchiveFreshness>
+): ArchiveClosedSpecsCandidate {
+  return {
+    id: spec.id,
+    title: spec.title,
+    lifecycle_state: spec.lifecycle_state,
+    path: specPath(cawsDir, spec.id),
+    ...(freshness.timestamp !== undefined ? { timestamp: freshness.timestamp } : {}),
+    ...(freshness.age_ms !== undefined ? { age_ms: freshness.age_ms } : {}),
+    ...(spec.worktree !== undefined ? { worktree: spec.worktree } : {}),
+  };
+}
+
+function archiveSkipFromSpec(
+  spec: Spec,
+  reason: string,
+  freshness: ReturnType<typeof closedArchiveFreshness>
+): ArchiveClosedSpecsSkipped {
+  return {
+    id: spec.id,
+    reason,
+    lifecycle_state: spec.lifecycle_state,
+    ...(freshness.timestamp !== undefined ? { timestamp: freshness.timestamp } : {}),
+    ...(freshness.age_ms !== undefined ? { age_ms: freshness.age_ms } : {}),
+    ...(spec.worktree !== undefined ? { worktree: spec.worktree } : {}),
+  };
+}
+
+function closedArchiveSelectorSkipReason(
+  spec: Spec,
+  input: ArchiveClosedSpecsSelectionInput,
+  freshness: ReturnType<typeof closedArchiveFreshness>,
+  updatedBeforeMs: number | undefined
+): string | null {
+  if (input.olderThanMs !== undefined) {
+    if (freshness.age_ms === undefined) return 'timestamp_unknown';
+    if (freshness.age_ms < input.olderThanMs) return 'too_fresh';
+  }
+  if (updatedBeforeMs !== undefined) {
+    if (freshness.timestampMs === undefined) return 'timestamp_unknown';
+    if (freshness.timestampMs >= updatedBeforeMs) return 'updated_at_not_before_cutoff';
+  }
+  if (input.withoutWorktree === true && spec.worktree !== undefined && spec.worktree.length > 0) {
+    return 'has_worktree';
+  }
+  return null;
+}
+
 export function selectClosedSpecsForArchive(
   cawsDir: string,
   input: ArchiveClosedSpecsSelectionInput = {}
@@ -1372,9 +1445,34 @@ export function selectClosedSpecsForArchive(
     return err(activeResult.diagnostics.filter((d) => d.severity === 'error'));
   }
 
+  let updatedBeforeMs: number | undefined;
+  if (input.updatedBefore !== undefined) {
+    const parsed = Date.parse(input.updatedBefore);
+    if (Number.isNaN(parsed)) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `--updated-before must be an ISO-8601 timestamp or other Date.parse-compatible value.`,
+          { subject: input.updatedBefore }
+        )
+      );
+    }
+    updatedBeforeMs = parsed;
+  }
+  if (input.olderThanMs !== undefined && (!Number.isInteger(input.olderThanMs) || input.olderThanMs < 0)) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `--older-than-ms must be a non-negative integer.`,
+        { subject: String(input.olderThanMs) }
+      )
+    );
+  }
+
   const specsById = new Map(activeResult.specs.map((spec) => [spec.id, spec]));
   const skipped: ArchiveClosedSpecsSkipped[] = [];
   const candidates: ArchiveClosedSpecsCandidate[] = [];
+  const nowMs = (input.now ?? (() => new Date()))().getTime();
 
   if (includeSet.size > 0) {
     for (const id of [...includeSet].sort()) {
@@ -1392,23 +1490,21 @@ export function selectClosedSpecsForArchive(
         });
         continue;
       }
-      candidates.push({
-        id: spec.id,
-        title: spec.title,
-        lifecycle_state: spec.lifecycle_state,
-        path: specPath(cawsDir, spec.id),
-      });
+      const freshness = closedArchiveFreshness(spec, nowMs);
+      const selectorSkipReason = closedArchiveSelectorSkipReason(spec, input, freshness, updatedBeforeMs);
+      if (selectorSkipReason !== null) {
+        skipped.push(archiveSkipFromSpec(spec, selectorSkipReason, freshness));
+        continue;
+      }
+      candidates.push(archiveCandidateFromSpec(cawsDir, spec, freshness));
     }
   } else {
     for (const spec of activeResult.specs) {
       if (excludeSet.has(spec.id)) continue;
       if (spec.lifecycle_state !== 'closed') continue;
-      candidates.push({
-        id: spec.id,
-        title: spec.title,
-        lifecycle_state: spec.lifecycle_state,
-        path: specPath(cawsDir, spec.id),
-      });
+      const freshness = closedArchiveFreshness(spec, nowMs);
+      if (closedArchiveSelectorSkipReason(spec, input, freshness, updatedBeforeMs) !== null) continue;
+      candidates.push(archiveCandidateFromSpec(cawsDir, spec, freshness));
     }
   }
 

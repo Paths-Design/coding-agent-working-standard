@@ -1070,12 +1070,21 @@ export interface SpecsArchiveOptions extends BaseCommandOptions {
   readonly status?: 'closed';
   readonly include?: readonly string[];
   readonly exclude?: readonly string[];
+  readonly olderThanMs?: number | string;
+  readonly updatedBefore?: string;
+  readonly withoutWorktree?: boolean;
   readonly apply?: boolean;
   readonly json?: boolean;
 }
 
 export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
   const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
+
+  const olderThanMs = parseNonNegativeIntegerOption(opts.olderThanMs, '--older-than-ms');
+  if (typeof olderThanMs === 'object') {
+    err(`caws specs archive: ${olderThanMs.error}`);
+    return 1;
+  }
 
   const ctx = resolveCawsCtx(cwd, err, showData, 'archive');
   if (ctx === null) return 2;
@@ -1084,6 +1093,9 @@ export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
     opts.status !== undefined ||
     opts.include !== undefined ||
     opts.exclude !== undefined ||
+    olderThanMs !== undefined ||
+    opts.updatedBefore !== undefined ||
+    opts.withoutWorktree === true ||
     opts.apply === true ||
     opts.json === true;
   if (opts.id !== undefined && batchFlagsPresent) {
@@ -1103,13 +1115,21 @@ export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
       status: opts.status,
       include: opts.include ?? [],
       exclude: opts.exclude ?? [],
+      ...(olderThanMs !== undefined ? { older_than_ms: olderThanMs } : {}),
+      ...(opts.updatedBefore !== undefined ? { updated_before: opts.updatedBefore } : {}),
+      without_worktree: opts.withoutWorktree === true,
+    };
+    const selectionInput = {
+      ...(opts.include !== undefined ? { include: opts.include } : {}),
+      ...(opts.exclude !== undefined ? { exclude: opts.exclude } : {}),
+      ...(olderThanMs !== undefined ? { olderThanMs } : {}),
+      ...(opts.updatedBefore !== undefined ? { updatedBefore: opts.updatedBefore } : {}),
+      ...(opts.withoutWorktree === true ? { withoutWorktree: true } : {}),
+      now: nowFn,
     };
 
     if (dryRun) {
-      const selected = selectClosedSpecsForArchive(ctx.cawsDir, {
-        ...(opts.include !== undefined ? { include: opts.include } : {}),
-        ...(opts.exclude !== undefined ? { exclude: opts.exclude } : {}),
-      });
+      const selected = selectClosedSpecsForArchive(ctx.cawsDir, selectionInput);
       if (!isOk(selected)) {
         err('caws specs archive: failed.');
         err(renderDiagnostics(selected.errors, { showData }));
@@ -1124,6 +1144,9 @@ export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
         candidates: selected.value.candidates.map((candidate) => ({
           id: candidate.id,
           path: path.relative(ctx.repoRoot, candidate.path),
+          ...(candidate.timestamp !== undefined ? { timestamp: candidate.timestamp } : {}),
+          ...(candidate.age_ms !== undefined ? { age_ms: candidate.age_ms } : {}),
+          ...(candidate.worktree !== undefined ? { worktree: candidate.worktree } : {}),
         })),
         skipped: selected.value.skipped,
         failed: [],
@@ -1143,7 +1166,12 @@ export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
           selector.include.length > 0 ? ` --include ${selector.include.join(',')}` : '';
         const excludeArg =
           selector.exclude.length > 0 ? ` --exclude ${selector.exclude.join(',')}` : '';
-        out(`apply: caws specs archive --status closed${includeArg}${excludeArg} --apply`);
+        const olderArg =
+          olderThanMs !== undefined ? ` --older-than-ms ${olderThanMs}` : '';
+        const updatedBeforeArg =
+          opts.updatedBefore !== undefined ? ` --updated-before ${opts.updatedBefore}` : '';
+        const withoutWorktreeArg = opts.withoutWorktree === true ? ' --without-worktree' : '';
+        out(`apply: caws specs archive --status closed${includeArg}${excludeArg}${olderArg}${updatedBeforeArg}${withoutWorktreeArg} --apply`);
       }
       return selected.value.skipped.length === 0 ? 0 : 1;
     }
@@ -1155,9 +1183,7 @@ export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
 
     const result = archiveClosedSpecs(ctx.cawsDir, {
       actor,
-      now: nowFn,
-      ...(opts.include !== undefined ? { include: opts.include } : {}),
-      ...(opts.exclude !== undefined ? { exclude: opts.exclude } : {}),
+      ...selectionInput,
     });
     if (!isOk(result)) {
       err('caws specs archive: failed.');

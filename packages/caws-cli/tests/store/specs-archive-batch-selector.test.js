@@ -25,17 +25,20 @@ function mkRepo() {
   return { root, caws: path.join(root, '.caws') };
 }
 
-function writeSpec(cawsDir, id, state) {
+function writeSpec(cawsDir, id, state, opts = {}) {
   const resolution = state === 'closed' || state === 'archived'
     ? 'resolution: completed\n'
     : '';
+  const createdAt = opts.createdAt ?? '2026-07-04T00:00:00.000Z';
+  const updatedAt = opts.updatedAt ?? '2026-07-04T00:00:00.000Z';
+  const worktreeLine = opts.worktree !== undefined ? `worktree: ${opts.worktree}\n` : '';
   const body = `id: ${id}
 title: '${id}'
 risk_tier: 3
 mode: chore
 lifecycle_state: ${state}
-${resolution}created_at: '2026-07-04T00:00:00.000Z'
-updated_at: '2026-07-04T00:00:00.000Z'
+${resolution}${worktreeLine}created_at: '${createdAt}'
+updated_at: '${updatedAt}'
 blast_radius:
   modules:
     - tests
@@ -91,6 +94,61 @@ describe('selectClosedSpecsForArchive', () => {
         lifecycle_state: 'missing',
       },
     ]);
+  });
+
+  test('composes age, cutoff, and without-worktree selectors with include/exclude', () => {
+    const { caws } = mkRepo();
+    writeSpec(caws, 'ARCHIVE-BATCH-OLD-001', 'closed', {
+      updatedAt: '2026-06-01T00:00:00.000Z',
+    });
+    writeSpec(caws, 'ARCHIVE-BATCH-FRESH-001', 'closed', {
+      updatedAt: '2026-07-04T00:30:00.000Z',
+    });
+    writeSpec(caws, 'ARCHIVE-BATCH-BOUND-001', 'closed', {
+      updatedAt: '2026-06-01T00:00:00.000Z',
+      worktree: 'wt-bound',
+    });
+    writeSpec(caws, 'ARCHIVE-BATCH-ACTIVE-001', 'active', {
+      updatedAt: '2026-06-01T00:00:00.000Z',
+    });
+
+    const selected = selectClosedSpecsForArchive(caws, {
+      include: [
+        'ARCHIVE-BATCH-OLD-001',
+        'ARCHIVE-BATCH-FRESH-001',
+        'ARCHIVE-BATCH-BOUND-001',
+        'ARCHIVE-BATCH-ACTIVE-001',
+      ],
+      olderThanMs: 60 * 60 * 1000,
+      updatedBefore: '2026-07-01T00:00:00.000Z',
+      withoutWorktree: true,
+      now: () => new Date('2026-07-04T01:02:03.000Z'),
+    });
+
+    expect(selected.ok).toBe(true);
+    expect(selected.value.candidates.map((entry) => entry.id)).toEqual([
+      'ARCHIVE-BATCH-OLD-001',
+    ]);
+    expect(selected.value.candidates[0].timestamp).toBe('2026-06-01T00:00:00.000Z');
+    expect(selected.value.candidates[0].age_ms).toBeGreaterThan(0);
+    expect(selected.value.skipped.map((entry) => [entry.id, entry.reason])).toEqual([
+      ['ARCHIVE-BATCH-ACTIVE-001', 'not_closed'],
+      ['ARCHIVE-BATCH-BOUND-001', 'has_worktree'],
+      ['ARCHIVE-BATCH-FRESH-001', 'too_fresh'],
+    ]);
+    expect(selected.value.skipped.find((entry) => entry.id === 'ARCHIVE-BATCH-BOUND-001').worktree).toBe('wt-bound');
+  });
+
+  test('rejects invalid updated-before values', () => {
+    const { caws } = mkRepo();
+    writeSpec(caws, 'ARCHIVE-BATCH-A-001', 'closed');
+
+    const selected = selectClosedSpecsForArchive(caws, {
+      updatedBefore: 'not-a-date',
+    });
+
+    expect(selected.ok).toBe(false);
+    expect(selected.errors[0].message).toContain('--updated-before');
   });
 });
 

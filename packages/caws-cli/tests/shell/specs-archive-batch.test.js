@@ -20,15 +20,18 @@ function mkRepo() {
   return { root, caws: path.join(root, '.caws') };
 }
 
-function writeSpec(cawsDir, id, state) {
+function writeSpec(cawsDir, id, state, opts = {}) {
   const resolution = state === 'closed' ? 'resolution: completed\n' : '';
+  const createdAt = opts.createdAt ?? '2026-07-04T00:00:00.000Z';
+  const updatedAt = opts.updatedAt ?? '2026-07-04T00:00:00.000Z';
+  const worktreeLine = opts.worktree !== undefined ? `worktree: ${opts.worktree}\n` : '';
   const body = `id: ${id}
 title: '${id}'
 risk_tier: 3
 mode: chore
 lifecycle_state: ${state}
-${resolution}created_at: '2026-07-04T00:00:00.000Z'
-updated_at: '2026-07-04T00:00:00.000Z'
+${resolution}${worktreeLine}created_at: '${createdAt}'
+updated_at: '${updatedAt}'
 blast_radius:
   modules:
     - tests
@@ -121,5 +124,86 @@ describe('caws specs archive batch mode', () => {
       'chore(caws): archive 2 closed specs'
     );
     expect(fs.existsSync(path.join(caws, 'specs', 'ARCHIVE-BATCH-A-001.yaml'))).toBe(false);
+  });
+
+  test('dry-run applies age/date/worktree selectors and renders skipped included specs', () => {
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'ARCHIVE-BATCH-OLD-001', 'closed', {
+      updatedAt: '2026-06-01T00:00:00.000Z',
+    });
+    writeSpec(caws, 'ARCHIVE-BATCH-FRESH-001', 'closed', {
+      updatedAt: '2026-07-04T00:30:00.000Z',
+    });
+    writeSpec(caws, 'ARCHIVE-BATCH-BOUND-001', 'closed', {
+      updatedAt: '2026-06-01T00:00:00.000Z',
+      worktree: 'wt-bound',
+    });
+    commitAll(root, 'add archive selector fixtures');
+    const beforeHead = git(root, ['rev-parse', 'HEAD']);
+
+    const result = runArchive(root, {
+      status: 'closed',
+      include: ['ARCHIVE-BATCH-OLD-001', 'ARCHIVE-BATCH-FRESH-001', 'ARCHIVE-BATCH-BOUND-001'],
+      olderThanMs: 60 * 60 * 1000,
+      updatedBefore: '2026-07-01T00:00:00.000Z',
+      withoutWorktree: true,
+      json: true,
+    });
+
+    expect(result.code).toBe(1);
+    const payload = JSON.parse(result.out);
+    expect(payload.dry_run).toBe(true);
+    expect(payload.selector).toMatchObject({
+      status: 'closed',
+      older_than_ms: 60 * 60 * 1000,
+      updated_before: '2026-07-01T00:00:00.000Z',
+      without_worktree: true,
+    });
+    expect(payload.candidates.map((entry) => entry.id)).toEqual(['ARCHIVE-BATCH-OLD-001']);
+    expect(payload.candidates[0].timestamp).toBe('2026-06-01T00:00:00.000Z');
+    expect(payload.skipped.map((entry) => [entry.id, entry.reason])).toEqual([
+      ['ARCHIVE-BATCH-BOUND-001', 'has_worktree'],
+      ['ARCHIVE-BATCH-FRESH-001', 'too_fresh'],
+    ]);
+    expect(git(root, ['rev-parse', 'HEAD'])).toBe(beforeHead);
+    expect(fs.existsSync(path.join(caws, 'specs', 'ARCHIVE-BATCH-OLD-001.yaml'))).toBe(true);
+  });
+
+  test('apply archives only selected specs after age selectors', () => {
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'ARCHIVE-BATCH-OLD-001', 'closed', {
+      updatedAt: '2026-06-01T00:00:00.000Z',
+    });
+    writeSpec(caws, 'ARCHIVE-BATCH-FRESH-001', 'closed', {
+      updatedAt: '2026-07-04T00:30:00.000Z',
+    });
+    commitAll(root, 'add archive selector fixtures');
+
+    const result = runArchive(root, {
+      status: 'closed',
+      olderThanMs: 60 * 60 * 1000,
+      updatedBefore: '2026-07-01T00:00:00.000Z',
+      apply: true,
+      json: true,
+    });
+
+    expect(result.code).toBe(0);
+    const payload = JSON.parse(result.out);
+    expect(payload.archived.map((entry) => entry.id)).toEqual(['ARCHIVE-BATCH-OLD-001']);
+    expect(payload.skipped).toEqual([]);
+    expect(fs.existsSync(path.join(caws, 'specs', 'ARCHIVE-BATCH-OLD-001.yaml'))).toBe(false);
+    expect(fs.existsSync(path.join(caws, 'specs', 'ARCHIVE-BATCH-FRESH-001.yaml'))).toBe(true);
+  });
+
+  test('rejects invalid older-than before composing archive state', () => {
+    const { root } = mkRepo();
+
+    const result = runArchive(root, {
+      status: 'closed',
+      olderThanMs: 'abc',
+    });
+
+    expect(result.code).toBe(1);
+    expect(result.err).toContain('--older-than-ms must be a non-negative integer');
   });
 });
