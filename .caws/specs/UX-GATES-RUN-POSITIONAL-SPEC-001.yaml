@@ -2,10 +2,11 @@ id: UX-GATES-RUN-POSITIONAL-SPEC-001
 title: 'Accept positional spec id for gates run'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: gates-run-positional-spec
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge gates-run-positional-spec at 8a4e5907675b2076936d631c3a5395d0595c8490'
 created_at: '2026-07-04T19:35:42.192Z'
-updated_at: '2026-07-04T19:35:42.192Z'
+updated_at: '2026-07-04T19:40:05.488Z'
 blast_radius:
   modules:
     - 'packages/caws-cli shell registration and metadata'
