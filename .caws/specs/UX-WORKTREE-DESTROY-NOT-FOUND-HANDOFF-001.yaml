@@ -2,10 +2,11 @@ id: UX-WORKTREE-DESTROY-NOT-FOUND-HANDOFF-001
 title: 'Improve worktree destroy not-found handoff'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: worktree-destroy-not-found-handoff
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge worktree-destroy-not-found-handoff at f33744731a1762607813a12b97d8dffab17f6de3'
 created_at: '2026-07-04T13:45:40.118Z'
-updated_at: '2026-07-04T13:45:40.118Z'
+updated_at: '2026-07-04T13:48:33.352Z'
 blast_radius:
   modules:
     - packages/caws-cli/worktree-lifecycle-writer
