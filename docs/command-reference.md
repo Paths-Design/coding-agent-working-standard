@@ -29,7 +29,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws status`](#caws-status) — Read-only dashboard: project, current context, claim, and doctor findings
 - [`caws scope`](#caws-scope) — Evaluate file paths against the bound spec scope
 - [`caws claim`](#caws-claim) — Surface ownership of the current worktree; with --takeover, acquire ownership from a foreign session (writes prior_owners audit). With --paths, declare working-tree ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001).
-- [`caws gates`](#caws-gates) — Run quality gates against the current changes (policy-driven)
+- [`caws gates`](#caws-gates) — Inspect and run quality gates against the current changes (policy-driven)
 - [`caws evidence`](#caws-evidence) — Record, inspect, and describe typed evidence events in .caws/events.jsonl
 - [`caws events`](#caws-events) — Read and maintain .caws/events.jsonl (list/show/rotate/migrate/verify-archive)
 - [`caws waiver`](#caws-waiver) — Manage CAWS waivers (bounded exception records that suppress matching gate violations)
@@ -113,7 +113,29 @@ Surface ownership of the current worktree; with --takeover, acquire ownership fr
 
 ## `caws gates`
 
-Run quality gates against the current changes (policy-driven)
+Inspect and run quality gates against the current changes (policy-driven)
+
+### `caws gates list`
+
+List policy-declared gates, modes, thresholds, risk-tier budgets, and effective waiver ids. Read-only; does not run evaluators or append gate_evaluated events.
+
+**Options:**
+
+- `--spec <id>` — Optional spec id for spec-scoped waiver matching
+- `--json` — Emit gate summaries, risk tiers, and waiver policy as JSON.
+- `--data` — Show structured data block on diagnostics
+
+### `caws gates explain <gate>`
+
+Explain one policy gate: enabled state, mode, thresholds, waiver policy, and effective waiver ids. Read-only; validates the gate id against policy.gates.
+
+**Argument:** `gate` (required) — Gate id to explain
+
+**Options:**
+
+- `--spec <id>` — Optional spec id for spec-scoped waiver matching
+- `--json` — Emit the gate explanation as JSON.
+- `--data` — Show structured data block on diagnostics
 
 ### `caws gates run`
 

@@ -40,6 +40,10 @@ import {
   type Actor,
   type Diagnostic,
   type EventBody,
+  effectiveWaiversForGate,
+  type GateConfig,
+  type Policy,
+  type Waiver,
 } from '@paths.design/caws-kernel';
 
 import {
@@ -79,6 +83,29 @@ export interface GatesRunCommandOptions {
   readonly showData?: boolean;
 }
 
+export interface GatesListCommandOptions {
+  readonly cwd?: string;
+  readonly now?: () => Date;
+  readonly out?: (line: string) => void;
+  readonly err?: (line: string) => void;
+  readonly json?: boolean;
+  readonly specId?: string;
+  /** Show structured data on rendered diagnostics. */
+  readonly showData?: boolean;
+}
+
+export interface GatesExplainCommandOptions {
+  readonly cwd?: string;
+  readonly now?: () => Date;
+  readonly out?: (line: string) => void;
+  readonly err?: (line: string) => void;
+  readonly json?: boolean;
+  readonly specId?: string;
+  readonly gateId: string;
+  /** Show structured data on rendered diagnostics. */
+  readonly showData?: boolean;
+}
+
 const MAX_EVENT_VIOLATIONS = 100;
 
 /** Exit code reserved for evidence-integrity failures (see file header §9). */
@@ -92,6 +119,202 @@ const EXIT_EVIDENCE_INTEGRITY = 3;
  */
 const GATES_NO_DISPOSITIONS_RULE = 'shell.gates.no_dispositions';
 const GATES_EVIDENCE_LOST_RULE = 'shell.gates.evidence_lost';
+
+interface GateDiscoverySnapshot {
+  readonly repoRoot: string;
+  readonly cawsDir: string;
+  readonly policy: Policy;
+  readonly waivers: readonly Waiver[];
+}
+
+interface GateSummary {
+  readonly gate_id: string;
+  readonly enabled: boolean;
+  readonly mode: string;
+  readonly description: string | null;
+  readonly thresholds: Record<string, unknown>;
+  readonly effective_waiver_ids: readonly string[];
+  readonly effective_waiver_count: number;
+}
+
+function loadGateDiscoverySnapshot(
+  cwd: string,
+  err: (line: string) => void,
+  showData: boolean,
+  commandName: string
+): GateDiscoverySnapshot | null {
+  const repoRootResult = resolveRepoRoot(cwd);
+  if (!repoRootResult.ok) {
+    err(`caws gates ${commandName}: failed to resolve repo root.`);
+    err(renderDiagnostics(repoRootResult.errors, { showData }));
+    return null;
+  }
+  const { repoRoot, cawsDir } = repoRootResult.value;
+
+  let snapshot: ReturnType<typeof composeStoreSnapshot>;
+  try {
+    snapshot = composeStoreSnapshot({ repoRoot, cawsDir });
+  } catch (e) {
+    err(`caws gates ${commandName}: store composition failed: ${(e as Error).message}`);
+    return null;
+  }
+  if (snapshot.policy === undefined) {
+    err(
+      `caws gates ${commandName}: no policy.yaml loaded — gate discovery requires policy. Run \`caws doctor\` for details.`
+    );
+    err(`(rule: ${SHELL_RULES.GATES_POLICY_REQUIRED})`);
+    if (snapshot.policyErrors.length > 0) {
+      err(renderDiagnostics(snapshot.policyErrors, { showData }));
+    }
+    return null;
+  }
+  if (snapshot.waiverDiagnostics.length > 0) {
+    err(renderDiagnostics(snapshot.waiverDiagnostics, { showData }));
+  }
+  return {
+    repoRoot,
+    cawsDir,
+    policy: snapshot.policy,
+    waivers: snapshot.waivers,
+  };
+}
+
+function gateSummary(args: {
+  readonly gateId: string;
+  readonly config: GateConfig;
+  readonly waivers: readonly Waiver[];
+  readonly specId?: string;
+  readonly now: Date;
+}): GateSummary {
+  const effective = effectiveWaiversForGate({
+    waivers: args.waivers,
+    gate: args.gateId,
+    ...(args.specId !== undefined ? { specId: args.specId } : {}),
+    now: args.now,
+  });
+  return {
+    gate_id: args.gateId,
+    enabled: args.config.enabled,
+    mode: args.config.mode,
+    description: args.config.description ?? null,
+    thresholds: args.config.thresholds ?? {},
+    effective_waiver_ids: effective.map((waiver) => waiver.id).sort(),
+    effective_waiver_count: effective.length,
+  };
+}
+
+function gateSummaries(args: {
+  readonly policy: Policy;
+  readonly waivers: readonly Waiver[];
+  readonly specId?: string;
+  readonly now: Date;
+}): readonly GateSummary[] {
+  return Object.entries(args.policy.gates).map(([gateId, config]) =>
+    gateSummary({
+      gateId,
+      config: config as GateConfig,
+      waivers: args.waivers,
+      ...(args.specId !== undefined ? { specId: args.specId } : {}),
+      now: args.now,
+    })
+  );
+}
+
+export function runGatesListCommand(opts: GatesListCommandOptions = {}): number {
+  const cwd = opts.cwd ?? process.cwd();
+  const now = (opts.now ?? (() => new Date()))();
+  const out = opts.out ?? ((s: string) => process.stdout.write(s + '\n'));
+  const err = opts.err ?? ((s: string) => process.stderr.write(s + '\n'));
+  const showData = opts.showData === true;
+
+  const loaded = loadGateDiscoverySnapshot(cwd, err, showData, 'list');
+  if (loaded === null) return 2;
+  const gates = gateSummaries({
+    policy: loaded.policy,
+    waivers: loaded.waivers,
+    ...(opts.specId !== undefined ? { specId: opts.specId } : {}),
+    now,
+  });
+
+  if (opts.json === true) {
+    out(JSON.stringify({
+      ok: true,
+      read_only: true,
+      spec_id: opts.specId ?? null,
+      gate_count: gates.length,
+      gates,
+      risk_tiers: loaded.policy.risk_tiers,
+      waiver_policy: loaded.policy.waivers ?? {},
+    }, null, 2));
+    return 0;
+  }
+
+  out(`caws gates list: ${gates.length} configured gate(s)`);
+  if (opts.specId !== undefined) out(`  spec: ${opts.specId}`);
+  out('  gates:');
+  for (const gate of gates) {
+    out(
+      `  - ${gate.gate_id}: enabled=${gate.enabled} mode=${gate.mode} ` +
+        `effective_waivers=${gate.effective_waiver_count}`
+    );
+  }
+  out('  risk_tiers:');
+  for (const [tier, budget] of Object.entries(loaded.policy.risk_tiers)) {
+    out(`  - ${tier}: max_files=${budget.max_files} max_loc=${budget.max_loc}`);
+  }
+  return 0;
+}
+
+export function runGatesExplainCommand(opts: GatesExplainCommandOptions): number {
+  const cwd = opts.cwd ?? process.cwd();
+  const now = (opts.now ?? (() => new Date()))();
+  const out = opts.out ?? ((s: string) => process.stdout.write(s + '\n'));
+  const err = opts.err ?? ((s: string) => process.stderr.write(s + '\n'));
+  const showData = opts.showData === true;
+
+  const loaded = loadGateDiscoverySnapshot(cwd, err, showData, 'explain');
+  if (loaded === null) return 2;
+  const config = loaded.policy.gates[opts.gateId as keyof typeof loaded.policy.gates];
+  if (config === undefined) {
+    const accepted = Object.keys(loaded.policy.gates).sort();
+    err(
+      `caws gates explain: unknown gate ${JSON.stringify(opts.gateId)}; expected one of ${accepted.join('|')}.`
+    );
+    return 1;
+  }
+  const summary = gateSummary({
+    gateId: opts.gateId,
+    config: config as GateConfig,
+    waivers: loaded.waivers,
+    ...(opts.specId !== undefined ? { specId: opts.specId } : {}),
+    now,
+  });
+
+  if (opts.json === true) {
+    out(JSON.stringify({
+      ok: true,
+      read_only: true,
+      spec_id: opts.specId ?? null,
+      gate: summary,
+      waiver_policy: loaded.policy.waivers ?? {},
+    }, null, 2));
+    return 0;
+  }
+
+  out(`caws gates explain: ${summary.gate_id}`);
+  if (opts.specId !== undefined) out(`  spec: ${opts.specId}`);
+  out(`  enabled=${summary.enabled}`);
+  out(`  mode=${summary.mode}`);
+  if (summary.description !== null) out(`  description=${summary.description}`);
+  out(`  thresholds=${JSON.stringify(summary.thresholds)}`);
+  out(
+    `  effective_waivers=${summary.effective_waiver_count}` +
+      (summary.effective_waiver_ids.length > 0
+        ? ` (${summary.effective_waiver_ids.join(', ')})`
+        : '')
+  );
+  return 0;
+}
 
 function dispositionToEventBody(args: {
   disposition: GateDisposition;
