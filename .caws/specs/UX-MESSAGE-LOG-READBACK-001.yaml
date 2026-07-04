@@ -2,10 +2,11 @@ id: UX-MESSAGE-LOG-READBACK-001
 title: 'Add message inbox and history readback UX'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: message-log-readback
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge message-log-readback at d84f77288f18641bc37077ba0ac0963bf0e2eabe'
 created_at: '2026-07-04T12:16:26.639Z'
-updated_at: '2026-07-04T12:19:22.766Z'
+updated_at: '2026-07-04T12:26:31.173Z'
 blast_radius:
   modules:
     - caws-cli/message
