@@ -3,6 +3,7 @@ title: 'Add explicit spec context for scope commands'
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: scope-spec-context
 created_at: '2026-07-04T13:06:01.054Z'
 updated_at: '2026-07-04T13:06:14.115Z'
 blast_radius:
