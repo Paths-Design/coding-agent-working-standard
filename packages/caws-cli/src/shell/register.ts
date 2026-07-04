@@ -57,6 +57,7 @@ import {
   runEventsRotateCommand,
   runEventsShowCommand,
   runEventsVerifyArchiveCommand,
+  evidenceRecordExampleCommand,
   runEvidenceListCommand,
   runEvidenceRecordCommand,
   runEvidenceSchemaCommand,
@@ -113,7 +114,24 @@ export interface RegisterShellCommandsOptions {
   readonly exit?: (code: number) => void;
 }
 
-function parseDataOption(raw: string | undefined): Record<string, unknown> {
+function renderEvidenceDataParseGuidance(kind: string | undefined): string {
+  if (isEvidenceKind(kind)) {
+    return [
+      `Run: caws evidence schema --type ${kind}`,
+      `Example: ${evidenceRecordExampleCommand(kind)}`,
+      'Tip: wrap JSON in single quotes so the shell preserves double quotes.',
+    ].join('\n');
+  }
+  return [
+    'Run: caws evidence schema --type <test|gate|ac>',
+    'Tip: wrap JSON in single quotes so the shell preserves double quotes.',
+  ].join('\n');
+}
+
+function parseDataOption(
+  raw: string | undefined,
+  kind: string | undefined
+): Record<string, unknown> {
   if (typeof raw !== 'string' || raw.length === 0) return {};
   try {
     const parsed = JSON.parse(raw);
@@ -127,7 +145,10 @@ function parseDataOption(raw: string | undefined): Record<string, unknown> {
     return parsed as Record<string, unknown>;
   } catch (e) {
     throw new Error(
-      `caws evidence record: invalid --data JSON: ${(e as Error).message}`
+      [
+        `caws evidence record: invalid --data JSON: ${(e as Error).message}`,
+        renderEvidenceDataParseGuidance(kind),
+      ].join('\n')
     );
   }
 }
@@ -524,7 +545,7 @@ export function registerShellCommands(
         // Parse --data here; pass already-typed shape to the command.
         let data: Record<string, unknown>;
         try {
-          data = parseDataOption(opts.data);
+          data = parseDataOption(opts.data, opts.type);
         } catch (e) {
           process.stderr.write(`${(e as Error).message}\n`);
           exit(1);

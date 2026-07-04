@@ -73,6 +73,7 @@ export type {
 } from './commands/scope';
 
 export {
+  evidenceRecordExampleCommand,
   runEvidenceListCommand,
   runEvidenceRecordCommand,
   runEvidenceSchemaCommand,

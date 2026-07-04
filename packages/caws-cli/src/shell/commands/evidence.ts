@@ -193,6 +193,10 @@ function exampleCommandForKind(kind: EvidenceKind): EvidenceSchemaExample {
   };
 }
 
+export function evidenceRecordExampleCommand(kind: EvidenceKind): string {
+  return exampleCommandForKind(kind).command;
+}
+
 function schemaPathCandidates(eventType: EventType): readonly string[] {
   const schemaFile = `${eventType}.v1.json`;
   const kernelMain = require.resolve('@paths.design/caws-kernel');

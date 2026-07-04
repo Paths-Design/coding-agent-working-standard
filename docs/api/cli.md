@@ -349,6 +349,11 @@ caws evidence record \
 | `--actor-kind <kind>` | Actor kind: `agent`, `human`, `system`, or `automation` (default: `agent`). |
 | `--actor-id <id>` | Override actor id (defaults to session id). |
 
+Malformed `--data` JSON is refused before repo/session resolution. The
+diagnostic prints the JSON parser error, the matching `caws evidence schema
+--type <kind>` command, a valid record example for the selected evidence type,
+and a shell-quoting tip.
+
 The event is appended through the store's `appendEvent` (hash-chained, atomic, locked). There is no other path that may write `events.jsonl`.
 
 Exit codes: 0 (recorded), 1 (validation failure on `--data`), 2 (composition failure).
