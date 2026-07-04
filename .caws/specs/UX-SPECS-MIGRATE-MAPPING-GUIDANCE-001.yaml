@@ -7,7 +7,8 @@ created_at: '2026-07-04T17:44:18.823Z'
 updated_at: '2026-07-04T17:44:18.823Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli/specs-migrate'
+    - 'docs/cli-ux-audit'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -19,12 +20,22 @@ scope:
     - 'docs/command-reference.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Malformed lifecycle mapping files remain non-mutating composition failures.'
+  - 'Parse and shape refusals include the expected JSON object schema and a copy-pasteable example.'
+  - 'Diagnostics do not echo the full malformed mapping file body.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'A CAWS repo and an invalid JSON file passed to specs migrate --lifecycle-mapping'
+    when: 'The operator runs caws specs migrate --from v10 --lifecycle-mapping <path>'
+    then: 'The command exits 2, writes no migration report, names the parse failure, and prints the mapping schema plus example JSON.'
+  - id: A2
+    given: 'A CAWS repo and a lifecycle mapping file whose root or entries have the wrong shape'
+    when: 'The operator runs caws specs migrate --from v10 --lifecycle-mapping <path>'
+    then: 'The command exits 2 and prints the same schema/example guidance without mutating specs or events.'
+  - id: A3
+    given: 'The CLI UX audit and command docs'
+    when: 'The slice lands'
+    then: 'The audit marks lifecycle mapping parse guidance as implemented and the documented migrate leaf describes the mapping shape.'
 non_functional: {}
 contracts:
   - name: 'migrate-mapping-guidance'
