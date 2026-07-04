@@ -2,10 +2,11 @@ id: UX-MESSAGE-RETENTION-PRUNE-001
 title: 'Add message retention prune planning'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: message-retention-prune
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge message-retention-prune at 4e0f25acdb9bcccdddfb81de6e28c6ec5805e810'
 created_at: '2026-07-04T12:28:46.076Z'
-updated_at: '2026-07-04T12:28:54.275Z'
+updated_at: '2026-07-04T12:34:35.728Z'
 blast_radius:
   modules:
     - packages/caws-cli/message
