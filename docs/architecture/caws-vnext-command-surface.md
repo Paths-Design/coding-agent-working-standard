@@ -2,9 +2,9 @@
 doc_id: caws-vnext-command-surface
 authority: architecture
 status: active
-title: CAWS vNext command surface (v11.0.0 → v11.2) [updated for v11.5.0]
+title: CAWS vNext command surface (v11.0.0 → v11.2) [updated for v11.6.0]
 owner: vNext rewrite team
-updated: 2026-05-29
+updated: 2026-07-03
 governs:
   modules:
     - packages/caws-cli/src/index.js
@@ -18,10 +18,10 @@ governs:
 
 # CAWS vNext command surface (v11.0.0 → v11.2)
 
-**Status:** active. v11.0.0 → v11.5.0 shipped (governed core, worktree lifecycle, events, agents, prepush). v11.2 in planning (multi-agent authority and observability — see §1).
+**Status:** active. v11.0.0 → v11.6.0 shipped (governed core, worktree lifecycle, events, agents, message, prepush). Multi-agent authority remains in planning (see §1).
 **Branch:** `main` post-cutover.
 **Authors:** vNext rewrite team
-**Last updated:** 2026-05-29
+**Last updated:** 2026-07-03
 
 This document is the doctrine source for the v11 cutover and its follow-on
 releases. It captures the cutover posture, the command surface that ships,
@@ -46,7 +46,7 @@ The cutover posture chosen at v11.0.0 was:
 > Projects needing legacy lifecycle pin to `caws-cli@^10.2.x`.
 > vNext lifecycle returns in v11.1.
 
-The v11.1 plan shipped in v11.1.x. Today's recommended install path is `@paths.design/caws-cli@^11.5.0` (or unpinned). Projects migrating from v10.2 should read [`docs/migration-v10-to-v11.md`](../migration-v10-to-v11.md).
+The v11.1 plan shipped in v11.1.x. Today's recommended install path is `@paths.design/caws-cli@^11.6.0` (or unpinned). Projects migrating from v10.2 should read [`docs/migration-v10-to-v11.md`](../migration-v10-to-v11.md).
 
 ### Why A1 was chosen
 
@@ -365,19 +365,20 @@ to preserve recon's no-side-edit discipline.
 
 ## 2. Command surface
 
-The v11.0.0 governed core shipped eight command groups. v11.1 grew the
-surface to **thirteen** named groups (plus the auto-generated `help`): it
+The v11.0.0 governed core shipped eight command groups. The current v11 line has
+**fourteen** top-level commands/groups (plus the auto-generated `help`): it
 restored `worktree` (ninth) and `specs` (tenth) as lifecycle commands,
 added `events` (eleventh) for hash-chained audit-log maintenance
 (`migrate/rotate/verify-archive`), `agents` (twelfth) for multi-agent
-observability, and `prepush` (thirteenth) — the governed pre-push range
+observability, `message` for directed inter-agent messages, and `prepush` — the governed pre-push range
 check (MULTI-AGENT-PUSH-RANGE-GUARD-001) that classifies the outgoing
 commit range and refuses commits not attributable to the current slice
 without running `git push` itself. `agents` shipped ahead of the broader
 v11.2 multi-agent plan: its `register/heartbeat/stop/list/show/prune`
-subcommands are all live in v11.1.x. The remaining v11.2 multi-agent line
-(lease-backed ownership, the `claim_taken_over.v1` event, worktree
-`prune/reconcile`) is still forthcoming. Every command group is
+subcommands are all live. `message send/poll` is deliberately not authority:
+message bodies are unverified claims until checked against repo/runtime state.
+The remaining multi-agent authority line (bridge claims and lease-backed
+ownership) is still forthcoming. Every command group is
 implemented in `packages/caws-cli/src/shell/`, composed atop
 `packages/caws-cli/src/store/` and `packages/caws-kernel/`.
 
@@ -422,14 +423,18 @@ Option A.
 | `caws worktree create/list/bind/destroy/merge` | Worktree lifecycle on the vNext substrate. Canonical path for parallel agent work. |
 | `caws worktree migrate-registry` | Convert v10.2 legacy-envelope `.caws/worktrees.json` into the v11 flat-map shape. Idempotent on already-flat files. |
 | `caws worktree repair-sparse <name>` | Restore the `/*` + `!/.caws/specs/` sparse-checkout invariant on a linked worktree. Idempotent and non-destructive: refuses dirty/untracked content under `<wt>/.caws/specs/` rather than stashing, cleaning, resetting, or deleting. Added by `WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001`. |
-| `caws specs create/list/show/activate/close/archive/retire-draft` | vNext spec lifecycle. Exits by state: draft → activate or retire-draft, active → close, closed → archive. |
+| `caws worktree repair` | Repair unambiguous worktree/spec half-states surfaced by `caws doctor`: prune ghost registry entries and clear dead spec→worktree bindings. Never creates or deletes a git worktree directory. |
+| `caws specs create/list/show/recover/retire-draft/activate/amend-scope/close/archive/prune-archive/migrate/validate` | vNext spec lifecycle. Exits by state: draft → activate or retire-draft, active → close, closed → archive. |
 | `caws specs activate <id>` | Governed activation of a pre-authored draft spec. Draft-only: patches `lifecycle_state: active`, refreshes `updated_at`, and appends `spec_activated`. This is the sanctioned alternative to hand-editing lifecycle state before `caws worktree create --spec <id>`. |
 | `caws specs recover <id>` | Recover an archived OR retired spec body via the event log + git history. Topology-independent; does NOT mutate `.caws/specs/`. |
 | `caws specs retire-draft <id>` | Governed retirement of a never-activated DRAFT spec (CAWS-SPECS-RETIRE-DRAFT-001). Draft-only: refuses active (use close), closed (use archive), archived. Tombstone — deletes the draft YAML and appends a recoverable `spec_retired` event (recover via `specs show --archived` / `specs recover`). The sanctioned alternative to raw `git rm .caws/specs/<id>.yaml`, which bypasses the audit + recovery path. |
-| `caws specs prune-archive` | Migrate legacy `.caws/specs/.archive/<id>.yaml` bodies (CAWS-ARCHIVE-AS-TOMBSTONE-001). Dry-run by default; `--apply` to execute. Unrecoverable bodies quarantined, never silently deleted. |
+| `caws specs amend-scope <id>` | Governed scope amendments for active specs. Use one invocation for a logical set of `--add`/`--remove` entries. |
+| `caws specs prune-archive` | Compatibility no-op. Archived spec bodies under `.caws/specs/.archive/` are canonical again and are not pruned by CAWS; `--apply` is accepted for compatibility and removes nothing. |
 | `caws specs migrate` | v10→v11 spec YAML migrator. Dry-run by default; `--apply --partial` for partial migration. |
+| `caws specs validate` | Validate spec YAML records and optionally apply safe date normalization repairs with `--fix-dates --apply`. |
 | `caws events migrate/rotate/verify-archive` | Hash-chained audit-log maintenance over `.caws/events.jsonl`. |
 | `caws agents register/heartbeat/stop/list/show/prune` | Agent-liveness substrate + read-only inspector. Shipped ahead of the broader v11.2 multi-agent plan: `list/show` restore agent visibility removed in v11.0.0; `register/heartbeat/stop` back the hook pack; `prune` is operator cleanup. |
+| `caws message send/poll` | Directed inter-agent messages over `.caws/messages.jsonl`. Separate from the audit chain and not authority. |
 | `caws claim --takeover` | Acquire ownership from a foreign session; writes `prior_owners` audit entry. |
 | `caws claim --paths <path>` | Declare working-tree path ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001). |
 | `caws prepush [--base <ref>] [--ack <sha>]` | Governed pre-push range check (MULTI-AGENT-PUSH-RANGE-GUARD-001). Enumerates the outgoing commit range (`<base>..HEAD`, default `origin/main`), classifies each commit's spec provenance (file-touch + commit-subject), escalates foreign-worktree presence, and refuses commits not attributable to the current slice unless `--ack <sha>`'d. Diagnose/decide only — never rewrites, drops, or pushes. v1 is opt-in (`prepush`-first; no raw `git push` interception). |
@@ -441,7 +446,6 @@ Option A.
 | `caws claim --spec <id>` | Bridge claim — session ↔ spec binding outside a worktree. |
 | `caws claim --release [--spec <id>]` | Explicit relinquishment of a bridge binding. |
 | `caws worktree prune` | Remove ghost worktree registry entries and ghost bridge bindings. Never removes live git worktrees. |
-| `caws worktree repair <name>` | Reconcile one-sided worktree bindings; refuse on genuine ambiguity. (Distinct from the shipped `repair-sparse`.) |
 | `caws worktree reconcile` | Read-only drift diagnostic across git worktrees, registry, spec fields, and bridge bindings. |
 
 ### Shipped ahead of v11.2 (MULTI-AGENT-ACTIVITY-REGISTRY-001)
@@ -461,7 +465,8 @@ operators and agents inspecting session state.
 | `caws agents register --session-id <id> --platform <name> --reason <reason>` | Upsert the calling session's lease at `.caws/leases/<id>.json` with status=active. Hook-invoked at SessionStart. |
 | `caws agents heartbeat --session-id <id> --throttle <ms> --json --include-active-summary` | Refresh `last_active` (respects throttle), and emit CAWS-native JSON describing all currently-active leases. Hook-invoked at PreToolUse; the hook script (not the CLI) composes Claude Code's `hookSpecificOutput.additionalContext` envelope from this JSON. |
 | `caws agents stop --session-id <id>` | Mark the session's lease as `status=stopped` with `stopped_at`. Hook-invoked at Stop; best-effort (SIGKILL/crash bypasses it — heartbeat staleness is the primary liveness signal). |
-| `caws agents prune --status <stopped\|stale> --older-than <duration> [--apply]` | Operator-driven cleanup of stopped or stale lease records. Default is dry-run. Never auto-runs. |
+| `caws agents prune --dead [--apply]` | Operator-driven cleanup of active/stopping leases on this host whose owning process is gone. Default is dry-run. Never auto-runs. |
+| `caws agents prune --status <stopped\|stale> --older-than-ms <ms> [--apply]` | Operator-driven retention cleanup of stopped or stale lease records. Default is dry-run. Never auto-runs. |
 
 **Hook IO boundary:** the CLI is hook-protocol-agnostic. `caws agents
 heartbeat --json` emits CAWS-native JSON only. The Claude Code envelope
@@ -475,9 +480,9 @@ lease writes.
 
 ### Help banner (v11.0.0 historical snapshot)
 
-> **Historical — captured at v11.0.0.** The current v11.1.6 surface has
-> 12 named groups: `init doctor scope status claim gates evidence waiver
-> events specs worktree agents` plus the auto-generated `help`. Run
+> **Historical — captured at v11.0.0.** The current surface has
+> fourteen top-level commands/groups: `init doctor status scope claim gates
+> evidence events waiver specs worktree agents message prepush` plus the auto-generated `help`. Run
 > `caws --help` against the installed CLI to see the live banner.
 
 ```
@@ -500,7 +505,7 @@ Exactly these eight groups (plus auto-generated `help`) at v11.0.0. See
 
 > **Historical — captured at v11.0.0 (8 vNext groups).** The `VALID_COMMANDS`
 > rewrite happened in slice 8a3; audit 8a4 confirmed equality. Current
-> v11.1.6 has 12 named groups — these counts reflect the pre-removal state.
+> later v11.x releases have a larger surface — these counts reflect the pre-removal state.
 
 | Source | Count | Notes |
 |---|---|---|

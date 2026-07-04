@@ -354,8 +354,19 @@ caws specs create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --r
                           # creates .caws/specs/<id>.yaml in lifecycle_state: active
 caws specs list           # list specs (excludes archived by default)
 caws specs show <id>      # read a spec (resolves through canonical control plane)
+caws specs recover <id>   # recover an archived or retired spec body
+caws specs retire-draft <id>
+                          # governed retirement for never-activated draft specs
+caws specs activate <id>  # governed activation for a pre-authored draft spec
+caws specs amend-scope <id> --add <path>
+                          # governed scope amendment; batch logical adds/removes in one call
 caws specs close <id>     # close an active spec
-caws specs archive <id>   # archive a closed spec
+caws specs archive <id>   # archive one closed spec
+caws specs archive --status closed --include A,B --exclude B --apply
+                          # batch archive selected closed specs with one aggregate audit commit
+caws specs prune-archive  # compatibility no-op; archive bodies are canonical
+caws specs migrate        # dry-run v10->v11 YAML migration
+caws specs validate       # validate spec YAML records
 ```
 
 ### Worktree lifecycle
@@ -370,6 +381,11 @@ caws worktree destroy <name>
                           # destroy a worktree (refuses foreign ownership)
 caws worktree merge <name>
                           # merge the branch back to base; auto-closes the bound spec
+caws worktree migrate-registry
+                          # convert legacy registry envelope to v11 flat map
+caws worktree repair-sparse <name>
+                          # restore .caws/specs sparse-checkout invariant
+caws worktree repair      # repair unambiguous doctor-surfaced half-states
 ```
 
 ### Worktree ownership
@@ -378,6 +394,8 @@ caws worktree merge <name>
 caws claim               # surface ownership of the current worktree
 caws claim --takeover    # acquire from a foreign session (writes prior_owners audit)
                           # use only with explicit user authorization
+caws scope contention <path>
+                          # report other active worktrees that claim the same path
 ```
 
 ### Agent liveness
@@ -385,6 +403,19 @@ caws claim --takeover    # acquire from a foreign session (writes prior_owners a
 ```bash
 caws agents list          # list active/stale/stopped agents (read-only; operational cache)
 caws agents show <id>     # show one lease by session id
+caws agents prune --dead  # dry-run cleanup for dead local process leases
+caws agents prune --status stopped --older-than-ms 604800000 --apply
+                          # retention cleanup; operator-invoked, never hook-invoked
+```
+
+### Message and pre-push checks
+
+```bash
+caws message send --to <session-id> --text "Please inspect FEAT-1"
+caws message poll --wait 60000
+                          # directed messages; not authority, verify claims before acting
+caws prepush --base origin/main --spec <id>
+                          # classify outgoing commits; diagnose/decide only, does not push
 ```
 
 (v11 does not ship `caws hooks install` or `caws provenance` commands. The hash-chained `events.jsonl` is the audit trail; record evidence with `caws evidence record`.)

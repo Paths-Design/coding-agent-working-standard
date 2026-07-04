@@ -16,26 +16,26 @@ The v11 cutover is complete. `main` runs the v11 surface published to npm as `@p
 
 ## What the v11 line ships
 
-Thirteen command groups (plus the auto-generated `help`).
+Fourteen top-level commands/groups (plus the auto-generated `help`).
 
 | Command | Purpose |
 |---|---|
-| `caws init` | Bootstrap canonical `.caws/` state. Idempotent. Refuses legacy single-spec residue. No `--force`. `--agent-surface <claude-code\|cursor\|windsurf\|none>` installs a hook pack. |
+| `caws init` | Bootstrap canonical `.caws/` state. Idempotent. Refuses legacy single-spec residue. No `--force`. `--agent-surface <claude-code\|codex\|opencode\|cursor\|windsurf\|none>` installs a hook pack. |
 | `caws doctor` | Drift detection over `.caws/` state. Exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure). |
 | `caws status` | Read-only dashboard: project, current context, agents, claim, doctor findings. Never mutates `.caws/`. |
-| `caws scope show <path>` | Explain the scope decision for `<path>`. Always exits 0. |
-| `caws scope check <path>` | Enforce the scope decision for `<path>`. Exits 0 admit / 1 refuse. |
+| `caws scope show / check / contention` | Explain scope, enforce scope, or report cross-worktree path contention. |
 | `caws claim [--takeover] [--paths <path>]` | Surface or take ownership of the current worktree. Writes `prior_owners` audit on takeover; `--paths` declares working-tree ownership metadata on the current lease. |
 | `caws gates run --spec <id> [--context <cli\|commit\|ci>]` | Run policy-driven quality gates. Appends one `gate_evaluated` event per declared gate. |
 | `caws evidence record --type <kind> --spec <id> --data <json>` | Append a typed evidence event (`test` / `gate` / `ac`) to `.caws/events.jsonl`. |
 | `caws events migrate / rotate / verify-archive` | Maintenance for the hash-chained `.caws/events.jsonl` (v10→v11 migration, rotation, archive integrity). |
 | `caws waiver create / list / show / revoke` | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. |
-| `caws specs create / list / show / recover / close / archive / retire-draft / prune-archive / migrate` | Manage CAWS spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. Lifecycle exits by state: active → `close`, closed → `archive`, never-activated draft → `retire-draft` (governed tombstone, not raw `git rm`). |
+| `caws specs create / list / show / recover / retire-draft / activate / amend-scope / close / archive / prune-archive / migrate / validate` | Manage CAWS spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. Batch archive supports `--status closed`, `--include`, `--exclude`, and `--apply`. |
 | `caws worktree create / list / bind / destroy / merge / repair-sparse / repair / migrate-registry` | Manage CAWS worktrees bound to active specs (`repair` prunes ghost registry entries + clears dead spec→worktree bindings; `repair-sparse` restores the `.caws/specs` sparse-checkout invariant). |
 | `caws agents register / heartbeat / stop / list / show / prune` | Agent-liveness substrate (`.caws/leases/`). Operational cache only — never authority. |
+| `caws message send / poll` | Directed inter-agent message channel over `.caws/messages.jsonl`. Not authority; verify claims before acting. |
 | `caws prepush [--base <ref>] [--ack <sha>]` | Governed pre-push range check (MULTI-AGENT-PUSH-RANGE-GUARD-001). Classifies the outgoing commit range and refuses commits not attributable to the current slice. Diagnose/decide only — does NOT run `git push`. |
 
-Run `caws <group> --help` for full options.
+Run `caws <group> --help` for live options, or read the generated [`docs/command-reference.md`](docs/command-reference.md) for the exhaustive leaf and flag surface.
 
 ## Quick start
 
@@ -47,7 +47,7 @@ Run `caws <group> --help` for full options.
 ### Install
 
 ```bash
-npm install -g @paths.design/caws-cli@^11.5.0
+npm install -g @paths.design/caws-cli@^11.6.0
 caws --version
 ```
 

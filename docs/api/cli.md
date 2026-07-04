@@ -2,27 +2,29 @@
 doc_id: caws-cli-api-reference
 authority: reference
 status: active
-title: CAWS CLI API Reference (v11.5.0)
+title: CAWS CLI API Reference (v11.6.0)
 owner: vNext rewrite team
-updated: 2026-05-28
+updated: 2026-07-03
 ---
 
-# CAWS CLI API Reference (v11.5.0)
+# CAWS CLI API Reference (v11.6.0)
 
-The CAWS CLI (`@paths.design/caws-cli`) is the governance surface for the Coding Agent Working Standard. The v11 line ships thirteen command groups: `init`, `doctor`, `scope`, `status`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents`, and the auto-generated `help`.
+The CAWS CLI (`@paths.design/caws-cli`) is the governance surface for the Coding Agent Working Standard. The v11 line ships fourteen top-level commands/groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents`, `message`, `prepush`, plus the auto-generated `help`.
 
 **Doctrine source:** [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md). When this reference and the doctrine doc disagree, the doctrine doc wins.
+
+**Generated exhaustive reference:** [`docs/command-reference.md`](../command-reference.md) is generated from `COMMAND_SURFACE_METADATA`, the same metadata used for CLI `--help`. This hand-authored API reference documents every leaf command and the behavioral context; generated flag details live there.
 
 Commands that existed in v10.x and do not ship in the v11 line are listed in [§ Removed in v11](#removed-in-v11). `caws parallel` and `caws session` are deferred to v11.3+ and are not replaceable by pinning to v10.2.x.
 
 ## Installation
 
 ```bash
-npm install -g @paths.design/caws-cli@^11.5.0
+npm install -g @paths.design/caws-cli@^11.6.0
 caws --version
 ```
 
-The package depends on `@paths.design/caws-kernel@^1.0.0` (pure governance primitives). Both are published independently.
+The package depends on `@paths.design/caws-kernel@^1.4.0` (pure governance primitives). Both are published independently.
 
 ## Global flags
 
@@ -120,6 +122,15 @@ caws scope check src/foo.ts
 ```
 
 Exit codes: 0 (admit), 1 (refuse).
+
+### `caws scope contention <path>`
+
+Report which other active worktrees on the same base branch have a bound spec whose `scope.in` claims `<path>`. Always exits 0 and is intended for hook/tooling contention checks.
+
+```bash
+caws scope contention src/foo.ts
+caws scope contention src/foo.ts --json
+```
 
 ---
 
@@ -228,7 +239,7 @@ Migrate a v10-shape `events.jsonl` to a v11 chain via `chain_rotated` rotation. 
 
 ```bash
 caws events migrate
-caws events migrate --apply
+caws events migrate --from v10 --apply --reason "v10 migration"
 ```
 
 ### `caws events rotate`
@@ -236,8 +247,8 @@ caws events migrate --apply
 Rotate `events.jsonl`: archive existing chain, start fresh chain with `chain_rotated` genesis event. Distinct from `migrate` — admits fully-unparseable logs.
 
 ```bash
-caws events rotate
-caws events rotate --apply
+caws events rotate --reason "operator maintenance"
+caws events rotate --reason "operator maintenance" --allow-clean
 ```
 
 ### `caws events verify-archive`
@@ -327,6 +338,8 @@ caws specs create FEAT-1 \
 | `--title <title>` | Short spec title. |
 | `--mode <mode>` | Spec mode: `feature`, `refactor`, `fix`, `doc`, or `chore`. |
 | `--risk-tier <n>` | Risk tier: `1`, `2`, or `3`. |
+| `--scope-in <path>` | Seed `scope.in`; repeatable. |
+| `--contract <entry>` | Seed a contract entry; repeatable. |
 | `--data` | Show structured data block on diagnostics. |
 
 Creates a new spec in `lifecycle_state: active`. Note: `--type` is a removed v10 alias; use `--mode` instead.
@@ -337,6 +350,7 @@ Not returned in v11.1: `specs update`, `specs delete`, `specs conflicts`, `specs
 
 ```bash
 caws specs list
+caws specs list --archived
 ```
 
 Lists specs. By default excludes archived specs.
@@ -359,10 +373,36 @@ caws specs recover FEAT-1 --out path/to/output.yaml
 
 Recover an archived spec body. Reads `.caws/events.jsonl` for the `spec_archived` event, prefers an on-disk `.caws/specs/.archive/<id>.yaml` body for move-shaped archives, and falls back to git history/blob recovery. Prints to stdout (or `--out <path>`). Does NOT mutate `.caws/specs/`.
 
+### `caws specs retire-draft <id>`
+
+```bash
+caws specs retire-draft FEAT-1
+```
+
+Governed retirement of a never-activated draft spec. Refuses active specs (use `close`), closed specs (use `archive`), and archived specs. Deletes the draft YAML through the recoverable lifecycle path and appends `spec_retired`.
+
+### `caws specs activate <id>`
+
+```bash
+caws specs activate FEAT-1
+```
+
+Governed activation of a pre-authored draft spec. Draft-only: patches `lifecycle_state: active`, refreshes `updated_at`, and appends `spec_activated`.
+
+### `caws specs amend-scope <id>`
+
+```bash
+caws specs amend-scope FEAT-1 --add src/foo.ts --add docs/foo.md
+caws specs amend-scope FEAT-1 --remove tmp/old.md --reason "scope narrowed"
+```
+
+Governed scope amendments for an active spec. Use one invocation with all `--add`/`--remove` values for a logical amendment.
+
 ### `caws specs close <id>`
 
 ```bash
 caws specs close FEAT-1
+caws specs close FEAT-1 --resolution done
 ```
 
 Close an active spec. Non-destructive raw-byte YAML patch; appends `spec_closed` event.
@@ -373,6 +413,7 @@ Close an active spec. Non-destructive raw-byte YAML patch; appends `spec_closed`
 caws specs archive FEAT-1
 caws specs archive --status closed
 caws specs archive --status closed --include FEAT-1,FEAT-2 --exclude FEAT-2
+caws specs archive --status closed --json
 caws specs archive --status closed --apply
 ```
 
@@ -398,6 +439,16 @@ caws specs migrate --apply --partial
 ```
 
 v10→v11 spec YAML migrator (CAWS-MIGRATE-V10-SPECS-001). Default is dry-run; `--apply` opts into mutation. `--apply` without `--partial` refuses if any spec hits a "refused" verdict. `--apply --partial` writes migratable specs, skips refused, emits a durable JSON report under `.caws/migrations/v10-specs/`.
+
+### `caws specs validate`
+
+```bash
+caws specs validate
+caws specs validate --all
+caws specs validate --spec FEAT-1 --fix-dates --apply
+```
+
+Validate spec YAML records and, when requested, repair safe date normalization issues. Default is dry-run; `--apply` opts into mutation.
 
 ---
 
@@ -471,7 +522,7 @@ Merge a worktree branch into its base. Auto-closes the bound spec via `caws spec
 
 ```bash
 caws worktree migrate-registry
-caws worktree migrate-registry --apply
+caws worktree migrate-registry --dry-run
 ```
 
 Convert v10.2 legacy-envelope `.caws/worktrees.json` into the v11 flat-map shape. Idempotent on already-flat files.
@@ -483,6 +534,15 @@ caws worktree repair-sparse my-feature
 ```
 
 Restore the `.caws/specs` sparse-checkout invariant on a linked worktree. Idempotent and non-destructive: refuses if `.caws/specs/` has dirty or untracked content rather than stashing, cleaning, resetting, or deleting it.
+
+### `caws worktree repair`
+
+```bash
+caws worktree repair
+caws worktree repair --dry-run
+```
+
+Repair unambiguous worktree/spec half-states surfaced by `caws doctor`: prune ghost registry entries and clear dead spec→worktree bindings. Refuses ambiguous or forbidden classes with zero mutation. Never creates or deletes a git worktree directory.
 
 Note: `caws worktree prune` and `caws worktree reconcile` are deferred to v11.2.
 
@@ -555,14 +615,16 @@ Show one lease by session id. Read-only.
 ### `caws agents prune`
 
 ```bash
-caws agents prune --status stopped
-caws agents prune --status stale --apply
+caws agents prune --status stopped --older-than-ms 604800000
+caws agents prune --status stale --older-than-ms 604800000 --apply
+caws agents prune --dead --apply
 ```
 
 | Flag | Description |
 |---|---|
 | `--status <s>` | Filter by status: `stopped` or `stale`. |
 | `--older-than-ms <ms>` | Retention threshold in milliseconds. |
+| `--dead` | Remove active/stopping leases on this host whose owning process is dead. Mutually exclusive with `--status`. |
 | `--stale-ttl-ms <ms>` | TTL for stale classification (default: 30m). |
 | `--apply` | Actually delete (default: dry-run). |
 | `--json` | Emit CAWS-native JSON to stdout. |
@@ -572,18 +634,65 @@ Operator-invoked cleanup. Never invoked by hooks.
 
 ---
 
+## 13. `caws message`
+
+Directed inter-agent messages over `.caws/messages.jsonl`. Messages are not authority; a message body is an unverified claim until checked against repo/runtime state.
+
+### `caws message send`
+
+```bash
+caws message send --to <session-id> --text "Please inspect DOC-1"
+caws message send --to <session-id> --text "Please inspect DOC-1" --allow-dead
+```
+
+Send a message to another session. By default refuses recipients that are not live in the agent registry.
+
+### `caws message poll`
+
+```bash
+caws message poll
+caws message poll --me <session-id> --wait 60000
+caws message poll --peek --json
+```
+
+Pull the next undelivered message addressed to the current session, or to `--me`. Default behavior is deliver-once; `--peek` observes without consuming.
+
+---
+
+## 14. `caws prepush`
+
+Governed pre-push range check (MULTI-AGENT-PUSH-RANGE-GUARD-001). Classifies the outgoing commit range and refuses commits not attributable to the current slice. Diagnose/decide only — does not run `git push`.
+
+```bash
+caws prepush
+caws prepush --base origin/main --spec FEAT-1
+caws prepush --ack <sha>
+```
+
+| Flag | Description |
+|---|---|
+| `--remote <remote>` | Push remote (default: `origin`). |
+| `--branch <branch>` | Push branch (default: `main`). |
+| `--base <ref>` | Base ref override (default `<remote>/<branch>`). |
+| `--spec <id>` | Current session active spec id for slice matching. |
+| `--ack <sha>` | Acknowledge an unexpected commit by SHA. Repeatable. |
+| `--data` | Show structured data block on diagnostics. |
+
+---
+
 ## State files
 
 What v11 owns and writes:
 
 | Path | Owner | Writers |
 |---|---|---|
-| `.caws/specs/<id>.yaml` | `caws specs create / close / archive` | store (atomic write + raw-byte YAML patch) |
+| `.caws/specs/<id>.yaml` | `caws specs create / retire-draft / activate / amend-scope / close / archive / validate` | store (atomic write + raw-byte YAML patch) |
 | `.caws/specs/.archive/<id>.yaml` | `caws specs archive` | store (move from `.caws/specs/`) |
 | `.caws/waivers/<id>.yaml` | `caws waiver create / revoke` | store (atomic write) |
 | `.caws/policy.yaml` | manual edit (governed) | (none — the CLI reads but does not write this file) |
-| `.caws/worktrees.json` | `caws worktree create/bind/destroy/merge`, `caws claim / claim --takeover` | store (atomic write) |
+| `.caws/worktrees.json` | `caws worktree create/bind/destroy/merge/repair/migrate-registry`, `caws claim / claim --takeover` | store (atomic write) |
 | `.caws/leases/` | `caws agents register / heartbeat / stop / prune` | store (per-session lease files) |
+| `.caws/messages.jsonl` | `caws message send / poll` | store (directed message log; not authority) |
 | `.caws/events.jsonl` | `caws gates run`, `caws evidence record`, `caws claim --takeover`, `caws specs close/archive`, `caws worktree create/merge/destroy` | store's `appendEvent` ONLY (hash-chained) |
 
 What v11 explicitly does NOT touch:
@@ -615,9 +724,9 @@ The following commands existed in v10.x and are **removed in v11**. They are no 
 | `caws session start / checkpoint / end / list / show / briefing` | Deferred to v11.3+ | External session-log hook; `caws agents` for liveness visibility |
 | `caws specs update / delete / conflicts / types` | Not restored in v11.1 | Edit spec YAML directly; `caws doctor` validates on next run |
 | `caws worktree claim` (standalone subcommand) | Promoted to top-level | `caws claim` (top-level command, this doc §5) |
-| `caws worktree prune / reconcile` | Deferred to v11.2 | `caws worktree list` + manual cleanup |
+| `caws worktree prune / reconcile` | Deferred to v11.2 | `caws worktree list`, `caws worktree repair`, and manual cleanup |
 
-This list is exhaustive against `caws-cli@10.2.x`. Anything not listed and not in §1–§12 above does not exist in v11.
+This list is exhaustive against `caws-cli@10.2.x`. Anything not listed and not in §1–§14 above does not exist in v11.
 
 ---
 
