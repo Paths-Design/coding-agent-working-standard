@@ -1,8 +1,9 @@
 /**
  * WORKTREE-REPAIR-EVENT-CONTRACT-001
  *
- * Vocabulary contract for the two honest half-state repair events:
- *   worktree_pruned     (OPTIONAL_SPEC_ID) — H1 ghost-registry entry removed.
+ * Vocabulary contract for honest worktree repair/release events:
+ *   worktree_pruned      (OPTIONAL_SPEC_ID) — H1 ghost-registry entry removed.
+ *   worktree_untracked   (OPTIONAL_SPEC_ID) — operator release while preserving files.
  *   spec_binding_cleared (REQUIRES_SPEC_ID) — H4 / H3-closed stale worktree: cleared.
  *
  * These exist so PRUNE-REPAIR-WORKTREE-001 can append an HONEST, schema-valid
@@ -32,7 +33,7 @@ function rules(r: ReturnType<typeof validateEventBody>): string[] {
 // A1 — spec-id class registration
 // =========================================================================
 
-describe('A1: the two new types are registered with the correct spec-id class', () => {
+describe('A1: worktree repair/release types are registered with the correct spec-id class', () => {
   test('worktree_pruned is OPTIONAL_SPEC_ID', () => {
     expect(OPTIONAL_SPEC_ID.has('worktree_pruned')).toBe(true);
     expect(REQUIRES_SPEC_ID.has('worktree_pruned')).toBe(false);
@@ -40,6 +41,10 @@ describe('A1: the two new types are registered with the correct spec-id class', 
   test('spec_binding_cleared is REQUIRES_SPEC_ID', () => {
     expect(REQUIRES_SPEC_ID.has('spec_binding_cleared')).toBe(true);
     expect(OPTIONAL_SPEC_ID.has('spec_binding_cleared')).toBe(false);
+  });
+  test('worktree_untracked is OPTIONAL_SPEC_ID', () => {
+    expect(OPTIONAL_SPEC_ID.has('worktree_untracked')).toBe(true);
+    expect(REQUIRES_SPEC_ID.has('worktree_untracked')).toBe(false);
   });
 });
 
@@ -138,14 +143,69 @@ describe('A3: spec_binding_cleared payload validation', () => {
 });
 
 // =========================================================================
-// A4 — the new types hash + chain-verify like any other event
+// A4 — worktree_untracked payload validation
 // =========================================================================
 
-describe('A4: the new event types do not break canonical hashing or chain integrity', () => {
-  test('a chain containing worktree_pruned and spec_binding_cleared verifies', () => {
+describe('A4: worktree_untracked payload validation', () => {
+  const valid = {
+    event: 'worktree_untracked',
+    ts: TS,
+    actor: ACTOR,
+    spec_id: 'FEAT-001',
+    data: {
+      worktree_name: 'wt-keep',
+      reason: 'preserve files for inspection',
+      path: '/repo/.caws/worktrees/wt-keep',
+      cleared_spec_binding: true,
+      spec_id: 'FEAT-001',
+      owner_session_id: 'session-1',
+    },
+  };
+
+  test('a well-formed worktree_untracked validates', () => {
+    expect(isOk(validateEventBody(valid))).toBe(true);
+  });
+
+  test('spec_id remains optional for registry-only releases', () => {
+    const { spec_id: _dropEnvelope, ...withoutEnvelopeSpec } = valid;
+    const { spec_id: _dropData, ...data } = valid.data;
+    void _dropEnvelope;
+    void _dropData;
+    const r = validateEventBody({ ...withoutEnvelopeSpec, data });
+    expect(isOk(r)).toBe(true);
+  });
+
+  test('a missing reason is REJECTED', () => {
+    const { reason: _drop, ...data } = valid.data;
+    void _drop;
+    expect(isErr(validateEventBody({ ...valid, data }))).toBe(true);
+  });
+
+  test('an extra data property is REJECTED (additionalProperties:false)', () => {
+    const r = validateEventBody({ ...valid, data: { ...valid.data, extra: true } });
+    expect(isErr(r)).toBe(true);
+  });
+});
+
+// =========================================================================
+// A5 — the new types hash + chain-verify like any other event
+// =========================================================================
+
+describe('A5: the new event types do not break canonical hashing or chain integrity', () => {
+  test('a chain containing worktree_pruned, worktree_untracked, and spec_binding_cleared verifies', () => {
     const bodies = [
       { event: 'spec_created', spec_id: 'FEAT-001', data: { title: 'x' } },
       { event: 'worktree_pruned', data: { worktree_name: 'wt-ghost', h_class: 'ghost_registry', reason: 'H1' } },
+      {
+        event: 'worktree_untracked',
+        spec_id: 'FEAT-001',
+        data: {
+          worktree_name: 'wt-keep',
+          reason: 'preserve files',
+          path: '/repo/.caws/worktrees/wt-keep',
+          cleared_spec_binding: true,
+        },
+      },
       {
         event: 'spec_binding_cleared',
         spec_id: 'FEAT-001',

@@ -34,7 +34,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws events`](#caws-events) — Maintenance commands for .caws/events.jsonl (rotate, migrate, verify-archive)
 - [`caws waiver`](#caws-waiver) — Manage CAWS waivers (bounded exception records that suppress matching gate violations)
 - [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/retire-draft/activate/amend-scope/close/archive/prune-archive/migrate/validate)
-- [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/bind/destroy/merge/migrate-registry/repair-sparse/repair/prune). Worktrees are git worktrees bound to active specs.
+- [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune). Worktrees are git worktrees bound to active specs.
 - [`caws agents`](#caws-agents) — Agent liveness substrate: register/heartbeat/stop/list/show/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.
 - [`caws message`](#caws-message) — Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/poll directed messages between running sessions, addressed by session id, over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
 - [`caws prepush`](#caws-prepush) — Classify the outgoing commit range before publish and refuse commits not attributable to the current slice. Diagnose/decide only — does NOT run git push.
@@ -376,7 +376,7 @@ Validate a spec YAML FILE on disk using the CLI's own bundled parser and the ker
 
 ## `caws worktree`
 
-Manage CAWS worktrees (create/list/bind/destroy/merge/migrate-registry/repair-sparse/repair/prune). Worktrees are git worktrees bound to active specs.
+Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune). Worktrees are git worktrees bound to active specs.
 
 ### `caws worktree create <name>`
 
@@ -421,6 +421,19 @@ Destroy a worktree. Non-forceful: refuses foreign ownership, dirty checkout, unm
 **Options:**
 
 - `--abandon-unmerged` — Destroy even when the branch is not merged into base. Still respects ownership and clean working tree.
+- `--data` — Show structured data block on diagnostics
+
+### `caws worktree untrack <name>`
+
+Release a CAWS worktree registry binding while preserving the physical git worktree directory for inspection. Dry-run by default. Requires --reason; --apply removes only the control-plane binding and refuses foreign-owned, dirty, or missing-directory cases.
+
+**Argument:** `name` (required) — Registered worktree name to release from CAWS tracking.
+
+**Options:**
+
+- `--reason <reason>` (**required**) — Operator reason recorded on the worktree_untracked audit event.
+- `--apply` — Apply the untrack plan. Without --apply, the command only prints the plan.
+- `--json` — Emit the dry-run plan or apply outcome as JSON.
 - `--data` — Show structured data block on diagnostics
 
 ### `caws worktree merge <name>`

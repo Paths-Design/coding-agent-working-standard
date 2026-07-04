@@ -73,6 +73,7 @@ export type EventType =
   | 'worktree_merged'
   | 'worktree_destroyed'
   | 'worktree_pruned'
+  | 'worktree_untracked'
   | 'worktree_ownership_seized'
   | 'claim_taken_over'
   | 'evidence_recorded'
@@ -135,6 +136,9 @@ export const OPTIONAL_SPEC_ID: ReadonlySet<EventType> = new Set<EventType>([
   // WORKTREE-REPAIR-EVENT-CONTRACT-001: a pruned ghost registry entry MAY name
   // the spec it claimed, but a legitimate ghost can lack one.
   'worktree_pruned',
+  // UX-WORKTREE-UNTRACK-001: an operator untrack may clear a spec binding when
+  // one exists, but registry-only releases are legitimate.
+  'worktree_untracked',
   'claim_taken_over',
   'commit_made',
 ]);

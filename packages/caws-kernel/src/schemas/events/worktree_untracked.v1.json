@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/worktree_untracked.v1.json",
+  "title": "worktree_untracked event payload",
+  "$comment": "Class: OPTIONAL_SPEC_ID. Records an operator-requested control-plane release where CAWS stops tracking a registered worktree but deliberately preserves the physical git worktree directory for inspection. Distinct from worktree_destroyed, which removes a live git worktree, and worktree_pruned, which repairs a ghost registry entry whose backing directory is already absent. UX-WORKTREE-UNTRACK-001.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["worktree_name", "reason", "path", "cleared_spec_binding"],
+  "properties": {
+    "worktree_name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "description": "Name of the untracked worktree registry entry."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable operator reason for releasing the CAWS control-plane binding."
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Physical git worktree directory that was preserved."
+    },
+    "cleared_spec_binding": {
+      "type": "boolean",
+      "description": "True when the matching spec worktree field was cleared as part of untrack."
+    },
+    "spec_id": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$",
+      "description": "Optional: the spec id the registry entry claimed, when present."
+    },
+    "owner_session_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional: registered owner session id at the time the binding was released."
+    }
+  }
+}

@@ -6,6 +6,7 @@
 //   - caws worktree list
 //   - caws worktree bind <name> --spec <id>
 //   - caws worktree destroy <name> [--abandon-unmerged]
+//   - caws worktree untrack <name> --reason <why> [--apply]
 //   - caws worktree merge <name> [--dry-run]
 //
 // Discipline:
@@ -48,6 +49,7 @@ import {
   listWorktreesPretty,
   mergeWorktree,
   pruneWorktree,
+  untrackWorktree,
 } from '../../store/worktrees-writer';
 import { clearSpecBinding } from '../../store/specs-writer';
 import { buildActor } from '../session/actor';
@@ -408,6 +410,87 @@ export function runWorktreeDestroyCommand(opts: WorktreeDestroyOptions): number 
     return 2;
   }
   out(`destroyed ${outcome.name}`);
+  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  return 0;
+}
+
+// ─── caws worktree untrack ────────────────────────────────────────────────
+
+export interface WorktreeUntrackOptions extends BaseCommandOptions {
+  readonly name: string;
+  readonly reason?: string;
+  readonly apply?: boolean;
+  readonly json?: boolean;
+}
+
+export function runWorktreeUntrackCommand(opts: WorktreeUntrackOptions): number {
+  const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
+  const ctx = resolveCawsCtx(cwd, err, showData, 'untrack');
+  if (ctx === null) return 2;
+
+  const reason = (opts.reason ?? '').trim();
+  if (reason.length === 0) {
+    err('caws worktree untrack: --reason is required and must be non-empty.');
+    return 1;
+  }
+
+  const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'untrack');
+  if (id === null) return 2;
+  const sessionCandidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env });
+
+  const result = untrackWorktree(ctx.cawsDir, {
+    name: opts.name,
+    reason,
+    session: id.session,
+    sessionCandidates,
+    actor: id.actor,
+    now: nowFn,
+    dryRun: opts.apply !== true,
+  });
+
+  if (!isOk(result)) {
+    err('caws worktree untrack: failed.');
+    err(renderDiagnostics(result.errors, { showData }));
+    return 1;
+  }
+
+  const outcome = result.value;
+  if (outcome.kind === 'partial_failure_recovered') {
+    err('caws worktree untrack: partial failure recovered (no state change).');
+    err(renderDiagnostics(outcome.cause, { showData }));
+    return 1;
+  }
+
+  if (outcome.kind === 'dry_run') {
+    if (opts.json === true) {
+      out(JSON.stringify({
+        ok: true,
+        dry_run: true,
+        read_only: true,
+        name: outcome.name,
+        reason,
+        findings: outcome.findings,
+      }, null, 2));
+    } else {
+      out(`caws worktree untrack ${outcome.name}: dry-run plan`);
+      for (const finding of outcome.findings) out(`- ${finding}`);
+      out('To apply: rerun with --apply.');
+    }
+    return outcome.canProceed ? 0 : 1;
+  }
+
+  if (opts.json === true) {
+    out(JSON.stringify({
+      ok: true,
+      dry_run: false,
+      read_only: false,
+      name: outcome.name,
+      action: outcome.action,
+      data: outcome.data ?? {},
+    }, null, 2));
+  } else {
+    out(`untracked ${outcome.name} (physical directory preserved)`);
+  }
   surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }
