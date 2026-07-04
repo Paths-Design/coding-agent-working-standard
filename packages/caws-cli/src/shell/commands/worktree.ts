@@ -544,9 +544,15 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
   if (outcome.kind === 'dry_run') {
     if (outcome.canProceed) {
       out(`caws worktree merge ${outcome.name} --dry-run: ready to merge.`);
+      if (showData === true && outcome.data !== undefined) {
+        out(JSON.stringify(outcome.data, null, 2));
+      }
     } else {
       err(`caws worktree merge ${outcome.name} --dry-run: NOT ready to merge.`);
       for (const f of outcome.findings) err(`  - ${f}`);
+      if (showData === true && outcome.data !== undefined) {
+        err(JSON.stringify(outcome.data, null, 2));
+      }
       return 1;
     }
     return 0;

@@ -845,6 +845,7 @@ Releases a CAWS registry/spec binding while preserving the physical git worktree
 ```bash
 caws worktree merge my-feature
 caws worktree merge my-feature --dry-run
+caws worktree merge my-feature --dry-run --data
 caws worktree merge my-feature --message "merge(worktree): integrate widget support"
 ```
 
@@ -855,6 +856,11 @@ caws worktree merge my-feature --message "merge(worktree): integrate widget supp
 | `--data` | Show structured data block on diagnostics. |
 
 Merge a worktree branch into its base. Auto-closes the bound spec via `caws specs close`.
+Use `--dry-run --data` as the read-only readiness and recovery plan: it reports
+whether the merge can proceed, the blocking findings, and next commands for
+inventory, physical cleanup planning, branch divergence, and merge-tree checks.
+Mutating merge refusals and git checkout/merge failures include the same
+recovery handoff.
 
 ### `caws worktree migrate-registry`
 
