@@ -7,7 +7,8 @@ created_at: '2026-07-04T05:20:31.340Z'
 updated_at: '2026-07-04T05:20:31.340Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli
+    - docs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -22,11 +23,26 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'gates list/explain are read-only and never append gate_evaluated events or write .caws/events.jsonl.'
+  - 'Gate discovery derives gate ids, enabled state, modes, thresholds, and risk-tier budgets from the loaded policy snapshot.'
+  - 'Effective waiver matches use the same kernel waiver applicability rule as gates run.'
+  - 'Unknown gate ids fail before evaluator execution and report the configured gate set.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a repository with a loaded .caws/policy.yaml'
+    when: 'an operator runs caws gates list --json'
+    then: 'the command prints read-only configured gate summaries, risk-tier budgets, waiver policy, and effective waiver ids without touching events.jsonl'
+  - id: A2
+    given: 'a configured gate with thresholds and waivers'
+    when: 'an operator runs caws gates explain <gate> --spec <id> --json'
+    then: 'the command reports enabled state, mode, thresholds, effective waivers, and spec-scoped waiver filtering for that gate'
+  - id: A3
+    given: 'an unknown gate id'
+    when: 'an operator runs caws gates explain <gate>'
+    then: 'the command exits nonzero, names the accepted gate ids, and leaves events.jsonl byte-identical'
+  - id: A4
+    given: 'the command metadata and docs are regenerated'
+    when: 'an operator runs caws gates --help, caws gates list --help, and caws gates explain --help from the dist-linked caws binary'
+    then: 'the read-only discovery context is visible before gates run in nested help and docs'
 non_functional: {}
 contracts: []
