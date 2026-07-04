@@ -3,6 +3,7 @@ title: 'Add evidence payload schema discovery'
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: evidence-schema-discovery
 created_at: '2026-07-04T05:02:41.783Z'
 updated_at: '2026-07-04T05:02:43.246Z'
 blast_radius:
