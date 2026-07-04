@@ -1,0 +1,34 @@
+id: UX-WORKTREE-DESTROY-FORCE-COMPAT-001
+title: 'Add worktree destroy force compatibility'
+risk_tier: 3
+mode: fix
+lifecycle_state: active
+created_at: '2026-07-04T19:01:28.460Z'
+updated_at: '2026-07-04T19:01:28.460Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/worktree.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/tests/shell/worktree-destroy-force-compat.test.js'
+    - 'docs/api/cli.md'
+    - 'docs/command-reference.md'
+    - 'docs/architecture/cli-ux-job-model-audit.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'worktree-destroy-force-compat'
+    type: behavior
+    path: 'packages/caws-cli/tests/shell/worktree-destroy-force-compat.test.js'
