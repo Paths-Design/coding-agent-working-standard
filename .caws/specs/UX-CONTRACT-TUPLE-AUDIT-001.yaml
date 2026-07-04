@@ -7,20 +7,29 @@ created_at: '2026-07-04T12:53:23.632Z'
 updated_at: '2026-07-04T12:53:30.529Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - docs/cli-ux-audit
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - docs/architecture/cli-ux-job-model-audit.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The audit must not describe an already-fixed contract tuple diagnostic as an open missing model.'
+  - 'The audit must name the verified CLI behavior and the existing regression test evidence.'
+  - 'The next-slice pointer must move to the next unresolved friction class.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'linked caws specs create rejects an inverted contract tuple'
+    when: 'the diagnostic includes the tuple shape, example, and corrected suggestion'
+    then: 'the audit marks the contract tuple row closed rather than missing'
+  - id: A2
+    given: 'the audit implementation ledger'
+    when: 'the stale representative row is reconciled'
+    then: 'the ledger records the reconciliation evidence and points at the existing specs-create UX test'
+  - id: A3
+    given: 'the audit next slice'
+    when: 'contract tuple inversion is no longer an open gap'
+    then: 'the next slice points to the next unresolved workflow issue'
 non_functional: {}
 contracts: []
