@@ -2,10 +2,11 @@ id: UX-SCOPE-BATCH-PLAN-001
 title: 'Add batch scope planning'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
-worktree: scope-batch-plan
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge scope-batch-plan at b8f882c066d19f9d7a5d76b6a0e95426cd01ed6f'
 created_at: '2026-07-04T05:55:28.290Z'
-updated_at: '2026-07-04T05:55:28.290Z'
+updated_at: '2026-07-04T06:03:05.790Z'
 blast_radius:
   modules:
     - 'packages/caws-cli/src/shell/commands/scope.ts'
