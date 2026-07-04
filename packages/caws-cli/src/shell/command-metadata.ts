@@ -718,8 +718,13 @@ export const INIT_COMMAND_META: LeafCommandMeta = {
         'Preview the canonical state, gitignore, hook-pack, and settings changes without writing anything.',
     },
     {
+      flag: '--dry-run',
+      description:
+        'Compatibility alias for --plan; previews init changes without writing anything.',
+    },
+    {
       flag: '--json',
-      description: 'Emit the read-only init plan as JSON with --plan.',
+      description: 'Emit the read-only init plan as JSON with --plan or --dry-run.',
     },
     {
       flag: '--agent-surface <name>',

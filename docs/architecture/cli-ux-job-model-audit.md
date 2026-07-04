@@ -47,7 +47,7 @@ default for every cleanup or bulk lifecycle surface.
 
 | Top-level command | Branches / leaves | Help commands and surfaced context | Current UX fit | Missing or uneven job model |
 |---|---|---|---|---|
-| `init` | flat leaf | `caws init --help` surfaces read-only `--plan`/`--json`, hook-pack install options, adoption/overwrite choices, diagnostics `--data`. | Good bootstrap model: idempotent, explicit adoption/overwrite semantics, and a preview path that reports canonical state, `.gitignore`, hook-pack, and settings actions before mutation. | Good model to copy. Future init UX should keep plan/apply sharing the same classifiers. |
+| `init` | flat leaf | `caws init --help` surfaces read-only `--plan`/`--dry-run`/`--json`, hook-pack install options, adoption/overwrite choices, diagnostics `--data`. | Good bootstrap model: idempotent, explicit adoption/overwrite semantics, and a preview path that reports canonical state, `.gitignore`, hook-pack, and settings actions before mutation. | Good model to copy. Future init UX should keep plan/apply sharing the same classifiers. |
 | `doctor` | flat leaf | `caws doctor --help` surfaces `--data`, `--repair-plan`, and repair-plan JSON. Runtime output includes findings and repair text; repair-plan mode groups findings into state classes with subject, source rule, safe next command, and allowed mutation or refusal reason. | Strong discovery/repair-orientation model with machine-readable handoff. | Good model to copy. Future expansion should keep mutation delegated to existing lifecycle commands. |
 | `status` | flat leaf | `caws status --help` surfaces `--data`, focused panel filters (`--specs`, `--worktrees`, `--agents`, `--doctor`), and JSON output. Runtime dashboard remains read-only; focused filters render only requested panels from the same composed snapshot. | Good orientation model with large-project filters. | Future status UX could add saved profiles, but the main scan-cost gap is closed. |
 | `scope` | `show`, `check`, `plan`, `contention` | `caws scope --help` lists the path-focused leaves. Leaf help distinguishes observation, enforcement, batch planning, explicit spec-context checks, and cross-worktree contention; `show`, `check`, `plan`, and `contention` expose JSON. `show/check/plan` JSON includes structured remediation for common refusals and reports `mode: spec_context` when `--spec <id>` is supplied. | Strong path-level refusal/explanation model: `scope check --json` preserves enforcement exit codes; `scope plan` evaluates many paths in one read-only run and groups remediation commands; `--spec` lets agents ask whether a path fits a named spec without mutating or pretending the current checkout has write authority. | Good model to copy. Remaining gap is optional apply handoff ergonomics outside `scope`: `scope` now delegates mutation to `specs amend-scope` by design. |
@@ -172,12 +172,17 @@ as a compatibility alias for the existing `--abandon-unmerged` branch-safety
 override only. It remains guarded by ownership, clean checkout,
 missing-registry, and cleanup-plan refusals.
 
+The next linked-dist resample found `init --dry-run` as the newest still-current
+option mismatch after excluding stale `prepush --ack` evidence. `--dry-run` is
+now fixed as an alias for the existing read-only `init --plan` preview path and
+does not add a second init mode.
+
 ### Friction Classes
 
 | Friction marker | Count | UX implication |
 |---|---:|---|
 | `no_scope_authority` | 126 | Reconciled against the current linked-dist CLI: residual session transcripts still contain old generic unbound repair text, but direct reproduction in Sterling now shows active-spec authority candidates, read-only `scope --spec` checks, and create/bind/enter worktree handoffs in human and JSON output. |
-| `unknown_or_missing_option` | 91 | Further fixed for `specs close`, `scope`, `agents prune`, `specs create`, validation-era removed commands, specs status listing, worktree cleanup state filters, specs archive/prune-archive discoverability, governed scope amendment rationale, and worktree destroy compatibility: `--closure-notes` and `--notes` are now supported aliases for close notes, `scope show/check/plan --spec <id>` supports read-only explicit spec-context evaluation, `agents prune --dead --json` is verified, `specs create --tier <n>` aliases `--risk-tier <n>`, `specs create --id <id>` aliases the positional create id, legacy validation diagnostics are pinned, `specs --status <state>` hands off to `specs list --status <state>`, `worktree prune/cleanup-plan --status <classes>` aliases `--state <classes>`, `worktree destroy --force` aliases `--abandon-unmerged` only, `specs prune-archive` hands off to archive/restore/recover workflows, and `specs amend-scope --reason <text>` records rationale on `spec_scope_amended` evidence. Remaining work should resample the newest option mismatches after these fixes before selecting another leaf. |
+| `unknown_or_missing_option` | 91 | Further fixed for `specs close`, `scope`, `agents prune`, `specs create`, validation-era removed commands, specs status listing, worktree cleanup state filters, specs archive/prune-archive discoverability, governed scope amendment rationale, worktree destroy compatibility, and init preview compatibility: `--closure-notes` and `--notes` are now supported aliases for close notes, `scope show/check/plan --spec <id>` supports read-only explicit spec-context evaluation, `agents prune --dead --json` is verified, `specs create --tier <n>` aliases `--risk-tier <n>`, `specs create --id <id>` aliases the positional create id, legacy validation diagnostics are pinned, `specs --status <state>` hands off to `specs list --status <state>`, `worktree prune/cleanup-plan --status <classes>` aliases `--state <classes>`, `worktree destroy --force` aliases `--abandon-unmerged` only, `init --dry-run` aliases `init --plan`, `specs prune-archive` hands off to archive/restore/recover workflows, and `specs amend-scope --reason <text>` records rationale on `spec_scope_amended` evidence. Remaining work should resample the newest option mismatches after these fixes before selecting another leaf. |
 | `tier_requires_metadata` | 87 | Fixed at the create-plan layer: `specs create --plan` now reports missing semantic fields and emits copy-pasteable YAML examples in human and JSON output. |
 | `danger_latch` | 66 | CAWS hook UX still matters for CLI workflows; blocked shell forms often interrupt otherwise correct CAWS procedures. |
 | `worktree_not_found` | 62 | Fixed for `worktree destroy`: missing registry entries now remain non-mutating refusals but include a CAWS-native handoff to `worktree list`, `worktree prune --include <name>`, and `worktree cleanup-plan --include <name>` so agents can distinguish registry residue from unregistered physical worktrees. |
@@ -279,6 +284,7 @@ missing-registry, and cleanup-plan refusals.
 | `UX-STATUS-SHORT-ALIAS-001` | Implemented in fifty-fifth repair slice | Status compact output option | Adds `caws status --short` as a compact read-only human summary over the same status snapshot. The flag prints specs/worktrees/agents/doctor/events/binding counts without the full dashboard panels, and `--short --json` preserves the existing JSON status schema. Covered by `packages/caws-cli/tests/shell/status-short.test.js`. |
 | `UX-SPECS-LIST-LIFECYCLE-ALIASES-001` | Implemented in fifty-sixth repair slice | Specs list lifecycle selector aliases | Adds `caws specs list --active`, `--draft`, `--closed`, `--lifecycle <state>`, and `--state <state>` as compatibility selectors for the existing read-only `--status <state>` filter. Conflicting lifecycle selectors refuse before mutation, and `--archived` keeps its include-archived meaning. Covered by `packages/caws-cli/tests/shell/specs-list-lifecycle-aliases.test.js`. |
 | `UX-WORKTREE-DESTROY-FORCE-COMPAT-001` | Implemented in fifty-seventh repair slice | Worktree destroy force compatibility alias | Adds `caws worktree destroy <name> --force` as a compatibility alias for `--abandon-unmerged` only. The alias reaches the same unmerged-branch override but still refuses foreign ownership, dirty checkout, missing registry entries, and other guarded destroy failures. Covered by `packages/caws-cli/tests/shell/worktree-destroy-force-compat.test.js`. |
+| `UX-INIT-DRY-RUN-ALIAS-001` | Implemented in fifty-eighth repair slice | Init dry-run preview alias | Adds `caws init --dry-run` as a compatibility alias for `--plan`, including `--dry-run --json`. The alias uses the same read-only init preview path and writes no `.caws`, `.gitignore`, hook-pack, settings, or event state. Covered by `packages/caws-cli/tests/shell/init-dry-run-alias.test.js`. |
 
 ## Next Slice
 
@@ -286,13 +292,13 @@ The next implementation slice should resample the newest CAWS and Sterling
 session evidence for residual `unknown_or_missing_option` after the `--notes`,
 `amend-scope --reason`, `specs create --id`, `specs create --scope.in`, and
 `specs create --acceptance`, `status --short`, and `specs list --active`
-fixes, plus `worktree destroy --force`. Treat stale fixed
+fixes, plus `worktree destroy --force` and `init --dry-run`. Treat stale fixed
 examples (`--tier`, `--status`, `--closure-notes`, `--notes`,
 `amend-scope --reason`, `specs create --id`, `specs create --scope.in`,
 `specs create --acceptance`, `status --short`, `specs list --active`,
-`specs list --lifecycle`, `specs list --state`, `worktree destroy --force`) as
-closed and select the newest current leaf mismatch for the next concrete fix, if
-any.
+`specs list --lifecycle`, `specs list --state`, `worktree destroy --force`,
+`init --dry-run`) as closed and select the newest current leaf mismatch for the
+next concrete fix, if any.
 
 ## Findings
 
@@ -510,6 +516,12 @@ any.
    override and still routes missing registry entries, dirty checkouts, foreign
    ownership, and broader cleanup through the governed repair/cleanup-plan
    commands.
+
+35. **Init now accepts dry-run as the natural preview spelling.**
+   `init --dry-run` and `init --dry-run --json` now route to the same read-only
+   bootstrap preview as `init --plan`. The alias preserves the existing
+   classifier path and does not create `.caws`, `.gitignore`, hook-pack files,
+   settings files, or events.
 
 ## Recommendations
 

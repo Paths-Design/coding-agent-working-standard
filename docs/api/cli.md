@@ -52,7 +52,9 @@ Bootstrap canonical vNext `.caws/` project state. With `--agent-surface`, also i
 ```bash
 caws init
 caws init --plan
+caws init --dry-run
 caws init --plan --json
+caws init --dry-run --json
 caws init --agent-surface claude-code
 caws init --agent-surface codex
 ```
@@ -60,7 +62,8 @@ caws init --agent-surface codex
 | Flag | Description |
 |---|---|
 | `--plan` | Preview canonical `.caws/`, `.gitignore`, hook-pack, and settings changes without writing anything. |
-| `--json` | Emit the read-only init plan as JSON with `--plan`. |
+| `--dry-run` | Compatibility alias for `--plan`; previews init changes without writing anything. |
+| `--json` | Emit the read-only init plan as JSON with `--plan` or `--dry-run`. |
 | `--agent-surface <name>` | Install a hook pack for an agent harness: `claude-code`, `codex`, `cursor`, `windsurf`, or `none`. When omitted, init attempts filesystem detection and skips hook install when ambiguous. |
 | `--overwrite` | For hook-pack install: replace drifted or unmanaged files at managed pack paths. CAUTION: local edits to those files will be lost. |
 | `--adopt` | For hook-pack install: leave drifted or unmanaged files in place without enforcing pack contents. CAUTION: pack drift is no longer tracked for those paths. |
@@ -69,7 +72,7 @@ caws init --agent-surface codex
 Behavior:
 
 - Idempotent. Re-running on an already-initialized project is a no-op.
-- `--plan` is read-only. It reports canonical paths that would be created or already exist, the `.gitignore` managed-block outcome, selected hook-pack file actions, Claude settings wiring plans, Codex trust notes, refusal reasons, and the next apply command.
+- `--plan` and `--dry-run` are read-only. They report canonical paths that would be created or already exist, the `.gitignore` managed-block outcome, selected hook-pack file actions, Claude settings wiring plans, Codex trust notes, refusal reasons, and the next apply command.
 - Refuses to run if legacy `.caws/working-spec.yaml` is present (migrate first; there is no `--force`).
 - Creates the canonical layout:
 
