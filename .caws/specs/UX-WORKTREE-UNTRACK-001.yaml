@@ -7,12 +7,12 @@ created_at: '2026-07-04T04:32:35.206Z'
 updated_at: '2026-07-04T04:32:45.580Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli
+    - docs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/store/worktrees-writer.ts
     - packages/caws-cli/src/shell/commands/worktree.ts
     - packages/caws-cli/src/shell/register.ts
@@ -23,11 +23,26 @@ scope:
     - docs/architecture/cli-ux-job-model-audit.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'worktree untrack never deletes, creates, checks out, or modifies the physical git worktree directory.'
+  - 'Dry-run is the default and reports the exact registry/spec/event mutation plan without writing files or events.'
+  - 'Apply requires a non-empty reason, admitted ownership, an existing physical worktree directory, and a clean working tree.'
+  - 'Successful apply removes only the CAWS registry binding, clears the matching spec worktree field when present, and appends auditable event evidence.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a registered worktree with an existing clean physical directory and admitted owner'
+    when: 'an operator runs caws worktree untrack <name> --reason "..."'
+    then: 'the command prints a dry-run plan and does not mutate worktrees.json, specs, events, git state, or filesystem contents'
+  - id: A2
+    given: 'the same registered worktree'
+    when: 'an operator reruns caws worktree untrack <name> --reason "..." --apply'
+    then: 'the command removes the registry entry, clears the matching spec worktree binding, appends worktree_untracked, and preserves the physical directory'
+  - id: A3
+    given: 'a registered worktree with a dirty checkout or a foreign owner'
+    when: 'an operator runs caws worktree untrack <name> --reason "..." --apply'
+    then: 'the command refuses with a diagnostic and leaves registry, specs, events, git state, and filesystem contents unchanged'
+  - id: A4
+    given: 'the command metadata and documentation are regenerated'
+    when: 'an operator runs caws worktree --help and caws worktree untrack --help from the built dist-linked caws binary'
+    then: 'the untrack leaf and its dry-run/apply/reason semantics are visible in nested help and docs'
 non_functional: {}
 contracts: []
