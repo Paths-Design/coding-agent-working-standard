@@ -50,7 +50,7 @@ default for every cleanup or bulk lifecycle surface.
 | `init` | flat leaf | `caws init --help` surfaces hook-pack install options, adoption/overwrite choices, diagnostics `--data`. | Good bootstrap model: idempotent, explicit adoption/overwrite semantics. | No dry-run/advice mode for "what would init install or overwrite?" A preview would match package managers' install-plan UX. |
 | `doctor` | flat leaf | `caws doctor --help` surfaces `--data`; runtime output includes findings and repair text. | Strong discovery/repair-orientation model. | Findings are not yet directly actionable as a generated plan. Agents still translate doctor classes into separate commands manually. |
 | `status` | flat leaf | `caws status --help` surfaces `--data`; runtime dashboard is read-only. | Good orientation model. | No focused filters (`--worktrees`, `--agents`, `--specs`) for large projects; agents may parse a broad dashboard. |
-| `scope` | `show`, `check`, `contention` | `caws scope --help` lists the three path-focused leaves. Leaf help distinguishes observation, enforcement, and cross-worktree contention; `show`/`contention` expose JSON. | Strong path-level refusal/explanation model. | No batch path check and no direct "amend this spec to admit these paths" handoff. The repair model lives in `specs amend-scope`, but the scope refusal does not produce a ready command. |
+| `scope` | `show`, `check`, `contention` | `caws scope --help` lists the three path-focused leaves. Leaf help distinguishes observation, enforcement, and cross-worktree contention; `show`, `check`, and `contention` expose JSON. `show/check` JSON includes structured remediation for common refusals. | Strong path-level refusal/explanation model: `scope check --json` preserves enforcement exit codes while returning next-command handoffs to `specs amend-scope`, `worktree bind/create`, or claimant inspection. | No batch path check. The command now explains single-path remediation but still cannot evaluate a set of paths as one plan. |
 | `claim` | flat leaf | `caws claim --help` surfaces `--takeover`, repeatable `--paths`, and diagnostics. | Good ownership surfacing. Takeover is explicit and audited. | No release/clear path for path claims. No preview of a takeover's impact beyond the refusal text. |
 | `gates` | `list`, `explain`, `run` | `caws gates --help`, `caws gates list --help`, `caws gates explain --help`, and `caws gates run --help` surface read-only policy discovery before mutation. `list` reports configured gates, modes, thresholds, risk-tier budgets, and effective waiver ids; `explain` expands one gate; `run` appends gate evidence. | Stronger governed-check model: agents can inspect policy modes and waiver matches before running evaluators or writing `gate_evaluated` events. | Good model to copy. Remaining gate gap is historical trend/readback across prior gate_evaluated evidence, which may belong under `evidence` or a future dashboard. |
 | `evidence` | `record`, `list`, `show`, `schema` | Help surfaces typed `--type`, `--spec`, JSON payload, actor fields, read-only list filters, JSON output, event-ref lookup by seq/hash/prefix, and kernel-derived payload schema discovery. | Strong read/write symmetry: evidence can be appended, inspected, and prepared with a copy-pasteable schema/example path without direct `events.jsonl` parsing. | Good model to copy. Remaining gap is broader event-log discovery under `events`, not typed evidence inspection. |
@@ -71,7 +71,7 @@ default for every cleanup or bulk lifecycle surface.
 | Destroy multiple worktrees safely | `worktree destroy <name>` | `specs archive --include/--exclude` | One-at-a-time only; no selector by spec status, merged state, owner, or cleanliness. | Add a batch plan surface, not necessarily batch deletion first: `worktree cleanup plan --status closed --merged --json`, then a deliberately scoped apply command. |
 | Untrack without deleting files | `worktree untrack <name> --reason ... --apply` | `worktree repair` clears dead bindings but only by doctor class | Now closed for single registered worktrees: dry-run default, required reason, clean/owned/existing-directory preconditions, and `worktree_untracked` audit evidence. | Future batch cleanup can compose this model, but should remain separate from physical deletion. |
 | Restore an archived spec body | `specs recover <id> --out` | `specs activate`, `specs amend-scope` | Recovery is output-only. There is no governed restore to `.caws/specs/<id>.yaml` as draft/active. | Add `specs restore <id> --as draft --out canonical --apply` only if lifecycle semantics are accepted; otherwise keep `recover` read-only and document the manual path. |
-| Convert a refusal into next command | `scope check`, `doctor` repair text | `specs amend-scope` | The user has to copy/paste and infer the exact next command. | Add structured remediation JSON fields and copy-paste commands for common safe repairs. |
+| Convert a refusal into next command | `scope check --json`, `doctor` repair text | `specs amend-scope` | Now closed for single-path scope checks: JSON and human output include remediation commands for scope.in misses, root refusals, one-sided/unbound authority, and ambiguous claimants. | Future work should add batch path checks rather than more single-path prose. |
 | Inspect evidence history and payload shape | `evidence list/show/schema` | `waiver list/show`, `agents list/show` | Now closed for typed evidence events: list filters by spec/type, show resolves seq/hash/prefix after chain verification, and schema derives required payload fields from the kernel contracts. | Use this read/write/schema loop as a model for other append-heavy commands. |
 | Rotate audit chain safely | `events list/show`, `events rotate --dry-run --reason ...`, `events verify-archive` | `events migrate --apply` | Now closed for first-order preview/read/verify parity: list/show summarize current chain and rotation archive status, rotate dry-run reports target archive path/line count/digest/stats/genesis, and verify-archive confirms archived bytes. | Future retention/prune semantics should be designed separately from rotation verification. |
 | Clean expired waivers safely | `waiver prune --status expired [--apply]` | `agents prune --status ... --apply` | Now closed for expired active waivers: prune defaults to dry-run, supports JSON, and apply requires revocation audit metadata. | Future waiver UX should focus on explaining which waiver scope would match a gate violation, not broad deletion. |
@@ -164,17 +164,19 @@ By top-level command:
 | `UX-EVENTS-LOG-DISCOVERY-001` | Implemented in eighth repair slice | `events list/show` read-only event-log discovery | Adds `caws events list [--limit <n>] [--json]` and `caws events show <event-ref|latest-rotation> [--json]`. Both commands load through the event store, verify the current hash chain, leave `events.jsonl` byte-identical, and report rotation archive presence plus digest/line-count match when applicable. Covered by `packages/caws-cli/tests/shell/events-log-discovery.test.js`. |
 | `UX-GATES-POLICY-DISCOVERY-001` | Implemented in ninth repair slice | `gates list/explain` read-only policy discovery | Adds `caws gates list [--spec <id>] [--json]` and `caws gates explain <gate> [--spec <id>] [--json]`. Both commands compose the store snapshot, derive gate ids/modes/thresholds/risk-tier budgets from policy, use kernel waiver applicability for spec-scoped effective waiver ids, and never append `gate_evaluated` events. Covered by `packages/caws-cli/tests/shell/gates-policy-discovery.test.js`. |
 | `UX-WAIVER-LIFECYCLE-PREFLIGHT-001` | Implemented in tenth repair slice | `waiver create --dry-run` and expired-waiver prune | Adds `caws waiver create --dry-run [--json]` and `caws waiver prune --status expired [--apply] [--json]`. Create dry-run validates the candidate and duplicate id without writing `.caws/waivers/`; prune dry-run prints the exact expired active target set; apply requires `--reason` and `--revoked-by` and revokes only selected expired active waivers through the existing store writer. Covered by `packages/caws-cli/tests/shell/waiver-lifecycle-preflight.test.js`. |
+| `UX-SCOPE-REMEDIATION-GUIDANCE-001` | Implemented in eleventh repair slice | `scope check --json` and refusal remediation | Adds `caws scope check <path> --json` with the same decision contract as `scope show --json`, plus an optional `remediation` object. Human and JSON output now hand off to existing governed commands for scope.in misses/root refusals, scope.out exclusions, one-sided bindings, unbound worktrees, and ambiguous claimants without mutating from `scope`. Covered by `packages/caws-cli/tests/shell/scope-remediation-guidance.test.js`. |
 
 ## Next Slice
 
-The next implementation slice should address scope refusal-to-remediation:
-`caws scope check <path> --json` should include structured next-command
-guidance when the refusal is repairable, and human output should print the same
-copy-pasteable command where safe. Session evidence shows `scope` has the
-largest friction count after `specs` and `worktree`, especially when agents run
-from an unbound checkout or need to translate a refused path into
-`caws specs amend-scope <id> --add <path> --reason ...`. Keep mutation out of
-`scope`; it should explain and hand off to existing lifecycle commands.
+The next implementation slice should address tiered spec creation planning:
+`caws specs create --plan` or an equivalent dry-run preflight should validate
+the candidate, print the required semantic fields for the requested
+mode/risk-tier, and avoid writing `.caws/specs/<id>.yaml`. Session evidence
+still shows `tier_requires_metadata` as a high-friction class; help examples
+reduced contract tuple failures, but agents still discover tier-1/2
+observability/rollback/security/contract requirements by mutation-time
+rejection. Keep the first slice read-only and make the output copy-pasteable
+for the eventual `specs create` invocation.
 
 ## Findings
 
@@ -228,15 +230,15 @@ from an unbound checkout or need to translate a refused path into
    default before adding any apply behavior. Sterling needs a trustworthy plan
    more than it needs another destructive verb.
 
-4. Add scope remediation guidance: structured refusal data and safe
-   copy-pasteable next commands for common unbound-worktree, draft-spec, and
-   amend-scope cases.
+4. Add a read-only `specs create --plan` preflight for tiered specs: validate
+   the requested mode/risk-tier/contract flags, print missing semantic fields,
+   and show the eventual create command without writing a spec file.
 
 5. Add help regression tests for any group description that names subcommands
    and for cleanup leaves that claim dry-run/apply semantics. The CLI already
    has metadata-driven help; the gap is asserting the UX promises that agents
    rely on.
 
-6. Add examples to `specs create --help` for tier-1/2 specs and contract tuple
-   syntax, or add a `specs create --plan` mode that validates and prints the
-   missing required semantic fields before writing.
+6. Add batch path-check planning after the single-path remediation contract:
+   evaluate many paths, group refusals by spec/worktree/remediation command,
+   and keep mutation delegated to existing governed commands.

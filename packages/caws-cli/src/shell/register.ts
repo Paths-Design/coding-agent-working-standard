@@ -337,11 +337,12 @@ export function registerShellCommands(
     });
 
   defineLeaf(scopeCmd, leafMeta(SCOPE_COMMAND_META, 'check'))
-    .action((p: string, opts: { data?: boolean }) => {
+    .action((p: string, opts: { data?: boolean; json?: boolean }) => {
       const code = runScopeCommand({
         path: p,
         mode: 'check',
         showData: opts.data === true,
+        json: opts.json === true,
       });
       exit(code);
     });

@@ -102,7 +102,7 @@ export function runScopeCommand(opts: ScopeCommandOptions): number {
     // --json: emit the stable contract for the ambiguous case (the kernel does
     // not produce a Decision here — authority is ambiguous by construction —
     // so build the object directly). decision=no_authority + the claimant ids.
-    if (asJson && mode === 'show') {
+    if (asJson) {
       out(
         JSON.stringify({
           decision: 'no_authority',
@@ -112,9 +112,20 @@ export function runScopeCommand(opts: ScopeCommandOptions): number {
           mode: 'union',
           ambiguousClaimants: claimants.map((c) => c.specId),
           message: `Ambiguous binding: ${claimants.length} active bound specs claim "${targetPath}" via scope.in; CAWS will not guess which governs.`,
+          remediation: {
+            summary: 'Multiple active bound specs claim this path; CAWS will not choose an owner.',
+            commands: claimants.map((c) => ({
+              command: `caws specs show ${c.specId}`,
+              description: `Inspect claimant ${c.specId} bound to worktree ${c.worktreeName}.`,
+              mutates: false,
+            })),
+            notes: [
+              'Route the edit through exactly one owning worktree, or narrow one spec with caws specs amend-scope.',
+            ],
+          },
         })
       );
-      return 0;
+      return mode === 'show' ? 0 : 1;
     }
     const cwdClaimant =
       bound.worktreeName !== undefined
@@ -136,6 +147,10 @@ export function runScopeCommand(opts: ScopeCommandOptions): number {
     err('    (a) narrowing one spec\'s scope.in so only one claims this path, OR');
     err('    (b) routing the edit through the single worktree that should own it');
     err('        and removing the path from the other spec\'s scope.in.');
+    err('  Next commands:');
+    for (const c of claimants) {
+      err(`    caws specs show ${c.specId}`);
+    }
     return 1;
   }
 
@@ -161,13 +176,13 @@ export function runScopeCommand(opts: ScopeCommandOptions): number {
     return 2;
   }
 
-  // 6. Render. --json (show only) emits the stable single-line machine
-  //    contract for hook consumption (CAWS-SCOPE-SHOW-JSON-CONTRACT-001) and
-  //    returns immediately — no human prose, no caveat lines. Otherwise both
+  // 6. Render. --json emits the stable single-line machine contract for hook
+  //    consumption and operator remediation. `show` and `check` share the same
+  //    JSON; exit codes still follow their normal mode contract. Otherwise both
   //    modes use the human renderer with the same boundContext hint.
-  if (asJson && mode === 'show') {
+  if (asJson) {
     out(renderDecisionJson(decision, bound));
-    return 0;
+    return mode === 'show' ? 0 : decision.kind === 'admit' ? 0 : 1;
   }
   out(renderDecision(decision, { boundContext: bound, showData }));
 

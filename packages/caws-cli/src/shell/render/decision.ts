@@ -83,6 +83,20 @@ export interface ScopeDecisionJson {
   readonly message: string;
   /** Precise repair hint, when the kernel knows one (else omitted). */
   readonly repair?: string;
+  /** Structured handoff guidance for common repairable refusals. */
+  readonly remediation?: ScopeRemediation;
+}
+
+export interface ScopeRemediationCommand {
+  readonly command: string;
+  readonly description: string;
+  readonly mutates: boolean;
+}
+
+export interface ScopeRemediation {
+  readonly summary: string;
+  readonly commands: readonly ScopeRemediationCommand[];
+  readonly notes?: readonly string[];
 }
 
 /**
@@ -135,6 +149,8 @@ export function buildScopeDecisionJson(
   ) {
     json.repair = decision.narrowRepair;
   }
+  const remediation = buildScopeRemediation(decision, boundContext);
+  if (remediation !== undefined) json.remediation = remediation;
   return json as ScopeDecisionJson;
 }
 
@@ -180,6 +196,154 @@ function extractMatchedPattern(
   return typeof candidate === 'string' ? candidate : undefined;
 }
 
+export function buildScopeRemediation(
+  decision: Decision,
+  boundContext?: ResolvedBinding
+): ScopeRemediation | undefined {
+  if (decision.kind === 'admit' || decision.kind === 'invalid_path') {
+    return undefined;
+  }
+
+  if (boundContext?.ambiguous !== undefined) {
+    const commands = boundContext.ambiguous.claimants.map((c) => ({
+      command: `caws specs show ${shellQuote(c.specId)}`,
+      description: `Inspect claimant ${c.specId} bound to worktree ${c.worktreeName}.`,
+      mutates: false,
+    }));
+    return {
+      summary: 'Multiple active bound specs claim this path; CAWS will not choose an owner.',
+      commands,
+      notes: [
+        'Route the edit through exactly one owning worktree, or narrow one spec with caws specs amend-scope.',
+      ],
+    };
+  }
+
+  const specId = extractBoundSpecId(decision, boundContext);
+  const normPath = decision.normalizedPath ?? decision.path;
+
+  if (
+    decision.kind === 'reject' &&
+    typeof specId === 'string' &&
+    (decision.rule === 'scope.reject.scope_in_miss' ||
+      decision.rule === 'scope.reject.root_not_allowed')
+  ) {
+    return {
+      summary: `Path is refused by spec ${specId}; amend that spec if this edit belongs in the slice.`,
+      commands: [
+        {
+          command: `caws specs amend-scope ${shellQuote(specId)} --add ${shellQuote(normPath)}`,
+          description: 'Add the path to scope.in, making it editable and worktree-claimed.',
+          mutates: true,
+        },
+        {
+          command: `caws specs amend-scope ${shellQuote(specId)} --add-support ${shellQuote(normPath)}`,
+          description: 'Add the path to scope.support, making it editable but not worktree-claimed.',
+          mutates: true,
+        },
+      ],
+    };
+  }
+
+  if (
+    decision.kind === 'reject' &&
+    typeof specId === 'string' &&
+    decision.rule === 'scope.reject.scope_out'
+  ) {
+    const matched = extractMatchedPattern(decision.data) ?? normPath;
+    return {
+      summary: `Path is excluded by spec ${specId}; inspect before widening scope.out.`,
+      commands: [
+        {
+          command: `caws specs show ${shellQuote(specId)}`,
+          description: 'Inspect the current scope.in/scope.out contract before changing it.',
+          mutates: false,
+        },
+        {
+          command: `caws specs amend-scope ${shellQuote(specId)} --remove-out ${shellQuote(matched)}`,
+          description: 'Remove the matching scope.out exclusion if this path is intentionally in scope.',
+          mutates: true,
+        },
+      ],
+    };
+  }
+
+  if (decision.kind === 'no_authority' && decision.bindingState === 'one_sided') {
+    const worktreeName = boundContext?.worktreeName ?? stringData(decision.data, 'worktreeName');
+    const registrySpecId = stringData(decision.data, 'registrySpecId');
+    const commands: ScopeRemediationCommand[] = [
+      {
+        command: 'caws doctor',
+        description: 'Inspect the one-sided binding and confirm which side is missing.',
+        mutates: false,
+      },
+    ];
+    if (typeof worktreeName === 'string' && typeof registrySpecId === 'string') {
+      commands.unshift({
+        command: `caws worktree bind ${shellQuote(worktreeName)} --spec ${shellQuote(registrySpecId)}`,
+        description: 'Repair the bidirectional worktree/spec binding.',
+        mutates: true,
+      });
+    }
+    return {
+      summary: 'The worktree/spec binding is one-sided; repair the binding before evaluating scope.',
+      commands,
+    };
+  }
+
+  if (decision.kind === 'no_authority' && decision.bindingState === 'unbound') {
+    if (typeof boundContext?.worktreeName === 'string') {
+      return {
+        summary: `Tracked worktree ${boundContext.worktreeName} is not bound to a spec.`,
+        commands: [
+          {
+            command: `caws worktree bind ${shellQuote(boundContext.worktreeName)} --spec <spec-id>`,
+            description: 'Bind this existing worktree to the active spec that should own the edit.',
+            mutates: true,
+          },
+          {
+            command: 'caws specs list',
+            description: 'List specs to choose the intended active spec id.',
+            mutates: false,
+          },
+        ],
+        notes: ['Replace <spec-id> before running the bind command.'],
+      };
+    }
+    return {
+      summary: 'No worktree is bound for this context; create or enter the worktree that should own the edit.',
+      commands: [
+        {
+          command: 'caws worktree create <name> --spec <spec-id>',
+          description: 'Create a governed worktree for the active spec that should own the edit.',
+          mutates: true,
+        },
+        {
+          command: 'caws specs list',
+          description: 'List specs to choose the intended active spec id.',
+          mutates: false,
+        },
+      ],
+      notes: ['Replace <name> and <spec-id> before running the create command.'],
+    };
+  }
+
+  return undefined;
+}
+
+function stringData(
+  data: Readonly<Record<string, unknown>> | undefined,
+  key: string
+): string | undefined {
+  const value = data?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function shellQuote(value: string): string {
+  if (/^[A-Za-z0-9_./:@%+=,-]+$/.test(value)) return value;
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 const KIND_LABEL: Record<Decision['kind'], string> = {
   admit: 'ADMIT       ',
   reject: 'REJECT      ',
@@ -212,6 +376,18 @@ export function renderDecision(
   }
   if (opts.showData === true && decision.data !== undefined) {
     lines.push(`             data:    ${JSON.stringify(decision.data)}`);
+  }
+  const remediation = buildScopeRemediation(decision, opts.boundContext);
+  if (remediation !== undefined) {
+    lines.push('             remediation:');
+    lines.push(`               ${remediation.summary}`);
+    for (const command of remediation.commands) {
+      lines.push(`               - ${command.command}`);
+      lines.push(`                 ${command.description}`);
+    }
+    for (const note of remediation.notes ?? []) {
+      lines.push(`               note: ${note}`);
+    }
   }
   lines.push(`             binding: ${decision.bindingState}`);
   return lines.join('\n');
