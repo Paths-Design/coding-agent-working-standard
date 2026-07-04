@@ -7,7 +7,8 @@ created_at: '2026-07-04T13:25:31.625Z'
 updated_at: '2026-07-04T13:25:39.440Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/legacy-command-diagnostics
+    - docs/cli-ux-audit
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -18,12 +19,22 @@ scope:
     - docs/command-reference.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Replaced validation-era commands such as caws validate continue to hand off to caws doctor and caws gates run --spec <id>.'
+  - 'Removed-without-equivalent validation-era commands such as verify-acs/evaluate/iterate/burnup keep their narrower command-specific guidance.'
+  - 'docs/api/cli.md no longer claims one replacement model for validation-era commands whose runtime diagnostics intentionally differ.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'An agent invokes caws validate or caws verify'
+    when: 'The legacy-command diagnostic is formatted'
+    then: 'It says the command was replaced and lists caws doctor plus caws gates run --spec <id>.'
+  - id: A2
+    given: 'An agent invokes verify-acs/evaluate/iterate/burnup'
+    when: 'The legacy-command diagnostic is formatted'
+    then: 'It preserves the command-specific removed guidance instead of inventing a false doctor/gates replacement.'
+  - id: A3
+    given: 'An operator reads docs/api/cli.md and the CLI UX audit'
+    when: 'They inspect removed validation-era surfaces'
+    then: 'The docs distinguish replaced validation commands from removed advisory/report commands and the audit advances to the next evidence-backed mismatch.'
 non_functional: {}
 contracts:
   - name: 'legacy-validation-diagnostics'
