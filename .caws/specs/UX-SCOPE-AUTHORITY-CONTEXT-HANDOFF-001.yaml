@@ -7,7 +7,9 @@ created_at: '2026-07-04T17:53:57.176Z'
 updated_at: '2026-07-04T17:53:57.176Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli/scope'
+    - 'packages/caws-cli/scope-remediation-rendering'
+    - 'docs/cli-ux-audit'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -21,12 +23,27 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Scope enforcement decisions and exit codes remain unchanged.'
+  - 'Unbound no-authority remediation names visible active specs and read-only spec-context checks when active specs exist.'
+  - 'Tracked unbound worktree remediation distinguishes bind-existing-worktree from create-new-worktree.'
+  - 'Authority-context guidance is read-only except for explicit create/bind commands already marked mutating.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'A canonical checkout with active specs and no current worktree binding'
+    when: 'An operator runs caws scope check --json <path> for an unclaimed path'
+    then: 'The refusal still exits 1 but includes active spec candidates, read-only caws scope show --spec commands, and create/enter handoffs.'
+  - id: A2
+    given: 'A tracked worktree registry entry with no bound spec'
+    when: 'An operator runs caws scope show/check from inside that worktree'
+    then: 'The no-authority remediation suggests binding that worktree to a visible active spec instead of only using a generic <spec-id> placeholder.'
+  - id: A3
+    given: 'The scope plan batch output'
+    when: 'Several paths are refused only because the current context is unbound'
+    then: 'The grouped remediation includes a specs list/read-only spec-context path and does not imply base-checkout write authority.'
+  - id: A4
+    given: 'The CLI UX audit'
+    when: 'This slice lands'
+    then: 'The no_scope_authority row records the authority-context handoff and scopes the next remaining residual issue.'
 non_functional: {}
 contracts:
   - name: 'scope-authority-context'
