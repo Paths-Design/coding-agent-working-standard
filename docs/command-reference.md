@@ -468,6 +468,7 @@ Close an active spec. Non-destructive raw-byte YAML patch; appends spec_closed e
 
 - `--resolution <r>` (default: `completed`) — Resolution: completed | superseded | abandoned
 - `--reason <text>` — Closure notes recorded on the spec YAML and the spec_closed event
+- `--closure-notes <text>` — Alias for --reason; writes closure_notes on the closed spec
 - `--merge-commit <sha>` — Optional merge commit SHA (e.g., when closure follows a worktree merge)
 - `--superseded-by <id>` — Spec id that supersedes this one (use with --resolution superseded)
 - `--data` — Show structured data block on diagnostics

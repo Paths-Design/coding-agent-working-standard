@@ -125,7 +125,7 @@ By top-level command:
 | Friction marker | Count | UX implication |
 |---|---:|---|
 | `no_scope_authority` | 126 | Agents frequently ask scope questions from canonical/unbound contexts and then need a bridge to "what command gets me into an authoritative context?" |
-| `unknown_or_missing_option` | 91 | Help/flag discoverability still creates retries, especially when command shapes are close but not parallel. |
+| `unknown_or_missing_option` | 91 | Partially fixed for `specs close`: `--closure-notes` is now a supported alias for the existing `--reason` closure note field, with a conflict guard when both are supplied. Help/flag discoverability still creates retries where adjacent command shapes are close but not parallel. |
 | `tier_requires_metadata` | 87 | Fixed at the create-plan layer: `specs create --plan` now reports missing semantic fields and emits copy-pasteable YAML examples in human and JSON output. |
 | `danger_latch` | 66 | CAWS hook UX still matters for CLI workflows; blocked shell forms often interrupt otherwise correct CAWS procedures. |
 | `worktree_not_found` | 62 | Agents repeatedly try `worktree destroy <name>` after merge/closure or for residue that is no longer a registered CAWS worktree. |
@@ -147,6 +147,7 @@ By top-level command:
 | Scope from canonical checkout | `NO AUTHORITY scope.no_authority.unbound ... No spec is bound to this worktree`. | A guided bridge from "no authority" to `worktree create`, `worktree bind`, or `specs amend-scope`, depending on intent. |
 | Draft spec binding | `Spec "..." is in lifecycle_state "draft"; only active specs can be bound to a worktree.` | Now closed for create/bind: the refusal includes `caws specs activate <id>`, explains activation preflight, and does not mutate worktree/spec/event state. |
 | Already-closed close | `Spec "..." is already closed; close is a no-op and no closure metadata was changed.` | Now closed for state-aware refusal: the diagnostic names `caws specs show <id>`, `caws specs archive <id>`, and `caws specs recover <id> --out <path>` without mutating closure metadata. |
+| Closure notes flag mismatch | `Unknown option: --closure-notes` when an agent tried to close a spec using the YAML field name. | Now closed for `specs close`: `--closure-notes <text>` aliases `--reason <text>`, both write `closure_notes`, and supplying both fails before mutation. |
 | Tier metadata failure | `Tier 1 specs require non-empty observability... rollback... contract.` | Now closed for plan guidance: `specs create --plan` lists missing semantic fields and emits copy-pasteable YAML examples in human output plus `field_examples` in JSON. |
 | Contract tuple inversion | `invalid --contract "behavior:verifychain-detects-tamper": type "verifychain-detects-tamper" is not one of ...` | Now closed: linked CLI verification shows the diagnostic prints the accepted tuple shape, `--contract "core-api:behavior"` example, and corrected `--contract "verifychain-detects-tamper:behavior"` suggestion. |
 | Evidence schema rejection | `data: must have required property 'command'` for `evidence record --type test`. | Fixed by `evidence schema --type test` plus per-type examples in `evidence record --help`. |
@@ -184,14 +185,15 @@ By top-level command:
 | `UX-SPECS-CLOSE-HANDOFF-001` | Implemented in twenty-seventh repair slice | Already-closed specs close handoff | Adds a state-aware already-closed diagnostic for `caws specs close <id>`. The refusal remains non-mutating, explains that close is a no-op, and points agents at `specs show`, `specs archive`, and post-archive `specs recover`. Covered by `packages/caws-cli/tests/shell/specs-close-handoff.test.js`. |
 | `UX-SPECS-CREATE-TIER-GUIDANCE-001` | Implemented in twenty-eighth repair slice | Tier metadata examples in create plan | Adds concrete YAML examples to `caws specs create --plan` for missing `/contracts`, `/observability`, `/rollback`, and `/non_functional/security` fields. Human output prints an `example YAML additions` block; JSON output exposes `field_examples`; plan remains read-only. Covered by `packages/caws-cli/tests/shell/specs-create-plan.test.js`. |
 | `UX-CONTRACT-TUPLE-AUDIT-001` | Implemented in twenty-ninth repair slice | Contract tuple audit reconciliation | Verifies the current linked CLI already emits the accepted tuple shape, inline example, and corrected inverted-tuple suggestion, then updates this audit so the representative row no longer describes the fixed behavior as a missing model. Existing behavior remains covered by `packages/caws-cli/tests/shell/specs-create-ux.test.js`. |
+| `UX-SPECS-CLOSE-CLOSURE-NOTES-ALIAS-001` | Implemented in thirtieth repair slice | Specs close closure note alias | Adds `caws specs close <id> --closure-notes <text>` as an alias for `--reason <text>` because both write the YAML `closure_notes` field. Supplying both flags fails before mutation. Covered by `packages/caws-cli/tests/shell/specs-close-closure-notes-alias.test.js`. |
 
 ## Next Slice
 
-The next implementation slice should address the broad
-`unknown_or_missing_option` class. Start by sampling the session evidence for
-which command groups are causing retries, then pick one concrete mismatch where
-help and runtime can be brought into alignment with a low-risk alias,
-state-aware refusal, or clearer neighboring-command handoff.
+The next implementation slice should continue the broad
+`unknown_or_missing_option` class. Session evidence shows agents also passed
+`--spec` to `caws scope show`; start there and decide whether the right fix is a
+read-only spec-context option, a sharper refusal that explains current-worktree
+scope authority, or a neighboring-command handoff.
 
 ## Findings
 
@@ -259,7 +261,13 @@ state-aware refusal, or clearer neighboring-command handoff.
    "verifychain-detects-tamper:behavior"?`. The representative row now matches
    the implementation ledger and existing regression test.
 
-12. **Help context is now closer to reality, but nested help should keep naming
+12. **Closure note naming now matches the YAML field.**
+   `specs close --closure-notes <text>` is a supported alias for the existing
+   `--reason <text>` storage path. This addresses session evidence where an
+   agent used the spec field name and got an unknown-option failure; the command
+   now rejects only the ambiguous case where both note flags are supplied.
+
+13. **Help context is now closer to reality, but nested help should keep naming
    adjacent alternatives.** The recent `specs archive` and `specs validate`
    fixes show that group and leaf help need to explain neighboring commands:
    archive vs recover, create vs amend-scope, repair vs destroy, prune vs
