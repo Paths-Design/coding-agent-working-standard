@@ -7,7 +7,13 @@ created_at: '2026-07-04T10:59:47.830Z'
 updated_at: '2026-07-04T10:59:47.830Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/tests/shell
+    - docs/api/cli.md
+    - docs/command-reference.md
+    - docs/architecture/cli-ux-job-model-audit.md
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -19,11 +25,21 @@ scope:
     - 'docs/command-reference.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Physical worktree cleanup planning is read-only: it must not delete git worktree directories, mutate .caws/worktrees.json, patch spec YAML, append events, or invoke git worktree remove.'
+  - 'The plan classifies registered and physical worktrees by cleanup-relevant state: cleanliness, merge status, bound spec lifecycle, ownership, and registry presence.'
+  - 'Selector flags must be explicit and composable: state, include, and exclude filters narrow the read-only plan without changing the underlying classification.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a project with registered physical worktrees in closed/clean, dirty, unmerged, active-bound, and foreign-owned states'
+    when: 'an agent runs the new physical cleanup planning command in human or JSON mode'
+    then: 'the command returns a read-only plan with state classes, refusal reasons, next commands, and no filesystem or CAWS state mutation'
+  - id: A2
+    given: 'a project with a physical git worktree under .caws/worktrees that is not registered in CAWS'
+    when: 'an agent runs the cleanup planning command'
+    then: 'the unregistered directory is surfaced as a refused physical cleanup class instead of being deleted or silently ignored'
+  - id: A3
+    given: 'the CLI help and generated command reference'
+    when: 'an agent inspects caws worktree --help and the new leaf --help'
+    then: 'the help distinguishes worktree prune control-plane cleanup from physical cleanup planning and documents state/include/exclude/json options'
 non_functional: {}
 contracts: []
