@@ -7,7 +7,13 @@ created_at: '2026-07-04T11:10:28.152Z'
 updated_at: '2026-07-04T11:10:28.152Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/tests/shell
+    - docs/api/cli.md
+    - docs/command-reference.md
+    - docs/architecture/cli-ux-job-model-audit.md
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -19,11 +25,21 @@ scope:
     - 'docs/command-reference.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Physical cleanup apply must never implement a second deletion engine: every selected worktree deletion goes through destroyWorktree.'
+  - 'Apply is narrower than plan: it may mutate only registered destroy-ready candidates and must refuse dirty, unmerged, active-bound, foreign-owned, unregistered, or observation-failed classes.'
+  - 'Apply must require explicit selectors so an unfiltered cleanup-plan --apply cannot destroy all eligible physical worktrees by accident.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a project with multiple cleanup-plan classes including destroy-ready and refused physical worktrees'
+    when: 'an agent runs cleanup-plan --apply with explicit include/state selectors'
+    then: 'only selected destroy-ready worktrees are passed through destroyWorktree; refused classes remain non-mutating and are reported in human and JSON output'
+  - id: A2
+    given: 'a project with destroy-ready worktrees but no explicit include/exclude/state selector'
+    when: 'an agent runs cleanup-plan --apply'
+    then: 'the command refuses before mutation and tells the agent to add a selector'
+  - id: A3
+    given: 'the CLI help and generated command reference'
+    when: 'an agent inspects caws worktree cleanup-plan --help'
+    then: 'the help documents dry-run default behavior, guarded --apply, selector requirements, and the destroy-ready-only apply class'
 non_functional: {}
 contracts: []
