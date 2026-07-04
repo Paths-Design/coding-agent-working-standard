@@ -168,7 +168,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         {
           flag: '--contract <spec>',
           description:
-            'Add a contract at creation (repeatable), as "name:type[:path]" where type is api|schema|contract-test|behavior. Tier 1/2 specs REQUIRE at least one contract; tier 3 / --mode chore do not.',
+            'Add a contract at creation (repeatable), as "name:type[:path]" where type is api|schema|contract-test|behavior. Example: --contract "core-api:behavior". Tier 1/2 specs REQUIRE at least one contract; tier 3 / --mode chore do not.',
           collect: true,
         },
         {

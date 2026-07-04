@@ -189,6 +189,17 @@ type ContractType = (typeof CONTRACT_TYPES)[number];
 const CONTRACT_SHAPE_HINT =
   'Contract shape: {name, type: api|schema|contract-test|behavior, path?, description?}. ' +
   'Author via repeatable --contract "name:type[:path]".';
+const CONTRACT_EXAMPLE_HINT = 'Example: --contract "core-api:behavior"';
+
+function contractTypeError(entry: string, name: string, typeRaw: string): string {
+  const base =
+    `invalid --contract "${entry}": type "${typeRaw}" is not one of ${CONTRACT_TYPES.join(', ')}. ` +
+    `${CONTRACT_SHAPE_HINT} ${CONTRACT_EXAMPLE_HINT}.`;
+  if (CONTRACT_TYPES.includes(name as ContractType) && typeRaw.length > 0) {
+    return `${base} Did you mean --contract "${typeRaw}:${name}"?`;
+  }
+  return base;
+}
 
 /**
  * Parse a repeatable --contract "name:type[:path]" into structured entries.
@@ -218,7 +229,7 @@ function parseContractFlags(
     }
     if (!CONTRACT_TYPES.includes(typeRaw as ContractType)) {
       return {
-        error: `invalid --contract "${entry}": type "${typeRaw}" is not one of ${CONTRACT_TYPES.join(', ')}.`,
+        error: contractTypeError(entry, name, typeRaw),
       };
     }
     contracts.push({
