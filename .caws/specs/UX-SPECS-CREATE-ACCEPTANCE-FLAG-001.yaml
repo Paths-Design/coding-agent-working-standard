@@ -2,10 +2,11 @@ id: UX-SPECS-CREATE-ACCEPTANCE-FLAG-001
 title: 'Add specs create acceptance flag'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: specs-create-acceptance-flag
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge specs-create-acceptance-flag at 32023dabb8e9472d98d66cbc1729cc07b78cabad'
 created_at: '2026-07-04T18:41:48.949Z'
-updated_at: '2026-07-04T18:41:48.949Z'
+updated_at: '2026-07-04T18:46:01.663Z'
 blast_radius:
   modules:
     - 'packages/caws-cli specs writer'
