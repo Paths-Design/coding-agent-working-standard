@@ -4,7 +4,7 @@ risk_tier: 3
 mode: feature
 lifecycle_state: active
 created_at: '2026-07-04T04:32:35.206Z'
-updated_at: '2026-07-04T04:32:35.206Z'
+updated_at: '2026-07-04T04:32:45.580Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
@@ -13,6 +13,14 @@ operational_rollback_slo: 5m
 scope:
   in:
     - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/tests/shell/worktree-untrack.test.js
+    - docs/api/cli.md
+    - docs/command-reference.md
+    - docs/architecture/cli-ux-job-model-audit.md
   out: []
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'
