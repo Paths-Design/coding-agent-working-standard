@@ -3,6 +3,7 @@ title: 'Clarify scope target-claim authority handoff'
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: scope-target-claim-handoff
 created_at: '2026-07-04T13:58:50.723Z'
 updated_at: '2026-07-04T13:58:50.723Z'
 blast_radius:
