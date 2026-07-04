@@ -748,8 +748,39 @@ export const EVIDENCE_COMMAND_META: GroupCommandMeta = {
 export const EVENTS_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'events',
-  description: 'Maintenance commands for .caws/events.jsonl (rotate, migrate, verify-archive)',
+  description:
+    'Read and maintain .caws/events.jsonl (list/show/rotate/migrate/verify-archive)',
   subcommands: [
+    {
+      kind: 'leaf',
+      name: 'list',
+      description:
+        'Summarize the current hash-chained events log. Read-only; verifies the chain, reports counts, latest event, recent events, and chain_rotated archive status.',
+      options: [
+        { flag: '--json', description: 'Emit chain summary, rotations, and recent events as JSON.' },
+        {
+          flag: '--limit <n>',
+          description: 'Number of recent events to include (default: 20; use 0 for summary only)',
+        },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'show',
+      argument: {
+        name: 'event-ref',
+        required: true,
+        description:
+          'Event sequence number, full event hash, unique event-hash prefix, or latest-rotation.',
+      },
+      description:
+        'Show one event after verifying the current hash chain. The special ref latest-rotation shows the newest chain_rotated event with archive presence/digest/line-count status.',
+      options: [
+        { flag: '--json', description: 'Emit the matched event and rotation status as JSON.' },
+        DATA_OPTION,
+      ],
+    },
     {
       kind: 'leaf',
       name: 'migrate',

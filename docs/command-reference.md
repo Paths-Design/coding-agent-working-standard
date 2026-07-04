@@ -31,7 +31,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws claim`](#caws-claim) — Surface ownership of the current worktree; with --takeover, acquire ownership from a foreign session (writes prior_owners audit). With --paths, declare working-tree ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001).
 - [`caws gates`](#caws-gates) — Run quality gates against the current changes (policy-driven)
 - [`caws evidence`](#caws-evidence) — Record, inspect, and describe typed evidence events in .caws/events.jsonl
-- [`caws events`](#caws-events) — Maintenance commands for .caws/events.jsonl (rotate, migrate, verify-archive)
+- [`caws events`](#caws-events) — Read and maintain .caws/events.jsonl (list/show/rotate/migrate/verify-archive)
 - [`caws waiver`](#caws-waiver) — Manage CAWS waivers (bounded exception records that suppress matching gate violations)
 - [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/retire-draft/activate/amend-scope/close/archive/prune-archive/migrate/validate)
 - [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune). Worktrees are git worktrees bound to active specs.
@@ -174,7 +174,28 @@ Print the kernel-derived payload schema and a copy-pasteable `caws evidence reco
 
 ## `caws events`
 
-Maintenance commands for .caws/events.jsonl (rotate, migrate, verify-archive)
+Read and maintain .caws/events.jsonl (list/show/rotate/migrate/verify-archive)
+
+### `caws events list`
+
+Summarize the current hash-chained events log. Read-only; verifies the chain, reports counts, latest event, recent events, and chain_rotated archive status.
+
+**Options:**
+
+- `--json` — Emit chain summary, rotations, and recent events as JSON.
+- `--limit <n>` — Number of recent events to include (default: 20; use 0 for summary only)
+- `--data` — Show structured data block on diagnostics
+
+### `caws events show <event-ref>`
+
+Show one event after verifying the current hash chain. The special ref latest-rotation shows the newest chain_rotated event with archive presence/digest/line-count status.
+
+**Argument:** `event-ref` (required) — Event sequence number, full event hash, unique event-hash prefix, or latest-rotation.
+
+**Options:**
+
+- `--json` — Emit the matched event and rotation status as JSON.
+- `--data` — Show structured data block on diagnostics
 
 ### `caws events migrate`
 

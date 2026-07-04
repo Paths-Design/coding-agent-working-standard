@@ -79,13 +79,17 @@ export type {
 } from './commands/evidence';
 
 export {
+  runEventsListCommand,
   runEventsMigrateCommand,
   runEventsRotateCommand,
+  runEventsShowCommand,
   runEventsVerifyArchiveCommand,
 } from './commands/events';
 export type {
+  EventsListCommandOptions,
   EventsMigrateCommandOptions,
   EventsRotateCommandOptions,
+  EventsShowCommandOptions,
   EventsVerifyArchiveCommandOptions,
 } from './commands/events';
 

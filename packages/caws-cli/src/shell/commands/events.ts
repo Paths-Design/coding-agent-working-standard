@@ -42,6 +42,7 @@ import {
   type Diagnostic,
   isOk,
   prepareAppend,
+  verifyChain,
 } from '@paths.design/caws-kernel';
 
 import {
@@ -183,6 +184,295 @@ export interface EventsMigrateCommandOptions extends BaseCommandOptions {
   readonly actorId?: string;
   /** Allow rotation when v10 specs are still present. */
   readonly allowPartialUpgrade?: boolean;
+}
+
+export interface EventsListCommandOptions extends BaseCommandOptions {
+  /** Emit machine-readable JSON instead of human summary lines. */
+  readonly json?: boolean;
+  /** Number of recent events to include. Defaults to 20. */
+  readonly limit?: number;
+}
+
+export interface EventsShowCommandOptions extends BaseCommandOptions {
+  /** Sequence number, full event_hash, unique event_hash prefix, or latest-rotation. */
+  readonly ref: string;
+  /** Emit machine-readable JSON instead of a human summary + payload. */
+  readonly json?: boolean;
+}
+
+interface EventSummary {
+  readonly seq: number;
+  readonly hash: string;
+  readonly event: string;
+  readonly spec_id: string | null;
+  readonly ts: string;
+  readonly actor: ChainedEvent['actor'];
+  readonly data: ChainedEvent['data'];
+}
+
+interface RotationSummary {
+  readonly seq: number;
+  readonly hash: string;
+  readonly ts: string;
+  readonly archive: string;
+  readonly archive_path: string;
+  readonly prior_file_digest: string | null;
+  readonly prior_line_count: number | null;
+  readonly prior_chain_status: string | null;
+  readonly archive_present: boolean;
+  readonly archive_digest: string | null;
+  readonly archive_line_count: number | null;
+  readonly archive_digest_matches: boolean | null;
+  readonly archive_line_count_matches: boolean | null;
+}
+
+function eventSummary(event: ChainedEvent): EventSummary {
+  return {
+    seq: event.seq,
+    hash: event.event_hash,
+    event: event.event,
+    spec_id: event.spec_id ?? null,
+    ts: event.ts,
+    actor: event.actor,
+    data: event.data,
+  };
+}
+
+function countByEvent(events: readonly ChainedEvent[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const event of events) {
+    counts[event.event] = (counts[event.event] ?? 0) + 1;
+  }
+  return counts;
+}
+
+function loadVerifiedEventsForDiscovery(
+  cwd: string,
+  err: (line: string) => void,
+  showData: boolean,
+  commandName: string
+): { cawsDir: string; events: readonly ChainedEvent[] } | null {
+  const rootResult = resolveRepoRoot(cwd);
+  if (!rootResult.ok) {
+    err(`caws events ${commandName}: failed to resolve repo root.`);
+    err(renderDiagnostics(rootResult.errors, { showData }));
+    return null;
+  }
+  const { cawsDir } = rootResult.value;
+  const loaded = loadEvents(cawsDir);
+  if (!loaded.ok) {
+    err(`caws events ${commandName}: failed to load events.jsonl.`);
+    err(renderDiagnostics(loaded.errors, { showData }));
+    return null;
+  }
+  const verified = verifyChain(loaded.value.events);
+  if (!isOk(verified)) {
+    err(`caws events ${commandName}: event chain verification failed.`);
+    err(renderDiagnostics(verified.errors, { showData }));
+    return null;
+  }
+  return { cawsDir, events: loaded.value.events };
+}
+
+function archiveStatus(cawsDir: string, rotation: ChainedEvent): RotationSummary {
+  const archive = String(rotation.data['prior_file_path'] ?? '');
+  const priorDigest =
+    typeof rotation.data['prior_file_digest'] === 'string'
+      ? rotation.data['prior_file_digest']
+      : null;
+  const priorLineCount =
+    typeof rotation.data['prior_line_count'] === 'number'
+      ? rotation.data['prior_line_count']
+      : null;
+  const priorChainStatus =
+    typeof rotation.data['prior_chain_status'] === 'string'
+      ? rotation.data['prior_chain_status']
+      : null;
+  const archivePath = path.join('.caws', archive);
+  const fullArchivePath = path.join(cawsDir, archive);
+  if (!archive || !fs.existsSync(fullArchivePath)) {
+    return {
+      seq: rotation.seq,
+      hash: rotation.event_hash,
+      ts: rotation.ts,
+      archive,
+      archive_path: archivePath,
+      prior_file_digest: priorDigest,
+      prior_line_count: priorLineCount,
+      prior_chain_status: priorChainStatus,
+      archive_present: false,
+      archive_digest: null,
+      archive_line_count: null,
+      archive_digest_matches: null,
+      archive_line_count_matches: null,
+    };
+  }
+  const archiveBytes = fs.readFileSync(fullArchivePath);
+  const actualDigest = `sha256:${crypto.createHash('sha256').update(archiveBytes).digest('hex')}`;
+  const actualLineCount = countNonEmptyLines(archiveBytes.toString('utf8'));
+  return {
+    seq: rotation.seq,
+    hash: rotation.event_hash,
+    ts: rotation.ts,
+    archive,
+    archive_path: archivePath,
+    prior_file_digest: priorDigest,
+    prior_line_count: priorLineCount,
+    prior_chain_status: priorChainStatus,
+    archive_present: true,
+    archive_digest: actualDigest,
+    archive_line_count: actualLineCount,
+    archive_digest_matches: priorDigest === null ? null : actualDigest === priorDigest,
+    archive_line_count_matches:
+      priorLineCount === null ? null : actualLineCount === priorLineCount,
+  };
+}
+
+function eventMatchesRef(event: ChainedEvent, ref: string): boolean {
+  if (/^\d+$/.test(ref)) return event.seq === Number(ref);
+  return event.event_hash === ref || event.event_hash.startsWith(ref);
+}
+
+function resolveEventRef(events: readonly ChainedEvent[], ref: string):
+  | { kind: 'found'; event: ChainedEvent }
+  | { kind: 'not_found' }
+  | { kind: 'ambiguous'; matches: readonly ChainedEvent[] } {
+  const matches = events.filter((event) => eventMatchesRef(event, ref));
+  if (matches.length === 0) return { kind: 'not_found' };
+  if (matches.length > 1) return { kind: 'ambiguous', matches };
+  return { kind: 'found', event: matches[0]! };
+}
+
+function mostRecentRotation(events: readonly ChainedEvent[]): ChainedEvent | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i]!.event === 'chain_rotated') return events[i]!;
+  }
+  return null;
+}
+
+export function runEventsListCommand(opts: EventsListCommandOptions): number {
+  const { cwd, out, err, showData } = defaults(opts);
+  const limit = opts.limit === undefined ? 20 : opts.limit;
+  if (!Number.isInteger(limit) || limit < 0) {
+    err('caws events list: --limit must be a non-negative integer.');
+    return 1;
+  }
+
+  const loaded = loadVerifiedEventsForDiscovery(cwd, err, showData, 'list');
+  if (loaded === null) return 2;
+
+  const rotations = loaded.events
+    .filter((event) => event.event === 'chain_rotated')
+    .map((event) => archiveStatus(loaded.cawsDir, event));
+  const latest = loaded.events.length > 0 ? loaded.events[loaded.events.length - 1]! : null;
+  const recent = limit === 0 ? [] : loaded.events.slice(-limit).map(eventSummary);
+  const latestRotation: RotationSummary | null =
+    rotations.length > 0 ? rotations[rotations.length - 1]! : null;
+
+  if (opts.json === true) {
+    out(JSON.stringify({
+      ok: true,
+      read_only: true,
+      chain_valid: true,
+      event_count: loaded.events.length,
+      counts_by_event: countByEvent(loaded.events),
+      latest_event: latest === null ? null : eventSummary(latest),
+      rotation_count: rotations.length,
+      latest_rotation: latestRotation,
+      rotations,
+      recent_events: recent,
+    }, null, 2));
+    return 0;
+  }
+
+  out(`caws events list: ${loaded.events.length} event(s); chain_valid=true`);
+  if (latest !== null) {
+    out(`  latest: seq=${latest.seq} event=${latest.event} hash=${latest.event_hash}`);
+  }
+  out(`  rotations: ${rotations.length}`);
+  if (latestRotation !== null) {
+    out(
+      `  latest rotation: seq=${latestRotation.seq} archive=${latestRotation.archive_path} ` +
+        `present=${latestRotation.archive_present}`
+    );
+  }
+  out('  counts_by_event:');
+  for (const [event, count] of Object.entries(countByEvent(loaded.events)).sort()) {
+    out(`  - ${event}: ${count}`);
+  }
+  out(`  recent_events${limit === 0 ? ' (suppressed by --limit 0)' : ` (last ${recent.length})`}:`);
+  for (const event of recent) {
+    out(`  - seq=${event.seq} event=${event.event} hash=${event.hash} spec=${event.spec_id ?? '(none)'}`);
+  }
+  return 0;
+}
+
+export function runEventsShowCommand(opts: EventsShowCommandOptions): number {
+  const { cwd, out, err, showData } = defaults(opts);
+  const ref = opts.ref.trim();
+  if (ref.length === 0) {
+    err('caws events show: event-ref is required.');
+    return 1;
+  }
+
+  const loaded = loadVerifiedEventsForDiscovery(cwd, err, showData, 'show');
+  if (loaded === null) return 2;
+
+  let event: ChainedEvent | null = null;
+  let rotation: RotationSummary | null = null;
+  if (ref === 'latest-rotation') {
+    event = mostRecentRotation(loaded.events);
+    if (event === null) {
+      err('caws events show: no chain_rotated event found.');
+      return 1;
+    }
+    rotation = archiveStatus(loaded.cawsDir, event);
+  } else {
+    const resolved = resolveEventRef(loaded.events, ref);
+    if (resolved.kind === 'not_found') {
+      err(`caws events show: event-ref ${JSON.stringify(ref)} not found.`);
+      return 1;
+    }
+    if (resolved.kind === 'ambiguous') {
+      err(
+        `caws events show: event-ref ${JSON.stringify(ref)} is ambiguous (${resolved.matches.length} matches).`
+      );
+      for (const match of resolved.matches.slice(0, 10)) {
+        err(`- seq=${match.seq} hash=${match.event_hash} event=${match.event}`);
+      }
+      return 1;
+    }
+    event = resolved.event;
+    if (event.event === 'chain_rotated') {
+      rotation = archiveStatus(loaded.cawsDir, event);
+    }
+  }
+
+  const summary = eventSummary(event);
+  if (opts.json === true) {
+    out(JSON.stringify({
+      ok: true,
+      read_only: true,
+      chain_valid: true,
+      event: summary,
+      rotation,
+    }, null, 2));
+    return 0;
+  }
+
+  out(
+    `seq=${summary.seq} event=${summary.event} spec=${summary.spec_id ?? '(none)'} hash=${summary.hash}`
+  );
+  if (rotation !== null) {
+    out(`rotation archive=${rotation.archive_path}`);
+    out(`  present=${rotation.archive_present}`);
+    out(`  prior_file_digest=${rotation.prior_file_digest ?? '(unknown)'}`);
+    out(`  prior_line_count=${rotation.prior_line_count ?? '(unknown)'}`);
+    out(`  archive_digest_matches=${rotation.archive_digest_matches ?? '(unknown)'}`);
+    out(`  archive_line_count_matches=${rotation.archive_line_count_matches ?? '(unknown)'}`);
+  }
+  out(JSON.stringify(summary.data, null, 2));
+  return 0;
 }
 
 /**

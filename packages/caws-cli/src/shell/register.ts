@@ -49,8 +49,10 @@ import {
   runMessagePollCommand,
   runClaimCommand,
   runDoctorCommand,
+  runEventsListCommand,
   runEventsMigrateCommand,
   runEventsRotateCommand,
+  runEventsShowCommand,
   runEventsVerifyArchiveCommand,
   runEvidenceListCommand,
   runEvidenceRecordCommand,
@@ -201,6 +203,15 @@ function parseCommaSeparatedList(raw: string | undefined): string[] | undefined 
     .split(',')
     .map((part) => part.trim())
     .filter((part) => part.length > 0);
+}
+
+function parseOptionalNonNegativeInteger(raw: string | undefined): number | undefined {
+  if (raw === undefined) return undefined;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`expected a non-negative integer, got ${JSON.stringify(raw)}`);
+  }
+  return parsed;
 }
 
 /** Construct the `.command()` name string with the metadata's positional
@@ -515,6 +526,34 @@ export function registerShellCommands(
   // -------------------------------------------------------------------
   const eventsCmd = program.command('events');
   applyGroupMeta(eventsCmd, EVENTS_COMMAND_META);
+
+  defineLeaf(eventsCmd, leafMeta(EVENTS_COMMAND_META, 'list'))
+    .action((opts: { json?: boolean; limit?: string; data?: boolean }) => {
+      let limit: number | undefined;
+      try {
+        limit = parseOptionalNonNegativeInteger(opts.limit);
+      } catch (e) {
+        process.stderr.write(`caws events list: invalid --limit: ${(e as Error).message}\n`);
+        exit(1);
+        return;
+      }
+      const code = runEventsListCommand({
+        json: opts.json === true,
+        ...(limit !== undefined ? { limit } : {}),
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  defineLeaf(eventsCmd, leafMeta(EVENTS_COMMAND_META, 'show'))
+    .action((eventRef: string, opts: { json?: boolean; data?: boolean }) => {
+      const code = runEventsShowCommand({
+        ref: eventRef,
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
 
   defineLeaf(eventsCmd, leafMeta(EVENTS_COMMAND_META, 'migrate'))
     .action(
