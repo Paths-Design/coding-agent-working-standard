@@ -7,7 +7,8 @@ created_at: '2026-07-04T17:30:02.441Z'
 updated_at: '2026-07-04T17:30:02.441Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/specs-shell
+    - docs/cli-ux-audit
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -18,12 +19,22 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Spec schema parse failures remain refusals and do not mutate specs, events, leases, or worktree registry state.'
+  - 'Specs show/validate failures name the exact validate command and include minimal YAML examples for common array-shaped spec fields.'
+  - 'The repair changes diagnostics only; valid specs show/validate exactly as before.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'A canonical spec has array-shaped fields authored as scalars or empty arrays.'
+    when: 'caws specs show <id> fails schema validation.'
+    then: 'The diagnostic includes caws specs validate .caws/specs/<id>.yaml and minimal YAML examples for invariants and acceptance.'
+  - id: A2
+    given: 'A standalone spec file fails schema validation under caws specs validate <file>.'
+    when: 'The invalid file contains the same common array-field mistakes.'
+    then: 'The diagnostic includes the file-specific validate command and the same minimal YAML examples without requiring .caws state.'
+  - id: A3
+    given: 'The CLI UX audit tracks parse_error repairs.'
+    when: 'This slice is merged.'
+    then: 'The audit ledger records the spec schema parse guidance and scopes the next remaining parse-error slice.'
 non_functional: {}
 contracts:
   - name: 'spec-schema-parse-guidance'
