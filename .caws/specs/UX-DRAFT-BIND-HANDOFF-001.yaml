@@ -3,6 +3,7 @@ title: 'Add draft spec bind activation handoff'
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: draft-bind-handoff
 created_at: '2026-07-04T12:37:06.645Z'
 updated_at: '2026-07-04T12:37:13.030Z'
 blast_radius:
