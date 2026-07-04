@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: specs-status-list-handoff
 created_at: '2026-07-04T13:31:08.024Z'
-updated_at: '2026-07-04T13:31:08.024Z'
+updated_at: '2026-07-04T13:34:05.208Z'
 blast_radius:
   modules:
     - packages/caws-cli/specs-list-shell
@@ -23,6 +23,7 @@ scope:
     - 'docs/api/cli.md'
     - 'docs/architecture/cli-ux-job-model-audit.md'
     - 'docs/command-reference.md'
+    - packages/caws-cli/scripts/generate-command-reference.mjs
   out: []
 invariants:
   - 'caws specs list --status <state> is read-only and filters lifecycle_state without mutating .caws/specs, worktrees.json, or events.jsonl.'
