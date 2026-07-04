@@ -7,12 +7,12 @@ created_at: '2026-07-04T04:47:28.074Z'
 updated_at: '2026-07-04T04:47:34.943Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli
+    - docs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/shell/commands/evidence.ts
     - packages/caws-cli/src/shell/index.ts
     - packages/caws-cli/src/shell/register.ts
@@ -23,11 +23,26 @@ scope:
     - docs/architecture/cli-ux-job-model-audit.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'evidence list and evidence show are read-only and never append, rotate, rewrite, or lock .caws/events.jsonl.'
+  - 'Readback uses the existing event-store load path and refuses malformed or invalid event logs instead of parsing around them.'
+  - 'List filters typed evidence events by spec id and optional evidence kind without exposing unrelated audit event classes by default.'
+  - 'Show resolves an event reference by sequence number, exact event hash, or unique hash prefix and reports ambiguity explicitly.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a project with test, gate, and ac evidence events for a spec'
+    when: 'an operator runs caws evidence list --spec <id> and caws evidence list --spec <id> --type test --json'
+    then: 'the command returns only matching typed evidence events, includes stable seq/hash/type handles, and leaves events.jsonl byte-identical'
+  - id: A2
+    given: 'a project with at least one evidence event'
+    when: 'an operator runs caws evidence show <event-ref> using a seq number, exact hash, or unique hash prefix'
+    then: 'the command prints the matching event, supports JSON output, and leaves events.jsonl byte-identical'
+  - id: A3
+    given: 'an unknown or ambiguous event reference'
+    when: 'an operator runs caws evidence show <event-ref>'
+    then: 'the command exits nonzero with a diagnostic that distinguishes not found from ambiguous'
+  - id: A4
+    given: 'the command metadata and docs are regenerated'
+    when: 'an operator runs caws evidence --help, caws evidence list --help, and caws evidence show --help from the built dist-linked caws binary'
+    then: 'the list/show leaves and their read-only filter/reference semantics are visible in nested help and docs'
 non_functional: {}
 contracts: []
