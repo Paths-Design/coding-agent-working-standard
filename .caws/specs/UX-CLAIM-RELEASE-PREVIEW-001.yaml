@@ -7,12 +7,12 @@ created_at: '2026-07-04T12:06:32.885Z'
 updated_at: '2026-07-04T12:06:57.260Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - caws-cli/claim
+    - caws-cli/docs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/shell/commands/claim.ts
     - packages/caws-cli/src/shell/render/claim.ts
     - packages/caws-cli/src/shell/command-metadata.ts
@@ -24,12 +24,23 @@ scope:
     - docs/architecture/cli-ux-job-model-audit.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'claim preview modes are read-only and never mutate worktrees.json, leases, specs, events, or git state.'
+  - 'claim release clears only the current session lease path claims by default and never takes over or clears a foreign owner.'
+  - 'takeover preview reports current owner, selected worktree, prior-owner audit impact, and whether apply would require --takeover without mutating state.'
+  - 'existing claim and --takeover behavior is preserved when preview/release flags are not supplied.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a worktree owned by a different session'
+    when: 'an agent runs caws claim --takeover --plan --json'
+    then: 'the command reports a read-only takeover impact plan naming the current owner, selected worktree, and prior-owner audit without changing registry or lease state.'
+  - id: A2
+    given: 'a live lease with claimed_paths recorded by caws claim --paths'
+    when: 'the owning session runs caws claim --release-paths --apply'
+    then: 'the lease claimed_paths are cleared without changing worktree ownership, specs, events, or unrelated lease metadata.'
+  - id: A3
+    given: 'the claim command help and CLI API docs'
+    when: 'an agent asks for caws claim --help or reads the command reference'
+    then: 'preview, release, JSON, and apply semantics are documented with the right read-only/apply context.'
 non_functional: {}
 contracts:
   - name: 'claim-release-preview'
