@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: evidence-data-parse-guidance
 created_at: '2026-07-04T17:21:55.033Z'
-updated_at: '2026-07-04T17:21:55.033Z'
+updated_at: '2026-07-04T17:26:17.758Z'
 blast_radius:
   modules:
     - 'packages/caws-cli/evidence-shell'
@@ -20,6 +20,8 @@ scope:
     - 'packages/caws-cli/tests/shell/evidence-schema.test.js'
     - 'docs/api/cli.md'
     - 'docs/architecture/cli-ux-job-model-audit.md'
+    - packages/caws-cli/src/shell/commands/evidence.ts
+    - packages/caws-cli/src/shell/index.ts
   out: []
 invariants:
   - 'Malformed evidence --data JSON is refused before repo/session resolution and before any event append.'
