@@ -125,7 +125,7 @@ By top-level command:
 | Friction marker | Count | UX implication |
 |---|---:|---|
 | `no_scope_authority` | 126 | Partially fixed: unbound/one-sided refusals already print remediation, and target-scope-claim admits now report JSON/plan handoffs to the owning worktree instead of implying base-checkout authority. Remaining work should focus on whether active-spec creation/binding flows need a more guided "authority context" wizard. |
-| `unknown_or_missing_option` | 91 | Partially fixed for `specs close`, `scope`, `agents prune`, `specs create`, validation-era removed commands, and specs status listing: `--closure-notes` is now a supported alias for the existing `--reason` closure note field, `scope show/check/plan --spec <id>` now supports read-only explicit spec-context evaluation, `agents prune --dead --json` is verified as a supported dry-run/apply dead-process cleanup path, `specs create --tier <n>` now aliases `--risk-tier <n>`, legacy validation diagnostics are pinned to the correct replacement/removal model, and `specs --status <state>` now hands off to `specs list --status <state>`. Help/flag discoverability still creates retries where adjacent command shapes are close but not parallel. |
+| `unknown_or_missing_option` | 91 | Partially fixed for `specs close`, `scope`, `agents prune`, `specs create`, validation-era removed commands, specs status listing, and worktree cleanup state filters: `--closure-notes` is now a supported alias for `--reason`, `scope show/check/plan --spec <id>` supports read-only explicit spec-context evaluation, `agents prune --dead --json` is verified, `specs create --tier <n>` aliases `--risk-tier <n>`, legacy validation diagnostics are pinned, `specs --status <state>` hands off to `specs list --status <state>`, and `worktree prune/cleanup-plan --status <classes>` aliases `--state <classes>`. Help/flag discoverability still creates retries where adjacent command shapes are close but not parallel. |
 | `tier_requires_metadata` | 87 | Fixed at the create-plan layer: `specs create --plan` now reports missing semantic fields and emits copy-pasteable YAML examples in human and JSON output. |
 | `danger_latch` | 66 | CAWS hook UX still matters for CLI workflows; blocked shell forms often interrupt otherwise correct CAWS procedures. |
 | `worktree_not_found` | 62 | Fixed for `worktree destroy`: missing registry entries now remain non-mutating refusals but include a CAWS-native handoff to `worktree list`, `worktree prune --include <name>`, and `worktree cleanup-plan --include <name>` so agents can distinguish registry residue from unregistered physical worktrees. |
@@ -153,6 +153,7 @@ By top-level command:
 | Tier shorthand mismatch | `unknown option '--tier'` when an agent tried `caws specs create ... --tier <n>`. | Now closed for `specs create`: `--tier <n>` aliases `--risk-tier <n>`, nested help documents both, and supplying both fails before spec/event mutation. |
 | Validation-era removed command flattening | `caws validate` and related v10-era commands were previously grouped in `docs/api/cli.md` under one doctor/gates replacement even though runtime diagnostics distinguish replaced commands, direct renames, and removed report/advisory commands. | Now reconciled: `validate`/`verify` hand off to `doctor` plus `gates run`, `diagnose` points only to `doctor`, and `verify-acs`/`evaluate`/`iterate`/`burnup` preserve command-specific removed-without-replacement guidance. |
 | Specs status group-level mismatch | `unknown option '--status'` when an agent tried `caws specs --status closed` before finding the list/archive model. | Now closed for read-only listing: `caws specs list --status <active|draft|closed|archived>` filters lifecycle state, `caws specs --status <state>` routes to the same list path, and invalid statuses name accepted values plus the batch archive command. |
+| Worktree cleanup status/state mismatch | `unknown option '--status'` when an agent used the status selector shape on `worktree prune` or `worktree cleanup-plan`. | Now closed for compatible cleanup filters: both leaves accept `--status <classes>` as an alias for `--state <classes>`, list the alias in help, and refuse invocations that supply both aliases before planning or mutation. |
 | Tier metadata failure | `Tier 1 specs require non-empty observability... rollback... contract.` | Now closed for plan guidance: `specs create --plan` lists missing semantic fields and emits copy-pasteable YAML examples in human output plus `field_examples` in JSON. |
 | Contract tuple inversion | `invalid --contract "behavior:verifychain-detects-tamper": type "verifychain-detects-tamper" is not one of ...` | Now closed: linked CLI verification shows the diagnostic prints the accepted tuple shape, `--contract "core-api:behavior"` example, and corrected `--contract "verifychain-detects-tamper:behavior"` suggestion. |
 | Evidence schema rejection | `data: must have required property 'command'` for `evidence record --type test`. | Fixed by `evidence schema --type test` plus per-type examples in `evidence record --help`. |
@@ -200,16 +201,16 @@ By top-level command:
 | `UX-WORKTREE-DESTROY-NOT-FOUND-HANDOFF-001` | Implemented in thirty-seventh repair slice | Worktree destroy not-found cleanup handoff | Adds a narrow repair block to the missing-registry destroy refusal. `caws worktree destroy <name>` still refuses without mutation when `<name>` is absent from `worktrees.json`, but it now points to inventory, control-plane prune, and physical cleanup-plan commands. Covered by `packages/caws-cli/tests/shell/worktree-destroy-not-found-handoff.test.js`. |
 | `UX-WORKTREE-MERGE-RECOVERY-GUIDANCE-001` | Implemented in thirty-eighth repair slice | Worktree merge readiness and recovery guidance | Adds structured read-only recovery output to `caws worktree merge <name> --dry-run --data` and attaches repair guidance to prerequisite refusals plus checkout/merge git failures. Covered by `packages/caws-cli/tests/shell/worktree-merge-recovery-guidance.test.js`. |
 | `UX-SCOPE-TARGET-CLAIM-HANDOFF-001` | Implemented in thirty-ninth repair slice | Scope target-claim authority handoff | Keeps single-claimant scope.in paths admitted, but reports target-claim decisions as non-authoritative `mode: union` in JSON and groups non-mutating handoff commands to inspect, enter, and claim the owning worktree. Covered by `packages/caws-cli/tests/shell/scope-target-claim-authority-handoff.test.js` and `packages/caws-cli/tests/shell/scope-show-json.test.js`. |
+| `UX-WORKTREE-PRUNE-STATUS-ALIAS-001` | Implemented in fortieth repair slice | Worktree cleanup status alias | Adds `--status <classes>` as a compatibility alias for `--state <classes>` on `worktree prune` and `worktree cleanup-plan`, with help/docs coverage and a mutual-exclusion refusal when both aliases are supplied. Covered by `packages/caws-cli/tests/shell/worktree-prune-status-alias.test.js`. |
 
 ## Next Slice
 
-The next implementation slice should move to `unknown_or_missing_option` help
-discoverability. Start with adjacent command pairs where the command exists but
-agents try the neighboring flag shape first: `worktree cleanup-plan` vs
-`worktree prune`, `specs archive` vs `specs prune-archive`, and `claim --plan`
-vs `claim --takeover --plan`. Verify current nested help and diagnostics, then
-add narrow aliases or explicit handoff text only where the runtime shape is
-semantically compatible.
+The next implementation slice should continue `unknown_or_missing_option` help
+discoverability with the `specs archive` vs `specs prune-archive` pair. Verify
+current `prune-archive` help/output, then either add explicit handoff text to
+`specs archive --status closed`, `specs restore`, and `specs recover`, or retire
+stale wording if the compatibility no-op is causing agents to search for a
+nonexistent cleanup workflow.
 
 ## Findings
 
@@ -340,6 +341,12 @@ semantically compatible.
    `source: target_scope_in_claim`, `mode: union`, and remediation commands for
    `caws worktree list --data`, `cd .caws/worktrees/<name>`, and `caws claim`.
    `scope plan` groups the same read-only handoff commands.
+
+22. **Worktree cleanup filters now accept the adjacent `--status` vocabulary.**
+   `worktree prune` and `worktree cleanup-plan` still expose canonical
+   `state_class` values and canonical `--state <classes>`, but nested help now
+   also lists `--status <classes>` as an alias. Supplying both aliases refuses
+   before cleanup planning or mutation.
 
 ## Recommendations
 

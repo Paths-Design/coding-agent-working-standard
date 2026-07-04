@@ -643,6 +643,7 @@ Print a worktree cleanup plan from doctor evidence. Dry-run by default. With --a
 **Options:**
 
 - `--state <classes>` — Comma-separated state-class filter (for example: ghost-registry,closed-spec-residue,event-orphan-refused).
+- `--status <classes>` — Alias for --state <classes>; accepts the same state-class values.
 - `--include <subjects>` — Comma-separated subjects to include (worktree names, spec ids, or paths).
 - `--exclude <subjects>` — Comma-separated subjects to exclude (worktree names, spec ids, or paths).
 - `--apply` — Apply only safe cleanup classes (ghost-registry, dead-binding, closed-spec-residue). Refused classes still do not mutate.
@@ -656,6 +657,7 @@ Print a physical worktree cleanup plan. Dry-run by default. With --apply, requir
 **Options:**
 
 - `--state <classes>` — Comma-separated state-class filter (for example: destroy-ready,dirty-refused,foreign-owned-refused,unregistered-physical-refused).
+- `--status <classes>` — Alias for --state <classes>; accepts the same state-class values.
 - `--include <subjects>` — Comma-separated worktree names, spec ids, or paths to include.
 - `--exclude <subjects>` — Comma-separated worktree names, spec ids, or paths to exclude.
 - `--apply` — Apply selected destroy-ready candidates only. Requires --state, --include, or --exclude. Refused classes still do not mutate.

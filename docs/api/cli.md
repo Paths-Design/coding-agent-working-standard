@@ -899,6 +899,7 @@ Repair unambiguous worktree/spec half-states surfaced by `caws doctor`: prune gh
 ```bash
 caws worktree prune
 caws worktree prune --state ghost-registry,closed-spec-residue
+caws worktree prune --status ghost-registry,closed-spec-residue
 caws worktree prune --include wt-old,SPEC-001 --exclude wt-foreign --json
 caws worktree prune --state ghost-registry,dead-binding --apply
 ```
@@ -906,6 +907,7 @@ caws worktree prune --state ghost-registry,dead-binding --apply
 | Flag | Description |
 |---|---|
 | `--state <classes>` | Comma-separated state-class filter, such as `ghost-registry`, `closed-spec-residue`, or `event-orphan-refused`. |
+| `--status <classes>` | Alias for `--state <classes>`; accepts the same state-class values. |
 | `--include <subjects>` | Comma-separated worktree names, spec ids, or paths to include. |
 | `--exclude <subjects>` | Comma-separated worktree names, spec ids, or paths to exclude. |
 | `--apply` | Apply only safe cleanup classes: `ghost-registry`, `dead-binding`, and `closed-spec-residue`. Refused classes still do not mutate. |
@@ -913,12 +915,14 @@ caws worktree prune --state ghost-registry,dead-binding --apply
 | `--data` | Show structured data block on diagnostics. |
 
 Cleanup plan over doctor evidence. Dry-run is the default: it classifies worktree residue and refusal classes, names the next safe command, and does not mutate `worktrees.json`, specs, events, or git worktree directories. `--apply` executes only the same mechanically safe writer paths already proven by `caws worktree repair`; event orphans, foreign physical worktrees, stale-owner lease drift, and other refused classes stay refused.
+Use either `--state` or its compatibility alias `--status`, not both.
 
 ### `caws worktree cleanup-plan`
 
 ```bash
 caws worktree cleanup-plan
 caws worktree cleanup-plan --state destroy-ready,dirty-refused
+caws worktree cleanup-plan --status destroy-ready,dirty-refused
 caws worktree cleanup-plan --include wt-old,SPEC-001 --exclude wt-foreign --json
 caws worktree cleanup-plan --state destroy-ready --apply
 ```
@@ -926,6 +930,7 @@ caws worktree cleanup-plan --state destroy-ready --apply
 | Flag | Description |
 |---|---|
 | `--state <classes>` | Comma-separated state-class filter, such as `destroy-ready`, `dirty-refused`, `foreign-owned-refused`, or `unregistered-physical-refused`. |
+| `--status <classes>` | Alias for `--state <classes>`; accepts the same state-class values. |
 | `--include <subjects>` | Comma-separated worktree names, spec ids, or paths to include. |
 | `--exclude <subjects>` | Comma-separated worktree names, spec ids, or paths to exclude. |
 | `--apply` | Apply selected `destroy-ready` candidates only. Requires at least one explicit selector: `--state`, `--include`, or `--exclude`. Refused classes still do not mutate. |
@@ -935,6 +940,7 @@ caws worktree cleanup-plan --state destroy-ready --apply
 Physical cleanup plan over real git worktree directories. Dry-run is the default: it classifies registered worktrees and unregistered physical git worktrees under `.caws/worktrees/` by clean/dirty state, merged/unmerged branch state, bound spec lifecycle, registry ownership, and CAWS registry presence without deleting a directory, mutating `.caws/worktrees.json`, patching spec YAML, appending events, or invoking `git worktree remove`.
 
 Apply mode is intentionally narrow. `--apply` refuses unless at least one selector is present, applies only selected `destroy-ready` registered worktrees, and calls the existing `destroyWorktree` path for each deletion so ownership, clean checkout, and merged-branch checks are re-evaluated at mutation time. Selected non-apply classes such as `dirty-refused`, `unmerged-refused`, `foreign-owned-refused`, and `unregistered-physical-refused` remain refused.
+Use either `--state` or its compatibility alias `--status`, not both.
 
 State classes include `destroy-ready`, `unbound-clean-candidate`, `dirty-refused`, `unmerged-refused`, `active-bound-refused`, `foreign-owned-refused`, `missing-directory-refused`, `not-git-worktree-refused`, `unknown-spec-refused`, `unregistered-physical-refused`, and `git-observation-unavailable`.
 

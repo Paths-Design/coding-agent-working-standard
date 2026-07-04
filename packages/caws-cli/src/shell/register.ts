@@ -1227,13 +1227,18 @@ export function registerShellCommands(
     .action(
       (opts: {
         state?: string;
+        status?: string;
         include?: string;
         exclude?: string;
         apply?: boolean;
         json?: boolean;
         data?: boolean;
       }) => {
-        const state = parseCommaSeparatedList(opts.state);
+        if (opts.state !== undefined && opts.status !== undefined) {
+          console.error('caws worktree prune: use either --state or --status, not both.');
+          exit(1);
+        }
+        const state = parseCommaSeparatedList(opts.state ?? opts.status);
         const include = parseCommaSeparatedList(opts.include);
         const exclude = parseCommaSeparatedList(opts.exclude);
         const code = runWorktreePruneCommand({
@@ -1252,13 +1257,18 @@ export function registerShellCommands(
     .action(
       (opts: {
         state?: string;
+        status?: string;
         include?: string;
         exclude?: string;
         apply?: boolean;
         json?: boolean;
         data?: boolean;
       }) => {
-        const state = parseCommaSeparatedList(opts.state);
+        if (opts.state !== undefined && opts.status !== undefined) {
+          console.error('caws worktree cleanup-plan: use either --state or --status, not both.');
+          exit(1);
+        }
+        const state = parseCommaSeparatedList(opts.state ?? opts.status);
         const include = parseCommaSeparatedList(opts.include);
         const exclude = parseCommaSeparatedList(opts.exclude);
         const code = runWorktreePhysicalCleanupPlanCommand({
