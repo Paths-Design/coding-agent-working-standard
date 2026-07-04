@@ -7,7 +7,8 @@ created_at: '2026-07-04T19:01:28.460Z'
 updated_at: '2026-07-04T19:01:28.460Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli worktree destroy command'
+    - 'CLI reference documentation'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -21,12 +22,22 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - '`caws worktree destroy <name> --force` is parsed as a compatibility alias for --abandon-unmerged only.'
+  - '`--force` never bypasses ownership, dirty checkout, missing-registry, or other guarded destroy refusals.'
+  - 'Help and docs explain the narrowed force semantics so agents are handed to cleanup-plan for broader cleanup.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a CAWS repository without the requested worktree in the registry'
+    when: 'an operator runs caws worktree destroy missing --force'
+    then: 'the command reaches the normal missing-registry handoff instead of unknown-option failure and writes no state.'
+  - id: A2
+    given: 'the worktree destroy command handler'
+    when: 'force is supplied'
+    then: 'the destroy writer receives the same abandonUnmerged intent as --abandon-unmerged.'
+  - id: A3
+    given: 'the built CLI command surface'
+    when: 'an operator runs caws worktree destroy --help'
+    then: 'help lists --force with the narrowed compatibility semantics.'
 non_functional: {}
 contracts:
   - name: 'worktree-destroy-force-compat'
