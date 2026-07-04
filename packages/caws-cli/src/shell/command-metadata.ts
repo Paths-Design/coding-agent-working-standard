@@ -659,6 +659,31 @@ export const SCOPE_COMMAND_META: GroupCommandMeta = {
     },
     {
       kind: 'leaf',
+      name: 'plan',
+      description:
+        'Evaluate multiple paths in one read-only run and group remediation commands. Always exits 0 after a successful plan, even when planned decisions include refusals.',
+      options: [
+        {
+          flag: '--path <path>',
+          description: 'Path to evaluate; repeat for multiple paths',
+          collect: true,
+          defaultValue: [],
+        },
+        {
+          flag: '--paths-file <file>',
+          description:
+            'Read newline-delimited paths from a file. Blank lines and # comments are ignored.',
+        },
+        {
+          flag: '--json',
+          description:
+            'Emit per-path decisions, counts, and grouped remediation commands as JSON',
+        },
+        { flag: '--data', description: 'Show structured data block on diagnostics' },
+      ],
+    },
+    {
+      kind: 'leaf',
       name: 'contention',
       argument: { name: 'path', required: true, description: 'File path to check for cross-worktree claims' },
       description:

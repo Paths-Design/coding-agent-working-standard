@@ -133,6 +133,28 @@ while preserving enforcement exit codes.
 
 Exit codes: 0 (admit), 1 (refuse).
 
+### `caws scope plan`
+
+Evaluate multiple paths in one read-only run and group shared remediation
+commands.
+
+```bash
+caws scope plan --path src/foo.ts --path docs/foo.md
+caws scope plan --paths-file changed-paths.txt --json
+```
+
+| Flag | Description |
+|---|---|
+| `--path <path>` | Path to evaluate; repeat for multiple paths. |
+| `--paths-file <file>` | Read newline-delimited paths from a file. Blank lines and `#` comments are ignored. |
+| `--json` | Emit per-path decisions, counts, and grouped remediation commands as JSON. |
+| `--data` | Show structured data block on diagnostics. |
+
+`scope plan` is observational: it uses the same decision/remediation contract
+as single-path `scope show/check`, but it does not enforce or mutate. Grouped
+commands are handoffs to existing governed mutation surfaces such as
+`caws specs amend-scope`.
+
 ### `caws scope contention <path>`
 
 Report which other active worktrees on the same base branch have a bound spec whose `scope.in` claims `<path>`. Always exits 0 and is intended for hook/tooling contention checks.
