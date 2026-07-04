@@ -3,6 +3,7 @@ title: 'Add governed worktree untrack command'
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: worktree-untrack
 created_at: '2026-07-04T04:32:35.206Z'
 updated_at: '2026-07-04T04:32:45.580Z'
 blast_radius:
