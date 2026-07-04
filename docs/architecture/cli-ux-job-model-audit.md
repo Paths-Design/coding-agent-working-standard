@@ -271,18 +271,20 @@ refuses before mutation.
 | `UX-SPECS-CREATE-SCOPE-DOT-ALIAS-001` | Implemented in fifty-third repair slice | Specs create scope.in option alias | Adds `caws specs create --scope.in <path>` as a YAML-field-name alias for `--scope-in <path>`, keeps both spellings repeatable, and refuses invocations that supply both scope aliases before mutation. Covered by `packages/caws-cli/tests/shell/specs-create-scope-dot-alias.test.js`. |
 | `UX-SPECS-CREATE-ACCEPTANCE-FLAG-001` | Implemented in fifty-fourth repair slice | Specs create acceptance option | Adds repeatable `caws specs create --acceptance <text>` to seed canonical v11 acceptance entries at creation time. Free text becomes the `then` clause with non-TODO Given/When scaffolding; structured `given: ...; when: ...; then: ...` values set all fields. Covered by `packages/caws-cli/tests/shell/specs-create-acceptance-flag.test.js`. |
 | `UX-STATUS-SHORT-ALIAS-001` | Implemented in fifty-fifth repair slice | Status compact output option | Adds `caws status --short` as a compact read-only human summary over the same status snapshot. The flag prints specs/worktrees/agents/doctor/events/binding counts without the full dashboard panels, and `--short --json` preserves the existing JSON status schema. Covered by `packages/caws-cli/tests/shell/status-short.test.js`. |
+| `UX-SPECS-LIST-LIFECYCLE-ALIASES-001` | Implemented in fifty-sixth repair slice | Specs list lifecycle selector aliases | Adds `caws specs list --active`, `--draft`, `--closed`, `--lifecycle <state>`, and `--state <state>` as compatibility selectors for the existing read-only `--status <state>` filter. Conflicting lifecycle selectors refuse before mutation, and `--archived` keeps its include-archived meaning. Covered by `packages/caws-cli/tests/shell/specs-list-lifecycle-aliases.test.js`. |
 
 ## Next Slice
 
 The next implementation slice should resample the newest CAWS and Sterling
 session evidence for residual `unknown_or_missing_option` after the `--notes`,
 `amend-scope --reason`, `specs create --id`, `specs create --scope.in`, and
-`specs create --acceptance`, and `status --short`
+`specs create --acceptance`, `status --short`, and `specs list --active`
 fixes. Treat stale fixed
 examples (`--tier`, `--status`, `--closure-notes`, `--notes`,
 `amend-scope --reason`, `specs create --id`, `specs create --scope.in`,
-`specs create --acceptance`, `status --short`) as closed and select the newest
-current leaf mismatch for the next concrete fix, if any.
+`specs create --acceptance`, `status --short`, `specs list --active`,
+`specs list --lifecycle`, `specs list --state`) as closed and select the
+newest current leaf mismatch for the next concrete fix, if any.
 
 ## Findings
 

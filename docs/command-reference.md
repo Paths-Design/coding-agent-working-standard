@@ -382,6 +382,11 @@ List specs. By default excludes archived specs.
 **Options:**
 
 - `--status <status>` — Filter by lifecycle status: active | draft | closed | archived
+- `--lifecycle <state>` — Alias for --status; filter by lifecycle state: active | draft | closed | archived
+- `--state <state>` — Alias for --status; filter by lifecycle state: active | draft | closed | archived
+- `--active` — Alias for --status active
+- `--draft` — Alias for --status draft
+- `--closed` — Alias for --status closed
 - `--archived` — Include archived specs in the listing
 - `--data` — Show structured data block on diagnostics
 

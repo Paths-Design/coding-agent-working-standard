@@ -892,7 +892,16 @@ export function registerShellCommands(
     );
 
   defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'list'))
-    .action((opts: { status?: string; archived?: boolean; data?: boolean }, command: Command) => {
+    .action((opts: {
+      status?: string;
+      lifecycle?: string;
+      state?: string;
+      active?: boolean;
+      draft?: boolean;
+      closed?: boolean;
+      archived?: boolean;
+      data?: boolean;
+    }, command: Command) => {
       const parentStatus = command.parent?.opts().status;
       const status =
         opts.status !== undefined
@@ -902,6 +911,11 @@ export function registerShellCommands(
             : undefined;
       const code = runSpecsListCommand({
         ...(status !== undefined ? { status } : {}),
+        ...(opts.lifecycle !== undefined ? { lifecycle: opts.lifecycle } : {}),
+        ...(opts.state !== undefined ? { state: opts.state } : {}),
+        active: opts.active === true,
+        draft: opts.draft === true,
+        closed: opts.closed === true,
         includeArchived: opts.archived === true,
         showData: opts.data === true,
       });

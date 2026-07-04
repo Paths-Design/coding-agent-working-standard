@@ -785,6 +785,16 @@ export interface SpecsListOptions extends BaseCommandOptions {
   readonly includeArchived?: boolean;
   /** Filter specs by lifecycle status. */
   readonly status?: string;
+  /** Alias for --status; filter specs by lifecycle state. */
+  readonly lifecycle?: string;
+  /** Alias for --status; filter specs by lifecycle state. */
+  readonly state?: string;
+  /** Alias for --status active. */
+  readonly active?: boolean;
+  /** Alias for --status draft. */
+  readonly draft?: boolean;
+  /** Alias for --status closed. */
+  readonly closed?: boolean;
 }
 
 function parseSpecsListStatus(raw: string | undefined): SpecsListStatus | undefined | null {
@@ -803,9 +813,32 @@ function renderSpecsStatusError(status: string, err: (line: string) => void): vo
   err('For batch archival, use: caws specs archive --status closed');
 }
 
+function resolveSpecsListStatus(opts: SpecsListOptions): string | undefined | { error: string } {
+  const selectors: { flag: string; status: string }[] = [];
+  if (opts.status !== undefined) selectors.push({ flag: '--status', status: opts.status });
+  if (opts.lifecycle !== undefined) selectors.push({ flag: '--lifecycle', status: opts.lifecycle });
+  if (opts.state !== undefined) selectors.push({ flag: '--state', status: opts.state });
+  if (opts.active === true) selectors.push({ flag: '--active', status: 'active' });
+  if (opts.draft === true) selectors.push({ flag: '--draft', status: 'draft' });
+  if (opts.closed === true) selectors.push({ flag: '--closed', status: 'closed' });
+  if (selectors.length > 1) {
+    return {
+      error:
+        `caws specs list: lifecycle selectors ${selectors.map((s) => s.flag).join(', ')} conflict; ` +
+        'pass only one of --status, --lifecycle, --state, --active, --draft, or --closed.',
+    };
+  }
+  return selectors[0]?.status;
+}
+
 export function runSpecsListCommand(opts: SpecsListOptions = {}): number {
   const { cwd, out, err, showData } = setupIO(opts);
-  const status = parseSpecsListStatus(opts.status);
+  const rawStatus = resolveSpecsListStatus(opts);
+  if (typeof rawStatus === 'object') {
+    err(rawStatus.error);
+    return 1;
+  }
+  const status = parseSpecsListStatus(rawStatus);
   if (status === null) {
     renderSpecsStatusError(String(opts.status), err);
     return 1;
