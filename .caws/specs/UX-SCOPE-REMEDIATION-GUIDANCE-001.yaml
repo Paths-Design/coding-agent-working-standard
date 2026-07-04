@@ -3,6 +3,7 @@ title: 'Add scope remediation guidance'
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: scope-remediation-guidance
 created_at: '2026-07-04T05:38:02.980Z'
 updated_at: '2026-07-04T05:38:02.980Z'
 blast_radius:
