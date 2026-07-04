@@ -3,6 +3,7 @@ title: 'Add message retention prune planning'
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: message-retention-prune
 created_at: '2026-07-04T12:28:46.076Z'
 updated_at: '2026-07-04T12:28:54.275Z'
 blast_radius:
