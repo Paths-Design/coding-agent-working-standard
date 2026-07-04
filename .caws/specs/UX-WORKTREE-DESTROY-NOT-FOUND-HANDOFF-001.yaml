@@ -3,6 +3,7 @@ title: 'Improve worktree destroy not-found handoff'
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: worktree-destroy-not-found-handoff
 created_at: '2026-07-04T13:45:40.118Z'
 updated_at: '2026-07-04T13:45:40.118Z'
 blast_radius:
