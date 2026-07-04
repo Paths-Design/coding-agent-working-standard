@@ -7,7 +7,10 @@ created_at: '2026-07-04T02:40:09.860Z'
 updated_at: '2026-07-04T02:40:09.860Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -24,11 +27,67 @@ scope:
     - '.caws/specs/CAWS-SPECS-ARCHIVE-PRUNE-STYLE-001.yaml'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    `caws specs archive <id>` remains the exact single-spec archive path. Batch
+    archive behavior is selected only by explicit batch selector flags and is
+    dry-run by default.
+  - >-
+    The batch selector can only target closed specs from the canonical
+    `.caws/specs/*.yaml` filesystem view. Active, draft, retired, missing, or
+    already archived specs are never archived by a broad selector.
+  - >-
+    `--only` and `--exclude` accept comma-separated spec id lists. `--only`
+    narrows the candidate set before lifecycle filtering; `--exclude` subtracts
+    ids after the closed-set is resolved. Invalid ids are refused before any
+    mutation.
+  - >-
+    Batch apply archives each selected spec through the existing locked
+    single-spec archive primitive so every item emits its own `spec_archived`
+    event and preserves hash-chain integrity.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
-contracts: []
+    given: 'A repository with multiple closed specs and at least one non-closed spec.'
+    when: '`caws specs archive --status closed` is run without `--apply`.'
+    then: >-
+      The command performs a dry-run, lists only closed specs, prints the
+      matching count and the corresponding `--apply` command, exits 0, and does
+      not mutate specs or events.
+  - id: A2
+    given: 'A repository with multiple closed specs.'
+    when: '`caws specs archive --status closed --apply` is run.'
+    then: >-
+      Every selected closed spec is archived through the governed archive path,
+      the summary reports archived/skipped/failed counts, and the command exits
+      non-zero if any selected item is skipped or failed.
+  - id: A3
+    given: 'A repository with closed specs A, B, and C.'
+    when: >-
+      `caws specs archive --status closed --only A,B,C --exclude B` is run.
+    then: >-
+      The dry-run/apply candidate set contains A and C only; B is omitted, and
+      non-closed ids named by `--only` are reported as skipped rather than
+      archived.
+  - id: A4
+    given: 'The same batch selector is invoked with `--json`.'
+    when: 'The command runs in dry-run or apply mode.'
+    then: >-
+      Stdout is a structured object with selector, dryRun, snapshot, archived,
+      skipped, failed, and ok fields suitable for automation.
+non_functional:
+  reliability:
+    - >-
+      A crash mid-batch leaves completed item transitions governed by already
+      appended archive events; re-running the batch safely skips non-closed
+      residue.
+contracts:
+  - name: specs-archive-batch-cli-contract
+    type: behavior
+    path: packages/caws-cli/tests/shell/specs-archive-batch.test.js
+    description: >-
+      Proves prune-style dry-run/apply behavior for archiving all closed specs.
+  - name: specs-archive-batch-selector-contract
+    type: contract-test
+    path: packages/caws-cli/tests/store/specs-archive-batch-selector.test.js
+    description: >-
+      Proves the batch selector admits only closed specs from the canonical spec
+      filesystem view.
