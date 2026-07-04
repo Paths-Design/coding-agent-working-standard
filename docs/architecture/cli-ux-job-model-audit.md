@@ -53,7 +53,7 @@ default for every cleanup or bulk lifecycle surface.
 | `scope` | `show`, `check`, `contention` | `caws scope --help` lists the three path-focused leaves. Leaf help distinguishes observation, enforcement, and cross-worktree contention; `show`/`contention` expose JSON. | Strong path-level refusal/explanation model. | No batch path check and no direct "amend this spec to admit these paths" handoff. The repair model lives in `specs amend-scope`, but the scope refusal does not produce a ready command. |
 | `claim` | flat leaf | `caws claim --help` surfaces `--takeover`, repeatable `--paths`, and diagnostics. | Good ownership surfacing. Takeover is explicit and audited. | No release/clear path for path claims. No preview of a takeover's impact beyond the refusal text. |
 | `gates` | `run` | `caws gates --help` and `caws gates run --help` surface required `--spec`, context, and diagnostics. | Good governed-check model; appends gate evidence. | No list/explain surface for available gates, policy modes, or waiver matches before running. |
-| `evidence` | `record`, `list`, `show` | Help surfaces typed `--type`, `--spec`, JSON payload, actor fields, read-only list filters, JSON output, and event-ref lookup by seq/hash/prefix. | Improved read/write symmetry: evidence can now be appended and inspected without direct `events.jsonl` parsing. | Record payload schemas are still under-discoverable from help; a future `evidence schema --type <kind>` would reduce rejected writes. |
+| `evidence` | `record`, `list`, `show`, `schema` | Help surfaces typed `--type`, `--spec`, JSON payload, actor fields, read-only list filters, JSON output, event-ref lookup by seq/hash/prefix, and kernel-derived payload schema discovery. | Strong read/write symmetry: evidence can be appended, inspected, and prepared with a copy-pasteable schema/example path without direct `events.jsonl` parsing. | Good model to copy. Remaining gap is broader event-log discovery under `events`, not typed evidence inspection. |
 | `events` | `migrate`, `rotate`, `verify-archive` | Group help lists maintenance leaves. `migrate` has `--apply` and reason/actor flags; `rotate` requires `--reason` and now has `--dry-run`/`--json`; `verify-archive` is read-only. | Improved maintenance model. `migrate` fits preview/apply; `rotate` can now preview archive path/digest/stats/genesis before mutation; `verify-archive` fits verification. | `events` still has no `list`/`show latest rotation` convenience for broad event-log inspection. |
 | `waiver` | `create`, `list`, `show`, `revoke` | Help covers CRUD-like waiver lifecycle; create/revoke require audit metadata. | Good exception lifecycle model. | No dry-run validation for `create`, and no `prune expired` cleanup model. |
 | `specs` | `create`, `list`, `show`, `recover`, `retire-draft`, `activate`, `amend-scope`, `close`, `archive`, `prune-archive`, `migrate`, `validate` | Group help now names every leaf. Leaf help exposes lifecycle state transitions, batch archive selectors, migration apply/partial, and file-path validation. | Strongest lifecycle surface after the archive fix: scoped creation, governed scope amendment, recover, batch archive, migration preview/apply. | Missing a general lifecycle cleanup model across states: e.g. "archive all closed older than X", "retire all stale drafts", "restore archived body to a chosen path/state". `recover` is read/output only; there is no governed `restore`. |
@@ -72,7 +72,7 @@ default for every cleanup or bulk lifecycle surface.
 | Untrack without deleting files | `worktree untrack <name> --reason ... --apply` | `worktree repair` clears dead bindings but only by doctor class | Now closed for single registered worktrees: dry-run default, required reason, clean/owned/existing-directory preconditions, and `worktree_untracked` audit evidence. | Future batch cleanup can compose this model, but should remain separate from physical deletion. |
 | Restore an archived spec body | `specs recover <id> --out` | `specs activate`, `specs amend-scope` | Recovery is output-only. There is no governed restore to `.caws/specs/<id>.yaml` as draft/active. | Add `specs restore <id> --as draft --out canonical --apply` only if lifecycle semantics are accepted; otherwise keep `recover` read-only and document the manual path. |
 | Convert a refusal into next command | `scope check`, `doctor` repair text | `specs amend-scope` | The user has to copy/paste and infer the exact next command. | Add structured remediation JSON fields and copy-paste commands for common safe repairs. |
-| Inspect evidence history | `evidence list/show` | `waiver list/show`, `agents list/show` | Now closed for typed evidence events: list filters by spec/type and show resolves seq/hash/prefix after chain verification. | Remaining gap is schema discoverability before writes: add `evidence schema --type <kind>` or richer examples. |
+| Inspect evidence history and payload shape | `evidence list/show/schema` | `waiver list/show`, `agents list/show` | Now closed for typed evidence events: list filters by spec/type, show resolves seq/hash/prefix after chain verification, and schema derives required payload fields from the kernel contracts. | Use this read/write/schema loop as a model for other append-heavy commands. |
 | Rotate audit chain safely | `events rotate --dry-run --reason ...` | `events migrate --apply` | Now mostly closed for preview/apply parity: dry-run reports target archive path, line count, digest, actor-shape stats, and genesis event payload. | Remaining gap is event-log discovery: `events list/show latest rotation` could summarize current chain and archive history. |
 | Retire stale draft specs in bulk | `specs retire-draft <id>` | `specs archive --status closed --include/--exclude --apply` | Draft cleanup is one-at-a-time and lacks selectors. | Add batch selectors only after "stale draft" is defined: age, no worktree binding, no scope changes, or explicit include list. |
 
@@ -131,7 +131,7 @@ By top-level command:
 | `missing_bulk_archive` | 19 | This is the exact class fixed by batch `specs archive`; agents had to inspect help, count closed specs, and infer that no bulk path existed. |
 | `contract_arg_invalid` | 14 | Contract tuple syntax is easy to invert; help should show examples and `specs create` should give a corrected form. |
 | `draft_spec_create_refused` | 13 | Agents try to bind draft specs to worktrees; the next command is `specs activate`, but the flow is not yet a guided handoff. |
-| `evidence_schema_rejected` | 10 | `evidence record --data` schemas are under-discoverable from help. |
+| `evidence_schema_rejected` | 10 | Fixed by `evidence schema --type <kind>` and per-kind `evidence record --help` examples. |
 | `already_closed_close_refused` | 7 | Agents try to close specs that are already closed; common next jobs are archive, recover, or inspect closure state. |
 | `parse_error` | 6 | Shell quoting and hook parsing failures still interrupt otherwise valid CAWS workflows. |
 | `not_a_git_repo` | 1 | Rare compared with state-model misses. |
@@ -147,7 +147,7 @@ By top-level command:
 | Already-closed close | `Spec "..." is in lifecycle_state "closed"; only active specs can be closed.` | State-aware alternatives: `archive`, `show`, `recover`, or no-op success when closure already matches requested metadata. |
 | Tier metadata failure | `Tier 1 specs require non-empty observability... rollback... contract.` | `specs create --help` needs complete tier-1/2 examples or a `--template tier1`/interactive plan output. |
 | Contract tuple inversion | `invalid --contract "behavior:verifychain-detects-tamper": type "verifychain-detects-tamper" is not one of ...` | Error should print the accepted tuple shape and a corrected example. |
-| Evidence schema rejection | `data: must have required property 'command'` for `evidence record --type test`. | `evidence record --help` should show per-type payload schemas or examples; longer term add `evidence schema --type test`. |
+| Evidence schema rejection | `data: must have required property 'command'` for `evidence record --type test`. | Fixed by `evidence schema --type test` plus per-type examples in `evidence record --help`. |
 
 ## Implementation Ledger
 
@@ -159,16 +159,17 @@ By top-level command:
 | `UX-WORKTREE-UNTRACK-001` | Implemented in fourth repair slice | `worktree untrack` control-plane release while preserving files | Adds `caws worktree untrack <name> --reason ... [--apply] [--json]`. Dry-run remains default; apply requires a reason, admitted ownership, an existing clean physical worktree directory, and clears only registry/spec bindings while preserving files. Successful apply appends `worktree_untracked`. Covered by `packages/caws-cli/tests/shell/worktree-untrack.test.js`. |
 | `UX-EVIDENCE-READBACK-001` | Implemented in fifth repair slice | `evidence list/show` read-only evidence inspection | Adds `caws evidence list --spec <id> [--type <kind>] [--json]` and `caws evidence show <event-ref> [--json]`. Both commands load through the event store, verify the hash chain, leave `events.jsonl` byte-identical, and expose stable seq/hash handles. Covered by `packages/caws-cli/tests/shell/evidence-readback.test.js`. |
 | `UX-EVENTS-ROTATE-DRY-RUN-001` | Implemented in sixth repair slice | `events rotate --dry-run` audit-storage preview | Adds `caws events rotate --dry-run --reason <text> [--allow-clean] [--json]`. The preview computes the target archive path, prior digest, line count, prior-chain status, actor-shape stats, and `chain_rotated` genesis event without renaming, archiving, appending, or rewriting `events.jsonl`. Covered by `packages/caws-cli/tests/shell/events-rotate-dry-run.test.js`. |
+| `UX-EVIDENCE-SCHEMA-DISCOVERY-001` | Implemented in seventh repair slice | `evidence schema` read-only payload discovery | Adds `caws evidence schema --type <test|gate|ac> [--json]` and per-kind `evidence record --help` examples. The schema command validates invalid kinds before filesystem reads, derives required fields and properties from the kernel event payload schemas, emits copy-pasteable record commands, and never reads or writes `.caws/events.jsonl`. Covered by `packages/caws-cli/tests/shell/evidence-schema.test.js`. |
 
 ## Next Slice
 
-The next implementation slice should address evidence payload schema
-discoverability: either `caws evidence schema --type <kind> [--json]` or richer
-per-type examples in `caws evidence record --help`. Session evidence shows
-agents still discover `test_recorded`, `gate_evaluated`, and `ac_recorded`
-payload requirements by failed writes. Keep the surface read-only, derive the
-schema from the same payload contracts the kernel validates, and make the help
-examples copy-pasteable.
+The next implementation slice should address event-log discovery:
+`caws events list [--json]` and/or `caws events show latest-rotation`. The
+rotate preview/apply path is now governed, but agents still need a read-only
+way to inspect current chain status, recent rotation history, archive paths,
+line counts, and digest verification targets without parsing
+`.caws/events.jsonl` by hand. Keep the first slice read-only and derive archive
+status from `chain_rotated` events plus the existing verify-archive logic.
 
 ## Findings
 
@@ -196,8 +197,8 @@ examples copy-pasteable.
    prose. A machine-readable plan with state class, subject, allowed mutation,
    refusal reason, and next command would let agents avoid guessing.
 
-5. **Read/write symmetry is still uneven outside evidence.**
-   `evidence record/list/show` now has an append/read loop, but `message
+5. **Read/write/schema symmetry is still uneven outside evidence.**
+   `evidence record/list/show/schema` now has an append/read/schema loop, but `message
    send/poll` can append and consume messages without a broader log-management
    surface. That may be acceptable for narrow workflows, but it is weak for
    audit-driven agent projects.
@@ -222,8 +223,9 @@ examples copy-pasteable.
    default before adding any apply behavior. Sterling needs a trustworthy plan
    more than it needs another destructive verb.
 
-4. Add schema discoverability for `evidence record`, either through
-   `evidence schema --type <kind>` or complete per-type examples in help.
+4. Add event-log discovery for `events rotate`/`verify-archive`: a read-only
+   list/show surface should summarize recent chain status and rotation
+   archives without requiring direct `events.jsonl` parsing.
 
 5. Add help regression tests for any group description that names subcommands
    and for cleanup leaves that claim dry-run/apply semantics. The CLI already

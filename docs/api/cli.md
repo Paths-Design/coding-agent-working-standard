@@ -207,7 +207,7 @@ Exit codes: 0 (all blocking gates pass), 1 (a blocking gate fails after waiver f
 
 ## 7. `caws evidence`
 
-Record and inspect typed evidence events in `.caws/events.jsonl`.
+Record, inspect, and describe typed evidence events in `.caws/events.jsonl`.
 
 ### `caws evidence record`
 
@@ -217,19 +217,40 @@ Append a typed evidence event.
 caws evidence record \
   --type test --spec FEAT-1 \
   --data '{"command":"npm test","exit_code":0}'
+caws evidence record \
+  --type gate --spec FEAT-1 \
+  --data '{"gate_id":"budget_limit","mode":"block","result":"pass","violations":[]}'
+caws evidence record \
+  --type ac --spec FEAT-1 \
+  --data '{"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}'
 ```
 
 | Flag | Description |
 |---|---|
 | `--type <kind>` | Evidence kind: `test`, `gate`, or `ac`. |
 | `--spec <id>` | Spec id this evidence is bound to. |
-| `--data <json>` | Inline JSON payload describing the evidence. Schema is per-`--type`. |
+| `--data <json>` | Inline JSON payload describing the evidence. Schema is per-`--type`; inspect it with `caws evidence schema --type <kind>`. |
 | `--actor-kind <kind>` | Actor kind: `agent`, `human`, `system`, or `automation` (default: `agent`). |
 | `--actor-id <id>` | Override actor id (defaults to session id). |
 
 The event is appended through the store's `appendEvent` (hash-chained, atomic, locked). There is no other path that may write `events.jsonl`.
 
 Exit codes: 0 (recorded), 1 (validation failure on `--data`), 2 (composition failure).
+
+### `caws evidence schema`
+
+```bash
+caws evidence schema --type test
+caws evidence schema --type gate --json
+caws evidence schema --type ac
+```
+
+| Flag | Description |
+|---|---|
+| `--type <kind>` | Evidence kind: `test`, `gate`, or `ac`. |
+| `--json` | Emit the kernel-derived payload schema, required fields, and example command as JSON. |
+
+Read-only schema discovery for `caws evidence record`. The command derives the payload contract from the same kernel schemas that validate `test_recorded`, `gate_evaluated`, and `ac_recorded` events. It does not read, append, rewrite, rotate, or lock `.caws/events.jsonl`.
 
 ### `caws evidence list`
 

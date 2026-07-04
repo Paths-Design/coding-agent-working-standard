@@ -22,6 +22,7 @@
 // false on the per-event-type payload schemas).
 
 import * as path from 'node:path';
+import * as fs from 'node:fs';
 
 import {
   type Actor,
@@ -106,6 +107,29 @@ export interface EvidenceShowOptions {
   readonly showData?: boolean;
 }
 
+export interface EvidenceSchemaOptions {
+  /** Which evidence event payload schema to inspect. */
+  readonly kind: EvidenceKind;
+  /** Emit machine-readable JSON instead of a human summary. */
+  readonly json?: boolean;
+  readonly out?: (line: string) => void;
+  readonly err?: (line: string) => void;
+}
+
+interface EvidenceSchemaExample {
+  readonly data: Record<string, unknown>;
+  readonly command: string;
+}
+
+interface EvidenceSchemaRecord {
+  readonly kind: EvidenceKind;
+  readonly event: EventType;
+  readonly schema: Record<string, unknown>;
+  readonly required: readonly string[];
+  readonly properties: readonly string[];
+  readonly example: EvidenceSchemaExample;
+}
+
 function rejectPreChainedFields(data: Record<string, unknown>): string | null {
   for (const banned of ['seq', 'prev_hash', 'event_hash']) {
     if (Object.prototype.hasOwnProperty.call(data, banned)) {
@@ -134,6 +158,89 @@ function evidenceSummary(event: ChainedEvent): Record<string, unknown> {
     actor: event.actor,
     data: event.data,
   };
+}
+
+function exampleDataForKind(kind: EvidenceKind): Record<string, unknown> {
+  if (kind === 'test') {
+    return { command: 'npm test', exit_code: 0 };
+  }
+  if (kind === 'gate') {
+    return {
+      gate_id: 'budget_limit',
+      mode: 'block',
+      result: 'pass',
+      violations: [],
+    };
+  }
+  return {
+    criterion_id: 'A1',
+    status: 'pass',
+    evidence_ref: 'npm test',
+  };
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function exampleCommandForKind(kind: EvidenceKind): EvidenceSchemaExample {
+  const data = exampleDataForKind(kind);
+  return {
+    data,
+    command:
+      `caws evidence record --type ${kind} --spec FEAT-1 --data ` +
+      shellQuote(JSON.stringify(data)),
+  };
+}
+
+function schemaPathCandidates(eventType: EventType): readonly string[] {
+  const schemaFile = `${eventType}.v1.json`;
+  const kernelMain = require.resolve('@paths.design/caws-kernel');
+  const kernelDistDir = path.dirname(kernelMain);
+  return [
+    path.join(kernelDistDir, 'schemas', 'events', schemaFile),
+    path.join(kernelDistDir, '..', 'src', 'schemas', 'events', schemaFile),
+  ];
+}
+
+function loadSchemaForKind(kind: EvidenceKind): EvidenceSchemaRecord {
+  const eventType = KIND_TO_EVENT_TYPE[kind];
+  const candidates = schemaPathCandidates(eventType);
+  const schemaPath = candidates.find((candidate) => fs.existsSync(candidate));
+  if (schemaPath === undefined) {
+    throw new Error(
+      `missing schema file for ${eventType}; searched ${candidates.join(', ')}`
+    );
+  }
+  const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf8')) as Record<string, unknown>;
+  const rawRequired = Array.isArray(schema.required) ? schema.required : [];
+  const rawProperties =
+    typeof schema.properties === 'object' && schema.properties !== null
+      ? Object.keys(schema.properties as Record<string, unknown>)
+      : [];
+  return {
+    kind,
+    event: eventType,
+    schema,
+    required: rawRequired.filter((field): field is string => typeof field === 'string'),
+    properties: rawProperties,
+    example: exampleCommandForKind(kind),
+  };
+}
+
+function renderPropertySummary(schema: Record<string, unknown>, property: string): string {
+  const properties = schema.properties as Record<string, unknown> | undefined;
+  const propertySchema = properties?.[property];
+  if (typeof propertySchema !== 'object' || propertySchema === null) {
+    return property;
+  }
+  const typedSchema = propertySchema as Record<string, unknown>;
+  const type = typedSchema.type;
+  const enumValues = typedSchema.enum;
+  const details: string[] = [];
+  if (typeof type === 'string') details.push(type);
+  if (Array.isArray(enumValues)) details.push(`one of ${enumValues.join('|')}`);
+  return details.length > 0 ? `${property} (${details.join('; ')})` : property;
 }
 
 function loadVerifiedEventsForRead(
@@ -381,5 +488,51 @@ export function runEvidenceShowCommand(opts: EvidenceShowOptions): number {
     );
     out(JSON.stringify(summary.data, null, 2));
   }
+  return 0;
+}
+
+export function runEvidenceSchemaCommand(opts: EvidenceSchemaOptions): number {
+  const out = opts.out ?? ((s: string) => process.stdout.write(s + '\n'));
+  const err = opts.err ?? ((s: string) => process.stderr.write(s + '\n'));
+
+  if (!isEvidenceKind(opts.kind)) {
+    err(
+      `caws evidence schema: invalid --type. Got ${JSON.stringify(opts.kind)}; expected test|gate|ac.`
+    );
+    err(`(rule: ${SHELL_RULES.COMMAND_INVALID_EVIDENCE_TYPE})`);
+    return 1;
+  }
+
+  let record: EvidenceSchemaRecord;
+  try {
+    record = loadSchemaForKind(opts.kind);
+  } catch (e) {
+    err(`caws evidence schema: failed to load kernel schema: ${(e as Error).message}`);
+    return 2;
+  }
+
+  if (opts.json === true) {
+    out(JSON.stringify({
+      ok: true,
+      read_only: true,
+      type: record.kind,
+      event: record.event,
+      required: record.required,
+      properties: record.properties,
+      schema: record.schema,
+      example: record.example,
+    }, null, 2));
+    return 0;
+  }
+
+  out(`caws evidence schema: ${record.kind} (${record.event})`);
+  out('  read-only: true');
+  out(`  required: ${record.required.length > 0 ? record.required.join(', ') : '(none)'}`);
+  out('  fields:');
+  for (const property of record.properties) {
+    out(`  - ${renderPropertySummary(record.schema, property)}`);
+  }
+  out('  example:');
+  out(`  ${record.example.command}`);
   return 0;
 }

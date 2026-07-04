@@ -30,7 +30,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws scope`](#caws-scope) — Evaluate file paths against the bound spec scope
 - [`caws claim`](#caws-claim) — Surface ownership of the current worktree; with --takeover, acquire ownership from a foreign session (writes prior_owners audit). With --paths, declare working-tree ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001).
 - [`caws gates`](#caws-gates) — Run quality gates against the current changes (policy-driven)
-- [`caws evidence`](#caws-evidence) — Record and inspect typed evidence events in .caws/events.jsonl
+- [`caws evidence`](#caws-evidence) — Record, inspect, and describe typed evidence events in .caws/events.jsonl
 - [`caws events`](#caws-events) — Maintenance commands for .caws/events.jsonl (rotate, migrate, verify-archive)
 - [`caws waiver`](#caws-waiver) — Manage CAWS waivers (bounded exception records that suppress matching gate violations)
 - [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/retire-draft/activate/amend-scope/close/archive/prune-archive/migrate/validate)
@@ -127,11 +127,11 @@ Run CAWS-local policy evaluators and apply policy.gates[gate].mode to decide blo
 
 ## `caws evidence`
 
-Record and inspect typed evidence events in .caws/events.jsonl
+Record, inspect, and describe typed evidence events in .caws/events.jsonl
 
 ### `caws evidence record`
 
-Append a typed evidence event (test|gate|ac)
+Append a typed evidence event (test|gate|ac). Payload examples: test {"command":"npm test","exit_code":0}; gate {"gate_id":"budget_limit","mode":"block","result":"pass","violations":[]}; ac {"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}. Use `caws evidence schema --type <kind>` for the full kernel schema.
 
 **Options:**
 
@@ -162,6 +162,15 @@ Show one event from the hash-chained events log by sequence number, exact event 
 
 - `--json` — Emit the matched event as JSON.
 - `--data` — Show structured data block on diagnostics
+
+### `caws evidence schema`
+
+Print the kernel-derived payload schema and a copy-pasteable `caws evidence record` example for one evidence kind. Read-only; does not read or write .caws/events.jsonl.
+
+**Options:**
+
+- `--type <kind>` (**required**) — Evidence kind: test | gate | ac
+- `--json` — Emit schema, required fields, and example command as JSON.
 
 ## `caws events`
 
