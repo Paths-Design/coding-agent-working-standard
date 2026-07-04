@@ -3,6 +3,7 @@ title: 'Alias worktree cleanup state filters as status'
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: worktree-prune-status-alias
 created_at: '2026-07-04T17:08:33.238Z'
 updated_at: '2026-07-04T17:08:33.238Z'
 blast_radius:
