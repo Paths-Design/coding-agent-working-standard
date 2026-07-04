@@ -7,12 +7,12 @@ created_at: '2026-07-04T12:28:46.076Z'
 updated_at: '2026-07-04T12:28:54.275Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/message
+    - docs/cli-reference
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/shell/commands/message.ts
     - packages/caws-cli/src/store/messages-store.ts
     - packages/caws-cli/src/store/index.ts
@@ -25,12 +25,23 @@ scope:
     - docs/architecture/cli-ux-job-model-audit.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'message prune is dry-run by default and must not mutate .caws/messages.jsonl without --apply.'
+  - 'message prune candidates are delivered message records only; undelivered inbox messages are classified as skipped/refused and preserved.'
+  - 'message prune --apply requires an explicit retention selector such as --older-than-ms or --include.'
+  - 'message cleanup remains separate from events.jsonl and does not imply audit evidence deletion.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a message log containing delivered and undelivered message records'
+    when: 'an operator runs caws message prune --status delivered'
+    then: 'the CLI reports delivered candidates, skipped undelivered messages, and leaves the message log unchanged'
+  - id: A2
+    given: 'a selected delivered message older than the requested retention window'
+    when: 'an operator runs caws message prune --status delivered --older-than-ms <ms> --apply'
+    then: 'only the selected delivered message and its delivery marker are removed from messages.jsonl'
+  - id: A3
+    given: 'the message command help and generated command reference'
+    when: 'an agent views caws message --help and caws message prune --help'
+    then: 'the retention command is documented as non-authoritative chat cleanup and dry-run first'
 non_functional: {}
 contracts:
   - name: 'message-prune'
