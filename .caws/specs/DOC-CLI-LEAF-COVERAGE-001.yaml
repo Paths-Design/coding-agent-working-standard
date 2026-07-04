@@ -7,7 +7,13 @@ created_at: '2026-07-04T03:14:40.329Z'
 updated_at: '2026-07-04T03:14:40.329Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - docs/api/cli.md
+    - README.md
+    - AGENTS.md
+    - packages/caws-cli/README.md
+    - docs/agents/full-guide.md
+    - docs/architecture/caws-vnext-command-surface.md
+    - packages/caws-cli/tests/docs/cli-api-reference-coverage.test.js
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -22,14 +28,44 @@ scope:
     - '.caws/specs/DOC-CLI-LEAF-COVERAGE-001.yaml'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    The hand-maintained CLI API reference documents every visible leaf command
+    exported by COMMAND_SURFACE_METADATA, including top-level leaves and nested
+    group leaves.
+  - >-
+    Hand-maintained quick-reference docs may summarize groups, but they must
+    not claim removed flags or planned commands as shipped behavior.
+  - >-
+    The generated command reference remains the exhaustive source for detailed
+    option listings; other docs should point readers there instead of
+    duplicating the whole surface.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'The built CLI metadata and docs/api/cli.md.'
+    when: 'The docs coverage test runs.'
+    then: >-
+      Every visible command leaf in COMMAND_SURFACE_METADATA has a matching
+      section in docs/api/cli.md.
+  - id: A2
+    given: 'The stale hand-maintained command docs identified in the audit.'
+    when: 'The docs are reviewed after this slice.'
+    then: >-
+      They no longer document nonexistent flags such as events rotate --apply
+      or worktree migrate-registry --apply, and no longer list shipped
+      worktree repair as planned-only.
+  - id: A3
+    given: 'The public README, AGENTS quick reference, package README, API doc, agent guide, and doctrine surface.'
+    when: 'A reader checks the current v11 command surface.'
+    then: >-
+      The docs mention the message command, prepush, current specs leaves, and
+      route exhaustive leaf/flag detail to docs/command-reference.md.
+non_functional:
+  reliability:
+    - >-
+      The coverage test derives the expected leaf set from the same metadata
+      used by --help and the generated command reference.
 contracts:
   - name: 'cli-api-reference-coverage'
     type: contract-test
     path: 'packages/caws-cli/tests/docs/cli-api-reference-coverage.test.js'
+    description: 'Fails when docs/api/cli.md omits a visible CLI leaf section.'
