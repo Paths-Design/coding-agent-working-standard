@@ -52,6 +52,27 @@ const {
 // Initialize global configuration
 const program = new Command();
 
+function normalizePrepushAckBundleArgv(argv) {
+  if (argv[2] !== 'prepush') return argv;
+  const normalized = argv.slice(0, 3);
+  for (const arg of argv.slice(3)) {
+    const trimmed = typeof arg === 'string' ? arg.trim() : '';
+    if (trimmed.startsWith('--ack ')) {
+      const parts = trimmed.split(/\s+/);
+      const isAckBundle =
+        parts.length >= 2 &&
+        parts.length % 2 === 0 &&
+        parts.every((part, index) => (index % 2 === 0 ? part === '--ack' : part.length > 0));
+      if (isAckBundle) {
+        normalized.push(...parts);
+        continue;
+      }
+    }
+    normalized.push(arg);
+  }
+  return normalized;
+}
+
 program
   .name('caws')
   .description('CAWS - Coding Agent Working Standard CLI')
@@ -162,7 +183,7 @@ registerShellCommands(program);
 // Parse and run
 if (require.main === module) {
   try {
-    program.parse();
+    program.parse(normalizePrepushAckBundleArgv(process.argv));
   } catch (error) {
     // Handle help and version requests gracefully
     if (

@@ -1181,6 +1181,7 @@ Governed pre-push range check (MULTI-AGENT-PUSH-RANGE-GUARD-001). Classifies the
 caws prepush
 caws prepush --base origin/main --spec FEAT-1
 caws prepush --ack <sha>
+caws prepush "--ack <sha> --ack <sha>"
 ```
 
 | Flag | Description |
@@ -1191,6 +1192,12 @@ caws prepush --ack <sha>
 | `--spec <id>` | Current session active spec id for slice matching. |
 | `--ack <sha>` | Acknowledge an unexpected commit by SHA. Repeatable. |
 | `--data` | Show structured data block on diagnostics. |
+
+For compatibility with agents that accidentally shell-quote a generated
+sequence of repeated ack flags, `caws prepush "--ack <sha> --ack <sha>"` is
+normalized before Commander parses options. This normalization is limited to
+`prepush --ack` bundles; other commands and options keep normal unknown-option
+behavior.
 
 ---
 
