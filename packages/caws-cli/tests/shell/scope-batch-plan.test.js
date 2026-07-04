@@ -81,15 +81,15 @@ describe('caws scope plan', () => {
     ]);
     expect(json.remediation_groups).toEqual([
       {
-        command: 'caws worktree create <name> --spec <spec-id>',
-        description: 'Create a governed worktree for the active spec that should own the edit.',
-        mutates: true,
+        command: 'caws specs list --status active',
+        description: 'List active specs before choosing the authority context.',
+        mutates: false,
         paths: ['packages/inline.ts', 'packages/a.ts', 'packages/b.ts'],
       },
       {
-        command: 'caws specs list',
-        description: 'List specs to choose the intended active spec id.',
-        mutates: false,
+        command: 'caws worktree create <name> --spec <spec-id>',
+        description: 'Create a governed worktree for the active spec that should own the edit.',
+        mutates: true,
         paths: ['packages/inline.ts', 'packages/a.ts', 'packages/b.ts'],
       },
     ]);

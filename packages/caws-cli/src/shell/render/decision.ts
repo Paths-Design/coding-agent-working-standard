@@ -17,7 +17,10 @@
 // handle — but the human prose tells the user which repair to perform.
 
 import type { Decision } from '@paths.design/caws-kernel';
-import type { ResolvedBinding } from '../binding/types';
+import type {
+  AuthorityContextCandidate,
+  ResolvedBinding,
+} from '../binding/types';
 
 export interface RenderDecisionOptions {
   /**
@@ -98,6 +101,7 @@ export interface ScopeRemediation {
   readonly summary: string;
   readonly commands: readonly ScopeRemediationCommand[];
   readonly notes?: readonly string[];
+  readonly authorityCandidates?: readonly AuthorityContextCandidate[];
 }
 
 /**
@@ -202,6 +206,77 @@ function extractMatchedPattern(
   const candidate =
     data['matchedPattern'] ?? data['matchedPrefix'] ?? data['matchedName'];
   return typeof candidate === 'string' ? candidate : undefined;
+}
+
+function authorityCandidates(
+  boundContext: ResolvedBinding | undefined
+): readonly AuthorityContextCandidate[] {
+  return boundContext?.authorityCandidates ?? [];
+}
+
+function activeSpecListCommand(): ScopeRemediationCommand {
+  return {
+    command: 'caws specs list --status active',
+    description: 'List active specs before choosing the authority context.',
+    mutates: false,
+  };
+}
+
+function authorityCandidateCommands(
+  normPath: string,
+  candidates: readonly AuthorityContextCandidate[],
+  opts: { readonly trackedWorktreeName?: string } = {}
+): ScopeRemediationCommand[] {
+  const commands: ScopeRemediationCommand[] = [];
+  for (const candidate of candidates.slice(0, 5)) {
+    commands.push({
+      command: `caws scope show ${shellQuote(normPath)} --spec ${shellQuote(candidate.specId)}`,
+      description: `Read-only check whether ${candidate.specId} is the right spec context for this path.`,
+      mutates: false,
+    });
+    if (typeof opts.trackedWorktreeName === 'string') {
+      if (candidate.worktreeName === undefined) {
+        commands.push({
+          command: `caws worktree bind ${shellQuote(opts.trackedWorktreeName)} --spec ${shellQuote(candidate.specId)}`,
+          description: `Bind this tracked worktree to active spec ${candidate.specId}.`,
+          mutates: true,
+        });
+      } else {
+        commands.push({
+          command: `cd .caws/worktrees/${shellQuote(candidate.worktreeName)}`,
+          description: `Enter the existing worktree already bound to ${candidate.specId}.`,
+          mutates: false,
+        });
+      }
+    } else if (candidate.worktreeName === undefined) {
+      commands.push({
+        command: `caws worktree create <name> --spec ${shellQuote(candidate.specId)}`,
+        description: `Create a governed worktree for active spec ${candidate.specId}.`,
+        mutates: true,
+      });
+    } else {
+      commands.push({
+        command: `cd .caws/worktrees/${shellQuote(candidate.worktreeName)}`,
+        description: `Enter the existing worktree already bound to ${candidate.specId}.`,
+        mutates: false,
+      });
+    }
+  }
+  return commands;
+}
+
+function authorityCandidateNotes(
+  candidates: readonly AuthorityContextCandidate[]
+): readonly string[] {
+  const notes = [
+    'Use the read-only scope --spec check first; it compares path fit but does not grant current-checkout write authority.',
+  ];
+  if (candidates.length > 5) {
+    notes.push(
+      `Showing first 5 active specs; run caws specs list --status active for all ${candidates.length}.`
+    );
+  }
+  return notes;
 }
 
 export function buildScopeRemediation(
@@ -336,39 +411,53 @@ export function buildScopeRemediation(
   }
 
   if (decision.kind === 'no_authority' && decision.bindingState === 'unbound') {
+    const candidates = authorityCandidates(boundContext);
+    const normPath = decision.normalizedPath ?? decision.path;
     if (typeof boundContext?.worktreeName === 'string') {
-      return {
-        summary: `Tracked worktree ${boundContext.worktreeName} is not bound to a spec.`,
-        commands: [
+      const commands: ScopeRemediationCommand[] = [
+        activeSpecListCommand(),
+        ...authorityCandidateCommands(normPath, candidates, {
+          trackedWorktreeName: boundContext.worktreeName,
+        }),
+      ];
+      if (candidates.length === 0) {
+        commands.push(
           {
             command: `caws worktree bind ${shellQuote(boundContext.worktreeName)} --spec <spec-id>`,
             description: 'Bind this existing worktree to the active spec that should own the edit.',
             mutates: true,
-          },
-          {
-            command: 'caws specs list',
-            description: 'List specs to choose the intended active spec id.',
-            mutates: false,
-          },
-        ],
-        notes: ['Replace <spec-id> before running the bind command.'],
+          }
+        );
+      }
+      return {
+        summary: `Tracked worktree ${boundContext.worktreeName} is not bound to a spec; choose an active spec authority before editing.`,
+        commands,
+        notes:
+          candidates.length > 0
+            ? authorityCandidateNotes(candidates)
+            : ['Replace <spec-id> before running the bind command.'],
+        authorityCandidates: candidates,
       };
     }
+    const commands: ScopeRemediationCommand[] = [
+      activeSpecListCommand(),
+      ...authorityCandidateCommands(normPath, candidates),
+    ];
+    if (candidates.length === 0) {
+      commands.push({
+        command: 'caws worktree create <name> --spec <spec-id>',
+        description: 'Create a governed worktree for the active spec that should own the edit.',
+        mutates: true,
+      });
+    }
     return {
-      summary: 'No worktree is bound for this context; create or enter the worktree that should own the edit.',
-      commands: [
-        {
-          command: 'caws worktree create <name> --spec <spec-id>',
-          description: 'Create a governed worktree for the active spec that should own the edit.',
-          mutates: true,
-        },
-        {
-          command: 'caws specs list',
-          description: 'List specs to choose the intended active spec id.',
-          mutates: false,
-        },
-      ],
-      notes: ['Replace <name> and <spec-id> before running the create command.'],
+      summary: 'No worktree is bound for this context; choose an active spec authority and create or enter its worktree before editing.',
+      commands,
+      notes:
+        candidates.length > 0
+          ? authorityCandidateNotes(candidates)
+          : ['Replace <name> and <spec-id> before running the create command.'],
+      authorityCandidates: candidates,
     };
   }
 
@@ -400,6 +489,7 @@ export function renderDecision(
   opts: RenderDecisionOptions = {}
 ): string {
   const lines: string[] = [];
+  const remediation = buildScopeRemediation(decision, opts.boundContext);
   const label = KIND_LABEL[decision.kind];
   const nuance = unboundNuance(decision, opts.boundContext);
   const ruleLabel = nuance !== '' ? `${decision.rule} ${nuance}` : decision.rule;
@@ -414,17 +504,27 @@ export function renderDecision(
   lines.push(`             message: ${decision.message}`);
   if (
     typeof decision.narrowRepair === 'string' &&
-    decision.narrowRepair.length > 0
+    decision.narrowRepair.length > 0 &&
+    !(decision.kind === 'no_authority' && remediation !== undefined)
   ) {
     lines.push(`             repair:  ${decision.narrowRepair}`);
   }
   if (opts.showData === true && decision.data !== undefined) {
     lines.push(`             data:    ${JSON.stringify(decision.data)}`);
   }
-  const remediation = buildScopeRemediation(decision, opts.boundContext);
   if (remediation !== undefined) {
     lines.push('             remediation:');
     lines.push(`               ${remediation.summary}`);
+    if ((remediation.authorityCandidates ?? []).length > 0) {
+      lines.push('               active spec candidates:');
+      for (const candidate of remediation.authorityCandidates ?? []) {
+        const wt =
+          candidate.worktreeName !== undefined
+            ? ` (worktree ${candidate.worktreeName})`
+            : ' (no worktree)';
+        lines.push(`               - ${candidate.specId}${wt}`);
+      }
+    }
     for (const command of remediation.commands) {
       lines.push(`               - ${command.command}`);
       lines.push(`                 ${command.description}`);
