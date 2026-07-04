@@ -3,6 +3,7 @@ title: 'Reconcile validation-era removed command diagnostics'
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: legacy-validation-diagnostics
 created_at: '2026-07-04T13:25:31.625Z'
 updated_at: '2026-07-04T13:25:39.440Z'
 blast_radius:
