@@ -1,0 +1,30 @@
+id: UX-SCOPE-AUTHORITY-JSON-REPAIR-FIELD-001
+title: 'Align no-authority JSON repair guidance'
+risk_tier: 2
+mode: fix
+lifecycle_state: active
+created_at: '2026-07-04T17:59:29.556Z'
+updated_at: '2026-07-04T17:59:29.556Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/render/decision.ts'
+    - 'packages/caws-cli/tests/shell/scope-authority-context-handoff.test.js'
+    - 'docs/architecture/cli-ux-job-model-audit.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'scope-json-repair-field'
+    type: behavior
+    path: 'packages/caws-cli/tests/shell/scope-authority-context-handoff.test.js'
