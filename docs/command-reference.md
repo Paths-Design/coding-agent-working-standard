@@ -781,6 +781,20 @@ Show retained channel history between this session and another endpoint. Read-on
 - `--json` — Emit JSON ({ok, read_only, channel, total, messages})
 - `--data` — Show structured data block on diagnostics
 
+### `caws message prune`
+
+Plan or apply retention cleanup for delivered non-authoritative chat messages. Dry-run by default; undelivered inbox messages are preserved.
+
+**Options:**
+
+- `--status <status>` (**required**) — Message retention selector: delivered
+- `--older-than-ms <ms>` — Select delivered messages older than this many milliseconds
+- `--include <ids>` — Comma-separated message ids to include
+- `--exclude <ids>` — Comma-separated message ids to exclude
+- `--apply` — Rewrite .caws/messages.jsonl to remove selected delivered messages and their delivery markers
+- `--json` — Emit JSON prune plan/result
+- `--data` — Show structured data block on diagnostics
+
 ## `caws prepush`
 
 Classify the outgoing commit range before publish and refuse commits not attributable to the current slice. Diagnose/decide only — does NOT run git push.

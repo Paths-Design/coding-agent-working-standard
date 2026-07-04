@@ -49,6 +49,7 @@ import {
   runMessagePollCommand,
   runMessageInboxCommand,
   runMessageHistoryCommand,
+  runMessagePruneCommand,
   runClaimCommand,
   runDoctorCommand,
   runEventsListCommand,
@@ -1441,6 +1442,31 @@ export function registerShellCommands(
         ...(opts.me !== undefined ? { me: opts.me } : {}),
         with: opts.with ?? '',
         ...(limit !== undefined && Number.isFinite(limit) ? { limit } : {}),
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'prune'))
+    .action((opts: {
+      status?: string;
+      olderThanMs?: string;
+      include?: string;
+      exclude?: string;
+      apply?: boolean;
+      json?: boolean;
+      data?: boolean;
+    }) => {
+      const olderThanMs = opts.olderThanMs !== undefined ? parseOptionalNonNegativeInteger(opts.olderThanMs) : undefined;
+      const include = parseCommaSeparatedList(opts.include);
+      const exclude = parseCommaSeparatedList(opts.exclude);
+      const code = runMessagePruneCommand({
+        status: opts.status ?? '',
+        ...(olderThanMs !== undefined ? { olderThanMs } : {}),
+        ...(include !== undefined ? { include } : {}),
+        ...(exclude !== undefined ? { exclude } : {}),
+        ...(opts.apply === true ? { apply: true } : {}),
         json: opts.json === true,
         showData: opts.data === true,
       });

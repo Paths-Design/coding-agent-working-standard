@@ -59,7 +59,7 @@ default for every cleanup or bulk lifecycle surface.
 | `specs` | `create`, `list`, `show`, `recover`, `restore`, `retire-draft`, `prune-drafts`, `activate`, `amend-scope`, `close`, `archive`, `prune-archive`, `migrate`, `validate` | Group help now names every leaf. Leaf help exposes lifecycle state transitions, create preflight, restore dry-run/apply, draft cleanup dry-run/apply, batch archive selectors, migration apply/partial, and file-path validation. Archive batch mode now supports include/exclude, age/date selectors, and worktree-binding exclusion. | Strong lifecycle surface after the archive and draft-prune fixes: scoped creation, read-only create planning, governed scope amendment, recover/restore, guarded draft prune apply, batch archive with refined selectors, migration preview/apply. | Good model to copy. Remaining spec lifecycle gaps are smaller refusal-handoff improvements, such as turning draft-bind refusal into a direct `specs activate` handoff. |
 | `worktree` | `create`, `list`, `bind`, `destroy`, `untrack`, `merge`, `migrate-registry`, `repair-sparse`, `repair`, `prune`, `cleanup-plan` | Group help lists lifecycle, untrack, migration, sparse repair, control-plane repair, doctor-evidence prune, and physical cleanup planning/apply. Leaf help distinguishes create vs bind, dry-run merge, destroy guardrails, untrack dry-run/apply, repair dry-run, prune dry-run/apply, cleanup-plan dry-run, and guarded cleanup-plan apply. | Strong lifecycle and cleanup model. `prune` covers safe control-plane residue classes, `untrack` preserves files after releasing a CAWS binding, and `cleanup-plan` classifies real git worktrees by clean/dirty, merged/unmerged, bound lifecycle, ownership, and registry presence. `cleanup-plan --apply` requires explicit selectors and destroys only `destroy-ready` items through `destroyWorktree`. | Good model to copy. Future expansion could consider `unbound-clean-candidate` apply, but only after field evidence proves it is safe. |
 | `agents` | `register`, `heartbeat`, `stop`, `list`, `show`, `prune` | Help exposes hook-writer verbs, read-only list/show, JSON, stale TTLs, `--dead`, retention filters, dry-run default, `--apply`. | Best cleanup UX model in the CLI. It cleanly separates display-only stale state from deletion and supports machine output. | Good model to copy. Minor gap: no `explain <id>` that says why a lease is active/stale/stopped/dead, but list/show largely cover it. |
-| `message` | `send`, `poll`, `inbox`, `history` | Help surfaces directed send, optional dead recipient escape hatch, deliver-once poll wait/peek/JSON, read-only inbox listing, and read-only channel history. | Stronger communication model: messages remain explicitly non-authority, agents can inspect waiting inbox and retained channel history without consuming messages or parsing `.caws/messages.jsonl`. | Remaining gap is retention/prune policy for long-running projects; design it separately from readback so non-authoritative chat cleanup does not look like evidence deletion. |
+| `message` | `send`, `poll`, `inbox`, `history`, `prune` | Help surfaces directed send, optional dead recipient escape hatch, deliver-once poll wait/peek/JSON, read-only inbox listing, read-only channel history, and dry-run-first delivered-message retention cleanup. | Strong communication model: messages remain explicitly non-authority, agents can inspect waiting inbox and retained channel history without consuming messages, and operators can prune old delivered chat records without touching undelivered inbox messages or events evidence. | Good model to copy. Future message UX should focus on channel/export ergonomics rather than broader deletion semantics. |
 | `prepush` | flat leaf | `caws prepush --help` surfaces remote/branch/base/spec/ack and diagnostics. | Good preflight model; `--ack` is an explicit exception path. | No "write an ack file" or "explain all unexpected commits grouped by spec/worktree" model for large ranges. |
 
 ## Parity Gaps by Job
@@ -179,15 +179,15 @@ By top-level command:
 | `UX-INIT-PREVIEW-PLAN-001` | Implemented in twenty-second repair slice | `init --plan` read-only bootstrap preview | Adds `caws init --plan [--json]`. The plan reuses canonical-state, `.gitignore`, hook-pack, and settings classifiers without creating `.caws`, `.gitignore`, hook files, settings files, or events, and reports refusal reasons plus the next apply command. Covered by `packages/caws-cli/tests/shell/init-plan.test.js`. |
 | `UX-CLAIM-RELEASE-PREVIEW-001` | Implemented in twenty-third repair slice | `claim --plan` and `claim --release-paths` | Adds `caws claim --plan [--json]` for read-only ownership/takeover impact preview and `caws claim --release-paths [--apply] [--json]` for dry-run/apply clearing of the current session lease `claimed_paths`. The release path writes only through the lease store and does not mutate worktree ownership, specs, events, or git state. Covered by `packages/caws-cli/tests/shell/claim-release-preview.test.js`. |
 | `UX-MESSAGE-LOG-READBACK-001` | Implemented in twenty-fourth repair slice | `message inbox/history` read-only message-log inspection | Adds `caws message inbox [--me <id>] [--limit <n>] [--json]` and `caws message history --with <id> [--me <id>] [--limit <n>] [--json]`. Inbox lists undelivered messages without consuming them; history returns bidirectional channel messages in log order; both are read-only and append no delivery records. Covered by `packages/caws-cli/tests/shell/message-log-readback.test.js`. |
+| `UX-MESSAGE-RETENTION-PRUNE-001` | Implemented in twenty-fifth repair slice | `message prune` delivered-message retention cleanup | Adds `caws message prune --status delivered [--older-than-ms <ms>] [--include <ids>] [--exclude <ids>] [--apply] [--json]`. Dry-run is default; candidates are delivered message records only; undelivered inbox messages are preserved; apply requires `--older-than-ms` or `--include` and removes selected delivered messages plus delivery markers. Covered by `packages/caws-cli/tests/shell/message-retention-prune.test.js`. |
 
 ## Next Slice
 
-The next implementation slice should address message retention/prune policy.
-`message inbox/history` now provide read-only inspection, but long-running
-projects can still accumulate `.caws/messages.jsonl` indefinitely. Add a
-dry-run-first retention plan that classifies prunable delivered chat records
-separately from undelivered inbox messages and keeps message cleanup distinct
-from hash-chained governance evidence.
+The next implementation slice should address smaller lifecycle handoff gaps now
+that the main cleanup model is consistent. A good target is the specs draft-bind
+refusal path: when a worktree bind/create operation refuses a draft spec, the
+CLI should surface a direct `caws specs activate <id>` handoff and explain the
+activation preflight instead of leaving agents to infer the next command.
 
 ## Findings
 
@@ -231,10 +231,11 @@ from hash-chained governance evidence.
    writing `worktrees.json`; `claim --release-paths` defaults to a dry-run and
    `--apply` clears only the current session lease `claimed_paths`.
 
-8. **Message readback now exists, but retention is still open.**
+8. **Message readback and retention cleanup now share the cleanup model.**
    `message inbox/history` give agents read-only access to waiting messages and
-   retained channel context without consuming messages. The remaining message
-   job is retention/prune policy for non-authoritative chat logs.
+   retained channel context without consuming messages. `message prune` now
+   plans/applies delivered-message cleanup separately from undelivered inbox
+   messages and remains distinct from hash-chained governance evidence.
 
 9. **Help context is now closer to reality, but nested help should keep naming
    adjacent alternatives.** The recent `specs archive` and `specs validate`
@@ -256,10 +257,10 @@ from hash-chained governance evidence.
    `prune` is doctor/control-plane cleanup; `cleanup-plan` is physical git
    worktree classification.
 
-4. Add `message` retention/prune planning:
-   keep messages non-authoritative and separate from events, but give operators
-   a dry-run target set for old delivered chat records while refusing to delete
-   undelivered inbox messages by default.
+4. Keep `message` cleanup separate from governance evidence:
+   `message prune` is only for non-authoritative chat retention. Future message
+   deletion/export work should preserve that boundary and keep undelivered inbox
+   records out of default prune candidates.
 
 5. Add help regression tests for any group description that names subcommands
    and for cleanup leaves that claim dry-run/apply semantics. The CLI already

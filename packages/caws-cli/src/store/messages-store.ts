@@ -23,6 +23,7 @@ import * as path from 'node:path';
 
 import { type Diagnostic, type Result, ok, err } from '@paths.design/caws-kernel';
 
+import { writeFileAtomic } from './atomic-write';
 import { loadLeases } from './leases-store';
 import { withLifecycleLock } from './lifecycle-lock';
 import { storeDiagnostic } from './repo-root';
@@ -165,6 +166,34 @@ export interface MessageInboxListResult {
   readonly diagnostics: ReadonlyArray<Diagnostic>;
 }
 
+export interface MessagePruneEntry {
+  readonly id: string;
+  readonly ts: string;
+  readonly from: string;
+  readonly to: string;
+  readonly channel: string;
+  readonly text: string;
+  readonly delivered: boolean;
+  readonly state: 'candidate' | 'skipped';
+  readonly reason: string;
+}
+
+export interface MessagePrunePlan {
+  readonly status: 'delivered';
+  readonly apply: boolean;
+  readonly candidates: readonly MessagePruneEntry[];
+  readonly skipped: readonly MessagePruneEntry[];
+  readonly diagnostics: ReadonlyArray<Diagnostic>;
+  readonly delivery_records_to_remove: number;
+  readonly selector_required_for_apply: boolean;
+}
+
+export interface MessagePruneResult extends MessagePrunePlan {
+  readonly applied: boolean;
+  readonly pruned_messages: number;
+  readonly pruned_delivery_records: number;
+}
+
 export interface PollOptions {
   /** Block up to this many ms for a message before giving up (long-poll). 0/undefined = return immediately. */
   readonly waitMs?: number;
@@ -182,6 +211,194 @@ function sleepSync(ms: number): void {
   while (Date.now() < end) {
     /* busy-wait; matches the lifecycle-lock idiom. Short interval, lock not held. */
   }
+}
+
+interface ParsedMessageLine {
+  readonly raw: string;
+  readonly parsed: MessageRecord | DeliveryRecord | null;
+}
+
+function readMessageLines(cawsDir: string): Result<{ readonly lines: ParsedMessageLine[]; readonly diagnostics: Diagnostic[] }> {
+  const file = messagesPath(cawsDir);
+  if (!fs.existsSync(file)) return ok({ lines: [], diagnostics: [] });
+
+  let raw: string;
+  try {
+    raw = fs.readFileSync(file, 'utf8');
+  } catch (e) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.MESSAGES_LOG_UNREADABLE,
+        `Failed to read ${MESSAGES_FILENAME}: ${(e as Error).message}`
+      )
+    );
+  }
+
+  const diagnostics: Diagnostic[] = [];
+  const lines: ParsedMessageLine[] = [];
+  let lineNo = 0;
+  for (const line of raw.split('\n')) {
+    lineNo++;
+    if (line.length === 0) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      diagnostics.push(
+        storeDiagnostic(
+          STORE_RULES.MESSAGES_LINE_MALFORMED,
+          `${MESSAGES_FILENAME}:${lineNo} is not valid JSON — skipped.`
+        )
+      );
+      lines.push({ raw: line, parsed: null });
+      continue;
+    }
+    const rec = parsed as { record?: string };
+    if (rec.record === 'message' || rec.record === 'delivery') {
+      lines.push({ raw: line, parsed: parsed as MessageRecord | DeliveryRecord });
+    } else {
+      lines.push({ raw: line, parsed: null });
+    }
+  }
+  return ok({ lines, diagnostics });
+}
+
+function messageEntry(message: MessageRecord, delivered: boolean, state: 'candidate' | 'skipped', reason: string): MessagePruneEntry {
+  return {
+    id: message.id,
+    ts: message.ts,
+    from: message.actor.session_id ?? message.actor.id,
+    to: message.to,
+    channel: message.channel,
+    text: message.text,
+    delivered,
+    state,
+    reason,
+  };
+}
+
+export interface MessagePruneOptions {
+  readonly status: 'delivered';
+  readonly olderThanMs?: number;
+  readonly include?: readonly string[];
+  readonly exclude?: readonly string[];
+  readonly apply?: boolean;
+}
+
+function buildMessagePrunePlan(cawsDir: string, opts: MessagePruneOptions): Result<MessagePrunePlan & { readonly lines: readonly ParsedMessageLine[] }> {
+  const loaded = readMessageLines(cawsDir);
+  if (!loaded.ok) return err(loaded.errors);
+
+  const delivered = new Set<string>();
+  for (const entry of loaded.value.lines) {
+    if (entry.parsed?.record === 'delivery' && typeof entry.parsed.deliver_id === 'string') {
+      delivered.add(entry.parsed.deliver_id);
+    }
+  }
+
+  const include = new Set(opts.include ?? []);
+  const exclude = new Set(opts.exclude ?? []);
+  const hasInclude = include.size > 0;
+  const hasAge = typeof opts.olderThanMs === 'number' && Number.isFinite(opts.olderThanMs);
+  const now = Date.now();
+  const candidates: MessagePruneEntry[] = [];
+  const skipped: MessagePruneEntry[] = [];
+
+  for (const entry of loaded.value.lines) {
+    if (entry.parsed?.record !== 'message') continue;
+    const message = entry.parsed;
+    const isDelivered = delivered.has(message.id);
+    if (!isDelivered) {
+      skipped.push(messageEntry(message, false, 'skipped', 'undelivered'));
+      continue;
+    }
+    if (hasInclude && !include.has(message.id)) {
+      skipped.push(messageEntry(message, true, 'skipped', 'not-included'));
+      continue;
+    }
+    if (exclude.has(message.id)) {
+      skipped.push(messageEntry(message, true, 'skipped', 'excluded'));
+      continue;
+    }
+    if (hasAge) {
+      const ts = Date.parse(message.ts);
+      const ageMs = Number.isFinite(ts) ? now - ts : 0;
+      if (ageMs < (opts.olderThanMs ?? 0)) {
+        skipped.push(messageEntry(message, true, 'skipped', 'newer-than-retention'));
+        continue;
+      }
+    }
+    candidates.push(messageEntry(message, true, 'candidate', 'delivered'));
+  }
+
+  const candidateIds = new Set(candidates.map((candidate) => candidate.id));
+  const deliveryRecordsToRemove = loaded.value.lines.filter(
+    (entry) => entry.parsed?.record === 'delivery' && candidateIds.has(entry.parsed.deliver_id)
+  ).length;
+
+  return ok({
+    status: opts.status,
+    apply: opts.apply === true,
+    candidates,
+    skipped,
+    diagnostics: loaded.value.diagnostics,
+    delivery_records_to_remove: deliveryRecordsToRemove,
+    selector_required_for_apply: opts.apply === true && !hasInclude && !hasAge,
+    lines: loaded.value.lines,
+  });
+}
+
+export function pruneMessages(cawsDir: string, opts: MessagePruneOptions): Result<MessagePruneResult> {
+  return withLifecycleLock(cawsDir, () => {
+    const planned = buildMessagePrunePlan(cawsDir, opts);
+    if (!planned.ok) return err(planned.errors);
+
+    const { lines, ...plan } = planned.value;
+    if (plan.selector_required_for_apply) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          'message prune --apply requires --older-than-ms or --include so broad chat-log cleanup is explicit.'
+        )
+      );
+    }
+
+    if (opts.apply !== true || plan.candidates.length === 0) {
+      return ok({
+        ...plan,
+        applied: opts.apply === true,
+        pruned_messages: 0,
+        pruned_delivery_records: 0,
+      });
+    }
+
+    const candidateIds = new Set(plan.candidates.map((candidate) => candidate.id));
+    let prunedDeliveryRecords = 0;
+    const keptLines: string[] = [];
+    for (const entry of lines) {
+      if (entry.parsed?.record === 'message' && candidateIds.has(entry.parsed.id)) {
+        continue;
+      }
+      if (entry.parsed?.record === 'delivery' && candidateIds.has(entry.parsed.deliver_id)) {
+        prunedDeliveryRecords++;
+        continue;
+      }
+      keptLines.push(entry.raw);
+    }
+
+    const file = messagesPath(cawsDir);
+    const written = writeFileAtomic(file, keptLines.length > 0 ? keptLines.join('\n') + '\n' : '');
+    if (!written.ok) return err(written.errors);
+
+    return ok({
+      ...plan,
+      applied: true,
+      pruned_messages: plan.candidates.length,
+      pruned_delivery_records: prunedDeliveryRecords,
+    });
+  }, {
+    lockPath: path.join(cawsDir, MESSAGES_FILENAME + '.lock'),
+  });
 }
 
 /**
