@@ -7,7 +7,8 @@ created_at: '2026-07-04T03:24:15.925Z'
 updated_at: '2026-07-04T03:24:15.925Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'docs/api/cli.md'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -18,12 +19,17 @@ scope:
     - '.caws/specs/DOC-CLI-HELP-CONTEXT-001.yaml'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - '`caws specs --help` group context names every visible specs subcommand.'
+  - '`docs/api/cli.md` describes `caws specs validate` as the file-path validator implemented by the CLI.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'COMMAND_SURFACE_METADATA contains specs subcommands.'
+    when: 'the specs help-context contract test runs.'
+    then: 'the specs group description includes every visible specs leaf name.'
+  - id: A2
+    given: 'the live `caws specs validate --help` command takes a file argument.'
+    when: 'the CLI API reference is read.'
+    then: 'the validate section documents file-path validation and does not claim canonical-state mutation flags.'
 non_functional: {}
 contracts:
   - name: 'specs-help-context'
