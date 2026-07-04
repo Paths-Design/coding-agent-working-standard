@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: worktree-cleanup-plan
 created_at: '2026-07-04T04:13:45.838Z'
-updated_at: '2026-07-04T04:13:45.838Z'
+updated_at: '2026-07-04T04:19:35.738Z'
 blast_radius:
   modules:
     - 'packages/caws-cli worktree command surface'
@@ -19,6 +19,7 @@ scope:
     - 'packages/caws-cli/tests'
     - 'docs/architecture/cli-ux-job-model-audit.md'
     - 'docs/command-reference.md'
+    - docs/api/cli.md
   out: []
 invariants:
   - 'The first worktree cleanup slice is read-only: it must not delete directories, mutate worktrees.json, mutate specs, or append events.'
