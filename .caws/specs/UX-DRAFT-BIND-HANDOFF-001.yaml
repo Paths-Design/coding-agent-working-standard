@@ -4,7 +4,7 @@ risk_tier: 2
 mode: feature
 lifecycle_state: active
 created_at: '2026-07-04T12:37:06.645Z'
-updated_at: '2026-07-04T12:37:06.645Z'
+updated_at: '2026-07-04T12:37:13.030Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
@@ -13,6 +13,10 @@ operational_rollback_slo: 5m
 scope:
   in:
     - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/tests/shell/worktree-draft-bind-handoff.test.js
+    - docs/api/cli.md
+    - docs/architecture/cli-ux-job-model-audit.md
   out: []
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'
