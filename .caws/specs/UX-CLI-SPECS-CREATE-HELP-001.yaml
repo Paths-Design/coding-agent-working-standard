@@ -7,7 +7,8 @@ created_at: '2026-07-04T04:07:40.798Z'
 updated_at: '2026-07-04T04:07:40.798Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli specs create command surface'
+    - 'CLI UX audit documentation'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -17,11 +18,21 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Invalid --contract diagnostics must name the accepted tuple shape and include a corrected example.'
+  - 'The specs-create help/error surface must let agents create tier 1/2 specs without discovering contract requirements by failure.'
+  - 'The UX audit must record completed command-surface repairs and preserve a scoped next slice.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'an agent inspects caws specs create --help'
+    when: 'the help renders'
+    then: 'contract tuple requirements and tier 1/2 requirements are visible in the command surface'
+  - id: A2
+    given: 'an agent supplies an inverted contract tuple such as behavior:verifychain-detects-tamper'
+    when: 'caws specs create rejects the input'
+    then: 'the diagnostic includes the accepted tuple shape and a corrected --contract example'
+  - id: A3
+    given: 'the first repair slice lands'
+    when: 'docs/architecture/cli-ux-job-model-audit.md is updated'
+    then: 'the document marks the specs-create diagnostics repair complete and scopes the next UX slice'
 non_functional: {}
 contracts: []
