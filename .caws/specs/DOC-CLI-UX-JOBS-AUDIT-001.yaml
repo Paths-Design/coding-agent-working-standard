@@ -1,0 +1,26 @@
+id: DOC-CLI-UX-JOBS-AUDIT-001
+title: 'Audit CLI UX jobs across command leaves'
+risk_tier: 3
+mode: doc
+lifecycle_state: active
+created_at: '2026-07-04T03:57:27.350Z'
+updated_at: '2026-07-04T03:57:27.350Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/architecture/cli-ux-job-model-audit.md'
+    - '.caws/specs/DOC-CLI-UX-JOBS-AUDIT-001.yaml'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
