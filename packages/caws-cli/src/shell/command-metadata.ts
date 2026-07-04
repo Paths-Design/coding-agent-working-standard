@@ -936,7 +936,8 @@ export const SCOPE_COMMAND_META: GroupCommandMeta = {
 export const GATES_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'gates',
-  description: 'Inspect and run quality gates against the current changes (policy-driven)',
+  description:
+    'Inspect and run quality gates against the current changes (list/explain/run; policy-driven)',
   subcommands: [
     {
       kind: 'leaf',
@@ -984,7 +985,7 @@ export const EVIDENCE_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'evidence',
   description:
-    'Record, inspect, and describe typed evidence events in .caws/events.jsonl',
+    'Record, list, show, and describe typed evidence events in .caws/events.jsonl (record/list/show/schema)',
   subcommands: [
     {
       kind: 'leaf',
@@ -1356,7 +1357,7 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'message',
   description:
-    'Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/poll directed messages between running sessions, addressed by session id, over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.',
+    'Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/poll/inbox/history/prune directed messages between running sessions, addressed by session id, over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.',
   subcommands: [
     {
       kind: 'leaf',

@@ -29,14 +29,14 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws status`](#caws-status) — Read-only dashboard: project, current context, claim, and doctor findings
 - [`caws scope`](#caws-scope) — Evaluate file paths against the bound spec scope
 - [`caws claim`](#caws-claim) — Surface ownership of the current worktree; with --takeover, acquire ownership from a foreign session (writes prior_owners audit). With --paths, declare working-tree ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001).
-- [`caws gates`](#caws-gates) — Inspect and run quality gates against the current changes (policy-driven)
-- [`caws evidence`](#caws-evidence) — Record, inspect, and describe typed evidence events in .caws/events.jsonl
+- [`caws gates`](#caws-gates) — Inspect and run quality gates against the current changes (list/explain/run; policy-driven)
+- [`caws evidence`](#caws-evidence) — Record, list, show, and describe typed evidence events in .caws/events.jsonl (record/list/show/schema)
 - [`caws events`](#caws-events) — Read and maintain .caws/events.jsonl (list/show/rotate/migrate/verify-archive)
 - [`caws waiver`](#caws-waiver) — Manage CAWS waivers (bounded exception records that suppress matching gate violations)
 - [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/amend-scope/close/archive/prune-archive/migrate/validate)
 - [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs.
 - [`caws agents`](#caws-agents) — Agent liveness substrate: register/heartbeat/stop/list/show/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.
-- [`caws message`](#caws-message) — Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/poll directed messages between running sessions, addressed by session id, over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
+- [`caws message`](#caws-message) — Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/poll/inbox/history/prune directed messages between running sessions, addressed by session id, over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
 - [`caws prepush`](#caws-prepush) — Classify the outgoing commit range before publish and refuse commits not attributable to the current slice. Diagnose/decide only — does NOT run git push.
 
 ## `caws init`
@@ -143,7 +143,7 @@ Surface ownership of the current worktree; with --takeover, acquire ownership fr
 
 ## `caws gates`
 
-Inspect and run quality gates against the current changes (policy-driven)
+Inspect and run quality gates against the current changes (list/explain/run; policy-driven)
 
 ### `caws gates list`
 
@@ -179,7 +179,7 @@ Run CAWS-local policy evaluators and apply policy.gates[gate].mode to decide blo
 
 ## `caws evidence`
 
-Record, inspect, and describe typed evidence events in .caws/events.jsonl
+Record, list, show, and describe typed evidence events in .caws/events.jsonl (record/list/show/schema)
 
 ### `caws evidence record`
 
@@ -760,7 +760,7 @@ Operator-invoked cleanup. Defaults to dry-run; pass --apply to actually delete. 
 
 ## `caws message`
 
-Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/poll directed messages between running sessions, addressed by session id, over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
+Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/poll/inbox/history/prune directed messages between running sessions, addressed by session id, over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
 
 ### `caws message send`
 
