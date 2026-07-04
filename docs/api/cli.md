@@ -683,10 +683,12 @@ Governed scope amendments for an active spec. Use one invocation with all `--add
 
 ```bash
 caws specs close FEAT-1
-caws specs close FEAT-1 --resolution done
+caws specs close FEAT-1 --resolution completed
 ```
 
 Close an active spec. Non-destructive raw-byte YAML patch; appends `spec_closed` event.
+
+If the spec is already closed, the command refuses without changing closure metadata and prints state-aware next steps: inspect with `caws specs show <id>`, archive with `caws specs archive <id>`, or recover the body after archive with `caws specs recover <id> --out <path>`.
 
 ### `caws specs archive [id]`
 
