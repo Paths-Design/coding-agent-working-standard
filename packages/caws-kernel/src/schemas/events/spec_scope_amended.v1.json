@@ -52,6 +52,11 @@
       "type": "array",
       "items": { "type": "string" },
       "description": "The full scope.support after the amendment (admitted-but-not-claimed paths)."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional operator rationale supplied by `caws specs amend-scope --reason`."
     }
   }
 }

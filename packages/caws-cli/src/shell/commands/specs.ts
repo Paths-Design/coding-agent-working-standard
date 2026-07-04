@@ -1145,6 +1145,7 @@ export interface SpecsAmendScopeOptions extends BaseCommandOptions {
   readonly removeOut?: readonly string[];
   readonly addSupport?: readonly string[];
   readonly removeSupport?: readonly string[];
+  readonly reason?: string;
 }
 
 export function runSpecsAmendScopeCommand(opts: SpecsAmendScopeOptions): number {
@@ -1166,6 +1167,7 @@ export function runSpecsAmendScopeCommand(opts: SpecsAmendScopeOptions): number 
     ...(opts.removeOut !== undefined ? { removeOut: opts.removeOut } : {}),
     ...(opts.addSupport !== undefined ? { addSupport: opts.addSupport } : {}),
     ...(opts.removeSupport !== undefined ? { removeSupport: opts.removeSupport } : {}),
+    ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
     now: nowFn,
     actor,
   });

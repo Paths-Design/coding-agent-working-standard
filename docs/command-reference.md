@@ -466,6 +466,7 @@ Amend a spec's scope.in/scope.out/scope.support on the canonical control plane (
 - `--remove-out <path>` (repeatable) — Remove a matching scope.out path — file or directory, matched by logical value regardless of quoting (repeatable)
 - `--add-support <path>` (repeatable) — Add a scope.support path — editable like scope.in but NOT worktree-claimed (use for repo-root deliverables; repeatable)
 - `--remove-support <path>` (repeatable) — Remove a matching scope.support path — matched by logical value regardless of quoting (repeatable)
+- `--reason <text>` — Optional operator rationale recorded on the spec_scope_amended event
 - `--data` — Show structured data block on diagnostics
 
 ### `caws specs close <id>`

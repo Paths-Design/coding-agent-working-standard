@@ -337,6 +337,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         { flag: '--remove-out <path>', description: 'Remove a matching scope.out path — file or directory, matched by logical value regardless of quoting (repeatable)', collect: true },
         { flag: '--add-support <path>', description: 'Add a scope.support path — editable like scope.in but NOT worktree-claimed (use for repo-root deliverables; repeatable)', collect: true },
         { flag: '--remove-support <path>', description: 'Remove a matching scope.support path — matched by logical value regardless of quoting (repeatable)', collect: true },
+        { flag: '--reason <text>', description: 'Optional operator rationale recorded on the spec_scope_amended event' },
         DATA_OPTION,
       ],
     },
