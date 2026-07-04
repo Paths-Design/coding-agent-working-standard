@@ -192,6 +192,11 @@ export interface SpecsCreateOptions extends BaseCommandOptions {
   /** Alias for --scope-in using the YAML field spelling. */
   readonly scopeInDot?: readonly string[];
   /**
+   * Repeatable --acceptance <text>. Free text becomes the `then` clause; a
+   * "given: ...; when: ...; then: ..." value seeds all v11 fields.
+   */
+  readonly acceptance?: readonly string[];
+  /**
    * Repeatable --contract "name:type[:path]". Tier-1/2 specs require at least
    * one contract; supplying it here creates the spec valid in one command
    * (FIX-SPECS-CONTRACT-ORIENTATION-001).
@@ -206,6 +211,12 @@ export interface SpecsCreateOptions extends BaseCommandOptions {
 /** The closed contract.type enum (mirrors spec.v1.json). */
 const CONTRACT_TYPES = ['api', 'schema', 'contract-test', 'behavior'] as const;
 type ContractType = (typeof CONTRACT_TYPES)[number];
+
+interface AcceptanceEntry {
+  readonly given: string;
+  readonly when: string;
+  readonly then: string;
+}
 
 /** The inline contract shape, shown wherever the operator needs orientation. */
 const CONTRACT_SHAPE_HINT =
@@ -263,9 +274,67 @@ function parseContractFlags(
   return { contracts };
 }
 
+function parseAcceptanceFlags(
+  raw: readonly string[]
+): { acceptance: AcceptanceEntry[] } | { error: string } {
+  const acceptance: AcceptanceEntry[] = [];
+  for (const entry of raw) {
+    const trimmed = entry.trim();
+    if (trimmed.length === 0) {
+      return { error: 'invalid --acceptance: value must not be empty.' };
+    }
+    const structured = parseStructuredAcceptance(trimmed);
+    if ('error' in structured) return structured;
+    acceptance.push(structured.acceptance);
+  }
+  return { acceptance };
+}
+
+function parseStructuredAcceptance(
+  value: string
+): { acceptance: AcceptanceEntry } | { error: string } {
+  const parts = value.split(';').map((p) => p.trim()).filter((p) => p.length > 0);
+  const labeled: Partial<Record<'given' | 'when' | 'then', string>> = {};
+  let sawLabel = false;
+  for (const part of parts) {
+    const match = /^(given|when|then)\s*:\s*(.+)$/i.exec(part);
+    if (match === null) continue;
+    sawLabel = true;
+    const key = match[1]!.toLowerCase() as 'given' | 'when' | 'then';
+    labeled[key] = match[2]!.trim();
+  }
+  if (sawLabel) {
+    const missing = (['given', 'when', 'then'] as const).filter((key) => {
+      const field = labeled[key];
+      return field === undefined || field.length === 0;
+    });
+    if (missing.length > 0 || Object.keys(labeled).length !== parts.length) {
+      return {
+        error:
+          'invalid --acceptance: structured values must use all fields as ' +
+          '"given: ...; when: ...; then: ...", or pass plain free text.',
+      };
+    }
+    return {
+      acceptance: {
+        given: labeled.given as string,
+        when: labeled.when as string,
+        then: labeled.then as string,
+      },
+    };
+  }
+  return {
+    acceptance: {
+      given: 'The spec implementation is complete.',
+      when: 'The acceptance statement is evaluated.',
+      then: value,
+    },
+  };
+}
+
 const SPECS_CREATE_USAGE = [
   'Usage:',
-  '  caws specs create <id> --title "<short title>" --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3> [--tier <1|2|3>] [--scope-in <path>]... [--scope.in <path>]... [--contract "name:type[:path]"]... [--plan] [--json]',
+  '  caws specs create <id> --title "<short title>" --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3> [--tier <1|2|3>] [--scope-in <path>]... [--scope.in <path>]... [--acceptance <text>]... [--contract "name:type[:path]"]... [--plan] [--json]',
   '',
   'Example:',
   '  caws specs create FEAT-001 --title "Trivial first slice" --mode chore --risk-tier 3',
@@ -280,9 +349,10 @@ const SPECS_CREATE_USAGE = [
   '    (repeatable); type is one of api|schema|contract-test|behavior. Or use --risk-tier 3 / --mode chore.',
   '  --scope-in (repeatable) writes scope.in at creation time, so you never hand-edit it.',
   '  --scope.in is an alias for --scope-in; both write the canonical scope.in field.',
+  '  --acceptance is repeatable; free text becomes then, or pass "given: ...; when: ...; then: ...".',
   '  --plan validates and prints the candidate without writing .caws/specs or events.',
   '  To widen scope later, use `caws specs amend-scope <id> --add <path>` (governed; no hand-edit).',
-  '  Invariants and acceptance still need filling in via the spec YAML before iteration.',
+  '  Invariants still need filling in via the spec YAML before iteration; acceptance does too unless --acceptance seeded it.',
 ].join('\n');
 
 function createCommandPreview(opts: {
@@ -291,6 +361,7 @@ function createCommandPreview(opts: {
   readonly mode: ValidMode;
   readonly riskTier: 1 | 2 | 3;
   readonly scopeIn?: readonly string[];
+  readonly acceptance?: readonly string[];
   readonly contract?: readonly string[];
 }): string {
   const parts = [
@@ -307,6 +378,9 @@ function createCommandPreview(opts: {
   ];
   for (const p of opts.scopeIn ?? []) {
     parts.push('--scope-in', shellQuote(p));
+  }
+  for (const a of opts.acceptance ?? []) {
+    parts.push('--acceptance', shellQuote(a));
   }
   for (const c of opts.contract ?? []) {
     parts.push('--contract', shellQuote(c));
@@ -494,6 +568,16 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     parsedContracts = parsed.contracts;
   }
 
+  let parsedAcceptance: AcceptanceEntry[] | undefined;
+  if (opts.acceptance !== undefined && opts.acceptance.length > 0) {
+    const parsed = parseAcceptanceFlags(opts.acceptance);
+    if ('error' in parsed) {
+      err(`caws specs create: ${parsed.error}`);
+      return 1;
+    }
+    parsedAcceptance = parsed.acceptance;
+  }
+
   const createInput = {
     id: specId,
     title,
@@ -504,6 +588,9 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     actor,
     ...(scopeIn !== undefined && scopeIn.length > 0
       ? { scopeIn }
+      : {}),
+    ...(parsedAcceptance !== undefined && parsedAcceptance.length > 0
+      ? { acceptance: parsedAcceptance }
       : {}),
     ...(parsedContracts !== undefined && parsedContracts.length > 0
       ? { contracts: parsedContracts }
@@ -529,6 +616,9 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
       ...(scopeIn !== undefined && scopeIn.length > 0
         ? { scopeIn }
         : {}),
+      ...(opts.acceptance !== undefined && opts.acceptance.length > 0
+        ? { acceptance: opts.acceptance }
+        : {}),
       ...(opts.contract !== undefined && opts.contract.length > 0
         ? { contract: opts.contract }
         : {}),
@@ -551,6 +641,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
           risk_tier: riskTier,
           lifecycle_state: 'active',
           scope_in: scopeIn ?? [],
+          acceptance: parsedAcceptance ?? [],
           contracts: parsedContracts ?? [],
         },
         command,
@@ -627,6 +718,11 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   // governed by the worktree-write-guard, not scope-guard. State that truth.
   const scopeInWasPopulated =
     scopeIn !== undefined && scopeIn.length > 0;
+  const acceptanceWasPopulated =
+    parsedAcceptance !== undefined && parsedAcceptance.length > 0;
+  const fillGuidance = acceptanceWasPopulated
+    ? 'Fill in invariants and review acceptance'
+    : 'Fill in invariants + acceptance';
   out('');
   // CAWS-SPECS-CREATE-COMMIT-BEFORE-WORKTREE-GUIDANCE-001: both branches must
   // tell the first-timer to COMMIT the spec (after filling in the body) BEFORE
@@ -637,7 +733,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   // the audit commit clean. We also name how to inspect the filled-in spec —
   // there is intentionally no `caws specs validate` verb in v11.
   if (scopeInWasPopulated) {
-    out('Next: scope.in is set from create-time scope flags. Fill in invariants + acceptance, then:');
+    out(`Next: scope.in is set from create-time scope flags. ${fillGuidance}, then:`);
     out(
       `  1. caws specs show ${outcome.id}   (re-read the spec; or run \`caws doctor\` to check for drift)`
     );
@@ -659,7 +755,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
         outcome.id +
         ' --add <path> --add <path>   (writes canonical, appends an audit event)'
     );
-    out('  2. Fill in invariants + acceptance, then inspect with `caws specs show ' +
+    out(`  2. ${fillGuidance}, then inspect with \`caws specs show ` +
         outcome.id +
         '` (or `caws doctor`).');
     out(

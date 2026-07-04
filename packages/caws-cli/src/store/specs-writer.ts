@@ -78,6 +78,16 @@ export interface CreateSpecInput {
    */
   readonly scopeIn?: readonly string[];
   /**
+   * Acceptance criteria to populate at creation time. Each entry is rendered
+   * into the canonical v11 `acceptance:` array using A1/A2/... ids, preserving
+   * caller order. When omitted, create keeps the legacy TODO scaffold.
+   */
+  readonly acceptance?: readonly {
+    readonly given: string;
+    readonly when: string;
+    readonly then: string;
+  }[];
+  /**
    * Contracts to populate at creation time (FIX-SPECS-CONTRACT-ORIENTATION-001).
    * Tier-1/2 specs require at least one contract; supplying them here lets a
    * tier-1/2 spec be created in one command instead of create-at-tier-3-then-
@@ -657,12 +667,30 @@ function renderInitialSpecYaml(input: CreateSpecInput): string {
     dedupedScopeIn !== null
       ? dedupedScopeIn.map((p) => `    - '${p.replace(/'/g, "''")}'`)
       : [`    - 'TODO: list the file(s) or directories this spec authorizes.'`];
+  const sq = (s: string): string => `'${s.replace(/'/g, "''")}'`;
+  const acceptanceLines =
+    input.acceptance !== undefined && input.acceptance.length > 0
+      ? [
+          `acceptance:`,
+          ...input.acceptance.flatMap((entry, index) => [
+            `  - id: A${index + 1}`,
+            `    given: ${sq(entry.given)}`,
+            `    when: ${sq(entry.when)}`,
+            `    then: ${sq(entry.then)}`,
+          ]),
+        ]
+      : [
+          `acceptance:`,
+          `  - id: A1`,
+          `    given: 'TODO'`,
+          `    when: 'TODO'`,
+          `    then: 'TODO'`,
+        ];
   // FIX-SPECS-CONTRACT-ORIENTATION-001: when --contract entries were supplied,
   // render them so a tier-1/2 spec is created valid in one command. Each entry
   // is {name, type[, path]}; single-quote string scalars defensively. When none
   // are supplied, render the empty sequence (prior behavior; valid for tier-3 /
   // mode: chore).
-  const sq = (s: string): string => `'${s.replace(/'/g, "''")}'`;
   const contractsLines =
     input.contracts !== undefined && input.contracts.length > 0
       ? [
@@ -700,11 +728,7 @@ function renderInitialSpecYaml(input: CreateSpecInput): string {
     `  out: []`,
     `invariants:`,
     `  - 'TODO: describe one invariant this spec guarantees.'`,
-    `acceptance:`,
-    `  - id: A1`,
-    `    given: 'TODO'`,
-    `    when: 'TODO'`,
-    `    then: 'TODO'`,
+    ...acceptanceLines,
     `non_functional: {}`,
     ...contractsLines,
     ``,

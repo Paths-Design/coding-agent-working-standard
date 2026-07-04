@@ -611,6 +611,12 @@ caws specs create --id FEAT-3 \
   --mode chore \
   --tier 3 \
   --scope.in docs/agent.md
+caws specs create --id FEAT-4 \
+  --title "Acceptance-seeded slice" \
+  --mode chore \
+  --tier 3 \
+  --scope-in docs/widget.md \
+  --acceptance "Docs describe the widget behavior"
 ```
 
 | Flag | Description |
@@ -622,6 +628,7 @@ caws specs create --id FEAT-3 \
 | `--tier <n>` | Alias for `--risk-tier`; writes the canonical `risk_tier` field. |
 | `--scope-in <path>` | Seed `scope.in`; repeatable. |
 | `--scope.in <path>` | Alias for `--scope-in` using the YAML field name; repeatable. |
+| `--acceptance <text>` | Seed an acceptance criterion; repeatable. Free text becomes the `then` clause; `given: ...; when: ...; then: ...` sets all fields. |
 | `--contract <entry>` | Seed a contract entry; repeatable. |
 | `--plan` | Read-only preflight. Render and validate the candidate without writing `.caws/specs/<id>.yaml` or appending events. |
 | `--json` | With `--plan`, emit the candidate, diagnostics, missing fields, and create command as JSON. |
@@ -638,6 +645,8 @@ copy-pasteable YAML examples for those fields; JSON output exposes the same
 examples in `field_examples`.
 `--scope.in` exists for agents that mirror the YAML field spelling; use either
 scope alias spelling, not both.
+`--acceptance` writes canonical v11 `acceptance` entries (`A1`, `A2`, ... in
+caller order) and never writes the removed `acceptance_criteria` alias.
 Note: `--type` is a removed v10 alias; use `--mode` instead.
 
 Not returned in v11.1: `specs update`, `specs delete`, `specs conflicts`, `specs types`. Edit the YAML directly for field updates; schema validation runs on `caws doctor` and `caws gates run`.
