@@ -457,6 +457,30 @@ function patchSpecClearWorktree(source: string): Result<string> {
   return removeTopLevelScalar(source, 'worktree');
 }
 
+function nonActiveSpecBindingError(specId: string, lifecycleState: string): Result<never> {
+  const isDraft = lifecycleState === 'draft';
+  const nextCommand = `caws specs activate ${specId}`;
+  const handoff = isDraft
+    ? `\n\nNext: ${nextCommand}\n` +
+      'Activation runs the draft spec preflight and only proceeds when the spec is complete. ' +
+      'After activation succeeds, re-run the worktree create/bind command.'
+    : '';
+  return err(
+    storeDiagnostic(
+      STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+      `Spec "${specId}" is in lifecycle_state "${lifecycleState}"; only active specs can be bound to a worktree.` +
+        handoff,
+      {
+        subject: specId,
+        data: {
+          lifecycle_state: lifecycleState,
+          ...(isDraft ? { next_command: nextCommand } : {}),
+        },
+      }
+    )
+  );
+}
+
 // ─── createWorktree ──────────────────────────────────────────────────────
 
 export function createWorktree(
@@ -479,13 +503,7 @@ export function createWorktree(
   const specInfo = loadSpecOrError(cawsDir, input.specId);
   if (!isOk(specInfo)) return err(specInfo.errors);
   if (specInfo.value.lifecycleState !== 'active') {
-    return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        `Spec "${input.specId}" is in lifecycle_state "${specInfo.value.lifecycleState}"; only active specs can be bound to a new worktree.`,
-        { subject: input.specId }
-      )
-    );
+    return nonActiveSpecBindingError(input.specId, specInfo.value.lifecycleState);
   }
   if (
     specInfo.value.currentWorktree !== undefined &&
@@ -753,6 +771,9 @@ export function bindWorktreeRepair(
 
   const specInfo = loadSpecOrError(cawsDir, input.specId);
   if (!isOk(specInfo)) return err(specInfo.errors);
+  if (specInfo.value.lifecycleState !== 'active') {
+    return nonActiveSpecBindingError(input.specId, specInfo.value.lifecycleState);
+  }
 
   const registry = loadWorktrees(cawsDir);
   if (!isOk(registry)) return err(registry.errors);
