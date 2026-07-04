@@ -2,10 +2,11 @@ id: UX-CLI-HELP-CONTEXT-LOCKS-001
 title: 'Lock CLI help context promises'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: cli-help-context-locks
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge cli-help-context-locks at af60b249ca65f6750c8b6dcc7ed094d9318fbee5'
 created_at: '2026-07-04T19:27:45.075Z'
-updated_at: '2026-07-04T19:32:25.033Z'
+updated_at: '2026-07-04T19:33:14.834Z'
 blast_radius:
   modules:
     - 'packages/caws-cli docs tests'
