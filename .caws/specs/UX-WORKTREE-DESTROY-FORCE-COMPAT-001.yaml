@@ -2,10 +2,11 @@ id: UX-WORKTREE-DESTROY-FORCE-COMPAT-001
 title: 'Add worktree destroy force compatibility'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: worktree-destroy-force-compat
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge worktree-destroy-force-compat at f88a4f51b9c0ba6f6a8eee281b2ede931c0b10db'
 created_at: '2026-07-04T19:01:28.460Z'
-updated_at: '2026-07-04T19:01:28.460Z'
+updated_at: '2026-07-04T19:08:09.326Z'
 blast_radius:
   modules:
     - 'packages/caws-cli worktree destroy command'
