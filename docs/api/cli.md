@@ -833,6 +833,7 @@ Cleanup plan over doctor evidence. Dry-run is the default: it classifies worktre
 caws worktree cleanup-plan
 caws worktree cleanup-plan --state destroy-ready,dirty-refused
 caws worktree cleanup-plan --include wt-old,SPEC-001 --exclude wt-foreign --json
+caws worktree cleanup-plan --state destroy-ready --apply
 ```
 
 | Flag | Description |
@@ -840,10 +841,13 @@ caws worktree cleanup-plan --include wt-old,SPEC-001 --exclude wt-foreign --json
 | `--state <classes>` | Comma-separated state-class filter, such as `destroy-ready`, `dirty-refused`, `foreign-owned-refused`, or `unregistered-physical-refused`. |
 | `--include <subjects>` | Comma-separated worktree names, spec ids, or paths to include. |
 | `--exclude <subjects>` | Comma-separated worktree names, spec ids, or paths to exclude. |
-| `--json` | Emit the read-only plan as JSON. |
+| `--apply` | Apply selected `destroy-ready` candidates only. Requires at least one explicit selector: `--state`, `--include`, or `--exclude`. Refused classes still do not mutate. |
+| `--json` | Emit the plan or apply outcome as JSON. |
 | `--data` | Show structured data block on diagnostics. |
 
-Read-only physical cleanup plan over real git worktree directories. It classifies registered worktrees and unregistered physical git worktrees under `.caws/worktrees/` by clean/dirty state, merged/unmerged branch state, bound spec lifecycle, registry ownership, and CAWS registry presence. It never deletes a directory, mutates `.caws/worktrees.json`, patches spec YAML, appends events, or invokes `git worktree remove`.
+Physical cleanup plan over real git worktree directories. Dry-run is the default: it classifies registered worktrees and unregistered physical git worktrees under `.caws/worktrees/` by clean/dirty state, merged/unmerged branch state, bound spec lifecycle, registry ownership, and CAWS registry presence without deleting a directory, mutating `.caws/worktrees.json`, patching spec YAML, appending events, or invoking `git worktree remove`.
+
+Apply mode is intentionally narrow. `--apply` refuses unless at least one selector is present, applies only selected `destroy-ready` registered worktrees, and calls the existing `destroyWorktree` path for each deletion so ownership, clean checkout, and merged-branch checks are re-evaluated at mutation time. Selected non-apply classes such as `dirty-refused`, `unmerged-refused`, `foreign-owned-refused`, and `unregistered-physical-refused` remain refused.
 
 State classes include `destroy-ready`, `unbound-clean-candidate`, `dirty-refused`, `unmerged-refused`, `active-bound-refused`, `foreign-owned-refused`, `missing-directory-refused`, `not-git-worktree-refused`, `unknown-spec-refused`, `unregistered-physical-refused`, and `git-observation-unavailable`.
 

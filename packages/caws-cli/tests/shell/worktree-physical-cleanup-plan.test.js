@@ -90,6 +90,7 @@ function readBytes(p) {
 }
 
 function statusFor(p) {
+  if (!fs.existsSync(p)) return null;
   return execFileSync('git', ['-C', p, 'status', '--porcelain'], { encoding: 'utf8' });
 }
 
@@ -257,5 +258,71 @@ describe('caws worktree cleanup-plan', () => {
     expect(result.out).toContain('caws worktree cleanup-plan: read-only physical cleanup plan');
     expect(result.out).toContain('unregistered-physical-refused wt-unregistered');
     expect(result.out).toContain('allowed: refused');
+  });
+
+  test('apply refuses without an explicit selector before mutating', () => {
+    const { repoRoot, caws, paths } = cleanupFixture();
+    const before = snapshotState(
+      caws,
+      ['READY-001', 'DIRTY-001', 'UNMERGED-001', 'ACTIVE-001', 'FOREIGN-001'],
+      paths
+    );
+
+    const result = runCleanupPlan(repoRoot, { apply: true, json: true });
+
+    expect(result.code).toBe(1);
+    expect(result.err).toContain('Add at least one explicit selector');
+    expect(result.out).toBe('');
+    expectUnchanged(
+      before,
+      snapshotState(caws, ['READY-001', 'DIRTY-001', 'UNMERGED-001', 'ACTIVE-001', 'FOREIGN-001'], paths)
+    );
+  });
+
+  test('apply destroys only selected destroy-ready candidates through guarded destroy path', () => {
+    const { repoRoot, caws, paths } = cleanupFixture();
+
+    const result = runCleanupPlan(repoRoot, {
+      include: ['wt-ready', 'wt-dirty'],
+      apply: true,
+      json: true,
+    });
+
+    expect(result.code).toBe(1);
+    const payload = JSON.parse(result.out);
+    expect(payload.read_only).toBe(false);
+    expect(payload.dry_run).toBe(false);
+    expect(payload.counts).toEqual({ applied: 1, refused: 1, failed: 0 });
+    expect(payload.outcomes.map((item) => [item.subject, item.action])).toEqual([
+      ['wt-ready', 'applied'],
+      ['wt-dirty', 'refused'],
+    ]);
+    expect(payload.outcomes[0].mutation).toContain('destroyWorktree');
+    expect(fs.existsSync(paths.ready)).toBe(false);
+    expect(fs.existsSync(paths.dirty)).toBe(true);
+
+    const registry = JSON.parse(readBytes(path.join(caws, 'worktrees.json')));
+    expect(registry['wt-ready']).toBeUndefined();
+    expect(registry['wt-dirty']).toBeDefined();
+    expect(readBytes(path.join(caws, 'specs', 'READY-001.yaml'))).not.toMatch(/worktree: wt-ready/);
+    expect(readBytes(path.join(caws, 'specs', 'DIRTY-001.yaml'))).toMatch(/worktree: wt-dirty/);
+  });
+
+  test('apply with state destroy-ready can delete all currently ready candidates', () => {
+    const { repoRoot, caws, paths } = cleanupFixture();
+
+    const result = runCleanupPlan(repoRoot, {
+      state: ['destroy-ready'],
+      apply: true,
+      json: true,
+    });
+
+    expect(result.code).toBe(0);
+    const payload = JSON.parse(result.out);
+    expect(payload.counts).toEqual({ applied: 1, refused: 0, failed: 0 });
+    expect(payload.outcomes[0].subject).toBe('wt-ready');
+    expect(fs.existsSync(paths.ready)).toBe(false);
+    const registry = JSON.parse(readBytes(path.join(caws, 'worktrees.json')));
+    expect(registry['wt-ready']).toBeUndefined();
   });
 });
