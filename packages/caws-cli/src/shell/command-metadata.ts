@@ -474,7 +474,7 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'prune',
       description:
-        'Print a read-only worktree cleanup plan from doctor evidence. Classifies ghost registry entries, dead spec bindings, closed-spec residue, event orphans, foreign physical worktrees, stale-owner lease drift, and ambiguous/refused classes. Does not mutate worktrees.json, specs, events, or git worktree directories.',
+        'Print a worktree cleanup plan from doctor evidence. Dry-run by default. With --apply, mutates only apply-capable classes (ghost-registry, dead-binding, closed-spec-residue) through the same writer paths as caws worktree repair; refused classes remain refused.',
       options: [
         {
           flag: '--state <classes>',
@@ -489,7 +489,12 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
           flag: '--exclude <subjects>',
           description: 'Comma-separated subjects to exclude (worktree names, spec ids, or paths).',
         },
-        { flag: '--json', description: 'Emit the read-only plan as JSON.' },
+        {
+          flag: '--apply',
+          description:
+            'Apply only safe cleanup classes (ghost-registry, dead-binding, closed-spec-residue). Refused classes still do not mutate.',
+        },
+        { flag: '--json', description: 'Emit the plan or apply outcome as JSON.' },
         DATA_OPTION,
       ],
     },

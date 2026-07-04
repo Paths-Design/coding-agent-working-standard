@@ -946,6 +946,7 @@ export function registerShellCommands(
         state?: string;
         include?: string;
         exclude?: string;
+        apply?: boolean;
         json?: boolean;
         data?: boolean;
       }) => {
@@ -956,6 +957,7 @@ export function registerShellCommands(
           ...(state !== undefined ? { state } : {}),
           ...(include !== undefined ? { include } : {}),
           ...(exclude !== undefined ? { exclude } : {}),
+          apply: opts.apply === true,
           json: opts.json === true,
           showData: opts.data === true,
         });

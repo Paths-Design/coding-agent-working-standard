@@ -549,6 +549,7 @@ Repair unambiguous worktree/spec half-states surfaced by `caws doctor`: prune gh
 caws worktree prune
 caws worktree prune --state ghost-registry,closed-spec-residue
 caws worktree prune --include wt-old,SPEC-001 --exclude wt-foreign --json
+caws worktree prune --state ghost-registry,dead-binding --apply
 ```
 
 | Flag | Description |
@@ -556,10 +557,11 @@ caws worktree prune --include wt-old,SPEC-001 --exclude wt-foreign --json
 | `--state <classes>` | Comma-separated state-class filter, such as `ghost-registry`, `closed-spec-residue`, or `event-orphan-refused`. |
 | `--include <subjects>` | Comma-separated worktree names, spec ids, or paths to include. |
 | `--exclude <subjects>` | Comma-separated worktree names, spec ids, or paths to exclude. |
-| `--json` | Emit the read-only cleanup plan as JSON. |
+| `--apply` | Apply only safe cleanup classes: `ghost-registry`, `dead-binding`, and `closed-spec-residue`. Refused classes still do not mutate. |
+| `--json` | Emit the plan or apply outcome as JSON. |
 | `--data` | Show structured data block on diagnostics. |
 
-Read-only cleanup plan over doctor evidence. It classifies worktree residue and refusal classes, names the next safe command, and does not mutate `worktrees.json`, specs, events, or git worktree directories.
+Cleanup plan over doctor evidence. Dry-run is the default: it classifies worktree residue and refusal classes, names the next safe command, and does not mutate `worktrees.json`, specs, events, or git worktree directories. `--apply` executes only the same mechanically safe writer paths already proven by `caws worktree repair`; event orphans, foreign physical worktrees, stale-owner lease drift, and other refused classes stay refused.
 
 Note: `caws worktree reconcile` is deferred to v11.2+.
 
@@ -741,7 +743,7 @@ The following commands existed in v10.x and are **removed in v11**. They are no 
 | `caws session start / checkpoint / end / list / show / briefing` | Deferred to v11.3+ | External session-log hook; `caws agents` for liveness visibility |
 | `caws specs update / delete / conflicts / types` | Not restored in v11.1 | Edit spec YAML directly; `caws doctor` validates on next run |
 | `caws worktree claim` (standalone subcommand) | Promoted to top-level | `caws claim` (top-level command, this doc §5) |
-| `caws worktree prune` | Restored as read-only cleanup planning | Use `caws worktree prune` to classify cleanup candidates; mutation remains in `caws worktree repair` for unambiguous H-classes |
+| `caws worktree prune` | Restored as cleanup planning with guarded apply | Use `caws worktree prune` to classify cleanup candidates; `--apply` mutates only repairable H-classes and refuses ambiguous classes |
 | `caws worktree reconcile` | Deferred to v11.2+ | Use `caws worktree prune`, `caws worktree list`, `caws worktree repair`, and manual cleanup |
 
 This list is exhaustive against `caws-cli@10.2.x`. Anything not listed and not in §1–§14 above does not exist in v11.

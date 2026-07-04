@@ -155,22 +155,17 @@ By top-level command:
 |---|---|---|---|
 | `UX-CLI-SPECS-CREATE-HELP-001` | Implemented in first repair slice | `specs create` help metadata and invalid `--contract` diagnostics | Adds an inline `--contract "core-api:behavior"` example to nested help metadata; invalid inverted tuples such as `behavior:verifychain-detects-tamper` now print the accepted tuple shape and a corrected `--contract "verifychain-detects-tamper:behavior"` suggestion. Covered by `packages/caws-cli/tests/shell/specs-create-ux.test.js`. |
 | `UX-WORKTREE-CLEANUP-PLAN-001` | Implemented in second repair slice | `worktree prune` read-only cleanup planning | Adds `caws worktree prune` as a non-mutating plan command over doctor evidence, with `--state`, `--include`, `--exclude`, and `--json`. The plan exposes subject, state class, source rule, allowed mutation or refusal reason, and next safe command without touching `worktrees.json`, specs, events, or git worktree directories. Covered by `packages/caws-cli/tests/shell/worktree-cleanup-plan.test.js`. |
+| `UX-WORKTREE-PRUNE-APPLY-001` | Implemented in third repair slice | `worktree prune --apply` for repairable classes | Adds explicit apply mode to `caws worktree prune`. Dry-run remains default; `--apply` mutates only `ghost-registry`, `dead-binding`, and `closed-spec-residue` through the same writer paths proven by `caws worktree repair`. Refused classes such as event orphans and stale-owner drift remain non-mutating and return nonzero when selected. Covered by `packages/caws-cli/tests/shell/worktree-cleanup-plan.test.js`. |
 
 ## Next Slice
 
-The next implementation slice should make the cleanup model actionable without
-collapsing distinct jobs:
-
-- add mutation only for classes already proven mechanically safe by
-  `worktree repair`, or add `worktree prune --apply` as a narrow wrapper around
-  those same writer paths;
-- keep refused classes refused by default, especially event-backed orphans and
-  foreign physical worktrees;
-- design `worktree untrack <name> --reason ... --dry-run/--apply` separately
-  for the job "remove a CAWS registry binding while preserving files for
-  inspection";
-- extend the plan taxonomy only after direct git-state checks can safely
-  distinguish `merged-clean`, `dirty-refused`, and `foreign-owned-refused`.
+The next implementation slice should design `worktree untrack <name>
+--reason ... --dry-run/--apply` for the separate job "remove a CAWS registry
+binding while preserving files for inspection." It should not reuse
+`worktree prune --apply` because untrack has different preconditions: it must
+prove the registry binding can be removed without deleting or modifying the
+on-disk directory, emit explicit audit evidence, and refuse dirty or
+foreign-owned cases until their authority model is explicit.
 
 ## Findings
 
