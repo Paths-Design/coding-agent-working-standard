@@ -2,10 +2,11 @@ id: UX-SPECS-AMEND-SCOPE-REASON-001
 title: 'Add specs amend-scope reason option'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: specs-amend-scope-reason
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge specs-amend-scope-reason at 1f50f355c248c6f7f549585e4865d3f99e64550d'
 created_at: '2026-07-04T18:18:56.366Z'
-updated_at: '2026-07-04T18:18:56.366Z'
+updated_at: '2026-07-04T18:23:58.659Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands
