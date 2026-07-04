@@ -818,6 +818,10 @@ caws worktree destroy my-feature --abandon-unmerged
 | `--data` | Show structured data block on diagnostics. |
 
 Non-forceful: refuses foreign ownership, dirty checkout, unmerged branch (use `--abandon-unmerged` to override branch check only).
+If the requested name is not registered, the refusal is non-mutating and points
+to `caws worktree list`, `caws worktree prune --include <name>`, and
+`caws worktree cleanup-plan --include <name>` so operators can distinguish
+closed/ghost control-plane residue from an unregistered physical git worktree.
 
 ### `caws worktree untrack <name>`
 

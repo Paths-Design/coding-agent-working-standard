@@ -930,7 +930,13 @@ export function destroyWorktree(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
         `Worktree "${input.name}" not found in registry.`,
-        { subject: input.name }
+        {
+          subject: input.name,
+          narrowRepair:
+            `Confirm registered names with \`caws worktree list\`. ` +
+            `If this is closed or ghost residue, run \`caws worktree prune --include ${input.name}\` first. ` +
+            `If a physical git worktree may still exist outside the registry, run \`caws worktree cleanup-plan --include ${input.name}\`.`,
+        }
       )
     );
   }
