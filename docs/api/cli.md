@@ -597,6 +597,9 @@ Creates a new spec in `lifecycle_state: active`. `--plan` validates the same
 candidate path that normal create would write, but exits without mutation; this
 is useful for tier 1/2 specs where required semantic fields such as contracts,
 observability, rollback, or security need to be planned before the YAML exists.
+When tier-required semantic fields are missing, plan output includes
+copy-pasteable YAML examples for those fields; JSON output exposes the same
+examples in `field_examples`.
 Note: `--type` is a removed v10 alias; use `--mode` instead.
 
 Not returned in v11.1: `specs update`, `specs delete`, `specs conflicts`, `specs types`. Edit the YAML directly for field updates; schema validation runs on `caws doctor` and `caws gates run`.

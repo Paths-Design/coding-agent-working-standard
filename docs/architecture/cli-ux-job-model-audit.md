@@ -147,7 +147,7 @@ By top-level command:
 | Scope from canonical checkout | `NO AUTHORITY scope.no_authority.unbound ... No spec is bound to this worktree`. | A guided bridge from "no authority" to `worktree create`, `worktree bind`, or `specs amend-scope`, depending on intent. |
 | Draft spec binding | `Spec "..." is in lifecycle_state "draft"; only active specs can be bound to a worktree.` | Now closed for create/bind: the refusal includes `caws specs activate <id>`, explains activation preflight, and does not mutate worktree/spec/event state. |
 | Already-closed close | `Spec "..." is already closed; close is a no-op and no closure metadata was changed.` | Now closed for state-aware refusal: the diagnostic names `caws specs show <id>`, `caws specs archive <id>`, and `caws specs recover <id> --out <path>` without mutating closure metadata. |
-| Tier metadata failure | `Tier 1 specs require non-empty observability... rollback... contract.` | `specs create --help` needs complete tier-1/2 examples or a `--template tier1`/interactive plan output. |
+| Tier metadata failure | `Tier 1 specs require non-empty observability... rollback... contract.` | Now closed for plan guidance: `specs create --plan` lists missing semantic fields and emits copy-pasteable YAML examples in human output plus `field_examples` in JSON. |
 | Contract tuple inversion | `invalid --contract "behavior:verifychain-detects-tamper": type "verifychain-detects-tamper" is not one of ...` | Error should print the accepted tuple shape and a corrected example. |
 | Evidence schema rejection | `data: must have required property 'command'` for `evidence record --type test`. | Fixed by `evidence schema --type test` plus per-type examples in `evidence record --help`. |
 
@@ -182,14 +182,15 @@ By top-level command:
 | `UX-MESSAGE-RETENTION-PRUNE-001` | Implemented in twenty-fifth repair slice | `message prune` delivered-message retention cleanup | Adds `caws message prune --status delivered [--older-than-ms <ms>] [--include <ids>] [--exclude <ids>] [--apply] [--json]`. Dry-run is default; candidates are delivered message records only; undelivered inbox messages are preserved; apply requires `--older-than-ms` or `--include` and removes selected delivered messages plus delivery markers. Covered by `packages/caws-cli/tests/shell/message-retention-prune.test.js`. |
 | `UX-DRAFT-BIND-HANDOFF-001` | Implemented in twenty-sixth repair slice | Draft spec bind/create activation handoff | Adds a shared active-only binding diagnostic for `worktree create` and `worktree bind`. Draft-spec refusals now include `caws specs activate <id>`, explain that activation preflight must pass before retrying create/bind, and preserve specs, registry, events, and worktree directories. Covered by `packages/caws-cli/tests/shell/worktree-draft-bind-handoff.test.js`. |
 | `UX-SPECS-CLOSE-HANDOFF-001` | Implemented in twenty-seventh repair slice | Already-closed specs close handoff | Adds a state-aware already-closed diagnostic for `caws specs close <id>`. The refusal remains non-mutating, explains that close is a no-op, and points agents at `specs show`, `specs archive`, and post-archive `specs recover`. Covered by `packages/caws-cli/tests/shell/specs-close-handoff.test.js`. |
+| `UX-SPECS-CREATE-TIER-GUIDANCE-001` | Implemented in twenty-eighth repair slice | Tier metadata examples in create plan | Adds concrete YAML examples to `caws specs create --plan` for missing `/contracts`, `/observability`, `/rollback`, and `/non_functional/security` fields. Human output prints an `example YAML additions` block; JSON output exposes `field_examples`; plan remains read-only. Covered by `packages/caws-cli/tests/shell/specs-create-plan.test.js`. |
 
 ## Next Slice
 
-The next implementation slice should address tier metadata creation failures.
-When `caws specs create` refuses a tier-1 or tier-2 spec for missing semantic
-metadata, the CLI should provide complete examples for the required fields or a
-read-only planning/template path, so agents do not recover by downgrading risk
-tier or hand-editing invalid YAML.
+The next implementation slice should re-audit the contract tuple inversion row
+against current behavior. The ledger says `UX-CLI-SPECS-CREATE-HELP-001` fixed
+the corrected-example diagnostic, but the representative table still describes
+it as missing. If the current CLI already passes, update the audit to remove the
+stale open-gap language; if not, close the remaining diagnostic/help gap.
 
 ## Findings
 

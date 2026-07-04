@@ -74,8 +74,40 @@ describe('caws specs create --plan', () => {
     expect(result.out).toContain('/observability');
     expect(result.out).toContain('/rollback');
     expect(result.out).toContain('/non_functional/security');
+    expect(result.out).toContain('example YAML additions:');
+    expect(result.out).toContain('observability:');
+    expect(result.out).toContain('rollback:');
+    expect(result.out).toContain('non_functional:');
+    expect(result.out).toContain('security:');
     expect(result.out).toContain('No files, events, or worktree registry entries were written.');
     expect(fs.existsSync(specPath(root, 'PLAN-TIER-001'))).toBe(false);
+    expect(fs.existsSync(eventsPath(root))).toBe(false);
+  });
+
+  test('tier 1 JSON plan includes field examples for missing semantic fields', () => {
+    const root = mkRepo();
+    const result = runCreate(root, {
+      id: 'PLAN-TIER-JSON-001',
+      title: 'Tier one json plan',
+      mode: 'feature',
+      riskTier: 1,
+      contract: ['core-api:behavior'],
+      plan: true,
+      json: true,
+    });
+
+    expect(result.code).toBe(0);
+    const json = JSON.parse(result.out);
+    expect(json.valid).toBe(false);
+    expect(json.missing_fields).toEqual([
+      '/observability',
+      '/rollback',
+      '/non_functional/security',
+    ]);
+    expect(json.field_examples['/observability']).toContain('observability:');
+    expect(json.field_examples['/rollback']).toContain('rollback:');
+    expect(json.field_examples['/non_functional/security']).toContain('non_functional:');
+    expect(fs.existsSync(specPath(root, 'PLAN-TIER-JSON-001'))).toBe(false);
     expect(fs.existsSync(eventsPath(root))).toBe(false);
   });
 
