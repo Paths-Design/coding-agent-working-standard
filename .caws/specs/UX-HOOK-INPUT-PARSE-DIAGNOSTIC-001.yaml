@@ -7,7 +7,9 @@ created_at: '2026-07-04T17:36:51.582Z'
 updated_at: '2026-07-04T17:36:51.582Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/shared-hook-core
+    - packages/caws-cli/hook-pack-install-metadata
+    - docs/cli-ux-audit
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -19,12 +21,22 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Malformed hook stdin remains fail-open and does not block otherwise legitimate tool calls.'
+  - 'Malformed hook stdin emits a controlled CAWS diagnostic to stderr instead of failing silently or printing a Python traceback.'
+  - 'The diagnostic never echoes the raw malformed payload and shared hook pack metadata is bumped so consumers can receive the fix.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'The shared PreToolUse dispatcher receives malformed JSON on stdin.'
+    when: 'The dispatcher parses hook input through runtime-paths.sh.'
+    then: 'It exits 0, emits a CAWS malformed hook input diagnostic, and still runs no guard decision.'
+  - id: A2
+    given: 'The shared runtime parser receives a valid hook envelope.'
+    when: 'A normal guard parses the envelope.'
+    then: 'No parse diagnostic is emitted and existing guard behavior is unchanged.'
+  - id: A3
+    given: 'The shared hook template changes.'
+    when: 'The package build/tests run.'
+    then: 'Shared pack version and pack fingerprint metadata are updated and the CLI UX audit records the slice.'
 non_functional: {}
 contracts:
   - name: 'hook-input-parse-diagnostic'
