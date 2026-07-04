@@ -142,12 +142,32 @@ check <path>` now prints active spec candidates, read-only `caws scope show
 contains `remediation.authorityCandidates` and omits the stale generic `repair`
 field.
 
+### Option-Mismatch Resample
+
+After the `--closure-notes`, `--spec`, `--tier`, `--status`, and
+prune-archive handoff fixes, I resampled transcript roots for `unknown option`
+and missing-option outputs. Many high-count examples are stale against current
+dist (`specs create --tier`, `specs list --status`, and `specs --status`), but
+`specs close --notes` remained a current close-note mismatch and is fixed in
+this slice.
+
+| Source | Files scanned | Files with option evidence | Option markers | Newest relevant evidence |
+|---|---:|---:|---:|---|
+| CAWS `.caws/sessions` | 229 | 3 | 10 | `specs close --notes` on 2026-07-04, plus older malformed multi-ack `prepush` shell expansion |
+| CAWS `tmp/` rendered sessions | 854 | 37 | 250 | old `worktree --takeover`, `specs create --type`, and `specs list --status` retries from 2026-05-30 |
+| Sterling `.caws/sessions` | 4,728 | 66 | 225 | stale `--tier` / `--status` retries through 2026-07-04; current live mismatch remains `specs close --notes` |
+
+During this slice, the governed scope-widening command also exposed the next
+current option mismatch: `caws specs amend-scope ... --reason <text>` appears in
+the CLI docs as an audit-style example, but the runtime currently rejects
+`--reason`. That should be the next concrete `unknown_or_missing_option` fix.
+
 ### Friction Classes
 
 | Friction marker | Count | UX implication |
 |---|---:|---|
 | `no_scope_authority` | 126 | Reconciled against the current linked-dist CLI: residual session transcripts still contain old generic unbound repair text, but direct reproduction in Sterling now shows active-spec authority candidates, read-only `scope --spec` checks, and create/bind/enter worktree handoffs in human and JSON output. |
-| `unknown_or_missing_option` | 91 | Partially fixed for `specs close`, `scope`, `agents prune`, `specs create`, validation-era removed commands, specs status listing, worktree cleanup state filters, and specs archive/prune-archive discoverability: `--closure-notes` is now a supported alias for `--reason`, `scope show/check/plan --spec <id>` supports read-only explicit spec-context evaluation, `agents prune --dead --json` is verified, `specs create --tier <n>` aliases `--risk-tier <n>`, legacy validation diagnostics are pinned, `specs --status <state>` hands off to `specs list --status <state>`, `worktree prune/cleanup-plan --status <classes>` aliases `--state <classes>`, and `specs prune-archive` now hands off to archive/restore/recover workflows. Help/flag discoverability still creates retries where adjacent command shapes are close but not parallel. |
+| `unknown_or_missing_option` | 91 | Further fixed for `specs close`, `scope`, `agents prune`, `specs create`, validation-era removed commands, specs status listing, worktree cleanup state filters, and specs archive/prune-archive discoverability: `--closure-notes` and `--notes` are now supported aliases for `--reason`, `scope show/check/plan --spec <id>` supports read-only explicit spec-context evaluation, `agents prune --dead --json` is verified, `specs create --tier <n>` aliases `--risk-tier <n>`, legacy validation diagnostics are pinned, `specs --status <state>` hands off to `specs list --status <state>`, `worktree prune/cleanup-plan --status <classes>` aliases `--state <classes>`, and `specs prune-archive` now hands off to archive/restore/recover workflows. The next live mismatch is `specs amend-scope --reason`, which docs/examples imply but runtime rejects. |
 | `tier_requires_metadata` | 87 | Fixed at the create-plan layer: `specs create --plan` now reports missing semantic fields and emits copy-pasteable YAML examples in human and JSON output. |
 | `danger_latch` | 66 | CAWS hook UX still matters for CLI workflows; blocked shell forms often interrupt otherwise correct CAWS procedures. |
 | `worktree_not_found` | 62 | Fixed for `worktree destroy`: missing registry entries now remain non-mutating refusals but include a CAWS-native handoff to `worktree list`, `worktree prune --include <name>`, and `worktree cleanup-plan --include <name>` so agents can distinguish registry residue from unregistered physical worktrees. |
@@ -170,7 +190,7 @@ field.
 | Scope against a named spec | `unknown option '--spec'` when an agent tried `caws scope show <path> --spec <id>` from outside the bound worktree. | Now closed for read-only context: `scope show/check/plan --spec <id>` evaluates against the named spec, reports JSON `mode: spec_context`, and prints that this is not current-checkout write authority. |
 | Draft spec binding | `Spec "..." is in lifecycle_state "draft"; only active specs can be bound to a worktree.` | Now closed for create/bind: the refusal includes `caws specs activate <id>`, explains activation preflight, and does not mutate worktree/spec/event state. |
 | Already-closed close | `Spec "..." is already closed; close is a no-op and no closure metadata was changed.` | Now closed for state-aware refusal: the diagnostic names `caws specs show <id>`, `caws specs archive <id>`, and `caws specs recover <id> --out <path>` without mutating closure metadata. |
-| Closure notes flag mismatch | `Unknown option: --closure-notes` when an agent tried to close a spec using the YAML field name. | Now closed for `specs close`: `--closure-notes <text>` aliases `--reason <text>`, both write `closure_notes`, and supplying both fails before mutation. |
+| Closure notes flag mismatch | `Unknown option: --closure-notes` / `unknown option '--notes'` when an agent tried to close a spec using the YAML field name or natural closure-note shorthand. | Now closed for `specs close`: `--closure-notes <text>` and `--notes <text>` alias `--reason <text>`, all write `closure_notes`, and supplying more than one fails before mutation. |
 | Dead-agent prune JSON mismatch | `agents prune --dead --json` was recorded as a prior unknown/missing-option retry. | Now reconciled: current CLI help lists `--dead` and `--json`, dry-run dead-process pruning emits CAWS-native JSON without `--status`, and apply deletes only selected dead-process leases. |
 | Tier shorthand mismatch | `unknown option '--tier'` when an agent tried `caws specs create ... --tier <n>`. | Now closed for `specs create`: `--tier <n>` aliases `--risk-tier <n>`, nested help documents both, and supplying both fails before spec/event mutation. |
 | Validation-era removed command flattening | `caws validate` and related v10-era commands were previously grouped in `docs/api/cli.md` under one doctor/gates replacement even though runtime diagnostics distinguish replaced commands, direct renames, and removed report/advisory commands. | Now reconciled: `validate`/`verify` hand off to `doctor` plus `gates run`, `diagnose` points only to `doctor`, and `verify-acs`/`evaluate`/`iterate`/`burnup` preserve command-specific removed-without-replacement guidance. |
@@ -239,15 +259,16 @@ field.
 | `UX-SCOPE-AUTHORITY-CONTEXT-HANDOFF-001` | Implemented in forty-seventh repair slice | Scope no-authority active-spec handoff | Enriches unbound `scope show/check/plan` remediation with active-spec candidates, read-only `scope show --spec` comparisons, and context-specific create/bind/enter commands while preserving decisions and exit codes. Covered by `packages/caws-cli/tests/shell/scope-authority-context-handoff.test.js`, `scope-remediation-guidance.test.js`, and `scope-batch-plan.test.js`. |
 | `UX-SCOPE-AUTHORITY-JSON-REPAIR-FIELD-001` | Implemented in forty-eighth repair slice | Scope no-authority JSON repair alignment | Removes the stale generic `repair` field from JSON no-authority responses whenever richer authority-context remediation is present, matching the human renderer and avoiding contradictory create/bind guidance. Covered by `packages/caws-cli/tests/shell/scope-authority-context-handoff.test.js`. |
 | `UX-NO-SCOPE-AUTHORITY-SESSION-RESAMPLE-001` | Implemented in forty-ninth repair slice | No-scope-authority session resample reconciliation | Resamples CAWS and Sterling session evidence after the handoff slices, verifies the currently linked dist CLI in Sterling emits enriched active-spec remediation, and closes the residual `no_scope_authority` bucket as stale transcript evidence rather than a current CLI gap. Covered by `packages/caws-cli/tests/docs/cli-ux-no-scope-authority-reconciliation.test.js`. |
+| `UX-SPECS-CLOSE-NOTES-ALIAS-001` | Implemented in fiftieth repair slice | Specs close notes shorthand alias | Adds `caws specs close <id> --notes <text>` as a compatibility alias for closure notes alongside `--reason` and `--closure-notes`. Supplying more than one note alias fails before mutation; help and docs list the alias. Covered by `packages/caws-cli/tests/shell/specs-close-closure-notes-alias.test.js`. |
 
 ## Next Slice
 
-The next implementation slice should target the remaining
-`unknown_or_missing_option` bucket. Start by resampling the newest CAWS and
-Sterling session retries for option-name mismatches after the previous
-`--closure-notes`, `--spec`, `--tier`, `--status`, and prune-archive handoff
-fixes; if a current mismatch remains, fix one concrete leaf and pin it in help
-and regression coverage.
+The next implementation slice should fix the current `specs amend-scope
+--reason` mismatch. The CLI docs show audit-style amend-scope examples with
+`--reason <text>`, but runtime currently rejects the option. Decide whether the
+reason should be recorded on `spec_scope_amended` evidence or whether docs/help
+must stop advertising it, then pin the chosen behavior in help and regression
+coverage.
 
 ## Findings
 
@@ -439,6 +460,12 @@ and regression coverage.
    enriched active-spec candidate model and JSON `authorityCandidates`. This
    closes the `no_scope_authority` friction class as no longer a current CLI
    gap.
+
+31. **Specs close now accepts the natural `--notes` shorthand.**
+   Session resampling showed residual `specs close --notes` retries after the
+   `--closure-notes` fix. `--notes` now aliases the same closure-notes storage
+   path as `--reason` and `--closure-notes`, while the command refuses before
+   mutation if more than one note alias is supplied.
 
 ## Recommendations
 

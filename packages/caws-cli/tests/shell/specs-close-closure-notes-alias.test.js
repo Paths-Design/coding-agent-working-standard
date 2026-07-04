@@ -102,25 +102,43 @@ describe('caws specs close --closure-notes alias', () => {
     expect(readBytes(path.join(cawsDir, 'events.jsonl'))).toContain('spec_closed');
   });
 
-  test('refuses competing --reason and --closure-notes before mutation', () => {
+  test('accepts --notes as closure_notes shorthand', () => {
     const root = mkRepo();
     const cawsDir = path.join(root, '.caws');
     writeActiveSpec(cawsDir, 'CLOSE-NOTES-002');
-    const before = snapshot(cawsDir, 'CLOSE-NOTES-002');
 
-    const result = runClose(root, 'CLOSE-NOTES-002', {
+    const result = runClose(root, 'CLOSE-NOTES-002', { notes: 'completed through notes' });
+
+    expect(result.code).toBe(0);
+    expect(result.out).toContain('closed CLOSE-NOTES-002');
+    const spec = readBytes(path.join(cawsDir, 'specs', 'CLOSE-NOTES-002.yaml'));
+    expect(spec).toContain('lifecycle_state: closed');
+    expect(spec).toContain("closure_notes: 'completed through notes'");
+    expect(readBytes(path.join(cawsDir, 'events.jsonl'))).toContain('spec_closed');
+  });
+
+  test('refuses competing note aliases before mutation', () => {
+    const root = mkRepo();
+    const cawsDir = path.join(root, '.caws');
+    writeActiveSpec(cawsDir, 'CLOSE-NOTES-003');
+    const before = snapshot(cawsDir, 'CLOSE-NOTES-003');
+
+    const result = runClose(root, 'CLOSE-NOTES-003', {
       reason: 'reason note',
       closureNotes: 'alias note',
+      notes: 'notes shorthand',
     });
 
     expect(result.code).toBe(1);
-    expect(result.err).toContain('--reason and --closure-notes');
-    expect(snapshot(cawsDir, 'CLOSE-NOTES-002')).toEqual(before);
+    expect(result.err).toContain('--reason and --closure-notes and --notes');
+    expect(result.err).toContain('pass only one');
+    expect(snapshot(cawsDir, 'CLOSE-NOTES-003')).toEqual(before);
   });
 
   test('metadata surfaces the alias on nested help', () => {
     const close = findLeaf('specs', 'close');
 
     expect(close.options.map((option) => option.flag)).toContain('--closure-notes <text>');
+    expect(close.options.map((option) => option.flag)).toContain('--notes <text>');
   });
 });
