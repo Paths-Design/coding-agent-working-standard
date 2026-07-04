@@ -14,6 +14,8 @@
 //   - bindWorktree: bidirectional binding repair (one-sided → bound)
 //   - destroyWorktree: safe destroy (refuses dirty, foreign, unmerged
 //     unless explicit non-default flag). NO --force.
+//   - untrackWorktree: safe control-plane release that preserves the physical
+//     git worktree directory for inspection.
 //   - mergeWorktree: dry-run + git merge --no-ff + auto-close via
 //     specs-writer + worktree_merged event + destroy
 //
@@ -144,6 +146,17 @@ export interface DestroyWorktreeInput {
   readonly abandonUnmerged?: boolean;
 }
 
+export interface UntrackWorktreeInput {
+  readonly name: string;
+  readonly session: SessionIdentity;
+  readonly sessionCandidates: SessionCandidates;
+  readonly actor: EventBody['actor'];
+  /** Human-readable operator reason recorded on worktree_untracked. */
+  readonly reason: string;
+  readonly now?: () => Date;
+  readonly dryRun?: boolean;
+}
+
 export interface MergeWorktreeInput {
   readonly name: string;
   /** See DestroyWorktreeInput.session — same actor/event-author role. */
@@ -164,7 +177,7 @@ export type WorktreeWriterOutcome =
   | {
       readonly kind: 'success';
       readonly name: string;
-      readonly action: 'created' | 'bound' | 'destroyed' | 'merged' | 'pruned';
+      readonly action: 'created' | 'bound' | 'destroyed' | 'merged' | 'pruned' | 'untracked';
       readonly data?: Record<string, unknown>;
     }
   | {
@@ -233,7 +246,7 @@ function autoCommitTransition(
   cawsDir: string,
   specId: string | null,
   name: string,
-  action: 'created' | 'bound' | 'destroyed' | 'merged',
+  action: 'created' | 'bound' | 'destroyed' | 'merged' | 'untracked',
   preState: PreWriteState
 ): AutoCommitOutcome {
   const repoRoot = repoRootFromCawsDir(cawsDir);
@@ -247,6 +260,7 @@ function autoCommitTransition(
     bound: 'bind',
     destroyed: 'destroy',
     merged: 'close',
+    untracked: 'untrack',
   };
   const verb = verbForAction[action];
   const specSuffix =
@@ -1143,6 +1157,179 @@ export function pruneWorktree(
     name: input.name,
     action: 'pruned',
     data: { h_class: 'ghost_registry', cleared_spec_binding: plannedWrites.length > 0 },
+  });
+}
+
+// ─── untrackWorktree (UX-WORKTREE-UNTRACK-001) ───────────────────────────
+//
+// Operator-requested control-plane release for the job "remove this CAWS
+// registry binding but keep the physical git worktree directory available for
+// inspection." This is deliberately NOT destroy: it never invokes git
+// worktree remove and never deletes files. It is also not prune: the physical
+// directory must exist and be clean so the operator can inspect it after CAWS
+// stops tracking it.
+
+export function untrackWorktree(
+  cawsDir: string,
+  input: UntrackWorktreeInput
+): Result<WorktreeWriterOutcome> {
+  const nameValidation = validateWorktreeName(input.name);
+  if (!nameValidation.ok) return nameValidation;
+
+  const reason = input.reason.trim();
+  if (reason.length === 0) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `caws worktree untrack requires a non-empty --reason.`,
+        { subject: input.name }
+      )
+    );
+  }
+
+  const registry = loadWorktrees(cawsDir);
+  if (!isOk(registry)) return err(registry.errors);
+  const entry = registry.value[input.name];
+  if (entry === undefined) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Worktree "${input.name}" not found in registry; nothing to untrack.`,
+        { subject: input.name }
+      )
+    );
+  }
+
+  if (entry.owner !== undefined) {
+    const matched = admitsOwner(input.sessionCandidates, entry.owner.session_id);
+    if (matched === null) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Worktree "${input.name}" is owned by a different session (${entry.owner.session_id}); untrack refuses to release another agent's binding.\n\n` +
+            `Session-resolution trace (no candidate matched the registered owner):\n${describeCandidateTrace(input.sessionCandidates)}`,
+          { subject: input.name }
+        )
+      );
+    }
+  }
+
+  const repoRoot = repoRootFromCawsDir(cawsDir);
+  const wtPath = worktreePathFor(cawsDir, input.name);
+  if (!fs.existsSync(wtPath) || !fs.statSync(wtPath).isDirectory()) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Worktree "${input.name}" has no physical directory at ${wtPath}; use caws worktree prune/repair for control-plane residue instead.`,
+        { subject: input.name, data: { path: wtPath } }
+      )
+    );
+  }
+
+  if (!isWorkingTreeCleanExceptArtifactLinks(repoRoot, wtPath)) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Worktree "${input.name}" is not clean; untrack preserves files and refuses dirty checkouts.`,
+        { subject: input.name, data: { path: wtPath } }
+      )
+    );
+  }
+
+  const specId = entry.specId;
+  const preState = capturePreWriteState(cawsDir, specId ?? null);
+  const plannedWrites: { path: string; contents: string }[] = [];
+  let clearsSpecBinding = false;
+
+  if (specId !== undefined) {
+    const specInfo = loadSpecOrError(cawsDir, specId);
+    if (!isOk(specInfo)) return err(specInfo.errors);
+    const currentWorktree = specInfo.value.currentWorktree;
+    if (
+      currentWorktree !== undefined &&
+      currentWorktree.length > 0 &&
+      currentWorktree !== input.name
+    ) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Spec "${specId}" is bound to worktree "${currentWorktree}", not "${input.name}"; refusing to clear unrelated spec state.`,
+          { subject: specId, data: { worktree_name: input.name, current_worktree: currentWorktree } }
+        )
+      );
+    }
+    if (currentWorktree === input.name) {
+      const newSpecBytes = patchSpecClearWorktree(specInfo.value.source);
+      if (!isOk(newSpecBytes)) return err(newSpecBytes.errors);
+      if (newSpecBytes.value !== specInfo.value.source) {
+        plannedWrites.push({ path: specInfo.value.path, contents: newSpecBytes.value });
+        clearsSpecBinding = true;
+      }
+    }
+  }
+
+  if (input.dryRun === true) {
+    return ok({
+      kind: 'dry_run',
+      name: input.name,
+      canProceed: true,
+      findings: [
+        `remove registry entry "${input.name}"`,
+        ...(clearsSpecBinding && specId !== undefined
+          ? [`clear worktree: field on spec ${specId}`]
+          : []),
+        `append worktree_untracked`,
+        `preserve physical directory ${wtPath}`,
+      ],
+    });
+  }
+
+  const now = (input.now ?? (() => new Date()))().toISOString();
+  const eventData: Record<string, unknown> = {
+    worktree_name: input.name,
+    reason,
+    path: wtPath,
+    cleared_spec_binding: clearsSpecBinding,
+  };
+  if (specId !== undefined) eventData.spec_id = specId;
+  if (entry.owner !== undefined) eventData.owner_session_id = entry.owner.session_id;
+
+  const event: EventBody = {
+    event: 'worktree_untracked',
+    ts: now,
+    actor: input.actor,
+    ...(specId !== undefined ? { spec_id: specId } : {}),
+    data: eventData,
+  } as unknown as EventBody;
+
+  const txnOutcome = withLifecycleLock(cawsDir, () => {
+    rollbackRegistryEntry(cawsDir, input.name);
+    return runLifecycleTransaction({ cawsDir, plannedWrites, events: [event] });
+  });
+
+  if (!txnOutcome.ok) return err(txnOutcome.errors);
+  if (txnOutcome.value.kind !== 'success') {
+    return ok({ kind: 'partial_failure_recovered', cause: txnOutcome.value.cause });
+  }
+
+  const autoCommitOutcome = autoCommitTransition(
+    cawsDir,
+    specId ?? null,
+    input.name,
+    'untracked',
+    preState
+  );
+  return ok({
+    kind: 'success',
+    name: input.name,
+    action: 'untracked',
+    data: {
+      path: wtPath,
+      spec_id: specId,
+      cleared_spec_binding: clearsSpecBinding,
+      preserved_physical_directory: true,
+      audit_commit: autoCommitOutcome,
+    },
   });
 }
 

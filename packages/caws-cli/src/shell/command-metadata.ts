@@ -360,14 +360,14 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
 
 // ─── worktree group (CLI-WORKTREE-001) ────────────────────────────────────
 // Co-located authority for `caws worktree` help. The group description here
-// enumerates EVERY subcommand (create/list/bind/destroy/merge/migrate-registry/
+// enumerates EVERY subcommand (create/list/bind/destroy/untrack/merge/migrate-registry/
 // repair-sparse/repair/prune), unlike the prior inline string that omitted
 // repair leaves.
 export const WORKTREE_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'worktree',
   description:
-    'Manage CAWS worktrees (create/list/bind/destroy/merge/migrate-registry/repair-sparse/repair/prune). Worktrees are git worktrees bound to active specs.',
+    'Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune). Worktrees are git worktrees bound to active specs.',
   subcommands: [
     {
       kind: 'leaf',
@@ -424,6 +424,30 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
           description:
             'Destroy even when the branch is not merged into base. Still respects ownership and clean working tree.',
         },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'untrack',
+      argument: {
+        name: 'name',
+        required: true,
+        description: 'Registered worktree name to release from CAWS tracking.',
+      },
+      description:
+        'Release a CAWS worktree registry binding while preserving the physical git worktree directory for inspection. Dry-run by default. Requires --reason; --apply removes only the control-plane binding and refuses foreign-owned, dirty, or missing-directory cases.',
+      options: [
+        {
+          flag: '--reason <reason>',
+          required: true,
+          description: 'Operator reason recorded on the worktree_untracked audit event.',
+        },
+        {
+          flag: '--apply',
+          description: 'Apply the untrack plan. Without --apply, the command only prints the plan.',
+        },
+        { flag: '--json', description: 'Emit the dry-run plan or apply outcome as JSON.' },
         DATA_OPTION,
       ],
     },

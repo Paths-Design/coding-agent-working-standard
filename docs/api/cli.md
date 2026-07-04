@@ -501,6 +501,23 @@ caws worktree destroy my-feature --abandon-unmerged
 
 Non-forceful: refuses foreign ownership, dirty checkout, unmerged branch (use `--abandon-unmerged` to override branch check only).
 
+### `caws worktree untrack <name>`
+
+```bash
+caws worktree untrack my-feature --reason "preserve files for review"
+caws worktree untrack my-feature --reason "preserve files for review" --apply
+caws worktree untrack my-feature --reason "preserve files for review" --json
+```
+
+| Flag | Description |
+|---|---|
+| `--reason <reason>` | Required operator reason recorded on the `worktree_untracked` audit event. |
+| `--apply` | Apply the untrack plan. Without `--apply`, the command only prints the plan. |
+| `--json` | Emit the dry-run plan or apply outcome as JSON. |
+| `--data` | Show structured data block on diagnostics. |
+
+Releases a CAWS registry/spec binding while preserving the physical git worktree directory for inspection. Dry-run is the default. Apply refuses foreign-owned worktrees, dirty checkouts, and missing physical directories; it removes only the control-plane binding, clears the matching spec `worktree:` field when present, and appends `worktree_untracked`.
+
 ### `caws worktree merge <name>`
 
 ```bash
@@ -709,10 +726,10 @@ What v11 owns and writes:
 | `.caws/specs/.archive/<id>.yaml` | `caws specs archive` | store (move from `.caws/specs/`) |
 | `.caws/waivers/<id>.yaml` | `caws waiver create / revoke` | store (atomic write) |
 | `.caws/policy.yaml` | manual edit (governed) | (none — the CLI reads but does not write this file) |
-| `.caws/worktrees.json` | `caws worktree create/bind/destroy/merge/repair/migrate-registry`, `caws claim / claim --takeover` | store (atomic write) |
+| `.caws/worktrees.json` | `caws worktree create/bind/destroy/untrack/merge/repair/prune/migrate-registry`, `caws claim / claim --takeover` | store (atomic write) |
 | `.caws/leases/` | `caws agents register / heartbeat / stop / prune` | store (per-session lease files) |
 | `.caws/messages.jsonl` | `caws message send / poll` | store (directed message log; not authority) |
-| `.caws/events.jsonl` | `caws gates run`, `caws evidence record`, `caws claim --takeover`, `caws specs close/archive`, `caws worktree create/merge/destroy` | store's `appendEvent` ONLY (hash-chained) |
+| `.caws/events.jsonl` | `caws gates run`, `caws evidence record`, `caws claim --takeover`, `caws specs close/archive`, `caws worktree create/merge/destroy/untrack/prune` | store's `appendEvent` ONLY (hash-chained) |
 
 What v11 explicitly does NOT touch:
 

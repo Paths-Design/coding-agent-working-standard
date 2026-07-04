@@ -84,6 +84,7 @@ import {
   runWorktreePruneCommand,
   runWorktreeRepairSparseCommand,
   runWorktreeRepairCommand,
+  runWorktreeUntrackCommand,
   type EvidenceKind,
 } from './index';
 import type { LeaseReason } from '@paths.design/caws-kernel';
@@ -891,6 +892,23 @@ export function registerShellCommands(
         const code = runWorktreeDestroyCommand({
           name,
           ...(opts.abandonUnmerged === true ? { abandonUnmerged: true } : {}),
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'untrack'))
+    .action(
+      (
+        name: string,
+        opts: { reason: string; apply?: boolean; json?: boolean; data?: boolean }
+      ) => {
+        const code = runWorktreeUntrackCommand({
+          name,
+          reason: opts.reason,
+          apply: opts.apply === true,
+          json: opts.json === true,
           showData: opts.data === true,
         });
         exit(code);
