@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: specs-create-plan
 created_at: '2026-07-04T05:46:28.385Z'
-updated_at: '2026-07-04T05:46:28.385Z'
+updated_at: '2026-07-04T05:47:55.263Z'
 blast_radius:
   modules:
     - 'packages/caws-cli/src/shell/commands/specs.ts'
@@ -23,6 +23,7 @@ scope:
     - 'docs/api/cli.md'
     - 'docs/command-reference.md'
     - 'docs/architecture/cli-ux-job-model-audit.md'
+    - packages/caws-cli/src/store/specs-writer.ts
   out: []
 invariants:
   - 'specs create --plan is read-only and never writes .caws/specs, worktrees, or events.'
