@@ -660,7 +660,14 @@ export const DOCTOR_COMMAND_META: LeafCommandMeta = {
   kind: 'leaf',
   name: 'doctor',
   description: 'Run drift detection against the current .caws/ state',
-  options: [{ flag: '--data', description: 'Show structured data block on findings/diagnostics' }],
+  options: [
+    { flag: '--data', description: 'Show structured data block on findings/diagnostics' },
+    {
+      flag: '--repair-plan',
+      description: 'Emit a read-only repair plan derived from doctor findings',
+    },
+    { flag: '--json', description: 'Emit the repair plan as JSON with --repair-plan' },
+  ],
 };
 
 export const STATUS_COMMAND_META: LeafCommandMeta = {

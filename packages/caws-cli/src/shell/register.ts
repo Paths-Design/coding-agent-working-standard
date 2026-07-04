@@ -315,9 +315,11 @@ export function registerShellCommands(
   // caws doctor
   // -------------------------------------------------------------------
   defineFlat(program, DOCTOR_COMMAND_META)
-    .action((opts: { data?: boolean }) => {
+    .action((opts: { data?: boolean; repairPlan?: boolean; json?: boolean }) => {
       const code = runDoctorCommand({
         showData: opts.data === true,
+        repairPlan: opts.repairPlan === true,
+        json: opts.json === true,
       });
       exit(code);
     });
