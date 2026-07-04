@@ -7,7 +7,8 @@ created_at: '2026-07-04T17:50:04.658Z'
 updated_at: '2026-07-04T17:50:04.658Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'docs/cli-ux-audit'
+    - 'packages/caws-cli/help-metadata-tests'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -16,12 +17,22 @@ scope:
     - 'packages/caws-cli/tests/docs/cli-json-input-surface.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The audit distinguishes operator-supplied JSON inputs from JSON output flags and internal state parsers.'
+  - 'Every current operator-facing CLI JSON input is either covered by schema/example guidance or explicitly listed as unsupported scope.'
+  - 'A regression test fails if command metadata adds a new JSON-like input flag without extending the known-surface list.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'The current CLI command metadata'
+    when: 'The regression test enumerates JSON-like option flags'
+    then: 'Only evidence record --data <json> and specs migrate --lifecycle-mapping <path> classify as operator-supplied JSON inputs.'
+  - id: A2
+    given: 'The parse_error friction bucket in the CLI UX audit'
+    when: 'Known operator-facing JSON inputs are reconciled against implemented guidance tests'
+    then: 'The bucket is marked reconciled with the covered surfaces and the next slice moves to the next residual friction class.'
+  - id: A3
+    given: 'Generated JSON output flags and internal JSON parsers'
+    when: 'The audit explains the reconciliation boundary'
+    then: 'They are not counted as unresolved parse_error CLI input surfaces.'
 non_functional: {}
 contracts:
   - name: 'parse-error-surface'
