@@ -1,0 +1,32 @@
+id: UX-EVIDENCE-DATA-PARSE-GUIDANCE-001
+title: 'Guide evidence data JSON parse errors'
+risk_tier: 2
+mode: fix
+lifecycle_state: active
+created_at: '2026-07-04T17:21:55.033Z'
+updated_at: '2026-07-04T17:21:55.033Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/tests/shell/evidence-data-parse-guidance.test.js'
+    - 'packages/caws-cli/tests/shell/evidence-schema.test.js'
+    - 'docs/api/cli.md'
+    - 'docs/architecture/cli-ux-job-model-audit.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'evidence-data-parse-guidance'
+    type: behavior
+    path: 'packages/caws-cli/tests/shell/evidence-data-parse-guidance.test.js'
