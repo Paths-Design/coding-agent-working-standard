@@ -7,7 +7,9 @@ created_at: '2026-07-04T05:46:28.385Z'
 updated_at: '2026-07-04T05:46:28.385Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -22,11 +24,29 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'specs create --plan is read-only and never writes .caws/specs, worktrees, or events.'
+  - 'plan mode reuses the same mode, risk-tier, contract tuple, and kernel spec-shape validation as create.'
+  - 'normal specs create behavior remains unchanged when --plan is omitted.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a tier 1 or tier 2 specs create invocation missing required semantic fields'
+    when: 'the operator runs caws specs create <id> ... --plan'
+    then: 'the command exits successfully, writes no spec file, and prints the missing semantic fields plus copy-pasteable next steps.'
+  - id: A2
+    given: 'an invalid --contract tuple'
+    when: 'the operator runs specs create --plan'
+    then: 'the command fails before any write with the same corrected tuple guidance as normal create.'
+  - id: A3
+    given: 'a valid tier 3 create plan with scope-in values'
+    when: 'the command runs with --json'
+    then: 'the JSON reports dry_run/read_only, the candidate spec path, populated scope.in, and no file/event writes.'
+  - id: A4
+    given: 'the implemented plan mode'
+    when: 'nested help and docs are generated'
+    then: 'caws specs create --help, docs/api/cli.md, and docs/command-reference.md document --plan and --json accurately.'
+  - id: A5
+    given: 'the completed slice'
+    when: 'focused tests, docs check, caws doctor, caws gates run, and a dist-linked CLI smoke run'
+    then: 'they pass without leaving unrelated repository dirt.'
 non_functional: {}
 contracts: []
