@@ -7,7 +7,10 @@ created_at: '2026-07-04T18:26:36.397Z'
 updated_at: '2026-07-04T18:26:36.397Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/commands
+    - packages/caws-cli/src/shell/register
+    - packages/caws-cli/tests/shell
+    - docs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -21,12 +24,22 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'caws specs create --id <spec-id> must be equivalent to supplying the positional <id>.'
+  - 'Supplying both positional <id> and --id must fail before writing a spec or event.'
+  - 'The positional id remains supported, and missing id diagnostics remain controlled by the create handler.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'an initialized CAWS project'
+    when: 'an operator runs caws specs create --id <id> with the normal required semantic flags'
+    then: 'the spec is created with that id through the existing spec_created path'
+  - id: A2
+    given: 'a create invocation with both a positional id and --id'
+    when: 'caws specs create is invoked'
+    then: 'the command refuses before spec/event mutation and explains that only one id source may be supplied'
+  - id: A3
+    given: 'help/docs/audit surfaces'
+    when: 'build and docs checks run'
+    then: 'they list --id as a compatibility alias and record the unknown-option evidence as fixed'
 non_functional: {}
 contracts:
   - name: 'specs-create-id-alias'
