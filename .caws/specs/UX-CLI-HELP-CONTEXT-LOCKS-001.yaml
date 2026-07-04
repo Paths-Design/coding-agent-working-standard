@@ -3,6 +3,7 @@ title: 'Lock CLI help context promises'
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: cli-help-context-locks
 created_at: '2026-07-04T19:27:45.075Z'
 updated_at: '2026-07-04T19:27:45.075Z'
 blast_radius:
