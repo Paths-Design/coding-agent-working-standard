@@ -34,7 +34,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws events`](#caws-events) — Read and maintain .caws/events.jsonl (list/show/rotate/migrate/verify-archive)
 - [`caws waiver`](#caws-waiver) — Manage CAWS waivers (bounded exception records that suppress matching gate violations)
 - [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/amend-scope/close/archive/prune-archive/migrate/validate)
-- [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune). Worktrees are git worktrees bound to active specs.
+- [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs.
 - [`caws agents`](#caws-agents) — Agent liveness substrate: register/heartbeat/stop/list/show/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.
 - [`caws message`](#caws-message) — Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/poll directed messages between running sessions, addressed by session id, over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
 - [`caws prepush`](#caws-prepush) — Classify the outgoing commit range before publish and refuse commits not attributable to the current slice. Diagnose/decide only — does NOT run git push.
@@ -507,7 +507,7 @@ Validate a spec YAML FILE on disk using the CLI's own bundled parser and the ker
 
 ## `caws worktree`
 
-Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune). Worktrees are git worktrees bound to active specs.
+Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs.
 
 ### `caws worktree create <name>`
 
@@ -618,6 +618,18 @@ Print a worktree cleanup plan from doctor evidence. Dry-run by default. With --a
 - `--exclude <subjects>` — Comma-separated subjects to exclude (worktree names, spec ids, or paths).
 - `--apply` — Apply only safe cleanup classes (ghost-registry, dead-binding, closed-spec-residue). Refused classes still do not mutate.
 - `--json` — Emit the plan or apply outcome as JSON.
+- `--data` — Show structured data block on diagnostics
+
+### `caws worktree cleanup-plan`
+
+Print a read-only physical worktree cleanup plan. Classifies real git worktree directories by clean/dirty, merged/unmerged, bound spec lifecycle, ownership, and registry presence. Does not delete directories or mutate CAWS state.
+
+**Options:**
+
+- `--state <classes>` — Comma-separated state-class filter (for example: destroy-ready,dirty-refused,foreign-owned-refused,unregistered-physical-refused).
+- `--include <subjects>` — Comma-separated worktree names, spec ids, or paths to include.
+- `--exclude <subjects>` — Comma-separated worktree names, spec ids, or paths to exclude.
+- `--json` — Emit the read-only plan as JSON.
 - `--data` — Show structured data block on diagnostics
 
 ## `caws agents`

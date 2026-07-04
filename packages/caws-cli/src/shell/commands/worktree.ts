@@ -28,6 +28,8 @@ import {
   DOCTOR_RULES,
   inspectProjectState,
   isOk,
+  type Spec,
+  type WorktreeRecord,
 } from '@paths.design/caws-kernel';
 
 import { loadSpecs, loadWorktrees, resolveRepoRoot, writeFileAtomic } from '../../store';
@@ -53,7 +55,7 @@ import {
 } from '../../store/worktrees-writer';
 import { clearSpecBinding } from '../../store/specs-writer';
 import { buildActor } from '../session/actor';
-import { resolveSession, resolveSessionCandidates } from '../session/resolve-session';
+import { admitsOwner, resolveSession, resolveSessionCandidates } from '../session/resolve-session';
 import { renderDiagnostics } from '../render/diagnostic';
 
 interface BaseCommandOptions {
@@ -745,6 +747,501 @@ export function runWorktreeMigrateRegistryCommand(
     renderPlanData(plan, out);
   }
 
+  return 0;
+}
+
+// ─── caws worktree cleanup-plan ───────────────────────────────────────────
+
+export type WorktreePhysicalCleanupStateClass =
+  | 'destroy-ready'
+  | 'unbound-clean-candidate'
+  | 'dirty-refused'
+  | 'unmerged-refused'
+  | 'active-bound-refused'
+  | 'foreign-owned-refused'
+  | 'missing-directory-refused'
+  | 'not-git-worktree-refused'
+  | 'unknown-spec-refused'
+  | 'unregistered-physical-refused'
+  | 'git-observation-unavailable';
+
+export interface WorktreePhysicalCleanupPlanItem {
+  readonly subject: string;
+  readonly state_class: WorktreePhysicalCleanupStateClass;
+  readonly registered: boolean;
+  readonly path: string;
+  readonly spec_id?: string;
+  readonly lifecycle_state?: string;
+  readonly owner_session_id?: string;
+  readonly branch?: string;
+  readonly base_branch?: string;
+  readonly clean?: boolean;
+  readonly merged?: boolean;
+  readonly allowed_mutation: string | null;
+  readonly refusal_reason?: string;
+  readonly next_command: string;
+  readonly details: Record<string, unknown>;
+}
+
+export interface WorktreePhysicalCleanupOptions extends BaseCommandOptions {
+  readonly state?: readonly string[];
+  readonly include?: readonly string[];
+  readonly exclude?: readonly string[];
+  readonly json?: boolean;
+}
+
+interface PhysicalGitWorktree {
+  readonly path: string;
+  readonly branch?: string;
+}
+
+const WORKTREE_PHYSICAL_CLEANUP_STATES: readonly WorktreePhysicalCleanupStateClass[] = [
+  'destroy-ready',
+  'unbound-clean-candidate',
+  'dirty-refused',
+  'unmerged-refused',
+  'active-bound-refused',
+  'foreign-owned-refused',
+  'missing-directory-refused',
+  'not-git-worktree-refused',
+  'unknown-spec-refused',
+  'unregistered-physical-refused',
+  'git-observation-unavailable',
+] as const;
+
+function defaultWorktreePath(cawsDir: string, name: string): string {
+  return path.join(cawsDir, 'worktrees', name);
+}
+
+function gitOutput(cwd: string, args: readonly string[]): { ok: true; stdout: string } | { ok: false; reason: string } {
+  try {
+    const stdout = execFileSync('git', [...args], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).toString();
+    return { ok: true, stdout };
+  } catch (e) {
+    const cause = e as { message?: string; stderr?: Buffer | string };
+    const stderr =
+      cause.stderr instanceof Buffer
+        ? cause.stderr.toString()
+        : typeof cause.stderr === 'string'
+          ? cause.stderr
+          : (cause.message ?? 'unknown git error');
+    return { ok: false, reason: stderr.trim() };
+  }
+}
+
+function listPhysicalGitWorktrees(repoRoot: string): { ok: true; worktrees: readonly PhysicalGitWorktree[] } | { ok: false; reason: string } {
+  const out = gitOutput(repoRoot, ['worktree', 'list', '--porcelain']);
+  if (!out.ok) return { ok: false, reason: out.reason };
+
+  const worktrees: PhysicalGitWorktree[] = [];
+  let currentPath: string | undefined;
+  let currentBranch: string | undefined;
+  const flush = () => {
+    if (currentPath !== undefined) {
+      worktrees.push({
+        path: currentPath,
+        ...(currentBranch !== undefined ? { branch: currentBranch } : {}),
+      });
+    }
+    currentPath = undefined;
+    currentBranch = undefined;
+  };
+
+  for (const line of out.stdout.split('\n')) {
+    if (line.startsWith('worktree ')) {
+      flush();
+      currentPath = line.slice('worktree '.length).trim();
+    } else if (line.startsWith('branch ')) {
+      currentBranch = line.slice('branch '.length).trim().replace(/^refs\/heads\//, '');
+    }
+  }
+  flush();
+  return { ok: true, worktrees };
+}
+
+function isCleanWorktree(worktreePath: string): { ok: true; clean: boolean; output: string } | { ok: false; reason: string } {
+  const status = gitOutput(worktreePath, ['status', '--porcelain']);
+  if (!status.ok) return { ok: false, reason: status.reason };
+  return { ok: true, clean: status.stdout.trim().length === 0, output: status.stdout };
+}
+
+function isMerged(repoRoot: string, branch: string, baseBranch: string): { ok: true; merged: boolean } | { ok: false; reason: string } {
+  const branchCheck = gitOutput(repoRoot, ['rev-parse', '--verify', branch]);
+  if (!branchCheck.ok) return { ok: false, reason: branchCheck.reason };
+  const baseCheck = gitOutput(repoRoot, ['rev-parse', '--verify', baseBranch]);
+  if (!baseCheck.ok) return { ok: false, reason: baseCheck.reason };
+  const merged = gitOutput(repoRoot, ['merge-base', '--is-ancestor', branch, baseBranch]);
+  return { ok: true, merged: merged.ok };
+}
+
+function specLifecycle(specs: readonly Spec[], specId: string | undefined): string | undefined {
+  if (specId === undefined) return undefined;
+  return specs.find((spec) => spec.id === specId)?.lifecycle_state;
+}
+
+function physicalItem(
+  input: {
+    readonly name: string;
+    readonly entry: WorktreeRecord;
+    readonly cawsDir: string;
+    readonly repoRoot: string;
+    readonly specs: readonly Spec[];
+    readonly sessionCandidates: ReturnType<typeof resolveSessionCandidates>;
+  }
+): WorktreePhysicalCleanupPlanItem {
+  const wtPath = input.entry.path ?? defaultWorktreePath(input.cawsDir, input.name);
+  const baseDetails: Record<string, unknown> = {
+    registry_path: input.entry.path,
+    default_path: defaultWorktreePath(input.cawsDir, input.name),
+  };
+  const lifecycle = specLifecycle(input.specs, input.entry.specId);
+
+  const common = {
+    subject: input.name,
+    registered: true,
+    path: wtPath,
+    ...(input.entry.specId !== undefined ? { spec_id: input.entry.specId } : {}),
+    ...(lifecycle !== undefined ? { lifecycle_state: lifecycle } : {}),
+    ...(input.entry.owner !== undefined ? { owner_session_id: input.entry.owner.session_id } : {}),
+    ...(input.entry.branch !== undefined ? { branch: input.entry.branch } : {}),
+    ...(input.entry.baseBranch !== undefined ? { base_branch: input.entry.baseBranch } : {}),
+  };
+
+  if (!fs.existsSync(wtPath)) {
+    return {
+      ...common,
+      state_class: 'missing-directory-refused',
+      allowed_mutation: null,
+      refusal_reason: 'The registry entry has no physical directory; this is control-plane residue, not a physical cleanup candidate.',
+      next_command: `caws worktree prune --include ${input.name}`,
+      details: baseDetails,
+    };
+  }
+
+  if (!isGitWorktree(wtPath)) {
+    return {
+      ...common,
+      state_class: 'not-git-worktree-refused',
+      allowed_mutation: null,
+      refusal_reason: 'The path exists but is not a git worktree, so CAWS will not classify it for physical cleanup.',
+      next_command: 'Inspect the directory manually; do not delete it through CAWS.',
+      details: baseDetails,
+    };
+  }
+
+  if (input.entry.owner !== undefined && admitsOwner(input.sessionCandidates, input.entry.owner.session_id) === null) {
+    return {
+      ...common,
+      state_class: 'foreign-owned-refused',
+      allowed_mutation: null,
+      refusal_reason: `Registered owner ${input.entry.owner.session_id} is not the current session; leases are not sufficient authority for cleanup.`,
+      next_command: `Inspect ownership with caws worktree list and caws agents list before any caws claim --takeover.`,
+      details: baseDetails,
+    };
+  }
+
+  const clean = isCleanWorktree(wtPath);
+  if (!clean.ok) {
+    return {
+      ...common,
+      state_class: 'git-observation-unavailable',
+      allowed_mutation: null,
+      refusal_reason: `Unable to inspect worktree cleanliness: ${clean.reason}`,
+      next_command: 'Fix git observation and rerun caws worktree cleanup-plan.',
+      details: baseDetails,
+    };
+  }
+  if (!clean.clean) {
+    return {
+      ...common,
+      clean: false,
+      state_class: 'dirty-refused',
+      allowed_mutation: null,
+      refusal_reason: 'The physical worktree has uncommitted changes.',
+      next_command: `Commit or intentionally preserve changes before caws worktree destroy ${input.name}.`,
+      details: { ...baseDetails, status: clean.output },
+    };
+  }
+
+  let merged: boolean | undefined;
+  if (input.entry.branch !== undefined && input.entry.baseBranch !== undefined) {
+    const merge = isMerged(input.repoRoot, input.entry.branch, input.entry.baseBranch);
+    if (!merge.ok) {
+      return {
+        ...common,
+        clean: true,
+        state_class: 'git-observation-unavailable',
+        allowed_mutation: null,
+        refusal_reason: `Unable to inspect merge status: ${merge.reason}`,
+        next_command: 'Fix git branch/base observation and rerun caws worktree cleanup-plan.',
+        details: baseDetails,
+      };
+    }
+    merged = merge.merged;
+    if (!merge.merged) {
+      return {
+        ...common,
+        clean: true,
+        merged: false,
+        state_class: 'unmerged-refused',
+        allowed_mutation: null,
+        refusal_reason: `Branch ${input.entry.branch} is not merged into ${input.entry.baseBranch}.`,
+        next_command: `Merge first, or use caws worktree destroy ${input.name} --abandon-unmerged only with explicit intent.`,
+        details: baseDetails,
+      };
+    }
+  }
+
+  if (input.entry.specId !== undefined && lifecycle === undefined) {
+    return {
+      ...common,
+      clean: true,
+      ...(merged !== undefined ? { merged } : {}),
+      state_class: 'unknown-spec-refused',
+      allowed_mutation: null,
+      refusal_reason: `Registry binds spec ${input.entry.specId}, but that spec is not loaded.`,
+      next_command: 'Restore the spec or inspect caws doctor before destroying this worktree.',
+      details: baseDetails,
+    };
+  }
+
+  if (lifecycle !== undefined && lifecycle !== 'closed' && lifecycle !== 'archived' && lifecycle !== 'retired') {
+    return {
+      ...common,
+      clean: true,
+      ...(merged !== undefined ? { merged } : {}),
+      state_class: 'active-bound-refused',
+      allowed_mutation: null,
+      refusal_reason: `Bound spec ${input.entry.specId} is lifecycle_state ${lifecycle}; physical cleanup must not remove active/draft work.`,
+      next_command: `Close, retire, or untrack the spec/worktree intentionally before caws worktree destroy ${input.name}.`,
+      details: baseDetails,
+    };
+  }
+
+  if (input.entry.specId === undefined) {
+    return {
+      ...common,
+      clean: true,
+      ...(merged !== undefined ? { merged } : {}),
+      state_class: 'unbound-clean-candidate',
+      allowed_mutation: 'eligible for single-worktree destroy; cleanup-plan itself is read-only',
+      next_command: `caws worktree destroy ${input.name}`,
+      details: baseDetails,
+    };
+  }
+
+  return {
+    ...common,
+    clean: true,
+    ...(merged !== undefined ? { merged } : {}),
+    state_class: 'destroy-ready',
+    allowed_mutation: 'eligible for single-worktree destroy; cleanup-plan itself is read-only',
+    next_command: `caws worktree destroy ${input.name}`,
+    details: baseDetails,
+  };
+}
+
+function unregisteredPhysicalItems(
+  repoRoot: string,
+  cawsDir: string,
+  registry: Record<string, WorktreeRecord>
+): WorktreePhysicalCleanupPlanItem[] {
+  const physical = listPhysicalGitWorktrees(repoRoot);
+  if (!physical.ok) {
+    return [
+      {
+        subject: '.caws/worktrees',
+        state_class: 'git-observation-unavailable',
+        registered: false,
+        path: path.join(cawsDir, 'worktrees'),
+        allowed_mutation: null,
+        refusal_reason: `Unable to enumerate physical git worktrees: ${physical.reason}`,
+        next_command: 'Fix git worktree observation and rerun caws worktree cleanup-plan.',
+        details: {},
+      },
+    ];
+  }
+
+  const physicalRoot = realpathSafe(path.join(cawsDir, 'worktrees'));
+  const registeredPaths = new Set(
+    Object.entries(registry).map(([name, entry]) => realpathSafe(entry.path ?? defaultWorktreePath(cawsDir, name)))
+  );
+  const items: WorktreePhysicalCleanupPlanItem[] = [];
+  for (const wt of physical.worktrees) {
+    const real = realpathSafe(wt.path);
+    if (real === realpathSafe(repoRoot)) continue;
+    if (!real.startsWith(physicalRoot + path.sep)) continue;
+    if (registeredPaths.has(real)) continue;
+    const subject = path.basename(real);
+    items.push({
+      subject,
+      state_class: 'unregistered-physical-refused',
+      registered: false,
+      path: wt.path,
+      ...(wt.branch !== undefined ? { branch: wt.branch } : {}),
+      allowed_mutation: null,
+      refusal_reason: 'A physical git worktree exists under .caws/worktrees but has no CAWS registry entry.',
+      next_command: 'Inspect with git worktree list and caws doctor before deciding whether to register, preserve, or remove it manually.',
+      details: {},
+    });
+  }
+  return items;
+}
+
+function selectedByPhysicalFilters(
+  item: WorktreePhysicalCleanupPlanItem,
+  filters: {
+    readonly states?: ReadonlySet<string>;
+    readonly include?: ReadonlySet<string>;
+    readonly exclude?: ReadonlySet<string>;
+  }
+): boolean {
+  if (filters.states !== undefined && !filters.states.has(item.state_class)) return false;
+  if (
+    filters.include !== undefined &&
+    !filters.include.has(item.subject) &&
+    !filters.include.has(item.path) &&
+    (item.spec_id === undefined || !filters.include.has(item.spec_id))
+  ) return false;
+  if (
+    filters.exclude !== undefined &&
+    (filters.exclude.has(item.subject) ||
+      filters.exclude.has(item.path) ||
+      (item.spec_id !== undefined && filters.exclude.has(item.spec_id)))
+  ) return false;
+  return true;
+}
+
+export function buildWorktreePhysicalCleanupPlan(input: {
+  readonly repoRoot: string;
+  readonly cawsDir: string;
+  readonly registry: Record<string, WorktreeRecord>;
+  readonly specs: readonly Spec[];
+  readonly sessionCandidates: ReturnType<typeof resolveSessionCandidates>;
+  readonly state?: readonly string[];
+  readonly include?: readonly string[];
+  readonly exclude?: readonly string[];
+}): { readonly ok: true; readonly items: readonly WorktreePhysicalCleanupPlanItem[] } | { readonly ok: false; readonly message: string } {
+  const stateSet = input.state !== undefined && input.state.length > 0 ? new Set(input.state) : undefined;
+  if (stateSet !== undefined) {
+    const unknown = [...stateSet].filter((state) => !WORKTREE_PHYSICAL_CLEANUP_STATES.includes(state as WorktreePhysicalCleanupStateClass));
+    if (unknown.length > 0) {
+      return {
+        ok: false,
+        message: `unknown --state value(s): ${unknown.join(', ')}. Expected one of: ${WORKTREE_PHYSICAL_CLEANUP_STATES.join(', ')}`,
+      };
+    }
+  }
+
+  const includeSet = input.include !== undefined && input.include.length > 0 ? new Set(input.include) : undefined;
+  const excludeSet = input.exclude !== undefined && input.exclude.length > 0 ? new Set(input.exclude) : undefined;
+  const filters = {
+    ...(stateSet !== undefined ? { states: stateSet } : {}),
+    ...(includeSet !== undefined ? { include: includeSet } : {}),
+    ...(excludeSet !== undefined ? { exclude: excludeSet } : {}),
+  };
+
+  const registered = Object.entries(input.registry).map(([name, entry]) =>
+    physicalItem({
+      name,
+      entry,
+      cawsDir: input.cawsDir,
+      repoRoot: input.repoRoot,
+      specs: input.specs,
+      sessionCandidates: input.sessionCandidates,
+    })
+  );
+  const unregistered = unregisteredPhysicalItems(input.repoRoot, input.cawsDir, input.registry);
+  return {
+    ok: true,
+    items: [...registered, ...unregistered].filter((item) => selectedByPhysicalFilters(item, filters)),
+  };
+}
+
+function physicalCountsByState(items: readonly WorktreePhysicalCleanupPlanItem[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const item of items) counts[item.state_class] = (counts[item.state_class] ?? 0) + 1;
+  return counts;
+}
+
+function renderWorktreePhysicalCleanupPlan(
+  items: readonly WorktreePhysicalCleanupPlanItem[],
+  out: (line: string) => void
+): void {
+  out(`caws worktree cleanup-plan: read-only physical cleanup plan (${items.length} item(s))`);
+  if (items.length === 0) {
+    out('(no physical worktree cleanup items)');
+    return;
+  }
+  for (const item of items) {
+    out(`- ${item.state_class} ${item.subject}`);
+    out(`  path: ${item.path}`);
+    if (item.spec_id !== undefined) out(`  spec: ${item.spec_id}${item.lifecycle_state !== undefined ? ` (${item.lifecycle_state})` : ''}`);
+    if (item.branch !== undefined) out(`  branch: ${item.branch}${item.base_branch !== undefined ? ` -> ${item.base_branch}` : ''}`);
+    if (item.owner_session_id !== undefined) out(`  owner: ${item.owner_session_id}`);
+    out(`  registered: ${item.registered ? 'yes' : 'no'}`);
+    if (item.clean !== undefined) out(`  clean: ${item.clean ? 'yes' : 'no'}`);
+    if (item.merged !== undefined) out(`  merged: ${item.merged ? 'yes' : 'no'}`);
+    out(`  allowed: ${item.allowed_mutation ?? 'refused'}`);
+    if (item.refusal_reason !== undefined) out(`  refusal: ${item.refusal_reason}`);
+    out(`  next: ${item.next_command}`);
+  }
+}
+
+export function runWorktreePhysicalCleanupPlanCommand(opts: WorktreePhysicalCleanupOptions): number {
+  const { cwd, env, out, err, showData } = setupIO(opts);
+  const ctx = resolveCawsCtx(cwd, err, showData, 'cleanup-plan');
+  if (ctx === null) return 2;
+
+  const registry = loadWorktrees(ctx.cawsDir);
+  if (!isOk(registry)) {
+    err('caws worktree cleanup-plan: failed to load worktrees registry.');
+    err(renderDiagnostics(registry.errors, { showData }));
+    return 2;
+  }
+  const specsResult = loadSpecs(ctx.cawsDir);
+  if (specsResult.diagnostics.some((d) => d.severity === 'error')) {
+    err('caws worktree cleanup-plan: failed to load specs.');
+    err(renderDiagnostics(specsResult.diagnostics, { showData }));
+    return 2;
+  }
+
+  const plan = buildWorktreePhysicalCleanupPlan({
+    repoRoot: ctx.repoRoot,
+    cawsDir: ctx.cawsDir,
+    registry: registry.value,
+    specs: specsResult.specs,
+    sessionCandidates: resolveSessionCandidates({ cawsDir: ctx.cawsDir, env }),
+    ...(opts.state !== undefined ? { state: opts.state } : {}),
+    ...(opts.include !== undefined ? { include: opts.include } : {}),
+    ...(opts.exclude !== undefined ? { exclude: opts.exclude } : {}),
+  });
+  if (!plan.ok) {
+    err(`caws worktree cleanup-plan: ${plan.message}`);
+    return 1;
+  }
+
+  if (opts.json === true) {
+    out(JSON.stringify({
+      ok: true,
+      dry_run: true,
+      read_only: true,
+      candidates: plan.items,
+      counts_by_state: physicalCountsByState(plan.items),
+      filters: {
+        state: opts.state ?? [],
+        include: opts.include ?? [],
+        exclude: opts.exclude ?? [],
+      },
+    }, null, 2));
+    return 0;
+  }
+
+  renderWorktreePhysicalCleanupPlan(plan.items, out);
   return 0;
 }
 

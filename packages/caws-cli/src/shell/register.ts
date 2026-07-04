@@ -92,6 +92,7 @@ import {
   runWorktreeListCommand,
   runWorktreeMergeCommand,
   runWorktreeMigrateRegistryCommand,
+  runWorktreePhysicalCleanupPlanCommand,
   runWorktreePruneCommand,
   runWorktreeRepairSparseCommand,
   runWorktreeRepairCommand,
@@ -1164,6 +1165,29 @@ export function registerShellCommands(
           ...(include !== undefined ? { include } : {}),
           ...(exclude !== undefined ? { exclude } : {}),
           apply: opts.apply === true,
+          json: opts.json === true,
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'cleanup-plan'))
+    .action(
+      (opts: {
+        state?: string;
+        include?: string;
+        exclude?: string;
+        json?: boolean;
+        data?: boolean;
+      }) => {
+        const state = parseCommaSeparatedList(opts.state);
+        const include = parseCommaSeparatedList(opts.include);
+        const exclude = parseCommaSeparatedList(opts.exclude);
+        const code = runWorktreePhysicalCleanupPlanCommand({
+          ...(state !== undefined ? { state } : {}),
+          ...(include !== undefined ? { include } : {}),
+          ...(exclude !== undefined ? { exclude } : {}),
           json: opts.json === true,
           showData: opts.data === true,
         });

@@ -420,7 +420,7 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'worktree',
   description:
-    'Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune). Worktrees are git worktrees bound to active specs.',
+    'Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs.',
   subcommands: [
     {
       kind: 'leaf',
@@ -572,6 +572,29 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
             'Apply only safe cleanup classes (ghost-registry, dead-binding, closed-spec-residue). Refused classes still do not mutate.',
         },
         { flag: '--json', description: 'Emit the plan or apply outcome as JSON.' },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'cleanup-plan',
+      description:
+        'Print a read-only physical worktree cleanup plan. Classifies real git worktree directories by clean/dirty, merged/unmerged, bound spec lifecycle, ownership, and registry presence. Does not delete directories or mutate CAWS state.',
+      options: [
+        {
+          flag: '--state <classes>',
+          description:
+            'Comma-separated state-class filter (for example: destroy-ready,dirty-refused,foreign-owned-refused,unregistered-physical-refused).',
+        },
+        {
+          flag: '--include <subjects>',
+          description: 'Comma-separated worktree names, spec ids, or paths to include.',
+        },
+        {
+          flag: '--exclude <subjects>',
+          description: 'Comma-separated worktree names, spec ids, or paths to exclude.',
+        },
+        { flag: '--json', description: 'Emit the read-only plan as JSON.' },
         DATA_OPTION,
       ],
     },

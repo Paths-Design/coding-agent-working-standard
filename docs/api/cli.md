@@ -827,6 +827,26 @@ caws worktree prune --state ghost-registry,dead-binding --apply
 
 Cleanup plan over doctor evidence. Dry-run is the default: it classifies worktree residue and refusal classes, names the next safe command, and does not mutate `worktrees.json`, specs, events, or git worktree directories. `--apply` executes only the same mechanically safe writer paths already proven by `caws worktree repair`; event orphans, foreign physical worktrees, stale-owner lease drift, and other refused classes stay refused.
 
+### `caws worktree cleanup-plan`
+
+```bash
+caws worktree cleanup-plan
+caws worktree cleanup-plan --state destroy-ready,dirty-refused
+caws worktree cleanup-plan --include wt-old,SPEC-001 --exclude wt-foreign --json
+```
+
+| Flag | Description |
+|---|---|
+| `--state <classes>` | Comma-separated state-class filter, such as `destroy-ready`, `dirty-refused`, `foreign-owned-refused`, or `unregistered-physical-refused`. |
+| `--include <subjects>` | Comma-separated worktree names, spec ids, or paths to include. |
+| `--exclude <subjects>` | Comma-separated worktree names, spec ids, or paths to exclude. |
+| `--json` | Emit the read-only plan as JSON. |
+| `--data` | Show structured data block on diagnostics. |
+
+Read-only physical cleanup plan over real git worktree directories. It classifies registered worktrees and unregistered physical git worktrees under `.caws/worktrees/` by clean/dirty state, merged/unmerged branch state, bound spec lifecycle, registry ownership, and CAWS registry presence. It never deletes a directory, mutates `.caws/worktrees.json`, patches spec YAML, appends events, or invokes `git worktree remove`.
+
+State classes include `destroy-ready`, `unbound-clean-candidate`, `dirty-refused`, `unmerged-refused`, `active-bound-refused`, `foreign-owned-refused`, `missing-directory-refused`, `not-git-worktree-refused`, `unknown-spec-refused`, `unregistered-physical-refused`, and `git-observation-unavailable`.
+
 Note: `caws worktree reconcile` is deferred to v11.2+.
 
 ---
