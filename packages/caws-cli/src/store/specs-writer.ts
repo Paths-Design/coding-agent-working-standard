@@ -96,6 +96,14 @@ export interface CreateSpecInput {
   readonly actor: EventBody['actor'];
 }
 
+export interface CreateSpecPlan {
+  readonly id: string;
+  readonly path: string;
+  readonly yaml: string;
+  readonly valid: boolean;
+  readonly diagnostics: readonly Diagnostic[];
+}
+
 export interface CloseSpecInput {
   readonly id: string;
   readonly resolution: 'completed' | 'superseded' | 'abandoned';
@@ -550,10 +558,10 @@ function renderInitialSpecYaml(input: CreateSpecInput): string {
 
 // ─── createSpec ──────────────────────────────────────────────────────────
 
-export function createSpec(
+export function planCreateSpec(
   cawsDir: string,
   input: CreateSpecInput
-): Result<SpecWriterOutcome> {
+): Result<CreateSpecPlan> {
   const idValidation = validateSpecId(input.id);
   if (!idValidation.ok) return idValidation;
 
@@ -591,29 +599,44 @@ export function createSpec(
   const targetPath = specPath(cawsDir, input.id);
   const newBytes = renderInitialSpecYaml(input);
 
-  // Validate the planned YAML through the kernel BEFORE we write or
-  // append events.
+  // Validate the planned YAML through the kernel BEFORE any write or event.
   const parsed = parseAndValidateSpec(newBytes);
-  if (!isOk(parsed)) {
-    return err(
-      parsed.errors.map((d) =>
+  const diagnostics = isOk(parsed)
+    ? []
+    : parsed.errors.map((d) =>
         storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
           subject: d.subject ?? input.id,
-          // Thread the kernel diagnostic's narrowRepair through so the shell's
-          // renderDiagnostics prints the `repair:` line. The kernel already
-          // names the escape for the tier-contract gate ("Add at least one
-          // contract or change risk_tier to 3 or mode to chore."); copying
-          // only d.message silently discarded it, leaving a first-timer with a
-          // bare "requires a contract" and no way forward.
-          // (CAWS-SPEC-CREATE-FIRSTTIMER-UX-001 A1/A2)
           ...(d.narrowRepair !== undefined
             ? { narrowRepair: d.narrowRepair }
             : {}),
-          data: { source_rule: d.rule },
+          data: {
+            source_rule: d.rule,
+            ...(d.location?.pointer !== undefined
+              ? { source_pointer: d.location.pointer }
+              : {}),
+          },
         })
-      )
-    );
-  }
+      );
+
+  return ok({
+    id: input.id,
+    path: targetPath,
+    yaml: newBytes,
+    valid: diagnostics.length === 0,
+    diagnostics,
+  });
+}
+
+export function createSpec(
+  cawsDir: string,
+  input: CreateSpecInput
+): Result<SpecWriterOutcome> {
+  const plan = planCreateSpec(cawsDir, input);
+  if (!isOk(plan)) return plan;
+  if (!plan.value.valid) return err(plan.value.diagnostics);
+
+  const targetPath = plan.value.path;
+  const newBytes = plan.value.yaml;
 
   const now = (input.now ?? (() => new Date()))().toISOString();
   const event: EventBody = {

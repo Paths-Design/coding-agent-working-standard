@@ -334,6 +334,8 @@ Create a new spec in lifecycle_state: active.
 - `--risk-tier <n>` — Risk tier (required): 1 | 2 | 3
 - `--scope-in <path>` (repeatable) — Populate scope.in at creation time (repeatable); avoids the YAML hand-edit. Widen later with `caws specs amend-scope`.
 - `--contract <spec>` (repeatable) — Add a contract at creation (repeatable), as "name:type[:path]" where type is api|schema|contract-test|behavior. Example: --contract "core-api:behavior". Tier 1/2 specs REQUIRE at least one contract; tier 3 / --mode chore do not.
+- `--plan` — Read-only preflight: validate and print the candidate spec without writing .caws/specs or events
+- `--json` — With --plan, emit the candidate, diagnostics, missing fields, and create command as JSON
 - `--data` — Show structured data block on diagnostics
 
 ### `caws specs list`

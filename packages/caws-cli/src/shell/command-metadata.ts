@@ -172,6 +172,16 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
           collect: true,
         },
         {
+          flag: '--plan',
+          description:
+            'Read-only preflight: validate and print the candidate spec without writing .caws/specs or events',
+        },
+        {
+          flag: '--json',
+          description:
+            'With --plan, emit the candidate, diagnostics, missing fields, and create command as JSON',
+        },
+        {
           flag: '--type <type>',
           description:
             'Removed v10 alias; use --mode <feature|refactor|fix|doc|chore> instead',

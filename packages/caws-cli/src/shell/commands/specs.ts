@@ -35,6 +35,7 @@ import {
   closeSpec,
   createSpec,
   listSpecs,
+  planCreateSpec,
   recoverArchivedSpec,
   retireDraftSpec,
   selectClosedSpecsForArchive,
@@ -179,6 +180,10 @@ export interface SpecsCreateOptions extends BaseCommandOptions {
    * (FIX-SPECS-CONTRACT-ORIENTATION-001).
    */
   readonly contract?: readonly string[];
+  /** Read-only preflight: render and validate the candidate without writing. */
+  readonly plan?: boolean;
+  /** Emit machine-readable plan output. */
+  readonly json?: boolean;
 }
 
 /** The closed contract.type enum (mirrors spec.v1.json). */
@@ -243,7 +248,7 @@ function parseContractFlags(
 
 const SPECS_CREATE_USAGE = [
   'Usage:',
-  '  caws specs create <id> --title "<short title>" --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3> [--scope-in <path>]... [--contract "name:type[:path]"]...',
+  '  caws specs create <id> --title "<short title>" --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3> [--scope-in <path>]... [--contract "name:type[:path]"]... [--plan] [--json]',
   '',
   'Example:',
   '  caws specs create FEAT-001 --title "Trivial first slice" --mode chore --risk-tier 3',
@@ -256,9 +261,73 @@ const SPECS_CREATE_USAGE = [
   '  Tier 1/2 specs require at least one contract: pass --contract "name:type[:path]"',
   '    (repeatable); type is one of api|schema|contract-test|behavior. Or use --risk-tier 3 / --mode chore.',
   '  --scope-in (repeatable) writes scope.in at creation time, so you never hand-edit it.',
+  '  --plan validates and prints the candidate without writing .caws/specs or events.',
   '  To widen scope later, use `caws specs amend-scope <id> --add <path>` (governed; no hand-edit).',
   '  Invariants and acceptance still need filling in via the spec YAML before iteration.',
 ].join('\n');
+
+function createCommandPreview(opts: {
+  readonly id: string;
+  readonly title: string;
+  readonly mode: ValidMode;
+  readonly riskTier: 1 | 2 | 3;
+  readonly scopeIn?: readonly string[];
+  readonly contract?: readonly string[];
+}): string {
+  const parts = [
+    'caws',
+    'specs',
+    'create',
+    shellQuote(opts.id),
+    '--title',
+    shellQuote(opts.title),
+    '--mode',
+    shellQuote(opts.mode),
+    '--risk-tier',
+    String(opts.riskTier),
+  ];
+  for (const p of opts.scopeIn ?? []) {
+    parts.push('--scope-in', shellQuote(p));
+  }
+  for (const c of opts.contract ?? []) {
+    parts.push('--contract', shellQuote(c));
+  }
+  return parts.join(' ');
+}
+
+function shellQuote(value: string): string {
+  if (/^[A-Za-z0-9_./:@%+=,-]+$/.test(value)) return value;
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function semanticFieldsFromPlanDiagnostics(
+  diagnostics: readonly { readonly data?: Readonly<Record<string, unknown>>; readonly message: string }[]
+): string[] {
+  const fields = diagnostics
+    .map((d) => d.data?.['source_pointer'])
+    .filter((p): p is string => typeof p === 'string' && p.length > 0);
+  return [...new Set(fields)];
+}
+
+function diagnosticJson(
+  diagnostics: readonly {
+    readonly rule: string;
+    readonly message: string;
+    readonly subject?: string;
+    readonly narrowRepair?: string;
+    readonly data?: Readonly<Record<string, unknown>>;
+  }[]
+): Record<string, unknown>[] {
+  return diagnostics.map((d) => ({
+    rule: d.rule,
+    message: d.message,
+    ...(d.subject !== undefined ? { subject: d.subject } : {}),
+    ...(typeof d.data?.['source_pointer'] === 'string'
+      ? { pointer: d.data['source_pointer'] }
+      : {}),
+    ...(d.narrowRepair !== undefined ? { repair: d.narrowRepair } : {}),
+  }));
+}
 
 export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
@@ -326,7 +395,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     parsedContracts = parsed.contracts;
   }
 
-  const result = createSpec(ctx.cawsDir, {
+  const createInput = {
     id: opts.id,
     title,
     mode: mode as ValidMode,
@@ -340,7 +409,75 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     ...(parsedContracts !== undefined && parsedContracts.length > 0
       ? { contracts: parsedContracts }
       : {}),
-  });
+  } as const;
+
+  if (opts.plan === true) {
+    const plan = planCreateSpec(ctx.cawsDir, createInput);
+    if (!isOk(plan)) {
+      err('caws specs create --plan: failed.');
+      err(renderDiagnostics(plan.errors, { showData }));
+      return 1;
+    }
+    const relSpecPath = path.relative(ctx.repoRoot, plan.value.path);
+    const diagnostics = diagnosticJson(plan.value.diagnostics);
+    const missingFields = semanticFieldsFromPlanDiagnostics(plan.value.diagnostics);
+    const command = createCommandPreview({
+      id: opts.id,
+      title,
+      mode: mode as ValidMode,
+      riskTier: riskTier as 1 | 2 | 3,
+      ...(opts.scopeIn !== undefined && opts.scopeIn.length > 0
+        ? { scopeIn: opts.scopeIn }
+        : {}),
+      ...(opts.contract !== undefined && opts.contract.length > 0
+        ? { contract: opts.contract }
+        : {}),
+    });
+    if (opts.json === true) {
+      emitJson(out, {
+        ok: true,
+        dry_run: true,
+        read_only: true,
+        id: plan.value.id,
+        target_path: relSpecPath,
+        valid: plan.value.valid,
+        would_write: plan.value.valid,
+        missing_fields: missingFields,
+        diagnostics,
+        candidate: {
+          title,
+          mode,
+          risk_tier: riskTier,
+          lifecycle_state: 'active',
+          scope_in: opts.scopeIn ?? [],
+          contracts: parsedContracts ?? [],
+        },
+        command,
+      });
+    } else {
+      out(`caws specs create --plan: ${plan.value.valid ? 'valid' : 'needs changes'} candidate for ${plan.value.id}`);
+      out(`  target: ${relSpecPath}`);
+      out('  read_only: true');
+      out(`  would_write: ${plan.value.valid ? 'yes' : 'no'}`);
+      if (missingFields.length > 0) {
+        out('  missing semantic fields:');
+        for (const field of missingFields) out(`    - ${field}`);
+      }
+      if (plan.value.diagnostics.length > 0) {
+        out('  diagnostics:');
+        for (const d of plan.value.diagnostics) {
+          out(`    - ${d.rule}: ${d.message}`);
+          if (d.narrowRepair !== undefined) out(`      repair: ${d.narrowRepair}`);
+        }
+      }
+      out('  create command:');
+      out(`    ${command}`);
+      out('  No files, events, or worktree registry entries were written.');
+    }
+    return 0;
+  }
+
+  const result = createSpec(ctx.cawsDir, createInput);
   if (!isOk(result)) {
     err('caws specs create: failed.');
     err(renderDiagnostics(result.errors, { showData }));

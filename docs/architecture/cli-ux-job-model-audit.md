@@ -56,7 +56,7 @@ default for every cleanup or bulk lifecycle surface.
 | `evidence` | `record`, `list`, `show`, `schema` | Help surfaces typed `--type`, `--spec`, JSON payload, actor fields, read-only list filters, JSON output, event-ref lookup by seq/hash/prefix, and kernel-derived payload schema discovery. | Strong read/write symmetry: evidence can be appended, inspected, and prepared with a copy-pasteable schema/example path without direct `events.jsonl` parsing. | Good model to copy. Remaining gap is broader event-log discovery under `events`, not typed evidence inspection. |
 | `events` | `list`, `show`, `migrate`, `rotate`, `verify-archive` | Group help lists read and maintenance leaves. `list` verifies the chain and reports counts/latest/rotation archive status; `show` resolves seq/hash/prefix/latest-rotation; `migrate` has `--apply`; `rotate` requires `--reason` and supports `--dry-run`/`--json`; `verify-archive` is read-only. | Stronger audit-log model: operators can discover current chain state and rotation history before rotate/verify operations. | Good model to copy. Remaining event-log gap is retention/prune policy, which should stay separate from rotate/archive verification. |
 | `waiver` | `create`, `list`, `show`, `revoke`, `prune` | Help covers CRUD-like waiver lifecycle; create/revoke require audit metadata, create supports dry-run validation, and prune exposes expired-waiver cleanup as dry-run/apply with JSON. | Stronger exception lifecycle model: operators can preview candidate creation and clean expired active waivers without hand-editing waiver files. | Good model to copy. Remaining gap is richer waiver matching diagnostics from a gate violation back to candidate waiver scope. |
-| `specs` | `create`, `list`, `show`, `recover`, `retire-draft`, `activate`, `amend-scope`, `close`, `archive`, `prune-archive`, `migrate`, `validate` | Group help now names every leaf. Leaf help exposes lifecycle state transitions, batch archive selectors, migration apply/partial, and file-path validation. | Strongest lifecycle surface after the archive fix: scoped creation, governed scope amendment, recover, batch archive, migration preview/apply. | Missing a general lifecycle cleanup model across states: e.g. "archive all closed older than X", "retire all stale drafts", "restore archived body to a chosen path/state". `recover` is read/output only; there is no governed `restore`. |
+| `specs` | `create`, `list`, `show`, `recover`, `retire-draft`, `activate`, `amend-scope`, `close`, `archive`, `prune-archive`, `migrate`, `validate` | Group help now names every leaf. Leaf help exposes lifecycle state transitions, create preflight, batch archive selectors, migration apply/partial, and file-path validation. | Strongest lifecycle surface after the archive fix: scoped creation, read-only create planning, governed scope amendment, recover, batch archive, migration preview/apply. | Missing a general lifecycle cleanup model across states: e.g. "archive all closed older than X", "retire all stale drafts", "restore archived body to a chosen path/state". `recover` is read/output only; there is no governed `restore`. |
 | `worktree` | `create`, `list`, `bind`, `destroy`, `untrack`, `merge`, `migrate-registry`, `repair-sparse`, `repair`, `prune` | Group help lists lifecycle, untrack, migration, sparse repair, control-plane repair, and cleanup planning. Leaf help distinguishes create vs bind, dry-run merge, destroy guardrails, untrack dry-run/apply, repair dry-run, and prune dry-run/apply. | Improved single-worktree lifecycle and targeted cleanup model. `prune` now covers safe repairable residue classes, while `untrack` covers preserving files after releasing a CAWS binding. | Still missing batch destroy/cleanup over real worktrees by merged/clean/closed state. `repair` and `prune` intentionally do not remove real git worktree directories, so batch physical deletion needs a separate plan/apply model. |
 | `agents` | `register`, `heartbeat`, `stop`, `list`, `show`, `prune` | Help exposes hook-writer verbs, read-only list/show, JSON, stale TTLs, `--dead`, retention filters, dry-run default, `--apply`. | Best cleanup UX model in the CLI. It cleanly separates display-only stale state from deletion and supports machine output. | Good model to copy. Minor gap: no `explain <id>` that says why a lease is active/stale/stopped/dead, but list/show largely cover it. |
 | `message` | `send`, `poll` | Help surfaces directed send, optional dead recipient escape hatch, poll wait/peek/JSON. | Adequate communication model and correctly says messages are not authority. | No inbox/list/history management or prune/retention surface. That may be intentional, but long-running projects will accumulate message-log state. |
@@ -76,6 +76,7 @@ default for every cleanup or bulk lifecycle surface.
 | Rotate audit chain safely | `events list/show`, `events rotate --dry-run --reason ...`, `events verify-archive` | `events migrate --apply` | Now closed for first-order preview/read/verify parity: list/show summarize current chain and rotation archive status, rotate dry-run reports target archive path/line count/digest/stats/genesis, and verify-archive confirms archived bytes. | Future retention/prune semantics should be designed separately from rotation verification. |
 | Clean expired waivers safely | `waiver prune --status expired [--apply]` | `agents prune --status ... --apply` | Now closed for expired active waivers: prune defaults to dry-run, supports JSON, and apply requires revocation audit metadata. | Future waiver UX should focus on explaining which waiver scope would match a gate violation, not broad deletion. |
 | Retire stale draft specs in bulk | `specs retire-draft <id>` | `specs archive --status closed --include/--exclude --apply` | Draft cleanup is one-at-a-time and lacks selectors. | Add batch selectors only after "stale draft" is defined: age, no worktree binding, no scope changes, or explicit include list. |
+| Plan tiered spec creation | `specs create --plan` | `waiver create --dry-run`, `events rotate --dry-run` | Now closed for creation preflight: plan validates the same candidate as create, reports missing semantic fields, supports JSON, and writes no spec/event state. | Future creation UX can add templates, but the read-only preflight is the durable base. |
 
 ## Session Evidence
 
@@ -165,18 +166,18 @@ By top-level command:
 | `UX-GATES-POLICY-DISCOVERY-001` | Implemented in ninth repair slice | `gates list/explain` read-only policy discovery | Adds `caws gates list [--spec <id>] [--json]` and `caws gates explain <gate> [--spec <id>] [--json]`. Both commands compose the store snapshot, derive gate ids/modes/thresholds/risk-tier budgets from policy, use kernel waiver applicability for spec-scoped effective waiver ids, and never append `gate_evaluated` events. Covered by `packages/caws-cli/tests/shell/gates-policy-discovery.test.js`. |
 | `UX-WAIVER-LIFECYCLE-PREFLIGHT-001` | Implemented in tenth repair slice | `waiver create --dry-run` and expired-waiver prune | Adds `caws waiver create --dry-run [--json]` and `caws waiver prune --status expired [--apply] [--json]`. Create dry-run validates the candidate and duplicate id without writing `.caws/waivers/`; prune dry-run prints the exact expired active target set; apply requires `--reason` and `--revoked-by` and revokes only selected expired active waivers through the existing store writer. Covered by `packages/caws-cli/tests/shell/waiver-lifecycle-preflight.test.js`. |
 | `UX-SCOPE-REMEDIATION-GUIDANCE-001` | Implemented in eleventh repair slice | `scope check --json` and refusal remediation | Adds `caws scope check <path> --json` with the same decision contract as `scope show --json`, plus an optional `remediation` object. Human and JSON output now hand off to existing governed commands for scope.in misses/root refusals, scope.out exclusions, one-sided bindings, unbound worktrees, and ambiguous claimants without mutating from `scope`. Covered by `packages/caws-cli/tests/shell/scope-remediation-guidance.test.js`. |
+| `UX-SPECS-CREATE-PLAN-001` | Implemented in twelfth repair slice | `specs create --plan` read-only creation preflight | Adds `caws specs create <id> ... --plan [--json]`. Plan mode reuses the create renderer and kernel parser, reports missing semantic fields such as `/contracts`, `/observability`, `/rollback`, and `/non_functional/security`, returns a copy-pasteable create command, and writes no spec files, events, or worktree registry entries. Covered by `packages/caws-cli/tests/shell/specs-create-plan.test.js`. |
 
 ## Next Slice
 
-The next implementation slice should address tiered spec creation planning:
-`caws specs create --plan` or an equivalent dry-run preflight should validate
-the candidate, print the required semantic fields for the requested
-mode/risk-tier, and avoid writing `.caws/specs/<id>.yaml`. Session evidence
-still shows `tier_requires_metadata` as a high-friction class; help examples
-reduced contract tuple failures, but agents still discover tier-1/2
-observability/rollback/security/contract requirements by mutation-time
-rejection. Keep the first slice read-only and make the output copy-pasteable
-for the eventual `specs create` invocation.
+The next implementation slice should address batch scope planning:
+`caws scope check --paths <file>` or an equivalent `scope plan` leaf should
+evaluate many paths in one read-only run, group refusals by governing
+spec/worktree/remediation command, and preserve the single-path enforcement
+semantics for `scope check <path>`. Single-path remediation now exists, but
+deep project slices often discover multiple out-of-scope files at once; agents
+still have to loop one path at a time and manually compose one
+`specs amend-scope` command.
 
 ## Findings
 
@@ -193,11 +194,10 @@ for the eventual `specs create` invocation.
    merged-clean worktrees, ignored dead directories, or "untrack but preserve
    files for review."
 
-3. **`specs create` needs a fuller creation model, not only more validation.**
-   Session evidence repeatedly shows agents discovering tier-1/2 requirements
-   and contract tuple syntax by failure. `--scope-in` and `--contract` helped,
-   but the command still needs either complete examples in help or a plan/template
-   mode for tiered specs.
+3. **Batch scope planning is still missing after single-path remediation.**
+   `scope check --json` can now explain one refusal, but agents working on
+   several files still have to loop paths and manually combine the resulting
+   `specs amend-scope` handoffs.
 
 4. **Repair commands should publish the state taxonomy they use.**
    `doctor` has rich H-class repair text, but users discover it only through
@@ -230,15 +230,15 @@ for the eventual `specs create` invocation.
    default before adding any apply behavior. Sterling needs a trustworthy plan
    more than it needs another destructive verb.
 
-4. Add a read-only `specs create --plan` preflight for tiered specs: validate
-   the requested mode/risk-tier/contract flags, print missing semantic fields,
-   and show the eventual create command without writing a spec file.
+4. Add batch scope planning after the single-path remediation contract:
+   evaluate many paths, group refusals by spec/worktree/remediation command,
+   and keep mutation delegated to existing governed commands.
 
 5. Add help regression tests for any group description that names subcommands
    and for cleanup leaves that claim dry-run/apply semantics. The CLI already
    has metadata-driven help; the gap is asserting the UX promises that agents
    rely on.
 
-6. Add batch path-check planning after the single-path remediation contract:
-   evaluate many paths, group refusals by spec/worktree/remediation command,
-   and keep mutation delegated to existing governed commands.
+6. Add lifecycle restore/cleanup designs only after their state semantics are
+   explicit: archived spec restore, stale draft retirement selectors, and batch
+   physical worktree deletion need separate plan/apply guardrails.

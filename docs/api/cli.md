@@ -514,6 +514,17 @@ caws specs create FEAT-1 \
   --title "Add widget support" \
   --mode feature \
   --risk-tier 1
+caws specs create FEAT-1 \
+  --title "Add widget support" \
+  --mode feature \
+  --risk-tier 1 \
+  --plan
+caws specs create FEAT-2 \
+  --title "Low-risk docs slice" \
+  --mode doc \
+  --risk-tier 3 \
+  --scope-in docs/widget.md \
+  --plan --json
 ```
 
 | Flag | Description |
@@ -523,9 +534,15 @@ caws specs create FEAT-1 \
 | `--risk-tier <n>` | Risk tier: `1`, `2`, or `3`. |
 | `--scope-in <path>` | Seed `scope.in`; repeatable. |
 | `--contract <entry>` | Seed a contract entry; repeatable. |
+| `--plan` | Read-only preflight. Render and validate the candidate without writing `.caws/specs/<id>.yaml` or appending events. |
+| `--json` | With `--plan`, emit the candidate, diagnostics, missing fields, and create command as JSON. |
 | `--data` | Show structured data block on diagnostics. |
 
-Creates a new spec in `lifecycle_state: active`. Note: `--type` is a removed v10 alias; use `--mode` instead.
+Creates a new spec in `lifecycle_state: active`. `--plan` validates the same
+candidate path that normal create would write, but exits without mutation; this
+is useful for tier 1/2 specs where required semantic fields such as contracts,
+observability, rollback, or security need to be planned before the YAML exists.
+Note: `--type` is a removed v10 alias; use `--mode` instead.
 
 Not returned in v11.1: `specs update`, `specs delete`, `specs conflicts`, `specs types`. Edit the YAML directly for field updates; schema validation runs on `caws doctor` and `caws gates run`.
 
