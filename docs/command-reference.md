@@ -33,7 +33,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws evidence`](#caws-evidence) — Record, inspect, and describe typed evidence events in .caws/events.jsonl
 - [`caws events`](#caws-events) — Read and maintain .caws/events.jsonl (list/show/rotate/migrate/verify-archive)
 - [`caws waiver`](#caws-waiver) — Manage CAWS waivers (bounded exception records that suppress matching gate violations)
-- [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/retire-draft/activate/amend-scope/close/archive/prune-archive/migrate/validate)
+- [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/activate/amend-scope/close/archive/prune-archive/migrate/validate)
 - [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune). Worktrees are git worktrees bound to active specs.
 - [`caws agents`](#caws-agents) — Agent liveness substrate: register/heartbeat/stop/list/show/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.
 - [`caws message`](#caws-message) — Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/poll directed messages between running sessions, addressed by session id, over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
@@ -330,7 +330,7 @@ Plan or apply cleanup for derived-expired active waivers. Dry-run by default; --
 
 ## `caws specs`
 
-Manage CAWS spec lifecycle (create/list/show/recover/retire-draft/activate/amend-scope/close/archive/prune-archive/migrate/validate)
+Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/activate/amend-scope/close/archive/prune-archive/migrate/validate)
 
 ### `caws specs create <id>`
 
@@ -379,6 +379,19 @@ Recover an archived spec body. Reads .caws/events.jsonl for the spec_archived ev
 
 - `--data` — Show structured data block on diagnostics
 - `--out <path>` — Write the recovered body to this path instead of stdout
+
+### `caws specs restore <id>`
+
+Restore a recoverable archived/retired spec body back to .caws/specs/<id>.yaml as draft or active. Dry-run by default; --apply writes the validated body and appends spec_restored. Restore refuses to overwrite an existing canonical spec and clears stale terminal lifecycle/worktree fields.
+
+**Argument:** `id` (required) — Archived or retired spec id to restore
+
+**Options:**
+
+- `--as <state>` — Target lifecycle state for the restored spec: draft | active
+- `--apply` — Apply the restore (default: read-only dry-run plan)
+- `--json` — Emit restore plan/apply result as JSON
+- `--data` — Show structured data block on diagnostics
 
 ### `caws specs retire-draft <id>`
 
