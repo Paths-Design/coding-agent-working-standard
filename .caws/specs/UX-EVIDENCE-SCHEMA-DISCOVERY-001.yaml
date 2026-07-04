@@ -7,12 +7,12 @@ created_at: '2026-07-04T05:02:41.783Z'
 updated_at: '2026-07-04T05:02:43.246Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli
+    - docs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/shell/commands/evidence.ts
     - packages/caws-cli/src/shell/index.ts
     - packages/caws-cli/src/shell/register.ts
@@ -23,11 +23,26 @@ scope:
     - docs/architecture/cli-ux-job-model-audit.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'evidence schema is read-only and never appends, rewrites, rotates, or locks events.jsonl.'
+  - 'Schema output is derived from the kernel payload schema files used to validate test_recorded, gate_evaluated, and ac_recorded.'
+  - 'Human output includes a copy-pasteable caws evidence record example for each evidence kind.'
+  - 'Invalid evidence kinds fail before filesystem reads and report the accepted kind set.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'the kernel event schemas for test_recorded, gate_evaluated, and ac_recorded'
+    when: 'an operator runs caws evidence schema --type test --json'
+    then: 'the command prints the kernel-derived JSON schema and an example record payload without touching events.jsonl'
+  - id: A2
+    given: 'the same command surface'
+    when: 'an operator runs caws evidence schema --type gate or --type ac'
+    then: 'the command reports the correct event type, required payload fields, and copy-pasteable record example for that kind'
+  - id: A3
+    given: 'an unsupported evidence kind'
+    when: 'an operator runs caws evidence schema --type bogus'
+    then: 'the command exits nonzero and prints test|gate|ac as the accepted kind set'
+  - id: A4
+    given: 'the command metadata and docs are regenerated'
+    when: 'an operator runs caws evidence --help, caws evidence record --help, and caws evidence schema --help from the built dist-linked caws binary'
+    then: 'schema discovery and per-type record examples are visible in nested help and docs'
 non_functional: {}
 contracts: []
