@@ -591,6 +591,10 @@ caws specs create FEAT-1 \
   --title "Add widget support" \
   --mode feature \
   --risk-tier 1
+caws specs create --id FEAT-1 \
+  --title "Add widget support" \
+  --mode feature \
+  --risk-tier 1
 caws specs create FEAT-1 \
   --title "Add widget support" \
   --mode feature \
@@ -606,6 +610,7 @@ caws specs create FEAT-2 \
 
 | Flag | Description |
 |---|---|
+| `--id <id>` | Alias for the positional spec id. Use either positional `<id>` or `--id`, not both. |
 | `--title <title>` | Short spec title. |
 | `--mode <mode>` | Spec mode: `feature`, `refactor`, `fix`, `doc`, or `chore`. |
 | `--risk-tier <n>` | Risk tier: `1`, `2`, or `3`. |
@@ -616,7 +621,9 @@ caws specs create FEAT-2 \
 | `--json` | With `--plan`, emit the candidate, diagnostics, missing fields, and create command as JSON. |
 | `--data` | Show structured data block on diagnostics. |
 
-Creates a new spec in `lifecycle_state: active`. `--plan` validates the same
+Creates a new spec in `lifecycle_state: active`. The spec id may be supplied as
+the positional `<id>` or with `--id <id>` for option-shaped command builders.
+Supplying both refuses before mutation. `--plan` validates the same
 candidate path that normal create would write, but exits without mutation; this
 is useful for tier 1/2 specs where required semantic fields such as contracts,
 observability, rollback, or security need to be planned before the YAML exists.

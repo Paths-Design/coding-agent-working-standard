@@ -151,7 +151,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
     {
       kind: 'leaf',
       name: 'create',
-      argument: { name: 'id', required: true, description: 'Spec id to create' },
+      argument: { name: 'id', required: false, description: 'Spec id to create' },
       description: 'Create a new spec in lifecycle_state: active.',
       // W3: --title/--mode/--risk-tier are functionally required, but the
       // handler (runSpecsCreateCommand) owns the missing-args check so it can
@@ -160,6 +160,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
       // "(required)" in prose and keep them .option() — help states the
       // requirement; the handler enforces it.
       options: [
+        { flag: '--id <id>', description: 'Alias for the positional spec id' },
         { flag: '--title <title>', description: 'Short spec title (required)' },
         {
           flag: '--mode <mode>',
