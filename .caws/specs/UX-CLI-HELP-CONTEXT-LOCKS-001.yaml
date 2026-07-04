@@ -7,7 +7,8 @@ created_at: '2026-07-04T19:27:45.075Z'
 updated_at: '2026-07-04T19:27:45.075Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli docs tests'
+    - 'CLI UX audit documentation'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -16,12 +17,22 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Any group help description that enumerates visible subcommands is tested against COMMAND_SURFACE_METADATA so it cannot omit a visible leaf.'
+  - 'Cleanup leaves that claim a dry-run/apply job model are tested for matching option/help context.'
+  - 'The audit document records the help-context lock so future CLI surface changes keep docs and help aligned.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'COMMAND_SURFACE_METADATA for a group whose description names at least one visible subcommand'
+    when: 'the docs help-context test runs'
+    then: 'the test fails if any visible subcommand name is missing from the group description.'
+  - id: A2
+    given: 'cleanup leaves with dry-run/apply semantics in command metadata'
+    when: 'the docs help-context test runs'
+    then: 'the test fails if dry-run/apply/default/selector context drifts from the promised job model.'
+  - id: A3
+    given: 'the CLI UX audit recommendations'
+    when: 'this slice lands'
+    then: 'the audit records the implemented help-context regression lock.'
 non_functional: {}
 contracts:
   - name: 'cli-help-context-locks'
