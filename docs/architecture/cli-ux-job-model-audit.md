@@ -161,12 +161,17 @@ The follow-up slice fixed the governed scope-widening mismatch as well:
 `caws specs amend-scope ... --reason <text>` now records the operator rationale
 on `spec_scope_amended` evidence instead of being rejected by runtime.
 
+The latest resample after those fixes found `specs create --id <spec-id>` as
+the newest still-current CAWS option mismatch. That is now fixed: `--id` is a
+compatibility alias for the positional create id, and supplying both id forms
+refuses before mutation.
+
 ### Friction Classes
 
 | Friction marker | Count | UX implication |
 |---|---:|---|
 | `no_scope_authority` | 126 | Reconciled against the current linked-dist CLI: residual session transcripts still contain old generic unbound repair text, but direct reproduction in Sterling now shows active-spec authority candidates, read-only `scope --spec` checks, and create/bind/enter worktree handoffs in human and JSON output. |
-| `unknown_or_missing_option` | 91 | Further fixed for `specs close`, `scope`, `agents prune`, `specs create`, validation-era removed commands, specs status listing, worktree cleanup state filters, specs archive/prune-archive discoverability, and governed scope amendment rationale: `--closure-notes` and `--notes` are now supported aliases for close notes, `scope show/check/plan --spec <id>` supports read-only explicit spec-context evaluation, `agents prune --dead --json` is verified, `specs create --tier <n>` aliases `--risk-tier <n>`, legacy validation diagnostics are pinned, `specs --status <state>` hands off to `specs list --status <state>`, `worktree prune/cleanup-plan --status <classes>` aliases `--state <classes>`, `specs prune-archive` hands off to archive/restore/recover workflows, and `specs amend-scope --reason <text>` records rationale on `spec_scope_amended` evidence. Remaining work should resample the newest option mismatches after these fixes before selecting another leaf. |
+| `unknown_or_missing_option` | 91 | Further fixed for `specs close`, `scope`, `agents prune`, `specs create`, validation-era removed commands, specs status listing, worktree cleanup state filters, specs archive/prune-archive discoverability, and governed scope amendment rationale: `--closure-notes` and `--notes` are now supported aliases for close notes, `scope show/check/plan --spec <id>` supports read-only explicit spec-context evaluation, `agents prune --dead --json` is verified, `specs create --tier <n>` aliases `--risk-tier <n>`, `specs create --id <id>` aliases the positional create id, legacy validation diagnostics are pinned, `specs --status <state>` hands off to `specs list --status <state>`, `worktree prune/cleanup-plan --status <classes>` aliases `--state <classes>`, `specs prune-archive` hands off to archive/restore/recover workflows, and `specs amend-scope --reason <text>` records rationale on `spec_scope_amended` evidence. Remaining work should resample the newest option mismatches after these fixes before selecting another leaf. |
 | `tier_requires_metadata` | 87 | Fixed at the create-plan layer: `specs create --plan` now reports missing semantic fields and emits copy-pasteable YAML examples in human and JSON output. |
 | `danger_latch` | 66 | CAWS hook UX still matters for CLI workflows; blocked shell forms often interrupt otherwise correct CAWS procedures. |
 | `worktree_not_found` | 62 | Fixed for `worktree destroy`: missing registry entries now remain non-mutating refusals but include a CAWS-native handoff to `worktree list`, `worktree prune --include <name>`, and `worktree cleanup-plan --include <name>` so agents can distinguish registry residue from unregistered physical worktrees. |
@@ -192,6 +197,7 @@ on `spec_scope_amended` evidence instead of being rejected by runtime.
 | Closure notes flag mismatch | `Unknown option: --closure-notes` / `unknown option '--notes'` when an agent tried to close a spec using the YAML field name or natural closure-note shorthand. | Now closed for `specs close`: `--closure-notes <text>` and `--notes <text>` alias `--reason <text>`, all write `closure_notes`, and supplying more than one fails before mutation. |
 | Dead-agent prune JSON mismatch | `agents prune --dead --json` was recorded as a prior unknown/missing-option retry. | Now reconciled: current CLI help lists `--dead` and `--json`, dry-run dead-process pruning emits CAWS-native JSON without `--status`, and apply deletes only selected dead-process leases. |
 | Tier shorthand mismatch | `unknown option '--tier'` when an agent tried `caws specs create ... --tier <n>`. | Now closed for `specs create`: `--tier <n>` aliases `--risk-tier <n>`, nested help documents both, and supplying both fails before spec/event mutation. |
+| Specs create id flag mismatch | `unknown option '--id'` when an agent tried `caws specs create --id <spec-id> ...` instead of the positional id. | Now closed for `specs create`: `--id <id>` aliases the positional spec id for option-shaped command builders, while supplying both id forms fails before spec/event mutation. |
 | Validation-era removed command flattening | `caws validate` and related v10-era commands were previously grouped in `docs/api/cli.md` under one doctor/gates replacement even though runtime diagnostics distinguish replaced commands, direct renames, and removed report/advisory commands. | Now reconciled: `validate`/`verify` hand off to `doctor` plus `gates run`, `diagnose` points only to `doctor`, and `verify-acs`/`evaluate`/`iterate`/`burnup` preserve command-specific removed-without-replacement guidance. |
 | Specs status group-level mismatch | `unknown option '--status'` when an agent tried `caws specs --status closed` before finding the list/archive model. | Now closed for read-only listing: `caws specs list --status <active|draft|closed|archived>` filters lifecycle state, `caws specs --status <state>` routes to the same list path, and invalid statuses name accepted values plus the batch archive command. |
 | Worktree cleanup status/state mismatch | `unknown option '--status'` when an agent used the status selector shape on `worktree prune` or `worktree cleanup-plan`. | Now closed for compatible cleanup filters: both leaves accept `--status <classes>` as an alias for `--state <classes>`, list the alias in help, and refuse invocations that supply both aliases before planning or mutation. |
@@ -261,14 +267,16 @@ on `spec_scope_amended` evidence instead of being rejected by runtime.
 | `UX-NO-SCOPE-AUTHORITY-SESSION-RESAMPLE-001` | Implemented in forty-ninth repair slice | No-scope-authority session resample reconciliation | Resamples CAWS and Sterling session evidence after the handoff slices, verifies the currently linked dist CLI in Sterling emits enriched active-spec remediation, and closes the residual `no_scope_authority` bucket as stale transcript evidence rather than a current CLI gap. Covered by `packages/caws-cli/tests/docs/cli-ux-no-scope-authority-reconciliation.test.js`. |
 | `UX-SPECS-CLOSE-NOTES-ALIAS-001` | Implemented in fiftieth repair slice | Specs close notes shorthand alias | Adds `caws specs close <id> --notes <text>` as a compatibility alias for closure notes alongside `--reason` and `--closure-notes`. Supplying more than one note alias fails before mutation; help and docs list the alias. Covered by `packages/caws-cli/tests/shell/specs-close-closure-notes-alias.test.js`. |
 | `UX-SPECS-AMEND-SCOPE-REASON-001` | Implemented in fifty-first repair slice | Specs amend-scope reason option | Adds `caws specs amend-scope <id> --reason <text>` and records the rationale on `spec_scope_amended` evidence while keeping the option optional for generated remediation commands. Covered by `packages/caws-cli/tests/shell/specs-amend-scope-reason.test.js`. |
+| `UX-SPECS-CREATE-ID-ALIAS-001` | Implemented in fifty-second repair slice | Specs create id option alias | Adds `caws specs create --id <id>` as a compatibility alias for the positional spec id and refuses invocations that supply both id forms before mutation. Covered by `packages/caws-cli/tests/shell/specs-create-id-alias.test.js`. |
 
 ## Next Slice
 
 The next implementation slice should resample the newest CAWS and Sterling
-session evidence for residual `unknown_or_missing_option` after the `--notes`
-and `amend-scope --reason` fixes. Treat stale fixed examples (`--tier`,
-`--status`, `--closure-notes`, `--notes`, `amend-scope --reason`) as closed and
-select the newest current leaf mismatch for the next concrete fix, if any.
+session evidence for residual `unknown_or_missing_option` after the `--notes`,
+`amend-scope --reason`, and `specs create --id` fixes. Treat stale fixed
+examples (`--tier`, `--status`, `--closure-notes`, `--notes`,
+`amend-scope --reason`, `specs create --id`) as closed and select the newest
+current leaf mismatch for the next concrete fix, if any.
 
 ## Findings
 
@@ -472,6 +480,13 @@ select the newest current leaf mismatch for the next concrete fix, if any.
    narrowed"`, but runtime rejected the option. `--reason <text>` now appears in
    nested help and generated docs, remains optional, and is recorded on the
    `spec_scope_amended` event payload when supplied.
+
+33. **Specs create now accepts option-shaped ids.**
+   Resampling after the prior option fixes found `specs create --id <spec-id>`
+   as the newest current CAWS option mismatch. `--id <id>` now aliases the
+   positional create id for agents that build commands from option maps, while
+   ambiguous invocations that supply both id forms refuse before writing specs
+   or events.
 
 ## Recommendations
 

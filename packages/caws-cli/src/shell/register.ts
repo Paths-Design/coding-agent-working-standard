@@ -848,8 +848,9 @@ export function registerShellCommands(
   defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'create'))
     .action(
       (
-        id: string,
+        id: string | undefined,
         opts: {
+          id?: string;
           title?: string;
           mode?: string;
           riskTier?: string;
@@ -863,7 +864,8 @@ export function registerShellCommands(
         }
       ) => {
         const code = runSpecsCreateCommand({
-          id,
+          ...(id !== undefined ? { id } : {}),
+          ...(opts.id !== undefined ? { idOption: opts.id } : {}),
           ...(opts.title !== undefined ? { title: opts.title } : {}),
           ...(opts.mode !== undefined ? { mode: opts.mode } : {}),
           ...(opts.riskTier !== undefined ? { riskTier: opts.riskTier } : {}),

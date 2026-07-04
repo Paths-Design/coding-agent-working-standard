@@ -353,14 +353,15 @@ Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-
 - `--status <status>` — Compatibility handoff to caws specs list --status <status>: active | draft | closed | archived
 - `--data` — Show structured data block on diagnostics
 
-### `caws specs create <id>`
+### `caws specs create [id]`
 
 Create a new spec in lifecycle_state: active.
 
-**Argument:** `id` (required) — Spec id to create
+**Argument:** `id` (optional) — Spec id to create
 
 **Options:**
 
+- `--id <id>` — Alias for the positional spec id
 - `--title <title>` — Short spec title (required)
 - `--mode <mode>` — Spec mode (required): feature | refactor | fix | doc | chore
 - `--risk-tier <n>` — Risk tier (required): 1 | 2 | 3

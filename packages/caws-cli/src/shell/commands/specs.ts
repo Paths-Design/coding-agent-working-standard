@@ -174,7 +174,9 @@ function buildActorOrError(
 // ─── caws specs create ────────────────────────────────────────────────────
 
 export interface SpecsCreateOptions extends BaseCommandOptions {
-  readonly id: string;
+  readonly id?: string;
+  /** Alias for the positional id; useful when agents build command options uniformly. */
+  readonly idOption?: string;
   readonly title?: string;
   readonly mode?: string;
   readonly riskTier?: number | string;
@@ -414,7 +416,14 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     return 1;
   }
 
+  if (opts.id !== undefined && opts.idOption !== undefined) {
+    err('caws specs create: positional <id> and --id both name the spec id; pass only one.');
+    return 1;
+  }
+  const specId = opts.id ?? opts.idOption;
+
   const missing = [
+    specId === undefined ? '<id> or --id' : undefined,
     opts.title === undefined ? '--title' : undefined,
     opts.mode === undefined ? '--mode' : undefined,
     opts.riskTier === undefined && opts.tier === undefined ? '--risk-tier' : undefined,
@@ -433,7 +442,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   }
 
   const rawRiskTier = opts.riskTier ?? opts.tier;
-  if (title === undefined || mode === undefined || rawRiskTier === undefined) {
+  if (specId === undefined || title === undefined || mode === undefined || rawRiskTier === undefined) {
     err('caws specs create: missing required options.');
     err(SPECS_CREATE_USAGE);
     return 1;
@@ -477,7 +486,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   }
 
   const createInput = {
-    id: opts.id,
+    id: specId,
     title,
     mode: mode as ValidMode,
     riskTier: riskTier as 1 | 2 | 3,
@@ -504,7 +513,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     const missingFields = semanticFieldsFromPlanDiagnostics(plan.value.diagnostics);
     const fieldExamples = semanticFieldExamples(missingFields);
     const command = createCommandPreview({
-      id: opts.id,
+      id: specId,
       title,
       mode: mode as ValidMode,
       riskTier: riskTier as 1 | 2 | 3,
