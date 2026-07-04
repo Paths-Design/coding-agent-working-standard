@@ -2,10 +2,11 @@ id: UX-SPECS-CLOSE-NOTE-ALIAS-001
 title: 'Add specs close note alias'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: specs-close-note-alias
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge specs-close-note-alias at 9c6bf4cfb1a0326a7718592dffb00cbed6c99301'
 created_at: '2026-07-04T19:22:18.578Z'
-updated_at: '2026-07-04T19:22:18.578Z'
+updated_at: '2026-07-04T19:25:17.043Z'
 blast_radius:
   modules:
     - 'packages/caws-cli specs close command'
