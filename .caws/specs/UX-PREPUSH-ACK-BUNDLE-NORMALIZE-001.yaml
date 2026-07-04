@@ -2,10 +2,11 @@ id: UX-PREPUSH-ACK-BUNDLE-NORMALIZE-001
 title: 'Normalize prepush ack bundles'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: prepush-ack-bundle-normalize
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge prepush-ack-bundle-normalize at 28d4eacf0f4235050a33bb15238d45a242fd75c7'
 created_at: '2026-07-04T19:17:27.061Z'
-updated_at: '2026-07-04T19:17:27.061Z'
+updated_at: '2026-07-04T19:20:11.864Z'
 blast_radius:
   modules:
     - 'packages/caws-cli argv entrypoint normalization'
