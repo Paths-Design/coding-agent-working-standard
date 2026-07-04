@@ -10,28 +10,26 @@ store, and a thin shell. It replaces v10.x.
 
 ## What v11 ships
 
-### Governed core (v11.0)
+### Governed core and current lifecycle
 
 | Command | What it does |
 |---|---|
-| `caws init` | Bootstrap the canonical `.caws/` project state. Idempotent. Refuses to overwrite legacy single-spec layout. |
+| `caws init` | Bootstrap the canonical `.caws/` project state. Idempotent. Refuses to overwrite legacy single-spec layout. `--agent-surface` installs hook packs for supported agent harnesses. |
 | `caws doctor` | Drift detection over `.caws/` state. Exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure). |
 | `caws status` | Read-only dashboard: project, current context, claim, doctor findings. Always exits 0; never mutates governance state. |
-| `caws scope show <path>` | Explain the scope decision for `<path>`. Always exits 0. |
-| `caws scope check <path>` | Enforce the scope decision for `<path>`. Exits 0 on admit, 1 on refuse. |
+| `caws scope show / check / contention` | Explain scope, enforce scope, or report cross-worktree path contention. |
 | `caws claim [--takeover]` | Surface or take ownership of the current worktree. Writes a `prior_owners` audit on takeover. |
 | `caws gates run --spec <id>` | Run quality gates against current changes. Policy decides block/warn/skip. Appends one `gate_evaluated` event per policy-declared gate. |
 | `caws evidence record --type <kind> --spec <id> --data <json>` | Append a typed evidence event (`test`/`gate`/`ac`) to `.caws/events.jsonl`. |
+| `caws events migrate / rotate / verify-archive` | Maintenance for the hash-chained `.caws/events.jsonl`. |
 | `caws waiver create/list/show/revoke` | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. |
+| `caws specs create / list / show / recover / retire-draft / activate / amend-scope / close / archive / prune-archive / migrate / validate` | Manage the per-spec lifecycle in `.caws/specs/`. Batch archive supports `--status closed`, `--include`, `--exclude`, and `--apply`. |
+| `caws worktree create / list / bind / destroy / merge / migrate-registry / repair-sparse / repair` | Worktree lifecycle on the vNext substrate. Canonical path for parallel agent work. |
+| `caws agents register / heartbeat / stop / list / show / prune` | Agent-liveness substrate in `.caws/leases/`; operational cache only. |
+| `caws message send / poll` | Directed inter-agent messages over `.caws/messages.jsonl`; not authority. |
+| `caws prepush` | Governed pre-push range classifier. Diagnose/decide only; does not run `git push`. |
 
-### Lifecycle (v11)
-
-| Command | What it does |
-|---|---|
-| `caws worktree create/list/bind/destroy/merge` | Worktree lifecycle on the vNext substrate. Canonical path for parallel agent work. |
-| `caws specs` | vNext spec lifecycle. |
-
-Run `caws <group> --help` for full options.
+Run `caws <group> --help` for live options. The repository also ships a generated exhaustive reference at `docs/command-reference.md`, rendered from the same `COMMAND_SURFACE_METADATA` used by CLI help.
 
 ## Posture
 
@@ -47,9 +45,11 @@ replacement is planned in any current milestone): `scaffold`, `validate`,
 `test-analysis`, legacy `hooks` install (hook packs now install through
 `caws init --agent-surface <name>`).
 
-The v11 line includes the `caws agents list/show` liveness substrate. Still
-planned for v11.2: bridge-claim authority such as `caws claim --spec
-<id>`, plus broader worktree reconciliation surfaces.
+The v11 line includes the `caws agents` liveness substrate and the
+`caws message send/poll` directed message channel. Messages are not
+authority; verify any claim in a message against repo/runtime state.
+Still planned for a later multi-agent authority line: bridge-claim
+authority such as `caws claim --spec <id>`.
 
 Explicitly deferred to v11.3+: `caws session` and `caws parallel`. The
 `caws worktree create` loop pattern replaces `parallel` for multi-agent
@@ -61,10 +61,10 @@ the complete doctrine, command surface, and architectural invariants.
 ## Installation
 
 ```bash
-npm install -g @paths.design/caws-cli@^11.5.0
+npm install -g @paths.design/caws-cli@^11.6.0
 ```
 
-The package depends on `@paths.design/caws-kernel@^1.0.0` (the pure
+The package depends on `@paths.design/caws-kernel@^1.4.0` (the pure
 governance primitives). Both are published independently; the kernel
 is published first and the CLI second.
 
