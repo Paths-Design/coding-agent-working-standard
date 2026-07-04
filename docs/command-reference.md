@@ -504,11 +504,11 @@ Archive one closed spec, or batch-archive closed specs with --status closed. Bat
 
 ### `caws specs prune-archive`
 
-Compatibility no-op. Archived spec bodies under .caws/specs/.archive/ are canonical again and are not pruned by CAWS.
+Compatibility no-op. Archived spec bodies under .caws/specs/.archive/ are canonical again and are not pruned by CAWS. To archive closed specs, use caws specs archive --status closed; to bring an archived spec back, use caws specs restore or caws specs recover.
 
 **Options:**
 
-- `--apply` — Accepted for compatibility; no files are pruned.
+- `--apply` — Accepted for compatibility; no files are pruned. Use caws specs archive --status closed --apply to archive closed specs.
 - `--data` — Show structured data block on diagnostics
 
 ### `caws specs migrate`

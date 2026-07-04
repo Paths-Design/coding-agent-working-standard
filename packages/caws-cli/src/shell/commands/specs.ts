@@ -1730,6 +1730,9 @@ export function runSpecsPruneArchiveCommand(opts: SpecsPruneArchiveOptions): num
   void opts.apply;
   void ctx;
   out('caws specs prune-archive: no-op. Archived spec bodies under .caws/specs/.archive/ are canonical again and are not pruned by CAWS.');
+  out('  To archive closed specs: caws specs archive --status closed');
+  out('  To restore an archived spec: caws specs restore <id> --as draft');
+  out('  To recover the archived body: caws specs recover <id> --out <path>');
   return 0;
 }
 

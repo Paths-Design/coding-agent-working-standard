@@ -182,5 +182,8 @@ describe('archiveSpec move semantics', () => {
     expect(code).toBe(0);
     expect(fs.readFileSync(toPath, 'utf8')).toBe('canonical archive body\n');
     expect(lines.join('\n')).toContain('no-op');
+    expect(lines.join('\n')).toContain('caws specs archive --status closed');
+    expect(lines.join('\n')).toContain('caws specs restore <id> --as draft');
+    expect(lines.join('\n')).toContain('caws specs recover <id> --out <path>');
   });
 });
