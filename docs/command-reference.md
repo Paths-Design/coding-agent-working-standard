@@ -92,6 +92,17 @@ Enforce the scope decision for <path>; exits 0 on admit, 1 otherwise. --json emi
 - `--data` — Show structured data block
 - `--json` — Emit the scope decision and remediation guidance as a single-line JSON contract
 
+### `caws scope plan`
+
+Evaluate multiple paths in one read-only run and group remediation commands. Always exits 0 after a successful plan, even when planned decisions include refusals.
+
+**Options:**
+
+- `--path <path>` (repeatable, default: `[]`) — Path to evaluate; repeat for multiple paths
+- `--paths-file <file>` — Read newline-delimited paths from a file. Blank lines and # comments are ignored.
+- `--json` — Emit per-path decisions, counts, and grouped remediation commands as JSON
+- `--data` — Show structured data block on diagnostics
+
 ### `caws scope contention <path>`
 
 Report which other active worktrees (same base branch) have a bound spec whose scope.in claims <path>; always exits 0

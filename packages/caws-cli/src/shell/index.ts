@@ -57,11 +57,19 @@ export type { RenderDecisionOptions } from './render/decision';
 export { runDoctorCommand } from './commands/doctor';
 export type { DoctorCommandOptions } from './commands/doctor';
 
-export { runScopeCommand, runScopeContentionCommand } from './commands/scope';
+export {
+  groupScopePlanRemediations,
+  runScopeCommand,
+  runScopeContentionCommand,
+  runScopePlanCommand,
+} from './commands/scope';
 export type {
   ScopeCommandOptions,
   ScopeMode,
   ScopeContentionOptions,
+  ScopePlanOptions,
+  ScopePlanPathResult,
+  ScopePlanRemediationGroup,
 } from './commands/scope';
 
 export {

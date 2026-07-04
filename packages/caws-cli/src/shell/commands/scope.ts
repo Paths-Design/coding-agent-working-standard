@@ -21,7 +21,7 @@
 // the command only renders and picks the exit.
 
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import * as nodePath from 'node:path';
 
 import {
@@ -34,7 +34,13 @@ import {
 
 import { composeStoreSnapshot, resolveRepoRoot } from '../../store';
 import { resolveBinding } from '../binding/resolve-binding';
-import { renderDecision, renderDecisionJson } from '../render/decision';
+import {
+  buildScopeDecisionJson,
+  renderDecision,
+  renderDecisionJson,
+  type ScopeDecisionJson,
+  type ScopeRemediationCommand,
+} from '../render/decision';
 import { renderDiagnostics } from '../render/diagnostic';
 
 export type ScopeMode = 'show' | 'check';
@@ -48,8 +54,8 @@ export interface ScopeCommandOptions {
   readonly showData?: boolean;
   /**
    * Emit the stable machine-readable JSON contract (one line) instead of the
-   * human render. Only meaningful on `show` (CAWS-SCOPE-SHOW-JSON-CONTRACT-001);
-   * the hook-facing consumer is scope-guard.sh. Exit codes are unchanged.
+   * human render. `show` and `check` share the contract; check preserves
+   * enforcement exit codes.
    */
   readonly json?: boolean;
 }
@@ -219,6 +225,265 @@ export function runScopeCommand(opts: ScopeCommandOptions): number {
   }
   // mode === 'check'
   return decision.kind === 'admit' ? 0 : 1;
+}
+
+// ---------------------------------------------------------------------------
+// caws scope plan  (batch, read-only)
+// ---------------------------------------------------------------------------
+
+export interface ScopePlanOptions {
+  readonly paths?: readonly string[];
+  readonly pathsFile?: string;
+  readonly cwd?: string;
+  readonly out?: (line: string) => void;
+  readonly err?: (line: string) => void;
+  readonly showData?: boolean;
+  readonly json?: boolean;
+}
+
+export interface ScopePlanPathResult extends ScopeDecisionJson {
+  readonly exit_code: 0 | 1;
+}
+
+export interface ScopePlanRemediationGroup {
+  readonly command: string;
+  readonly description: string;
+  readonly mutates: boolean;
+  readonly paths: readonly string[];
+}
+
+function collectPlanPaths(
+  opts: ScopePlanOptions,
+  cwd: string,
+  err: (line: string) => void
+): string[] | null {
+  const paths: string[] = [];
+  for (const p of opts.paths ?? []) {
+    const trimmed = p.trim();
+    if (trimmed.length > 0) paths.push(trimmed);
+  }
+  if (opts.pathsFile !== undefined) {
+    const pathsFile = nodePath.isAbsolute(opts.pathsFile)
+      ? opts.pathsFile
+      : nodePath.join(cwd, opts.pathsFile);
+    let body: string;
+    try {
+      body = readFileSync(pathsFile, 'utf8');
+    } catch (e) {
+      err(`caws scope plan: failed to read --paths-file ${opts.pathsFile}: ${(e as Error).message}`);
+      return null;
+    }
+    for (const line of body.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (trimmed.length === 0 || trimmed.startsWith('#')) continue;
+      paths.push(trimmed);
+    }
+  }
+  return [...new Set(paths)];
+}
+
+function shellQuote(value: string): string {
+  if (/^[A-Za-z0-9_./:@%+=,-]+$/.test(value)) return value;
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function groupedCommandForPath(
+  command: ScopeRemediationCommand,
+  path: string
+): { key: string; command: string } {
+  const addMatch = command.command.match(/^caws specs amend-scope ([^ ]+) --add (.+)$/);
+  if (addMatch !== null) {
+    const specId = addMatch[1]!;
+    return {
+      key: `specs-amend-scope:${specId}:--add`,
+      command: `caws specs amend-scope ${specId} --add ${shellQuote(path)}`,
+    };
+  }
+  const addSupportMatch = command.command.match(/^caws specs amend-scope ([^ ]+) --add-support (.+)$/);
+  if (addSupportMatch !== null) {
+    const specId = addSupportMatch[1]!;
+    return {
+      key: `specs-amend-scope:${specId}:--add-support`,
+      command: `caws specs amend-scope ${specId} --add-support ${shellQuote(path)}`,
+    };
+  }
+  return { key: command.command, command: command.command };
+}
+
+export function groupScopePlanRemediations(
+  results: readonly ScopePlanPathResult[]
+): ScopePlanRemediationGroup[] {
+  const groups = new Map<
+    string,
+    {
+      command: ScopeRemediationCommand;
+      commandParts: string[];
+      paths: string[];
+    }
+  >();
+  for (const result of results) {
+    for (const command of result.remediation?.commands ?? []) {
+      const path = result.normalizedPath ?? result.path;
+      const grouped = groupedCommandForPath(command, path);
+      const existing = groups.get(grouped.key);
+      if (existing === undefined) {
+        groups.set(grouped.key, {
+          command,
+          commandParts: [grouped.command],
+          paths: [path],
+        });
+      } else {
+        existing.commandParts.push(grouped.command);
+        existing.paths.push(path);
+      }
+    }
+  }
+  return [...groups.values()].map((group) => {
+    let command = group.commandParts[0]!;
+    if (group.commandParts.length > 1) {
+      const addMatch = command.match(/^caws specs amend-scope ([^ ]+) --add /);
+      const addSupportMatch = command.match(/^caws specs amend-scope ([^ ]+) --add-support /);
+      if (addMatch !== null) {
+        command = `caws specs amend-scope ${addMatch[1]!} ${group.paths
+          .map((p) => `--add ${shellQuote(p)}`)
+          .join(' ')}`;
+      } else if (addSupportMatch !== null) {
+        command = `caws specs amend-scope ${addSupportMatch[1]!} ${group.paths
+          .map((p) => `--add-support ${shellQuote(p)}`)
+          .join(' ')}`;
+      }
+    }
+    return {
+      command,
+      description: group.command.description,
+      mutates: group.command.mutates,
+      paths: group.paths,
+    };
+  });
+}
+
+function ambiguousPlanPayload(targetPath: string, claimants: readonly {
+  readonly specId: string;
+  readonly worktreeName: string;
+}[]): ScopePlanPathResult {
+  return {
+    decision: 'no_authority',
+    rule: 'scope.no_authority.ambiguous_binding',
+    path: targetPath,
+    bindingState: 'unbound',
+    mode: 'union',
+    ambiguousClaimants: claimants.map((c) => c.specId),
+    message: `Ambiguous binding: ${claimants.length} active bound specs claim "${targetPath}" via scope.in; CAWS will not guess which governs.`,
+    remediation: {
+      summary: 'Multiple active bound specs claim this path; CAWS will not choose an owner.',
+      commands: claimants.map((c) => ({
+        command: `caws specs show ${c.specId}`,
+        description: `Inspect claimant ${c.specId} bound to worktree ${c.worktreeName}.`,
+        mutates: false,
+      })),
+      notes: [
+        'Route the edit through exactly one owning worktree, or narrow one spec with caws specs amend-scope.',
+      ],
+    },
+    exit_code: 1,
+  };
+}
+
+export function runScopePlanCommand(opts: ScopePlanOptions): number {
+  const cwd = opts.cwd ?? process.cwd();
+  const out = opts.out ?? ((s: string) => process.stdout.write(s + '\n'));
+  const err = opts.err ?? ((s: string) => process.stderr.write(s + '\n'));
+  const showData = opts.showData === true;
+  const asJson = opts.json === true;
+
+  const paths = collectPlanPaths(opts, cwd, err);
+  if (paths === null) return 1;
+  if (paths.length === 0) {
+    err('caws scope plan: provide at least one --path <path> or --paths-file <file>.');
+    return 1;
+  }
+
+  const repoRootResult = resolveRepoRoot(cwd);
+  if (!repoRootResult.ok) {
+    err('caws scope plan: failed to resolve repo root.');
+    err(renderDiagnostics(repoRootResult.errors, { showData }));
+    return 2;
+  }
+  const { repoRoot, cawsDir } = repoRootResult.value;
+
+  let snapshot: ReturnType<typeof composeStoreSnapshot>;
+  try {
+    snapshot = composeStoreSnapshot({ repoRoot, cawsDir });
+  } catch (e) {
+    err(`caws scope plan: store composition failed: ${(e as Error).message}`);
+    return 2;
+  }
+  const policy: Policy | undefined = snapshot.policy;
+  if (policy === undefined) {
+    err('caws scope plan: no policy.yaml loaded. Run `caws doctor` for details.');
+    if (snapshot.policyErrors.length > 0) {
+      err(renderDiagnostics(snapshot.policyErrors, { showData }));
+    }
+    return 2;
+  }
+
+  const results: ScopePlanPathResult[] = [];
+  for (const p of paths) {
+    const bound = resolveBinding({
+      repoRoot,
+      cwd,
+      targetPath: p,
+      registry: snapshot.worktrees,
+      specs: snapshot.specs,
+    });
+    if (bound.ambiguous !== undefined) {
+      results.push(ambiguousPlanPayload(bound.ambiguous.targetPath, bound.ambiguous.claimants));
+      continue;
+    }
+    const decision = evaluatePath(p, bound.binding, policy);
+    results.push({
+      ...buildScopeDecisionJson(decision, bound),
+      exit_code: decision.kind === 'admit' ? 0 : 1,
+    });
+  }
+
+  const counts = {
+    admit: results.filter((r) => r.decision === 'admit').length,
+    reject: results.filter((r) => r.decision === 'reject').length,
+    no_authority: results.filter((r) => r.decision === 'no_authority').length,
+    invalid_path: results.filter((r) => r.decision === 'invalid_path').length,
+  };
+  const remediationGroups = groupScopePlanRemediations(results);
+
+  if (asJson) {
+    out(JSON.stringify({
+      ok: true,
+      read_only: true,
+      count: results.length,
+      counts,
+      paths: results,
+      remediation_groups: remediationGroups,
+    }, null, 2));
+    return 0;
+  }
+
+  out(`caws scope plan: ${results.length} path(s) evaluated (read-only)`);
+  out(
+    `  admit=${counts.admit} reject=${counts.reject} no_authority=${counts.no_authority} invalid_path=${counts.invalid_path}`
+  );
+  out('  decisions:');
+  for (const result of results) {
+    out(`    - ${result.path}: ${result.decision} ${result.rule}`);
+  }
+  if (remediationGroups.length > 0) {
+    out('  remediation groups:');
+    for (const group of remediationGroups) {
+      out(`    - ${group.command}`);
+      out(`      paths: ${group.paths.join(', ')}`);
+      out(`      ${group.description}`);
+    }
+  }
+  return 0;
 }
 
 // ---------------------------------------------------------------------------

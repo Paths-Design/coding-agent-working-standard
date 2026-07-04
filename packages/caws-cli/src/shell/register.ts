@@ -65,6 +65,7 @@ import {
   runPrepushCommand,
   runScopeCommand,
   runScopeContentionCommand,
+  runScopePlanCommand,
   runSpecsActivateCommand,
   runSpecsAmendScopeCommand,
   runSpecsArchiveCommand,
@@ -343,6 +344,17 @@ export function registerShellCommands(
         mode: 'check',
         showData: opts.data === true,
         json: opts.json === true,
+      });
+      exit(code);
+    });
+
+  defineLeaf(scopeCmd, leafMeta(SCOPE_COMMAND_META, 'plan'))
+    .action((opts: { path?: string[]; pathsFile?: string; json?: boolean; data?: boolean }) => {
+      const code = runScopePlanCommand({
+        paths: opts.path ?? [],
+        ...(opts.pathsFile !== undefined ? { pathsFile: opts.pathsFile } : {}),
+        json: opts.json === true,
+        showData: opts.data === true,
       });
       exit(code);
     });
