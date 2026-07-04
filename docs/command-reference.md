@@ -520,7 +520,7 @@ v10→v11 spec YAML migrator (CAWS-MIGRATE-V10-SPECS-001). Default is dry-run; -
 - `--from <version>` (**required**) — Source schema version (only v10 is supported in v11.2)
 - `--apply` — Write migrated YAMLs to disk (default: dry-run)
 - `--partial` — Allow apply to proceed even when some specs are refused (only meaningful with --apply)
-- `--lifecycle-mapping <path>` — Path to a JSON file mapping spec ids to v11 lifecycle values, for v10 lifecycles outside the v11 enum (superseded/proven/frozen). Operator-owned; the transformer never auto-defaults.
+- `--lifecycle-mapping <path>` — Path to a JSON file mapping spec ids to v11 lifecycle values, shaped like {"SPEC-1":{"lifecycle_state":"closed","resolution":"implemented"}}. Used for v10 lifecycles outside the v11 enum (superseded/proven/frozen). Operator-owned; the transformer never auto-defaults.
 - `--json` — Emit machine-readable JSON output instead of human text
 - `--data` — Show structured data block on diagnostics
 

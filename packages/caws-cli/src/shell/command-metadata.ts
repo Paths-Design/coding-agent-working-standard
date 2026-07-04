@@ -444,7 +444,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         {
           flag: '--lifecycle-mapping <path>',
           description:
-            'Path to a JSON file mapping spec ids to v11 lifecycle values, for v10 lifecycles outside the v11 enum (superseded/proven/frozen). Operator-owned; the transformer never auto-defaults.',
+            'Path to a JSON file mapping spec ids to v11 lifecycle values, shaped like {"SPEC-1":{"lifecycle_state":"closed","resolution":"implemented"}}. Used for v10 lifecycles outside the v11 enum (superseded/proven/frozen). Operator-owned; the transformer never auto-defaults.',
         },
         { flag: '--json', description: 'Emit machine-readable JSON output instead of human text' },
         DATA_OPTION,
