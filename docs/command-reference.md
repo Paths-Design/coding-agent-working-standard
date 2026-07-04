@@ -465,14 +465,15 @@ Repair the unambiguous worktree/spec half-states the doctor surfaces: prune a gh
 
 ### `caws worktree prune`
 
-Print a read-only worktree cleanup plan from doctor evidence. Classifies ghost registry entries, dead spec bindings, closed-spec residue, event orphans, foreign physical worktrees, stale-owner lease drift, and ambiguous/refused classes. Does not mutate worktrees.json, specs, events, or git worktree directories.
+Print a worktree cleanup plan from doctor evidence. Dry-run by default. With --apply, mutates only apply-capable classes (ghost-registry, dead-binding, closed-spec-residue) through the same writer paths as caws worktree repair; refused classes remain refused.
 
 **Options:**
 
 - `--state <classes>` — Comma-separated state-class filter (for example: ghost-registry,closed-spec-residue,event-orphan-refused).
 - `--include <subjects>` — Comma-separated subjects to include (worktree names, spec ids, or paths).
 - `--exclude <subjects>` — Comma-separated subjects to exclude (worktree names, spec ids, or paths).
-- `--json` — Emit the read-only plan as JSON.
+- `--apply` — Apply only safe cleanup classes (ghost-registry, dead-binding, closed-spec-residue). Refused classes still do not mutate.
+- `--json` — Emit the plan or apply outcome as JSON.
 - `--data` — Show structured data block on diagnostics
 
 ## `caws agents`

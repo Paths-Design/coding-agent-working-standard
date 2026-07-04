@@ -77,6 +77,10 @@ function writeRegistry(cawsDir, entries) {
   fs.writeFileSync(path.join(cawsDir, 'worktrees.json'), JSON.stringify(entries, null, 2) + '\n');
 }
 
+function makeWorktreeDir(cawsDir, name) {
+  fs.mkdirSync(path.join(cawsDir, 'worktrees', name), { recursive: true });
+}
+
 function readBytes(p) {
   return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null;
 }
@@ -105,6 +109,10 @@ function expectUnchanged(before, after) {
   expect(after.events).toBe(before.events);
   expect(after.eventCount).toBe(before.eventCount);
   expect(after.specs).toEqual(before.specs);
+}
+
+function eventsOfType(cawsDir, type) {
+  return readEventsRaw(cawsDir).filter((e) => e.event === type);
 }
 
 function runPrune(repoRoot, opts = {}) {
@@ -154,11 +162,57 @@ describe('caws worktree prune read-only cleanup plan', () => {
     expect(result.code).toBe(0);
     const payload = JSON.parse(result.out);
     expect(payload.read_only).toBe(true);
+    expect(payload.dry_run).toBe(true);
     expect(payload.candidates).toHaveLength(1);
     expect(payload.candidates[0].subject).toBe('wt-ghost');
     expect(payload.candidates[0].state_class).toBe('ghost-registry');
     expect(payload.counts_by_state).toEqual({ 'ghost-registry': 1 });
     expectUnchanged(before, snapshotState(caws, ['GHOST-BIND-001']));
+  });
+
+  test('apply executes only repairable classes and records expected audit events', () => {
+    const { repoRoot, caws } = cleanupRepo();
+    const result = runPrune(repoRoot, { apply: true, json: true });
+
+    expect(result.code).toBe(0);
+    const payload = JSON.parse(result.out);
+    expect(payload.read_only).toBe(false);
+    expect(payload.dry_run).toBe(false);
+    expect(payload.counts).toEqual({ applied: 2, refused: 0, failed: 0 });
+    expect(payload.outcomes.map((item) => item.action)).toEqual(['applied', 'applied']);
+
+    const registry = JSON.parse(readBytes(path.join(caws, 'worktrees.json')));
+    expect(registry['wt-ghost']).toBeUndefined();
+    expect(readBytes(path.join(caws, 'specs', 'GHOST-BIND-001.yaml'))).not.toMatch(/worktree: wt-dead/);
+    expect(eventsOfType(caws, 'worktree_pruned')).toHaveLength(1);
+    expect(eventsOfType(caws, 'spec_binding_cleared')).toHaveLength(1);
+  });
+
+  test('apply refuses non-apply classes without mutating state', () => {
+    const repoRoot = mkRepo('caws-wt-prune-refuse-');
+    const caws = setupCaws(repoRoot);
+    writeRegistry(caws, {
+      'wt-owned': {
+        branch: 'wt-owned',
+        baseBranch: 'main',
+        owner: { session_id: 'foreign-session', platform: 'test' },
+      },
+    });
+    makeWorktreeDir(caws, 'wt-owned');
+    const before = snapshotState(caws, []);
+
+    const result = runPrune(repoRoot, {
+      state: ['owner-lease-missing-refused'],
+      apply: true,
+      json: true,
+    });
+
+    expect(result.code).toBe(1);
+    const payload = JSON.parse(result.out);
+    expect(payload.counts).toEqual({ applied: 0, refused: 1, failed: 0 });
+    expect(payload.outcomes[0].action).toBe('refused');
+    expect(payload.outcomes[0].state_class).toBe('owner-lease-missing-refused');
+    expectUnchanged(before, snapshotState(caws, []));
   });
 
   test('unknown state filters refuse before mutation', () => {

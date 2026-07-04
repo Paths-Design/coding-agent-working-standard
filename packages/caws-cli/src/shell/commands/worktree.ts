@@ -922,8 +922,29 @@ export interface WorktreePruneOptions extends BaseCommandOptions {
   readonly state?: readonly string[];
   readonly include?: readonly string[];
   readonly exclude?: readonly string[];
+  readonly apply?: boolean;
   readonly json?: boolean;
 }
+
+type WorktreePruneApplyOutcome =
+  | {
+      readonly subject: string;
+      readonly state_class: WorktreePruneStateClass;
+      readonly action: 'applied';
+      readonly mutation: string;
+    }
+  | {
+      readonly subject: string;
+      readonly state_class: WorktreePruneStateClass;
+      readonly action: 'refused';
+      readonly reason: string;
+    }
+  | {
+      readonly subject: string;
+      readonly state_class: WorktreePruneStateClass;
+      readonly action: 'failed';
+      readonly reason: string;
+    };
 
 /** What the matrix decided for a single doctor finding. */
 type RepairDecision =
@@ -1273,8 +1294,37 @@ function renderWorktreePrunePlan(
   }
 }
 
+function renderWorktreePruneApply(
+  outcomes: readonly WorktreePruneApplyOutcome[],
+  out: (line: string) => void
+): void {
+  const applied = outcomes.filter((item) => item.action === 'applied').length;
+  const refused = outcomes.filter((item) => item.action === 'refused').length;
+  const failed = outcomes.filter((item) => item.action === 'failed').length;
+  out(`caws worktree prune --apply: ${applied} applied, ${refused} refused, ${failed} failed`);
+  for (const item of outcomes) {
+    if (item.action === 'applied') {
+      out(`- APPLIED ${item.state_class} ${item.subject}: ${item.mutation}`);
+    } else {
+      out(`- ${item.action.toUpperCase()} ${item.state_class} ${item.subject}: ${item.reason}`);
+    }
+  }
+}
+
+function pruneApplyCounts(outcomes: readonly WorktreePruneApplyOutcome[]): Record<string, number> {
+  return {
+    applied: outcomes.filter((item) => item.action === 'applied').length,
+    refused: outcomes.filter((item) => item.action === 'refused').length,
+    failed: outcomes.filter((item) => item.action === 'failed').length,
+  };
+}
+
+function firstErrorMessage(errors: readonly { readonly message: string }[]): string {
+  return errors.map((e) => e.message).join('; ');
+}
+
 export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
-  const { cwd, nowFn, out, err, showData } = setupIO(opts);
+  const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
   const ctx = resolveCawsCtx(cwd, err, showData, 'prune');
   if (ctx === null) return 2;
 
@@ -1301,9 +1351,113 @@ export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
     return 1;
   }
 
+  if (opts.apply === true) {
+    const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'prune');
+    if (id === null) return 2;
+    const sessionCandidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env });
+    const outcomes: WorktreePruneApplyOutcome[] = [];
+
+    for (const item of plan.items) {
+      if (item.state_class === 'ghost-registry') {
+        const result = pruneWorktree(ctx.cawsDir, {
+          name: item.subject,
+          session: id.session,
+          sessionCandidates,
+          actor: id.actor,
+          reason: 'caws worktree prune --apply: ghost-registry cleanup.',
+          now: nowFn,
+        });
+        if (!isOk(result)) {
+          outcomes.push({
+            subject: item.subject,
+            state_class: item.state_class,
+            action: 'failed',
+            reason: firstErrorMessage(result.errors),
+          });
+        } else if (result.value.kind === 'partial_failure_recovered') {
+          outcomes.push({
+            subject: item.subject,
+            state_class: item.state_class,
+            action: 'failed',
+            reason: 'partial failure recovered; no state change',
+          });
+        } else {
+          outcomes.push({
+            subject: item.subject,
+            state_class: item.state_class,
+            action: 'applied',
+            mutation: 'removed registry entry and appended worktree_pruned',
+          });
+        }
+        continue;
+      }
+
+      if (item.state_class === 'dead-binding' || item.state_class === 'closed-spec-residue') {
+        const worktreeName =
+          typeof item.details.worktree_name === 'string' && item.details.worktree_name.length > 0
+            ? item.details.worktree_name
+            : '(unknown)';
+        const hClass =
+          item.state_class === 'closed-spec-residue'
+            ? 'dormant_spec_binding'
+            : 'ghost_spec_binding';
+        const result = clearSpecBinding(ctx.cawsDir, {
+          id: item.subject,
+          clearedWorktreeName: worktreeName,
+          hClass,
+          reason: `caws worktree prune --apply: ${item.state_class} cleanup.`,
+          actor: id.actor,
+          now: nowFn,
+        });
+        if (!isOk(result)) {
+          outcomes.push({
+            subject: item.subject,
+            state_class: item.state_class,
+            action: 'failed',
+            reason: firstErrorMessage(result.errors),
+          });
+        } else {
+          outcomes.push({
+            subject: item.subject,
+            state_class: item.state_class,
+            action: 'applied',
+            mutation: 'cleared spec worktree binding and appended spec_binding_cleared',
+          });
+        }
+        continue;
+      }
+
+      outcomes.push({
+        subject: item.subject,
+        state_class: item.state_class,
+        action: 'refused',
+        reason: item.refusal_reason ?? 'state class is not apply-capable',
+      });
+    }
+
+    if (opts.json === true) {
+      out(JSON.stringify({
+        ok: !outcomes.some((item) => item.action !== 'applied'),
+        dry_run: false,
+        read_only: false,
+        outcomes,
+        counts: pruneApplyCounts(outcomes),
+        filters: {
+          state: opts.state ?? [],
+          include: opts.include ?? [],
+          exclude: opts.exclude ?? [],
+        },
+      }, null, 2));
+    } else {
+      renderWorktreePruneApply(outcomes, out);
+    }
+    return outcomes.some((item) => item.action !== 'applied') ? 1 : 0;
+  }
+
   if (opts.json === true) {
     out(JSON.stringify({
       ok: true,
+      dry_run: true,
       read_only: true,
       candidates: plan.items,
       counts_by_state: countsByState(plan.items),
