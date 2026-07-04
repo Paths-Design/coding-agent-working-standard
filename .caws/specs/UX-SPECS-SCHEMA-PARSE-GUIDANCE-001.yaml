@@ -3,6 +3,7 @@ title: 'Guide spec schema parse failures'
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: specs-schema-parse-guidance
 created_at: '2026-07-04T17:30:02.441Z'
 updated_at: '2026-07-04T17:30:02.441Z'
 blast_radius:
