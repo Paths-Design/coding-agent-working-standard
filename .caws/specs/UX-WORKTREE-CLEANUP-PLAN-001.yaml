@@ -2,10 +2,11 @@ id: UX-WORKTREE-CLEANUP-PLAN-001
 title: 'Add worktree cleanup plan surface'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
-worktree: worktree-cleanup-plan
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge worktree-cleanup-plan at d246bc9c5aa5eabc5c9c3a328373122592f0acc6'
 created_at: '2026-07-04T04:13:45.838Z'
-updated_at: '2026-07-04T04:19:35.738Z'
+updated_at: '2026-07-04T04:21:47.642Z'
 blast_radius:
   modules:
     - 'packages/caws-cli worktree command surface'
