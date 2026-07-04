@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: worktree-untrack
 created_at: '2026-07-04T04:32:35.206Z'
-updated_at: '2026-07-04T04:35:41.777Z'
+updated_at: '2026-07-04T04:38:47.334Z'
 blast_radius:
   modules:
     - packages/caws-cli
@@ -23,6 +23,8 @@ scope:
     - docs/command-reference.md
     - docs/architecture/cli-ux-job-model-audit.md
     - packages/caws-cli/src/shell/index.ts
+    - packages/caws-kernel/src
+    - packages/caws-types/src
   out: []
 invariants:
   - 'worktree untrack never deletes, creates, checks out, or modifies the physical git worktree directory.'
