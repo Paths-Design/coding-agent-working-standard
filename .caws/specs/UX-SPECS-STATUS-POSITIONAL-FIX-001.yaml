@@ -7,7 +7,8 @@ created_at: '2026-07-04T13:41:01.919Z'
 updated_at: '2026-07-04T13:41:01.919Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/specs-command-parser
+    - packages/caws-cli/specs-status-list-tests
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -17,12 +18,17 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The specs group-level --status handoff must not consume or shadow the specs list --status leaf option.'
+  - 'Spawned CLI coverage must prove both caws specs --status <state> and caws specs list --status <state> filter lifecycle state from the linked dist entrypoint.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'A repo with active and closed specs.'
+    when: 'An agent runs caws specs list --status active from the dist CLI.'
+    then: 'Only active specs are listed; closed specs are excluded.'
+  - id: A2
+    given: 'The same repo.'
+    when: 'An agent runs caws specs --status closed from the dist CLI.'
+    then: 'The group-level compatibility path still lists only closed specs.'
 non_functional: {}
 contracts:
   - name: 'specs-status-positional'
