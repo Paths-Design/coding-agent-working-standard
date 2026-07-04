@@ -120,11 +120,33 @@ By top-level command:
 | `events` | 8 | 0 |
 | `waiver` | 4 | 0 |
 
+### Post-Handoff Authority Resample
+
+After the active-spec handoff and JSON repair-field slices, I resampled the
+same three transcript locations for residual `scope.no_authority` / `NO
+AUTHORITY` evidence. The logs still contain historical failures, including a
+recent Sterling transcript copied before this build was available, but direct
+linked-dist reproduction from Sterling's canonical checkout now emits the
+enriched authority model instead of the old generic `repair` field.
+
+| Source | Files scanned | Files with scope/authority evidence | Authority markers | Newest relevant evidence |
+|---|---:|---:|---:|---|
+| CAWS `.caws/sessions` | 229 | 67 | 271 | scope command transcripts through 2026-06-26; no newer generic no-authority repair after the handoff slices |
+| CAWS `tmp/` rendered sessions | 854 | 244 | 1,366 | old generic unbound repair text from 2026-05-30 |
+| Sterling `.caws/sessions` | 4,728 | 364 | 649 | stale copied generic unbound repair text from 2026-07-04; current linked-dist reproduction now shows active-spec candidates and `authorityCandidates` JSON |
+
+Current linked binary check: `command -v caws` resolves through
+`packages/caws-cli/dist/index.js`, and from Sterling an unbound `caws scope
+check <path>` now prints active spec candidates, read-only `caws scope show
+<path> --spec <id>` checks, and worktree create/enter handoffs. JSON output
+contains `remediation.authorityCandidates` and omits the stale generic `repair`
+field.
+
 ### Friction Classes
 
 | Friction marker | Count | UX implication |
 |---|---:|---|
-| `no_scope_authority` | 126 | Further fixed: unbound/one-sided refusals print remediation, target-scope-claim admits report JSON/plan handoffs to the owning worktree, and unbound canonical/tracked-worktree contexts now include active-spec authority candidates with read-only `scope --spec` checks plus create/bind/enter commands. Remaining work should resample sessions for any residual authority-context confusion after this guidance. |
+| `no_scope_authority` | 126 | Reconciled against the current linked-dist CLI: residual session transcripts still contain old generic unbound repair text, but direct reproduction in Sterling now shows active-spec authority candidates, read-only `scope --spec` checks, and create/bind/enter worktree handoffs in human and JSON output. |
 | `unknown_or_missing_option` | 91 | Partially fixed for `specs close`, `scope`, `agents prune`, `specs create`, validation-era removed commands, specs status listing, worktree cleanup state filters, and specs archive/prune-archive discoverability: `--closure-notes` is now a supported alias for `--reason`, `scope show/check/plan --spec <id>` supports read-only explicit spec-context evaluation, `agents prune --dead --json` is verified, `specs create --tier <n>` aliases `--risk-tier <n>`, legacy validation diagnostics are pinned, `specs --status <state>` hands off to `specs list --status <state>`, `worktree prune/cleanup-plan --status <classes>` aliases `--state <classes>`, and `specs prune-archive` now hands off to archive/restore/recover workflows. Help/flag discoverability still creates retries where adjacent command shapes are close but not parallel. |
 | `tier_requires_metadata` | 87 | Fixed at the create-plan layer: `specs create --plan` now reports missing semantic fields and emits copy-pasteable YAML examples in human and JSON output. |
 | `danger_latch` | 66 | CAWS hook UX still matters for CLI workflows; blocked shell forms often interrupt otherwise correct CAWS procedures. |
@@ -144,7 +166,7 @@ By top-level command:
 |---|---|---|
 | Bulk archive absence | `caws specs archive --help` showed only `Usage: caws specs archive [options] <id>` while the session counted 1,326 closed specs and then asked whether there was a bulk path. | Fixed by batch archive; copy its selector/dry-run/apply model. |
 | Worktree cleanup residue | `caws worktree destroy: failed... Worktree "..." not found in registry` after merge/closure verification. | Now closed for destroy not-found handoff: the refusal names `caws worktree list`, `caws worktree prune --include <name>`, and `caws worktree cleanup-plan --include <name>` without mutating registry, specs, events, or physical worktrees. |
-| Scope from canonical checkout | `NO AUTHORITY scope.no_authority.unbound ... No spec is bound to this worktree`. | Further closed: unbound refusals now list active spec authority candidates, include read-only `caws scope show <path> --spec <id>` comparisons, and hand off to `worktree create`, `worktree bind`, or `cd .caws/worktrees/<name>` depending on whether the candidate spec is already bound. |
+| Scope from canonical checkout | `NO AUTHORITY scope.no_authority.unbound ... No spec is bound to this worktree`. | Closed and resampled: historical transcripts still contain the old generic repair text, but current linked-dist output lists active spec authority candidates, includes read-only `caws scope show <path> --spec <id>` comparisons, and hands off to `worktree create`, `worktree bind`, or `cd .caws/worktrees/<name>` depending on whether the candidate spec is already bound. |
 | Scope against a named spec | `unknown option '--spec'` when an agent tried `caws scope show <path> --spec <id>` from outside the bound worktree. | Now closed for read-only context: `scope show/check/plan --spec <id>` evaluates against the named spec, reports JSON `mode: spec_context`, and prints that this is not current-checkout write authority. |
 | Draft spec binding | `Spec "..." is in lifecycle_state "draft"; only active specs can be bound to a worktree.` | Now closed for create/bind: the refusal includes `caws specs activate <id>`, explains activation preflight, and does not mutate worktree/spec/event state. |
 | Already-closed close | `Spec "..." is already closed; close is a no-op and no closure metadata was changed.` | Now closed for state-aware refusal: the diagnostic names `caws specs show <id>`, `caws specs archive <id>`, and `caws specs recover <id> --out <path>` without mutating closure metadata. |
@@ -216,13 +238,16 @@ By top-level command:
 | `UX-PARSE-ERROR-SURFACE-RECONCILIATION-001` | Implemented in forty-sixth repair slice | Parse-error surface reconciliation | Confirms the current metadata exposes only two operator-supplied JSON inputs: `evidence record --data <json>` and `specs migrate --lifecycle-mapping <path>`. Both already have schema/example guidance; JSON output flags and internal state parsers are excluded from the parse-risk bucket. Covered by `packages/caws-cli/tests/docs/cli-json-input-surface.test.js`. |
 | `UX-SCOPE-AUTHORITY-CONTEXT-HANDOFF-001` | Implemented in forty-seventh repair slice | Scope no-authority active-spec handoff | Enriches unbound `scope show/check/plan` remediation with active-spec candidates, read-only `scope show --spec` comparisons, and context-specific create/bind/enter commands while preserving decisions and exit codes. Covered by `packages/caws-cli/tests/shell/scope-authority-context-handoff.test.js`, `scope-remediation-guidance.test.js`, and `scope-batch-plan.test.js`. |
 | `UX-SCOPE-AUTHORITY-JSON-REPAIR-FIELD-001` | Implemented in forty-eighth repair slice | Scope no-authority JSON repair alignment | Removes the stale generic `repair` field from JSON no-authority responses whenever richer authority-context remediation is present, matching the human renderer and avoiding contradictory create/bind guidance. Covered by `packages/caws-cli/tests/shell/scope-authority-context-handoff.test.js`. |
+| `UX-NO-SCOPE-AUTHORITY-SESSION-RESAMPLE-001` | Implemented in forty-ninth repair slice | No-scope-authority session resample reconciliation | Resamples CAWS and Sterling session evidence after the handoff slices, verifies the currently linked dist CLI in Sterling emits enriched active-spec remediation, and closes the residual `no_scope_authority` bucket as stale transcript evidence rather than a current CLI gap. Covered by `packages/caws-cli/tests/docs/cli-ux-no-scope-authority-reconciliation.test.js`. |
 
 ## Next Slice
 
-The next implementation slice should resample current CAWS/Sterling sessions
-for residual `no_scope_authority` failures after the active-spec handoff. If
-the remaining examples are stale, close the class as reconciled; if they show a
-new flow, fix that one concrete authority job next.
+The next implementation slice should target the remaining
+`unknown_or_missing_option` bucket. Start by resampling the newest CAWS and
+Sterling session retries for option-name mismatches after the previous
+`--closure-notes`, `--spec`, `--tier`, `--status`, and prune-archive handoff
+fixes; if a current mismatch remains, fix one concrete leaf and pin it in help
+and regression coverage.
 
 ## Findings
 
@@ -406,6 +431,14 @@ new flow, fix that one concrete authority job next.
    existing bound worktree. The JSON and human renderers suppress stale generic
    repair text when this richer remediation exists. The kernel decision and
    scope enforcement exit code are unchanged.
+
+30. **Residual no-authority transcripts are stale against current linked dist.**
+   A post-handoff resample still finds old `scope.no_authority` snippets in
+   CAWS `tmp/` and Sterling session logs, but direct reproduction from Sterling
+   with the linked `packages/caws-cli/dist/index.js` binary now shows the
+   enriched active-spec candidate model and JSON `authorityCandidates`. This
+   closes the `no_scope_authority` friction class as no longer a current CLI
+   gap.
 
 ## Recommendations
 
