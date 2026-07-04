@@ -1,0 +1,35 @@
+id: DOC-CLI-LEAF-COVERAGE-001
+title: 'Reconcile CLI leaf docs with actual command surface'
+risk_tier: 2
+mode: doc
+lifecycle_state: active
+created_at: '2026-07-04T03:14:40.329Z'
+updated_at: '2026-07-04T03:14:40.329Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/api/cli.md'
+    - 'README.md'
+    - 'AGENTS.md'
+    - 'packages/caws-cli/README.md'
+    - 'docs/agents/full-guide.md'
+    - 'docs/architecture/caws-vnext-command-surface.md'
+    - 'packages/caws-cli/tests/docs/cli-api-reference-coverage.test.js'
+    - '.caws/specs/DOC-CLI-LEAF-COVERAGE-001.yaml'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'cli-api-reference-coverage'
+    type: contract-test
+    path: 'packages/caws-cli/tests/docs/cli-api-reference-coverage.test.js'
