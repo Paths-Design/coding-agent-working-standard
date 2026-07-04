@@ -7,7 +7,8 @@ created_at: '2026-07-04T06:18:53.681Z'
 updated_at: '2026-07-04T06:18:53.681Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - '@paths.design/caws-cli specs lifecycle shell/store'
+    - 'CLI command reference and UX audit docs'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -19,11 +20,25 @@ scope:
     - 'docs/command-reference.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Draft cleanup planning is read-only and never writes .caws/specs, .caws/events.jsonl, or worktrees.json.'
+  - 'The plan classifies draft specs with explicit state classes instead of implying every draft is safe to retire.'
+  - 'Selectors must be reviewable and deterministic: older-than, include, exclude, and bound/unbound state are visible in JSON.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a repo with draft specs of different ages and bindings'
+    when: 'an operator runs caws specs prune-drafts with selector flags'
+    then: 'CAWS prints a read-only plan with candidate/refused/skipped classifications and writes no spec files or events'
+  - id: A2
+    given: 'draft and non-draft ids selected by include/exclude flags'
+    when: 'the command runs with --json'
+    then: 'the JSON output includes selector metadata, state class, reason, age, target path, and next safe command for each selected or refused spec'
+  - id: A3
+    given: 'a draft spec with a worktree binding'
+    when: 'the command runs without an explicit bound-draft selector'
+    then: 'the plan refuses that draft for automatic retirement and explains that the binding must be resolved first'
+  - id: A4
+    given: 'CLI help and docs are generated from metadata'
+    when: 'the project builds and docs/tests run'
+    then: 'caws specs --help and caws specs prune-drafts --help list the read-only planning leaf and its selectors, and docs/api plus command-reference match the implemented surface'
 non_functional: {}
 contracts: []
