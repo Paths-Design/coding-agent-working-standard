@@ -7,7 +7,9 @@ created_at: '2026-07-04T13:31:08.024Z'
 updated_at: '2026-07-04T13:31:08.024Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/specs-list-shell
+    - packages/caws-cli/specs-help-metadata
+    - docs/cli-ux-audit
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -22,12 +24,26 @@ scope:
     - 'docs/command-reference.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'caws specs list --status <state> is read-only and filters lifecycle_state without mutating .caws/specs, worktrees.json, or events.jsonl.'
+  - 'caws specs --status <state> routes to the same read-only listing path as caws specs list --status <state> so the common group-level attempt is not a generic unknown-option dead end.'
+  - 'Invalid status filters fail before repository mutation and name the accepted lifecycle states plus the list/archive commands that use status selectors.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'A repo with active, draft, closed, and archived specs.'
+    when: 'An agent runs caws specs list --status <active|draft|closed|archived> and --data/help variants.'
+    then: 'The CLI lists only matching specs, documents the filter, and does not mutate governed state.'
+  - id: A2
+    given: 'An agent follows session muscle memory and runs caws specs --status closed.'
+    when: 'The group-level status option is parsed.'
+    then: 'The command prints the same read-only closed-spec listing as caws specs list --status closed and exits successfully.'
+  - id: A3
+    given: 'An invalid status value is supplied to either list or group-level status.'
+    when: 'The command validates the status selector.'
+    then: 'It exits non-zero with accepted values and a concrete handoff to caws specs list --status <state> or caws specs archive --status closed.'
+  - id: A4
+    given: 'The audit ledger scopes the next UX slice.'
+    when: 'This slice is merged.'
+    then: 'docs/architecture/cli-ux-job-model-audit.md records this completed slice and identifies the next evidence-backed item.'
 non_functional: {}
 contracts:
   - name: 'specs-status-list'
