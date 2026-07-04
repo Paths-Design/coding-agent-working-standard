@@ -7,7 +7,7 @@ created_at: '2026-07-04T03:57:27.350Z'
 updated_at: '2026-07-04T03:57:27.350Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'docs/architecture/cli-ux-job-model-audit.md'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -16,11 +16,16 @@ scope:
     - '.caws/specs/DOC-CLI-UX-JOBS-AUDIT-001.yaml'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The audit table is grounded in the current `COMMAND_SURFACE_METADATA` and live CLI help.'
+  - 'The audit distinguishes shipped behavior from candidate UX model gaps; it does not claim unimplemented commands are available.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'the current CLI command metadata.'
+    when: 'the audit document is read.'
+    then: 'it includes each top-level command, its leaves, and the help surface pattern.'
+  - id: A2
+    given: 'recurring Sterling friction around archive, repair, delete, and untrack workflows.'
+    when: 'the audit classifies gaps.'
+    then: 'it identifies missing or uneven UX models by job-to-be-done without prescribing unsafe behavior.'
 non_functional: {}
 contracts: []
