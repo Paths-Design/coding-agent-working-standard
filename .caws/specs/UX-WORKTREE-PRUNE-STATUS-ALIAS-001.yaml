@@ -7,7 +7,9 @@ created_at: '2026-07-04T17:08:33.238Z'
 updated_at: '2026-07-04T17:08:33.238Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli/worktree-shell'
+    - 'packages/caws-cli/help-metadata'
+    - 'docs/cli-ux-audit'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -22,12 +24,26 @@ scope:
     - 'docs/command-reference.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'worktree prune and worktree cleanup-plan keep state_class as their canonical model; --status is only a CLI alias for --state.'
+  - 'Supplying both --state and --status refuses before composing cleanup state or mutating governed files.'
+  - 'Nested help and generated command reference disclose the alias so unknown-option retries stop at help discovery.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'A user tries caws worktree prune with --status <state-class>.'
+    when: 'The command runs in dry-run or apply mode.'
+    then: 'It behaves exactly like --state <state-class>, preserving JSON shape and state_class naming.'
+  - id: A2
+    given: 'A user tries caws worktree cleanup-plan with --status <state-class>.'
+    when: 'The command runs in dry-run or apply mode.'
+    then: 'It behaves exactly like --state <state-class>, including apply selector requirements.'
+  - id: A3
+    given: 'A user supplies both --state and --status to either worktree cleanup command.'
+    when: 'The command parses options.'
+    then: 'It exits nonzero before mutation and tells the user to choose one alias.'
+  - id: A4
+    given: 'The CLI metadata and UX audit describe adjacent command discoverability.'
+    when: 'This slice is merged.'
+    then: 'Help/docs list --status as an alias and the audit ledger records the completed fix plus the next slice.'
 non_functional: {}
 contracts:
   - name: 'worktree-prune-status-alias'
