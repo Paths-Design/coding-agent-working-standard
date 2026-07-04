@@ -2,10 +2,11 @@ id: UX-CONTRACT-TUPLE-AUDIT-001
 title: 'Reconcile contract tuple audit row'
 risk_tier: 3
 mode: doc
-lifecycle_state: active
-worktree: contract-tuple-audit
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge contract-tuple-audit at 7ec2452055cee84c33d8c0ff1f8a5dbeec8a7f10'
 created_at: '2026-07-04T12:53:23.632Z'
-updated_at: '2026-07-04T12:53:30.529Z'
+updated_at: '2026-07-04T12:55:38.874Z'
 blast_radius:
   modules:
     - docs/cli-ux-audit
