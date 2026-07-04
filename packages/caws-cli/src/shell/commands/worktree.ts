@@ -5,15 +5,15 @@
 //   - caws worktree create <name> --spec <id>
 //   - caws worktree list
 //   - caws worktree bind <name> --spec <id>
-//   - caws worktree destroy <name> [--abandon-unmerged]
+//   - caws worktree destroy <name> [--abandon-unmerged|--force]
 //   - caws worktree untrack <name> --reason <why> [--apply]
 //   - caws worktree merge <name> [--dry-run]
 //
 // Discipline:
 //   - All mutation paths go through worktrees-writer (which uses the
 //     lifecycle-transaction substrate + applyRegistryPatch).
-//   - Destroy is non-forceful. There is NO --force. The only override
-//     is --abandon-unmerged, which still respects ownership and clean
+//   - Destroy is non-forceful. --force is a compatibility alias for
+//     --abandon-unmerged only; both still respect ownership and clean
 //     working tree.
 //   - Merge auto-closes the bound spec through specs-writer.closeSpec.
 //     The shell does not call appendEvent directly.
@@ -367,6 +367,7 @@ export function runWorktreeBindCommand(opts: WorktreeBindOptions): number {
 export interface WorktreeDestroyOptions extends BaseCommandOptions {
   readonly name: string;
   readonly abandonUnmerged?: boolean;
+  readonly force?: boolean;
 }
 
 export function runWorktreeDestroyCommand(opts: WorktreeDestroyOptions): number {
@@ -392,7 +393,7 @@ export function runWorktreeDestroyCommand(opts: WorktreeDestroyOptions): number 
     actor: id.actor,
     now: nowFn,
   };
-  if (opts.abandonUnmerged === true)
+  if (opts.abandonUnmerged === true || opts.force === true)
     (input as { abandonUnmerged?: boolean }).abandonUnmerged = true;
 
   const result = destroyWorktree(ctx.cawsDir, input);

@@ -585,13 +585,14 @@ Repair bidirectional binding between a worktree and a spec (one-sided → bound)
 
 ### `caws worktree destroy <name>`
 
-Destroy a worktree. Non-forceful: refuses foreign ownership, dirty checkout, unmerged branch (use --abandon-unmerged to override branch check only).
+Destroy a worktree. Guarded: refuses foreign ownership, dirty checkout, and unmerged branch unless --abandon-unmerged or its --force compatibility alias is supplied.
 
 **Argument:** `name` (required) — Worktree name
 
 **Options:**
 
 - `--abandon-unmerged` — Destroy even when the branch is not merged into base. Still respects ownership and clean working tree.
+- `--force` — Compatibility alias for --abandon-unmerged only; still respects ownership, clean checkout, and registry guardrails.
 - `--data` — Show structured data block on diagnostics
 
 ### `caws worktree untrack <name>`
