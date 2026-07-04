@@ -440,15 +440,14 @@ caws specs migrate --apply --partial
 
 v10→v11 spec YAML migrator (CAWS-MIGRATE-V10-SPECS-001). Default is dry-run; `--apply` opts into mutation. `--apply` without `--partial` refuses if any spec hits a "refused" verdict. `--apply --partial` writes migratable specs, skips refused, emits a durable JSON report under `.caws/migrations/v10-specs/`.
 
-### `caws specs validate`
+### `caws specs validate <file>`
 
 ```bash
-caws specs validate
-caws specs validate --all
-caws specs validate --spec FEAT-1 --fix-dates --apply
+caws specs validate .caws/specs/FEAT-1.yaml
+caws specs validate path/to/spec.yaml --data
 ```
 
-Validate spec YAML records and, when requested, repair safe date normalization issues. Default is dry-run; `--apply` opts into mutation.
+Validate one spec YAML file on disk using the CLI's bundled parser and the kernel parse→shape→semantics pipeline. Path-shaped: takes a file path, not a spec id. It does not resolve canonical `.caws/` state and does not mutate anything.
 
 ---
 
