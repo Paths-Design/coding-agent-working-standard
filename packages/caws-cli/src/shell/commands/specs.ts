@@ -39,6 +39,7 @@ import {
   recoverArchivedSpec,
   restoreArchivedSpec,
   retireDraftSpec,
+  selectDraftSpecsForPrune,
   selectClosedSpecsForArchive,
   showSpec,
 } from '../../store/specs-writer';
@@ -812,6 +813,104 @@ export function runSpecsRestoreCommand(opts: SpecsRestoreOptions): number {
     surfaceAuditCommit(outcome.data?.audit_commit, err);
   }
   return plan.valid ? 0 : 1;
+}
+
+// ─── caws specs prune-drafts ──────────────────────────────────────────────
+
+export interface SpecsPruneDraftsOptions extends BaseCommandOptions {
+  readonly olderThanMs?: number | string;
+  readonly include?: readonly string[];
+  readonly exclude?: readonly string[];
+  readonly includeBound?: boolean;
+  readonly json?: boolean;
+}
+
+function parseNonNegativeIntegerOption(
+  value: number | string | undefined,
+  optionName: string
+): number | { readonly error: string } | undefined {
+  if (value === undefined) return undefined;
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return { error: `${optionName} must be a non-negative integer.` };
+  }
+  return parsed;
+}
+
+export function runSpecsPruneDraftsCommand(opts: SpecsPruneDraftsOptions = {}): number {
+  const { cwd, nowFn, out, err, showData } = setupIO(opts);
+
+  const olderThanMs = parseNonNegativeIntegerOption(opts.olderThanMs, '--older-than-ms');
+  if (typeof olderThanMs === 'object') {
+    err(`caws specs prune-drafts: ${olderThanMs.error}`);
+    return 1;
+  }
+
+  const ctx = resolveCawsCtx(cwd, err, showData, 'prune-drafts');
+  if (ctx === null) return 2;
+
+  const result = selectDraftSpecsForPrune(ctx.cawsDir, {
+    ...(olderThanMs !== undefined ? { olderThanMs } : {}),
+    ...(opts.include !== undefined ? { include: opts.include } : {}),
+    ...(opts.exclude !== undefined ? { exclude: opts.exclude } : {}),
+    ...(opts.includeBound === true ? { includeBound: true } : {}),
+    now: nowFn,
+  });
+  if (!isOk(result)) {
+    err('caws specs prune-drafts: failed.');
+    err(renderDiagnostics(result.errors, { showData }));
+    return 1;
+  }
+
+  const plan = result.value;
+  const payload = {
+    ok: true,
+    dry_run: true,
+    read_only: true,
+    selector: plan.selector,
+    counts: {
+      candidates: plan.candidates.length,
+      skipped: plan.skipped.length,
+      refused: plan.refused.length,
+    },
+    candidates: plan.candidates,
+    skipped: plan.skipped,
+    refused: plan.refused,
+  };
+  if (opts.json === true) {
+    emitJson(out, payload);
+    return 0;
+  }
+
+  out(
+    `caws specs prune-drafts: ${plan.candidates.length} candidate(s), ${plan.skipped.length} skipped, ${plan.refused.length} refused (read-only)`
+  );
+  out(`  older_than_ms: ${plan.selector.older_than_ms}`);
+  if (plan.selector.include.length > 0) out(`  include: ${plan.selector.include.join(',')}`);
+  if (plan.selector.exclude.length > 0) out(`  exclude: ${plan.selector.exclude.join(',')}`);
+  out(`  include_bound: ${plan.selector.include_bound ? 'yes' : 'no'}`);
+  if (plan.candidates.length > 0) {
+    out('  candidates:');
+    for (const entry of plan.candidates) {
+      out(`    - ${entry.id}: ${entry.state} (${entry.reason})`);
+      if (entry.next_command !== undefined) out(`      next: ${entry.next_command}`);
+    }
+  }
+  if (plan.skipped.length > 0) {
+    out('  skipped:');
+    for (const entry of plan.skipped) {
+      out(`    - ${entry.id}: ${entry.state} (${entry.reason})`);
+    }
+  }
+  if (plan.refused.length > 0) {
+    out('  refused:');
+    for (const entry of plan.refused) {
+      out(`    - ${entry.id}: ${entry.state} (${entry.reason})`);
+      if (entry.next_command !== undefined) out(`      next: ${entry.next_command}`);
+    }
+  }
+  out('  No files, events, or worktree registry entries were written.');
+  return 0;
 }
 
 // ─── caws specs activate ──────────────────────────────────────────────────

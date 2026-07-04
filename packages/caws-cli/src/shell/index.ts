@@ -190,6 +190,7 @@ export {
   runSpecsRecoverCommand,
   runSpecsRestoreCommand,
   runSpecsRetireDraftCommand,
+  runSpecsPruneDraftsCommand,
   runSpecsMigrateCommand,
   runSpecsValidateCommand,
 } from './commands/specs';
@@ -204,6 +205,7 @@ export type {
   SpecsRecoverOptions,
   SpecsRestoreOptions,
   SpecsRetireDraftOptions,
+  SpecsPruneDraftsOptions,
   SpecsMigrateOptions,
   SpecsValidateOptions,
 } from './commands/specs';

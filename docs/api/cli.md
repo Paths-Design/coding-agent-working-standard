@@ -615,6 +615,19 @@ caws specs retire-draft FEAT-1
 
 Governed retirement of a never-activated draft spec. Refuses active specs (use `close`), closed specs (use `archive`), and archived specs. Deletes the draft YAML through the recoverable lifecycle path and appends `spec_retired`.
 
+### `caws specs prune-drafts`
+
+```bash
+caws specs prune-drafts
+caws specs prune-drafts --older-than-ms 604800000 --json
+caws specs prune-drafts --include FEAT-1,FEAT-2 --exclude FEAT-2
+caws specs prune-drafts --include FEAT-1 --include-bound
+```
+
+Read-only stale draft cleanup planning. Classifies draft specs as `candidate`, `skipped`, or `refused` using age, explicit include/exclude selectors, and worktree binding state. It does not retire drafts, append events, or mutate `.caws/specs/`; use `caws specs retire-draft <id>` for one-spec retirement until a guarded batch apply surface exists.
+
+Default stale threshold is seven days (`604800000` ms) using `updated_at` when present, otherwise `created_at`. Bound drafts are refused by default; `--include-bound` allows explicitly selected bound drafts to appear as candidates in the plan.
+
 ### `caws specs activate <id>`
 
 ```bash
@@ -956,14 +969,14 @@ What v11 owns and writes:
 
 | Path | Owner | Writers |
 |---|---|---|
-| `.caws/specs/<id>.yaml` | `caws specs create / retire-draft / activate / amend-scope / close / archive / validate` | store (atomic write + raw-byte YAML patch) |
+| `.caws/specs/<id>.yaml` | `caws specs create / restore / retire-draft / activate / amend-scope / close / archive / validate` | store (atomic write + raw-byte YAML patch) |
 | `.caws/specs/.archive/<id>.yaml` | `caws specs archive` | store (move from `.caws/specs/`) |
 | `.caws/waivers/<id>.yaml` | `caws waiver create / revoke / prune --apply` | store (atomic write) |
 | `.caws/policy.yaml` | manual edit (governed) | (none — the CLI reads but does not write this file) |
 | `.caws/worktrees.json` | `caws worktree create/bind/destroy/untrack/merge/repair/prune/migrate-registry`, `caws claim / claim --takeover` | store (atomic write) |
 | `.caws/leases/` | `caws agents register / heartbeat / stop / prune` | store (per-session lease files) |
 | `.caws/messages.jsonl` | `caws message send / poll` | store (directed message log; not authority) |
-| `.caws/events.jsonl` | `caws gates run`, `caws evidence record`, `caws claim --takeover`, `caws specs close/archive`, `caws worktree create/merge/destroy/untrack/prune` | store's `appendEvent` ONLY (hash-chained) |
+| `.caws/events.jsonl` | `caws gates run`, `caws evidence record`, `caws claim --takeover`, `caws specs close/archive/restore/retire-draft`, `caws worktree create/merge/destroy/untrack/prune` | store's `appendEvent` ONLY (hash-chained) |
 
 What v11 explicitly does NOT touch:
 

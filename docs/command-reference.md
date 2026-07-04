@@ -33,7 +33,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws evidence`](#caws-evidence) — Record, inspect, and describe typed evidence events in .caws/events.jsonl
 - [`caws events`](#caws-events) — Read and maintain .caws/events.jsonl (list/show/rotate/migrate/verify-archive)
 - [`caws waiver`](#caws-waiver) — Manage CAWS waivers (bounded exception records that suppress matching gate violations)
-- [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/activate/amend-scope/close/archive/prune-archive/migrate/validate)
+- [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/amend-scope/close/archive/prune-archive/migrate/validate)
 - [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune). Worktrees are git worktrees bound to active specs.
 - [`caws agents`](#caws-agents) — Agent liveness substrate: register/heartbeat/stop/list/show/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.
 - [`caws message`](#caws-message) — Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/poll directed messages between running sessions, addressed by session id, over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
@@ -330,7 +330,7 @@ Plan or apply cleanup for derived-expired active waivers. Dry-run by default; --
 
 ## `caws specs`
 
-Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/activate/amend-scope/close/archive/prune-archive/migrate/validate)
+Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/amend-scope/close/archive/prune-archive/migrate/validate)
 
 ### `caws specs create <id>`
 
@@ -402,6 +402,19 @@ Retire a never-activated DRAFT spec via tombstone. Refuses active (use close), c
 **Options:**
 
 - `--reason <text>` — Optional human-readable retirement note
+- `--data` — Show structured data block on diagnostics
+
+### `caws specs prune-drafts`
+
+Plan stale draft cleanup. Read-only: classifies draft specs as candidates, skipped, or refused using age, include/exclude selectors, and worktree binding state. Does not retire drafts; use retire-draft for one spec until an apply surface exists.
+
+**Options:**
+
+- `--older-than-ms <ms>` — Stale threshold in milliseconds (default: 604800000 = 7 days)
+- `--include <ids>` — Comma-separated spec ids to include even when not stale
+- `--exclude <ids>` — Comma-separated spec ids to exclude from the plan
+- `--include-bound` — Allow bound draft specs to appear as candidates; default refuses bound drafts
+- `--json` — Emit the draft cleanup plan as JSON
 - `--data` — Show structured data block on diagnostics
 
 ### `caws specs activate <id>`
