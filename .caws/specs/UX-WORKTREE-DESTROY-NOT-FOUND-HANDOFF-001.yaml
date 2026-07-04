@@ -7,7 +7,8 @@ created_at: '2026-07-04T13:45:40.118Z'
 updated_at: '2026-07-04T13:45:40.118Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/worktree-lifecycle-writer
+    - docs/cli-ux-audit
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -19,12 +20,22 @@ scope:
     - 'docs/command-reference.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'caws worktree destroy <name> must still refuse when <name> is absent from .caws/worktrees.json; it must not infer or delete physical paths from a missing registry entry.'
+  - 'The not-found refusal must name CAWS-native next commands for inventory and cleanup planning instead of leaving agents at a dead end.'
+  - 'The refusal path remains non-mutating: no worktrees.json, spec YAML, events, or physical worktree changes.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'A CAWS repo with no registry entry for the requested worktree name.'
+    when: 'An agent runs caws worktree destroy <missing-name>.'
+    then: 'The command exits non-zero, reports the missing registry entry, and includes repair guidance for caws worktree list, caws worktree prune, and caws worktree cleanup-plan.'
+  - id: A2
+    given: 'The same repo before the failed destroy.'
+    when: 'The not-found refusal is rendered.'
+    then: 'The registry, specs, events, and physical worktree directories remain byte-identical.'
+  - id: A3
+    given: 'The CLI UX audit tracks worktree_not_found as the next slice.'
+    when: 'This slice is merged.'
+    then: 'The audit ledger marks the not-found handoff completed and scopes the next evidence-backed item.'
 non_functional: {}
 contracts:
   - name: 'worktree-destroy-not-found'
