@@ -269,17 +269,19 @@ refuses before mutation.
 | `UX-SPECS-AMEND-SCOPE-REASON-001` | Implemented in fifty-first repair slice | Specs amend-scope reason option | Adds `caws specs amend-scope <id> --reason <text>` and records the rationale on `spec_scope_amended` evidence while keeping the option optional for generated remediation commands. Covered by `packages/caws-cli/tests/shell/specs-amend-scope-reason.test.js`. |
 | `UX-SPECS-CREATE-ID-ALIAS-001` | Implemented in fifty-second repair slice | Specs create id option alias | Adds `caws specs create --id <id>` as a compatibility alias for the positional spec id and refuses invocations that supply both id forms before mutation. Covered by `packages/caws-cli/tests/shell/specs-create-id-alias.test.js`. |
 | `UX-SPECS-CREATE-SCOPE-DOT-ALIAS-001` | Implemented in fifty-third repair slice | Specs create scope.in option alias | Adds `caws specs create --scope.in <path>` as a YAML-field-name alias for `--scope-in <path>`, keeps both spellings repeatable, and refuses invocations that supply both scope aliases before mutation. Covered by `packages/caws-cli/tests/shell/specs-create-scope-dot-alias.test.js`. |
+| `UX-SPECS-CREATE-ACCEPTANCE-FLAG-001` | Implemented in fifty-fourth repair slice | Specs create acceptance option | Adds repeatable `caws specs create --acceptance <text>` to seed canonical v11 acceptance entries at creation time. Free text becomes the `then` clause with non-TODO Given/When scaffolding; structured `given: ...; when: ...; then: ...` values set all fields. Covered by `packages/caws-cli/tests/shell/specs-create-acceptance-flag.test.js`. |
 
 ## Next Slice
 
 The next implementation slice should resample the newest CAWS and Sterling
 session evidence for residual `unknown_or_missing_option` after the `--notes`,
-`amend-scope --reason`, `specs create --id`, and `specs create --scope.in`
+`amend-scope --reason`, `specs create --id`, `specs create --scope.in`, and
+`specs create --acceptance`
 fixes. Treat stale fixed
 examples (`--tier`, `--status`, `--closure-notes`, `--notes`,
-`amend-scope --reason`, `specs create --id`, `specs create --scope.in`) as
-closed and select the newest current leaf mismatch for the next concrete fix,
-if any.
+`amend-scope --reason`, `specs create --id`, `specs create --scope.in`,
+`specs create --acceptance`) as closed and select the newest current leaf
+mismatch for the next concrete fix, if any.
 
 ## Findings
 
