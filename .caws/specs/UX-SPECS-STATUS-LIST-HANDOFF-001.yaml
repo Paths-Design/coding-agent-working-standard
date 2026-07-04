@@ -2,10 +2,11 @@ id: UX-SPECS-STATUS-LIST-HANDOFF-001
 title: 'Add specs status list handoff'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: specs-status-list-handoff
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge specs-status-list-handoff at dacf30ee5fa8e2c4c4d64b7dc41b3976a090e88f'
 created_at: '2026-07-04T13:31:08.024Z'
-updated_at: '2026-07-04T13:34:05.208Z'
+updated_at: '2026-07-04T13:39:12.543Z'
 blast_radius:
   modules:
     - packages/caws-cli/specs-list-shell
