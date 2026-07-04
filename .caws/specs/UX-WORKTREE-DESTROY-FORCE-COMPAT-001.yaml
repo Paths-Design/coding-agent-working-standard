@@ -3,6 +3,7 @@ title: 'Add worktree destroy force compatibility'
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: worktree-destroy-force-compat
 created_at: '2026-07-04T19:01:28.460Z'
 updated_at: '2026-07-04T19:01:28.460Z'
 blast_radius:
