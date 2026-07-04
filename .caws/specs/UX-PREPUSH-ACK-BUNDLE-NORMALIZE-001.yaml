@@ -3,6 +3,7 @@ title: 'Normalize prepush ack bundles'
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: prepush-ack-bundle-normalize
 created_at: '2026-07-04T19:17:27.061Z'
 updated_at: '2026-07-04T19:17:27.061Z'
 blast_radius:
