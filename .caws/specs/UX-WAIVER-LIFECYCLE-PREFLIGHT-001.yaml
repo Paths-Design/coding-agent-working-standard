@@ -7,7 +7,8 @@ created_at: '2026-07-04T05:28:16.804Z'
 updated_at: '2026-07-04T05:28:16.804Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli
+    - docs
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -22,11 +23,30 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'waiver create --dry-run validates the candidate and duplicate id state without writing .caws/waivers/.'
+  - 'waiver prune defaults to dry-run and prints the exact target set before any mutation.'
+  - 'waiver prune --apply mutates only selected expired active waivers through the existing atomic markRevoked path.'
+  - 'waiver prune refuses unsupported status selectors before filesystem mutation and reports the accepted status set.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a valid new waiver candidate'
+    when: 'an operator runs caws waiver create <id> --dry-run'
+    then: 'the command reports that the waiver is valid and would be written, but no waiver file is created'
+  - id: A2
+    given: 'a duplicate waiver id'
+    when: 'an operator runs caws waiver create <id> --dry-run'
+    then: 'the command exits nonzero and reports the duplicate before writing'
+  - id: A3
+    given: 'a repository with active expired and active unexpired waivers'
+    when: 'an operator runs caws waiver prune --status expired --json'
+    then: 'the command prints a read-only target plan for only expired active waivers and leaves waiver files byte-identical'
+  - id: A4
+    given: 'the same repository'
+    when: 'an operator runs caws waiver prune --status expired --apply --reason <text> --revoked-by <id>'
+    then: 'only expired active waivers are revoked through the existing waiver revocation shape and unexpired waivers remain active'
+  - id: A5
+    given: 'the command metadata and docs are regenerated'
+    when: 'an operator runs caws waiver create --help and caws waiver prune --help from the dist-linked caws binary'
+    then: 'dry-run/create preflight and prune plan/apply semantics are visible in nested help and docs'
 non_functional: {}
 contracts: []
