@@ -3,6 +3,7 @@ title: 'Add event log discovery commands'
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: events-log-discovery
 created_at: '2026-07-04T05:11:36.838Z'
 updated_at: '2026-07-04T05:11:36.838Z'
 blast_radius:
