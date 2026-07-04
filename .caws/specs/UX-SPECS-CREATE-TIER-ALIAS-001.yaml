@@ -7,7 +7,8 @@ created_at: '2026-07-04T13:19:02.332Z'
 updated_at: '2026-07-04T13:19:10.086Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/specs
+    - docs/cli-ux-audit
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -21,12 +22,26 @@ scope:
     - docs/architecture/cli-ux-job-model-audit.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'caws specs create --tier <n> behaves as an alias for --risk-tier <n> for create and --plan.'
+  - 'Supplying both --tier and --risk-tier fails before spec/event mutation.'
+  - 'Nested help and docs make the alias discoverable without changing the canonical YAML field risk_tier.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'A user creates a spec with --tier 3'
+    when: 'The command succeeds'
+    then: 'The generated spec YAML contains risk_tier: 3 and the event path matches existing create behavior.'
+  - id: A2
+    given: 'A user runs caws specs create --plan with --tier 2'
+    when: 'The plan renders'
+    then: 'The plan uses risk_tier 2 and writes no spec or event state.'
+  - id: A3
+    given: 'A user supplies both --risk-tier and --tier'
+    when: 'They invoke create or plan'
+    then: 'The command fails clearly before mutation and explains that both flags write risk_tier.'
+  - id: A4
+    given: 'An agent reads nested create help and the CLI UX audit'
+    when: 'They look for tier shorthand'
+    then: 'The --tier alias is documented and the audit advances to the next evidence-backed mismatch.'
 non_functional: {}
 contracts:
   - name: 'specs-create-tier-alias'
