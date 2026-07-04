@@ -102,6 +102,7 @@ describe('scope authority-context handoff', () => {
 
     expect(result.code).toBe(1);
     expect(result.json.decision).toBe('no_authority');
+    expect(result.json.repair).toBeUndefined();
     expect(result.json.remediation.authorityCandidates).toEqual([
       { specId: 'ACTIVE-BOUND-001', lifecycleState: 'active', worktreeName: 'wt-owned-b' },
       { specId: 'ACTIVE-UNBOUND-001', lifecycleState: 'active' },

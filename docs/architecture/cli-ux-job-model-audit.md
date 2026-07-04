@@ -215,6 +215,7 @@ By top-level command:
 | `UX-SPECS-MIGRATE-MAPPING-GUIDANCE-001` | Implemented in forty-fifth repair slice | Specs migrate lifecycle mapping parse guidance | Keeps malformed `--lifecycle-mapping` files as non-mutating exit-2 composition refusals, but adds schema/example guidance for parse and lightweight shape failures and surfaces the mapping shape in nested help/generated command reference. Covered by `packages/caws-cli/tests/shell/specs-migrate-mapping-guidance.test.js`. |
 | `UX-PARSE-ERROR-SURFACE-RECONCILIATION-001` | Implemented in forty-sixth repair slice | Parse-error surface reconciliation | Confirms the current metadata exposes only two operator-supplied JSON inputs: `evidence record --data <json>` and `specs migrate --lifecycle-mapping <path>`. Both already have schema/example guidance; JSON output flags and internal state parsers are excluded from the parse-risk bucket. Covered by `packages/caws-cli/tests/docs/cli-json-input-surface.test.js`. |
 | `UX-SCOPE-AUTHORITY-CONTEXT-HANDOFF-001` | Implemented in forty-seventh repair slice | Scope no-authority active-spec handoff | Enriches unbound `scope show/check/plan` remediation with active-spec candidates, read-only `scope show --spec` comparisons, and context-specific create/bind/enter commands while preserving decisions and exit codes. Covered by `packages/caws-cli/tests/shell/scope-authority-context-handoff.test.js`, `scope-remediation-guidance.test.js`, and `scope-batch-plan.test.js`. |
+| `UX-SCOPE-AUTHORITY-JSON-REPAIR-FIELD-001` | Implemented in forty-eighth repair slice | Scope no-authority JSON repair alignment | Removes the stale generic `repair` field from JSON no-authority responses whenever richer authority-context remediation is present, matching the human renderer and avoiding contradictory create/bind guidance. Covered by `packages/caws-cli/tests/shell/scope-authority-context-handoff.test.js`. |
 
 ## Next Slice
 
@@ -402,8 +403,9 @@ new flow, fix that one concrete authority job next.
    remediation now lists active specs, offers read-only `scope show --spec`
    comparisons, and then routes to the correct authority action: create a
    worktree for an unbound spec, bind the current tracked worktree, or enter an
-   existing bound worktree. The kernel decision and scope enforcement exit code
-   are unchanged.
+   existing bound worktree. The JSON and human renderers suppress stale generic
+   repair text when this richer remediation exists. The kernel decision and
+   scope enforcement exit code are unchanged.
 
 ## Recommendations
 

@@ -155,13 +155,14 @@ export function buildScopeDecisionJson(
   if (ambiguousClaimants !== undefined && ambiguousClaimants.length > 0) {
     json.ambiguousClaimants = ambiguousClaimants;
   }
+  const remediation = buildScopeRemediation(decision, boundContext);
   if (
     typeof decision.narrowRepair === 'string' &&
-    decision.narrowRepair.length > 0
+    decision.narrowRepair.length > 0 &&
+    !(decision.kind === 'no_authority' && remediation !== undefined)
   ) {
     json.repair = decision.narrowRepair;
   }
-  const remediation = buildScopeRemediation(decision, boundContext);
   if (remediation !== undefined) json.remediation = remediation;
   return json as ScopeDecisionJson;
 }
