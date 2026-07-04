@@ -595,6 +595,18 @@ caws specs recover FEAT-1 --out path/to/output.yaml
 
 Recover an archived spec body. Reads `.caws/events.jsonl` for the `spec_archived` event, prefers an on-disk `.caws/specs/.archive/<id>.yaml` body for move-shaped archives, and falls back to git history/blob recovery. Prints to stdout (or `--out <path>`). Does NOT mutate `.caws/specs/`.
 
+### `caws specs restore <id>`
+
+```bash
+caws specs restore FEAT-1 --as draft
+caws specs restore FEAT-1 --as active --apply
+caws specs restore FEAT-1 --as draft --json
+```
+
+Restore a recoverable archived or retired spec body back to `.caws/specs/<id>.yaml` as `draft` or `active`. Defaults to a read-only dry-run plan. `--apply` writes the validated body and appends `spec_restored`.
+
+Restore refuses to overwrite an existing canonical spec. During restore it clears stale top-level lifecycle authority that should not be resurrected into draft/active state: `resolution`, `closure_notes`, `superseded_by`, and `worktree`.
+
 ### `caws specs retire-draft <id>`
 
 ```bash

@@ -71,6 +71,7 @@ import {
   runSpecsArchiveCommand,
   runSpecsPruneArchiveCommand,
   runSpecsRecoverCommand,
+  runSpecsRestoreCommand,
   runSpecsRetireDraftCommand,
   runSpecsCloseCommand,
   runSpecsCreateCommand,
@@ -830,6 +831,18 @@ export function registerShellCommands(
         id,
         showData: opts.data === true,
         ...(typeof opts.out === 'string' && opts.out.length > 0 ? { outPath: opts.out } : {}),
+      });
+      exit(code);
+    });
+
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'restore'))
+    .action((id: string, opts: { as?: string; apply?: boolean; json?: boolean; data?: boolean }) => {
+      const code = runSpecsRestoreCommand({
+        id,
+        ...(opts.as !== undefined ? { targetState: opts.as } : {}),
+        ...(opts.apply === true ? { apply: true } : {}),
+        ...(opts.json === true ? { json: true } : {}),
+        showData: opts.data === true,
       });
       exit(code);
     });

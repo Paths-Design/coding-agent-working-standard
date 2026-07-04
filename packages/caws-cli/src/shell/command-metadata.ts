@@ -134,7 +134,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'specs',
   description:
-    'Manage CAWS spec lifecycle (create/list/show/recover/retire-draft/activate/amend-scope/close/archive/prune-archive/migrate/validate)',
+    'Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/activate/amend-scope/close/archive/prune-archive/migrate/validate)',
   subcommands: [
     {
       kind: 'leaf',
@@ -230,6 +230,23 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
           flag: '--out <path>',
           description: 'Write the recovered body to this path instead of stdout',
         },
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'restore',
+      argument: { name: 'id', required: true, description: 'Archived or retired spec id to restore' },
+      description:
+        'Restore a recoverable archived/retired spec body back to .caws/specs/<id>.yaml as draft or active. Dry-run by default; --apply writes the validated body and appends spec_restored. Restore refuses to overwrite an existing canonical spec and clears stale terminal lifecycle/worktree fields.',
+      options: [
+        {
+          flag: '--as <state>',
+          description: 'Target lifecycle state for the restored spec',
+          allowedValues: ['draft', 'active'],
+        },
+        { flag: '--apply', description: 'Apply the restore (default: read-only dry-run plan)' },
+        { flag: '--json', description: 'Emit restore plan/apply result as JSON' },
+        DATA_OPTION,
       ],
     },
     {

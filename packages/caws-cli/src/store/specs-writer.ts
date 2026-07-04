@@ -211,6 +211,40 @@ export interface RetireDraftSpecInput {
   readonly actor: EventBody['actor'];
 }
 
+export interface RestoreArchivedSpecInput {
+  readonly id: string;
+  readonly targetState: 'draft' | 'active';
+  readonly apply?: boolean;
+  readonly now?: () => Date;
+  readonly actor: EventBody['actor'];
+}
+
+export interface RestoreArchivedSpecPlan {
+  readonly id: string;
+  readonly apply: boolean;
+  readonly targetPath: string;
+  readonly restoredPath: string;
+  readonly targetLifecycleState: 'draft' | 'active';
+  readonly sourceEvent: 'spec_archived' | 'spec_retired';
+  readonly sourcePath: string;
+  readonly blobSha: string | null;
+  readonly worktreeBindingCleared: boolean;
+  readonly yaml: string;
+  readonly valid: boolean;
+  readonly diagnostics: readonly Diagnostic[];
+}
+
+export type RestoreArchivedSpecResult =
+  | {
+      readonly kind: 'plan';
+      readonly plan: RestoreArchivedSpecPlan;
+    }
+  | {
+      readonly kind: 'applied';
+      readonly plan: RestoreArchivedSpecPlan;
+      readonly outcome: SpecWriterOutcome;
+    };
+
 export type SpecWriterOutcome =
   | {
       readonly kind: 'success';
@@ -411,7 +445,7 @@ function gitPathIgnored(repoRoot: string, relPath: string): boolean {
 function autoCommitSpecWrite(
   cawsDir: string,
   specId: string,
-  action: 'create' | 'activate' | 'close' | 'archive' | 'amend-scope',
+  action: 'create' | 'activate' | 'close' | 'archive' | 'amend-scope' | 'restore',
   wasDirtyBeforeWrite: boolean,
   extraPaths: ReadonlyArray<string> = []
 ): AutoCommitOutcome {
@@ -438,7 +472,7 @@ function attachAutoCommit(
   outcome: Result<SpecWriterOutcome>,
   cawsDir: string,
   specId: string,
-  action: 'create' | 'activate' | 'close' | 'archive' | 'amend-scope',
+  action: 'create' | 'activate' | 'close' | 'archive' | 'amend-scope' | 'restore',
   wasDirtyBeforeWrite: boolean,
   extraPaths: ReadonlyArray<string> = []
 ): Result<SpecWriterOutcome> {
@@ -2313,6 +2347,7 @@ export function showSpec(
 // .caws/specs/. Returns the raw yaml bytes.
 
 interface ArchivedSpecEvent {
+  readonly event: 'spec_archived' | 'spec_retired';
   readonly ts: string;
   readonly from_path: string;
   readonly blob_sha: string | null; // null for legacy events with only to_path
@@ -2377,6 +2412,7 @@ function findArchivedSpecEvent(
       continue;
     }
     latest = {
+      event: evtType as 'spec_archived' | 'spec_retired',
       ts: evt.ts,
       from_path: evt.data.from_path,
       blob_sha: typeof evt.data.blob_sha === 'string' ? evt.data.blob_sha : null,
@@ -2401,7 +2437,12 @@ function findArchivedSpecEvent(
 export function recoverArchivedSpec(
   cawsDir: string,
   id: string
-): Result<{ readonly source: string; readonly blob_sha: string | null; readonly from_path: string }> {
+): Result<{
+  readonly source: string;
+  readonly blob_sha: string | null;
+  readonly from_path: string;
+  readonly source_event: 'spec_archived' | 'spec_retired';
+}> {
   const idValidation = validateSpecId(id);
   if (!idValidation.ok) return idValidation;
 
@@ -2410,7 +2451,7 @@ export function recoverArchivedSpec(
     return err(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        `Spec "${id}" was never archived (no spec_archived event in .caws/events.jsonl).`,
+        `Spec "${id}" was never archived or retired (no spec_archived/spec_retired event in .caws/events.jsonl).`,
         { subject: id }
       )
     );
@@ -2424,7 +2465,7 @@ export function recoverArchivedSpec(
       return err(
         storeDiagnostic(
           STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-          `spec_archived event for "${id}" has malformed blob_sha "${evt.blob_sha}" (expected 40-hex).`,
+          `${evt.event} event for "${id}" has malformed blob_sha "${evt.blob_sha}" (expected 40-hex).`,
           { subject: id }
         )
       );
@@ -2441,7 +2482,12 @@ export function recoverArchivedSpec(
         )
       );
     }
-    return ok({ source: body, blob_sha: evt.blob_sha, from_path: evt.from_path });
+    return ok({
+      source: body,
+      blob_sha: evt.blob_sha,
+      from_path: evt.from_path,
+      source_event: evt.event,
+    });
   }
 
   if (evt.to_path !== undefined) {
@@ -2449,7 +2495,12 @@ export function recoverArchivedSpec(
     if (fs.existsSync(archivePath)) {
       const source = readYamlSource(archivePath);
       if (!isOk(source)) return err(source.errors);
-      return ok({ source: source.value, blob_sha: null, from_path: evt.from_path });
+      return ok({
+        source: source.value,
+        blob_sha: null,
+        from_path: evt.from_path,
+        source_event: evt.event,
+      });
     }
     const recoveredFromArchivePath = recoverPathFromGitHistory(
       repoRoot,
@@ -2460,6 +2511,7 @@ export function recoverArchivedSpec(
         source: recoveredFromArchivePath,
         blob_sha: null,
         from_path: evt.from_path,
+        source_event: evt.event,
       });
     }
   }
@@ -2473,6 +2525,7 @@ export function recoverArchivedSpec(
       source: recoveredFromSourcePath,
       blob_sha: null,
       from_path: evt.from_path,
+      source_event: evt.event,
     });
   }
 
@@ -2489,6 +2542,146 @@ export function recoverArchivedSpec(
       }
     )
   );
+}
+
+function planRestoreArchivedSpec(
+  cawsDir: string,
+  input: RestoreArchivedSpecInput
+): Result<RestoreArchivedSpecPlan> {
+  const idValidation = validateSpecId(input.id);
+  if (!idValidation.ok) return idValidation;
+
+  const targetPath = specPath(cawsDir, input.id);
+  if (fs.existsSync(targetPath)) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${input.id}" already exists at ${targetPath}; restore refuses to overwrite canonical control-plane state.`,
+        { subject: input.id, data: { target_path: targetPath } }
+      )
+    );
+  }
+
+  const recovered = recoverArchivedSpec(cawsDir, input.id);
+  if (!isOk(recovered)) return recovered;
+
+  const now = (input.now ?? (() => new Date()))().toISOString();
+  let patched = recovered.value.source;
+  const lifecycle = setTopLevelScalar(patched, 'lifecycle_state', input.targetState);
+  if (!lifecycle.ok) return lifecycle;
+  patched = lifecycle.value;
+
+  if (/^updated_at:/m.test(patched)) {
+    const updated = setTopLevelScalar(patched, 'updated_at', `'${now}'`);
+    if (!updated.ok) return updated;
+    patched = updated.value;
+  } else {
+    const updated = insertTopLevelScalarAfter(
+      patched,
+      'lifecycle_state',
+      'updated_at',
+      `'${now}'`
+    );
+    if (!updated.ok) return updated;
+    patched = updated.value;
+  }
+
+  for (const terminalKey of ['resolution', 'closure_notes', 'superseded_by']) {
+    const removed = removeTopLevelScalar(patched, terminalKey);
+    if (!removed.ok) return removed;
+    patched = removed.value;
+  }
+
+  const worktreeBindingCleared = /^worktree:/m.test(patched);
+  const withoutWorktree = removeTopLevelScalar(patched, 'worktree');
+  if (!withoutWorktree.ok) return withoutWorktree;
+  patched = withoutWorktree.value;
+
+  const parsed = parseAndValidateSpec(patched);
+  const diagnostics = isOk(parsed)
+    ? []
+    : parsed.errors.map((d) =>
+        storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
+          subject: d.subject ?? input.id,
+          ...(d.narrowRepair !== undefined
+            ? { narrowRepair: d.narrowRepair }
+            : {}),
+          data: {
+            source_rule: d.rule,
+            ...(d.location?.pointer !== undefined
+              ? { source_pointer: d.location.pointer }
+              : {}),
+          },
+        })
+      );
+
+  const repoRoot = repoRootFromCawsDir(cawsDir);
+  const restoredPath = path.relative(repoRoot, targetPath);
+  return ok({
+    id: input.id,
+    apply: input.apply === true,
+    targetPath,
+    restoredPath,
+    targetLifecycleState: input.targetState,
+    sourceEvent: recovered.value.source_event,
+    sourcePath: recovered.value.from_path,
+    blobSha: recovered.value.blob_sha,
+    worktreeBindingCleared,
+    yaml: patched,
+    valid: diagnostics.length === 0,
+    diagnostics,
+  });
+}
+
+export function restoreArchivedSpec(
+  cawsDir: string,
+  input: RestoreArchivedSpecInput
+): Result<RestoreArchivedSpecResult> {
+  const plan = planRestoreArchivedSpec(cawsDir, input);
+  if (!isOk(plan)) return plan;
+  if (input.apply !== true) {
+    return ok({ kind: 'plan', plan: plan.value });
+  }
+  if (!plan.value.valid) return err(plan.value.diagnostics);
+
+  const now = (input.now ?? (() => new Date()))().toISOString();
+  const eventData: Record<string, unknown> = {
+    source_event: plan.value.sourceEvent,
+    from_path: plan.value.sourcePath,
+    restored_path: plan.value.restoredPath,
+    restored_lifecycle_state: plan.value.targetLifecycleState,
+  };
+  if (plan.value.blobSha !== null) eventData.blob_sha = plan.value.blobSha;
+
+  const event: EventBody = {
+    event: 'spec_restored',
+    ts: now,
+    actor: input.actor,
+    spec_id: input.id,
+    data: eventData,
+  };
+
+  const repoRoot = repoRootFromCawsDir(cawsDir);
+  const wasDirtyBeforeWrite = isPathDirty(repoRoot, plan.value.restoredPath);
+  const txnResult = withLifecycleLock(cawsDir, () =>
+    runLifecycleTransaction({
+      cawsDir,
+      plannedWrites: [{ path: plan.value.targetPath, contents: plan.value.yaml }],
+      events: [event],
+    })
+  );
+  if (!txnResult.ok) return err(txnResult.errors);
+
+  const outcome = mapTxnToOutcome(txnResult.value, input.id, plan.value.targetPath);
+  const committed = attachAutoCommit(
+    outcome,
+    cawsDir,
+    input.id,
+    'restore',
+    wasDirtyBeforeWrite
+  );
+  if (!isOk(committed)) return committed;
+  return ok({ kind: 'applied', plan: plan.value, outcome: committed.value });
 }
 
 function recoverPathFromGitHistory(

@@ -37,6 +37,7 @@ import {
   listSpecs,
   planCreateSpec,
   recoverArchivedSpec,
+  restoreArchivedSpec,
   retireDraftSpec,
   selectClosedSpecsForArchive,
   showSpec,
@@ -702,6 +703,115 @@ export function runSpecsRecoverCommand(opts: SpecsRecoverOptions): number {
     stdoutFn(result.value.source);
   }
   return 0;
+}
+
+// ─── caws specs restore ──────────────────────────────────────────────────
+
+export interface SpecsRestoreOptions extends BaseCommandOptions {
+  readonly id: string;
+  readonly targetState?: string;
+  readonly apply?: boolean;
+  readonly json?: boolean;
+}
+
+function restoreCommandPreview(id: string, targetState: 'draft' | 'active'): string {
+  return [
+    'caws',
+    'specs',
+    'restore',
+    shellQuote(id),
+    '--as',
+    targetState,
+    '--apply',
+  ].join(' ');
+}
+
+export function runSpecsRestoreCommand(opts: SpecsRestoreOptions): number {
+  const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
+
+  if (opts.targetState !== 'draft' && opts.targetState !== 'active') {
+    err('caws specs restore: --as is required and must be one of: draft, active.');
+    return 1;
+  }
+
+  const ctx = resolveCawsCtx(cwd, err, showData, 'restore');
+  if (ctx === null) return 2;
+
+  const actor = buildActorOrError(
+    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'restore'
+  );
+  if (actor === null) return 2;
+
+  const result = restoreArchivedSpec(ctx.cawsDir, {
+    id: opts.id,
+    targetState: opts.targetState,
+    apply: opts.apply === true,
+    now: nowFn,
+    actor,
+  });
+  if (!isOk(result)) {
+    err('caws specs restore: failed.');
+    err(renderDiagnostics(result.errors, { showData }));
+    return 1;
+  }
+
+  const plan = result.value.plan;
+  const diagnostics = diagnosticJson(plan.diagnostics);
+  const command = restoreCommandPreview(opts.id, plan.targetLifecycleState);
+  const payload = {
+    ok: plan.valid,
+    dry_run: result.value.kind === 'plan',
+    read_only: result.value.kind === 'plan',
+    id: plan.id,
+    target_path: plan.restoredPath,
+    target_lifecycle_state: plan.targetLifecycleState,
+    source: {
+      event: plan.sourceEvent,
+      from_path: plan.sourcePath,
+      blob_sha: plan.blobSha,
+    },
+    worktree_binding_cleared: plan.worktreeBindingCleared,
+    valid: plan.valid,
+    would_write: plan.valid && result.value.kind === 'applied',
+    diagnostics,
+    command,
+  };
+
+  if (opts.json === true) {
+    emitJson(out, payload);
+  } else if (result.value.kind === 'plan') {
+    out(`caws specs restore: ${plan.valid ? 'valid' : 'needs changes'} plan for ${plan.id}`);
+    out(`  target: ${plan.restoredPath}`);
+    out(`  lifecycle_state: ${plan.targetLifecycleState}`);
+    out(`  source: ${plan.sourceEvent} ${plan.sourcePath}`);
+    if (plan.blobSha !== null) out(`  blob_sha: ${plan.blobSha}`);
+    out(`  worktree_binding_cleared: ${plan.worktreeBindingCleared ? 'yes' : 'no'}`);
+    out('  read_only: true');
+    out(`  would_write: ${plan.valid ? 'yes, with --apply' : 'no'}`);
+    if (plan.diagnostics.length > 0) {
+      out('  diagnostics:');
+      for (const d of plan.diagnostics) {
+        out(`    - ${d.rule}: ${d.message}`);
+        if (d.narrowRepair !== undefined) out(`      repair: ${d.narrowRepair}`);
+      }
+    }
+    out('  apply command:');
+    out(`    ${command}`);
+    out('  No files, events, or worktree registry entries were written.');
+  } else {
+    out(`restored ${plan.id} to ${plan.restoredPath} (lifecycle_state: ${plan.targetLifecycleState})`);
+  }
+
+  if (result.value.kind === 'applied') {
+    const outcome = result.value.outcome;
+    if (outcome.kind === 'partial_failure_recovered') {
+      err('caws specs restore: partial failure recovered (no state change).');
+      err(renderDiagnostics(outcome.cause, { showData }));
+      return 1;
+    }
+    surfaceAuditCommit(outcome.data?.audit_commit, err);
+  }
+  return plan.valid ? 0 : 1;
 }
 
 // ─── caws specs activate ──────────────────────────────────────────────────

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/spec_restored.v1.json",
+  "title": "spec_restored event payload",
+  "$comment": "Class: REQUIRES_SPEC_ID. Records a governed restoration of a recoverable archived or retired spec body back into .caws/specs/<id>.yaml. Restore is an explicit resurrection path, distinct from create: create still refuses archived tombstone ids, while restore requires prior spec_archived/spec_retired recovery metadata and refuses to overwrite an existing canonical spec.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source_event", "from_path", "restored_path", "restored_lifecycle_state"],
+  "properties": {
+    "source_event": {
+      "type": "string",
+      "enum": ["spec_archived", "spec_retired"],
+      "description": "The tombstone event class used to recover the body."
+    },
+    "from_path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Repo-root-relative path the spec yaml occupied before archive or retirement."
+    },
+    "blob_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "Optional full 40-hex git blob sha used to recover the body when available."
+    },
+    "restored_path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Repo-root-relative canonical spec path written by restore."
+    },
+    "restored_lifecycle_state": {
+      "type": "string",
+      "enum": ["draft", "active"],
+      "description": "Lifecycle state explicitly requested by --as."
+    }
+  }
+}
