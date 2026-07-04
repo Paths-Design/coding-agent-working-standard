@@ -7,7 +7,8 @@ created_at: '2026-07-04T18:33:49.870Z'
 updated_at: '2026-07-04T18:33:49.870Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli shell specs create'
+    - 'CLI reference documentation'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -21,12 +22,22 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - '`caws specs create --scope.in <path>` writes the same canonical scope.in YAML as --scope-in.'
+  - 'Supplying both --scope-in and --scope.in is refused before spec files or events are written.'
+  - 'The nested create help and CLI docs expose the alias without changing the canonical YAML field.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a CAWS repository with no existing target spec'
+    when: 'an operator runs caws specs create --id <id> ... --scope.in README.md'
+    then: 'the command succeeds and the created spec contains scope.in: [README.md].'
+  - id: A2
+    given: 'a CAWS repository with no existing target spec'
+    when: 'an operator supplies both --scope-in and --scope.in to specs create'
+    then: 'the command exits non-zero and writes no spec file or event.'
+  - id: A3
+    given: 'the built CLI command surface'
+    when: 'an operator runs caws specs create --help'
+    then: 'help lists both --scope-in <path> and --scope.in <path> with the shared scope.in context.'
 non_functional: {}
 contracts:
   - name: 'specs-create-scope-dot-alias'
