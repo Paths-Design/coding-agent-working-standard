@@ -620,10 +620,21 @@ Not returned in v11.1: `specs update`, `specs delete`, `specs conflicts`, `specs
 
 ```bash
 caws specs list
+caws specs list --status active
+caws specs list --status draft
+caws specs list --status closed
+caws specs list --status archived
+caws specs --status closed
 caws specs list --archived
 ```
 
-Lists specs. By default excludes archived specs.
+Lists specs from `.caws/specs/`. By default excludes archived/tombstoned spec
+ids. Use `--status <active|draft|closed|archived>` to filter by lifecycle
+state; `caws specs --status <state>` is a compatibility handoff to the same
+read-only list filter. Pass `--archived` to include archived/tombstoned spec ids
+recoverable from history alongside current specs. For batch archival, use
+`caws specs archive --status closed`; listing status filters never archive or
+mutate specs.
 
 ### `caws specs show <id>`
 

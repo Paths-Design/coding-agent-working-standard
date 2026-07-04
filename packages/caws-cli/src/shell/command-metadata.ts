@@ -34,6 +34,7 @@ import {
   SPEC_MODES,
   SPEC_RESOLUTIONS,
 } from '@paths.design/caws-kernel';
+import { SPECS_LIST_STATUSES } from '../store/specs-writer';
 
 /** A positional argument on a command (this CLI uses at most one per command). */
 export interface CommandArgMeta {
@@ -109,6 +110,8 @@ export interface GroupCommandMeta {
   readonly name: string;
   /** The group-level `.description()` (shown in `caws --help` and `caws <group> --help`). */
   readonly description: string;
+  /** Declared group-level options, used only for intentional group actions/aliases. */
+  readonly options?: readonly CommandOptionMeta[];
   /** The group's subcommands. */
   readonly subcommands: readonly LeafCommandMeta[];
 }
@@ -135,6 +138,15 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
   name: 'specs',
   description:
     'Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/amend-scope/close/archive/prune-archive/migrate/validate)',
+  options: [
+    {
+      flag: '--status <status>',
+      description:
+        'Compatibility handoff to caws specs list --status <status>',
+      allowedValues: SPECS_LIST_STATUSES,
+    },
+    DATA_OPTION,
+  ],
   subcommands: [
     {
       kind: 'leaf',
@@ -204,6 +216,11 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
       name: 'list',
       description: 'List specs. By default excludes archived specs.',
       options: [
+        {
+          flag: '--status <status>',
+          description: 'Filter by lifecycle status',
+          allowedValues: SPECS_LIST_STATUSES,
+        },
         { flag: '--archived', description: 'Include archived specs in the listing' },
         DATA_OPTION,
       ],

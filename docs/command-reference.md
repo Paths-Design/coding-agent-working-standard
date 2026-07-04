@@ -348,6 +348,11 @@ Plan or apply cleanup for derived-expired active waivers. Dry-run by default; --
 
 Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/amend-scope/close/archive/prune-archive/migrate/validate)
 
+**Options:**
+
+- `--status <status>` — Compatibility handoff to caws specs list --status <status>: active | draft | closed | archived
+- `--data` — Show structured data block on diagnostics
+
 ### `caws specs create <id>`
 
 Create a new spec in lifecycle_state: active.
@@ -372,6 +377,7 @@ List specs. By default excludes archived specs.
 
 **Options:**
 
+- `--status <status>` — Filter by lifecycle status: active | draft | closed | archived
 - `--archived` — Include archived specs in the listing
 - `--data` — Show structured data block on diagnostics
 
