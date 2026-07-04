@@ -3,6 +3,7 @@ title: 'Add evidence list and show readback'
 risk_tier: 3
 mode: feature
 lifecycle_state: active
+worktree: evidence-readback
 created_at: '2026-07-04T04:47:28.074Z'
 updated_at: '2026-07-04T04:47:34.943Z'
 blast_radius:
