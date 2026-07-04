@@ -768,11 +768,12 @@ caws specs close FEAT-1
 caws specs close FEAT-1 --resolution completed
 caws specs close FEAT-1 --closure-notes "Completed in worktree merge"
 caws specs close FEAT-1 --notes "Completed in worktree merge"
+caws specs close FEAT-1 --note "Completed in worktree merge"
 ```
 
 Close an active spec. Non-destructive raw-byte YAML patch; appends `spec_closed` event.
 
-`--reason <text>`, `--closure-notes <text>`, and `--notes <text>` all write the spec's `closure_notes` field and the corresponding close-event note. Use only one.
+`--reason <text>`, `--closure-notes <text>`, `--notes <text>`, and `--note <text>` all write the spec's `closure_notes` field and the corresponding close-event note. Use only one.
 
 If the spec is already closed, the command refuses without changing closure metadata and prints state-aware next steps: inspect with `caws specs show <id>`, archive with `caws specs archive <id>`, or recover the body after archive with `caws specs recover <id> --out <path>`.
 
