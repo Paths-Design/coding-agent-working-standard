@@ -588,7 +588,7 @@ caws specs create FEAT-1 \
 caws specs create FEAT-2 \
   --title "Low-risk docs slice" \
   --mode doc \
-  --risk-tier 3 \
+  --tier 3 \
   --scope-in docs/widget.md \
   --plan --json
 ```
@@ -598,6 +598,7 @@ caws specs create FEAT-2 \
 | `--title <title>` | Short spec title. |
 | `--mode <mode>` | Spec mode: `feature`, `refactor`, `fix`, `doc`, or `chore`. |
 | `--risk-tier <n>` | Risk tier: `1`, `2`, or `3`. |
+| `--tier <n>` | Alias for `--risk-tier`; writes the canonical `risk_tier` field. |
 | `--scope-in <path>` | Seed `scope.in`; repeatable. |
 | `--contract <entry>` | Seed a contract entry; repeatable. |
 | `--plan` | Read-only preflight. Render and validate the candidate without writing `.caws/specs/<id>.yaml` or appending events. |

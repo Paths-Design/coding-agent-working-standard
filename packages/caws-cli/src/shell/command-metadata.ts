@@ -160,6 +160,11 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
           allowedValues: RISK_TIERS,
         },
         {
+          flag: '--tier <n>',
+          description: 'Alias for --risk-tier; writes the canonical risk_tier field',
+          allowedValues: RISK_TIERS,
+        },
+        {
           flag: '--scope-in <path>',
           description:
             'Populate scope.in at creation time (repeatable); avoids the YAML hand-edit. Widen later with `caws specs amend-scope`.',

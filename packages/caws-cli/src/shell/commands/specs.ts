@@ -170,6 +170,8 @@ export interface SpecsCreateOptions extends BaseCommandOptions {
   readonly title?: string;
   readonly mode?: string;
   readonly riskTier?: number | string;
+  /** Alias for --risk-tier; writes the canonical risk_tier YAML field. */
+  readonly tier?: number | string;
   readonly legacyType?: string;
   /**
    * Repeatable --scope-in <path>. When supplied, scope.in is written with the
@@ -251,7 +253,7 @@ function parseContractFlags(
 
 const SPECS_CREATE_USAGE = [
   'Usage:',
-  '  caws specs create <id> --title "<short title>" --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3> [--scope-in <path>]... [--contract "name:type[:path]"]... [--plan] [--json]',
+  '  caws specs create <id> --title "<short title>" --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3> [--tier <1|2|3>] [--scope-in <path>]... [--contract "name:type[:path]"]... [--plan] [--json]',
   '',
   'Example:',
   '  caws specs create FEAT-001 --title "Trivial first slice" --mode chore --risk-tier 3',
@@ -260,6 +262,7 @@ const SPECS_CREATE_USAGE = [
   '',
   'Notes:',
   '  --type is not supported in v11. Use --mode instead.',
+  '  --tier is an alias for --risk-tier; both write the canonical risk_tier field.',
   '  Risk tier 3 is appropriate for docs, tests, harnesses, and low-blast-radius slices.',
   '  Tier 1/2 specs require at least one contract: pass --contract "name:type[:path]"',
   '    (repeatable); type is one of api|schema|contract-test|behavior. Or use --risk-tier 3 / --mode chore.',
@@ -374,7 +377,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   const missing = [
     opts.title === undefined ? '--title' : undefined,
     opts.mode === undefined ? '--mode' : undefined,
-    opts.riskTier === undefined ? '--risk-tier' : undefined,
+    opts.riskTier === undefined && opts.tier === undefined ? '--risk-tier' : undefined,
   ].filter((v): v is string => v !== undefined);
   if (missing.length > 0) {
     err(`caws specs create: missing required options: ${missing.join(', ')}`);
@@ -384,7 +387,12 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
 
   const title = opts.title;
   const mode = opts.mode;
-  const rawRiskTier = opts.riskTier;
+  if (opts.riskTier !== undefined && opts.tier !== undefined) {
+    err('caws specs create: --risk-tier and --tier both write risk_tier; pass only one.');
+    return 1;
+  }
+
+  const rawRiskTier = opts.riskTier ?? opts.tier;
   if (title === undefined || mode === undefined || rawRiskTier === undefined) {
     err('caws specs create: missing required options.');
     err(SPECS_CREATE_USAGE);
@@ -402,7 +410,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     : rawRiskTier;
   if (riskTier !== 1 && riskTier !== 2 && riskTier !== 3) {
     err(
-      `caws specs create: invalid --risk-tier "${rawRiskTier}". Expected 1, 2, or 3.`
+      `caws specs create: invalid risk tier "${rawRiskTier}". Expected 1, 2, or 3.`
     );
     return 1;
   }
