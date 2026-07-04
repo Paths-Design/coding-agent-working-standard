@@ -2,10 +2,11 @@ id: UX-WORKTREE-PRUNE-STATUS-ALIAS-001
 title: 'Alias worktree cleanup state filters as status'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: worktree-prune-status-alias
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge worktree-prune-status-alias at 07e7880cdb60ec97673767fd9a37084f13796c62'
 created_at: '2026-07-04T17:08:33.238Z'
-updated_at: '2026-07-04T17:08:33.238Z'
+updated_at: '2026-07-04T17:13:56.580Z'
 blast_radius:
   modules:
     - 'packages/caws-cli/worktree-shell'
