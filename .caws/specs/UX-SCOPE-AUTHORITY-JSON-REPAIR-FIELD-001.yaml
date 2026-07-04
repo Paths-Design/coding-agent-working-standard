@@ -7,7 +7,8 @@ created_at: '2026-07-04T17:59:29.556Z'
 updated_at: '2026-07-04T17:59:29.556Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli/scope-remediation-rendering'
+    - 'docs/cli-ux-audit'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -17,12 +18,22 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'JSON and human no-authority remediation do not expose stale generic repair text when richer authority-context remediation exists.'
+  - 'Scope decisions and exit codes remain unchanged.'
+  - 'Non-no-authority repair fields remain available when the kernel emits a narrow repair and no richer remediation supersedes it.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'A canonical checkout with active specs and no current worktree binding'
+    when: 'An operator runs caws scope check --json <path>'
+    then: 'The JSON refusal includes remediation commands and authority candidates, but omits the stale generic repair field.'
+  - id: A2
+    given: 'A no-authority decision with no richer authority-context remediation'
+    when: 'The renderer builds JSON'
+    then: 'The command remains conservative and does not change the kernel decision or exit code.'
+  - id: A3
+    given: 'The CLI UX audit'
+    when: 'This follow-up lands'
+    then: 'The authority-context slice evidence notes JSON repair-field alignment.'
 non_functional: {}
 contracts:
   - name: 'scope-json-repair-field'
