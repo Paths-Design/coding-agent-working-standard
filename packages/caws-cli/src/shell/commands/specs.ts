@@ -1643,13 +1643,17 @@ function loadLifecycleMappingFile(
     const cause = e as { message?: string };
     return {
       ok: false,
-      message: `Cannot parse ${filePath} as JSON: ${cause.message ?? 'unknown error'}.`,
+      message: renderLifecycleMappingFileFailure(
+        `Cannot parse ${filePath} as JSON: ${cause.message ?? 'unknown error'}.`,
+      ),
     };
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return {
       ok: false,
-      message: `Lifecycle mapping file ${filePath} must be a JSON object keyed by spec id; got ${typeof parsed === 'object' ? 'array' : typeof parsed}.`,
+      message: renderLifecycleMappingFileFailure(
+        `Lifecycle mapping file ${filePath} must be a JSON object keyed by spec id; got ${typeof parsed === 'object' ? 'array' : typeof parsed}.`,
+      ),
     };
   }
   // Lightweight shape check — every value should be an object with a
@@ -1659,18 +1663,49 @@ function loadLifecycleMappingFile(
     if (typeof entry !== 'object' || entry === null) {
       return {
         ok: false,
-        message: `Lifecycle mapping entry "${specId}" is not an object.`,
+        message: renderLifecycleMappingFileFailure(
+          `Lifecycle mapping entry "${specId}" is not an object.`,
+        ),
       };
     }
     const e = entry as Record<string, unknown>;
     if (typeof e['lifecycle_state'] !== 'string') {
       return {
         ok: false,
-        message: `Lifecycle mapping entry "${specId}" is missing required string field "lifecycle_state".`,
+        message: renderLifecycleMappingFileFailure(
+          `Lifecycle mapping entry "${specId}" is missing required string field "lifecycle_state".`,
+        ),
       };
     }
   }
   return { ok: true, mapping: parsed as LifecycleMapping };
+}
+
+function renderLifecycleMappingFileFailure(message: string): string {
+  return [
+    message,
+    'Expected --lifecycle-mapping JSON shape:',
+    '  {',
+    '    "<spec-id>": {',
+    '      "lifecycle_state": "active|draft|closed|archived",',
+    '      "resolution": "implemented",',
+    '      "closure_notes": "optional migrated closure note"',
+    '    }',
+    '  }',
+    'Example mapping file:',
+    '  {',
+    '    "FEAT-123": {',
+    '      "lifecycle_state": "closed",',
+    '      "resolution": "implemented",',
+    '      "closure_notes": "Migrated from v10 closed spec."',
+    '    },',
+    '    "FEAT-456": {',
+    '      "lifecycle_state": "active"',
+    '    }',
+    '  }',
+    'Tip: write this as a JSON file and pass its path, for example:',
+    '  caws specs migrate --from v10 --lifecycle-mapping lifecycle-map.json',
+  ].join('\n');
 }
 
 function renderApplyHuman(

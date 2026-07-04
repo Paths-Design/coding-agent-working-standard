@@ -770,9 +770,27 @@ body elsewhere for inspection.
 caws specs migrate
 caws specs migrate --apply
 caws specs migrate --apply --partial
+caws specs migrate --from v10 --lifecycle-mapping lifecycle-map.json
 ```
 
 v10→v11 spec YAML migrator (CAWS-MIGRATE-V10-SPECS-001). Default is dry-run; `--apply` opts into mutation. `--apply` without `--partial` refuses if any spec hits a "refused" verdict. `--apply --partial` writes migratable specs, skips refused, emits a durable JSON report under `.caws/migrations/v10-specs/`.
+
+`--lifecycle-mapping <path>` points at an operator-authored JSON file keyed by spec id. Use it when v10 specs contain lifecycle values outside the v11 enum, such as `superseded`, `proven`, or `frozen`. Minimal shape:
+
+```json
+{
+  "FEAT-123": {
+    "lifecycle_state": "closed",
+    "resolution": "implemented",
+    "closure_notes": "Migrated from v10 closed spec."
+  },
+  "FEAT-456": {
+    "lifecycle_state": "active"
+  }
+}
+```
+
+Malformed or wrongly shaped mapping files are refused before migration and print this schema plus an example; CAWS never guesses the lifecycle mapping.
 
 ### `caws specs validate <file>`
 
