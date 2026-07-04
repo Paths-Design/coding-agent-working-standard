@@ -2,10 +2,11 @@ id: UX-DRAFT-BIND-HANDOFF-001
 title: 'Add draft spec bind activation handoff'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: draft-bind-handoff
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge draft-bind-handoff at 882333db521c4a725a17c16c5e430a6785a8a6d2'
 created_at: '2026-07-04T12:37:06.645Z'
-updated_at: '2026-07-04T12:37:13.030Z'
+updated_at: '2026-07-04T12:40:51.109Z'
 blast_radius:
   modules:
     - packages/caws-cli/worktree
