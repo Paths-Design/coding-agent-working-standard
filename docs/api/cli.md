@@ -1000,6 +1000,26 @@ caws message poll --peek --json
 
 Pull the next undelivered message addressed to the current session, or to `--me`. Default behavior is deliver-once; `--peek` observes without consuming.
 
+### `caws message inbox`
+
+```bash
+caws message inbox
+caws message inbox --me <session-id> --limit 20
+caws message inbox --json
+```
+
+Read-only inbox listing for undelivered messages. Unlike `poll`, this command never appends delivery records and never consumes messages. JSON output includes `read_only: true`, `waiting`, and the returned `messages`.
+
+### `caws message history`
+
+```bash
+caws message history --with <session-id>
+caws message history --me <session-id> --with <other-session-id> --limit 50
+caws message history --with <session-id> --json
+```
+
+Read-only channel history between two endpoints. History includes both directions in message-log order; `--limit` returns the most recent messages while preserving log order. Message bodies remain communication, not authority or evidence.
+
 ---
 
 ## 14. `caws prepush`

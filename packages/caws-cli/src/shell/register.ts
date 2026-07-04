@@ -47,6 +47,8 @@ import {
   runAgentsStopCommand,
   runMessageSendCommand,
   runMessagePollCommand,
+  runMessageInboxCommand,
+  runMessageHistoryCommand,
   runClaimCommand,
   runDoctorCommand,
   runEventsListCommand,
@@ -1414,6 +1416,31 @@ export function registerShellCommands(
         ...(opts.me !== undefined ? { me: opts.me } : {}),
         ...(waitMs !== undefined && Number.isFinite(waitMs) ? { waitMs } : {}),
         ...(opts.peek === true ? { peek: true } : {}),
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'inbox'))
+    .action((opts: { me?: string; limit?: string; json?: boolean; data?: boolean }) => {
+      const limit = opts.limit !== undefined ? Number(opts.limit) : undefined;
+      const code = runMessageInboxCommand({
+        ...(opts.me !== undefined ? { me: opts.me } : {}),
+        ...(limit !== undefined && Number.isFinite(limit) ? { limit } : {}),
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'history'))
+    .action((opts: { me?: string; with?: string; limit?: string; json?: boolean; data?: boolean }) => {
+      const limit = opts.limit !== undefined ? Number(opts.limit) : undefined;
+      const code = runMessageHistoryCommand({
+        ...(opts.me !== undefined ? { me: opts.me } : {}),
+        with: opts.with ?? '',
+        ...(limit !== undefined && Number.isFinite(limit) ? { limit } : {}),
         json: opts.json === true,
         showData: opts.data === true,
       });

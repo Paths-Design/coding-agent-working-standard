@@ -13,7 +13,10 @@ import {
   resolveRepoRoot,
   sendMessage,
   inboxCount,
+  inboxMessages,
+  channelHistory,
   type MessageActor,
+  type MessageRecord,
 } from '../../store';
 import { buildActor } from '../session/actor';
 import { resolveSession } from '../session/resolve-session';
@@ -168,6 +171,152 @@ export function runMessagePollCommand(opts: MessagePollCommandOptions): number {
   if (typeof waiting === 'number') {
     const others = opts.peek === true ? waiting - 1 : waiting;
     if (others > 0) out(`(${others} more message(s) waiting)`);
+  }
+  return 0;
+}
+
+export interface MessageInboxCommandOptions extends BaseCommandOptions {
+  /** Endpoint to list. Defaults to the resolved session id. */
+  readonly me?: string;
+  readonly limit?: number;
+  readonly json?: boolean;
+}
+
+export interface MessageHistoryCommandOptions extends BaseCommandOptions {
+  /** One side of the channel. Defaults to the resolved session id. */
+  readonly me?: string;
+  /** Other endpoint in the channel. */
+  readonly with: string;
+  readonly limit?: number;
+  readonly json?: boolean;
+}
+
+function resolveMe(
+  commandName: string,
+  cawsDir: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  explicit: string | undefined,
+  err: (line: string) => void,
+  showData: boolean
+): string | null {
+  if (typeof explicit === 'string' && explicit.length > 0) return explicit;
+  const sessionResult = resolveSession({ cawsDir, worktreeRoot: cwd, env, allowMint: false });
+  if (!sessionResult.ok) {
+    err(`caws message ${commandName}: no --me given and could not resolve your session id.`);
+    err(renderDiagnostics(sessionResult.errors, { showData }));
+    return null;
+  }
+  const me = buildActor({ session: sessionResult.value, kind: 'agent' }).session_id ?? '';
+  if (me.length === 0) {
+    err(`caws message ${commandName}: resolved session has no session_id; pass --me <id>.`);
+    return null;
+  }
+  return me;
+}
+
+function sanitizeLimit(limit: number | undefined): number | undefined {
+  if (typeof limit !== 'number' || !Number.isFinite(limit)) return undefined;
+  return Math.max(0, Math.floor(limit));
+}
+
+function renderMessageLine(message: MessageRecord): string {
+  return `${message.ts} ${message.actor.session_id ?? message.actor.id} -> ${message.to}: ${message.text}`;
+}
+
+export function runMessageInboxCommand(opts: MessageInboxCommandOptions = {}): number {
+  const { cwd, env, out, err, showData } = defaults(opts);
+  const rootResult = resolveRepoRoot(cwd);
+  if (!rootResult.ok) {
+    err('caws message inbox: failed to resolve repo root.');
+    err(renderDiagnostics(rootResult.errors, { showData }));
+    return 2;
+  }
+  const { cawsDir } = rootResult.value;
+  const me = resolveMe('inbox', cawsDir, cwd, env, opts.me, err, showData);
+  if (me === null) return 1;
+
+  const limit = sanitizeLimit(opts.limit);
+  const result = inboxMessages(cawsDir, me, limit !== undefined ? { limit } : {});
+  if (!result.ok) {
+    err('caws message inbox: failed to read the message log.');
+    err(renderDiagnostics(result.errors, { showData }));
+    return 2;
+  }
+
+  if (opts.json === true) {
+    out(JSON.stringify({
+      ok: true,
+      read_only: true,
+      me,
+      waiting: result.value.waiting,
+      messages: result.value.messages,
+      diagnostics: result.value.diagnostics,
+    }));
+    return 0;
+  }
+
+  out(`Inbox for ${me}: ${result.value.waiting} waiting`);
+  if (result.value.messages.length === 0) {
+    out('(no messages)');
+    return 0;
+  }
+  for (const message of result.value.messages) out(renderMessageLine(message));
+  if (result.value.messages.length < result.value.waiting) {
+    out(`(${result.value.waiting - result.value.messages.length} more not shown)`);
+  }
+  return 0;
+}
+
+export function runMessageHistoryCommand(opts: MessageHistoryCommandOptions): number {
+  const { cwd, env, out, err, showData } = defaults(opts);
+  if (typeof opts.with !== 'string' || opts.with.length === 0) {
+    err('caws message history: --with <session_id> is required.');
+    return 1;
+  }
+
+  const rootResult = resolveRepoRoot(cwd);
+  if (!rootResult.ok) {
+    err('caws message history: failed to resolve repo root.');
+    err(renderDiagnostics(rootResult.errors, { showData }));
+    return 2;
+  }
+  const { cawsDir } = rootResult.value;
+  const me = resolveMe('history', cawsDir, cwd, env, opts.me, err, showData);
+  if (me === null) return 1;
+
+  const result = channelHistory(cawsDir, me, opts.with);
+  if (!result.ok) {
+    err('caws message history: failed to read the message log.');
+    err(renderDiagnostics(result.errors, { showData }));
+    return 2;
+  }
+  const limit = sanitizeLimit(opts.limit);
+  const messages =
+    limit !== undefined ? result.value.slice(Math.max(0, result.value.length - limit)) : result.value;
+  const channel = [me, opts.with].sort().join('::');
+
+  if (opts.json === true) {
+    out(JSON.stringify({
+      ok: true,
+      read_only: true,
+      me,
+      with: opts.with,
+      channel,
+      total: result.value.length,
+      messages,
+    }));
+    return 0;
+  }
+
+  out(`History ${channel}: ${result.value.length} message(s)`);
+  if (messages.length === 0) {
+    out('(no messages)');
+    return 0;
+  }
+  for (const message of messages) out(renderMessageLine(message));
+  if (messages.length < result.value.length) {
+    out(`(${result.value.length - messages.length} earlier not shown)`);
   }
   return 0;
 }
