@@ -2,10 +2,11 @@ id: UX-WORKTREE-PRUNE-APPLY-001
 title: 'Add safe apply mode to worktree prune'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
-worktree: worktree-prune-apply
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge worktree-prune-apply at 45ec0eefa93a926ba5d52dcaa73824e2dd0c7512'
 created_at: '2026-07-04T04:23:43.858Z'
-updated_at: '2026-07-04T04:23:43.858Z'
+updated_at: '2026-07-04T04:30:23.546Z'
 blast_radius:
   modules:
     - 'packages/caws-cli worktree prune command'
