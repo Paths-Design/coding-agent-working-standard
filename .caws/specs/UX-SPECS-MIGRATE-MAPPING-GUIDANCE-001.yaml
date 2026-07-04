@@ -2,10 +2,11 @@ id: UX-SPECS-MIGRATE-MAPPING-GUIDANCE-001
 title: 'Guide malformed specs migrate lifecycle mappings'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: specs-migrate-mapping-guidance
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge specs-migrate-mapping-guidance at 3f007bb341bd352301092a4b2f8b12af43ebc7c5'
 created_at: '2026-07-04T17:44:18.823Z'
-updated_at: '2026-07-04T17:46:04.474Z'
+updated_at: '2026-07-04T17:48:06.373Z'
 blast_radius:
   modules:
     - 'packages/caws-cli/specs-migrate'
