@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: init-preview-plan
 created_at: '2026-07-04T11:50:19.165Z'
-updated_at: '2026-07-04T11:50:26.903Z'
+updated_at: '2026-07-04T12:02:53.568Z'
 blast_radius:
   modules:
     - caws-cli/init
@@ -24,6 +24,7 @@ scope:
     - docs/api/cli.md
     - docs/command-reference.md
     - docs/architecture/cli-ux-job-model-audit.md
+    - packages/caws-cli/src/store/index.ts
   out: []
 invariants:
   - 'caws init --plan is read-only and never creates .caws, .gitignore, hook-pack files, settings files, or events.'
