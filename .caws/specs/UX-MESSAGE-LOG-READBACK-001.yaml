@@ -3,6 +3,7 @@ title: 'Add message inbox and history readback UX'
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: message-log-readback
 created_at: '2026-07-04T12:16:26.639Z'
 updated_at: '2026-07-04T12:16:53.407Z'
 blast_radius:
