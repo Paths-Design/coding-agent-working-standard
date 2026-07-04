@@ -30,12 +30,14 @@ import type {
 import {
   activateSpec,
   amendScopeSpec,
+  archiveClosedSpecs,
   archiveSpec,
   closeSpec,
   createSpec,
   listSpecs,
   recoverArchivedSpec,
   retireDraftSpec,
+  selectClosedSpecsForArchive,
   showSpec,
 } from '../../store/specs-writer';
 import type { LifecycleMapping } from '@paths.design/caws-kernel';
@@ -74,6 +76,10 @@ function setupIO(opts: BaseCommandOptions) {
   const errFn = opts.err ?? ((s: string) => process.stderr.write(s + '\n'));
   const showData = opts.showData === true;
   return { cwd, nowFn, env, out, err: errFn, showData };
+}
+
+function emitJson(out: (line: string) => void, payload: unknown): void {
+  out(JSON.stringify(payload, null, 2));
 }
 
 /**
@@ -702,8 +708,13 @@ export function runSpecsCloseCommand(opts: SpecsCloseOptions): number {
 // ─── caws specs archive ───────────────────────────────────────────────────
 
 export interface SpecsArchiveOptions extends BaseCommandOptions {
-  readonly id: string;
+  readonly id?: string;
   readonly reason?: string;
+  readonly status?: 'closed';
+  readonly include?: readonly string[];
+  readonly exclude?: readonly string[];
+  readonly apply?: boolean;
+  readonly json?: boolean;
 }
 
 export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
@@ -711,6 +722,129 @@ export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
 
   const ctx = resolveCawsCtx(cwd, err, showData, 'archive');
   if (ctx === null) return 2;
+
+  const batchFlagsPresent =
+    opts.status !== undefined ||
+    opts.include !== undefined ||
+    opts.exclude !== undefined ||
+    opts.apply === true ||
+    opts.json === true;
+  if (opts.id !== undefined && batchFlagsPresent) {
+    err('caws specs archive: <id> cannot be combined with batch flags.');
+    err('  Use `caws specs archive <id>` for one spec, or `caws specs archive --status closed` for batch dry-run.');
+    return 1;
+  }
+
+  if (opts.id === undefined) {
+    if (opts.status !== 'closed') {
+      err('caws specs archive: batch mode requires --status closed.');
+      return 1;
+    }
+
+    const dryRun = opts.apply !== true;
+    const selector = {
+      status: opts.status,
+      include: opts.include ?? [],
+      exclude: opts.exclude ?? [],
+    };
+
+    if (dryRun) {
+      const selected = selectClosedSpecsForArchive(ctx.cawsDir, {
+        ...(opts.include !== undefined ? { include: opts.include } : {}),
+        ...(opts.exclude !== undefined ? { exclude: opts.exclude } : {}),
+      });
+      if (!isOk(selected)) {
+        err('caws specs archive: failed.');
+        err(renderDiagnostics(selected.errors, { showData }));
+        return 1;
+      }
+      const payload = {
+        ok: selected.value.skipped.length === 0,
+        dry_run: true,
+        selector,
+        snapshot: { count: selected.value.candidates.length },
+        archived: [],
+        candidates: selected.value.candidates.map((candidate) => ({
+          id: candidate.id,
+          path: path.relative(ctx.repoRoot, candidate.path),
+        })),
+        skipped: selected.value.skipped,
+        failed: [],
+      };
+      if (opts.json === true) {
+        emitJson(out, payload);
+      } else {
+        out(`archive --status closed (dry-run): ${selected.value.candidates.length} candidate(s)`);
+        for (const candidate of selected.value.candidates) {
+          out(`  would-archive ${candidate.id}`);
+        }
+        for (const skipped of selected.value.skipped) {
+          const state = skipped.lifecycle_state !== undefined ? ` (${skipped.lifecycle_state})` : '';
+          out(`  skipped ${skipped.id}: ${skipped.reason}${state}`);
+        }
+        const includeArg =
+          selector.include.length > 0 ? ` --include ${selector.include.join(',')}` : '';
+        const excludeArg =
+          selector.exclude.length > 0 ? ` --exclude ${selector.exclude.join(',')}` : '';
+        out(`apply: caws specs archive --status closed${includeArg}${excludeArg} --apply`);
+      }
+      return selected.value.skipped.length === 0 ? 0 : 1;
+    }
+
+    const actor = buildActorOrError(
+      ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'archive'
+    );
+    if (actor === null) return 2;
+
+    const result = archiveClosedSpecs(ctx.cawsDir, {
+      actor,
+      now: nowFn,
+      ...(opts.include !== undefined ? { include: opts.include } : {}),
+      ...(opts.exclude !== undefined ? { exclude: opts.exclude } : {}),
+    });
+    if (!isOk(result)) {
+      err('caws specs archive: failed.');
+      err(renderDiagnostics(result.errors, { showData }));
+      return 1;
+    }
+    const outcome = result.value;
+    const ok = outcome.skipped.length === 0 && outcome.failed.length === 0;
+    if (opts.json === true) {
+      emitJson(out, {
+        ok,
+        dry_run: false,
+        selector,
+        snapshot: {
+          count: outcome.archived.length + outcome.skipped.length + outcome.failed.length,
+        },
+        archived: outcome.archived.map((entry) => ({
+          id: entry.id,
+          path: path.relative(ctx.repoRoot, entry.path),
+        })),
+        skipped: outcome.skipped,
+        failed: outcome.failed,
+      });
+    } else {
+      out(
+        `archive --status closed (apply): archived ${outcome.archived.length}; skipped ${outcome.skipped.length}; failed ${outcome.failed.length}`
+      );
+      for (const entry of outcome.archived) {
+        out(`  archived ${entry.id} → ${path.relative(ctx.repoRoot, entry.path)}`);
+      }
+      for (const skipped of outcome.skipped) {
+        const state = skipped.lifecycle_state !== undefined ? ` (${skipped.lifecycle_state})` : '';
+        out(`  skipped ${skipped.id}: ${skipped.reason}${state}`);
+      }
+      for (const failed of outcome.failed) {
+        out(`  failed ${failed.id}: ${failed.reason}`);
+      }
+    }
+    for (const warning of outcome.warnings ?? []) {
+      err(`caws advisory (non-blocking): ${warning}`);
+    }
+    surfaceAuditCommit(outcome.data?.audit_commit, err);
+    return ok ? 0 : 1;
+  }
 
   const actor = buildActorOrError(
     ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'archive'

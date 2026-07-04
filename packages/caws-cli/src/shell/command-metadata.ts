@@ -289,14 +289,25 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
     {
       kind: 'leaf',
       name: 'archive',
-      argument: { name: 'id', required: true, description: 'Closed spec id to archive' },
+      argument: { name: 'id', required: false, description: 'Closed spec id to archive' },
       description:
-        'Archive a closed spec by moving its YAML to .caws/specs/.archive/<id>.yaml and appending spec_archived. If the archive destination is gitignored, the file is preserved on disk but not staged; the command prints follow-up instructions.',
+        'Archive one closed spec, or batch-archive closed specs with --status closed. Batch mode defaults to dry-run; pass --apply to archive selected specs in one aggregate audit commit.',
       options: [
         {
           flag: '--reason <text>',
           description: 'Archive reason (advisory; the spec_archived event does not carry it)',
         },
+        { flag: '--status <s>', description: 'Batch selector status. Currently only: closed' },
+        {
+          flag: '--include <ids>',
+          description: 'Comma-separated spec ids to include in batch mode',
+        },
+        {
+          flag: '--exclude <ids>',
+          description: 'Comma-separated spec ids to exclude from batch mode',
+        },
+        { flag: '--apply', description: 'Apply batch archive (default: dry-run)' },
+        { flag: '--json', description: 'Emit CAWS-native JSON to stdout' },
         DATA_OPTION,
       ],
     },

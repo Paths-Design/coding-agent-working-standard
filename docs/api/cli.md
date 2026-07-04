@@ -367,13 +367,18 @@ caws specs close FEAT-1
 
 Close an active spec. Non-destructive raw-byte YAML patch; appends `spec_closed` event.
 
-### `caws specs archive <id>`
+### `caws specs archive [id]`
 
 ```bash
 caws specs archive FEAT-1
+caws specs archive --status closed
+caws specs archive --status closed --include FEAT-1,FEAT-2 --exclude FEAT-2
+caws specs archive --status closed --apply
 ```
 
-Archive a closed spec. Moves the YAML file to `.caws/specs/.archive/`; appends `spec_archived` event.
+Archive one closed spec, or batch-archive closed specs. Single-spec mode moves the YAML file to `.caws/specs/.archive/` and appends `spec_archived`.
+
+Batch mode requires `--status closed`, defaults to dry-run, and prints the matching set plus a copy-pasteable `--apply` command. `--include <ids>` and `--exclude <ids>` accept comma-separated spec ids. `--apply` archives selected closed specs through the governed archive path and creates one aggregate audit commit for the batch.
 
 ### `caws specs prune-archive`
 
