@@ -3,6 +3,7 @@ title: 'Route worktree --prune to prune leaf'
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: worktree-group-prune-handoff
 created_at: '2026-07-04T19:43:43.773Z'
 updated_at: '2026-07-04T19:43:43.773Z'
 blast_radius:
