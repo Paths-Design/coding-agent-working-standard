@@ -7,7 +7,9 @@ created_at: '2026-07-04T05:55:28.290Z'
 updated_at: '2026-07-04T05:55:28.290Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli/src/shell/commands/scope.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -22,11 +24,29 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'scope plan is read-only and never writes specs, events, worktrees, waivers, or leases.'
+  - 'each planned path uses the same binding resolution and kernel scope decision as scope show/check.'
+  - 'batch output groups remediation commands but delegates all mutation to existing governed commands.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'multiple paths supplied with repeatable --path flags'
+    when: 'the operator runs caws scope plan --path <a> --path <b> --json'
+    then: 'the command exits 0, evaluates every path, and emits JSON with per-path decisions plus grouped remediation commands.'
+  - id: A2
+    given: 'paths supplied through a newline-delimited --paths-file'
+    when: 'the file includes blank lines and comments'
+    then: 'the command ignores blank/comment lines and evaluates the remaining paths without mutating state.'
+  - id: A3
+    given: 'multiple refused paths with the same amend-scope command'
+    when: 'scope plan groups remediation'
+    then: 'the output includes one grouped command with all matching paths rather than requiring the operator to inspect each path separately.'
+  - id: A4
+    given: 'no paths are supplied'
+    when: 'scope plan runs'
+    then: 'the command fails with usage guidance before composing or mutating any CAWS state.'
+  - id: A5
+    given: 'the completed slice'
+    when: 'focused tests, docs check, caws doctor, caws gates run, and a dist-linked CLI smoke run'
+    then: 'they pass without leaving unrelated repository dirt.'
 non_functional: {}
 contracts: []
