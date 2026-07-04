@@ -1107,7 +1107,12 @@ The following commands existed in v10.x and are **removed in v11**. They are no 
 
 | Removed | Reason category | Replacement |
 |---|---|---|
-| `caws validate / verify-acs / evaluate / iterate / diagnose / burnup` | Authority conflict (AC) — used legacy spec resolution and parallel `events.jsonl` writers | `caws doctor` + `caws gates run --spec <id>` |
+| `caws validate / verify` | Replaced v10 validation bundle — used legacy spec resolution and parallel `events.jsonl` writers | `caws doctor` + `caws gates run --spec <id>` |
+| `caws diagnose` | Renamed v10 diagnostic surface | `caws doctor` |
+| `caws verify-acs` | Removed AC-evidence report | Encode AC-evidence assertions in your test suite directly. |
+| `caws evaluate` | Removed quality-evaluation report | `caws gates run --spec <id>` covers policy gates; quality-evaluation reports are not reproduced. |
+| `caws iterate` | Removed advisory iteration guidance | Use spec acceptance criteria as guidance. |
+| `caws burnup` | Removed budget report | Derive budget burn-up from `caws status` + spec `change_budget` manually. |
 | `caws scaffold` | Scaffold / hook risk (SH) | Out of scope for governed core |
 | `caws hooks install / remove / status` | Authority conflict (AC) — generated hooks called removed commands | `caws init --agent-surface <name>` installs the hook pack |
 | `caws provenance init / update / show / verify / analyze-ai` | Provenance / evidence conflict (PE) — duplicated `events.jsonl` semantics | `caws evidence record` + hash-chained `events.jsonl` |
