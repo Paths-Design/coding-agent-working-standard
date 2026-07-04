@@ -292,6 +292,7 @@ sequence as one shell-quoted argv token. `prepush` now normalizes only that
 | `UX-WORKTREE-DESTROY-FORCE-COMPAT-001` | Implemented in fifty-seventh repair slice | Worktree destroy force compatibility alias | Adds `caws worktree destroy <name> --force` as a compatibility alias for `--abandon-unmerged` only. The alias reaches the same unmerged-branch override but still refuses foreign ownership, dirty checkout, missing registry entries, and other guarded destroy failures. Covered by `packages/caws-cli/tests/shell/worktree-destroy-force-compat.test.js`. |
 | `UX-INIT-DRY-RUN-ALIAS-001` | Implemented in fifty-eighth repair slice | Init dry-run preview alias | Adds `caws init --dry-run` as a compatibility alias for `--plan`, including `--dry-run --json`. The alias uses the same read-only init preview path and writes no `.caws`, `.gitignore`, hook-pack, settings, or event state. Covered by `packages/caws-cli/tests/shell/init-dry-run-alias.test.js`. |
 | `UX-PREPUSH-ACK-BUNDLE-NORMALIZE-001` | Implemented in fifty-ninth repair slice | Prepush shell-quoted ack bundle normalization | Normalizes a single `prepush` argv token shaped like `--ack <sha> --ack <sha>` into ordinary repeated `--ack` flags before Commander validation. The compatibility path is limited to `prepush --ack` bundles; other commands and options retain normal unknown-option behavior. Covered by `packages/caws-cli/tests/shell/prepush-ack-bundle-normalize.test.js`. |
+| `UX-CLI-HELP-CONTEXT-LOCKS-001` | Implemented in sixty-first repair slice | CLI help context regression locks | Generalizes the help-context metadata test so every group description that enumerates visible subcommands must name all visible leaves, and pins cleanup leaves that promise dry-run/apply or dry-run-preview semantics to explicit selector/help context. Covered by `packages/caws-cli/tests/docs/cli-help-context.test.js`. |
 
 ## Next Slice
 
@@ -399,11 +400,12 @@ newest current leaf mismatch for the next concrete fix, if any.
    `risk_tier`, and the command refuses ambiguous invocations that supply both
    flags before any spec or event mutation.
 
-16. **Help context is now closer to reality, but nested help should keep naming
-   adjacent alternatives.** The recent `specs archive` and `specs validate`
-   fixes show that group and leaf help need to explain neighboring commands:
-   archive vs recover, create vs amend-scope, repair vs destroy, prune vs
-   repair. Agents use help as a decision tree, not only as an option list.
+16. **Help context is now regression-locked for the highest-drift shapes.**
+   Group descriptions that enumerate subcommands must now name every visible
+   leaf, and cleanup leaves that promise dry-run/apply or dry-run-preview
+   semantics must keep selector and mutation context in metadata. Neighboring
+   command handoffs still matter because agents use help as a decision tree,
+   not only as an option list.
 
 17. **Validation-era removed commands now match their real replacement model.**
    `validate` and `verify` are replaced by `doctor` plus `gates run`, while
@@ -562,10 +564,11 @@ newest current leaf mismatch for the next concrete fix, if any.
    deletion/export work should preserve that boundary and keep undelivered inbox
    records out of default prune candidates.
 
-5. Add help regression tests for any group description that names subcommands
-   and for cleanup leaves that claim dry-run/apply semantics. The CLI already
-   has metadata-driven help; the gap is asserting the UX promises that agents
-   rely on.
+5. Keep extending help regression tests for any group description that names
+   subcommands and for cleanup leaves that claim dry-run/apply semantics. The
+   first-order lock now asserts enumerated subcommand completeness plus
+   dry-run/apply, dry-run-preview, selector, and mutation-context promises in
+   metadata-driven help.
 
 6. Use the same evidence-first loop for remaining retry-heavy classes:
    sample the session traces, verify the current linked CLI behavior, then fix
