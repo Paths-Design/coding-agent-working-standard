@@ -134,7 +134,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'specs',
   description:
-    'Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/activate/amend-scope/close/archive/prune-archive/migrate/validate)',
+    'Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/amend-scope/close/archive/prune-archive/migrate/validate)',
   subcommands: [
     {
       kind: 'leaf',
@@ -257,6 +257,32 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         'Retire a never-activated DRAFT spec via tombstone. Refuses active (use close), closed (use archive), and archived specs. Deletes the draft YAML and appends a recoverable spec_retired event (recover via caws specs show <id> --archived). The governed alternative to raw git rm.',
       options: [
         { flag: '--reason <text>', description: 'Optional human-readable retirement note' },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'prune-drafts',
+      description:
+        'Plan stale draft cleanup. Read-only: classifies draft specs as candidates, skipped, or refused using age, include/exclude selectors, and worktree binding state. Does not retire drafts; use retire-draft for one spec until an apply surface exists.',
+      options: [
+        {
+          flag: '--older-than-ms <ms>',
+          description: 'Stale threshold in milliseconds (default: 604800000 = 7 days)',
+        },
+        {
+          flag: '--include <ids>',
+          description: 'Comma-separated spec ids to include even when not stale',
+        },
+        {
+          flag: '--exclude <ids>',
+          description: 'Comma-separated spec ids to exclude from the plan',
+        },
+        {
+          flag: '--include-bound',
+          description: 'Allow bound draft specs to appear as candidates; default refuses bound drafts',
+        },
+        { flag: '--json', description: 'Emit the draft cleanup plan as JSON' },
         DATA_OPTION,
       ],
     },

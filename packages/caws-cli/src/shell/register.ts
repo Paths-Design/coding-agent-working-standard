@@ -73,6 +73,7 @@ import {
   runSpecsRecoverCommand,
   runSpecsRestoreCommand,
   runSpecsRetireDraftCommand,
+  runSpecsPruneDraftsCommand,
   runSpecsCloseCommand,
   runSpecsCreateCommand,
   runSpecsListCommand,
@@ -852,6 +853,28 @@ export function registerShellCommands(
       const code = runSpecsRetireDraftCommand({
         id,
         ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'prune-drafts'))
+    .action((opts: {
+      olderThanMs?: string;
+      include?: string;
+      exclude?: string;
+      includeBound?: boolean;
+      json?: boolean;
+      data?: boolean;
+    }) => {
+      const include = parseCommaSeparatedList(opts.include);
+      const exclude = parseCommaSeparatedList(opts.exclude);
+      const code = runSpecsPruneDraftsCommand({
+        ...(opts.olderThanMs !== undefined ? { olderThanMs: opts.olderThanMs } : {}),
+        ...(include !== undefined ? { include } : {}),
+        ...(exclude !== undefined ? { exclude } : {}),
+        ...(opts.includeBound === true ? { includeBound: true } : {}),
+        ...(opts.json === true ? { json: true } : {}),
         showData: opts.data === true,
       });
       exit(code);

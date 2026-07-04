@@ -204,6 +204,54 @@ export interface ArchiveClosedSpecsOutcome {
   readonly warnings?: readonly string[];
 }
 
+export type DraftPruneDisposition = 'candidate' | 'skipped' | 'refused';
+
+export type DraftPruneState =
+  | 'stale_draft'
+  | 'included_draft'
+  | 'fresh_draft_skipped'
+  | 'bound_draft_refused'
+  | 'bound_draft_candidate'
+  | 'timestamp_unknown_refused'
+  | 'missing_refused'
+  | 'non_draft_refused';
+
+export interface DraftPrunePlanEntry {
+  readonly id: string;
+  readonly disposition: DraftPruneDisposition;
+  readonly state: DraftPruneState;
+  readonly reason: string;
+  readonly path?: string;
+  readonly title?: string;
+  readonly lifecycle_state?: Spec['lifecycle_state'] | 'missing';
+  readonly timestamp?: string;
+  readonly age_ms?: number;
+  readonly worktree?: string;
+  readonly next_command?: string;
+}
+
+export interface DraftPrunePlan {
+  readonly dry_run: true;
+  readonly read_only: true;
+  readonly selector: {
+    readonly older_than_ms: number;
+    readonly include: readonly string[];
+    readonly exclude: readonly string[];
+    readonly include_bound: boolean;
+  };
+  readonly candidates: readonly DraftPrunePlanEntry[];
+  readonly skipped: readonly DraftPrunePlanEntry[];
+  readonly refused: readonly DraftPrunePlanEntry[];
+}
+
+export interface SelectDraftSpecsForPruneInput {
+  readonly olderThanMs?: number;
+  readonly include?: readonly string[];
+  readonly exclude?: readonly string[];
+  readonly includeBound?: boolean;
+  readonly now?: () => Date;
+}
+
 export interface RetireDraftSpecInput {
   readonly id: string;
   readonly reason?: string;
@@ -1434,6 +1482,188 @@ export function archiveClosedSpecs(
     failed,
     ...(audit !== undefined ? { data: { audit_commit: audit } } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
+  });
+}
+
+function specFreshness(spec: Spec, nowMs: number): {
+  readonly timestamp?: string;
+  readonly age_ms?: number;
+} {
+  const timestamp = spec.updated_at ?? spec.created_at;
+  if (timestamp === undefined || timestamp.length === 0) return {};
+  const parsed = Date.parse(timestamp);
+  if (Number.isNaN(parsed)) return { timestamp };
+  return { timestamp, age_ms: Math.max(0, nowMs - parsed) };
+}
+
+function pushDraftPlanEntry(
+  entry: DraftPrunePlanEntry,
+  buckets: {
+    readonly candidates: DraftPrunePlanEntry[];
+    readonly skipped: DraftPrunePlanEntry[];
+    readonly refused: DraftPrunePlanEntry[];
+  }
+): void {
+  if (entry.disposition === 'candidate') buckets.candidates.push(entry);
+  else if (entry.disposition === 'skipped') buckets.skipped.push(entry);
+  else buckets.refused.push(entry);
+}
+
+export function selectDraftSpecsForPrune(
+  cawsDir: string,
+  input: SelectDraftSpecsForPruneInput = {}
+): Result<DraftPrunePlan> {
+  const olderThanMs = input.olderThanMs ?? 7 * 24 * 60 * 60 * 1000;
+  if (!Number.isFinite(olderThanMs) || olderThanMs < 0) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `olderThanMs must be a non-negative integer (got ${String(input.olderThanMs)}).`,
+        { subject: 'olderThanMs' }
+      )
+    );
+  }
+
+  const include = [...new Set(input.include ?? [])].sort();
+  const exclude = [...new Set(input.exclude ?? [])].sort();
+  const excludeSet = new Set(exclude);
+  const includeBound = input.includeBound === true;
+  const nowMs = (input.now ?? (() => new Date()))().getTime();
+
+  const loaded = loadSpecs(cawsDir);
+  const loadErrors = loaded.diagnostics.filter((d) => d.severity === 'error');
+  if (loadErrors.length > 0) return err(loadErrors);
+
+  const specsById = new Map(loaded.specs.map((spec) => [spec.id, spec]));
+  const repoRoot = repoRootFromCawsDir(cawsDir);
+  const ids = include.length > 0
+    ? include.filter((id) => !excludeSet.has(id))
+    : loaded.specs
+        .filter((spec) => spec.lifecycle_state === 'draft' && !excludeSet.has(spec.id))
+        .map((spec) => spec.id)
+        .sort();
+
+  const buckets = {
+    candidates: [] as DraftPrunePlanEntry[],
+    skipped: [] as DraftPrunePlanEntry[],
+    refused: [] as DraftPrunePlanEntry[],
+  };
+
+  for (const id of ids) {
+    const explicitlyIncluded = include.includes(id);
+    const spec = specsById.get(id);
+    if (spec === undefined) {
+      pushDraftPlanEntry({
+        id,
+        disposition: 'refused',
+        state: 'missing_refused',
+        lifecycle_state: 'missing',
+        reason: 'Included spec id is not present in canonical .caws/specs.',
+        next_command: 'caws specs list --archived',
+      }, buckets);
+      continue;
+    }
+
+    const fullPath = specPath(cawsDir, spec.id);
+    const relPath = path.relative(repoRoot, fullPath);
+    if (spec.lifecycle_state !== 'draft') {
+      const nextCommand =
+        spec.lifecycle_state === 'active'
+          ? `caws specs close ${spec.id}`
+          : spec.lifecycle_state === 'closed'
+            ? `caws specs archive ${spec.id}`
+            : `caws specs show ${spec.id} --archived`;
+      pushDraftPlanEntry({
+        id: spec.id,
+        disposition: 'refused',
+        state: 'non_draft_refused',
+        lifecycle_state: spec.lifecycle_state,
+        path: relPath,
+        title: spec.title,
+        reason: `Spec is ${spec.lifecycle_state}, not draft.`,
+        next_command: nextCommand,
+      }, buckets);
+      continue;
+    }
+
+    const freshness = specFreshness(spec, nowMs);
+    const stale = freshness.age_ms !== undefined && freshness.age_ms >= olderThanMs;
+    const selected = explicitlyIncluded || stale;
+    const base = {
+      id: spec.id,
+      lifecycle_state: spec.lifecycle_state,
+      path: relPath,
+      title: spec.title,
+      ...(freshness.timestamp !== undefined ? { timestamp: freshness.timestamp } : {}),
+      ...(freshness.age_ms !== undefined ? { age_ms: freshness.age_ms } : {}),
+      ...(spec.worktree !== undefined ? { worktree: spec.worktree } : {}),
+    } as const;
+
+    if (spec.worktree !== undefined && !includeBound) {
+      pushDraftPlanEntry({
+        ...base,
+        disposition: 'refused',
+        state: 'bound_draft_refused',
+        reason: `Draft has worktree binding "${spec.worktree}"; resolve the binding before batch retirement.`,
+        next_command: `caws specs show ${spec.id}`,
+      }, buckets);
+      continue;
+    }
+
+    if (!selected) {
+      if (freshness.age_ms === undefined) {
+        pushDraftPlanEntry({
+          ...base,
+          disposition: 'refused',
+          state: 'timestamp_unknown_refused',
+          reason: 'Draft has no parseable updated_at or created_at timestamp, so staleness cannot be determined.',
+          next_command: `caws specs show ${spec.id}`,
+        }, buckets);
+      } else {
+        pushDraftPlanEntry({
+          ...base,
+          disposition: 'skipped',
+          state: 'fresh_draft_skipped',
+          reason: `Draft age ${freshness.age_ms}ms is below older-than threshold ${olderThanMs}ms.`,
+          next_command: `caws specs retire-draft ${spec.id} --reason <reason>`,
+        }, buckets);
+      }
+      continue;
+    }
+
+    pushDraftPlanEntry({
+      ...base,
+      disposition: 'candidate',
+      state: spec.worktree !== undefined
+        ? 'bound_draft_candidate'
+        : explicitlyIncluded
+          ? 'included_draft'
+          : 'stale_draft',
+      reason: explicitlyIncluded
+        ? 'Draft was explicitly included.'
+        : `Draft age ${freshness.age_ms ?? 0}ms meets older-than threshold ${olderThanMs}ms.`,
+      next_command: `caws specs retire-draft ${spec.id} --reason <reason>`,
+    }, buckets);
+  }
+
+  const byId = (a: DraftPrunePlanEntry, b: DraftPrunePlanEntry) =>
+    a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  buckets.candidates.sort(byId);
+  buckets.skipped.sort(byId);
+  buckets.refused.sort(byId);
+
+  return ok({
+    dry_run: true,
+    read_only: true,
+    selector: {
+      older_than_ms: olderThanMs,
+      include,
+      exclude,
+      include_bound: includeBound,
+    },
+    candidates: buckets.candidates,
+    skipped: buckets.skipped,
+    refused: buckets.refused,
   });
 }
 
