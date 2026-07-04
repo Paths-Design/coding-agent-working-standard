@@ -46,7 +46,7 @@ Bootstrap the canonical vNext .caws/ project state (idempotent; refuses to overw
 **Options:**
 
 - `--data` — Show structured data block on diagnostics
-- `--agent-surface <name>` — Install a hook pack for an agent harness (claude-code | codex | cursor | windsurf | none). When omitted, init attempts filesystem detection and skips hook install when ambiguous.
+- `--agent-surface <name>` — Install a hook pack for an agent harness (claude-code | codex | opencode | cursor | windsurf | none). When omitted, init attempts filesystem detection and skips hook install when ambiguous.
 - `--overwrite` — For hook-pack install: replace drifted or unmanaged files at managed pack paths. CAUTION: local edits to those files will be lost.
 - `--adopt` — For hook-pack install: leave drifted or unmanaged files in place without enforcing pack contents. CAUTION: pack drift is no longer tracked for those paths.
 
@@ -326,15 +326,20 @@ Close an active spec. Non-destructive raw-byte YAML patch; appends spec_closed e
 - `--superseded-by <id>` — Spec id that supersedes this one (use with --resolution superseded)
 - `--data` — Show structured data block on diagnostics
 
-### `caws specs archive <id>`
+### `caws specs archive [id]`
 
-Archive a closed spec by moving its YAML to .caws/specs/.archive/<id>.yaml and appending spec_archived. If the archive destination is gitignored, the file is preserved on disk but not staged; the command prints follow-up instructions.
+Archive one closed spec, or batch-archive closed specs with --status closed. Batch mode defaults to dry-run; pass --apply to archive selected specs in one aggregate audit commit.
 
-**Argument:** `id` (required) — Closed spec id to archive
+**Argument:** `id` (optional) — Closed spec id to archive
 
 **Options:**
 
 - `--reason <text>` — Archive reason (advisory; the spec_archived event does not carry it)
+- `--status <s>` — Batch selector status. Currently only: closed
+- `--include <ids>` — Comma-separated spec ids to include in batch mode
+- `--exclude <ids>` — Comma-separated spec ids to exclude from batch mode
+- `--apply` — Apply batch archive (default: dry-run)
+- `--json` — Emit CAWS-native JSON to stdout
 - `--data` — Show structured data block on diagnostics
 
 ### `caws specs prune-archive`
@@ -560,7 +565,9 @@ Pull the next undelivered message addressed to you. Deliver-once. Defaults --me 
 **Options:**
 
 - `--me <session_id>` — Endpoint to poll for (default: this session id)
-- `--json` — Emit JSON ({message}) instead of human text
+- `--wait <ms>` — Block up to <ms> for a message before returning (long-poll; capped at 60000)
+- `--peek` — Show the next message without consuming it (no delivery record)
+- `--json` — Emit JSON ({message, waiting}) instead of human text
 - `--data` — Show structured data block on diagnostics
 
 ## `caws prepush`

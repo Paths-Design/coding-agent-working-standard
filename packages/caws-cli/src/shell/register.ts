@@ -190,6 +190,14 @@ function applyOptionMeta(cmd: Command, opt: CommandOptionMeta): void {
   cmd.option(opt.flag, description);
 }
 
+function parseCommaSeparatedList(raw: string | undefined): string[] | undefined {
+  if (raw === undefined) return undefined;
+  return raw
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
 /** Construct the `.command()` name string with the metadata's positional
  * argument suffix (`<name>` required, `[name]` optional), e.g. "create <id>". */
 function leafCommandName(leaf: LeafCommandMeta): string {
@@ -749,10 +757,29 @@ export function registerShellCommands(
 
   defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'archive'))
     .action(
-      (id: string, opts: { reason?: string; data?: boolean }) => {
+      (
+        id: string | undefined,
+        opts: {
+          reason?: string;
+          status?: string;
+          include?: string;
+          exclude?: string;
+          apply?: boolean;
+          json?: boolean;
+          data?: boolean;
+        }
+      ) => {
+        const include = parseCommaSeparatedList(opts.include);
+        const exclude = parseCommaSeparatedList(opts.exclude);
+        const status = opts.status === 'closed' ? 'closed' : undefined;
         const code = runSpecsArchiveCommand({
-          id,
+          ...(id !== undefined ? { id } : {}),
           ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+          ...(status !== undefined ? { status } : {}),
+          ...(include !== undefined ? { include } : {}),
+          ...(exclude !== undefined ? { exclude } : {}),
+          ...(opts.apply === true ? { apply: true } : {}),
+          ...(opts.json === true ? { json: true } : {}),
           showData: opts.data === true,
         });
         exit(code);

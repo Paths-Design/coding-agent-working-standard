@@ -146,6 +146,54 @@ export interface ArchiveSpecInput {
   readonly reason?: string;
   readonly now?: () => Date;
   readonly actor: EventBody['actor'];
+  readonly autoCommit?: boolean;
+}
+
+export interface ArchiveClosedSpecsSelectionInput {
+  readonly include?: readonly string[];
+  readonly exclude?: readonly string[];
+}
+
+export interface ArchiveClosedSpecsCandidate {
+  readonly id: string;
+  readonly title: string;
+  readonly lifecycle_state: Spec['lifecycle_state'];
+  readonly path: string;
+}
+
+export interface ArchiveClosedSpecsSkipped {
+  readonly id: string;
+  readonly reason: string;
+  readonly lifecycle_state?: Spec['lifecycle_state'] | 'missing';
+}
+
+export interface ArchiveClosedSpecsSelection {
+  readonly candidates: readonly ArchiveClosedSpecsCandidate[];
+  readonly skipped: readonly ArchiveClosedSpecsSkipped[];
+}
+
+export interface ArchiveClosedSpecsInput extends ArchiveClosedSpecsSelectionInput {
+  readonly now?: () => Date;
+  readonly actor: EventBody['actor'];
+}
+
+export interface ArchiveClosedSpecsArchived {
+  readonly id: string;
+  readonly path: string;
+}
+
+export interface ArchiveClosedSpecsFailed {
+  readonly id: string;
+  readonly reason: string;
+}
+
+export interface ArchiveClosedSpecsOutcome {
+  readonly kind: 'success';
+  readonly archived: readonly ArchiveClosedSpecsArchived[];
+  readonly skipped: readonly ArchiveClosedSpecsSkipped[];
+  readonly failed: readonly ArchiveClosedSpecsFailed[];
+  readonly data?: { readonly audit_commit: AutoCommitOutcome };
+  readonly warnings?: readonly string[];
 }
 
 export interface RetireDraftSpecInput {
@@ -1176,12 +1224,15 @@ export function archiveSpec(
   // shared autoCommit helper filters gitignored paths, so an ignored
   // .archive/ directory yields a deletion-only audit commit and leaves
   // the archived body on disk for the operator.
-  const audit = autoCommit({
-    repoRoot,
-    paths: [fromRel, toRel],
-    message: `chore(caws): archive ${input.id}`,
-    wasDirtyBeforeWrite,
-  });
+  const audit =
+    input.autoCommit === false
+      ? undefined
+      : autoCommit({
+          repoRoot,
+          paths: [fromRel, toRel],
+          message: `chore(caws): archive ${input.id}`,
+          wasDirtyBeforeWrite,
+        });
 
   const warnings = archivePathIgnored
     ? [
@@ -1193,8 +1244,139 @@ export function archiveSpec(
     kind: 'success',
     id: input.id,
     path: toPath,
-    data: { audit_commit: audit },
+    ...(audit !== undefined ? { data: { audit_commit: audit } } : {}),
     ...(warnings !== undefined ? { warnings } : {}),
+  });
+}
+
+// ─── selectClosedSpecsForArchive ────────────────────────────────────────
+
+export function selectClosedSpecsForArchive(
+  cawsDir: string,
+  input: ArchiveClosedSpecsSelectionInput = {}
+): Result<ArchiveClosedSpecsSelection> {
+  const includeSet = new Set(input.include ?? []);
+  const excludeSet = new Set(input.exclude ?? []);
+  for (const id of [...includeSet, ...excludeSet]) {
+    const idValidation = validateSpecId(id);
+    if (!idValidation.ok) return idValidation;
+  }
+
+  const activeResult = loadSpecs(cawsDir);
+  if (activeResult.diagnostics.some((d) => d.severity === 'error')) {
+    return err(activeResult.diagnostics.filter((d) => d.severity === 'error'));
+  }
+
+  const specsById = new Map(activeResult.specs.map((spec) => [spec.id, spec]));
+  const skipped: ArchiveClosedSpecsSkipped[] = [];
+  const candidates: ArchiveClosedSpecsCandidate[] = [];
+
+  if (includeSet.size > 0) {
+    for (const id of [...includeSet].sort()) {
+      if (excludeSet.has(id)) continue;
+      const spec = specsById.get(id);
+      if (spec === undefined) {
+        skipped.push({ id, reason: 'missing', lifecycle_state: 'missing' });
+        continue;
+      }
+      if (spec.lifecycle_state !== 'closed') {
+        skipped.push({
+          id,
+          reason: 'not_closed',
+          lifecycle_state: spec.lifecycle_state,
+        });
+        continue;
+      }
+      candidates.push({
+        id: spec.id,
+        title: spec.title,
+        lifecycle_state: spec.lifecycle_state,
+        path: specPath(cawsDir, spec.id),
+      });
+    }
+  } else {
+    for (const spec of activeResult.specs) {
+      if (excludeSet.has(spec.id)) continue;
+      if (spec.lifecycle_state !== 'closed') continue;
+      candidates.push({
+        id: spec.id,
+        title: spec.title,
+        lifecycle_state: spec.lifecycle_state,
+        path: specPath(cawsDir, spec.id),
+      });
+    }
+  }
+
+  candidates.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  skipped.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return ok({ candidates, skipped });
+}
+
+export function archiveClosedSpecs(
+  cawsDir: string,
+  input: ArchiveClosedSpecsInput
+): Result<ArchiveClosedSpecsOutcome> {
+  const selected = selectClosedSpecsForArchive(cawsDir, input);
+  if (!selected.ok) return selected;
+
+  const repoRoot = repoRootFromCawsDir(cawsDir);
+  const nowFn = input.now;
+  const archived: ArchiveClosedSpecsArchived[] = [];
+  const skipped = [...selected.value.skipped];
+  const failed: ArchiveClosedSpecsFailed[] = [];
+  const warnings: string[] = [];
+  const commitPaths: string[] = [];
+  const wasDirtyBeforeWrite = selected.value.candidates.some((candidate) => {
+    const fromRel = path.relative(repoRoot, candidate.path);
+    const toRel = path.relative(repoRoot, archivedSpecPath(cawsDir, candidate.id));
+    return isPathDirty(repoRoot, fromRel) || isPathDirty(repoRoot, toRel);
+  });
+
+  for (const candidate of selected.value.candidates) {
+    const result = archiveSpec(cawsDir, {
+      id: candidate.id,
+      actor: input.actor,
+      ...(nowFn !== undefined ? { now: nowFn } : {}),
+      autoCommit: false,
+    });
+    if (!result.ok) {
+      failed.push({
+        id: candidate.id,
+        reason: result.errors.map((d) => d.message).join('; '),
+      });
+      continue;
+    }
+    if (result.value.kind === 'partial_failure_recovered') {
+      failed.push({
+        id: candidate.id,
+        reason: result.value.cause.map((d) => d.message).join('; '),
+      });
+      continue;
+    }
+    archived.push({ id: candidate.id, path: result.value.path });
+    commitPaths.push(path.relative(repoRoot, candidate.path));
+    commitPaths.push(path.relative(repoRoot, result.value.path));
+    for (const warning of result.value.warnings ?? []) warnings.push(warning);
+  }
+
+  const uniqueCommitPaths = [...new Set(commitPaths)];
+  const audit =
+    uniqueCommitPaths.length > 0
+      ? autoCommit({
+          repoRoot,
+          paths: uniqueCommitPaths,
+          message: `chore(caws): archive ${archived.length} closed specs`,
+          wasDirtyBeforeWrite,
+        })
+      : undefined;
+
+  return ok({
+    kind: 'success',
+    archived,
+    skipped,
+    failed,
+    ...(audit !== undefined ? { data: { audit_commit: audit } } : {}),
+    ...(warnings.length > 0 ? { warnings } : {}),
   });
 }
 
