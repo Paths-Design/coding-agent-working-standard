@@ -59,7 +59,7 @@ import {
 } from '../../store';
 import { resolveBinding } from '../binding/resolve-binding';
 import { renderDiagnostics } from '../render/diagnostic';
-import { renderStatus } from '../render/status';
+import { renderStatus, type StatusPanel } from '../render/status';
 import { resolveSession } from '../session/resolve-session';
 
 const DEFAULT_LEASE_STALE_TTL_MS = 30 * 60 * 1000; // 30m
@@ -134,6 +134,42 @@ export interface StatusCommandOptions {
   readonly sessionId?: string;
   /** Platform tag for the lease record (only used when --heartbeat). */
   readonly platform?: string;
+  readonly specs?: boolean;
+  readonly worktrees?: boolean;
+  readonly agents?: boolean;
+  readonly doctor?: boolean;
+  readonly json?: boolean;
+}
+
+function selectedPanels(opts: StatusCommandOptions): readonly StatusPanel[] | undefined {
+  const panels: StatusPanel[] = [];
+  if (opts.specs === true) panels.push('specs');
+  if (opts.worktrees === true) panels.push('worktrees');
+  if (opts.agents === true) panels.push('agents');
+  if (opts.doctor === true) panels.push('doctor');
+  return panels.length > 0 ? panels : undefined;
+}
+
+function countByLifecycle(specs: readonly { readonly lifecycle_state: string }[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const spec of specs) counts[spec.lifecycle_state] = (counts[spec.lifecycle_state] ?? 0) + 1;
+  return counts;
+}
+
+function countDoctorFindings(findings: readonly { readonly severity: string }[]): {
+  readonly errors: number;
+  readonly warnings: number;
+  readonly infos: number;
+} {
+  let errors = 0;
+  let warnings = 0;
+  let infos = 0;
+  for (const finding of findings) {
+    if (finding.severity === 'error') errors++;
+    else if (finding.severity === 'warning') warnings++;
+    else infos++;
+  }
+  return { errors, warnings, infos };
 }
 
 // ─── git path normalization (shared with agents command) ─────────────────
@@ -330,30 +366,83 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
   const chainBroken = report.findings.some(
     (f) => f.rule === 'doctor.event.chain_invalid' && f.severity === 'error'
   );
+  const panels = selectedPanels(opts);
+  const effectiveLeaseSummary = wantsHeartbeat
+    ? (callSummarizeActiveAgentsSafe(leases, now, leaseTtl) ?? EMPTY_ACTIVITY_SUMMARY)
+    : summary;
+  const renderInput = {
+    repoRoot,
+    cawsDir,
+    policyLoaded: snapshot.policy !== undefined,
+    specs: snapshot.specs,
+    worktrees: snapshot.worktrees,
+    agents: snapshot.agents,
+    leases,
+    leaseSummary: effectiveLeaseSummary,
+    selfSessionId: sessionIdentity?.session_id ?? null,
+    eventCount: snapshot.events.length,
+    ...(snapshot.events.length > 0 ? { eventChainOk: !chainBroken } : {}),
+    binding,
+    session: sessionResult.ok ? sessionResult.value : null,
+    doctorFindings: report.findings,
+    now,
+    ...(opts.staleTtlMs !== undefined ? { staleTtlMs: opts.staleTtlMs } : {}),
+    ...(opts.findingCap !== undefined ? { findingCap: opts.findingCap } : {}),
+    ...(panels !== undefined ? { panels } : {}),
+  };
 
-  out(
-    renderStatus({
-      repoRoot,
-      cawsDir,
-      policyLoaded: snapshot.policy !== undefined,
-      specs: snapshot.specs,
-      worktrees: snapshot.worktrees,
-      agents: snapshot.agents,
-      leases,
-      leaseSummary: wantsHeartbeat
-        ? (callSummarizeActiveAgentsSafe(leases, now, leaseTtl) ?? EMPTY_ACTIVITY_SUMMARY)
-        : summary,
-      selfSessionId: sessionIdentity?.session_id ?? null,
-      eventCount: snapshot.events.length,
-      ...(snapshot.events.length > 0 ? { eventChainOk: !chainBroken } : {}),
-      binding,
-      session: sessionResult.ok ? sessionResult.value : null,
-      doctorFindings: report.findings,
-      now,
-      ...(opts.staleTtlMs !== undefined ? { staleTtlMs: opts.staleTtlMs } : {}),
-      ...(opts.findingCap !== undefined ? { findingCap: opts.findingCap } : {}),
-    })
-  );
+  if (opts.json === true) {
+    const jsonPanels = panels ?? ['specs', 'worktrees', 'agents', 'doctor'] as const;
+    const payload: Record<string, unknown> = {
+      ok: true,
+      read_only: !wantsHeartbeat,
+      panels: jsonPanels,
+    };
+    if (jsonPanels.includes('specs')) {
+      payload.specs = {
+        count: snapshot.specs.length,
+        by_lifecycle: countByLifecycle(snapshot.specs),
+        items: snapshot.specs.map((spec) => ({
+          id: spec.id,
+          title: spec.title,
+          lifecycle_state: spec.lifecycle_state,
+          ...(spec.worktree !== undefined ? { worktree: spec.worktree } : {}),
+        })),
+      };
+    }
+    if (jsonPanels.includes('worktrees')) {
+      payload.worktrees = {
+        count: Object.keys(snapshot.worktrees).length,
+        items: Object.entries(snapshot.worktrees).map(([name, record]) => ({
+          name,
+          spec_id: record.specId,
+          path: record.path,
+          ...(record.owner !== undefined ? { owner: record.owner } : {}),
+        })),
+      };
+    }
+    if (jsonPanels.includes('agents')) {
+      payload.agents = {
+        leases: {
+          total: effectiveLeaseSummary.total,
+          active: effectiveLeaseSummary.active,
+          stale: effectiveLeaseSummary.stale,
+          stopped: effectiveLeaseSummary.stopped,
+        },
+        self_session_id: sessionIdentity?.session_id ?? null,
+      };
+    }
+    if (jsonPanels.includes('doctor')) {
+      payload.doctor = {
+        counts: countDoctorFindings(report.findings),
+        findings: report.findings,
+      };
+    }
+    out(JSON.stringify(payload, null, 2));
+    return 0;
+  }
+
+  out(renderStatus(renderInput));
 
   // Surface lease-load diagnostics in showData mode (non-blocking).
   if (showData && Array.isArray(leasesDiagnostics) && leasesDiagnostics.length > 0) {

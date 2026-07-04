@@ -179,13 +179,23 @@ Read-only dashboard.
 ```bash
 caws status
 caws status --data
+caws status --specs
+caws status --worktrees --agents
+caws status --doctor --json
 ```
 
 | Flag | Description |
 |---|---|
 | `--data` | Show structured data block on rendered diagnostics. |
+| `--specs` | Render only the focused specs panel. |
+| `--worktrees` | Render only the focused worktrees panel. |
+| `--agents` | Render only the focused agents panel. |
+| `--doctor` | Render only the focused doctor panel. |
+| `--json` | Emit selected status panels as JSON. |
 
-Surfaces project, current context, claim panel (when run inside a registered worktree), and active doctor findings. **Always observability — never mutates `.caws/`.** Running it any number of times produces zero `.caws/` byte changes (see invariant 7 in the doctrine doc).
+Surfaces project, current context, claim panel (when run inside a registered worktree), agent lease summary, and active doctor findings. **Always observability — never mutates `.caws/`.** Running it any number of times produces zero `.caws/` byte changes (see invariant 7 in the doctrine doc).
+
+Focused filters keep the same read-only snapshot but render only the requested panels. Combine filters to inspect several panels at once. `--json` emits the selected panel payloads with `read_only: true`; without any focused filter, JSON includes the status data panels (`specs`, `worktrees`, `agents`, `doctor`).
 
 Exit code: 0 (always).
 

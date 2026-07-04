@@ -675,7 +675,14 @@ export const STATUS_COMMAND_META: LeafCommandMeta = {
   name: 'status',
   description:
     'Read-only dashboard: project, current context, claim, and doctor findings',
-  options: [{ flag: '--data', description: 'Show structured data block on rendered diagnostics' }],
+  options: [
+    { flag: '--data', description: 'Show structured data block on rendered diagnostics' },
+    { flag: '--specs', description: 'Render only the focused specs panel' },
+    { flag: '--worktrees', description: 'Render only the focused worktrees panel' },
+    { flag: '--agents', description: 'Render only the focused agents panel' },
+    { flag: '--doctor', description: 'Render only the focused doctor panel' },
+    { flag: '--json', description: 'Emit selected status panels as JSON' },
+  ],
 };
 
 export const CLAIM_COMMAND_META: LeafCommandMeta = {
