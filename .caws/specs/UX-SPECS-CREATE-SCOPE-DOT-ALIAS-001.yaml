@@ -2,10 +2,11 @@ id: UX-SPECS-CREATE-SCOPE-DOT-ALIAS-001
 title: 'Add specs create scope.in alias'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: specs-create-scope-dot-alias
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge specs-create-scope-dot-alias at b72737df822c0401d2094c30dd8109370818b346'
 created_at: '2026-07-04T18:33:49.870Z'
-updated_at: '2026-07-04T18:33:49.870Z'
+updated_at: '2026-07-04T18:38:31.136Z'
 blast_radius:
   modules:
     - 'packages/caws-cli shell specs create'
