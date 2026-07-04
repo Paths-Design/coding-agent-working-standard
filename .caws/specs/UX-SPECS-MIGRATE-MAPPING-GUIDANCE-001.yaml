@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: specs-migrate-mapping-guidance
 created_at: '2026-07-04T17:44:18.823Z'
-updated_at: '2026-07-04T17:44:18.823Z'
+updated_at: '2026-07-04T17:46:04.474Z'
 blast_radius:
   modules:
     - 'packages/caws-cli/specs-migrate'
@@ -19,6 +19,7 @@ scope:
     - 'docs/architecture/cli-ux-job-model-audit.md'
     - 'docs/api/cli.md'
     - 'docs/command-reference.md'
+    - packages/caws-cli/src/shell/command-metadata.ts
   out: []
 invariants:
   - 'Malformed lifecycle mapping files remain non-mutating composition failures.'
