@@ -117,7 +117,15 @@ import type { HookPackV1 } from './types';
 // hook stdin fail-open, but now emits a controlled CAWS hook-parse diagnostic to
 // stderr instead of silently replacing the payload with {}. The diagnostic never
 // echoes raw malformed input and avoids Python tracebacks.
-export const SHARED_PACK_VERSION = 15;
+// v16 (CAWS-ZCODE-AGENT-SURFACE-001): agent-surface.sh gains a `zcode` case arm
+// (CAWS_VENDOR_DIR=.zcode, CAWS_PERMISSION_VOCAB=ask — ZCode supports allow/ask/
+// deny for PreToolUse like Claude Code). emit_ask gains an optional [event]
+// parameter so a future PostToolUse caller can pass the correct hookEventName;
+// the harness validates hookEventName against the actual event and rejects a
+// mismatch. No current caller passes a second arg, so existing PreToolUse ask
+// behavior is unchanged; the change is defensive hardening that lets the same
+// emitter serve PostToolUse without each surface rolling its own.
+export const SHARED_PACK_VERSION = 16;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.

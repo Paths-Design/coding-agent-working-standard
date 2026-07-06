@@ -32,12 +32,17 @@ import {
 import {
   detectOrphanedDispatchDir,
   inspectClaudeSettings,
+  inspectZcodeConfig,
   installHookPack,
   mergeClaudeSettings,
+  mergeZcodeConfig,
   planClaudeSettingsMerge,
   planHookPackInstall,
   planSettingsExample,
+  planZcodeConfigExample,
+  planZcodeConfigMerge,
   writeSettingsExample,
+  writeZcodeConfigExample,
 } from '../../init/hook-install';
 import {
   IMPLEMENTED_SURFACES,
@@ -72,6 +77,7 @@ import {
   renderActivationContract,
   renderHookPackInstall,
   renderSettingsWiring,
+  renderZcodeSettingsWiring,
 } from '../render/init-hook-pack';
 import type {
   SettingsMergeResult,
@@ -300,6 +306,10 @@ interface InitPlanDocument {
     readonly settings_example: SettingsExamplePlanResult;
     readonly orphaned_dispatch_dir: string | null;
   };
+  readonly zcode_settings?: {
+    readonly config_json: SettingsMergePlanResult;
+    readonly config_example: SettingsExamplePlanResult;
+  };
   readonly codex_trust_note?: string;
   readonly next_apply_command: string;
 }
@@ -399,6 +409,23 @@ function renderInitPlan(plan: InitPlanDocument): string {
     }
   }
 
+  if (plan.zcode_settings) {
+    lines.push('');
+    lines.push('.zcode config wiring:');
+    lines.push(`  config.json: ${plan.zcode_settings.config_json.kind}`);
+    if (plan.zcode_settings.config_json.kind === 'merged') {
+      lines.push(
+        `  would add: ${plan.zcode_settings.config_json.added.join(', ')}`
+      );
+    }
+    if (plan.zcode_settings.config_json.kind === 'invalid') {
+      lines.push(`  error: ${plan.zcode_settings.config_json.error}`);
+    }
+    lines.push(
+      `  config.json.example: ${plan.zcode_settings.config_example.action}`
+    );
+  }
+
   if (plan.codex_trust_note) {
     lines.push('');
     lines.push(plan.codex_trust_note);
@@ -468,6 +495,13 @@ function runInitPlan(
           orphaned_dispatch_dir: detectOrphanedDispatchDir(repoRoot),
         }
       : undefined;
+  const zcodeSettings =
+    hookPlan.pack?.id === 'zcode'
+      ? {
+          config_json: planZcodeConfigMerge(repoRoot),
+          config_example: planZcodeConfigExample(repoRoot),
+        }
+      : undefined;
   const codexTrustNote =
     hookPlan.pack?.id === 'codex'
       ? 'Codex project hooks require project trust and /hooks review before changed command hooks run.'
@@ -491,6 +525,7 @@ function runInitPlan(
     gitignore,
     hook_pack: { ...hookPlan, read_only: true },
     ...(claudeSettings ? { claude_settings: claudeSettings } : {}),
+    ...(zcodeSettings ? { zcode_settings: zcodeSettings } : {}),
     ...(codexTrustNote ? { codex_trust_note: codexTrustNote } : {}),
     next_apply_command: applyCommand(opts),
   };
@@ -630,6 +665,13 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     out(renderSettingsWiring(wiringStatus, mergeResult, orphanedDispatchDir));
   } else if (hookPackResult.pack?.id === 'codex') {
     out(renderCodexHookTrust());
+  } else if (hookPackResult.pack?.id === 'zcode') {
+    mergeResult = mergeZcodeConfig(repoRoot);
+    writeZcodeConfigExample(repoRoot);
+    // Re-inspect AFTER the merge so the activation panel reflects the
+    // now-wired state, exactly as the claude-code branch does.
+    wiringStatus = inspectZcodeConfig(repoRoot);
+    out(renderZcodeSettingsWiring(mergeResult));
   }
 
   // Step 4: activation contract. The contract message tailors to whether

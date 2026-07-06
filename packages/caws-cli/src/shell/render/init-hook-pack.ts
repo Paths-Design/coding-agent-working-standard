@@ -7,6 +7,7 @@
 
 import {
   CANONICAL_SETTINGS_SNIPPET,
+  CANONICAL_ZCODE_CONFIG_SNIPPET,
   type SettingsMergeResult,
   type SettingsWiringStatus,
 } from '../../init/hook-install';
@@ -34,7 +35,7 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
         '  This repo is NOT agent-safe for multi-session work without external governance.'
       );
       lines.push(
-        '  If you intended to enable a hook pack, rerun with --agent-surface claude-code, codex, or opencode.'
+        '  If you intended to enable a hook pack, rerun with --agent-surface claude-code, codex, opencode, or zcode.'
       );
       return lines.join('\n');
     }
@@ -46,6 +47,7 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
       lines.push('    caws init --agent-surface claude-code');
       lines.push('    caws init --agent-surface codex');
       lines.push('    caws init --agent-surface opencode');
+      lines.push('    caws init --agent-surface zcode');
       lines.push('    caws init --agent-surface none      # explicit opt-out');
       return lines.join('\n');
     }
@@ -145,6 +147,50 @@ export function renderCodexHookTrust(): string {
   lines.push('  Codex loads project .codex hooks only in trusted projects; changed');
   lines.push('  non-managed command hooks are skipped until reviewed and trusted.');
   lines.push('  In Codex, run /hooks to inspect and trust the installed hooks.');
+  return lines.join('\n');
+}
+
+/** Render the .zcode/config.json wiring step. Reports what the in-place merge
+ *  actually did (created / merged / unchanged / invalid) for the ZCode surface,
+ *  mirroring renderSettingsWiring's mergeResult branch but for ZCode's schema.
+ *  There is no orphaned-dispatch-dir concept for zcode (it has no pre-rename
+ *  legacy layout). A .zcode/config.json.example is always written as a
+ *  reference artifact alongside the merge. */
+export function renderZcodeSettingsWiring(
+  mergeResult: SettingsMergeResult
+): string {
+  const lines: string[] = [];
+  lines.push(section('Step: .zcode/config.json wiring'));
+
+  switch (mergeResult.kind) {
+    case 'created':
+      lines.push('  Created .zcode/config.json wiring the four CAWS bridge');
+      lines.push('  entrypoints (PreToolUse/PostToolUse/SessionStart/Stop) under');
+      lines.push('  hooks.events with hooks.enabled=true.');
+      break;
+    case 'merged':
+      lines.push('  Merged the CAWS bridge wiring into your existing');
+      lines.push(`  .zcode/config.json (added: ${mergeResult.added.join(', ')}).`);
+      lines.push('  Your other settings — permissions, env, and any existing hooks —');
+      lines.push('  were preserved unchanged; hooks.enabled was forced to true.');
+      break;
+    case 'unchanged':
+      lines.push('  OK — .zcode/config.json already wires all four CAWS bridge');
+      lines.push('  entrypoints. No change.');
+      break;
+    case 'invalid':
+      lines.push(`  ERROR — .zcode/config.json could not be parsed: ${mergeResult.error}`);
+      lines.push('  init did NOT modify the file. Repair the JSON, then re-run init or');
+      lines.push('  merge the canonical wiring by hand:');
+      lines.push('');
+      for (const line of CANONICAL_ZCODE_CONFIG_SNIPPET.split('\n')) {
+        lines.push(`    ${line}`);
+      }
+      break;
+  }
+  lines.push('');
+  lines.push('  A .zcode/config.json.example with the canonical wiring was also');
+  lines.push('  written for reference.');
   return lines.join('\n');
 }
 
@@ -274,6 +320,7 @@ export function renderActivationContract(
   const wired = wiringStatus?.kind === 'wired';
   const isCodex = result.pack.id === 'codex';
   const isOpencode = result.pack.id === 'opencode';
+  const isZcode = result.pack.id === 'zcode';
 
   switch (result.activation) {
     case 'immediate':
@@ -299,6 +346,18 @@ export function renderActivationContract(
         } else {
           lines.push('  The CAWS plugin is installed. It is active once opencode loads it at');
           lines.push('  startup; restart opencode if this session pre-dates the install.');
+        }
+        break;
+      }
+      if (isZcode) {
+        if (changed) {
+          lines.push('  Hook files were installed or updated. Restart the ZCode session so');
+          lines.push('  .zcode/config.json is re-read and the bridge at');
+          lines.push('  .zcode/hooks/caws-bridge.sh begins dispatching the shared CAWS hooks.');
+        } else {
+          lines.push('  The CAWS bridge is installed. It is active in any ZCode session');
+          lines.push('  started AFTER the install; restart ZCode if this session pre-dates');
+          lines.push('  the install.');
         }
         break;
       }

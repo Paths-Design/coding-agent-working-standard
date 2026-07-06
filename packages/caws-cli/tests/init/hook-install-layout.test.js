@@ -27,6 +27,7 @@ const PACKS_ROOT = path.join(CLI_PKG_ROOT, 'templates', 'hook-packs');
 const { SHARED_PACK } = require('../../dist/init/hook-packs/manifest-shared');
 const { CLAUDE_CODE_PACK } = require('../../dist/init/hook-packs/manifest-claude-code');
 const { CODEX_PACK } = require('../../dist/init/hook-packs/manifest-codex');
+const { ZCODE_PACK } = require('../../dist/init/hook-packs/manifest-zcode');
 
 const EXCLUDED_DIRS = new Set(['tmp', '.caws', '__pycache__', 'node_modules']);
 const EXCLUDED_FILES = new Set(['.DS_Store']);
@@ -106,6 +107,7 @@ describe('manifest-vs-disk drift (A2): no drift in either direction', () => {
     { id: 'shared', manifest: SHARED_PACK, dir: path.join(PACKS_ROOT, 'shared') },
     { id: 'claude-code', manifest: CLAUDE_CODE_PACK, dir: path.join(PACKS_ROOT, 'claude-code') },
     { id: 'codex', manifest: CODEX_PACK, dir: path.join(PACKS_ROOT, 'codex') },
+    { id: 'zcode', manifest: ZCODE_PACK, dir: path.join(PACKS_ROOT, 'zcode') },
   ];
 
   test.each(PACKS)('$id: every manifest sourcePath exists on disk', ({ manifest, dir }) => {

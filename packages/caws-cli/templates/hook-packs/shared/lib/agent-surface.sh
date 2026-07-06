@@ -47,6 +47,10 @@
 #                  is unset, preserving back-compat for any existing wiring that
 #                  does not yet inject the surface identity.
 #   codex        — OpenAI Codex CLI.
+#   zcode        — ZCode CLI. Strict-JSON hook output contract; the vendor
+#                  wiring installs a bridge wrapper (caws-bridge.sh) that
+#                  re-wraps non-JSON shared-dispatcher output as valid
+#                  additionalContext envelopes. Supports PreToolUse ask.
 #   (future)     — cursor, windsurf, vscode, idea, ... Add a case arm below.
 #
 # IDEMPOTENT: safe to source multiple times.
@@ -112,6 +116,12 @@ case "$CAWS_AGENT_SURFACE" in
     # inside tool.execute.before (see .opencode/plugins/caws.ts). Map ask ->
     # deny, matching the codex adapter precedent.
     CAWS_PERMISSION_VOCAB="deny"
+    ;;
+  zcode)
+    CAWS_VENDOR_DIR=".zcode"
+    CAWS_PLATFORM_FLAG="zcode"
+    # ZCode supports allow/ask/deny for PreToolUse — same as Claude Code.
+    CAWS_PERMISSION_VOCAB="ask"
     ;;
   *)
     # Unknown surface — fall through to claude-code defaults so a

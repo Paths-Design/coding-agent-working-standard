@@ -68,6 +68,7 @@ const { SHARED_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-sha
 const { CLAUDE_CODE_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-claude-code');
 const { CODEX_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-codex');
 const { OPENCODE_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-opencode');
+const { ZCODE_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-zcode');
 
 const PACKS = [
   { id: 'shared', dir: path.join(PACKS_ROOT, 'shared'), version: SHARED_PACK_VERSION },
@@ -78,6 +79,7 @@ const PACKS = [
   },
   { id: 'codex', dir: path.join(PACKS_ROOT, 'codex'), version: CODEX_PACK_VERSION },
   { id: 'opencode', dir: path.join(PACKS_ROOT, 'opencode'), version: OPENCODE_PACK_VERSION },
+  { id: 'zcode', dir: path.join(PACKS_ROOT, 'zcode'), version: ZCODE_PACK_VERSION },
 ];
 
 describe('pack-fingerprint guard: live template fingerprint matches the recorded baseline', () => {

@@ -7,12 +7,18 @@ created_at: '2026-07-06T15:37:58.223Z'
 updated_at: '2026-07-06T15:42:20.797Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/init/hook-packs
+    - packages/caws-cli/src/init/hook-install.ts
+    - packages/caws-cli/src/init/harness-detect.ts
+    - packages/caws-cli/src/shell/commands/init.ts
+    - packages/caws-cli/src/shell/render/init-hook-pack.ts
+    - packages/caws-cli/templates/hook-packs/shared/lib
+    - packages/caws-cli/templates/hook-packs/zcode
+    - packages/caws-cli/tests/init
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh
     - packages/caws-cli/templates/hook-packs/shared/lib/emit.sh
     - packages/caws-cli/src/init/hook-packs/types.ts
@@ -32,14 +38,103 @@ scope:
     - packages/caws-cli/tests/init/hook-install-layout.test.js
     - packages/caws-cli/tests/init/zcode-config-merge.test.js
     - .caws/specs/CAWS-ZCODE-AGENT-SURFACE-001.yaml
-  out: []
+  out:
+    - >-
+      The shared guard logic bodies (scope-guard.sh, worktree-write-guard.sh,
+      block-dangerous.sh, etc.) are NOT modified. zcode only adds the surface
+      resolution case arm in agent-surface.sh and the emit_ask event parameter
+      in emit.sh; it does not alter guard decisions or failure-class invariants.
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    `zcode` is a first-class known and implemented agent surface, parallel to
+    claude-code/codex/opencode. resolveHookPack('zcode') returns a pack;
+    KNOWN_SURFACES and IMPLEMENTED_SURFACES include it; the AgentSurface union
+    admits 'zcode'; harness detection recognizes `.zcode` markers; and
+    `caws init --agent-surface zcode` installs the pack without weakening any
+    existing surface.
+  - >-
+    The ZCode surface uses the same shared hook core (.caws/hooks/) as every
+    other surface. The only ZCode-installed vendor file is
+    `.zcode/hooks/caws-bridge.sh`, which wraps the shared dispatchers so their
+    output conforms to ZCode's strict-JSON contract. No shared guard logic is
+    duplicated into the zcode pack.
+  - >-
+    ZCode's CAWS_AGENT_SURFACE resolves to CAWS_VENDOR_DIR=.zcode,
+    CAWS_PLATFORM_FLAG=zcode, and CAWS_PERMISSION_VOCAB=ask (ZCode supports
+    allow/ask/deny for PreToolUse, same vocabulary as Claude Code — unlike
+    codex/opencode which degrade ask to deny).
+  - >-
+    `.zcode/config.json` is merged non-destructively, mirroring the Claude
+    settings.json surface: absent -> created with the canonical wiring;
+    present-but-unwired -> CAWS entries appended under hooks.events with
+    hooks.enabled forced true, preserving all user-authored keys; already-wired
+    -> byte-identical no-op (idempotent); unparseable -> left untouched and
+    reported invalid. CAWS-owned entries are identified by the
+    `/.zcode/hooks/caws-bridge.sh` path segment in the hook command.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      The hook-pack registry, the AgentSurface type union, and the harness
+      detector.
+    when: >-
+      `zcode` is requested explicitly via `--agent-surface zcode`, or `.zcode/`
+      is present on disk.
+    then: >-
+      `zcode` is recognized as a KNOWN and IMPLEMENTED surface, resolves to the
+      ZCODE_PACK manifest with targetSurface 'zcode', is selected by harness
+      detection, and does not displace claude-code/codex/opencode from their
+      registration branches.
+  - id: A2
+    given: >-
+      A fresh git repo.
+    when: >-
+      `caws init --agent-surface zcode` runs.
+    then: >-
+      The shared hook core lands under `.caws/hooks/`, the bridge lands at
+      `.zcode/hooks/caws-bridge.sh` with its executable bit set and a
+      CAWS-MANAGED-HOOK header carrying hook_pack: zcode, and `.zcode/config.json`
+      is created wiring the four events (PreToolUse/PostToolUse/SessionStart/Stop)
+      to the bridge + shared dispatchers with hooks.enabled=true.
+  - id: A3
+    given: >-
+      A repo with an already-wired `.zcode/config.json` (canonical CAWS entries
+      present) plus unrelated user-authored hooks.
+    when: >-
+      `caws init --agent-surface zcode` is run again.
+    then: >-
+      The merge is a no-op (unchanged): no duplicate CAWS entries are appended,
+      the user's own hooks are preserved byte-for-byte, and the file is left
+      byte-identical to the pre-run state.
+  - id: A4
+    given: >-
+      A repo with a malformed (unparseable) `.zcode/config.json`.
+    when: >-
+      `caws init --agent-surface zcode` runs.
+    then: >-
+      init does NOT modify the file, reports it as invalid with the parse error,
+      and writes a `.zcode/config.json.example` reference artifact so the user
+      can repair by hand.
+  - id: A5
+    given: >-
+      The zcode-config-merge contract test suite.
+    when: >-
+      the merge/plan/idempotency/detection cases run against temp repos.
+    then: >-
+      mergeZcodeConfig covers created/merged/unchanged/invalid and is idempotent
+      on a second run; planZcodeConfigMerge reports the same outcomes read-only;
+      arrayHasCawsZcodeEntry detects an existing CAWS bridge entry and does not
+      double-append.
+  - id: A6
+    given: >-
+      The pack-fingerprint and registration guard tests.
+    when: >-
+      the shared pack templates change (emit.sh emit_ask gains an event param)
+      and the zcode pack is added.
+    then: >-
+      SHARED_PACK_VERSION bumps 15 -> 16 alongside its updated fingerprint, the
+      new zcode pack has a recorded fingerprint at version 1, and the
+      hook-pack-register canary lists exactly claude-code/codex/opencode/zcode
+      as implemented.
 non_functional: {}
 contracts:
   - name: 'zcode-config-merge'

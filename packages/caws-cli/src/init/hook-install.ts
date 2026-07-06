@@ -1082,6 +1082,352 @@ export function planSettingsExample(repoRoot: string): SettingsExamplePlanResult
   };
 }
 
+// ─── .zcode/config.json wiring (ZCode vendor surface) ────────────────────
+//
+// ZCode reads hook registration from .zcode/config.json at session start, in
+// a schema that nests event arrays one level deeper than Claude's
+// settings.json:
+//   { "hooks": { "enabled": true, "events": { "<Event>": [ {matcher,hooks} ] } } }
+// (CAWS-ZCODE-AGENT-SURFACE-001.) The merge mirrors mergeClaudeSettings:
+// non-destructive, idempotent, never-clobber. The CAWS-owned entry for each
+// event is identified by the `/.zcode/hooks/caws-bridge.sh` path segment in
+// the hook command. .zcode/config.json itself is NOT a managed pack file
+// (it carries user-authored hooks/permissions/env); it is merged in place, and
+// a .zcode/config.json.example is emitted as a reference artifact.
+
+/** Match PreToolUse against the same tool set the Claude surface does. */
+const ZCODE_PRETOOLUSE_MATCHER = 'Bash|Read|Write|Edit|Glob|Grep|NotebookEdit';
+const ZCODE_POSTTOOLUSE_MATCHER = 'Write|Edit|Bash|ExitPlanMode';
+
+/** ZCode resolves ZCODE_PROJECT_DIR at invocation time, so commands embed it
+ *  verbatim — no install-time substitution. Centralized so the canonical
+ *  entries and the example stay in lockstep.
+ *
+ *  Quoting form: the env var is quoted and the literal path tail sits OUTSIDE
+ *  the quotes (`"${ZCODE_PROJECT_DIR}"/.zcode/hooks/caws-bridge.sh`), matching
+ *  the hand-authored reference validated live in the Sterling consumer. The
+ *  var-inside-quotes form (`"${ZCODE_PROJECT_DIR}/.zcode/..."`) is equivalent
+ *  for well-formed paths, but the split form is the one ZCode's hook runner has
+ *  been exercised against, so the canonical wiring emits it byte-for-byte.
+ *
+ *  `ZCODE_VAR_TOKEN` is built by string concatenation (not a template literal)
+ *  so it carries the literal characters `${ZCODE_PROJECT_DIR}` for the shell to
+ *  expand at invocation time — a template literal would try to interpolate it. */
+const ZCODE_PROJECT_DIR_VAR = 'ZCODE_PROJECT_DIR';
+const ZCODE_VAR_TOKEN = '${' + ZCODE_PROJECT_DIR_VAR + '}';
+const ZCODE_BRIDGE_REF = `"${ZCODE_VAR_TOKEN}"/.zcode/hooks/caws-bridge.sh`;
+function ZCODE_BRIDGE_REF_DEFAULT_DISPATCHER(dispatcher: string): string {
+  return `"${ZCODE_VAR_TOKEN}"/.caws/hooks/dispatch/${dispatcher}`;
+}
+
+/** The canonical CAWS hook wiring for ZCode, as the structured entries that
+ *  go under `hooks.events.<Event>`. Single source of truth for both the
+ *  in-place merge and the printed/emitted example. */
+export const CANONICAL_ZCODE_HOOK_ENTRIES: Readonly<
+  Record<string, Record<string, unknown>>
+> = {
+  PreToolUse: {
+    matcher: ZCODE_PRETOOLUSE_MATCHER,
+    hooks: [
+      {
+        type: 'command',
+        command: `${ZCODE_BRIDGE_REF} PreToolUse ${ZCODE_BRIDGE_REF_DEFAULT_DISPATCHER('pre_tool_use.sh')}`,
+        timeout: 45,
+      },
+    ],
+  },
+  PostToolUse: {
+    matcher: ZCODE_POSTTOOLUSE_MATCHER,
+    hooks: [
+      {
+        type: 'command',
+        command: `${ZCODE_BRIDGE_REF} PostToolUse ${ZCODE_BRIDGE_REF_DEFAULT_DISPATCHER('post_tool_use.sh')}`,
+        timeout: 60,
+      },
+    ],
+  },
+  SessionStart: {
+    hooks: [
+      {
+        type: 'command',
+        command: `${ZCODE_BRIDGE_REF} SessionStart ${ZCODE_BRIDGE_REF_DEFAULT_DISPATCHER('session_start.sh')}`,
+        timeout: 30,
+      },
+    ],
+  },
+  Stop: {
+    hooks: [
+      {
+        type: 'command',
+        command: `${ZCODE_BRIDGE_REF} Stop ${ZCODE_BRIDGE_REF_DEFAULT_DISPATCHER('stop.sh')}`,
+        timeout: 30,
+      },
+    ],
+  },
+};
+
+/** A fresh .zcode/config.json object containing ONLY the canonical CAWS wiring. */
+function canonicalZcodeConfigObject(): {
+  hooks: { enabled: true; events: Record<string, unknown[]> };
+} {
+  const events: Record<string, unknown[]> = {};
+  for (const [key, entry] of Object.entries(CANONICAL_ZCODE_HOOK_ENTRIES)) {
+    events[key] = [entry];
+  }
+  return { hooks: { enabled: true, events } };
+}
+
+/** Canonical .zcode/config.json wiring snippet, as a JSON string ready to
+ *  print or copy. */
+export const CANONICAL_ZCODE_CONFIG_SNIPPET = JSON.stringify(
+  canonicalZcodeConfigObject(),
+  null,
+  2
+);
+
+/** Does this event's entry array already contain a CAWS-owned entry? Matches a
+ *  hook whose command references the `/.zcode/hooks/caws-bridge.sh` path, so
+ *  re-running init on a wired consumer does not append a duplicate entry.
+ *
+ *  ZCode's schema nests the per-event blocks under `hooks.events.<Event>`
+ *  (vs Claude's flat `hooks.<Event>`), but each block's shape is identical to
+ *  Claude's, so the walk is the same. */
+function arrayHasCawsZcodeEntry(entryArray: unknown): boolean {
+  if (!Array.isArray(entryArray)) return false;
+  const bridgeTail = '/.zcode/hooks/caws-bridge.sh';
+  for (const block of entryArray as unknown[]) {
+    const hookList = (block as { hooks?: unknown }).hooks;
+    if (!Array.isArray(hookList)) continue;
+    for (const h of hookList as unknown[]) {
+      const cmd = (h as { command?: unknown }).command;
+      if (typeof cmd === 'string' && cmd.includes(bridgeTail)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Merge the canonical CAWS hook wiring into `.zcode/config.json`,
+ * non-destructively. For each event, the CAWS entry is appended only if an
+ * equivalent entry (matched by the caws-bridge.sh command path) is not already
+ * present. All other keys — permissions, env, user-authored hooks — are
+ * preserved. `hooks.enabled` is forced to `true` (CAWS wiring is inert
+ * otherwise). The `events` object is created if absent.
+ *
+ * Never overwrites an unparseable file. Idempotent: a second run on a
+ * fully-wired config.json is a no-op and leaves the file byte-identical.
+ */
+export function mergeZcodeConfig(repoRoot: string): SettingsMergeResult {
+  const configPath = path.join(repoRoot, '.zcode', 'config.json');
+
+  if (!fs.existsSync(configPath)) {
+    ensureDir(path.dirname(configPath));
+    fs.writeFileSync(
+      configPath,
+      `${JSON.stringify(canonicalZcodeConfigObject(), null, 2)}\n`,
+      'utf8'
+    );
+    return { kind: 'created', path: configPath };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  } catch (e) {
+    return { kind: 'invalid', path: configPath, error: (e as Error).message };
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return {
+      kind: 'invalid',
+      path: configPath,
+      error: 'config.json root is not an object',
+    };
+  }
+
+  const root = parsed as Record<string, unknown>;
+  // Ensure root.hooks is an object; force hooks.enabled = true.
+  let hooks: Record<string, unknown>;
+  if (
+    root.hooks &&
+    typeof root.hooks === 'object' &&
+    !Array.isArray(root.hooks)
+  ) {
+    hooks = root.hooks as Record<string, unknown>;
+  } else {
+    hooks = {};
+    root.hooks = hooks;
+  }
+  const wasEnabled = hooks.enabled === true;
+  hooks.enabled = true;
+  // Ensure hooks.events is an object.
+  let events: Record<string, unknown>;
+  if (
+    hooks.events &&
+    typeof hooks.events === 'object' &&
+    !Array.isArray(hooks.events)
+  ) {
+    events = hooks.events as Record<string, unknown>;
+  } else {
+    events = {};
+    hooks.events = events;
+  }
+
+  const added: string[] = [];
+  for (const [key, entry] of Object.entries(CANONICAL_ZCODE_HOOK_ENTRIES)) {
+    const existing = events[key];
+    if (arrayHasCawsZcodeEntry(existing)) continue; // already wired
+    if (Array.isArray(existing)) {
+      (existing as unknown[]).push(entry);
+    } else {
+      events[key] = [entry];
+    }
+    added.push(key);
+  }
+
+  if (added.length === 0 && wasEnabled) {
+    // Nothing appended AND enabled was already true → byte-identical no-op.
+    return { kind: 'unchanged', path: configPath };
+  }
+
+  root.hooks = hooks;
+  fs.writeFileSync(configPath, `${JSON.stringify(root, null, 2)}\n`, 'utf8');
+  return { kind: 'merged', path: configPath, added };
+}
+
+/** Read-only counterpart to mergeZcodeConfig. Computes the same created /
+ *  merged / unchanged / invalid outcome without writing config.json. */
+export function planZcodeConfigMerge(
+  repoRoot: string
+): SettingsMergePlanResult {
+  const configPath = path.join(repoRoot, '.zcode', 'config.json');
+
+  if (!fs.existsSync(configPath)) {
+    return { kind: 'created', path: configPath, readOnly: true };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  } catch (e) {
+    return {
+      kind: 'invalid',
+      path: configPath,
+      error: (e as Error).message,
+      readOnly: true,
+    };
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return {
+      kind: 'invalid',
+      path: configPath,
+      error: 'config.json root is not an object',
+      readOnly: true,
+    };
+  }
+
+  const root = parsed as Record<string, unknown>;
+  const hooks =
+    root.hooks && typeof root.hooks === 'object' && !Array.isArray(root.hooks)
+      ? (root.hooks as Record<string, unknown>)
+      : {};
+  const events =
+    hooks.events &&
+    typeof hooks.events === 'object' &&
+    !Array.isArray(hooks.events)
+      ? (hooks.events as Record<string, unknown>)
+      : {};
+
+  const added: string[] = [];
+  for (const key of Object.keys(CANONICAL_ZCODE_HOOK_ENTRIES)) {
+    if (arrayHasCawsZcodeEntry(events[key])) continue;
+    added.push(key);
+  }
+
+  if (added.length === 0 && hooks.enabled === true) {
+    return { kind: 'unchanged', path: configPath, readOnly: true };
+  }
+  return { kind: 'merged', path: configPath, added, readOnly: true };
+}
+
+/** Inspect `.zcode/config.json` and report whether the canonical ZCode hook
+ *  wiring is present. Reuses SettingsWiringStatus so the init renderer can
+ *  treat it uniformly with the Claude inspection surface. */
+export function inspectZcodeConfig(repoRoot: string): SettingsWiringStatus {
+  const configPath = path.join(repoRoot, '.zcode', 'config.json');
+  if (!fs.existsSync(configPath)) {
+    return { kind: 'absent' };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  } catch (e) {
+    return { kind: 'invalid', error: (e as Error).message };
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    return { kind: 'invalid', error: 'config.json root is not an object' };
+  }
+  const root = parsed as Record<string, unknown>;
+  const hooks = root.hooks;
+  if (!hooks || typeof hooks !== 'object') {
+    return {
+      kind: 'partial',
+      missing: ['PreToolUse', 'PostToolUse', 'SessionStart', 'Stop'],
+    };
+  }
+  const events = (hooks as { events?: unknown }).events;
+  if (!events || typeof events !== 'object') {
+    return {
+      kind: 'partial',
+      missing: ['PreToolUse', 'PostToolUse', 'SessionStart', 'Stop'],
+    };
+  }
+  const required = ['PreToolUse', 'PostToolUse', 'SessionStart', 'Stop'];
+  const missing: string[] = [];
+  for (const key of required) {
+    const entry = (events as Record<string, unknown>)[key];
+    if (!Array.isArray(entry) || !arrayHasCawsZcodeEntry(entry)) {
+      missing.push(key);
+    }
+  }
+  if (missing.length === 0) return { kind: 'wired' };
+  return { kind: 'partial', missing };
+}
+
+/** Write `.zcode/config.json.example` with the canonical CAWS wiring.
+ *  Idempotent (always writes the same bytes). Reference artifact for users
+ *  who decline the in-place merge. */
+export function writeZcodeConfigExample(repoRoot: string): string {
+  const examplePath = path.join(repoRoot, '.zcode', 'config.json.example');
+  ensureDir(path.dirname(examplePath));
+  fs.writeFileSync(examplePath, `${CANONICAL_ZCODE_CONFIG_SNIPPET}\n`, 'utf8');
+  return examplePath;
+}
+
+export function planZcodeConfigExample(
+  repoRoot: string
+): SettingsExamplePlanResult {
+  const examplePath = path.join(repoRoot, '.zcode', 'config.json.example');
+  const desired = `${CANONICAL_ZCODE_CONFIG_SNIPPET}\n`;
+  let existing: string | null = null;
+  try {
+    existing = fs.readFileSync(examplePath, 'utf8');
+  } catch {
+    existing = null;
+  }
+  return {
+    path: examplePath,
+    action:
+      existing === null
+        ? 'would_create'
+        : existing === desired
+          ? 'unchanged'
+          : 'would_update',
+    readOnly: true,
+  };
+}
+
 /** Detect a leftover pre-rename `.claude/hooks/dispatch/` directory from a
  *  CAWS install that predates the caws_dispatch/ namespace. Returns the
  *  absolute path when present, else null. The caller emits a leave-and-warn

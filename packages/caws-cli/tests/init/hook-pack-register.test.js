@@ -62,10 +62,12 @@ describe('hook-pack registration: the surface arrays are mutually consistent', (
     }
   });
 
-  test('the three implemented surfaces are exactly claude-code, codex, opencode', () => {
-    // Canary: adding a 4th implemented surface MUST update this assertion, so
+  test('the implemented surfaces are exactly claude-code, codex, opencode, zcode', () => {
+    // Canary: adding a new implemented surface MUST update this assertion, so
     // the registration lock cannot silently go stale. If you ship a new pack,
     // add it here AND confirm every assertion above still holds.
-    expect([...IMPLEMENTED_SURFACES].sort()).toEqual(['claude-code', 'codex', 'opencode'].sort());
+    expect([...IMPLEMENTED_SURFACES].sort()).toEqual(
+      ['claude-code', 'codex', 'opencode', 'zcode'].sort()
+    );
   });
 });

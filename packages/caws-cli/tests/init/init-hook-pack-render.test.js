@@ -54,8 +54,8 @@ function listTemplateFiles(dir, baseDir = dir) {
   return out;
 }
 
-const ALL_TEMPLATE_FILES = ['shared', 'claude-code', 'codex', 'opencode'].flatMap((pack) =>
-  listTemplateFiles(path.join(PACKS_ROOT, pack))
+const ALL_TEMPLATE_FILES = ['shared', 'claude-code', 'codex', 'opencode', 'zcode'].flatMap(
+  (pack) => listTemplateFiles(path.join(PACKS_ROOT, pack))
 );
 
 /** The subset of template files that carry the managed marker (the ones whose

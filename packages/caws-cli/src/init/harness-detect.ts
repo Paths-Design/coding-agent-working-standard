@@ -38,6 +38,10 @@ const SIGNALS: readonly SurfaceSignal[] = [
     markers: ['.opencode', 'opencode.json', 'opencode.jsonc', '.opencode/plugins'],
   },
   {
+    surface: 'zcode',
+    markers: ['.zcode', '.zcode/config.json', '.zcode/hooks'],
+  },
+  {
     surface: 'cursor',
     markers: ['.cursor', '.cursor/settings.json', '.cursor/rules'],
   },
