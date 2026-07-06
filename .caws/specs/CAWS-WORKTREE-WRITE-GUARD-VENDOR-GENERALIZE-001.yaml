@@ -7,12 +7,13 @@ created_at: '2026-07-06T20:08:47.460Z'
 updated_at: '2026-07-06T20:08:56.384Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh
+    - packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/shared/session-log.sh
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh
     - packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh
     - packages/caws-cli/templates/hook-packs/shared/session-log.sh
@@ -20,14 +21,77 @@ scope:
     - packages/caws-cli/tests/init/pack-fingerprints.json
     - packages/caws-cli/tests/hooks/vendor-allowlist-generalized.test.js
     - .caws/specs/CAWS-WORKTREE-WRITE-GUARD-VENDOR-GENERALIZE-001.yaml
-  out: []
+  out:
+    - >-
+      The guard's enforcement semantics (block/ask/allow outcomes, oracle
+      routing, scope contention) are NOT modified. Only WHICH root-level
+      instruction files bypass the base-branch write guard, and WHICH plan dir
+      is_plan_file_path recognizes, change — both now derive from CAWS_VENDOR_DIR
+      / CAWS_INSTRUCTION_FILES instead of hardcoding Claude-Code-specific paths.
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    agent-surface.sh exports a new CAWS_INSTRUCTION_FILES value (a
+    space-separated list of root instruction filenames) per surface:
+    CLAUDE.md for claude-code; AGENTS.md for codex/opencode/zcode; and
+    "CLAUDE.md AGENTS.md" for the unknown-surface fallback (fail-safe for
+    multi-surface repos with an unrecognized surface). It sits alongside the
+    existing CAWS_VENDOR_DIR / CAWS_PLATFORM_FLAG / CAWS_PERMISSION_VOCAB
+    exports.
+  - >-
+    worktree-write-guard.sh no longer hardcodes CLAUDE.md in its allowlist. The
+    root-instruction-file arm matches every name in CAWS_INSTRUCTION_FILES via
+    [[ == ]] conditionals (case patterns cannot expand shell variables), so a
+    Codex/ZCode/opencode session editing AGENTS.md gets the same allowlist
+    treatment a claude-code session gets editing CLAUDE.md. The Claude-Code
+    behavior is unchanged (CLAUDE.md is still allowlisted on the claude-code
+    surface).
+  - >-
+    session-log.sh's is_plan_file_path() no longer hardcodes .claude/plans/. It
+    recognizes $HOME/<vendor>/plans/*.md and */<vendor>/plans/*.md derived from
+    CAWS_VENDOR_DIR, plus the vendor-neutral .caws/plans/*.md arm. A
+    codex/zcode/opencode session's plan files are now logged as plans, not
+    ordinary edits.
+  - >-
+    SHARED_PACK_VERSION bumps 16 -> 17 alongside the rebase, and the
+    pack-fingerprints.json shared entry is recomputed. The growth-doctrine
+    header invariant (edit_stance present; parseManagedHeader resolves) holds
+    on all three edited shared templates.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      agent-surface.sh sourced under each CAWS_AGENT_SURFACE value.
+    when: >-
+      the surface resolves.
+    then: >-
+      CAWS_INSTRUCTION_FILES is exported and correct: claude-code→CLAUDE.md,
+      codex/opencode/zcode→AGENTS.md, unknown→"CLAUDE.md AGENTS.md".
+  - id: A2
+    given: >-
+      worktree-write-guard.sh with CAWS_INSTRUCTION_FILES set.
+    when: >-
+      an Edit/Write targets <project>/AGENTS.md on a codex/zcode/opencode
+      surface (or <project>/CLAUDE.md on claude-code).
+    then: >-
+      the path matches the instruction-file arm and exits 0 (allowlisted), the
+      same outcome the hardcoded CLAUDE.md arm produced before. A path that is
+      NOT an instruction file is not matched by this arm.
+  - id: A3
+    given: >-
+      session-log.sh's is_plan_file_path with CAWS_VENDOR_DIR resolved.
+    when: >-
+      given $HOME/.codex/plans/x.md (surface codex), $HOME/.zcode/plans/x.md
+      (surface zcode), or .caws/plans/x.md (any surface).
+    then: >-
+      it returns 0 (recognized as a plan file). A .claude/plans/ path under the
+      codex surface does NOT match (vendor-derived, not hardcoded).
+  - id: A4
+    given: >-
+      The vendor-allowlist-generalized contract test.
+    when: >-
+      it drives agent-surface.sh + is_plan_file_path across all surfaces.
+    then: >-
+      every implemented surface resolves an instruction file and a plan dir; the
+      test fails if a future surface forgets the CAWS_INSTRUCTION_FILES arm.
 non_functional: {}
 contracts:
   - name: 'vendor-allowlist-generalized'

@@ -62,6 +62,12 @@ export interface DurableHookEnvelope {
   readonly created_at: string;
   readonly last_seen_at: string;
   readonly hook_event: string;
+  /**
+   * Surface identity written by parse-input.sh
+   * (CAWS-RESOLVER-PLATFORM-FROM-ENVELOPE-001). Optional: absent on envelopes
+   * written by older parse-input.sh; readers fall back to 'claude-code'.
+   */
+  readonly platform?: string;
 }
 
 export interface SessionCapsule {
