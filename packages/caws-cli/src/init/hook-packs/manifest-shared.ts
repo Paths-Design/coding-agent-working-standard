@@ -125,7 +125,22 @@ import type { HookPackV1 } from './types';
 // mismatch. No current caller passes a second arg, so existing PreToolUse ask
 // behavior is unchanged; the change is defensive hardening that lets the same
 // emitter serve PostToolUse without each surface rolling its own.
-export const SHARED_PACK_VERSION = 16;
+// v17 (CAWS-WORKTREE-WRITE-GUARD-VENDOR-GENERALIZE-001): agent-surface.sh
+// exports CAWS_INSTRUCTION_FILES (CLAUDE.md for claude-code; AGENTS.md for
+// codex/opencode/zcode; both for the unknown-surface fallback).
+// worktree-write-guard.sh's hardcoded CLAUDE.md allowlist arm is replaced with
+// a CAWS_INSTRUCTION_FILES-driven [[ == ]] conditional so every surface's root
+// instruction file bypasses the base-branch write guard. session-log.sh's
+// is_plan_file_path() no longer hardcodes .claude/plans/ — it derives the
+// harness plan dir from CAWS_VENDOR_DIR (same [[ == ]] pattern the rest of the
+// file uses for vendor paths).
+// CAWS-RESOLVER-PLATFORM-FROM-ENVELOPE-001: parse-input.sh's
+// _write_durable_session_envelope now emits a `platform` field (sourced from
+// CAWS_PLATFORM_FLAG) so the resolver can read the true surface identity
+// instead of hardcoding 'claude-code'. Defaults to 'claude-code' when the
+// flag is unset, preserving back-compat for wirings that haven't sourced
+// agent-surface.sh.
+export const SHARED_PACK_VERSION = 18;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.

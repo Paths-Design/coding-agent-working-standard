@@ -7,12 +7,14 @@ created_at: '2026-07-06T22:39:38.014Z'
 updated_at: '2026-07-06T22:39:43.128Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/shared/lib/parse-input.sh
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/src/shell/session/types.ts
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/templates/hook-packs/shared/lib/parse-input.sh
     - packages/caws-cli/src/shell/session/resolve-session.ts
     - packages/caws-cli/src/shell/session/types.ts
@@ -22,12 +24,87 @@ scope:
     - .caws/specs/CAWS-RESOLVER-PLATFORM-FROM-ENVELOPE-001.yaml
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    The durable hook envelope writer (parse-input.sh's
+    _write_durable_session_envelope) emits a `platform` field sourced from
+    CAWS_PLATFORM_FLAG, defaulting to 'claude-code' when that env var is unset.
+    agent-surface.sh already exports CAWS_PLATFORM_FLAG per surface
+    (claude-code/codex/opencode/zcode/cursor/windsurf), so no new surface
+    detection is required. The field is additive; existing envelope fields
+    (session_id, repo_root, created_at, last_seen_at, hook_event) and the
+    preserve-created_at / atomic-rename semantics are unchanged.
+  - >-
+    The resolver reads envelope.platform with a 'claude-code' back-compat
+    fallback at every durable-envelope resolution site: resolveSession's
+    single-candidate path, resolveSession's caller-disambiguated path, and
+    resolveSessionCandidates' envelope-admission loop. An envelope written
+    before this fix (no platform field) resolves identically to before — the
+    fallback preserves the historical behavior, so a mid-rollout reader sees
+    a pre-rollout writer's envelopes as claude-code.
+  - >-
+    The env-var sources (CLAUDE_SESSION_ID, CLAUDE_CODE_SESSION_ID,
+    HOOK_SESSION_ID) REMAIN hardcoded 'claude-code'. They are Claude-Code-
+    specific by design (documented in resolve-session.ts's source-order
+    comment block). Only the durable-envelope surface is widened, because
+    that is the surface the non-Claude harnesses actually populate.
+  - >-
+    admitsOwner's comparison is session_id equality only — platform is NOT
+    compared (per its existing doc comment). Widening the envelope platform
+    source therefore cannot widen or narrow ownership admission; the destroy/
+    merge refusal behavior is unchanged.
+  - >-
+    SHARED_PACK_VERSION bumps alongside the parse-input.sh edit, and the
+    shared entry in tests/init/pack-fingerprints.json is recomputed. The
+    growth-doctrine header invariant (edit_stance present; parseManagedHeader
+    resolves) holds on parse-input.sh after the edit.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      A durable hook envelope written by parse-input.sh on the zcode surface
+      (CAWS_PLATFORM_FLAG=zcode).
+    when: >-
+      resolveSession resolves a single fresh candidate from that envelope.
+    then: >-
+      the resolved SessionIdentity has platform === 'zcode' (not
+      'claude-code') and source === 'durable_hook_envelope'.
+  - id: A2
+    given: >-
+      A durable hook envelope with platform: 'codex'.
+    when: >-
+      resolveSession resolves from that envelope.
+    then: >-
+      platform === 'codex'. Generalizes across all implemented surfaces, not
+      just zcode.
+  - id: A3
+    given: >-
+      A legacy durable hook envelope written WITHOUT a platform field (the
+      shape produced by parse-input.sh before this fix).
+    when: >-
+      resolveSession resolves from that envelope.
+    then: >-
+      platform === 'claude-code' (the back-compat fallback). The legacy
+      envelope is not rejected and resolves identically to pre-fix behavior.
+  - id: A4
+    given: >-
+      Two fresh durable hook envelopes for the same repo_root, plus a
+      governed caller-session pointer naming one of them, with both envelopes
+      carrying platform: 'zcode'.
+    when: >-
+      resolveSession takes the caller-disambiguated path, AND
+      resolveSessionCandidates admits both envelopes.
+    then: >-
+      both surfaces reflect envelope.platform: the disambiguated
+      resolveSession identity is platform 'zcode', and the two
+      resolveSessionCandidates entries are each platform 'zcode'.
+  - id: A5
+    given: >-
+      parse-input.sh's _write_durable_session_envelope under any
+      CAWS_PLATFORM_FLAG value (including unset).
+    when: >-
+      it writes an envelope.
+    then: >-
+      the on-disk JSON contains a `platform` key whose value equals
+      CAWS_PLATFORM_FLAG, or 'claude-code' when that var is unset.
 non_functional: {}
 contracts:
   - name: 'resolver-platform-from-envelope'

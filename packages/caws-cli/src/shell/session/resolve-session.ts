@@ -10,7 +10,7 @@
 //                                Claude Code hook envelope via
 //                                lib/parse-input.sh; refused if the
 //                                value is the literal "unknown")
-//   2.5. Durable hook envelope → platform = "claude-code"
+//   2.5. Durable hook envelope → platform = envelope.platform ?? "claude-code"
 //                                (CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001;
 //                                bridges HOOK_SESSION_ID across agent-Bash
 //                                invocations where the env var doesn't
@@ -23,7 +23,12 @@
 //                                repo_root + 24h freshness on last_seen_at.
 //                                Refuses with typed ambiguity diagnostic
 //                                when two or more candidates match;
-//                                NEVER newest-wins.)
+//                                NEVER newest-wins. The platform field is
+//                                sourced from CAWS_PLATFORM_FLAG by
+//                                parse-input.sh
+//                                (CAWS-RESOLVER-PLATFORM-FROM-ENVELOPE-001);
+//                                absent on legacy envelopes, which fall back
+//                                to 'claude-code'.)
 //   3. CAWS session capsule    → on-disk `.caws/sessions/<id>.json` that
 //                                names the current worktree root
 //   4. CURSOR_TRACE_ID env     → platform = "cursor" (low-stability fallback)
@@ -220,6 +225,14 @@ interface DurableEnvelopeShape {
   readonly created_at: string;
   readonly last_seen_at: string;
   readonly hook_event: string;
+  /**
+   * Surface identity written by parse-input.sh
+   * (CAWS-RESOLVER-PLATFORM-FROM-ENVELOPE-001): claude-code, codex, opencode,
+   * zcode, cursor, or windsurf. Absent on envelopes written by older
+   * parse-input.sh; the resolver falls back to 'claude-code' for back-compat
+   * so a legacy envelope resolves identically to pre-fix behavior.
+   */
+  readonly platform?: string;
 }
 
 interface DurableEnvelopeCandidate {
@@ -749,7 +762,7 @@ export function resolveSession(
           {
             identity: {
               session_id: mine.envelope.session_id,
-              platform: 'claude-code',
+              platform: mine.envelope.platform ?? 'claude-code',
             },
             source: 'durable_hook_envelope',
             envelopePath: mine.envelopePath,
@@ -781,7 +794,10 @@ export function resolveSession(
       {
         identity: {
           session_id: sole.envelope.session_id,
-          platform: 'claude-code',
+          // CAWS-RESOLVER-PLATFORM-FROM-ENVELOPE-001: prefer the envelope's
+          // recorded platform; fall back to 'claude-code' for legacy
+          // envelopes written before the platform field existed.
+          platform: sole.envelope.platform ?? 'claude-code',
         },
         source: 'durable_hook_envelope',
         envelopePath: sole.envelopePath,
@@ -1178,7 +1194,7 @@ export function resolveSessionCandidates(
       candidates.push({
         identity: {
           session_id: c.envelope.session_id,
-          platform: 'claude-code',
+          platform: c.envelope.platform ?? 'claude-code',
         },
         source: 'durable_hook_envelope',
         envelopePath: c.envelopePath,

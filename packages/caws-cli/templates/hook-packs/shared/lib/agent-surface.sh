@@ -32,6 +32,14 @@
 #                         decision (Claude Code), "deny" when it does not
 #                         (Codex maps ask->deny). Used by emit.sh to select
 #                         the correct permission-decision vocabulary.
+#   CAWS_INSTRUCTION_FILES — space-separated root instruction filenames the
+#                         harness reads at the repo root (e.g. "CLAUDE.md" for
+#                         claude-code, "AGENTS.md" for codex/opencode/zcode).
+#                         Used by worktree-write-guard.sh's allowlist so a
+#                         session editing its harness's doctrine file does not
+#                         trip the base-branch write guard. The unknown-surface
+#                         fallback lists BOTH common files (fail-safe for
+#                         multi-surface repos).
 #
 # PROJECT ROOT RESOLUTION (back-compat fallback chain):
 #   CAWS_PROJECT_DIR is the canonical env var injected by the vendor wiring.
@@ -92,22 +100,26 @@ case "$CAWS_AGENT_SURFACE" in
     CAWS_VENDOR_DIR=".claude"
     CAWS_PLATFORM_FLAG="claude-code"
     CAWS_PERMISSION_VOCAB="ask"
+    CAWS_INSTRUCTION_FILES="CLAUDE.md"
     ;;
   codex)
     CAWS_VENDOR_DIR=".codex"
     CAWS_PLATFORM_FLAG="codex"
     # Codex has no PreToolUse "ask" decision; map ask -> deny.
     CAWS_PERMISSION_VOCAB="deny"
+    CAWS_INSTRUCTION_FILES="AGENTS.md"
     ;;
   cursor)
     CAWS_VENDOR_DIR=".cursor"
     CAWS_PLATFORM_FLAG="cursor"
     CAWS_PERMISSION_VOCAB="ask"
+    CAWS_INSTRUCTION_FILES="AGENTS.md"
     ;;
   windsurf)
     CAWS_VENDOR_DIR=".windsurf"
     CAWS_PLATFORM_FLAG="windsurf"
     CAWS_PERMISSION_VOCAB="ask"
+    CAWS_INSTRUCTION_FILES="AGENTS.md"
     ;;
   opencode)
     CAWS_VENDOR_DIR=".opencode"
@@ -116,22 +128,28 @@ case "$CAWS_AGENT_SURFACE" in
     # inside tool.execute.before (see .opencode/plugins/caws.ts). Map ask ->
     # deny, matching the codex adapter precedent.
     CAWS_PERMISSION_VOCAB="deny"
+    CAWS_INSTRUCTION_FILES="AGENTS.md"
     ;;
   zcode)
     CAWS_VENDOR_DIR=".zcode"
     CAWS_PLATFORM_FLAG="zcode"
     # ZCode supports allow/ask/deny for PreToolUse — same as Claude Code.
     CAWS_PERMISSION_VOCAB="ask"
+    CAWS_INSTRUCTION_FILES="AGENTS.md"
     ;;
   *)
     # Unknown surface — fall through to claude-code defaults so a
     # misconfigured wiring does not become a hard block. Emit a warning to
     # stderr so the operator can investigate, but do NOT exit non-zero.
+    # CAWS_INSTRUCTION_FILES lists BOTH common root doctrine files so a
+    # multi-surface repo with an unrecognized surface still allowlists its
+    # instruction file(s) in the worktree-write-guard.
     printf '[agent-surface.sh] WARNING: unknown CAWS_AGENT_SURFACE=%s; defaulting to claude-code values\n' \
       "$CAWS_AGENT_SURFACE" >&2
     CAWS_VENDOR_DIR=".claude"
     CAWS_PLATFORM_FLAG="claude-code"
     CAWS_PERMISSION_VOCAB="ask"
+    CAWS_INSTRUCTION_FILES="CLAUDE.md AGENTS.md"
     ;;
 esac
 
@@ -146,7 +164,7 @@ else
   CAWS_LOG_DIR="${CAWS_VENDOR_DIR}/logs"
 fi
 
-export CAWS_VENDOR_DIR CAWS_PLATFORM_FLAG CAWS_PERMISSION_VOCAB CAWS_LOG_DIR
+export CAWS_VENDOR_DIR CAWS_PLATFORM_FLAG CAWS_PERMISSION_VOCAB CAWS_INSTRUCTION_FILES CAWS_LOG_DIR
 
 # ---------------------------------------------------------------------------
 # 5. caws_source_lib <basename>

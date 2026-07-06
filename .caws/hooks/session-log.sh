@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 14
+# hook_pack_version: 18
 # caws_min_major: 11
 # lineage_refs: 10
 # edit_stance: this repo OWNS and may grow this hook. Edits are expected and
@@ -182,14 +182,21 @@ is_plan_file_path() {
 
   [[ -n "$file_path" ]] || return 1
 
+  # Vendor-neutral CAWS plan dir (always matched, any surface).
   case "$file_path" in
-    "$HOME"/.claude/plans/*.md|*/.claude/plans/*.md|*/.caws/plans/*.md)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
+    */.caws/plans/*.md) return 0 ;;
   esac
+
+  # Harness plan dir: $HOME/<vendor>/plans/ or <vendor>/plans/ — derived from
+  # CAWS_VENDOR_DIR because case patterns cannot expand shell variables.
+  # (CAWS-WORKTREE-WRITE-GUARD-VENDOR-GENERALIZE-001: was hardcoded .claude/.)
+  # NOTE on quoting: the glob metacharacters (* and the leading */ for the
+  # relative form) MUST sit OUTSIDE the double quotes, or bash treats them as
+  # literals and the match silently fails. Only ${HOME}/${CAWS_VENDOR_DIR} are
+  # quoted (they're path values, not patterns).
+  [[ $file_path == ${HOME:-}/${CAWS_VENDOR_DIR}/plans/*.md ]] && return 0
+  [[ $file_path == */${CAWS_VENDOR_DIR}/plans/*.md ]] && return 0
+  return 1
 }
 
 handle_post_tool_use() {

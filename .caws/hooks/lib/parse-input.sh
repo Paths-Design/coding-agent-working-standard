@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 14
+# hook_pack_version: 18
 # caws_min_major: 11
 # lineage_refs: 8,16
 # edit_stance: this repo OWNS and may grow this hook. Edits are expected and
@@ -200,6 +200,16 @@ except Exception:
 
   # Atomic write: temp file + rename. tmpfile is in the same dir to
   # guarantee same-filesystem rename atomicity.
+  #
+  # CAWS-RESOLVER-PLATFORM-FROM-ENVELOPE-001: the payload now carries a
+  # `platform` field sourced from CAWS_PLATFORM_FLAG (exported per surface by
+  # agent-surface.sh: claude-code/codex/opencode/zcode/cursor/windsurf). The
+  # resolver reads this instead of hardcoding 'claude-code', so a non-Claude
+  # session's lease/status display reflects its true harness. Defaults to
+  # 'claude-code' when CAWS_PLATFORM_FLAG is unset (back-compat for wirings
+  # that have not yet sourced agent-surface.sh, and for legacy envelopes
+  # which the resolver also falls back on).
+  local platform="${CAWS_PLATFORM_FLAG:-claude-code}"
   local tmpfile="$envelope_dir/.session-envelope.tmp.$$"
   python3 -c '
 import json, sys
@@ -209,11 +219,12 @@ payload = {
     "created_at": sys.argv[3],
     "last_seen_at": sys.argv[4],
     "hook_event": sys.argv[5],
+    "platform": sys.argv[6],
 }
-with open(sys.argv[6], "w") as f:
+with open(sys.argv[7], "w") as f:
     json.dump(payload, f)
     f.write("\n")
-' "$sid" "$repo_root" "$created_at" "$now" "${HOOK_EVENT_NAME:-unknown}" "$tmpfile" 2>/dev/null || {
+' "$sid" "$repo_root" "$created_at" "$now" "${HOOK_EVENT_NAME:-unknown}" "$platform" "$tmpfile" 2>/dev/null || {
     rm -f "$tmpfile" 2>/dev/null
     return 0
   }

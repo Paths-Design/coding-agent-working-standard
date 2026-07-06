@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 14
+# hook_pack_version: 18
 # caws_min_major: 11
 # lineage_refs: 4,8,13
 # edit_stance: this repo OWNS and may grow this hook. Edits are expected and
@@ -237,7 +237,6 @@ if [[ -n "$FILE_PATH" ]]; then
     "$PROJECT_DIR"/.githooks/*|.githooks/*) exit 0 ;;
     "$PROJECT_DIR"/.github/*|.github/*) exit 0 ;;
     "$PROJECT_DIR"/docs/*|docs/*) exit 0 ;;
-    "$PROJECT_DIR"/CLAUDE.md|CLAUDE.md) exit 0 ;;
   esac
 
   # vendor-dir hooks allowlist: case patterns cannot expand variables, so match
@@ -245,6 +244,21 @@ if [[ -n "$FILE_PATH" ]]; then
   if [[ "$FILE_PATH_FOR_ALLOWLIST" == "$PROJECT_DIR/${CAWS_VENDOR_DIR}/"* ]] || \
      [[ "$FILE_PATH_FOR_ALLOWLIST" == "${CAWS_VENDOR_DIR}/"* ]]; then
     exit 0
+  fi
+
+  # Root instruction files (CLAUDE.md / AGENTS.md / etc.): the harness's primary
+  # doctrine file at the repo root. Surface-derived via CAWS_INSTRUCTION_FILES
+  # (set by agent-surface.sh); matched via [[ == ]] because case patterns cannot
+  # expand variables. Generalizes the former hardcoded CLAUDE.md arm so every
+  # surface's instruction file gets the same allowlist treatment.
+  # (CAWS-WORKTREE-WRITE-GUARD-VENDOR-GENERALIZE-001.)
+  if [[ -n "${CAWS_INSTRUCTION_FILES:-}" ]]; then
+    for _instr in $CAWS_INSTRUCTION_FILES; do
+      if [[ "$FILE_PATH_FOR_ALLOWLIST" == "$PROJECT_DIR/$_instr" ]] || \
+         [[ "$FILE_PATH_FOR_ALLOWLIST" == "$_instr" ]]; then
+        exit 0
+      fi
+    done
   fi
 fi
 
