@@ -7,12 +7,14 @@ created_at: '2026-07-06T18:14:09.985Z'
 updated_at: '2026-07-06T18:14:21.247Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/scripts
+    - packages/caws-cli/README.md
+    - docs/guides/agent-integration-guide.md
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/shell/command-metadata.ts
     - packages/caws-cli/scripts/generate-command-reference.mjs
     - packages/caws-cli/scripts/populate-doc-markers.mjs
@@ -22,14 +24,84 @@ scope:
     - docs/guides/agent-integration-guide.md
     - packages/caws-cli/tests/docs/agent-surfaces-sync.test.js
     - .caws/specs/CAWS-DOCS-AGENT-SURFACES-SINGLE-SOURCE-001.yaml
-  out: []
+  out:
+    - >-
+      The runtime validation of --agent-surface (isKnownSurface in
+      register.ts) is NOT modified — it already reads KNOWN_SURFACES. This
+      spec only changes where the human-visible list (help text, generated
+      command-reference, hand-maintained docs) is authored from.
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    KNOWN_SURFACES and IMPLEMENTED_SURFACES in
+    packages/caws-cli/src/init/hook-packs/register.ts are the single source of
+    truth for the agent-surface list. Every consumer that renders the list to a
+    human (caws init --help, the generated docs/command-reference.md, and the
+    hand-maintained README.md / docs/guides/agent-integration-guide.md) derives
+    its content from those constants — none hardcodes the surface list.
+  - >-
+    The --agent-surface flag in command-metadata.ts uses the option's
+    allowedValues field (set to KNOWN_SURFACES) rather than embedding the list
+    in the description string. register.ts:renderOptionDescription and the
+    command-reference generator both append `: <allowedValues joined by ' | '>`
+    to the description, so runtime --help and the generated
+    command-reference.md stay in lockstep with register.ts automatically.
+  - >-
+    Hand-maintained docs that mention the surface list carry explicit marker
+    pairs (`<!-- agent-surfaces-*:start -->` / `:end -->`). A build-time
+    populator (scripts/populate-doc-markers.mjs) replaces the content between
+    each marker pair from a snippet the generator emits
+    (src/docs/agent-surfaces.md), derived from KNOWN_SURFACES /
+    IMPLEMENTED_SURFACES. The populator is idempotent (marker boundaries make
+    re-runs safe) and fails loudly if a registered marker is missing from a
+    target file, so the docs cannot silently drift.
+  - >-
+    A sync gate test (tests/docs/agent-surfaces-sync.test.js) re-runs the
+    populator in check mode and fails if any registered doc's marker content is
+    stale, AND asserts every IMPLEMENTED surface is also KNOWN. Adding a surface
+    to register.ts without re-running the populator fails CI — the same drift
+    discipline the closed CAWS-DOCS-COMMAND-REFERENCE-GEN-001 spec established
+    for command-reference.md, extended to the hand-maintained prose docs.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      The --agent-surface option in command-metadata.ts and the runtime --help
+      renderer.
+    when: >-
+      KNOWN_SURFACES gains or loses a value.
+    then: >-
+      `caws init --help` renders the new list (via renderOptionDescription
+      appending allowedValues) with no separate hand-edit, and
+      docs/command-reference.md regenerates with the new list.
+  - id: A2
+    given: >-
+      The hand-maintained README.md and docs/guides/agent-integration-guide.md,
+      each carrying agent-surfaces marker pairs.
+    when: >-
+      `npm run build:docs` (or `npm run docs:populate`) runs after
+      KNOWN_SURFACES / IMPLEMENTED_SURFACES change.
+    then: >-
+      Every marker block in both docs is replaced with content derived from the
+      current constants; implemented vs declared-only surfaces are distinguished
+      correctly; no marker is left stale; and re-running is a byte-identical
+      no-op (idempotent).
+  - id: A3
+    given: >-
+      A doc whose registered marker pair has been removed or renamed, or whose
+      hand-edited marker content diverges from the snippet.
+    when: >-
+      the populator runs (or the sync gate test runs).
+    then: >-
+      it fails with a clear error naming the file and marker, rather than
+      silently leaving the doc stale.
+  - id: A4
+    given: >-
+      The agent-surfaces-sync contract test.
+    when: >-
+      a surface is added to IMPLEMENTED_SURFACES but not KNOWN_SURFACES (or the
+      docs are not repopulated after a surface change).
+    then: >-
+      the test fails on the consistency assertion or the stale-marker check,
+      blocking the drift.
 non_functional: {}
 contracts:
   - name: 'agent-surfaces-sync'

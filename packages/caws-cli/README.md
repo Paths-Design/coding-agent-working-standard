@@ -81,11 +81,14 @@ caws init
 
 To install an agent hook pack during init:
 
+<!-- agent-surfaces-install:start -->
 ```bash
 caws init --agent-surface claude-code
 caws init --agent-surface codex
 caws init --agent-surface opencode
+caws init --agent-surface zcode
 ```
+<!-- agent-surfaces-install:end -->
 
 Codex installs project-local `.codex/hooks.json` plus `.codex/hooks/*`.
 After install, restart/reopen Codex and review or trust changed project

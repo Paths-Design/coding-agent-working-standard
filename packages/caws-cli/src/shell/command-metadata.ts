@@ -35,6 +35,7 @@ import {
   SPEC_RESOLUTIONS,
 } from '@paths.design/caws-kernel';
 import { SPECS_LIST_STATUSES } from '../store/specs-writer';
+import { KNOWN_SURFACES } from '../init/hook-packs/register';
 
 /** A positional argument on a command (this CLI uses at most one per command). */
 export interface CommandArgMeta {
@@ -733,7 +734,8 @@ export const INIT_COMMAND_META: LeafCommandMeta = {
     {
       flag: '--agent-surface <name>',
       description:
-        'Install a hook pack for an agent harness (claude-code | codex | opencode | zcode | cursor | windsurf | none). When omitted, init attempts filesystem detection and skips hook install when ambiguous.',
+        'Install a hook pack for an agent harness. When omitted, init attempts filesystem detection and skips hook install when ambiguous',
+      allowedValues: KNOWN_SURFACES,
     },
     {
       flag: '--overwrite',

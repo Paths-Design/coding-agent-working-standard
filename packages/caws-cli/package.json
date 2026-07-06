@@ -18,10 +18,11 @@
   "scripts": {
     "build": "node scripts/build-cli.js",
     "docs:generate": "node scripts/generate-command-reference.mjs",
-    "docs:check": "node scripts/generate-command-reference.mjs --check",
+    "docs:populate": "node scripts/populate-doc-markers.mjs",
+    "docs:check": "node scripts/generate-command-reference.mjs --check && node scripts/populate-doc-markers.mjs --check",
     "docs:stage": "node scripts/stage-consumer-docs.mjs",
     "docs:clean": "node scripts/clean-staged-docs.mjs",
-    "build:docs": "node scripts/build-cli.js && node scripts/generate-command-reference.mjs",
+    "build:docs": "node scripts/build-cli.js && node scripts/generate-command-reference.mjs && node scripts/populate-doc-markers.mjs",
     "prepack": "node scripts/clean-staged-docs.mjs && node scripts/stage-consumer-docs.mjs",
     "postpack": "node scripts/clean-staged-docs.mjs",
     "dev": "node scripts/build-cli.js && node dist/index.js",
