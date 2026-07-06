@@ -54,8 +54,15 @@ describe('CLI UX no-scope-authority reconciliation audit', () => {
     const doc = auditDoc();
     const nextSlice = doc.match(/## Next Slice\n\n([\s\S]*?)\n\n## Findings/)[1];
 
-    expect(nextSlice).toContain('`unknown_or_missing_option` bucket');
-    expect(nextSlice).toMatch(/resampling the newest CAWS and\s+Sterling session retries/);
+    // The Next Slice section is a LIVING part of the audit doc — it gets
+    // rewritten each slice as work lands and the focus shifts. These
+    // assertions track the SECTION'S INTENT (the next slice targets
+    // `unknown_or_missing_option` resampling and has moved OFF
+    // `no_scope_authority`), not exact wording, so a prose refresh between
+    // slices doesn't false-fail. When the doc's next-slice focus legitimately
+    //changes away from option-name resampling, update the intent here too.
+    expect(nextSlice).toMatch(/`unknown_or_missing_option`/);
+    expect(nextSlice).toMatch(/resampl(e|ing) the newest CAWS and\s+Sterling\s+session/);
     expect(nextSlice).not.toContain('residual `no_scope_authority` failures');
   });
 });

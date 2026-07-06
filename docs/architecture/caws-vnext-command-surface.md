@@ -2,9 +2,9 @@
 doc_id: caws-vnext-command-surface
 authority: architecture
 status: active
-title: CAWS vNext command surface (v11.0.0 → v11.2) [updated for v11.6.0]
+title: CAWS vNext command surface (v11.0.0 → v11.2) [updated for v11.7.0]
 owner: vNext rewrite team
-updated: 2026-07-03
+updated: 2026-07-06
 governs:
   modules:
     - packages/caws-cli/src/index.js
@@ -18,10 +18,10 @@ governs:
 
 # CAWS vNext command surface (v11.0.0 → v11.2)
 
-**Status:** active. v11.0.0 → v11.6.0 shipped (governed core, worktree lifecycle, events, agents, message, prepush). Multi-agent authority remains in planning (see §1).
+**Status:** active. v11.0.0 → v11.7.0 shipped (governed core, worktree lifecycle, events, agents, message, prepush; v11.7.0 adds the zcode agent surface and links `.caws/hooks/node_modules` into worktrees). Multi-agent authority remains in planning (see §1).
 **Branch:** `main` post-cutover.
 **Authors:** vNext rewrite team
-**Last updated:** 2026-07-03
+**Last updated:** 2026-07-06
 
 This document is the doctrine source for the v11 cutover and its follow-on
 releases. It captures the cutover posture, the command surface that ships,
@@ -30,6 +30,14 @@ rewrite established.
 
 If a future change conflicts with anything below, fix the change or revise
 this doc — do not silently regress an invariant.
+
+> **v11.7.0 consumer note** — the shared hook pack version bumped 15 → 16
+> (`agent-surface.sh` gained a `zcode` arm; `emit_ask` gained an optional
+> `[event]` parameter). Existing consumers' next `caws init` will report
+> `agent-surface.sh` and `emit.sh` as `managed_drift` until they re-run with
+> `--overwrite` (pull the new baseline) or `--adopt` (keep the local copy). This
+> is the intended growth-doctrine behavior; the renderer frames it as
+> "kept your edits", not an error.
 
 ---
 
@@ -46,7 +54,7 @@ The cutover posture chosen at v11.0.0 was:
 > Projects needing legacy lifecycle pin to `caws-cli@^10.2.x`.
 > vNext lifecycle returns in v11.1.
 
-The v11.1 plan shipped in v11.1.x. Today's recommended install path is `@paths.design/caws-cli@^11.6.0` (or unpinned). Projects migrating from v10.2 should read [`docs/migration-v10-to-v11.md`](../migration-v10-to-v11.md).
+The v11.1 plan shipped in v11.1.x. Today's recommended install path is `@paths.design/caws-cli@^11.7.0` (or unpinned). Projects migrating from v10.2 should read [`docs/migration-v10-to-v11.md`](../migration-v10-to-v11.md).
 
 ### Why A1 was chosen
 
