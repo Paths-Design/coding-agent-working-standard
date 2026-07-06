@@ -7,22 +7,73 @@ created_at: '2026-07-06T17:09:53.143Z'
 updated_at: '2026-07-06T17:09:59.627Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/worktree-artifacts.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/store/worktree-artifacts.ts
     - .caws/specs/CAWS-WORKTREE-ARTIFACT-CAWS-HOOKS-NODE-MODULES-001.yaml
-  out: []
+  out:
+    - >-
+      KNOWN_DIRS is NOT modified. `.caws` remains in KNOWN_DIRS so walkDirs
+      continues to prune the .caws subtree (descending into sessions/, leases/,
+      worktrees/, specs/ would be a performance disaster and create spurious
+      candidates). The fix is additive: a ROOT_CANDIDATES entry bypasses the
+      walk via a direct fs.existsSync check, exactly as the existing five
+      ROOT_CANDIDATES entries do.
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    `discoverCandidates` returns `.caws/hooks/node_modules` as a candidate when
+    it exists in the canonical checkout, even though `.caws` is in KNOWN_DIRS
+    and the walkDirs prune prevents descent into the .caws subtree. This is
+    achieved via an explicit ROOT_CANDIDATES entry (checked directly, bypassing
+    the walk), NOT by removing `.caws` from KNOWN_DIRS or increasing walk depth.
+  - >-
+    The candidate carries `kind: node_dependencies` and manifest files scoped
+    to `.caws/hooks/` (`.caws/hooks/package.json`,
+    `.caws/hooks/package-lock.json`), so the linkCandidate manifest-mismatch
+    check compares the right files and the installHint names the hooks context
+    (js-yaml is required by the worktree-claim-oracle).
+  - >-
+    The existing linkCandidate machinery handles the rest unchanged: it creates
+    the `.caws/hooks/` parent dir in the worktree, creates the relative symlink,
+    and ensureLinkIgnored writes the shared exclude so the `node_modules/`
+    dir-only pattern does not leave the symlink as untracked dirt. No new
+    linking logic is introduced.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      A canonical checkout with `.caws/hooks/node_modules` present (e.g. a
+      consumer whose shared hook core requires js-yaml, installed under
+      .caws/hooks/).
+    when: >-
+      `caws worktree create <name> --spec <SPEC>` runs.
+    then: >-
+      The worktree creation output reports `.caws/hooks/node_modules` as linked
+      (or already_linked on re-create), the worktree gains a relative symlink at
+      `.caws/hooks/node_modules` → the canonical target, and the
+      worktree-claim-oracle can `require('js-yaml')` in the worktree.
+  - id: A2
+    given: >-
+      A canonical checkout with NO `.caws/hooks/node_modules` (no hooks deps
+      installed).
+    when: >-
+      `caws worktree create` runs.
+    then: >-
+      The candidate is not linked (no spurious missing_target churn for repos
+      that do not use .caws/hooks node deps); worktree creation is unaffected.
+  - id: A3
+    given: >-
+      The closed spec CAWS-WORKTREE-ARTIFACT-LINKS-001's advisory-linking
+      contract.
+    when: >-
+      the `.caws/hooks/node_modules` link operation fails (e.g. the path already
+      exists as a real dir in the worktree, or the target moved).
+    then: >-
+      worktree create still succeeds (advisory, never a lifecycle error) and the
+      status surfaces the concrete reason plus the installHint, matching the
+      A2/A3 contract of the foundational artifact-links spec.
 non_functional: {}
 contracts:
   - name: 'worktree-artifact-discovery'

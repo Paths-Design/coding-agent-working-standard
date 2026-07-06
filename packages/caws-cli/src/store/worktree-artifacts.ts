@@ -78,6 +78,22 @@ const ROOT_CANDIDATES: readonly ArtifactCandidate[] = [
     installHint: 'Run the project package-manager install command in the worktree before running tests.',
   },
   {
+    // .caws/hooks/node_modules is checked directly here (ROOT_CANDIDATES bypass
+    // the walk) because `.caws` is in KNOWN_DIRS, which prunes the entire .caws
+    // subtree at walk depth 0 — so walkDirs never descends into .caws/hooks/
+    // and would otherwise never discover this nested artifact. Without this
+    // link, the worktree-claim-oracle (worktree-claim-oracle.cjs) cannot
+    // require('js-yaml') in the worktree, forcing the js-yaml degrade path
+    // (CAWS-HOOKPACK-ORACLE-JSYAML-DEGRADE-001) on every hooks-bearing worktree.
+    // CAWS-WORKTREE-ARTIFACT-CAWS-HOOKS-NODE-MODULES-001.
+    relPath: '.caws/hooks/node_modules',
+    kind: 'node_dependencies',
+    manifestFiles: ['.caws/hooks/package.json', '.caws/hooks/package-lock.json'],
+    installHint:
+      'Run npm install in .caws/hooks in the worktree before running hooks ' +
+      '(js-yaml is required by the worktree-claim-oracle).',
+  },
+  {
     relPath: '.pnpm-store',
     kind: 'pnpm_store',
     manifestFiles: ['pnpm-lock.yaml', 'pnpm-workspace.yaml'],
