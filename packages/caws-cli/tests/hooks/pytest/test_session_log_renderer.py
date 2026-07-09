@@ -145,3 +145,144 @@ class TestMalformedTranscriptNoCrash:
         # All the per-turn collections start empty.
         for key in ("timeline", "edited_files", "read_files", "searches", "commands"):
             assert turn[key] == []
+
+
+class TestMidTurnInterjectionCapture:
+    """CAWS-SESSION-LOG-INTERJECTION-CAPTURE-001.
+
+    A message sent while the assistant is still running never becomes a
+    role:user transcript line -- the harness stores it as a queued_command
+    attachment instead, delivered inline rather than opening a new turn.
+    These tests pin that such an attachment is captured as an `interjection`
+    event, attached to whichever turn is open when it arrives, and that
+    machine-injected queued_command entries (background-task notifications)
+    are NOT mistaken for human steering.
+    """
+
+    def _write(self, lines: list[dict]) -> str:
+        tmp = Path(tempfile.mkdtemp(prefix="caws-slr-")) / "transcript.jsonl"
+        tmp.write_text("\n".join(json.dumps(line) for line in lines) + "\n", encoding="utf-8")
+        return str(tmp)
+
+    def test_dict_shaped_human_queued_command_becomes_interjection_event(self):
+        path = self._write([
+            {
+                "type": "attachment",
+                "attachment": {
+                    "type": "queued_command",
+                    "prompt": "do this instead",
+                    "commandMode": "prompt",
+                    "origin": {"kind": "human"},
+                },
+                "timestamp": "2026-06-14T00:00:05Z",
+            },
+        ])
+        events = slr.parse_transcript_events(path)
+        assert events == [{"ev": "interjection", "text": "do this instead", "ts": "2026-06-14T00:00:05Z"}]
+
+    def test_stringified_dict_attachment_is_parsed_via_regex_fallback(self):
+        # Some raw transcript lines carry the attachment as a Python
+        # repr-style string rather than nested JSON. The regex fallback must
+        # still recover the prompt text.
+        raw_attachment = (
+            "{'type': 'queued_command', 'prompt': 'stop and reconsider', "
+            "'commandMode': 'prompt', 'origin': {'kind': 'human'}}"
+        )
+        path = self._write([
+            {"type": "attachment", "attachment": raw_attachment, "timestamp": "2026-06-14T00:00:05Z"},
+        ])
+        events = slr.parse_transcript_events(path)
+        assert events == [{"ev": "interjection", "text": "stop and reconsider", "ts": "2026-06-14T00:00:05Z"}]
+
+    def test_task_notification_queued_command_is_not_an_interjection(self):
+        # Background-agent completion notifications are also delivered as
+        # queued_command attachments, but they never carry an `origin` --
+        # only genuine human-authored prompts do. Without this exclusion,
+        # every task-notification would be misfiled as human steering.
+        path = self._write([
+            {
+                "type": "attachment",
+                "attachment": {
+                    "type": "queued_command",
+                    "prompt": "<task-notification>...</task-notification>",
+                    "commandMode": "task-notification",
+                },
+                "timestamp": "2026-06-14T00:00:05Z",
+            },
+        ])
+        assert slr.parse_transcript_events(path) == []
+
+    def test_non_human_origin_is_not_an_interjection(self):
+        path = self._write([
+            {
+                "type": "attachment",
+                "attachment": {
+                    "type": "queued_command",
+                    "prompt": "some non-human origin",
+                    "origin": {"kind": "agent"},
+                },
+                "timestamp": "2026-06-14T00:00:05Z",
+            },
+        ])
+        assert slr.parse_transcript_events(path) == []
+
+    def test_content_block_list_prompt_is_flattened_to_text(self):
+        # A pasted image alongside text makes `prompt` a content-block list
+        # (the same shape as message.content elsewhere), not a bare string.
+        path = self._write([
+            {
+                "type": "attachment",
+                "attachment": {
+                    "type": "queued_command",
+                    "prompt": [
+                        {"type": "text", "text": "look at this"},
+                        {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "xx"}},
+                    ],
+                    "origin": {"kind": "human"},
+                },
+                "timestamp": "2026-06-14T00:00:05Z",
+            },
+        ])
+        events = slr.parse_transcript_events(path)
+        assert events == [{"ev": "interjection", "text": "look at this", "ts": "2026-06-14T00:00:05Z"}]
+
+    def test_interjection_attaches_to_the_currently_open_turn(self):
+        # The interjection arrives mid-flight -- between the user's opening
+        # message and the assistant's next output -- so it must land on the
+        # turn already in progress, not open a new turn of its own.
+        events = [
+            {"ev": "user_text", "text": "please fix the bug", "ts": "2026-06-14T00:00:00Z"},
+            {"ev": "interjection", "text": "actually check the other file first", "ts": "2026-06-14T00:00:05Z"},
+            {"ev": "assistant_text", "text": "Checking the other file now.", "ts": "2026-06-14T00:00:10Z"},
+        ]
+        turns, _session_events = slr.accumulate_turns(events, cwd="/repo")
+        assert len(turns) == 1
+        payload = slr.build_turn_payload(turns[0], number=1)
+        assert payload["user"] == "please fix the bug"
+        assert payload["interjections"] == [
+            {"text": "actually check the other file first", "ts": "2026-06-14T00:00:05Z"}
+        ]
+
+    def test_turn_with_only_an_interjection_and_no_timeline_is_still_emitted(self):
+        # A turn that gains an interjection but no assistant timeline before
+        # the next user message must not be silently dropped.
+        events = [
+            {"ev": "user_text", "text": "first ask", "ts": "2026-06-14T00:00:00Z"},
+            {"ev": "interjection", "text": "steering before any reply", "ts": "2026-06-14T00:00:01Z"},
+            {"ev": "user_text", "text": "second ask", "ts": "2026-06-14T00:01:00Z"},
+        ]
+        turns, _session_events = slr.accumulate_turns(events, cwd="/repo")
+        assert len(turns) == 2
+        assert turns[0]["user"] == "first ask"
+        assert turns[0]["interjections"] == [{"text": "steering before any reply", "ts": "2026-06-14T00:00:01Z"}]
+        assert turns[1]["user"] == "second ask"
+
+    def test_blank_prompt_is_not_recorded_as_an_interjection(self):
+        path = self._write([
+            {
+                "type": "attachment",
+                "attachment": {"type": "queued_command", "prompt": "   ", "origin": {"kind": "human"}},
+                "timestamp": "2026-06-14T00:00:05Z",
+            },
+        ])
+        assert slr.parse_transcript_events(path) == []
