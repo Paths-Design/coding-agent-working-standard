@@ -1,0 +1,36 @@
+id: INIT-OVERWRITE-FORCE-001
+title: 'Force-gate hook-pack overwrite: diff surfacing and per-file targeting in caws init'
+risk_tier: 2
+mode: feature
+lifecycle_state: active
+created_at: '2026-07-09T20:32:36.118Z'
+updated_at: '2026-07-09T20:32:36.118Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/init/hook-install.ts'
+    - 'packages/caws-cli/src/init/unified-diff.ts'
+    - 'packages/caws-cli/src/init/hook-packs/types.ts'
+    - 'packages/caws-cli/src/shell/commands/init.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/shell/render/init-hook-pack.ts'
+    - 'packages/caws-cli/tests/init/hook-install-layout.test.js'
+    - 'packages/caws-cli/tests/init/hook-pack-register.test.js'
+    - 'packages/caws-cli/tests/init/init-hook-pack-render.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'init-overwrite-force-behavior'
+    type: behavior
