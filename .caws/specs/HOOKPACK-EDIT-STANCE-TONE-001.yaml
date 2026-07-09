@@ -2,10 +2,11 @@ id: HOOKPACK-EDIT-STANCE-TONE-001
 title: 'Broaden edit_stance header tone (invitation-first) and correct force-gated --overwrite wording across all hook packs'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: edit-stance-tone
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge edit-stance-tone at d93ae30edea116cfb47c7f83c615cb9a00bb8a0a'
 created_at: '2026-07-09T21:37:09.224Z'
-updated_at: '2026-07-09T21:37:09.224Z'
+updated_at: '2026-07-09T22:03:56.246Z'
 blast_radius:
   modules:
     - 'caws-cli hook packs (managed-header edit_stance across shared + 4 vendor adapters; pack version constants; fingerprint baseline)'
