@@ -7,7 +7,7 @@ created_at: '2026-07-09T21:13:53.510Z'
 updated_at: '2026-07-09T21:13:53.510Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli shared hook pack (version constant + fingerprint baseline)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -16,12 +16,27 @@ scope:
     - 'packages/caws-cli/tests/init/pack-fingerprints.json'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'SHARED_PACK_VERSION equals the recorded shared-pack version in
+    pack-fingerprints.json, and the recorded shared fingerprint equals the
+    live sha256 over the shared template tree — a template byte-change and its
+    version bump land together (the stale-installed-fix guard is satisfied,
+    not silenced).'
+  - 'Only the shared pack entry (version + fingerprint) changes; the other
+    four pack baselines (claude-code, codex, opencode, zcode) are byte-identical.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'the shared template session_log_renderer.py changed in f9942d15
+      (v19 fix) while SHARED_PACK_VERSION stayed 18 and the fingerprint baseline
+      was not regenerated'
+    when: 'SHARED_PACK_VERSION is bumped to 19 and the shared baseline in
+      pack-fingerprints.json is regenerated to {version:19, live fingerprint}'
+    then: 'pack-fingerprint.test.js passes: recorded.version === manifest
+      version AND recorded.fingerprint === live fingerprint for the shared pack'
+  - id: A2
+    given: 'the regenerated baseline'
+    when: 'the four non-shared pack entries are compared to their pre-change values'
+    then: 'they are unchanged (this is a shared-only reconciliation, not a
+      full-tree rebaseline)'
 non_functional: {}
 contracts:
   - name: 'shared-pack-version-fingerprint-consistency'
