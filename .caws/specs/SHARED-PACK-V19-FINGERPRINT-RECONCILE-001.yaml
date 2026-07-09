@@ -3,6 +3,7 @@ title: 'Reconcile shared pack v19: bump SHARED_PACK_VERSION and regenerate finge
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: pack-v19-reconcile
 created_at: '2026-07-09T21:13:53.510Z'
 updated_at: '2026-07-09T21:13:53.510Z'
 blast_radius:
