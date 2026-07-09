@@ -3,6 +3,7 @@ title: 'Force-gate hook-pack overwrite: diff surfacing and per-file targeting in
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: init-overwrite-force
 created_at: '2026-07-09T20:32:36.118Z'
 updated_at: '2026-07-09T20:32:49.965Z'
 blast_radius:
