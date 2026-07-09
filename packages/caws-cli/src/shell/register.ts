@@ -306,7 +306,8 @@ export function registerShellCommands(
   //
   // Creates the canonical vNext .caws/ shape (specs/, waivers/,
   // policy.yaml, worktrees.json, agents.json). Idempotent. Refuses to
-  // overwrite legacy state (working-spec.yaml et al.). No --force.
+  // overwrite legacy state (working-spec.yaml et al.) — no flag unlocks
+  // that; --force here only confirms hook-pack --overwrite replacements.
   // Replaces the legacy `caws init` registration removed from
   // src/index.js as part of slice 7b.
   // -------------------------------------------------------------------
@@ -315,7 +316,8 @@ export function registerShellCommands(
       (opts: {
         data?: boolean;
         agentSurface?: string;
-        overwrite?: boolean;
+        overwrite?: boolean | string[];
+        force?: boolean;
         adopt?: boolean;
         plan?: boolean;
         dryRun?: boolean;
@@ -331,7 +333,21 @@ export function registerShellCommands(
             opts.agentSurface;
         }
         if (opts.overwrite !== undefined) {
-          (runOpts as { overwrite?: boolean }).overwrite = opts.overwrite;
+          // `--overwrite [paths...]`: bare → true; with values → string[].
+          // Either form means "overwrite selected"; the paths (when present)
+          // restrict which destPaths are selected.
+          if (Array.isArray(opts.overwrite)) {
+            (runOpts as { overwrite?: boolean }).overwrite = true;
+            if (opts.overwrite.length > 0) {
+              (runOpts as { overwriteTargets?: readonly string[] }).overwriteTargets =
+                opts.overwrite;
+            }
+          } else {
+            (runOpts as { overwrite?: boolean }).overwrite = opts.overwrite;
+          }
+        }
+        if (opts.force !== undefined) {
+          (runOpts as { force?: boolean }).force = opts.force;
         }
         if (opts.adopt !== undefined) {
           (runOpts as { adopt?: boolean }).adopt = opts.adopt;

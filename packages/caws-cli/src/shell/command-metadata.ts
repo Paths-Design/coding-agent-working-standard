@@ -738,9 +738,14 @@ export const INIT_COMMAND_META: LeafCommandMeta = {
       allowedValues: KNOWN_SURFACES,
     },
     {
-      flag: '--overwrite',
+      flag: '--overwrite [paths...]',
       description:
-        'For hook-pack install: replace drifted or unmanaged files at managed pack paths. CAUTION: local edits to those files will be lost.',
+        'For hook-pack install: select drifted or unmanaged files at managed pack paths for replacement — every pack file when bare, or only the listed destination paths. Without --force this previews a unified diff of each replacement and refuses (nothing is written); add --force to apply.',
+    },
+    {
+      flag: '--force',
+      description:
+        'With --overwrite: apply the previewed replacements. CAUTION: local edits to the selected files are lost. A usage error without --overwrite.',
     },
     {
       flag: '--adopt',

@@ -19,7 +19,7 @@
 const fs = require('fs');
 const path = require('path');
 const { makeTempRepo, cleanupAll } = require('../helpers/git-repo-factory');
-const { installOnce } = require('../helpers/hook-install');
+const { installOnce, runInit } = require('../helpers/hook-install');
 
 const CLI_PKG_ROOT = path.resolve(__dirname, '..', '..');
 const PACKS_ROOT = path.join(CLI_PKG_ROOT, 'templates', 'hook-packs');
@@ -131,5 +131,108 @@ describe('manifest-vs-disk drift (A2): no drift in either direction', () => {
     expect(fs.existsSync(examplePath)).toBe(true);
     const declared = new Set(CLAUDE_CODE_PACK.installedFiles.map((f) => f.sourcePath));
     expect(declared.has('settings.json.example')).toBe(false);
+  });
+});
+
+/**
+ * Force-gated overwrite through the FULL CLI parse path (INIT-OVERWRITE-FORCE-001).
+ *
+ * These run the built dist entry (`node dist/index.js init …`) so the proof
+ * covers Commander flag parsing (`--overwrite [paths...]` variadic, `--force`
+ * boolean) and the runInitCommand validation gates — not just the
+ * installHookPack unit surface (which handler-level tests exercise but a
+ * mis-registered flag would never reach).
+ */
+describe('force-gated --overwrite via the live CLI (full parse path)', () => {
+  const REL = '.caws/hooks/scope-guard.sh';
+  const OTHER = '.caws/hooks/classify_command.py';
+  let repoDir;
+
+  beforeEach(() => {
+    repoDir = makeTempRepo();
+    const first = runInit(repoDir);
+    expect(first.code).toBe(0);
+  });
+
+  afterAll(() => cleanupAll());
+
+  function abs(rel) {
+    return path.join(repoDir, rel);
+  }
+
+  function grow(rel, marker) {
+    const grown = fs.readFileSync(abs(rel), 'utf8') + `\n# ${marker}\n`;
+    fs.writeFileSync(abs(rel), grown);
+    return grown;
+  }
+
+  test('--overwrite without --force: exit 1, diff printed, file bytes untouched', () => {
+    const grown = grow(REL, 'live-cli growth');
+
+    const r = runInit(repoDir, { extraArgs: ['--overwrite'] });
+    expect(r.code).toBe(1);
+    expect(r.stdout).toMatch(/Overwrite withheld — needs --force/);
+    // The diff names the exact line --force would discard.
+    expect(r.stdout).toMatch(/^\s+-# live-cli growth$/m);
+    expect(r.stdout).toMatch(/--overwrite --force/);
+    expect(fs.readFileSync(abs(REL), 'utf8')).toBe(grown);
+  });
+
+  test('--overwrite --force: exit 0, grown hook replaced with the upstream template', () => {
+    grow(REL, 'growth to be forced away');
+
+    const r = runInit(repoDir, { extraArgs: ['--overwrite', '--force'] });
+    expect(r.code).toBe(0);
+    expect(fs.readFileSync(abs(REL), 'utf8')).not.toContain('growth to be forced away');
+  });
+
+  test('targeted --overwrite <path> --force replaces only that file; the other drifted file survives (exit 1)', () => {
+    grow(REL, 'targeted growth');
+    const otherGrown = grow(OTHER, 'untargeted growth');
+
+    const r = runInit(repoDir, { extraArgs: ['--overwrite', REL, '--force'] });
+    // The untargeted drifted file still refuses, so init exits 1 — an honest
+    // signal that not everything converged, not a failure of the targeting.
+    expect(r.code).toBe(1);
+    expect(fs.readFileSync(abs(REL), 'utf8')).not.toContain('targeted growth');
+    expect(fs.readFileSync(abs(OTHER), 'utf8')).toBe(otherGrown);
+    expect(r.stdout).toMatch(/Kept your edits/);
+  });
+
+  test('--force without --overwrite is a usage error (exit 2) and writes nothing', () => {
+    const grown = grow(REL, 'growth behind a bad flag combo');
+
+    const r = runInit(repoDir, { extraArgs: ['--force'] });
+    expect(r.code).toBe(2);
+    expect(r.stdout).toMatch(/--force is only meaningful with --overwrite/);
+    expect(fs.readFileSync(abs(REL), 'utf8')).toBe(grown);
+  });
+
+  test('an unknown --overwrite target is a usage error (exit 2) that lists valid paths, before any write', () => {
+    const grown = grow(REL, 'growth behind a typo');
+
+    const r = runInit(repoDir, {
+      extraArgs: ['--overwrite', '.caws/hooks/does-not-exist.sh', '--force'],
+    });
+    expect(r.code).toBe(2);
+    expect(r.stdout).toMatch(/unknown --overwrite target\(s\): \.caws\/hooks\/does-not-exist\.sh/);
+    // The error enumerates the valid managed destPaths so the caller can fix
+    // the target without spelunking the manifest.
+    expect(r.stdout).toMatch(/\.caws\/hooks\/scope-guard\.sh/);
+    expect(fs.readFileSync(abs(REL), 'utf8')).toBe(grown);
+  });
+
+  test('--plan --json --overwrite (no --force) carries forceRequired + diff and writes nothing', () => {
+    const grown = grow(REL, 'plan-json growth');
+
+    const r = runInit(repoDir, { extraArgs: ['--overwrite', '--plan', '--json'] });
+    expect(r.code).toBe(1); // plan.ok=false: refusals present
+    const plan = JSON.parse(r.stdout);
+    expect(plan.read_only).toBe(true);
+    const action = plan.hook_pack.actions.find((a) => a.destPath === REL);
+    expect(action.action).toBe('refused');
+    expect(action.forceRequired).toBe(true);
+    expect(action.diff).toMatch(/-# plan-json growth/);
+    expect(fs.readFileSync(abs(REL), 'utf8')).toBe(grown);
   });
 });

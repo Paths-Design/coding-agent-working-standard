@@ -30,7 +30,11 @@ const CLI_PKG_ROOT = path.resolve(__dirname, '..', '..');
 const PACKS_ROOT = path.join(CLI_PKG_ROOT, 'templates', 'hook-packs');
 
 const os = require('os');
-const { parseManagedHeader, installHookPack } = require('../../dist/init/hook-install');
+const {
+  parseManagedHeader,
+  installHookPack,
+  planHookPackInstall,
+} = require('../../dist/init/hook-install');
 const { SHARED_PACK } = require('../../dist/init/hook-packs/manifest-shared');
 const { CLAUDE_CODE_PACK } = require('../../dist/init/hook-packs/manifest-claude-code');
 const { OPENCODE_PACK } = require('../../dist/init/hook-packs/manifest-opencode');
@@ -204,6 +208,33 @@ describe('A3: render frames a grown (drifted) managed hook as expected, not a pr
     expect(out).not.toMatch(/Kept your edits/);
     expect(out).not.toMatch(/unmanaged file at a managed path/i);
   });
+
+  test('a forceRequired refusal renders the withheld block: per-file diff plus the --force remediation', () => {
+    const out = renderWith([
+      {
+        destPath: '.caws/hooks/scope-guard.sh',
+        action: 'refused',
+        refusalReason: 'managed_drift',
+        forceRequired: true,
+        diff: [
+          '--- local: .caws/hooks/scope-guard.sh',
+          '+++ incoming: shared v6 template',
+          '@@ -1,1 +1,1 @@',
+          '-# mine',
+          '+# upstream',
+        ].join('\n'),
+      },
+    ]);
+    expect(out).toMatch(/Overwrite withheld — needs --force \(1\)/);
+    // The diff body is printed line-by-line so the operator sees exactly what
+    // --force would discard (-) and pull in (+).
+    expect(out).toMatch(/^\s+-# mine$/m);
+    expect(out).toMatch(/^\s+\+# upstream$/m);
+    expect(out).toMatch(/--overwrite --force/);
+    expect(out).toMatch(/--adopt/);
+    // A withheld overwrite is NOT the default kept-your-edits drift block.
+    expect(out).not.toMatch(/Kept your edits/);
+  });
 });
 
 describe('A4: caws init preserves a grown hook and never silently clobbers it', () => {
@@ -264,14 +295,55 @@ describe('A4: caws init preserves a grown hook and never silently clobbers it', 
     expect(fs.readFileSync(abs(REL), 'utf8')).toBe(grown);
   });
 
-  test('--overwrite on a grown hook DOES take the upstream template (the one path that discards edits)', () => {
-    const grown = fs.readFileSync(abs(REL), 'utf8') + '\n# growth that will be discarded\n';
+  test('--overwrite WITHOUT --force on a grown hook withholds the write and surfaces a diff', () => {
+    const grown = fs.readFileSync(abs(REL), 'utf8') + '\n# growth kept until forced\n';
     fs.writeFileSync(abs(REL), grown);
 
     const r = installHookPack(SHARED_PACK, { repoRoot, overwrite: true });
     const a = r.actions.find((x) => x.destPath === REL);
+    // Selected for overwrite but not confirmed: refused, marked forceRequired,
+    // and the diff names the exact local line --force would discard.
+    expect(a.action).toBe('refused');
+    expect(a.refusalReason).toBe('managed_drift');
+    expect(a.forceRequired).toBe(true);
+    expect(a.diff).toMatch(/^-# growth kept until forced$/m);
+    // The local file survives byte-for-byte.
+    expect(fs.readFileSync(abs(REL), 'utf8')).toBe(grown);
+  });
+
+  test('--overwrite --force on a grown hook DOES take the upstream template (the one path that discards edits)', () => {
+    const grown = fs.readFileSync(abs(REL), 'utf8') + '\n# growth that will be discarded\n';
+    fs.writeFileSync(abs(REL), grown);
+
+    const r = installHookPack(SHARED_PACK, { repoRoot, overwrite: true, force: true });
+    const a = r.actions.find((x) => x.destPath === REL);
     expect(a.action).toBe('updated');
     expect(fs.readFileSync(abs(REL), 'utf8')).not.toContain('growth that will be discarded');
+  });
+
+  test('targeted --overwrite --force replaces ONLY the listed destPath; other drifted files keep the plain refusal', () => {
+    const OTHER = '.caws/hooks/classify_command.py';
+    const grownTarget = fs.readFileSync(abs(REL), 'utf8') + '\n# target growth\n';
+    const grownOther = fs.readFileSync(abs(OTHER), 'utf8') + '\n# other growth\n';
+    fs.writeFileSync(abs(REL), grownTarget);
+    fs.writeFileSync(abs(OTHER), grownOther);
+
+    const r = installHookPack(SHARED_PACK, {
+      repoRoot,
+      overwrite: true,
+      overwriteTargets: [REL],
+      force: true,
+    });
+    const target = r.actions.find((x) => x.destPath === REL);
+    const other = r.actions.find((x) => x.destPath === OTHER);
+    expect(target.action).toBe('updated');
+    expect(fs.readFileSync(abs(REL), 'utf8')).not.toContain('target growth');
+    // The untargeted drifted file behaves as if --overwrite was not passed:
+    // plain drift refusal, no forceRequired, bytes intact.
+    expect(other.action).toBe('refused');
+    expect(other.refusalReason).toBe('managed_drift');
+    expect(other.forceRequired).toBeUndefined();
+    expect(fs.readFileSync(abs(OTHER), 'utf8')).toBe(grownOther);
   });
 
   test('--adopt on a grown hook keeps the edit and reports unchanged', () => {
@@ -281,6 +353,22 @@ describe('A4: caws init preserves a grown hook and never silently clobbers it', 
     const r = installHookPack(SHARED_PACK, { repoRoot, adopt: true });
     const a = r.actions.find((x) => x.destPath === REL);
     expect(a.action).toBe('unchanged');
+    expect(fs.readFileSync(abs(REL), 'utf8')).toBe(grown);
+  });
+
+  test('the plan path previews the withheld overwrite (diff attached) without writing anything', () => {
+    const grown = fs.readFileSync(abs(REL), 'utf8') + '\n# plan-preview growth\n';
+    fs.writeFileSync(abs(REL), grown);
+
+    const r = planHookPackInstall(SHARED_PACK, { repoRoot, overwrite: true });
+    const a = r.actions.find((x) => x.destPath === REL);
+    expect(r.readOnly).toBe(true);
+    expect(a.action).toBe('refused');
+    expect(a.forceRequired).toBe(true);
+    expect(a.diff).toMatch(/^-# plan-preview growth$/m);
+    // Read-only means read-only even with overwrite+force: plan never writes.
+    const forced = planHookPackInstall(SHARED_PACK, { repoRoot, overwrite: true, force: true });
+    expect(forced.actions.find((x) => x.destPath === REL).action).toBe('updated');
     expect(fs.readFileSync(abs(REL), 'utf8')).toBe(grown);
   });
 
