@@ -4,11 +4,15 @@
 # hook_pack_version: 5
 # caws_min_major: 11
 # lineage_refs: 1,4,6,8,11,12,13,16,17,19,22,23,24,25,26,27,28,29,30,31
-# edit_stance: this repo OWNS and may grow this hook. Edits are expected and
-#   preserved — caws init refuses to overwrite a changed managed hook (re-run
-#   with --adopt to keep yours, or --overwrite to pull this upstream template).
-#   CAWS owns the failure-class invariant (the why/what you must not silently
-#   weaken); you own the how. Do not edit it to BYPASS the guard; do grow it.
+# edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
+#   to your repo: tune thresholds, add checks, remove what does not fit. Your edits
+#   are preserved: caws init treats a changed hook as intended growth and will not
+#   clobber it — it shows a diff and asks (--adopt keeps yours; --overwrite --force
+#   takes the upstream template). The CAWS-MANAGED-HOOK marker above is only how caws
+#   init finds hooks it can offer updates for; it is NOT a keep-out sign. CAWS owns the
+#   failure-class invariant (the why/what a guard protects); you own the how. The one
+#   edit to avoid: gutting a guard to dodge a block instead of fixing the cause. Grow
+#   everything else freely.
 -->
 
 # CAWS opencode Hook Pack
@@ -153,8 +157,9 @@ needs no apology.
 **Your edits are preserved — `caws init` will not clobber them.** As long as a
 hook keeps its `CAWS-MANAGED-HOOK` header, an edited hook is classified as
 _drift_ and `caws init` **refuses to overwrite it**. On a re-init you choose:
-do nothing / `--adopt` (keep yours, the default), or `--overwrite` (pull the
-upstream template).
+do nothing / `--adopt` (keep yours, the default), `--overwrite` (preview the
+replacement diff; nothing is written), or `--overwrite --force` (take the
+upstream template, discarding your edits).
 
 ## Activation
 

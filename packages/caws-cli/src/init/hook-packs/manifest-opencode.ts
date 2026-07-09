@@ -60,7 +60,7 @@ import type { HookPackV1 } from './types';
 // message → heartbeat poll → additionalContext → stash → system.transform
 // INJECTED → model perceives it. Builds on v3 (updatedInput/quiet-merge) and
 // v2 (session-id in the dispatcher payload).
-export const OPENCODE_PACK_VERSION = 5;
+export const OPENCODE_PACK_VERSION = 6;
 
 export const OPENCODE_PACK: HookPackV1 = {
   id: 'opencode',

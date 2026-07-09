@@ -99,14 +99,22 @@ describe('A1: no managed header carries the contradicting edit-prohibition', () 
     expect(missing).toEqual([]);
   });
 
-  test('the edit_stance line states the repo owns/may grow the hook and that bypass is the one out-of-bounds edit', () => {
+  test('the edit_stance line invites edits, frames the marker as non-prohibitive, and names bypass as the one out-of-bounds edit', () => {
     // Assert the SEMANTICS of one representative header, not just presence —
-    // an empty or watered-down edit_stance line must fail.
+    // an empty or watered-down edit_stance line must fail. The stance must lead
+    // with the invitation (not a prohibition), state the CAWS-MANAGED-HOOK marker
+    // is a discovery marker rather than a keep-out sign, describe the force-gated
+    // two-step overwrite accurately, and name the single out-of-bounds edit.
     const sample = fs.readFileSync(path.join(PACKS_ROOT, 'shared', 'scope-guard.sh'), 'utf8');
-    expect(sample).toMatch(/OWNS and may grow this hook/);
-    expect(sample).toMatch(/--adopt to keep yours/);
-    expect(sample).toMatch(/--overwrite to pull this upstream/);
-    expect(sample).toMatch(/do not edit it to BYPASS the guard/i);
+    expect(sample).toMatch(/YOURS TO EDIT/);
+    expect(sample).toMatch(/starting hook, not a locked one/);
+    expect(sample).toMatch(/--adopt keeps yours/);
+    // Force-gated: the header must NOT tell the reader bare --overwrite replaces
+    // their file; it must name --overwrite --force as the applying step.
+    expect(sample).toMatch(/--overwrite --force/);
+    expect(sample).not.toMatch(/--overwrite to pull this upstream/);
+    expect(sample).toMatch(/is NOT a keep-out sign/);
+    expect(sample).toMatch(/gutting a guard to dodge a block/i);
   });
 });
 
@@ -131,9 +139,11 @@ describe('A2: parseManagedHeader still recognizes a rewritten header as managed'
 
   test('the multi-line edit_stance block does not swallow or corrupt a marker key', () => {
     // Construct a header in the exact shape we ship: marker keys first, then the
-    // 5-line edit_stance block. The continuation lines (no `key:` colon) must
-    // not be misparsed as keys, and the block must not push the keys out of the
-    // parser's 30-line window.
+    // 9-line invitation-first edit_stance block. The continuation lines (no
+    // `key:` colon) must not be misparsed as keys, and the longer block must not
+    // push the marker keys out of the parser's 30-line window. This fixture
+    // mirrors the real shipped block; if the parser regresses on the longer
+    // wording, this fails rather than silently classifying a file as unmanaged.
     const header = [
       '#!/bin/bash',
       '# CAWS-MANAGED-HOOK',
@@ -141,11 +151,15 @@ describe('A2: parseManagedHeader still recognizes a rewritten header as managed'
       '# hook_pack_version: 6',
       '# caws_min_major: 11',
       '# lineage_refs: 8,11',
-      '# edit_stance: this repo OWNS and may grow this hook. Edits are expected and',
-      '#   preserved — `caws init` refuses to overwrite a changed managed hook (re-run',
-      '#   with --adopt to keep yours, or --overwrite to pull this upstream template).',
-      '#   CAWS owns the failure-class invariant (the why/what you must not silently',
-      '#   weaken); you own the how. Do not edit it to BYPASS the guard; do grow it.',
+      '# edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it',
+      '#   to your repo: tune thresholds, add checks, remove what does not fit. Your edits',
+      '#   are preserved: caws init treats a changed hook as intended growth and will not',
+      '#   clobber it — it shows a diff and asks (--adopt keeps yours; --overwrite --force',
+      '#   takes the upstream template). The CAWS-MANAGED-HOOK marker above is only how caws',
+      '#   init finds hooks it can offer updates for; it is NOT a keep-out sign. CAWS owns the',
+      '#   failure-class invariant (the why/what a guard protects); you own the how. The one',
+      '#   edit to avoid: gutting a guard to dodge a block instead of fixing the cause. Grow',
+      '#   everything else freely.',
       '#',
       'echo hi',
     ].join('\n');

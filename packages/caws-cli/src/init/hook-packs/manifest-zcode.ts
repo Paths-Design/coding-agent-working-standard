@@ -53,7 +53,7 @@ import type { HookPackV1 } from './types';
 // pack. The bridge is the bugfixed version validated live in the Sterling
 // consumer (commit cf0118d97): strict-JSON re-wrapping, multi-object stdout
 // coalescing (decision-bearing objects win over advisory), exit-code pass-through.
-export const ZCODE_PACK_VERSION = 1;
+export const ZCODE_PACK_VERSION = 2;
 
 export const ZCODE_PACK: HookPackV1 = {
   id: 'zcode',

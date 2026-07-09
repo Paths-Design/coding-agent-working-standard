@@ -140,7 +140,7 @@ import type { HookPackV1 } from './types';
 // instead of hardcoding 'claude-code'. Defaults to 'claude-code' when the
 // flag is unset, preserving back-compat for wirings that haven't sourced
 // agent-surface.sh.
-export const SHARED_PACK_VERSION = 19;
+export const SHARED_PACK_VERSION = 20;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.

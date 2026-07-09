@@ -199,7 +199,7 @@ import type { HookPackV1 } from './types';
 // `edit_stance:` growth framing (repo owns/grows the hook; edits preserved;
 // only editing-to-bypass is out of bounds). Bump re-propagates the reframed
 // header to consumers on next caws init.
-export const CLAUDE_CODE_PACK_VERSION = 20;
+export const CLAUDE_CODE_PACK_VERSION = 21;
 
 export const CLAUDE_CODE_PACK: HookPackV1 = {
   id: 'claude-code',

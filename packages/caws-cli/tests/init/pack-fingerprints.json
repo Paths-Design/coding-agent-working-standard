@@ -1,22 +1,22 @@
 {
   "shared": {
-    "version": 19,
-    "fingerprint": "cd0e7ff3cebe4fd50f7a300976c5940c09c95f3968fdf3d827996fa289334d21"
+    "version": 20,
+    "fingerprint": "5a713d0d439bb52d65e6ca614d2fd203dd6261091bc315056edaf3ee0539602c"
   },
   "claude-code": {
-    "version": 20,
-    "fingerprint": "926a6442a6d8b62c1847aba9048bbc12a15c07897aa92679fcea987a9d39005b"
+    "version": 21,
+    "fingerprint": "e5d482edc61f56ee435c454be8f7254a9648f3b8b680cc8d6792c515c19eb8de"
   },
   "codex": {
-    "version": 10,
-    "fingerprint": "0b912a48db86fcfdaf6d1bf299573ae96e1b75895549592221eca079bf363429"
+    "version": 11,
+    "fingerprint": "f73fbe697af61bddcec8f0b188f806aaaf1e41425c34fa133d51c3505fdb9bbe"
   },
   "opencode": {
-    "version": 5,
-    "fingerprint": "5340cd481430709b5a3fda132773f2411a78039a31e94bc060a8c11e3f4b9035"
+    "version": 6,
+    "fingerprint": "5e2cf4dc7205e481a480883812ae80a689697f3858c0dd6456ea811e191eb27f"
   },
   "zcode": {
-    "version": 1,
-    "fingerprint": "254800632f4e6f9a903a42da13df4bf0a8caed9d609555b667d3704539d76a36"
+    "version": 2,
+    "fingerprint": "15a8a3b26f677446a99de21734732decc0ef692ebbac8c8f10fd50519d0c10aa"
   }
 }
