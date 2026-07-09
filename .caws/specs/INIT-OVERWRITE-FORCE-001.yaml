@@ -2,10 +2,11 @@ id: INIT-OVERWRITE-FORCE-001
 title: 'Force-gate hook-pack overwrite: diff surfacing and per-file targeting in caws init'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: init-overwrite-force
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge init-overwrite-force at 25f68b9eff021d32f5471c4017640c2be96d5511'
 created_at: '2026-07-09T20:32:36.118Z'
-updated_at: '2026-07-09T20:32:49.965Z'
+updated_at: '2026-07-09T21:00:07.595Z'
 blast_radius:
   modules:
     - 'caws-cli init (hook-pack install policy, flag surface, renderer)'
