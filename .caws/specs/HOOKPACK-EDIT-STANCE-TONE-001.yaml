@@ -1,0 +1,38 @@
+id: HOOKPACK-EDIT-STANCE-TONE-001
+title: 'Broaden edit_stance header tone (invitation-first) and correct force-gated --overwrite wording across all hook packs'
+risk_tier: 2
+mode: fix
+lifecycle_state: active
+created_at: '2026-07-09T21:37:09.224Z'
+updated_at: '2026-07-09T21:37:09.224Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-codex.ts'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-opencode.ts'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-zcode.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/init/init-hook-pack-render.test.js'
+    - 'packages/caws-cli/templates/hook-packs/shared'
+    - 'packages/caws-cli/templates/hook-packs/claude-code'
+    - 'packages/caws-cli/templates/hook-packs/codex'
+    - 'packages/caws-cli/templates/hook-packs/opencode'
+    - 'packages/caws-cli/templates/hook-packs/zcode'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'edit-stance-header-invites-edits-and-describes-force-gate'
+    type: behavior
