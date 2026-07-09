@@ -3,6 +3,7 @@ title: 'Broaden edit_stance header tone (invitation-first) and correct force-gat
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: edit-stance-tone
 created_at: '2026-07-09T21:37:09.224Z'
 updated_at: '2026-07-09T21:37:09.224Z'
 blast_radius:
