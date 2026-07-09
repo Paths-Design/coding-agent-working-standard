@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 18
+# hook_pack_version: 19
 # caws_min_major: 11
 # lineage_refs: 10
 # edit_stance: this repo OWNS and may grow this hook. Edits are expected and
@@ -233,6 +233,7 @@ def new_turn(user_text: str | None = None, ts: str | None = None) -> dict[str, A
         "user": user_text,
         "user_ts": ts,
         "timeline": [],
+        "interjections": [],
         "edited_files": [],
         "read_files": [],
         "searches": [],
@@ -344,6 +345,40 @@ def parse_transcript_events(transcript_path: str) -> list[dict[str, Any]]:
                             }
                         )
 
+            elif kind == "attachment":
+                attachment = obj.get("attachment")
+                # Mid-turn interjections: a message sent while the assistant is
+                # still running never becomes a role:user transcript line — the
+                # harness stores it as a queued_command attachment instead, and
+                # it is delivered inline (often between tool calls) rather than
+                # opening a new turn. Without this branch, human steering sent
+                # mid-flight is invisible to the session log even though it can
+                # change the shape of the work that follows in the same turn.
+                # Task-notification queued_command entries (background-agent
+                # completions) are excluded: they never carry origin.kind, only
+                # genuine human-authored prompts do.
+                # CAWS-SESSION-LOG-INTERJECTION-CAPTURE-001.
+                if isinstance(attachment, str):
+                    if "'queued_command'" in attachment and "'human'" in attachment:
+                        m = re.search(r"'prompt':\s*'(.*?)',\s*'commandMode'", attachment, re.DOTALL)
+                        if m:
+                            events.append({"ev": "interjection", "text": m.group(1), "ts": ts})
+                    continue
+                if not isinstance(attachment, dict):
+                    continue
+                if attachment.get("type") == "queued_command":
+                    origin = attachment.get("origin")
+                    if isinstance(origin, dict) and origin.get("kind") == "human":
+                        # prompt is usually a string, but a pasted image (or
+                        # other content-block payload) makes it a list like
+                        # message.content elsewhere in the transcript.
+                        raw_prompt = attachment.get("prompt", "")
+                        prompt = raw_prompt if isinstance(raw_prompt, str) \
+                            else extract_text_from_content_blocks(raw_prompt)
+                        if prompt and prompt.strip():
+                            events.append({"ev": "interjection", "text": prompt, "ts": ts})
+                    continue
+
     return events
 
 
@@ -364,7 +399,7 @@ def accumulate_turns(events: list[dict[str, Any]], cwd: str) -> tuple[list[dict[
             if any(text.startswith(prefix) for prefix in SESSION_EVENT_PREFIXES):
                 session_events.append(parse_control_event(text, ts))
                 continue
-            if current["user"] or current["timeline"] or current["control_events"]:
+            if current["user"] or current["timeline"] or current["control_events"] or current["interjections"]:
                 turns.append(current)
             current = new_turn(text, ts)
             continue
@@ -540,8 +575,15 @@ def accumulate_turns(events: list[dict[str, Any]], cwd: str) -> tuple[list[dict[
                     "provenance": "tool_output_orphan",
                 }
             )
+            continue
 
-    if current["user"] or current["timeline"] or current["control_events"]:
+        if ev == "interjection":
+            text = entry.get("text", "")
+            if text.strip():
+                current["interjections"].append({"text": text, "ts": ts})
+            continue
+
+    if current["user"] or current["timeline"] or current["control_events"] or current["interjections"]:
         turns.append(current)
 
     return turns, session_events
@@ -571,6 +613,9 @@ def build_turn_payload(turn: dict[str, Any], number: int) -> dict[str, Any]:
             all_ts.append(item["ts"])
         if item.get("result_ts"):
             all_ts.append(item["result_ts"])
+    for item in turn["interjections"]:
+        if item.get("ts"):
+            all_ts.append(item["ts"])
     ts_values = [value for value in all_ts if value]
     ts_start = min(ts_values) if ts_values else None
     ts_end = max(ts_values) if ts_values else None
@@ -601,6 +646,7 @@ def build_turn_payload(turn: dict[str, Any], number: int) -> dict[str, Any]:
         "next_action": next_action,
         "blocking_issue": blocking_issue,
         "refs": refs,
+        "interjections": turn["interjections"],
         "timeline": turn["timeline"],
     }
 
