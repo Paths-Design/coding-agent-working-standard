@@ -7,7 +7,7 @@ created_at: '2026-07-09T20:32:36.118Z'
 updated_at: '2026-07-09T20:32:49.965Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli init (hook-pack install policy, flag surface, renderer)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -27,12 +27,48 @@ scope:
     - docs/api/cli.md
     - docs/architecture/caws-vnext-command-surface.md
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - '--overwrite without --force never writes a drifted (managed_drift) or unmanaged
+    (unmanaged_collision) file; those paths keep their local bytes.'
+  - 'Byte-identical (managed_clean) and version-stamp-only (managed_old_version) files
+    never require --overwrite or --force; their existing safe-update behavior is unchanged.'
+  - 'The refusal emitted by --overwrite without --force carries a unified diff of local
+    vs incoming rendered template content per refused file, in both human and --plan --json output.'
+  - '--force without --overwrite is a usage error (exit 2); --force never acts alone.'
+  - 'Overwrite targeting (--overwrite <destPath...>) only widens write eligibility for the
+    listed destPaths; untargeted drifted files behave as if --overwrite was not passed.'
+  - 'An unknown overwrite target (matching no destPath in the resolved shared+vendor pack
+    manifests) is a usage error (exit 2) that names the valid managed paths; no file is written.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a managed hook file whose body was locally edited (managed_drift)'
+    when: 'caws init --agent-surface <s> --overwrite runs WITHOUT --force'
+    then: 'the file is not modified, the action is refused with a unified diff of local vs
+      incoming content, remediation names --overwrite --force and --adopt, and exit code is 1'
+  - id: A2
+    given: 'a managed hook file whose body was locally edited (managed_drift)'
+    when: 'caws init --agent-surface <s> --overwrite --force runs'
+    then: 'the file is replaced with the rendered upstream template (current clobber
+      behavior, now explicitly confirmed), action reported as updated'
+  - id: A3
+    given: 'two drifted managed files X and Y'
+    when: 'caws init --overwrite X --force runs targeting only X'
+    then: 'X is replaced; Y is left untouched and refused with the standard drift refusal'
+  - id: A4
+    given: 'any init invocation'
+    when: '--force is passed without --overwrite, or an --overwrite target matches no
+      destPath in the resolved pack manifests'
+    then: 'init exits 2 with a usage error before any hook-pack file is written'
+  - id: A5
+    given: 'a managed file byte-identical to the rendered template, and one differing only
+      by the version stamp'
+    when: 'caws init runs with or without --overwrite/--force'
+    then: 'they remain no-op (unchanged) and safe re-stamp (updated) respectively — never
+      diffed, never refused, never force-gated'
+  - id: A6
+    given: 'a drifted managed file'
+    when: 'caws init --plan --json --overwrite runs without --force'
+    then: 'the JSON plan marks the file refused with force_required and carries the unified
+      diff; no file is written (plan stays read-only)'
 non_functional: {}
 contracts:
   - name: 'init-overwrite-force-behavior'
