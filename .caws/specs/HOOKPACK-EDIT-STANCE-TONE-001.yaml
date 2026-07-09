@@ -7,7 +7,7 @@ created_at: '2026-07-09T21:37:09.224Z'
 updated_at: '2026-07-09T21:37:09.224Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli hook packs (managed-header edit_stance across shared + 4 vendor adapters; pack version constants; fingerprint baseline)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -26,12 +26,44 @@ scope:
     - 'packages/caws-cli/templates/hook-packs/zcode'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The edit_stance header leads with an invitation to edit (not a prohibition):
+    it states the hook is the repo''s to shape, that the CAWS-MANAGED-HOOK marker
+    is a discovery marker not a keep-out sign, and that the only out-of-bounds edit
+    is gutting a guard to dodge a block.'
+  - 'The header describes the force-gated overwrite accurately: caws init shows a
+    diff and refuses; --adopt keeps yours; --overwrite --force takes upstream. No
+    managed header, vendor doc, or renderer line says bare --overwrite discards edits.'
+  - 'The CAWS-MANAGED-HOOK marker line is preserved verbatim in every managed file
+    so parseManagedHeader still classifies the file as managed (the install layer''s
+    drift/preserve machinery is unchanged).'
+  - 'Every pack whose template bytes changed has its *_PACK_VERSION bumped and its
+    fingerprint baseline regenerated (the stale-installed-fix guard stays satisfied,
+    so the new tone actually reaches consumers on re-init).'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a shared managed hook (e.g. scope-guard.sh) after the header rewrite'
+    when: 'parseManagedHeader reads it'
+    then: 'it still resolves to a managed header (hookPack/hookPackVersion/cawsMinMajor/
+      lineageRefs), and the header text contains the invitation-first stance and the
+      "marker is not a keep-out sign" clause'
+  - id: A2
+    given: 'any managed template across all five packs'
+    when: 'grepped for the stale wording "overwrite to pull this upstream template"
+      or "--overwrite" described as directly replacing/discarding without --force'
+    then: 'no managed header, vendor CLAUDE.md/README/AGENTS doc carries it — the
+      force-gated two-step is described everywhere the old wording appeared'
+  - id: A3
+    given: 'the templates changed the edit_stance header in shared + claude-code +
+      codex + opencode + zcode'
+    when: 'pack-fingerprint.test.js runs'
+    then: 'for each changed pack recorded.version === manifest *_PACK_VERSION (bumped)
+      AND recorded.fingerprint === live fingerprint (regenerated); unchanged packs
+      keep their baseline'
+  - id: A4
+    given: 'the existing growth-doctrine render tests (init-hook-pack-render.test.js)'
+    when: 'the suite runs after the header rewrite'
+    then: 'the A1 edit_stance-presence and A2 parseManagedHeader tests still pass,
+      updated to assert the new invitation-first semantics rather than the old wording'
 non_functional: {}
 contracts:
   - name: 'edit-stance-header-invites-edits-and-describes-force-gate'
