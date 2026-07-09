@@ -35,7 +35,8 @@ this doc — do not silently regress an invariant.
 > (`agent-surface.sh` gained a `zcode` arm; `emit_ask` gained an optional
 > `[event]` parameter). Existing consumers' next `caws init` will report
 > `agent-surface.sh` and `emit.sh` as `managed_drift` until they re-run with
-> `--overwrite` (pull the new baseline) or `--adopt` (keep the local copy). This
+> `--overwrite --force` (pull the new baseline; bare `--overwrite` previews the
+> replacement diffs and refuses) or `--adopt` (keep the local copy). This
 > is the intended growth-doctrine behavior; the renderer frames it as
 > "kept your edits", not an error.
 
@@ -394,7 +395,7 @@ implemented in `packages/caws-cli/src/shell/`, composed atop
 
 | Command | Purpose |
 |---|---|
-| `caws init` | Bootstrap canonical vNext `.caws/` state. Idempotent. Refuses legacy residue. No `--force`. |
+| `caws init` | Bootstrap canonical vNext `.caws/` state. Idempotent. Refuses legacy residue; no flag overrides that. Hook-pack `--overwrite` previews replacement diffs (optionally per-path targets) and only `--overwrite --force` applies them. |
 | `caws doctor` | Drift detection over `.caws/` state; exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure). |
 | `caws status` | Read-only dashboard: project, current context, claim, doctor findings. Always observability — never mutates. |
 | `caws scope show <path>` | Explain the scope decision for `<path>`; always exits 0. |

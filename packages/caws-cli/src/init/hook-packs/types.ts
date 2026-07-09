@@ -138,6 +138,14 @@ export interface HookPackFileAction {
   readonly action: 'created' | 'updated' | 'unchanged' | 'refused';
   /** When action === 'refused', the reason. */
   readonly refusalReason?: 'unmanaged_collision' | 'managed_drift';
+  /** True when --overwrite selected this file but --force was absent: the
+   *  replacement was withheld pending explicit confirmation. The renderer
+   *  surfaces `diff` and the --overwrite --force remediation. */
+  readonly forceRequired?: boolean;
+  /** Unified diff of the local file vs the incoming rendered template,
+   *  attached to a forceRequired refusal so the operator (human or agent)
+   *  can port local edits manually instead of accepting the replacement. */
+  readonly diff?: string;
 }
 
 /** Result of installing a pack into a repo. */

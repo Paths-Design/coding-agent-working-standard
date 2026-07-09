@@ -69,6 +69,9 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
   // "resolve" is what trains agents to treat their own growth as an error.
   const drifted: string[] = [];
   const collided: string[] = [];
+  // Overwrite selected these files but --force was absent: the replacement
+  // was withheld and each refusal carries the diff of what --force would do.
+  const withheld: Array<{ destPath: string; diff: string }> = [];
   for (const a of result.actions) {
     switch (a.action) {
       case 'created':
@@ -81,7 +84,9 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
         unchanged.push(a.destPath);
         break;
       case 'refused':
-        if (a.refusalReason === 'managed_drift') {
+        if (a.forceRequired === true) {
+          withheld.push({ destPath: a.destPath, diff: a.diff ?? '' });
+        } else if (a.refusalReason === 'managed_drift') {
           drifted.push(a.destPath);
         } else {
           collided.push(a.destPath);
@@ -114,9 +119,10 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
     lines.push('                  when you intended to grow these hooks.');
     lines.push('    --adopt       Same outcome made explicit: keep your version and stop');
     lines.push('                  reporting it as drift on future runs.');
-    lines.push('    --overwrite   Pull the upstream template, replacing your version.');
-    lines.push('                  Only this path discards local edits — use it when you');
-    lines.push('                  want the new CAWS baseline over your changes.');
+    lines.push('    --overwrite   Preview replacing your version with the upstream template');
+    lines.push('                  (shows a diff per file; nothing is written). Add --force');
+    lines.push('                  to apply — only that path discards local edits. Target');
+    lines.push('                  specific files with --overwrite <path...>.');
   }
 
   if (collided.length > 0) {
@@ -125,12 +131,38 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
     lines.push('');
     lines.push('  A file exists at a managed hook path but carries no CAWS-MANAGED-HOOK');
     lines.push('  marker, so init cannot tell whether it is yours to keep. To resolve:');
-    lines.push('    --overwrite   Replace it with the canonical pack version.');
-    lines.push('                  CAUTION: the existing file is discarded.');
+    lines.push('    --overwrite   Preview replacing it with the canonical pack version');
+    lines.push('                  (shows a diff; nothing is written). Add --force to apply.');
+    lines.push('                  CAUTION: --force discards the existing file.');
     lines.push('    --adopt       Leave it in place; do not enforce that it matches the');
     lines.push('                  pack (drift is no longer tracked until the marker');
     lines.push('                  is restored).');
     lines.push('  Alternative: rename or remove the conflicting file, then re-run init.');
+  }
+
+  if (withheld.length > 0) {
+    lines.push(`  Overwrite withheld — needs --force (${withheld.length}):`);
+    for (const w of withheld) lines.push(`    ~ ${w.destPath}`);
+    lines.push('');
+    lines.push('  --overwrite selected these files, but replacing them discards local');
+    lines.push('  content, so init previewed the change instead of applying it. Each');
+    lines.push('  diff below shows what --force would change (-: your line, +: incoming):');
+    for (const w of withheld) {
+      lines.push('');
+      const diffBody =
+        w.diff.length > 0
+          ? w.diff
+          : `(no diff available for ${w.destPath})`;
+      for (const dl of diffBody.split('\n')) lines.push(`    ${dl}`);
+    }
+    lines.push('');
+    lines.push('  Your options:');
+    lines.push('    --overwrite --force            Apply every replacement shown above.');
+    lines.push('    --overwrite <path...> --force  Apply only the listed files.');
+    lines.push('    (no --overwrite)               Keep your files; port wanted upstream');
+    lines.push('                                   lines manually using the diffs.');
+    lines.push('    --adopt                        Keep your files and stop reporting');
+    lines.push('                                   them as drift on future runs.');
   }
 
   return lines.join('\n');

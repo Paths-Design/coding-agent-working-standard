@@ -65,7 +65,8 @@ caws init --agent-surface codex
 | `--dry-run` | Compatibility alias for `--plan`; previews init changes without writing anything. |
 | `--json` | Emit the read-only init plan as JSON with `--plan` or `--dry-run`. |
 | `--agent-surface <name>` | Install a hook pack for an agent harness: `claude-code`, `codex`, `cursor`, `windsurf`, or `none`. When omitted, init attempts filesystem detection and skips hook install when ambiguous. |
-| `--overwrite` | For hook-pack install: replace drifted or unmanaged files at managed pack paths. CAUTION: local edits to those files will be lost. |
+| `--overwrite [paths...]` | For hook-pack install: select drifted or unmanaged files at managed pack paths for replacement — every pack file when bare, or only the listed destination paths. Without `--force` this previews a unified diff of each replacement and refuses (nothing is written). An unknown target path is a usage error (exit 2) that lists the valid managed paths. |
+| `--force` | With `--overwrite`: apply the previewed replacements. CAUTION: local edits to the selected files are lost. A usage error (exit 2) without `--overwrite`. |
 | `--adopt` | For hook-pack install: leave drifted or unmanaged files in place without enforcing pack contents. CAUTION: pack drift is no longer tracked for those paths. |
 | `--data` | Show structured data block on diagnostics. |
 
@@ -73,7 +74,8 @@ Behavior:
 
 - Idempotent. Re-running on an already-initialized project is a no-op.
 - `--plan` and `--dry-run` are read-only. They report canonical paths that would be created or already exist, the `.gitignore` managed-block outcome, selected hook-pack file actions, Claude settings wiring plans, Codex trust notes, refusal reasons, and the next apply command.
-- Refuses to run if legacy `.caws/working-spec.yaml` is present (migrate first; there is no `--force`).
+- Refuses to run if legacy `.caws/working-spec.yaml` is present (migrate first; no flag overrides this — `--force` only confirms hook-pack `--overwrite` replacements, never legacy-state overwrite).
+- Overwrite is force-gated. `--overwrite` alone never writes a drifted or unmanaged file: it prints a unified diff per file (local vs incoming template) and exits 1 so the operator can port edits manually, add `--force` to accept the replacement, or `--adopt` to keep the local version. Byte-identical files and files differing only by the version stamp never need `--overwrite` — their safe no-op/re-stamp path is unchanged.
 - Creates the canonical layout:
 
   ```
@@ -86,7 +88,7 @@ Behavior:
     # events.jsonl is created on first append; never required at rest.
   ```
 
-Exit codes: 0 (created or no-op), 1 (legacy residue refused), 2 (not a git repo / I/O failure).
+Exit codes: 0 (created or no-op), 1 (legacy residue refused, or hook-pack files refused — including overwrite withheld pending `--force`), 2 (not a git repo / I/O failure / `--force` without `--overwrite` / unknown `--overwrite` target).
 
 ---
 
@@ -1267,7 +1269,7 @@ These are the contracts v11 enforces. Don't try to work around them in client co
 3. Doctor is pure (kernel-side). The store composes the snapshot; doctor inspects it.
 4. Missing != malformed. Diagnostics distinguish absence from corruption.
 5. `events.jsonl` is never required at rest. The first `appendEvent` creates it.
-6. `caws init` is idempotent and non-destructive. It refuses legacy residue. There is no `--force`.
+6. `caws init` is idempotent and non-destructive. It refuses legacy residue; no flag overrides that refusal. The only destructive path is hook-pack `--overwrite --force`, which is opt-in twice: `--overwrite` alone previews diffs and refuses.
 7. `caws status` is observability. Running it any number of times produces no `.caws/` byte changes.
 8. Agent liveness state (`.caws/leases/`) is an operational cache — NEVER authority. Ownership authority lives in `.caws/worktrees.json`; spec authority lives in `.caws/specs/<id>.yaml`.
 

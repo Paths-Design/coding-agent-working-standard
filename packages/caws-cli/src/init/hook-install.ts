@@ -7,6 +7,15 @@
 //   - managed_drift      → refuse unless adopt/overwrite is passed.
 //   - unmanaged_collision → refuse unless adopt/overwrite is passed.
 //
+// Overwrite is force-gated: overwrite alone never writes a drifted or
+// unmanaged file. It selects files for replacement (all pack files, or only
+// the destPaths in overwriteTargets) and, without `force`, withholds the
+// write and attaches a unified diff of local vs incoming content to the
+// refusal so the operator can port edits manually. Only overwrite + force
+// performs the destructive replacement. Byte-identical (managed_clean) and
+// version-stamp-only (managed_old_version) files never consult overwrite or
+// force — their safe-update path is unchanged.
+//
 // settings.json is intentionally NOT in the pack manifest (it carries
 // user-authored permissions/env that the pack must not clobber). This
 // module instead MERGES the four CAWS caws_dispatch entrypoints into
@@ -24,6 +33,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { unifiedDiff } from './unified-diff';
 import type {
   HookPackFile,
   HookPackFileAction,
@@ -468,8 +478,16 @@ function evaluateFileState(
 
 export interface HookPackInstallOptions {
   readonly repoRoot: string;
-  /** When true, allow overwriting unmanaged or drifted files. */
+  /** When true, select drifted/unmanaged files for replacement. Without
+   *  `force` the selection only previews: refusals carry a unified diff and
+   *  no file is written. */
   readonly overwrite?: boolean;
+  /** Restrict overwrite to these destPaths. Undefined selects every pack
+   *  file. Ignored when overwrite is not set. */
+  readonly overwriteTargets?: readonly string[];
+  /** Confirm the destructive replacement overwrite describes. Only
+   *  meaningful with overwrite. */
+  readonly force?: boolean;
   /** When true, leave drifted/unmanaged files in place and report. */
   readonly adopt?: boolean;
   /** Override the pack template root (used by tests). */
@@ -485,7 +503,35 @@ interface InstallContext {
   readonly packRoot: string;
   readonly pack: HookPackV1;
   readonly overwrite: boolean;
+  /** Null = overwrite selects every pack file. */
+  readonly overwriteTargets: ReadonlySet<string> | null;
+  readonly force: boolean;
   readonly adopt: boolean;
+}
+
+function contextFromOptions(
+  pack: HookPackV1,
+  options: HookPackInstallOptions
+): InstallContext {
+  return {
+    repoRoot: options.repoRoot,
+    packRoot: options.packRootOverride ?? packTemplateRoot(pack.id),
+    pack,
+    overwrite: options.overwrite === true,
+    overwriteTargets:
+      options.overwriteTargets !== undefined
+        ? new Set(options.overwriteTargets)
+        : null,
+    force: options.force === true,
+    adopt: options.adopt === true,
+  };
+}
+
+/** Did --overwrite select this file? Bare overwrite selects everything;
+ *  targeted overwrite selects only the listed destPaths. */
+function overwriteSelects(ctx: InstallContext, file: HookPackFile): boolean {
+  if (!ctx.overwrite) return false;
+  return ctx.overwriteTargets === null || ctx.overwriteTargets.has(file.destPath);
 }
 
 function ensureDir(target: string): void {
@@ -551,61 +597,81 @@ function applyOne(
       return { destPath: file.destPath, action: 'updated' };
 
     case 'managed_drift':
-      if (ctx.overwrite) {
-        writeFile(destAbs, sourceAbs, file.executable, ctx.repoRoot, file, pv);
-        return { destPath: file.destPath, action: 'updated' };
-      }
-      if (ctx.adopt) {
-        return { destPath: file.destPath, action: 'unchanged' };
-      }
-      return {
-        destPath: file.destPath,
-        action: 'refused',
-        refusalReason: 'managed_drift',
-      };
+      return resolveCollision(ctx, file, 'managed_drift', true);
 
     case 'unmanaged_collision':
-      if (ctx.overwrite) {
-        writeFile(destAbs, sourceAbs, file.executable, ctx.repoRoot, file, pv);
-        return { destPath: file.destPath, action: 'updated' };
-      }
-      if (ctx.adopt) {
-        return { destPath: file.destPath, action: 'unchanged' };
-      }
-      return {
-        destPath: file.destPath,
-        action: 'refused',
-        refusalReason: 'unmanaged_collision',
-      };
+      return resolveCollision(ctx, file, 'unmanaged_collision', true);
   }
 }
 
-function actionForState(
-  state: InstallFileState,
-  overwrite: boolean,
-  adopt: boolean
-): HookPackFileAction['action'] {
-  switch (state.kind) {
-    case 'absent':
-      return 'created';
-    case 'managed_clean':
-      return 'unchanged';
-    case 'managed_old_version':
-      return 'updated';
-    case 'managed_drift':
-    case 'unmanaged_collision':
-      if (overwrite) return 'updated';
-      if (adopt) return 'unchanged';
-      return 'refused';
+/** Unified diff of the local file vs the incoming rendered template, for a
+ *  withheld overwrite. Labels name both sides so the diff is actionable
+ *  standalone (in --plan --json output as much as terminal output). */
+function incomingDiff(ctx: InstallContext, file: HookPackFile): string {
+  const destAbs = path.join(ctx.repoRoot, file.destPath);
+  const sourceAbs = path.join(ctx.packRoot, file.sourcePath);
+  const localBytes = readBytes(destAbs);
+  const rawSourceBytes = readBytes(sourceAbs);
+  if (rawSourceBytes === null) {
+    return `(pack template missing at ${file.sourcePath}; no diff available)`;
   }
+  const incoming = renderPackFileBytes(
+    rawSourceBytes,
+    ctx.repoRoot,
+    file,
+    ctx.pack.packVersion
+  );
+  return unifiedDiff(
+    `local: ${file.destPath}`,
+    `incoming: ${ctx.pack.id} v${ctx.pack.packVersion} template`,
+    (localBytes ?? Buffer.alloc(0)).toString('utf8'),
+    incoming.toString('utf8')
+  );
 }
 
-function refusalForState(
-  state: InstallFileState
-): HookPackFileAction['refusalReason'] {
-  if (state.kind === 'managed_drift') return 'managed_drift';
-  if (state.kind === 'unmanaged_collision') return 'unmanaged_collision';
-  return undefined;
+/** Decide (and for apply=true, perform) the drift/collision outcome under
+ *  the overwrite/force/adopt policy. Shared by applyOne and planOne so the
+ *  preview can never disagree with the write path. */
+function resolveCollision(
+  ctx: InstallContext,
+  file: HookPackFile,
+  reason: 'managed_drift' | 'unmanaged_collision',
+  apply: boolean
+): HookPackFileAction {
+  if (overwriteSelects(ctx, file)) {
+    if (ctx.force) {
+      if (apply) {
+        const destAbs = path.join(ctx.repoRoot, file.destPath);
+        const sourceAbs = path.join(ctx.packRoot, file.sourcePath);
+        writeFile(
+          destAbs,
+          sourceAbs,
+          file.executable,
+          ctx.repoRoot,
+          file,
+          ctx.pack.packVersion
+        );
+      }
+      return { destPath: file.destPath, action: 'updated' };
+    }
+    // Overwrite selected this file but --force is absent: withhold the
+    // write and surface exactly what would be lost.
+    return {
+      destPath: file.destPath,
+      action: 'refused',
+      refusalReason: reason,
+      forceRequired: true,
+      diff: incomingDiff(ctx, file),
+    };
+  }
+  if (ctx.adopt) {
+    return { destPath: file.destPath, action: 'unchanged' };
+  }
+  return {
+    destPath: file.destPath,
+    action: 'refused',
+    refusalReason: reason,
+  };
 }
 
 function planOne(
@@ -619,14 +685,18 @@ function planOne(
     ctx.pack.packVersion,
     file
   );
-  const action = actionForState(state, ctx.overwrite, ctx.adopt);
-  const refusalReason =
-    action === 'refused' ? refusalForState(state) : undefined;
-  return {
-    destPath: file.destPath,
-    action,
-    ...(refusalReason ? { refusalReason } : {}),
-  };
+  switch (state.kind) {
+    case 'absent':
+      return { destPath: file.destPath, action: 'created' };
+    case 'managed_clean':
+      return { destPath: file.destPath, action: 'unchanged' };
+    case 'managed_old_version':
+      return { destPath: file.destPath, action: 'updated' };
+    case 'managed_drift':
+      return resolveCollision(ctx, file, 'managed_drift', false);
+    case 'unmanaged_collision':
+      return resolveCollision(ctx, file, 'unmanaged_collision', false);
+  }
 }
 
 function outcomeForActions(
@@ -657,13 +727,7 @@ export function installHookPack(
   pack: HookPackV1,
   options: HookPackInstallOptions
 ): HookPackInstallResult {
-  const ctx: InstallContext = {
-    repoRoot: options.repoRoot,
-    packRoot: options.packRootOverride ?? packTemplateRoot(pack.id),
-    pack,
-    overwrite: options.overwrite === true,
-    adopt: options.adopt === true,
-  };
+  const ctx = contextFromOptions(pack, options);
 
   const actions: HookPackFileAction[] = [];
   for (const file of pack.installedFiles) {
@@ -684,13 +748,7 @@ export function planHookPackInstall(
   pack: HookPackV1,
   options: HookPackInstallOptions
 ): HookPackPlanResult {
-  const ctx: InstallContext = {
-    repoRoot: options.repoRoot,
-    packRoot: options.packRootOverride ?? packTemplateRoot(pack.id),
-    pack,
-    overwrite: options.overwrite === true,
-    adopt: options.adopt === true,
-  };
+  const ctx = contextFromOptions(pack, options);
 
   const actions = pack.installedFiles.map((file) => planOne(ctx, file));
 

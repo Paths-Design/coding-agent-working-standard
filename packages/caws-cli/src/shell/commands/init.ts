@@ -19,10 +19,11 @@
 //   0 = canonical state established (created OR already_initialized)
 //       AND hook-pack step did not refuse files
 //   1 = legacy residue refused (INIT_LEGACY_RESIDUE)
-//       OR hook-pack install refused one or more files (use --adopt or
-//       --overwrite to resolve)
-//   2 = repo-root resolution failed, write I/O failed, or default
-//       policy invalid
+//       OR hook-pack install refused one or more files (use --adopt to
+//       keep them, or --overwrite to preview + --force to replace)
+//   2 = repo-root resolution failed, write I/O failed, default policy
+//       invalid, --force without --overwrite, or an unknown --overwrite
+//       target
 
 import { execFileSync } from 'child_process';
 import {
@@ -106,8 +107,14 @@ export interface InitCommandOptions {
   /** Selected agent harness. When undefined, the command attempts
    *  filesystem detection. */
   readonly agentSurface?: AgentSurface;
-  /** When true, overwrite drifted/unmanaged files at managed pack paths. */
+  /** When true, select drifted/unmanaged files at managed pack paths for
+   *  replacement. Without `force` this previews (diffs) and refuses. */
   readonly overwrite?: boolean;
+  /** Restrict --overwrite to these destination paths. */
+  readonly overwriteTargets?: readonly string[];
+  /** Confirm the destructive replacement --overwrite describes. Usage
+   *  error without overwrite. */
+  readonly force?: boolean;
   /** When true, leave drifted/unmanaged files in place; do not enforce
    *  pack contents at those paths. */
   readonly adopt?: boolean;
@@ -134,6 +141,51 @@ function chooseSurface(
     return { surface: null, reason: 'ambiguous' };
   }
   return { surface: null, reason: 'none' };
+}
+
+/** The overwrite/force/adopt policy subset of InitCommandOptions, shaped for
+ *  installHookPack/planHookPackInstall. One place so apply and plan cannot
+ *  drift. */
+function hookPackPolicyOptions(options: InitCommandOptions): {
+  overwrite?: boolean;
+  overwriteTargets?: readonly string[];
+  force?: boolean;
+  adopt?: boolean;
+} {
+  const out: {
+    overwrite?: boolean;
+    overwriteTargets?: readonly string[];
+    force?: boolean;
+    adopt?: boolean;
+  } = {};
+  if (options.overwrite !== undefined) out.overwrite = options.overwrite;
+  if (options.overwriteTargets !== undefined) {
+    out.overwriteTargets = options.overwriteTargets;
+  }
+  if (options.force !== undefined) out.force = options.force;
+  if (options.adopt !== undefined) out.adopt = options.adopt;
+  return out;
+}
+
+/** Validate --overwrite targets against the destPaths the resolved packs can
+ *  actually install. Returns the unknown targets (empty = all valid) plus the
+ *  valid path list for the error message. Runs BEFORE any install/plan step
+ *  so a typo'd target can never cause a partial write. */
+function checkOverwriteTargets(
+  surface: AgentSurface | null,
+  targets: readonly string[] | undefined
+): { readonly unknown: readonly string[]; readonly valid: readonly string[] } {
+  const valid = new Set<string>(
+    SHARED_PACK.installedFiles.map((f) => f.destPath)
+  );
+  if (surface !== null && surface !== 'none') {
+    const resolution = resolveHookPack(surface);
+    if (resolution.kind === 'pack') {
+      for (const f of resolution.pack.installedFiles) valid.add(f.destPath);
+    }
+  }
+  const unknown = (targets ?? []).filter((t) => !valid.has(t));
+  return { unknown, valid: [...valid].sort() };
 }
 
 function performHookPackStep(
@@ -187,13 +239,10 @@ function performHookPackStep(
     };
   }
 
-  const installOpts: Parameters<typeof installHookPack>[1] = { repoRoot };
-  if (options.overwrite !== undefined) {
-    (installOpts as { overwrite?: boolean }).overwrite = options.overwrite;
-  }
-  if (options.adopt !== undefined) {
-    (installOpts as { adopt?: boolean }).adopt = options.adopt;
-  }
+  const installOpts: Parameters<typeof installHookPack>[1] = {
+    repoRoot,
+    ...hookPackPolicyOptions(options),
+  };
 
   const sharedResult = installHookPack(SHARED_PACK, installOpts);
   const vendorResult = installHookPack(resolution.pack, installOpts);
@@ -272,13 +321,10 @@ function planHookPackStep(
     };
   }
 
-  const planOpts: Parameters<typeof planHookPackInstall>[1] = { repoRoot };
-  if (options.overwrite !== undefined) {
-    (planOpts as { overwrite?: boolean }).overwrite = options.overwrite;
-  }
-  if (options.adopt !== undefined) {
-    (planOpts as { adopt?: boolean }).adopt = options.adopt;
-  }
+  const planOpts: Parameters<typeof planHookPackInstall>[1] = {
+    repoRoot,
+    ...hookPackPolicyOptions(options),
+  };
 
   const sharedResult = planHookPackInstall(SHARED_PACK, planOpts);
   const vendorResult = planHookPackInstall(resolution.pack, planOpts);
@@ -323,7 +369,13 @@ function applyCommand(opts: InitCommandOptions): string {
   if (opts.agentSurface !== undefined) {
     parts.push('--agent-surface', opts.agentSurface);
   }
-  if (opts.overwrite === true) parts.push('--overwrite');
+  if (opts.overwrite === true) {
+    parts.push('--overwrite');
+    if (opts.overwriteTargets !== undefined) {
+      parts.push(...opts.overwriteTargets);
+    }
+  }
+  if (opts.force === true) parts.push('--force');
   if (opts.adopt === true) parts.push('--adopt');
   if (opts.showData === true) parts.push('--data');
   return parts.join(' ');
@@ -549,6 +601,24 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     return 2;
   }
 
+  // --force confirms the destructive replacement --overwrite describes; on
+  // its own it confirms nothing. Refuse rather than silently ignore it, so
+  // a caller who believed they forced something learns they did not.
+  if (opts.force === true && opts.overwrite !== true) {
+    err('caws init: --force is only meaningful with --overwrite.');
+    err('  --overwrite previews the replacement diffs for drifted/unmanaged');
+    err('  files; --overwrite --force applies the replacement.');
+    return 2;
+  }
+  if (
+    opts.overwriteTargets !== undefined &&
+    opts.overwriteTargets.length > 0 &&
+    opts.overwrite !== true
+  ) {
+    err('caws init: overwrite targets require --overwrite.');
+    return 2;
+  }
+
   // Validate --agent-surface early. An unknown value is a programmer
   // error from the caller (or a typo at the CLI); fail fast with a
   // clear diagnostic.
@@ -569,6 +639,29 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     return 2;
   }
   const { repoRoot } = root.value;
+
+  // Validate --overwrite targets against the packs the chosen surface would
+  // install, BEFORE any write (or plan) step — a typo'd target must never
+  // produce a partial overwrite.
+  if (
+    opts.overwriteTargets !== undefined &&
+    opts.overwriteTargets.length > 0
+  ) {
+    const detection = detectAgentHarness(repoRoot);
+    const chosen = chooseSurface(opts.agentSurface, detection);
+    const { unknown, valid } = checkOverwriteTargets(
+      chosen.surface,
+      opts.overwriteTargets
+    );
+    if (unknown.length > 0) {
+      err(
+        `caws init: unknown --overwrite target(s): ${unknown.join(', ')}`
+      );
+      err('  Targets must be managed pack destination paths. Valid paths:');
+      for (const p of valid) err(`    ${p}`);
+      return 2;
+    }
+  }
 
   if (opts.plan === true) {
     return runInitPlan(repoRoot, opts, out, err, showData);
