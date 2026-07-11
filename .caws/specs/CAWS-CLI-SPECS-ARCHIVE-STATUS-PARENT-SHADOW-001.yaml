@@ -2,10 +2,11 @@ id: CAWS-CLI-SPECS-ARCHIVE-STATUS-PARENT-SHADOW-001
 title: 'specs archive --status closed unreachable: parent group --status shadows the leaf selector'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: archive-status-shadow
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge archive-status-shadow at 0925b46b37a6c6c06be5887d8232b2011929f9d0'
 created_at: '2026-07-11T21:23:40.829Z'
-updated_at: '2026-07-11T21:23:40.829Z'
+updated_at: '2026-07-11T21:30:36.926Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/register.ts
