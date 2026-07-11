@@ -3,6 +3,7 @@ title: 'specs archive --status closed unreachable: parent group --status shadows
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: archive-status-shadow
 created_at: '2026-07-11T21:23:40.829Z'
 updated_at: '2026-07-11T21:23:40.829Z'
 blast_radius:
