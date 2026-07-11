@@ -1105,11 +1105,24 @@ export function registerShellCommands(
           apply?: boolean;
           json?: boolean;
           data?: boolean;
-        }
+        },
+        command: Command
       ) => {
         const include = parseCommaSeparatedList(opts.include);
         const exclude = parseCommaSeparatedList(opts.exclude);
-        const status = opts.status === 'closed' ? 'closed' : undefined;
+        // The parent `specs` command declares a group-level `--status` compat
+        // option (it powers `caws specs --status <s>` → `specs list`). Because
+        // the parent also declares `--status`, commander binds a `--status`
+        // that appears after the `archive` subcommand to the PARENT command,
+        // not to this leaf — so the leaf-local `opts.status` is undefined and
+        // the batch guard trips unconditionally. `optsWithGlobals()` surfaces
+        // the effective value regardless of which command it bound to, keeping
+        // the parent compat handoff intact while making the batch selector
+        // reachable. See CAWS-CLI-SPECS-ARCHIVE-STATUS-PARENT-SHADOW-001.
+        const effectiveStatus = (
+          command.optsWithGlobals() as { status?: string }
+        ).status;
+        const status = effectiveStatus === 'closed' ? 'closed' : undefined;
         const code = runSpecsArchiveCommand({
           ...(id !== undefined ? { id } : {}),
           ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
