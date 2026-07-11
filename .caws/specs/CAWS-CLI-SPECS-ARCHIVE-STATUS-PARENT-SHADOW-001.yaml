@@ -7,7 +7,7 @@ created_at: '2026-07-11T21:23:40.829Z'
 updated_at: '2026-07-11T21:23:40.829Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/register.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -16,13 +16,100 @@ scope:
     - 'packages/caws-cli/tests/shell/specs-archive-status-routing.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    `caws specs archive --status closed` reaches the archive leaf's batch path
+    and produces the dry-run candidate listing (or, with `--apply`, the
+    aggregate archive) — it must NOT print "batch mode requires --status
+    closed". The batch-archive feature that the handler
+    (`runSpecsArchiveCommand`) already implements must be reachable through the
+    real CLI parse path, not only through direct handler calls in tests.
+  - >-
+    The parent `specs --status <status>` compatibility handoff (no subcommand →
+    `caws specs list --status <status>`) remains functional. The fix must
+    restore the archive batch selector WITHOUT removing the parent group's
+    `--status` compat option, because both surfaces are documented and a naive
+    "drop the parent option" fix trades one broken surface for another.
+  - >-
+    The single-spec path `caws specs archive <id>` continues to archive exactly
+    that closed spec and is unaffected by the routing fix (it never depended on
+    `--status`).
+  - >-
+    A regression test exercises the fix through the spawned `dist/index.js` CLI
+    (full commander parse path), not by calling `runSpecsArchiveCommand`
+    directly. The pre-existing batch tests call the handler directly and passed
+    green while the CLI was dead; a handler-only test cannot pin this behavior.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      a repo with two or more closed specs, driven through the real CLI binary
+      (`node dist/index.js`), not the handler directly
+    when: the operator runs `caws specs archive --status closed`
+    then: >-
+      the command exits 1 (dry-run convention) and prints
+      `archive --status closed (dry-run): N candidate(s)` with the closed spec
+      ids listed as `would-archive` — instead of the pre-fix behavior where it
+      prints `caws specs archive: batch mode requires --status closed.` because
+      `--status` bound to the parent `specs` command and never reached the
+      archive leaf's `opts.status`.
+  - id: A2
+    given: the same repo, driven through the real CLI binary
+    when: the operator runs `caws specs archive --status closed --apply`
+    then: >-
+      the closed specs are archived in one aggregate audit commit
+      (`chore(caws): archive N closed specs`), the exit code is 0, and the spec
+      YAMLs are moved out of `.caws/specs/` — proving the apply path is
+      reachable too, not just the dry-run.
+  - id: A3
+    given: a repo with no subcommand after `specs`, driven through the real CLI
+    when: the operator runs `caws specs --status closed`
+    then: >-
+      the parent compatibility handoff still routes to `caws specs list --status
+      closed` and lists closed specs — proving the fix did not sacrifice the
+      documented parent `--status` compat surface to unbreak the leaf.
+  - id: A4
+    given: a repo with one closed spec, driven through the real CLI
+    when: the operator runs `caws specs archive <that-id>`
+    then: >-
+      exactly that spec is archived (single-id path), confirming the routing fix
+      left the id-argument path untouched.
 non_functional: {}
 contracts:
   - name: 'specs-archive-status-routing'
     type: behavior
+    description: >-
+      `caws specs archive --status closed[/ --apply]` routes the `--status`
+      selector to the archive leaf through the full commander parse path, so the
+      batch-archive feature is reachable from the CLI, while the parent
+      `specs --status` compat handoff and the single-id archive path both remain
+      intact.
+# --- Root cause (verified empirically 2026-07-11) ----------------------------
+# Symptom: every form of `caws specs archive --status closed` fails with
+#   "caws specs archive: batch mode requires --status closed." (specs.ts:1460),
+#   so the batch-archive feature is dead code as shipped in v11.7.0. An agent
+#   asked to bulk-archive closed specs is pushed toward hand-rolling a
+#   per-spec loop or hand-moving YAML — the exact governance-bypass incentive
+#   the release stance forbids.
+#
+# Mechanism (confirmed with a minimal commander repro, not hypothesized):
+#   The parent `specs` command declares a group-level `--status <status>` compat
+#   option (command-metadata.ts:144, applied at register.ts:860). The `archive`
+#   leaf ALSO declares its own `--status <s>` (command-metadata.ts:423). With
+#   `specsCmd.enablePositionalOptions()` (register.ts:861), commander binds a
+#   `--status` appearing after the `archive` subcommand to the PARENT command,
+#   not the leaf. Repro output for `specs archive --status closed`:
+#     LEAF archive action: opts={} optsWithGlobals()={"status":"closed"}
+#   So the leaf action (register.ts:1094) receives opts.status === undefined,
+#   and the guard `if (opts.status !== 'closed')` trips unconditionally.
+#   Removing the parent option fixes the leaf but breaks the `specs --status`
+#   compat handoff (repro: "unknown option '--status'") — so that is NOT the fix.
+#
+# Direction for the fix (implemented under this spec):
+#   1. In the archive leaf action (register.ts ~1094), read the effective status
+#      via the command's `optsWithGlobals()` (the parent-bound value is present
+#      there) instead of the leaf-local `opts.status`, so `--status closed`
+#      after the subcommand reaches the batch path. Leave the parent `--status`
+#      compat option in place.
+#   2. Add tests/shell/specs-archive-status-routing.test.js that spawns the real
+#      dist CLI (pattern from specs-create-id-alias.test.js) and asserts A1–A4
+#      through the full parse path — the layer the existing handler-only
+#      specs-archive-batch.test.js does not exercise.
