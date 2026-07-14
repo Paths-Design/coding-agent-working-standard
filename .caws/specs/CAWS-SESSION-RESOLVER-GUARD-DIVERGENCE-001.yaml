@@ -1,0 +1,313 @@
+id: CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001
+title: 'worktree ownership misattribution: the resolver chain and the write-guard chain read different session-id sources'
+risk_tier: 1
+mode: fix
+lifecycle_state: active
+worktree: resolver-guard-divergence
+created_at: '2026-07-13T00:00:00.000Z'
+updated_at: '2026-07-13T00:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/templates/hook-packs/shared/lib/worktree-claim-oracle.cjs
+    - packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/parse-input.sh
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/src/shell/session
+    - packages/caws-cli/templates/hook-packs/shared/lib/worktree-claim-oracle.cjs
+    - packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/parse-input.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib
+    - packages/caws-cli/templates/hook-packs/codex/hooks/lib/parse-input.sh
+    - packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh
+    - packages/caws-cli/templates/hook-packs/shared/reset-danger-latch.sh
+    - packages/caws-cli/tests/hooks
+    - packages/caws-cli/tests/shell
+    - .caws/specs/CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001.yaml
+  out:
+    - packages/caws-kernel
+    - packages/caws-cli/src/store
+    - .caws/policy.yaml
+    - CODEOWNERS
+invariants:
+  - >-
+    There is ONE definition of "the current session" used by every surface that
+    stamps an owner (`worktree create`, `claim`, `agents`) AND by every surface
+    that compares against an owner (the bash/write guards and their oracle). The
+    resolver (`resolveSession`) and the guard oracle MUST consult the same
+    session-id precedence. A divergence where the stamper reads source X and the
+    checker reads only `HOOK_SESSION_ID` is the defect class this spec closes;
+    it must not be reintroduced by a future one-sided change to either half.
+  - >-
+    The rightful owner of a worktree can write to its own payload across EVERY
+    supported agent harness (claude-code, codex, cursor, windsurf, opencode,
+    zcode), not only under Claude Code. Specifically: when the harness exports a
+    per-session id that survives the agent-Bash tool boundary (e.g.
+    `CLAUDE_CODE_SESSION_ID` for claude-code, `CODEX_THREAD_ID` for codex) but
+    does NOT export `HOOK_SESSION_ID` into the agent's Bash shell, the owner-self
+    write must still PASS. A false `block_foreign_worktree` against the true
+    creator is the headline symptom and is forbidden after this fix. The harness
+    is ALREADY known to the hook layer via `CAWS_AGENT_SURFACE` / the per-surface
+    `CAWS_PLATFORM_FLAG` (agent-surface.sh:102-158, all six surfaces enumerated)
+    — the resolver and guard must dispatch on that known surface to select the
+    correct per-surface session id, instead of a Claude-only env-var list with no
+    platform dispatch.
+  - >-
+    The partition holds the other way too: a genuinely foreign session (a
+    different session_id than the recorded owner) is still refused. The fix
+    broadens owner-self recognition; it does NOT weaken the foreign block. A
+    change that makes the oracle pass for any non-empty session id, or that
+    drops the owner comparison, violates this invariant and the tier-1 partition
+    authority posture.
+  - >-
+    The last-writer-wins `.caws/sessions/.caller-session.json` pointer must not
+    be the deciding factor when two concurrent sessions both have fresh durable
+    envelopes. The resolver's own comments (`resolve-session.ts:670-675`) name
+    this singleton as the historical cause of worktree-ownership misattribution;
+    the fix either removes the race, makes the pointer advisory-only (never the
+    sole decider between two equally-fresh candidates), or replaces it with a
+    deterministic per-caller signal. "Newest-wins" is explicitly forbidden by the
+    existing source comments and stays forbidden.
+  - >-
+    A freshly-minted fallback capsule (`mintCapsule`) records a HARNESS platform
+    name from the `AgentSurface` enum (claude-code | codex | opencode | zcode |
+    cursor | windsurf | none), NOT the Node `process.platform` OS string
+    (darwin/linux). Stamping `platform: 'darwin'` is an attribution bug and
+    violates the audit-trail contract; the mint path must map the operating
+    context to a harness surface, defaulting to a documented sentinel when no
+    harness is detectable (never a bare OS string).
+  - >-
+    The durable session envelope written by the codex hook pack records the
+    `platform` field, so a codex session does not silently resolve with the
+    `'claude-code'` fallback. Non-Claude surfaces must be attributable on their
+    own platform name in the audit trail and in resolver diagnostics.
+  - >-
+    The three divergent session-id precedence orders that exist today — in
+    `resolve-session.ts`, in `block-dangerous.sh` (`.session_id → CAWS_SESSION_ID
+    → CLAUDE_SESSION_ID → HOOK_SESSION_ID`), and in `reset-danger-latch.sh`
+    (`CAWS_SESSION_ID → CLAUDE_SESSION_ID → HOOK_SESSION_ID`) — are consolidated
+    behind ONE shared precedence helper (or one documented canonical order) so
+    all three surfaces agree. Three different orders is a latent
+    misattribution vector; after this spec there is one order, referenced by all
+    three.
+  - >-
+    The `events.jsonl` hash chain is never edited by hand and is written only
+    through the store's `appendEvent`. The fix touches resolver + guard +
+    envelope-writing code paths; it must not introduce a direct write to
+    `events.jsonl` or to the worktree registry outside the existing kernel/store
+    seams.
+acceptance:
+  - id: A1
+    given: >-
+      a worktree whose recorded owner is session S, driven through the real
+      installed CLI; the operating environment exports S via a harness id that
+      crosses the agent-Bash tool boundary (e.g. `CLAUDE_CODE_SESSION_ID=S` under
+      claude-code, `CODEX_THREAD_ID=S` under codex) but does NOT export
+      `HOOK_SESSION_ID` into the Bash shell (the exact condition under which the
+      current guard false-blocks the true owner). Both harness cases MUST be
+      covered — incident (a) was claude-code, incident (b) was codex.
+    when: the operator performs a write into that worktree's payload, gated by
+      `bash-write-guard.sh` / `worktree-write-guard.sh`
+    then: >-
+      the guard PASSES the write as owner-self under BOTH harness env shapes.
+      Pre-fix it emits `block_foreign_worktree:<name>:<other>` (or
+      `ask_uncertain` when the session id is empty) because the oracle only sees
+      `HOOK_SESSION_ID`; post-fix the oracle sees the same resolved identity the
+      stamper used and recognizes S as owner. Asserted by a regression test that
+      drives the guard with EACH boundary env (CLAUDE_CODE_SESSION_ID and
+      CODEX_THREAD_ID) and asserts a `pass` / `owner-self` outcome for both.
+  - id: A2
+    given: >-
+      the same worktree owned by S, but the operating session is a DIFFERENT
+      session T (T's id is not the recorded owner)
+    when: T attempts a write into the worktree payload
+    then: >-
+      the guard still refuses (`block_foreign_worktree:<name>:S`). The fix does
+      not weaken the foreign block. Asserted by a regression test with a
+      genuinely foreign session id.
+  - id: A3
+    given: >-
+      two concurrent sessions S1 and S2, each with a fresh durable envelope
+      under `.caws/sessions/`, and the `.caller-session.json` pointer naming S2
+      (because S2's hook fired most recently). S1 is the true creator/owner of
+      the worktree.
+    when: S1 resolves its identity to stamp or check ownership
+    then: >-
+      S1 is NOT misattributed as S2. The pointer does not hand S1's ownership to
+      S2 by recency. Either the resolver refuses with a typed ambiguity
+      diagnostic (the existing "NEVER newest-wins" behavior) when it genuinely
+      cannot tell, or it resolves S1 deterministically from a non-racy signal.
+      The pre-fix last-writer-wins misattribution is pinned by a test that
+      constructs the two-envelope + pointer-naming-S2 state and asserts the
+      owner is not silently flipped to S2.
+  - id: A4
+    given: a context where `resolveSession` falls all the way through to
+      `mintCapsule` (no env var, no envelope, no capsule)
+    when: a fresh fallback capsule is minted
+    then: >-
+      the capsule's `platform` field is a harness name from the `AgentSurface`
+      enum (or the documented `none` sentinel), never a bare OS string like
+      `darwin` or `linux`. Asserted by a unit test against `mintCapsule` that
+      checks `platform` is a member of the surface enum.
+  - id: A5
+    given: a codex hook-pack session firing its parse-input path
+    when: the durable `.session-envelope.json` is written
+    then: >-
+      the envelope records `platform` (e.g. `"codex"`), and a subsequent
+      `resolveSession` against that envelope resolves with platform `codex`
+      rather than the `'claude-code'` fallback. Asserted by a test that writes a
+      codex-style envelope and reads the resolved platform back.
+  - id: A6
+    given: the three current session-id precedence sites (resolver,
+      `block-dangerous.sh`, `reset-danger-latch.sh`)
+    when: the fix lands
+    then: >-
+      all three consult a single shared precedence (a shared shell helper, or a
+      single documented canonical order with the shell sites sourcing it). A
+      grep confirms no site re-implements an independent order. This is the
+      structural guard against re-divergence.
+  - id: A7
+    given: the common single-session path (one live session, owner stamped and
+      checked in the same harness, the overwhelmingly typical case)
+    when: the full create → write → merge flow runs
+    then: >-
+      behavior is unchanged: owner-self writes pass, the events chain verifies,
+      `caws doctor` is clean for the spec's own drift. No regression to the
+      common path is introduced by broadening owner-self recognition.
+non_functional:
+  reliability:
+    - >-
+      Deterministic under concurrent sessions. The fix removes a last-writer-wins
+      race; any replacement signal must be per-caller (not a singleton overwritten
+      by the most recent hook fire) so two interleaved sessions produce stable,
+      repeatable ownership resolution. Tests must cover the two-fresh-envelope
+      interleaving, not only the single-session happy path.
+    - >-
+      No new required env var for the common case. A Claude Code session that
+      exports only `CLAUDE_CODE_SESSION_ID` (the status quo) continues to work
+      without operator configuration; the fix recognizes what is already there.
+  security:
+    - >-
+      Worktree ownership is CAWS's authority boundary ("partition authority, not
+      add channels"). The fix broadens owner-self recognition across harnesses
+      but MUST NOT admit a foreign session as owner-self. The reverse-direction
+      failure — letting session T write S's payload because the identity
+      resolution got more permissive — would be a partition breach and is
+      explicitly out of scope / forbidden. A2 pins this.
+    - >-
+      The resolver MUST continue to refuse the literal `'unknown'` and empty
+      string as a session id (the existing discipline at `resolve-session.ts`
+      tiers 1.5/2). Admitting them would alias every broken-context invocation
+      into one shared capsule and collapse the partition. The fix must not lower
+      that guard.
+    - >-
+      Operator override (`CLAUDE_SESSION_ID`) stays the highest-authority source.
+      The fix must not demote it below any newly-added platform-aware source, so
+      an operator who explicitly sets the session id retains deterministic
+      control.
+observability:
+  - >-
+      The regression tests are the primary verification artifact: per-harness
+      owner-self pass (A1), foreign block (A2), two-envelope non-misattribution
+      (A3), minted platform enum membership (A4), codex envelope platform (A5).
+      Their jest output (asserted outcome +, where relevant, resolved
+      `source`/`platform`) is recorded in closure evidence.
+  - >-
+      Resolver `source` provenance is observable: `resolveSession` already
+      returns a `source` discriminator (claude_env / claude_code_env / hook_env /
+      durable_hook_envelope / capsule / minted). Tests assert the expected source
+      per scenario so a future regression that silently changes which source won
+      is detectable, not just whether the id matched.
+rollback:
+  - >-
+      Revert the fix commits (resolver + both guards + oracle + parse-input +
+      codex parse-input + consolidated helper + tests). No data migration is
+      introduced: no change to the events log schema, no rewrite of existing
+      `.caws/sessions/` envelopes or worktree registry entries. Pre-existing
+      owner records are read as-is; the fix changes how the CURRENT session is
+      resolved and compared, not how historical owners are stored.
+  - >-
+      Operational rollback SLO 30m: the surface is hook templates + TS resolver,
+      all reverted by `git revert`. No coordinated deploy, no migration to undo.
+      If the consolidated precedence helper is a new file, its removal is part of
+      the same revert (the shell sites fall back to their pre-fix inline order,
+      restoring the buggy-but-known state).
+contracts:
+  - name: session-id-resolution-single-source-of-truth
+    type: behavior
+    path: packages/caws-cli/src/shell/session/resolve-session.ts
+    description: >-
+      The owner-stamping surfaces (`worktree create`, `claim`, `agents`) and the
+      owner-comparing surfaces (bash/write guards via the claim oracle) resolve
+      "the current session" through one shared precedence. The rightful owner of
+      a worktree can write its own payload under any supported harness; a
+      genuinely foreign session is still refused; the last-writer-wins caller
+      pointer is not the sole decider between two equally-fresh sessions.
+# --- Root cause (verified 2026-07-13; two independent reproductions) --------
+# Symptom: a session creates a worktree, but the registry attributes ownership
+#   to a DIFFERENT session. The operator observes a `block_foreign_worktree`
+#   (or ask_uncertain) against their own freshly-created tree. TWO incident
+#   reports from consuming repos:
+#     (a) owner came back as a peer session id (4aec2b13) rather than the
+#         creator (sess_2a1...) under concurrent multi-agent work.
+#     (b) a codex session's freshly-created worktree was assigned to a DIFFERENT
+#         active session because the resolver read a durable envelope instead of
+#         CODEX_THREAD_ID — the codex per-session id the harness exports across
+#         the agent-Bash tool boundary. The operator had to surface ownership and
+#         request authority rather than use --takeover.
+#
+# REPRODUCED IN THE caws REPO ITSELF while authoring this spec: `worktree create`
+#   stamped the owner as a MINTED fallback capsule `caws-9fa0572228cf:darwin`
+#   (not a real session id; platform = the OS string), and a subsequent
+#   `caws claim` refused the true creator as foreign. Both session ids were
+#   mints because this harness exports none of CLAUDE_*/HOOK_SESSION_ID — the
+#   exact non-Claude-harness failure mode A1/A3 describe.
+#
+# Mechanism (confirmed by reading the code, not hypothesized):
+#   1. STAMPER. `resolveSession()` (resolve-session.ts:650) resolves the current
+#      session via a priority chain: CLAUDE_SESSION_ID -> CLAUDE_CODE_SESSION_ID
+#      -> HOOK_SESSION_ID -> durable envelope scan (+ .caller-session.json
+#      pointer) -> cwd capsule -> mint. The top three sources are Claude-Code-
+#      specific env vars; there are NO platform-aware equivalents for
+#      codex/cursor/windsurf/opencode/zcode (grep confirms zero *_SESSION_ID /
+#      CODEX_THREAD_ID refs in the resolver or templates). A non-Claude harness
+#      falls to the durable-envelope scan, whose disambiguator is
+#      `.caller-session.json` — a last-writer-wins singleton. The resolver's own
+#      comments (resolve-session.ts:670-675) name this singleton as the
+#      historical cause of "worktree-ownership misattribution." The fix framing:
+#      the hook layer ALREADY knows the surface via CAWS_AGENT_SURFACE /
+#      CAWS_PLATFORM_FLAG (agent-surface.sh:102-158, all six surfaces) — the
+#      resolver should dispatch on that surface to the harness's real per-session
+#      id (CLAUDE_CODE_SESSION_ID / CODEX_THREAD_ID / ...), not consult a
+#      Claude-only list with no platform dispatch.
+#   2. CHECKER. The guards (bash-write-guard.sh:251, worktree-write-guard.sh:172)
+#      pass ONLY `HOOK_SESSION_ID` to the oracle. `HOOK_SESSION_ID` is set only
+#      inside the hook's own shell (parse-input.sh:94) and does NOT propagate to
+#      an agent-issued command. The oracle (worktree-claim-oracle.cjs:325) then
+#      does direct string equality: `if (sessionId && owner === sessionId)
+#      pass; else block_foreign_worktree`. So the stamper reads a broad chain
+#      and the checker reads a single var; whenever those differ, the rightful
+#      owner is treated as foreign.
+#   3. SECONDARY. mintCapsule stamps `platform: opts.platform ?? process.platform`
+#      (resolve-session.ts:604) — the OS string (darwin), not a harness name.
+#      The codex parse-input.sh override omits the platform field when writing
+#      the durable envelope, so codex sessions always resolve with the
+#      'claude-code' fallback. And there are THREE different session-id
+#      precedence orders across resolve-session.ts / block-dangerous.sh:159 /
+#      reset-danger-latch.sh:107 — a latent re-divergence vector.
+#
+# Why tier 1: worktree ownership is CAWS's authority boundary. The observed
+#   failure was a false-block (availability), but the reverse-direction misfire
+#   of the same mechanism — admitting a foreign session as owner-self — would be
+#   a partition breach. The fix touches the partition surface and is held to the
+#   tightest change budget and the always-request-review posture.
+#
+# Why mode fix (not feature): it repairs an existing governed surface; it adds
+#   no new command and changes no CLI interface. The behavioral contract is
+#   narrowed (stamper and checker agree), not extended.
