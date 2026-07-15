@@ -5,6 +5,17 @@
 //
 //   1. CLAUDE_SESSION_ID env  → platform = "claude-code"
 //                                (operator-set override; deliberate)
+//   1.5. CLAUDE_CODE_SESSION_ID env → platform = "claude-code"
+//                                (Claude Code harness UUID; survives the
+//                                agent-Bash tool boundary —
+//                                CAWS-SESSION-ID-AGENT-BASH-PROPAGATION-001)
+//   1.6. CODEX_THREAD_ID env  → platform = "codex"
+//                                (Codex harness thread id; survives the tool
+//                                boundary — CAWS-SESSION-RESOLVER-GUARD-
+//                                DIVERGENCE-001 A1; the codex incident fix)
+//   1.7. CAWS_SESSION_ID env  → platform = surfaceFromEnv(env)
+//                                (generic escape hatch for any harness; same
+//                                slice)
 //   2. HOOK_SESSION_ID env    → platform = "claude-code"
 //                                (harness-stable id exported by the
 //                                Claude Code hook envelope via
@@ -71,6 +82,82 @@ import type {
 } from './types';
 
 const SESSIONS_DIRNAME = 'sessions';
+
+// CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001
+// The set of valid agent-surface names (mirrors the AgentSurface enum in
+// src/init/hook-packs/types.ts, minus the union literal there). The resolver
+// uses this to (a) validate a derived surface before stamping it, and (b) give
+// mintCapsule a harness name instead of the bare OS string `process.platform`.
+// Keep in lockstep with that enum and with the shell-side surface list in
+// lib/agent-surface.sh + lib/session-id.sh.
+const AGENT_SURFACES = [
+  'claude-code',
+  'codex',
+  'opencode',
+  'zcode',
+  'cursor',
+  'windsurf',
+  'none',
+] as const;
+type AgentSurface = (typeof AGENT_SURFACES)[number];
+
+function isAgentSurface(v: string): v is AgentSurface {
+  return (AGENT_SURFACES as readonly string[]).includes(v);
+}
+
+/**
+ * CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 (A4/A1): derive the agent surface
+ * from env, mirroring the shell-side `lib/session-id.sh` precedence. Each
+ * harness exports its per-session id under a DIFFERENT env var, and the var
+ * that is set identifies the harness. Returns the surface name, or 'none' when
+ * no harness-specific var is detectable — NEVER the OS string (`process.platform`
+ * like 'darwin'/'linux'), which was the pre-fix mintCapsule attribution bug.
+ *
+ * Used both to stamp the minted-capsule platform (A4) and to label the platform
+ * for the per-surface env sources (A1).
+ */
+function surfaceFromEnv(env: NodeJS.ProcessEnv): AgentSurface {
+  if (typeof env['CLAUDE_SESSION_ID'] === 'string' && env['CLAUDE_SESSION_ID'].length > 0) {
+    return 'claude-code';
+  }
+  if (
+    typeof env['CLAUDE_CODE_SESSION_ID'] === 'string' &&
+    env['CLAUDE_CODE_SESSION_ID'].length > 0 &&
+    env['CLAUDE_CODE_SESSION_ID'] !== 'unknown'
+  ) {
+    return 'claude-code';
+  }
+  if (
+    typeof env['CODEX_THREAD_ID'] === 'string' &&
+    env['CODEX_THREAD_ID'].length > 0 &&
+    env['CODEX_THREAD_ID'] !== 'unknown'
+  ) {
+    return 'codex';
+  }
+  // CAWS_SESSION_ID is generic — it does not identify a harness. If it is the
+  // only signal, we cannot know the surface; return 'none' (the documented
+  // sentinel) rather than guessing.
+  if (
+    typeof env['HOOK_SESSION_ID'] === 'string' &&
+    env['HOOK_SESSION_ID'].length > 0 &&
+    env['HOOK_SESSION_ID'] !== 'unknown'
+  ) {
+    // HOOK_SESSION_ID is populated by the hook envelope; the surface that fired
+    // the hook also exports CAWS_PLATFORM_FLAG. We do not read that here (the
+    // resolver is TS-side and env may be injected by tests), so fall through to
+    // the generic detection below.
+  }
+  if (typeof env['CURSOR_TRACE_ID'] === 'string' && env['CURSOR_TRACE_ID'].length > 0) {
+    return 'cursor';
+  }
+  // An explicit CAWS_PLATFORM_FLAG wins for the generic case (a harness that
+  // exports it but no per-surface session var matched).
+  const flag = env['CAWS_PLATFORM_FLAG'];
+  if (typeof flag === 'string' && isAgentSurface(flag)) {
+    return flag;
+  }
+  return 'none';
+}
 
 // CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001
 // CAWS-SESSION-LOG-RELOCATE-001: per-session state moved out of repo-root
@@ -601,7 +688,19 @@ function mintCapsule(
 }> {
   const now = (opts.now ?? (() => new Date()))();
   const suffix = (opts.mintIdSuffix ?? defaultMintIdSuffix)();
-  const platform = opts.platform ?? process.platform;
+  // CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 (A4): stamp a HARNESS surface
+  // name from the AgentSurface enum, NOT the Node `process.platform` OS string
+  // (darwin/linux). The OS string is a bogus platform that corrupted the audit
+  // trail and made owner records unreadable. An explicit opts.platform is
+  // honored only if it is itself a valid surface (tests pass synthetic labels
+  // like 'claude-code'); otherwise derive from env via surfaceFromEnv, falling
+  // to the documented 'none' sentinel.
+  const env = opts.env ?? process.env;
+  const explicit = opts.platform;
+  const platform: string =
+    typeof explicit === 'string' && isAgentSurface(explicit)
+      ? explicit
+      : surfaceFromEnv(env);
   const sessionId = `caws-${suffix}`;
   const capsule: SessionCapsule = {
     session_id: sessionId,
@@ -689,6 +788,53 @@ export function resolveSession(
     });
   }
 
+  // 1.6. CODEX_THREAD_ID env (authority source #1.6 — the Codex harness's
+  //      per-thread id, exported by Codex into every tool subprocess, including
+  //      the agent's Bash tool). CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001
+  //      (A1): this is THE fix for the codex ownership-misattribution
+  //      incidents. Codex exports its thread id under CODEX_THREAD_ID, not
+  //      CLAUDE_*_SESSION_ID — so pre-fix, a codex session in agent-Bash
+  //      (where HOOK_SESSION_ID does not propagate) fell all the way through to
+  //      the durable-envelope scan, whose .caller-session.json disambiguator is
+  //      a last-writer-wins singleton. Two codex sessions racing on that
+  //      pointer produced the observed ownership crossing. Admitting
+  //      CODEX_THREAD_ID here resolves the codex agent-Bash path
+  //      deterministically to the true caller, the same way tier 1.5 did for
+  //      claude-code. Mirrors the shell-side lib/session-id.sh precedence.
+  //
+  //      Refuse literal 'unknown'/empty (same discipline as tiers 1.5/2).
+  //      Stays below CLAUDE_* so operator/explicit-harness overrides win.
+  const codexThreadId = env['CODEX_THREAD_ID'];
+  if (
+    typeof codexThreadId === 'string' &&
+    codexThreadId.length > 0 &&
+    codexThreadId !== 'unknown'
+  ) {
+    return ok({
+      identity: { session_id: codexThreadId, platform: 'codex' },
+      source: 'codex_thread_env',
+    });
+  }
+
+  // 1.7. CAWS_SESSION_ID env (authority source #1.7 — the generic CAWS escape
+  //      hatch, usable by any harness that does not have a dedicated per-
+  //      surface var). CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001: gives
+  //      opencode/zcode/windsurf a deterministic env path without falling into
+  //      the racy durable-envelope scan. The platform is derived from env via
+  //      surfaceFromEnv (which may return 'none' for the generic var — that is
+  //      an honest attribution, better than a wrong one).
+  const cawsId = env['CAWS_SESSION_ID'];
+  if (
+    typeof cawsId === 'string' &&
+    cawsId.length > 0 &&
+    cawsId !== 'unknown'
+  ) {
+    return ok({
+      identity: { session_id: cawsId, platform: surfaceFromEnv(env) },
+      source: 'caws_env',
+    });
+  }
+
   // 2. HOOK_SESSION_ID env (authority source #2 — harness-stable id
   //    exported by the Claude Code hook envelope via lib/parse-input.sh).
   //    Refuse the literal 'unknown' (parse-input.sh's fallback when the
@@ -741,6 +887,20 @@ export function resolveSession(
     // caller's own envelope. This is an explicit identity match, NOT a
     // recency heuristic; "NEVER newest-wins" is preserved. Absent / stale /
     // malformed / non-matching pointer → fall through to the refusal below.
+    //
+    // CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 (A3): the pointer is now
+    // ADVISORY-ONLY between two fresh envelopes — it may narrow the set only
+    // when CORROBORATED by a per-surface env var the current process actually
+    // carries (CLAUDE_SESSION_ID / CLAUDE_CODE_SESSION_ID / CODEX_THREAD_ID /
+    // CAWS_SESSION_ID / HOOK_SESSION_ID / CURSOR_TRACE_ID). Without
+    // corroboration, the pointer is a last-writer-wins singleton: a sibling
+    // session whose hook fired most recently would silently flip THIS
+    // session's resolved identity to the sibling's, crossing worktree
+    // ownership. The corroboration gate turns that race into a typed refusal
+    // (the existing ambiguity diagnostic below) instead of a silent
+    // misattribution. With A1 landed, the common agent-Bash case resolves at
+    // tier 1.5/1.6 and never reaches this pointer at all; this gate covers
+    // the residual no-env-var case.
     let repoRootReal: string;
     try {
       repoRootReal = fs.realpathSync(repoRoot);
@@ -753,23 +913,42 @@ export function resolveSession(
       nowMs: (opts.now ? opts.now() : new Date()).getTime(),
     });
     if (callerId !== null) {
-      const matches = envScan.candidates.filter(
-        (c) => c.envelope.session_id === callerId
+      // Corroboration: does any per-surface env var the current process
+      // carries equal the pointer's named id? If so, the pointer is naming
+      // THIS process's own session, not a sibling's — safe to select.
+      const envSessionIds = [
+        env['CLAUDE_SESSION_ID'],
+        env['CLAUDE_CODE_SESSION_ID'],
+        env['CODEX_THREAD_ID'],
+        env['CAWS_SESSION_ID'],
+        env['HOOK_SESSION_ID'],
+        env['CURSOR_TRACE_ID'],
+      ].filter(
+        (v): v is string =>
+          typeof v === 'string' && v.length > 0 && v !== 'unknown'
       );
-      if (matches.length === 1) {
-        const mine = matches[0]!;
-        return ok(
-          {
-            identity: {
-              session_id: mine.envelope.session_id,
-              platform: mine.envelope.platform ?? 'claude-code',
-            },
-            source: 'durable_hook_envelope',
-            envelopePath: mine.envelopePath,
-          },
-          envScan.warnings.length > 0 ? envScan.warnings : undefined
+      const corroborated = envSessionIds.includes(callerId);
+      if (corroborated) {
+        const matches = envScan.candidates.filter(
+          (c) => c.envelope.session_id === callerId
         );
+        if (matches.length === 1) {
+          const mine = matches[0]!;
+          return ok(
+            {
+              identity: {
+                session_id: mine.envelope.session_id,
+                platform: mine.envelope.platform ?? 'claude-code',
+              },
+              source: 'durable_hook_envelope',
+              envelopePath: mine.envelopePath,
+            },
+            envScan.warnings.length > 0 ? envScan.warnings : undefined
+          );
+        }
       }
+      // Pointer present but uncorroborated → fall through to the ambiguity
+      // refusal. Do NOT silently select on the pointer alone.
     }
 
     const ids = envScan.candidates.map((c) => c.envelope.session_id);
@@ -777,7 +956,7 @@ export function resolveSession(
     return err([
       diag(
         SHELL_RULES.SESSION_DURABLE_ENVELOPE_AMBIGUOUS,
-        `Multiple fresh durable hook envelopes match repo_root ${repoRoot}. The resolver cannot pick a winner. Disambiguate by setting CLAUDE_SESSION_ID, by routing through a hook context that sets HOOK_SESSION_ID, or by removing stale .caws/sessions/<id>/ directories (or legacy tmp/<id>/ dirs) for sessions that have ended.`,
+        `Multiple fresh durable hook envelopes match repo_root ${repoRoot}. The resolver cannot pick a winner. Disambiguate by setting CLAUDE_SESSION_ID, CLAUDE_CODE_SESSION_ID, CODEX_THREAD_ID, or CAWS_SESSION_ID to the current session's id, by routing through a hook context that sets HOOK_SESSION_ID, or by removing stale .caws/sessions/<id>/ directories (or legacy tmp/<id>/ dirs) for sessions that have ended.`,
         {
           repoRoot,
           candidateCount: envScan.candidates.length,
@@ -875,6 +1054,16 @@ export function describeSessionSource(s: ResolvedSession): Diagnostic {
       return infoDiag(
         SHELL_RULES.SESSION_RESOLVED_FROM_CLAUDE_CODE_ENV,
         `Session identity from CLAUDE_CODE_SESSION_ID env (Claude Code harness, survives the tool boundary): ${s.identity.session_id}`
+      );
+    case 'codex_thread_env':
+      return infoDiag(
+        SHELL_RULES.SESSION_RESOLVED_FROM_CLAUDE_CODE_ENV,
+        `Session identity from CODEX_THREAD_ID env (Codex harness, survives the tool boundary): ${s.identity.session_id}`
+      );
+    case 'caws_env':
+      return infoDiag(
+        SHELL_RULES.SESSION_RESOLVED_FROM_CLAUDE_CODE_ENV,
+        `Session identity from CAWS_SESSION_ID env (generic harness escape hatch): ${s.identity.session_id}`
       );
     case 'hook_env':
       return infoDiag(
@@ -1124,6 +1313,75 @@ export function resolveSessionCandidates(
       source: 'claude_code_env',
       outcome: 'absent',
       reason: 'CLAUDE_CODE_SESSION_ID not set',
+    });
+  }
+
+  // 1.6. CODEX_THREAD_ID env (refuse literal 'unknown' and empty).
+  //      CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 (A1): the Codex harness
+  //      thread id that survives the tool boundary into agent-Bash. Admitted as
+  //      a candidate so ownership comparison (destroy/merge) can match a
+  //      worktree owner stamped from this same source — exact session_id
+  //      equality, never widens authority. Mirrors tier 1.5 for claude-code.
+  const codexThreadId = env['CODEX_THREAD_ID'];
+  if (
+    typeof codexThreadId === 'string' &&
+    codexThreadId.length > 0 &&
+    codexThreadId !== 'unknown'
+  ) {
+    candidates.push({
+      identity: { session_id: codexThreadId, platform: 'codex' },
+      source: 'codex_thread_env',
+    });
+    trace.push({
+      source: 'codex_thread_env',
+      outcome: 'admitted',
+      count: 1,
+      admittedIds: [codexThreadId],
+    });
+  } else if (codexThreadId === 'unknown') {
+    trace.push({
+      source: 'codex_thread_env',
+      outcome: 'rejected',
+      reason: 'CODEX_THREAD_ID is literal "unknown"',
+    });
+  } else {
+    trace.push({
+      source: 'codex_thread_env',
+      outcome: 'absent',
+      reason: 'CODEX_THREAD_ID not set',
+    });
+  }
+
+  // 1.7. CAWS_SESSION_ID env (generic escape hatch for any harness).
+  //      Same slice (A1): gives opencode/zcode/windsurf a deterministic env
+  //      path. Platform derived via surfaceFromEnv (may be 'none' — honest).
+  const cawsId = env['CAWS_SESSION_ID'];
+  if (
+    typeof cawsId === 'string' &&
+    cawsId.length > 0 &&
+    cawsId !== 'unknown'
+  ) {
+    candidates.push({
+      identity: { session_id: cawsId, platform: surfaceFromEnv(env) },
+      source: 'caws_env',
+    });
+    trace.push({
+      source: 'caws_env',
+      outcome: 'admitted',
+      count: 1,
+      admittedIds: [cawsId],
+    });
+  } else if (cawsId === 'unknown') {
+    trace.push({
+      source: 'caws_env',
+      outcome: 'rejected',
+      reason: 'CAWS_SESSION_ID is literal "unknown"',
+    });
+  } else {
+    trace.push({
+      source: 'caws_env',
+      outcome: 'absent',
+      reason: 'CAWS_SESSION_ID not set',
     });
   }
 

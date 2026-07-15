@@ -93,6 +93,13 @@ if ! source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || ! command -v sanitize
   }
 fi
 
+# shellcheck source=lib/session-id.sh
+# CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 (A6): resolve the session id via
+# the SAME precedence the resolver + guards use, so the latch filename the
+# reset targets matches the filename block-dangerous.sh keyed. Best-effort
+# source — a missing helper falls back to the inline chain at the call site.
+[[ -f "$SCRIPT_DIR/lib/session-id.sh" ]] && source "$SCRIPT_DIR/lib/session-id.sh" 2>/dev/null || true
+
 # --- Resolve the set of latch files to clear --------------------------------
 declare -a LATCH_FILES=()
 # DANGER-LATCH-APPROVAL-AND-FEEDBACK-001: the reset ALSO clears the per-session
@@ -104,7 +111,16 @@ declare -a WARN_FILES=()
 
 case "$MODE" in
   current)
-    SESSION_ID="${CAWS_SESSION_ID:-${CLAUDE_SESSION_ID:-${HOOK_SESSION_ID:-unknown}}}"
+    # CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 (A6): use the shared helper so
+    # this resolves the SAME session id block-dangerous.sh used to KEY the latch
+    # (previously this used a 3-source inline chain while block-dangerous used a
+    # 4-source jq chain — they could disagree, so the reset targeted the wrong
+    # filename). Falls back to the legacy inline chain if the helper is absent.
+    if declare -F resolve_caws_session_id >/dev/null 2>&1; then
+      SESSION_ID="$(resolve_caws_session_id)"
+    else
+      SESSION_ID="${CAWS_SESSION_ID:-${CLAUDE_SESSION_ID:-${HOOK_SESSION_ID:-unknown}}}"
+    fi
     CANDIDATE="$STATE_DIR/danger-latch-$(sanitize_session "$SESSION_ID").json"
     # The warn sibling for this session (cleared even if no latch exists).
     WARN_FILES+=("$STATE_DIR/danger-warn-$(sanitize_session "$SESSION_ID").json")

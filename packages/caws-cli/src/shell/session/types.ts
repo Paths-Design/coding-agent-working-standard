@@ -9,6 +9,9 @@
 //   1.5. CLAUDE_CODE_SESSION_ID env (Claude Code harness UUID; survives the
 //        tool boundary into agent-Bash — CAWS-SESSION-ID-AGENT-BASH-
 //        PROPAGATION-001)
+//   1.6. CODEX_THREAD_ID env (Codex harness thread id; survives the tool
+//        boundary — CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 A1)
+//   1.7. CAWS_SESSION_ID env (generic escape hatch for any harness; same slice)
 //   2.   HOOK_SESSION_ID env (hook envelope; does not propagate to agent-Bash)
 //   2.5. durable hook envelope on disk
 //   3.   CAWS session capsule bound to this shell+worktree
@@ -22,6 +25,8 @@ import type { SessionIdentity } from '@paths.design/caws-kernel';
 export type SessionSource =
   | 'claude_env'
   | 'claude_code_env'
+  | 'codex_thread_env'
+  | 'caws_env'
   | 'hook_env'
   | 'durable_hook_envelope'
   | 'capsule'

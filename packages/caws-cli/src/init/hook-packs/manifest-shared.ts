@@ -140,7 +140,7 @@ import type { HookPackV1 } from './types';
 // instead of hardcoding 'claude-code'. Defaults to 'claude-code' when the
 // flag is unset, preserving back-compat for wirings that haven't sourced
 // agent-surface.sh.
-export const SHARED_PACK_VERSION = 20;
+export const SHARED_PACK_VERSION = 21;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.
@@ -263,6 +263,16 @@ export const SHARED_PACK: HookPackV1 = {
     {
       destPath: '.caws/hooks/lib/guard-message.sh',
       sourcePath: 'lib/guard-message.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      // CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 (A6): shared session-id
+      // precedence helper sourced by the write guards, block-dangerous.sh, and
+      // reset-danger-latch.sh so every shell surface resolves "the current
+      // session" through ONE env-var chain that mirrors the TS resolver.
+      destPath: '.caws/hooks/lib/session-id.sh',
+      sourcePath: 'lib/session-id.sh',
       executable: false,
       managed: true,
     },
