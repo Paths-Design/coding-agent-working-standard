@@ -1,0 +1,32 @@
+id: CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001
+title: 'session-scoped guard reprieve: a governed, expiring, per-session way to skip a PreToolUse guard'
+risk_tier: 2
+mode: feature
+lifecycle_state: active
+created_at: '2026-07-15T14:50:40.190Z'
+updated_at: '2026-07-15T14:50:40.190Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/reprieve.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/run-handlers.sh'
+    - 'packages/caws-cli/src/shell/commands/reprieve.ts'
+    - 'packages/caws-cli/tests/hooks/bats/reprieve.bats'
+    - 'packages/caws-cli/tests/shell/reprieve-command.test.js'
+    - '.caws/specs/CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001.yaml'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'session-scoped-guard-reprieve'
+    type: behavior
