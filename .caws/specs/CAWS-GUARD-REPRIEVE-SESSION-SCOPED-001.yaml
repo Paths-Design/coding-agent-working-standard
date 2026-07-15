@@ -7,26 +7,241 @@ created_at: '2026-07-15T14:50:40.190Z'
 updated_at: '2026-07-15T14:50:40.190Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/shared/lib/reprieve.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/run-handlers.sh
+    - packages/caws-cli/src/shell/commands/reprieve.ts
   data_migration: false
-operational_rollback_slo: 5m
+operational_rollback_slo: 30m
 scope:
   in:
-    - 'packages/caws-cli/templates/hook-packs/shared/lib/reprieve.sh'
-    - 'packages/caws-cli/templates/hook-packs/shared/lib/run-handlers.sh'
-    - 'packages/caws-cli/src/shell/commands/reprieve.ts'
-    - 'packages/caws-cli/tests/hooks/bats/reprieve.bats'
-    - 'packages/caws-cli/tests/shell/reprieve-command.test.js'
-    - '.caws/specs/CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001.yaml'
-  out: []
+    - packages/caws-cli/templates/hook-packs/shared/lib/reprieve.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/run-handlers.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib
+    - packages/caws-cli/templates/hook-packs/codex/hooks/lib/run-handlers.sh
+    - packages/caws-cli/src/shell/commands/reprieve.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/hooks/bats/reprieve.bats
+    - packages/caws-cli/tests/shell/reprieve-command.test.js
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - AGENTS.md
+    - .caws/specs/CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001.yaml
+  out:
+    - packages/caws-kernel
+    - packages/caws-cli/src/store
+    - .caws/policy.yaml
+    - CODEOWNERS
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    A reprieve disables a guard for EXACTLY ONE session, identified by its
+    resolved session id (the same `resolve_caws_session_id` precedence the
+    guards and the resolver use). A second concurrent session — even the same
+    operator, even the same harness — is NOT covered. The reprieve state file is
+    keyed by `guard-reprieve-<sanitized-session>.json` under the vendor
+    `hooks/state/` dir (the same substrate as the danger latch), so two sessions
+    produce two files and neither bleeds into the other. A reprieve must never
+    widen to all agents — that is the exact anti-pattern (commenting a guard out
+    of the dispatcher HANDLERS array) this feature replaces.
+  - >-
+    Every reprieve carries a mandatory `reason`, `approved_by`, and `expires_at`.
+    A reprieve without an expiry is the workaround with extra steps: it persists
+    forever and silently. `expires_at` is ISO-8601 and the reader treats an
+    expired file as ABSENT (derived, never mutated on read — the same discipline
+    as waiver `expires_at`). A grant with a missing or malformed expiry is
+    refused. The default state — no reprieve file — is exactly today's behavior
+    (the guard runs); reprieves only narrow a guard's reach, never extend it.
+  - >-
+    The reprieve is OPERATIONAL CACHE, not governance state. Like the danger
+    latch and the scope-guard strike file, it lives under
+    `${CAWS_VENDOR_DIR}/hooks/state/`, is gitignored, and does NOT flow through
+    `events.jsonl`, the kernel, or `.caws/`. It is shell-adjudicated at dispatch
+    time, not policy-adjudicated at gate-run time. This keeps it deliberately
+    distinct from waivers (which bypass GATES, live in `.caws/waivers/`, are
+    kernel-adjudicated, and are governance state). Reprieve = skip a HOOK guard
+    for one session; waiver = bypass a GATE at policy-run time.
+  - >-
+    The skip is OBSERVABLE. When a handler is skipped under a reprieve, the
+    dispatcher logs `[reprieve] <handler> skipped for session <id> (expires
+    <ts>)` to stderr. A silent skip — indistinguishable from "the guard ran and
+    found nothing" — is forbidden, because it defeats the audit trail that
+    justifies the feature. (This is the structural reason the reprieve is
+    enforced at the dispatcher skip seam, not as a guard self-skip: the emit
+    vocabulary is closed and has no "reprieved" decision, and a guard exit-0
+    carries no reason.)
+  - >-
+    The partition holds for every NON-reprieved session. A foreign session (a
+    different session_id than the reprieve names) is never admitted by a
+    reprieve it did not create. This holds by construction — the filename is
+    keyed to a different sanitized session id, so the foreign session's consult
+    finds no file — and is pinned by a regression test.
+  - >-
+    The feature degrades safely when its lib is absent. The dispatcher's
+    reprieve check is guarded by `declare -F caws_is_handler_reprieved` so a
+    partial hook-pack install (missing `lib/reprieve.sh`) is a no-op: every
+    guard runs as it does today. A missing reprieve lib must never block a tool
+    call or crash the dispatcher.
+  - >-
+    The writer (the `caws reprieve grant` command) and the reader (the
+    dispatcher consult) resolve the session id through the SAME
+    `resolve_caws_session_id` helper and sanitize it through the SAME
+    `sanitize_session` transform. The danger-latch lineage
+    (DANGER-LATCH-UX-001) established that a writer/reader transform mismatch
+    silently targets the wrong file; the reprieve reuses the shared
+    `sanitize_session` from `lib/caws-state.sh` so there is exactly one
+    transform.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: >-
+      a reprieved session S with a valid `guard-reprieve-<sanitized-S>.json`
+      naming `protected-paths.sh` in its `handlers` array, not expired; driven
+      through the installed PreToolUse dispatcher
+    when: S attempts a Write/Edit into the vendor hooks dir (the path
+      protected-paths.sh would normally refuse)
+    then: >-
+      the dispatcher SKIPS `protected-paths.sh` (it never runs) and logs
+      `[reprieve] protected-paths.sh skipped for session <S> (expires <ts>)` to
+      stderr. The write is not blocked by protected-paths. Asserted by a bats
+      test that grants the reprieve via the CLI, drives the dispatcher, and
+      checks the skip log + the unblocked outcome.
+  - id: A2
+    given: >-
+      the same reprieve for session S, but the operating session is a DIFFERENT
+      session T (T's session id is not the reprieved one)
+    when: T attempts the same Write/Edit into the vendor hooks dir
+    then: >-
+      protected-paths.sh RUNS normally for T and blocks the edit. The reprieve
+      for S does not cover T. Asserted in the same bats suite with a foreign
+      session id.
+  - id: A3
+    given: >-
+      a reprieve for session S whose `expires_at` is in the past
+    when: S attempts the same Write/Edit
+    then: >-
+      the reader treats the expired reprieve as absent: protected-paths.sh runs
+      and blocks. Expiry is derived on read, never mutating the file. Asserted
+      by a bats test that writes an expired reprieve and confirms the guard runs.
+  - id: A4
+    given: >-
+      the `caws reprieve` command group, driven through the real compiled CLI
+    when: the operator runs `caws reprieve grant --current --handlers
+      protected-paths.sh --reason "…" --approved-by "…" --expires-at <future-iso>`
+    then: >-
+      the state file is written at the vendor `hooks/state/` path with the
+      resolved session id, the handlers array, reason, approver, and expiry;
+      `caws reprieve show --current` prints it; `caws reprieve revoke --current
+      --reason "…"` deletes it and appends an audit line to
+      `${CAWS_VENDOR_DIR}/logs/guard-reprieves.log`; `caws reprieve list` shows
+      active reprieves. Asserted by a jest test driving `dist/index.js`.
+  - id: A5
+    given: >-
+      a hook pack with `lib/reprieve.sh` deleted (simulating a partial install)
+    when: the PreToolUse dispatcher runs for a Write/Edit
+    then: >-
+      the dispatcher does NOT crash and does NOT silently skip every guard: the
+      reprieve check is a no-op (guarded by `declare -F`), and every guard runs
+      as it does today. Asserted by a bats test using the missing-lib harness.
+  - id: A6
+    given: >-
+      the codex surface, which vendors its own `lib/run-handlers.sh` override
+    when: the loop change is mirrored there and a codex session is reprieved
+    then: >-
+      the skip works identically on the codex surface (the feature is not
+      claude-code-only). Asserted structurally (the codex run-handlers.sh
+      carries the same skip check) + by a syntax check.
+  - id: A7
+    given: >-
+      the common case — no reprieve file exists for the operating session
+    when: any Write/Edit/Bash runs through the dispatcher
+    then: >-
+      behavior is byte-identical to today: every guard runs, the consult finds
+      no file, no skip log is emitted. The feature is additive and the default
+      state changes nothing.
+non_functional:
+  reliability:
+    - >-
+      The reprieve consult is a single file existence + JSON read per dispatcher
+      invocation (amortized: resolved once at the top of run_handlers, read once
+      per handler that matches). It must not add a measurable latency floor to
+      the PreToolUse path. The state dir is small (one file per reprieved
+      session); no scan is needed because the filename is keyed to the resolved
+      session id.
+    - >-
+      The writer/reader/clearer all route through `resolve_caws_session_id` and
+      `sanitize_session`, so the same session resolves to the same filename in
+      every context (the DANGER-LATCH-UX-001 lesson).
+  security:
+    - >-
+      A reprieve narrows a guard's reach for ONE session with mandatory
+      reason/approver/expiry + audit log. It must not weaken the partition for
+      other sessions (A2). The feature is strictly additive: the default (no
+      reprieve file) is today's behavior. A reprieve cannot disable the
+      danger-latch or the worktree-ownership guards without an explicit,
+      approved record naming them — and even then only for the named session
+      until expiry.
+    - >-
+      The reprieve file is operational cache under the vendor dir, gitignored,
+      never committed. It carries no secrets (only a session id, reason text,
+      approver handle, and timestamps). It is shell-side only; no kernel or
+      store authority flows through it.
+observability:
+  - >-
+    Every skip emits `[reprieve] <handler> skipped for session <id> (expires
+    <ts>)` to stderr — the primary observability signal, visible in the harness
+    transcript. The bats test asserts this line appears.
+  - >-
+    grant/revoke append a JSONL audit record to
+    `${CAWS_VENDOR_DIR}/logs/guard-reprieves.log` (mirroring
+    `danger-latch-resets.log`): `{ts, action, session_id, handlers, reason,
+    approved_by}`. `caws reprieve list` enumerates active reprieves.
+rollback:
+  - >-
+    Revert the fix commits (reprieve.sh + run-handlers.sh changes + codex mirror
+    + reprieve.ts + register/metadata wiring + manifest/fingerprint + tests +
+    AGENTS.md). No data migration: existing reprieve state files are gitignored
+    operational cache and are simply ignored once the dispatcher no longer
+    consults them (they do not need to be deleted on rollback — they become
+    inert dead files, cleaned by the operator or by expiry).
+  - >-
+    Operational rollback SLO 30m: the surface is hook templates + one TS command
+    group, all reverted by `git revert`. No coordinated deploy, no migration to
+    undo. If `lib/reprieve.sh` is removed by the revert, the `declare -F` guard
+    makes the dispatcher skip-check a no-op, so a half-reverted state is safe.
 contracts:
-  - name: 'session-scoped-guard-reprieve'
+  - name: session-scoped-guard-reprieve
     type: behavior
+    path: packages/caws-cli/templates/hook-packs/shared/lib/reprieve.sh
+    description: >-
+      A reprieve record (per-session JSON state file under the vendor hooks/state
+      dir, keyed by sanitized session id, with reason/approver/expiry/handlers)
+      causes the PreToolUse dispatcher to skip invocation of the named handlers
+      for exactly that session until expiry. Foreign sessions and expired
+      reprieves are not admitted. The skip is logged to stderr; the default
+      (no file) is today's behavior.
+# --- Motivation (the anti-pattern this replaces) ---------------------------
+# A consumer repo (sterling) works around protected-paths.sh blocking hook edits
+# by COMMENTING IT OUT of the PreToolUse dispatcher's HANDLERS array:
+#
+#   # protected-paths.sh # CAWS temporary release for agent: 019f6289-...
+#   scan-secrets.sh
+#
+# That workaround:
+#   1. disables the guard for EVERY agent in the repo, not one — the comment
+#      claims a session scope the mechanism cannot enforce.
+#   2. persists forever — no expiry, no re-evaluation.
+#   3. carries no reason/approver/approval record beyond a stale inline comment.
+#   4. turns the dispatcher into a `managed_drift` file that `caws init` refuses
+#      to update, so the repo is frozen on its hand-edited dispatcher.
+#
+# The reprieve is the governed replacement: same intent (let one session edit
+# hooks for a bounded task), but session-scoped, expiring, machine-checkable,
+# and audited. It mirrors the danger-latch + scope-guard-strike substrate
+# (per-session JSON state file, keyed by sanitized session id, reset-style CLI
+# with mandatory --reason) rather than the waiver system (which bypasses GATES
+# at policy-run time and is governance state — a different enforcement layer).
+#
+# The exploration proved the emit vocabulary is closed (no "reprieved" decision),
+# so a guard cannot signal a reprieve — the skip must live at the dispatcher
+# seam (skip-invocation), which is the same seam post_tool_use.sh already uses
+# for CAWS_DISABLED_HANDLERS. Shipping it upstream in run-handlers.sh avoids the
+# managed_drift footgun entirely.
