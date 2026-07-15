@@ -60,7 +60,25 @@ fi
 # Use caws_source_lib so a vendor override is preferred over the shared default.
 caws_source_lib emit.sh 2>/dev/null || true
 [[ -f "$SCRIPT_DIR/lib/guard-message.sh" ]] && source "$SCRIPT_DIR/lib/guard-message.sh"
+# shellcheck source=lib/session-id.sh
+# CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 (A1/A2): resolve the operating
+# session id through the SAME env-var precedence the TS resolver uses, not only
+# HOOK_SESSION_ID (which does not propagate into agent-Bash). Best-effort source
+# — a missing helper degrades to the legacy HOOK_SESSION_ID-only path, never a
+# hard block.
+[[ -f "$SCRIPT_DIR/lib/session-id.sh" ]] && source "$SCRIPT_DIR/lib/session-id.sh"
 parse_hook_input
+
+# CAWS_ORACLE_SESSION_ID: the fully-resolved operating identity. Falls back to
+# HOOK_SESSION_ID when the helper is absent (back-compat). This is what the
+# oracle compares against the worktree's stamped owner — matching the resolver
+# chain the stamper used, so owner-self recognition works across all harnesses.
+if declare -F resolve_caws_session_id_with_payload >/dev/null 2>&1; then
+  CAWS_ORACLE_SESSION_ID="$(resolve_caws_session_id_with_payload "${HOOK_SESSION_ID:-}")"
+else
+  CAWS_ORACLE_SESSION_ID="${HOOK_SESSION_ID:-}"
+fi
+export CAWS_ORACLE_SESSION_ID
 
 TOOL_NAME="$HOOK_TOOL_NAME"
 COMMAND="$HOOK_COMMAND"
@@ -248,7 +266,7 @@ while IFS= read -r cand; do
   out="$(CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
     CAWS_ORACLE_CURRENT_BRANCH="" \
     CAWS_ORACLE_REL_PATH="$abs" \
-    CAWS_ORACLE_SESSION_ID="${HOOK_SESSION_ID:-}" \
+    CAWS_ORACLE_SESSION_ID="$CAWS_ORACLE_SESSION_ID" \
     node "$CAWS_CLAIM_ORACLE" 2>&1 || true)"
   _first="${out%%$'\n'*}"
   case "${_first%%:*}" in

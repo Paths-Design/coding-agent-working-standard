@@ -271,6 +271,15 @@ except Exception:
 
   # Atomic write: temp file + rename. tmpfile is in the same dir to
   # guarantee same-filesystem rename atomicity.
+  #
+  # CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 (A5): write the `platform` field,
+  # sourced from CAWS_PLATFORM_FLAG (exported by agent-surface.sh as "codex" for
+  # this surface). WITHOUT this field the resolver falls back to 'claude-code'
+  # (resolve-session.ts envelope.platform ?? 'claude-code'), so a codex-created
+  # worktree gets stamped owner.platform='claude-code' while the lease correctly
+  # says 'codex' — the exact misattribution behind the ownership-crossing
+  # incidents. Mirrors shared/lib/parse-input.sh's envelope writer shape.
+  local platform="${CAWS_PLATFORM_FLAG:-codex}"
   local tmpfile="$envelope_dir/.session-envelope.tmp.$$"
   python3 -c '
 import json, sys
@@ -280,11 +289,12 @@ payload = {
     "created_at": sys.argv[3],
     "last_seen_at": sys.argv[4],
     "hook_event": sys.argv[5],
+    "platform": sys.argv[6],
 }
-with open(sys.argv[6], "w") as f:
+with open(sys.argv[7], "w") as f:
     json.dump(payload, f)
     f.write("\n")
-' "$sid" "$repo_root" "$created_at" "$now" "${HOOK_EVENT_NAME:-unknown}" "$tmpfile" 2>/dev/null || {
+' "$sid" "$repo_root" "$created_at" "$now" "${HOOK_EVENT_NAME:-unknown}" "$platform" "$tmpfile" 2>/dev/null || {
     rm -f "$tmpfile" 2>/dev/null
     return 0
   }

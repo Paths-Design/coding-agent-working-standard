@@ -58,6 +58,11 @@ caws_source_lib emit.sh 2>/dev/null || true
 # guard_identity (HOOK-GUARD-LEGIBILITY-001) — so latch reasons self-identify
 # as "CAWS command-safety". Non-fatal if absent.
 [[ -f "$SCRIPT_DIR/lib/guard-message.sh" ]] && source "$SCRIPT_DIR/lib/guard-message.sh"
+# shellcheck source=lib/session-id.sh
+# CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 (A6): consolidate the danger-latch
+# session-id resolution onto the SAME precedence every other surface uses.
+# Best-effort source — a missing helper falls back to the inline chain below.
+[[ -f "$SCRIPT_DIR/lib/session-id.sh" ]] && source "$SCRIPT_DIR/lib/session-id.sh"
 
 # The sticky-latch carve-out (see the latch-armed branch below) exempts
 # read-only commands AND the reset invocation: a latched session can still run
@@ -156,7 +161,21 @@ INPUT=$(cat)
 # Extract tool info
 TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // ""')
 COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""')
-SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // env.CAWS_SESSION_ID // env.CLAUDE_SESSION_ID // env.HOOK_SESSION_ID // "unknown"')
+# CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 (A6): resolve through the shared
+# helper so the danger latch uses the SAME precedence as the resolver + guards
+# (CLAUDE_SESSION_ID → CLAUDE_CODE_SESSION_ID → CODEX_THREAD_ID →
+# CAWS_SESSION_ID → HOOK_SESSION_ID → CURSOR_TRACE_ID). The hook payload's
+# session_id is extracted first and passed as the override (it is the most
+# authoritative for THIS tool call), with the helper falling back to env when it
+# is absent/unknown. Falls back to the legacy inline jq chain if the helper is
+# not loaded (back-compat for a partial hook-pack install).
+_PAYLOAD_SID="$(printf '%s' "$INPUT" | jq -r '.session_id // ""')"
+if declare -F resolve_caws_session_id >/dev/null 2>&1; then
+  SESSION_ID="$(resolve_caws_session_id "$_PAYLOAD_SID")"
+else
+  SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // env.CAWS_SESSION_ID // env.CLAUDE_SESSION_ID // env.HOOK_SESSION_ID // "unknown"')
+fi
+unset _PAYLOAD_SID
 
 # Only check Bash tool
 if [[ "$TOOL_NAME" != "Bash" ]] || [[ -z "$COMMAND" ]]; then

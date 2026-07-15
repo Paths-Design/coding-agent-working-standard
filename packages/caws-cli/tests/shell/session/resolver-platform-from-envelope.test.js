@@ -175,10 +175,20 @@ describe('CAWS-RESOLVER-PLATFORM-FROM-ENVELOPE-001', () => {
         }) + '\n'
       );
 
+      // CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 (A3): the pointer is now
+      // advisory-only between two fresh envelopes and must be CORROBORATED by a
+      // per-surface env var the current process carries. To exercise the pointer
+      // path SPECIFICALLY (so the envelope's platform flows through), we
+      // corroborate with CURSOR_TRACE_ID — it is tier 4, BELOW the envelope scan
+      // (tier 2.5), so it does not short-circuit resolution but DOES count as
+      // corroboration evidence for the pointer. This keeps the test's original
+      // intent: the disambiguated envelope's platform ('zcode') is reflected.
+      const env = { ...cleanEnv(), CURSOR_TRACE_ID: 'sess_a_001' };
+
       const result = resolveSession({
         cawsDir,
         worktreeRoot: cawsDir,
-        env: cleanEnv(),
+        env,
         now: () => now,
       });
 
