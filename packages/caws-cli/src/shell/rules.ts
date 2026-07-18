@@ -80,6 +80,12 @@ export const SHELL_RULES = {
   WAIVER_INVALID_INPUT: 'shell.waiver.invalid_input',
   WAIVER_ALREADY_REVOKED: 'shell.waiver.already_revoked',
   WAIVER_WRITE_FAILED: 'shell.waiver.write_failed',
+
+  // reprieve command surface (CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001).
+  REPRIEVE_UNKNOWN_SURFACE: 'shell.reprieve.unknown_surface',
+  REPRIEVE_NO_SESSION: 'shell.reprieve.no_session',
+  REPRIEVE_INVALID_EXPIRY: 'shell.reprieve.invalid_expiry',
+  REPRIEVE_MISSING_REQUIRED: 'shell.reprieve.missing_required',
 } as const;
 
 export type ShellRule = (typeof SHELL_RULES)[keyof typeof SHELL_RULES];

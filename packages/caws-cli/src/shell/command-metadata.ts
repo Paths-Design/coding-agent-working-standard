@@ -1257,6 +1257,74 @@ export const WAIVER_COMMAND_META: GroupCommandMeta = {
   ],
 };
 
+// ─── reprieve group ───────────────────────────────────────────────────────
+// CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001: session-scoped guard reprieve.
+export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
+  kind: 'group',
+  name: 'reprieve',
+  description:
+    'Manage session-scoped guard reprieves (governed, expiring, per-session skips of a PreToolUse guard)',
+  subcommands: [
+    {
+      kind: 'leaf',
+      name: 'grant',
+      description:
+        'Grant a reprieve that skips the named handler(s) for the current session until expiry. Replaces commenting a guard out of the dispatcher HANDLERS array.',
+      options: [
+        {
+          flag: '--handlers <list>',
+          required: true,
+          description: 'Comma-separated handler basenames to skip (e.g. protected-paths.sh)',
+        },
+        { flag: '--reason <text>', required: true, description: 'Why this reprieve is safe; recorded' },
+        { flag: '--approved-by <id>', required: true, description: 'Approver identity' },
+        { flag: '--expires-at <iso>', required: true, description: 'Expiry as an ISO-8601 datetime' },
+        { flag: '--current', description: 'Resolve the session from env (default)' },
+        { flag: '--session <id>', description: 'Explicit session id (overrides --current)' },
+        { flag: '--surface <name>', description: 'Agent surface / vendor dir (default: detect)' },
+        { flag: '--dry-run', description: 'Validate and report without writing the state file' },
+        { flag: '--json', description: 'Emit the result as JSON.' },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'show',
+      description: 'Show the reprieve for the current (or named) session, if any.',
+      options: [
+        { flag: '--current', description: 'Resolve the session from env (default)' },
+        { flag: '--session <id>', description: 'Explicit session id (overrides --current)' },
+        { flag: '--surface <name>', description: 'Agent surface / vendor dir (default: detect)' },
+        { flag: '--json', description: 'Emit the record as JSON.' },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'revoke',
+      description: 'Revoke (delete) the reprieve for the current (or named) session.',
+      options: [
+        { flag: '--reason <text>', required: true, description: 'Why the reprieve is being cleared; recorded' },
+        { flag: '--current', description: 'Resolve the session from env (default)' },
+        { flag: '--session <id>', description: 'Explicit session id (overrides --current)' },
+        { flag: '--surface <name>', description: 'Agent surface / vendor dir (default: detect)' },
+        { flag: '--json', description: 'Emit the result as JSON.' },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'list',
+      description: 'List all reprieve state files in the vendor state dir.',
+      options: [
+        { flag: '--surface <name>', description: 'Agent surface / vendor dir (default: detect)' },
+        { flag: '--json', description: 'Emit the list as JSON.' },
+        DATA_OPTION,
+      ],
+    },
+  ],
+};
+
 // ─── agents group ─────────────────────────────────────────────────────────
 export const AGENTS_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
@@ -1484,6 +1552,7 @@ export const COMMAND_SURFACE_METADATA: readonly CommandMeta[] = Object.freeze([
   EVIDENCE_COMMAND_META,
   EVENTS_COMMAND_META,
   WAIVER_COMMAND_META,
+  REPRIEVE_COMMAND_META,
   SPECS_COMMAND_META,
   WORKTREE_COMMAND_META,
   AGENTS_COMMAND_META,

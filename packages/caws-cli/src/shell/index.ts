@@ -168,6 +168,21 @@ export type {
 } from './commands/waiver';
 
 export {
+  runReprieveGrantCommand,
+  runReprieveShowCommand,
+  runReprieveRevokeCommand,
+  runReprieveListCommand,
+} from './commands/reprieve';
+export type {
+  ReprieveCommandBase,
+  ReprieveRecord,
+  ReprieveGrantOptions,
+  ReprieveShowOptions,
+  ReprieveRevokeOptions,
+  ReprieveListOptions,
+} from './commands/reprieve';
+
+export {
   renderWaiverSummary,
   renderWaiverDetail,
 } from './render/waiver';

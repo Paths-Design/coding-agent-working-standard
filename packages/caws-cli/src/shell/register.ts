@@ -30,6 +30,7 @@ import {
   EVIDENCE_COMMAND_META,
   EVENTS_COMMAND_META,
   WAIVER_COMMAND_META,
+  REPRIEVE_COMMAND_META,
   AGENTS_COMMAND_META,
   MESSAGE_COMMAND_META,
   SPECS_COMMAND_META,
@@ -90,6 +91,10 @@ import {
   runWaiverPruneCommand,
   runWaiverRevokeCommand,
   runWaiverShowCommand,
+  runReprieveGrantCommand,
+  runReprieveShowCommand,
+  runReprieveRevokeCommand,
+  runReprieveListCommand,
   runWorktreeBindCommand,
   runWorktreeCreateCommand,
   runWorktreeDestroyCommand,
@@ -847,6 +852,101 @@ export function registerShellCommands(
         exit(code);
       }
     );
+
+  // -------------------------------------------------------------------
+  // caws reprieve grant / show / revoke / list
+  //
+  // CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001: session-scoped guard reprieve.
+  // A governed, per-session, expiring way to skip a PreToolUse guard for one
+  // agent session. Replaces commenting a guard out of the dispatcher HANDLERS
+  // array (which disables it for every agent forever). Writes a gitignored
+  // JSON state file under the vendor hooks/state/ dir — operational cache,
+  // not .caws/ governance state.
+  // -------------------------------------------------------------------
+  const reprieveCmd = program.command('reprieve');
+  applyGroupMeta(reprieveCmd, REPRIEVE_COMMAND_META);
+
+  defineLeaf(reprieveCmd, leafMeta(REPRIEVE_COMMAND_META, 'grant'))
+    .action(
+      (opts: {
+        handlers: string;
+        reason: string;
+        approvedBy: string;
+        expiresAt: string;
+        current?: boolean;
+        session?: string;
+        surface?: string;
+        dryRun?: boolean;
+        json?: boolean;
+        data?: boolean;
+      }) => {
+        const code = runReprieveGrantCommand({
+          handlers: opts.handlers,
+          reason: opts.reason,
+          approvedBy: opts.approvedBy,
+          expiresAt: opts.expiresAt,
+          current: opts.current !== false,
+          ...(opts.session !== undefined ? { session: opts.session } : {}),
+          ...(opts.surface !== undefined ? { surface: opts.surface } : {}),
+          dryRun: opts.dryRun === true,
+          json: opts.json === true,
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  defineLeaf(reprieveCmd, leafMeta(REPRIEVE_COMMAND_META, 'show'))
+    .action(
+      (opts: {
+        current?: boolean;
+        session?: string;
+        surface?: string;
+        json?: boolean;
+        data?: boolean;
+      }) => {
+        const code = runReprieveShowCommand({
+          current: opts.current !== false,
+          ...(opts.session !== undefined ? { session: opts.session } : {}),
+          ...(opts.surface !== undefined ? { surface: opts.surface } : {}),
+          json: opts.json === true,
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  defineLeaf(reprieveCmd, leafMeta(REPRIEVE_COMMAND_META, 'revoke'))
+    .action(
+      (opts: {
+        reason: string;
+        current?: boolean;
+        session?: string;
+        surface?: string;
+        json?: boolean;
+        data?: boolean;
+      }) => {
+        const code = runReprieveRevokeCommand({
+          reason: opts.reason,
+          current: opts.current !== false,
+          ...(opts.session !== undefined ? { session: opts.session } : {}),
+          ...(opts.surface !== undefined ? { surface: opts.surface } : {}),
+          json: opts.json === true,
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  defineLeaf(reprieveCmd, leafMeta(REPRIEVE_COMMAND_META, 'list'))
+    .action((opts: { surface?: string; json?: boolean; data?: boolean }) => {
+      const code = runReprieveListCommand({
+        ...(opts.surface !== undefined ? { surface: opts.surface } : {}),
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
 
   // -------------------------------------------------------------------
   // caws specs (CLI-SPECS-001)
