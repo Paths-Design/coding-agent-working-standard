@@ -799,12 +799,12 @@ function assertLegacyCommandDiagnostics(projectDir, installedRoot) {
       mustInclude: ['deferred to v11.3+'],
       mustExclude: [],
     },
-    {
-      argv: ['worktree', 'prune'],
-      disposition: 'deferred',
-      mustInclude: ['planned for v11.2'],
-      mustExclude: [],
-    },
+    // NOTE: `caws worktree prune` was previously listed here as a deferred-
+    // to-v11.2 command expecting exit 1. It has since SHIPPED as a live
+    // read-only cleanup-planning command (exit 0, dry-run by default, --apply
+    // for the apply-capable classes). It is no longer a removed/deferred
+    // command and must not be asserted as one — doing so is a stale-
+    // assertion false-fail. Removed from this legacy-refusal list.
     {
       argv: ['statuz'],
       disposition: 'typo (fuzzy suggester, not legacy)',

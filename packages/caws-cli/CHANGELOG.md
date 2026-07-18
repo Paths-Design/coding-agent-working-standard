@@ -1,5 +1,90 @@
 ## [Unreleased]
 
+## [11.8.0] (2026-07-17)
+
+Three threads land together: the carried-forward 11.7.0 work (zcode agent
+surface + worktree node_modules linking + docs single-sourcing — committed
+but never tagged/released), a session-id resolution fix that corrects
+worktree-ownership misattribution across every non-claude-code harness, and
+a new session-scoped guard reprieve that replaces the anti-pattern of
+commenting a guard out of a dispatcher HANDLERS array.
+
+> Note: 11.7.0 was bumped in `package.json` but never tagged or published;
+> this release rolls its content forward. The version number 11.7.0 is
+> skipped on the registry as a published line.
+
+### Added
+
+- **`caws init --agent-surface zcode`.** The **zcode** agent surface — the
+  fifth harness CAWS supports (after claude-code, codex, opencode). Installs
+  `.zcode/hooks/caws-bridge.sh` + config. The bridge re-wraps shared-core
+  dispatcher output as ZCode strict-JSON envelopes; supports PreToolUse ask.
+  (Carried forward from the untagged 11.7.0.)
+- **`caws reprieve grant / show / revoke / list`.** A session-scoped guard
+  reprieve: a governed, per-session, expiring, machine-checkable way to skip a
+  PreToolUse guard for exactly one agent session. Replaces the anti-pattern of
+  commenting a guard out of the dispatcher HANDLERS array (which disables it
+  for every agent forever, with no reason/approver/expiry, and turns the
+  dispatcher into a `managed_drift` file `caws init` won't update). Mirrors the
+  danger-latch + scope-guard-strike substrate (per-session JSON state file,
+  keyed by sanitized session id, gitignored operational cache under the vendor
+  `hooks/state/` dir) with one addition: an `expires_at` field. The skip is
+  logged to stderr (`[reprieve] <handler> skipped for session <id>`) so the
+  audit trail shows when/why a guard was skipped; foreign sessions are never
+  covered (the file is keyed to the resolved session id). Distinct from waivers
+  (which bypass GATES at policy-run time and are governance state) — a reprieve
+  skips a HOOK guard at dispatch time and is operational cache. Enforced at the
+  dispatcher skip seam in `run-handlers.sh` (shared + codex), guarded by
+  `declare -F` so a missing `lib/reprieve.sh` is a safe no-op. (CAWS-GUARD-
+  REPRIEVE-SESSION-SCOPED-001.)
+- **`lib/session-id.sh`** — a shared shell-side session-id precedence helper
+  (CLAUDE_SESSION_ID → CLAUDE_CODE_SESSION_ID → CODEX_THREAD_ID → CAWS_SESSION_ID
+  → HOOK_SESSION_ID → CURSOR_TRACE_ID), sourced by the write guards, the danger
+  latch, and the strike reset so every shell surface resolves "the current
+  session" through ONE chain that mirrors the TS resolver. (CAWS-SESSION-
+  RESOLVER-GUARD-DIVERGENCE-001.)
+- **`.caws/hooks/node_modules` is linked into worktrees** so the shared hook
+  core (js-yaml for the claim oracle, etc.) resolves inside a worktree checkout.
+  (Carried forward from the untagged 11.7.0.)
+- **opencode in `--agent-surface` help + the activation banner** (carried
+  forward from the untagged 11.7.0).
+
+### Fixed
+
+- **Worktree ownership misattribution across non-claude-code harnesses.** The
+  owner-stamping surface (`resolveSession`, used by `worktree create`/`claim`/
+  `agents`) and the owner-checking surface (the write guards via the
+  worktree-claim-oracle) read different session-id sources, so the rightful
+  owner of a worktree was treated as foreign under any harness that exports a
+  per-session id other than `HOOK_SESSION_ID`. Two real-world reproductions (a
+  concurrent-session crossing and a codex ownership misattribution) plus an
+  in-repo repro confirmed it. The fix: the resolver admits `CODEX_THREAD_ID`
+  (tier 1.6) and `CAWS_SESSION_ID` (tier 1.7); `mintCapsule` stamps a harness
+  surface name (`surfaceFromEnv`) rather than the bare OS string (`darwin`);
+  the codex durable-envelope writer now includes the `platform` field (the
+  concrete incident root cause — codex envelopes lacked it, so the resolver
+  fell back to `claude-code`); the `.caller-session.json` pointer is advisory-
+  only between two fresh envelopes (requires corroboration by a per-surface env
+  var); the three divergent session-id precedence orders across the resolver /
+  `block-dangerous.sh` / `reset-danger-latch.sh` are consolidated behind the
+  shared `lib/session-id.sh`. The oracle's owner-self comparison is unchanged —
+  the partition logic was never the bug, only the identity it was fed.
+  (CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001.)
+- **Single-source agent-surface list** across CLI help and docs (carried
+  forward from the untagged 11.7.0).
+
+### Consumer upgrade notes
+
+- This release bumps the shared hook-pack to v22 and the codex override to v13.
+  Existing consumers will see their installed pack as `managed_old_version` and
+  can refresh with `caws init --adopt` (preserves repo-local edits) or
+  `--overwrite --force`. The reprieve feature and the codex `platform`-field
+  fix only take effect after the pack refresh — `caws reprieve grant` writes
+  the state file, but the dispatcher only honors it once `lib/reprieve.sh` +
+  the `run-handlers.sh` skip seam are installed.
+- Pack fingerprint baselines and the shared/codex manifests are updated
+  alongside this release.
+
 ## [11.6.0] (2026-06-29)
 
 The **opencode** agent surface — the fourth harness CAWS supports (after

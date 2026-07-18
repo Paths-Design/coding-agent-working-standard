@@ -1,6 +1,6 @@
 {
   "name": "@paths.design/caws-cli",
-  "version": "11.7.0",
+  "version": "11.8.0",
   "description": "CAWS CLI - the governed core for CAWS project state, scope, claims, gates, waivers, and evidence (v11.1). Restores canonical spec/worktree lifecycle on the vNext kernel/store/shell architecture.",
   "main": "dist/index.js",
   "bin": {

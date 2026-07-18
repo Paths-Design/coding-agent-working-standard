@@ -2,9 +2,9 @@
 doc_id: caws-vnext-command-surface
 authority: architecture
 status: active
-title: CAWS vNext command surface (v11.0.0 → v11.2) [updated for v11.7.0]
+title: CAWS vNext command surface (v11.0.0 → v11.2) [updated for v11.8.0]
 owner: vNext rewrite team
-updated: 2026-07-06
+updated: 2026-07-17
 governs:
   modules:
     - packages/caws-cli/src/index.js
@@ -18,10 +18,10 @@ governs:
 
 # CAWS vNext command surface (v11.0.0 → v11.2)
 
-**Status:** active. v11.0.0 → v11.7.0 shipped (governed core, worktree lifecycle, events, agents, message, prepush; v11.7.0 adds the zcode agent surface and links `.caws/hooks/node_modules` into worktrees). Multi-agent authority remains in planning (see §1).
+**Status:** active. v11.0.0 → v11.8.0 shipped (governed core, worktree lifecycle, events, agents, message, prepush; v11.8.0 adds the zcode agent surface, links `.caws/hooks/node_modules` into worktrees, fixes cross-harness worktree-ownership misattribution, and adds `caws reprieve` for session-scoped guard skips). Multi-agent authority remains in planning (see §1).
 **Branch:** `main` post-cutover.
 **Authors:** vNext rewrite team
-**Last updated:** 2026-07-06
+**Last updated:** 2026-07-17
 
 This document is the doctrine source for the v11 cutover and its follow-on
 releases. It captures the cutover posture, the command surface that ships,
@@ -55,7 +55,18 @@ The cutover posture chosen at v11.0.0 was:
 > Projects needing legacy lifecycle pin to `caws-cli@^10.2.x`.
 > vNext lifecycle returns in v11.1.
 
-The v11.1 plan shipped in v11.1.x. Today's recommended install path is `@paths.design/caws-cli@^11.7.0` (or unpinned). Projects migrating from v10.2 should read [`docs/migration-v10-to-v11.md`](../migration-v10-to-v11.md).
+The v11.1 plan shipped in v11.1.x. Today's recommended install path is `@paths.design/caws-cli@^11.8.0` (or unpinned). Projects migrating from v10.2 should read [`docs/migration-v10-to-v11.md`](../migration-v10-to-v11.md).
+
+> **v11.8.0 consumer note** — the shared hook pack version bumped 21 → 22
+> and the codex override bumped 12 → 13. This release adds `lib/reprieve.sh`
+> (the reprieve consult lib) and a skip seam in `run-handlers.sh` (shared +
+> codex), plus `lib/session-id.sh` (the session-id precedence helper) and the
+> codex envelope `platform` field. Existing consumers' next `caws init` will
+> report `run-handlers.sh` / `agent-surface.sh` as `managed_drift` until they
+> re-run with `--overwrite --force` (pull the new baseline; bare `--overwrite`
+> previews the replacement diffs and refuses) or `--adopt` (keep the local copy
+> where it has grown). The reprieve feature and the codex `platform`-field fix
+> only take effect after this pack refresh.
 
 ### Why A1 was chosen
 
