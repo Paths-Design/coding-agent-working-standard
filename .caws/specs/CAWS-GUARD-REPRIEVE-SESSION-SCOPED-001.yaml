@@ -2,10 +2,11 @@ id: CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001
 title: 'session-scoped guard reprieve: a governed, expiring, per-session way to skip a PreToolUse guard'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: reprieve-session
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge reprieve-session at 6e41b90b76b5dfd4dada3fb898b0e11313e1cfad'
 created_at: '2026-07-15T14:50:40.190Z'
-updated_at: '2026-07-15T14:50:40.190Z'
+updated_at: '2026-07-18T06:12:18.437Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/shared/lib/reprieve.sh
