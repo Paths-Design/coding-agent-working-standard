@@ -113,6 +113,22 @@ run_handlers() {
     parse_hook_input || return 0
   fi
 
+  # CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001: resolve the operating session id ONCE
+  # so the per-handler reprieve consult gets the boundary-crossing identity (not
+  # just raw HOOK_SESSION_ID, which does not propagate into agent-Bash). Best-effort:
+  # a missing lib degrades to HOOK_SESSION_ID, and the reprieve check itself is
+  # guarded by declare -F so a missing reprieve.sh is a no-op. Never blocks.
+  local _rh_session_id="${HOOK_SESSION_ID:-}"
+  if [[ -f "${HOOKS_DIR}/lib/session-id.sh" ]]; then
+    # shellcheck source=lib/session-id.sh
+    source "${HOOKS_DIR}/lib/session-id.sh" 2>/dev/null || true
+    if declare -F resolve_caws_session_id_with_payload >/dev/null 2>&1; then
+      _rh_session_id="$(resolve_caws_session_id_with_payload "${HOOK_SESSION_ID:-}")"
+    fi
+  fi
+  # Best-effort source the reprieve lib so the loop check is available.
+  [[ -f "${HOOKS_DIR}/lib/reprieve.sh" ]] && source "${HOOKS_DIR}/lib/reprieve.sh" 2>/dev/null || true
+
   # Accept both surface-neutral (CAWS_HOOK_*) and legacy (CLAUDE_HOOK_*)
   # env var names for dry-run / timing so that existing consumer configs
   # that set CLAUDE_HOOK_DRY_RUN keep working during the migration period.
@@ -149,6 +165,19 @@ run_handlers() {
 
     local handler_path="${HOOKS_DIR}/${handler}"
     if [[ ! -x "$handler_path" ]]; then
+      continue
+    fi
+
+    # CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001: per-session guard reprieve. If the
+    # operating session has an active (non-expired) reprieve that names this
+    # handler, SKIP invocation entirely. Guarded by declare -F so a missing
+    # reprieve.sh is a no-op (every guard runs as today). The skip is LOGGED to
+    # stderr so the audit trail shows when/why a guard was skipped — a silent
+    # skip is forbidden by the spec's observability invariant.
+    if declare -F caws_is_handler_reprieved >/dev/null 2>&1 && \
+       caws_is_handler_reprieved "$handler" "$_rh_session_id"; then
+      printf '[reprieve] %s skipped for session %s (expires %s)\n' \
+        "$handler" "$_rh_session_id" "${CAWS_REPRIEVE_EXPIRES_AT:-?}" >&2
       continue
     fi
 

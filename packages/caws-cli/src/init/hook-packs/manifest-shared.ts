@@ -140,7 +140,7 @@ import type { HookPackV1 } from './types';
 // instead of hardcoding 'claude-code'. Defaults to 'claude-code' when the
 // flag is unset, preserving back-compat for wirings that haven't sourced
 // agent-surface.sh.
-export const SHARED_PACK_VERSION = 21;
+export const SHARED_PACK_VERSION = 22;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.
@@ -273,6 +273,15 @@ export const SHARED_PACK: HookPackV1 = {
       // session" through ONE env-var chain that mirrors the TS resolver.
       destPath: '.caws/hooks/lib/session-id.sh',
       sourcePath: 'lib/session-id.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      // CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001: session-scoped guard reprieve
+      // consult lib. Sourced best-effort by run-handlers.sh; the dispatcher
+      // skips invocation of reprieved handlers for the resolved session.
+      destPath: '.caws/hooks/lib/reprieve.sh',
+      sourcePath: 'lib/reprieve.sh',
       executable: false,
       managed: true,
     },

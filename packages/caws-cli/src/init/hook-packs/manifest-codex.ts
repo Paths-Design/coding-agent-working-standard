@@ -49,7 +49,7 @@ import type { HookPackV1 } from './types';
 // CAWS metadata field from hooks.json because Codex only accepts `hooks` at the
 // top level. Installer recognition now uses the runtime-root dispatcher shape
 // for this one JSON file instead of unsupported embedded metadata.
-export const CODEX_PACK_VERSION = 12;
+export const CODEX_PACK_VERSION = 13;
 
 export const CODEX_PACK: HookPackV1 = {
   id: 'codex',

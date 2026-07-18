@@ -22,6 +22,7 @@ The v11 cutover is complete. `main` runs the v11 surface (kernel/store/shell arc
 | `caws gates run --spec <id>` | Run policy-driven quality gates. Appends one `gate_evaluated` event per declared gate. |
 | `caws evidence record --type <kind> --spec <id> --data <json>` | Append a typed evidence event (`test` / `gate` / `ac`). |
 | `caws waiver create / list / show / revoke` | Manage waiver records. Singular surface — no plural alias. |
+| `caws reprieve grant / show / revoke / list` | Session-scoped guard reprieve: skip a PreToolUse guard for ONE session until expiry. Replaces commenting a guard out of the dispatcher HANDLERS array. See [Reprieves](#reprieves). |
 | `caws events migrate / rotate / verify-archive` | Maintenance for the hash-chained `.caws/events.jsonl`. |
 | `caws specs create / list / show / recover / retire-draft / activate / amend-scope / close / archive / prune-archive / migrate / validate` | Manage spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. Batch archive supports `--status closed`, `--include`, `--exclude`, and `--apply`. |
 | `caws worktree create / list / bind / destroy / merge / repair-sparse / repair / migrate-registry` | Manage CAWS worktrees bound to active specs (`repair` prunes ghost registry entries + clears dead spec→worktree bindings; `repair-sparse` restores the `.caws/specs` sparse-checkout invariant). |
@@ -176,6 +177,28 @@ caws waiver list
 caws waiver show FEAT-1-w
 caws waiver revoke FEAT-1-w
 ```
+
+## Reprieves
+
+A **reprieve** skips a PreToolUse guard for exactly one agent session until a stated expiry. It replaces the anti-pattern of commenting a guard out of the dispatcher's HANDLERS array (which disables it for *every* agent, forever, with no reason or expiry). Reprieves are operational cache (gitignored, under the vendor `hooks/state/` dir), not governance state — they do not flow through `events.jsonl` or the kernel.
+
+```bash
+caws reprieve grant --current \
+  --handlers protected-paths.sh \
+  --reason "editing casr-context.sh under CASR-HOOK-LIVE-WIRING-OWNER-STEP-01" \
+  --approved-by "darian" \
+  --expires-at "2026-07-16T00:00:00Z"
+
+caws reprieve show --current
+caws reprieve revoke --current --reason "done editing hooks"
+caws reprieve list
+```
+
+**Reprieve vs waiver** — different enforcement layers, do not confuse them:
+- A **waiver** bypasses a **GATE** at policy-run time (`caws gates run`). It is governance state (`.caws/waivers/`), kernel-adjudicated, optionally scoped to a spec. Use it when a gate's threshold is wrong for a legitimate change.
+- A **reprieve** skips a **HOOK guard** at dispatch time (the PreToolUse chain). It is operational cache (vendor `hooks/state/`), session-scoped, expiring. Use it when one session legitimately needs to do what a guard blocks (e.g. editing a hook script) without disabling the guard for every other session.
+
+A reprieve carries a mandatory `--reason`, `--approved-by`, and `--expires-at`. The skip is logged to stderr (`[reprieve] <handler> skipped for session <id> (expires <ts>)`) so the audit trail shows when and why a guard was skipped. A foreign session is never covered — the state file is keyed to the resolved session id.
 
 ## Exit codes (uniform across v11)
 
