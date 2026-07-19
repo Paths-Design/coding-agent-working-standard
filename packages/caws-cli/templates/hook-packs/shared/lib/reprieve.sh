@@ -45,11 +45,39 @@ fi
 _CAWS_REPRIEVE_SH_LOADED=1
 
 # Resolve the reprieve state directory. Mirrors danger_state_dir
-# (block-dangerous.sh:73-78): ${CAWS_PROJECT_DIR}/${CAWS_VENDOR_DIR}/hooks/state.
+# (block-dangerous.sh:73-78): ${CAWS_PROJECT_DIR}/${CAWS_VENDOR_DIR}/hooks/state,
+# BUT resolves the CANONICAL project dir (not the cwd/worktree root) so a
+# reprieve granted in one context is honored in every worktree of the same
+# repo. CAWS-GUARD-REPRIEVE-LOCATION-COUPLING-001: without this, an agent that
+# grants from the canonical checkout then enters a worktree finds the
+# dispatcher's CAWS_PROJECT_DIR points at the worktree, the reprieve file is
+# absent there, and the guard re-blocks — defeating the feature in the exact
+# multi-worktree workflow CAWS is for. Same lesson guard-strikes.sh applies
+# (it moves strike state OUT of the worktree entirely). Resolution:
+#   1. git rev-parse --git-common-dir → <canonical>/.git; parent = canonical root
+#   2. fall back to CAWS_PROJECT_DIR when not in a linked worktree or git fails
 # Creates the dir if missing (mkdir -p is idempotent; a read consult that has to
 # create the dir is harmless — the file simply won't exist in it).
 caws_reprieve_state_dir() {
   local project_dir="${CAWS_PROJECT_DIR:-.}"
+  # Resolve the canonical checkout root from the git common dir. In a linked
+  # worktree, --git-common-dir returns <canonical>/.git, whose parent is the
+  # canonical root. In the canonical checkout itself, it returns .git (relative),
+  # so resolve to an absolute path before taking the parent. Failures (not a git
+  # repo, git missing) fall back to CAWS_PROJECT_DIR — never block.
+  local common
+  common="$(cd "$project_dir" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null)" || common=""
+  if [[ -n "$common" ]]; then
+    case "$common" in
+      /*) : ;;
+      *)  common="$project_dir/$common" ;;
+    esac
+    local canon_root
+    canon_root="$(cd "$common/.." 2>/dev/null && pwd -P)" || canon_root=""
+    if [[ -n "$canon_root" ]]; then
+      project_dir="$canon_root"
+    fi
+  fi
   local state_dir="$project_dir/${CAWS_VENDOR_DIR}/hooks/state"
   mkdir -p "$state_dir" 2>/dev/null || true
   printf '%s\n' "$state_dir"

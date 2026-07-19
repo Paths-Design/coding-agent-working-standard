@@ -72,6 +72,18 @@ commenting a guard out of a dispatcher HANDLERS array.
   (CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001.)
 - **Single-source agent-surface list** across CLI help and docs (carried
   forward from the untagged 11.7.0).
+- **Reprieve location-coupling across worktrees.** The reprieve consult
+  resolved its state dir from `CAWS_PROJECT_DIR`, which the dispatcher sets to
+  the worktree root inside a worktree — so a reprieve granted at the canonical
+  checkout was invisible to a worktree-rooted dispatch and the guard re-blocked,
+  defeating the feature in the exact multi-worktree workflow CAWS is for (a real
+  field failure: grant succeeded, the next Edit still blocked). The reader now
+  resolves the canonical checkout root via `git rev-parse --git-common-dir`'s
+  parent (the same lesson `guard-strikes.sh` applies for strike state, which it
+  deliberately moves OUT of the worktree). The TS writer was already
+  canonical-rooted via `resolveRepoRoot`, so writer/reader now agree. Pinned by
+  a regression test (grant from canonical, dispatch from worktree → reprieve
+  honored). (CAWS-GUARD-REPRIEVE-LOCATION-COUPLING-001.)
 
 ### Consumer upgrade notes
 

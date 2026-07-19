@@ -192,3 +192,46 @@ run_pretooluse_with_session() {
   grep -Fq "BLOCKED" <<<"$output"
   ! grep -Fq "[reprieve]" <<<"$output"
 }
+
+# ─── A8: canonical→worktree location coupling (CAWS-GUARD-REPRIEVE-LOCATION-COUPLING-001) ─
+#
+# A reprieve granted at the CANONICAL checkout must be honored when the agent
+# dispatches from a WORKTREE. Pre-fix, the reader resolved the state dir from
+# CAWS_PROJECT_DIR (which the dispatcher sets to the worktree root inside a
+# worktree), so the reprieve file written at canonical/.claude/hooks/state/
+# was invisible to a worktree-rooted dispatch and the guard re-blocked —
+# defeating the feature in the exact multi-worktree workflow CAWS is for.
+# The fix resolves the canonical root via `git rev-parse --git-common-dir`
+# (same lesson guard-strikes.sh applies for strike state).
+
+@test "A8 — reprieve granted at canonical is honored when dispatching from a worktree" {
+  # write_reprieve targets $CAWS_TEST_REPO/.claude/hooks/state (canonical).
+  write_reprieve "sess-a8-canonical" "2099-01-01T00:00:00Z" "scope-guard.sh,protected-paths.sh"
+  # Create a linked worktree off the test repo so --git-common-dir resolves to
+  # the canonical .git, proving the reader walks back to the canonical root.
+  local wt
+  wt="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-reprieve-wt-XXXXXX")"
+  git -C "$CAWS_TEST_REPO" worktree add -q "$wt" -b bats-reprieve-wt-test 2>/dev/null
+  local env_file target
+  target="$CAWS_TEST_REPO/.claude/hooks/a-canonical-handler.sh"
+  env_file="$(mktemp)"
+  jq -nc --arg fp "$target" '{
+    tool_name: "Write",
+    tool_input: { file_path: $fp },
+    session_id: "sess-a8-canonical"
+  }' >"$env_file"
+  # Dispatch with CAWS_PROJECT_DIR + HOOK_CWD set to the WORKTREE root, so the
+  # reader's CAWS_PROJECT_DIR fallback would (pre-fix) look in the worktree.
+  run env \
+    CAWS_PROJECT_DIR="$wt" \
+    CAWS_AGENT_SURFACE="claude-code" \
+    HOOK_CWD="$wt" \
+    bash "$CAWS_TEST_HOOKS_DIR/dispatch/pre_tool_use.sh" <"$env_file"
+  rm -f "$env_file"
+  git -C "$CAWS_TEST_REPO" worktree remove --force "$wt" 2>/dev/null
+  git -C "$CAWS_TEST_REPO" branch -D bats-reprieve-wt-test 2>/dev/null
+  # The reprieve was found at the canonical state dir despite the worktree
+  # cwd/CAWS_PROJECT_DIR: both guards were skipped.
+  grep -Fq "[reprieve] scope-guard.sh skipped for session sess-a8-canonical" <<<"$output"
+  grep -Fq "[reprieve] protected-paths.sh skipped for session sess-a8-canonical" <<<"$output"
+}

@@ -588,7 +588,94 @@ Exit codes: 0 (plan or apply completed), 1 (invalid selector or missing apply me
 
 ---
 
-## 10. `caws specs`
+## 10. `caws reprieve`
+
+Session-scoped guard reprieve: skip a PreToolUse guard for ONE session until a stated expiry. Use when a session legitimately needs to do what a guard blocks (e.g. editing a hook script) without disabling it for every other session. Distinct from `caws waiver`: a reprieve skips a HOOK guard at dispatch time (operational cache, session-scoped, expiring); a waiver bypasses a GATE at policy-run time (governance state, kernel-adjudicated). Replaces the anti-pattern of commenting a guard out of the dispatcher HANDLERS array. Reprieves live under the vendor `hooks/state/` dir, are gitignored, and do not flow through `events.jsonl` or the kernel.
+
+### `caws reprieve grant`
+
+```bash
+caws reprieve grant --current \
+  --handlers protected-paths.sh \
+  --reason "editing casr-context.sh under CASR-001" \
+  --approved-by "darian" \
+  --expires-at "2026-07-16T00:00:00Z"
+```
+
+| Flag | Description |
+|---|---|
+| `--handlers <list>` | Comma-separated handler basenames to skip (e.g. `protected-paths.sh`). **Required.** |
+| `--reason <text>` | Why this reprieve is safe; recorded in the state file + audit log. **Required.** |
+| `--approved-by <id>` | Approver identity. **Required.** |
+| `--expires-at <iso>` | Expiry as an ISO-8601 datetime; must be in the future. **Required.** |
+| `--current` | Resolve the session from env (default). |
+| `--session <id>` | Explicit session id (overrides `--current`). |
+| `--surface <name>` | Agent surface / vendor dir (default: detect). |
+| `--dry-run` | Validate and report without writing the state file. |
+| `--json` | Emit the result as JSON. |
+| `--data` | Show structured data block on diagnostics. |
+
+The reprieve takes effect on the next PreToolUse dispatch for the named session; the dispatcher logs `[reprieve] <handler> skipped for session <id> (expires <ts>)` to stderr when it fires. A foreign session is never covered. `--dry-run` is read-only.
+
+Exit codes: 0 (granted or valid dry-run), 1 (missing flags, unresolvable session, past expiry, empty handlers), 2 (composition failure).
+
+### `caws reprieve show`
+
+```bash
+caws reprieve show --current
+caws reprieve show --session 019f6289-...
+```
+
+| Flag | Description |
+|---|---|
+| `--current` | Resolve the session from env (default). |
+| `--session <id>` | Explicit session id (overrides `--current`). |
+| `--surface <name>` | Agent surface / vendor dir (default: detect). |
+| `--json` | Emit the record as JSON. |
+| `--data` | Show structured data block on diagnostics. |
+
+Reports the reprieve for the current (or named) session with its derived active/expired state. Read-only.
+
+Exit codes: 0 (found or not found — both are observations), 1 (malformed reprieve file), 2 (composition failure).
+
+### `caws reprieve revoke`
+
+```bash
+caws reprieve revoke --current --reason "done editing hooks"
+```
+
+| Flag | Description |
+|---|---|
+| `--reason <text>` | Why the reprieve is being cleared; recorded in the audit log. **Required.** |
+| `--current` | Resolve the session from env (default). |
+| `--session <id>` | Explicit session id (overrides `--current`). |
+| `--surface <name>` | Agent surface / vendor dir (default: detect). |
+| `--json` | Emit the result as JSON. |
+| `--data` | Show structured data block on diagnostics. |
+
+Deletes the reprieve state file; the guard resumes normal enforcement immediately on the next dispatch. Appends a `revoke` entry to `${CAWS_VENDOR_DIR}/logs/guard-reprieves.log`.
+
+Exit codes: 0 (revoked or nothing to revoke), 1 (missing `--reason`), 2 (composition failure).
+
+### `caws reprieve list`
+
+```bash
+caws reprieve list
+```
+
+| Flag | Description |
+|---|---|
+| `--surface <name>` | Agent surface / vendor dir (default: detect). |
+| `--json` | Emit the list as JSON. |
+| `--data` | Show structured data block on diagnostics. |
+
+Lists active guard reprieves across sessions with each one's handlers, expiry, and derived active/expired state. Read-only.
+
+Exit codes: 0 (always — zero results is an observation), 2 (composition failure).
+
+---
+
+## 11. `caws specs`
 
 Manage CAWS spec lifecycle.
 
@@ -852,7 +939,7 @@ authoritative hook/CI path; consumers should not shell out to their own
 
 ---
 
-## 11. `caws worktree`
+## 12. `caws worktree`
 
 Manage CAWS worktrees. Worktrees are git worktrees bound to active specs.
 
@@ -1034,7 +1121,7 @@ Note: `caws worktree reconcile` is deferred to v11.2+.
 
 ---
 
-## 12. `caws agents`
+## 13. `caws agents`
 
 Agent liveness substrate. **Operational cache only — NEVER authority.** State lives in `.caws/leases/`. CAWS-native JSON; never Claude Code hook envelope.
 
@@ -1121,7 +1208,7 @@ Operator-invoked cleanup. Never invoked by hooks.
 
 ---
 
-## 13. `caws message`
+## 14. `caws message`
 
 Directed inter-agent messages over `.caws/messages.jsonl`. Messages are not authority; a message body is an unverified claim until checked against repo/runtime state.
 
@@ -1176,7 +1263,7 @@ Dry-run-first retention cleanup for non-authoritative chat logs. Only delivered 
 
 ---
 
-## 14. `caws prepush`
+## 15. `caws prepush`
 
 Governed pre-push range check (MULTI-AGENT-PUSH-RANGE-GUARD-001). Classifies the outgoing commit range and refuses commits not attributable to the current slice. Diagnose/decide only — does not run `git push`.
 
