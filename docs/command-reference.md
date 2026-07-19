@@ -33,6 +33,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws evidence`](#caws-evidence) — Record, list, show, and describe typed evidence events in .caws/events.jsonl (record/list/show/schema)
 - [`caws events`](#caws-events) — Read and maintain .caws/events.jsonl (list/show/rotate/migrate/verify-archive)
 - [`caws waiver`](#caws-waiver) — Manage CAWS waivers (bounded exception records that suppress matching gate violations)
+- [`caws reprieve`](#caws-reprieve) — Session-scoped guard reprieve: skip a PreToolUse guard for ONE session until a stated expiry. Use when a session legitimately needs to do what a guard blocks (e.g. editing a hook script) WITHOUT disabling it for every other session. Distinct from `caws waiver`: a reprieve skips a HOOK guard at dispatch time (operational cache, session-scoped, expiring); a waiver bypasses a GATE at policy-run time (governance state, kernel-adjudicated). Replaces the anti-pattern of commenting a guard out of the dispatcher HANDLERS array.
 - [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/amend-scope/close/archive/prune-archive/migrate/validate)
 - [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.
 - [`caws agents`](#caws-agents) — Agent liveness substrate: register/heartbeat/stop/list/show/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.
@@ -50,7 +51,8 @@ Bootstrap the canonical vNext .caws/ project state (idempotent; refuses to overw
 - `--dry-run` — Compatibility alias for --plan; previews init changes without writing anything.
 - `--json` — Emit the read-only init plan as JSON with --plan or --dry-run.
 - `--agent-surface <name>` — Install a hook pack for an agent harness. When omitted, init attempts filesystem detection and skips hook install when ambiguous: claude-code | codex | opencode | zcode | cursor | windsurf | none
-- `--overwrite` — For hook-pack install: replace drifted or unmanaged files at managed pack paths. CAUTION: local edits to those files will be lost.
+- `--overwrite [paths...]` — For hook-pack install: select drifted or unmanaged files at managed pack paths for replacement — every pack file when bare, or only the listed destination paths. Without --force this previews a unified diff of each replacement and refuses (nothing is written); add --force to apply.
+- `--force` — With --overwrite: apply the previewed replacements. CAUTION: local edits to the selected files are lost. A usage error without --overwrite.
 - `--adopt` — For hook-pack install: leave drifted or unmanaged files in place without enforcing pack contents. CAUTION: pack drift is no longer tracked for those paths.
 
 ## `caws doctor`
@@ -346,6 +348,62 @@ Plan or apply cleanup for derived-expired active waivers. Dry-run by default; --
 - `--reason <reason>` — Required with --apply; recorded in each revocation.reason
 - `--revoked-by <id>` — Required with --apply; recorded in each revocation.revoked_by
 - `--json` — Emit the prune plan/result as JSON.
+- `--data` — Show structured data block on diagnostics
+
+## `caws reprieve`
+
+Session-scoped guard reprieve: skip a PreToolUse guard for ONE session until a stated expiry. Use when a session legitimately needs to do what a guard blocks (e.g. editing a hook script) WITHOUT disabling it for every other session. Distinct from `caws waiver`: a reprieve skips a HOOK guard at dispatch time (operational cache, session-scoped, expiring); a waiver bypasses a GATE at policy-run time (governance state, kernel-adjudicated). Replaces the anti-pattern of commenting a guard out of the dispatcher HANDLERS array.
+
+### `caws reprieve grant`
+
+Grant a reprieve that skips the named handler(s) for the current session until expiry. Replaces commenting a guard out of the dispatcher HANDLERS array (which disables it for every agent forever). The reprieve is recorded with a reason, approver, and expiry; the skip is logged to stderr when it fires; foreign sessions are never covered.
+
+**Options:**
+
+- `--handlers <list>` (**required**) — Comma-separated handler basenames to skip (e.g. protected-paths.sh)
+- `--reason <text>` (**required**) — Why this reprieve is safe; recorded
+- `--approved-by <id>` (**required**) — Approver identity
+- `--expires-at <iso>` (**required**) — Expiry as an ISO-8601 datetime
+- `--current` — Resolve the session from env (default)
+- `--session <id>` — Explicit session id (overrides --current)
+- `--surface <name>` — Agent surface / vendor dir (default: detect)
+- `--dry-run` — Validate and report without writing the state file
+- `--json` — Emit the result as JSON.
+- `--data` — Show structured data block on diagnostics
+
+### `caws reprieve show`
+
+Show the reprieve for the current (or named) session, if any, including its derived active/expired state.
+
+**Options:**
+
+- `--current` — Resolve the session from env (default)
+- `--session <id>` — Explicit session id (overrides --current)
+- `--surface <name>` — Agent surface / vendor dir (default: detect)
+- `--json` — Emit the record as JSON.
+- `--data` — Show structured data block on diagnostics
+
+### `caws reprieve revoke`
+
+Revoke (delete) the reprieve for the current (or named) session. The guard resumes normal enforcement immediately. --reason is mandatory and is recorded in the audit log.
+
+**Options:**
+
+- `--reason <text>` (**required**) — Why the reprieve is being cleared; recorded
+- `--current` — Resolve the session from env (default)
+- `--session <id>` — Explicit session id (overrides --current)
+- `--surface <name>` — Agent surface / vendor dir (default: detect)
+- `--json` — Emit the result as JSON.
+- `--data` — Show structured data block on diagnostics
+
+### `caws reprieve list`
+
+List active guard reprieves across sessions, with each one's handlers, expiry, and derived active/expired state.
+
+**Options:**
+
+- `--surface <name>` — Agent surface / vendor dir (default: detect)
+- `--json` — Emit the list as JSON.
 - `--data` — Show structured data block on diagnostics
 
 ## `caws specs`

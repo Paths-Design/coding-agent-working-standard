@@ -1263,13 +1263,13 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'reprieve',
   description:
-    'Manage session-scoped guard reprieves (governed, expiring, per-session skips of a PreToolUse guard)',
+    'Session-scoped guard reprieve: skip a PreToolUse guard for ONE session until a stated expiry. Use when a session legitimately needs to do what a guard blocks (e.g. editing a hook script) WITHOUT disabling it for every other session. Distinct from `caws waiver`: a reprieve skips a HOOK guard at dispatch time (operational cache, session-scoped, expiring); a waiver bypasses a GATE at policy-run time (governance state, kernel-adjudicated). Replaces the anti-pattern of commenting a guard out of the dispatcher HANDLERS array.',
   subcommands: [
     {
       kind: 'leaf',
       name: 'grant',
       description:
-        'Grant a reprieve that skips the named handler(s) for the current session until expiry. Replaces commenting a guard out of the dispatcher HANDLERS array.',
+        'Grant a reprieve that skips the named handler(s) for the current session until expiry. Replaces commenting a guard out of the dispatcher HANDLERS array (which disables it for every agent forever). The reprieve is recorded with a reason, approver, and expiry; the skip is logged to stderr when it fires; foreign sessions are never covered.',
       options: [
         {
           flag: '--handlers <list>',
@@ -1290,7 +1290,7 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
     {
       kind: 'leaf',
       name: 'show',
-      description: 'Show the reprieve for the current (or named) session, if any.',
+      description: 'Show the reprieve for the current (or named) session, if any, including its derived active/expired state.',
       options: [
         { flag: '--current', description: 'Resolve the session from env (default)' },
         { flag: '--session <id>', description: 'Explicit session id (overrides --current)' },
@@ -1302,7 +1302,7 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
     {
       kind: 'leaf',
       name: 'revoke',
-      description: 'Revoke (delete) the reprieve for the current (or named) session.',
+      description: 'Revoke (delete) the reprieve for the current (or named) session. The guard resumes normal enforcement immediately. --reason is mandatory and is recorded in the audit log.',
       options: [
         { flag: '--reason <text>', required: true, description: 'Why the reprieve is being cleared; recorded' },
         { flag: '--current', description: 'Resolve the session from env (default)' },
@@ -1315,7 +1315,7 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
     {
       kind: 'leaf',
       name: 'list',
-      description: 'List all reprieve state files in the vendor state dir.',
+      description: 'List active guard reprieves across sessions, with each one\'s handlers, expiry, and derived active/expired state.',
       options: [
         { flag: '--surface <name>', description: 'Agent surface / vendor dir (default: detect)' },
         { flag: '--json', description: 'Emit the list as JSON.' },
