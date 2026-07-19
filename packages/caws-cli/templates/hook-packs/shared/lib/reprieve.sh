@@ -158,14 +158,21 @@ if not isinstance(rec, dict):
 expires_at = rec.get("expires_at")
 if not isinstance(expires_at, str) or not expires_at:
     sys.exit(1)
-# Derived expiry: compare ISO-8601 strings lexically (they sort chronologically
-# when the same shape/timezone is used, which the writer guarantees via date -u).
-# A past expiry → absent. Never mutate the file on read.
+# Derived expiry. CAWS-GUARD-REPRIEVE-NAIVE-EXPIRY-001: a user may pass a
+# timezone-less --expires-at (e.g. "2026-07-19T04:00:00"); the writer is
+# supposed to reject those, but the reader must be robust to legacy/inert
+# files already on disk. Assume UTC for a naive datetime (the only sane
+# default for a tool whose now=UTC) so the compare does not TypeError on
+# naive-vs-aware -- which would silently disable the reprieve with no error
+# surfaced (the worst failure class: reports success while doing nothing).
+# A past expiry means absent. Never mutate the file on read.
 import datetime
 try:
     exp = datetime.datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
 except Exception:
     sys.exit(1)
+if exp.tzinfo is None:
+    exp = exp.replace(tzinfo=datetime.timezone.utc)
 now = datetime.datetime.now(datetime.timezone.utc)
 if exp < now:
     sys.exit(1)

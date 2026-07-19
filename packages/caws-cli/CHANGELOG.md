@@ -84,6 +84,18 @@ commenting a guard out of a dispatcher HANDLERS array.
   canonical-rooted via `resolveRepoRoot`, so writer/reader now agree. Pinned by
   a regression test (grant from canonical, dispatch from worktree → reprieve
   honored). (CAWS-GUARD-REPRIEVE-LOCATION-COUPLING-001.)
+- **Reprieve silently inert on timezone-less `--expires-at`.** A grant with a
+  naive expiry (e.g. `--expires-at 2026-07-19T04:00:00`, no `Z`/offset) reported
+  success but the reprieve was silently treated as absent: the reader parsed the
+  naive datetime, compared it against a timezone-aware `now=UTC`, hit a Python
+  `TypeError` (can't compare offset-naive and offset-aware), exited non-zero, and
+  the consult failed-closed — the "reports success while doing nothing" class.
+  A real field failure (the grant looked complete, the next edit still blocked).
+  Fix is two-layered: the writer now REFUSES a naive `--expires-at` at grant
+  time with an actionable error ("append 'Z' (UTC)"); the reader assumes UTC for
+  a naive datetime so legacy/inert files already on disk start working. Pinned
+  by a jest case (writer rejects naive) and a bats case (reader honors a naive
+  future expiry). (CAWS-GUARD-REPRIEVE-NAIVE-EXPIRY-001.)
 
 ### Consumer upgrade notes
 

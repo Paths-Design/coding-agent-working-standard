@@ -276,7 +276,21 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
     return 1;
   }
 
-  // Validate expiry: ISO-8601 and in the future.
+  // Validate expiry: ISO-8601, timezone-qualified, and in the future.
+  // CAWS-GUARD-REPRIEVE-NAIVE-EXPIRY-001: a timezone-less --expires-at (e.g.
+  // "2026-07-19T04:00:00") is REFUSED here, not silently accepted. The reader
+  // (lib/reprieve.sh) assumes UTC for naive values to tolerate legacy files,
+  // but the writer must fail loud: otherwise the grant reports success and the
+  // reprieve is silently inert (the "reports success while doing nothing" class).
+  // Require a trailing Z or a +/- offset. The stored value is the user's input
+  // verbatim — do NOT silently normalize, so the audit trail shows what was approved.
+  const RAW_EXPIRY = opts.expiresAt;
+  if (!/[Zz]|[+-]\d\d:?\d\d$/.test(RAW_EXPIRY.trim())) {
+    err(
+      `caws reprieve grant: --expires-at "${RAW_EXPIRY}" is missing a timezone. Append 'Z' (UTC) or a +/-HH:MM offset, e.g. --expires-at ${RAW_EXPIRY.trim()}Z`
+    );
+    return 1;
+  }
   let expiresAt: Date;
   try {
     expiresAt = new Date(opts.expiresAt);

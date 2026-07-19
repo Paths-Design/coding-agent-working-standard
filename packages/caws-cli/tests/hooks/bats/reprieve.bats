@@ -235,3 +235,34 @@ run_pretooluse_with_session() {
   grep -Fq "[reprieve] scope-guard.sh skipped for session sess-a8-canonical" <<<"$output"
   grep -Fq "[reprieve] protected-paths.sh skipped for session sess-a8-canonical" <<<"$output"
 }
+
+# ─── A9: naive (timezone-less) expires_at honored by the reader ────────────
+#
+# CAWS-GUARD-REPRIEVE-NAIVE-EXPIRY-001. A reprieve file whose expires_at lacks
+# a timezone (e.g. "2099-01-01T00:00:00" — what a user naturally writes if the
+# CLI did not reject it) must still be HONORED, not silently treated as absent.
+# Pre-fix, the reader parsed it as a naive datetime, compared against a
+# timezone-aware now=UTC, hit TypeError, exited non-zero, and the reprieve was
+# silently inert — the "reports success while doing nothing" class. The reader
+# now assumes UTC for a naive datetime. (The writer rejects naive expiries at
+# grant time so new files carry a timezone, but the reader must tolerate legacy
+# files already on disk.)
+
+@test "A9 — reader honors a naive (timezone-less) future expires_at" {
+  # Write a reprieve with a NAIVE future expiry directly (bypassing the writer,
+  # which now rejects naive). The reader must treat it as UTC-future = active.
+  write_reprieve "sess-a9-naive" "2099-01-01T00:00:00" "protected-paths.sh"
+  local result
+  result="$(CAWS_PROJECT_DIR="$CAWS_TEST_REPO" CAWS_VENDOR_DIR=.claude \
+    HOOKS_DIR="$CAWS_TEST_HOOKS_DIR" bash -c '
+      source "$HOOKS_DIR/lib/caws-state.sh" 2>/dev/null || true
+      source "$HOOKS_DIR/lib/reprieve.sh"
+      if caws_is_handler_reprieved protected-paths.sh sess-a9-naive; then
+        echo "REPRIEVED"
+      else
+        echo "NOT-REPRIEVED"
+      fi
+  ' 2>&1)"
+  echo "result=$result" >&3
+  grep -Fq "REPRIEVED" <<<"$result"
+}

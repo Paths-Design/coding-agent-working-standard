@@ -133,6 +133,31 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       expect(errs.join('\n')).toMatch(/in the past/i);
     });
 
+    test('refuses a naive (timezone-less) expiry with a clear, actionable error', () => {
+      // CAWS-GUARD-REPRIEVE-NAIVE-EXPIRY-001: a timezone-less --expires-at
+      // must be REFUSED at grant time, not silently accepted. Pre-fix the
+      // writer accepted it, printed "granted reprieve", and the reader then
+      // silently treated it as inert (TypeError on naive-vs-aware compare).
+      const { repoRoot } = makeRepoRoot();
+      const errs = [];
+      const code = runReprieveGrantCommand({
+        cwd: repoRoot,
+        out: () => {},
+        err: (s) => errs.push(s),
+        handlers: 'protected-paths.sh',
+        reason: 'x',
+        approvedBy: 'd',
+        expiresAt: '2099-01-01T00:00:00', // naive — no Z, no offset
+        session: 'sess-x',
+        surface: 'claude-code',
+      });
+      expect(code).toBe(1);
+      const msg = errs.join('\n');
+      expect(msg).toMatch(/missing a timezone/i);
+      // The error must tell the user HOW to fix it (append Z), not just refuse.
+      expect(msg).toMatch(/2099-01-01T00:00:00Z/);
+    });
+
     test('refuses an empty handlers list', () => {
       const { repoRoot } = makeRepoRoot();
       const errs = [];
