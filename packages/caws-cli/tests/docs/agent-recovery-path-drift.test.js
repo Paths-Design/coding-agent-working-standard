@@ -145,3 +145,100 @@ describe('ownership remediation names a caws claim shape the CLI accepts', () =>
     }
   });
 });
+
+describe('reset-danger-latch resolves its state dir independently of cwd', () => {
+  // CAWS-RESET-LATCH-CWD-DEPENDENT-LOOKUP-001. agent-surface.sh sets
+  // CAWS_PROJECT_DIR="." when it cannot resolve an absolute root, and a
+  // `${CAWS_PROJECT_DIR:-<abs fallback>}` expansion does NOT rescue that — "."
+  // is non-empty, so `:-` never fires. STATE_DIR then resolved against whatever
+  // cwd the human happened to be standing in: the script reported "nothing to
+  // clear" and exited 0 while the latch was still armed. That is the worst
+  // failure shape for a recovery path — indistinguishable from a real reset,
+  // so the operator stays hard-blocked believing they are unblocked.
+  //
+  // These tests run the SHIPPED template in an install-shaped fixture from a
+  // foreign cwd, because the defect only appears when cwd != project root.
+
+  const os = require('os');
+
+  const TEMPLATE = path.join(
+    ROOT,
+    'packages/caws-cli/templates/hook-packs/shared/reset-danger-latch.sh'
+  );
+
+  /**
+   * Materialize <fixture>/.caws/hooks/{reset-danger-latch.sh,lib/} plus the
+   * vendor state dir, mirroring a real install so SCRIPT_DIR/../.. is the
+   * fixture root. Returns the fixture paths.
+   */
+  function installFixture() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-latch-'));
+    const hooksDir = path.join(root, '.caws', 'hooks');
+    const stateDir = path.join(root, '.claude', 'hooks', 'state');
+    fs.mkdirSync(path.join(hooksDir, 'lib'), { recursive: true });
+    fs.mkdirSync(stateDir, { recursive: true });
+    fs.mkdirSync(path.join(root, '.claude', 'logs'), { recursive: true });
+
+    fs.copyFileSync(TEMPLATE, path.join(hooksDir, 'reset-danger-latch.sh'));
+    const libSrc = path.join(ROOT, '.caws', 'hooks', 'lib');
+    for (const f of fs.readdirSync(libSrc).filter((f) => f.endsWith('.sh'))) {
+      fs.copyFileSync(path.join(libSrc, f), path.join(hooksDir, 'lib', f));
+    }
+    return { root, script: path.join(hooksDir, 'reset-danger-latch.sh'), stateDir };
+  }
+
+  function runReset(script, session, cwd) {
+    // cwd is deliberately NOT the fixture root — that is the whole point.
+    return execFileSync(
+      'bash',
+      [script, '--session', session, '--reason', 'regression test'],
+      { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+    );
+  }
+
+  test('clears a genuinely armed latch when run from a foreign cwd', () => {
+    const { script, stateDir } = installFixture();
+    const latch = path.join(stateDir, 'danger-latch-probe-sess.json');
+    fs.writeFileSync(latch, JSON.stringify({ session: 'probe-sess' }));
+
+    // Precondition: the latch really is armed, so a later "cleared" assertion
+    // cannot pass against an empty state dir.
+    expect(fs.existsSync(latch)).toBe(true);
+
+    const out = runReset(script, 'probe-sess', os.tmpdir());
+
+    expect(out).toMatch(/Cleared danger latch/);
+    expect(fs.existsSync(latch)).toBe(false);
+  });
+
+  test('does not report a clean result without naming the directory searched', () => {
+    const { script, stateDir } = installFixture();
+    // No latch armed: this is the genuine not-found case.
+    expect(fs.readdirSync(stateDir)).toEqual([]);
+
+    const out = runReset(script, 'no-such-session', os.tmpdir());
+
+    // The absolute searched path is the evidence that distinguishes "searched
+    // the right tree, nothing armed" from "searched the wrong tree entirely".
+    expect(out).toMatch(/searched:/);
+    expect(out).toContain(stateDir);
+  });
+
+  test('the state dir is never resolved relative to cwd', () => {
+    const { script, stateDir } = installFixture();
+    fs.writeFileSync(
+      path.join(stateDir, 'danger-latch-probe-sess.json'),
+      JSON.stringify({ session: 'probe-sess' })
+    );
+
+    // Run from an unrelated directory that contains no .claude tree. Under the
+    // old `${CAWS_PROJECT_DIR:-...}` expansion this searched ./.claude/... and
+    // falsely reported success; it must now find the fixture's latch instead.
+    const foreign = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-foreign-'));
+    const out = runReset(script, 'probe-sess', foreign);
+
+    expect(out).toMatch(/Cleared danger latch/);
+    // No phantom state tree may be created under the operator's cwd.
+    expect(fs.existsSync(path.join(foreign, '.claude'))).toBe(false);
+  });
+});

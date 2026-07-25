@@ -23,10 +23,25 @@ set -euo pipefail
 # --- Resolve project + state locations -------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/agent-surface.sh
-# Provides CAWS_VENDOR_DIR, CAWS_PROJECT_DIR.
+# Provides CAWS_VENDOR_DIR. NOTE: it also sets CAWS_PROJECT_DIR, sometimes to the
+# RELATIVE fallback "." — see below for why that value is deliberately ignored.
 source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
 
-PROJECT_DIR="${CAWS_PROJECT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+# CAWS-RESET-LATCH-CWD-DEPENDENT-LOOKUP-001: derive the project root from this
+# script's own location, NOT from the inherited CAWS_PROJECT_DIR.
+#
+# agent-surface.sh sets CAWS_PROJECT_DIR="." when it cannot resolve an absolute
+# root. A `${CAWS_PROJECT_DIR:-<absolute fallback>}` expansion does NOT rescue
+# that: "." is non-empty, so `:-` never fires and STATE_DIR becomes the RELATIVE
+# "./${CAWS_VENDOR_DIR}/hooks/state" — silently resolved against whatever cwd the
+# human happens to be in. Running the reset from a sibling repo then searched the
+# wrong tree and reported "nothing to clear" while the latch was still armed,
+# leaving the session hard-blocked with no working recovery path.
+#
+# reset-strikes.sh has always computed its root this way and is immune; this
+# matches it. The state dir is a property of where the hooks are INSTALLED, never
+# of where the operator is standing.
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 STATE_DIR="$PROJECT_DIR/${CAWS_VENDOR_DIR}/hooks/state"
 LOG_FILE="$PROJECT_DIR/${CAWS_VENDOR_DIR}/logs/danger-latch-resets.log"
 
@@ -230,7 +245,15 @@ for WARN in ${WARN_FILES[@]+"${WARN_FILES[@]}"}; do
 done
 
 if [[ "$MODE" != "all" && "$CLEARED" -eq 0 && "$WARNS_CLEARED" -eq 0 && "$MISSING" -gt 0 ]]; then
-  echo "No active latch or warn marker for the requested session (nothing to clear)."
+  # CAWS-RESET-LATCH-CWD-DEPENDENT-LOOKUP-001 (A3): name the directory that was
+  # actually searched. "nothing to clear" alone is indistinguishable from a
+  # completed reset, so an operator who searched the WRONG tree reads a
+  # still-armed latch as a successful one and stays hard-blocked with no signal.
+  # The absolute path is the evidence that makes the two cases tellable apart.
+  echo "No active latch or warn marker for the requested session (searched: $STATE_DIR)."
+  if [[ ! -d "$STATE_DIR" ]]; then
+    echo "  note: that state directory does not exist — this is likely the wrong project root." >&2
+  fi
   exit 0
 fi
 
