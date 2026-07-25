@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: agent-docs-reset-path
 created_at: '2026-07-25T04:15:17.651Z'
-updated_at: '2026-07-25T04:18:50.139Z'
+updated_at: '2026-07-25T04:23:56.525Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
@@ -26,6 +26,8 @@ scope:
     - packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh
     - packages/caws-cli/templates/hook-packs/shared/protected-paths.sh
     - packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
   out: []
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'
