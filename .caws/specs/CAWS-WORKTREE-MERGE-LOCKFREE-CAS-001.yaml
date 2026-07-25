@@ -7,7 +7,7 @@ mode: fix
 lifecycle_state: active
 worktree: merge-cas
 created_at: '2026-07-25T00:00:00.000Z'
-updated_at: '2026-07-25T00:00:00.000Z'
+updated_at: '2026-07-25T07:06:22.693Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/worktrees-writer.ts
@@ -23,6 +23,7 @@ scope:
     - packages/caws-cli/tests/store/worktree-merge-concurrency.test.js
     - docs/api/schema.md
     - .caws/specs/CAWS-WORKTREE-MERGE-LOCKFREE-CAS-001.yaml
+    - packages/caws-cli/src/store/specs-writer.ts
   out:
     - .caws/policy.yaml
     - CODEOWNERS
