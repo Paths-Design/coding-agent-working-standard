@@ -1,14 +1,18 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 18
+# hook_pack_version: 23
 # caws_min_major: 11
 # lineage_refs: (new in shared-core-001)
-# edit_stance: this repo OWNS and may grow this hook. Edits are expected and
-#   preserved — `caws init` refuses to overwrite a changed managed hook (re-run
-#   with --adopt to keep yours, or --overwrite to pull this upstream template).
-#   CAWS owns the failure-class invariant (the why/what you must not silently
-#   weaken); you own the how. Do not edit it to BYPASS the guard; do grow it.
+# edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
+#   to your repo: tune thresholds, add checks, remove what does not fit. Your edits
+#   are preserved: caws init treats a changed hook as intended growth and will not
+#   clobber it — it shows a diff and asks (--adopt keeps yours; --overwrite --force
+#   takes the upstream template). The CAWS-MANAGED-HOOK marker above is only how caws
+#   init finds hooks it can offer updates for; it is NOT a keep-out sign. CAWS owns the
+#   failure-class invariant (the why/what a guard protects); you own the how. The one
+#   edit to avoid: gutting a guard to dodge a block instead of fixing the cause. Grow
+#   everything else freely.
 # Surface resolver — derives harness-specific values from CAWS_AGENT_SURFACE.
 #
 # WHY THIS EXISTS. The shared core must not branch on a hardcoded harness name
@@ -164,7 +168,64 @@ else
   CAWS_LOG_DIR="${CAWS_VENDOR_DIR}/logs"
 fi
 
-export CAWS_VENDOR_DIR CAWS_PLATFORM_FLAG CAWS_PERMISSION_VOCAB CAWS_INSTRUCTION_FILES CAWS_LOG_DIR
+# ---------------------------------------------------------------------------
+# 4b. Derive CAWS_HOOKS_DIR — where the hook SCRIPTS live.
+#
+# This is NOT the vendor dir. Logs are vendor-scoped (.claude/logs,
+# .codex/logs, ...) because each harness writes its own; the hook scripts are
+# shared and live in the CAWS-vendored tree (.caws/hooks/) for EVERY surface.
+#
+# Remediation text that tells a human to run reset-strikes.sh /
+# reset-danger-latch.sh must interpolate THIS, not CAWS_VENDOR_DIR — a guard
+# that names a path which does not resolve turns a correct refusal into an
+# unrecoverable block, because the agent is (by design) barred from clearing
+# its own strike/latch state and can only hand the command to a human.
+#
+# A candidate only wins if it actually CONTAINS the reset scripts. Deriving the
+# path from this file's location alone is not enough: under `caws init` the
+# shared templates are read from a package directory that is NOT the installed
+# hooks tree, so a self-relative guess yields a real-looking path with no
+# scripts in it — the same "names a path that does not resolve" failure this
+# variable exists to prevent, just harder to spot. Validate, then fall back.
+#
+# BASH_SOURCE is referenced defensively: this lib is sourced by hooks that run
+# under `set -u`, where a bare ${BASH_SOURCE[0]} is a fatal unbound reference
+# in some invocation shapes.
+# ---------------------------------------------------------------------------
+if [[ -z "${CAWS_HOOKS_DIR:-}" ]]; then
+  _caws_hooks_candidates=()
+
+  _caws_self="${BASH_SOURCE[0]:-}"
+  if [[ -n "$_caws_self" ]]; then
+    _caws_lib_dir="$(cd "$(dirname "$_caws_self")" 2>/dev/null && pwd)"
+    [[ -n "$_caws_lib_dir" ]] && _caws_hooks_candidates+=("$(dirname "$_caws_lib_dir")")
+  fi
+
+  if [[ -n "${CAWS_PROJECT_DIR:-}" && "${CAWS_PROJECT_DIR}" != "." ]]; then
+    _caws_hooks_candidates+=("${CAWS_PROJECT_DIR}/.caws/hooks")
+  fi
+  _caws_hooks_candidates+=(".caws/hooks")
+
+  for _caws_cand in "${_caws_hooks_candidates[@]}"; do
+    if [[ -f "${_caws_cand}/reset-strikes.sh" ]]; then
+      CAWS_HOOKS_DIR="$_caws_cand"
+      break
+    fi
+  done
+
+  # Nothing validated — name the canonical location rather than a wrong guess.
+  if [[ -z "${CAWS_HOOKS_DIR:-}" ]]; then
+    if [[ -n "${CAWS_PROJECT_DIR:-}" && "${CAWS_PROJECT_DIR}" != "." ]]; then
+      CAWS_HOOKS_DIR="${CAWS_PROJECT_DIR}/.caws/hooks"
+    else
+      CAWS_HOOKS_DIR=".caws/hooks"
+    fi
+  fi
+
+  unset _caws_hooks_candidates _caws_self _caws_lib_dir _caws_cand
+fi
+
+export CAWS_VENDOR_DIR CAWS_PLATFORM_FLAG CAWS_PERMISSION_VOCAB CAWS_INSTRUCTION_FILES CAWS_LOG_DIR CAWS_HOOKS_DIR
 
 # ---------------------------------------------------------------------------
 # 5. caws_source_lib <basename>
