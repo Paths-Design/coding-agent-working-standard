@@ -124,10 +124,34 @@ caws claim                                 # prints owner; exits 0 if you own it
 caws status                                # Agents panel: other live sessions
 caws agents list                           # active / stale / stopped sessions
 
-# When done: merge (auto-closes the bound spec) and destroy
+# When done: merge (auto-closes the bound spec, deletes the merged branch)
 caws worktree merge wt-auth
-caws worktree destroy wt-auth
+caws worktree destroy wt-auth              # "not found in registry" = already
+                                           # de-registered by the merge = success
 ```
+
+### Merging is safe while other agents are working
+
+`caws worktree merge` **never checks out the base branch**. It computes the
+merge in the object database (`git merge-tree --write-tree` +
+`git commit-tree`) and advances the base with an atomic compare-and-swap
+(`git update-ref <ref> <new> <expected-old>`). Nothing touches the shared
+working tree.
+
+If another agent lands a merge first, git refuses the ref update ("is at X but
+expected Y") and yours recomputes against the new base and retries — bounded at
+5 attempts. **Losing that race is normal, not an error.** Nothing partial is
+written either way: the objects created before the compare-and-swap are
+unreferenced, so an interrupted or crashed merge leaves no half-applied state.
+
+Only a genuine conflict or an exhausted retry budget is reported as a failure,
+and the diagnostic distinguishes them — contention names the base branch and the
+retry command; a conflict names the paths and leaves your working tree clean
+(no `MERGE_HEAD`, no conflict markers to clean up).
+
+Hand-running `git checkout main && git merge` reintroduces the hazard this
+removes, and the bare checkout can trip the danger latch. Use the governed
+command.
 
 ### Foreign-claim soft-block
 

@@ -41,17 +41,35 @@ Merge commits ARE allowed on the base branch while other worktrees are active. T
 caws worktree merge <name>            # readiness check first: caws worktree merge <name> --dry-run
 ```
 
-This is one governed transaction: it checks ownership + clean-tree + binding prerequisites, runs `git checkout <base>` + `git merge --no-ff` with a `merge(worktree): <name>` message, **auto-closes the bound spec** (`spec_closed`), and appends `worktree_merged` — over the v11 flat-map `worktrees.json`. You then `caws worktree destroy <name>` to remove the now-merged worktree. Prefer this over hand-running git: the governed command performs the base checkout *inside* the transaction, whereas a manual `git checkout main` is a bare checkout of an existing branch, which the danger-latch classifier flags as potentially discarding work (only `checkout -b` is auto-admitted) and can require a human latch reset.
+This is one governed transaction: it checks ownership + clean-tree + binding prerequisites, computes and lands the merge with a `merge(worktree): <name>` message, **auto-closes the bound spec** (`spec_closed`), appends `worktree_merged`, and **deletes the merged branch** — over the v11 flat-map `worktrees.json`. The merge also de-registers the worktree, so a follow-up `caws worktree destroy <name>` reporting "not found in registry" is the expected success signal, not an error.
+
+### Why it is safe to merge while other agents are working
+
+**The merge never checks out the base branch.** Checking out the base would mutate the canonical working tree's HEAD — a resource every concurrent agent shares. Instead the merge happens entirely in the object database:
+
+```
+git merge-tree --write-tree <base> <branch>   # merged tree; no working tree, no index, no HEAD
+git commit-tree <tree> -p <base> -p <branch>  # the merge commit object
+git update-ref refs/heads/<base> <new> <old>  # ATOMIC compare-and-swap
+```
+
+The third step is the only instant at which the merge becomes real. Passing the base SHA the merge was computed against makes it a compare-and-swap: if another agent advanced the base in between, **git itself refuses** ("is at X but expected Y") and nothing is written.
+
+This is stronger than a lock. There is no blocking, no deadlock, no stale-lock recovery, and it stays correct across processes, containers, and machines — including when a human or CI moves the ref. It is also crash-safe by construction: the objects written before the CAS are unreferenced, so an interrupted merge is invisible rather than half-applied.
+
+**Losing the race is normal, not an error.** The merge re-reads the base, recomputes, and retries (bounded at 5 attempts). Only a genuine conflict or an exhausted retry budget surfaces as a failure, and the diagnostic says which — contention names the base branch and the retry command; a conflict names the conflicting paths and leaves the working tree clean.
+
+**Branch deletion uses `git branch -d`, never `-D`.** After a successful CAS the branch is provably an ancestor of the new base, so `-d` cannot lose work. If `-d` ever refuses, the merge still reports success (it completed) and warns with git's own reason plus the commands to reconcile.
 
 **Manual fallback (only if the governed command genuinely cannot be used):**
 
-1. Switch to the base branch: `git checkout main` (be aware this bare checkout can trip the danger latch).
+1. Switch to the base branch: `git checkout main` (be aware this bare checkout can trip the danger latch, and mutates the working tree every other agent shares).
 2. Merge with: `git merge --no-ff <worktree-branch>`
 3. The commit-msg hook enforces the `merge(worktree): <description>` format for non-FF merges.
 4. For manual merge commits: `git commit -m "merge(worktree): integrate scenarios work"`
-5. Then destroy the now-merged worktree: `caws worktree destroy <name>`.
+5. Then destroy the now-merged worktree: `caws worktree destroy <name>`, and delete the branch: `git branch -d <branch>`.
 
-(The `WORKTREE-MERGE-V11-SHAPE-001` registry-shape crash that once forced this fallback is fixed; the governed command reads the flat-map registry natively.)
+The manual path reintroduces the concurrency hazard the governed command removes — it is a last resort, not an equivalent. (The `WORKTREE-MERGE-V11-SHAPE-001` registry-shape crash that once forced this fallback is fixed; the governed command reads the flat-map registry natively.)
 
 ## Virtual environment in worktrees
 
@@ -67,8 +85,9 @@ If your project uses `.caws/scope.json`, the `designatedVenvPath` field specifie
 
 1. Commit all changes to your worktree branch
 2. Run tests in your worktree to verify
-3. Merge with the governed path: `caws worktree merge <name>` (checks prerequisites, `git merge --no-ff`, auto-closes the bound spec, appends `worktree_merged`). Use `--dry-run` first to confirm readiness.
-4. Destroy the now-merged worktree: `caws worktree destroy <name>`
-5. Delete the branch if no longer needed: `git branch -d <branch>`
+3. Merge with the governed path: `caws worktree merge <name>` (checks prerequisites, lands the merge via compare-and-swap without checking out the base, auto-closes the bound spec, appends `worktree_merged`, and deletes the merged branch). Use `--dry-run` first to confirm readiness.
+4. Destroy the now-merged worktree: `caws worktree destroy <name>` — "not found in registry" here means the merge already de-registered it, which is success.
 
-(Manual fallback only if the governed command cannot be used: `git checkout main && git merge --no-ff <branch>` in the `merge(worktree):` format, then `caws worktree destroy <name>` — but be aware the bare `git checkout main` can trip the danger latch.)
+The branch is deleted for you in step 3; there is no separate `git branch -d`.
+
+(Manual fallback only if the governed command cannot be used: `git checkout main && git merge --no-ff <branch>` in the `merge(worktree):` format, then `caws worktree destroy <name>` and `git branch -d <branch>` — but be aware the bare `git checkout main` can trip the danger latch AND mutates the working tree shared by every other agent.)
