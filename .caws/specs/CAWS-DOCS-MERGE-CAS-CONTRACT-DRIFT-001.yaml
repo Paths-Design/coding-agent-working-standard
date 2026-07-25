@@ -1,0 +1,36 @@
+id: CAWS-DOCS-MERGE-CAS-CONTRACT-DRIFT-001
+title: 'Agent-facing docs describe the removed checkout+merge sequence and omit the concurrency contract'
+risk_tier: 3
+mode: doc
+lifecycle_state: active
+created_at: '2026-07-25T08:27:47.384Z'
+updated_at: '2026-07-25T08:27:47.384Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'CLAUDE.md'
+    - '.claude/rules/worktree-isolation.md'
+    - 'docs/agents/full-guide.md'
+    - 'AGENTS.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'an agent reading CLAUDE.md or worktree-isolation.md to learn how caws worktree merge works'
+    when: 'it follows the documented description'
+    then: 'the description matches the implementation — object-database merge plus compare-and-swap, no base checkout'
+  - id: A2
+    given: 'multiple agents merging concurrently'
+    when: 'an agent consults the docs for whether that is safe'
+    then: 'the concurrency contract is stated — the CAS refuses a stale base, a lost race retries, and no partial state is written'
+  - id: A3
+    given: 'a spec author looking for how to record successor obligations'
+    when: 'they read the agent guides'
+    then: 'the successors field is discoverable there, not only in docs/api/schema.md'
+non_functional: {}
+contracts: []
