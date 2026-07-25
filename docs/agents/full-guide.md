@@ -14,7 +14,7 @@ updated: 2026-05-28
 **Version**: 11.1.6
 **Last Updated**: 2026-05-28
 
-> **v11.1 posture (A1).** This guide describes the v11.1.6 surface — twelve command groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents` (plus the auto-generated `help`). Removed v10 commands (`validate`, `iterate`, `evaluate`, `diagnose`, `provenance`, `scaffold`, `parallel`, `mode`, `verify-acs`, `burnup`, `sidecar`, `test-analysis`, `templates`, legacy `hooks install`) are not registered with the CLI. Do NOT pin `caws-cli@^10.2.x`; v11.1 ships the full spec/worktree/agents surface.
+> **v11 posture (A1).** This guide describes the v11 surface — fifteen command groups: `init`, `doctor`, `scope`, `status`, `claim`, `gates`, `prepush`, `evidence`, `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message` (plus the auto-generated `help`). Run `caws --help` for the authoritative list. Removed v10 commands (`validate`, `iterate`, `evaluate`, `diagnose`, `provenance`, `scaffold`, `parallel`, `mode`, `verify-acs`, `burnup`, `sidecar`, `test-analysis`, `templates`, legacy `hooks install`) are not registered with the CLI. Do NOT pin `caws-cli@^10.2.x`; v11.1 ships the full spec/worktree/agents surface.
 >
 > Doctrine source: [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md). Full CLI reference: [`docs/api/cli.md`](../api/cli.md). When this guide and the doctrine doc disagree, the doctrine doc wins.
 
@@ -88,7 +88,8 @@ Risk tiers drive rigor and determine quality gates:
 Every task needs a working spec at `.caws/specs/<spec-id>.yaml`. Create one with the CLI, then fill in the project-specific fields:
 
 ```bash
-caws specs create FEAT-001 --title "Add user authentication flow" --mode feature --risk-tier 1
+caws specs create FEAT-001 --title "Add user authentication flow" --mode feature --risk-tier 1 \
+  --contract "auth-api:api"
 ```
 
 Then edit the generated file to add scope, invariants, acceptance, and non-functional requirements:
@@ -138,8 +139,11 @@ contracts:
 **Goal**: Author a per-feature spec and a test plan.
 
 ```bash
-# 1. Create the spec via CLI — this is the canonical path
-caws specs create <id> --title "Feature title" --mode feature --risk-tier 2
+# 1. Create the spec via CLI — this is the canonical path.
+#    Tier 1/2 REQUIRE at least one --contract ("name:type[:path]", where type is
+#    api|schema|contract-test|behavior); the command refuses without it.
+caws specs create <id> --title "Feature title" --mode feature --risk-tier 2 \
+  --contract "core-api:behavior"
 
 # 2. Edit the generated file to add scope, invariants, acceptance criteria
 $EDITOR .caws/specs/<id>.yaml
@@ -335,11 +339,12 @@ caws gates run --spec <id>
 ```bash
 # Record a test result
 caws evidence record --type test --spec <id> \
-  --data '{"name":"login_happy_path","status":"pass"}'
+  --data '{"command":"npm test -- login_happy_path","exit_code":0}'
 
 # Record an acceptance-criterion closure
+# status is a closed enum: pass | fail | unchecked | waived
 caws evidence record --type ac --spec <id> \
-  --data '{"id":"A1","status":"satisfied"}'
+  --data '{"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}'
 
 # Record a gate decision (rare — gates run records this automatically)
 caws evidence record --type gate --spec <id> --data '{...}'
@@ -366,7 +371,9 @@ caws specs archive --status closed --include A,B --exclude B --apply
                           # batch archive selected closed specs with one aggregate audit commit
 caws specs prune-archive  # compatibility no-op; archive bodies are canonical
 caws specs migrate        # dry-run v10->v11 YAML migration
-caws specs validate       # validate spec YAML records
+caws specs validate <file>  # validate ONE spec YAML file on disk; <file> is a
+                          # required path (not a spec id). Reads no canonical
+                          # state and mutates nothing.
 ```
 
 ### Worktree lifecycle
@@ -385,6 +392,13 @@ caws worktree migrate-registry
                           # convert legacy registry envelope to v11 flat map
 caws worktree repair-sparse <name>
                           # restore .caws/specs sparse-checkout invariant
+caws worktree untrack <name> --reason "..."
+                          # release the registry binding, keep the directory
+                          # (dry-run by default; --apply to write)
+caws worktree prune       # plan registry cleanup from doctor evidence
+                          # (dry-run by default; --apply to mutate)
+caws worktree cleanup-plan
+                          # plan PHYSICAL worktree cleanup (dry-run by default)
 caws worktree repair      # repair unambiguous doctor-surfaced half-states
 ```
 
@@ -815,7 +829,7 @@ When a change is AI-assisted, record an evidence event so the audit trail captur
 
 ```bash
 caws evidence record --type ac --spec <id> \
-  --data '{"id":"A1","status":"satisfied","assistance":"ai","tool":"claude-code"}'
+  --data '{"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}'
 ```
 
 The evidence-event schema accepts arbitrary `--data` payloads; the project's policy decides which fields are required.
@@ -1050,7 +1064,7 @@ du -k dist/main.js | awk '{if ($1 > 50) exit 1}'
 
 ```bash
 caws evidence record --type ac --spec <id> \
-  --data '{"id":"A1","status":"satisfied","assistance":"ai","tool":"claude-code"}'
+  --data '{"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}'
 ```
 
 The store appends a hash-chained event. There is no separate provenance file to maintain.

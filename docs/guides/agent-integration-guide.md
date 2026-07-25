@@ -81,18 +81,26 @@ Each evidence event is hash-chained and atomic. The runtime should record:
 ```bash
 # A test result
 caws evidence record --type test --spec <id> \
-  --data '{"name":"unit/login","status":"pass","runtime_ms":42}'
+  --data '{"command":"npm test -- unit/login","exit_code":0}'
 
 # An acceptance-criterion closure
 caws evidence record --type ac --spec <id> \
-  --data '{"id":"A1","status":"satisfied","tested_by":["unit/login","integration/login"]}'
+  --data '{"criterion_id":"A1","status":"pass","evidence_ref":"unit/login"}'
 
-# An AI-assisted-change marker (tool, model, session id)
+# The same closure, pinned to a specific test node
 caws evidence record --type ac --spec <id> \
-  --data '{"id":"A1","status":"satisfied","assistance":"ai","tool":"claude-code","model":"opus-4.7","session":"<session-id>"}'
+  --data '{"criterion_id":"A1","status":"pass","evidence_ref":"npm test","test_nodeid":"unit/login"}'
 ```
 
-The schema for `--data` is per-`--type` and is otherwise free-form (the project's policy decides which fields are required). The store appends through `prepareAppend` + `verifyChain`; do not write `events.jsonl` directly.
+**The `--data` payload is not free-form.** Each `--type` has a closed kernel
+schema (`packages/caws-kernel/src/schemas/events/*.v1.json`) with
+`additionalProperties: false`, so an invented field is rejected rather than
+stored. `status` is a closed enum (`pass | fail | unchecked | waived`), and
+`criterion_id` must match `^A\d+$` — matching the `id` of an entry in the spec's
+`acceptance` array. Print the authoritative field list and a runnable example
+for any kind with `caws evidence schema --type <test|gate|ac>`. The store
+appends through `prepareAppend` + `verifyChain`; do not write `events.jsonl`
+directly.
 
 ## Running gates
 
@@ -171,7 +179,7 @@ Before declaring the feature done:
 ```bash
 caws doctor && \
   caws gates run --spec <id> && \
-  caws evidence record --type ac --spec <id> --data '{"id":"A_FINAL","status":"satisfied"}'
+  caws evidence record --type ac --spec <id> --data '{"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}'
 ```
 
 ## What CAWS v11 does NOT provide

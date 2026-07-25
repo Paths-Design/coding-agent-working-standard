@@ -6,7 +6,7 @@
 
 The v11 cutover is complete. `main` runs the v11 surface (kernel/store/shell architecture, A1 posture). The doctrine source is [`docs/architecture/caws-vnext-command-surface.md`](docs/architecture/caws-vnext-command-surface.md). When this doc and the doctrine doc disagree, the doctrine doc wins.
 
-**The v11 line ships fourteen top-level commands/groups** (plus the auto-generated `help`): the governed core plus `specs`, `worktree`, `events`, `agents`, `message`, and `prepush`. Commands removed in v11.0 and not planned to return (`validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `provenance`, `hooks`, `scaffold`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `templates`, `sidecar`) will fail if invoked. `caws agents list/show` **ship in v11.1** (liveness substrate). `caws message send/poll` is a directed message channel, not authority. `caws prepush` is the governed pre-push range check (MULTI-AGENT-PUSH-RANGE-GUARD-001): it classifies the outgoing commit range and refuses commits not attributable to the current slice; it does NOT run `git push`. Only `caws session` and `caws parallel` are deferred (v11.3+); bridge claims and lease-backed *authority* are the v11.2 plan.
+**The v11 line ships fifteen top-level commands/groups** (plus the auto-generated `help`): the governed core plus `specs`, `worktree`, `events`, `agents`, `message`, `reprieve`, and `prepush`. Run `caws --help` for the authoritative list. Commands removed in v11.0 and not planned to return (`validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `provenance`, `hooks`, `scaffold`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `templates`, `sidecar`) will fail if invoked. `caws agents list/show` **ship in v11.1** (liveness substrate). `caws message send/poll` is a directed message channel, not authority. `caws prepush` is the governed pre-push range check (MULTI-AGENT-PUSH-RANGE-GUARD-001): it classifies the outgoing commit range and refuses commits not attributable to the current slice; it does NOT run `git push`. Only `caws session` and `caws parallel` are deferred (v11.3+); bridge claims and lease-backed *authority* are the v11.2 plan.
 
 **Migrating from v10.2?** Read [`docs/migration-v10-to-v11.md`](docs/migration-v10-to-v11.md) before upgrading. It classifies every v10.2 command (Replaced / Renamed / Removed-no-replacement / Deferred) and includes a rollback one-liner. v11 is not a drop-in replacement for every v10.2 workflow.
 
@@ -25,7 +25,7 @@ The v11 cutover is complete. `main` runs the v11 surface (kernel/store/shell arc
 | `caws reprieve grant / show / revoke / list` | Session-scoped guard reprieve: skip a PreToolUse guard for ONE session until expiry. Replaces commenting a guard out of the dispatcher HANDLERS array. See [Reprieves](#reprieves). |
 | `caws events migrate / rotate / verify-archive` | Maintenance for the hash-chained `.caws/events.jsonl`. |
 | `caws specs create / list / show / recover / retire-draft / activate / amend-scope / close / archive / prune-archive / migrate / validate` | Manage spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. Batch archive supports `--status closed`, `--include`, `--exclude`, and `--apply`. |
-| `caws worktree create / list / bind / destroy / merge / repair-sparse / repair / migrate-registry` | Manage CAWS worktrees bound to active specs (`repair` prunes ghost registry entries + clears dead spec→worktree bindings; `repair-sparse` restores the `.caws/specs` sparse-checkout invariant). |
+| `caws worktree create / list / bind / destroy / untrack / merge / migrate-registry / repair-sparse / repair / prune / cleanup-plan` | Manage CAWS worktrees bound to active specs (`repair` prunes ghost registry entries + clears dead spec→worktree bindings; `repair-sparse` restores the `.caws/specs` sparse-checkout invariant; `untrack` releases the registry binding while keeping the directory; `prune` and `cleanup-plan` are dry-run-by-default cleanup planners). |
 | `caws agents register / heartbeat / stop / list / show / prune` | Agent-liveness substrate (`.caws/leases/`). Operational cache only — never authority. |
 | `caws message send / poll` | Directed inter-agent message channel over `.caws/messages.jsonl`. Not authority; verify claims before acting. |
 | `caws prepush [--base <ref>] [--ack <sha>]` | Governed pre-push range check. Diagnose/decide only — does NOT run `git push`. |
@@ -97,9 +97,12 @@ caws gates run --spec FEAT-1               # policy decides block/warn/skip
 
 # 4. Record typed evidence (test results, AC closures)
 caws evidence record --type test --spec FEAT-1 \
-  --data '{"name":"unit","status":"pass"}'
+  --data '{"command":"npm test","exit_code":0}'
 caws evidence record --type ac --spec FEAT-1 \
-  --data '{"id":"A1","status":"satisfied"}'
+  --data '{"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}'
+# Payload shapes are closed (additionalProperties: false) and status is a closed
+# enum. Print the authoritative shape + a runnable example for any kind with:
+#   caws evidence schema --type <test|gate|ac>
 
 # 5. Re-check
 caws doctor

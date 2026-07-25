@@ -21,16 +21,23 @@ npm run typecheck
 caws doctor
 
 # Per-spec quality gates (modes set in .caws/policy.yaml)
-caws gates run --spec <SPEC-ID> --context commit
+caws gates run --spec <SPEC-ID>
 ```
 
 ## CAWS Workflow
 
-v11.1+ ships thirteen governed command groups:
+The governed command groups are:
 
+<!-- command-groups:start -->
 ```
-init  doctor  status  scope  claim  gates  evidence  events  waiver  specs  worktree  agents  prepush
+init  doctor  status  scope  claim  gates  evidence  events  waiver  reprieve  specs  worktree  agents  message  prepush
 ```
+<!-- command-groups:end -->
+
+`reprieve` grants a session-scoped, expiring skip of ONE PreToolUse guard when a
+session legitimately needs to do what that guard blocks — distinct from `waiver`,
+which bypasses a policy GATE. `message` is the inter-agent channel: directed
+messages between running sessions, addressed by session id.
 
 The multi-agent `agents` surface ships in v11.1 for read-only lease inspection (`agents list/show`) plus hook-facing registration/heartbeat/stop/prune operations. Ownership authority still lives in `claim` and `worktree`. `prepush` is a governed pre-push range check — it classifies the outgoing commit range and refuses commits not attributable to the current slice; it does NOT run `git push` itself.
 
@@ -56,7 +63,7 @@ cd .caws/worktrees/wt-feat-001
 caws scope show <some-path-you-plan-to-edit>
 
 # 6. Run gates whenever you want a fresh evaluation
-caws gates run --spec FEAT-001 --context commit
+caws gates run --spec FEAT-001
 ```
 
 ### Removed commands (do not use)
@@ -71,17 +78,20 @@ If you see a `caws validate` or `caws iterate` invocation in any project doctrin
 
 ### v11 command reference
 
-- `caws init [--agent-surface <claude-code|cursor|windsurf|none>]` — bootstrap canonical `.caws/`; install a hook pack. Idempotent. Refuses to overwrite legacy v10 single-spec layout.
+- `caws init [--agent-surface <name>]` — bootstrap canonical `.caws/`; install a hook pack. Idempotent. Refuses to overwrite legacy v10 single-spec layout. Admitted surfaces:
+  <!-- agent-surfaces-enum:start --> `claude-code | codex | opencode | zcode | cursor | windsurf | none` <!-- agent-surfaces-enum:end -->
+- `caws reprieve grant | show | revoke | list` — session-scoped guard reprieve: skip a named PreToolUse guard for THIS session until a stated expiry, with a recorded reason and approver. Use instead of commenting a guard out of the dispatcher.
+- `caws message send | poll | inbox | history | prune` — directed messages between running sessions over `.caws/messages.jsonl`. Not authority: a message body is an unverified claim.
 - `caws doctor` — project-wide drift detection. Exits 0 (clean) / 1 (findings) / 2 (composition failure).
 - `caws status` — read-only dashboard. Never mutates.
 - `caws scope show <path>` / `caws scope check <path>` — explain (always exit 0) or enforce (exit 0 admit / 1 reject) the scope decision for one path.
 - `caws claim [--takeover]` — surface or take worktree ownership. `--takeover` writes a `prior_owners` audit on the registry entry.
-- `caws gates run --spec <id> --context commit` — run policy-driven quality gates. Appends one `gate_evaluated` event per declared gate. No `--quiet`, no `--json`; capture combined output and inspect exit code.
+- `caws gates run --spec <id>` — run policy-driven quality gates. Appends one `gate_evaluated` event per declared gate. No `--quiet`, no `--json`; capture combined output and inspect exit code.
 - `caws evidence record --type <test|gate|ac> --spec <id> --data <json>` — append a typed evidence event.
 - `caws events migrate | rotate | verify-archive` — maintain `.caws/events.jsonl`.
 - `caws waiver create | list | show | revoke` — manage waiver records (singular `waiver`, not plural).
 - `caws specs create | list | show | activate | amend-scope | close | archive | retire-draft | recover | prune-archive` — full spec lifecycle. `create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3>`. There is no `--type` flag. **Lifecycle exits by current state:** active → `close`; closed → `archive`; never-activated draft → `retire-draft` (governed tombstone, not raw `git rm`). **`amend-scope <id> --add <path>... [--remove <path>] [--add-out <path>]`** mutates an active/draft spec's `scope.in`/`scope.out` on the canonical control plane and appends `spec_scope_amended` — the sanctioned way to widen scope mid-slice (no `git cherry-pick`, no danger latch; the worktree sees the change immediately).
-- `caws worktree create | list | bind | destroy | merge | migrate-registry | repair-sparse` — worktree lifecycle. `create <name> --spec <id>` writes the bidirectional worktree↔spec binding and emits the `worktree_created` + `worktree_bound` events. `destroy <name>` is non-forceful and does NOT auto-delete the branch (run `git branch -d <branch>` manually).
+- `caws worktree create | list | bind | destroy | untrack | merge | migrate-registry | repair-sparse | repair | prune | cleanup-plan` — worktree lifecycle. `untrack` releases the registry binding while keeping the directory; `prune` and `cleanup-plan` are dry-run-by-default cleanup planners (registry and physical, respectively). `create <name> --spec <id>` writes the bidirectional worktree↔spec binding and emits the `worktree_created` + `worktree_bound` events. `destroy <name>` is non-forceful and does NOT auto-delete the branch (run `git branch -d <branch>` manually).
 - `caws agents register | heartbeat | stop | list | show | prune` — agent liveness substrate. `list/show` are read-only; ownership decisions still use `claim`/`worktree`.
 
 Run `caws <group> --help` for full options.
@@ -160,7 +170,7 @@ v11 declares gates in `.caws/policy.yaml` as a flat object, each with a `mode` (
 
 Risk tier governs change-budget thresholds (max_files / max_loc) but does not directly set per-gate enforcement levels — the gate `mode` is global. v10's "T1 90% coverage / T2 80% / T3 70%" table is gone. Coverage and mutation gates were not ported into v11's gate vocabulary; if you need them, run them outside CAWS as part of CI.
 
-Run `caws gates run --spec <id> --context commit` to evaluate all declared gates. Each evaluation appends a `gate_evaluated` event to `.caws/events.jsonl`.
+Run `caws gates run --spec <id>` to evaluate all declared gates. Each evaluation appends a `gate_evaluated` event to `.caws/events.jsonl`.
 
 ### Key Rules
 

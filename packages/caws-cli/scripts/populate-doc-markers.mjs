@@ -33,6 +33,14 @@ import { execFileSync } from 'node:child_process';
 const require = createRequire(import.meta.url);
 const {
   renderSurfaceList,
+  renderSurfaceEnum,
+  renderCommandGroups,
+  // renderImplemented / renderDeclaredOnly are used by renderSnippetFile
+  // (--stdout); both were referenced without being imported, so --stdout threw
+  // a ReferenceError. --check and the write path never touched them, which is
+  // why the fixture suite stayed green over a broken flag.
+  renderImplemented,
+  renderDeclaredOnly,
   renderReadmeInstallBlock,
   renderGuideSurfaceProse,
   surfaceConsistency,
@@ -76,6 +84,49 @@ function canonicalRegisterPath() {
   }
 }
 
+/**
+ * Resolve a dist module, falling back to the canonical checkout's dist when the
+ * local one is absent (linked git worktrees cannot build dist). Same fallback
+ * shape as loadSurfaces; the exports are pure data, identical across trees for
+ * the same committed source.
+ */
+function resolveDistModule(localPath, relParts) {
+  if (fs.existsSync(localPath)) return localPath;
+  try {
+    const commonDir = execFileSync('git', ['rev-parse', '--git-common-dir'], {
+      cwd: PKG_ROOT,
+      encoding: 'utf8',
+    }).trim();
+    const canonicalRoot = path.dirname(path.resolve(PKG_ROOT, commonDir));
+    const canonical = path.join(canonicalRoot, 'packages', 'caws-cli', ...relParts);
+    if (fs.existsSync(canonical)) return canonical;
+  } catch {
+    /* fall through to the throw below */
+  }
+  throw new Error(
+    `${path.basename(localPath)} not found at ${localPath} (nor at the canonical dist) — run the package build first.`
+  );
+}
+
+/**
+ * The registered top-level command groups, in `caws --help` order.
+ * (CAWS-AGENT-DOC-SURFACE-DRIFT-002)
+ */
+export function loadCommandGroups() {
+  const rel = ['dist', 'shell', 'command-metadata.js'];
+  const resolved = resolveDistModule(path.join(PKG_ROOT, ...rel), rel);
+  const mod = require(resolved);
+  const meta = mod.COMMAND_SURFACE_METADATA;
+  if (!Array.isArray(meta) || meta.length === 0) {
+    throw new Error('command-metadata.js did not export a non-empty COMMAND_SURFACE_METADATA.');
+  }
+  const groups = meta.map((m) => m.name).filter(Boolean);
+  if (groups.length === 0) {
+    throw new Error('COMMAND_SURFACE_METADATA entries carry no `name` field.');
+  }
+  return groups;
+}
+
 export function loadSurfaces(registerPath = REGISTER_PATH) {
   let resolved = registerPath;
   if (!fs.existsSync(resolved)) {
@@ -100,12 +151,32 @@ export function loadSurfaces(registerPath = REGISTER_PATH) {
 
 // ─── Registry: which docs get which markers ──────────────────────────────────
 
-/** @param {{ known: readonly string[], implemented: readonly string[] }} surfaces */
-function docTargets(surfaces) {
+/**
+ * @param {{ known: readonly string[], implemented: readonly string[] }} surfaces
+ * @param {readonly string[]} groups
+ */
+function docTargets(surfaces, groups) {
   return [
     {
       path: path.join(PKG_ROOT, 'README.md'),
       fills: [{ name: 'agent-surfaces-install', content: renderReadmeInstallBlock(surfaces.implemented) }],
+    },
+    // The SHIPPED templates. `caws init` copies these into every consumer
+    // project, where they become the agent's primary operating doctrine — yet
+    // until CAWS-AGENT-DOC-SURFACE-DRIFT-002 they had no tether to source of
+    // truth, and drifted to "thirteen command groups" against a real fifteen.
+    // The generator-managed docs were all repo-internal; the ones that actually
+    // reached agents were unguarded. These two entries close that gap.
+    {
+      path: path.join(PKG_ROOT, 'templates', 'CLAUDE.md'),
+      fills: [
+        { name: 'command-groups', content: renderCommandGroups(groups) },
+        { name: 'agent-surfaces-enum', content: renderSurfaceEnum(surfaces.known), inline: true },
+      ],
+    },
+    {
+      path: path.join(PKG_ROOT, 'templates', 'agents.md'),
+      fills: [{ name: 'command-groups', content: renderCommandGroups(groups) }],
     },
     {
       path: path.join(REPO_ROOT, 'docs', 'guides', 'agent-integration-guide.md'),
@@ -141,7 +212,7 @@ function main(argv) {
     return 0;
   }
 
-  const targets = docTargets(surfaces);
+  const targets = docTargets(surfaces, loadCommandGroups());
   let stale = false;
   for (const target of targets) {
     const rel = path.relative(REPO_ROOT, target.path);

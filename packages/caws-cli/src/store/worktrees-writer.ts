@@ -994,7 +994,7 @@ export function destroyWorktree(
       return err(
         storeDiagnostic(
           STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-          `Worktree "${input.name}" is owned by a different session (${entry.owner.session_id}). Run 'caws claim ${input.name} --takeover' first if you need to take ownership.\n\nSession-resolution trace (no candidate matched the registered owner):\n${describeCandidateTrace(input.sessionCandidates)}`,
+          `Worktree "${input.name}" is owned by a different session (${entry.owner.session_id}). To take ownership, cd into the worktree first — 'caws claim' reads the current directory and takes no worktree-name argument: cd .caws/worktrees/${input.name} && caws claim --takeover\n\nSession-resolution trace (no candidate matched the registered owner):\n${describeCandidateTrace(input.sessionCandidates)}`,
           { subject: input.name }
         )
       );
@@ -1163,7 +1163,7 @@ export function pruneWorktree(
       return err(
         storeDiagnostic(
           STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-          `Worktree "${input.name}" is owned by a different session (${entry.owner.session_id}). Run 'caws claim ${input.name} --takeover' first if you need to take ownership.`,
+          `Worktree "${input.name}" is owned by a different session (${entry.owner.session_id}). To take ownership, cd into the worktree first — 'caws claim' reads the current directory and takes no worktree-name argument: cd .caws/worktrees/${input.name} && caws claim --takeover`,
           { subject: input.name }
         )
       );

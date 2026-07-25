@@ -301,7 +301,7 @@ case "$WORST" in
       echo "[$_BG_ID] BLOCKED: this Bash command mutates worktree '$_OWN_WT''s payload (.caws/worktrees/$_OWN_WT/...), owned by a DIFFERENT session." >&2
       echo "  A Bash mutation of another session's worktree files is the same isolation breach as a foreign Write/Edit — it is blocked at the same boundary." >&2
       echo "  This is a CAWS governance decision." >&2
-      echo "  To work in worktree '$_OWN_WT', operate from a SESSION rooted there (caws claim '$_OWN_WT' --takeover to take ownership)." >&2
+      echo "  To work in worktree '$_OWN_WT', operate from a SESSION rooted there. 'caws claim' has NO worktree-name argument — it reads the current directory, so cd first: cd .caws/worktrees/$_OWN_WT && caws claim --takeover" >&2
     else
       IFS=',' read -ra _CLAIM_PAIRS <<< "$WORST_DETAIL"
       _LEAD_WT="${_CLAIM_PAIRS[0]%%:*}"
@@ -320,7 +320,7 @@ case "$WORST" in
       fi
       echo "  This is a CAWS governance decision." >&2
     fi
-    echo "  Do NOT edit ${CAWS_VENDOR_DIR}/hooks/ or guard state to bypass this." >&2
+    echo "  Do NOT edit ${CAWS_HOOKS_DIR:-.caws/hooks}/ or guard state to bypass this." >&2
     exit 2 ;;
   ask)
     case "$WORST_KIND" in

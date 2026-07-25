@@ -34,7 +34,7 @@
 #   1. Switch into the right CAWS worktree.
 #   2. Bring the target file into the active spec's scope.in (if it legitimately
 #      belongs there), then ask the user to reset your strikes by running:
-#        bash ${CAWS_VENDOR_DIR}/hooks/reset-strikes.sh --current
+#        bash ${CAWS_HOOKS_DIR:-.caws/hooks}/reset-strikes.sh --current
 #      or the equivalent narrower reset (see --help).
 #   3. Ask the user to resolve the conflict explicitly.
 # Never edit guard-strikes-*.json files by hand — use reset-strikes.sh so the

@@ -78,6 +78,7 @@ describe('guard remediation text resolves to a real script', () => {
     'scope-guard.sh',
     'protected-paths.sh',
     'block-dangerous.sh',
+    'guard-strikes.sh',
   ];
 
   test.each(GUARDS_WITH_RESET_REMEDIATION)(
@@ -103,5 +104,44 @@ describe('guard remediation text resolves to a real script', () => {
       'utf8'
     );
     expect(body).toMatch(/export .*\bCAWS_HOOKS_DIR\b/);
+  });
+});
+
+describe('ownership remediation names a caws claim shape the CLI accepts', () => {
+  // `caws claim` takes NO positional argument — it resolves the worktree from
+  // cwd. A remediation that prints `caws claim <name> --takeover` is worse than
+  // an error: the name is silently ignored, the command evaluates against the
+  // wrong directory, and the agent is told about a cwd it was never asked to
+  // change. Any text handing the agent a claim command must pair it with the cd.
+  const CLAIM_SITES = [
+    'packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh',
+    'packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh',
+    'packages/caws-cli/src/store/worktrees-writer.ts',
+  ];
+
+  test.each(CLAIM_SITES)('%s does not print a positional-arg claim', (rel) => {
+    const body = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    const offenders = body
+      .split('\n')
+      .map((line, i) => [i + 1, line])
+      // `caws claim` followed by anything that is not immediately a flag or a
+      // shell/string terminator — i.e. a positional worktree name.
+      .filter(([, line]) => /caws claim\s+(?!--)['"$\w]/.test(line));
+
+    expect(offenders.map(([n, l]) => `${rel}:${n}: ${l.trim()}`)).toEqual([]);
+  });
+
+  test.each(CLAIM_SITES)('%s pairs the claim with a cd into the worktree', (rel) => {
+    const body = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    const claimLines = body
+      .split('\n')
+      .filter((line) => /caws claim/.test(line) && /--takeover/.test(line));
+
+    // Guard against a vacuous pass: if the remediation text ever moves or is
+    // reworded away, this test must fail rather than silently assert nothing.
+    expect(claimLines.length).toBeGreaterThan(0);
+    for (const line of claimLines) {
+      expect(line).toMatch(/cd .*\.caws\/worktrees\//);
+    }
   });
 });
