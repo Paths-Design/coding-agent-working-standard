@@ -26,6 +26,30 @@
       "description": "Optional merge commit SHA when closure followed a worktree merge."
     },
     "closure_notes": { "type": "string" },
+    "successors": {
+      "type": "array",
+      "description": "The structured successor declarations carried by the spec at close time, preserved verbatim. This is the audit record of what the author DECIDED; target standing is deliberately not projected, since it is derivable from each target's own history and would go stale here.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["target_spec_id", "disposition"],
+        "properties": {
+          "target_spec_id": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$"
+          },
+          "disposition": {
+            "type": "string",
+            "enum": ["required", "declined", "absorbed"]
+          },
+          "rationale": { "type": "string" },
+          "absorbed_by": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$"
+          }
+        }
+      }
+    },
     "prior_worktree": {
       "type": "string",
       "description": "Worktree name this spec was bound to immediately before close. Recorded when closeSpec clears a top-level `worktree:` field as part of the close transaction. Audit-trail record per WORKTREE-MERGE-CLEARS-SPEC-BINDING-001."
