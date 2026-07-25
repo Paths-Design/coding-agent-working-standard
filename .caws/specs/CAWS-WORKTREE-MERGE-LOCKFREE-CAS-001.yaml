@@ -1,0 +1,279 @@
+id: CAWS-WORKTREE-MERGE-LOCKFREE-CAS-001
+title: >-
+  worktree merge is agent-safe under concurrency: compare-and-swap ref update,
+  no base checkout
+risk_tier: 1
+mode: fix
+lifecycle_state: active
+created_at: '2026-07-25T00:00:00.000Z'
+updated_at: '2026-07-25T00:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-kernel/src/spec/successors.ts
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-kernel/src/spec/successors.ts
+    - packages/caws-kernel/tests/unit/spec-successors.test.ts
+    - packages/caws-cli/tests/store/worktree-merge-branch-delete.test.js
+    - packages/caws-cli/tests/store/worktree-merge-concurrency.test.js
+    - docs/api/schema.md
+    - .caws/specs/CAWS-WORKTREE-MERGE-LOCKFREE-CAS-001.yaml
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - packages/caws-cli/templates
+invariants:
+  - >-
+    THE MERGE NEVER CHECKS OUT THE BASE BRANCH. `git checkout <base>` mutates
+    the canonical working tree's HEAD, which every concurrent agent in the
+    repository shares. That single line is what makes the current merge
+    sequence unsafe under concurrency, and it is also what trips the
+    danger-latch classifier (a bare checkout of an existing branch reads as
+    potentially discarding work). The replacement computes the merge entirely
+    in the object database — `git merge-tree --write-tree` then
+    `git commit-tree` — and touches no working tree, no index, and no HEAD.
+    A reintroduced `checkout <base>` in the merge path violates this invariant
+    regardless of any lock wrapped around it.
+  - >-
+    THE REF MOVE IS AN ATOMIC COMPARE-AND-SWAP, NOT A LOCK. The base ref
+    advances via `git update-ref refs/heads/<base> <new> <expected-old>`,
+    where `<expected-old>` is the base SHA the merge was computed against. If
+    a concurrent agent advanced the base in the interim, git itself refuses
+    the update ("is at X but expected Y") and NOTHING is written. This is
+    strictly stronger than a lifecycle lock: it needs no coordination, cannot
+    deadlock, requires no stale-lock recovery, and stays correct across
+    processes, containers, and machines. A design that replaces the CAS with
+    a mutex — or that passes no `<expected-old>` — reopens the exact race.
+  - >-
+    A REFUSED CAS IS A RETRY, NOT A FAILURE. Losing the race is the normal,
+    expected outcome of concurrent merges, not an error condition. On refusal
+    the merge re-reads the base, recomputes the merge against it, and retries
+    a bounded number of times. Only exhaustion of the retry budget, or a real
+    conflict, surfaces as an error. Reporting a lost CAS directly to the
+    operator as a failure would make correct concurrent behavior look broken
+    and push agents toward manual git.
+  - >-
+    NOTHING IS DESTROYED BEFORE THE MERGE IS DURABLE. Branch deletion, the
+    worktree destroy, and the spec close all happen strictly AFTER the CAS
+    succeeds. Before that point the branch is the only handle on the work and
+    must survive every failure path — including a killed process. A crashed
+    agent must leave zero partial state: because the object-database writes
+    (`merge-tree`, `commit-tree`) are unreferenced until the CAS, an
+    interrupted merge is invisible rather than half-applied.
+  - >-
+    `git branch -d` REMAINS THE ONLY DELETION, AND ITS PREMISE IS NOW SOUND.
+    `-d` asks git whether the branch is reachable from the current HEAD.
+    Under the old sequence that premise was unverifiable — a concurrent
+    checkout could move HEAD between the merge and the delete, so `-d` might
+    evaluate against a base that was never merged into. After the CAS the
+    branch is provably an ancestor of the ref we just advanced, so the check
+    is meaningful. `-D` remains forbidden (CAWS-WORKTREE-MERGE-DELETE-
+    BRANCH-001).
+  - >-
+    AMBIGUOUS TARGET RESOLUTION DOES NOT PUNISH AN UNRELATED SPEC. A
+    successor id present in both the live set and the archive currently
+    yields AMBIGUOUS_ID and REFUSES the close. Custody is nonetheless
+    satisfied — the target demonstrably exists — so refusing makes one spec's
+    close fail for a corpus-integrity problem it did not cause and cannot
+    fix. Resolution must report the ambiguity as a WARNING and admit the
+    close. This repo already carries such a pair
+    (WORKTREE-DOCTOR-HALF-STATE-001, closed in .caws/specs and archived in
+    .caws/specs/.archive, 7053 vs 22802 bytes), so the case is live, not
+    theoretical.
+acceptance:
+  - id: A1
+    given: two agents concurrently merging different worktree branches into
+      the same base
+    when: both merge sequences run interleaved
+    then: >-
+      both merges land, or the loser retries and then lands; NEITHER merge is
+      silently lost and the base ref never moves backward. Asserted by driving
+      two real merges against one repository with the second computed against
+      a deliberately stale base, then verifying BOTH branches are ancestors of
+      the final base ref.
+  - id: A2
+    given: a merge whose base moved after the merge tree was computed
+    when: the CAS ref update runs with the now-stale expected-old SHA
+    then: >-
+      git refuses the update and no ref is written. Asserted on git's own
+      refusal ("is at X but expected Y") AND on the base ref being byte-identical
+      to the concurrent agent's value — not merely on a non-zero exit.
+  - id: A3
+    given: the merge sequence at any point before the CAS succeeds
+    when: the process is interrupted
+    then: >-
+      the repository is unchanged: base ref unmoved, branch intact, worktree
+      present, spec still active, no events appended. Asserted by running the
+      merge with a fault injected before the CAS and diffing full repository
+      state against a pre-merge snapshot.
+  - id: A4
+    given: the merge path
+    when: the implementation is inspected
+    then: >-
+      it contains NO `git checkout` of the base branch. Asserted by call
+      observation on the git argv, because an outcome-only assertion cannot
+      distinguish a checkout-based merge from an object-database merge.
+  - id: A5
+    given: two worktree branches that touch the same file in conflicting ways
+    when: the second is merged
+    then: >-
+      the conflict is detected and reported WITHOUT leaving a conflicted merge
+      in the working tree or a dirty index — the failure mode the old
+      `git merge` path produced. Asserted on `git status --porcelain` being
+      empty after the refusal.
+  - id: A6
+    given: a merge that wins the CAS
+    when: the sequence continues
+    then: >-
+      branch deletion, worktree destroy, and spec close all occur strictly
+      after the ref advanced, and the merged branch is an ancestor of the new
+      base at the moment `git branch -d` runs. Asserted by ordering
+      observation, not just end state.
+  - id: A7
+    given: a successor target id present in BOTH the live spec set and the
+      archive
+    when: the declaring spec is closed
+    then: >-
+      the close SUCCEEDS and the ambiguity is surfaced as a warning naming
+      both locations. Custody is satisfied; corpus drift is reported, not
+      charged to this spec. Asserted on exit code 0, the spec reaching closed,
+      and the warning text.
+  - id: A8
+    given: the retry budget is exhausted by sustained concurrent merging
+    when: the final attempt loses the CAS
+    then: >-
+      the operator gets a diagnostic naming the contention explicitly and the
+      exact retry command, with no partial state written. A bare "merge
+      failed" is insufficient — the message must distinguish contention from
+      a genuine conflict.
+  - id: A9
+    given: docs/api/schema.md
+    when: this slice lands
+    then: >-
+      the `successors` field, its closed disposition vocabulary, and the
+      derived-not-stored rule for target standing are documented, discharging
+      the doc obligation carried from
+      CAWS-SPEC-SUCCESSOR-DECLARATION-CUSTODY-01.
+non_functional:
+  reliability:
+    - >-
+      Retry must be bounded and must not busy-wait. Contention is expected
+      under multi-agent load; an unbounded retry loop converts a busy
+      repository into a hang.
+    - >-
+      The merge must be correct when the base ref is advanced by a process
+      CAWS does not control (a human running git by hand, or CI). The CAS
+      makes no assumption that all writers are CAWS.
+    - >-
+      Conflict detection must not depend on working-tree state, so a merge
+      attempted while another agent holds a dirty tree still reports the
+      correct answer.
+  security:
+    - >-
+      Branch deletion is destructive and gated on `-d` reachability. This
+      slice must not weaken that gate; the CAS strengthens its premise but
+      does not replace it. No path may force-delete.
+    - >-
+      The CAS expected-old SHA must be read from the ref itself immediately
+      before the update, never carried from a cached or user-supplied value.
+      Accepting an operator-supplied expected-old would let a caller overwrite
+      a concurrent merge by asserting a base that is not current.
+observability:
+  - >-
+    Every CAS refusal logs the expected and actual base SHAs and the attempt
+    number, so contention is diagnosable from the log alone rather than by
+    reproducing the race.
+  - >-
+    The success path reports the merge commit and the base SHA it advanced
+    from, so a reviewer can reconstruct the ordering of concurrent merges
+    from the event log.
+  - >-
+    The A1/A2/A3 test output — the actual git refusal text, the ancestry
+    assertions, and the pre/post state diff — is the closure evidence, quoted
+    with concrete values rather than a pass count.
+rollback:
+  - >-
+    Revert the implementation commit. The change is confined to the merge
+    sequence and the resolver's ambiguity branch; no data migration, no event
+    schema change, no on-disk format change. Merge commits already created by
+    the CAS path are ordinary merge commits and remain valid after revert.
+  - >-
+    Reverting restores the checkout-based merge and with it the concurrency
+    race. If revert is required, note in the revert message that concurrent
+    merges become unsafe again so the hazard is not silently reintroduced.
+contracts:
+  - name: merge-concurrency-safety
+    type: behavior
+    path: packages/caws-cli/src/store/worktrees-writer.ts
+    description: >-
+      mergeWorktree computes the merge in the object database
+      (merge-tree --write-tree + commit-tree) and advances the base via an
+      atomic compare-and-swap update-ref against the SHA it merged from. It
+      never checks out the base branch. A lost CAS is retried against the new
+      base; only exhaustion or a real conflict surfaces as an error, and no
+      destructive step runs before the CAS succeeds.
+  - name: successor-ambiguity-resolution
+    type: behavior
+    path: packages/caws-kernel/src/spec/successors.ts
+    description: >-
+      A successor target present in both the live set and the archive resolves
+      as AUTHORED with an ambiguity warning rather than blocking the close.
+      Custody is satisfied by existence; corpus drift is reported to the
+      operator without charging it to the closing spec.
+# --- Why compare-and-swap rather than a lock ------------------------------
+#
+# ORIGIN. Found during a holistic review of the successor + branch-delete
+#   work. mergeWorktree is the ONLY worktree lifecycle function without
+#   withLifecycleLock: createWorktree (:682), bindWorktreeRepair (:869),
+#   destroyWorktree (:1085) and pruneWorktree (:1211) all wrap; merge's only
+#   lock (:1653) covers the worktree_merged event append, leaving every git
+#   mutation — checkout (:1508), merge (:1523), branch -d (:1721) —
+#   unprotected. The branch-delete fix landed a DESTRUCTIVE op inside that
+#   unprotected window, which is what surfaced the gap.
+#
+# THE RACE, CONCRETELY. Agents A and B share one canonical working tree.
+#   A: checkout main. B: checkout main. A: merge. B: merge (onto A's result,
+#   or onto a dirty index). Worse, `branch -d` evaluates reachability against
+#   whatever HEAD is at that instant — if B's checkout moved HEAD between A's
+#   merge and A's delete, A's -d evaluates against a base it never merged
+#   into. The -d safety property holds only if HEAD is stable across the
+#   sequence, and nothing guaranteed that.
+#
+# WHY NOT JUST ADD THE LOCK. A lifecycle lock would serialize the sequence
+#   and fix the immediate race. It was rejected as the primary mechanism
+#   because it is a mutex over a GLOBAL resource: agents block on each other,
+#   a killed holder needs stale-lock recovery (30s threshold), and the
+#   guarantee does not survive a second checkout of the repo or a writer that
+#   is not CAWS. It treats the symptom (concurrent access to the working
+#   tree) rather than the cause (using the working tree at all).
+#
+# THE MECHANISM, VERIFIED BEFORE SPECIFYING. git 2.50.1, real repository:
+#     TREE=$(git merge-tree --write-tree main feat1)
+#     MC=$(git commit-tree $TREE -p main -p feat1 -m "merge(worktree): feat1")
+#     git update-ref refs/heads/main $MC $BASE     # agent A: succeeds
+#     git update-ref refs/heads/main $MC2 $BASE    # agent B, stale: REFUSED
+#       fatal: cannot lock ref 'refs/heads/main': is at 4354e76 but expected 0a013a7
+#   Git itself refuses the stale update atomically. No lock was involved and
+#   no work was lost — B simply recomputes against the new base.
+#
+# PROPERTIES A LOCK CANNOT PROVIDE. No blocking (retry instead of wait); no
+#   stale-lock recovery path; correct across processes/containers/machines;
+#   correct even when a non-CAWS writer advances the base; and crash-safe by
+#   construction, because merge-tree/commit-tree write unreferenced objects
+#   that are invisible until the CAS makes them reachable.
+#
+# SIDE BENEFIT. Removing `checkout <base>` also removes the danger-latch trap
+#   documented in CLAUDE.md and .claude/rules/worktree-isolation.md, where the
+#   governed merge could arm the classifier on a bare checkout of an existing
+#   branch. The governed path stops needing an exemption from the guard.
+#
+# THIRD FINDING FOLDED IN. The review also found AMBIGUOUS_ID refusing a
+#   close over corpus drift the closing spec did not cause. This repo already
+#   has one such pair (WORKTREE-DOCTOR-HALF-STATE-001). It is included here
+#   rather than deferred because both findings are "the governed command
+#   refuses something it should admit", and shipping one without the other
+#   leaves the same class of incentive to route around the guard.
