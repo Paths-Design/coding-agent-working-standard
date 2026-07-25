@@ -1,0 +1,381 @@
+id: CAWS-SPEC-SUCCESSOR-DECLARATION-CUSTODY-01
+title: >-
+  Structured successor declaration on specs: schema, semantic resolution,
+  close-gate, and read-only migration reporter
+risk_tier: 1
+mode: feature
+lifecycle_state: active
+created_at: '2026-07-24T00:00:00.000Z'
+updated_at: '2026-07-24T00:00:00.000Z'
+blast_radius:
+  modules:
+    - packages/caws-kernel/src/schemas/spec.v1.json
+    - packages/caws-kernel/src/schemas/events/spec_closed.v1.json
+    - packages/caws-kernel/src/spec/validate-semantics.ts
+    - packages/caws-kernel/src/spec/types.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+  data_migration: false
+operational_rollback_slo: 30m
+scope:
+  in:
+    - packages/caws-kernel/src/schemas/spec.v1.json
+    - packages/caws-kernel/src/schemas/events/spec_closed.v1.json
+    - packages/caws-kernel/src/spec/types.ts
+    - packages/caws-kernel/src/spec/validate-semantics.ts
+    - packages/caws-kernel/src/spec/rules.ts
+    - packages/caws-kernel/src/spec/index.ts
+    - packages/caws-kernel/src/index.ts
+    - packages/caws-kernel/tests
+    - packages/caws-kernel/CHANGELOG.md
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/tests
+    - docs/api/schema.md
+    - .caws/specs/CAWS-SPEC-SUCCESSOR-DECLARATION-CUSTODY-01.yaml
+  out:
+    - .caws/policy.yaml
+    - CODEOWNERS
+    - packages/caws-cli/templates
+invariants:
+  - >-
+    TWO AXES, NEVER CONFLATED. A `successors` entry records a SOURCE-SIDE
+    DECISION (`disposition`: what the closing spec decided about the
+    obligation). It MUST NOT store TARGET STANDING (whether the target is
+    active, closed, completed, abandoned). Target standing is DERIVED at query
+    time from the target spec's own `lifecycle_state` + `resolution`. Storing
+    it would let the stored copy drift from the target's real state — the
+    precise failure this slice exists to prevent. A schema property named for
+    target standing, or a validator that persists resolved standing back into
+    the source spec, violates this invariant.
+  - >-
+    UNRESOLVABLE IS NOT A DISPOSITION. The closed source-side vocabulary is
+    exactly `required` | `declined` | `absorbed`. These are decisions a human
+    made. "The target does not exist" is a QUERY RESULT about the target, not
+    a decision by the source, and must be reported as a distinct outcome
+    (unresolved reference) rather than admitted as a fourth disposition value.
+    Widening the enum to absorb a target-state condition collapses the two
+    axes and violates the invariant above.
+  - >-
+    MIGRATION NEVER AUTHORS. The migration reporter is READ-ONLY. It classifies
+    legacy `closure_notes` prose and reports; it MUST NOT rewrite closure prose,
+    synthesize a `successors:` block, guess a target id from malformed text, or
+    mutate any spec file. Sterling's census found 17 of 46 controlled closure-note
+    declarations (37%) are malformed prose such as
+    "Successor: ALG-001a-HARDEN-01 (not yet created) will take this atom" —
+    heuristic conversion of those would INVENT governance intent that no human
+    recorded. A reporter that writes is a defect, not a convenience.
+  - >-
+    ADDITIVE SCHEMA CHANGE, NOT A SCHEMA FORK. `successors` is an OPTIONAL
+    top-level array added in place to `spec.v1.json`; `additionalProperties`
+    stays `false` and no `required` entry is added. Every existing spec that
+    omits the field continues to validate byte-unchanged. This follows the
+    established precedent (`scope.support` in 04e03ae7, kernel 1.2.0, "No
+    breaking changes"; `prior_worktree` on spec_closed.v1.json in 297e7a8a)
+    and the written policy at docs/api/schema.md:753, which reserves breaking-
+    change ceremony for field REMOVAL and enum NARROWING. Compatibility is
+    carried by the `@paths.design/caws-kernel` package semver — the `$id` is
+    never resolved over the network (validate-shape.ts:8 imports the schema
+    from local disk), so there is no floating-schema consumer to break.
+  - >-
+    ROUND-TRIP PRESERVATION IS LOAD-BEARING AND MUST BE PINNED BY TEST. Every
+    routine lifecycle mutation in specs-writer.ts (activate, close, archive,
+    amend-scope, clear-binding, retire-draft) operates by surgical raw-byte
+    patching (`setTopLevelScalar` / `insertTopLevelScalarAfter`), never by a
+    parse -> object -> `yaml.dump` rebuild. That discipline is WHY a
+    `successors:` block survives untouched today. It is an unstated property
+    of the current implementation, not a guaranteed contract — so this slice
+    must add tests that FAIL if any writer is ever converted to an
+    object-rebuild that silently drops the field.
+  - >-
+    THE EVENT IS THE AUDIT RECORD. When a spec carrying successor declarations
+    closes, the `spec_closed` event payload preserves the structured
+    declaration exactly as authored (same ids, same dispositions, same
+    rationale text). A close that records the declaration only in the YAML,
+    or that flattens it into a prose string in the event, breaks the audit
+    trail this slice exists to establish. `events.jsonl` is written only via
+    the store's `appendEvent`; this slice introduces no direct write.
+  - >-
+    THE CLOSE GATE REFUSES HONESTLY OR NOT AT ALL. A spec with an unresolved
+    `required` successor MUST be refused at close with a typed, actionable
+    diagnostic naming the unresolved id. Per repo release doctrine, a command
+    that reports success while leaving the obligation undischarged is the most
+    dangerous failure class: it trains agents to stop trusting the guard. The
+    refusal must be a real refusal (non-zero, no state written), never a
+    warning printed over a completed close.
+acceptance:
+  - id: A1
+    given: >-
+      a spec author who needs to record that this spec's work continues in
+      another spec
+    when: they add a `successors:` array entry with `target_spec_id` and
+      `disposition` and validate the spec
+    then: >-
+      the spec validates and the obligation is expressed as structured data
+      with NO use of `closure_notes` prose. Asserted by a kernel shape test
+      over a fixture spec carrying a `successors` block.
+  - id: A2
+    given: a `successors` entry whose `target_spec_id` does not match the
+      canonical CAWS spec-id grammar `^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+[a-z]*$`
+    when: the spec is validated
+    then: >-
+      validation FAILS with a schema diagnostic. Specifically, the malformed
+      prose forms observed in Sterling's census — "ALG-001a-HARDEN-01 (not yet
+      created) will take this atom", "a multi-seed-evidence slice that executes
+      the seam across a seed", "retiring test_p11_p21_promotion_proposal.py and"
+      — are STRUCTURALLY UNREPRESENTABLE, not merely flagged. Asserted by a
+      table-driven negative test over those exact three strings.
+  - id: A3
+    given: 'a `successors` entry with `disposition: declined`'
+    when: the spec is validated with an absent or empty `rationale`
+    then: >-
+      validation FAILS. `declined` records a human decision not to pursue a
+      successor, and an undocumented decline is indistinguishable from an
+      oversight. Asserted by both an absent-key case and an empty-string case.
+  - id: A4
+    given: 'a `successors` entry with `disposition: absorbed`'
+    when: the spec is validated with an absent `absorbed_by`, or an
+      `absorbed_by` that does not resolve to an existing spec
+    then: >-
+      validation FAILS in both cases with distinguishable diagnostics — schema
+      shape for the absent key, semantic resolution for the unresolvable id.
+      Asserted by two separate tests so a single fix cannot mask both.
+  - id: A5
+    given: >-
+      an active spec carrying `disposition: required` whose `target_spec_id`
+      names a spec that was never authored
+    when: '`caws specs close` is invoked on it'
+    then: >-
+      the close is REFUSED, non-zero, with a typed diagnostic naming the
+      unresolved id. No YAML mutation and no `spec_closed` event are written —
+      verified by asserting the spec file bytes are unchanged AND the events
+      log length is unchanged, not merely by the exit code.
+  - id: A6
+    given: >-
+      an active spec carrying `disposition: required` whose target resolves to
+      a real spec
+    when: '`caws specs close` is invoked'
+    then: >-
+      the close SUCCEEDS for a target in any lifecycle state (active OR
+      closed/archived). The gate tests RESOLVABILITY, not target standing —
+      requiring the target be closed first would invert the ordinary
+      predecessor-closes-then-successor-runs sequence. Asserted for an active
+      target and a closed target as separate cases.
+  - id: A7
+    given: a spec carrying two successor entries of differing disposition
+    when: it closes successfully
+    then: >-
+      the emitted `spec_closed` event payload contains the structured
+      declaration with both entries, ids/dispositions/rationale preserved
+      exactly. Asserted by reading the appended event back off `events.jsonl`
+      and deep-comparing to the authored block — not by asserting the writer
+      was called.
+  - id: A8
+    given: the full corpus of existing specs in this repo, none of which carry
+      a `successors` field
+    when: they are validated against the amended schema
+    then: >-
+      every one validates unchanged. Asserted by a test that walks
+      `.caws/specs/*.yaml` and validates each, so the additive-change claim is
+      proven against the real corpus rather than a synthetic fixture.
+  - id: A9
+    given: a spec file carrying a `successors:` block
+    when: it is put through each routine lifecycle mutation
+      (activate, close, archive, amend-scope, clear-binding)
+    then: >-
+      the `successors:` block round-trips byte-identically in every case, and
+      running the same mutation twice produces byte-identical output
+      (deterministic serialization). Asserted per-writer, so a future
+      conversion of ANY single writer to an object-rebuild fails the suite.
+  - id: A10
+    given: a repository whose specs carry legacy successor intent in
+      `closure_notes` prose
+    when: the read-only migration reporter runs
+    then: >-
+      it classifies each spec as `STRUCTURED_CANDIDATE`,
+      `MALFORMED_LEGACY_DECLARATION`, `AMBIGUOUS_LEGACY_DECLARATION`, or
+      `NO_DECLARATION`, and writes NOTHING. Asserted by capturing a hash of
+      every spec file plus the events-log length before and after the run and
+      requiring both unchanged — an assertion that fails if the reporter ever
+      gains a write path.
+  - id: A11
+    given: a CLI consumer pinned to a kernel release predating this change
+    when: it validates a spec carrying `successors`
+    then: >-
+      it rejects the spec via `additionalProperties: false`, and this is
+      documented as the declared minimum-compatible-release boundary rather
+      than claimed as backward compatibility. Asserted by an older-reader
+      fixture test that compiles the PRE-amendment schema and confirms the
+      rejection, so the compatibility posture is a tested fact and not a
+      README assertion.
+  - id: A12
+    given: the docs surface for the spec schema
+    when: this slice lands
+    then: >-
+      docs/api/schema.md documents the `successors` field, the closed
+      disposition vocabulary, and states explicitly that TARGET STANDING IS
+      DERIVED AT QUERY TIME AND NEVER STORED. The doc carries present-tense
+      what/how/why only, with no status barnacles.
+non_functional:
+  reliability:
+    - >-
+      The close gate's target-resolution step reads sibling spec files. It must
+      degrade honestly: an unreadable or malformed sibling yields a typed
+      diagnostic distinguishing "cannot determine" from "does not exist", and
+      MUST NOT silently admit the close. Fail-closed, and say which.
+    - >-
+      Resolution is deterministic and exact-id only. No fuzzy matching, no
+      prefix matching, no case-insensitive fallback — an id either resolves or
+      it does not. Sterling's census is the evidence that inference over spec
+      identifiers manufactures false governance conclusions.
+    - >-
+      Validation cost stays bounded as the corpus grows. Resolution over a
+      2,500-spec corpus (Sterling's real size) must not require an O(n^2) walk
+      per close; build an index once per invocation.
+  security:
+    - >-
+      Successor declarations are governance authority records. Rationale text
+      is persisted verbatim into the hash-chained `events.jsonl` and MUST NOT
+      be interpreted, expanded, shell-evaluated, or path-resolved at any point.
+      It is opaque data end to end.
+    - >-
+      The close gate is a REFUSAL surface, and this slice must not create an
+      escape from it. A successor obligation cannot be discharged by editing
+      the spec YAML by hand to delete the entry without an audit record; the
+      governed edit path must be the easy path. Silent removal of a `required`
+      declaration is the bypass class to watch for in review.
+    - >-
+      The migration reporter reads specs across the repository. It must not
+      follow paths outside `.caws/specs/`, and must not emit file contents
+      beyond the classification and the id it matched.
+observability:
+  - >-
+    Every close refused for an unresolved `required` successor emits a typed
+    diagnostic carrying the source spec id, the unresolved target id, and the
+    disposition — sufficient to act on without re-reading the YAML. The
+    diagnostic code is stable and greppable.
+  - >-
+    The migration reporter's output is machine-readable (one classification per
+    spec, `--json` shaped) so a consuming repo can triage 2,500 specs without
+    parsing prose. Counts per classification are reported so the operator sees
+    the shape of the corpus, not just a list.
+  - >-
+    The jest output for A5 (refusal), A7 (event fidelity), and A9 (round-trip)
+    is the primary closure evidence, quoted with concrete asserted values —
+    the actual refusal message, the deep-compared event payload, the byte
+    comparison — not a pass count.
+rollback:
+  - >-
+    Revert the implementation commits (schema, kernel types + semantics, CLI
+    writer/command, migration reporter, tests, docs). No data migration is
+    introduced: no existing spec file is rewritten and no event is rewritten,
+    so revert is a pure code revert with no state to undo.
+  - >-
+    A spec authored WITH a `successors` block during the window before a revert
+    would fail validation afterward (the field becomes unknown again under
+    `additionalProperties: false`). This is the one recovery obligation:
+    identify such specs via grep for `^successors:` under `.caws/specs/` and
+    move the declaration back to `closure_notes` prose before completing the
+    revert. Operational rollback SLO 30m covers this manual step.
+  - >-
+    A `spec_closed` event already appended with a structured declaration stays
+    valid on revert only if the event schema amendment is reverted LAST, or
+    left in place. The events log is append-only and hash-chained — it is never
+    rewritten to accommodate a rollback. Prefer leaving the event-schema
+    addition in place over rewriting history.
+contracts:
+  - name: spec-successors-schema
+    type: schema
+    path: packages/caws-kernel/src/schemas/spec.v1.json
+    description: >-
+      An optional top-level `successors` array. Each entry requires
+      `target_spec_id` (canonical spec-id grammar) and `disposition`
+      (`required` | `declined` | `absorbed`), with optional `rationale` and
+      `absorbed_by` (canonical grammar). `additionalProperties: false` at the
+      entry level. Target standing is absent from the shape by construction.
+  - name: successor-close-gate
+    type: behavior
+    path: packages/caws-kernel/src/spec/validate-semantics.ts
+    description: >-
+      Closing a spec resolves every `required` successor's `target_spec_id`
+      and every `absorbed` entry's `absorbed_by` against the authored spec
+      corpus by exact id. An unresolved reference REFUSES the close with a
+      typed diagnostic and writes no state. Resolution tests existence, not
+      target lifecycle standing.
+# --- Provenance and the decision this slice already made --------------------
+#
+# ORIGIN. Handed off from Sterling session 23291f85 (2026-07-25) via
+#   ~/Desktop/Projects/sterling/.tmp/handoff-caws-successor-custody.md. Sterling
+#   could not author here: its scope-guard.sh:237-266
+#   (SCOPE-GUARD-FOREIGN-REPO-CONTAINMENT-001) hard-blocks cross-repo writes.
+#   Cross-repo READS are permitted, so Sterling's recon was done from there.
+#
+# ORIGINATING INCIDENT. A completed Sterling recon
+#   (LING-CONCEPT-NAMESPACE-BRIDGE-AUTHORITY-RECON-01) named a successor
+#   (LING-CONCEPT-RECORD-EXTRACTION-WIRING-EN-ES-01) that was never authored.
+#   A later agent keyword-searched the archive, missed the recon, and authored a
+#   spec CONTRADICTING its ratified conclusion. Retracted at 07f726a9f /
+#   3d0e2d0ee. The adjudication survived only because a human remembered it.
+#   That is the failure this slice makes structurally impossible: the obligation
+#   becomes queryable data instead of prose nobody greps.
+#
+# THE VERSIONING DECISION, AND WHY THE HANDOFF'S RECOMMENDATION WAS REVERSED.
+#   The handoff recommended a new spec.v2.json, reasoning that because no v2 of
+#   any CAWS schema exists, there is "no additive-amendment precedent to appeal
+#   to." That inference runs backwards. The absence of a v2 is evidence that
+#   ADDITIVE AMENDMENT IN PLACE IS the established practice — every schema in
+#   this repo has absorbed additive change under its .v1 name:
+#     - scope.support added to spec.v1.json (04e03ae7); commit states "No
+#       migration; existing specs unchanged"; shipped as a MINOR kernel bump
+#       (1.1.x -> 1.2.0) with CHANGELOG framing "No breaking changes".
+#     - prior_worktree added to spec_closed.v1.json (297e7a8a), shipped as fix:.
+#     - spec_archived.v1.json gained an entire oneOf tombstone shape (377a5058).
+#   Written policy agrees: docs/api/schema.md:753 reserves breaking-change
+#   ceremony for field REMOVAL and enum NARROWING.
+#
+#   The "older validator" objection is also weaker here than in the general
+#   case. validate-shape.ts:8 imports the schema from local disk
+#   (`import specSchema from '../schemas/spec.v1.json'`) into a module-level
+#   Ajv singleton with NO loadSchema option — the $id is never resolved over
+#   the network. There is no floating-schema consumer. "Older reader" means
+#   "older npm package", which the ordinary minimum-compatible-release
+#   declaration covers. A spec.v2.json would fork the schema, the loader, and
+#   every fixture to buy what semver already provides.
+#
+#   DECISION: amend spec.v1.json in place, additive and optional. A11 pins the
+#   compatibility boundary as a TESTED fact against a pre-amendment fixture,
+#   which is what the handoff's item 10 was actually asking for.
+#
+# WHERE THE REAL WORK IS. The handoff frames this as a schema gap. The schema
+#   is the small half. validate-semantics.ts:16-19 explicitly defers
+#   "supersedes/superseded_by must form a valid graph" as out of scope, and the
+#   only referential check that exists today is a self-reference guard
+#   (validate-semantics.ts:139-151). CAWS HAS NO CROSS-SPEC REFERENTIAL
+#   VALIDATION AT ALL. A4/A5/A6 require building that layer from nothing —
+#   corpus indexing, exact-id resolution, and a refusal path wired into close.
+#   Estimate accordingly; the JSON Schema edit is an afternoon, the resolution
+#   layer is the slice.
+#
+# ROUND-TRIP IS ALREADY SAFE, WHICH IS EXACTLY WHY A9 EXISTS. specs-writer.ts
+#   mutates specs by surgical raw-byte patching (setTopLevelScalar /
+#   insertTopLevelScalarAfter), never parse -> object -> yaml.dump. So a
+#   successors: block already survives every routine mutation. That is an
+#   emergent property of the current implementation, not a contract — the one
+#   object-rebuild path (specs-migration.ts:380, yaml.dump) is the v10->v11
+#   migrator only. A9 converts the emergent property into a pinned one.
+#
+# OWNERSHIP BOUNDARY (from the handoff, upheld). CAWS owns the structured
+#   declaration, source-side disposition, schema + semantic validation,
+#   close-event projection, exact target lookup, and compatibility/migration
+#   behavior. Sterling retains ADR-0019 citation propagation, Sterling-specific
+#   normative path scopes, the 2,574-spec census, legacy prose inference and
+#   triage, and local-hook activation. LEGACY_TEXTUAL_INFERENCE stays in
+#   Sterling — it is migration reconnaissance, not a governance relation.
+#
+# NOT AN IMPORT TARGET. Sterling's prototype (native/tools/
+#   check_close_propagation.py, python/scripts/ci/spec_authority_index.py) is a
+#   working reference whose VOCABULARY survived review. Do not port its code.
+#   Note specifically that Sterling's _SPEC_ID_RE is LAXER than the canonical
+#   CAWS grammar (it accepts any alphanumeric final segment); the CAWS pattern
+#   in spec.v1.json is authoritative here.
