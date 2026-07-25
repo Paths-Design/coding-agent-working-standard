@@ -27,5 +27,6 @@ acceptance:
     when: 'the suite runs'
     then: 'the case still fails, proving the isolation fix removed the env leak without making the assertion vacuous'
 non_functional:
-  reliability: 'The suite must be environment-independent: identical verdict in CI, a bare shell, and an agent harness.'
+  reliability:
+    - 'The suite must be environment-independent: identical verdict in CI, a bare shell, and an agent harness.'
 contracts: []
