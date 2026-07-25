@@ -7,7 +7,8 @@ created_at: '2026-07-25T03:54:18.942Z'
 updated_at: '2026-07-25T03:54:18.942Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -17,13 +18,83 @@ scope:
     - 'packages/caws-cli/tests'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    SAFE DELETE ONLY — `git branch -d`, NEVER `-D`. The safety of this fix
+    rests entirely on git's own reachability check. After a successful
+    `git merge --no-ff`, the branch is by definition fully reachable from
+    base, so `-d` cannot lose work. If `-d` REFUSES, git is asserting the
+    branch is not merged — which after a successful merge means something is
+    genuinely wrong, and the correct response is to surface it loudly and
+    leave the branch intact. A `-D` fallback, or any retry that escalates
+    force, would convert this convenience into a work-destroying operation
+    and is forbidden.
+  - >-
+    DELETION IS THE LAST STEP AND NEVER ROLLS BACK THE MERGE. Branch deletion
+    runs AFTER the merge commit, the spec close, the `worktree_merged` event,
+    and the worktree destroy have all landed. At that point the merge is
+    complete and durable. A deletion failure therefore MUST NOT roll back any
+    prior step, MUST NOT flip the exit code, and MUST NOT be reported as a
+    partial failure. This follows CAWS-AUTOCOMMIT-INTEGRITY-002: operation
+    success is not the same as every downstream bookkeeping step landing.
+  - >-
+    ONLY THE MERGE PATH DELETES. `destroyWorktree` is independently reachable
+    (`caws worktree destroy`), where retaining the branch is CORRECT — an
+    operator may destroy a worktree holding unmerged work they intend to
+    return to. The deletion belongs to the merge sequence, which has proof of
+    reachability, not to destroy, which has none. Adding branch deletion to
+    the standalone destroy path violates this invariant.
+  - >-
+    THE FEEDBACK BUDGET IS ONE LINE ON SUCCESS. The merge success path today
+    prints a single summary line. Branch deletion folds INTO that line rather
+    than adding a second. Only the refusal case earns additional output, and
+    that output must name the branch, git's own reason, and the exact command
+    to reconcile — an agent or human reading it must not need a second
+    investigation to know what to do.
 acceptance:
   - id: A1
-    given: 'a bound worktree whose branch merges cleanly'
-    when: 'caws worktree merge runs'
-    then: 'the branch is deleted with git branch -d and the deletion is reported in the existing success line'
-non_functional: {}
+    given: a bound worktree whose branch merges cleanly into its base
+    when: '`caws worktree merge <name>` runs to completion'
+    then: >-
+      the branch no longer exists (`git branch --list <branch>` is empty), and
+      the deletion is reported within the EXISTING success line rather than as
+      an additional line. Asserted by checking the branch is gone AND by
+      asserting the stdout line count for the success path did not grow.
+  - id: A2
+    given: a merge sequence where `git branch -d` refuses (git reports the
+      branch is not fully merged)
+    when: the merge otherwise completes
+    then: >-
+      the exit code stays 0, the merge commit and events remain intact, the
+      branch is left in place, and a warning on stderr names the branch, the
+      git reason, and the reconcile command. Asserted on all four: exit code,
+      branch still present, warning content, and that no rollback occurred.
+  - id: A3
+    given: '`caws worktree destroy <name>` invoked standalone (no merge)'
+    when: the worktree is destroyed
+    then: >-
+      the branch is PRESERVED. Destroy has no proof of reachability, and an
+      operator may be parking unmerged work. Asserted by a test that destroys
+      a worktree carrying an unmerged commit and confirms the branch and its
+      commit still exist.
+  - id: A4
+    given: the merge sequence at the point of branch deletion
+    when: the implementation is inspected
+    then: >-
+      it invokes `git branch -d` and never `git branch -D`. Asserted by
+      observing the actual git argv (call observation), not by asserting the
+      branch disappeared — a `-D` implementation would pass the outcome
+      assertion in A1 identically while violating the safety invariant.
+non_functional:
+  reliability:
+    - >-
+      Branch deletion must not run before the merge is durable. If the merge,
+      close, event append, or destroy fails, the branch is the operator's
+      recovery handle and must survive untouched.
+  security:
+    - >-
+      This is a destructive git operation on shared repo state. Its entire
+      safety argument is git's `-d` reachability refusal; no code path may
+      weaken, bypass, or force past that check.
 contracts:
   - name: 'merge-deletes-merged-branch'
     type: behavior
