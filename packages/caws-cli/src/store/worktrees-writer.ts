@@ -1700,6 +1700,27 @@ export function mergeWorktree(
     );
   }
 
+  // CAWS-WORKTREE-MERGE-DELETE-BRANCH-001: delete the now-merged branch.
+  //
+  // LAST step, deliberately. The merge commit, spec close, worktree_merged
+  // event, and worktree destroy have all landed by here, so the merge is
+  // complete and durable. A failure below therefore never rolls back and
+  // never flips the exit code — per CAWS-AUTOCOMMIT-INTEGRITY-002,
+  // operation success is not the same as every downstream step landing.
+  //
+  // `-d`, NEVER `-D`. The entire safety argument is git's own reachability
+  // check: after a successful --no-ff merge the branch is by definition
+  // reachable from base, so -d cannot lose work. If -d refuses, git is
+  // telling us the branch is NOT merged — which after a successful merge
+  // means something is genuinely wrong. We surface that loudly and leave
+  // the branch intact rather than escalating to -D.
+  //
+  // Only this path deletes. Standalone `caws worktree destroy` preserves
+  // the branch: it has no proof of reachability, and the operator may be
+  // parking unmerged work.
+  const branchDeleteResult = runGit(['branch', '-d', branch], repoRoot);
+  const branchDeleted = branchDeleteResult.ok;
+
   const autoCommitOutcome = autoCommitTransition(
     cawsDir,
     preStateSpecId,
@@ -1716,6 +1737,13 @@ export function mergeWorktree(
       spec_id: specId,
       auto_closed_spec: true,
       audit_commit: autoCommitOutcome,
+      branch,
+      branch_deleted: branchDeleted,
+      // Present only on refusal, and carries git's own words so the
+      // operator does not need a second investigation to act.
+      ...(branchDeleted
+        ? {}
+        : { branch_delete_error: branchDeleteResult.reason }),
     },
   });
 }

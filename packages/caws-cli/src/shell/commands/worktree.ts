@@ -558,9 +558,29 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
     }
     return 0;
   }
+  // CAWS-WORKTREE-MERGE-DELETE-BRANCH-001: branch deletion folds INTO the
+  // existing success line rather than adding a second one. Only the refusal
+  // case earns extra output.
+  const branchName = outcome.data?.branch;
+  const branchDeleted = outcome.data?.branch_deleted === true;
   out(
-    `merged ${outcome.name} (merge_commit: ${outcome.data?.merge_commit}; auto_closed_spec: ${outcome.data?.spec_id})`
+    `merged ${outcome.name} (merge_commit: ${outcome.data?.merge_commit}; ` +
+      `auto_closed_spec: ${outcome.data?.spec_id}; ` +
+      `branch: ${branchName}${branchDeleted ? ' deleted' : ' RETAINED'})`
   );
+  if (!branchDeleted) {
+    // The merge itself is complete and durable — exit code stays 0. But git
+    // refused to delete a branch it should consider merged, which is worth
+    // a loud, actionable warning: what happened, why, and the exact way to
+    // reconcile it.
+    err(
+      `warning: merge completed but branch "${branchName}" was NOT deleted.\n` +
+        `  git said: ${outcome.data?.branch_delete_error}\n` +
+        `  This is unexpected after a successful merge — git considers the branch unmerged.\n` +
+        `  Inspect before removing it: git log --oneline main..${branchName}\n` +
+        `  If that range is empty the branch is safe to delete: git branch -d ${branchName}`
+    );
+  }
   surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }
