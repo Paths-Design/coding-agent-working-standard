@@ -252,8 +252,12 @@ the `git init` bootstrap family (including flag-split variants like
 
 1. **Stop.** Do not rephrase, wrap, reorder, or alias the command. Do not retry with `command git ...`, `env ... git ...`, `bash -lc '...'`, or `git --bare init`. The hook recognizes those variants and will block them too.
 2. The hook writes a per-session latch at `.claude/hooks/state/danger-latch-<session>.json`. **Every subsequent Bash tool call in this session will block** until a human clears the latch. The block message names which command first engaged the latch — if it is not the command you just ran, the latch is sticky from an earlier command, not a problem with the current one.
-3. **You cannot clear the latch yourself** — the reset is human-only by design. Ask the user to run:
+3. **You cannot clear the latch yourself** — the reset is human-only by design. The block message prints the exact command with your session id already resolved; hand that to the user verbatim. It has the shape:
    ```bash
-   bash .claude/hooks/reset-danger-latch.sh --current --reason "<why this is safe>"
+   bash .caws/hooks/reset-danger-latch.sh --session <id> --reason "<why this is safe>"
    ```
+   Note the two different directories: the latch **state** is vendor-scoped
+   (`.claude/hooks/state/`, per harness), but the reset **scripts** are shared
+   and live in `.caws/hooks/`. Reconstructing the path from the state location
+   yields a command that does not exist.
 4. If you need a fresh git repo for legitimate test setup, ask the user to do it in their terminal (via `! <command>` in Claude Code) rather than searching for a phrasing that bypasses the matcher.

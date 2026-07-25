@@ -214,11 +214,19 @@ Two important behaviors within a given checkout:
    the scope is now correct.
 
 2. **The recovery path is the strike-reset script, not the scope edit alone.**
-   When the guard says "ask the user to run: `bash .claude/hooks/reset-strikes.sh
-   --current`" — that's not optional. After correcting the scope cause, you still
-   need to clear the accumulated strike state. `reset-strikes.sh` collects strike
-   files from the canonical `.claude/logs`, every worktree gitdir, and the legacy
-   `.caws/worktrees/**/tmp` location, so `--current` clears the right one.
+   When the guard says "ask the user to run: `bash .caws/hooks/reset-strikes.sh
+   --session <id>`" — that's not optional. After correcting the scope cause, you
+   still need to clear the accumulated strike state. `reset-strikes.sh` collects
+   strike files from the canonical vendor log dir (`.claude/logs` for Claude
+   Code), every worktree gitdir, and the legacy `.caws/worktrees/**/tmp`
+   location, so the reset clears the right one.
+
+   **The scripts live in `.caws/hooks/`, not `.claude/hooks/`.** The vendor dir
+   (`.claude/`, `.codex/`, `.cursor/`, …) holds per-harness logs and settings;
+   the hook scripts are shared across every surface and live in the CAWS tree.
+   The guard prints the full command with the session id already resolved —
+   hand it to the user verbatim rather than reconstructing it, since an agent
+   cannot clear its own strike state and a wrong path leaves both of you stuck.
 
 The right discipline: don't speculatively edit a file before verifying it's in
 scope. Use `caws scope show <path>` first if uncertain. The check costs nothing
@@ -229,13 +237,28 @@ and avoids burning a strike on a file you'll have to revisit.
 1. **Stop editing the hot file.** Don't retry on the same path — each retry is
    another strike.
 2. **Diagnose** with `caws scope show <path>` from inside the worktree. Capture
-   the exact refusal message.
-3. **Decide:** is the path legitimately in scope (amend needed) or genuinely out
+   the exact refusal message, and read *which* of the three outcomes you got —
+   `ADMIT`, `REFUSE`, or `NO AUTHORITY`. They have different fixes.
+3. **If `NO AUTHORITY` (`scope.no_authority.unbound`):** no spec is bound to
+   this checkout, so the kernel cannot decide scope at all and amending will
+   not help — the path may already be in `scope.in` and still refuse. Create or
+   enter the bound worktree (`caws worktree create <name> --spec <id>`, or `cd
+   .caws/worktrees/<name>`), then rerun the check. Beware `caws scope show
+   <path> --spec <id>`: it answers "would this path fit that spec", prints
+   `binding: bound` about the **named spec** rather than your checkout, and does
+   not prove write authority. Only the bare form does.
+4. **If blocked but the path is in your spec's `scope.in`,** suspect a
+   directory-claim collision: run `caws scope contention <path>`. A sibling
+   spec listing a *directory* (e.g. `packages/caws-cli/tests`) in its `scope.in`
+   makes its worktree claim every path beneath it, so two specs both "own" the
+   file and the worktree claim wins. The fix is to narrow the claiming spec to
+   file-granular entries, not to amend yours again.
+5. **Decide:** is the path legitimately in scope (amend needed) or genuinely out
    (revert your edit, route through a different file)?
-4. **For "amend needed":** run `caws specs amend-scope <SPEC-ID> --add <path>`
-   (writes canonical, no cherry-pick), then ask the user to run `bash
-   .claude/hooks/reset-strikes.sh --current`. The reset is required because fixing
-   scope alone does NOT re-evaluate prior strikes — the file stays "hot" at its
-   accumulated count.
-5. **For "genuinely out":** revert your edit, route the change through an
+6. **For "amend needed":** run `caws specs amend-scope <SPEC-ID> --add <path>`
+   (writes canonical, no cherry-pick), then ask the user to run the
+   `bash .caws/hooks/reset-strikes.sh --session <id>` command the guard printed.
+   The reset is required because fixing scope alone does NOT re-evaluate prior
+   strikes — the file stays "hot" at its accumulated count.
+7. **For "genuinely out":** revert your edit, route the change through an
    in-scope file, and document the decision in the next commit message.

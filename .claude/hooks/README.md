@@ -130,6 +130,8 @@ These are invoked by a human at the terminal, never by the agent:
 1. Read the block message — it names the guard and the remediation.
 2. Do not bypass by deleting/editing hook files or using `--no-verify`.
 3. If the scope is wrong, widen it with `caws specs amend-scope <id> --add <path>`.
-4. If strikes are stale after a legitimate scope fix, ask the user to run
-   `bash .claude/hooks/reset-strikes.sh --current`.
+4. If strikes are stale after a legitimate scope fix, ask the user to run the
+   `bash .caws/hooks/reset-strikes.sh --session <id>` command the guard printed.
+   The reset scripts live in `.caws/hooks/` (shared across surfaces), not in the
+   vendor dir — `.claude/` holds this adapter's settings and logs, not scripts.
 5. See [`CLAUDE.md`](./CLAUDE.md) for the full doctrine.
