@@ -376,6 +376,46 @@ caws specs validate <file>  # validate ONE spec YAML file on disk; <file> is a
                           # state and mutates nothing.
 ```
 
+#### Recording successor work (`successors`)
+
+When a spec hands work onward, record it as structured data rather than
+`closure_notes` prose, so the obligation is queryable instead of buried:
+
+```yaml
+successors:
+  - target_spec_id: SOME-SPEC-01
+    disposition: required          # required | declined | absorbed
+    rationale: Implements the runtime wiring established by this recon.
+```
+
+- `required` — the target must resolve to an authored spec before this spec
+  can close.
+- `declined` — no successor will be authored; a non-empty `rationale` is
+  mandatory, because an undocumented decline is indistinguishable from an
+  oversight.
+- `absorbed` — the obligation was discharged elsewhere; `absorbed_by` names
+  that spec and must resolve.
+
+Two rules that surprise people:
+
+**Custody, not completion.** `caws specs close` checks that the target was
+*authored*, not that it is finished. A target in any lifecycle state satisfies
+the gate — including one closed as `abandoned`, because someone decided and the
+decision is on record. Requiring the target be closed first would invert the
+normal sequence, where a predecessor closes and its successor then runs.
+
+**Target standing is derived, never stored.** Do not record whether the target
+is active/closed/archived in your spec; that is read from the target itself at
+query time so the two cannot drift. There is deliberately no schema field for
+it.
+
+`caws specs validate <file>` performs **no** referential resolution, so a spec
+naming an unauthored successor is *valid* but cannot *close*. That split is
+intentional: validation stays portable and gives the same answer for the same
+bytes anywhere, while resolution is a repository-aware close-time check.
+
+Full field reference: [`docs/api/schema.md`](../api/schema.md#successor-declarations).
+
 ### Worktree lifecycle
 
 ```bash
@@ -387,7 +427,10 @@ caws worktree bind <name> # repair a one-sided worktree↔spec binding
 caws worktree destroy <name>
                           # destroy a worktree (refuses foreign ownership)
 caws worktree merge <name>
-                          # merge the branch back to base; auto-closes the bound spec
+                          # merge the branch back to base; auto-closes the bound
+                          # spec and deletes the merged branch. Safe under
+                          # concurrent agents: no base checkout, and the ref
+                          # advances by compare-and-swap (see below).
 caws worktree migrate-registry
                           # convert legacy registry envelope to v11 flat map
 caws worktree repair-sparse <name>

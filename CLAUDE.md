@@ -242,14 +242,27 @@ When git worktrees are active for parallel work:
 - Use the lifecycle commands (`caws worktree create | list | bind | destroy |
   merge | migrate-registry | repair-sparse | repair`) — do not fall back to raw
   `git worktree`/`git merge` by default.
-- **`caws worktree merge <name>` is the governed merge path** — one transaction:
-  `git checkout <base>` + `git merge --no-ff` + auto-close the bound spec
-  (`spec_closed`) + append `worktree_merged`, over the flat-map `worktrees.json`.
-  Prefer it over a manual `git checkout main && git merge`: a bare `git checkout
-  <existing-branch>` is flagged by the danger-latch classifier as potentially
-  discarding work (only `checkout -b` is auto-admitted), so the manual path can
-  trip the latch and need a human reset. The governed command does the base
-  checkout *inside* the transaction and avoids that trap.
+- **`caws worktree merge <name>` is the governed merge path, and it is safe
+  under concurrent agents.** It never checks out the base branch. The merge is
+  computed in the object database (`git merge-tree --write-tree` +
+  `git commit-tree`) and the base ref advances by an atomic compare-and-swap
+  (`git update-ref <ref> <new> <expected-old>`). One transaction: merge +
+  auto-close the bound spec (`spec_closed`) + append `worktree_merged` +
+  delete the merged branch (`git branch -d`, never `-D`), over the flat-map
+  `worktrees.json`.
+- **A lost race is a retry, not a failure.** If another agent advances the base
+  between the merge computation and the CAS, git refuses the ref update ("is at
+  X but expected Y") and the merge recomputes against the new base, up to 5
+  attempts. Nothing partial is written: the objects created before the CAS are
+  unreferenced and therefore invisible, so an interrupted merge leaves no
+  half-applied state. Only a real conflict, or exhausting the retry budget,
+  surfaces as an error — and the diagnostic distinguishes the two.
+- **Prefer the governed command over hand-running git.** A manual `git checkout
+  main && git merge` reintroduces exactly the hazard the CAS removes: the base
+  checkout mutates the shared working tree, and a bare checkout of an existing
+  branch is flagged by the danger-latch classifier as potentially discarding
+  work (only `checkout -b` is auto-admitted). The governed path touches no
+  working tree at all.
 
 Full list: `.claude/rules/worktree-isolation.md`.
 
