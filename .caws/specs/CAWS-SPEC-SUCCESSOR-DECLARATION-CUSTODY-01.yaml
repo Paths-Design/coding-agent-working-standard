@@ -7,7 +7,7 @@ mode: feature
 lifecycle_state: active
 worktree: successor-custody
 created_at: '2026-07-24T00:00:00.000Z'
-updated_at: '2026-07-24T00:00:00.000Z'
+updated_at: '2026-07-25T03:59:03.599Z'
 blast_radius:
   modules:
     - packages/caws-kernel/src/schemas/spec.v1.json
@@ -33,9 +33,9 @@ scope:
     - packages/caws-cli/src/store/specs-writer.ts
     - packages/caws-cli/src/shell/commands/specs.ts
     - packages/caws-cli/src/shell/command-metadata.ts
-    - packages/caws-cli/tests
     - docs/api/schema.md
     - .caws/specs/CAWS-SPEC-SUCCESSOR-DECLARATION-CUSTODY-01.yaml
+    - packages/caws-cli/tests/store/specs-successors.test.js
   out:
     - .caws/policy.yaml
     - CODEOWNERS
