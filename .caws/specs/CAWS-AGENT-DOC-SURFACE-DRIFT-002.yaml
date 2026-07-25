@@ -1,0 +1,59 @@
+id: CAWS-AGENT-DOC-SURFACE-DRIFT-002
+title: 'Agent-facing docs and guard text match the real CLI surface; shipped templates gain a generator tether'
+risk_tier: 2
+mode: fix
+lifecycle_state: active
+created_at: '2026-07-25T06:38:30.586Z'
+updated_at: '2026-07-25T06:38:30.586Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'AGENTS.md'
+    - 'CLAUDE.md'
+    - 'docs/agents/TUTORIAL.md'
+    - 'docs/agents/full-guide.md'
+    - 'docs/agent-workflow-tools.md'
+    - 'docs/guides/agent-integration-guide.md'
+    - 'docs/guides/hooks-and-agent-workflows.md'
+    - 'docs/guides/multi-agent-workflow.md'
+    - '.claude/rules/worktree-isolation.md'
+    - 'packages/caws-cli/templates/CLAUDE.md'
+    - 'packages/caws-cli/templates/agents.md'
+    - 'packages/caws-cli/templates/hook-packs/shared/guard-strikes.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh'
+    - 'packages/caws-cli/src/store/worktrees-writer.ts'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/scripts/populate-doc-markers.mjs'
+    - 'packages/caws-cli/scripts/lib/agent-surfaces.cjs'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/docs/agent-recovery-path-drift.test.js'
+    - 'packages/caws-cli/tests/docs/agent-doc-examples.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'an agent-facing doc contains a caws evidence record example'
+    when: 'its --data payload is validated against the kernel event schema'
+    then: 'it validates, because a documented command that fails when run teaches the agent the wrong system'
+  - id: A2
+    given: 'guard remediation text tells an agent how to take worktree ownership'
+    when: 'the printed command is run verbatim'
+    then: 'it is a shape the CLI accepts (cd into the worktree, then bare caws claim --takeover), not a silently-ignored positional'
+  - id: A3
+    given: 'a shipped template enumerates the command groups or the --agent-surface enum'
+    when: 'the doc generator runs in --check mode'
+    then: 'it fails if the enumeration drifts from COMMAND_SURFACE_METADATA and KNOWN_SURFACES'
+  - id: A4
+    given: 'any guard builds a reset-strikes command'
+    when: 'the message is rendered'
+    then: 'it interpolates CAWS_HOOKS_DIR and names a path that exists'
+non_functional: {}
+contracts:
+  - name: 'agent-doc-example-executability'
+    type: behavior
