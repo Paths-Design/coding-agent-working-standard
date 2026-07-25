@@ -6,7 +6,46 @@ risk_tier: 1
 mode: feature
 lifecycle_state: closed
 resolution: completed
-closure_notes: 'Auto-closed by caws worktree merge successor-custody at 266fbc722b565cce888e05e17101c957642bdc14'
+closure_notes: >-
+  Merged at 266fbc72 (caws worktree merge successor-custody). PARTIAL
+  CLOSURE — the auto-close stub this replaces implied full completion; it
+  did not.
+
+  SHIPPED AND PROVEN. Schema: optional `successors` array on spec.v1.json
+  and on spec_closed.v1.json, both additive in place (additionalProperties
+  stays false), validated against the real 269-spec corpus with zero
+  failures. Kernel: intra-spec semantics (7 rule codes) and spec/successors.ts
+  — an injected-corpus resolver with the closed outcome vocabulary AUTHORED |
+  UNAUTHORED | MALFORMED_ID | AMBIGUOUS_ID | REGISTRY_UNAVAILABLE. CLI: the
+  close gate in closeSpec, placed before any byte patching, plus the event
+  projection. 39 kernel tests; kernel suite 572/572; CLI suite 903/904 (the
+  one failure is pre-existing env leakage in
+  resolver-guard-divergence.test.js, unrelated to this slice).
+
+  RUNTIME EVIDENCE, not just green tests. Against a scratch repo driving the
+  built CLI: (1) a spec declaring an unauthored `required` successor VALIDATES
+  (`specs validate` => valid) while `specs close` REFUSES it with exit 1 —
+  the two layers disagreeing on identical bytes is the layering invariant
+  demonstrated live; (2) the refusal left the spec file byte-identical and
+  the events log length unchanged; (3) after authoring the target, the same
+  close SUCCEEDED against a target in `active` state — custody, not
+  completion; (4) the emitted spec_closed event carried the declaration
+  verbatim including rationale, with no target standing copied in.
+
+  NOT DONE — carried to CAWS-SPEC-SUCCESSOR-DECLARATION-CUSTODY-02: the
+  read-only migration reporter, docs/api/schema.md, and acceptance A9
+  (round-trip across all writers), A11 (older-reader fixture), A16 (validate
+  needs no repository index). A9's round-trip safety currently rests on
+  reading specs-writer.ts and observing raw-byte patching — it is a
+  code-reading inference, NOT a runtime fact, until those tests exist.
+successors:
+  - target_spec_id: CAWS-SPEC-SUCCESSOR-DECLARATION-CUSTODY-02
+    disposition: required
+    rationale: >-
+      Carries the migration reporter, schema docs, and the three unproven
+      acceptance criteria (A9 round-trip, A11 older-reader, A16 validator
+      portability). Declared structurally rather than in prose — this slice
+      dogfooding its own feature.
 created_at: '2026-07-24T00:00:00.000Z'
 updated_at: '2026-07-25T06:05:50.745Z'
 blast_radius:
