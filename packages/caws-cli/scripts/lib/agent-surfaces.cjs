@@ -17,6 +17,25 @@ function renderSurfaceList(known) {
   return known.join(' | ');
 }
 
+/**
+ * The top-level command groups, rendered as a fenced block.
+ * (CAWS-AGENT-DOC-SURFACE-DRIFT-002)
+ *
+ * Source of truth is COMMAND_SURFACE_METADATA in src/shell/command-metadata.ts.
+ * Hand-maintained enumerations of this list drifted badly: shipped templates
+ * claimed "thirteen governed command groups" while the CLI registered fifteen,
+ * so `reprieve` and `message` were invisible to every consumer agent even
+ * though both ship. Order follows registration order, matching `caws --help`.
+ */
+function renderCommandGroups(groups) {
+  return ['```', groups.join('  '), '```'].join('\n');
+}
+
+/** The --agent-surface enum as an inline backticked span. */
+function renderSurfaceEnum(known) {
+  return '`' + renderSurfaceList(known) + '`';
+}
+
 /** Each implemented surface as its own backtick span, comma-joined, for inline prose. */
 function renderImplemented(implemented) {
   return implemented.map((s) => '`' + s + '`').join(', ');
@@ -119,6 +138,8 @@ function fillMarkers(text, fills) {
 
 module.exports = {
   renderSurfaceList,
+  renderSurfaceEnum,
+  renderCommandGroups,
   renderImplemented,
   renderDeclaredOnly,
   renderReadmeInstallBlock,

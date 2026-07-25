@@ -88,7 +88,8 @@ Risk tiers drive rigor and determine quality gates:
 Every task needs a working spec at `.caws/specs/<spec-id>.yaml`. Create one with the CLI, then fill in the project-specific fields:
 
 ```bash
-caws specs create FEAT-001 --title "Add user authentication flow" --mode feature --risk-tier 1
+caws specs create FEAT-001 --title "Add user authentication flow" --mode feature --risk-tier 1 \
+  --contract "auth-api:api"
 ```
 
 Then edit the generated file to add scope, invariants, acceptance, and non-functional requirements:
@@ -138,8 +139,11 @@ contracts:
 **Goal**: Author a per-feature spec and a test plan.
 
 ```bash
-# 1. Create the spec via CLI — this is the canonical path
-caws specs create <id> --title "Feature title" --mode feature --risk-tier 2
+# 1. Create the spec via CLI — this is the canonical path.
+#    Tier 1/2 REQUIRE at least one --contract ("name:type[:path]", where type is
+#    api|schema|contract-test|behavior); the command refuses without it.
+caws specs create <id> --title "Feature title" --mode feature --risk-tier 2 \
+  --contract "core-api:behavior"
 
 # 2. Edit the generated file to add scope, invariants, acceptance criteria
 $EDITOR .caws/specs/<id>.yaml

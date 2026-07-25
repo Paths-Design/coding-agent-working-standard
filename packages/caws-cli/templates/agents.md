@@ -29,6 +29,16 @@ caws doctor              # Project-wide CAWS drift detection
 
 ## CAWS Workflow
 
+The governed command groups are:
+
+<!-- command-groups:start -->
+```
+init  doctor  status  scope  claim  gates  evidence  events  waiver  reprieve  specs  worktree  agents  message  prepush
+```
+<!-- command-groups:end -->
+
+Run `caws <group> --help` for the authoritative options of any group.
+
 1. **Read the spec**: Use `.caws/specs/<id>.yaml` for the active feature
 2. **Plan with `caws doctor`**: Get drift snapshot before changes
 3. **Implement**: Write tests first, then implementation. Stay within scope.
