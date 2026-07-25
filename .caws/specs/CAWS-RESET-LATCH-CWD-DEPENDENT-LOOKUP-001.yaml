@@ -1,0 +1,38 @@
+id: CAWS-RESET-LATCH-CWD-DEPENDENT-LOOKUP-001
+title: 'reset-danger-latch resolves state dir from cwd and falsely reports nothing to clear'
+risk_tier: 2
+mode: fix
+lifecycle_state: active
+created_at: '2026-07-25T08:09:02.636Z'
+updated_at: '2026-07-25T08:09:02.636Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/reset-danger-latch.sh'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/docs/agent-recovery-path-drift.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'a session danger latch is armed and its state file exists'
+    when: 'a human runs reset-danger-latch.sh by absolute path from ANY working directory'
+    then: 'the latch is found and cleared, because the only recovery path for a hard block must not depend on the operator''s cwd'
+  - id: A2
+    given: 'agent-surface.sh sets CAWS_PROJECT_DIR to the relative fallback ''.'''
+    when: 'the reset script computes STATE_DIR'
+    then: 'it derives the project root from its own SCRIPT_DIR rather than the inherited relative value, matching reset-strikes.sh which is already immune'
+  - id: A3
+    given: 'the reset script cannot locate the state directory it was asked about'
+    when: 'no latch file matches'
+    then: 'it distinguishes ''searched <abs path>, none found'' from silent success, because reporting nothing to clear while an armed latch exists is indistinguishable from a completed reset'
+non_functional: {}
+contracts:
+  - name: 'latch-reset-cwd-independence'
+    type: behavior
