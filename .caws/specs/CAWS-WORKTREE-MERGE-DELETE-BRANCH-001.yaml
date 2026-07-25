@@ -3,6 +3,7 @@ title: 'worktree merge leaves the merged branch behind: delete it with git branc
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: merge-branch-delete
 created_at: '2026-07-25T03:54:18.942Z'
 updated_at: '2026-07-25T03:54:18.942Z'
 blast_radius:
