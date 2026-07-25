@@ -3,6 +3,7 @@ title: 'Agent-facing recovery paths and guard remediation name the real reset sc
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: agent-docs-reset-path
 created_at: '2026-07-25T04:15:17.651Z'
 updated_at: '2026-07-25T04:15:17.651Z'
 blast_radius:
