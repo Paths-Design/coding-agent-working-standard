@@ -24,6 +24,14 @@ export type Resolution = (typeof SPEC_RESOLUTIONS)[number];
 export const CONTRACT_TYPES = ['api', 'schema', 'contract-test', 'behavior'] as const;
 export type ContractType = (typeof CONTRACT_TYPES)[number];
 
+// Source-side decision about a successor obligation. This axis records what the
+// CLOSING spec decided; it never encodes the target's standing (active, closed,
+// abandoned), which is derived from the target's own lifecycle_state +
+// resolution at query time. "The target does not exist" is a resolver result
+// (see SuccessorResolution), never a disposition.
+export const SUCCESSOR_DISPOSITIONS = ['required', 'declined', 'absorbed'] as const;
+export type SuccessorDisposition = (typeof SUCCESSOR_DISPOSITIONS)[number];
+
 export interface Contract {
   name: string;
   type: ContractType;
@@ -78,6 +86,21 @@ export interface ExperimentalMode {
   expires_at: string;
 }
 
+/**
+ * A structured successor declaration.
+ *
+ * Mirrors the `successors` items schema in spec.v1.json. Deliberately carries
+ * NO target-standing field: whether the target is draft/active/closed/archived
+ * (and with what resolution) is read from the target spec itself, never copied
+ * here where it could go stale.
+ */
+export interface Successor {
+  target_spec_id: string;
+  disposition: SuccessorDisposition;
+  rationale?: string;
+  absorbed_by?: string;
+}
+
 export interface Spec {
   id: string;
   title: string;
@@ -88,6 +111,7 @@ export interface Spec {
   blockers?: Blocker[];
   supersedes?: string;
   superseded_by?: string;
+  successors?: Successor[];
   worktree?: string;
   operational_rollback_slo?: string;
   blast_radius: BlastRadius;

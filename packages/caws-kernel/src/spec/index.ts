@@ -11,6 +11,18 @@ export { parseSpecYaml } from './parse';
 export { validateSpecShape } from './validate-shape';
 export { validateSpecSemantics } from './validate-semantics';
 export {
+  SUCCESSOR_RESOLUTIONS,
+  type SuccessorResolution,
+  type SuccessorTargetStanding,
+  type SuccessorTargetResult,
+  type SpecCorpusEntry,
+  type SuccessorResolver,
+  type UnresolvedObligation,
+  createSuccessorResolver,
+  findUnresolvedObligations,
+  projectSuccessorsForEvent,
+} from './successors';
+export {
   MIGRATE_RULES,
   type MigrateRule,
   SAFE_RENAMES,
