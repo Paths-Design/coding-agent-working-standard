@@ -99,6 +99,21 @@ The feature specification defines a single feature's requirements and constraint
       "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$",
       "description": "When this spec is itself superseded by another."
     },
+    "successors": {
+      "type": "array",
+      "description": "Structured successor declarations. Each entry records a SOURCE-SIDE DECISION about an obligation this spec hands onward. Target standing is never stored here — see 'Successor declarations' below.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["target_spec_id", "disposition"],
+        "properties": {
+          "target_spec_id": { "type": "string", "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$" },
+          "disposition": { "type": "string", "enum": ["required", "declined", "absorbed"] },
+          "rationale": { "type": "string", "minLength": 1 },
+          "absorbed_by": { "type": "string", "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$" }
+        }
+      }
+    },
     "worktree": {
       "type": "string",
       "pattern": "^[a-zA-Z0-9_-]+$",
@@ -291,6 +306,7 @@ interface CawsSpec {
   blockers?: Blocker[];
   supersedes?: string;               // spec id pattern
   superseded_by?: string;            // spec id pattern
+  successors?: Successor[];          // structured successor declarations
   worktree?: string;                 // bound worktree name
   operational_rollback_slo?: string; // e.g. "5m", "1h" — required for Tier 1 via semantic check
   observability?: string[];          // required for Tier 1 via semantic check
@@ -739,6 +755,70 @@ if (!isValid) {
   console.error('Validation errors:', validate.errors);
 }
 ```
+
+## Successor declarations
+
+A spec records work it hands onward in the structured `successors` array
+rather than in `closure_notes` prose, so the obligation is queryable data
+that schema validation and lifecycle tooling can act on.
+
+```yaml
+successors:
+  - target_spec_id: SOME-SPEC-01
+    disposition: required
+    rationale: Implements the runtime wiring established by this recon.
+```
+
+### Two axes, never conflated
+
+`disposition` records a **source-side decision** — what the closing spec
+decided about the obligation. It is one of:
+
+| disposition | Meaning | Requires |
+|---|---|---|
+| `required` | The target carries the obligation onward and must resolve before this spec can close. | `target_spec_id` resolves |
+| `declined` | No successor will be authored. | non-empty `rationale` |
+| `absorbed` | The obligation was discharged elsewhere. | `absorbed_by` resolves |
+
+**Target standing is derived at query time, never stored.** Whether the
+target is `draft`, `active`, `closed`, or `archived` — and with what
+`resolution` — is read from the target spec itself. Copying it into the
+declaring spec would let the copy drift from the target's real state, which
+is the failure this field exists to prevent. There is deliberately no
+schema property for it.
+
+"The target does not exist" is likewise **not** a disposition. It is a
+query result about the corpus, not a decision by the author.
+
+### Close-time resolution: custody, not completion
+
+Closing a spec resolves each `required` entry's `target_spec_id` and each
+`absorbed` entry's `absorbed_by` by exact id against live and archived
+specs. An unresolved reference **refuses the close** with a typed diagnostic
+and writes nothing — no YAML mutation, no event.
+
+The gate asks whether the obligation was made *governable*, not whether the
+work is finished. An authored target in **any** lifecycle state satisfies
+it, including one closed as `abandoned`: someone decided, and the decision
+is on record. Requiring the target be closed first would invert the ordinary
+sequence, where a predecessor closes and its successor then runs.
+
+Resolution is exact-id only — no prefix, case-insensitive, or fuzzy
+matching. An id found in both the live set and the archive resolves normally
+with an ambiguity warning; corpus drift is reported to the operator rather
+than charged to the closing spec.
+
+Validation layering matters here: `caws specs validate <file>` performs
+**no** referential resolution, so it returns the same verdict for the same
+bytes regardless of ambient `.caws` state. A spec naming an unauthored
+successor is *valid* but cannot *close*.
+
+### Audit record
+
+The `spec_closed` event preserves the complete declaration array verbatim —
+every entry, in order, with `disposition`, `rationale`, and `absorbed_by`
+intact. Target standing is not projected, for the same reason it is not
+stored.
 
 ## Extensions
 

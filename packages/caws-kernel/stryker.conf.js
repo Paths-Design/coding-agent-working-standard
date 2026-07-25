@@ -56,6 +56,12 @@ module.exports = {
     // Spec validation (E13/E14) — shape + semantics gates.
     'src/spec/validate-shape.ts',
     'src/spec/validate-semantics.ts',
+    // Successor resolution (CAWS-SPEC-SUCCESSOR-DECLARATION-CUSTODY-01) —
+    // the close gate's existence oracle. Joins the mutate set here because
+    // its covering tests landed with it (tests/unit/spec-successors.test.ts).
+    // This is a refusal surface: a mutant that turns a REFUSE into an ADMIT
+    // lets an undischarged obligation close silently.
+    'src/spec/successors.ts',
     // Policy budgets.
     'src/policy/derive-budget.ts',
     // Worktree lifecycle transitions + freshness doctrine.

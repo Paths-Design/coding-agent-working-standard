@@ -174,6 +174,13 @@ function buildSuccessorCorpus(cawsDir: string): SpecCorpusEntry[] | undefined {
   // tombstone). Only the ID is needed to prove custody, so read filenames
   // rather than parsing each body — a 2,500-spec archive must not cost a
   // full parse per close.
+  //
+  // The filename is authoritative here BY CONSTRUCTION: archiveSpec moves
+  // <id>.yaml into .archive/ under the same name, so name and internal id
+  // agree. A hand-renamed archive file would resolve under its filename
+  // rather than its body id — acceptable for a custody check (the worst case
+  // is a UNAUTHORED refusal naming an id the operator can see on disk), and
+  // strictly preferable to parsing every archived spec on every close.
   const archiveDir = path.join(cawsDir, 'specs', '.archive');
   if (fs.existsSync(archiveDir)) {
     try {
@@ -216,11 +223,6 @@ function unresolvedObligationMessage(
         `${where} ("${u.target_spec_id}") cannot be verified. Refusing rather ` +
         `than assuming the successor exists.`
       );
-    case 'AMBIGUOUS_ID':
-      return (
-        `Cannot close "${specId}": ${where} names "${u.target_spec_id}", which ` +
-        `resolves to more than one spec (live and archived). The reference is ambiguous.`
-      );
     case 'MALFORMED_ID':
       return (
         `Cannot close "${specId}": ${where} ("${u.target_spec_id}") is not a ` +
@@ -241,8 +243,6 @@ function unresolvedObligationRepair(u: UnresolvedObligation): string {
       );
     case 'REGISTRY_UNAVAILABLE':
       return 'Fix access to .caws/specs and retry; do not bypass the check.';
-    case 'AMBIGUOUS_ID':
-      return `Remove the duplicate ${u.target_spec_id} from the archive or the live set.`;
     case 'MALFORMED_ID':
       return 'Correct the id to the canonical grammar (e.g. SOME-SPEC-01).';
     default:
