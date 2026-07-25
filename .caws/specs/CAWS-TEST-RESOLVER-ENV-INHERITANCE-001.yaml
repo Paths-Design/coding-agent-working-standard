@@ -2,10 +2,11 @@ id: CAWS-TEST-RESOLVER-ENV-INHERITANCE-001
 title: 'resolver precedence test inherits the harness CLAUDE_CODE_SESSION_ID and fails for any agent-run suite'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: resolver-env-fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge resolver-env-fix at fb76a6316453f3e1585ad626a6b03ddb6f95b7e5'
 created_at: '2026-07-25T08:45:35.971Z'
-updated_at: '2026-07-25T08:45:35.971Z'
+updated_at: '2026-07-25T08:56:44.575Z'
 blast_radius:
   modules:
     - 'caws-cli/tests/shell/session (session-resolver precedence suite)'
