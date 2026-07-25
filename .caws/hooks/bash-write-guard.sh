@@ -1,14 +1,18 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 18
+# hook_pack_version: 24
 # caws_min_major: 11
 # lineage_refs: 4,8,13,20,32
-# edit_stance: this repo OWNS and may grow this hook. Edits are expected and
-#   preserved — `caws init` refuses to overwrite a changed managed hook (re-run
-#   with --adopt to keep yours, or --overwrite to pull this upstream template).
-#   CAWS owns the failure-class invariant (the why/what you must not silently
-#   weaken); you own the how. Do not edit it to BYPASS the guard; do grow it.
+# edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
+#   to your repo: tune thresholds, add checks, remove what does not fit. Your edits
+#   are preserved: caws init treats a changed hook as intended growth and will not
+#   clobber it — it shows a diff and asks (--adopt keeps yours; --overwrite --force
+#   takes the upstream template). The CAWS-MANAGED-HOOK marker above is only how caws
+#   init finds hooks it can offer updates for; it is NOT a keep-out sign. CAWS owns the
+#   failure-class invariant (the why/what a guard protects); you own the how. The one
+#   edit to avoid: gutting a guard to dodge a block instead of fixing the cause. Grow
+#   everything else freely.
 #
 # CAWS Bash Write-Target Guard (shared, WORKTREE-ISOLATION-HARDENING-001 Fix 3).
 # Self-filters on Bash, extracts write targets for a narrow set of mutation
@@ -56,7 +60,25 @@ fi
 # Use caws_source_lib so a vendor override is preferred over the shared default.
 caws_source_lib emit.sh 2>/dev/null || true
 [[ -f "$SCRIPT_DIR/lib/guard-message.sh" ]] && source "$SCRIPT_DIR/lib/guard-message.sh"
+# shellcheck source=lib/session-id.sh
+# CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 (A1/A2): resolve the operating
+# session id through the SAME env-var precedence the TS resolver uses, not only
+# HOOK_SESSION_ID (which does not propagate into agent-Bash). Best-effort source
+# — a missing helper degrades to the legacy HOOK_SESSION_ID-only path, never a
+# hard block.
+[[ -f "$SCRIPT_DIR/lib/session-id.sh" ]] && source "$SCRIPT_DIR/lib/session-id.sh"
 parse_hook_input
+
+# CAWS_ORACLE_SESSION_ID: the fully-resolved operating identity. Falls back to
+# HOOK_SESSION_ID when the helper is absent (back-compat). This is what the
+# oracle compares against the worktree's stamped owner — matching the resolver
+# chain the stamper used, so owner-self recognition works across all harnesses.
+if declare -F resolve_caws_session_id_with_payload >/dev/null 2>&1; then
+  CAWS_ORACLE_SESSION_ID="$(resolve_caws_session_id_with_payload "${HOOK_SESSION_ID:-}")"
+else
+  CAWS_ORACLE_SESSION_ID="${HOOK_SESSION_ID:-}"
+fi
+export CAWS_ORACLE_SESSION_ID
 
 TOOL_NAME="$HOOK_TOOL_NAME"
 COMMAND="$HOOK_COMMAND"
@@ -244,7 +266,7 @@ while IFS= read -r cand; do
   out="$(CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
     CAWS_ORACLE_CURRENT_BRANCH="" \
     CAWS_ORACLE_REL_PATH="$abs" \
-    CAWS_ORACLE_SESSION_ID="${HOOK_SESSION_ID:-}" \
+    CAWS_ORACLE_SESSION_ID="$CAWS_ORACLE_SESSION_ID" \
     node "$CAWS_CLAIM_ORACLE" 2>&1 || true)"
   _first="${out%%$'\n'*}"
   case "${_first%%:*}" in
@@ -279,7 +301,7 @@ case "$WORST" in
       echo "[$_BG_ID] BLOCKED: this Bash command mutates worktree '$_OWN_WT''s payload (.caws/worktrees/$_OWN_WT/...), owned by a DIFFERENT session." >&2
       echo "  A Bash mutation of another session's worktree files is the same isolation breach as a foreign Write/Edit — it is blocked at the same boundary." >&2
       echo "  This is a CAWS governance decision." >&2
-      echo "  To work in worktree '$_OWN_WT', operate from a SESSION rooted there (caws claim '$_OWN_WT' --takeover to take ownership)." >&2
+      echo "  To work in worktree '$_OWN_WT', operate from a SESSION rooted there. 'caws claim' has NO worktree-name argument — it reads the current directory, so cd first: cd .caws/worktrees/$_OWN_WT && caws claim --takeover" >&2
     else
       IFS=',' read -ra _CLAIM_PAIRS <<< "$WORST_DETAIL"
       _LEAD_WT="${_CLAIM_PAIRS[0]%%:*}"
@@ -298,7 +320,7 @@ case "$WORST" in
       fi
       echo "  This is a CAWS governance decision." >&2
     fi
-    echo "  Do NOT edit ${CAWS_VENDOR_DIR}/hooks/ or guard state to bypass this." >&2
+    echo "  Do NOT edit ${CAWS_HOOKS_DIR:-.caws/hooks}/ or guard state to bypass this." >&2
     exit 2 ;;
   ask)
     case "$WORST_KIND" in

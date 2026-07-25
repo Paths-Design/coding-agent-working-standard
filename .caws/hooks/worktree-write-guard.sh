@@ -1,14 +1,18 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 18
+# hook_pack_version: 24
 # caws_min_major: 11
 # lineage_refs: 4,8,13
-# edit_stance: this repo OWNS and may grow this hook. Edits are expected and
-#   preserved — `caws init` refuses to overwrite a changed managed hook (re-run
-#   with --adopt to keep yours, or --overwrite to pull this upstream template).
-#   CAWS owns the failure-class invariant (the why/what you must not silently
-#   weaken); you own the how. Do not edit it to BYPASS the guard; do grow it.
+# edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
+#   to your repo: tune thresholds, add checks, remove what does not fit. Your edits
+#   are preserved: caws init treats a changed hook as intended growth and will not
+#   clobber it — it shows a diff and asks (--adopt keeps yours; --overwrite --force
+#   takes the upstream template). The CAWS-MANAGED-HOOK marker above is only how caws
+#   init finds hooks it can offer updates for; it is NOT a keep-out sign. CAWS owns the
+#   failure-class invariant (the why/what a guard protects); you own the how. The one
+#   edit to avoid: gutting a guard to dodge a block instead of fixing the cause. Grow
+#   everything else freely.
 #
 # CAWS Worktree Write Guard (shared).
 #
@@ -63,6 +67,24 @@ fi
 caws_source_lib emit.sh 2>/dev/null || true
 # shellcheck source=lib/guard-message.sh
 [[ -f "$SCRIPT_DIR/lib/guard-message.sh" ]] && source "$SCRIPT_DIR/lib/guard-message.sh"
+# shellcheck source=lib/session-id.sh
+# CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 (A1/A2): resolve the operating
+# session id through the SAME env-var precedence the TS resolver uses, not only
+# HOOK_SESSION_ID (which does not propagate into agent-Bash). Best-effort source
+# — a missing helper degrades to the legacy HOOK_SESSION_ID-only path, never a
+# hard block.
+[[ -f "$SCRIPT_DIR/lib/session-id.sh" ]] && source "$SCRIPT_DIR/lib/session-id.sh"
+
+# CAWS_ORACLE_SESSION_ID: the fully-resolved operating identity. Falls back to
+# HOOK_SESSION_ID when the helper is absent (back-compat). This is what the
+# oracle compares against the worktree's stamped owner — matching the resolver
+# chain the stamper used, so owner-self recognition works across all harnesses.
+if declare -F resolve_caws_session_id_with_payload >/dev/null 2>&1; then
+  CAWS_ORACLE_SESSION_ID="$(resolve_caws_session_id_with_payload "${HOOK_SESSION_ID:-}")"
+else
+  CAWS_ORACLE_SESSION_ID="${HOOK_SESSION_ID:-}"
+fi
+export CAWS_ORACLE_SESSION_ID
 
 # WORKTREE-ISOLATION-HARDENING-001 (Fix 1+2): the shared ownership oracle.
 CAWS_CLAIM_ORACLE="$SCRIPT_DIR/lib/worktree-claim-oracle.cjs"
@@ -165,7 +187,7 @@ if [[ -n "$FILE_PATH" ]]; then
         _ORACLE_OUT="$(CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
           CAWS_ORACLE_CURRENT_BRANCH="" \
           CAWS_ORACLE_REL_PATH="$FILE_PATH_FOR_ALLOWLIST" \
-          CAWS_ORACLE_SESSION_ID="${HOOK_SESSION_ID:-}" \
+          CAWS_ORACLE_SESSION_ID="$CAWS_ORACLE_SESSION_ID" \
           node "$CAWS_CLAIM_ORACLE" 2>&1 || true)"
         _ORACLE_FIRST="${_ORACLE_OUT%%$'\n'*}"
         case "${_ORACLE_FIRST%%:*}" in
@@ -197,8 +219,8 @@ if [[ -n "$FILE_PATH" ]]; then
             echo "[$_WG_ID] BLOCKED: this is a write into worktree '$_OWN_WT''s payload (.caws/worktrees/$_OWN_WT/...), which is owned by a DIFFERENT session." >&2
             echo "  A worktree's files are owned by the session that created/claimed it; another session must not mutate them directly." >&2
             echo "  This is a CAWS governance decision." >&2
-            echo "  To work in worktree '$_OWN_WT', your SESSION must be rooted there (caws claim '$_OWN_WT' --takeover if you intend to take ownership), not writing into its path from a foreign session." >&2
-            echo "  Do NOT edit ${CAWS_VENDOR_DIR}/hooks/ or guard state to bypass this." >&2
+            echo "  To work in worktree '$_OWN_WT', your SESSION must be rooted there, not writing into its path from a foreign session. 'caws claim' has NO worktree-name argument — it reads the current directory, so cd first: cd .caws/worktrees/$_OWN_WT && caws claim --takeover" >&2
+            echo "  Do NOT edit ${CAWS_HOOKS_DIR:-.caws/hooks}/ or guard state to bypass this." >&2
             exit 2 ;;
           block_claimed)
             _WG_ID="CAWS worktree-write-guard"
@@ -492,7 +514,7 @@ case "${SPEC_CONTENTION_CHECK:-}" in
     else
       echo "To make this edit, your SESSION must be operating in the owning worktree (caws worktree list)." >&2
     fi
-    echo "Do NOT edit ${CAWS_VENDOR_DIR}/hooks/ or guard state to bypass this." >&2
+    echo "Do NOT edit ${CAWS_HOOKS_DIR:-.caws/hooks}/ or guard state to bypass this." >&2
     exit 2
     ;;
 esac
@@ -505,7 +527,7 @@ if _guard_no_ask; then
   echo "[worktree-write-guard.sh] BLOCKED: $_RISK_REASON" >&2
   echo "" >&2
   echo "(ask-incapable harness: CAWS_GUARD_NO_ASK=$CAWS_GUARD_NO_ASK or emit_ask unavailable — falling back to a hard block so the write is not silently allowed.)" >&2
-  echo "Do NOT edit ${CAWS_VENDOR_DIR}/hooks/ or guard state to bypass this. Ask the user if a base-branch edit is genuinely needed." >&2
+  echo "Do NOT edit ${CAWS_HOOKS_DIR:-.caws/hooks}/ or guard state to bypass this. Ask the user if a base-branch edit is genuinely needed." >&2
   exit 2
 fi
 
