@@ -1,0 +1,38 @@
+id: CAWS-AGENT-CONCEPT-DISCOVERABILITY-001
+title: 'Escape hatches and core concepts are discoverable at the point of need, not by accident'
+risk_tier: 2
+mode: feature
+lifecycle_state: active
+created_at: '2026-07-25T07:06:20.473Z'
+updated_at: '2026-07-25T07:06:20.473Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/scope-guard.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/protected-paths.sh'
+    - 'packages/caws-cli/src/shell/commands/gates.ts'
+    - 'packages/caws-cli/tests/docs/agent-doc-examples.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'a PreToolUse hook guard blocks an agent'
+    when: 'the refusal is rendered'
+    then: 'it names caws reprieve as the sanctioned session-scoped escape and distinguishes it from a waiver, because reprieve exists solely to unblock a hook guard yet zero live guards mention it'
+  - id: A2
+    given: 'a policy gate reports violations in block mode'
+    when: 'the disposition is printed'
+    then: 'it names caws waiver create as the bounded exception path with its required flags'
+  - id: A3
+    given: 'an agent has never used CAWS and reads only guard output'
+    when: 'it is blocked by any guard'
+    then: 'every command named in the remediation exists and runs, verified by a test that extracts and validates them'
+non_functional: {}
+contracts:
+  - name: 'guard-remediation-names-its-escape-hatch'
+    type: behavior
