@@ -5,7 +5,8 @@ title: >-
 risk_tier: 1
 mode: feature
 lifecycle_state: closed
-resolution: completed
+resolution: superseded
+superseded_by: CAWS-SPEC-SUCCESSOR-DECLARATION-CUSTODY-02
 closure_notes: >-
   Merged at 266fbc72 (caws worktree merge successor-custody). PARTIAL
   CLOSURE — the auto-close stub this replaces implied full completion; it
@@ -32,12 +33,32 @@ closure_notes: >-
   completion; (4) the emitted spec_closed event carried the declaration
   verbatim including rationale, with no target standing copied in.
 
-  NOT DONE — carried to CAWS-SPEC-SUCCESSOR-DECLARATION-CUSTODY-02: the
-  read-only migration reporter, docs/api/schema.md, and acceptance A9
-  (round-trip across all writers), A11 (older-reader fixture), A16 (validate
-  needs no repository index). A9's round-trip safety currently rests on
-  reading specs-writer.ts and observing raw-byte patching — it is a
-  code-reading inference, NOT a runtime fact, until those tests exist.
+  RESOLUTION IS `superseded`, NOT `completed`. A structured `required`
+  successor establishes CUSTODY of the remaining work; it does not make unmet
+  acceptance criteria on this spec retroactively complete. The auto-close
+  wrote `completed`, and an earlier correction fixed only the prose — leaving
+  the machine-readable field contradicting the notes, which is exactly the
+  "reports success while doing nothing" class this repo's release stance
+  names as most dangerous. `superseded_by` now points at -02.
+
+  ACCEPTANCE TRANSFER MATRIX (this spec's 19 criteria):
+    MET HERE (16): A1-A8 schema + intra-spec semantics; A10-A14 resolver
+      outcomes and close-gate behavior; A15 the two layers disagreeing on
+      identical bytes; A16 `specs validate` needing no repository index —
+      both proven live against a scratch repo, not only by unit test; A17
+      REGISTRY_UNAVAILABLE refusing rather than downgrading.
+    TRANSFERRED TO -02 (3):
+      A9  round-trip byte-identity across activate/close/archive/
+          amend-scope/clear-binding. Currently an inference from reading
+          specs-writer.ts's raw-byte patching, NOT a runtime fact.
+      A11 older-reader fixture pinning the additionalProperties boundary.
+      A19 the read-only migration reporter and its no-write proof.
+    ALSO TRANSFERRED: docs/api/schema.md (discharged under
+      CAWS-WORKTREE-MERGE-LOCKFREE-CAS-001 A9, which absorbed the doc
+      obligation when it touched the same file).
+
+  The three transferred criteria are the ONLY unmet work; -02 carries them
+  under its own acceptance set. Nothing else from this spec is outstanding.
 successors:
   - target_spec_id: CAWS-SPEC-SUCCESSOR-DECLARATION-CUSTODY-02
     disposition: required
