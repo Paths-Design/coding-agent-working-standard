@@ -4,10 +4,11 @@ title: >-
   no base checkout
 risk_tier: 1
 mode: fix
-lifecycle_state: active
-worktree: merge-cas
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge merge-cas at 9a4acc7a7bd89f5c550f0575fd8488a052af058c'
 created_at: '2026-07-25T00:00:00.000Z'
-updated_at: '2026-07-25T07:23:23.722Z'
+updated_at: '2026-07-25T07:36:37.436Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/worktrees-writer.ts
