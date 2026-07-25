@@ -113,10 +113,10 @@ Implement, run your project's test suite as usual.
 
 ```bash
 caws evidence record --type test --spec user-auth \
-  --data '{"name":"login_happy_path","status":"pass"}'
+  --data '{"command":"npm test -- login_happy_path","exit_code":0}'
 
 caws evidence record --type ac --spec user-auth \
-  --data '{"id":"A1","status":"satisfied"}'
+  --data '{"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}'
 ```
 
 Both append hash-chained events to `.caws/events.jsonl` via the store.

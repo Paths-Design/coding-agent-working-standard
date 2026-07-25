@@ -56,8 +56,15 @@ This creates `.caws/` with `policy.yaml`, `specs/`, `waivers/`, `worktrees.json`
 Use the CLI to create the spec — this is the canonical path:
 
 ```bash
-caws specs create PREF-001 --title "Add User Preferences Storage" --mode feature --risk-tier 2
+caws specs create PREF-001 --title "Add User Preferences Storage" --mode feature --risk-tier 2 \
+  --contract "preferences-api:behavior"
 ```
+
+`--contract` is not optional here: tier 1 and tier 2 specs require at least one,
+and the command refuses without it (`Tier 2 specs require at least one
+contract`). The shape is `"name:type[:path]"`, where type is one of
+`api | schema | contract-test | behavior`. A tier-3 or `--mode chore` spec needs
+no contract.
 
 This writes `.caws/specs/PREF-001.yaml` with `lifecycle_state: active`. Now edit it to add scope, invariants, acceptance, and non-functional requirements:
 
@@ -419,9 +426,9 @@ scope:
 
 ```bash
 # Record each acceptance criterion as satisfied
-caws evidence record --type ac --spec PREF-001 --data '{"id":"A1","status":"satisfied"}'
-caws evidence record --type ac --spec PREF-001 --data '{"id":"A2","status":"satisfied"}'
-caws evidence record --type ac --spec PREF-001 --data '{"id":"A3","status":"satisfied"}'
+caws evidence record --type ac --spec PREF-001 --data '{"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}'
+caws evidence record --type ac --spec PREF-001 --data '{"criterion_id":"A2","status":"pass","evidence_ref":"npm test"}'
+caws evidence record --type ac --spec PREF-001 --data '{"criterion_id":"A3","status":"pass","evidence_ref":"npm test"}'
 
 # Check overall spec status
 caws status

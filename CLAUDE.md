@@ -194,7 +194,7 @@ The kernel has **three** outcomes, not two — dispatch on which one you got:
 must exist *before* any file is written under that spec's authority:
 
 ```
-author spec → caws specs validate → commit spec → caws worktree create <name> --spec <id> → cd into it → then write
+author spec → caws specs validate .caws/specs/<id>.yaml → commit spec → caws worktree create <name> --spec <id> → cd into it → then write
 ```
 
 This is not a multi-agent nicety — the worktree is what *confers write

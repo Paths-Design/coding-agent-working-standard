@@ -171,7 +171,7 @@ Before declaring the feature done:
 ```bash
 caws doctor && \
   caws gates run --spec <id> && \
-  caws evidence record --type ac --spec <id> --data '{"id":"A_FINAL","status":"satisfied"}'
+  caws evidence record --type ac --spec <id> --data '{"criterion_id":"A_FINAL","status":"pass","evidence_ref":"npm test"}'
 ```
 
 ## What CAWS v11 does NOT provide
