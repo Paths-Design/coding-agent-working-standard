@@ -1,0 +1,45 @@
+id: CAWS-AGENT-USAGE-REFERENCE-SCAFFOLD-001
+title: 'Ship the CAWS operating reference as repo docs and scaffold it into .caws/ on init'
+risk_tier: 2
+mode: feature
+lifecycle_state: active
+created_at: '2026-07-25T07:11:00.230Z'
+updated_at: '2026-07-25T07:11:00.230Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/agents/usage-reference.md'
+    - 'packages/caws-cli/templates/USAGE.md'
+    - 'packages/caws-cli/src/store/init-store.ts'
+    - 'packages/caws-cli/scripts/populate-doc-markers.mjs'
+    - 'packages/caws-cli/scripts/lib/agent-surfaces.cjs'
+    - 'packages/caws-cli/tests/docs/agent-doc-examples.test.js'
+    - 'packages/caws-cli/tests/store/init-usage-scaffold.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'a project runs caws init'
+    when: '.caws/USAGE.md is absent'
+    then: 'it is created from the shipped template, and a re-run is a no-op that never clobbers local edits'
+  - id: A2
+    given: 'the usage reference enumerates the command groups or the --agent-surface enum'
+    when: 'npm run docs:check runs'
+    then: 'it fails on drift, because the enumerations sit inside generator marker pairs'
+  - id: A3
+    given: 'the usage reference contains runnable caws examples'
+    when: 'the agent-doc-examples test runs'
+    then: 'every evidence payload validates against its kernel schema and no tier-1/2 create omits --contract'
+  - id: A4
+    given: 'an agent has only .caws/USAGE.md and no prior CAWS knowledge'
+    when: 'it needs to unblock a hook guard or bypass a gate'
+    then: 'reprieve and waiver are both named with their real flags and the distinction between them stated'
+non_functional: {}
+contracts:
+  - name: 'usage-reference-generated-from-surface'
+    type: behavior
