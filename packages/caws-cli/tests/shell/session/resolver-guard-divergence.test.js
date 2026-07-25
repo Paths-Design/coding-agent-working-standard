@@ -386,16 +386,63 @@ describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A6: precedence consolid
       { env: { CLAUDE_CODE_SESSION_ID: 'unknown', CODEX_THREAD_ID: 'real' }, want: 'real' },
       { env: {}, want: 'unknown' },
     ];
+    // CAWS-TEST-RESOLVER-ENV-INHERITANCE-001: each case must be decided ONLY by
+    // the variables it sets. execSync inherits the parent environment, and every
+    // agent harness exports a real session id (Claude Code exports
+    // CLAUDE_CODE_SESSION_ID), which outranks the lower-precedence variables the
+    // later cases set — so the helper correctly returned the inherited id and the
+    // case failed. The suite passed in CI and on a bare shell and failed for every
+    // agent, which is the worst shape: green exactly where nobody runs it.
+    //
+    // Clear the full precedence chain before applying the case's own assignments.
+    // Scoped to the session variables rather than `env -i` so PATH/HOME survive
+    // and the child shell still behaves like a real one.
+    const SESSION_VARS = [
+      'CLAUDE_SESSION_ID',
+      'CLAUDE_CODE_SESSION_ID',
+      'CODEX_THREAD_ID',
+      'CAWS_SESSION_ID',
+      'HOOK_SESSION_ID',
+      'CURSOR_TRACE_ID',
+    ];
+
     for (const { env, want } of cases) {
-      const envAssigns = Object.entries(env)
-        .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
-        .join(' ');
-      const out = require('child_process').execSync(
-        `${envAssigns} bash -c 'source "${SHARED_LIB}" >/dev/null 2>&1; resolve_caws_session_id'`,
-        { encoding: 'utf8' }
-      ).trim();
+      const childEnv = { ...process.env };
+      for (const v of SESSION_VARS) delete childEnv[v];
+      Object.assign(childEnv, env);
+
+      const out = require('child_process')
+        .execSync(`bash -c 'source "${SHARED_LIB}" >/dev/null 2>&1; resolve_caws_session_id'`, {
+          encoding: 'utf8',
+          env: childEnv,
+        })
+        .trim();
       expect(out).toBe(want);
     }
+  });
+
+  test('the precedence cases are decided by the case env, not the ambient one', () => {
+    // Guards the fix above against becoming vacuous. If the isolation regressed
+    // to inheriting the parent environment, a deliberately-planted ambient
+    // session id would win over the lower-precedence variable this case sets,
+    // and the assertion would read back the planted value instead of 'e'.
+    const childEnv = { ...process.env, HOOK_SESSION_ID: 'e' };
+    for (const v of ['CLAUDE_SESSION_ID', 'CODEX_THREAD_ID', 'CAWS_SESSION_ID', 'CURSOR_TRACE_ID'])
+      delete childEnv[v];
+    // Plant a HIGHER-precedence id, exactly as a real harness would.
+    childEnv.CLAUDE_CODE_SESSION_ID = 'ambient-leak-sentinel';
+
+    const leaked = require('child_process')
+      .execSync(`bash -c 'source "${SHARED_LIB}" >/dev/null 2>&1; resolve_caws_session_id'`, {
+        encoding: 'utf8',
+        env: childEnv,
+      })
+      .trim();
+
+    // The helper honours precedence, so with the leak present it MUST return the
+    // planted value — proving the ambient environment really can reach the child
+    // and that the loop above is protected by its explicit deletion, not by luck.
+    expect(leaked).toBe('ambient-leak-sentinel');
   });
 
   test('block-dangerous.sh sources the shared helper', () => {

@@ -2,13 +2,14 @@ id: CAWS-RESET-LATCH-CWD-DEPENDENT-LOOKUP-001
 title: 'reset-danger-latch resolves state dir from cwd and falsely reports nothing to clear'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: latch-cwd-fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge latch-cwd-fix at 465ebca453bbecff82aeee515b09cb4454ebeaa0'
 created_at: '2026-07-25T08:09:02.636Z'
-updated_at: '2026-07-25T08:09:02.636Z'
+updated_at: '2026-07-25T08:35:44.620Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli/templates/hook-packs/shared (danger-latch reset recovery path)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -19,7 +20,8 @@ scope:
     - 'packages/caws-cli/tests/docs/agent-recovery-path-drift.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The latch state directory is derived from the reset script''s own install location, never from the operator''s working directory.'
+  - 'The reset script never reports a clean result without naming the absolute directory it searched, so a false negative is distinguishable from a completed reset.'
 acceptance:
   - id: A1
     given: 'a session danger latch is armed and its state file exists'

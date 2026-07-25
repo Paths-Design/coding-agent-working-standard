@@ -1,14 +1,18 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 18
+# hook_pack_version: 25
 # caws_min_major: 11
 # lineage_refs: 17
-# edit_stance: this repo OWNS and may grow this hook. Edits are expected and
-#   preserved — `caws init` refuses to overwrite a changed managed hook (re-run
-#   with --adopt to keep yours, or --overwrite to pull this upstream template).
-#   CAWS owns the failure-class invariant (the why/what you must not silently
-#   weaken); you own the how. Do not edit it to BYPASS the guard; do grow it.
+# edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
+#   to your repo: tune thresholds, add checks, remove what does not fit. Your edits
+#   are preserved: caws init treats a changed hook as intended growth and will not
+#   clobber it — it shows a diff and asks (--adopt keeps yours; --overwrite --force
+#   takes the upstream template). The CAWS-MANAGED-HOOK marker above is only how caws
+#   init finds hooks it can offer updates for; it is NOT a keep-out sign. CAWS owns the
+#   failure-class invariant (the why/what a guard protects); you own the how. The one
+#   edit to avoid: gutting a guard to dodge a block instead of fixing the cause. Grow
+#   everything else freely.
 # Human-authorized reset for the dangerous-command latch written by
 # block-dangerous.sh. Clears latch sentinel(s) under
 # ${CAWS_VENDOR_DIR}/hooks/state/ and records each reset (with a mandatory
@@ -19,10 +23,25 @@ set -euo pipefail
 # --- Resolve project + state locations -------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/agent-surface.sh
-# Provides CAWS_VENDOR_DIR, CAWS_PROJECT_DIR.
+# Provides CAWS_VENDOR_DIR. NOTE: it also sets CAWS_PROJECT_DIR, sometimes to the
+# RELATIVE fallback "." — see below for why that value is deliberately ignored.
 source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
 
-PROJECT_DIR="${CAWS_PROJECT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+# CAWS-RESET-LATCH-CWD-DEPENDENT-LOOKUP-001: derive the project root from this
+# script's own location, NOT from the inherited CAWS_PROJECT_DIR.
+#
+# agent-surface.sh sets CAWS_PROJECT_DIR="." when it cannot resolve an absolute
+# root. A `${CAWS_PROJECT_DIR:-<absolute fallback>}` expansion does NOT rescue
+# that: "." is non-empty, so `:-` never fires and STATE_DIR becomes the RELATIVE
+# "./${CAWS_VENDOR_DIR}/hooks/state" — silently resolved against whatever cwd the
+# human happens to be in. Running the reset from a sibling repo then searched the
+# wrong tree and reported "nothing to clear" while the latch was still armed,
+# leaving the session hard-blocked with no working recovery path.
+#
+# reset-strikes.sh has always computed its root this way and is immune; this
+# matches it. The state dir is a property of where the hooks are INSTALLED, never
+# of where the operator is standing.
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 STATE_DIR="$PROJECT_DIR/${CAWS_VENDOR_DIR}/hooks/state"
 LOG_FILE="$PROJECT_DIR/${CAWS_VENDOR_DIR}/logs/danger-latch-resets.log"
 
@@ -89,6 +108,13 @@ if ! source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || ! command -v sanitize
   }
 fi
 
+# shellcheck source=lib/session-id.sh
+# CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 (A6): resolve the session id via
+# the SAME precedence the resolver + guards use, so the latch filename the
+# reset targets matches the filename block-dangerous.sh keyed. Best-effort
+# source — a missing helper falls back to the inline chain at the call site.
+[[ -f "$SCRIPT_DIR/lib/session-id.sh" ]] && source "$SCRIPT_DIR/lib/session-id.sh" 2>/dev/null || true
+
 # --- Resolve the set of latch files to clear --------------------------------
 declare -a LATCH_FILES=()
 # DANGER-LATCH-APPROVAL-AND-FEEDBACK-001: the reset ALSO clears the per-session
@@ -100,7 +126,16 @@ declare -a WARN_FILES=()
 
 case "$MODE" in
   current)
-    SESSION_ID="${CAWS_SESSION_ID:-${CLAUDE_SESSION_ID:-${HOOK_SESSION_ID:-unknown}}}"
+    # CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 (A6): use the shared helper so
+    # this resolves the SAME session id block-dangerous.sh used to KEY the latch
+    # (previously this used a 3-source inline chain while block-dangerous used a
+    # 4-source jq chain — they could disagree, so the reset targeted the wrong
+    # filename). Falls back to the legacy inline chain if the helper is absent.
+    if declare -F resolve_caws_session_id >/dev/null 2>&1; then
+      SESSION_ID="$(resolve_caws_session_id)"
+    else
+      SESSION_ID="${CAWS_SESSION_ID:-${CLAUDE_SESSION_ID:-${HOOK_SESSION_ID:-unknown}}}"
+    fi
     CANDIDATE="$STATE_DIR/danger-latch-$(sanitize_session "$SESSION_ID").json"
     # The warn sibling for this session (cleared even if no latch exists).
     WARN_FILES+=("$STATE_DIR/danger-warn-$(sanitize_session "$SESSION_ID").json")
@@ -210,7 +245,15 @@ for WARN in ${WARN_FILES[@]+"${WARN_FILES[@]}"}; do
 done
 
 if [[ "$MODE" != "all" && "$CLEARED" -eq 0 && "$WARNS_CLEARED" -eq 0 && "$MISSING" -gt 0 ]]; then
-  echo "No active latch or warn marker for the requested session (nothing to clear)."
+  # CAWS-RESET-LATCH-CWD-DEPENDENT-LOOKUP-001 (A3): name the directory that was
+  # actually searched. "nothing to clear" alone is indistinguishable from a
+  # completed reset, so an operator who searched the WRONG tree reads a
+  # still-armed latch as a successful one and stays hard-blocked with no signal.
+  # The absolute path is the evidence that makes the two cases tellable apart.
+  echo "No active latch or warn marker for the requested session (searched: $STATE_DIR)."
+  if [[ ! -d "$STATE_DIR" ]]; then
+    echo "  note: that state directory does not exist — this is likely the wrong project root." >&2
+  fi
   exit 0
 fi
 
