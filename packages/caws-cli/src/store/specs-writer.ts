@@ -37,6 +37,11 @@ import {
   type Result,
   type Spec,
   type Diagnostic,
+  createSuccessorResolver,
+  findUnresolvedObligations,
+  projectSuccessorsForEvent,
+  type SpecCorpusEntry,
+  type UnresolvedObligation,
 } from '@paths.design/caws-kernel';
 
 import { appendEvent, loadEvents } from './events-store';
@@ -133,6 +138,116 @@ export interface CloseSpecInput {
    * See CAWS-CLI-MERGE-AUTOCLOSE-PRESERVE-CLOSURE-NOTES-001.
    */
   readonly preserveExistingNotes?: boolean;
+}
+
+/**
+ * Build the successor-resolution corpus from live + archived specs.
+ *
+ * Returns `undefined` when the corpus cannot be read, which the resolver
+ * turns into REGISTRY_UNAVAILABLE for every lookup. That distinction is
+ * load-bearing: "I cannot tell" must never be reported as "it does not
+ * exist", or an unreadable repository would silently wave through the
+ * obligation the close gate governs.
+ *
+ * Archived specs count as AUTHORED. Archive is a tombstone, not absence —
+ * a successor that ran, closed, and was archived plainly discharged its
+ * custody.
+ */
+function buildSuccessorCorpus(cawsDir: string): SpecCorpusEntry[] | undefined {
+  const loaded = loadSpecs(cawsDir);
+  // loadSpecs reports an unreadable specs dir as READ_IO_FAILED with zero
+  // specs. Distinguish that from a legitimately empty repository.
+  const readFailed = loaded.diagnostics.some(
+    (d) => d.rule === STORE_RULES.READ_IO_FAILED
+  );
+  if (readFailed && loaded.specs.length === 0) return undefined;
+
+  const entries: SpecCorpusEntry[] = loaded.specs.map((s) => ({
+    id: s.id,
+    lifecycle_state: s.lifecycle_state,
+    ...(s.resolution !== undefined ? { resolution: s.resolution } : {}),
+    archived: false,
+    source: 'live',
+  }));
+
+  // Archived specs live in .caws/specs/.archive as <id>.yaml (or a
+  // tombstone). Only the ID is needed to prove custody, so read filenames
+  // rather than parsing each body — a 2,500-spec archive must not cost a
+  // full parse per close.
+  const archiveDir = path.join(cawsDir, 'specs', '.archive');
+  if (fs.existsSync(archiveDir)) {
+    try {
+      for (const name of fs.readdirSync(archiveDir)) {
+        if (!name.endsWith('.yaml') && !name.endsWith('.yml')) continue;
+        const id = name.replace(/\.ya?ml$/, '');
+        entries.push({
+          id,
+          // Archived specs are terminal by construction. Standing is
+          // evidence only and never gates the close, so the coarse read is
+          // sufficient here.
+          lifecycle_state: 'archived',
+          archived: true,
+          source: 'archive',
+        });
+      }
+    } catch {
+      // An unreadable ARCHIVE is not an unreadable corpus: live specs still
+      // resolve. Degrade to live-only rather than failing every lookup.
+    }
+  }
+
+  return entries;
+}
+
+function unresolvedObligationMessage(
+  specId: string,
+  u: UnresolvedObligation
+): string {
+  const where = `successors[${u.index}].${u.field}`;
+  switch (u.outcome) {
+    case 'UNAUTHORED':
+      return (
+        `Cannot close "${specId}": ${where} names "${u.target_spec_id}", ` +
+        `which is not an authored spec. The successor obligation is undischarged.`
+      );
+    case 'REGISTRY_UNAVAILABLE':
+      return (
+        `Cannot close "${specId}": the spec corpus could not be read, so ` +
+        `${where} ("${u.target_spec_id}") cannot be verified. Refusing rather ` +
+        `than assuming the successor exists.`
+      );
+    case 'AMBIGUOUS_ID':
+      return (
+        `Cannot close "${specId}": ${where} names "${u.target_spec_id}", which ` +
+        `resolves to more than one spec (live and archived). The reference is ambiguous.`
+      );
+    case 'MALFORMED_ID':
+      return (
+        `Cannot close "${specId}": ${where} ("${u.target_spec_id}") is not a ` +
+        `valid spec id.`
+      );
+    default:
+      return `Cannot close "${specId}": ${where} ("${u.target_spec_id}") did not resolve.`;
+  }
+}
+
+function unresolvedObligationRepair(u: UnresolvedObligation): string {
+  switch (u.outcome) {
+    case 'UNAUTHORED':
+      return (
+        `Author the successor (caws specs create ${u.target_spec_id} ...), or ` +
+        `change this declaration's disposition to "declined" with a rationale ` +
+        `if the work will not be carried onward.`
+      );
+    case 'REGISTRY_UNAVAILABLE':
+      return 'Fix access to .caws/specs and retry; do not bypass the check.';
+    case 'AMBIGUOUS_ID':
+      return `Remove the duplicate ${u.target_spec_id} from the archive or the live set.`;
+    case 'MALFORMED_ID':
+      return 'Correct the id to the canonical grammar (e.g. SOME-SPEC-01).';
+    default:
+      return 'Resolve the successor reference before closing.';
+  }
 }
 
 function nonActiveCloseSpecError(id: string, lifecycleState: string): Result<never> {
@@ -1055,6 +1170,44 @@ export function closeSpec(
     return nonActiveCloseSpecError(input.id, spec.lifecycle_state);
   }
 
+  // CAWS-SPEC-SUCCESSOR-DECLARATION-CUSTODY-01: the successor close gate.
+  //
+  // Placed BEFORE any byte patching so a refusal writes nothing — no YAML
+  // mutation, no event. The repository-aware resolver is built here and
+  // INJECTED into the kernel's pure predicate; the kernel never reads the
+  // filesystem, which is what keeps `caws specs validate <file>` portable.
+  //
+  // CUSTODY, NOT COMPLETION: an authored target in any lifecycle state
+  // satisfies the obligation. We are asking whether the work was made
+  // governable, not whether it is finished.
+  if (spec.successors !== undefined && spec.successors.length > 0) {
+    const corpus = buildSuccessorCorpus(cawsDir);
+    const unresolved = findUnresolvedObligations(
+      spec.successors,
+      createSuccessorResolver(corpus)
+    );
+    if (unresolved.length > 0) {
+      return err(
+        unresolved.map((u) =>
+          storeDiagnostic(
+            STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+            unresolvedObligationMessage(input.id, u),
+            {
+              subject: input.id,
+              narrowRepair: unresolvedObligationRepair(u),
+              data: {
+                successor_index: u.index,
+                field: u.field,
+                target_spec_id: u.target_spec_id,
+                outcome: u.outcome,
+              },
+            }
+          )
+        )
+      );
+    }
+  }
+
   // Raw-byte patch sequence:
   //   1. lifecycle_state → closed
   //   2. insert resolution after lifecycle_state
@@ -1191,6 +1344,14 @@ export function closeSpec(
   if (input.mergeCommit !== undefined) eventData.merge_commit = input.mergeCommit;
   if (input.supersededBy !== undefined) eventData.superseded_by = input.supersededBy;
   if (priorWorktree !== undefined) eventData.prior_worktree = priorWorktree;
+  // Preserve the COMPLETE declaration array — every entry, in order, with
+  // rationale and absorbed_by intact. A projection that kept only target ids
+  // would satisfy a naive test while destroying the audit record this slice
+  // exists to establish.
+  const projectedSuccessors = projectSuccessorsForEvent(spec);
+  if (projectedSuccessors !== undefined) {
+    eventData.successors = projectedSuccessors;
+  }
 
   const event: EventBody = {
     event: 'spec_closed',

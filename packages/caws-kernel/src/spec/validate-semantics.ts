@@ -150,6 +150,140 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
     );
   }
 
+  // Successor declarations — INTRA-SPEC RULES ONLY.
+  //
+  // Everything below is decidable from this spec's own bytes. Whether a
+  // target_spec_id resolves to an authored spec is deliberately NOT checked
+  // here: that requires reading the corpus, and pushing it into this layer
+  // would make `caws specs validate <file>` return different verdicts for
+  // identical bytes depending on ambient .caws state. Resolution belongs to
+  // the SuccessorResolver, injected at close preflight.
+  if (spec.successors !== undefined) {
+    const seenTargets = new Map<string, number>();
+
+    spec.successors.forEach((successor, index) => {
+      const pointer = `/successors/${index}`;
+
+      // 'declined' records a human decision NOT to pursue a successor. An
+      // undocumented decline is indistinguishable from an oversight, so the
+      // rationale carries the whole weight of the decision.
+      if (successor.disposition === 'declined') {
+        if (successor.rationale === undefined || successor.rationale.trim() === '') {
+          errors.push(
+            diagnostic({
+              rule: SPEC_RULES.SUCCESSOR_DECLINED_MISSING_RATIONALE,
+              authority: 'kernel/spec',
+              message: `Successor "${successor.target_spec_id}" has disposition "declined" but no rationale. A decline without a stated reason is indistinguishable from an oversight.`,
+              subject: subjectBase,
+              location: { pointer: `${pointer}/rationale` },
+              narrowRepair: 'Add a rationale explaining why no successor is required.',
+            }),
+          );
+        }
+      }
+
+      // 'absorbed' asserts the obligation was discharged somewhere specific.
+      // Without absorbed_by the claim is unfalsifiable.
+      if (successor.disposition === 'absorbed' && successor.absorbed_by === undefined) {
+        errors.push(
+          diagnostic({
+            rule: SPEC_RULES.SUCCESSOR_ABSORBED_MISSING_ABSORBED_BY,
+            authority: 'kernel/spec',
+            message: `Successor "${successor.target_spec_id}" has disposition "absorbed" but no absorbed_by. An absorbed obligation must name the spec that discharged it.`,
+            subject: subjectBase,
+            location: { pointer: `${pointer}/absorbed_by` },
+            narrowRepair: 'Add absorbed_by naming the spec that took on this work.',
+          }),
+        );
+      }
+
+      // A whitespace-only rationale passes the schema's minLength: 1 but
+      // carries no decision. Reject it wherever it appears, not only under
+      // 'declined'.
+      if (successor.rationale !== undefined && successor.rationale.trim() === '') {
+        errors.push(
+          diagnostic({
+            rule: SPEC_RULES.SUCCESSOR_RATIONALE_FORBIDDEN_EMPTY,
+            authority: 'kernel/spec',
+            message: `Successor "${successor.target_spec_id}" has a whitespace-only rationale.`,
+            subject: subjectBase,
+            location: { pointer: `${pointer}/rationale` },
+            narrowRepair: 'Write a substantive rationale or remove the field.',
+          }),
+        );
+      }
+
+      // Self-reference, in its three shapes. This is the ONLY cycle analysis
+      // in scope for this slice — the resolver is an existence oracle, not a
+      // graph authority.
+      if (successor.target_spec_id === spec.id) {
+        errors.push(
+          diagnostic({
+            rule: SPEC_RULES.SUCCESSOR_SELF_REFERENCE,
+            authority: 'kernel/spec',
+            message: 'A spec cannot be its own successor.',
+            subject: subjectBase,
+            location: { pointer: `${pointer}/target_spec_id` },
+            narrowRepair: 'Name a different spec, or remove the successor entry.',
+          }),
+        );
+      }
+
+      if (successor.absorbed_by !== undefined && successor.absorbed_by === spec.id) {
+        errors.push(
+          diagnostic({
+            rule: SPEC_RULES.SUCCESSOR_ABSORBED_BY_SELF_REFERENCE,
+            authority: 'kernel/spec',
+            message: 'A spec cannot absorb its own successor obligation.',
+            subject: subjectBase,
+            location: { pointer: `${pointer}/absorbed_by` },
+            narrowRepair: 'Name the spec that actually discharged the obligation.',
+          }),
+        );
+      }
+
+      // absorbed_by === target_spec_id would make the declaration
+      // self-satisfying: "the successor obligation was absorbed by the
+      // successor" states nothing.
+      if (
+        successor.absorbed_by !== undefined &&
+        successor.absorbed_by === successor.target_spec_id
+      ) {
+        errors.push(
+          diagnostic({
+            rule: SPEC_RULES.SUCCESSOR_ABSORBED_BY_EQUALS_TARGET,
+            authority: 'kernel/spec',
+            message: `Successor "${successor.target_spec_id}" is absorbed by itself, which asserts nothing. Use disposition "required" if the target carries the obligation.`,
+            subject: subjectBase,
+            location: { pointer: `${pointer}/absorbed_by` },
+            narrowRepair:
+              'Set disposition to "required", or name the different spec that absorbed the work.',
+          }),
+        );
+      }
+
+      // Duplicate targets are REJECTED rather than deduplicated: two entries
+      // for one target mean the author's intent is ambiguous, and silently
+      // collapsing them would pick one rationale and discard the other.
+      const firstIndex = seenTargets.get(successor.target_spec_id);
+      if (firstIndex !== undefined) {
+        errors.push(
+          diagnostic({
+            rule: SPEC_RULES.SUCCESSOR_DUPLICATE_TARGET,
+            authority: 'kernel/spec',
+            message: `Successor "${successor.target_spec_id}" is declared more than once (entries ${firstIndex} and ${index}). Two declarations for one target are ambiguous.`,
+            subject: subjectBase,
+            location: { pointer: `${pointer}/target_spec_id` },
+            narrowRepair:
+              'Merge the entries into one declaration with a single disposition and rationale.',
+          }),
+        );
+      } else {
+        seenTargets.set(successor.target_spec_id, index);
+      }
+    });
+  }
+
   // SPEC-SCOPE-OVERBROAD-OUT-DETECTION-001: same-spec scope contradiction.
   //
   // Detect when a scope.out entry is a path-prefix of a scope.in entry

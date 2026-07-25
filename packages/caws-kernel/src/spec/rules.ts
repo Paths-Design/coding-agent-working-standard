@@ -35,6 +35,21 @@ export const SPEC_RULES = {
   CLOSED_SPEC_MISSING_RESOLUTION: 'spec.semantic.closed.resolution_required',
   SUPERSEDES_SELF_REFERENCE: 'spec.semantic.supersedes.self_reference',
   /**
+   * Successor declaration rules — INTRA-SPEC ONLY. These are decidable from
+   * the spec's own bytes with no filesystem access, which is what keeps
+   * `caws specs validate <file>` portable and deterministic. Whether a
+   * target_spec_id actually RESOLVES to an authored spec is a separate,
+   * repository-aware question answered by the SuccessorResolver at close
+   * preflight — never here.
+   */
+  SUCCESSOR_DECLINED_MISSING_RATIONALE: 'spec.semantic.successor.declined_rationale_required',
+  SUCCESSOR_ABSORBED_MISSING_ABSORBED_BY: 'spec.semantic.successor.absorbed_by_required',
+  SUCCESSOR_RATIONALE_FORBIDDEN_EMPTY: 'spec.semantic.successor.rationale_empty',
+  SUCCESSOR_DUPLICATE_TARGET: 'spec.semantic.successor.duplicate_target',
+  SUCCESSOR_SELF_REFERENCE: 'spec.semantic.successor.self_reference',
+  SUCCESSOR_ABSORBED_BY_SELF_REFERENCE: 'spec.semantic.successor.absorbed_by_self_reference',
+  SUCCESSOR_ABSORBED_BY_EQUALS_TARGET: 'spec.semantic.successor.absorbed_by_equals_target',
+  /**
    * A scope.out entry is a path-prefix of a scope.in entry within the
    * same spec, which would refuse the explicitly-admitted file at
    * scope-decision time. See SPEC-SCOPE-OVERBROAD-OUT-DETECTION-001

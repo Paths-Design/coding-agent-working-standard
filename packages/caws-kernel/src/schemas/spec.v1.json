@@ -74,6 +74,37 @@
       "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$",
       "description": "When this spec is itself superseded by another."
     },
+    "successors": {
+      "type": "array",
+      "description": "Structured successor declarations. Each entry records a SOURCE-SIDE DECISION about an obligation this spec hands onward. Target standing (whether the target is active, closed, completed, abandoned) is NEVER stored here — it is derived at query time from the target's own lifecycle_state + resolution, so the two can never drift apart.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["target_spec_id", "disposition"],
+        "properties": {
+          "target_spec_id": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$",
+            "description": "The spec carrying the obligation onward. Canonical spec-id grammar: prose after the identifier is structurally unrepresentable."
+          },
+          "disposition": {
+            "type": "string",
+            "enum": ["required", "declined", "absorbed"],
+            "description": "The source's decision. 'required': target must resolve to an authored spec before this spec can close. 'declined': no target required, rationale mandatory. 'absorbed': obligation discharged elsewhere, absorbed_by mandatory. NOT a target-state field — 'the target does not exist' is a query result, not a disposition."
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Why this disposition was chosen. Mandatory for 'declined' (enforced semantically): an undocumented decline is indistinguishable from an oversight."
+          },
+          "absorbed_by": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$",
+            "description": "For disposition 'absorbed': the spec that actually discharged the obligation. Must resolve to an authored spec, which need not be terminal."
+          }
+        }
+      }
+    },
     "worktree": {
       "type": "string",
       "pattern": "^[a-zA-Z0-9_-]+$",
