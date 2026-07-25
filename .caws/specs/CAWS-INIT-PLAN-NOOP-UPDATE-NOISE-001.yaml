@@ -1,0 +1,34 @@
+id: CAWS-INIT-PLAN-NOOP-UPDATE-NOISE-001
+title: 'init plan reports Would update for byte-identical files whose only delta is the version stamp'
+risk_tier: 3
+mode: fix
+lifecycle_state: active
+created_at: '2026-07-25T07:31:27.942Z'
+updated_at: '2026-07-25T07:31:27.942Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/init/hook-install.ts'
+    - 'packages/caws-cli/tests/init/init-hook-pack-render.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'an installed managed hook is byte-identical to the rendered template including the stamped version'
+    when: 'caws init --plan runs'
+    then: 'it reports unchanged, not Would update, because a plan that proposes zero-effect work trains operators to stop reading it'
+  - id: A2
+    given: 'an installed hook carries an older header stamp but an identical body'
+    when: 'the plan is rendered'
+    then: 'the entry is labelled as a version re-stamp distinct from a content update, so an operator can tell cosmetic from substantive'
+  - id: A3
+    given: 'the shared templates ship a placeholder hook_pack_version that install overwrites'
+    when: 'a test compares rendered output to the installed file'
+    then: 'it asserts the rendered stamp equals SHARED_PACK_VERSION, pinning the placeholder-vs-stamp contract that currently has no coverage'
+non_functional: {}
+contracts: []
