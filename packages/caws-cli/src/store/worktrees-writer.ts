@@ -1401,6 +1401,155 @@ export function untrackWorktree(
 
 // ─── mergeWorktree ───────────────────────────────────────────────────────
 
+/** How many times a lost compare-and-swap is retried before giving up. */
+const MERGE_CAS_MAX_ATTEMPTS = 5;
+
+type MergeCasOutcome =
+  | { ok: true; mergeCommit: string; baseBefore: string; attempts: number }
+  | {
+      ok: false;
+      message: string;
+      /** True when the failure is concurrent contention, not a real conflict. */
+      contention: boolean;
+      attempts?: number;
+      repairSuffix?: string;
+    };
+
+/**
+ * Merge `branch` into `baseBranch` without checking either one out.
+ *
+ * The three-step sequence — merge-tree, commit-tree, update-ref with an
+ * expected-old SHA — is the whole concurrency story. Steps 1 and 2 write only
+ * unreferenced objects, so they are invisible to every other process and safe
+ * to abandon. Step 3 is the single atomic instant at which the merge becomes
+ * real, and git refuses it outright if the base moved underneath us.
+ *
+ * Losing that race is NORMAL under multi-agent load, not an error: we re-read
+ * the base and recompute. Only exhausting the retry budget, or hitting a real
+ * conflict, is reported as a failure — and the two are distinguished in the
+ * outcome so the caller can say which happened.
+ */
+function mergeViaCompareAndSwap(
+  repoRoot: string,
+  baseBranch: string,
+  branch: string,
+  message: string
+): MergeCasOutcome {
+  const ref = `refs/heads/${baseBranch}`;
+
+  for (let attempt = 1; attempt <= MERGE_CAS_MAX_ATTEMPTS; attempt++) {
+    // Read the base ref immediately before computing the merge. This value is
+    // the CAS witness; it must never come from a cache or from the caller,
+    // or a stale witness could overwrite a concurrent merge.
+    const baseRead = runGit(['rev-parse', ref], repoRoot);
+    if (!baseRead.ok) {
+      return {
+        ok: false,
+        message: `git rev-parse ${ref} failed: ${baseRead.reason}`,
+        contention: false,
+      };
+    }
+    const baseBefore = baseRead.stdout.trim();
+
+    // Compute the merged tree in the object database. No working tree, no
+    // index, no HEAD — so a dirty canonical checkout cannot corrupt the
+    // result and a conflict cannot strand a half-merged tree on disk.
+    const treeResult = runGit(
+      ['merge-tree', '--write-tree', baseBefore, branch],
+      repoRoot
+    );
+    if (!treeResult.ok) {
+      // merge-tree exits non-zero on conflict and prints the conflicted
+      // paths. This is a genuine conflict, not contention: retrying cannot
+      // help, and the working tree is still clean.
+      return {
+        ok: false,
+        message:
+          `Cannot merge ${branch} into ${baseBranch}: conflicting changes.\n` +
+          `${treeResult.reason}`,
+        contention: false,
+        repairSuffix:
+          'No merge was started and the working tree is untouched. Resolve by ' +
+          `merging ${baseBranch} into ${branch} inside the worktree, then re-run.`,
+      };
+    }
+    const mergedTree = treeResult.stdout.trim().split('\n')[0]?.trim() ?? '';
+    if (!/^[0-9a-f]{40}$/.test(mergedTree)) {
+      return {
+        ok: false,
+        message: `Unexpected tree SHA from git merge-tree: ${mergedTree}`,
+        contention: false,
+      };
+    }
+
+    // Build the merge commit. Two parents, base first, matching the shape
+    // `git merge --no-ff` would have produced.
+    const commitResult = runGit(
+      ['commit-tree', mergedTree, '-p', baseBefore, '-p', branch, '-m', message],
+      repoRoot
+    );
+    if (!commitResult.ok) {
+      return {
+        ok: false,
+        message: `git commit-tree failed: ${commitResult.reason}`,
+        contention: false,
+      };
+    }
+    const mergeCommit = commitResult.stdout.trim();
+
+    // The atomic instant. Passing baseBefore as the expected-old value makes
+    // this a compare-and-swap: if another agent advanced the base since we
+    // read it, git refuses and writes nothing.
+    const casResult = runGit(
+      ['update-ref', ref, mergeCommit, baseBefore],
+      repoRoot
+    );
+    if (casResult.ok) {
+      // The ref moved. If the CANONICAL checkout happens to have the base
+      // branch checked out, its working tree and index are now stale relative
+      // to the new HEAD — every merged file would show as a staged deletion
+      // ("D path"), making a successful merge look like it deleted the work.
+      //
+      // `read-tree -u -m` fast-forwards the tree and index to match. The `-m`
+      // (merge) form is deliberate over `reset --hard`: it REFUSES rather
+      // than clobbers when local modifications are present, so it cannot
+      // destroy uncommitted work. (The merge preconditions already require a
+      // clean tree; this is defense in depth.)
+      //
+      // Worktrees with a different branch checked out are unaffected, which
+      // is the entire point of computing the merge in the object database.
+      const headRef = runGit(['symbolic-ref', '--quiet', 'HEAD'], repoRoot);
+      if (headRef.ok && headRef.stdout.trim() === ref) {
+        runGit(['read-tree', '-u', '-m', 'HEAD'], repoRoot);
+      }
+      return { ok: true, mergeCommit, baseBefore, attempts: attempt };
+    }
+
+    // Lost the race. The objects we just wrote are unreferenced and will be
+    // collected; nothing was mutated. Recompute against the new base.
+    const isCas =
+      casResult.reason.includes('but expected') ||
+      casResult.reason.includes('cannot lock ref');
+    if (!isCas) {
+      return {
+        ok: false,
+        message: `git update-ref ${ref} failed: ${casResult.reason}`,
+        contention: false,
+      };
+    }
+  }
+
+  return {
+    ok: false,
+    message:
+      `Could not merge into ${baseBranch}: the base branch was advanced by ` +
+      `another agent on all ${MERGE_CAS_MAX_ATTEMPTS} attempts. This is ` +
+      `contention, not a conflict — no state was written.`,
+    contention: true,
+    attempts: MERGE_CAS_MAX_ATTEMPTS,
+  };
+}
+
 export function mergeWorktree(
   cawsDir: string,
   input: MergeWorktreeInput
@@ -1499,58 +1648,64 @@ export function mergeWorktree(
     );
   }
 
-  // Perform the merge: git checkout base + git merge --no-ff.
+  // Perform the merge WITHOUT checking out the base branch.
+  //
+  // CAWS-WORKTREE-MERGE-LOCKFREE-CAS-001. The old sequence was
+  // `git checkout <base>` + `git merge --no-ff`, which mutates the canonical
+  // working tree's HEAD — a resource every concurrent agent shares. Two
+  // agents merging at once could interleave checkouts and merges, and
+  // `git branch -d` (which evaluates reachability against HEAD) could end up
+  // judging against a base it never merged into.
+  //
+  // Instead we compute the merge entirely in the object database and advance
+  // the base ref with an atomic compare-and-swap:
+  //
+  //   git merge-tree --write-tree <base> <branch>   -> merged tree, no I/O
+  //   git commit-tree <tree> -p <base> -p <branch>  -> merge commit object
+  //   git update-ref <ref> <new> <expected-old>     -> ATOMIC CAS
+  //
+  // If a concurrent agent advanced the base in between, git itself refuses
+  // the ref update ("is at X but expected Y") and nothing is written — we
+  // simply recompute against the new base and retry. This is strictly
+  // stronger than a lock: no blocking, no deadlock, no stale-lock recovery,
+  // and correct even when a human or CI advances the ref. It is also
+  // crash-safe by construction, since the objects written before the CAS are
+  // unreferenced (and therefore invisible) until the CAS makes them
+  // reachable.
   const repoRoot = repoRootFromCawsDir(cawsDir);
   const baseBranch = entry.baseBranch as string;
   const branch = entry.branch as string;
   const specId = entry.specId as string;
-
-  const checkoutResult = runGit(['checkout', baseBranch], repoRoot);
-  if (!checkoutResult.ok) {
-    return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_WRITE_FAILED,
-        `git checkout ${baseBranch} failed: ${checkoutResult.reason}`,
-        {
-          subject: input.name,
-          narrowRepair: mergeRepairHint(input.name, entry),
-        }
-      )
-    );
-  }
-
   const message = input.message ?? `merge(worktree): ${input.name}`;
-  const mergeResult = runGit(
-    ['merge', '--no-ff', '-m', message, branch],
-    repoRoot
+
+  const casOutcome = mergeViaCompareAndSwap(
+    repoRoot,
+    baseBranch,
+    branch,
+    message
   );
-  if (!mergeResult.ok) {
+  if (!casOutcome.ok) {
     return err(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_WRITE_FAILED,
-        `git merge --no-ff ${branch} failed: ${mergeResult.reason}`,
+        casOutcome.message,
         {
           subject: input.name,
-          narrowRepair:
-            `${mergeRepairHint(input.name, entry)} ` +
-            'If git left a conflicted merge in progress, inspect `git status --short` before aborting or resolving it.',
+          narrowRepair: casOutcome.contention
+            ? `Another agent is merging into ${baseBranch}. Re-run: caws worktree merge ${input.name}`
+            : `${mergeRepairHint(input.name, entry)} ${casOutcome.repairSuffix ?? ''}`.trim(),
+          data: {
+            base_branch: baseBranch,
+            ...(casOutcome.contention ? { contention: true } : {}),
+            ...(casOutcome.attempts !== undefined
+              ? { attempts: casOutcome.attempts }
+              : {}),
+          },
         }
       )
     );
   }
-
-  // Obtain the merge commit SHA.
-  const shaResult = runGit(['rev-parse', 'HEAD'], repoRoot);
-  if (!shaResult.ok) {
-    return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_WRITE_FAILED,
-        `git rev-parse HEAD failed: ${shaResult.reason}`,
-        { subject: input.name }
-      )
-    );
-  }
-  const mergeCommit = shaResult.stdout.trim();
+  const mergeCommit = casOutcome.mergeCommit;
   if (!/^[0-9a-f]{7,40}$/.test(mergeCommit)) {
     return err(
       storeDiagnostic(

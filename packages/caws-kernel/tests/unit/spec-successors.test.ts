@@ -313,15 +313,100 @@ describe('successor resolver: existence oracle (A6, A7, A8, A17)', () => {
     expect(resolver.resolve('not a spec id').outcome).toBe('MALFORMED_ID');
   });
 
-  it('reports AMBIGUOUS_ID when one id exists in both live and archive', () => {
+  it('resolves AUTHORED with an ambiguity report when an id is in both live and archive', () => {
+    // Corpus drift is worth REPORTING but not worth refusing a close over:
+    // custody is satisfied either way, and the declaring spec neither caused
+    // the drift nor can fix it. This repo already carries such a pair
+    // (WORKTREE-DOCTOR-HALF-STATE-001), so the case is live, not theoretical.
     const ambiguous = createSuccessorResolver([
       { id: 'DUPE-01', lifecycle_state: 'active', archived: false, source: 'live' },
       { id: 'DUPE-01', lifecycle_state: 'archived', archived: true, source: 'archive' },
     ]);
 
     const result = ambiguous.resolve('DUPE-01');
-    expect(result.outcome).toBe('AMBIGUOUS_ID');
+    expect(result.outcome).toBe('AUTHORED');
     expect(result.ambiguous_sources).toEqual(['live', 'archive']);
+    // Standing reports the LIVE copy, which is what the rest of the system
+    // treats as current.
+    expect(result.standing?.lifecycle_state).toBe('active');
+  });
+
+  it('does not block a close on an ambiguous target', () => {
+    const ambiguous = createSuccessorResolver([
+      { id: 'DUPE-01', lifecycle_state: 'active', archived: false, source: 'live' },
+      { id: 'DUPE-01', lifecycle_state: 'archived', archived: true, source: 'archive' },
+    ]);
+
+    expect(
+      findUnresolvedObligations(
+        [{ target_spec_id: 'DUPE-01', disposition: 'required' }],
+        ambiguous,
+      ),
+    ).toEqual([]);
+  });
+
+  it('omits ambiguous_sources when the id resolves uniquely', () => {
+    // A warning field that is always present is a warning nobody reads.
+    expect(resolver.resolve('ACTIVE-TARGET-01').ambiguous_sources).toBeUndefined();
+  });
+
+  it('labels ambiguous entries by live/archive when no source is supplied', () => {
+    // The corpus builder sets `source`, but the type makes it optional, so
+    // the fallback label is reachable by any other caller. Without this case
+    // the fallback is uncovered and its mutants survive untested.
+    const unlabeled = createSuccessorResolver([
+      { id: 'DUPE-02', lifecycle_state: 'active', archived: false },
+      { id: 'DUPE-02', lifecycle_state: 'archived', archived: true },
+    ]);
+
+    expect(unlabeled.resolve('DUPE-02').ambiguous_sources).toEqual([
+      'live[0]',
+      'archive[1]',
+    ]);
+  });
+
+  it('prefers the LIVE entry for standing when both copies exist', () => {
+    // Ordering must not decide which copy is reported: the live entry wins
+    // even when the archived one is first in the corpus.
+    const archiveFirst = createSuccessorResolver([
+      {
+        id: 'DUPE-03',
+        lifecycle_state: 'archived',
+        resolution: 'completed',
+        archived: true,
+      },
+      { id: 'DUPE-03', lifecycle_state: 'active', archived: false },
+    ]);
+
+    const result = archiveFirst.resolve('DUPE-03');
+    expect(result.standing?.lifecycle_state).toBe('active');
+    expect(result.standing?.archived).toBe(false);
+  });
+
+  it('falls back to the archived entry when every copy is archived', () => {
+    // `found.find(live) ?? found[0]` — the right-hand side is a real branch,
+    // not dead defensive code.
+    const allArchived = createSuccessorResolver([
+      {
+        id: 'ARCH-ONLY-01',
+        lifecycle_state: 'archived',
+        resolution: 'superseded',
+        archived: true,
+      },
+    ]);
+
+    const result = allArchived.resolve('ARCH-ONLY-01');
+    expect(result.outcome).toBe('AUTHORED');
+    expect(result.standing?.archived).toBe(true);
+    expect(result.standing?.resolution).toBe('superseded');
+  });
+
+  it('omits resolution from standing when the target has none', () => {
+    // Pins the conditional assignment: an absent key, not an explicit
+    // undefined, which is what exactOptionalPropertyTypes requires.
+    const result = resolver.resolve('ACTIVE-TARGET-01');
+    expect(result.standing).toBeDefined();
+    expect('resolution' in (result.standing ?? {})).toBe(false);
   });
 
   it('reports REGISTRY_UNAVAILABLE — never UNAUTHORED — for an unreadable corpus', () => {
@@ -333,6 +418,42 @@ describe('successor resolver: existence oracle (A6, A7, A8, A17)', () => {
 
     expect(result.outcome).toBe('REGISTRY_UNAVAILABLE');
     expect(result.outcome).not.toBe('UNAUTHORED');
+  });
+
+  it.each([
+    // Hostile inputs for the canonical grammar, one per rule it enforces.
+    ['lowercase-01', 'lowercase prefix'],
+    ['SPEC_01', 'underscore separator'],
+    ['SPEC-', 'missing numeric segment'],
+    ['-SPEC-01', 'leading separator'],
+    ['SPEC-01-', 'trailing separator'],
+    ['1SPEC-01', 'leading digit'],
+    ['SPEC-01A', 'uppercase suffix (only lowercase permitted)'],
+    ['SPEC 01', 'embedded space'],
+    ['', 'empty string'],
+    // ANCHORING. These are the census shapes: a well-formed id with prose
+    // attached at one end. Without `$` the first would be accepted as a
+    // prefix match; without `^` the second as a suffix match. Both are the
+    // exact "prose written after the identifier" failure the structured
+    // field exists to make unrepresentable.
+    ['ALG-001a-HARDEN-01 (not yet created)', 'valid id followed by prose'],
+    ['SPEC-01 will take this atom', 'valid id followed by a sentence'],
+    ['see SPEC-01', 'valid id preceded by prose'],
+    ['\nSPEC-01', 'leading newline (anchors must be line-insensitive)'],
+    ['SPEC-01\n', 'trailing newline'],
+  ])('rejects %j as MALFORMED_ID (%s)', (id) => {
+    expect(resolver.resolve(id).outcome).toBe('MALFORMED_ID');
+  });
+
+  it.each([
+    ['ALG-001a', 'numeric segment with lowercase suffix'],
+    ['A-1', 'minimal valid form'],
+    ['MULTI-PART-PREFIX-42', 'multiple prefix segments'],
+    ['SPEC2-01', 'digit inside a prefix segment'],
+  ])('accepts %j as well-formed (%s)', (id) => {
+    // Well-formed but absent resolves UNAUTHORED — proving the grammar
+    // admitted it rather than rejecting it as malformed.
+    expect(resolver.resolve(id).outcome).toBe('UNAUTHORED');
   });
 
   it('does not fall back to prefix or case-insensitive matching', () => {
@@ -451,6 +572,36 @@ describe('close obligations: which references must resolve (A5, A6, A8, A17)', (
 
   it('returns no obligations for a spec with no successors', () => {
     expect(findUnresolvedObligations(undefined, resolver)).toEqual([]);
+  });
+
+  it('skips an absorbed entry whose absorbed_by is absent rather than crashing', () => {
+    // The semantic layer rejects this shape, but the resolver must not
+    // depend on having been called after it — a caller that resolves an
+    // unvalidated spec gets no obligation, not a TypeError.
+    expect(
+      findUnresolvedObligations(
+        [{ target_spec_id: 'PROPOSED-01', disposition: 'absorbed' }],
+        resolver,
+      ),
+    ).toEqual([]);
+  });
+
+  it('does not resolve absorbed_by on a NON-absorbed disposition', () => {
+    // A stray absorbed_by on a `declined` entry is not an obligation. Both
+    // halves of the guard matter: disposition AND presence.
+    expect(
+      findUnresolvedObligations(
+        [
+          {
+            target_spec_id: 'NEVER-AUTHORED-01',
+            disposition: 'declined',
+            rationale: 'not pursuing',
+            absorbed_by: 'ALSO-NEVER-AUTHORED-01',
+          },
+        ],
+        resolver,
+      ),
+    ).toEqual([]);
   });
 });
 

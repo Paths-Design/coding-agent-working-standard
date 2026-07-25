@@ -48,7 +48,6 @@ export const SUCCESSOR_RESOLUTIONS = [
   'AUTHORED',
   'UNAUTHORED',
   'MALFORMED_ID',
-  'AMBIGUOUS_ID',
   'REGISTRY_UNAVAILABLE',
 ] as const;
 export type SuccessorResolution = (typeof SUCCESSOR_RESOLUTIONS)[number];
@@ -73,7 +72,12 @@ export interface SuccessorTargetResult {
   target_spec_id: string;
   /** Present only when outcome is AUTHORED. Evidence, never authority. */
   standing?: SuccessorTargetStanding;
-  /** Present for AMBIGUOUS_ID: where the id was found more than once. */
+  /**
+   * Present on AUTHORED when the id was found in more than one place (live
+   * AND archive). Corpus drift worth REPORTING, but not worth refusing a
+   * close over: custody is satisfied either way, and the declaring spec did
+   * not cause the drift and cannot fix it.
+   */
   ambiguous_sources?: string[];
 }
 
@@ -144,17 +148,22 @@ export function createSuccessorResolver(
         return { outcome: 'UNAUTHORED', target_spec_id: specId };
       }
 
-      if (found.length > 1) {
-        return {
-          outcome: 'AMBIGUOUS_ID',
-          target_spec_id: specId,
-          ambiguous_sources: found.map(
-            (entry, i) => entry.source ?? `${entry.archived ? 'archive' : 'live'}[${i}]`,
-          ),
-        };
-      }
+      // An id in more than one place (typically live AND archive) is corpus
+      // drift worth reporting — but custody is still SATISFIED: the target
+      // demonstrably exists, which is the only question the close gate asks.
+      // Resolving AUTHORED-with-ambiguity rather than refusing means one
+      // spec's close does not fail for an integrity problem it did not cause
+      // and cannot fix. The caller surfaces `ambiguous_sources` as a warning.
+      const ambiguousSources =
+        found.length > 1
+          ? found.map(
+              (e, i) => e.source ?? `${e.archived ? 'archive' : 'live'}[${i}]`,
+            )
+          : undefined;
 
-      const entry = found[0];
+      // Prefer the live entry when reporting standing: it is the copy the
+      // rest of the system treats as current.
+      const entry = found.find((e) => !e.archived) ?? found[0];
       if (entry === undefined) {
         return { outcome: 'UNAUTHORED', target_spec_id: specId };
       }
@@ -167,7 +176,14 @@ export function createSuccessorResolver(
       // `undefined` is not the same as an absent key.
       if (entry.resolution !== undefined) standing.resolution = entry.resolution;
 
-      return { outcome: 'AUTHORED', target_spec_id: specId, standing };
+      return {
+        outcome: 'AUTHORED',
+        target_spec_id: specId,
+        standing,
+        ...(ambiguousSources !== undefined
+          ? { ambiguous_sources: ambiguousSources }
+          : {}),
+      };
     },
   };
 }
