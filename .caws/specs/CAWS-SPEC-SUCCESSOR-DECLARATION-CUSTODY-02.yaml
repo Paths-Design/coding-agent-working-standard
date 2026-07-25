@@ -1,0 +1,40 @@
+id: CAWS-SPEC-SUCCESSOR-DECLARATION-CUSTODY-02
+title: 'Successor declarations: read-only migration reporter, round-trip and older-reader proofs, schema docs'
+risk_tier: 2
+mode: feature
+lifecycle_state: active
+created_at: '2026-07-25T06:13:26.500Z'
+updated_at: '2026-07-25T06:13:26.500Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/specs-writer.ts'
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/tests/store/specs-successors.test.js'
+    - 'packages/caws-kernel/tests'
+    - 'docs/api/schema.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'a repo with legacy successor intent in closure_notes'
+    when: 'the read-only migration reporter runs'
+    then: 'it classifies each spec and writes nothing, proven by hashing every spec file and the events log before and after'
+  - id: A2
+    given: 'a spec carrying a successors block'
+    when: 'it passes through activate, close, archive, amend-scope and clear-binding'
+    then: 'the block round-trips byte-identically in every case'
+  - id: A3
+    given: 'a consumer pinned to a kernel release predating the successors field'
+    when: 'it validates a successors-bearing spec'
+    then: 'it rejects via additionalProperties false, pinned by an older-reader fixture'
+non_functional: {}
+contracts:
+  - name: 'successor-migration-reporter'
+    type: behavior
