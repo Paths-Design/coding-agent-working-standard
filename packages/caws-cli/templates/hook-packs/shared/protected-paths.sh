@@ -111,7 +111,7 @@ if _strikes_match; then
   echo "BLOCKED: $FILE_PATH is protected guard state." >&2
   echo "Do not edit strike counters by hand to bypass enforcement." >&2
   echo "If the scope was legitimately corrected and prior strikes are stale, ask the user to run:" >&2
-  echo "  bash ${CAWS_VENDOR_DIR}/hooks/reset-strikes.sh --current" >&2
+  echo "  bash ${CAWS_HOOKS_DIR:-.caws/hooks}/reset-strikes.sh --current" >&2
   echo "(or --session <uuid> / --worktree <name> / --all --confirm; resets are logged)." >&2
   echo "Otherwise switch into the correct worktree, update the active CAWS spec scope, or ask the user for direction." >&2
   exit 2

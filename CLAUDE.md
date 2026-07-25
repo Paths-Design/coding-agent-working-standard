@@ -170,16 +170,44 @@ Planned write targets:
 - ...
 
 Scope proof:
-- caws scope show <path> => <ADMIT | REFUSE>
+- caws scope show <path> => <ADMIT | REFUSE | NO AUTHORITY>
 - ...
 
 No edits before this proof is complete.
 ```
 
 Then run the `caws scope show` calls; edit only if every target returns ADMIT.
-On a REFUSE: stop, run **one** `caws specs amend-scope <SPEC-ID> --add <path>...`
-(all missing paths in a single call — canonical write, no cherry-pick), rerun
-the proof, then edit.
+The kernel has **three** outcomes, not two — dispatch on which one you got:
+
+- **ADMIT** — proceed.
+- **REFUSE** — stop, run **one** `caws specs amend-scope <SPEC-ID> --add
+  <path>...` (all missing paths in a single call — canonical write, no
+  cherry-pick), rerun the proof, then edit.
+- **NO AUTHORITY** (`scope.no_authority.unbound`) — *no spec is bound to this
+  checkout*, so the kernel cannot decide scope at all. This is not an edge
+  case: it is the outcome for every new spec before its worktree exists.
+  `amend-scope` does **not** fix it — the path may already be in `scope.in`
+  and the edit will still refuse. Create or enter the worktree (below), then
+  rerun the proof.
+
+**The worktree-before-code ordering invariant.** For a new spec, the worktree
+must exist *before* any file is written under that spec's authority:
+
+```
+author spec → caws specs validate → commit spec → caws worktree create <name> --spec <id> → cd into it → then write
+```
+
+This is not a multi-agent nicety — the worktree is what *confers write
+authority*. Working solo does not exempt you; skipping it produces NO
+AUTHORITY on every path and a strike on every edit.
+
+**`--spec` answers a different question than the bare form.** `caws scope show
+<path>` asks *may I write here now?*; `caws scope show <path> --spec <id>` asks
+*would this path fit that spec?* — a hypothetical. The `--spec` form prints
+`binding: bound` referring to the **named spec**, not your checkout, so from an
+unbound checkout it can read as authority it does not grant. Only the bare form
+proves write authority. Use `--spec` to choose an authority before creating a
+worktree, never as your pre-edit proof.
 
 **Demote intuition; trust proof.** If your mental model says "this file is
 obviously in scope" but you haven't run `caws scope show`, your mental model has
@@ -272,8 +300,12 @@ The hook pack includes a "danger latch" that fires on certain Bash patterns
 (force-push, `reset --hard`, `rebase`, `cherry-pick`, `clean -f`, bare
 `checkout <path>`, deleted-tag pushes, pipe-to-shell, the `git init` family). If
 it fires once, **every subsequent Bash call in the session blocks** until a
-human runs `bash .claude/hooks/reset-danger-latch.sh`. There is no agent-side
-dismissal by design. If you trip it, stop and ask the user to reset — do NOT
+human runs `bash .caws/hooks/reset-danger-latch.sh --session <id> --reason
+"<why this is safe>"`. The reset scripts live under `.caws/hooks/`, not under
+the harness vendor dir (`.claude/`) — that directory holds logs and settings,
+not the hook scripts. The block message prints the exact command with your
+session id already filled in; hand that to the user verbatim. There is no
+agent-side dismissal by design. If you trip it, stop and ask the user to reset — do NOT
 re-run the command in a different shape (`command git ...`, `env ... git ...`,
 `bash -lc '...'`); the latch recognizes those variants, and shell trickery to
 bypass it is exactly the pattern it's there to catch.

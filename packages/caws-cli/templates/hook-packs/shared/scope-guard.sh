@@ -99,8 +99,33 @@ emit_scope_progression() {
   fi
 
   local widen="If this path SHOULD be in scope, widen the bound spec: $_hint"
-  local fix_options="Fix options: (1) edit a file already in scope, (2) $widen, (3) ask the user."
-  local hard_block_guidance="If prior strikes from earlier edits are cornering this session and the scope is now correct, ask the user to run: bash ${CAWS_VENDOR_DIR}/hooks/reset-strikes.sh --current (or --session <uuid>) to clear stale strike state. Verify the worktree binding: the spec must declare 'worktree: <name>' and .caws/worktrees.json must map that same worktree name to the correct 'specId' (v10) or 'spec_id' (v11). On CAWS v11.0 the worktree lifecycle CLI is not yet restored; on v11.1+ use 'caws worktree bind'. Do not edit ${CAWS_VENDOR_DIR}/hooks/, ${CAWS_VENDOR_DIR}/logs/guard-strikes-*.json, or other guard state to bypass this check."
+
+  # Remediation must be conditional on the ACTUAL cause, not a fixed menu.
+  #
+  # When no spec id was passed, the caller is in union mode — no spec is bound
+  # to this checkout. The path may already be in a spec's scope.in and the edit
+  # STILL refuses, because scope fit is not write authority. Telling that agent
+  # to `amend-scope` sends it to widen a scope that needed no widening; it burns
+  # a turn and teaches a wrong model of the system. The correct first move is to
+  # create or enter the bound worktree.
+  local fix_options
+  if [[ -z "$spec_id" ]]; then
+    fix_options="Fix options: (1) create or enter the worktree bound to the spec that owns this path — no spec is bound to THIS checkout, so scope is being checked in union mode over every active spec, and a path already listed in its spec's scope.in still refuses here (path fit is not write authority); list candidates with 'caws specs list --status active' and enter via 'cd .caws/worktrees/<name>' or create with 'caws worktree create <name> --spec <id>', (2) edit a file already in scope, (3) ask the user."
+  else
+    fix_options="Fix options: (1) edit a file already in scope, (2) $widen, (3) ask the user."
+  fi
+
+  # Print the resolved session id rather than a '<uuid>' placeholder: the guard
+  # already knows it (it just keyed the strike file by it), and the human being
+  # handed this command has no other obvious way to look it up.
+  local _reset_cmd="bash ${CAWS_HOOKS_DIR:-.caws/hooks}/reset-strikes.sh"
+  if [[ -n "$SESSION_ID" ]]; then
+    _reset_cmd="$_reset_cmd --session $SESSION_ID"
+  else
+    _reset_cmd="$_reset_cmd --current"
+  fi
+
+  local hard_block_guidance="If prior strikes from earlier edits are cornering this session and the scope is now correct, ask the user to run: $_reset_cmd to clear stale strike state. Verify the worktree binding: the spec must declare 'worktree: <name>' and .caws/worktrees.json must map that same worktree name to the correct 'spec_id'. Repair a one-sided binding with 'caws worktree bind <name> --spec <id>'. Do not edit ${CAWS_HOOKS_DIR:-.caws/hooks}/, ${CAWS_LOG_DIR:-${CAWS_VENDOR_DIR}/logs}/guard-strikes-*.json, or other guard state to bypass this check."
 
   guard_enforce_progressive_strikes \
     "$SESSION_ID" \
