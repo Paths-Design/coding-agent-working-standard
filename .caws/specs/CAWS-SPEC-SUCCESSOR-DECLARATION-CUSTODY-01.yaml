@@ -25,6 +25,7 @@ scope:
     - packages/caws-kernel/src/spec/validate-semantics.ts
     - packages/caws-kernel/src/spec/rules.ts
     - packages/caws-kernel/src/spec/index.ts
+    - packages/caws-kernel/src/spec/successors.ts
     - packages/caws-kernel/src/index.ts
     - packages/caws-kernel/tests
     - packages/caws-kernel/CHANGELOG.md
@@ -88,6 +89,46 @@ invariants:
     of the current implementation, not a guaranteed contract — so this slice
     must add tests that FAIL if any writer is ever converted to an
     object-rebuild that silently drops the field.
+  - >-
+    THE SINGLE-FILE VALIDATOR STAYS PORTABLE AND DETERMINISTIC. Referential
+    resolution MUST NOT be pushed down into `validateSpecSemantics`, and no
+    filesystem access or repository walk may be introduced there. Today
+    `parseAndValidateSpec` (spec/index.ts:44-48) is a pure three-layer
+    pipeline — parse, shape, semantics — with no filesystem seam; that purity
+    is the property being protected. If resolution were threaded into the
+    semantic layer, `caws specs validate <file>` would silently become
+    repository-dependent, returning different verdicts for identical bytes
+    depending on ambient `.caws` state. Responsibilities partition as:
+      - JSON Schema:            structural shape and field grammar.
+      - validateSpecSemantics:  intra-spec rules only — disposition-specific
+                                required/forbidden fields, self-reference,
+                                duplicate targets, source-axis consistency.
+      - SuccessorResolver:      exact-id lookup against live + archived specs.
+                                A separate, repository-aware layer.
+      - closeSpec preflight:    injects the resolver and refuses unresolved
+                                governed obligations.
+    A change that gives the semantic layer a filesystem dependency violates
+    this invariant regardless of how the resolution result is plumbed.
+  - >-
+    THE RESOLVER IS AN EXISTENCE ORACLE, NOT A GRAPH AUTHORITY. This slice
+    builds CAWS's FIRST cross-spec resolver, and the risk is that it silently
+    accretes into a general dependency-graph engine without a stated boundary.
+    Its scope is exactly: exact-id existence lookup, and live-vs-archive
+    ambiguity detection. Explicitly OUT: dependency ordering, cycle analysis
+    beyond direct self-reference, any requirement that a successor complete,
+    retroactive mutation of prior specs, and heuristic prose inference
+    anywhere in the blocking path. General `supersedes`/`superseded_by` graph
+    integrity (deferred at validate-semantics.ts:16-19) MAY reuse this
+    substrate in a later slice; it must not be absorbed into this one.
+  - >-
+    RESOLUTION IS A CLOSED RESULT VOCABULARY, DISJOINT FROM DISPOSITION.
+    The resolver returns exactly one of `AUTHORED` | `UNAUTHORED` |
+    `MALFORMED_ID` | `AMBIGUOUS_ID` | `REGISTRY_UNAVAILABLE`. Target
+    lifecycle_state and resolution MAY accompany `AUTHORED` as evidence, but
+    MUST NOT be encoded as source dispositions — that is the two-axis
+    invariant restated at the resolver boundary. `REGISTRY_UNAVAILABLE` is
+    distinct from `UNAUTHORED` on purpose: "I cannot tell" and "it does not
+    exist" are different facts and must never collapse into one another.
   - >-
     THE EVENT IS THE AUDIT RECORD. When a spec carrying successor declarations
     closes, the `spec_closed` event payload preserves the structured
@@ -157,21 +198,45 @@ acceptance:
       a real spec
     when: '`caws specs close` is invoked'
     then: >-
-      the close SUCCEEDS for a target in any lifecycle state (active OR
-      closed/archived). The gate tests RESOLVABILITY, not target standing —
-      requiring the target be closed first would invert the ordinary
-      predecessor-closes-then-successor-runs sequence. Asserted for an active
-      target and a closed target as separate cases.
+      the close SUCCEEDS for a target in EVERY lifecycle state — draft,
+      active, closed, and archived — asserted as four separate cases. The
+      gate's invariant is CUSTODY, NOT COMPLETION: an authored target in any
+      state proves the obligation was made governable. Requiring the target
+      be closed first would invert the ordinary sequence (predecessor closes
+      -> successor becomes active owner of the remaining obligation ->
+      successor later completes, is superseded, or is abandoned).
   - id: A7
+    given: >-
+      a `required` successor whose target resolves to a spec that is closed
+      with `resolution: abandoned`
+    when: the predecessor is closed
+    then: >-
+      the close SUCCEEDS. A terminally abandoned target is a GOVERNED OUTCOME,
+      not a lost obligation — someone decided, and the decision is on record.
+      The target's standing IS surfaced in the resolution result as evidence,
+      but does not gate the predecessor's close. This case is the sharpest
+      test of custody-not-completion and must be asserted explicitly rather
+      than folded into A6.
+  - id: A8
+    given: an `absorbed` entry whose `absorbed_by` resolves to an authored
+      spec that is still active
+    when: the predecessor is closed
+    then: >-
+      the close SUCCEEDS. `absorbed_by` is held to the same custody bar as
+      `target_spec_id`: it must resolve to an authored spec, but that spec
+      need not already be terminal.
+  - id: A9
     given: a spec carrying two successor entries of differing disposition
     when: it closes successfully
     then: >-
-      the emitted `spec_closed` event payload contains the structured
-      declaration with both entries, ids/dispositions/rationale preserved
-      exactly. Asserted by reading the appended event back off `events.jsonl`
-      and deep-comparing to the authored block — not by asserting the writer
-      was called.
-  - id: A8
+      the emitted `spec_closed` event payload preserves the COMPLETE
+      declaration array semantically byte-for-byte — every entry, in order,
+      with `disposition`, `rationale`, and `absorbed_by` intact — not merely
+      the target ids. Asserted by reading the appended event back off
+      `events.jsonl` and deep-comparing the whole array to the authored
+      block, NOT by asserting the writer was called. A projection that keeps
+      ids and drops rationale passes a naive test and fails this one.
+  - id: A10
     given: the full corpus of existing specs in this repo, none of which carry
       a `successors` field
     when: they are validated against the amended schema
@@ -179,7 +244,7 @@ acceptance:
       every one validates unchanged. Asserted by a test that walks
       `.caws/specs/*.yaml` and validates each, so the additive-change claim is
       proven against the real corpus rather than a synthetic fixture.
-  - id: A9
+  - id: A11
     given: a spec file carrying a `successors:` block
     when: it is put through each routine lifecycle mutation
       (activate, close, archive, amend-scope, clear-binding)
@@ -188,7 +253,7 @@ acceptance:
       running the same mutation twice produces byte-identical output
       (deterministic serialization). Asserted per-writer, so a future
       conversion of ANY single writer to an object-rebuild fails the suite.
-  - id: A10
+  - id: A12
     given: a repository whose specs carry legacy successor intent in
       `closure_notes` prose
     when: the read-only migration reporter runs
@@ -199,7 +264,7 @@ acceptance:
       every spec file plus the events-log length before and after the run and
       requiring both unchanged — an assertion that fails if the reporter ever
       gains a write path.
-  - id: A11
+  - id: A13
     given: a CLI consumer pinned to a kernel release predating this change
     when: it validates a spec carrying `successors`
     then: >-
@@ -209,7 +274,7 @@ acceptance:
       fixture test that compiles the PRE-amendment schema and confirms the
       rejection, so the compatibility posture is a tested fact and not a
       README assertion.
-  - id: A12
+  - id: A14
     given: the docs surface for the spec schema
     when: this slice lands
     then: >-
@@ -217,6 +282,62 @@ acceptance:
       disposition vocabulary, and states explicitly that TARGET STANDING IS
       DERIVED AT QUERY TIME AND NEVER STORED. The doc carries present-tense
       what/how/why only, with no status barnacles.
+  - id: A15
+    given: >-
+      a standalone spec FILE, valid in shape and intra-spec semantics, whose
+      `required` successor names a target that does not exist in any
+      repository
+    when: it is put through `parseAndValidateSpec` and then through the
+      repository-aware close preflight
+    then: >-
+      the two layers DISAGREE, and that is correct: shape + semantic
+      validation PASS (the file is well-formed and internally consistent),
+      while the close preflight REFUSES (the obligation is unresolved). This
+      is the load-bearing test for the layering invariant — a single test
+      asserting both verdicts on the same bytes, so any future collapse of
+      resolution into the semantic layer fails it.
+  - id: A16
+    given: a spec file on disk and no `.caws` repository context whatsoever
+    when: '`caws specs validate <file>` is invoked'
+    then: >-
+      it succeeds without requiring a repository index, performs no
+      `.caws/specs` walk, and returns the same verdict it returns from inside
+      a repository. Asserted for identical bytes in both ambient conditions,
+      comparing the full diagnostic output — not merely the exit code — so a
+      silently repository-dependent verdict is caught.
+  - id: A17
+    given: a spec with a `required` successor, in a context where the spec
+      corpus cannot be read (unreadable directory or corrupt index)
+    when: '`caws specs close` is invoked'
+    then: >-
+      the close is REFUSED with a `REGISTRY_UNAVAILABLE`-derived diagnostic
+      distinguishable from the `UNAUTHORED` refusal in A5. It MUST NOT
+      silently downgrade to local-only validation and admit the close.
+      "Cannot determine" and "does not exist" are different facts; conflating
+      them would let an unreadable corpus wave through the exact obligation
+      this slice governs.
+  - id: A18
+    given: a `successors` array declaring the same `target_spec_id` twice
+    when: the spec is validated
+    then: >-
+      validation FAILS at the intra-spec semantic layer (no repository access
+      needed to detect this). Rejection is preferred over canonical
+      deduplication: two declarations for one target mean the author's intent
+      is ambiguous, and silently collapsing them would pick one rationale and
+      discard the other.
+  - id: A19
+    given: successor entries that reference the declaring spec itself —
+      `target_spec_id` equal to the source spec id, `absorbed_by` equal to
+      the source spec id, and `absorbed_by` equal to the entry's own
+      `target_spec_id`
+    when: each is validated
+    then: >-
+      all three FAIL at the intra-spec semantic layer, with no repository
+      access. A spec cannot be its own successor, cannot absorb its own
+      obligation, and an entry cannot be absorbed by the very target it
+      declares — the last would make the declaration self-satisfying. This
+      mirrors the existing self-reference guard at
+      validate-semantics.ts:139-151 and is the ONLY cycle analysis in scope.
 non_functional:
   reliability:
     - >-
@@ -294,15 +415,26 @@ contracts:
       (`required` | `declined` | `absorbed`), with optional `rationale` and
       `absorbed_by` (canonical grammar). `additionalProperties: false` at the
       entry level. Target standing is absent from the shape by construction.
-  - name: successor-close-gate
+  - name: successor-intra-spec-semantics
     type: behavior
     path: packages/caws-kernel/src/spec/validate-semantics.ts
     description: >-
-      Closing a spec resolves every `required` successor's `target_spec_id`
-      and every `absorbed` entry's `absorbed_by` against the authored spec
-      corpus by exact id. An unresolved reference REFUSES the close with a
-      typed diagnostic and writes no state. Resolution tests existence, not
-      target lifecycle standing.
+      INTRA-SPEC RULES ONLY, no filesystem access. Disposition-specific
+      required/forbidden fields (`declined` requires rationale; `absorbed`
+      requires `absorbed_by`), self-reference rejection, duplicate-target
+      rejection, and source-axis consistency. This layer never resolves a
+      target against the corpus — see successor-close-gate.
+  - name: successor-close-gate
+    type: behavior
+    path: packages/caws-cli/src/store/specs-writer.ts
+    description: >-
+      The repository-aware close preflight. Injects a SuccessorResolver
+      (exact-id lookup over live + archived specs, returning AUTHORED |
+      UNAUTHORED | MALFORMED_ID | AMBIGUOUS_ID | REGISTRY_UNAVAILABLE) and
+      refuses the close on any unresolved governed obligation, writing no
+      state. Resolution tests EXISTENCE (custody), never target lifecycle
+      standing (completion). The resolver is injected, not imported into the
+      kernel's pure validation pipeline.
 # --- Provenance and the decision this slice already made --------------------
 #
 # ORIGIN. Handed off from Sterling session 23291f85 (2026-07-25) via
