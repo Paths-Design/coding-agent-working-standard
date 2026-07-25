@@ -2,10 +2,11 @@ id: CAWS-DOCS-MERGE-CAS-CONTRACT-DRIFT-001
 title: 'Agent-facing docs describe the removed checkout+merge sequence and omit the concurrency contract'
 risk_tier: 3
 mode: doc
-lifecycle_state: active
-worktree: docs-merge-cas
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge docs-merge-cas at e2b41ec8f5fa076093360aecff89094874298073'
 created_at: '2026-07-25T08:27:47.384Z'
-updated_at: '2026-07-25T08:27:47.384Z'
+updated_at: '2026-07-25T08:31:48.835Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
