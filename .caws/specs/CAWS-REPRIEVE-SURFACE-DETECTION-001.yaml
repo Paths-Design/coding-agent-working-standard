@@ -7,7 +7,7 @@ created_at: '2026-07-26T03:11:53.622Z'
 updated_at: '2026-07-26T03:11:53.622Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli/shell/commands/reprieve (vendor dir resolution)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -16,7 +16,10 @@ scope:
     - 'packages/caws-cli/tests/shell/reprieve-surface-detection.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A reprieve is written where the dispatcher that will consult it actually reads. A record landing in a vendor dir no running dispatcher reads is inert while the command reports success — the reports-success-while-doing-nothing class.'
+  - 'Vendor-dir resolution derives from the running harness, never from the declaration order of a hardcoded array. Array order encodes no fact about who is executing.'
+  - 'Ambiguity is refused, not guessed. With multiple candidate substrates and no harness signal, the command names the candidates and --surface rather than silently picking one.'
+  - 'The CLI and the hook dispatcher must agree on the surface. The dispatcher is TOLD its surface via CAWS_AGENT_SURFACE while the CLI infers one — any divergence between them writes the record to the wrong place.'
 acceptance:
   - id: A1
     given: 'a repo with several vendor dirs that each have a hooks/state substrate'
