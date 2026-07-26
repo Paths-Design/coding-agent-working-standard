@@ -27,6 +27,29 @@ const {
 
 const SESSION = 'sess-no-self-grant';
 
+/**
+ * Seed a lease so the grant path can resolve this session's agent surface.
+ * CAWS-REPRIEVE-SURFACE-DETECTION-001 derives the vendor dir from the lease of
+ * the session being granted for, and refuses when there is none — an
+ * unregistered session never entered governed channels. These fixtures use a
+ * .claude-only substrate, so a claude-code lease preserves their original intent.
+ */
+function seedLease(repoRoot, sessionId, platform = 'claude-code') {
+  fs.mkdirSync(path.join(repoRoot, '.caws', 'leases'), { recursive: true });
+  fs.writeFileSync(
+    path.join(repoRoot, '.caws', 'leases', `${sessionId}.json`),
+    JSON.stringify({
+      lease_version: 1,
+      session_id: sessionId,
+      platform,
+      status: 'active',
+      started_at: '2026-07-26T01:00:00.000Z',
+      last_active: '2026-07-26T01:59:00.000Z',
+      repo_root: repoRoot,
+    })
+  );
+}
+
 function makeRepoRoot() {
   const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-noselfgrant-'));
   execSync(
@@ -34,6 +57,7 @@ function makeRepoRoot() {
     { cwd: repoRoot }
   );
   fs.mkdirSync(path.join(repoRoot, '.claude', 'hooks', 'state'), { recursive: true });
+  seedLease(repoRoot, SESSION);
   return repoRoot;
 }
 

@@ -36,6 +36,29 @@ const {
  * resolves. Returns { repoRoot, stateDir, logsDir } where stateDir is the
  * .claude/hooks/state path the writer targets and the reader consults.
  */
+/**
+ * Seed a lease so the grant path can resolve this session's agent surface.
+ * CAWS-REPRIEVE-SURFACE-DETECTION-001 derives the vendor dir from the lease of
+ * the session being granted for, and refuses when there is none — an
+ * unregistered session never entered governed channels. These fixtures use a
+ * .claude-only substrate, so a claude-code lease preserves their original intent.
+ */
+function seedLease(repoRoot, sessionId, platform = 'claude-code') {
+  fs.mkdirSync(path.join(repoRoot, '.caws', 'leases'), { recursive: true });
+  fs.writeFileSync(
+    path.join(repoRoot, '.caws', 'leases', `${sessionId}.json`),
+    JSON.stringify({
+      lease_version: 1,
+      session_id: sessionId,
+      platform,
+      status: 'active',
+      started_at: '2026-07-26T01:00:00.000Z',
+      last_active: '2026-07-26T01:59:00.000Z',
+      repo_root: repoRoot,
+    })
+  );
+}
+
 function makeRepoRoot() {
   const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-reprieve-cli-'));
   // resolveRepoRoot requires a git repo (the command refuses non-repo cwds).
@@ -47,6 +70,16 @@ function makeRepoRoot() {
   fs.mkdirSync(path.join(repoRoot, '.claude', 'hooks', 'state'), {
     recursive: true,
   });
+  // Every session this suite grants for needs a lease: the grant path resolves
+  // the vendor dir from it (CAWS-REPRIEVE-SURFACE-DETECTION-001).
+  seedLease(repoRoot, '019f6289-d6d6-76b3-a6d1-04123944b2e6');
+  seedLease(repoRoot, 'sess-alpha');
+  seedLease(repoRoot, 'sess-list-1');
+  seedLease(repoRoot, 'sess-none');
+  seedLease(repoRoot, 'sess-nope');
+  seedLease(repoRoot, 'sess-revoke');
+  seedLease(repoRoot, 'sess-show');
+  seedLease(repoRoot, 'sess-x');
   const stateDir = path.join(repoRoot, '.claude', 'hooks', 'state');
   const logsDir = path.join(repoRoot, '.claude', 'logs');
   return { repoRoot, stateDir, logsDir };
