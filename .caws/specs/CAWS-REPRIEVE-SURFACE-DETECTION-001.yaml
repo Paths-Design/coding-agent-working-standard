@@ -18,7 +18,9 @@ scope:
   out: []
 invariants:
   - 'A reprieve is written where the dispatcher that will consult it actually reads. A record landing in a vendor dir no running dispatcher reads is inert while the command reports success — the reports-success-while-doing-nothing class.'
-  - 'Vendor-dir resolution derives from the running harness, never from the declaration order of a hardcoded array. Array order encodes no fact about who is executing.'
+  - 'Vendor-dir resolution derives from the lease of the session being granted FOR, never from the declaration order of a hardcoded array and never from the env of the shell running the command. Array order encodes no fact about who will read the record, and on the grant path the running shell is a human whose env names no harness at all.'
+  - 'No lease means no grant. An unregistered session did not enter governed channels, so there is no dispatcher known to consult the reprieve and refusing is the correct answer rather than a fallback.'
+  - 'Env-derived surface remains available for the read-only subcommands and as a corroborating cross-check, but it never overrides the lease.'
   - 'Ambiguity is refused, not guessed. With multiple candidate substrates and no harness signal, the command names the candidates and --surface rather than silently picking one.'
   - 'The CLI and the hook dispatcher must agree on the surface. The dispatcher is TOLD its surface via CAWS_AGENT_SURFACE while the CLI infers one — any divergence between them writes the record to the wrong place.'
 acceptance:
@@ -27,9 +29,9 @@ acceptance:
     when: 'a codex session grants a reprieve without --surface'
     then: 'the record is written under .codex, because detectVendorDir currently returns the first array entry with a substrate and .claude always wins regardless of who is running'
   - id: A2
-    given: 'an agent-session env var that identifies the harness such as CODEX_THREAD_ID'
+    given: 'a grant naming --session <id> whose lease records platform codex'
     when: 'the vendor dir is resolved'
-    then: 'that signal decides the surface, because the session already knows its own harness and guessing from directory order discards that knowledge'
+    then: 'the record is written under .codex, because the lease is CAWS-owned state naming the dispatcher that will consult this reprieve, while a harness env var describes only the shell that happens to be running the command'
   - id: A3
     given: 'no harness signal and several candidate vendor dirs'
     when: 'grant runs without --surface'
@@ -39,10 +41,14 @@ acceptance:
     when: 'grant runs'
     then: 'the argument wins over any detected signal, so the operator can still target a specific dispatcher'
   - id: A5
-    given: 'exactly one vendor dir has a hooks/state substrate'
-    when: 'grant runs with no signal and no --surface'
-    then: 'it writes there without refusing, because there is no ambiguity to resolve'
+    given: 'a grant naming a --session id that has no lease, or whose lease was pruned'
+    when: 'grant runs without --surface'
+    then: 'it refuses and does not guess a vendor dir, because an unregistered session never entered governed channels and there is no dispatcher known to consult the record'
   - id: A6
+    given: 'a grant whose --session lease records one platform while the running shell env implies another'
+    when: 'the vendor dir is resolved'
+    then: 'the lease decides and the divergence is reported, because env is a corroborating signal for detecting drift and never an authority that overrides recorded state'
+  - id: A7
     given: 'a reprieve is granted'
     when: 'the command reports success'
     then: 'the output names the vendor dir written and states which dispatcher consults it, because a grant that reports success while the dispatcher reads elsewhere is the reports-success-while-doing-nothing class'
