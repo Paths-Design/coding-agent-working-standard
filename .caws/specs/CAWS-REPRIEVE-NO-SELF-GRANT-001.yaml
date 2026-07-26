@@ -3,6 +3,7 @@ title: 'caws reprieve grant refuses to run inside an agent session (interim env-
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: reprieve-no-self-grant
 created_at: '2026-07-26T02:30:45.208Z'
 updated_at: '2026-07-26T02:30:45.208Z'
 blast_radius:
