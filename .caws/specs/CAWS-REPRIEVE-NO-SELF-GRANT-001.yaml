@@ -1,0 +1,45 @@
+id: CAWS-REPRIEVE-NO-SELF-GRANT-001
+title: 'caws reprieve grant refuses to run inside an agent session (interim env-union guard)'
+risk_tier: 2
+mode: feature
+lifecycle_state: active
+created_at: '2026-07-26T02:30:45.208Z'
+updated_at: '2026-07-26T02:30:45.208Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/reprieve.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/tests/shell/reprieve-no-self-grant.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'any recognized agent-session env var is set (CLAUDE_SESSION_ID, CLAUDE_CODE_SESSION_ID, CODEX_THREAD_ID, CAWS_SESSION_ID, HOOK_SESSION_ID, CURSOR_TRACE_ID)'
+    when: 'caws reprieve grant runs'
+    then: 'it refuses with ''agents cannot grant their own reprieves'' and writes no state file, because a guard weakened by the party it constrains is not a guard'
+  - id: A2
+    given: 'a Codex-shaped session where only CODEX_THREAD_ID is set and CAWS_SESSION_ID is absent'
+    when: 'grant runs'
+    then: 'it still refuses, because keying on CAWS_SESSION_ID alone would permit the exact self-grant event that motivated this slice'
+  - id: A3
+    given: 'no agent env var is set (a human shell)'
+    when: 'grant runs'
+    then: 'it proceeds normally, so the human path is not collateral damage'
+  - id: A4
+    given: 'an agent unsets every agent env var to evade the refusal'
+    when: 'grant runs'
+    then: 'session resolution fails and the grant is refused anyway, so evasion is self-punishing rather than free'
+  - id: A5
+    given: 'the refusal fires'
+    when: 'the operator reads it'
+    then: 'it names the exact command a human runs outside the agent session, so the blocked path terminates in a remedy rather than an incentive to hand-edit the state JSON'
+non_functional: {}
+contracts:
+  - name: 'reprieve-grant-agent-refusal'
+    type: behavior
