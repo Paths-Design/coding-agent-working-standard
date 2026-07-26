@@ -872,7 +872,8 @@ export function registerShellCommands(
         handlers: string;
         reason: string;
         approvedBy: string;
-        expiresAt: string;
+        expiresAt?: string;
+        for?: string;
         current?: boolean;
         session?: string;
         surface?: string;
@@ -884,7 +885,11 @@ export function registerShellCommands(
           handlers: opts.handlers,
           reason: opts.reason,
           approvedBy: opts.approvedBy,
-          expiresAt: opts.expiresAt,
+          // Forward only what was supplied: the handler distinguishes "absent"
+          // from "present" to enforce exactly-one-of, so an explicit undefined
+          // key must not be introduced here.
+          ...(opts.expiresAt !== undefined ? { expiresAt: opts.expiresAt } : {}),
+          ...(opts.for !== undefined ? { for: opts.for } : {}),
           current: opts.current !== false,
           ...(opts.session !== undefined ? { session: opts.session } : {}),
           ...(opts.surface !== undefined ? { surface: opts.surface } : {}),
