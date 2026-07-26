@@ -170,17 +170,40 @@ function detectVendorDir(repoRoot: string): string {
  * → CODEX_THREAD_ID → CAWS_SESSION_ID → HOOK_SESSION_ID → CURSOR_TRACE_ID.
  * Returns null ("unknown") when none is set — grant refuses that.
  */
+/**
+ * The env vars that indicate an agent session, in resolver precedence order.
+ *
+ * CAWS-REPRIEVE-NO-SELF-GRANT-001: the self-grant refusal keys on the UNION of
+ * this list, and session resolution reads it in order. They MUST be the same
+ * list: if the guard checked a subset, an agent whose harness exports a var
+ * outside that subset would resolve a session (and grant) while reading as a
+ * human. Sharing the constant makes that drift impossible to introduce silently.
+ */
+const AGENT_SESSION_VARS = [
+  'CLAUDE_SESSION_ID',
+  'CLAUDE_CODE_SESSION_ID',
+  'CODEX_THREAD_ID',
+  'CAWS_SESSION_ID',
+  'HOOK_SESSION_ID',
+  'CURSOR_TRACE_ID',
+] as const;
+
+function envHasValue(env: NodeJS.ProcessEnv, name: string): boolean {
+  const v = env[name];
+  return typeof v === 'string' && v.length > 0 && v !== 'unknown';
+}
+
+/**
+ * Names every agent-session var currently set. Empty means "no agent session
+ * detected" — the human path.
+ */
+export function detectAgentSessionVars(env: NodeJS.ProcessEnv): string[] {
+  return AGENT_SESSION_VARS.filter((name) => envHasValue(env, name));
+}
+
 function resolveSessionId(env: NodeJS.ProcessEnv): string {
-  const sources = [
-    env['CLAUDE_SESSION_ID'],
-    env['CLAUDE_CODE_SESSION_ID'],
-    env['CODEX_THREAD_ID'],
-    env['CAWS_SESSION_ID'],
-    env['HOOK_SESSION_ID'],
-    env['CURSOR_TRACE_ID'],
-  ];
-  for (const s of sources) {
-    if (typeof s === 'string' && s.length > 0 && s !== 'unknown') return s;
+  for (const name of AGENT_SESSION_VARS) {
+    if (envHasValue(env, name)) return env[name] as string;
   }
   return 'unknown';
 }
@@ -293,6 +316,37 @@ export interface ReprieveGrantOptions extends ReprieveCommandBase {
 export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
   const { cwd, nowFn, out, err, showData } = setupIO(opts);
   const now = nowFn();
+
+  // CAWS-REPRIEVE-NO-SELF-GRANT-001: an agent may not lift a guard that
+  // constrains it. This runs FIRST — before repo resolution, before the state
+  // dir is created — so a refused grant leaves nothing behind.
+  //
+  // Keyed on the union of AGENT_SESSION_VARS rather than CAWS_SESSION_ID alone.
+  // In the transcript that motivated this, a Codex agent self-granted twice
+  // with CAWS_SESSION_ID unset (it is fourth in precedence, behind the harness
+  // vars), so a CAWS_SESSION_ID-only check would have permitted the exact event
+  // it exists to stop, while blocking a human who happened to export it.
+  //
+  // Scope note: this raises the cost of self-granting, it does not make it
+  // impossible — an env check is only as strong as the environment the agent
+  // controls. Clearing the vars to evade it also breaks session resolution
+  // below, so evasion is self-punishing rather than free, but the durable gate
+  // is human approval outside the agent's process tree
+  // (CAWS-SESSION-IDENTITY-INVERSION-001).
+  const agentEnv = opts.env ?? process.env;
+  const agentVars = detectAgentSessionVars(agentEnv);
+  if (agentVars.length > 0) {
+    err('caws reprieve grant: agents cannot grant their own reprieves.');
+    err(`  detected agent session via: ${agentVars.join(', ')}`);
+    err('  A reprieve weakens a guard, so it must be authorized by a human, not');
+    err('  by the session the guard constrains.');
+    err('');
+    err('  Ask the user to run this from a terminal OUTSIDE the agent session:');
+    err(
+      `    caws reprieve grant --handlers ${opts.handlers} --reason "<why this is safe>" --approved-by "<their id>" --for 30m`
+    );
+    return 1;
+  }
 
   const repo = resolveRepoRoot(cwd);
   if (!repo.ok) {
