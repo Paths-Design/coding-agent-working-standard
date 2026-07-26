@@ -3,6 +3,7 @@ title: 'caws reprieve grant accepts a relative --for duration alongside absolute
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: reprieve-relative-expiry
 created_at: '2026-07-25T07:21:27.400Z'
 updated_at: '2026-07-25T07:21:27.400Z'
 blast_radius:
