@@ -70,6 +70,7 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       const err = () => {};
       const code = runReprieveGrantCommand({
         cwd: repoRoot,
+        env: {},  // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
         out,
         err,
         handlers: 'protected-paths.sh,scan-secrets.sh',
@@ -120,6 +121,7 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       const errs = [];
       const code = runReprieveGrantCommand({
         cwd: repoRoot,
+        env: {},  // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
         out: () => {},
         err: (s) => errs.push(s),
         handlers: 'protected-paths.sh',
@@ -142,6 +144,7 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       const errs = [];
       const code = runReprieveGrantCommand({
         cwd: repoRoot,
+        env: {},  // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
         out: () => {},
         err: (s) => errs.push(s),
         handlers: 'protected-paths.sh',
@@ -163,6 +166,7 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       const errs = [];
       const code = runReprieveGrantCommand({
         cwd: repoRoot,
+        env: {},  // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
         out: () => {},
         err: (s) => errs.push(s),
         handlers: ' , ',
@@ -182,6 +186,7 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       const { repoRoot } = makeRepoRoot();
       runReprieveGrantCommand({
         cwd: repoRoot,
+        env: {},  // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
         out: () => {},
         err: () => {},
         handlers: 'protected-paths.sh',
@@ -224,6 +229,7 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       const { repoRoot, stateDir, logsDir } = makeRepoRoot();
       runReprieveGrantCommand({
         cwd: repoRoot,
+        env: {},  // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
         out: () => {},
         err: () => {},
         handlers: 'protected-paths.sh',
@@ -290,6 +296,7 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       const { repoRoot } = makeRepoRoot();
       runReprieveGrantCommand({
         cwd: repoRoot,
+        env: {},  // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
         out: () => {},
         err: () => {},
         handlers: 'protected-paths.sh',
@@ -331,6 +338,7 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
       for (const sid of ['sess-alpha', 'sess-beta']) {
         runReprieveGrantCommand({
           cwd: repoRoot,
+          env: {},  // human shell: no agent-session vars (CAWS-REPRIEVE-NO-SELF-GRANT-001)
           out: () => {},
           err: () => {},
           handlers: 'protected-paths.sh',

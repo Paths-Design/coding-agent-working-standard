@@ -45,12 +45,21 @@ function makeRepoRoot() {
   return repoRoot;
 }
 
-/** Run grant against a temp repo with a frozen clock, capturing stdout/stderr. */
+/**
+ * Run grant against a temp repo with a frozen clock, capturing stdout/stderr.
+ *
+ * env is pinned to a human shell: CAWS-REPRIEVE-NO-SELF-GRANT-001 refuses a
+ * grant when any agent-session var is set, and these cases exercise expiry
+ * parsing, not the agent guard. Without this the suite passes in CI and fails
+ * for every agent — the env-inheritance class that already bit the resolver
+ * precedence tests.
+ */
 function grant(repoRoot, opts) {
   const out = [];
   const err = [];
   const code = runReprieveGrantCommand({
     cwd: repoRoot,
+    env: {},
     now: () => NOW,
     out: (l) => out.push(l),
     err: (l) => err.push(l),
@@ -225,11 +234,21 @@ describe('CAWS-REPRIEVE-RELATIVE-EXPIRY-001: CLI parse path', () => {
     // that only sets CAWS_SESSION_ID resolves to the ambient session and writes
     // its record under a different filename. Delete the higher-precedence vars
     // and pass --session explicitly so the id is the test's, in every context.
+    // Every agent-session var must be cleared, not just the higher-precedence
+    // ones: CAWS-REPRIEVE-NO-SELF-GRANT-001 refuses the grant if ANY is set,
+    // and CAWS_SESSION_ID is itself one of them. The session id is supplied via
+    // --session so the record is still deterministically named.
     const env = { ...process.env };
-    delete env.CLAUDE_SESSION_ID;
-    delete env.CLAUDE_CODE_SESSION_ID;
-    delete env.CODEX_THREAD_ID;
-    env.CAWS_SESSION_ID = SESSION;
+    for (const v of [
+      'CLAUDE_SESSION_ID',
+      'CLAUDE_CODE_SESSION_ID',
+      'CODEX_THREAD_ID',
+      'CAWS_SESSION_ID',
+      'HOOK_SESSION_ID',
+      'CURSOR_TRACE_ID',
+    ]) {
+      delete env[v];
+    }
     return spawnSync('node', [cli, 'reprieve', 'grant', '--session', SESSION, ...args], {
       cwd,
       encoding: 'utf8',
