@@ -3,6 +3,7 @@ title: 'caws reprieve resolves the vendor dir from the running harness, never fi
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: reprieve-surface-detection
 created_at: '2026-07-26T03:11:53.622Z'
 updated_at: '2026-07-26T03:11:53.622Z'
 blast_radius:
