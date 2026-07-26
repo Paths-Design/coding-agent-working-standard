@@ -7,7 +7,10 @@ created_at: '2026-07-26T02:31:46.299Z'
 updated_at: '2026-07-26T02:31:46.299Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli/shell session identity resolution'
+    - 'hook-pack shared/lib/session-id.sh (shell-side resolver, must stay byte-identical)'
+    - 'agent registry + .caws/leases (identity minting and record)'
+    - 'session-keyed state: danger latch, scope-guard strikes, reprieve files, worktrees.json owner'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -15,7 +18,11 @@ scope:
     - 'packages/caws-cli/src/shell/commands/reprieve.ts'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'CAWS owns the session identity it enforces on. Harness env vars are discovery inputs for minting or locating the CAWS id, never the identity itself — otherwise a vendor rename silently re-keys the latch, strikes, leases, and worktree ownership at once.'
+  - 'The TS resolver and the shell-side resolve_caws_session_id must produce byte-identical ids for the same session. A divergence targets the wrong state filename and the guard consults a file that does not exist (DANGER-LATCH-UX-001).'
+  - 'No session-keyed state is orphaned by the cutover. A mid-flight re-key makes an active session look foreign to its own claims, which surfaces as a foreign-claim refusal against the rightful owner.'
+  - 'A keychain-backed approval gate is only a gate if the item is created with an empty trusted-application list. Created without that ACL restriction it is read silently by any caller, including the agent it is meant to constrain — verified by probe, not assumed.'
+  - 'The human-approval gate must terminate outside the agent process tree, because an in-process approver is exactly what approved the self-grant in the motivating transcript.'
 acceptance:
   - id: A1
     given: 'CAWS mints and records a session id in the agent registry'

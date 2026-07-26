@@ -7,7 +7,8 @@ created_at: '2026-07-26T02:30:45.208Z'
 updated_at: '2026-07-26T02:30:45.208Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli/shell/commands/reprieve (grant refusal path)'
+    - 'caws-cli/shell/command-metadata (grant help text)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -17,7 +18,10 @@ scope:
     - 'packages/caws-cli/tests/shell/reprieve-no-self-grant.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The party a guard constrains cannot be the party that lifts it: no code path lets a session running under any agent-session env var write its own reprieve record.'
+  - 'The refusal is keyed on the UNION of every session var the resolver consults, never on CAWS_SESSION_ID alone — that var is fourth in precedence and typically unset for agents, so a check keyed on it permits the motivating self-grant.'
+  - 'Evasion is self-punishing: the same vars that trigger the refusal are the ones session resolution needs, so clearing them to slip past the guard makes the grant fail for lack of a session id.'
+  - 'This env-union check is an interim measure, not the durable gate. It raises cost, it does not make self-granting impossible, and it is superseded by CAWS-SESSION-IDENTITY-INVERSION-001.'
 acceptance:
   - id: A1
     given: 'any recognized agent-session env var is set (CLAUDE_SESSION_ID, CLAUDE_CODE_SESSION_ID, CODEX_THREAD_ID, CAWS_SESSION_ID, HOOK_SESSION_ID, CURSOR_TRACE_ID)'
