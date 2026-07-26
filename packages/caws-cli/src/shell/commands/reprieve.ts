@@ -219,12 +219,65 @@ function appendAudit(
 // caws reprieve grant
 // ---------------------------------------------------------------------------
 
+/**
+ * Accepted duration units for `--for`. Longer aliases first so that "hr" is
+ * matched before "h" — otherwise "1hr30m" parses "h" and then chokes on "r".
+ */
+const DURATION_UNITS: ReadonlyArray<readonly [string, number]> = [
+  ['d', 86400],
+  ['hr', 3600],
+  ['h', 3600],
+  ['m', 60],
+  ['s', 1],
+];
+
+/** Human-facing list of what `--for` accepts; used in every refusal message. */
+export const DURATION_UNITS_HELP = 's (seconds), m (minutes), h/hr (hours), d (days)';
+
+/**
+ * Parse a relative duration like "30m", "1h30m", "1hr30m", "120s", "2d" into
+ * whole seconds. Returns null for anything unparseable.
+ *
+ * CAWS-REPRIEVE-RELATIVE-EXPIRY-001 A2: components may be concatenated and are
+ * summed. A bare number ("30") is REFUSED rather than assumed to be minutes —
+ * guessing the unit on an expiry is the "silently does something other than
+ * what was asked" class, and the caller gets the unit list instead.
+ */
+export function parseDurationToSeconds(raw: string): number | null {
+  const text = raw.trim().toLowerCase();
+  if (text.length === 0) return null;
+
+  let rest = text;
+  let total = 0;
+  let matched = 0;
+
+  while (rest.length > 0) {
+    const num = /^(\d+)/.exec(rest);
+    if (num === null) return null;
+    const value = Number.parseInt(num[1] as string, 10);
+    rest = rest.slice((num[1] as string).length);
+
+    const unit = DURATION_UNITS.find(([suffix]) => rest.startsWith(suffix));
+    if (unit === undefined) return null;
+    rest = rest.slice(unit[0].length);
+
+    total += value * unit[1];
+    matched += 1;
+  }
+
+  if (matched === 0) return null;
+  return total;
+}
+
 export interface ReprieveGrantOptions extends ReprieveCommandBase {
   /** Comma-separated handler basenames to reprieve (e.g. "protected-paths.sh"). */
   readonly handlers: string;
   readonly reason: string;
   readonly approvedBy: string;
-  readonly expiresAt: string;
+  /** Absolute ISO-8601 expiry. Mutually exclusive with `for`. */
+  readonly expiresAt?: string;
+  /** Relative duration from now (e.g. "90m"). Mutually exclusive with `expiresAt`. */
+  readonly for?: string;
   /** Resolve the current session from env (default). */
   readonly current?: boolean;
   /** Explicit session id (overrides --current). */
@@ -276,34 +329,82 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
     return 1;
   }
 
-  // Validate expiry: ISO-8601, timezone-qualified, and in the future.
-  // CAWS-GUARD-REPRIEVE-NAIVE-EXPIRY-001: a timezone-less --expires-at (e.g.
-  // "2026-07-19T04:00:00") is REFUSED here, not silently accepted. The reader
-  // (lib/reprieve.sh) assumes UTC for naive values to tolerate legacy files,
-  // but the writer must fail loud: otherwise the grant reports success and the
-  // reprieve is silently inert (the "reports success while doing nothing" class).
-  // Require a trailing Z or a +/- offset. The stored value is the user's input
-  // verbatim — do NOT silently normalize, so the audit trail shows what was approved.
-  const RAW_EXPIRY = opts.expiresAt;
-  if (!/[Zz]|[+-]\d\d:?\d\d$/.test(RAW_EXPIRY.trim())) {
+  // Resolve the expiry from exactly one of --for (relative) or --expires-at
+  // (absolute). CAWS-REPRIEVE-RELATIVE-EXPIRY-001 A3/A4: two sources would make
+  // the audit record ambiguous about what was actually approved, and zero
+  // sources previously left absolute ISO as the only discoverable path — which
+  // forces UTC arithmetic on the operator at exactly the moment they are
+  // blocked by a guard.
+  const relative = opts.for;
+  const absolute = opts.expiresAt;
+  if (relative !== undefined && absolute !== undefined) {
     err(
-      `caws reprieve grant: --expires-at "${RAW_EXPIRY}" is missing a timezone. Append 'Z' (UTC) or a +/-HH:MM offset, e.g. --expires-at ${RAW_EXPIRY.trim()}Z`
+      'caws reprieve grant: --for and --expires-at are mutually exclusive. Pass --for <duration> for a relative expiry (e.g. --for 30m), or --expires-at <iso> for an absolute one — not both.'
     );
     return 1;
   }
-  let expiresAt: Date;
-  try {
-    expiresAt = new Date(opts.expiresAt);
-    if (!Number.isFinite(expiresAt.getTime())) {
-      throw new Error('invalid date');
-    }
-  } catch {
-    err(`caws reprieve grant: --expires-at "${opts.expiresAt}" is not a valid ISO-8601 timestamp.`);
+  if (relative === undefined && absolute === undefined) {
+    err(
+      `caws reprieve grant: an expiry is required. Pass --for <duration> (e.g. --for 30m; units: ${DURATION_UNITS_HELP}), or --expires-at <iso> (e.g. --expires-at ${new Date(now.getTime() + 30 * 60_000).toISOString()}).`
+    );
     return 1;
   }
-  if (expiresAt.getTime() <= now.getTime()) {
-    err(`caws reprieve grant: --expires-at "${opts.expiresAt}" is in the past. A reprieve must expire in the future.`);
-    return 1;
+
+  // The stored value is always a concrete absolute ISO-8601 timestamp (A1): the
+  // record is an audit artifact read later by lib/reprieve.sh, so it must not
+  // carry a relative string that would need re-evaluation against a different "now".
+  let expiresAt: Date;
+  let storedExpiry: string;
+
+  if (relative !== undefined) {
+    const seconds = parseDurationToSeconds(relative);
+    if (seconds === null) {
+      err(
+        `caws reprieve grant: --for "${relative}" is not a valid duration. Accepted units: ${DURATION_UNITS_HELP}. Examples: 30m, 90m, 1h30m, 1hr30m, 120s, 2d.`
+      );
+      return 1;
+    }
+    if (seconds <= 0) {
+      err(
+        `caws reprieve grant: --for "${relative}" resolves to ${seconds} seconds. A reprieve must expire in the future.`
+      );
+      return 1;
+    }
+    expiresAt = new Date(now.getTime() + seconds * 1000);
+    storedExpiry = expiresAt.toISOString();
+  } else {
+    // Validate expiry: ISO-8601, timezone-qualified, and in the future.
+    // CAWS-GUARD-REPRIEVE-NAIVE-EXPIRY-001: a timezone-less --expires-at (e.g.
+    // "2026-07-19T04:00:00") is REFUSED here, not silently accepted. The reader
+    // (lib/reprieve.sh) assumes UTC for naive values to tolerate legacy files,
+    // but the writer must fail loud: otherwise the grant reports success and the
+    // reprieve is silently inert (the "reports success while doing nothing" class).
+    // Require a trailing Z or a +/- offset. The stored value is the user's input
+    // verbatim — do NOT silently normalize, so the audit trail shows what was approved.
+    const RAW_EXPIRY = absolute as string;
+    if (!/[Zz]|[+-]\d\d:?\d\d$/.test(RAW_EXPIRY.trim())) {
+      err(
+        `caws reprieve grant: --expires-at "${RAW_EXPIRY}" is missing a timezone. Append 'Z' (UTC) or a +/-HH:MM offset, e.g. --expires-at ${RAW_EXPIRY.trim()}Z`
+      );
+      return 1;
+    }
+    expiresAt = new Date(RAW_EXPIRY);
+    if (!Number.isFinite(expiresAt.getTime())) {
+      err(
+        `caws reprieve grant: --expires-at "${RAW_EXPIRY}" is not a valid ISO-8601 timestamp. Expected YYYY-MM-DDTHH:MM:SSZ, e.g. ${new Date(now.getTime() + 30 * 60_000).toISOString()}. To avoid computing a timestamp, use --for 30m instead.`
+      );
+      return 1;
+    }
+    // Report "now" alongside the refusal: an operator reasoning in local time
+    // near a UTC date boundary otherwise cannot see why a same-day timestamp is
+    // already past, and burns retries guessing.
+    if (expiresAt.getTime() <= now.getTime()) {
+      err(
+        `caws reprieve grant: --expires-at "${RAW_EXPIRY}" is in the past (now: ${now.toISOString()}). A reprieve must expire in the future. For a relative expiry, use --for 30m.`
+      );
+      return 1;
+    }
+    storedExpiry = RAW_EXPIRY;
   }
   if (!opts.approvedBy || opts.approvedBy.length === 0) {
     err('caws reprieve grant: --approved-by is required.');
@@ -317,7 +418,7 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
   const record: ReprieveRecord = {
     session_id: sessionId,
     created_at: now.toISOString(),
-    expires_at: opts.expiresAt,
+    expires_at: storedExpiry,
     approved_by: opts.approvedBy,
     reason: opts.reason,
     handlers,
@@ -327,7 +428,7 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
   if (opts.dryRun === true) {
     const payload = opts.json
       ? JSON.stringify({ ok: true, dry_run: true, would_write: true, reprieve: record, target: filePath }, null, 2)
-      : `caws reprieve grant --dry-run: would write ${filePath}\n  session: ${sessionId}\n  handlers: ${handlers.join(', ')}\n  expires: ${opts.expiresAt}`;
+      : `caws reprieve grant --dry-run: would write ${filePath}\n  session: ${sessionId}\n  handlers: ${handlers.join(', ')}\n  expires: ${storedExpiry}`;
     out(payload);
     return 0;
   }
@@ -353,7 +454,7 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
       handlers,
       reason: opts.reason,
       approved_by: opts.approvedBy,
-      expires_at: opts.expiresAt,
+      expires_at: storedExpiry,
       file: filePath,
     },
     err
@@ -364,7 +465,7 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
   } else {
     out(`granted reprieve for session ${sessionId}`);
     out(`  handlers: ${handlers.join(', ')}`);
-    out(`  expires:  ${opts.expiresAt}`);
+    out(`  expires:  ${storedExpiry}`);
     out(`  reason:   ${opts.reason}`);
     out(`  approved: ${opts.approvedBy}`);
     out(`  file:     ${filePath}`);
