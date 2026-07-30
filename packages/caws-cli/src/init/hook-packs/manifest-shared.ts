@@ -140,7 +140,22 @@ import type { HookPackV1 } from './types';
 // instead of hardcoding 'claude-code'. Defaults to 'claude-code' when the
 // flag is unset, preserving back-compat for wirings that haven't sourced
 // agent-surface.sh.
-export const SHARED_PACK_VERSION = 25;
+// v26 (HOOK-PROJECT-DIR-ROOT-NOT-CWD-01): agent-surface.sh now NORMALIZES the
+// vendor *_PROJECT_DIR (CLAUDE_PROJECT_DIR / CODEX_PROJECT_DIR) to its git
+// repo root before adopting it, via `git rev-parse --show-toplevel`. Some
+// harnesses inject the session CWD there rather than the repo root — zcode
+// sets CLAUDE_PROJECT_DIR to the session cwd, which is often a package-bearing
+// subdirectory, so the old verbatim adoption made CAWS_PROJECT_DIR a subdir and
+// fragmented every derived path (CAWS_LOG_DIR, the heartbeat lease cache, the
+// audit log) into a stray <subdir>/.caws or <subdir>/.zcode, wedging merges
+// and corrupting peer-agent context. This is the same invariant the codex
+// dispatcher already binds (hook-install.ts codexCommand:
+// CAWS_PROJECT_DIR=$REPO_ROOT). It is a no-op for harnesses whose vendor dir
+// is already the root (Claude Code, Codex — show-toplevel is idempotent);
+// fail-open keeps the raw candidate when git is absent or the dir is not in a
+// repo (never downgrades a real vendor signal to "."); the bare "." fallback
+// is reached only when no vendor *_PROJECT_DIR is set at all.
+export const SHARED_PACK_VERSION = 26;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.
