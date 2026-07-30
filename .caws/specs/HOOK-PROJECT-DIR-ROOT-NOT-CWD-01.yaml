@@ -7,24 +7,84 @@ created_at: '2026-07-30T21:38:17.633Z'
 updated_at: '2026-07-30T21:38:26.855Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/shared
+    - packages/caws-cli/src/init/hook-packs
+    - packages/caws-cli/tests/hooks
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh
     - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
     - packages/caws-cli/tests/hooks/bats/agent-surface.bats
     - .caws/specs/HOOK-PROJECT-DIR-ROOT-NOT-CWD-01.yaml
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    CAWS_PROJECT_DIR resolved by lib/agent-surface.sh is the git repo root of
+    the checkout containing the vendor-injected *_PROJECT_DIR, never the raw
+    session cwd. A vendor CLAUDE_PROJECT_DIR / CODEX_PROJECT_DIR that points at
+    a subdirectory is normalized via `git rev-parse --show-toplevel` before
+    adoption, so every downstream consumer (CAWS_LOG_DIR, heartbeat lease cache,
+    audit log, evidence/strike dirs) lands under the repo root, not a stray
+    <subdir>/.caws or <subdir>/.zcode.
+  - >-
+    Normalization is fail-open: when git is unavailable or the vendor dir is not
+    inside a git repo, the raw vendor value is kept (it is the best available
+    signal) — the resolver never downgrades to the bare "." last-resort fallback
+    when a vendor dir was actually supplied. The "." fallback is reached ONLY
+    when no vendor *_PROJECT_DIR is set at all.
+  - >-
+    A pre-set CAWS_PROJECT_DIR is always respected and never re-derived (the
+    existing `if [[ -z ]]` gate), so vendor wiring that already injects the
+    correct root (including the codex dispatcher's git-root binding) is
+    unchanged.
+  - >-
+    The fix is a no-op for harnesses whose vendor *_PROJECT_DIR is already the
+    git root (Claude Code, Codex): `git rev-parse --show-toplevel` of the root
+    returns the root, so adoption is idempotent. The two-layer design is
+    preserved — agent-surface.sh yields the checkout root; resolve_canonical_dir
+    / caws_reprieve_state_dir still walk to the canonical main repo root for
+    shared governance state on top of it.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      lib/agent-surface.sh sourced in a process whose CLAUDE_PROJECT_DIR points
+      at a package-bearing subdirectory of a git repo (the zcode runtime
+      scenario), with CAWS_PROJECT_DIR unset.
+    when: >-
+      CAWS_PROJECT_DIR is read after the resolver runs.
+    then: >-
+      CAWS_PROJECT_DIR equals the git repo root (e.g. …/sterling), NOT the
+      subdirectory (…/sterling/workbench); equivalently CAWS_LOG_DIR resolves
+      to <repo-root>/<vendor>/logs.
+  - id: A2
+    given: >-
+      The same subdirectory scenario via CODEX_PROJECT_DIR instead of
+      CLAUDE_PROJECT_DIR, with CAWS_PROJECT_DIR unset.
+    when: >-
+      CAWS_PROJECT_DIR is read after the resolver runs.
+    then: >-
+      CAWS_PROJECT_DIR equals the git repo root, same as A1 (the precedence fix
+      covers both vendor vars).
+  - id: A3
+    given: >-
+      A process whose CLAUDE_PROJECT_DIR already points at the git repo root
+      (the Claude Code / Codex case).
+    when: >-
+      CAWS_PROJECT_DIR is read after the resolver runs.
+    then: >-
+      CAWS_PROJECT_DIR is unchanged — git rev-parse --show-toplevel of the root
+      is idempotent. No regression for non-zcode harnesses.
+  - id: A4
+    given: >-
+      A process where CAWS_PROJECT_DIR is already set (e.g. by the codex
+      dispatcher's git-root binding) to an explicit value.
+    when: >-
+      The resolver runs.
+    then: >-
+      CAWS_PROJECT_DIR is kept verbatim; the vendor *_PROJECT_DIR chain is not
+      consulted and no re-derivation occurs.
 non_functional: {}
 contracts:
   - name: 'project-dir-resolution'
