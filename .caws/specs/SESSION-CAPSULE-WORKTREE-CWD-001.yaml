@@ -7,12 +7,13 @@ created_at: '2026-07-30T22:25:43.195Z'
 updated_at: '2026-07-30T22:25:53.871Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-kernel/src/worktree
+    - packages/caws-cli/src/shell/commands
+    - packages/caws-cli/src/shell/session
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-kernel/src/worktree/ownership.ts
     - packages/caws-cli/src/shell/commands/claim.ts
     - packages/caws-kernel/tests/unit/worktree-ownership-candidates.test.ts
@@ -20,12 +21,78 @@ scope:
     - .caws/specs/SESSION-CAPSULE-WORKTREE-CWD-001.yaml
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    `caws claim` resolves "the current session" through the SAME cwd-independent
+    candidate set that every other ownership surface (merge / bind / destroy /
+    untrack) already uses, not the cwd-keyed single-identity path. An agent that
+    creates a worktree from one directory and runs `caws claim` from another
+    (the documented create-then-enter flow) is recognized as the recorded owner
+    WITHOUT `--takeover`.
+  - >-
+    Same-session admission is satisfied when the recorded owner matches the
+    resolved identity directly (the existing sameSession check) OR when the
+    owner is admitted by any identity in the cwd-independent candidate set. This
+    is the admitsOwner semantics merge/bind already rely on; claim now matches
+    it. The kernel's assertOwnership gains an optional sessionCandidates input
+    mirroring the merge/bind input shape (session actor + candidate set).
+  - >-
+    No cross-agent aliasing. This does NOT broaden the cwd-keyed capsule match
+    into "any capsule wins" — the tier-2.5 corroboration gate (a per-surface env
+    var must corroborate the caller pointer) is untouched, and the candidate set
+    is the same env-var + capsule sources the resolver already trusts. A foreign
+    agent's capsule is NOT admitted unless an env var corroborates it. The fix
+    closes the gap where ONE agent's own earlier mint was invisible to its own
+    later claim, not the gap between two different agents.
+  - >-
+    A genuine foreign owner is still refused without --takeover, and takeover
+    still writes the prior_owners audit. The refusal diagnostic is unchanged for
+    a real foreign owner; the only behavioral change is that same-agent-across-
+    cwds now resolves to Ok(null) instead of a foreign-owner refusal.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      A worktree whose recorded owner.session_id was minted by resolveSession
+      from the repo root (a capsule keyed to the repo root), and a later
+      `caws claim` invoked from INSIDE that worktree (a different cwd), where no
+      per-surface env var is set — the precise create-then-enter scenario that
+      today forces --takeover.
+    when: >-
+      `caws claim` resolves its identity and the kernel decides ownership.
+    then: >-
+      claim is recognized as the owner (exit 0, no --takeover required). The
+      cwd-keyed single-identity miss is bridged by the candidate set, which
+      reads the repo-root capsule regardless of cwd.
+  - id: A2
+    given: >-
+      A worktree owned by a GENUINELY foreign session (a different agent whose
+      capsule/env the current process does not corroborate).
+    when: >-
+      `caws claim` (no --takeover) runs.
+    then: >-
+      claim is refused with the existing foreign-owner diagnostic; the
+      candidate set does NOT admit the foreign owner because no env var
+      corroborates it. --takeover still works and still writes prior_owners.
+  - id: A3
+    given: >-
+      assertOwnership invoked directly (kernel unit) with an owner in the
+      registry and a single `session` that differs from the owner, plus a
+      sessionCandidates set that DOES contain the owner.
+    when: >-
+      assertOwnership runs with opts.sessionCandidates populated.
+    then: >-
+      Returns Ok(null) — same-session satisfied via the candidate set, no
+      takeover patch. (Mirrors admitsOwner over candidates, the merge/bind
+      semantic.)
+  - id: A4
+    given: >-
+      assertOwnership with opts.sessionCandidates absent/empty (back-compat —
+      any caller that has not been migrated, including existing tests).
+    when: >-
+      assertOwnership runs without sessionCandidates.
+    then: >-
+      Behavior is byte-for-byte the prior behavior — sameSession against the
+      single `session` only. The new input is additive and optional; no existing
+      caller or test changes.
 non_functional: {}
 contracts:
   - name: 'session-id-resolution'
