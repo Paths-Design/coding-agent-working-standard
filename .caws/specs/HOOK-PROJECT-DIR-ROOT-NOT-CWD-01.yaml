@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-hook-project-dir
 created_at: '2026-07-30T21:38:17.633Z'
-updated_at: '2026-07-30T21:38:26.855Z'
+updated_at: '2026-07-30T22:00:12.545Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/shared
@@ -19,6 +19,7 @@ scope:
     - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
     - packages/caws-cli/tests/hooks/bats/agent-surface.bats
     - .caws/specs/HOOK-PROJECT-DIR-ROOT-NOT-CWD-01.yaml
+    - .caws/hooks/lib/agent-surface.sh
   out: []
 invariants:
   - >-
