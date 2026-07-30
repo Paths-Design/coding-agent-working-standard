@@ -69,7 +69,7 @@ import {
 import { resolveBinding } from '../binding/resolve-binding';
 import { renderClaimPanel, classifyOwnership } from '../render/claim';
 import { renderDiagnostics } from '../render/diagnostic';
-import { resolveSession } from '../session/resolve-session';
+import { resolveSession, resolveSessionCandidates } from '../session/resolve-session';
 
 export interface ClaimCommandOptions {
   readonly takeover?: boolean;
@@ -340,6 +340,16 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
   }
   const session = sessionResult.value.identity;
 
+  // SESSION-CAPSULE-WORKTREE-CWD-001: build the cwd-independent candidate set,
+  // the same one merge/bind/destroy consult. The single `session` above may
+  // resolve to a fresh mint when this claim runs from a different cwd than the
+  // one that minted the worktree's owner (the create-then-enter flow), because
+  // resolveSession's capsule tier is cwd-keyed. Threading the candidate set
+  // into assertOwnership lets the kernel admit the recorded owner via the
+  // cwd-independent capsule read, so an agent claiming its OWN worktree is not
+  // forced to --takeover. Never mints; read-only resolution over env + capsules.
+  const sessionCandidates = resolveSessionCandidates({ cawsDir, env });
+
   // 4. Binding from cwd.
   const bound = resolveBinding({
     repoRoot,
@@ -374,7 +384,13 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
     snapshot.worktrees,
     worktreeName,
     session,
-    { takeover: wantsTakeover },
+    {
+      takeover: wantsTakeover,
+      // SESSION-CAPSULE-WORKTREE-CWD-001: admit the recorded owner via the
+      // cwd-independent candidate set so a same-agent claim from a different
+      // cwd is recognized without --takeover.
+      sessionCandidates: sessionCandidates.candidates.map((c) => c.identity),
+    },
     now
   );
 
@@ -687,18 +703,39 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
       : record;
 
   const newRel = classifyOwnership(renderedRecord, session);
+  // SESSION-CAPSULE-WORKTREE-CWD-001: when the kernel admitted via the cwd-
+  // independent candidate set (assertOwnership => Ok(null)) but the single
+  // resolved `session` differs from the recorded owner, newRel is 'foreign'
+  // even though ownership IS established. For the panel render, present the
+  // admitted owner as the current session so classifyOwnership returns 'you'
+  // (the owner IS us, admitted via our candidate identity) — the panel then
+  // reads "OWNED (you)" matching the admission result. Localized to claim.ts
+  // so no render-side override is needed.
+  const panelSession =
+    ownershipResult.ok && ownershipResult.value === null && newRel !== 'you' && renderedRecord.owner !== undefined
+      ? renderedRecord.owner
+      : session;
   out(
     renderClaimPanel({
       worktreeName,
       worktreeRecord: renderedRecord,
-      currentSession: session,
+      currentSession: panelSession,
       now,
       ...(opts.staleTtlMs !== undefined ? { staleTtlMs: opts.staleTtlMs } : {}),
     })
   );
 
   // Same-session OR successful takeover both count as "claim established".
-  // The only Ok-but-not-yours case is impossible here: assertOwnership
-  // never returns Ok with a foreign owner intact.
+  // SESSION-CAPSULE-WORKTREE-CWD-001: the kernel may have admitted via the
+  // cwd-independent candidate set (assertOwnership => Ok(null)) even when the
+  // single resolved `session` differs from the recorded owner — the
+  // create-then-enter case where the owner was minted from a different cwd.
+  // classifyOwnership(renderedRecord, session) would label that 'foreign'
+  // because it compares only the single session id, so the exit decision must
+  // key on the kernel's admission result, not the naive relation. Ok(null) =>
+  // admitted (directly or via candidates) => claim established.
+  if (ownershipResult.ok && ownershipResult.value === null) {
+    return 0;
+  }
   return newRel === 'you' ? 0 : 1;
 }

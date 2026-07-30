@@ -28,13 +28,40 @@ export interface AssertOwnershipOptions {
    * ownership is a hard refusal.
    */
   readonly takeover?: boolean;
+  /**
+   * Optional cwd-independent candidate identities for the invoking process
+   * (SESSION-CAPSULE-WORKTREE-CWD-001). The shell ownership surfaces resolve
+   * "the current session" through a tier chain whose capsule tier is
+   * cwd-keyed, so a session that mints an identity from one directory (e.g.
+   * the repo root, when creating a worktree) is invisible to a later claim
+   * invoked from another directory (e.g. inside the worktree) — the single
+   * `session` argument resolves to a fresh mint and the direct sameSession
+   * check fails, forcing a spurious --takeover of the agent's own worktree.
+   *
+   * The candidate set is the cwd-independent resolution merge/bind/destroy
+   * already use (readAllCapsules reads every capsule regardless of
+   * worktree_root). When the recorded owner is admitted by ANY candidate,
+   * same-session is satisfied — the admitsOwner semantic. This is NOT a
+   * broadening of the cwd-keyed match into "any capsule wins": the candidate
+   * set is the same env-var + capsule sources the resolver already trusts,
+   * and the tier-2.5 corroboration gate (a per-surface env var must name the
+   * caller) is what prevents a foreign agent's capsule from being admitted.
+   *
+   * Additive and optional: absent/empty => byte-for-byte prior behavior
+   * (sameSession against the single `session` only).
+   */
+  readonly sessionCandidates?: readonly SessionIdentity[];
 }
 
 /**
  * Assert that `session` may operate on `worktreeName`.
  *
  * Returns:
- *   - Ok<null>           — same-session, no patch needed.
+ *   - Ok<null>           — same-session, no patch needed. Same-session is
+ *                          satisfied when `session` matches the recorded
+ *                          owner directly, OR when the owner is admitted by
+ *                          any identity in opts.sessionCandidates
+ *                          (SESSION-CAPSULE-WORKTREE-CWD-001).
  *   - Ok<takeover patch> — foreign owner + opts.takeover === true.
  *                          Patch carries the prior owner audit record.
  *                          A WARNING diagnostic (OWNERSHIP_TAKEOVER_PERFORMED)
@@ -80,6 +107,32 @@ export function assertOwnership(
 
   if (sameSession(owner, me)) {
     return ok(null);
+  }
+
+  // SESSION-CAPSULE-WORKTREE-CWD-001: the single `session` may differ from
+  // the recorded owner even for the SAME agent, because the shell resolver's
+  // capsule tier is cwd-keyed — an identity minted from one directory is
+  // invisible to a claim run from another (the documented create-then-enter
+  // flow). The caller may pass the cwd-independent candidate set (the same
+  // one merge/bind/destroy build); if ANY admitted candidate is the recorded
+  // owner, same-session is satisfied. This is the admitsOwner semantic, kept
+  // here in the single ownership-decision site rather than duplicated into a
+  // shell-level admit. Not a broadening: the candidate set is the resolver's
+  // already-trusted env-var + capsule sources, gated upstream by the tier-2.5
+  // corroboration check that prevents a foreign agent's capsule from entering
+  // the set uncorroborated.
+  const candidates = opts.sessionCandidates;
+  if (candidates !== undefined && candidates.length > 0) {
+    for (const candidate of candidates) {
+      if (
+        candidate !== null &&
+        typeof candidate === 'object' &&
+        typeof candidate.session_id === 'string' &&
+        candidate.session_id === owner.session_id
+      ) {
+        return ok(null);
+      }
+    }
   }
 
   // Foreign owner.
