@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 25
+# hook_pack_version: 26
 # caws_min_major: 11
 # lineage_refs: (new in shared-core-001)
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -54,6 +54,20 @@
 #   The resolved value is re-exported as CAWS_PROJECT_DIR so all downstream
 #   scripts can use the single canonical name.
 #
+#   HOOK-PROJECT-DIR-ROOT-NOT-CWD-01: a vendor *_PROJECT_DIR may be the
+#   session's CWD rather than the repo root (zcode sets CLAUDE_PROJECT_DIR to
+#   the session cwd, which is often a package-bearing subdirectory). A
+#   subdirectory value would fragment every CAWS_PROJECT_DIR-derived path
+#   (CAWS_LOG_DIR, the heartbeat lease cache, the audit log) into a stray
+#   <subdir>/.caws or <subdir>/.zcode. So each candidate is NORMALIZED to its
+#   git repo root via `git rev-parse --show-toplevel` before adoption — the
+#   same invariant the codex dispatcher already binds (hook-install.ts
+#   codexCommand: CAWS_PROJECT_DIR=$REPO_ROOT). This is a no-op when the
+#   candidate is already the root (Claude Code, Codex). On git-absent or
+#   not-a-repo, the raw candidate is kept (fail-open — never downgrade a real
+#   vendor signal to "."); the bare "." fallback is reached ONLY when no
+#   vendor *_PROJECT_DIR is set at all.
+#
 # SURFACES:
 #   claude-code  — Claude Code (Anthropic CLI). Default when CAWS_AGENT_SURFACE
 #                  is unset, preserving back-compat for any existing wiring that
@@ -77,16 +91,55 @@ _CAWS_AGENT_SURFACE_SH_LOADED=1
 
 # ---------------------------------------------------------------------------
 # 1. Resolve CAWS_PROJECT_DIR with the back-compat fallback chain.
+#
+#    HOOK-PROJECT-DIR-ROOT-NOT-CWD-01: normalize each vendor *_PROJECT_DIR
+#    candidate to its git repo root before adopting it, because some harnesses
+#    (zcode) inject the session CWD there, and a CWD that is a package-bearing
+#    subdirectory would fragment all CAWS_PROJECT_DIR-derived paths into a
+#    stray <subdir>/.caws / <subdir>/.zcode. `git rev-parse --show-toplevel`
+#    is cwd-independent and idempotent (a no-op when the candidate is already
+#    the root, so Claude Code / Codex are unaffected). On git-absent or a
+#    candidate that is not inside a repo, keep the raw candidate (fail-open —
+#    it is still the best available signal, and never silently downgrade a real
+#    vendor value to "."). The bare "." fallback is reached ONLY when no
+#    vendor *_PROJECT_DIR is set at all.
 # ---------------------------------------------------------------------------
+# Resolve a candidate directory to its git repo root, cwd-independent. Prints
+# the root on success, nothing on failure (not a repo / git missing). Never
+# exits non-zero: callers treat empty output as "no root available".
+_caws_to_git_root() {
+  local d="${1:-}"
+  [[ -z "$d" ]] && return 0
+  command -v git >/dev/null 2>&1 || return 0
+  local root
+  root="$(cd "$d" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || true)"
+  [[ -n "$root" ]] && printf '%s\n' "$root"
+}
+
 if [[ -z "${CAWS_PROJECT_DIR:-}" ]]; then
+  _CAWS_VENDOR_DIR_CANDIDATE=""
   if [[ -n "${CLAUDE_PROJECT_DIR:-}" ]]; then
-    CAWS_PROJECT_DIR="${CLAUDE_PROJECT_DIR}"
+    _CAWS_VENDOR_DIR_CANDIDATE="$CLAUDE_PROJECT_DIR"
   elif [[ -n "${CODEX_PROJECT_DIR:-}" ]]; then
-    CAWS_PROJECT_DIR="${CODEX_PROJECT_DIR}"
+    _CAWS_VENDOR_DIR_CANDIDATE="$CODEX_PROJECT_DIR"
+  fi
+
+  if [[ -n "$_CAWS_VENDOR_DIR_CANDIDATE" ]]; then
+    # Normalize the candidate to its git repo root (HOOK-PROJECT-DIR-ROOT-
+    # NOT-CWD-01). On failure keep the raw candidate — fail-open.
+    _CAWS_NORMALIZED_ROOT="$(_caws_to_git_root "$_CAWS_VENDOR_DIR_CANDIDATE")"
+    if [[ -n "$_CAWS_NORMALIZED_ROOT" ]]; then
+      CAWS_PROJECT_DIR="$_CAWS_NORMALIZED_ROOT"
+    else
+      CAWS_PROJECT_DIR="$_CAWS_VENDOR_DIR_CANDIDATE"
+    fi
   else
     CAWS_PROJECT_DIR="."
   fi
+
+  unset _CAWS_VENDOR_DIR_CANDIDATE _CAWS_NORMALIZED_ROOT
 fi
+unset -f _caws_to_git_root
 export CAWS_PROJECT_DIR
 
 # ---------------------------------------------------------------------------
