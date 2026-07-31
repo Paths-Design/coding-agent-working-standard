@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 28
+# hook_pack_version: 29
 # caws_min_major: 11
 # lineage_refs: (new — CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001)
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -60,14 +60,23 @@ fi
 _CAWS_SESSION_ID_SH_LOADED=1
 
 # resolve_caws_session_id — print the current session id per the canonical
-# precedence, or "unknown" if no source is set. Reads ONLY env vars; performs no
-# disk access. Pure function (no side effects, no exports) so callers can compose
-# it. Callers that need the id as a variable: s="$(resolve_caws_session_id)".
+# precedence, or "unknown" if no source is set. Pure function (no side effects,
+# no exports) so callers can compose it. Callers that need the id as a variable:
+# s="$(resolve_caws_session_id)".
 #
-# A non-empty first positional arg ($1) overrides the entire chain — used by
-# surfaces that have an authoritative stdin-payload session_id (block-dangerous.sh
-# reads it from the hook JSON) that should win over env. When $1 is empty or
-# "unknown", the env chain is consulted instead.
+# Precedence (mirrors the TS resolver resolve-session.ts so shell + TS agree on
+# identity by construction — CAWS-SESSION-SHELL-RESOLVER-CAPSULE-001):
+#   1. $1 payload id (harness-stamped stdin session_id; wins when present)
+#   2. env identity vars (CLAUDE_SESSION_ID / CLAUDE_CODE_SESSION_ID /
+#      CODEX_THREAD_ID / CAWS_SESSION_ID / HOOK_SESSION_ID / CURSOR_TRACE_ID)
+#   3. the durable capsule at .caws/sessions/caws-<id>.json — the shell mirror
+#      of the TS resolver's tier-3 readCapsule, and the same file caws worktree
+#      create records as the owner. Reached when the env chain misses (the
+#      agent-Bash case where no identity env var survives the subshell). Without
+#      it, the resolver returned "unknown" and the write-guards treated the
+#      owner's own edits as foreign. This is completing the shell resolver to
+#      match the canonical identity model, NOT a parallel fallback.
+# Returns "unknown" only when no capsule exists (fresh repo, no mint yet).
 resolve_caws_session_id() {
   local payload_id="${1:-}"
   # The hook payload's session_id is the most authoritative when present (it is
@@ -100,6 +109,42 @@ resolve_caws_session_id() {
   if [[ -n "${CURSOR_TRACE_ID:-}" ]]; then
     printf '%s\n' "$CURSOR_TRACE_ID"
     return 0
+  fi
+  # Tier 3 (CAWS-SESSION-SHELL-RESOLVER-CAPSULE-001): the durable capsule. This
+  # is the shell mirror of resolve-session.ts's tier-3 readCapsule — the same
+  # .caws/sessions/caws-<id>.json file caws worktree create records as the owner.
+  # Reached when the env chain misses (agent-Bash subshells carry no identity env
+  # var), so the resolver stops returning "unknown" for the owner's own process.
+  # Bounded: CAWS_PROJECT_DIR or this script's repo root, one glob, first match.
+  # Fail-opens to "unknown" when no capsule exists.
+  local _caws_sid_dir="${CAWS_PROJECT_DIR:-}"
+  if [[ -z "$_caws_sid_dir" || "$_caws_sid_dir" == "." ]]; then
+    local _caws_self="${BASH_SOURCE[0]:-}"
+    if [[ -n "$_caws_self" ]]; then
+      _caws_sid_dir="$(cd "$(dirname "$_caws_self")/../../.." 2>/dev/null && pwd)"
+    fi
+  fi
+  if [[ -n "$_caws_sid_dir" ]]; then
+    local _caws_capsule
+    # First caws-*.json capsule (skip dotfiles like .caller-session.json). The
+    # capsule shape is {session_id, platform, minted_at, worktree_root}; we read
+    # only session_id. A malformed file is skipped (fail-open), not fatal.
+    _caws_capsule="$(ls "$_caws_sid_dir/.caws/sessions"/caws-*.json 2>/dev/null | head -1)"
+    if [[ -n "$_caws_capsule" && -f "$_caws_capsule" ]]; then
+      local _caws_sid
+      _caws_sid="$(python3 -c 'import json,sys
+try:
+    d=json.load(open(sys.argv[1]))
+    sid=d.get("session_id")
+    if isinstance(sid,str) and sid: print(sid)
+except Exception:
+    pass
+' "$_caws_capsule" 2>/dev/null)"
+      if [[ -n "$_caws_sid" && "$_caws_sid" != "unknown" ]]; then
+        printf '%s\n' "$_caws_sid"
+        return 0
+      fi
+    fi
   fi
   printf '%s\n' "unknown"
 }
