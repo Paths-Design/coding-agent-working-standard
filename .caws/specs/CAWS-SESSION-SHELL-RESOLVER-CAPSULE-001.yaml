@@ -3,6 +3,7 @@ title: 'Shell session resolver reads the durable capsule so it stops returning u
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: wt-shell-resolver
 created_at: '2026-07-31T07:28:25.026Z'
 updated_at: '2026-07-31T07:28:25.973Z'
 blast_radius:
