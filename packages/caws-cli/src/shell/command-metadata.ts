@@ -1435,14 +1435,14 @@ export const AGENTS_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'prune',
       description:
-        'Operator-invoked cleanup. Defaults to dry-run; pass --apply to actually delete. Never invoked by hooks. Two modes: --dead (PID-liveness: remove active/stopping leases on THIS host whose owning process is gone — collapses the verify→stop→prune dance into one step), or --status <stopped|stale> --older-than-ms <ms> (retention-based).',
+        'Operator-invoked cleanup. Defaults to dry-run; pass --apply to actually delete. Never invoked by hooks. Three modes: --dead (PID-liveness: remove active/stopping leases on THIS host whose owning process is gone), --status <stopped|stale|legacy> --older-than-ms <ms> (retention-based; legacy is status-agnostic and reaches v10/early-v11 records with no status field), or --status legacy for age-based cleanup of orphan records.',
       options: [
         {
           flag: '--dead',
           description:
             'Remove leases whose owning process is dead (active/stopping, this host, pid not alive). Mutually exclusive with --status. Foreign-host leases are never touched.',
         },
-        { flag: '--status <s>', description: 'stopped | stale (required unless --dead)' },
+        { flag: '--status <s>', description: 'stopped | stale | legacy (required unless --dead). legacy is status-agnostic — selects by last_active age alone, reaching records with no status field.' },
         { flag: '--older-than-ms <ms>', description: 'Retention threshold in milliseconds (required with --status)' },
         {
           flag: '--stale-ttl-ms <ms>',

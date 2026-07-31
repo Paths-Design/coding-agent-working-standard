@@ -677,7 +677,7 @@ export function runAgentsShowCommand(opts: ShowOpts): number {
 
 export interface PruneOpts extends BaseAgentsOpts {
   /** Retention mode: bucket by lease status + age. Omitted when dead=true. */
-  readonly status?: 'stopped' | 'stale';
+  readonly status?: 'stopped' | 'stale' | 'legacy';
   readonly olderThanMs?: number;
   readonly staleTtlMs?: number;
   /**
