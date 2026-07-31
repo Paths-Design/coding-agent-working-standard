@@ -1,0 +1,28 @@
+id: CAWS-RESET-LATCH-MULTIVENDOR-001
+title: 'reset-danger-latch clears latches across all vendor state dirs, not just its own'
+risk_tier: 2
+mode: fix
+lifecycle_state: active
+created_at: '2026-07-31T00:39:00.899Z'
+updated_at: '2026-07-31T00:39:00.899Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'danger-latch-clear'
+    type: behavior
+    path: 'packages/caws-cli/templates/hook-packs/shared/reset-danger-latch.sh'
