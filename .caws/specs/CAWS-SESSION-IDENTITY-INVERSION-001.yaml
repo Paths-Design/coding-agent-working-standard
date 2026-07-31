@@ -1,0 +1,54 @@
+id: CAWS-SESSION-IDENTITY-INVERSION-001
+title: 'CAWS_SESSION_ID becomes CAWS-assigned registry-backed identity; harness vars demote to discovery inputs'
+risk_tier: 2
+mode: refactor
+lifecycle_state: active
+created_at: '2026-07-26T02:31:46.299Z'
+updated_at: '2026-07-26T02:31:46.299Z'
+blast_radius:
+  modules:
+    - 'caws-cli/shell session identity resolution'
+    - 'hook-pack shared/lib/session-id.sh (shell-side resolver, must stay byte-identical)'
+    - 'agent registry + .caws/leases (identity minting and record)'
+    - 'session-keyed state: danger latch, scope-guard strikes, reprieve files, worktrees.json owner'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/reprieve.ts'
+  out: []
+invariants:
+  - 'CAWS owns the session identity it enforces on. Harness env vars are discovery inputs for minting or locating the CAWS id, never the identity itself — otherwise a vendor rename silently re-keys the latch, strikes, leases, and worktree ownership at once.'
+  - 'The TS resolver and the shell-side resolve_caws_session_id must produce byte-identical ids for the same session. A divergence targets the wrong state filename and the guard consults a file that does not exist (DANGER-LATCH-UX-001).'
+  - 'No session-keyed state is orphaned by the cutover. A mid-flight re-key makes an active session look foreign to its own claims, which surfaces as a foreign-claim refusal against the rightful owner.'
+  - 'A keychain-backed approval gate is only a gate if the item is created with an empty trusted-application list. Created without that ACL restriction it is read silently by any caller, including the agent it is meant to constrain — verified by probe, not assumed.'
+  - 'The human-approval gate must terminate outside the agent process tree, because an in-process approver is exactly what approved the self-grant in the motivating transcript.'
+acceptance:
+  - id: A1
+    given: 'CAWS mints and records a session id in the agent registry'
+    when: 'any session-keyed substrate resolves identity'
+    then: 'the CAWS-assigned id is authoritative and harness vars are consulted only to discover or mint it, because an identity CAWS does not control breaks whenever a vendor renames or drops its env var'
+  - id: A2
+    given: 'a vendor renames its session env var (the durability case)'
+    when: 'a session resolves identity'
+    then: 'the resolved id is unchanged, because that stability is the entire point of the inversion'
+  - id: A3
+    given: 'session-keyed state exists under harness-derived ids across the danger latch, scope-guard strikes, reprieve files, leases, and worktree ownership'
+    when: 'the inversion lands'
+    then: 'existing state is migrated or resolvable under both keys, because a mid-flight re-key makes an active session look foreign to its own claims and trips the foreign-claim refusal'
+  - id: A4
+    given: 'the TS resolver and the shell-side resolve_caws_session_id in lib/session-id.sh'
+    when: 'either resolves a session'
+    then: 'both produce a byte-identical id, because a divergence targets the wrong state filename per the DANGER-LATCH-UX-001 lesson'
+  - id: A5
+    given: 'a keychain item created with an empty trusted-application list'
+    when: 'an agent attempts to read it non-interactively'
+    then: 'the read blocks on SecurityAgent authorization and cannot complete, because an item created without that ACL restriction is read silently by any caller and provides no gate at all'
+  - id: A6
+    given: 'an agent auto-approver of the kind that approved a self-grant in the motivating transcript'
+    when: 'a reprieve requires the keychain gate'
+    then: 'approval cannot be produced in-process, because the prompt terminates outside the agent process tree'
+non_functional: {}
+contracts:
+  - name: 'session-identity-resolution'
+    type: behavior

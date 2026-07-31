@@ -1278,7 +1278,16 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
         },
         { flag: '--reason <text>', required: true, description: 'Why this reprieve is safe; recorded' },
         { flag: '--approved-by <id>', required: true, description: 'Approver identity' },
-        { flag: '--expires-at <iso>', required: true, description: 'Expiry as an ISO-8601 datetime' },
+        {
+          flag: '--for <duration>',
+          description:
+            'Expiry as a duration from now, e.g. 30m, 1h30m, 120s, 2d (units: s, m, h/hr, d). Mutually exclusive with --expires-at; exactly one is required.',
+        },
+        {
+          flag: '--expires-at <iso>',
+          description:
+            'Expiry as an absolute ISO-8601 datetime, e.g. 2026-07-26T02:30:00Z (must include Z or a +/-HH:MM offset). Mutually exclusive with --for; prefer --for unless you need an exact instant.',
+        },
         { flag: '--current', description: 'Resolve the session from env (default)' },
         { flag: '--session <id>', description: 'Explicit session id (overrides --current)' },
         { flag: '--surface <name>', description: 'Agent surface / vendor dir (default: detect)' },
