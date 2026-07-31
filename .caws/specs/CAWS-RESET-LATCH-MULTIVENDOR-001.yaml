@@ -3,6 +3,7 @@ title: 'reset-danger-latch clears latches across all vendor state dirs, not just
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: wt-reset-multivendor
 created_at: '2026-07-31T00:39:00.899Z'
 updated_at: '2026-07-31T00:39:11.079Z'
 blast_radius:
