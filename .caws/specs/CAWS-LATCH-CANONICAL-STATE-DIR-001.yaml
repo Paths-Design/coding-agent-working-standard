@@ -3,6 +3,7 @@ title: 'Canonical hook-state-dir helper: align the danger latch clearer + dedup 
 risk_tier: 2
 mode: refactor
 lifecycle_state: active
+worktree: wt-latch-canonical
 created_at: '2026-07-31T02:45:14.459Z'
 updated_at: '2026-07-31T02:45:31.741Z'
 blast_radius:
