@@ -24,9 +24,9 @@ The v11 cutover is complete. `main` runs the v11 surface (kernel/store/shell arc
 | `caws waiver create / list / show / revoke` | Manage waiver records. Singular surface — no plural alias. |
 | `caws reprieve grant / show / revoke / list` | Session-scoped guard reprieve: skip a PreToolUse guard for ONE session until expiry. Replaces commenting a guard out of the dispatcher HANDLERS array. See [Reprieves](#reprieves). |
 | `caws events migrate / rotate / verify-archive` | Maintenance for the hash-chained `.caws/events.jsonl`. |
-| `caws specs create / list / show / recover / retire-draft / activate / amend-scope / close / archive / prune-archive / migrate / validate` | Manage spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. Batch archive supports `--status closed`, `--include`, `--exclude`, and `--apply`. |
+| `caws specs create / list / show / recover / retire-draft / activate / amend-scope / close / reopen / archive / prune-archive / migrate / validate` | Manage spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. `close` (auto-fired by `worktree merge`) → `reopen` reverses it when the work was premature (closed→active, removes resolution/closure_notes). Batch archive supports `--status closed`, `--include`, `--exclude`, and `--apply`. |
 | `caws worktree create / list / bind / destroy / untrack / merge / migrate-registry / repair-sparse / repair / prune / cleanup-plan` | Manage CAWS worktrees bound to active specs (`repair` prunes ghost registry entries + clears dead spec→worktree bindings; `repair-sparse` restores the `.caws/specs` sparse-checkout invariant; `untrack` releases the registry binding while keeping the directory; `prune` and `cleanup-plan` are dry-run-by-default cleanup planners). |
-| `caws agents register / heartbeat / stop / list / show / prune` | Agent-liveness substrate (`.caws/leases/`). Operational cache only — never authority. |
+| `caws agents register / heartbeat / stop / list / show / prune` | Agent-liveness substrate (`.caws/leases/`). Operational cache only — never authority. `prune` modes: `--dead` (PID-liveness), `--status stopped|stale --older-than-ms` (retention), `--status legacy --older-than-ms` (age-based, reaches v10/early-v11 leases with no status field). |
 | `caws message send / poll` | Directed inter-agent message channel over `.caws/messages.jsonl`. Not authority; verify claims before acting. |
 | `caws prepush [--base <ref>] [--ack <sha>]` | Governed pre-push range check. Diagnose/decide only — does NOT run `git push`. |
 
@@ -35,7 +35,7 @@ Run `caws <group> --help` for full options and flag details.
 ## Specs in v11
 
 - Specs live at `.caws/specs/<id>.yaml`. There is no project-level `working-spec.yaml`.
-- The v11 line ships `caws specs create/list/show/recover/retire-draft/activate/amend-scope/close/archive/prune-archive/migrate/validate`. Create with `caws specs create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3>`, then edit the generated YAML. See existing specs in `.caws/specs/` for the shape.
+- The v11 line ships `caws specs create/list/show/recover/retire-draft/activate/amend-scope/close/reopen/archive/prune-archive/migrate/validate`. `caws specs reopen <id>` reverses a close (closed→active) when the auto-close from `worktree merge` was premature. Create with `caws specs create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3>`, then edit the generated YAML. See existing specs in `.caws/specs/` for the shape.
 - v11 does **not** ship `caws validate` (removed in v11.0, not returning). Validation happens via `caws doctor` (drift / structure) and `caws gates run --spec <id>` (policy / quality).
 - Acceptance criteria use Given/When/Then format.
 - A spec's `scope.in` / `scope.out` defines what files an agent may touch. `caws scope check <path>` enforces it.
