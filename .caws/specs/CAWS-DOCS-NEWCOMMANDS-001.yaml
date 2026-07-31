@@ -2,10 +2,11 @@ id: CAWS-DOCS-NEWCOMMANDS-001
 title: 'Document specs reopen + agents prune --status legacy in agent-facing surfaces'
 risk_tier: 3
 mode: doc
-lifecycle_state: active
-worktree: wt-docs
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-docs at 91f90c7dcdc96747668b8afc8b68a9f7c233874f'
 created_at: '2026-07-31T07:42:16.457Z'
-updated_at: '2026-07-31T07:42:17.474Z'
+updated_at: '2026-07-31T07:53:44.070Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
