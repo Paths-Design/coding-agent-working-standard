@@ -7,12 +7,13 @@ created_at: '2026-07-31T05:31:00.406Z'
 updated_at: '2026-07-31T05:31:01.274Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-kernel/src/schemas/events
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-kernel/src/schemas/events/spec_reopened.v1.json
     - packages/caws-cli/src/store/specs-writer.ts
     - packages/caws-cli/src/shell/commands/specs.ts
@@ -23,12 +24,69 @@ scope:
     - .caws/specs/CAWS-SPEC-REOPEN-001.yaml
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    `caws specs reopen <id>` is the governed closed-to-active transition, the
+    inverse of close. It mirrors closeSpec/restoreArchivedSpec exactly: validate
+    id -> load -> state-guard -> raw-byte YAML patch -> re-validate through
+    parseAndValidateSpec -> spec_reopened event -> withLifecycleLock +
+    runLifecycleTransaction -> attachAutoCommit. The shell never patches YAML
+    or appends events directly.
+  - >-
+    Only a closed spec may be reopened. active/draft are refused (point to
+    activate / edit); archived is refused (point to restore). A refusal mutates
+    nothing (byte-identical spec + events snapshot before/after).
+  - >-
+    Reopen removes the terminal fields resolution, closure_notes, and
+    superseded_by (removeTopLevelScalar, exactly as restoreArchivedSpec does) —
+    MANDATORY, because validate-semantics rejects an active spec carrying
+    resolution. lifecycle_state becomes active; updated_at is bumped. The
+    patched bytes are re-validated through parseAndValidateSpec before write, so
+    a reopen that left a terminal field would fail the transaction rather than
+    write an invalid spec.
+  - >-
+    Reopen does NOT restore the worktree binding. close already cleared the
+    top-level worktree field (its prior value lives only in the spec_closed
+    event's prior_worktree); reopen leaves it absent. The spec reopens unbound,
+    and the operator re-binds via caws worktree create/bind (which requires
+    active). worktrees.json is not touched. This mirrors restoreArchivedSpec.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      A closed spec (lifecycle_state: closed, with resolution: completed and
+      closure_notes set).
+    when: >-
+      `caws specs reopen <id>` runs.
+    then: >-
+      The spec transitions to lifecycle_state: active; resolution, closure_notes,
+      and superseded_by are removed; updated_at is bumped; a spec_reopened event
+      is appended; the change is auto-committed. Exit 0.
+  - id: A2
+    given: >-
+      An active, draft, or archived spec.
+    when: >-
+      `caws specs reopen <id>` runs.
+    then: >-
+      Refused (exit 1) with a diagnostic naming the conflict and the right
+      next_commands (activate for draft, restore for archived). No mutation —
+      the spec YAML and events.jsonl are byte-identical before/after.
+  - id: A3
+    given: >-
+      A closed spec with resolution set, reopened, then the resulting active
+      spec re-validated.
+    when: >-
+      parseAndValidateSpec runs on the post-reopen bytes.
+    then: >-
+      It passes — resolution is gone (the semantic guard at validate-semantics
+      that rejects resolution-on-active does not fire). Proves the remove step
+      is load-bearing.
+  - id: A4
+    given: >-
+      The command metadata surface.
+    when: >-
+      findLeaf('specs', 'reopen') is consulted.
+    then: >-
+      The reopen leaf exists with a --reason flag, and `caws specs --help` lists
+      reopen alongside close/archive/restore.
 non_functional: {}
 contracts:
   - name: 'spec-reopen'
