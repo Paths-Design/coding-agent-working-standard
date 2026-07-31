@@ -65,6 +65,7 @@ export type EventType =
   | 'spec_archive_pruned'
   | 'spec_retired'
   | 'spec_restored'
+  | 'spec_reopened'
   | 'spec_deleted'
   | 'spec_scope_amended'
   | 'spec_binding_cleared'
@@ -107,6 +108,7 @@ export const REQUIRES_SPEC_ID: ReadonlySet<EventType> = new Set<EventType>([
   'spec_archive_pruned',
   'spec_retired',
   'spec_restored',
+  'spec_reopened',
   'spec_deleted',
   'spec_scope_amended',
   'spec_drift_detected',

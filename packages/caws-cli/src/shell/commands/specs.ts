@@ -43,6 +43,7 @@ import {
   listSpecs,
   planCreateSpec,
   recoverArchivedSpec,
+  reopenSpec,
   restoreArchivedSpec,
   retireDraftSpec,
   retireDraftSpecs,
@@ -1410,6 +1411,52 @@ export function runSpecsCloseCommand(opts: SpecsCloseOptions): number {
     return 1;
   }
   out(`closed ${outcome.id} (resolution: ${opts.resolution})`);
+  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  return 0;
+}
+
+// ─── caws specs reopen ─────────────────────────────────────────────────────
+
+export interface SpecsReopenOptions extends BaseCommandOptions {
+  readonly id: string;
+  readonly reason?: string;
+}
+
+// CAWS-SPEC-REOPEN-001: the governed closed -> active transition, the inverse
+// of close. Mirrors runSpecsCloseCommand: resolve ctx -> build actor -> call the
+// reopenSpec writer -> surface the audit commit. `--reason` is recorded on the
+// spec_reopened event (NOT as closure_notes, which reopen removes).
+export function runSpecsReopenCommand(opts: SpecsReopenOptions): number {
+  const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
+
+  const ctx = resolveCawsCtx(cwd, err, showData, 'reopen');
+  if (ctx === null) return 2;
+
+  const actor = buildActorOrError(
+    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'reopen'
+  );
+  if (actor === null) return 2;
+
+  const input: Parameters<typeof reopenSpec>[1] = {
+    id: opts.id,
+    now: nowFn,
+    actor,
+  };
+  if (opts.reason !== undefined) (input as { reason?: string }).reason = opts.reason;
+
+  const result = reopenSpec(ctx.cawsDir, input);
+  if (!isOk(result)) {
+    err('caws specs reopen: failed.');
+    err(renderDiagnostics(result.errors, { showData }));
+    return 1;
+  }
+  const outcome = result.value;
+  if (outcome.kind === 'partial_failure_recovered') {
+    err('caws specs reopen: partial failure recovered (no state change).');
+    err(renderDiagnostics(outcome.cause, { showData }));
+    return 1;
+  }
+  out(`reopened ${outcome.id} (lifecycle_state: active)`);
   surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }

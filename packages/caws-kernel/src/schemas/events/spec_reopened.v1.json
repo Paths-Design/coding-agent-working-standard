@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/spec_reopened.v1.json",
+  "title": "spec_reopened event payload",
+  "$comment": "Class: REQUIRES_SPEC_ID. Records a governed closed-to-active transition (caws specs reopen), the inverse of spec_closed. Reopen is distinct from spec_restored (archived->draft/active via body recovery) and spec_activated (draft->active): it operates on an existing closed canonical body, removes the terminal fields (resolution/closure_notes/superseded_by) so the active spec passes validate-semantics, and leaves the spec unbound (close already cleared the worktree field). Carries previous_lifecycle_state for audit-trail parity with spec_activated.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["previous_lifecycle_state"],
+  "properties": {
+    "previous_lifecycle_state": {
+      "type": "string",
+      "enum": ["closed"],
+      "description": "The lifecycle state the spec held before reopen (always closed; other states are refused by reopenSpec)."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional operator-supplied reason for reopening (e.g. 'work determined incomplete after merge'). Recorded on the event, NOT as closure_notes (that field is removed by reopen)."
+    }
+  }
+}

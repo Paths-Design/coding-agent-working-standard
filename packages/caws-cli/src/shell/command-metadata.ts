@@ -411,6 +411,20 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
     },
     {
       kind: 'leaf',
+      name: 'reopen',
+      argument: { name: 'id', required: true, description: 'Closed spec id to reopen' },
+      description:
+        'Reopen a closed spec (closed -> active), the inverse of close. Removes resolution/closure_notes/superseded_by so the active spec is valid; leaves the spec unbound (re-bind with caws worktree create/bind). Appends spec_reopened event.',
+      options: [
+        {
+          flag: '--reason <text>',
+          description: 'Optional reason recorded on the spec_reopened event (e.g. work determined incomplete)',
+        },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
       name: 'archive',
       argument: { name: 'id', required: false, description: 'Closed spec id to archive' },
       description:

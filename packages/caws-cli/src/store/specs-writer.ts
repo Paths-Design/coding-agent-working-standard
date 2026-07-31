@@ -691,7 +691,7 @@ function gitPathIgnored(repoRoot: string, relPath: string): boolean {
 function autoCommitSpecWrite(
   cawsDir: string,
   specId: string,
-  action: 'create' | 'activate' | 'close' | 'archive' | 'amend-scope' | 'restore',
+  action: 'create' | 'activate' | 'close' | 'archive' | 'amend-scope' | 'restore' | 'reopen',
   wasDirtyBeforeWrite: boolean,
   extraPaths: ReadonlyArray<string> = []
 ): AutoCommitOutcome {
@@ -718,7 +718,7 @@ function attachAutoCommit(
   outcome: Result<SpecWriterOutcome>,
   cawsDir: string,
   specId: string,
-  action: 'create' | 'activate' | 'close' | 'archive' | 'amend-scope' | 'restore',
+  action: 'create' | 'activate' | 'close' | 'archive' | 'amend-scope' | 'restore' | 'reopen',
   wasDirtyBeforeWrite: boolean,
   extraPaths: ReadonlyArray<string> = []
 ): Result<SpecWriterOutcome> {
@@ -1386,6 +1386,186 @@ export function closeSpec(
   }
   const outcome = mapTxnToOutcome(txnResult.value, input.id, targetPath);
   return attachAutoCommit(outcome, cawsDir, input.id, 'close', wasDirtyBeforeWrite);
+}
+
+
+// ─── reopenSpec ──────────────────────────────────────────────────────────
+
+export interface ReopenSpecInput {
+  readonly id: string;
+  readonly reason?: string;
+  readonly now?: () => Date;
+  readonly actor: EventBody['actor'];
+}
+
+// CAWS-SPEC-REOPEN-001: the governed closed -> active transition, the inverse
+// of closeSpec. Mirrors closeSpec/restoreArchivedSpec exactly (validate id ->
+// load -> state-guard -> raw-byte YAML patch -> re-validate -> event -> dirty-
+// capture -> withLifecycleLock + runLifecycleTransaction -> attachAutoCommit).
+//
+// Only a closed spec may be reopened. active/draft are refused (point to
+// activate / edit); archived is refused (point to restore). The terminal fields
+// resolution/closure_notes/superseded_by are removed (MANDATORY — validate-
+// semantics rejects an active spec carrying resolution; restoreArchivedSpec does
+// the same at its 3263-3272). The worktree binding is left absent (close
+// already cleared it; reopen -> unbound -> operator re-binds via worktree
+// create/bind, which requires active). worktrees.json is not touched.
+export function reopenSpec(
+  cawsDir: string,
+  input: ReopenSpecInput
+): Result<SpecWriterOutcome> {
+  const idValidation = validateSpecId(input.id);
+  if (!idValidation.ok) return idValidation;
+
+  const targetPath = specPath(cawsDir, input.id);
+  if (!fs.existsSync(targetPath)) {
+    const archived = archivedSpecPath(cawsDir, input.id);
+    if (fs.existsSync(archived) || isArchivedViaTombstone(cawsDir, input.id)) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Spec "${input.id}" is archived; use \`caws specs restore\` to bring it back (reopen operates on closed canonical specs only).`,
+          { subject: input.id }
+        )
+      );
+    }
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${input.id}" not found at ${targetPath}.`,
+        { subject: input.id }
+      )
+    );
+  }
+
+  // Load and verify the current state.
+  const sourceResult = readYamlSource(targetPath);
+  if (!isOk(sourceResult)) return err(sourceResult.errors);
+  const originalBytes = sourceResult.value;
+  const parsed = parseAndValidateSpec(originalBytes);
+  if (!isOk(parsed)) {
+    return err(
+      parsed.errors.map((d) =>
+        storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
+          subject: d.subject ?? input.id,
+        })
+      )
+    );
+  }
+  const spec = parsed.value;
+
+  // State guard: only closed specs may be reopened.
+  if (spec.lifecycle_state !== 'closed') {
+    if (spec.lifecycle_state === 'active') {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Spec "${input.id}" is already active; nothing to reopen.`,
+          { subject: input.id, data: { lifecycle_state: spec.lifecycle_state } }
+        )
+      );
+    }
+    if (spec.lifecycle_state === 'draft') {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Spec "${input.id}" is a draft; use \`caws specs activate\` to move it to active (reopen operates on closed specs only).`,
+          { subject: input.id, data: { lifecycle_state: spec.lifecycle_state } }
+        )
+      );
+    }
+    // archived bodies are recovered via restore, not reopen.
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${input.id}" is ${spec.lifecycle_state}; use \`caws specs restore\` to recover an archived spec (reopen operates on closed specs only).`,
+        { subject: input.id, data: { lifecycle_state: spec.lifecycle_state } }
+      )
+    );
+  }
+
+  const now = (input.now ?? (() => new Date()))().toISOString();
+  let patched = originalBytes;
+
+  // lifecycle_state -> active.
+  const stepLifecycle = setTopLevelScalar(patched, 'lifecycle_state', 'active');
+  if (!stepLifecycle.ok) return err(stepLifecycle.errors);
+  patched = stepLifecycle.value;
+
+  // updated_at (mirror closeSpec's anchor-preference: after created_at if present).
+  if (/^updated_at:/m.test(patched)) {
+    const updated = setTopLevelScalar(patched, 'updated_at', `'${now}'`);
+    if (!updated.ok) return err(updated.errors);
+    patched = updated.value;
+  } else {
+    const anchorKey = /^created_at:/m.test(patched) ? 'created_at' : 'lifecycle_state';
+    const updated = insertTopLevelScalarAfter(patched, anchorKey, 'updated_at', `'${now}'`);
+    if (!updated.ok) return err(updated.errors);
+    patched = updated.value;
+  }
+
+  // Remove terminal fields. MANDATORY: validate-semantics rejects an active
+  // spec carrying resolution; closure_notes/superseded_by are close-only too.
+  // (Mirrors restoreArchivedSpec's remove loop.)
+  for (const terminalKey of ['resolution', 'closure_notes', 'superseded_by']) {
+    const removed = removeTopLevelScalar(patched, terminalKey);
+    if (!removed.ok) return err(removed.errors);
+    patched = removed.value;
+  }
+
+  // worktree: is already absent on a closed spec (close cleared it). Remove
+  // defensively in case a closed spec was hand-edited to re-add it; never
+  // restore a binding (reopen -> unbound -> operator re-binds).
+  const withoutWorktree = removeTopLevelScalar(patched, 'worktree');
+  if (!withoutWorktree.ok) return err(withoutWorktree.errors);
+  patched = withoutWorktree.value;
+
+  // Validate the patched bytes through the kernel before write.
+  const reparsed = parseAndValidateSpec(patched);
+  if (!isOk(reparsed)) {
+    return err(
+      reparsed.errors.map((d) =>
+        storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
+          subject: d.subject ?? input.id,
+          data: { source_rule: d.rule, hint: 'planned-bytes validation failed' },
+        })
+      )
+    );
+  }
+
+  const eventData: Record<string, unknown> = {
+    previous_lifecycle_state: 'closed',
+  };
+  if (input.reason !== undefined && input.reason.length > 0) {
+    eventData.reason = input.reason;
+  }
+
+  const event: EventBody = {
+    event: 'spec_reopened',
+    ts: now,
+    actor: input.actor,
+    spec_id: input.id,
+    data: eventData,
+  } as unknown as EventBody;
+
+  const repoRoot = repoRootFromCawsDir(cawsDir);
+  const wasDirtyBeforeWrite = isPathDirty(
+    repoRoot,
+    specRelPath(cawsDir, input.id, repoRoot)
+  );
+
+  const txnResult = withLifecycleLock(cawsDir, () =>
+    runLifecycleTransaction({
+      cawsDir,
+      plannedWrites: [{ path: targetPath, contents: patched }],
+      events: [event],
+    })
+  );
+  if (!txnResult.ok) {
+    return err(txnResult.errors);
+  }
+  const outcome = mapTxnToOutcome(txnResult.value, input.id, targetPath);
+  return attachAutoCommit(outcome, cawsDir, input.id, 'reopen', wasDirtyBeforeWrite);
 }
 
 // ─── archiveSpec ─────────────────────────────────────────────────────────

@@ -44,6 +44,7 @@ import specArchivePrunedSchema from '../schemas/events/spec_archive_pruned.v1.js
 import specActivatedSchema from '../schemas/events/spec_activated.v1.json';
 import specRetiredSchema from '../schemas/events/spec_retired.v1.json';
 import specRestoredSchema from '../schemas/events/spec_restored.v1.json';
+import specReopenedSchema from '../schemas/events/spec_reopened.v1.json';
 import specScopeAmendedSchema from '../schemas/events/spec_scope_amended.v1.json';
 import specBindingClearedSchema from '../schemas/events/spec_binding_cleared.v1.json';
 import worktreePrunedSchema from '../schemas/events/worktree_pruned.v1.json';
@@ -106,6 +107,7 @@ const PAYLOAD_SCHEMAS: Readonly<Partial<Record<EventType, object>>> = {
   spec_activated: specActivatedSchema,
   spec_retired: specRetiredSchema,
   spec_restored: specRestoredSchema,
+  spec_reopened: specReopenedSchema,
   spec_scope_amended: specScopeAmendedSchema,
   spec_binding_cleared: specBindingClearedSchema,
   spec_closed: specClosedSchema,
@@ -607,6 +609,7 @@ const KNOWN_EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   'spec_archive_pruned',
   'spec_retired',
   'spec_restored',
+  'spec_reopened',
   'spec_deleted',
   'spec_scope_amended',
   'spec_drift_detected',

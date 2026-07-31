@@ -80,6 +80,7 @@ import {
   runSpecsRetireDraftCommand,
   runSpecsPruneDraftsCommand,
   runSpecsCloseCommand,
+  runSpecsReopenCommand,
   runSpecsCreateCommand,
   runSpecsListCommand,
   runSpecsMigrateCommand,
@@ -1189,6 +1190,24 @@ export function registerShellCommands(
           ...(opts.supersededBy !== undefined
             ? { supersededBy: opts.supersededBy }
             : {}),
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'reopen'))
+    .action(
+      (
+        id: string,
+        opts: {
+          reason?: string;
+          data?: boolean;
+        }
+      ) => {
+        const code = runSpecsReopenCommand({
+          id,
+          ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
           showData: opts.data === true,
         });
         exit(code);
