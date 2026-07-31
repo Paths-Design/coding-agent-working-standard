@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 27
+# hook_pack_version: 28
 # caws_min_major: 11
 # lineage_refs: (new — CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001)
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -59,26 +59,34 @@ _CAWS_REPRIEVE_SH_LOADED=1
 # Creates the dir if missing (mkdir -p is idempotent; a read consult that has to
 # create the dir is harmless — the file simply won't exist in it).
 caws_reprieve_state_dir() {
-  local project_dir="${CAWS_PROJECT_DIR:-.}"
-  # Resolve the canonical checkout root from the git common dir. In a linked
-  # worktree, --git-common-dir returns <canonical>/.git, whose parent is the
-  # canonical root. In the canonical checkout itself, it returns .git (relative),
-  # so resolve to an absolute path before taking the parent. Failures (not a git
-  # repo, git missing) fall back to CAWS_PROJECT_DIR — never block.
-  local common
-  common="$(cd "$project_dir" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null)" || common=""
-  if [[ -n "$common" ]]; then
-    case "$common" in
-      /*) : ;;
-      *)  common="$project_dir/$common" ;;
-    esac
-    local canon_root
-    canon_root="$(cd "$common/.." 2>/dev/null && pwd -P)" || canon_root=""
-    if [[ -n "$canon_root" ]]; then
-      project_dir="$canon_root"
+  # CAWS-LATCH-CANONICAL-STATE-DIR-001: delegate to the shared canonical-root
+  # walk in lib/caws-state.sh (caws_canonical_state_dir) instead of inlining an
+  # equivalent walk here. The helper reproduces this function's exact semantics
+  # (git-common-dir -> canonical root, relative-common resolved absolute via
+  # pwd -P, no .caws/ requirement, fail-open to the start dir). Falls back to
+  # the inline walk if the helper is unavailable (caws-state.sh not yet sourced
+  # in this shell) so reprieve never depends on source order.
+  local state_dir
+  if declare -F caws_canonical_state_dir >/dev/null 2>&1; then
+    state_dir="$(caws_canonical_state_dir "${CAWS_PROJECT_DIR:-.}" "${CAWS_VENDOR_DIR:-.claude}")"
+  else
+    # Inline fallback identical to the pre-refactor walk (and to the helper).
+    local project_dir="${CAWS_PROJECT_DIR:-.}"
+    local common
+    common="$(cd "$project_dir" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null)" || common=""
+    if [[ -n "$common" ]]; then
+      case "$common" in
+        /*) : ;;
+        *)  common="$project_dir/$common" ;;
+      esac
+      local canon_root
+      canon_root="$(cd "$common/.." 2>/dev/null && pwd -P)" || canon_root=""
+      if [[ -n "$canon_root" ]]; then
+        project_dir="$canon_root"
+      fi
     fi
+    state_dir="$project_dir/${CAWS_VENDOR_DIR:-.claude}/hooks/state"
   fi
-  local state_dir="$project_dir/${CAWS_VENDOR_DIR}/hooks/state"
   mkdir -p "$state_dir" 2>/dev/null || true
   printf '%s\n' "$state_dir"
 }

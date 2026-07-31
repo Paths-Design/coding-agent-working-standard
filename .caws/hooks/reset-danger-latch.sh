@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 27
+# hook_pack_version: 28
 # caws_min_major: 11
 # lineage_refs: 17
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -59,12 +59,39 @@ LOG_FILE="$PROJECT_DIR/${CAWS_VENDOR_DIR}/logs/danger-latch-resets.log"
 # CAWS_VENDOR_DIR is always included (even if its dir does not exist yet) so a
 # keyed candidate is still computed for it.
 _caws_known_vendor_dirs=(.claude .codex .cursor .windsurf .opencode .zcode)
+_caws_canonical_root() {
+  # CAWS-LATCH-CANONICAL-STATE-DIR-001: resolve the canonical repo root (the
+  # one block-dangerous.sh writes latches under, since its CAWS_PROJECT_DIR is
+  # git-root-normalized) rather than the install root (SCRIPT_DIR/../..). The
+  # two diverge when this reset runs from a linked worktree, leaving a latch
+  # written at the canonical root unreachable. Delegates to the shared
+  # caws_canonical_state_dir walk (lib/caws-state.sh) and strips the trailing
+  # <vendor>/hooks/state to recover the root. Falls back to the install root
+  # when the helper is unavailable or git is absent.
+  if declare -F caws_canonical_state_dir >/dev/null 2>&1; then
+    local hinted
+    hinted="$(caws_canonical_state_dir "${CAWS_PROJECT_DIR:-$PROJECT_DIR}" "${CAWS_VENDOR_DIR:-.claude}")"
+    # caws_canonical_state_dir returns <root>/<vendor>/hooks/state; recover the
+    # root by chopping the trailing /<vendor>/hooks/state (two levels: the
+    # vendor dir + hooks/state).
+    local root="${hinted%/hooks/state}"
+    root="${root%/*}"
+    [[ -n "$root" ]] && { printf '%s\n' "$root"; return 0; }
+  fi
+  printf '%s\n' "$PROJECT_DIR"
+}
+
 _caws_all_vendor_state_dirs() {
   local out=()
   local vd dir seen prev
+  # Anchor at the CANONICAL root (where the latch writer lands files), not the
+  # install root (CAWS-LATCH-CANONICAL-STATE-DIR-001). Falls back to install
+  # root if the canonical resolution is unavailable.
+  local search_root
+  search_root="$(_caws_canonical_root)"
   # Always include the resolved vendor dir first (the primary), then the rest.
   for vd in "${CAWS_VENDOR_DIR:-.claude}" "${_caws_known_vendor_dirs[@]}"; do
-    dir="$PROJECT_DIR/$vd/hooks/state"
+    dir="$search_root/$vd/hooks/state"
     # Dedup (empty-array-safe under set -u).
     seen=0
     for prev in ${out[@]+"${out[@]}"}; do [[ "$prev" == "$dir" ]] && { seen=1; break; }; done
