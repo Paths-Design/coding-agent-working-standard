@@ -472,7 +472,7 @@ export function applyLeasePatches(
  * diagnostics from the delete operations.
  */
 export interface PruneOptions {
-  readonly status: 'stopped' | 'stale';
+  readonly status: 'stopped' | 'stale' | 'legacy';
   /** Active records whose age exceeds this are bucketed as stale for the prune decision. */
   readonly staleTtlMs?: number;
   readonly retentionMs: number;
@@ -512,6 +512,15 @@ export function pruneLeasesByStatus(
         : Date.parse(lease.last_active);
       if (!Number.isFinite(reference)) continue;
       if (nowMs - reference > opts.retentionMs) candidates.push(lease.session_id);
+    } else if (opts.status === 'legacy') {
+      // CAWS-AGENTS-PRUNE-LEGACY-001: status-agnostic age-based prune. Reaches
+      // legacy records that carry NO status field (v10/early-v11 shape), which
+      // the stopped/stale/dead modes all skip (they gate on a status value).
+      // Select purely by last_active age > retention; an unparseable/absent
+      // last_active is skipped (no reference), matching the stopped mode.
+      const lastActiveMs = Date.parse(lease.last_active);
+      if (!Number.isFinite(lastActiveMs)) continue;
+      if (nowMs - lastActiveMs > opts.retentionMs) candidates.push(lease.session_id);
     } else {
       // status === 'stale'
       if (lease.status !== 'active' && lease.status !== 'stopping') continue;
