@@ -188,6 +188,47 @@ describe('CAWS-SPEC-REOPEN-001 — caws specs reopen', () => {
     expect(flags).toContain('--reason <text>');
   });
 
+  test('group description matrix lists reopen alongside close (CAWS-DOCS-NEWCOMMANDS-001 — top-level help contract)', () => {
+    // Closes the gap where a leaf is wired but the GROUP description string (the
+    // top-level `caws --help` matrix an agent in another repo sees first) omits
+    // it. The matrix is a separate string from the subcommand list.
+    const group = COMMAND_SURFACE_METADATA.find((c) => c.name === 'specs');
+    expect(group).toBeDefined();
+    const leafNames = (group.subcommands || []).map((c) => c.name);
+    // The group description's slash-list must contain every leaf name.
+    for (const name of leafNames) {
+      expect(group.description).toContain(name);
+    }
+    expect(group.description).toContain('reopen');
+  });
+
+  test('close-already error mentions reopen as a next command (CAWS-DOCS-NEWCOMMANDS-001 — in-flow discovery)', () => {
+    // Closes the gap where the close-already diagnostic could drift to omit
+    // reopen without a test failure. An agent that closes an already-closed
+    // spec must learn reopen exists from the error.
+    const root = makeTempRepo();
+    initProject(root);
+    const cawsDir = path.join(root, '.caws');
+    writeClosedSpec(cawsDir, 'REOPEN-ERR-001');
+    // Close is refused on an already-closed spec with a diagnostic. We exercise
+    // it via the close command path to capture the real error text.
+    const { runSpecsCloseCommand } = require('../../dist/shell/commands/specs');
+    const out = [];
+    const err = [];
+    const code = runSpecsCloseCommand({
+      cwd: root,
+      now: () => new Date('2026-07-30T12:00:00.000Z'),
+      env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'test-session' },
+      id: 'REOPEN-ERR-001',
+      resolution: 'completed',
+      out: (line) => out.push(line),
+      err: (line) => err.push(line),
+    });
+    expect(code).toBe(1);
+    const combined = out.join('\n') + '\n' + err.join('\n');
+    expect(combined).toContain('reopen');
+  });
+
   test('idempotency: reopening an already-active (post-reopen) spec is refused', () => {
     const { root } = setupClosedRepo('REOPEN-IDEM-001');
     // First reopen succeeds.

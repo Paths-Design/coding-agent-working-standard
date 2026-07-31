@@ -253,6 +253,7 @@ function unresolvedObligationRepair(u: UnresolvedObligation): string {
 function nonActiveCloseSpecError(id: string, lifecycleState: string): Result<never> {
   if (lifecycleState === 'closed') {
     const nextCommands = [
+      `caws specs reopen ${id}`,
       `caws specs show ${id}`,
       `caws specs archive ${id}`,
       `caws specs recover ${id} --out <path>`,
@@ -261,9 +262,10 @@ function nonActiveCloseSpecError(id: string, lifecycleState: string): Result<nev
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
         `Spec "${id}" is already closed; close is a no-op and no closure metadata was changed.\n\n` +
-          `Next: ${nextCommands[0]}\n` +
-          `Archive when finished: ${nextCommands[1]}\n` +
-          `If you need the body after archive: ${nextCommands[2]}`,
+          `Reopen if the close was premature: ${nextCommands[0]}\n` +
+          `Next: ${nextCommands[1]}\n` +
+          `Archive when finished: ${nextCommands[2]}\n` +
+          `If you need the body after archive: ${nextCommands[3]}`,
         {
           subject: id,
           data: {

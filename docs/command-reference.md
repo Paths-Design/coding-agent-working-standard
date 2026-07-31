@@ -556,6 +556,19 @@ Close an active spec. Non-destructive raw-byte YAML patch; appends spec_closed e
 - `--superseded-by <id>` — Spec id that supersedes this one (use with --resolution superseded)
 - `--data` — Show structured data block on diagnostics
 
+### `caws specs reopen <id>`
+
+Reopen a closed spec (closed -> active), the inverse of close. `caws worktree merge` auto-closes the bound spec; if the work is later judged incomplete, `reopen` is the governed path back to active. Removes `resolution`/`closure_notes`/`superseded_by` (mandatory — an active spec may not carry `resolution`); leaves the spec unbound (close already cleared the `worktree:` field — re-bind with `caws worktree create/bind`). Appends a `spec_reopened` event.
+
+**Argument:** `id` (required) — Closed spec id to reopen
+
+**Options:**
+
+- `--reason <text>` — Optional reason recorded on the `spec_reopened` event (e.g. "work determined incomplete after merge"). Not written as `closure_notes` (that field is removed by reopen).
+- `--data` — Show structured data block on diagnostics
+
+**Refusals:** an already-active spec ("nothing to reopen"); a draft (use `activate`); an archived spec (use `restore`). No mutation on refusal.
+
 ### `caws specs archive [id]`
 
 Archive one closed spec, or batch-archive closed specs with --status closed. Batch mode defaults to dry-run; pass --apply to archive selected specs in one aggregate audit commit.
