@@ -155,7 +155,18 @@ import type { HookPackV1 } from './types';
 // fail-open keeps the raw candidate when git is absent or the dir is not in a
 // repo (never downgrades a real vendor signal to "."); the bare "." fallback
 // is reached only when no vendor *_PROJECT_DIR is set at all.
-export const SHARED_PACK_VERSION = 26;
+// v27 (CAWS-RESET-LATCH-MULTIVENDOR-001): reset-danger-latch.sh now searches
+// across ALL present vendor state dirs, not just its own (defaulted) one. The
+// latch is written by block-dangerous.sh under the WRITER's vendor dir (the
+// active harness bridge sets CAWS_AGENT_SURFACE, e.g. zcode -> .zcode/), but
+// the reset is run by a human from a plain shell where CAWS_AGENT_SURFACE is
+// unset, so agent-surface.sh defaults to claude-code -> .claude/. In a
+// multi-surface repo the latch lived under .zcode/ while the reset searched
+// only .claude/ — reporting "nothing to clear" while the latch stayed armed,
+// wedging the agent with no working recovery. --all now sweeps every vendor
+// dir; --session/--current search the keyed filename (and the one-latch
+// fallback) across the union. The session-id resolution is unchanged.
+export const SHARED_PACK_VERSION = 27;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.
