@@ -177,7 +177,17 @@ import type { HookPackV1 } from './types';
 // deliberately NOT migrated (its out-of-tree placement is an intentional
 // git-add safety invariant). No behavioral change to reprieve; the latch
 // clearer is strictly more correct than v27's install-root anchoring.
-export const SHARED_PACK_VERSION = 28;
+// v29 (CAWS-SESSION-SHELL-RESOLVER-CAPSULE-001): resolve_caws_session_id
+// (lib/session-id.sh) now consults the durable capsule at
+// .caws/sessions/caws-<id>.json when the env-identity chain misses — the shell
+// mirror of the TS resolver's tier-3 readCapsule, and the same file caws
+// worktree create records as the owner. Without it, a Bash subshell carrying no
+// identity env var resolved to "unknown", so the write-guards treated the
+// owner's own edits as foreign and blocked/reverted them. This completes the
+// shell resolver to match the canonical identity model (one model across shell
+// + TS), not a parallel fallback. Fail-opens to "unknown" only when no capsule
+// exists.
+export const SHARED_PACK_VERSION = 29;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.
