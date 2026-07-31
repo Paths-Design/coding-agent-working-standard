@@ -166,7 +166,18 @@ import type { HookPackV1 } from './types';
 // wedging the agent with no working recovery. --all now sweeps every vendor
 // dir; --session/--current search the keyed filename (and the one-latch
 // fallback) across the union. The session-id resolution is unchanged.
-export const SHARED_PACK_VERSION = 27;
+// v28 (CAWS-LATCH-CANONICAL-STATE-DIR-001): extract a shared canonical
+// hook-state-dir helper (lib/caws-state.sh caws_canonical_state_dir) and align
+// the danger-latch clearer + reprieve onto it. lib/reprieve.sh no longer
+// inlines its own git-common-dir walk (pure dedup, behavior-preserving).
+// reset-danger-latch.sh anchors its multi-vendor search at the CANONICAL repo
+// root (via the helper) instead of the install root — closing the gap where a
+// latch written at <git-root>/.zcode/... was missed when the reset ran from a
+// linked worktree (install root != git root). The guard-strike subsystem is
+// deliberately NOT migrated (its out-of-tree placement is an intentional
+// git-add safety invariant). No behavioral change to reprieve; the latch
+// clearer is strictly more correct than v27's install-root anchoring.
+export const SHARED_PACK_VERSION = 28;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.

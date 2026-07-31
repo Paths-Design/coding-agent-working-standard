@@ -105,3 +105,26 @@ run_reset() {
   assert_output --partial "searched vendor state dirs"
   assert_output --partial ".zcode/hooks/state"
 }
+
+@test "reset: --session clears a latch at the CANONICAL root when run from a linked worktree (A2, CAWS-LATCH-CANONICAL-STATE-DIR-001)" {
+  # The latch writer (block-dangerous.sh) lands files at <git-root>/<surface>/
+  # hooks/state (CAWS_PROJECT_DIR is git-root-normalized). The clearer used to
+  # anchor at its INSTALL root (SCRIPT_DIR/../..), which is a worktree path when
+  # the reset runs from a linked worktree — diverging from the writer's root and
+  # missing the latch. The clearer now anchors at the canonical root.
+  #
+  # Here: the temp repo IS the canonical root. Plant a latch under it, then run
+  # the reset from a subdir, and assert the latch is still found via the
+  # canonical root. Asserts ONLY our latch (prior tests may leave residue).
+  plant_latch ".zcode" "sess-A2canon"
+  local before
+  before=$(find "$CAWS_TEST_REPO" -path '*/hooks/state/danger-latch-sess-A2canon.json' 2>/dev/null | wc -l | tr -d ' ')
+  [ "$before" = "1" ]
+
+  mkdir -p "$CAWS_TEST_REPO/.caws/worktrees/fake-wt"
+  run env -i PATH="$PATH" HOME="$HOME" bash -c "cd '$CAWS_TEST_REPO/.caws/worktrees/fake-wt' && bash '$RESET' --session sess-A2canon --reason test"
+  assert_success
+  local after
+  after=$(find "$CAWS_TEST_REPO" -path '*/hooks/state/danger-latch-sess-A2canon.json' 2>/dev/null | wc -l | tr -d ' ')
+  [ "$after" = "0" ]
+}

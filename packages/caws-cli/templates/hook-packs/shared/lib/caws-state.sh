@@ -142,6 +142,49 @@ resolve_canonical_dir() {
   printf '%s\n' "$start"
 }
 
+# caws_canonical_state_dir <start-dir> <vendor-dir>
+#   Resolve the CANONICAL hook-state directory: walk git-common-dir from
+#   <start-dir> to the canonical (main) checkout root, then return
+#   <canonical-root>/<vendor-dir>/hooks/state. This is the shared landing spot
+#   for the canonical-root walk that lib/reprieve.sh previously inlined and
+#   that reset-danger-latch.sh needs so its search anchors at the same root the
+#   latch writer (block-dangerous.sh, CAWS_PROJECT_DIR git-root-normalized by
+#   HOOK-PROJECT-DIR-ROOT-NOT-CWD-01) writes to.
+#
+#   Semantics intentionally match lib/reprieve.sh's caws_reprieve_state_dir walk
+#   (the battle-tested one), NOT resolve_canonical_dir's stricter variant:
+#     - no .caws/ existence requirement at the candidate;
+#     - a relative common-dir (".git" in the canonical checkout itself) is
+#       resolved to absolute before the parent is taken, via pwd -P;
+#     - fail-open: on git-absent / not-a-repo / walk failure, return
+#       <start-dir>/<vendor-dir>/hooks/state (never empty, never block).
+#
+#   CAWS-LATCH-CANONICAL-STATE-DIR-001. The guard-strike subsystem is
+#   deliberately NOT migrated onto this helper -- its out-of-tree placement is an
+#   intentional safety invariant (CAWS-GUARD-STRIKE-FILE-OUT-OF-TREE-001).
+caws_canonical_state_dir() {
+  local start="${1:-.}"
+  local vendor_dir="${2:-${CAWS_VENDOR_DIR:-.claude}}"
+  local project_dir="$start"
+  if command -v git >/dev/null 2>&1; then
+    local common
+    common="$(cd "$start" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null)" || common=""
+    if [[ -n "$common" ]]; then
+      case "$common" in
+        /*) : ;;
+        *)  common="$start/$common" ;;
+      esac
+      local canon_root
+      canon_root="$(cd "$common/.." 2>/dev/null && pwd -P)" || canon_root=""
+      if [[ -n "$canon_root" ]]; then
+        project_dir="$canon_root"
+      fi
+    fi
+  fi
+  printf '%s/%s/hooks/state
+' "$project_dir" "$vendor_dir"
+}
+
 extract_worktree_name() {
   local dir="${1:-}"
   if [[ "$dir" =~ ^(.*\/\.caws\/worktrees\/([^/]+))($|/) ]]; then
