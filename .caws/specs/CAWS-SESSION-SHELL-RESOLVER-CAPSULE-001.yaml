@@ -2,10 +2,11 @@ id: CAWS-SESSION-SHELL-RESOLVER-CAPSULE-001
 title: 'Shell session resolver reads the durable capsule so it stops returning unknown'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-shell-resolver
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-shell-resolver at ef336addcd4694af26726439d53705a3cdd2ebf0'
 created_at: '2026-07-31T07:28:25.026Z'
-updated_at: '2026-07-31T07:28:25.973Z'
+updated_at: '2026-07-31T07:34:29.044Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/shared/lib/session-id.sh
