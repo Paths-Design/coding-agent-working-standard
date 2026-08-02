@@ -1,27 +1,50 @@
 id: CAWS-FIX-N4-CLAIM-TAKEOVER-AUTHORITY-001
 title: 'Resolved-self-strict: claim --takeover must take over a foreign owner even when a fresh durable envelope admits it as a candidate'
-risk_tier: 2
+risk_tier: 1
 mode: fix
 lifecycle_state: active
 created_at: '2026-08-02T23:19:56.740Z'
 updated_at: '2026-08-02T23:19:56.740Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/commands/claim.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/shell/commands/claim.ts
+    - packages/caws-cli/tests/shell/session/claim-takeover-foreign-envelope.test.js
+    - .caws/specs/CAWS-FIX-N4-CLAIM-TAKEOVER-AUTHORITY-001.yaml
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/caws-kernel/src/worktree/ownership.ts
+    - packages/caws-cli/src/shell/session/resolve-session.ts
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'An explicit caws claim --takeover on a foreign-owned worktree MUST perform the ownership rewrite (write prior_owners, set owner to the resolved self, emit the takeover authority record) — it must never silently exit 0 with no state change. Candidate-set admission (resolveSessionCandidates) no longer short-circuits an explicit takeover: under --takeover, only candidates whose session_id equals the single resolved self (resolveSession, the same resolver caws status uses) are admitted to the kernel. The kernel stays pure id-equality (no liveness dependency); the filtering decision lives in the shell where the resolved-self identity and the takeover intent are both in scope.'
+  - 'The non-takeover claim path is unchanged: create-then-enter (an agent re-entering its own worktree from a different cwd) still surfaces OWNED (you) and exits 0 via candidate admission, as today. The fix only narrows the candidate set under an EXPLICIT --takeover, where a silent no-op crosses an authority boundary.'
+  - 'Defense in depth: the panelSession swap (render the admitted owner as "you") and the exit-0 branch additionally require that the resolved self equals the recorded owner. A foreign owner is never labeled "you" and a foreign-owned worktree never silently exits 0 on --takeover, even if the kernel returned Ok(null) — so a future regression in the candidate filter cannot reintroduce the silent no-op.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'A worktree wt-a1 whose worktrees.json owner.session_id is a foreign session F, and F has a fresh (last_seen_at within 24h) durable hook envelope on disk at .caws/sessions/<F>/.session-envelope.json, and the operating session is S (different from F), resolved via CAWS_SESSION_ID so caws status reports session S.'
+    when: 'caws claim --takeover runs on wt-a1.'
+    then: 'The takeover IS performed: worktrees.json owner.session_id is rewritten to S; a prior_owners entry is appended recording F (session_id, platform, takenOver_at); the command exits 0. It does NOT exit 0 with no state change, and it does NOT render F as "you".'
+  - id: A2
+    given: 'A worktree wt-a2 owned by the operating session S (the legit same-session case), with S resolvable both as the single resolved self and as a candidate.'
+    when: 'caws claim --takeover runs on wt-a2.'
+    then: 'The takeover is a no-op that exits 0 (resolved self IS the owner) — the legit create-then-enter self-takeover is preserved. (Accepted trade-off per the chosen approach: this may write a self-takeover prior_owners entry; noisy audit, not wrong.)'
+  - id: A3
+    given: 'A worktree wt-a3 owned by S, with S admitted ONLY via a capsule candidate (create-then-enter from a different cwd, no env var corroborating), and the operating session is S.'
+    when: 'caws claim (no --takeover) runs on wt-a3 from a different cwd.'
+    then: 'The non-takeover claim still admits S via the candidate set and surfaces OWNED (you), exit 0 — the candidate-admission path that SESSION-CAPSULE-WORKTREE-CWD-001 added is NOT regressed for the non-takeover claim.'
+  - id: A4
+    given: 'A worktree wt-a4 owned by foreign session F, where F has NO fresh envelope/candidate on disk (a genuinely-foreign owner with no candidate match).'
+    when: 'caws claim --takeover runs on wt-a4.'
+    then: 'The kernel refuses with foreign_owner_blocked unless explicitly authorized; the fix does not loosen the foreign-owner block. (Pre-existing behavior; this AC pins that it is preserved.)'
+non_functional:
+  security:
+    - 'The candidate-set filter under --takeover is the authority boundary: it must admit only the resolved self, never a foreign session. The filtering predicate is session_id equality against the single resolveSession identity — never a heuristic that could admit a foreign session. A foreign owner with a fresh durable envelope is the exact case that must reach the takeover rewrite, not the no-op short-circuit.'
+    - 'The defense-in-depth panelSession/exit-0 guards key on session_id equality between the resolved self and the recorded owner, so a foreign owner cannot be rendered as "you" or silently admitted regardless of the kernel result. This bounds the blast radius of any future candidate-filter regression to a display/exit-code issue, not a silent authority no-op.'
 contracts:
   - name: 'claim-takeover-resolved-self-authority'
     type: behavior
