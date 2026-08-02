@@ -10,6 +10,9 @@ blast_radius:
     - packages/caws-cli/src/shell/commands/claim.ts
   data_migration: false
 operational_rollback_slo: 5m
+observability:
+  - 'The jest suite claim-takeover-foreign-envelope.test.js is the verification artifact: A1 asserts the takeover IS performed (owner rewritten, prior_owners appended) for the foreign-fresh-envelope case that previously no-oped; A3 pins the non-regression of the create-then-enter non-takeover claim.'
+  - 'The prior_owners audit entry written by a successful takeover (session_id, platform, takenOver_at) is the durable control-plane artifact that the fix landed — caws worktree show / doctor surface it, and a reverted fix leaves no strand because the record shape is unchanged from pre-fix successful takeovers.'
 rollback:
   - 'Rollback is a revert of the claim.ts change + its test. The candidate filter and the panelSession/exit-0 guards revert; assertOwnership (kernel) and resolveSessionCandidates are untouched (scope.out), so reverting restores the pre-fix candidate-admission behavior exactly. No .caws/ governance state is migrated by this change, so nothing needs to be un-migrated.'
   - 'A takeover performed under the fix produces the same prior_owners/owner record shape the pre-fix path used on the cases where it worked, so a revert does not strand any record the fix wrote; at worst a self-takeover prior_owners entry (the documented accepted trade-off) remains as harmless audit noise.'
