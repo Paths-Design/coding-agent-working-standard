@@ -22,6 +22,10 @@
     "auto_closed_spec": {
       "type": "boolean",
       "description": "True when merge auto-flipped the bound spec to closed."
+    },
+    "spec_already_closed": {
+      "type": "boolean",
+      "description": "True when the merge found the bound spec already in lifecycle_state: closed and skipped closeSpec (the close was performed by an earlier `caws specs close`). Implies the merge appended no second spec_closed event. Optional; absent is equivalent to false."
     }
   }
 }

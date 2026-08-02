@@ -50,7 +50,7 @@ import {
   listVerifiedArtifactLinks,
   removeWorktreeArtifactLinks,
 } from './worktree-artifacts';
-import { closeSpec } from './specs-writer';
+import { closeSpec, type SpecWriterOutcome } from './specs-writer';
 import { loadSpecs } from './specs-store';
 import { loadWorktrees } from './worktrees-store';
 import { runLifecycleTransaction } from './lifecycle-transaction';
@@ -1730,19 +1730,45 @@ export function mergeWorktree(
   const mergeNow = new Date((input.now ?? (() => new Date()))().getTime());
   const now = mergeNow.toISOString();
   const sharedNowFactory = () => mergeNow;
-  const closeResult = closeSpec(cawsDir, {
-    id: specId,
-    resolution: 'completed',
-    reason: `Auto-closed by caws worktree merge ${input.name} at ${mergeCommit}`,
-    mergeCommit,
-    actor: input.actor,
-    now: sharedNowFactory,
-    // CAWS-CLI-MERGE-AUTOCLOSE-PRESERVE-CLOSURE-NOTES-001: the `reason`
-    // above is a machine-generated stub. Insert-only mode keeps it from
-    // clobbering closure_notes an author wrote on the bound spec — the
-    // stub fills closure_notes only when the spec carried none.
-    preserveExistingNotes: true,
-  });
+
+  // CAWS-FIX-N5-MERGE-IDEMPOTENT-CLOSE-001: the close step must be
+  // idempotent. If the bound spec was already closed before the merge
+  // (e.g. an operator ran `caws specs close` then `caws worktree merge`),
+  // closeSpec would return LIFECYCLE_PLAN_REJECTED via
+  // nonActiveCloseSpecError — which this composed merge would then turn
+  // into a false LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED claiming "the bound
+  // spec remains active" (it does not). The pre-close already appended a
+  // spec_closed event, so we skip closeSpec entirely and continue to the
+  // worktree_merged append + destroy. The already-closed guard in
+  // closeSpec runs before any write, so skipping it changes nothing on
+  // disk. loadSpecOrError re-reads through the canonical parser.
+  const preCloseState = loadSpecOrError(cawsDir, specId);
+  if (!isOk(preCloseState)) {
+    return err(preCloseState.errors);
+  }
+  const specWasAlreadyClosed = preCloseState.value.lifecycleState === 'closed';
+
+  let closeResult: Result<SpecWriterOutcome>;
+  if (specWasAlreadyClosed) {
+    // Synthesize a success outcome so the existing completion-honesty
+    // checks below pass without a special case. No spec_closed event is
+    // appended here — the prior `caws specs close` already appended one.
+    closeResult = ok({ kind: 'success', id: specId, path: preCloseState.value.path });
+  } else {
+    closeResult = closeSpec(cawsDir, {
+      id: specId,
+      resolution: 'completed',
+      reason: `Auto-closed by caws worktree merge ${input.name} at ${mergeCommit}`,
+      mergeCommit,
+      actor: input.actor,
+      now: sharedNowFactory,
+      // CAWS-CLI-MERGE-AUTOCLOSE-PRESERVE-CLOSURE-NOTES-001: the `reason`
+      // above is a machine-generated stub. Insert-only mode keeps it from
+      // clobbering closure_notes an author wrote on the bound spec — the
+      // stub fills closure_notes only when the spec carried none.
+      preserveExistingNotes: true,
+    });
+  }
 
   if (!isOk(closeResult)) {
     return err(
@@ -1767,7 +1793,9 @@ export function mergeWorktree(
   // `partial_failure_recovered` in `ok()`. Only `success` means the closed
   // bytes actually landed on disk. If close transaction rolled back, the
   // spec remains active and mergeWorktree must NOT continue to append
-  // worktree_merged or destroy the worktree.
+  // worktree_merged or destroy the worktree. (The synthesized success for
+  // the already-closed fast path also satisfies this — the spec is
+  // genuinely closed on disk, just by an earlier close.)
   if (closeResult.value.kind !== 'success') {
     return err(
       storeDiagnostic(
@@ -1799,6 +1827,12 @@ export function mergeWorktree(
       merge_commit: mergeCommit,
       base_branch: baseBranch,
       auto_closed_spec: true,
+      // CAWS-FIX-N5-MERGE-IDEMPOTENT-CLOSE-001: true when the merge skipped
+      // closeSpec because the bound spec was already closed. auto_closed_spec
+      // stays true (the spec is closed as of this merge); this discriminant
+      // records that the close was performed by an earlier `caws specs close`,
+      // not by this merge.
+      spec_already_closed: specWasAlreadyClosed,
     },
   } as unknown as EventBody;
 
@@ -1891,6 +1925,7 @@ export function mergeWorktree(
       merge_commit: mergeCommit,
       spec_id: specId,
       auto_closed_spec: true,
+      spec_already_closed: specWasAlreadyClosed,
       audit_commit: autoCommitOutcome,
       branch,
       branch_deleted: branchDeleted,
