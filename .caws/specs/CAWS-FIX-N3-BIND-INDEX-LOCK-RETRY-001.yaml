@@ -2,10 +2,11 @@ id: CAWS-FIX-N3-BIND-INDEX-LOCK-RETRY-001
 title: 'Retry the worktree-create bind audit commit on a concurrent .git/index.lock'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-n3
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-n3 at dc25c12c42c70289329c153729a462ad305c1332'
 created_at: '2026-08-02T22:57:42.244Z'
-updated_at: '2026-08-02T22:58:17.765Z'
+updated_at: '2026-08-02T23:04:26.857Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/git-autocommit.ts
