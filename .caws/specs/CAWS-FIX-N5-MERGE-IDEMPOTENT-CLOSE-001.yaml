@@ -4,23 +4,35 @@ risk_tier: 2
 mode: fix
 lifecycle_state: active
 created_at: '2026-08-02T20:58:03.182Z'
-updated_at: '2026-08-02T20:58:03.182Z'
+updated_at: '2026-08-02T20:58:35.195Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/worktrees-writer.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/tests/store/worktree-merge-already-closed-spec.test.js
+    - .caws/specs/CAWS-FIX-N5-MERGE-IDEMPOTENT-CLOSE-001.yaml
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/store/specs-store.ts
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'mergeWorktree close step is idempotent: a bound spec that is already lifecycle_state: closed at merge time is treated as closed (skip closeSpec), and the merge continues to append worktree_merged and destroy the worktree rather than aborting with a false partial_failure.'
+  - 'The already-closed fast path reads the spec state through loadSpecOrError and performs NO closeSpec call and NO spec_closed event append (the pre-close already appended one); a genuine close failure (successor gate, malformed spec) still surfaces as LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED via the existing error branches.'
+  - 'Honest completion: the worktree_merged event data and the success outcome carry spec_already_closed: true when the merge skipped closeSpec because the spec was already closed, alongside auto_closed_spec: true (semantics: the spec is closed as of this merge).'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'A v11 repo with an active bound spec (worktree wt-a1 bound to SPEC-A1), the worktree branch merged into main via mergeViaCompareAndSwap, and the bound spec pre-closed via caws specs close (lifecycle_state: closed, with closure notes and a spec_closed event already in the chain).'
+    when: 'caws worktree merge wt-a1 runs its close step.'
+    then: 'mergeWorktree returns ok with kind success (NOT LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED); outcome.data.spec_already_closed is true; the worktree_merged event is appended; the worktree is destroyed and the merged branch is deleted.'
+  - id: A2
+    given: 'A bound spec in lifecycle_state: active whose successor gate refuses close (unresolved successor obligation).'
+    when: 'caws worktree merge runs its close step.'
+    then: 'mergeWorktree still returns LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED (the genuine-close-failure branches are unchanged); the spec is not double-closed; the recovery instruction names the manual close command.'
 non_functional: {}
 contracts:
   - name: 'merge-close-already-closed-idempotent'
