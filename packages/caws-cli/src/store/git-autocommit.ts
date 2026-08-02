@@ -45,6 +45,58 @@
 import { execFileSync } from 'child_process';
 import * as path from 'path';
 
+// CAWS-FIX-N3-BIND-INDEX-LOCK-RETRY-001: the audit commit must tolerate a
+// transient .git/index.lock held by a concurrent git process (a sibling
+// agent's commit) rather than stranding the staged spec change. The
+// retry budget and delay mirror the merge CAS loop
+// (MERGE_CAS_MAX_ATTEMPTS = 5) and the file-lock retry loops
+// (LOCK_RETRY_DELAY_MS = 50); overridable via AutoCommitInput so tests
+// can exercise exhaustion deterministically without real timing.
+const INDEX_LOCK_MAX_ATTEMPTS_DEFAULT = 5;
+const INDEX_LOCK_RETRY_DELAY_MS_DEFAULT = 50;
+
+/**
+ * Synchronous busy-wait sleep. Copied verbatim from lifecycle-lock.ts —
+ * the established idiom in this codebase (events-store.ts and
+ * messages-store.ts each keep their own copy too; there is no shared
+ * sleep util to import). Used only for the tens-of-ms inter-attempt
+ * delay below. (CAWS-FIX-N3-BIND-INDEX-LOCK-RETRY-001.)
+ */
+function sleepSyncMs(ms: number): void {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    // intentional spin
+  }
+}
+
+/**
+ * True when a git failure reason indicates .git/index.lock contention —
+ * git emits both of these (the fatal EEXIST line and the explanatory
+ * paragraph) for an add or a commit under a held lock, stable across
+ * versions. Non-matching reasons (a pre-commit hook refusal, a genuine
+ * error) are NOT contention and must not be retried.
+ * (CAWS-FIX-N3-BIND-INDEX-LOCK-RETRY-001.)
+ */
+function isIndexLockContention(reason: string): boolean {
+  return /index\.lock'?: File exists|Another git process seems to be running in this repository/.test(
+    reason
+  );
+}
+
+/**
+ * The exhaustion diagnostic for persistent index.lock contention. Used by
+ * both the `git add` and `git commit` final-attempt contention branches so
+ * the operator is told the failure was contention (a concurrent git
+ * process held the lock), not a bare "git add/commit failed" that reads
+ * like a hook refusal. (CAWS-FIX-N3-BIND-INDEX-LOCK-RETRY-001.)
+ */
+function indexLockExhaustedReason(maxAttempts: number): string {
+  return (
+    `git commit could not land after ${maxAttempts} attempts: .git/index.lock was held by a concurrent git process. ` +
+    'The caws write is intact in the working tree (staged); retry the caws command once the other git process has finished.'
+  );
+}
+
 export type AutoCommitKind =
   | 'committed'
   | 'refused_dirty'
@@ -72,6 +124,19 @@ export interface AutoCommitInput {
    *  own write. The caller knows this; the utility cannot rederive it
    *  after the write has landed. */
   readonly wasDirtyBeforeWrite: boolean;
+  /**
+   * Override the index.lock-contention retry budget. Defaults to 5
+   * (INDEX_LOCK_MAX_ATTEMPTS_DEFAULT). Exposed so tests can exercise the
+   * exhaustion path deterministically without real timing.
+   * (CAWS-FIX-N3-BIND-INDEX-LOCK-RETRY-001.)
+   */
+  readonly indexLockMaxAttempts?: number;
+  /**
+   * Override the inter-attempt synchronous delay in milliseconds.
+   * Defaults to 50 (INDEX_LOCK_RETRY_DELAY_MS_DEFAULT).
+   * (CAWS-FIX-N3-BIND-INDEX-LOCK-RETRY-001.)
+   */
+  readonly indexLockRetryDelayMs?: number;
 }
 
 function runGit(
@@ -151,64 +216,105 @@ export function autoCommit(input: AutoCommitInput): AutoCommitOutcome {
     return { kind: 'committed', sha: '' };
   }
 
-  // Stage exactly the writer's TRACKED paths. Do NOT use `git add -A` —
-  // that would silently stage unrelated dirty files.
-  const addResult = runGit(['add', '--', ...trackablePaths], input.repoRoot);
-  if (!addResult.ok) {
-    return {
-      kind: 'refused_dirty',
-      reason: `git add failed: ${addResult.reason.trim()}`,
-    };
-  }
+  // Stage and commit the writer's TRACKED paths.
+  //
+  // CAWS-FIX-N3-BIND-INDEX-LOCK-RETRY-001: the add -> diff --cached ->
+  // commit sequence runs inside a bounded retry loop that treats a
+  // concurrent .git/index.lock (a sibling agent's commit holding the
+  // shared index lock) as transient contention. On an index.lock
+  // collision we sleep briefly and re-run the WHOLE sequence — re-running
+  // `git add` is safe because the commit is path-scoped
+  // (CAWS-AUTOCOMMIT-INTEGRITY-001): only the writer's TRACKED paths are
+  // ever committed, so re-staging cannot sweep foreign staged files into
+  // the audit commit. Any NON-contention failure (a pre-commit hook
+  // refusal, a genuine git error) breaks out immediately with the
+  // existing refused_dirty outcome — the never --no-verify / hook-respect
+  // contract is unchanged.
+  const maxAttempts = input.indexLockMaxAttempts ?? INDEX_LOCK_MAX_ATTEMPTS_DEFAULT;
+  const retryDelayMs = input.indexLockRetryDelayMs ?? INDEX_LOCK_RETRY_DELAY_MS_DEFAULT;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    // Stage exactly the writer's TRACKED paths. Do NOT use `git add -A` —
+    // that would silently stage unrelated dirty files.
+    const addResult = runGit(['add', '--', ...trackablePaths], input.repoRoot);
+    if (!addResult.ok) {
+      if (isIndexLockContention(addResult.reason) && attempt < maxAttempts) {
+        sleepSyncMs(retryDelayMs);
+        continue;
+      }
+      // On the final attempt, surface the clean contention diagnostic
+      // rather than a bare "git add failed" so the operator knows the
+      // cause was index.lock contention, not a hook refusal.
+      if (isIndexLockContention(addResult.reason)) {
+        return { kind: 'refused_dirty', reason: indexLockExhaustedReason(maxAttempts) };
+      }
+      return {
+        kind: 'refused_dirty',
+        reason: `git add failed: ${addResult.reason.trim()}`,
+      };
+    }
 
-  // Check whether `git add` actually staged anything. If the writer's
-  // write was a no-op (file already matched), there's nothing to
-  // commit and we should NOT create an empty commit.
-  const diffCached = runGit(
-    ['diff', '--cached', '--name-only', '--', ...trackablePaths],
-    input.repoRoot
-  );
-  if (!diffCached.ok) {
-    return {
-      kind: 'refused_dirty',
-      reason: `git diff --cached failed: ${diffCached.reason.trim()}`,
-    };
-  }
-  if (diffCached.stdout.trim().length === 0) {
-    // Nothing to commit. Treat as 'committed' with no sha — the
-    // writer's intended state IS already in HEAD.
-    return { kind: 'committed', sha: '' };
-  }
+    // Check whether `git add` actually staged anything. If the writer's
+    // write was a no-op (file already matched), there's nothing to
+    // commit and we should NOT create an empty commit.
+    const diffCached = runGit(
+      ['diff', '--cached', '--name-only', '--', ...trackablePaths],
+      input.repoRoot
+    );
+    if (!diffCached.ok) {
+      // `git diff --cached` reads the index and does NOT take the lock,
+      // so an index.lock collision cannot surface here. Treat any failure
+      // as a genuine error — do not retry.
+      return {
+        kind: 'refused_dirty',
+        reason: `git diff --cached failed: ${diffCached.reason.trim()}`,
+      };
+    }
+    if (diffCached.stdout.trim().length === 0) {
+      // Nothing to commit. Treat as 'committed' with no sha — the
+      // writer's intended state IS already in HEAD.
+      return { kind: 'committed', sha: '' };
+    }
 
-  // Commit ONLY the writer's own paths via an explicit pathspec.
-  // A bare `git commit -m <msg>` commits the ENTIRE index, which under
-  // a shared cross-worktree index (a concurrent sibling session may have
-  // pre-staged unrelated files) would sweep those foreign files into a
-  // CAWS lifecycle commit — the exact cross-session attribution failure
-  // CAWS exists to prevent. Path-scoping the commit makes it total over
-  // ambient index state: only `input.paths` are committed, whatever else
-  // is staged: only the writer's TRACKED paths. (CAWS-AUTOCOMMIT-INTEGRITY-001)
-  const commitResult = runGit(
-    ['commit', '-m', input.message, '--', ...trackablePaths],
-    input.repoRoot
-  );
-  if (!commitResult.ok) {
-    // Commit failed. Most likely a pre-commit hook refused (downstream
-    // consumer hooks, not anything CAWS ships). Surface the hook's
-    // reason verbatim; do NOT retry with --no-verify.
+    // Commit ONLY the writer's own paths via an explicit pathspec.
+    // A bare `git commit -m <msg>` commits the ENTIRE index, which under
+    // a shared cross-worktree index (a concurrent sibling session may have
+    // pre-staged unrelated files) would sweep those foreign files into a
+    // CAWS lifecycle commit — the exact cross-session attribution failure
+    // CAWS exists to prevent. Path-scoping the commit makes it total over
+    // ambient index state: only `input.paths` are committed, whatever else
+    // is staged: only the writer's TRACKED paths. (CAWS-AUTOCOMMIT-INTEGRITY-001)
+    const commitResult = runGit(
+      ['commit', '-m', input.message, '--', ...trackablePaths],
+      input.repoRoot
+    );
+    if (commitResult.ok) {
+      // Success — capture the resulting sha for evidence/audit and return.
+      const shaResult = runGit(['rev-parse', '--short', 'HEAD'], input.repoRoot);
+      const sha = shaResult.ok ? shaResult.stdout.trim() : '';
+      return { kind: 'committed', sha };
+    }
+    if (isIndexLockContention(commitResult.reason) && attempt < maxAttempts) {
+      sleepSyncMs(retryDelayMs);
+      continue;
+    }
+    // On the final attempt with contention, surface the clean exhaustion
+    // diagnostic. Otherwise (a non-contention failure) surface the reason
+    // verbatim — never retry with --no-verify.
+    if (isIndexLockContention(commitResult.reason)) {
+      return { kind: 'refused_dirty', reason: indexLockExhaustedReason(maxAttempts) };
+    }
     return {
       kind: 'refused_dirty',
       reason: `git commit failed: ${commitResult.reason.trim()}`,
     };
   }
 
-  // Capture the resulting sha for evidence/audit.
-  const shaResult = runGit(
-    ['rev-parse', '--short', 'HEAD'],
-    input.repoRoot
-  );
-  const sha = shaResult.ok ? shaResult.stdout.trim() : '';
-  return { kind: 'committed', sha };
+  // The loop body returns from every real path (success, non-contention
+  // failure, or contention-exhausted). We only reach here if the budget
+  // was non-positive (maxAttempts < 1) and the loop never ran. Treat that
+  // as a degenerate exhaustion — the caller asked for zero attempts, so
+  // nothing committed and we surface the contention diagnostic.
+  return { kind: 'refused_dirty', reason: indexLockExhaustedReason(maxAttempts) };
 }
 
 /**
