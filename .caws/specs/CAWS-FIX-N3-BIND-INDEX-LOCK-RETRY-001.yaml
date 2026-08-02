@@ -4,24 +4,42 @@ risk_tier: 2
 mode: fix
 lifecycle_state: active
 created_at: '2026-08-02T22:57:42.244Z'
-updated_at: '2026-08-02T22:57:42.244Z'
+updated_at: '2026-08-02T22:58:17.765Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/git-autocommit.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/store/git-autocommit.ts
+    - packages/caws-cli/tests/store/git-autocommit-index-lock.test.js
+    - .caws/specs/CAWS-FIX-N3-BIND-INDEX-LOCK-RETRY-001.yaml
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/caws-cli/src/store/worktrees-writer.ts
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'autoCommit treats a concurrent .git/index.lock as transient contention, not a permanent failure: the add -> diff --cached -> commit sequence is retried up to a bounded budget (default 5 attempts) with a short synchronous backoff, and on success the audit commit lands as if there had been no contention. The retry is path-scoped (CAWS-AUTOCOMMIT-INTEGRITY-001): re-running git add on each attempt cannot sweep foreign staged files into the audit commit because the commit is always -- <writer paths>.'
+  - 'The retry fires ONLY on index.lock contention. Any other failure (a pre-commit hook refusal, a genuine git error) breaks out immediately with the existing refused_dirty outcome — the never --no-verify / hook-respect contract is unchanged. Detection matches git stable stderr: "index.lock ... File exists" or "Another git process seems to be running in this repository".'
+  - 'When the budget is exhausted on persistent contention, autoCommit surfaces refused_dirty with a reason naming index.lock contention, so the caller reports a clean diagnostic rather than a silent strand. The writer transaction is unaffected (the working-tree write is intact); only the audit commit is deferred.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'A repo where the CAWS audit-commit path set is trackable and not gitignored, and a concurrent git process is holding .git/index.lock at the moment autoCommit runs.'
+    when: 'autoCommit runs its add -> diff --cached -> commit sequence and the lock is released before the retry budget is exhausted.'
+    then: 'The sequence retries (sleeping between attempts); once the lock is gone the audit commit lands with kind committed and a real sha; the spec binding is committed and HEAD advances. No refused_dirty is surfaced.'
+  - id: A2
+    given: 'A repo where .git/index.lock is held for the entire retry budget.'
+    when: 'autoCommit runs with a small override budget (for deterministic test).'
+    then: 'After exhausting the budget, autoCommit returns refused_dirty whose reason names index.lock contention (not a bare git commit failed); the writer working-tree change is intact (staged or unstaged); no --no-verify or force path was taken.'
+  - id: A3
+    given: 'A repo whose pre-commit hook refuses the audit commit (a non-index.lock failure).'
+    when: 'autoCommit runs and the commit fails with the hook refusal.'
+    then: 'The retry loop does NOT retry (the failure is not index.lock contention); autoCommit returns refused_dirty with the hook reason verbatim on the first attempt, identical to pre-fix behavior. The hook-respect contract is unchanged.'
+non_functional:
+  reliability:
+    - 'The retry budget and delay are overridable via optional AutoCommitInput fields (indexLockMaxAttempts, indexLockRetryDelayMs) so tests exercise the exhaustion path deterministically without real timing, mirroring AcquireLifecycleLockOptions. Defaults: 5 attempts, 50ms delay (matching MERGE_CAS_MAX_ATTEMPTS and LOCK_RETRY_DELAY_MS).'
+    - 'The inter-attempt sleep is a synchronous busy-wait copied verbatim from lifecycle-lock.ts (the established idiom; there is no shared sleep util to import).'
 contracts:
   - name: 'bind-audit-commit-index-lock-retry'
     type: behavior
