@@ -3,6 +3,7 @@ title: 'Resolved-self-strict: claim --takeover must take over a foreign owner ev
 risk_tier: 1
 mode: fix
 lifecycle_state: active
+worktree: wt-n4
 created_at: '2026-08-02T23:19:56.740Z'
 updated_at: '2026-08-02T23:21:35.050Z'
 blast_radius:
