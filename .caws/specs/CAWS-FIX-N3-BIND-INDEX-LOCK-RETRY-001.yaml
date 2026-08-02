@@ -3,6 +3,7 @@ title: 'Retry the worktree-create bind audit commit on a concurrent .git/index.l
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: wt-n3
 created_at: '2026-08-02T22:57:42.244Z'
 updated_at: '2026-08-02T22:58:17.765Z'
 blast_radius:
