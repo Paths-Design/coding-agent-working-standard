@@ -3,6 +3,7 @@ title: 'Idempotent close step in caws worktree merge for already-closed spec'
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: wt-n5
 created_at: '2026-08-02T20:58:03.182Z'
 updated_at: '2026-08-02T20:58:35.195Z'
 blast_radius:
