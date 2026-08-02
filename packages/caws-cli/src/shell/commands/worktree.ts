@@ -392,6 +392,10 @@ export function runWorktreeDestroyCommand(opts: WorktreeDestroyOptions): number 
     sessionCandidates,
     actor: id.actor,
     now: nowFn,
+    // CAWS-FIX-WORKTREE-MERGE-CWD-SELF-DESTRUCT-GUARD-001: refuse the
+    // teardown when the caller's shell is sitting inside the worktree
+    // being destroyed (the teardown deletes that directory).
+    callerCwd: cwd,
   };
   if (opts.abandonUnmerged === true || opts.force === true)
     (input as { abandonUnmerged?: boolean }).abandonUnmerged = true;
@@ -526,6 +530,11 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
     sessionCandidates,
     actor: id.actor,
     now: nowFn,
+    // CAWS-FIX-WORKTREE-MERGE-CWD-SELF-DESTRUCT-GUARD-001: refuse the
+    // merge when the caller's shell is inside the worktree (the merge's
+    // destroy step deletes that directory). Skipped internally for
+    // --dry-run, which performs no teardown.
+    callerCwd: cwd,
   };
   if (opts.dryRun === true) (input as { dryRun?: boolean }).dryRun = true;
   if (opts.message !== undefined) (input as { message?: string }).message = opts.message;

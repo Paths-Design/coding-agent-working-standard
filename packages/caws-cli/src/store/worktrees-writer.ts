@@ -144,6 +144,15 @@ export interface DestroyWorktreeInput {
    *  Default false. There is intentionally NO --force; this is the
    *  one explicit override and it does not bypass ownership. */
   readonly abandonUnmerged?: boolean;
+  /**
+   * The caller process's current working directory, captured once at CLI
+   * invocation. When set, destroyWorktree refuses if it is the target
+   * worktree path or a descendant of it — destroying a worktree you are
+   * sitting inside removes the ground under the caller's shell, leaving
+   * every subsequent process spawn failing ENOENT.
+   * (CAWS-FIX-WORKTREE-MERGE-CWD-SELF-DESTRUCT-GUARD-001.)
+   */
+  readonly callerCwd?: string;
 }
 
 export interface UntrackWorktreeInput {
@@ -171,6 +180,15 @@ export interface MergeWorktreeInput {
   /** Optional commit message for the merge commit. Defaults to a
    *  conventional "merge(worktree): <name>" form. */
   readonly message?: string;
+  /**
+   * The caller process's current working directory, captured once at CLI
+   * invocation. When set and this is NOT a dry run, mergeWorktree refuses
+   * if the cwd is the target worktree path or a descendant of it — the
+   * merge's destroy step removes that directory, which would delete the
+   * ground under the caller's shell. See DestroyWorktreeInput.callerCwd.
+   * (CAWS-FIX-WORKTREE-MERGE-CWD-SELF-DESTRUCT-GUARD-001.)
+   */
+  readonly callerCwd?: string;
 }
 
 export type WorktreeWriterOutcome =
@@ -199,6 +217,76 @@ function specPath(cawsDir: string, id: string): string {
 }
 function worktreePathFor(cawsDir: string, name: string): string {
   return path.join(cawsDir, 'worktrees', name);
+}
+
+/**
+ * Resolve a path through realpath when possible, resolving the longest
+ * existing ancestor and appending the (possibly non-existent) remainder
+ * when the full path does not exist. realpath collapses symlinks and
+ * relative segments, so a cwd reached via a symlink or `.`/`..` still
+ * trips the self-destruct guard.
+ *
+ * The longest-ancestor fallback is load-bearing on platforms whose tmp
+ * root is a symlink (macOS: /var → /private/var): a non-existent
+ * descendant (e.g. a cwd nested under a freshly-created worktree whose
+ * deeper dirs are sparse) would otherwise fall back to the literal
+ * /var/... form while an existing worktree path resolves to
+ * /private/var/..., and the prefix-containment check would silently
+ * miss the match. Resolving through the longest existing ancestor keeps
+ * both sides in the same (realpath) namespace.
+ * (CAWS-FIX-WORKTREE-MERGE-CWD-SELF-DESTRUCT-GUARD-001.)
+ */
+function realpathOrLiteral(p: string): string {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    // Walk up to the longest existing ancestor, realpath THAT, then
+    // re-append the non-existent tail. If nothing exists (absurd for a
+    // caller cwd), fall back to the literal path.
+    let dir = p;
+    const tail: string[] = [];
+    while (dir !== path.dirname(dir)) {
+      try {
+        const real = fs.realpathSync(dir);
+        return tail.length === 0 ? real : path.join(real, ...tail.reverse());
+      } catch {
+        tail.push(path.basename(dir));
+        dir = path.dirname(dir);
+      }
+    }
+    return p;
+  }
+}
+
+/**
+ * True when `callerCwd` is `wtPath` itself or a descendant of it. Both
+ * paths are realpath-resolved first so symlinks and relative segments
+ * cannot hide the containment. A trailing separator is added to `wtPath`
+ * for the descendant test so `/foo/wt-bar` does not match `/foo/wt-barbaz`.
+ * (CAWS-FIX-WORKTREE-MERGE-CWD-SELF-DESTRUCT-GUARD-001.)
+ */
+function isCwdInsideWorktree(callerCwd: string, wtPath: string): boolean {
+  const cwdReal = realpathOrLiteral(callerCwd);
+  const wtReal = realpathOrLiteral(wtPath);
+  if (cwdReal === wtReal) return true;
+  const wtRealWithSep = wtReal.endsWith(path.sep) ? wtReal : wtReal + path.sep;
+  return cwdReal.startsWith(wtRealWithSep);
+}
+
+/**
+ * Build the LIFECYCLE_PLAN_REJECTED diagnostic for the self-destruct guard.
+ * Names the worktree and the cd-out remediation. Shared by destroy and merge
+ * since both run a teardown that deletes the worktree directory.
+ */
+function cwdSelfDestructRefusal(name: string, wtPath: string): Diagnostic {
+  return storeDiagnostic(
+    STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+    `Refusing to destroy worktree "${name}" while the current directory is inside it (${wtPath}). ` +
+      `The teardown deletes that directory, which would invalidate the shell's cwd and leave every subsequent command unable to spawn. ` +
+      `Change directory out of the worktree first, then retry from the repository root: ` +
+      `cd <repo-root> && caws worktree merge ${name} (or caws worktree destroy ${name}).`,
+    { subject: name }
+  );
 }
 function registryRelPath(cawsDir: string, repoRoot: string): string {
   return path.relative(repoRoot, path.join(cawsDir, 'worktrees.json'));
@@ -980,6 +1068,21 @@ export function destroyWorktree(
     );
   }
 
+  // CAWS-FIX-WORKTREE-MERGE-CWD-SELF-DESTRUCT-GUARD-001: refuse to
+  // destroy a worktree the caller's shell is sitting inside. destroy's
+  // final step deletes the worktree directory; running it from a cwd
+  // under that directory removes the ground under the caller, leaving
+  // every subsequent process spawn failing ENOENT. Placed before
+  // ownership/teardown checks so the operator's first remediation (cd
+  // out) is the one surfaced. Skipped when callerCwd is not provided
+  // (e.g. non-CLI callers with no shell cwd to invalidate).
+  if (input.callerCwd !== undefined) {
+    const wtPathEarly = entry.path ?? worktreePathFor(cawsDir, input.name);
+    if (isCwdInsideWorktree(input.callerCwd, wtPathEarly)) {
+      return err([cwdSelfDestructRefusal(input.name, wtPathEarly)]);
+    }
+  }
+
   // Ownership check: admit if ANY identity the invoker can speak for
   // matches the registered owner (CAWS-WORKTREE-DESTROY-SESSION-
   // RESOLUTION-001). The candidate set is built by the caller via
@@ -1577,6 +1680,22 @@ export function mergeWorktree(
         }
       )
     );
+  }
+
+  // CAWS-FIX-WORKTREE-MERGE-CWD-SELF-DESTRUCT-GUARD-001: the merge's
+  // final step is destroyWorktree, which deletes the worktree directory.
+  // If the caller's shell cwd is inside it, the teardown removes the
+  // ground under the caller and leaves every subsequent process spawn
+  // failing ENOENT. Refuse BEFORE the merge commit / spec close / event
+  // appends land — once mergeViaCompareAndSwap advances the base, a
+  // destroy-time refusal would leave source merged but the worktree
+  // alive (a half-completed merge). Exempt --dry-run: it performs no
+  // teardown, so there is no directory to invalidate.
+  if (input.callerCwd !== undefined && input.dryRun !== true) {
+    const wtPathEarly = entry.path ?? worktreePathFor(cawsDir, input.name);
+    if (isCwdInsideWorktree(input.callerCwd, wtPathEarly)) {
+      return err([cwdSelfDestructRefusal(input.name, wtPathEarly)]);
+    }
   }
 
   // Validate prerequisites.
