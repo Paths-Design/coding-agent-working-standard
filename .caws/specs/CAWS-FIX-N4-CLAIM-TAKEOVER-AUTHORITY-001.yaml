@@ -2,10 +2,11 @@ id: CAWS-FIX-N4-CLAIM-TAKEOVER-AUTHORITY-001
 title: 'Resolved-self-strict: claim --takeover must take over a foreign owner even when a fresh durable envelope admits it as a candidate'
 risk_tier: 1
 mode: fix
-lifecycle_state: active
-worktree: wt-n4
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-n4 at bff62f6243c9ed08964c9cc5bdfb085ae29b6493'
 created_at: '2026-08-02T23:19:56.740Z'
-updated_at: '2026-08-02T23:21:35.050Z'
+updated_at: '2026-08-02T23:36:46.780Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/claim.ts
