@@ -3,6 +3,7 @@ title: 'probe'
 risk_tier: 3
 mode: chore
 lifecycle_state: active
+worktree: wt-probe
 created_at: '2026-08-02T22:49:25.795Z'
 updated_at: '2026-08-02T22:49:25.795Z'
 blast_radius:
