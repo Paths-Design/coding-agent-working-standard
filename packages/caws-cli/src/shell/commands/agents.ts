@@ -32,8 +32,6 @@
 //   - list / show: read-only via loadLeases + summarizeActiveAgents.
 
 import * as os from 'node:os';
-import { execFileSync } from 'node:child_process';
-
 import {
   isOk,
   registerAgentSession,
@@ -53,7 +51,7 @@ import {
   loadLeases,
   pruneDeadLeases,
   pruneLeasesByStatus,
-  realpathSafe,
+  readGitDirInfo,
   resolveRepoRoot,
   safeLeaseFilename,
 } from '../../store';
@@ -127,47 +125,8 @@ function emitJson(out: (line: string) => void, payload: unknown): void {
 
 // ─── git path normalization (canonical vs worktree detection) ────────────
 
-interface GitDirInfo {
-  readonly git_common_dir: string;
-  readonly git_dir: string;
-  readonly branch?: string;
-}
-
-function readGitDirInfo(cwd: string): GitDirInfo | null {
-  try {
-    const commonDir = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
-      cwd,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }).trim();
-    const gitDir = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-dir'], {
-      cwd,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }).trim();
-    const commonReal = realpathSafe(commonDir);
-    const gitReal = realpathSafe(gitDir);
-    let branch: string | undefined;
-    try {
-      branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
-        cwd,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-      }).trim();
-    } catch {
-      // Detached HEAD or other; leave branch undefined.
-    }
-    return {
-      git_common_dir: commonReal,
-      git_dir: gitReal,
-      ...(branch !== undefined && branch !== '' ? { branch } : {}),
-    };
-  } catch {
-    return null;
-  }
-}
-
-// (CAWS-REFACTOR-SHARED-UTILS-001) realpathSafe consolidated into store/repo-root.ts.
+// (CAWS-REFACTOR-SHARED-UTILS-001) GitDirInfo + readGitDirInfo consolidated
+// into store/repo-root.ts (formerly duplicated with status command).
 
 // ─── session identity ─────────────────────────────────────────────────────
 

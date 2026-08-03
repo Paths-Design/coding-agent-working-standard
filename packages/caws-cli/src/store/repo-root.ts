@@ -187,6 +187,52 @@ export function realpathSafe(p: string): string {
   }
 }
 
+/**
+ * Resolved absolute git directory info for a cwd. Formerly a byte-identical
+ * private `readGitDirInfo` in both shell/commands/status.ts and
+ * shell/commands/agents.ts (the readGitDirInfo triplicate; resolve-binding.ts
+ * uses a spawnSync variant for status inspection and is NOT consolidated here).
+ * Returns null when cwd is not inside a git work tree. The branch field is
+ * absent on detached HEAD. (CAWS-REFACTOR-SHARED-UTILS-001.)
+ */
+export interface GitDirInfo {
+  readonly git_common_dir: string;
+  readonly git_dir: string;
+  readonly branch?: string;
+}
+
+export function readGitDirInfo(cwd: string): GitDirInfo | null {
+  try {
+    const commonDir = execFileSync(
+      'git',
+      ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+      { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+    ).trim();
+    const gitDir = execFileSync(
+      'git',
+      ['rev-parse', '--path-format=absolute', '--git-dir'],
+      { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+    ).trim();
+    let branch: string | undefined;
+    try {
+      branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+        cwd,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }).trim();
+    } catch {
+      // detached HEAD; leave undefined
+    }
+    return {
+      git_common_dir: realpathSafe(commonDir),
+      git_dir: realpathSafe(gitDir),
+      ...(branch !== undefined && branch !== '' ? { branch } : {}),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export interface ResolveRepoRootOptions {
   readonly git?: GitRunner;
   /**

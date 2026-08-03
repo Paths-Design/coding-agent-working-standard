@@ -46,14 +46,13 @@ import {
   type LeaseRegistry,
   type SessionIdentity,
 } from '@paths.design/caws-kernel';
-import { execFileSync } from 'node:child_process';
 import * as os from 'node:os';
 
 import {
   applyLeasePatch,
   composeDoctorSnapshot,
   loadLeases,
-  realpathSafe,
+  readGitDirInfo,
   resolveRepoRoot,
   safeLeaseFilename,
 } from '../../store';
@@ -173,47 +172,9 @@ function countDoctorFindings(findings: readonly { readonly severity: string }[])
   return { errors, warnings, infos };
 }
 
-// ─── git path normalization (shared with agents command) ─────────────────
-
-interface GitDirInfo {
-  readonly git_common_dir: string;
-  readonly git_dir: string;
-  readonly branch?: string;
-}
-
-function readGitDirInfo(cwd: string): GitDirInfo | null {
-  try {
-    const commonDir = execFileSync(
-      'git',
-      ['rev-parse', '--path-format=absolute', '--git-common-dir'],
-      { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
-    ).trim();
-    const gitDir = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-dir'], {
-      cwd,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }).trim();
-    let branch: string | undefined;
-    try {
-      branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
-        cwd,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-      }).trim();
-    } catch {
-      // detached HEAD; leave undefined
-    }
-    return {
-      git_common_dir: realpathSafe(commonDir),
-      git_dir: realpathSafe(gitDir),
-      ...(branch !== undefined && branch !== '' ? { branch } : {}),
-    };
-  } catch {
-    return null;
-  }
-}
-
-// (CAWS-REFACTOR-SHARED-UTILS-001) realpathSafe consolidated into store/repo-root.ts.
+// ─── git path normalization ──────────────────────────────────────────────
+// (CAWS-REFACTOR-SHARED-UTILS-001) GitDirInfo + readGitDirInfo consolidated
+// into store/repo-root.ts (formerly duplicated with agents command).
 
 export function runStatusCommand(opts: StatusCommandOptions = {}): number {
   const cwd = opts.cwd ?? process.cwd();
