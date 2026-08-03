@@ -256,3 +256,52 @@ describe('A4: merge --dry-run is exempt', () => {
     expect(result.value.canProceed).toBe(true);
   });
 });
+
+// CAWS-FIX-CWD-GUARD-COVERAGE-001 (hole 2): the merge's internal destroy
+// call (the teardown step after a successful merge+close) now threads
+// callerCwd through to destroyWorktree. This is defense-in-depth — the
+// merge's EARLY guard (tested in A1) refuses the same condition before
+// teardown is ever reached, so the internal destroy guard is unreachable
+// for the cwd-inside-worktree case in current code. These tests document
+// that relationship: a merge with callerCwd inside the worktree is
+// refused identically whether it would have reached the internal destroy
+// or not, and the diagnostic shape is the cwdSelfDestructRefusal one.
+describe('merge internal teardown carries callerCwd (CAWS-FIX-CWD-GUARD-COVERAGE-001 hole 2)', () => {
+  test('a merge from inside the worktree is refused with the cwd-guard diagnostic (early guard fires first)', () => {
+    const { caws, wtPath } = setupWorktree('cwdg-h2-', 'wt-h2', 'CWDG-H2-001');
+    const result = mergeWorktree(caws, {
+      name: 'wt-h2',
+      session: SESSION,
+      sessionCandidates: CANDIDATES,
+      actor: ACTOR,
+      callerCwd: wtPath,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.errors[0].message).toMatch(/Refusing to destroy worktree "wt-h2"/);
+    expect(result.errors[0].message).toMatch(/cd <repo-root>/);
+    // No mutation: the early guard returned before any teardown.
+    expect(fs.existsSync(wtPath)).toBe(true);
+  });
+
+  test('a merge from the repo root proceeds and the internal destroy completes (guard does not fire when cwd is safe)', () => {
+    const { repo, caws, wtPath } = setupWorktree('cwdg-h2b-', 'wt-h2b', 'CWDG-H2B-001');
+    commitCaws(repo, 'bind wt-h2b');
+    // Put a real commit on the branch so the merge is non-empty.
+    fs.writeFileSync(path.join(wtPath, 'payload.txt'), 'work\n');
+    execFileSync('git', ['-C', wtPath, 'add', 'payload.txt']);
+    execFileSync('git', ['-C', wtPath, 'commit', '--quiet', '--no-verify', '-m', 'feat: work']);
+    execFileSync('git', ['-C', wtPath, 'merge', '--quiet', '--no-edit', 'main']);
+
+    const result = mergeWorktree(caws, {
+      name: 'wt-h2b',
+      session: SESSION,
+      sessionCandidates: CANDIDATES,
+      actor: ACTOR,
+      callerCwd: repo, // safe cwd — the internal destroy guard must not fire
+    });
+    expect(result.ok).toBe(true);
+    expect(result.value.kind).toBe('success');
+    // The internal destroy completed: the worktree dir is gone.
+    expect(fs.existsSync(wtPath)).toBe(false);
+  });
+});

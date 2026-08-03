@@ -1331,6 +1331,12 @@ export function runWorktreePhysicalCleanupPlanCommand(opts: WorktreePhysicalClea
         sessionCandidates,
         actor: id.actor,
         now: nowFn,
+        // CAWS-FIX-CWD-GUARD-COVERAGE-001: the destroy teardown deletes the
+        // worktree directory; if the operator's shell is sitting inside it
+        // the directory is removed from under them and every subsequent
+        // spawn fails ENOENT. Thread callerCwd so the guard fires here too
+        // (it already fires on the standalone destroy + merge paths).
+        callerCwd: cwd,
       });
       if (!isOk(result)) {
         outcomes.push({

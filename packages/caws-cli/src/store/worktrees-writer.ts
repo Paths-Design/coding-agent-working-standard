@@ -1951,6 +1951,15 @@ export function mergeWorktree(
     sessionCandidates: input.sessionCandidates,
     actor: input.actor,
     now: sharedNowFactory,
+    // CAWS-FIX-CWD-GUARD-COVERAGE-001: defense-in-depth — thread callerCwd
+    // into the merge's own teardown so the guard covers this destroy path
+    // too. Unreachable when dry-run (mergeWorktree returns at the dry-run
+    // branch before teardown) and preceded by the early guard in real
+    // merges, so this cannot change observable behavior today, but it
+    // protects any future path that reaches this destroy. Conditionally
+    // spread because exactOptionalPropertyTypes forbids assigning
+    // `string | undefined` to an optional `string` field.
+    ...(input.callerCwd !== undefined ? { callerCwd: input.callerCwd } : {}),
   });
   if (!isOk(destroyResult)) {
     // The merge + close + merged event all succeeded. The destroy
