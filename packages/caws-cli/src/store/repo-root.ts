@@ -165,9 +165,26 @@ export function validateSpecId(id: string): Result<true> {
   return ok(true as const);
 }
 
-// ----------------------------------------------------------------------------
-// resolveRepoRoot
-// ----------------------------------------------------------------------------
+/**
+ * Resolve a path through realpath when the path EXISTS, falling back to the
+ * literal path when it does not. The byte-identical simple variant formerly
+ * private to resolve-binding.ts (safeRealpath), status.ts, worktree.ts, and
+ * agents.ts (realpathSafe). (CAWS-REFACTOR-SHARED-UTILS-001.)
+ *
+ * NOTE: this is the simple literal-fallback variant. Two other variants stay
+ * in place — the ancestor-walk realpathOrLiteral in worktrees-writer.ts (which
+ * resolves the longest existing ancestor, required for the cwd-self-destruct
+ * guard on macOS /var->/private/var), and the path.resolve-fallback
+ * safeRealpath in claim.ts (which normalizes without collapsing symlinks).
+ * Do NOT silently swap those call sites to this helper — they differ.
+ */
+export function realpathSafe(p: string): string {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return p;
+  }
+}
 
 export interface ResolveRepoRootOptions {
   readonly git?: GitRunner;

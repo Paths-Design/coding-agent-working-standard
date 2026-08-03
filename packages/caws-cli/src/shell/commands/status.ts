@@ -47,13 +47,13 @@ import {
   type SessionIdentity,
 } from '@paths.design/caws-kernel';
 import { execFileSync } from 'node:child_process';
-import * as fs from 'node:fs';
 import * as os from 'node:os';
 
 import {
   applyLeasePatch,
   composeDoctorSnapshot,
   loadLeases,
+  realpathSafe,
   resolveRepoRoot,
   safeLeaseFilename,
 } from '../../store';
@@ -213,13 +213,7 @@ function readGitDirInfo(cwd: string): GitDirInfo | null {
   }
 }
 
-function realpathSafe(p: string): string {
-  try {
-    return fs.realpathSync(p);
-  } catch {
-    return p;
-  }
-}
+// (CAWS-REFACTOR-SHARED-UTILS-001) realpathSafe consolidated into store/repo-root.ts.
 
 export function runStatusCommand(opts: StatusCommandOptions = {}): number {
   const cwd = opts.cwd ?? process.cwd();

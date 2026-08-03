@@ -17,6 +17,7 @@ export type {
 export {
   defaultGitRunner,
   resolveRepoRoot,
+  realpathSafe,
   repoRootFromCawsDir,
   runGit,
   sleepSyncMs,

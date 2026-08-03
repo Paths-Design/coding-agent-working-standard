@@ -31,7 +31,6 @@
 //     applyLeasePatch / applyLeasePatches.
 //   - list / show: read-only via loadLeases + summarizeActiveAgents.
 
-import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { execFileSync } from 'node:child_process';
 
@@ -54,6 +53,7 @@ import {
   loadLeases,
   pruneDeadLeases,
   pruneLeasesByStatus,
+  realpathSafe,
   resolveRepoRoot,
   safeLeaseFilename,
 } from '../../store';
@@ -167,13 +167,7 @@ function readGitDirInfo(cwd: string): GitDirInfo | null {
   }
 }
 
-function realpathSafe(p: string): string {
-  try {
-    return fs.realpathSync(p);
-  } catch {
-    return p;
-  }
-}
+// (CAWS-REFACTOR-SHARED-UTILS-001) realpathSafe consolidated into store/repo-root.ts.
 
 // ─── session identity ─────────────────────────────────────────────────────
 
