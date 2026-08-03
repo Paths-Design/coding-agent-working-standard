@@ -7,12 +7,15 @@ created_at: '2026-08-03T16:57:15.799Z'
 updated_at: '2026-08-03T16:57:31.085Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/shared/lib/write-allowlist.sh
+    - packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/templates/hook-packs/shared/lib/write-allowlist.sh
     - packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh
     - packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh
@@ -22,15 +25,42 @@ scope:
     - packages/caws-cli/tests/hooks/guard-allowlist-sync.test.js
     - packages/caws-cli/tests/shell/specs-close-requires-closure-notes.test.js
     - .caws/specs/CAWS-GUARD-ALLOWLIST-SYNC-001.yaml
-  out: []
+  out:
+    - packages/caws-cli/templates/hook-packs/shared/lib/worktree-claim-oracle.cjs
+    - packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/caws-state.sh
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - .caws/policy.yaml
+    - .caws/events.jsonl
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'ALLOWLIST PARITY: a path that the Write/Edit guard treats as unconditionally allowed (docs/*, .caws/* excluding .caws/worktrees payload, .tmp/*, tmp/*, .archive/*, .githooks/*, .github/*, .gitignore, the vendor hooks dir, the CAWS_VENDOR_DIR home dir, and CAWS_INSTRUCTION_FILES) MUST receive the same allow verdict from the Bash guard. The Bash guard must consult the SAME allowlist helper the Write/Edit guard uses, so the two guards cannot diverge by tool — there is exactly one source of truth for the unconditional-allow path set.'
+  - 'PAYLOAD ISOLATION PRESERVED: the .caws/worktrees/<name>/* payload arm is NOT part of the unconditional allowlist. It stays routed through the ownership oracle in both guards exactly as today (worktree-write-guard.sh:185-253 routes payload through worktree-claim-oracle.cjs; bash-write-guard.sh routes every extracted mutation target through the same oracle). The shared allowlist helper handles ONLY unconditional-allow paths; ownership/claim adjudication is unchanged.'
+  - 'CLOSE REQUIRES NOTES: caws specs close MUST refuse to close an active spec when closure notes (--reason / --closure-notes / --notes / --note) are absent or empty after trimming. The refusal is enforced in BOTH the shell command (runSpecsCloseCommand, before actor/input construction) and the store writer (closeSpec, before any byte mutation or event append). No spec YAML byte changes and no spec_closed event are produced on the refusal path.'
+  - 'MERGE AUTO-CLOSE UNAFFECTED: the mergeWorktree → closeSpec path (worktrees-writer.ts:1877) always supplies a non-empty machine stub reason with preserveExistingNotes: true, so the close-requires-notes contract does not change merge behavior. The merge auto-close path is NOT in this spec''s scope.in; it is only verified to keep passing, not edited.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'A repo with an active worktree wt-a whose bound spec scope.in claims docs/foo.md, and the shared allowlist helper caws_is_write_allowlisted sourced from lib/write-allowlist.sh.'
+    when: 'A Bash mutation (e.g. sed -i) targets docs/foo.md from a foreign session, and a Write/Edit targets the same docs/foo.md.'
+    then: 'Both the Bash guard and the Write/Edit guard allow the write (docs/* is on the unconditional allowlist per failure-lineage.md:888). Neither blocks on the scope.in claim, because the allowlist is consulted before the oracle. The two tools return the SAME verdict for the SAME path.'
+  - id: A2
+    given: 'A repo with an active worktree wt-a whose bound spec scope.in claims src/foo.ts, and the shared allowlist helper.'
+    when: 'A Bash mutation (e.g. sed -i) targets src/foo.ts, and a Write/Edit targets the same src/foo.ts.'
+    then: 'Both the Bash guard and the Write/Edit guard route through the ownership oracle and block the write (src/foo.ts is NOT on the unconditional allowlist and is claimed by wt-a scope.in). src/* paths are not allowlisted in either tool — the oracle path is preserved.'
+  - id: A3
+    given: 'An active spec FIX-1 with no closure_notes and an operator (or agent) running caws specs close FIX-1 --resolution completed with NO --reason / --closure-notes / --notes / --note.'
+    when: 'The close command runs.'
+    then: 'It exits 1 BEFORE any YAML mutation or spec_closed event. The error message names the required flag. closeSpec called directly with an absent or empty reason returns LIFECYCLE_PLAN_REJECTED with no file change. The spec remains lifecycle_state: active with no spec_closed event appended.'
+  - id: A4
+    given: 'The mergeWorktree → closeSpec auto-close path (worktrees-writer.ts:1877), which always passes a non-empty stub reason with preserveExistingNotes: true.'
+    when: 'caws worktree merge runs on a worktree whose bound spec is still active.'
+    then: 'The merge auto-close succeeds exactly as before (writes the stub to closure_notes or preserves existing author notes). The close-requires-notes contract does not fire for the merge path because its reason is always non-empty.'
+  - id: A5
+    given: 'The .caws/worktrees/<name>/<rest> payload path (worktree payload owned by a different session).'
+    when: 'A Bash mutation or a Write/Edit targets that payload path.'
+    then: 'Both guards STILL route it through the ownership oracle (block_foreign_worktree), NOT through the unconditional allowlist. The shared allowlist helper explicitly excludes .caws/worktrees/* from its allow set so payload isolation is byte-identical to today.'
+non_functional:
+  reliability:
+    - 'Each defect fix is committed separately and verified (build + targeted jest + typecheck) before the next begins, so a regression is bisectable to one task. Defect 1 (allowlist) lands before Defect 2 (closure notes) because they are independent and Defect 1 is the larger behavioral change.'
 contracts:
   - name: 'close-requires-notes'
     type: behavior
