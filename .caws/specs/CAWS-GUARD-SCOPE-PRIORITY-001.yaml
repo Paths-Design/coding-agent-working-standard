@@ -3,6 +3,7 @@ title: 'scope.in overrides the write allowlist: a claimed path is owned, not unc
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: wt-scope-priority
 created_at: '2026-08-03T19:10:28.118Z'
 updated_at: '2026-08-03T19:10:28.118Z'
 blast_radius:
