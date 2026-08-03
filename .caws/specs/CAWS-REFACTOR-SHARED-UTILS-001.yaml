@@ -4,7 +4,7 @@ risk_tier: 2
 mode: refactor
 lifecycle_state: active
 created_at: '2026-08-03T15:26:55.278Z'
-updated_at: '2026-08-03T18:07:02.157Z'
+updated_at: '2026-08-03T18:20:30.635Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/lifecycle-lock.ts
@@ -47,6 +47,13 @@ scope:
     - packages/caws-kernel/src/worktree/index.ts
     - packages/caws-cli/tests/store/shared-utils-consolidation.test.js
     - .caws/specs/CAWS-REFACTOR-SHARED-UTILS-001.yaml
+    - packages/caws-cli/src/init/gitignore-drift.ts
+    - packages/caws-cli/src/shell/gates/gate-result-contract.ts
+    - packages/caws-cli/src/shell/commands/waiver.ts
+    - packages/caws-cli/src/shell/commands/reprieve.ts
+    - packages/caws-cli/src/store/apply-patch.ts
+    - packages/caws-cli/src/store/worktrees-migration.ts
+    - packages/caws-cli/src/store/git-sparse-checkout.ts
   out:
     - .caws/policy.yaml
     - .caws/events.jsonl
