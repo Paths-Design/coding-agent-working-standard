@@ -20,7 +20,7 @@ scope:
   out:
     - .caws/policy.yaml
     - .caws/events.jsonl
-    - packages/caws-kernel/**
+    - packages/caws-kernel
     - packages/caws-cli/src/store/doctor-snapshot.ts
     - packages/caws-cli/src/store/types.ts
 invariants:
