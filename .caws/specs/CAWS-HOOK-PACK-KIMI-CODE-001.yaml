@@ -3,6 +3,7 @@ title: 'Kimi Code agent surface: hook pack + user-level TOML wiring'
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: wt-kimi-surface
 created_at: '2026-08-03T23:05:48.048Z'
 updated_at: '2026-08-03T23:06:07.976Z'
 blast_radius:
