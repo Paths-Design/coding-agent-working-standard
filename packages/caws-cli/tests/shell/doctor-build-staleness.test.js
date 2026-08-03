@@ -123,4 +123,40 @@ describe('detectBuildStaleness (CAWS-GUARD-BUILD-FRESHNESS-001)', () => {
     expect(finding.rule).toBe(BUILD_DIST_STALE_RULE);
     expect(finding.data.stale_files).toBeGreaterThanOrEqual(1);
   });
+
+  test('self-locates the package dist root from a nested caller __dirname', () => {
+    // The doctor command lives at dist/shell/commands/doctor.js, so its
+    // __dirname is dist/shell/commands/ — NESTED three levels under dist.
+    // detectBuildStaleness must walk UP to find the package dist root
+    // (the dir whose parent has a sibling src/). Passing a nested path
+    // must still detect staleness correctly.
+    const root = mkPkgRoot();
+    fs.mkdirSync(path.join(root, 'src', 'shell', 'commands'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'src', 'shell', 'commands', 'doctor.ts'), 'export const x = 1;');
+    setMtime(path.join(root, 'src', 'shell', 'commands', 'doctor.ts'), T0 + 500);
+    fs.mkdirSync(path.join(root, 'dist', 'shell', 'commands'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'dist', 'shell', 'commands', 'doctor.js'), 'exports.x = 1;');
+    fs.writeFileSync(path.join(root, 'dist', 'shell', 'commands', 'doctor.d.ts'), 'export declare const x = 1;');
+    setMtime(path.join(root, 'dist', 'shell', 'commands', 'doctor.js'), T0 + 100);
+    setMtime(path.join(root, 'dist', 'shell', 'commands', 'doctor.d.ts'), T0 + 100);
+
+    // Caller passes the NESTED dir, not the dist root.
+    const nestedCallerDir = path.join(root, 'dist', 'shell', 'commands');
+    const finding = detectBuildStaleness(nestedCallerDir);
+    expect(finding).not.toBeNull();
+    expect(finding.rule).toBe(BUILD_DIST_STALE_RULE);
+    expect(finding.data.stale_files).toBeGreaterThanOrEqual(2);
+  });
+
+  test('returns null when a nested caller has no src/ ancestor (published install)', () => {
+    const root = mkPkgRoot();
+    // Published install: no src/ anywhere up the tree.
+    fs.rmSync(path.join(root, 'src'), { recursive: true, force: true });
+    fs.mkdirSync(path.join(root, 'dist', 'shell', 'commands'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'dist', 'shell', 'commands', 'doctor.js'), 'exports.x = 1;');
+
+    const nestedCallerDir = path.join(root, 'dist', 'shell', 'commands');
+    const finding = detectBuildStaleness(nestedCallerDir);
+    expect(finding).toBeNull();
+  });
 });
