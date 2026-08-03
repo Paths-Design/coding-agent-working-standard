@@ -2,10 +2,11 @@ id: CAWS-FIX-CWD-GUARD-COVERAGE-001
 title: 'Thread callerCwd through cleanup-plan --apply and the merge internal teardown so the cwd self-destruct guard covers all destroy paths'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-cwd-guard
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-cwd-guard at eced4b02e0c3e531d76a70947ff5ade9c9111f6a'
 created_at: '2026-08-03T21:53:18.807Z'
-updated_at: '2026-08-03T21:53:19.785Z'
+updated_at: '2026-08-03T21:59:15.789Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/worktrees-writer.ts
