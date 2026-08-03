@@ -45,6 +45,8 @@
 import { execFileSync } from 'child_process';
 import * as path from 'path';
 
+import { sleepSyncMs } from './repo-root';
+
 // CAWS-FIX-N3-BIND-INDEX-LOCK-RETRY-001: the audit commit must tolerate a
 // transient .git/index.lock held by a concurrent git process (a sibling
 // agent's commit) rather than stranding the staged spec change. The
@@ -54,20 +56,6 @@ import * as path from 'path';
 // can exercise exhaustion deterministically without real timing.
 const INDEX_LOCK_MAX_ATTEMPTS_DEFAULT = 5;
 const INDEX_LOCK_RETRY_DELAY_MS_DEFAULT = 50;
-
-/**
- * Synchronous busy-wait sleep. Copied verbatim from lifecycle-lock.ts —
- * the established idiom in this codebase (events-store.ts and
- * messages-store.ts each keep their own copy too; there is no shared
- * sleep util to import). Used only for the tens-of-ms inter-attempt
- * delay below. (CAWS-FIX-N3-BIND-INDEX-LOCK-RETRY-001.)
- */
-function sleepSyncMs(ms: number): void {
-  const end = Date.now() + ms;
-  while (Date.now() < end) {
-    // intentional spin
-  }
-}
 
 /**
  * True when a git failure reason indicates .git/index.lock contention —

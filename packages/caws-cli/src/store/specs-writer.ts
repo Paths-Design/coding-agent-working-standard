@@ -56,7 +56,7 @@ import {
   type LifecycleTransactionResult,
 } from './lifecycle-transaction';
 import { withLifecycleLock } from './lifecycle-lock';
-import { storeDiagnostic } from './repo-root';
+import { repoRootFromCawsDir, storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
 import {
   insertTopLevelScalarAfter,
@@ -524,9 +524,6 @@ export type SpecWriterOutcome =
 
 function specPath(cawsDir: string, id: string): string {
   return path.join(cawsDir, 'specs', `${id}.yaml`);
-}
-function repoRootFromCawsDir(cawsDir: string): string {
-  return path.dirname(cawsDir);
 }
 function specRelPath(
   cawsDir: string,

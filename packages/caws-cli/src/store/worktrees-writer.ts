@@ -60,7 +60,7 @@ import {
   describeCandidateTrace,
 } from '../shell/session/resolve-session';
 import type { SessionCandidates } from '../shell/session/types';
-import { storeDiagnostic } from './repo-root';
+import { repoRootFromCawsDir, storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
 import {
   insertTopLevelScalarAfter,
@@ -389,10 +389,6 @@ function runGit(args: readonly string[], cwd: string): { ok: true; stdout: strin
     const message: string = typeof cause.message === 'string' ? cause.message : '';
     return { ok: false, reason: stderr || message || 'unknown git error' };
   }
-}
-
-function repoRootFromCawsDir(cawsDir: string): string {
-  return path.dirname(cawsDir);
 }
 
 function getCurrentBranch(repoRoot: string): string | null {

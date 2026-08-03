@@ -60,6 +60,44 @@ export const defaultGitRunner: GitRunner = (args, options) => {
 };
 
 // ----------------------------------------------------------------------------
+// Shared store-layer helpers (CAWS-REFACTOR-SHARED-UTILS-001)
+//
+// These were previously private copies in lifecycle-lock.ts, events-store.ts,
+// messages-store.ts, git-autocommit.ts (sleep), and worktrees-writer.ts,
+// specs-writer.ts, resolve-session.ts, specs-migration.ts (repo-root). They
+// are byte-identical across their former homes; consolidating them here is a
+// pure-mechanical refactor with no behavior change.
+// ----------------------------------------------------------------------------
+
+/**
+ * Synchronous busy-wait sleep for the tens-of-ms inter-attempt delays used by
+ * the file-lock and git-contention retry loops. This is a CPU-burning spin
+ * over Date.now(), NOT a real sleep — it blocks the event loop and is
+ * acceptable only for short contention backoff. Atomics.wait is the cleaner
+ * tool but requires a SharedArrayBuffer setup; polling Date.now() is fine at
+ * this scale. (Formerly duplicated in lifecycle-lock.ts, events-store.ts,
+ * messages-store.ts as `sleepSync`/`sleepSyncMs`.)
+ */
+export function sleepSyncMs(ms: number): void {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    // intentional spin
+  }
+}
+
+/**
+ * Derive the git repo root from a known `.caws/` directory path. The repo
+ * root is the parent of `.caws/`. Formerly a byte-identical private helper
+ * (`repoRootFromCawsDir`) in worktrees-writer.ts and specs-writer.ts plus
+ * inline `path.dirname(cawsDir)` copies in resolve-session.ts and
+ * specs-migration.ts. The invariant `repoRoot === path.dirname(cawsDir)` is
+ * documented at resolve-session.ts:219.
+ */
+export function repoRootFromCawsDir(cawsDir: string): string {
+  return path.dirname(cawsDir);
+}
+
+// ----------------------------------------------------------------------------
 // resolveRepoRoot
 // ----------------------------------------------------------------------------
 

@@ -39,7 +39,7 @@ import {
   type Result,
 } from '@paths.design/caws-kernel';
 import { writeFileAtomic } from './atomic-write';
-import { storeDiagnostic } from './repo-root';
+import { repoRootFromCawsDir, storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
 
 // --- Public types ---------------------------------------------------------
@@ -203,7 +203,7 @@ export function runSpecsMigrateScan(opts: ScanOptions): Result<ScanReport> {
     // cawsDir-relative ("specs/X.yaml"). User-facing diagnostics and
     // report entries reference the path the operator would type at
     // the shell, which is repo-root-relative.
-    const repoRoot = path.dirname(opts.cawsDir);
+    const repoRoot = repoRootFromCawsDir(opts.cawsDir);
     const relPath = path.relative(repoRoot, fullPath);
 
     // Non-YAML files: classify and skip.

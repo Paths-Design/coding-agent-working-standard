@@ -71,6 +71,7 @@ import {
 } from '@paths.design/caws-kernel';
 import { SHELL_RULES } from '../rules';
 import { writeFileAtomic } from '../../store/atomic-write';
+import { repoRootFromCawsDir } from '../../store/repo-root';
 import type {
   CandidateTraceEntry,
   ResolveCandidatesOptions,
@@ -871,7 +872,7 @@ export function resolveSession(
   //      home first, then the LEGACY repo-root `tmp/` home (bounded
   //      read-both fallback so a pre-relocation in-flight session is not
   //      orphaned).
-  const repoRoot = path.dirname(opts.cawsDir);
+  const repoRoot = repoRootFromCawsDir(opts.cawsDir);
   const homes = sessionStateHomes(repoRoot);
   const envScan = scanDurableEnvelopes({
     repoRoot,
@@ -1440,7 +1441,7 @@ export function resolveSessionCandidates(
   //      worktree the caller legitimately owns. `caws status` already
   //      resolved that same UUID as "self" via this exact envelope source;
   //      this aligns the comparison surface with the display surface.
-  const repoRoot = path.dirname(opts.cawsDir);
+  const repoRoot = repoRootFromCawsDir(opts.cawsDir);
   const homes = sessionStateHomes(repoRoot);
   const envScan = scanDurableEnvelopes({
     repoRoot,
