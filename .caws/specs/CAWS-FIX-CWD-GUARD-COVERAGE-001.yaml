@@ -7,26 +7,39 @@ created_at: '2026-08-03T21:53:18.807Z'
 updated_at: '2026-08-03T21:53:19.785Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/store/worktrees-writer.ts
     - packages/caws-cli/src/shell/commands/worktree.ts
     - packages/caws-cli/tests/store/worktree-merge-cwd-self-destruct-guard.test.js
     - packages/caws-cli/tests/shell/worktree-cleanup-plan-cwd-guard.test.js
     - .caws/specs/CAWS-FIX-CWD-GUARD-COVERAGE-001.yaml
-  out: []
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The cwd self-destruct guard (CAWS-FIX-WORKTREE-MERGE-CWD-SELF-DESTRUCT-GUARD-001) fires on EVERY path that calls destroyWorktree, not just the merge and standalone destroy command. The guard is opt-in via the callerCwd input field: when it is undefined, destroyWorktree short-circuits past the guard. Two call sites omit it — runWorktreePhysicalCleanupPlanCommand (--apply loop) and mergeWorktree internal teardown — silently bypassing the guard. Threading callerCwd at those sites makes the guard universal across the destroy surface. The guard semantics, diagnostic code (LIFECYCLE_PLAN_REJECTED via cwdSelfDestructRefusal), and message text are unchanged; only coverage widens.'
+  - 'callerCwd already exists as an optional field on DestroyWorktreeInput and MergeWorktreeInput and is documented for exactly this. No interface changes, no new STORE_RULES, no new diagnostic helpers. The fix is two one-line additions at the two omitting call sites. A self-inside-cwd destroy via cleanup-plan surfaces as an outcome with action: failed (the existing outcome-mapping path), not an abort of the whole apply run — matching how a dirty or foreign-owned candidate already fails per-item without stopping the loop.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'A worktree wt-ready that is destroy-ready (unregistered/git-orphaned or similar), and a caller whose cwd is inside wt-ready (the worktree path or a descendant).'
+    when: 'caws worktree cleanup-plan --apply is invoked with a selector that includes wt-ready.'
+    then: 'The destroy of wt-ready is refused by the cwd guard: the per-item outcome has action: failed with a reason matching /Refusing to destroy worktree "wt-ready"/ and the cd-out remediation; the wt-ready directory and registry entry are unchanged. Other selected candidates are unaffected (the loop continues).'
+  - id: A2
+    given: 'A worktree wt-ready that is destroy-ready, and a caller whose cwd is the canonical repo root (NOT inside wt-ready).'
+    when: 'caws worktree cleanup-plan --apply is invoked with a selector that includes wt-ready.'
+    then: 'The cwd guard does NOT fire; wt-ready is destroyed normally (action: applied) — the guard only blocks the self-inside-cwd case.'
+  - id: A3
+    given: 'A worktree wt-a3 bound to an active spec, with a caller process whose cwd is inside it (writer-level test, mirroring the existing guard test).'
+    when: 'mergeWorktree is called with callerCwd set to a path inside wt-a3 (the early merge guard fires and refuses BEFORE teardown).'
+    then: 'The merge returns err with LIFECYCLE_PLAN_REJECTED naming wt-a3, exactly as in the original guard spec A1 — the internal destroy path now also carries callerCwd (defense in depth), so the guard would fire there too if ever reached. No git merge, no spec close, no destroy.'
+non_functional:
+  reliability:
+    - 'The internal destroy call in mergeWorktree is unreachable in dry-run (mergeWorktree returns at the dry-run branch before teardown) and is preceded by the early guard in real merges, so threading input.callerCwd there is defense-in-depth: it cannot change any observable behavior today, but ensures a future code path that reaches the internal destroy without the early check is still protected.'
 contracts:
   - name: 'cwd-guard-coverage'
     type: behavior
