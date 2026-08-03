@@ -7,12 +7,13 @@ created_at: '2026-08-03T23:05:48.048Z'
 updated_at: '2026-08-03T23:06:07.976Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli hook-pack system (init/templates)
+    - shared hook core (agent-surface resolver, quiet-merge)
+    - consumer user-level ~/.kimi-code/config.toml (opt-in via --wire-user-config)
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/templates/hook-packs/kimi-code/**
     - packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh
     - packages/caws-cli/templates/hook-packs/shared/quiet-merge.sh
@@ -31,12 +32,27 @@ scope:
     - AGENTS.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - The kimi-code wiring lives in the user-level $KIMI_CODE_HOME/config.toml and is repo-conditional — it is inert (exit 0, no output) in any directory that is not a CAWS repo with the kimi-code pack installed.
+  - The user-level config.toml is never written without the explicit --wire-user-config flag; merges are append-only, idempotent, and never rewrite existing content.
+  - All guard logic stays in the shared pack; the kimi-code pack carries only wiring/translation (shim, doctrine, emit override) and surface identity reaches shared scripts only via injected env (CAWS_AGENT_SURFACE/CAWS_PROJECT_DIR).
+  - kimi PreToolUse block reasons are delivered on stderr with exit 2 (Kimi's contract); ask-level escalations degrade to deny.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: a fresh consumer repo with kimi installed and KIMI_CODE_HOME pointed at a sandbox dir
+    when: caws init --agent-surface kimi-code --wire-user-config runs
+    then: the kimi-code pack files land at their manifest destPaths and the sandbox config.toml gains exactly five [[hooks]] blocks; a second run is a byte-identical no-op
+  - id: A2
+    given: the kimi-code wiring is present in config.toml
+    when: a kimi session runs in a directory that is not a CAWS repo (or a CAWS repo without the pack)
+    then: the hook exits 0 with no block and no CAWS output (inert outside CAWS repos)
+  - id: A3
+    given: a CAWS repo with the kimi-code pack installed
+    when: a kimi session is launched from a subdirectory of the repo and a guard refuses a tool call
+    then: CAWS_PROJECT_DIR resolves to the git root (not the subdirectory) and the block reason reaches the model via stderr/exit 2
+  - id: A4
+    given: the repo test suites
+    when: npm test (init + hooks suites) and scripts/fresh-install-smoke.mjs run
+    then: register/layout/fingerprint/kimi-config-merge tests pass and the smoke test proves install + idempotent re-run + inertness in a non-CAWS repo
 non_functional: {}
 contracts:
   - name: 'kimi-hook-pack'
