@@ -28,9 +28,7 @@
 
 import { SUCCESSOR_DISPOSITIONS } from './types';
 import type { LifecycleState, Resolution, Spec, Successor } from './types';
-
-/** Canonical CAWS spec-id grammar. Mirrors the pattern in spec.v1.json. */
-const SPEC_ID_PATTERN = /^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+[a-z]*$/;
+import { SPEC_ID_REGEX } from '../evidence';
 
 /**
  * Closed result vocabulary, deliberately DISJOINT from SuccessorDisposition.
@@ -139,7 +137,7 @@ export function createSuccessorResolver(
       // bypassed validation. Say so precisely rather than reporting "not
       // found", which would send the operator hunting for a spec that could
       // never have existed.
-      if (!SPEC_ID_PATTERN.test(specId)) {
+      if (!SPEC_ID_REGEX.test(specId)) {
         return { outcome: 'MALFORMED_ID', target_spec_id: specId };
       }
 
