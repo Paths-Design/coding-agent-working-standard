@@ -1380,6 +1380,18 @@ export function runSpecsCloseCommand(opts: SpecsCloseOptions): number {
 
   const closureNotes = opts.closureNotes ?? opts.notes ?? opts.note ?? opts.reason;
 
+  // CAWS-GUARD-ALLOWLIST-SYNC-001 (Defect 2): a spec must not close without
+  // closure notes. Refuse before resolving ctx/actor so the agent gets a fast,
+  // clear error instead of a silent close that loses the audit trail. The
+  // store-layer closeSpec enforces the same contract (defense in depth); this
+  // shell guard gives the better message and avoids the wasted work.
+  if (closureNotes === undefined || closureNotes.trim().length === 0) {
+    err(
+      `caws specs close: --reason (or --closure-notes / --notes / --note) is required — a spec must not close without closure notes recording what was done and why. Closing silently loses the audit trail and costs downstream agents loops.`
+    );
+    return 1;
+  }
+
   const ctx = resolveCawsCtx(cwd, err, showData, 'close');
   if (ctx === null) return 2;
 

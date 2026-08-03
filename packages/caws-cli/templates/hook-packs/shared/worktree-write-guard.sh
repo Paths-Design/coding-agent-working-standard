@@ -165,23 +165,24 @@ if [[ -n "$CANONICAL_ROOT" ]]; then
 fi
 
 # Always-allowed paths bypass enforcement.
-# FLAG: The agent-state home directory arm ($HOME/${CAWS_VENDOR_DIR}/) cannot
-# be expressed as a bash case pattern because case patterns cannot expand shell
-# variables. It is matched via [[ == ]] below after the case block returns.
+# CAWS-GUARD-ALLOWLIST-SYNC-001: the unconditional-allow path set lives in the
+# shared lib/write-allowlist.sh so worktree-write-guard and bash-write-guard
+# return the SAME allow verdict for the SAME path. The one arm that MUST stay
+# inline is .caws/worktrees/* PAYLOAD — that is ownership-adjudicated (routed
+# through the oracle), not unconditionally allowed, and it must run BEFORE the
+# allowlist so a payload path is not swept up by the .caws/* allow arm.
 if [[ -n "$FILE_PATH" ]]; then
   case "$FILE_PATH" in
     /*) FILE_PATH_FOR_ALLOWLIST="$(_realpath "$FILE_PATH")" ;;
     *)  FILE_PATH_FOR_ALLOWLIST="$FILE_PATH" ;;
   esac
 
-  # Agent-state home dir: must use [[ ]] because case cannot expand CAWS_VENDOR_DIR.
-  if [[ "$FILE_PATH_FOR_ALLOWLIST" == "${HOME:-}/${CAWS_VENDOR_DIR}/"* ]]; then
-    exit 0
-  fi
-
+  # WORKTREE-ISOLATION-HARDENING-001 (Fix 1+2): .caws/worktrees/<name>/<rest>
+  # is worktree PAYLOAD — route through ownership oracle FIRST. This arm is
+  # intentionally NOT in the shared allowlist (payload is ownership-checked,
+  # never unconditionally allowed) and must precede the allowlist delegation
+  # so it wins over the .caws/* allow arm.
   case "$FILE_PATH_FOR_ALLOWLIST" in
-    # WORKTREE-ISOLATION-HARDENING-001 (Fix 1+2): .caws/worktrees/<name>/<rest>
-    # is worktree PAYLOAD — route through ownership oracle FIRST.
     "$PROJECT_DIR"/.caws/worktrees/*|.caws/worktrees/*)
       if [[ -f "$CAWS_CLAIM_ORACLE" ]] && command -v node >/dev/null 2>&1; then
         _ORACLE_OUT="$(CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
@@ -251,36 +252,18 @@ if [[ -n "$FILE_PATH" ]]; then
         esac
       fi
       exit 0 ;;
-    "$PROJECT_DIR"/.caws/*|.caws/*) exit 0 ;;
-    "$PROJECT_DIR"/.gitignore|.gitignore) exit 0 ;;
-    "$PROJECT_DIR"/.tmp/*|.tmp/*) exit 0 ;;
-    "$PROJECT_DIR"/tmp/*|tmp/*) exit 0 ;;
-    "$PROJECT_DIR"/.archive/*|.archive/*) exit 0 ;;
-    "$PROJECT_DIR"/.githooks/*|.githooks/*) exit 0 ;;
-    "$PROJECT_DIR"/.github/*|.github/*) exit 0 ;;
-    "$PROJECT_DIR"/docs/*|docs/*) exit 0 ;;
   esac
 
-  # vendor-dir hooks allowlist: case patterns cannot expand variables, so match
-  # via [[ == ]] with CAWS_VENDOR_DIR.
-  if [[ "$FILE_PATH_FOR_ALLOWLIST" == "$PROJECT_DIR/${CAWS_VENDOR_DIR}/"* ]] || \
-     [[ "$FILE_PATH_FOR_ALLOWLIST" == "${CAWS_VENDOR_DIR}/"* ]]; then
-    exit 0
-  fi
-
-  # Root instruction files (CLAUDE.md / AGENTS.md / etc.): the harness's primary
-  # doctrine file at the repo root. Surface-derived via CAWS_INSTRUCTION_FILES
-  # (set by agent-surface.sh); matched via [[ == ]] because case patterns cannot
-  # expand variables. Generalizes the former hardcoded CLAUDE.md arm so every
-  # surface's instruction file gets the same allowlist treatment.
-  # (CAWS-WORKTREE-WRITE-GUARD-VENDOR-GENERALIZE-001.)
-  if [[ -n "${CAWS_INSTRUCTION_FILES:-}" ]]; then
-    for _instr in $CAWS_INSTRUCTION_FILES; do
-      if [[ "$FILE_PATH_FOR_ALLOWLIST" == "$PROJECT_DIR/$_instr" ]] || \
-         [[ "$FILE_PATH_FOR_ALLOWLIST" == "$_instr" ]]; then
-        exit 0
-      fi
-    done
+  # Shared unconditional allowlist (lib/write-allowlist.sh). Returns 0 if the
+  # path is unconditionally allowed (docs/*, .caws/* minus payload, .tmp/*,
+  # .github/*, vendor dir, instruction files, agent-home dir). Payload already
+  # returned above; everything else here is allow-before-adjudication.
+  # shellcheck source=lib/write-allowlist.sh
+  [[ -f "$SCRIPT_DIR/lib/write-allowlist.sh" ]] && source "$SCRIPT_DIR/lib/write-allowlist.sh"
+  if declare -F caws_is_write_allowlisted >/dev/null 2>&1; then
+    if caws_is_write_allowlisted "$FILE_PATH_FOR_ALLOWLIST" "$PROJECT_DIR"; then
+      exit 0
+    fi
   fi
 fi
 
