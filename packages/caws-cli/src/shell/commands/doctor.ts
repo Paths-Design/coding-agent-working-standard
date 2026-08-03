@@ -29,6 +29,7 @@ import type { Diagnostic, DoctorFinding } from '@paths.design/caws-kernel';
 import { DOCTOR_RULES, inspectProjectState } from '@paths.design/caws-kernel';
 
 import { detectGitignoreDrift } from '../../init/gitignore-drift';
+import { detectBuildStaleness } from '../build-freshness';
 import {
   composeDoctorSnapshot,
   resolveRepoRoot,
@@ -291,14 +292,22 @@ export function runDoctorCommand(opts: DoctorCommandOptions = {}): number {
     return 2;
   }
 
-  // 3b. CLI-side findings the kernel does not own. The gitignore-drift check is
-  // a shell concern (the kernel knows nothing about .gitignore or init's
-  // managed-block format), so it is computed here and merged into the findings
-  // list alongside the kernel report (CAWS-DOCTOR-GITIGNORE-DRIFT-001).
+  // 3b. CLI-side findings the kernel does not own. These are shell concerns
+  // (the kernel knows nothing about .gitignore, init's managed-block format,
+  // or the package's dist/src build layout), so they are computed here and
+  // merged into the findings list alongside the kernel report
+  // (CAWS-DOCTOR-GITIGNORE-DRIFT-001, CAWS-GUARD-BUILD-FRESHNESS-001).
   const gitignoreDrift = detectGitignoreDrift(repoRoot, cawsDir);
-  const findings: DoctorFinding[] = gitignoreDrift
-    ? [...report.findings, gitignoreDrift]
-    : [...report.findings];
+  // The build-staleness check reasons about the running binary's OWN dist/
+  // (where __dirname lives at runtime), not about the project's working
+  // tree — so it keys off the compiled file path, not repoRoot.
+  const buildStale = detectBuildStaleness(__dirname);
+  const shellFindings: DoctorFinding[] = [
+    ...(gitignoreDrift ? [gitignoreDrift] : []),
+    ...(buildStale ? [buildStale] : []),
+  ];
+  const findings: DoctorFinding[] =
+    shellFindings.length > 0 ? [...report.findings, ...shellFindings] : [...report.findings];
 
   // 4. Render store-load diagnostics — kept SEPARATE from doctor findings.
   const loadDiagnostics: Diagnostic[] = [
