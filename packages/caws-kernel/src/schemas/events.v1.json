@@ -53,6 +53,7 @@
         "spec_updated",
         "spec_activated",
         "spec_closed",
+        "spec_reopened",
         "spec_archived",
         "spec_archive_pruned",
         "spec_retired",
