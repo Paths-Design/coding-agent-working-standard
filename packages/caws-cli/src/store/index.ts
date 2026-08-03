@@ -16,6 +16,7 @@ export type {
 
 export {
   defaultGitRunner,
+  readGitDirInfo,
   resolveRepoRoot,
   realpathSafe,
   repoRootFromCawsDir,
@@ -24,7 +25,7 @@ export {
   storeDiagnostic,
   validateSpecId,
 } from './repo-root';
-export type { GitRunner, RepoRoot, ResolveRepoRootOptions } from './repo-root';
+export type { GitDirInfo, GitRunner, RepoRoot, ResolveRepoRootOptions } from './repo-root';
 
 export { fsyncDir, writeFileAtomic } from './atomic-write';
 export { readJsonFile } from './json-store';

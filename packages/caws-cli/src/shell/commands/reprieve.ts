@@ -28,7 +28,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { loadLeases, resolveRepoRoot } from '../../store';
+import { loadLeases, resolveRepoRoot, storeDiagnostic } from '../../store';
 import { renderDiagnostics } from '../render/diagnostic';
 import { SHELL_RULES } from '../rules';
 
@@ -161,12 +161,11 @@ function surfaceToVendorDir(
     err(
       renderDiagnostics(
         [
-          {
-            rule: SHELL_RULES.REPRIEVE_UNKNOWN_SURFACE,
-            authority: 'kernel/diagnostics',
-            severity: 'error',
-            message: `Unknown agent surface: ${surface}`,
-          },
+          storeDiagnostic(
+            SHELL_RULES.REPRIEVE_UNKNOWN_SURFACE,
+            `Unknown agent surface: ${surface}`,
+            { severity: 'error' }
+          ),
         ],
         { showData }
       )

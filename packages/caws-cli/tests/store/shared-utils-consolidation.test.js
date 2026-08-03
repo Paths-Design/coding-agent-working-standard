@@ -53,6 +53,8 @@ describe('CAWS-REFACTOR-SHARED-UTILS-001 — shared utilities are exported and b
     expect(typeof store.runGit).toBe('function');
     // Task 4: realpathSafe (simple variant)
     expect(typeof store.realpathSafe).toBe('function');
+    // Task A: readGitDirInfo (extracted from status/agents triplicate)
+    expect(typeof store.readGitDirInfo).toBe('function');
     // Task 5: storeDiagnostic (widened with severity)
     expect(typeof store.storeDiagnostic).toBe('function');
   });
@@ -197,13 +199,29 @@ describe('CAWS-REFACTOR-SHARED-UTILS-001 — consolidation invariants (no privat
     }
   });
 
-  test('the divergent variants deliberately remain (not consolidated)', () => {
-    // The throwing runGit, the swapped-arg runGit/gitOutput, and the positional
-    // defaultGitRunner stay in place — the refactor only collapsed byte-identical twins.
+  test('Task A: no private readGitDirInfo/GitDirInfo definitions remain in status/agents', () => {
+    const readSrc = (rel) => fs.readFileSync(path.join(__dirname, '../../src', rel), 'utf8');
+    for (const f of ['shell/commands/status.ts', 'shell/commands/agents.ts']) {
+      const src = readSrc(f);
+      expect(src).not.toMatch(/function\s+readGitDirInfo\s*\(/);
+      expect(src).not.toMatch(/interface\s+GitDirInfo\s*\{/);
+    }
+  });
+
+  test('Task B: git-sparse-checkout runGit and worktree gitOutput are consolidated (flipped to shared runGit)', () => {
+    const readSrc = (rel) => fs.readFileSync(path.join(__dirname, '../../src', rel), 'utf8');
+    // The swapped-arg local copies are gone; both now import the shared runGit.
+    expect(readSrc('store/git-sparse-checkout.ts')).not.toMatch(/function\s+runGit\s*\(/);
+    expect(readSrc('shell/commands/worktree.ts')).not.toMatch(/function\s+gitOutput\s*\(/);
+  });
+
+  test('the still-divergent variants deliberately remain (not consolidated)', () => {
+    // Only the genuinely-different variants stay: the THROWING runGit in
+    // diff-helpers.ts, claim.ts's path.resolve-fallback safeRealpath (different
+    // semantics from the simple realpathSafe), and the ancestor-walk
+    // realpathOrLiteral (required for the cwd-self-destruct guard on macOS).
     const readSrc = (rel) => fs.readFileSync(path.join(__dirname, '../../src', rel), 'utf8');
     expect(readSrc('shell/gates/local-evaluators/diff-helpers.ts')).toMatch(/function\s+runGit\s*\(/);
-    expect(readSrc('store/git-sparse-checkout.ts')).toMatch(/function\s+runGit\s*\(/);
-    expect(readSrc('shell/commands/worktree.ts')).toMatch(/function\s+gitOutput\s*\(/);
     // claim.ts keeps its path.resolve-fallback safeRealpath (different semantics).
     expect(readSrc('shell/commands/claim.ts')).toMatch(/function\s+safeRealpath\s*\(/);
     // worktrees-writer.ts keeps the ancestor-walk realpathOrLiteral (required for the

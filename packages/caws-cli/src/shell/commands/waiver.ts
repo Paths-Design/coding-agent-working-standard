@@ -49,6 +49,7 @@ import {
   markRevoked,
   resolveRepoRoot,
   STORE_RULES,
+  storeDiagnostic,
   writeWaiver,
 } from '../../store';
 import { renderDiagnostics } from '../render/diagnostic';
@@ -67,23 +68,17 @@ export interface WaiverCommandBase {
   readonly showData?: boolean;
 }
 
+// (CAWS-REFACTOR-SHARED-UTILS-001) shellDiag delegates to storeDiagnostic.
+// Shell-side ad-hoc diagnostics borrow the kernel/diagnostics authority
+// — the kernel's Authority enum is closed, and the rule prefix
+// `shell.*` is what distinguishes shell-owned diagnostics from kernel-
+// owned ones. storeDiagnostic bakes in that authority.
 function shellDiag(
   rule: string,
   message: string,
   subject?: string
 ): Diagnostic {
-  // Shell-side ad-hoc diagnostics borrow the kernel/diagnostics authority
-  // — the kernel's Authority enum is closed, and the rule prefix
-  // `shell.*` is what distinguishes shell-owned diagnostics from kernel-
-  // owned ones. Existing shell modules (resolve-session, gates contract)
-  // follow the same convention.
-  return {
-    rule,
-    authority: 'kernel/diagnostics',
-    severity: 'error',
-    message,
-    ...(subject !== undefined ? { subject } : {}),
-  };
+  return storeDiagnostic(rule, message, subject !== undefined ? { severity: 'error', subject } : { severity: 'error' });
 }
 
 function setupIO(opts: WaiverCommandBase) {

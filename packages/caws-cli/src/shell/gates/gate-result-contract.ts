@@ -23,6 +23,7 @@
 
 import { err, ok, type Diagnostic, type Result } from '@paths.design/caws-kernel';
 
+import { storeDiagnostic } from '../../store/repo-root';
 import { SHELL_RULES } from '../rules';
 
 export interface GatesViolation {
@@ -59,14 +60,9 @@ export interface GatesReport {
   };
 }
 
+// (CAWS-REFACTOR-SHARED-UTILS-001) diag delegates to storeDiagnostic.
 function diag(rule: string, message: string, data?: Record<string, unknown>): Diagnostic {
-  const base: Diagnostic = {
-    rule,
-    authority: 'kernel/diagnostics',
-    severity: 'error',
-    message,
-  };
-  return data !== undefined ? { ...base, data } : base;
+  return storeDiagnostic(rule, message, data !== undefined ? { severity: 'error', data } : { severity: 'error' });
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {
