@@ -42,8 +42,9 @@
 // reading git twice (race-prone and ambiguous: a dirty file with the
 // writer's change applied looks identical to a dirty file without).
 
-import { execFileSync } from 'child_process';
 import * as path from 'path';
+
+import { runGit, sleepSyncMs } from './repo-root';
 
 // CAWS-FIX-N3-BIND-INDEX-LOCK-RETRY-001: the audit commit must tolerate a
 // transient .git/index.lock held by a concurrent git process (a sibling
@@ -54,20 +55,6 @@ import * as path from 'path';
 // can exercise exhaustion deterministically without real timing.
 const INDEX_LOCK_MAX_ATTEMPTS_DEFAULT = 5;
 const INDEX_LOCK_RETRY_DELAY_MS_DEFAULT = 50;
-
-/**
- * Synchronous busy-wait sleep. Copied verbatim from lifecycle-lock.ts —
- * the established idiom in this codebase (events-store.ts and
- * messages-store.ts each keep their own copy too; there is no shared
- * sleep util to import). Used only for the tens-of-ms inter-attempt
- * delay below. (CAWS-FIX-N3-BIND-INDEX-LOCK-RETRY-001.)
- */
-function sleepSyncMs(ms: number): void {
-  const end = Date.now() + ms;
-  while (Date.now() < end) {
-    // intentional spin
-  }
-}
 
 /**
  * True when a git failure reason indicates .git/index.lock contention —
@@ -139,30 +126,7 @@ export interface AutoCommitInput {
   readonly indexLockRetryDelayMs?: number;
 }
 
-function runGit(
-  args: readonly string[],
-  cwd: string
-): { ok: true; stdout: string } | { ok: false; reason: string } {
-  try {
-    const stdout = execFileSync('git', [...args], {
-      cwd,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    return { ok: true, stdout: stdout.toString() };
-  } catch (e) {
-    const cause = e as { message?: string; stderr?: Buffer | string };
-    const stderr: string =
-      cause.stderr instanceof Buffer
-        ? cause.stderr.toString()
-        : typeof cause.stderr === 'string'
-          ? cause.stderr
-          : '';
-    const message: string =
-      typeof cause.message === 'string' ? cause.message : '';
-    return { ok: false, reason: stderr || message || 'unknown git error' };
-  }
-}
+// (CAWS-REFACTOR-SHARED-UTILS-001) runGit consolidated into store/repo-root.ts.
 
 function isInsideGitWorkingTree(cwd: string): boolean {
   const r = runGit(['rev-parse', '--is-inside-work-tree'], cwd);

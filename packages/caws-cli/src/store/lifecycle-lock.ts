@@ -25,7 +25,7 @@ import * as path from 'path';
 
 import { err, ok, type Result } from '@paths.design/caws-kernel';
 
-import { storeDiagnostic } from './repo-root';
+import { sleepSyncMs, storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
 
 const LOCK_FILE_NAME = 'state.lock';
@@ -49,14 +49,6 @@ export interface AcquireLifecycleLockOptions {
   readonly maxAttempts?: number;
   /** Override retry delay. Defaults to 50ms. */
   readonly retryDelayMs?: number;
-}
-
-function sleepSyncMs(ms: number): void {
-  // Busy-wait short sleep. Matches events-store.ts pattern.
-  const end = Date.now() + ms;
-  while (Date.now() < end) {
-    // intentional spin
-  }
 }
 
 function tryRecoverStaleLock(

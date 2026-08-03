@@ -17,7 +17,12 @@ export type {
 export {
   defaultGitRunner,
   resolveRepoRoot,
+  realpathSafe,
+  repoRootFromCawsDir,
+  runGit,
+  sleepSyncMs,
   storeDiagnostic,
+  validateSpecId,
 } from './repo-root';
 export type { GitRunner, RepoRoot, ResolveRepoRootOptions } from './repo-root';
 

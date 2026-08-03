@@ -32,7 +32,7 @@ import {
   type WorktreeRecord,
 } from '@paths.design/caws-kernel';
 
-import { loadSpecs, loadWorktrees, resolveRepoRoot, writeFileAtomic } from '../../store';
+import { loadSpecs, loadWorktrees, realpathSafe, resolveRepoRoot, writeFileAtomic } from '../../store';
 import { composeDoctorSnapshot } from '../../store/doctor-snapshot';
 import { configureWorktreeSparseCheckout } from '../../store/git-sparse-checkout';
 import type {
@@ -1443,13 +1443,7 @@ export interface WorktreeRepairSparseOptions extends BaseCommandOptions {
   readonly name: string;
 }
 
-function realpathSafe(p: string): string {
-  try {
-    return fs.realpathSync(p);
-  } catch {
-    return p;
-  }
-}
+// (CAWS-REFACTOR-SHARED-UTILS-001) realpathSafe consolidated into store/repo-root.ts.
 
 function isGitWorktree(p: string): boolean {
   // A linked worktree has a `.git` file (not directory) pointing at the

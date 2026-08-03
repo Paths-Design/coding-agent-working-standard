@@ -21,11 +21,12 @@
 //
 // The shell NEVER uses `basename(cwd)` to invent a worktree name.
 
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 import { deriveBindingState } from '@paths.design/caws-kernel';
+
+import { realpathSafe } from '../../store/repo-root';
 
 import type {
   BindingClaimant,
@@ -34,13 +35,7 @@ import type {
   ResolvedBinding,
 } from './types';
 
-function safeRealpath(p: string): string {
-  try {
-    return fs.realpathSync(p);
-  } catch {
-    return p;
-  }
-}
+// (CAWS-REFACTOR-SHARED-UTILS-001) safeRealpath consolidated into store/repo-root.ts as realpathSafe.
 
 function isAncestorOrEqual(maybeAncestor: string, descendant: string): boolean {
   if (maybeAncestor === descendant) return true;
@@ -110,7 +105,7 @@ function findRegistryMatch(
   let bestDepth = -1;
   for (const [name, record] of Object.entries(registry)) {
     if (typeof record?.path !== 'string') continue;
-    const recordReal = safeRealpath(record.path);
+    const recordReal = realpathSafe(record.path);
     if (!isAncestorOrEqual(recordReal, cwdReal)) continue;
     const depth = recordReal.split(path.sep).length;
     if (
@@ -196,8 +191,8 @@ function findScopeInClaimants(
 }
 
 export function resolveBinding(input: ResolveBindingInput): ResolvedBinding {
-  const cwdReal = safeRealpath(input.cwd);
-  const repoRootReal = safeRealpath(input.repoRoot);
+  const cwdReal = realpathSafe(input.cwd);
+  const repoRootReal = realpathSafe(input.repoRoot);
 
   // If cwd is exactly the repo root, we are in the main checkout. Walk the
   // registry anyway in case a worktree was created at the repo root (rare,
@@ -213,7 +208,7 @@ export function resolveBinding(input: ResolveBindingInput): ResolvedBinding {
     let porcelainMatch: GitWorktreeEntry | null = null;
     let porcelainDepth = -1;
     for (const wt of wts) {
-      const wtReal = safeRealpath(wt.path);
+      const wtReal = realpathSafe(wt.path);
       if (!isAncestorOrEqual(wtReal, cwdReal)) continue;
       const depth = wtReal.split(path.sep).length;
       if (depth > porcelainDepth) {
@@ -222,14 +217,14 @@ export function resolveBinding(input: ResolveBindingInput): ResolvedBinding {
       }
     }
     if (porcelainMatch !== null) {
-      const porcelainReal = safeRealpath(porcelainMatch.path);
+      const porcelainReal = realpathSafe(porcelainMatch.path);
       // Skip if porcelain match is the main checkout (no worktree binding).
       if (porcelainReal !== repoRootReal) {
         // Look up registry entry by path equality.
         for (const [name, record] of Object.entries(input.registry)) {
           if (
             typeof record?.path === 'string' &&
-            safeRealpath(record.path) === porcelainReal
+            realpathSafe(record.path) === porcelainReal
           ) {
             candidate = { name, path: porcelainReal };
             source = 'git_porcelain_match';
@@ -245,7 +240,7 @@ export function resolveBinding(input: ResolveBindingInput): ResolvedBinding {
     // Before falling to `unbound`, try to resolve the binding from the
     // TARGET PATH so the verdict is cwd-independent.
     if (typeof input.targetPath === 'string' && input.targetPath.length > 0) {
-      const targetAbs = safeRealpath(
+      const targetAbs = realpathSafe(
         path.isAbsolute(input.targetPath)
           ? input.targetPath
           : path.join(repoRootReal, input.targetPath)

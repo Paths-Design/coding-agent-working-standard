@@ -26,7 +26,7 @@ import { type Diagnostic, type Result, ok, err } from '@paths.design/caws-kernel
 import { writeFileAtomic } from './atomic-write';
 import { loadLeases } from './leases-store';
 import { withLifecycleLock } from './lifecycle-lock';
-import { storeDiagnostic } from './repo-root';
+import { sleepSyncMs, storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
 
 const MESSAGES_FILENAME = 'messages.jsonl';
@@ -205,13 +205,6 @@ export interface PollOptions {
 const MAX_WAIT_MS = 60_000;
 /** Sleep between poll attempts while waiting. Lock is RELEASED during the sleep. */
 const POLL_RETRY_MS = 150;
-
-function sleepSync(ms: number): void {
-  const end = Date.now() + ms;
-  while (Date.now() < end) {
-    /* busy-wait; matches the lifecycle-lock idiom. Short interval, lock not held. */
-  }
-}
 
 interface ParsedMessageLine {
   readonly raw: string;
@@ -433,7 +426,7 @@ export function pollMessage(cawsDir: string, me: string, options: PollOptions = 
     const r = attempt();
     if (!r.ok) return r;
     if (r.value.message || waitMs === 0 || Date.now() >= deadline) return r;
-    sleepSync(POLL_RETRY_MS);
+    sleepSyncMs(POLL_RETRY_MS);
   }
 }
 

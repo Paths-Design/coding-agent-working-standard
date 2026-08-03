@@ -26,7 +26,6 @@
 //   - Mutate worktrees.json without going through applyRegistryPatch.
 //   - Run rm -rf on any path.
 
-import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -40,6 +39,7 @@ import {
   type Result,
   type SessionIdentity,
   type Diagnostic,
+  WORKTREE_NAME_REGEX,
 } from '@paths.design/caws-kernel';
 
 import { applyRegistryPatch } from './apply-patch';
@@ -60,7 +60,7 @@ import {
   describeCandidateTrace,
 } from '../shell/session/resolve-session';
 import type { SessionCandidates } from '../shell/session/types';
-import { storeDiagnostic } from './repo-root';
+import { repoRootFromCawsDir, runGit, storeDiagnostic, validateSpecId } from './repo-root';
 import { STORE_RULES } from './rules';
 import {
   insertTopLevelScalarAfter,
@@ -369,31 +369,7 @@ function autoCommitTransition(
 }
 
 // ─── Git helpers ─────────────────────────────────────────────────────────
-
-function runGit(args: readonly string[], cwd: string): { ok: true; stdout: string } | { ok: false; reason: string } {
-  try {
-    const stdout = execFileSync('git', [...args], {
-      cwd,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    return { ok: true, stdout: stdout.toString() };
-  } catch (e) {
-    const cause = e as { message?: string; stderr?: Buffer | string };
-    const stderr: string =
-      cause.stderr instanceof Buffer
-        ? cause.stderr.toString()
-        : typeof cause.stderr === 'string'
-          ? cause.stderr
-          : '';
-    const message: string = typeof cause.message === 'string' ? cause.message : '';
-    return { ok: false, reason: stderr || message || 'unknown git error' };
-  }
-}
-
-function repoRootFromCawsDir(cawsDir: string): string {
-  return path.dirname(cawsDir);
-}
+// (CAWS-REFACTOR-SHARED-UTILS-001) runGit consolidated into store/repo-root.ts.
 
 function getCurrentBranch(repoRoot: string): string | null {
   const r = runGit(['rev-parse', '--abbrev-ref', 'HEAD'], repoRoot);
@@ -474,9 +450,8 @@ function isBranchMerged(repoRoot: string, branch: string, base: string): boolean
 }
 
 // ─── ID + name validation ────────────────────────────────────────────────
-
-const WORKTREE_NAME_REGEX = /^[a-zA-Z0-9_-]+$/;
-const SPEC_ID_PATTERN = /^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+[a-z]*$/;
+// (CAWS-REFACTOR-SHARED-UTILS-001) SPEC_ID_REGEX + WORKTREE_NAME_REGEX are
+// now shared from the kernel; validateSpecId is shared from store/repo-root.
 
 function validateWorktreeName(name: string): Result<true> {
   if (!WORKTREE_NAME_REGEX.test(name)) {
@@ -485,19 +460,6 @@ function validateWorktreeName(name: string): Result<true> {
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
         `Worktree name "${name}" does not match the v11 pattern (alphanumeric, hyphen, underscore).`,
         { subject: name }
-      )
-    );
-  }
-  return ok(true as const);
-}
-
-function validateSpecId(id: string): Result<true> {
-  if (!SPEC_ID_PATTERN.test(id)) {
-    return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        `Spec id "${id}" does not match the v11 pattern.`,
-        { subject: id }
       )
     );
   }

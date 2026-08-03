@@ -33,7 +33,7 @@ import {
   type EventBody,
   type Result,
 } from '@paths.design/caws-kernel';
-import { storeDiagnostic } from './repo-root';
+import { sleepSyncMs, storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
 import type { EventsLoadResult } from './types';
 
@@ -712,15 +712,4 @@ function tryRecoverStaleLock(lockPath: string): boolean {
     return true;
   }
   return false;
-}
-
-function sleepSyncMs(ms: number): void {
-  // Synchronous sleep without dragging in dependencies. Used only inside
-  // the lock-acquisition retry loop.
-  const end = Date.now() + ms;
-  // Atomics.wait is the clean tool here but requires a SharedArrayBuffer
-  // setup. Polling Date.now() is fine for the tens-of-ms scale we use.
-  while (Date.now() < end) {
-    // empty body — spinning briefly under contention is acceptable.
-  }
 }

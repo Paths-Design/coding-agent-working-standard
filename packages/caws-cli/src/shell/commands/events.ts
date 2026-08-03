@@ -35,7 +35,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import {
-  diagnostic,
   type Actor,
   type ActorKind,
   type ChainedEvent,
@@ -50,6 +49,7 @@ import {
   resolveRepoRoot,
   rotateEvents,
   STORE_RULES,
+  storeDiagnostic,
 } from '../../store';
 import {
   detectEventsLogShape,
@@ -130,13 +130,11 @@ function scanSpecsDirectory(cawsDir: string): SpecScanResult {
     const cause = e as { code?: string; message?: string };
     return {
       ok: false,
-      diagnostic: diagnostic({
-        rule: MIGRATION_RULES.SPEC_SCAN_UNAVAILABLE,
-        authority: 'kernel/diagnostics',
-        message: `caws events migrate: cannot scan .caws/specs/ for v10-shape YAMLs (${cause.code ?? 'unknown error'}: ${cause.message ?? 'no message'}). The half-upgrade refusal cannot be enforced without a complete scan; refusing rather than silently bypassing the guard. Run from a checkout where .caws/specs/ is visible (sparse-checkout exclusion of .caws/specs/ counts as missing).`,
-        subject: specsDir,
-        data: { code: cause.code },
-      }),
+      diagnostic: storeDiagnostic(
+        MIGRATION_RULES.SPEC_SCAN_UNAVAILABLE,
+        `caws events migrate: cannot scan .caws/specs/ for v10-shape YAMLs (${cause.code ?? 'unknown error'}: ${cause.message ?? 'no message'}). The half-upgrade refusal cannot be enforced without a complete scan; refusing rather than silently bypassing the guard. Run from a checkout where .caws/specs/ is visible (sparse-checkout exclusion of .caws/specs/ counts as missing).`,
+        { subject: specsDir, data: { code: cause.code } }
+      ),
     };
   }
   const files: SpecYamlInput[] = [];
@@ -151,13 +149,11 @@ function scanSpecsDirectory(cawsDir: string): SpecScanResult {
       const cause = e as { code?: string; message?: string };
       return {
         ok: false,
-        diagnostic: diagnostic({
-          rule: MIGRATION_RULES.SPEC_SCAN_UNAVAILABLE,
-          authority: 'kernel/diagnostics',
-          message: `caws events migrate: failed to read ${entry.name} during spec scan (${cause.code ?? 'unknown error'}). Refusing rather than bypassing the half-upgrade guard.`,
-          subject: fullPath,
-          data: { code: cause.code },
-        }),
+        diagnostic: storeDiagnostic(
+          MIGRATION_RULES.SPEC_SCAN_UNAVAILABLE,
+          `caws events migrate: failed to read ${entry.name} during spec scan (${cause.code ?? 'unknown error'}). Refusing rather than bypassing the half-upgrade guard.`,
+          { subject: fullPath, data: { code: cause.code } }
+        ),
       };
     }
     files.push({ path: fullPath, raw });
@@ -555,12 +551,11 @@ export function runEventsMigrateCommand(
     err('caws events migrate: refuse — fully-unparseable events.jsonl.');
     err(renderDiagnostics(
       [
-        diagnostic({
-          rule: MIGRATION_RULES.MIGRATE_UNPARSEABLE_REFUSED,
-          authority: 'kernel/diagnostics',
-          message: `events.jsonl has no JSON-parseable lines (${detection.value.stats.unparseable} unparseable, ${detection.value.lineCount} total). Migration cannot claim it found a v10 chain. If you want to archive the corrupt log as evidence quarantine, use 'caws events rotate --reason "<text>"' (which admits fully-unparseable logs under the honest 'unparseable' status).`,
-          subject: eventsPath,
-        }),
+        storeDiagnostic(
+          MIGRATION_RULES.MIGRATE_UNPARSEABLE_REFUSED,
+          `events.jsonl has no JSON-parseable lines (${detection.value.stats.unparseable} unparseable, ${detection.value.lineCount} total). Migration cannot claim it found a v10 chain. If you want to archive the corrupt log as evidence quarantine, use 'caws events rotate --reason "<text>"' (which admits fully-unparseable logs under the honest 'unparseable' status).`,
+          { subject: eventsPath }
+        ),
       ],
       { showData }
     ));
@@ -1020,12 +1015,11 @@ export function runEventsVerifyArchiveCommand(
     err('caws events verify-archive: cannot load current events.jsonl; verification depends on locating the most recent chain_rotated event.');
     err(renderDiagnostics(
       [
-        diagnostic({
-          rule: MIGRATION_RULES.VERIFY_CURRENT_CHAIN_INVALID,
-          authority: 'kernel/diagnostics',
-          message: `events.jsonl could not be loaded as a valid hash-chained log. The underlying store diagnostics follow.`,
-          subject: path.join(cawsDir, 'events.jsonl'),
-        }),
+        storeDiagnostic(
+          MIGRATION_RULES.VERIFY_CURRENT_CHAIN_INVALID,
+          `events.jsonl could not be loaded as a valid hash-chained log. The underlying store diagnostics follow.`,
+          { subject: path.join(cawsDir, 'events.jsonl') }
+        ),
         ...loaded.errors,
       ],
       { showData }
@@ -1045,11 +1039,10 @@ export function runEventsVerifyArchiveCommand(
     err('caws events verify-archive: no chain_rotated event found in current events.jsonl. Nothing to verify against.');
     err(renderDiagnostics(
       [
-        diagnostic({
-          rule: MIGRATION_RULES.VERIFY_NO_ROTATION_EVENT,
-          authority: 'kernel/diagnostics',
-          message: `The current events.jsonl chain contains ${loaded.value.events.length} event(s) but no chain_rotated event. verify-archive needs at least one rotation event to know what to verify.`,
-        }),
+        storeDiagnostic(
+          MIGRATION_RULES.VERIFY_NO_ROTATION_EVENT,
+          `The current events.jsonl chain contains ${loaded.value.events.length} event(s) but no chain_rotated event. verify-archive needs at least one rotation event to know what to verify.`
+        ),
       ],
       { showData }
     ));
@@ -1066,12 +1059,11 @@ export function runEventsVerifyArchiveCommand(
     err('caws events verify-archive: archive file is missing.');
     err(renderDiagnostics(
       [
-        diagnostic({
-          rule: MIGRATION_RULES.VERIFY_ARCHIVE_MISSING,
-          authority: 'kernel/diagnostics',
-          message: `Archive file ${archiveName} (named by chain_rotated event seq=${mostRecentRotation.seq}) does not exist at ${archivePath}.`,
-          subject: archivePath,
-        }),
+        storeDiagnostic(
+          MIGRATION_RULES.VERIFY_ARCHIVE_MISSING,
+          `Archive file ${archiveName} (named by chain_rotated event seq=${mostRecentRotation.seq}) does not exist at ${archivePath}.`,
+          { subject: archivePath }
+        ),
       ],
       { showData }
     ));
@@ -1087,13 +1079,11 @@ export function runEventsVerifyArchiveCommand(
     err('caws events verify-archive: archive digest mismatch (tamper detection).');
     err(renderDiagnostics(
       [
-        diagnostic({
-          rule: STORE_RULES.EVENTS_ARCHIVE_DIGEST_MISMATCH,
-          authority: 'kernel/diagnostics',
-          message: `Archive ${archiveName} sha256 does not match the chain_rotated committed digest. Expected ${expectedDigest}, got ${actualDigest}. The archive may have been edited after rotation.`,
-          subject: archivePath,
-          data: { expected: expectedDigest, actual: actualDigest },
-        }),
+        storeDiagnostic(
+          STORE_RULES.EVENTS_ARCHIVE_DIGEST_MISMATCH,
+          `Archive ${archiveName} sha256 does not match the chain_rotated committed digest. Expected ${expectedDigest}, got ${actualDigest}. The archive may have been edited after rotation.`,
+          { subject: archivePath, data: { expected: expectedDigest, actual: actualDigest } }
+        ),
       ],
       { showData }
     ));
@@ -1104,13 +1094,11 @@ export function runEventsVerifyArchiveCommand(
     err('caws events verify-archive: archive line-count mismatch.');
     err(renderDiagnostics(
       [
-        diagnostic({
-          rule: STORE_RULES.EVENTS_ARCHIVE_LINE_COUNT_MISMATCH,
-          authority: 'kernel/diagnostics',
-          message: `Archive ${archiveName} non-empty line count does not match the chain_rotated committed count. Expected ${expectedLineCount}, got ${actualLineCount}.`,
-          subject: archivePath,
-          data: { expected: expectedLineCount, actual: actualLineCount },
-        }),
+        storeDiagnostic(
+          STORE_RULES.EVENTS_ARCHIVE_LINE_COUNT_MISMATCH,
+          `Archive ${archiveName} non-empty line count does not match the chain_rotated committed count. Expected ${expectedLineCount}, got ${actualLineCount}.`,
+          { subject: archivePath, data: { expected: expectedLineCount, actual: actualLineCount } }
+        ),
       ],
       { showData }
     ));
