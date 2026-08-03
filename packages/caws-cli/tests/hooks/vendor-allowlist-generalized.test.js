@@ -143,7 +143,17 @@ describe('worktree-write-guard: no hardcoded CLAUDE.md remains', () => {
     expect(guard).not.toMatch(/CLAUDE\.md\|CLAUDE\.md\) exit 0/);
   });
 
-  test('the guard references CAWS_INSTRUCTION_FILES (the new derived arm)', () => {
-    expect(guard).toMatch(/CAWS_INSTRUCTION_FILES/);
+  test('CAWS_INSTRUCTION_FILES is honored (now via the shared allowlist helper)', () => {
+    // CAWS-GUARD-ALLOWLIST-SYNC-001: the instruction-files allowlist arm moved
+    // from worktree-write-guard.sh into the shared lib/write-allowlist.sh so
+    // both the Write/Edit and Bash guards honor it. The invariant this test
+    // guards — that instruction files ARE allowlisted via CAWS_INSTRUCTION_FILES
+    // — now spans the guard (which sources the helper) and the helper (which
+    // carries the logic).
+    const helper = fs.readFileSync(path.join(TEMPLATES, 'lib', 'write-allowlist.sh'), 'utf8');
+    // The guard delegates its allowlist to the helper.
+    expect(guard).toMatch(/lib\/write-allowlist\.sh/);
+    // The helper carries the CAWS_INSTRUCTION_FILES derived arm.
+    expect(helper).toMatch(/CAWS_INSTRUCTION_FILES/);
   });
 });
