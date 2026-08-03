@@ -40,6 +40,7 @@ import {
   type Result,
   type SessionIdentity,
   type Diagnostic,
+  WORKTREE_NAME_REGEX,
 } from '@paths.design/caws-kernel';
 
 import { applyRegistryPatch } from './apply-patch';
@@ -60,7 +61,7 @@ import {
   describeCandidateTrace,
 } from '../shell/session/resolve-session';
 import type { SessionCandidates } from '../shell/session/types';
-import { repoRootFromCawsDir, storeDiagnostic } from './repo-root';
+import { repoRootFromCawsDir, storeDiagnostic, validateSpecId } from './repo-root';
 import { STORE_RULES } from './rules';
 import {
   insertTopLevelScalarAfter,
@@ -470,9 +471,8 @@ function isBranchMerged(repoRoot: string, branch: string, base: string): boolean
 }
 
 // ─── ID + name validation ────────────────────────────────────────────────
-
-const WORKTREE_NAME_REGEX = /^[a-zA-Z0-9_-]+$/;
-const SPEC_ID_PATTERN = /^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+[a-z]*$/;
+// (CAWS-REFACTOR-SHARED-UTILS-001) SPEC_ID_REGEX + WORKTREE_NAME_REGEX are
+// now shared from the kernel; validateSpecId is shared from store/repo-root.
 
 function validateWorktreeName(name: string): Result<true> {
   if (!WORKTREE_NAME_REGEX.test(name)) {
@@ -481,19 +481,6 @@ function validateWorktreeName(name: string): Result<true> {
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
         `Worktree name "${name}" does not match the v11 pattern (alphanumeric, hyphen, underscore).`,
         { subject: name }
-      )
-    );
-  }
-  return ok(true as const);
-}
-
-function validateSpecId(id: string): Result<true> {
-  if (!SPEC_ID_PATTERN.test(id)) {
-    return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        `Spec id "${id}" does not match the v11 pattern.`,
-        { subject: id }
       )
     );
   }

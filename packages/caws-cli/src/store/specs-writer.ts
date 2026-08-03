@@ -56,7 +56,7 @@ import {
   type LifecycleTransactionResult,
 } from './lifecycle-transaction';
 import { withLifecycleLock } from './lifecycle-lock';
-import { repoRootFromCawsDir, storeDiagnostic } from './repo-root';
+import { repoRootFromCawsDir, storeDiagnostic, validateSpecId } from './repo-root';
 import { STORE_RULES } from './rules';
 import {
   insertTopLevelScalarAfter,
@@ -738,29 +738,8 @@ function attachAutoCommit(
 
 // ─── ID validation (mirrors kernel regex) ────────────────────────────────
 
-const SPEC_ID_PATTERN = /^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+[a-z]*$/;
-
-function validateSpecId(id: string): Result<true> {
-  if (typeof id !== 'string' || id.length === 0) {
-    return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        'Spec id is required.',
-        { subject: 'id' }
-      )
-    );
-  }
-  if (!SPEC_ID_PATTERN.test(id)) {
-    return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        `Spec id "${id}" does not match the v11 pattern (e.g., FEAT-001, CLI-SPECS-001).`,
-        { subject: id, data: { pattern: SPEC_ID_PATTERN.source } }
-      )
-    );
-  }
-  return ok(true as const);
-}
+// (CAWS-REFACTOR-SHARED-UTILS-001) validateSpecId + SPEC_ID_PATTERN
+// consolidated into store/repo-root.ts (regex shared from the kernel).
 
 // ─── Spec rendering for create ───────────────────────────────────────────
 

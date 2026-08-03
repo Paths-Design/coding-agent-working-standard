@@ -20,6 +20,7 @@ export {
   repoRootFromCawsDir,
   sleepSyncMs,
   storeDiagnostic,
+  validateSpecId,
 } from './repo-root';
 export type { GitRunner, RepoRoot, ResolveRepoRootOptions } from './repo-root';
 

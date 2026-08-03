@@ -22,6 +22,7 @@ import {
   diagnostic,
   err,
   ok,
+  SPEC_ID_REGEX,
   type Diagnostic,
   type Result,
 } from '@paths.design/caws-kernel';
@@ -95,6 +96,35 @@ export function sleepSyncMs(ms: number): void {
  */
 export function repoRootFromCawsDir(cawsDir: string): string {
   return path.dirname(cawsDir);
+}
+
+/**
+ * Validate a CAWS spec id against the canonical v11 grammar (shared from
+ * the kernel's SPEC_ID_REGEX). STORE_RULES-flavored: emits
+ * LIFECYCLE_PLAN_REJECTED via storeDiagnostic, so it stays on the shell
+ * side even though the regex is pure kernel. The superset of the two
+ * former private copies (worktrees-writer.ts and specs-writer.ts): it
+ * carries the empty-string guard and the "e.g., FEAT-001" repair hint.
+ * (CAWS-REFACTOR-SHARED-UTILS-001.)
+ */
+export function validateSpecId(id: string): Result<true> {
+  if (typeof id !== 'string' || id.length === 0) {
+    return err(
+      storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, 'Spec id is required.', {
+        subject: 'id',
+      })
+    );
+  }
+  if (!SPEC_ID_REGEX.test(id)) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec id "${id}" does not match the v11 pattern (e.g., FEAT-001, CLI-SPECS-001).`,
+        { subject: id, data: { pattern: SPEC_ID_REGEX.source } }
+      )
+    );
+  }
+  return ok(true as const);
 }
 
 // ----------------------------------------------------------------------------
