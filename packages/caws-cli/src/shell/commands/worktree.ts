@@ -32,7 +32,7 @@ import {
   type WorktreeRecord,
 } from '@paths.design/caws-kernel';
 
-import { loadSpecs, loadWorktrees, realpathSafe, resolveRepoRoot, writeFileAtomic } from '../../store';
+import { loadSpecs, loadWorktrees, realpathSafe, resolveRepoRoot, runGit, writeFileAtomic } from '../../store';
 import { composeDoctorSnapshot } from '../../store/doctor-snapshot';
 import { configureWorktreeSparseCheckout } from '../../store/git-sparse-checkout';
 import type {
@@ -870,28 +870,11 @@ function defaultWorktreePath(cawsDir: string, name: string): string {
   return path.join(cawsDir, 'worktrees', name);
 }
 
-function gitOutput(cwd: string, args: readonly string[]): { ok: true; stdout: string } | { ok: false; reason: string } {
-  try {
-    const stdout = execFileSync('git', [...args], {
-      cwd,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }).toString();
-    return { ok: true, stdout };
-  } catch (e) {
-    const cause = e as { message?: string; stderr?: Buffer | string };
-    const stderr =
-      cause.stderr instanceof Buffer
-        ? cause.stderr.toString()
-        : typeof cause.stderr === 'string'
-          ? cause.stderr
-          : (cause.message ?? 'unknown git error');
-    return { ok: false, reason: stderr.trim() };
-  }
-}
+// (CAWS-REFACTOR-SHARED-UTILS-001) gitOutput consolidated into store/repo-root.ts
+// as runGit; callers flipped to the shared (args, cwd) arg order.
 
 function listPhysicalGitWorktrees(repoRoot: string): { ok: true; worktrees: readonly PhysicalGitWorktree[] } | { ok: false; reason: string } {
-  const out = gitOutput(repoRoot, ['worktree', 'list', '--porcelain']);
+  const out = runGit(['worktree', 'list', '--porcelain'], repoRoot);
   if (!out.ok) return { ok: false, reason: out.reason };
 
   const worktrees: PhysicalGitWorktree[] = [];
@@ -921,17 +904,17 @@ function listPhysicalGitWorktrees(repoRoot: string): { ok: true; worktrees: read
 }
 
 function isCleanWorktree(worktreePath: string): { ok: true; clean: boolean; output: string } | { ok: false; reason: string } {
-  const status = gitOutput(worktreePath, ['status', '--porcelain']);
+  const status = runGit(['status', '--porcelain'], worktreePath);
   if (!status.ok) return { ok: false, reason: status.reason };
   return { ok: true, clean: status.stdout.trim().length === 0, output: status.stdout };
 }
 
 function isMerged(repoRoot: string, branch: string, baseBranch: string): { ok: true; merged: boolean } | { ok: false; reason: string } {
-  const branchCheck = gitOutput(repoRoot, ['rev-parse', '--verify', branch]);
+  const branchCheck = runGit(['rev-parse', '--verify', branch], repoRoot);
   if (!branchCheck.ok) return { ok: false, reason: branchCheck.reason };
-  const baseCheck = gitOutput(repoRoot, ['rev-parse', '--verify', baseBranch]);
+  const baseCheck = runGit(['rev-parse', '--verify', baseBranch], repoRoot);
   if (!baseCheck.ok) return { ok: false, reason: baseCheck.reason };
-  const merged = gitOutput(repoRoot, ['merge-base', '--is-ancestor', branch, baseBranch]);
+  const merged = runGit(['merge-base', '--is-ancestor', branch, baseBranch], repoRoot);
   return { ok: true, merged: merged.ok };
 }
 

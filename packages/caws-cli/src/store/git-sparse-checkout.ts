@@ -31,7 +31,7 @@
 // sparse-checkout requires git 2.27+, which is documented in the
 // spec's non_functional.reliability clause.
 
-import { execFileSync } from 'child_process';
+import { runGit } from './repo-root';
 
 /**
  * Configure non-cone sparse-checkout on `wtPath` so that `.caws/specs/`
@@ -54,7 +54,7 @@ export function configureWorktreeSparseCheckout(
   wtPath: string,
 ): { ok: true } | { ok: false; reason: string; step: 'init' | 'set' | 'checkout' } {
   // 1) Initialize sparse-checkout in non-cone mode.
-  const initResult = runGit(wtPath, ['sparse-checkout', 'init', '--no-cone']);
+  const initResult = runGit(['sparse-checkout', 'init', '--no-cone'], wtPath);
   if (!initResult.ok) return { ok: false, reason: initResult.reason, step: 'init' };
 
   // 2) Set the pattern: include everything, exclude .caws/specs/.
@@ -63,41 +63,23 @@ export function configureWorktreeSparseCheckout(
   //    anchors the exclusion to the worktree root (not subdirectories
   //    named .caws/specs/ further down — there are none in this
   //    project, but the anchor is correct discipline).
-  const setResult = runGit(wtPath, [
+  const setResult = runGit([
     'sparse-checkout',
     'set',
     '--no-cone',
     '/*',
     '!/.caws/specs/',
-  ]);
+  ], wtPath);
   if (!setResult.ok) return { ok: false, reason: setResult.reason, step: 'set' };
 
   // 3) Materialize the included files. `git worktree add --no-checkout`
   //    leaves the worktree empty; this populates everything sparse-
   //    checkout admits.
-  const checkoutResult = runGit(wtPath, ['checkout']);
+  const checkoutResult = runGit(['checkout'], wtPath);
   if (!checkoutResult.ok)
     return { ok: false, reason: checkoutResult.reason, step: 'checkout' };
 
   return { ok: true };
 }
 
-function runGit(cwd: string, args: readonly string[]): { ok: true; stdout: string } | { ok: false; reason: string } {
-  try {
-    const stdout = execFileSync('git', [...args], {
-      cwd,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    return { ok: true, stdout: stdout.toString() };
-  } catch (e) {
-    const cause = e as { message?: string; stderr?: Buffer | string };
-    const stderr: string =
-      cause.stderr instanceof Buffer
-        ? cause.stderr.toString()
-        : typeof cause.stderr === 'string'
-          ? cause.stderr
-          : (cause.message ?? 'unknown git error');
-    return { ok: false, reason: stderr.trim() };
-  }
-}
+// (CAWS-REFACTOR-SHARED-UTILS-001) runGit consolidated into store/repo-root.ts.
