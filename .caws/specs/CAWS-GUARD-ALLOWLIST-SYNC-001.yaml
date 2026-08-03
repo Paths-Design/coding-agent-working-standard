@@ -2,10 +2,11 @@ id: CAWS-GUARD-ALLOWLIST-SYNC-001
 title: 'Sync write-guard allowlists (docs/** Edit/Bash asymmetry) + require closure notes on spec close'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-allowlist-sync
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-allowlist-sync at 5c6feff86727eb5b774e2e15b9685ad59721d699'
 created_at: '2026-08-03T16:57:15.799Z'
-updated_at: '2026-08-03T16:57:31.085Z'
+updated_at: '2026-08-03T17:45:43.357Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/shared/lib/write-allowlist.sh
