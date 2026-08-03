@@ -242,7 +242,7 @@ describe('closeSpec — inject on spec_closed [classify: transaction-contained]'
     const preCount = readEventsRaw(caws).length;
 
     const result = withFault('spec_closed', () =>
-      closeSpec(caws, { id, resolution: 'completed', actor: ACTOR })
+      closeSpec(caws, { id, resolution: 'completed', reason: 'test closure under rollback fault', actor: ACTOR })
     );
 
     expect(result.ok).toBe(true);
@@ -414,7 +414,7 @@ describe('archiveSpec — inject on spec_archived [classify: external-unlink gat
     writeActiveSpec(caws, id, 'active');
     commitCaws(repo, 'add active fixture'); // archive requires blob_sha at HEAD
     // archiveSpec requires a closed spec; close it first (cleanly).
-    const closeRes = closeSpec(caws, { id, resolution: 'completed', actor: ACTOR });
+    const closeRes = closeSpec(caws, { id, resolution: 'completed', reason: 'closing before archive test', actor: ACTOR });
     expect(closeRes.ok).toBe(true);
     expect(closeRes.value.kind).toBe('success');
     const preCount = readEventsRaw(caws).length;
