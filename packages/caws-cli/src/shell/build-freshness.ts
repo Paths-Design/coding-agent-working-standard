@@ -135,17 +135,50 @@ function computeStaleness(srcDir: string, distDir: string): StalenessResult | nu
 }
 
 /**
+ * Resolve the package dist root from a path inside dist/. The dist tree
+ * mirrors the src tree (e.g. dist/shell/commands/doctor.js), so a caller's
+ * `__dirname` may be nested several levels under dist/. Walk UP from
+ * `startDir` until a directory is found whose parent contains a sibling
+ * `src/` (i.e. `<parent>/src` exists and `<parent>/dist` is `startDir` or
+ * one of its ancestors). Returns the dist root, or null when no such layout
+ * exists (published install ships only dist/, no src/).
+ */
+function resolveDistRoot(startDir: string): string | null {
+  let dir = startDir;
+  // Guard against infinite loops / filesystem root.
+  for (let depth = 0; depth < 16; depth++) {
+    const parent = path.dirname(dir);
+    if (parent === dir) return null; // reached filesystem root
+    if (fs.existsSync(path.join(parent, 'src')) && fs.existsSync(path.join(parent, 'dist'))) {
+      const distRoot = path.join(parent, 'dist');
+      // Confirm `dir` is at-or-under parent/dist (it is, since we walked up
+      // from inside dist). This guards against a coincidental src/ sibling
+      // elsewhere in the tree.
+      if (dir === distRoot || dir.startsWith(distRoot + path.sep)) {
+        return distRoot;
+      }
+    }
+    dir = parent;
+  }
+  return null;
+}
+
+/**
  * Build the build-staleness doctor finding. Returns null when the running
  * binary has no sibling src/ (published install) OR when dist is fresh.
  *
- * @param binaryDistDir The dist/ directory the running caws binary lives
- *   in. In a dev checkout this is packages/caws-cli/dist; the sibling
- *   src/ is packages/caws-cli/src. In a published install there is no
- *   sibling src/ and the check no-ops.
+ * @param startDir A path inside the running caws binary's dist/ tree —
+ *   typically the `__dirname` of the doctor command, which is nested at
+ *   dist/shell/commands/. The function walks UP to locate the package dist
+ *   root (the directory whose parent has a sibling src/). In a dev checkout
+ *   this resolves to packages/caws-cli/dist; in a published install there
+ *   is no sibling src/ and the check no-ops.
  */
-export function detectBuildStaleness(binaryDistDir: string): DoctorFinding | null {
-  // The src/ directory is the sibling of dist/ — they share the package
-  // root (packages/caws-cli/{src,dist}).
+export function detectBuildStaleness(startDir: string): DoctorFinding | null {
+  const binaryDistDir = resolveDistRoot(startDir);
+  if (binaryDistDir === null) return null; // published install (no src/ sibling)
+
+  // The src/ directory is the sibling of dist/ at the package root.
   const packageRoot = path.dirname(binaryDistDir);
   const srcDir = path.join(packageRoot, 'src');
 
