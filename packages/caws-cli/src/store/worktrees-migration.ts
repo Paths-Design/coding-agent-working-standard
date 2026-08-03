@@ -34,6 +34,7 @@
 //     authority closes).
 
 import { err, isOk, ok, type Diagnostic, type Result } from '@paths.design/caws-kernel';
+import { storeDiagnostic } from './repo-root';
 
 // ---- Stable rule ids ------------------------------------------------------
 //
@@ -73,6 +74,9 @@ export type RegistryShape =
   | { readonly kind: 'mixed'; readonly reason: string }
   | { readonly kind: 'empty'; readonly reason: 'empty_object' };
 
+// (CAWS-REFACTOR-SHARED-UTILS-001) migrationDiagnostic delegates to storeDiagnostic
+// (severity defaults to 'error' in both). Kept as a thin local alias so the
+// migration-rule-typed call sites keep their narrow `MigrationRule` branding.
 function migrationDiagnostic(
   rule: MigrationRule,
   message: string,
@@ -83,15 +87,14 @@ function migrationDiagnostic(
     readonly narrowRepair?: string;
   } = {}
 ): Diagnostic {
-  return {
-    rule,
-    authority: 'kernel/diagnostics',
-    severity: opts.severity ?? 'error',
-    message,
+  // Conditional-spread builds a clean object with only defined keys, satisfying
+  // exactOptionalPropertyTypes when delegating to storeDiagnostic.
+  return storeDiagnostic(rule, message, {
+    ...(opts.severity !== undefined ? { severity: opts.severity } : {}),
     ...(opts.subject !== undefined ? { subject: opts.subject } : {}),
     ...(opts.data !== undefined ? { data: opts.data } : {}),
     ...(opts.narrowRepair !== undefined ? { narrowRepair: opts.narrowRepair } : {}),
-  };
+  });
 }
 
 /**

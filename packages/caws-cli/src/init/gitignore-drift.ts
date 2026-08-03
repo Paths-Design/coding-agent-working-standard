@@ -22,6 +22,8 @@ import * as path from 'path';
 
 import type { DoctorFinding } from '@paths.design/caws-kernel';
 
+import { storeDiagnostic } from '../store/repo-root';
+
 import {
   EPHEMERAL_CAWS_ENTRIES,
   computeGitignore,
@@ -86,23 +88,23 @@ export function detectGitignoreDrift(
   const isDrifted = outcome !== 'unchanged';
   if (!isDrifted) return null;
 
-  return {
-    rule: GITIGNORE_DRIFT_RULE,
-    authority: 'kernel/diagnostics',
-    severity: 'warning',
-    message:
-      'Ephemeral .caws/ runtime state is not git-ignored. Without ignore rules, ' +
+  return storeDiagnostic(
+    GITIGNORE_DRIFT_RULE,
+    'Ephemeral .caws/ runtime state is not git-ignored. Without ignore rules, ' +
       'per-CLI/per-session state (worktrees.json, agents.json, leases/, ' +
       'events.jsonl, caches) can be accidentally committed.',
-    subject: '.gitignore',
-    narrowRepair:
-      'Run `caws init` (idempotent) to write/update the managed CAWS ' +
-      `.gitignore block. It ignores: ${EPHEMERAL_CAWS_ENTRIES.join(', ')}. ` +
-      'Authority state (.caws/specs/, .caws/policy.yaml, .caws/waivers/) stays ' +
-      'tracked.',
-    data: {
-      gitignore_outcome_if_init_ran: outcome,
-      ephemeral_entries: EPHEMERAL_CAWS_ENTRIES,
-    },
-  };
+    {
+      severity: 'warning',
+      subject: '.gitignore',
+      narrowRepair:
+        'Run `caws init` (idempotent) to write/update the managed CAWS ' +
+        `.gitignore block. It ignores: ${EPHEMERAL_CAWS_ENTRIES.join(', ')}. ` +
+        'Authority state (.caws/specs/, .caws/policy.yaml, .caws/waivers/) stays ' +
+        'tracked.',
+      data: {
+        gitignore_outcome_if_init_ran: outcome,
+        ephemeral_entries: EPHEMERAL_CAWS_ENTRIES,
+      },
+    }
+  ) as DoctorFinding;
 }
