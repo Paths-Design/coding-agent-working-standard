@@ -25,6 +25,7 @@ import {
   SPEC_ID_REGEX,
   type Diagnostic,
   type Result,
+  type Severity,
 } from '@paths.design/caws-kernel';
 import { STORE_RULES } from './rules';
 
@@ -277,11 +278,22 @@ export function resolveRepoRoot(
 // Helpers exposed for tests
 // ----------------------------------------------------------------------------
 
-/** Construct a structured Diagnostic with the canonical store authority. */
+/**
+ * Construct a structured Diagnostic with the canonical store authority.
+ * (CAWS-REFACTOR-SHARED-UTILS-001) `extra.severity` widens the helper so the
+ * ~26 inline `diagnostic({ rule, authority: 'kernel/diagnostics', severity,
+ * ... })` literals across events/specs/waivers stores can migrate to it. When
+ * omitted, severity is left to the kernel `diagnostic()` default (error).
+ */
 export function storeDiagnostic(
   rule: string,
   message: string,
-  extra: { subject?: string; narrowRepair?: string; data?: Record<string, unknown> } = {}
+  extra: {
+    subject?: string;
+    narrowRepair?: string;
+    severity?: Severity;
+    data?: Record<string, unknown>;
+  } = {}
 ): Diagnostic {
   return diagnostic({
     rule,
@@ -289,6 +301,7 @@ export function storeDiagnostic(
     message,
     ...(extra.subject !== undefined ? { subject: extra.subject } : {}),
     ...(extra.narrowRepair !== undefined ? { narrowRepair: extra.narrowRepair } : {}),
+    ...(extra.severity !== undefined ? { severity: extra.severity } : {}),
     ...(extra.data !== undefined ? { data: extra.data } : {}),
   });
 }

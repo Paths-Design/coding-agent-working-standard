@@ -36,7 +36,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import {
-  diagnostic,
   err,
   ok,
   type AgentLease,
@@ -290,14 +289,11 @@ export function applyLeasePatch(
       // Stopping a session we never registered is a lifecycle mismatch,
       // not a write opportunity. Surface as a warning diagnostic; do
       // NOT fabricate a historical record.
-      const warn = diagnostic({
-        rule: STORE_RULES.LEASE_STOP_NO_PRIOR_LEASE,
-        authority: 'kernel/diagnostics',
-        severity: 'warning',
-        message: `mark_stopped: no existing lease for session "${patch.session_id}" — nothing to update.`,
-        subject: filePath,
-        data: { session_id: patch.session_id },
-      });
+      const warn = storeDiagnostic(
+        STORE_RULES.LEASE_STOP_NO_PRIOR_LEASE,
+        `mark_stopped: no existing lease for session "${patch.session_id}" — nothing to update.`,
+        { severity: 'warning', subject: filePath, data: { session_id: patch.session_id } }
+      );
       return ok({ wrote: false, diagnostics: [warn] });
     }
 
@@ -356,14 +352,11 @@ export function applyLeasePatch(
     // class (the same diagnostic shape mark_stopped uses for the
     // missing-lease case). No partial write.
     if (!fs.existsSync(filePath)) {
-      const warn = diagnostic({
-        rule: STORE_RULES.LEASE_STOP_NO_PRIOR_LEASE,
-        authority: 'kernel/diagnostics',
-        severity: 'warning',
-        message: `update_lease_paths: no existing lease file for session "${patch.session_id}" — nothing to update.`,
-        subject: filePath,
-        data: { session_id: patch.session_id },
-      });
+      const warn = storeDiagnostic(
+        STORE_RULES.LEASE_STOP_NO_PRIOR_LEASE,
+        `update_lease_paths: no existing lease file for session "${patch.session_id}" — nothing to update.`,
+        { severity: 'warning', subject: filePath, data: { session_id: patch.session_id } }
+      );
       return ok({ wrote: false, diagnostics: [warn] });
     }
 

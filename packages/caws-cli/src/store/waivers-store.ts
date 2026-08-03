@@ -17,7 +17,6 @@ import * as path from 'path';
 
 import {
   isOk,
-  diagnostic,
   validateWaiver,
   err,
   ok,
@@ -86,13 +85,11 @@ export function loadWaivers(cawsDir: string): WaiversLoadResult {
     if (!isYamlPath(entry.name)) {
       // CAWS-DOCTOR-SEVERITY-RECALIBRATION-001: by-design skip is INFO.
       diagnostics.push(
-        diagnostic({
-          rule: STORE_RULES.WAIVERS_NON_YAML_SKIPPED,
-          authority: 'kernel/diagnostics',
-          severity: 'info',
-          message: `Skipping non-YAML file in .caws/waivers/: ${entry.name}.`,
-          subject: fullPath,
-        })
+        storeDiagnostic(
+          STORE_RULES.WAIVERS_NON_YAML_SKIPPED,
+          `Skipping non-YAML file in .caws/waivers/: ${entry.name}.`,
+          { severity: 'info', subject: fullPath }
+        )
       );
       continue;
     }

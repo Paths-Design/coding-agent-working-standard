@@ -20,8 +20,8 @@
 // docs/architecture/caws-vnext-command-surface.md invariant 14 and the
 // rotateEvents tolerant-scan helper in events-store.ts.
 
-import { diagnostic } from '@paths.design/caws-kernel';
 import { err, ok, type Diagnostic, type Result } from '@paths.design/caws-kernel';
+import { storeDiagnostic } from './repo-root';
 
 // ---------------------------------------------------------------------------
 // Migration-local rule constants
@@ -143,12 +143,10 @@ export function detectEventsLogShape(
 
   if (nonEmpty.length === 0) {
     return err(
-      diagnostic({
-        rule: MIGRATION_RULES.EMPTY_INPUT,
-        authority: 'kernel/diagnostics',
-        message:
-          'events.jsonl is empty; nothing to migrate. rotateEvents refuses on the same condition (EVENTS_ROTATE_NOTHING_TO_ROTATE).',
-      })
+      storeDiagnostic(
+        MIGRATION_RULES.EMPTY_INPUT,
+        'events.jsonl is empty; nothing to migrate. rotateEvents refuses on the same condition (EVENTS_ROTATE_NOTHING_TO_ROTATE).'
+      )
     );
   }
 
@@ -401,11 +399,10 @@ export function planEventsRotation(
     return {
       kind: 'refuse',
       cause: 'unparseable_only',
-      diagnostic: diagnostic({
-        rule: MIGRATION_RULES.UNPARSEABLE_INPUT,
-        authority: 'kernel/diagnostics',
-        message: `events.jsonl has no JSON-parseable lines (${detection.stats.unparseable} unparseable, ${detection.lineCount} total). Inspect the file before rotation; manual recovery may be required.`,
-      }),
+      diagnostic: storeDiagnostic(
+        MIGRATION_RULES.UNPARSEABLE_INPUT,
+        `events.jsonl has no JSON-parseable lines (${detection.stats.unparseable} unparseable, ${detection.lineCount} total). Inspect the file before rotation; manual recovery may be required.`
+      ),
       detection,
     };
   }
@@ -429,13 +426,14 @@ export function planEventsRotation(
     return {
       kind: 'refuse',
       cause: 'partial_corruption',
-      diagnostic: diagnostic({
-        rule: MIGRATION_RULES.PARTIAL_CORRUPTION_REFUSED,
-        authority: 'kernel/diagnostics',
-        message: `events.jsonl has ${detection.stats.unparseable} unparseable line(s) alongside ${parseable} parseable line(s) (${detection.lineCount} total). Mixed parseable + unparseable cannot be honestly labeled by the chain_rotated payload. Inspect the file and recover manually, or remove the corrupt lines before retrying.`,
-        narrowRepair:
-          'Open events.jsonl, identify the unparseable line(s) (often a truncated/crash-recovery tail), and either restore them or remove them. Re-run after the file has only parseable JSON lines.',
-      }),
+      diagnostic: storeDiagnostic(
+        MIGRATION_RULES.PARTIAL_CORRUPTION_REFUSED,
+        `events.jsonl has ${detection.stats.unparseable} unparseable line(s) alongside ${parseable} parseable line(s) (${detection.lineCount} total). Mixed parseable + unparseable cannot be honestly labeled by the chain_rotated payload. Inspect the file and recover manually, or remove the corrupt lines before retrying.`,
+        {
+          narrowRepair:
+            'Open events.jsonl, identify the unparseable line(s) (often a truncated/crash-recovery tail), and either restore them or remove them. Re-run after the file has only parseable JSON lines.',
+        }
+      ),
       detection,
     };
   }
@@ -451,13 +449,14 @@ export function planEventsRotation(
     return {
       kind: 'refuse',
       cause: 'v10_specs_require_allow_partial_upgrade',
-      diagnostic: diagnostic({
-        rule: MIGRATION_RULES.V10_SPEC_DETECTED,
-        authority: 'kernel/diagnostics',
-        message: `events migrate --apply refuses: ${opts.v10Specs.v10Paths.length} v10-shape spec(s) detected (${opts.v10Specs.v10Paths.join(', ')}). Run 'caws specs migrate --from v10 --dry-run' first or pass --allow-partial-upgrade.`,
-        narrowRepair:
-          "Run 'caws specs migrate --from v10' to migrate specs first, then re-run 'caws events migrate --apply'. If you intentionally want the events log to migrate ahead of specs, pass --allow-partial-upgrade.",
-      }),
+      diagnostic: storeDiagnostic(
+        MIGRATION_RULES.V10_SPEC_DETECTED,
+        `events migrate --apply refuses: ${opts.v10Specs.v10Paths.length} v10-shape spec(s) detected (${opts.v10Specs.v10Paths.join(', ')}). Run 'caws specs migrate --from v10 --dry-run' first or pass --allow-partial-upgrade.`,
+        {
+          narrowRepair:
+            "Run 'caws specs migrate --from v10' to migrate specs first, then re-run 'caws events migrate --apply'. If you intentionally want the events log to migrate ahead of specs, pass --allow-partial-upgrade.",
+        }
+      ),
       detection,
       v10Specs: opts.v10Specs,
     };
@@ -474,13 +473,14 @@ export function planEventsRotation(
     return {
       kind: 'refuse',
       cause: 'clean_chain_requires_allow_clean',
-      diagnostic: diagnostic({
-        rule: 'store.events.rotate.clean_chain_requires_allow_clean',
-        authority: 'kernel/diagnostics',
-        message: `rotateEvents would refuse: prior chain is a clean v11 chain (${detection.stats.v11_object_actor} structured actors); pass allowClean: true (CLI: --allow-clean) to rotate it anyway.`,
-        narrowRepair:
-          'If you intend to rotate a healthy v11 chain (e.g., for operational reasons unrelated to migration), pass --allow-clean. Otherwise, no rotation is needed.',
-      }),
+      diagnostic: storeDiagnostic(
+        'store.events.rotate.clean_chain_requires_allow_clean',
+        `rotateEvents would refuse: prior chain is a clean v11 chain (${detection.stats.v11_object_actor} structured actors); pass allowClean: true (CLI: --allow-clean) to rotate it anyway.`,
+        {
+          narrowRepair:
+            'If you intend to rotate a healthy v11 chain (e.g., for operational reasons unrelated to migration), pass --allow-clean. Otherwise, no rotation is needed.',
+        }
+      ),
       detection,
     };
   }
