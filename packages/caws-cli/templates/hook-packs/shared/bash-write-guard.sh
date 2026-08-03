@@ -272,15 +272,19 @@ escalate() {
 while IFS= read -r cand; do
   [[ -z "$cand" ]] && continue
   abs="$(abspath "$cand")"
-  # CAWS-GUARD-ALLOWLIST-SYNC-001: an allowlisted path (docs/*, .caws/* minus
-  # payload, .tmp/*, .github/*, vendor dir, instruction files, agent-home dir)
-  # is unconditionally allowed WITHOUT spawning the oracle — matching the
-  # Write/Edit guard verdict for the same path. Payload paths
-  # (.caws/worktrees/*) are excluded by the helper and still hit the oracle
-  # below, so foreign-payload isolation is byte-identical to before.
+  # CAWS-GUARD-ALLOWLIST-SYNC-001 + CAWS-GUARD-SCOPE-PRIORITY-001: record
+  # whether this target is on the unconditional allowlist (docs/*, .caws/*
+  # minus payload, .tmp/*, .github/*, vendor dir, instruction files,
+  # agent-home dir). The oracle STILL runs — a scope.in CLAIM overrides the
+  # allowlist, so a claimed docs/** path must block (block_claimed) just like
+  # a claimed src/** path. But for an allowlisted path, only a CLAIM/ownership
+  # block escalates; pass/degraded/ask/error do NOT (an unclaimed allowlisted
+  # path is permitted, and a toolchain fault must not block it). Payload paths
+  # (.caws/worktrees/*) are excluded by the helper and always escalate normally.
+  _CAND_ALLOWLISTED=0
   if declare -F caws_is_write_allowlisted >/dev/null 2>&1; then
     if caws_is_write_allowlisted "$abs" "$PROJECT_DIR"; then
-      continue
+      _CAND_ALLOWLISTED=1
     fi
   fi
   out="$(CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
@@ -307,7 +311,18 @@ while IFS= read -r cand; do
     # is absent). Record it for a single post-loop advisory; the mutation flows.
     degraded_no_yaml) _DEGRADED_NO_YAML=1 ;;
     block_foreign_worktree|block_claimed) escalate block "$detail" "$outcome" ;;
-    ask_uncertain|error_fail_closed)      escalate ask "$detail" "$outcome" ;;
+    ask_uncertain|error_fail_closed)
+      # CAWS-GUARD-SCOPE-PRIORITY-001: an allowlisted path defers to the
+      # allowlist on non-claim verdicts — a toolchain fault or uncertain
+      # ownership must not block a docs/** or .caws/** coordination edit.
+      # Only a positive claim (block_claimed/block_foreign_worktree, handled
+      # above) overrides the allowlist. Non-allowlisted paths escalate normally.
+      if [[ "$_CAND_ALLOWLISTED" == "1" ]]; then
+        :
+      else
+        escalate ask "$detail" "$outcome"
+      fi
+      ;;
   esac
 done < <(extract_targets "$COMMAND")
 

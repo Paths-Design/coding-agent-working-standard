@@ -257,12 +257,24 @@ if [[ -n "$FILE_PATH" ]]; then
   # Shared unconditional allowlist (lib/write-allowlist.sh). Returns 0 if the
   # path is unconditionally allowed (docs/*, .caws/* minus payload, .tmp/*,
   # .github/*, vendor dir, instruction files, agent-home dir). Payload already
-  # returned above; everything else here is allow-before-adjudication.
+  # returned above.
+  #
+  # CAWS-GUARD-SCOPE-PRIORITY-001: the allowlist NO LONGER exits unconditionally.
+  # A scope.in claim overrides the allowlist — a path claimed by an active
+  # worktree is owned, not unconditionally allowed. So we record the allowlist
+  # verdict as a flag and let the path fall through to the scope-contention
+  # check in the base-branch section. There, a CLAIMED allowlisted path blocks
+  # (scope.in wins); a CLEAR or UNDETERMINED allowlisted path exits 0 (the
+  # allowlist permits when unclaimed, and a toolchain fault must not block).
+  # The early exits below (no worktrees.json, no node, inside worktree,
+  # registered worktree, WT_COUNT 0) all exit 0, so an allowlisted path is
+  # still allowed in those contexts — scope.in only overrides on the base
+  # branch where cross-worktree contention is the concern.
   # shellcheck source=lib/write-allowlist.sh
   [[ -f "$SCRIPT_DIR/lib/write-allowlist.sh" ]] && source "$SCRIPT_DIR/lib/write-allowlist.sh"
   if declare -F caws_is_write_allowlisted >/dev/null 2>&1; then
     if caws_is_write_allowlisted "$FILE_PATH_FOR_ALLOWLIST" "$PROJECT_DIR"; then
-      exit 0
+      _PATH_ALLOWLISTED=1
     fi
   fi
 fi
@@ -400,6 +412,27 @@ if [[ -n "$FILE_PATH" ]] && [[ "$WT_COUNT" -gt 0 ]] 2>/dev/null; then
       esac
     fi
   fi
+fi
+
+# CAWS-GUARD-SCOPE-PRIORITY-001: an allowlisted path is permitted ONLY when no
+# worktree's scope.in claims it. If the scope-contention check above reported
+# the path as CLAIMED, the allowlist defers — scope.in is authoritative, so a
+# claimed docs/** or .caws/** path blocks here exactly like a claimed src/**
+# path would. If contention is CLEAR (no claim) or UNKNOWN (toolchain fault),
+# the allowlist admits (coordination edits still work; a fault must not block).
+# Non-allowlisted paths fall through to the risk-prompt logic below.
+if [[ "${_PATH_ALLOWLISTED:-0}" == "1" ]]; then
+  case "${SPEC_CONTENTION_CHECK:-unknown:scope-check-skipped}" in
+    claimed:*)
+      # scope.in wins — fall through to the claimed:* block below which blocks
+      # with the worktree/pattern detail. Do NOT exit 0 here.
+      ;;
+    *)
+      # clear, unknown:* (toolchain fault), or scope-check-skipped (WT_COUNT==0
+      # path that bypassed the scope section). Allow via the allowlist.
+      exit 0
+      ;;
+  esac
 fi
 
 if [[ -z "${REL_PATH:-}" ]]; then
