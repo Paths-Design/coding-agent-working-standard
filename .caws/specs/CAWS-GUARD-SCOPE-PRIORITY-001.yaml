@@ -7,21 +7,48 @@ created_at: '2026-08-03T19:10:28.118Z'
 updated_at: '2026-08-03T19:10:28.118Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/shared/lib/write-allowlist.sh
+    - packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/templates/hook-packs/shared/lib/write-allowlist.sh
+    - packages/caws-cli/templates/hook-packs/shared/worktree-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh
+    - packages/caws-cli/tests/hooks/guard-allowlist-sync.test.js
+    - packages/caws-cli/tests/hooks/scope-priority-over-allowlist.test.js
+    - .caws/specs/CAWS-GUARD-SCOPE-PRIORITY-001.yaml
+  out:
+    - packages/caws-cli/templates/hook-packs/shared/lib/worktree-claim-oracle.cjs
+    - .caws/policy.yaml
+    - .caws/events.jsonl
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'SCOPE PRIORITY: a worktree scope.in claim on a path is AUTHORITATIVE — it overrides the unconditional write allowlist. If caws scope contention reports the path as claimed by an active worktree, the write is blocked (foreign session) regardless of whether the path is docs/*, .caws/*, or any other allowlisted prefix. The allowlist permits only when no worktree claims the path (contention status clear or undetermined). This makes scope.in honest for doc-heavy and config-heavy specs, which was impossible when the allowlist fired before the scope check.'
+  - 'COORDINATION EDITS STILL WORK: when NO worktree claims the path (contention clear), the allowlist still permits canonical-checkout coordination edits (docs/, .caws/specs/*, policy.yaml, instruction files) exactly as failure-lineage.md:888 requires. The allowlist is not removed; it is gated behind the scope-claim check so it admits only unclaimed paths.'
+  - 'NO NEW BLOCKAGE FOR UNBOUND CONTEXTS: when there is no active worktree at all (WT_COUNT == 0), or the caller is inside its own registered worktree, the allowlist still fires unconditionally — scope.in only overrides on the BASE BRANCH where cross-worktree contention is the concern. Sessions inside their own worktree are not blocked by their own scope.in.'
+  - 'TOOLCHAIN FAULT POSTURE PRESERVED: when scope contention is undetermined (caws unavailable, jq missing, or the JSON unparseable), the allowlist still admits the path — a toolchain fault must not turn every allowlisted write into a block. The scope override fires only on a positive claimed verdict, never on undetermined.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'A repo with an active worktree wt-a whose bound spec scope.in claims docs/foo.md, and the operating session is NOT rooted in wt-a (a foreign base-branch write).'
+    when: 'A Write/Edit or a Bash mutation (e.g. sed -i) targets docs/foo.md.'
+    then: 'BOTH guards block the write — the scope.in claim overrides the docs/* allowlist arm. The block message names the claiming worktree. The allowlist does NOT short-circuit because the path is claimed.'
+  - id: A2
+    given: 'A repo with NO active worktree claiming docs/foo.md (contention clear), or the caller is inside its own registered worktree.'
+    when: 'A Write/Edit or a Bash mutation targets docs/foo.md.'
+    then: 'BOTH guards allow the write via the allowlist (docs/* is unconditionally permitted when unclaimed). Canonical-checkout coordination edits to docs/ still work.'
+  - id: A3
+    given: 'A repo where caws scope contention returns undetermined for docs/foo.md (caws unavailable, jq missing, or JSON unparseable — a toolchain fault, not a claim).'
+    when: 'A Write/Edit or a Bash mutation targets docs/foo.md.'
+    then: 'BOTH guards allow the write via the allowlist. A toolchain fault does not turn every allowlisted write into a block; the scope override fires only on a positive claimed verdict.'
+  - id: A4
+    given: 'A repo with an active worktree wt-a whose scope.in claims src/foo.ts (a non-allowlisted source path).'
+    when: 'A Write/Edit or a Bash mutation targets src/foo.ts from a foreign session.'
+    then: 'BOTH guards block the write exactly as before (src/* is not allowlisted and is claimed). The scope-priority fix does not change behavior for non-allowlisted claimed paths — it only adds the override for ALLOWLISTED claimed paths.'
+non_functional:
+  reliability:
+    - 'The fix lands as a single commit and is verified (build + targeted jest + typecheck) before merge. The scope-contention check is already computed downstream in the base-branch section; this fix restructures the guard so the allowlist delegation consults the scope verdict rather than firing unconditionally. No new process spawns beyond what the base-branch section already does.'
 contracts:
   - name: 'scope-priority-over-allowlist'
     type: behavior
