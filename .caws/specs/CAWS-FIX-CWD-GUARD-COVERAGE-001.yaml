@@ -3,6 +3,7 @@ title: 'Thread callerCwd through cleanup-plan --apply and the merge internal tea
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: wt-cwd-guard
 created_at: '2026-08-03T21:53:18.807Z'
 updated_at: '2026-08-03T21:53:19.785Z'
 blast_radius:
