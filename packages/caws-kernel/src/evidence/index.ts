@@ -33,6 +33,7 @@ export { computeEventHash } from './hash';
 export type { HashableEvent } from './hash';
 
 export { validateChainedEvent, validateEventBody } from './validate';
+export { SPEC_ID_REGEX } from './validate';
 
 export { prepareAppend } from './prepare';
 

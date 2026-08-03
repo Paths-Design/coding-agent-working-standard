@@ -589,7 +589,7 @@ function validatePayload(eventType: string, data: unknown): Diagnostic[] {
   );
 }
 
-const SPEC_ID_REGEX = /^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+[a-z]*$/;
+export const SPEC_ID_REGEX = /^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+[a-z]*$/;
 
 function isIsoDateTime(s: string): boolean {
   // AJV's date-time format does this exactly; we mirror it for body
