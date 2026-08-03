@@ -30,6 +30,7 @@ import { DOCTOR_RULES, inspectProjectState } from '@paths.design/caws-kernel';
 
 import { detectGitignoreDrift } from '../../init/gitignore-drift';
 import { detectBuildStaleness } from '../build-freshness';
+import { AGENT_CWD_GONE_RULE, detectWedgedSessions } from '../cwd-recovery';
 import {
   composeDoctorSnapshot,
   resolveRepoRoot,
@@ -207,6 +208,16 @@ function doctorRepairPlanItem(finding: DoctorFinding): DoctorRepairPlanItem {
           'Leases are operational cache, not authority; use explicit handoff or takeover intent before cleanup.',
       });
 
+    case AGENT_CWD_GONE_RULE:
+      // CAWS-GUARD-CWD-RECOVERY-001: a wedged session's shell cwd must be
+      // reset by the operator — CAWS will not change a live session's cwd.
+      return genericPlanItem(finding, {
+        stateClass: 'agent-cwd-gone-refused',
+        nextCommand: finding.narrowRepair ?? 'cd <repo-root>',
+        refusalReason:
+          'CAWS will not change a live session\'s shell cwd. The operator must reset it (cd to repo_root, or restart the session rooted at the repo root).',
+      });
+
     case DOCTOR_RULES.WAIVER_EXPIRED_ACTIVE:
       return genericPlanItem(finding, {
         stateClass: 'expired-waiver',
@@ -294,17 +305,23 @@ export function runDoctorCommand(opts: DoctorCommandOptions = {}): number {
 
   // 3b. CLI-side findings the kernel does not own. These are shell concerns
   // (the kernel knows nothing about .gitignore, init's managed-block format,
-  // or the package's dist/src build layout), so they are computed here and
-  // merged into the findings list alongside the kernel report
-  // (CAWS-DOCTOR-GITIGNORE-DRIFT-001, CAWS-GUARD-BUILD-FRESHNESS-001).
+  // the package's dist/src build layout, or live sessions' shell cwds), so
+  // they are computed here and merged into the findings list alongside the
+  // kernel report (CAWS-DOCTOR-GITIGNORE-DRIFT-001,
+  // CAWS-GUARD-BUILD-FRESHNESS-001, CAWS-GUARD-CWD-RECOVERY-001).
   const gitignoreDrift = detectGitignoreDrift(repoRoot, cawsDir);
   // The build-staleness check reasons about the running binary's OWN dist/
   // (where __dirname lives at runtime), not about the project's working
   // tree — so it keys off the compiled file path, not repoRoot.
   const buildStale = detectBuildStaleness(__dirname);
+  // The wedged-session check reads .caws/leases/ and stats each running
+  // session's cwd to flag sessions whose sticky cwd was deleted out from
+  // under them (the ENOENT wedge with no self-recovery path).
+  const wedgedSessions = detectWedgedSessions(cawsDir);
   const shellFindings: DoctorFinding[] = [
     ...(gitignoreDrift ? [gitignoreDrift] : []),
     ...(buildStale ? [buildStale] : []),
+    ...wedgedSessions,
   ];
   const findings: DoctorFinding[] =
     shellFindings.length > 0 ? [...report.findings, ...shellFindings] : [...report.findings];
