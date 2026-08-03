@@ -8,25 +8,39 @@ created_at: '2026-08-03T21:43:30.712Z'
 updated_at: '2026-08-03T21:43:43.073Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/build-freshness.ts
+    - packages/caws-cli/src/shell/commands/doctor.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/shell/build-freshness.ts
     - packages/caws-cli/src/shell/commands/doctor.ts
     - packages/caws-cli/tests/shell/doctor-build-staleness.test.js
     - .caws/specs/CAWS-GUARD-BUILD-FRESHNESS-001.yaml
-  out: []
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A shell-side doctor finding surfaces when the compiled dist/ artifacts the running caws binary loads are older than their src/ TypeScript sources. dist/ is gitignored and rebuilt only by a manual npm run build; nothing today signals that the running binary lacks recently-edited behavior. The finding is read-only (it never writes files or mutates .caws/), modeled on detectGitignoreDrift (src/init/gitignore-drift.ts): a shell-owned DoctorFinding appended to the report alongside the kernel findings at doctor.ts where detectGitignoreDrift is already merged in.'
+  - 'The check keys on mtime: for each src/store/** and src/shell/** TypeScript source and each allowlisted src/*.js file copied verbatim by scripts/build-cli.js (JS_ALLOWLIST), the corresponding dist artifact (src/x.ts -> dist/x.js, +.d.ts) is stat-checked; if any compiled artifact is older than its source the finding fires. The check no-ops (returns null, no finding) when there is no sibling src/ directory next to dist/ — a published install ships only dist/ (package.json files allowlist), so staleness is meaningless there and must not raise a false positive. Severity is warning so the finding does not flip doctor exit code, matching gitignore-drift.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'A development checkout where dist/ is fresh: every compiled dist/*.js and dist/*.d.ts artifact has mtime >= its src/*.ts source (i.e. npm run build was run after the last source edit).'
+    when: 'caws doctor is invoked.'
+    then: 'No build-freshness finding appears in the report. The shell.build.dist_stale rule id is absent from the findings list.'
+  - id: A2
+    given: 'A development checkout where at least one compiled dist artifact is older than its src source (dist is stale — e.g. a source file was edited but npm run build was not re-run).'
+    when: 'caws doctor is invoked.'
+    then: 'A warning-severity finding with rule id shell.build.dist_stale appears, naming that the running caws is compiled from dist/ older than src/, and the narrowRepair instructs the operator to run `cd packages/caws-cli && npm run build` then re-run. The data block carries stale_files (count) and oldest_delta_ms (the largest source-newer-than-artifact gap). Doctor exit code is unchanged (warning severity does not flip it).'
+  - id: A3
+    given: 'A published/global install of @paths.design/caws-cli — the running binary resolves to a dist/ with no sibling src/ directory (only dist/ is shipped per package.json files).'
+    when: 'caws doctor is invoked.'
+    then: 'The check no-ops: no build-freshness finding appears. Staleness is meaningless without sources to compare against, and the check must not raise a false positive on published installs.'
+non_functional:
+  reliability:
+    - 'mtime is read via fs.statSync with the established stat.mtimeMs pattern (src/store/lifecycle-lock.ts). A missing dist artifact is treated as stale (the source has no compiled output — the strongest possible staleness signal), not as a crash; a missing src file is skipped. The check is pure observation: it stats the filesystem and reads no .caws/ governed state, so it cannot itself cause drift.'
+    - 'Performance: the walk is bounded by the src/store + src/shell file count plus the 7 allowlisted JS files (tens to low hundreds of stat calls). No glob over the whole tree; the check only compares files that have a defined src->dist mapping.'
 contracts:
   - name: 'build-freshness-doctor-finding'
     type: behavior
