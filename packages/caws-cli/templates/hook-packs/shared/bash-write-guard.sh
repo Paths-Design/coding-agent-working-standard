@@ -67,6 +67,15 @@ caws_source_lib emit.sh 2>/dev/null || true
 # — a missing helper degrades to the legacy HOOK_SESSION_ID-only path, never a
 # hard block.
 [[ -f "$SCRIPT_DIR/lib/session-id.sh" ]] && source "$SCRIPT_DIR/lib/session-id.sh"
+# shellcheck source=lib/write-allowlist.sh
+# CAWS-GUARD-ALLOWLIST-SYNC-001: the shared unconditional-allow path set. A
+# Bash mutation of an allowlisted path (docs/*, .caws/* minus payload, .tmp/*,
+# .github/*, vendor dir, instruction files, agent-home dir) must get the SAME
+# allow verdict as a Write/Edit of that path — this guard consults the SAME
+# helper worktree-write-guard uses, so the two guards cannot diverge by tool.
+# Best-effort source: a missing helper degrades to oracle-everything (the
+# pre-fix behavior), never a hard block.
+[[ -f "$SCRIPT_DIR/lib/write-allowlist.sh" ]] && source "$SCRIPT_DIR/lib/write-allowlist.sh"
 parse_hook_input
 
 # CAWS_ORACLE_SESSION_ID: the fully-resolved operating identity. Falls back to
@@ -263,6 +272,17 @@ escalate() {
 while IFS= read -r cand; do
   [[ -z "$cand" ]] && continue
   abs="$(abspath "$cand")"
+  # CAWS-GUARD-ALLOWLIST-SYNC-001: an allowlisted path (docs/*, .caws/* minus
+  # payload, .tmp/*, .github/*, vendor dir, instruction files, agent-home dir)
+  # is unconditionally allowed WITHOUT spawning the oracle — matching the
+  # Write/Edit guard verdict for the same path. Payload paths
+  # (.caws/worktrees/*) are excluded by the helper and still hit the oracle
+  # below, so foreign-payload isolation is byte-identical to before.
+  if declare -F caws_is_write_allowlisted >/dev/null 2>&1; then
+    if caws_is_write_allowlisted "$abs" "$PROJECT_DIR"; then
+      continue
+    fi
+  fi
   out="$(CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
     CAWS_ORACLE_CURRENT_BRANCH="" \
     CAWS_ORACLE_REL_PATH="$abs" \
