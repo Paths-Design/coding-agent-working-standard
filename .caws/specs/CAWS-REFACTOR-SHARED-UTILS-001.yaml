@@ -2,10 +2,11 @@ id: CAWS-REFACTOR-SHARED-UTILS-001
 title: 'Consolidate duplicated utilities: sleepSyncMs, repoRootFromCawsDir, id-regexes/validators, runGit, realpathSafe, storeDiagnostic severity'
 risk_tier: 2
 mode: refactor
-lifecycle_state: active
-worktree: wt-refactor2
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-refactor2 at 9abd92980676636e7ebc76e32bdece7e1ba237af'
 created_at: '2026-08-03T15:26:55.278Z'
-updated_at: '2026-08-03T18:20:30.635Z'
+updated_at: '2026-08-03T18:51:54.852Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/lifecycle-lock.ts
