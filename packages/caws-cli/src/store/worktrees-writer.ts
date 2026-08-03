@@ -26,7 +26,6 @@
 //   - Mutate worktrees.json without going through applyRegistryPatch.
 //   - Run rm -rf on any path.
 
-import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -61,7 +60,7 @@ import {
   describeCandidateTrace,
 } from '../shell/session/resolve-session';
 import type { SessionCandidates } from '../shell/session/types';
-import { repoRootFromCawsDir, storeDiagnostic, validateSpecId } from './repo-root';
+import { repoRootFromCawsDir, runGit, storeDiagnostic, validateSpecId } from './repo-root';
 import { STORE_RULES } from './rules';
 import {
   insertTopLevelScalarAfter,
@@ -370,27 +369,7 @@ function autoCommitTransition(
 }
 
 // ─── Git helpers ─────────────────────────────────────────────────────────
-
-function runGit(args: readonly string[], cwd: string): { ok: true; stdout: string } | { ok: false; reason: string } {
-  try {
-    const stdout = execFileSync('git', [...args], {
-      cwd,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    return { ok: true, stdout: stdout.toString() };
-  } catch (e) {
-    const cause = e as { message?: string; stderr?: Buffer | string };
-    const stderr: string =
-      cause.stderr instanceof Buffer
-        ? cause.stderr.toString()
-        : typeof cause.stderr === 'string'
-          ? cause.stderr
-          : '';
-    const message: string = typeof cause.message === 'string' ? cause.message : '';
-    return { ok: false, reason: stderr || message || 'unknown git error' };
-  }
-}
+// (CAWS-REFACTOR-SHARED-UTILS-001) runGit consolidated into store/repo-root.ts.
 
 function getCurrentBranch(repoRoot: string): string | null {
   const r = runGit(['rev-parse', '--abbrev-ref', 'HEAD'], repoRoot);

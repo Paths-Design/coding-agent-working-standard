@@ -60,6 +60,44 @@ export const defaultGitRunner: GitRunner = (args, options) => {
   return execFileSync('git', args, execOptions).trim();
 };
 
+/**
+ * Run a git subprocess, returning a Result-shaped outcome (never throws).
+ * The byte-identical twin formerly private to git-autocommit.ts and
+ * worktrees-writer.ts. Spawns via execFileSync with stdio
+ * `['ignore','pipe','pipe']` and utf8 encoding; on non-zero exit, captures
+ * stderr into `reason` (falling back to the error message, then a literal).
+ * (CAWS-REFACTOR-SHARED-UTILS-001.)
+ *
+ * NOTE: this is the result-shape helper. Divergent variants stay in place —
+ * the THROWING runGit in shell/gates/local-evaluators/diff-helpers.ts, the
+ * SWAPPED-arg runGit/gitOutput in git-sparse-checkout.ts and
+ * shell/commands/worktree.ts, and the positional-cwd defaultGitRunner in
+ * shell/commands/prepush.ts. Only the two identical twins consolidated.
+ */
+export function runGit(
+  args: readonly string[],
+  cwd: string
+): { ok: true; stdout: string } | { ok: false; reason: string } {
+  try {
+    const stdout = execFileSync('git', [...args], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return { ok: true, stdout: stdout.toString() };
+  } catch (e) {
+    const cause = e as { message?: string; stderr?: Buffer | string };
+    const stderr: string =
+      cause.stderr instanceof Buffer
+        ? cause.stderr.toString()
+        : typeof cause.stderr === 'string'
+          ? cause.stderr
+          : '';
+    const message: string = typeof cause.message === 'string' ? cause.message : '';
+    return { ok: false, reason: stderr || message || 'unknown git error' };
+  }
+}
+
 // ----------------------------------------------------------------------------
 // Shared store-layer helpers (CAWS-REFACTOR-SHARED-UTILS-001)
 //

@@ -18,6 +18,7 @@ export {
   defaultGitRunner,
   resolveRepoRoot,
   repoRootFromCawsDir,
+  runGit,
   sleepSyncMs,
   storeDiagnostic,
   validateSpecId,
