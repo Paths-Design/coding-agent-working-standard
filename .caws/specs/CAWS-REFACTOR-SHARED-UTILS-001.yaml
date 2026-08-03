@@ -7,21 +7,72 @@ created_at: '2026-08-03T15:26:55.278Z'
 updated_at: '2026-08-03T15:26:55.278Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/lifecycle-lock.ts
+    - packages/caws-cli/src/store/events-store.ts
+    - packages/caws-cli/src/store/messages-store.ts
+    - packages/caws-cli/src/store/git-autocommit.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/store/specs-migration.ts
+    - packages/caws-cli/src/store/repo-root.ts
+    - packages/caws-cli/src/store/index.ts
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/src/shell/commands/status.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/shell/commands/agents.ts
+    - packages/caws-cli/src/shell/commands/claim.ts
+    - packages/caws-cli/src/shell/binding/resolve-binding.ts
+    - packages/caws-kernel/src/worktree/identity.ts
+    - packages/caws-kernel/src/worktree/index.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/store/lifecycle-lock.ts
+    - packages/caws-cli/src/store/events-store.ts
+    - packages/caws-cli/src/store/messages-store.ts
+    - packages/caws-cli/src/store/git-autocommit.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/store/specs-migration.ts
+    - packages/caws-cli/src/store/repo-root.ts
+    - packages/caws-cli/src/store/index.ts
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/src/shell/commands/status.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/shell/commands/agents.ts
+    - packages/caws-cli/src/shell/commands/claim.ts
+    - packages/caws-cli/src/shell/binding/resolve-binding.ts
+    - packages/caws-kernel/src/worktree/identity.ts
+    - packages/caws-kernel/src/worktree/index.ts
+    - packages/caws-cli/tests/store/shared-utils-consolidation.test.js
+    - .caws/specs/CAWS-REFACTOR-SHARED-UTILS-001.yaml
+  out:
+    - .caws/policy.yaml
+    - .caws/events.jsonl
+    - packages/caws-cli/src/shell/gates/local-evaluators/diff-helpers.ts
+    - packages/caws-cli/src/shell/commands/prepush.ts
+    - packages/caws-cli/src/store/git-sparse-checkout.ts
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Pure-mechanical consolidation: behavior is byte-identical before and after. The four sleepSyncMs copies collapse to one shared export; the five repoRootFromCawsDir sites collapse to one; the spec/worktree id regexes are shared from the kernel; the two byte-identical runGit result-shape helpers collapse to one in repo-root.ts; the five simple realpathSafe copies collapse to one (the ancestor-walk realpathOrLiteral stays a separate documented helper); storeDiagnostic gains an optional severity field and ~26 inline literals migrate to it. No call site changes semantics.'
+  - 'Divergent variants are NOT merged: the throwing runGit (diff-helpers.ts), the swapped-arg runGit/gitOutput (git-sparse-checkout.ts, worktree.ts gitOutput), the positional-cwd defaultGitRunner (prepush.ts), and the ancestor-walk realpathOrLiteral (worktrees-writer.ts) are all left in place — only the byte-identical twins consolidate. scope.out names the files deliberately not touched.'
+  - 'Validation diagnostics stay STORE_RULES-flavored on the CLI side: the kernel exports the regexes (SPEC_ID_REGEX, WORKTREE_NAME_REGEX), but the CLI keeps its own validateSpecId/validateWorktreeName wrappers that emit LIFECYCLE_PLAN_REJECTED via storeDiagnostic. The two CLI validateSpecId copies collapse into one shared shell helper.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'The consolidated utilities after the refactor.'
+    when: 'A repo-wide grep for private sleepSyncMs/sleepSync definitions, for repoRootFromCawsDir definitions, for SPEC_ID_REGEX/WORKTREE_NAME_REGEX literals outside the kernel, for runGit result-shape definitions outside repo-root.ts, and for realpathSafe/safeRealpath definitions outside repo-root.ts.'
+    then: 'Each returns exactly one definition (the shared export) or zero private copies; every former call site imports the shared helper. The divergent variants (throwing runGit, swapped-arg runGit/gitOutput, positional defaultGitRunner, ancestor-walk realpathOrLiteral) remain where they were.'
+  - id: A2
+    given: 'storeDiagnostic widened with an optional severity field.'
+    when: 'Call sites that previously built inline diagnostic literals with severity info/warning/error (events.ts, specs-store.ts, waivers-store.ts, events-migration.ts, leases-store.ts) are migrated.'
+    then: 'Those sites call storeDiagnostic with severity; the produced diagnostics are byte-identical to the prior inline literals. gitignore-drift.ts (non-STORE_RULES constant) is NOT migrated this slice.'
+  - id: A3
+    given: 'The full caws-cli + caws-kernel test suites.'
+    when: 'npm run build && npm run typecheck && the jest suites run.'
+    then: 'Build and typecheck are clean; all pre-existing tests pass (no behavior change). A new shared-utils-consolidation.test.js asserts the shared helpers exist and behave identically to the private copies they replaced.'
+non_functional:
+  reliability:
+    - 'Each task is committed separately and verified (build + targeted jest + typecheck) before the next begins, so a regression is bisectable to one task.'
 contracts:
   - name: 'shared-sleep-syncMs'
     type: behavior
