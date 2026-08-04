@@ -2,9 +2,11 @@ id: CAWS-ZCODE-AGENT-SURFACE-001
 title: 'Add ZCode agent surface'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'ZCode surface shipped in aa3032e2 (feat(cli): add zcode agent surface, 2026-07-06) and carried into the 11.8.0 release. Closing retroactively — the spec was never formally closed at ship time. No follow-up work outstanding.'
 created_at: '2026-07-06T15:37:58.223Z'
-updated_at: '2026-07-06T15:42:20.797Z'
+updated_at: '2026-08-04T02:32:05.939Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/init/hook-packs
