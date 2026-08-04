@@ -2,10 +2,11 @@ id: CAWS-HOOK-PACK-KIMI-CODE-001
 title: 'Kimi Code agent surface: hook pack + user-level TOML wiring'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: wt-kimi-closeout
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-kimi-closeout at ac31474514bb87c8936ab9f87ab04fdec5b60fa3'
 created_at: '2026-08-03T23:05:48.048Z'
-updated_at: '2026-08-04T13:13:59.758Z'
+updated_at: '2026-08-04T13:27:55.119Z'
 blast_radius:
   modules:
     - packages/caws-cli hook-pack system (init/templates)
