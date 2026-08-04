@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-qwen-surface
 created_at: '2026-08-04T00:24:30.926Z'
-updated_at: '2026-08-04T00:25:14.045Z'
+updated_at: '2026-08-04T12:59:49.287Z'
 blast_radius:
   modules:
     - packages/caws-cli hook-pack system (init/templates)
@@ -41,6 +41,7 @@ scope:
     - packages/caws-cli/templates/agents.md
     - QWEN.md
     - .qwen/**
+    - packages/caws-cli/tests/shell/session/resolver-guard-divergence.test.js
   out: []
 invariants:
   - The qwen-code wiring lives in the repo-local .qwen/settings.json (plus a managed import line in root QWEN.md); merges preserve existing user keys, are idempotent, and a second caws init run is a byte-identical no-op.
