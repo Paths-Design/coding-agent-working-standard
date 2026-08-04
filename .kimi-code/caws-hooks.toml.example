@@ -1,0 +1,36 @@
+# >>> caws kimi-code hook: PreToolUse (managed, v1) >>>
+[[hooks]]
+event = "PreToolUse"
+matcher = "Bash|Read|Write|Edit|Glob|Grep"
+command = 'ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"; test -x "$ROOT/.kimi-code/hooks/caws-kimi-hook.sh" && "$ROOT/.kimi-code/hooks/caws-kimi-hook.sh" PreToolUse || true'
+timeout = 45
+# <<< caws kimi-code hook: PreToolUse <<<
+
+# >>> caws kimi-code hook: PostToolUse (managed, v1) >>>
+[[hooks]]
+event = "PostToolUse"
+matcher = "Write|Edit|Bash|ExitPlanMode"
+command = 'ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"; test -x "$ROOT/.kimi-code/hooks/caws-kimi-hook.sh" && "$ROOT/.kimi-code/hooks/caws-kimi-hook.sh" PostToolUse || true'
+timeout = 60
+# <<< caws kimi-code hook: PostToolUse <<<
+
+# >>> caws kimi-code hook: SessionStart (managed, v1) >>>
+[[hooks]]
+event = "SessionStart"
+command = 'ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"; test -x "$ROOT/.kimi-code/hooks/caws-kimi-hook.sh" && "$ROOT/.kimi-code/hooks/caws-kimi-hook.sh" SessionStart || true'
+timeout = 30
+# <<< caws kimi-code hook: SessionStart <<<
+
+# >>> caws kimi-code hook: Stop (managed, v1) >>>
+[[hooks]]
+event = "Stop"
+command = 'ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"; test -x "$ROOT/.kimi-code/hooks/caws-kimi-hook.sh" && "$ROOT/.kimi-code/hooks/caws-kimi-hook.sh" Stop || true'
+timeout = 30
+# <<< caws kimi-code hook: Stop <<<
+
+# >>> caws kimi-code hook: PreCompact (managed, v1) >>>
+[[hooks]]
+event = "PreCompact"
+command = 'ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"; test -x "$ROOT/.kimi-code/hooks/caws-kimi-hook.sh" && "$ROOT/.kimi-code/hooks/caws-kimi-hook.sh" PreCompact || true'
+timeout = 30
+# <<< caws kimi-code hook: PreCompact <<<
