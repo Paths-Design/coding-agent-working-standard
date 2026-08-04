@@ -4,7 +4,7 @@ risk_tier: 2
 mode: feature
 lifecycle_state: active
 created_at: '2026-08-04T00:24:30.926Z'
-updated_at: '2026-08-04T00:24:30.926Z'
+updated_at: '2026-08-04T00:25:14.045Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
@@ -13,6 +13,31 @@ operational_rollback_slo: 5m
 scope:
   in:
     - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/templates/hook-packs/qwen-code/**
+    - packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh
+    - packages/caws-cli/src/init/hook-packs/**
+    - packages/caws-cli/src/init/hook-install.ts
+    - packages/caws-cli/src/init/harness-detect.ts
+    - packages/caws-cli/src/shell/commands/init.ts
+    - packages/caws-cli/src/shell/render/init-hook-pack.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/src/shell/commands/reprieve.ts
+    - packages/caws-cli/tests/init/**
+    - packages/caws-cli/tests/hooks/**
+    - packages/caws-cli/tests/docs/agent-surfaces-sync.test.js
+    - packages/caws-cli/scripts/fresh-install-smoke.mjs
+    - .gitignore
+    - docs/architecture/hook-pack-shared-core.md
+    - AGENTS.md
+    - packages/caws-cli/README.md
+    - docs/guides/agent-integration-guide.md
+    - docs/command-reference.md
+    - packages/caws-cli/templates/CLAUDE.md
+    - packages/caws-cli/templates/agents.md
+    - QWEN.md
+    - .qwen/**
   out: []
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'
