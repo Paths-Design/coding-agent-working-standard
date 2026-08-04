@@ -2,10 +2,12 @@ id: CAWS-SPEC-SUCCESSOR-DECLARATION-CUSTODY-02
 title: 'Successor declarations: read-only migration reporter, round-trip and older-reader proofs, schema docs'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: abandoned
+closure_notes: 'Stub spec with TODO body, no bound worktree, no concrete work. The core successor-declarations surface it would harden (migration reporter, round-trip proofs, older-reader fixtures) already ships on main and in kernel 1.5.0; this -02 never started. Closing as abandoned to clear it from the active-spec set so it does not masquerade as a release dependency. The hardening it envisioned can be re-filed as a fresh spec if wanted.'
 supersedes: CAWS-SPEC-SUCCESSOR-DECLARATION-CUSTODY-01
 created_at: '2026-07-25T06:13:26.500Z'
-updated_at: '2026-07-25T06:13:26.500Z'
+updated_at: '2026-08-04T14:11:41.976Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
