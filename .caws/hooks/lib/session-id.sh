@@ -35,10 +35,12 @@
 #   3. CODEX_THREAD_ID        — Codex harness per-thread id; survives the tool
 #                               boundary. THE fix for the codex incident: codex
 #                               exports this, not CLAUDE_*_SESSION_ID.
-#   4. CAWS_SESSION_ID        — generic CAWS escape hatch (any harness)
-#   5. HOOK_SESSION_ID        — the hook-envelope id (set only inside the hook's
+#   4. QWEN_CODE_SESSION_ID   — Qwen Code harness session UUID (probed live on
+#                               0.21.4); survives the tool boundary.
+#   5. CAWS_SESSION_ID        — generic CAWS escape hatch (any harness)
+#   6. HOOK_SESSION_ID        — the hook-envelope id (set only inside the hook's
 #                               own shell; does NOT propagate to agent-Bash)
-#   6. CURSOR_TRACE_ID        — cursor low-stability fallback
+#   7. CURSOR_TRACE_ID        — cursor low-stability fallback
 #   → "unknown" sentinel when nothing is set (the resolver refuses this literal).
 #
 # This MUST stay in lockstep with resolve-session.ts's env-var tiers
@@ -96,6 +98,10 @@ resolve_caws_session_id() {
   fi
   if [[ -n "${CODEX_THREAD_ID:-}" && "${CODEX_THREAD_ID}" != "unknown" ]]; then
     printf '%s\n' "$CODEX_THREAD_ID"
+    return 0
+  fi
+  if [[ -n "${QWEN_CODE_SESSION_ID:-}" && "${QWEN_CODE_SESSION_ID}" != "unknown" ]]; then
+    printf '%s\n' "$QWEN_CODE_SESSION_ID"
     return 0
   fi
   if [[ -n "${CAWS_SESSION_ID:-}" && "${CAWS_SESSION_ID}" != "unknown" ]]; then

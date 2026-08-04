@@ -1,0 +1,66 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "run_shell_command|write_file|edit|read_file|glob|grep_search|notebook_edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ROOT=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)\"; test -x \"$ROOT/.qwen/hooks/caws-qwen-hook.sh\" && \"$ROOT/.qwen/hooks/caws-qwen-hook.sh\" PreToolUse || true",
+            "name": "caws-qwen-pre-tool-use",
+            "timeout": 45
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "write_file|edit|notebook_edit|run_shell_command|exit_plan_mode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ROOT=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)\"; test -x \"$ROOT/.qwen/hooks/caws-qwen-hook.sh\" && \"$ROOT/.qwen/hooks/caws-qwen-hook.sh\" PostToolUse || true",
+            "name": "caws-qwen-post-tool-use",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ROOT=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)\"; test -x \"$ROOT/.qwen/hooks/caws-qwen-hook.sh\" && \"$ROOT/.qwen/hooks/caws-qwen-hook.sh\" SessionStart || true",
+            "name": "caws-qwen-session-start",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ROOT=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)\"; test -x \"$ROOT/.qwen/hooks/caws-qwen-hook.sh\" && \"$ROOT/.qwen/hooks/caws-qwen-hook.sh\" Stop || true",
+            "name": "caws-qwen-stop",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ROOT=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)\"; test -x \"$ROOT/.qwen/hooks/caws-qwen-hook.sh\" && \"$ROOT/.qwen/hooks/caws-qwen-hook.sh\" PreCompact || true",
+            "name": "caws-qwen-pre-compact",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -218,6 +218,19 @@ case "$CAWS_AGENT_SURFACE" in
     # through unrewritten on this surface.
     CAWS_SUPPORTS_UPDATED_INPUT="0"
     ;;
+  qwen-code)
+    CAWS_VENDOR_DIR=".qwen"
+    CAWS_PLATFORM_FLAG="qwen-code"
+    # Qwen Code supports allow/deny/ask natively (verified live on 0.21.4):
+    # interactive sessions prompt on ask; headless/background contexts
+    # degrade ask -> deny automatically. Same vocab as Claude Code.
+    CAWS_PERMISSION_VOCAB="ask"
+    CAWS_INSTRUCTION_FILES="QWEN.md"
+    # updatedInput is documented but NOT enforced in 0.21.x (probed
+    # 2026-08-03, tmp/qwen-hook-probe-findings.md) — quiet-merge passes the
+    # command through unrewritten on this surface.
+    CAWS_SUPPORTS_UPDATED_INPUT="0"
+    ;;
   *)
     # Unknown surface — fall through to claude-code defaults so a
     # misconfigured wiring does not become a hard block. Emit a warning to
