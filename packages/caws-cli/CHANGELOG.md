@@ -1,5 +1,132 @@
 ## [Unreleased]
 
+The agent-surface line continues: this release adds two new hook packs —
+**kimi-code** and **qwen-code** (the sixth and seventh supported harnesses) —
+and lands a wave of guard, worktree-merge, and session-recovery fixes, plus a
+broad pass of governed discovery / planning / handoff commands across the CLI.
+
+> **Not yet documented here (pending merge):** the kimi-code and qwen-code
+> surfaces. Both were authored in worktrees (`wt-kimi-parse-fix`,
+> `wt-qwen-surface`) and are not yet on `main`; their entries below are
+> placeholders to be filled at merge time. Do not tag this section until both
+> land and their bullets are confirmed.
+
+### Added
+
+- **Agent surfaces — pending merge.** Two new harnesses are landing:
+  - **kimi-code** (`caws init --agent-surface kimi-code`) — hook pack +
+    user-level `config.toml` wiring. Inert outside CAWS repos. Status: spec
+    reopened for a parse-input follow-up; unmerged in `wt-kimi-parse-fix`.
+    *(CAWS-HOOK-PACK-KIMI-CODE-001 — fill in detail at merge.)*
+  - **qwen-code** (`caws init --agent-surface qwen-code`) — hook pack +
+    repo-local `.qwen/settings.json` wiring; declares
+    `CAWS_SUPPORTS_UPDATED_INPUT=0`. Status: unmerged in `wt-qwen-surface`.
+    *(CAWS-HOOK-PACK-QWEN-CODE-001 — fill in detail at merge.)*
+- **`CAWS_SUPPORTS_UPDATED_INPUT` capability flag** in `agent-surface.sh`.
+  Surfaces whose harness does not enforce `hookSpecificOutput.updatedInput`
+  declare `0`; the shared `quiet-merge.sh` then passes the command through
+  unrewritten instead of emitting an update the harness will drop. Kicks in
+  for kimi-code/qwen-code; defaults to `1` for all existing surfaces.
+- **Governed spec restore — `caws specs reopen <id>`.** A governed closed→active
+  transition that reverses a premature auto-close from `caws worktree merge`
+  (removes `resolution`/`closure_notes`). Replaces hand-editing the YAML.
+  *(CAWS-SPEC-REOPEN-001.)*
+- **Structured successor declarations + close gate.** Specs may declare an
+  optional top-level `successors` array (target spec id + disposition
+  `required|declined|absorbed`); the close gate and a `spec_closed` event
+  projection enforce/respect it, so a superseded `-01` resolves as superseded
+  rather than completed. *(CAWS-SPEC-SUCCESSOR-DECLARATION-CUSTODY-01; requires
+  the coupled kernel release below.)*
+- **`caws agents prune --status legacy`** — age-based retention for status-less
+  (v10 / early-v11) leases that fell through every existing prune mode.
+  *(CAWS-AGENTS-PRUNE-LEGACY-001.)*
+- **Force-gated `caws init hook-pack --overwrite`.** `--overwrite` alone now
+  previews a unified diff per drifted/unmanaged file and exits 1 (no write);
+  add `--force` to apply, `--adopt` to keep local versions, or target specific
+  paths. Closes the class of "ran `--overwrite`, lost my local edits."
+- **Governed discovery / planning / handoff commands.** A broad pass that gives
+  every governed surface a read-only discovery + plan + handoff triple, so the
+  next step after a finding is a single command rather than a manual lookup.
+  Notably: `doctor repair plan`; `init preview plan`; `scope` explicit-context,
+  remediation guidance, and batch planning; `waiver lifecycle preflight`;
+  `gates policy discovery`; `events` rotate dry-run + log discovery; `evidence`
+  schema discovery + readback; `specs create plan`/tier guidance + close
+  closure-notes alias + status handoff; `message` log readback + retention
+  prune; `worktree` cleanup plan + physical-cleanup plan/apply + governed
+  untrack; `draft` prune plan/apply + bind activation handoff; closed-spec
+  batch archive selectors; focused `status` filters.
+
+### Changed
+
+- **`scope.in` now overrides the write allowlist.** The allowlist (docs/*,
+  .caws/*, etc.) previously fired unconditionally before the scope-contention
+  check, so a worktree's `scope.in` claim on a doc-heavy path was silently
+  ignored — the claim was a lie. Now `scope.in` is authoritative for allowlisted
+  paths in both the Write/Edit and Bash guards. *(CAWS-GUARD-SCOPE-PRIORITY-001.)*
+- **Shared write-allowlist helper, Bash guard synced to Edit guard.** The
+  worktree-write-guard had an inlined allowlist; the bash-write-guard had none,
+  so the same path+claim got two answers depending on which tool the agent
+  reached for. Consolidated behind one helper. *(CAWS-GUARD-ALLOWLIST-SYNC-001.)*
+- **Closure notes required on spec close.** `caws specs close` now requires
+  resolution notes, so a premature auto-close leaves an audit trail.
+- **Managed-hook `edit_stance` rewritten invitation-first.** Force-gated,
+  invitation-first wording replacing the prior stance.
+  *(HOOKPACK-EDIT-STANCE-TONE-001.)*
+- **Shared-utils consolidation.** `runGit`, `realpathSafe`, `SPEC_ID_REGEX`, and
+  related helpers deduplicated across the shell layer (kernel now exports
+  `SPEC_ID_REGEX`). *(CAWS-REFACTOR-SHARED-UTILS-001.)*
+
+### Fixed
+
+- **Worktree merge is now lock-free (compare-and-swap).** `mergeWorktree` gained
+  a CAS ref update (`git update-ref <ref> <new> <expected-old>`); losing a race
+  recomputes against the new base and retries (bounded at 5) instead of
+  blocking on ambiguity. *(CAWS-WORKTREE-MERGE-LOCKFREE-CAS-001.)*
+- **Idempotent close step in `caws worktree merge`.** An already-closed spec no
+  longer errors the merge of a follow-up slice. *(CAWS-FIX-N5-MERGE-IDEMPOTENT-CLOSE-001.)*
+- **`caws worktree merge` deletes the merged branch** and refuses when the
+  caller's cwd is inside the target worktree (no self-destruct).
+  *(CAWS-WORKTREE-MERGE-DELETE-BRANCH-001, CAWS-FIX-WORKTREE-MERGE-CWD-SELF-DESTRUCT-GUARD-001.)*
+- **`caws claim --takeover` authority fix.** Takes over a foreign owner even
+  when a fresh durable envelope admits it (the prior-owner audit was being
+  skipped). *(CAWS-FIX-N4-CLAIM-TAKEOVER-AUTHORITY-001.)*
+- **Claim identity via cwd-independent candidate set.** `claim` resolves
+  identity through a candidate set that does not depend on the working
+  directory, so the rightful owner is recognized regardless of where the
+  session is rooted. *(SESSION-CAPSULE-WORKTREE-CWD-001.)*
+- **Retry worktree-create bind audit on concurrent `.git/index.lock`.** A
+  concurrent index write no longer fails `caws worktree create`.
+  *(CAWS-FIX-N3-BIND-INDEX-LOCK-RETRY-001.)*
+- **`doctor` flags stale `dist/` relative to `src/`.** A new finding
+  (`shell.build.dist_stale`, warning) fires when the compiled artifacts the
+  running binary loads are older than their TypeScript sources — nothing
+  previously signaled that the running `caws` lacked recently-edited behavior.
+  *(CAWS-GUARD-BUILD-FRESHNESS-001.)*
+- **`doctor` detects and guides recovery for wedged sessions.** A new finding
+  (`shell.agent.cwd_gone`, error) fires for every running session whose
+  recorded cwd no longer exists (deleted by a merge/destroy or crash mid-merge)
+  — the wedge where every subsequent shell spawn fails ENOENT with no
+  self-recovery. *(CAWS-GUARD-CWD-RECOVERY-001.)*
+- **`callerCwd` threaded through `cleanup-plan --apply` and merge teardown.**
+  *(CAWS-FIX-CWD-GUARD-COVERAGE-001.)*
+- **Codex hooks JSON schema kept valid; shared-core hook commands rendered.**
+  *(CAWS-CODEX-HOOKS-JSON-SCHEMA-001, CAWS-CODEX-SHARED-CORE-FRESH-INSTALL-001.)*
+
+### Consumer upgrade notes
+
+- This release bumps the shared hook-pack (to v30, from v22 in 11.8.0). Existing
+  consumers will see their installed pack as `managed_old_version`; refresh with
+  `caws init --overwrite` (preview the diff first — see the force-gating above),
+  `--adopt` to preserve local edits, or `--force` to apply. Several fixes
+  (scope-priority, write-allowlist sync) only take effect after the pack
+  refresh.
+- **Coupled kernel release required.** The successor-declarations feature
+  consumes new exported kernel symbols (structured `successors`, the
+  `spec_reopened` event schema). The kernel `@paths.design/caws-kernel` must be
+  bumped and published (to 1.5.0) **before** this CLI tag, and the CLI's
+  `^1.4.0` dependency raised — otherwise the prepublish fresh-install smoke
+  resolves a registry-stale kernel missing those symbols.
+
 ## [11.8.0] (2026-07-17)
 
 Three threads land together: the carried-forward 11.7.0 work (zcode agent

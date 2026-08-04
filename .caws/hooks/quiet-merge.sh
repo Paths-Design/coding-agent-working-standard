@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 29
+# hook_pack_version: 30
 # caws_min_major: 11
 # lineage_refs: 22,26
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -73,6 +73,12 @@ PROJECT_DIR="$(resolve_canonical_dir "${CAWS_PROJECT_DIR:-.}")"
 # Match: caws worktree merge|destroy <name> [options]
 # Skip if already piped/redirected (user already handling output)
 if echo "$COMMAND" | grep -qE 'caws\s+worktree\s+(merge|destroy)\b' && ! echo "$COMMAND" | grep -qE '[|>]'; then
+  # Surfaces without an updatedInput contract (kimi-code: none documented)
+  # cannot rewrite the command — pass it through unrewritten. quiet-merge is
+  # an output-quieting optimization, not a guard; skipping it loses nothing.
+  if [[ "${CAWS_SUPPORTS_UPDATED_INPUT:-1}" != "1" ]]; then
+    exit 0
+  fi
   # Always prepend cd to repo root for CWD safety (critical for subagents
   # whose CWD is inside the worktree being destroyed)
   QUIET_CMD="cd \"$PROJECT_DIR\" && $COMMAND 2>/dev/null | tail -3; echo '---'; git log --oneline -1"
