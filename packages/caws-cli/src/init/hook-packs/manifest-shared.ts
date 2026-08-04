@@ -187,7 +187,12 @@ import type { HookPackV1 } from './types';
 // shell resolver to match the canonical identity model (one model across shell
 // + TS), not a parallel fallback. Fail-opens to "unknown" only when no capsule
 // exists.
-export const SHARED_PACK_VERSION = 29;
+//
+// Version 30: CAWS-HOOK-PACK-KIMI-CODE-001. lib/agent-surface.sh gains the
+// kimi-code case arm (vendor dir .kimi-code, deny vocab, AGENTS.md instruction
+// file) and SURFACES doc; quiet-merge.sh passes commands through unrewritten
+// on surfaces without an updatedInput contract (kimi). No guard logic changes.
+export const SHARED_PACK_VERSION = 30;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.

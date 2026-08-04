@@ -55,6 +55,10 @@ const PACKS = {
     manifestFile: 'manifest-codex.js',
     exportName: 'CODEX_PACK',
   },
+  'kimi-code': {
+    manifestFile: 'manifest-kimi-code.js',
+    exportName: 'KIMI_CODE_PACK',
+  },
   // CAWS-HOOK-PACK-SHARED-CORE-001: the real hook logic (oracle, agent-*.sh,
   // guards, dispatchers, libs) lives in the `shared` pack and installs under
   // .caws/hooks/. The vendor packs (claude-code/codex) are now thin adapters.
@@ -1205,6 +1209,220 @@ function runCodexTarballSmoke(tarballs) {
   ok(`Codex tarball smoke project: ${projectDir}`);
 }
 
+// ─── Kimi Code surface smoke (CAWS-HOOK-PACK-KIMI-CODE-001) ─────────────
+//
+// Kimi Code has no project-level hook config: [[hooks]] entries are read
+// only from the user-level $KIMI_CODE_HOME/config.toml and fire for every
+// project. The CAWS wiring is therefore (a) gated behind the explicit
+// --wire-user-config consent flag, and (b) repo-conditional — every entry
+// invokes the pack-installed shim, which resolves the git root at
+// invocation time and exits 0 silently outside a CAWS repo. The smoke
+// points KIMI_CODE_HOME at a scratch dir so the real user config is never
+// touched, then proves: the wiring lands, re-running init is a no-op, the
+// shim is inert in a non-CAWS repo, and a protected hook edit is blocked
+// (exit 2, reason on stderr — the channel Kimi surfaces).
+
+function assertCliTarballContainsKimiArtifacts(cliFiles) {
+  step('Kimi artifact proof — cli tarball file list');
+  const paths = cliFiles.map((file) => file.path);
+  const required = [
+    'dist/init/hook-packs/manifest-kimi-code.js',
+    'dist/init/hook-packs/manifest-shared.js',
+    'templates/hook-packs/kimi-code/hooks/caws-kimi-hook.sh',
+    'templates/hook-packs/kimi-code/hooks/lib/emit.sh',
+    'templates/hook-packs/kimi-code/hooks/lib/run-handlers.sh',
+    'templates/hook-packs/kimi-code/AGENTS.md',
+    'templates/hook-packs/shared/dispatch/pre_tool_use.sh',
+    'templates/hook-packs/shared/protected-paths.sh',
+  ];
+  const missing = required.filter((path) => !paths.includes(path));
+  if (missing.length > 0) {
+    fail('cli tarball is missing Kimi runtime artifacts', {
+      missing: JSON.stringify(missing, null, 2),
+      hint: 'package.json:files must include dist/** and templates/hook-packs/**',
+    });
+  }
+  for (const path of required) {
+    log(colors.dim(`  artifact tarball:${path}`));
+  }
+  ok(`cli tarball includes ${required.length} Kimi adapter/shared-core artifacts`);
+}
+
+const KIMI_EVENTS = ['PreToolUse', 'PostToolUse', 'SessionStart', 'Stop', 'PreCompact'];
+
+function runKimiInit(projectDir, installedRoot, kimiHome) {
+  step('git init + caws init --agent-surface kimi-code --wire-user-config');
+  if (!existsSync(join(projectDir, '.git'))) {
+    execSync('git init -q', { cwd: projectDir });
+    execSync('git config user.email smoke@local', { cwd: projectDir });
+    execSync('git config user.name Smoke', { cwd: projectDir });
+    execSync('git commit --allow-empty -q -m init', { cwd: projectDir });
+  }
+  mkdirSync(kimiHome, { recursive: true });
+  const cli = join(installedRoot, 'dist', 'index.js');
+  const result = spawnSync(
+    'node', [cli, 'init', '--agent-surface', 'kimi-code', '--wire-user-config'],
+    { cwd: projectDir, encoding: 'utf8', env: { ...process.env, KIMI_CODE_HOME: kimiHome } }
+  );
+  if (result.status !== 0) {
+    fail('caws init --agent-surface kimi-code --wire-user-config exited non-zero', {
+      exitCode: result.status,
+      stdout: result.stdout.trim().slice(0, 2000),
+      stderr: result.stderr.trim().slice(0, 2000),
+    });
+  }
+  ok('caws init (kimi-code, wired) succeeded');
+}
+
+function readKimiUserConfig(kimiHome) {
+  const configPath = join(kimiHome, 'config.toml');
+  if (!existsSync(configPath)) {
+    fail('user-level kimi config.toml was not written under KIMI_CODE_HOME', {
+      expected: configPath,
+    });
+  }
+  return readFileSync(configPath, 'utf8');
+}
+
+function assertKimiUserConfigMerged(kimiHome) {
+  step('Kimi artifact proof — user-level config.toml gained all five CAWS blocks');
+  const content = readKimiUserConfig(kimiHome);
+  const missing = [];
+  for (const event of KIMI_EVENTS) {
+    const beginMarker = `# >>> caws kimi-code hook: ${event}`;
+    if (!content.includes(beginMarker) || !content.includes(`event = "${event}"`)) {
+      missing.push(event);
+    }
+  }
+  if (missing.length > 0) {
+    fail('user-level config.toml is missing CAWS hook blocks', { missing: missing.join(', ') });
+  }
+  const shimRefs = content.split('caws-kimi-hook.sh').length - 1;
+  if (shimRefs < KIMI_EVENTS.length) {
+    fail('user-level config.toml does not reference the CAWS shim for every event', {
+      expectedAtLeast: KIMI_EVENTS.length,
+      got: shimRefs,
+    });
+  }
+  ok(`config.toml wires all ${KIMI_EVENTS.length} events to the CAWS shim`);
+}
+
+function assertKimiUserConfigIdempotent(projectDir, installedRoot, kimiHome) {
+  step('Kimi artifact proof — second --wire-user-config run is a no-op');
+  const before = readKimiUserConfig(kimiHome);
+  runKimiInit(projectDir, installedRoot, kimiHome);
+  const after = readKimiUserConfig(kimiHome);
+  if (before !== after) {
+    fail('second caws init --wire-user-config run mutated config.toml', {
+      beforeBytes: Buffer.byteLength(before),
+      afterBytes: Buffer.byteLength(after),
+    });
+  }
+  ok('re-running init left config.toml byte-identical');
+}
+
+function assertKimiConfigExample(projectDir) {
+  step('Kimi artifact proof — in-repo wiring example materialized');
+  const examplePath = join(projectDir, '.kimi-code', 'caws-hooks.toml.example');
+  if (!existsSync(examplePath)) {
+    fail('in-repo kimi wiring example missing', { expected: examplePath });
+  }
+  const content = readFileSync(examplePath, 'utf8');
+  if (!content.includes('[[hooks]]') || !content.includes('caws-kimi-hook.sh')) {
+    fail('in-repo kimi wiring example does not contain the canonical blocks', {
+      path: examplePath,
+    });
+  }
+  ok('.kimi-code/caws-hooks.toml.example carries the canonical wiring');
+}
+
+function assertKimiShimInertInNonCawsRepo(projectDir) {
+  step('Kimi artifact proof — shim is inert in a non-CAWS git repo');
+  const plainRepo = makeSmokeDir('caws-smoke-kimi-plain-');
+  registerCleanup(plainRepo);
+  execSync('git init -q', { cwd: plainRepo });
+  const shim = join(projectDir, '.kimi-code', 'hooks', 'caws-kimi-hook.sh');
+  const payload = {
+    session_id: 'caws-smoke-kimi-inert',
+    cwd: plainRepo,
+    hook_event_name: 'PreToolUse',
+    tool_name: 'Write',
+    tool_input: { file_path: '.kimi-code/hooks/lib/emit.sh', content: 'x' },
+  };
+  const result = spawnSync('bash', [shim, 'PreToolUse'], {
+    cwd: plainRepo,
+    input: JSON.stringify(payload),
+    encoding: 'utf8',
+  });
+  if (result.status !== 0 || result.stdout.trim() !== '') {
+    fail('kimi shim was not inert in a non-CAWS repo', {
+      exitCode: result.status,
+      stdout: result.stdout.trim().slice(0, 500),
+      stderr: result.stderr.trim().slice(0, 500),
+    });
+  }
+  ok('shim exited 0 silently outside a CAWS repo (a protected-path payload was NOT enforced there)');
+}
+
+function assertKimiProtectedPathDispatcher(projectDir) {
+  step('Kimi artifact proof — protected-path guard blocks through the shim (exit 2 + stderr reason)');
+  const shim = join(projectDir, '.kimi-code', 'hooks', 'caws-kimi-hook.sh');
+  const payload = {
+    session_id: 'caws-smoke-kimi-protected',
+    cwd: projectDir,
+    hook_event_name: 'PreToolUse',
+    tool_name: 'Write',
+    tool_input: { file_path: '.kimi-code/hooks/lib/emit.sh', content: 'echo tampered\n' },
+  };
+  // Run from a subdirectory: the shim must resolve the git root from cwd
+  // (HOOK-PROJECT-DIR-ROOT-NOT-CWD-01) rather than assuming cwd == root.
+  const subdir = join(projectDir, 'subdir');
+  mkdirSync(subdir, { recursive: true });
+  const result = spawnSync('bash', [shim, 'PreToolUse'], {
+    cwd: subdir,
+    input: JSON.stringify(payload),
+    encoding: 'utf8',
+  });
+  log(colors.dim(`  artifact dispatcher_exit=${result.status}`));
+  log(colors.dim(`  artifact dispatcher_stderr=${result.stderr.trim().slice(0, 500)}`));
+  if (result.status !== 2) {
+    fail('Kimi PreToolUse dispatch did not fail closed (exit 2) for a protected hook edit', {
+      exitCode: result.status,
+      stdout: result.stdout.trim().slice(0, 1000),
+      stderr: result.stderr.trim().slice(0, 1000),
+    });
+  }
+  if (!result.stderr.includes('.kimi-code/hooks/lib/emit.sh is protected')) {
+    fail('Kimi protected-path dispatch did not cite the protected hook path on stderr', {
+      stderr: result.stderr.trim().slice(0, 1000),
+    });
+  }
+  ok('installed shim blocked a relative .kimi-code/hooks edit from a subdirectory with concrete protected-path evidence');
+}
+
+function runKimiTarballSmoke(tarballs) {
+  step('Kimi Code pack — install from local tarballs into a fresh project');
+  assertCliTarballContainsKimiArtifacts(tarballs.cliFiles);
+  const { projectDir, installedRoot } = installTarball(tarballs);
+  const pack = loadManifest(installedRoot, 'kimi-code');
+  const sharedPack = loadManifest(installedRoot, 'shared');
+  assertTemplateSourcesPresent(installedRoot, pack, 'kimi-code');
+  assertTemplateSourcesPresent(installedRoot, sharedPack, 'shared');
+  // KIMI_CODE_HOME points at a scratch dir: the user-level config merge must
+  // provably land there, never in the real ~/.kimi-code.
+  const kimiHome = makeSmokeDir('caws-smoke-kimi-home-');
+  registerCleanup(kimiHome);
+  runKimiInit(projectDir, installedRoot, kimiHome);
+  assertDestFilesPresent(projectDir, pack);
+  assertDestFilesPresent(projectDir, sharedPack);
+  assertKimiUserConfigMerged(kimiHome);
+  assertKimiUserConfigIdempotent(projectDir, installedRoot, kimiHome);
+  assertKimiConfigExample(projectDir);
+  assertKimiShimInertInNonCawsRepo(projectDir);
+  assertKimiProtectedPathDispatcher(projectDir);
+  ok(`Kimi Code tarball smoke project: ${projectDir}`);
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────
 
 try {
@@ -1268,6 +1486,10 @@ try {
 
   if (packIds.includes('codex')) {
     runCodexTarballSmoke(tarballs);
+  }
+
+  if (packIds.includes('kimi-code')) {
+    runKimiTarballSmoke(tarballs);
   }
 
   const elapsedMs = Date.now() - startMs;

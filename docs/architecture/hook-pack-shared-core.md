@@ -58,6 +58,12 @@ templates/hook-packs/
     hooks.json                # the wiring Codex reads
     AGENTS.md                 # surface doc
     overrides/                # named override files
+
+  kimi-code/                  # vendor adapter — harness-specific ONLY
+    hooks/caws-kimi-hook.sh   # shim the user-level config.toml wiring invokes
+    caws-hooks.toml.example   # the wiring Kimi Code reads (user-level; see below)
+    AGENTS.md                 # surface doc
+    hooks/lib/                # named override files (emit.sh, run-handlers.sh)
 ```
 
 Installed layout in a consumer repo:
@@ -75,6 +81,17 @@ Installed layout in a consumer repo:
 .codex/                       # codex adapter
   hooks.json                  # wiring -> .caws/hooks/dispatch/<event>.sh
   hooks/<override files>       # only the codex overrides
+
+.kimi-code/                   # kimi-code adapter
+  hooks/caws-kimi-hook.sh     # shim -> .caws/hooks/dispatch/<event>.sh
+  hooks/<override files>      # only the kimi-code overrides
+  caws-hooks.toml.example     # copy-paste wiring reference
+# kimi-code is the exception to "wiring lives in the repo": Kimi Code reads
+# [[hooks]] ONLY from the user-level $KIMI_CODE_HOME/config.toml (fires for
+# every project, cwd = launch dir). `caws init --agent-surface kimi-code
+# --wire-user-config` merges fenced CAWS blocks there behind an explicit
+# consent flag; each entry invokes the repo-local shim, which resolves the
+# git root at invocation time and exits 0 silently outside CAWS repos.
 ```
 
 ## Dependency-injection environment contract
@@ -93,12 +110,14 @@ The shared core derives every other harness-dependent value from
 `CAWS_AGENT_SURFACE` via a single resolver in `lib/caws-state.sh` (or a small
 dedicated `lib/agent-surface.sh`):
 
-| Derived value | claude-code | codex |
-|---------------|-------------|-------|
-| vendor dir | `.claude` | `.codex` |
-| log dir | `$CAWS_PROJECT_DIR/.claude/logs` | `$CAWS_PROJECT_DIR/.codex/logs` |
-| `--platform` flag | `claude-code` | `codex` |
-| permission-decision vocab | `ask` supported | `ask` → `deny` (Codex has no PreToolUse `ask`) |
+| Derived value | claude-code | codex | kimi-code |
+|---------------|-------------|-------|-----------|
+| vendor dir | `.claude` | `.codex` | `.kimi-code` |
+| log dir | `$CAWS_PROJECT_DIR/.claude/logs` | `$CAWS_PROJECT_DIR/.codex/logs` | `$CAWS_PROJECT_DIR/.kimi-code/logs` |
+| `--platform` flag | `claude-code` | `codex` | `kimi-code` |
+| permission-decision vocab | `ask` supported | `ask` → `deny` (Codex has no PreToolUse `ask`) | `ask` → `deny` (Kimi's `ask` is non-blocking — verified live) |
+| updatedInput rewrite | yes | yes | no (no documented contract; quiet-merge passes through) |
+| non-2 non-zero hook exit | warning (max returned) | warning (max returned) | promoted to blocking exit 2 — Kimi does not enforce exit 1 (verified live) |
 
 Backward-compatibility: the resolver falls back to the legacy env var
 (`CLAUDE_PROJECT_DIR` / `CODEX_PROJECT_DIR`) when `CAWS_PROJECT_DIR` is unset, so
@@ -123,6 +142,18 @@ codex `hooks.json` (runtime-root form):
 ```jsonc
 { "type": "command",
   "command": "REPO_ROOT=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)\"; CAWS_AGENT_SURFACE=codex CAWS_PROJECT_DIR=\"$REPO_ROOT\" CODEX_PROJECT_DIR=\"$REPO_ROOT\" \"$REPO_ROOT/.caws/hooks/dispatch/pre_tool_use.sh\"" }
+```
+
+kimi-code user-level `config.toml` (shim-mediated form — the shim injects the
+surface env and resolves the git root itself, so the TOML entry stays
+surface-neutral and inert outside CAWS repos):
+
+```toml
+[[hooks]]
+event = "PreToolUse"
+matcher = "Bash|Read|Write|Edit|Glob|Grep"
+command = 'ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"; test -x "$ROOT/.kimi-code/hooks/caws-kimi-hook.sh" && "$ROOT/.kimi-code/hooks/caws-kimi-hook.sh" PreToolUse || true'
+timeout = 45
 ```
 
 The shared dispatcher resolves its lib/handlers from its own location
@@ -154,6 +185,16 @@ genuine-divergence set (from the codex/claude-code comparison) is:
   surface resolver; prefer folding).
 - `dispatch/post_tool_use.sh` HANDLERS — codex disables `quality-check.sh`;
   model this as a per-surface HANDLERS list, not a forked vendor dispatcher.
+- `hooks/caws-kimi-hook.sh` — kimi-code only: a shim, not an override. Kimi
+  Code fires hooks from the user-level config for every project with cwd =
+  launch dir; the shim resolves the git root, injects the surface env, exits
+  0 silently outside CAWS repos, and maps events to shared dispatchers.
+- `lib/emit.sh` (kimi-code) — ask → deny (Kimi's `ask` is non-blocking),
+  block/ask reasons mirrored to stderr (the channel Kimi surfaces on exit 2),
+  no `emit_updated_input`.
+- `lib/run-handlers.sh` (kimi-code) — the codex-style `deny` priority arm,
+  plus promotion of any non-zero aggregate exit to the blocking exit 2 (Kimi
+  does not enforce exit 1; both verified live against 0.31.1).
 
 Resolution rule at install time: for each shared file, the vendor adapter MAY
 provide an override; if present, the override is installed in place of the
@@ -171,10 +212,11 @@ surface resolver (injected context) wherever the difference is mechanical.
   shared core), not a parallel edit + header bump in a second tree.
 - Each vendor adapter is a managed pack with its own identity and version,
   covering only its wiring + overrides + surface doc.
-- The fingerprint test hashes three trees independently: `shared`, `claude-code`
-  adapter, `codex` adapter. A byte change in any tree fails until that tree's
-  version is bumped and a history entry appended — same propagation guarantee as
-  before, but a shared-logic change touches one tree.
+- The fingerprint test hashes the trees independently: `shared` plus one tree
+  per vendor adapter (`claude-code`, `codex`, `kimi-code`, ...). A byte change
+  in any tree fails until that tree's version is bumped and a history entry
+  appended — same propagation guarantee as before, but a shared-logic change
+  touches one tree.
 
 ## Install behavior (preserved invariants)
 

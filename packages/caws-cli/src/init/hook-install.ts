@@ -31,6 +31,7 @@
 // path segment in the hook command.
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 import { unifiedDiff } from './unified-diff';
@@ -1498,4 +1499,300 @@ export function detectOrphanedDispatchDir(repoRoot: string): string | null {
   } catch {
     return null;
   }
+}
+
+// ─── Kimi Code user-level config.toml wiring (kimi-code vendor surface) ─────
+//
+// Kimi Code has no project-level hook config (verified against the 0.31.x
+// docs and live behavior): [[hooks]] entries are read only from the
+// user-level $KIMI_CODE_HOME/config.toml and fire for EVERY project, with
+// cwd = the session's launch directory. The CAWS wiring is therefore
+// repo-conditional: each entry invokes the pack-installed shim
+// (.kimi-code/hooks/caws-kimi-hook.sh), which resolves the git root at
+// invocation time and exits 0 silently when no .caws/hooks/ shared core
+// exists — inert in non-CAWS repos.
+//
+// Unlike the claude/zcode merges (which write into the consumer repo), this
+// merge writes OUTSIDE the repo into user-level state. It runs only under
+// the explicit --wire-user-config flag (init.ts gates the call); it is
+// append-only, idempotent, and never rewrites existing content. Detection is
+// per-event: an event counts as wired when the file contains a [[hooks]]
+// table whose `event` matches and whose `command` references the CAWS shim —
+// so blocks the user pasted by hand from the example are honored and never
+// duplicated. No TOML parser is required: detection is line-oriented and new
+// entries are appended at EOF, where a [[hooks]] array-of-tables element is
+// always valid TOML regardless of what precedes it.
+
+/** One canonical kimi [[hooks]] entry. */
+export interface KimiHookEntry {
+  readonly event: string;
+  readonly matcher?: string;
+  readonly command: string;
+  readonly timeout: number;
+}
+
+/** Build the canonical shim-invoking command for one event. The command
+ *  resolves the git root at invocation time (kimi may be launched from a
+ *  repo subdirectory — HOOK-PROJECT-DIR-ROOT-NOT-CWD-01), refuses to run
+ *  when the shim is absent (non-CAWS repo), and always exits 0 on the
+ *  inert path so a missing pack never becomes a block. */
+function kimiHookCommand(event: string): string {
+  return (
+    'ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"; ' +
+    'test -x "$ROOT/.kimi-code/hooks/caws-kimi-hook.sh" && ' +
+    `"$ROOT/.kimi-code/hooks/caws-kimi-hook.sh" ${event} || true`
+  );
+}
+
+/** The canonical CAWS hook wiring for Kimi Code, as the structured entries
+ *  that become [[hooks]] TOML blocks. Single source of truth for the merge,
+ *  the plan-mode preview, and the emitted example. Mirrors the event set and
+ *  timeouts of the Claude wiring (CANONICAL_HOOK_ENTRIES). */
+export const CANONICAL_KIMI_HOOK_ENTRIES: readonly KimiHookEntry[] = [
+  {
+    event: 'PreToolUse',
+    matcher: 'Bash|Read|Write|Edit|Glob|Grep',
+    command: kimiHookCommand('PreToolUse'),
+    timeout: 45,
+  },
+  {
+    event: 'PostToolUse',
+    matcher: 'Write|Edit|Bash|ExitPlanMode',
+    command: kimiHookCommand('PostToolUse'),
+    timeout: 60,
+  },
+  {
+    event: 'SessionStart',
+    command: kimiHookCommand('SessionStart'),
+    timeout: 30,
+  },
+  {
+    event: 'Stop',
+    command: kimiHookCommand('Stop'),
+    timeout: 30,
+  },
+  {
+    event: 'PreCompact',
+    command: kimiHookCommand('PreCompact'),
+    timeout: 30,
+  },
+];
+
+/** Marker pair fencing one CAWS-managed event block, so a future pack
+ *  version can find and replace its own blocks without touching user
+ *  entries. */
+function kimiBlockBeginMarker(event: string): string {
+  return `# >>> caws kimi-code hook: ${event} (managed, v1) >>>`;
+}
+function kimiBlockEndMarker(event: string): string {
+  return `# <<< caws kimi-code hook: ${event} <<<`;
+}
+
+/** Render one event as a fenced [[hooks]] TOML block. The command uses a
+ *  TOML literal string (single quotes): it contains double quotes for the
+ *  shell but never a single quote, so no escaping is needed. */
+function renderKimiHookBlock(entry: KimiHookEntry): string {
+  const lines = [
+    kimiBlockBeginMarker(entry.event),
+    '[[hooks]]',
+    `event = "${entry.event}"`,
+  ];
+  if (entry.matcher !== undefined) {
+    lines.push(`matcher = "${entry.matcher}"`);
+  }
+  lines.push(`command = '${entry.command}'`, `timeout = ${entry.timeout}`, kimiBlockEndMarker(entry.event));
+  return lines.join('\n');
+}
+
+/** The full canonical wiring as TOML text (all five events), ready to print
+ *  or write as the in-repo example. */
+export const CANONICAL_KIMI_CONFIG_SNIPPET =
+  CANONICAL_KIMI_HOOK_ENTRIES.map(renderKimiHookBlock).join('\n\n') + '\n';
+
+/** Resolve the user-level kimi config path: $KIMI_CODE_HOME/config.toml when
+ *  the env var is set and non-blank, else ~/.kimi-code/config.toml. */
+export function kimiUserConfigPath(
+  env: NodeJS.ProcessEnv = process.env
+): string {
+  const override = env.KIMI_CODE_HOME;
+  const home =
+    typeof override === 'string' && override.trim().length > 0
+      ? override
+      : path.join(os.homedir(), '.kimi-code');
+  return path.join(home, 'config.toml');
+}
+
+/** Does the file content already wire `event` to the CAWS shim? Line-oriented
+ *  scan: inside a [[hooks]] table, an `event = "<name>"` line and a `command`
+ *  line referencing caws-kimi-hook.sh together count as wired — regardless of
+ *  whether the block came from this merge or was pasted by hand. */
+function kimiConfigHasEvent(content: string, event: string): boolean {
+  const eventRe = new RegExp(`^\\s*event\\s*=\\s*"${event}"\\s*$`);
+  let inHooksTable = false;
+  let sawEvent = false;
+  let sawShimCommand = false;
+  for (const line of content.split('\n')) {
+    if (/^\s*\[\[hooks\]\]\s*$/.test(line)) {
+      if (inHooksTable && sawEvent && sawShimCommand) return true;
+      inHooksTable = true;
+      sawEvent = false;
+      sawShimCommand = false;
+      continue;
+    }
+    // Any other table header ends the current [[hooks]] element.
+    if (/^\s*\[/.test(line)) {
+      if (inHooksTable && sawEvent && sawShimCommand) return true;
+      inHooksTable = false;
+      sawEvent = false;
+      sawShimCommand = false;
+      continue;
+    }
+    if (!inHooksTable) continue;
+    if (eventRe.test(line)) sawEvent = true;
+    if (/^\s*command\s*=/.test(line) && line.includes('caws-kimi-hook.sh')) {
+      sawShimCommand = true;
+    }
+  }
+  return inHooksTable && sawEvent && sawShimCommand;
+}
+
+/** Compute which canonical events are not yet wired in `content` (empty
+ *  string = absent file). Exported for the plan-mode preview. */
+export function missingKimiHookEvents(content: string): readonly string[] {
+  return CANONICAL_KIMI_HOOK_ENTRIES.filter(
+    (e) => !kimiConfigHasEvent(content, e.event)
+  ).map((e) => e.event);
+}
+
+/**
+ * Merge the canonical CAWS hook wiring into the user-level kimi config.toml.
+ * Append-only and idempotent: events already wired (by this merge or by a
+ * hand-pasted block) are skipped; missing events are appended at EOF as
+ * fenced blocks. Existing content — including malformed TOML — is never
+ * rewritten. Creates the file (and parent dir) when absent.
+ *
+ * Caller gates this on the explicit --wire-user-config flag; it writes
+ * OUTSIDE the consumer repo into user-level state.
+ */
+export function mergeKimiUserConfig(
+  opts: { env?: NodeJS.ProcessEnv } = {}
+): SettingsMergeResult {
+  const configPath = kimiUserConfigPath(opts.env);
+
+  let existing: string | null = null;
+  try {
+    existing = fs.readFileSync(configPath, 'utf8');
+  } catch {
+    existing = null; // ENOENT → treat as absent.
+  }
+
+  const missing = missingKimiHookEvents(existing ?? '');
+  if (existing !== null && missing.length === 0) {
+    return { kind: 'unchanged', path: configPath };
+  }
+
+  const blocks = CANONICAL_KIMI_HOOK_ENTRIES.filter((e) =>
+    missing.includes(e.event)
+  ).map(renderKimiHookBlock);
+
+  if (existing === null) {
+    ensureDir(path.dirname(configPath));
+    const header =
+      '# Kimi Code CLI configuration.\n' +
+      '# The fenced [[hooks]] blocks below wire CAWS governance hooks for repos\n' +
+      '# with the kimi-code pack installed; they are inert everywhere else.\n\n';
+    fs.writeFileSync(configPath, header + blocks.join('\n\n') + '\n', 'utf8');
+    return { kind: 'created', path: configPath };
+  }
+
+  // Append after existing content with exactly one blank-line separator.
+  const trimmedEnd = existing.replace(/\n*$/, '');
+  const separator = trimmedEnd.length > 0 ? '\n\n' : '';
+  fs.writeFileSync(
+    configPath,
+    `${trimmedEnd}${separator}${blocks.join('\n\n')}\n`,
+    'utf8'
+  );
+  return { kind: 'merged', path: configPath, added: missing };
+}
+
+/** Read-only counterpart to mergeKimiUserConfig for `caws init --plan`. */
+export function planKimiConfigMerge(
+  opts: { env?: NodeJS.ProcessEnv } = {}
+): SettingsMergePlanResult {
+  const configPath = kimiUserConfigPath(opts.env);
+  let existing: string | null = null;
+  try {
+    existing = fs.readFileSync(configPath, 'utf8');
+  } catch {
+    existing = null;
+  }
+  const missing = missingKimiHookEvents(existing ?? '');
+  if (existing === null) {
+    return { kind: 'created', path: configPath, readOnly: true };
+  }
+  if (missing.length === 0) {
+    return { kind: 'unchanged', path: configPath, readOnly: true };
+  }
+  return { kind: 'merged', path: configPath, added: missing, readOnly: true };
+}
+
+/** Inspect the user-level kimi config and report whether the canonical CAWS
+ *  wiring is present. Reuses SettingsWiringStatus so the init renderer can
+ *  treat it uniformly with the Claude/ZCode inspection surfaces. */
+export function inspectKimiUserConfig(
+  opts: { env?: NodeJS.ProcessEnv } = {}
+): SettingsWiringStatus {
+  const configPath = kimiUserConfigPath(opts.env);
+  let existing: string | null = null;
+  try {
+    existing = fs.readFileSync(configPath, 'utf8');
+  } catch {
+    return { kind: 'absent' };
+  }
+  const missing = missingKimiHookEvents(existing);
+  if (missing.length === 0) return { kind: 'wired' };
+  return { kind: 'partial', missing };
+}
+
+/** Write `.kimi-code/caws-hooks.toml.example` with the canonical CAWS wiring.
+ *  Idempotent (always writes the same bytes). Reference artifact for users
+ *  who decline the user-level merge (or whose init ran without
+ *  --wire-user-config). */
+export function writeKimiConfigExample(repoRoot: string): string {
+  const examplePath = path.join(
+    repoRoot,
+    '.kimi-code',
+    'caws-hooks.toml.example'
+  );
+  ensureDir(path.dirname(examplePath));
+  fs.writeFileSync(examplePath, CANONICAL_KIMI_CONFIG_SNIPPET, 'utf8');
+  return examplePath;
+}
+
+export function planKimiConfigExample(
+  repoRoot: string
+): SettingsExamplePlanResult {
+  const examplePath = path.join(
+    repoRoot,
+    '.kimi-code',
+    'caws-hooks.toml.example'
+  );
+  const desired = CANONICAL_KIMI_CONFIG_SNIPPET;
+  let existing: string | null = null;
+  try {
+    existing = fs.readFileSync(examplePath, 'utf8');
+  } catch {
+    existing = null;
+  }
+  return {
+    path: examplePath,
+    action:
+      existing === null
+        ? 'would_create'
+        : existing === desired
+          ? 'unchanged'
+          : 'would_update',
+    readOnly: true,
+  };
 }

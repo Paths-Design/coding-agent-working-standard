@@ -511,6 +511,17 @@ test-caws-project/
 .claude/logs/guard-strikes-*.json
 **/.claude/logs/guard-strikes-*.json
 
+# Kimi Code hook runtime state (same classes as the .claude/ entries above:
+# reprieve/latch state under hooks/state, strike counters and reset logs under
+# logs) plus the local user-level config shim. Per-session, must not be
+# committed. (CAWS-HOOK-PACK-KIMI-CODE-001)
+.kimi-code/hooks/state/
+**/.kimi-code/hooks/state/
+.kimi-code/logs/
+**/.kimi-code/logs/
+.kimi-code/local.toml
+**/.kimi-code/local.toml
+
 # CAWS logs
 caws-debug.log*
 **/caws.log

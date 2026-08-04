@@ -33,15 +33,20 @@ import {
 import {
   detectOrphanedDispatchDir,
   inspectClaudeSettings,
+  inspectKimiUserConfig,
   inspectZcodeConfig,
   installHookPack,
   mergeClaudeSettings,
+  mergeKimiUserConfig,
   mergeZcodeConfig,
   planClaudeSettingsMerge,
   planHookPackInstall,
+  planKimiConfigExample,
+  planKimiConfigMerge,
   planSettingsExample,
   planZcodeConfigExample,
   planZcodeConfigMerge,
+  writeKimiConfigExample,
   writeSettingsExample,
   writeZcodeConfigExample,
 } from '../../init/hook-install';
@@ -77,6 +82,7 @@ import {
   renderCodexHookTrust,
   renderActivationContract,
   renderHookPackInstall,
+  renderKimiHookWiring,
   renderSettingsWiring,
   renderZcodeSettingsWiring,
 } from '../render/init-hook-pack';
@@ -122,6 +128,12 @@ export interface InitCommandOptions {
   readonly plan?: boolean;
   /** When true with --plan, emit machine-readable JSON. */
   readonly json?: boolean;
+  /** kimi-code only: merge the canonical CAWS [[hooks]] blocks into the
+   *  user-level $KIMI_CODE_HOME/config.toml. kimi hooks have no project-level
+   *  config, so the wiring lives in user-level state; this flag is the
+   *  explicit consent for that out-of-repo write. Usage error with any other
+   *  surface. */
+  readonly wireUserConfig?: boolean;
 }
 
 function chooseSurface(
@@ -356,6 +368,12 @@ interface InitPlanDocument {
     readonly config_json: SettingsMergePlanResult;
     readonly config_example: SettingsExamplePlanResult;
   };
+  readonly kimi_settings?: {
+    /** Present only with --wire-user-config: the user-level config.toml
+     *  merge preview (out-of-repo path, read-only). */
+    readonly user_config?: SettingsMergePlanResult;
+    readonly config_example: SettingsExamplePlanResult;
+  };
   readonly codex_trust_note?: string;
   readonly next_apply_command: string;
 }
@@ -377,6 +395,7 @@ function applyCommand(opts: InitCommandOptions): string {
   }
   if (opts.force === true) parts.push('--force');
   if (opts.adopt === true) parts.push('--adopt');
+  if (opts.wireUserConfig === true) parts.push('--wire-user-config');
   if (opts.showData === true) parts.push('--data');
   return parts.join(' ');
 }
@@ -478,6 +497,28 @@ function renderInitPlan(plan: InitPlanDocument): string {
     );
   }
 
+  if (plan.kimi_settings) {
+    lines.push('');
+    lines.push('kimi user-level wiring:');
+    if (plan.kimi_settings.user_config) {
+      lines.push(
+        `  config.toml (${plan.kimi_settings.user_config.path}): ${plan.kimi_settings.user_config.kind}`
+      );
+      if (plan.kimi_settings.user_config.kind === 'merged') {
+        lines.push(
+          `  would add: ${plan.kimi_settings.user_config.added.join(', ')}`
+        );
+      }
+    } else {
+      lines.push(
+        '  config.toml: not merged (re-run with --wire-user-config to consent to the user-level write)'
+      );
+    }
+    lines.push(
+      `  caws-hooks.toml.example: ${plan.kimi_settings.config_example.action}`
+    );
+  }
+
   if (plan.codex_trust_note) {
     lines.push('');
     lines.push(plan.codex_trust_note);
@@ -554,6 +595,15 @@ function runInitPlan(
           config_example: planZcodeConfigExample(repoRoot),
         }
       : undefined;
+  const kimiSettings =
+    hookPlan.pack?.id === 'kimi-code'
+      ? {
+          ...(opts.wireUserConfig === true
+            ? { user_config: planKimiConfigMerge() }
+            : {}),
+          config_example: planKimiConfigExample(repoRoot),
+        }
+      : undefined;
   const codexTrustNote =
     hookPlan.pack?.id === 'codex'
       ? 'Codex project hooks require project trust and /hooks review before changed command hooks run.'
@@ -578,6 +628,7 @@ function runInitPlan(
     hook_pack: { ...hookPlan, read_only: true },
     ...(claudeSettings ? { claude_settings: claudeSettings } : {}),
     ...(zcodeSettings ? { zcode_settings: zcodeSettings } : {}),
+    ...(kimiSettings ? { kimi_settings: kimiSettings } : {}),
     ...(codexTrustNote ? { codex_trust_note: codexTrustNote } : {}),
     next_apply_command: applyCommand(opts),
   };
@@ -616,6 +667,20 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     opts.overwrite !== true
   ) {
     err('caws init: overwrite targets require --overwrite.');
+    return 2;
+  }
+
+  // --wire-user-config is the explicit consent for the kimi-code out-of-repo
+  // merge into the user-level config.toml. It is meaningless on any other
+  // surface (their wiring is repo-local); refuse rather than silently ignore.
+  if (
+    opts.wireUserConfig === true &&
+    opts.agentSurface !== undefined &&
+    opts.agentSurface !== 'kimi-code'
+  ) {
+    err(
+      `caws init: --wire-user-config is only meaningful with --agent-surface kimi-code (got "${opts.agentSurface}").`
+    );
     return 2;
   }
 
@@ -765,6 +830,29 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     // now-wired state, exactly as the claude-code branch does.
     wiringStatus = inspectZcodeConfig(repoRoot);
     out(renderZcodeSettingsWiring(mergeResult));
+  } else if (hookPackResult.pack?.id === 'kimi-code') {
+    // Kimi has no project-level hook config: the wiring lives in the
+    // user-level $KIMI_CODE_HOME/config.toml and is merged ONLY under the
+    // explicit --wire-user-config consent flag. The in-repo example is
+    // always written so a flagless run still leaves a paste-able artifact.
+    writeKimiConfigExample(repoRoot);
+    if (opts.wireUserConfig === true) {
+      mergeResult = mergeKimiUserConfig();
+      // Re-inspect AFTER the merge so the activation panel reflects the
+      // now-wired state, exactly as the claude-code branch does.
+      wiringStatus = inspectKimiUserConfig();
+    } else {
+      wiringStatus = inspectKimiUserConfig();
+    }
+    out(renderKimiHookWiring(wiringStatus, mergeResult));
+  } else if (opts.wireUserConfig === true) {
+    // The flag only makes sense when the kimi-code pack was installed; on
+    // any other outcome (no pack, a different detected surface) refuse
+    // rather than silently ignore an out-of-repo-write consent flag.
+    err(
+      'caws init: --wire-user-config is only meaningful when the kimi-code hook pack is installed.'
+    );
+    return 2;
   }
 
   // Step 4: activation contract. The contract message tailors to whether

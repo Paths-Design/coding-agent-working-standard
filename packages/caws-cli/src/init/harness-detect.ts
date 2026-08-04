@@ -42,6 +42,10 @@ const SIGNALS: readonly SurfaceSignal[] = [
     markers: ['.zcode', '.zcode/config.json', '.zcode/hooks'],
   },
   {
+    surface: 'kimi-code',
+    markers: ['.kimi-code', '.kimi-code/local.toml', '.kimi-code/hooks'],
+  },
+  {
     surface: 'cursor',
     markers: ['.cursor', '.cursor/settings.json', '.cursor/rules'],
   },

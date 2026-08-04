@@ -8,6 +8,7 @@
 import {
   CANONICAL_SETTINGS_SNIPPET,
   CANONICAL_ZCODE_CONFIG_SNIPPET,
+  kimiUserConfigPath,
   type SettingsMergeResult,
   type SettingsWiringStatus,
 } from '../../init/hook-install';
@@ -35,7 +36,7 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
         '  This repo is NOT agent-safe for multi-session work without external governance.'
       );
       lines.push(
-        '  If you intended to enable a hook pack, rerun with --agent-surface claude-code, codex, opencode, or zcode.'
+        '  If you intended to enable a hook pack, rerun with --agent-surface claude-code, codex, opencode, zcode, or kimi-code.'
       );
       return lines.join('\n');
     }
@@ -223,6 +224,70 @@ export function renderZcodeSettingsWiring(
   lines.push('');
   lines.push('  A .zcode/config.json.example with the canonical wiring was also');
   lines.push('  written for reference.');
+  return lines.join('\n');
+}
+
+/** Render the kimi-code wiring step. Kimi has no project-level hook config:
+ *  the wiring lives in the user-level $KIMI_CODE_HOME/config.toml and the
+ *  merge runs only under --wire-user-config. When the merge ran, reports its
+ *  outcome (created / merged / unchanged). When it did not, prints the
+ *  manual-paste instructions and the consent-flag hint. */
+export function renderKimiHookWiring(
+  wiringStatus: SettingsWiringStatus | undefined,
+  mergeResult: SettingsMergeResult | undefined
+): string {
+  const lines: string[] = [];
+  const configPath = kimiUserConfigPath();
+  lines.push(section('Step: kimi user-level hook wiring'));
+
+  if (mergeResult !== undefined) {
+    switch (mergeResult.kind) {
+      case 'created':
+        lines.push(`  Created ${mergeResult.path} with the five CAWS`);
+        lines.push('  [[hooks]] blocks (PreToolUse/PostToolUse/SessionStart/Stop/PreCompact).');
+        break;
+      case 'merged':
+        lines.push('  Appended the missing CAWS [[hooks]] blocks to your');
+        lines.push(`  existing ${mergeResult.path} (added: ${mergeResult.added.join(', ')}).`);
+        lines.push('  Everything already in the file was preserved unchanged.');
+        break;
+      case 'unchanged':
+        lines.push(`  OK — ${mergeResult.path} already wires all five CAWS hook`);
+        lines.push('  events. No change.');
+        break;
+      case 'invalid':
+        // mergeKimiUserConfig never rewrites or parses-fails user content, so
+        // this arm is defensive only.
+        lines.push(`  ERROR — ${mergeResult.path}: ${mergeResult.error}`);
+        lines.push('  init did NOT modify the file.');
+        break;
+    }
+  } else {
+    lines.push('  Kimi reads hooks ONLY from the user-level config.toml —');
+    lines.push('  there is no project-level hook config to merge into.');
+    lines.push('  init did NOT touch your user-level config (no --wire-user-config).');
+    lines.push('');
+    lines.push('  To activate the CAWS hooks, either:');
+    lines.push('    1. re-run:  caws init --agent-surface kimi-code --wire-user-config');
+    lines.push(`       (appends the CAWS blocks to ${configPath},`);
+    lines.push('        idempotently, preserving everything else), or');
+    lines.push('    2. paste the blocks from .kimi-code/caws-hooks.toml.example');
+    lines.push(`       into ${configPath} yourself.`);
+    lines.push('');
+    lines.push('  The wiring is repo-conditional: outside repos with the CAWS');
+    lines.push('  kimi-code pack installed, every block exits silently.');
+  }
+
+  if (wiringStatus?.kind === 'partial') {
+    lines.push('');
+    lines.push(
+      `  Note: ${configPath} currently wires only some CAWS events (missing: ${wiringStatus.missing.join(', ')}).`
+    );
+  }
+
+  lines.push('');
+  lines.push('  Hooks load at session start: start a NEW kimi session for the');
+  lines.push('  wiring to take effect.');
   return lines.join('\n');
 }
 

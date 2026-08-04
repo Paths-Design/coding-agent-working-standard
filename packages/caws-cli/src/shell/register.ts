@@ -328,6 +328,7 @@ export function registerShellCommands(
         plan?: boolean;
         dryRun?: boolean;
         json?: boolean;
+        wireUserConfig?: boolean;
       }) => {
         // Commander hands back the raw string for agentSurface; the
         // runInitCommand validator rejects unknown values with exit 2.
@@ -363,6 +364,10 @@ export function registerShellCommands(
         }
         if (opts.json !== undefined) {
           (runOpts as { json?: boolean }).json = opts.json;
+        }
+        if (opts.wireUserConfig !== undefined) {
+          (runOpts as { wireUserConfig?: boolean }).wireUserConfig =
+            opts.wireUserConfig;
         }
         const code = runInitCommand(runOpts);
         exit(code);
