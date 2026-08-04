@@ -7,12 +7,14 @@ created_at: '2026-08-04T00:24:30.926Z'
 updated_at: '2026-08-04T00:25:14.045Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli hook-pack system (init/templates)
+    - shared hook core (agent-surface resolver)
+    - session resolution + reprieve vendor maps (lockstep arrays)
+    - consumer project-level .qwen/settings.json and root QWEN.md (repo-local wiring)
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/templates/hook-packs/qwen-code/**
     - packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh
     - packages/caws-cli/src/init/hook-packs/**
@@ -40,12 +42,29 @@ scope:
     - .qwen/**
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - The qwen-code wiring lives in the repo-local .qwen/settings.json (plus a managed import line in root QWEN.md); merges preserve existing user keys, are idempotent, and a second caws init run is a byte-identical no-op.
+  - The installed hook command is repo-conditional — the shim resolves the git root at invocation time and is inert (exit 0, no output) in any directory that is not a CAWS repo with the qwen-code pack installed.
+  - All guard logic stays in the shared pack; the qwen-code pack carries only wiring/translation (shim if needed, doctrine doc, example config) and surface identity reaches shared scripts only via injected env (CAWS_AGENT_SURFACE/CAWS_PROJECT_DIR).
+  - Block reasons reach the model via permissionDecision deny (stdout JSON, exit 0) or stderr with exit 2; ask-level escalations degrade to deny in headless/background contexts (harness-native).
+  - The pack declares CAWS_SUPPORTS_UPDATED_INPUT=0 because Qwen Code 0.21.x does not enforce hookSpecificOutput.updatedInput (probed 2026-08-03, tmp/qwen-hook-probe-findings.md); quiet-merge passes commands through unrewritten for this surface.
+  - The lockstep surface arrays in src/shell/session/resolve-session.ts and src/shell/commands/reprieve.ts list qwen-code and kimi-code after this spec.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: a fresh consumer repo
+    when: caws init --agent-surface qwen-code runs
+    then: the qwen-code pack files land at their manifest destPaths, .qwen/settings.json gains the managed PreToolUse/PostToolUse/SessionStart/Stop/PreCompact hook blocks, and root QWEN.md gains the managed doctrine import; a second run is a byte-identical no-op
+  - id: A2
+    given: the qwen-code hook command is present in .qwen/settings.json
+    when: a qwen session (or the shim directly) runs in a directory that is not a CAWS repo (or a CAWS repo without the pack)
+    then: the hook exits 0 with no block and no CAWS output (inert outside CAWS repos)
+  - id: A3
+    given: a CAWS repo with the qwen-code pack installed
+    when: a qwen session is launched from a subdirectory of the repo and a guard refuses a tool call
+    then: CAWS_PROJECT_DIR resolves to the git root (not the subdirectory, never QWEN_CODE_PROJECT_DIR) and the block reason reaches the model via deny JSON or stderr/exit 2
+  - id: A4
+    given: the repo test suites
+    when: npm test (init + hooks suites) and scripts/fresh-install-smoke.mjs run
+    then: register/layout/fingerprint/qwen-config-merge tests pass and the smoke test proves install + idempotent re-run + inertness in a non-CAWS repo
 non_functional: {}
 contracts:
   - name: 'qwen-hook-pack'
