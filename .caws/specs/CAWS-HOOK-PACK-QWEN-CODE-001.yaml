@@ -2,10 +2,11 @@ id: CAWS-HOOK-PACK-QWEN-CODE-001
 title: 'Qwen Code agent surface: hook pack + project settings.json wiring'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: wt-qwen-surface
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-qwen-surface at f7c82c94b880492f9f0315affb59336fbb136e70'
 created_at: '2026-08-04T00:24:30.926Z'
-updated_at: '2026-08-04T12:59:49.287Z'
+updated_at: '2026-08-04T13:12:38.644Z'
 blast_radius:
   modules:
     - packages/caws-cli hook-pack system (init/templates)
