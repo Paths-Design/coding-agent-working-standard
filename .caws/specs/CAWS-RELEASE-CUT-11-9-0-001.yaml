@@ -2,10 +2,11 @@ id: CAWS-RELEASE-CUT-11-9-0-001
 title: 'Release cut: caws-cli 11.9.0 + caws-kernel 1.5.0 (kimi/qwen surfaces, coupled)'
 risk_tier: 2
 mode: chore
-lifecycle_state: active
-worktree: wt-release-cut
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-release-cut at 568d3b17ec02e519c7645f3daf54551a569f9f32'
 created_at: '2026-08-04T14:08:08.635Z'
-updated_at: '2026-08-04T14:08:51.951Z'
+updated_at: '2026-08-04T14:17:38.073Z'
 blast_radius:
   modules:
     - scripts/ (dead release-guard cluster removal)
