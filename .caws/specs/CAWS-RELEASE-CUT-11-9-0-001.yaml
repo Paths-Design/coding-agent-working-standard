@@ -7,7 +7,11 @@ created_at: '2026-08-04T14:08:08.635Z'
 updated_at: '2026-08-04T14:08:51.951Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - scripts/ (dead release-guard cluster removal)
+    - .github/workflows/release.yml (stale comment reconciliation)
+    - docs/release-procedure.md (stale reference reconciliation)
+    - packages/caws-cli (version bump + CHANGELOG + kernel dep floor)
+    - packages/caws-kernel (version bump + CHANGELOG)
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -23,11 +27,70 @@ scope:
     - .caws/specs/CAWS-RELEASE-CUT-11-9-0-001.yaml
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    The dead release-guard script cluster (release-guard-dry-run.mjs,
+    release-guard-commit-analyzer-check.mjs, release-guard-scope-audit.mjs,
+    multi-package-release.mjs) is removed from scripts/, and no release
+    guidance or workflow comment references scripts that no longer exist.
+    The retired semantic-release commit-driven publish model is not described
+    anywhere as active.
+  - >-
+    caws-kernel is bumped to 1.5.0 and caws-cli to 11.9.0; the CLI's
+    @paths.design/caws-kernel dependency floor is raised from ^1.4.0 to ^1.5.0
+    so a fresh install cannot resolve a registry-stale 1.4.x lacking the
+    successor-declarations / spec_reopened / SPEC_ID_REGEX symbols the CLI
+    imports.
+  - >-
+    Both CHANGELOGs carry a dated section matching the new version with no
+    remaining [Unreleased] body content; the prepublish fresh-install smoke
+    passes against the bumped versions before the kernel is published.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      The four orphaned release-guard scripts (invoked in no workflow run:
+      step; only referenced in each other and in stale comments/guidance).
+    when: >-
+      The release-cut spec lands.
+    then: >-
+      The four scripts are deleted; release.yml and release-procedure.md no
+      longer reference them or the retired semantic-release PR-advisory model.
+  - id: A2
+    given: >-
+      packages/caws-kernel at 1.4.0 with new exported symbols (successors,
+      spec_reopened schema, SPEC_ID_REGEX) consumed by the CLI but unpublished.
+    when: >-
+      The kernel version bump + CHANGELOG section are committed.
+    then: >-
+      kernel package.json reads 1.5.0; its CHANGELOG has a dated [1.5.0]
+      section; the kernel is ready for manual `npm publish --access public
+      --provenance` (manual-only in v1; caws-kernel-v* tags are refused).
+  - id: A3
+    given: >-
+      packages/caws-cli at 11.8.0 (predating the kimi/qwen/guard-fix content in
+      its own [Unreleased] section) depending on ^1.4.0 kernel.
+    when: >-
+      The CLI version bump + CHANGELOG finalize + dep floor raise are
+      committed.
+    then: >-
+      CLI package.json reads 11.9.0 with @paths.design/caws-kernel ^1.5.0; its
+      CHANGELOG has a dated [11.9.0] section (the prior [Unreleased] body);
+      `npm run build` and the fresh-install smoke pass so the tag-triggered
+      Release workflow's prepublish gate is pre-validated.
+  - id: A4
+    given: >-
+      CAWS-SPEC-SUCCESSOR-DECLARATION-CUSTODY-02, an active stub (TODO body,
+      no bound worktree, no concrete work) that would otherwise masquerade as
+      a release dependency.
+    when: >-
+      The release-cut spec lands.
+    then: >-
+      The -02 stub is archived (draft) so it does not block or confuse the
+      release; the core successor surface it would harden is already on main
+      and ships in kernel 1.5.0.
 non_functional: {}
-contracts: []
+contracts:
+  - name: fresh-install-smoke
+    type: behavior
+    description: >-
+      `npm run smoke:fresh-install` passes against the bumped versions,
+      pre-validating the Release workflow's prepublish gate.
