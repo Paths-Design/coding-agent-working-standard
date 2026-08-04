@@ -1235,6 +1235,7 @@ function assertCliTarballContainsKimiArtifacts(cliFiles) {
     'templates/hook-packs/kimi-code/hooks/caws-kimi-hook.sh',
     'templates/hook-packs/kimi-code/hooks/lib/emit.sh',
     'templates/hook-packs/kimi-code/hooks/lib/run-handlers.sh',
+    'templates/hook-packs/kimi-code/hooks/lib/parse-input.sh',
     'templates/hook-packs/kimi-code/AGENTS.md',
     'templates/hook-packs/shared/dispatch/pre_tool_use.sh',
     'templates/hook-packs/shared/protected-paths.sh',
@@ -1351,7 +1352,7 @@ function assertKimiShimInertInNonCawsRepo(projectDir) {
     cwd: plainRepo,
     hook_event_name: 'PreToolUse',
     tool_name: 'Write',
-    tool_input: { file_path: '.kimi-code/hooks/lib/emit.sh', content: 'x' },
+    tool_input: { path: '.kimi-code/hooks/lib/emit.sh', content: 'x' },
   };
   const result = spawnSync('bash', [shim, 'PreToolUse'], {
     cwd: plainRepo,
@@ -1376,7 +1377,9 @@ function assertKimiProtectedPathDispatcher(projectDir) {
     cwd: projectDir,
     hook_event_name: 'PreToolUse',
     tool_name: 'Write',
-    tool_input: { file_path: '.kimi-code/hooks/lib/emit.sh', content: 'echo tampered\n' },
+    // kimi's Edit tool sends tool_input.path (not the Claude file_path) —
+    // the parse-input override must normalize it or the guard is blind.
+    tool_input: { path: '.kimi-code/hooks/lib/emit.sh', old_string: 'a', new_string: 'b' },
   };
   // Run from a subdirectory: the shim must resolve the git root from cwd
   // (HOOK-PROJECT-DIR-ROOT-NOT-CWD-01) rather than assuming cwd == root.

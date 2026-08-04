@@ -4,9 +4,9 @@ risk_tier: 2
 mode: feature
 lifecycle_state: closed
 resolution: completed
-closure_notes: 'Auto-closed by caws worktree merge wt-kimi-surface at 311bfab1338999c3a79fbc0160aca4ac3c1d992c'
+closure_notes: 'Auto-closed by caws worktree merge wt-kimi-parse-fix at e82ef1baa846db0b2c36871fcaa1a2e8811a6036'
 created_at: '2026-08-03T23:05:48.048Z'
-updated_at: '2026-08-04T00:07:17.743Z'
+updated_at: '2026-08-04T02:52:09.321Z'
 blast_radius:
   modules:
     - packages/caws-cli hook-pack system (init/templates)

@@ -14,6 +14,9 @@
 #   - the run-handlers override ranks deny as priority-3 (immediate block) and
 #     promotes a non-zero aggregate to the blocking exit 2 (Kimi has no
 #     non-blocking error tier — exit 1 is not enforced, verified live);
+#   - the parse-input override normalizes tool_input.path -> HOOK_FILE_PATH
+#     and tool_call_id -> HOOK_TOOL_USE_ID (kimi field names; without it every
+#     path-based guard silently admits every kimi file edit);
 #   - quiet-merge emits no updatedInput under the kimi-code surface.
 
 load helpers
@@ -47,6 +50,7 @@ teardown_file() {
   [[ -f "$KIMI_VENDOR_DIR/AGENTS.md" ]]
   [[ -f "$KIMI_VENDOR_DIR/hooks/lib/emit.sh" ]]
   [[ -f "$KIMI_VENDOR_DIR/hooks/lib/run-handlers.sh" ]]
+  [[ -f "$KIMI_VENDOR_DIR/hooks/lib/parse-input.sh" ]]
   [[ -f "$KIMI_VENDOR_DIR/caws-hooks.toml.example" ]]
 }
 
@@ -163,6 +167,58 @@ SPY
     exit 0
   "
   assert_success
+}
+
+# --- parse-input override -----------------------------------------------------
+
+@test "kimi parse-input: tool_input.path normalizes to HOOK_FILE_PATH (kimi Edit/Write schema)" {
+  # The dogfood escape: kimi's file tools send tool_input.path, not the Claude
+  # file_path the shared parser reads — every path guard was blind without
+  # this override.
+  run env -i PATH="$PATH" \
+    CAWS_SHARED_LIB_DIR="$CAWS_TEST_HOOKS_DIR/lib" \
+    CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
+    bash -c "
+      source '$KIMI_VENDOR_DIR/hooks/lib/parse-input.sh'
+      export HOOK_INPUT_JSON='{\"hook_event_name\":\"PreToolUse\",\"session_id\":\"session_bats\",\"cwd\":\"/tmp\",\"tool_name\":\"Edit\",\"tool_input\":{\"path\":\".kimi-code/hooks/lib/emit.sh\",\"old_string\":\"a\",\"new_string\":\"b\"},\"tool_call_id\":\"tool_abc\"}'
+      parse_hook_input
+      printf '%s|%s\n' \"\$HOOK_FILE_PATH\" \"\$HOOK_TOOL_USE_ID\"
+    "
+  assert_success
+  assert_output ".kimi-code/hooks/lib/emit.sh|tool_abc"
+}
+
+@test "kimi parse-input: Claude file_path wins when both present; pathless tools stay empty" {
+  run env -i PATH="$PATH" \
+    CAWS_SHARED_LIB_DIR="$CAWS_TEST_HOOKS_DIR/lib" \
+    CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
+    bash -c "
+      source '$KIMI_VENDOR_DIR/hooks/lib/parse-input.sh'
+      (
+        export HOOK_INPUT_JSON='{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"claude.txt\",\"path\":\"kimi.txt\"}}'
+        parse_hook_input
+        printf 'both=%s\n' \"\$HOOK_FILE_PATH\"
+      )
+      (
+        export HOOK_INPUT_JSON='{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls\"}}'
+        parse_hook_input
+        printf 'bash=[%s]\n' \"\$HOOK_FILE_PATH\"
+      )
+    "
+  assert_success
+  assert_output $'both=claude.txt\nbash=[]'
+}
+
+@test "shim: a protected hook edit carrying kimi's tool_input.path is blocked end-to-end" {
+  # Regression for the live dogfood escape: same payload shape kimi actually
+  # sends for an Edit, from a subdirectory, must block with exit 2 and cite
+  # the protected path on stderr.
+  local subdir="$CAWS_TEST_REPO/packages/some-pkg"
+  mkdir -p "$subdir"
+  run env -i PATH="$PATH" \
+    bash -c "cd '$subdir' && printf '%s' '{\"hook_event_name\":\"PreToolUse\",\"session_id\":\"session_bats\",\"cwd\":\"'$subdir'\",\"tool_name\":\"Edit\",\"tool_input\":{\"path\":\".kimi-code/hooks/lib/emit.sh\",\"old_string\":\"a\",\"new_string\":\"b\"},\"tool_call_id\":\"tool_1\"}' | '$KIMI_SHIM' PreToolUse"
+  assert_failure 2
+  assert_output --partial '.kimi-code/hooks/lib/emit.sh is protected'
 }
 
 # --- run-handlers override ------------------------------------------------------

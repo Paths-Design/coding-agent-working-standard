@@ -227,6 +227,11 @@ genuine-divergence set (from the codex/claude-code comparison) is:
 - `lib/run-handlers.sh` (kimi-code) — the codex-style `deny` priority arm,
   plus promotion of any non-zero aggregate exit to the blocking exit 2 (Kimi
   does not enforce exit 1; both verified live against 0.31.1).
+- `lib/parse-input.sh` (kimi-code) — field-name normalization: kimi file
+  tools carry `tool_input.path` (not the Claude `file_path`) and
+  `tool_call_id` (not `tool_use_id`). A thin wrapper over the shared parser
+  (snapshot + wrap), codex-override precedent. Without it every path-based
+  guard is blind on this surface (live dogfood escape, pack v2).
 - `hooks/caws-qwen-hook.sh` — qwen-code only: a shim, not an override (same
   shape as the kimi shim). Repo-local wiring notwithstanding, Qwen exports no
   reliable repo-root env var, so the shim resolves the git root, injects the
