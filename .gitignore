@@ -533,6 +533,17 @@ test-caws-project/
 .qwen/QWEN.local.md
 **/.qwen/QWEN.local.md
 
+# ZCode hook runtime state (same classes as the entries above). The wiring
+# itself (.zcode/config.json, .zcode/config.json.example, .zcode/hooks/caws-bridge.sh)
+# IS committed; the per-session plan transcripts, logs, and guard/reprieve state
+# under hooks/state are high-turnover and go stale once the work lands.
+.zcode/hooks/state/
+**/.zcode/hooks/state/
+.zcode/logs/
+**/.zcode/logs/
+.zcode/plans/
+**/.zcode/plans/
+
 # CAWS logs
 caws-debug.log*
 **/caws.log
