@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [11.9.0] (2026-08-04)
+
 The agent-surface line continues: this release adds two new hook packs —
 **kimi-code** and **qwen-code** (the sixth and seventh supported harnesses) —
 and lands a wave of guard, worktree-merge, and session-recovery fixes, plus a
@@ -124,6 +126,20 @@ broad pass of governed discovery / planning / handoff commands across the CLI.
   consumers never received the file on install; the manifest now declares it.
   *(CAWS-HOOK-PACK-QWEN-CODE-001.)*
 
+### Removed
+
+- **Retired semantic-release release-guard script cluster.** Removed
+  `scripts/release-guard-dry-run.mjs`,
+  `scripts/release-guard-commit-analyzer-check.mjs`,
+  `scripts/release-guard-scope-audit.mjs`, and `scripts/multi-package-release.mjs`
+  (~1118 lines). These backed the retired commit-push-publish model and were
+  orphaned by the tag-driven release flow (`CAWS-RELEASE-TAG-DRIVEN-001`):
+  invoked in no workflow `run:` step, only referenced in each other and in
+  stale comments. `release-guard-dry-run` actively threw
+  (`release.yml has no push.paths trigger list`) because the workflow became
+  tag-triggered. Stale references in `.github/workflows/release.yml` and
+  `docs/release-procedure.md` reconciled. *(CAWS-RELEASE-CUT-11-9-0-001.)*
+
 ### Consumer upgrade notes
 
 - This release bumps the shared hook-pack (to v31, from v22 in 11.8.0). Existing
@@ -132,12 +148,13 @@ broad pass of governed discovery / planning / handoff commands across the CLI.
   `--adopt` to preserve local edits, or `--force` to apply. Several fixes
   (scope-priority, write-allowlist sync) only take effect after the pack
   refresh.
-- **Coupled kernel release required.** The successor-declarations feature
-  consumes new exported kernel symbols (structured `successors`, the
-  `spec_reopened` event schema). The kernel `@paths.design/caws-kernel` must be
-  bumped and published (to 1.5.0) **before** this CLI tag, and the CLI's
-  `^1.4.0` dependency raised — otherwise the prepublish fresh-install smoke
-  resolves a registry-stale kernel missing those symbols.
+- **Coupled kernel release.** This CLI depends on `@paths.design/caws-kernel`
+  **1.5.0** (the dependency floor is raised from `^1.4.0` to `^1.5.0`). Kernel
+  1.5.0 exports the successor-declarations surface (`successors`, the
+  `spec_reopened` event schema, `SPEC_ID_REGEX`) this CLI consumes; it must be
+  published **before** this CLI tag. Kernel publishes manually in v1
+  (`cd packages/caws-kernel && npm publish --access public --provenance`); see
+  `docs/release-procedure.md`.
 
 ## [11.8.0] (2026-07-17)
 

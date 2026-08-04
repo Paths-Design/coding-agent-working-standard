@@ -5,6 +5,41 @@ pure-TypeScript governance primitive layer (spec/policy/scope/evidence/worktree
 types, parsers, validators, lifecycle transitions; no I/O) consumed by
 `caws-cli@^11` and external integrators.
 
+## [Unreleased]
+
+## [1.5.0] (2026-08-04)
+
+Additive governance-primitive surface for the caws-cli 11.9.0 release (the
+kimi-code + qwen-code agent-surface line, governed spec restore, and the
+successor-declarations close gate). No breaking changes — a new optional spec
+field, new event vocabulary + schema, and one exported regex. The caws-cli
+11.9.0 runtime imports these symbols (`caws specs reopen` consumes the
+`spec_reopened` schema; `caws specs close` consumes structured `successors`;
+the shell layer shares `SPEC_ID_REGEX`), so **this kernel 1.5.0 must be
+published before the caws-cli 11.9.0 tag** (coupled-release ordering; see
+`docs/release-procedure.md`). Kernel publishes manually in v1 (tag-driven CI
+publish is deferred; `caws-kernel-v*` tags are refused-and-deleted); the CLI's
+`^1.4.0` dependency floor is raised to `^1.5.0` to prevent a fresh install
+from resolving a registry-stale 1.4.x that lacks these symbols.
+
+### Added
+
+- **Structured successor declarations.** Optional top-level `successors` array
+  on `spec.v1.json` (added in place; `additionalProperties` stays false, no new
+  required field). Entries carry `target_spec_id` (canonical spec-id grammar,
+  validated by the shared `SPEC_ID_REGEX`), `disposition`
+  (`required|declined|absorbed`), and optional `rationale` / `absorbed_by`. A
+  pure resolution oracle (`spec/successors.ts`) resolves a spec's successor
+  chain so a superseded `-01` resolves as superseded rather than completed.
+  *(CAWS-SPEC-SUCCESSOR-DECLARATION-CUSTODY-01.)*
+- **`spec_reopened` event schema.** `spec_reopened.v1.json` added to the event
+  schema registry and the `EventType` enum (was in the enum but not the JSON
+  schema, blocking chain validation after `caws specs reopen`). Schema-drift
+  fix that unblocks the governed closed→active transition.
+- **`SPEC_ID_REGEX` exported** from the `spec` barrel (previously internal).
+  Shared with the CLI shell layer so spec-id grammar cannot diverge between
+  the kernel and consumers. Prerequisite for `CAWS-REFACTOR-SHARED-UTILS-001`.
+
 ## [1.4.0] (2026-06-16)
 
 Additive governance-primitive surface for the caws-cli 11.4.0 hook-de-duplication
