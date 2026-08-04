@@ -200,7 +200,16 @@ import type { HookPackV1 } from './types';
 // and SURFACES doc. lib/session-id.sh adds QWEN_CODE_SESSION_ID to the
 // canonical env-var precedence (tier 4, after CODEX_THREAD_ID), mirroring the
 // resolve-session.ts qwen tier. No guard logic changes.
-export const SHARED_PACK_VERSION = 31;
+//
+// Version 32: CAWS-SESSION-LOG-QWEN-001. session_log_renderer.py learns
+// Qwen Code transcripts (Gemini-shaped message.parts rows): rows convert to
+// the same canonical events the claude branches emit, tool runtime ids
+// normalize at the parse boundary, system telemetry and @-mention
+// context-injection wrapper rows are dropped. session-log.sh matches qwen
+// runtime tool ids in the PostToolUse plan-file trigger and gains chats/
+// transcript fallback candidates. Design validated against a real 1377-row
+// qwen transcript and sterling's harness_qwen adapter port.
+export const SHARED_PACK_VERSION = 32;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.

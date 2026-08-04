@@ -100,6 +100,23 @@ resolve_transcript() {
     return
   fi
 
+  # Qwen Code keeps durable transcripts under a chats/ subdir of the project
+  # store (CAWS-SESSION-LOG-QWEN-001, verified 0.21.4):
+  # ~/.qwen/projects/<slug>/chats/<session-id>.jsonl. The payload's
+  # $TRANSCRIPT_PATH usually names it already; this fallback covers hook
+  # fires whose payload lacks the path.
+  candidate="$HOME/${CAWS_VENDOR_DIR}/projects/${slug}/chats/${SESSION_ID}.jsonl"
+  if [[ -f "$candidate" ]]; then
+    printf '%s\n' "$candidate"
+    return
+  fi
+
+  candidate="$HOME/${CAWS_VENDOR_DIR}/projects/-${slug}/chats/${SESSION_ID}.jsonl"
+  if [[ -f "$candidate" ]]; then
+    printf '%s\n' "$candidate"
+    return
+  fi
+
   printf '\n'
 }
 
@@ -208,12 +225,16 @@ handle_post_tool_use() {
   tool_name="$HOOK_TOOL_NAME"
   file_path="${HOOK_FILE_PATH:-}"
   case "$tool_name" in
-    Write|Edit)
+    Write|Edit|write_file|edit)
+      # qwen-code runtime tool ids reach this hook unnormalized (the shared
+      # parse-input.sh is sourced directly above, not via caws_source_lib),
+      # so the qwen names are matched alongside the canonical ones
+      # (CAWS-SESSION-LOG-QWEN-001).
       if is_plan_file_path "$file_path"; then
         render_session_output "$(resolve_transcript)"
       fi
       ;;
-    ExitPlanMode)
+    ExitPlanMode|exit_plan_mode)
       render_session_output "$(resolve_transcript)"
       ;;
     *)
