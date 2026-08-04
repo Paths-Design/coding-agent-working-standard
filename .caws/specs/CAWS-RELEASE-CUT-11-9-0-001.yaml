@@ -4,7 +4,7 @@ risk_tier: 2
 mode: chore
 lifecycle_state: active
 created_at: '2026-08-04T14:08:08.635Z'
-updated_at: '2026-08-04T14:08:19.963Z'
+updated_at: '2026-08-04T14:08:51.951Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
@@ -12,7 +12,6 @@ blast_radius:
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - scripts/
     - .github/workflows/release.yml
     - docs/release-procedure.md
