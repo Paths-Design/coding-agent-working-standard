@@ -1,0 +1,27 @@
+id: CAWS-SESSION-LOG-QWEN-001
+title: 'Session log renderer: handle Qwen Code transcripts'
+risk_tier: 2
+mode: feature
+lifecycle_state: active
+created_at: '2026-08-04T17:14:03.173Z'
+updated_at: '2026-08-04T17:14:03.173Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'qwen-session-render'
+    type: behavior
