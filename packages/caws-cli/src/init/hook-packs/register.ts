@@ -1,13 +1,15 @@
 // Pack registry. Maps `--agent-surface <id>` to a `HookPackV1` manifest.
 //
-// The implemented packs are `claude-code`, `codex`, `opencode`, and `zcode`.
-// `cursor` and `windsurf` are recognized as values but resolution returns a
-// "declared but not implemented" diagnostic — the abstraction is in place so
-// adding a new pack is purely additive (drop a manifest, register it here).
+// The implemented packs are `claude-code`, `codex`, `opencode`, `zcode`, and
+// `kimi-code`. `cursor` and `windsurf` are recognized as values but resolution
+// returns a "declared but not implemented" diagnostic — the abstraction is in
+// place so adding a new pack is purely additive (drop a manifest, register it
+// here).
 
 import type { AgentSurface, HookPackV1 } from './types';
 import { CLAUDE_CODE_PACK } from './manifest-claude-code';
 import { CODEX_PACK } from './manifest-codex';
+import { KIMI_CODE_PACK } from './manifest-kimi-code';
 import { OPENCODE_PACK } from './manifest-opencode';
 import { ZCODE_PACK } from './manifest-zcode';
 
@@ -36,6 +38,9 @@ export function resolveHookPack(surface: AgentSurface): PackResolution {
   if (surface === 'zcode') {
     return { kind: 'pack', pack: ZCODE_PACK };
   }
+  if (surface === 'kimi-code') {
+    return { kind: 'pack', pack: KIMI_CODE_PACK };
+  }
   // cursor / windsurf: recognized but not yet implemented.
   return { kind: 'declared_not_implemented', surface };
 }
@@ -47,6 +52,7 @@ export const KNOWN_SURFACES: readonly AgentSurface[] = [
   'codex',
   'opencode',
   'zcode',
+  'kimi-code',
   'cursor',
   'windsurf',
   'none',
@@ -58,6 +64,7 @@ export const IMPLEMENTED_SURFACES: readonly AgentSurface[] = [
   'codex',
   'opencode',
   'zcode',
+  'kimi-code',
 ];
 
 export function isKnownSurface(value: string): value is AgentSurface {

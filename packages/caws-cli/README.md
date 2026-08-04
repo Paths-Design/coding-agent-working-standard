@@ -87,6 +87,7 @@ caws init --agent-surface claude-code
 caws init --agent-surface codex
 caws init --agent-surface opencode
 caws init --agent-surface zcode
+caws init --agent-surface kimi-code
 ```
 <!-- agent-surfaces-install:end -->
 

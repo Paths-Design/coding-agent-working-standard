@@ -766,6 +766,11 @@ export const INIT_COMMAND_META: LeafCommandMeta = {
       description:
         'For hook-pack install: leave drifted or unmanaged files in place without enforcing pack contents. CAUTION: pack drift is no longer tracked for those paths.',
     },
+    {
+      flag: '--wire-user-config',
+      description:
+        'kimi-code only: merge the canonical CAWS [[hooks]] blocks into the user-level $KIMI_CODE_HOME/config.toml (append-only, idempotent). Without this flag init installs the pack and prints the wiring for manual paste.',
+    },
   ],
 };
 

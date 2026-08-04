@@ -36,6 +36,11 @@
 #                         decision (Claude Code), "deny" when it does not
 #                         (Codex maps ask->deny). Used by emit.sh to select
 #                         the correct permission-decision vocabulary.
+#   CAWS_SUPPORTS_UPDATED_INPUT — "1" when the harness honors the PreToolUse
+#                         updatedInput contract (quiet-merge.sh rewrites the
+#                         command), "0" when it does not (kimi-code: no
+#                         documented updatedInput contract — quiet-merge
+#                         passes the command through unrewritten).
 #   CAWS_INSTRUCTION_FILES — space-separated root instruction filenames the
 #                         harness reads at the repo root (e.g. "CLAUDE.md" for
 #                         claude-code, "AGENTS.md" for codex/opencode/zcode).
@@ -77,6 +82,13 @@
 #                  wiring installs a bridge wrapper (caws-bridge.sh) that
 #                  re-wraps non-JSON shared-dispatcher output as valid
 #                  additionalContext envelopes. Supports PreToolUse ask.
+#   kimi-code    — Kimi Code CLI. Hooks live ONLY in the user-level
+#                  $KIMI_CODE_HOME/config.toml (no project-level config), so
+#                  the wiring is a repo-conditional shim (caws-kimi-hook.sh)
+#                  that resolves the git root at invocation time (codex
+#                  precedent) and no-ops outside CAWS repos. Deny-only PreToolUse
+#                  vocab (verified live: "ask" does not block); block reasons
+#                  go to stderr with exit 2.
 #   (future)     — cursor, windsurf, vscode, idea, ... Add a case arm below.
 #
 # IDEMPOTENT: safe to source multiple times.
@@ -194,6 +206,18 @@ case "$CAWS_AGENT_SURFACE" in
     CAWS_PERMISSION_VOCAB="ask"
     CAWS_INSTRUCTION_FILES="AGENTS.md"
     ;;
+  kimi-code)
+    CAWS_VENDOR_DIR=".kimi-code"
+    CAWS_PLATFORM_FLAG="kimi-code"
+    # Kimi has no PreToolUse "ask" decision that blocks (verified live on
+    # 0.31.1: ask degrades to allow); map ask -> deny, matching the codex
+    # adapter precedent.
+    CAWS_PERMISSION_VOCAB="deny"
+    CAWS_INSTRUCTION_FILES="AGENTS.md"
+    # No documented updatedInput contract — quiet-merge passes the command
+    # through unrewritten on this surface.
+    CAWS_SUPPORTS_UPDATED_INPUT="0"
+    ;;
   *)
     # Unknown surface — fall through to claude-code defaults so a
     # misconfigured wiring does not become a hard block. Emit a warning to
@@ -220,6 +244,10 @@ else
   # Individual hooks that need an absolute log dir must resolve cwd themselves.
   CAWS_LOG_DIR="${CAWS_VENDOR_DIR}/logs"
 fi
+
+# Default updatedInput support ON for every surface that has been emitting it
+# (all surfaces predating this flag); the kimi-code arm above opts out.
+: "${CAWS_SUPPORTS_UPDATED_INPUT:=1}"
 
 # ---------------------------------------------------------------------------
 # 4b. Derive CAWS_HOOKS_DIR — where the hook SCRIPTS live.
@@ -278,7 +306,7 @@ if [[ -z "${CAWS_HOOKS_DIR:-}" ]]; then
   unset _caws_hooks_candidates _caws_self _caws_lib_dir _caws_cand
 fi
 
-export CAWS_VENDOR_DIR CAWS_PLATFORM_FLAG CAWS_PERMISSION_VOCAB CAWS_INSTRUCTION_FILES CAWS_LOG_DIR CAWS_HOOKS_DIR
+export CAWS_VENDOR_DIR CAWS_PLATFORM_FLAG CAWS_PERMISSION_VOCAB CAWS_INSTRUCTION_FILES CAWS_LOG_DIR CAWS_HOOKS_DIR CAWS_SUPPORTS_UPDATED_INPUT
 
 # ---------------------------------------------------------------------------
 # 5. caws_source_lib <basename>

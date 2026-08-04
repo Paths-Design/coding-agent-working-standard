@@ -67,6 +67,7 @@ const RECORDED = JSON.parse(
 const { SHARED_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-shared');
 const { CLAUDE_CODE_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-claude-code');
 const { CODEX_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-codex');
+const { KIMI_CODE_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-kimi-code');
 const { OPENCODE_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-opencode');
 const { ZCODE_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-zcode');
 
@@ -78,6 +79,7 @@ const PACKS = [
     version: CLAUDE_CODE_PACK_VERSION,
   },
   { id: 'codex', dir: path.join(PACKS_ROOT, 'codex'), version: CODEX_PACK_VERSION },
+  { id: 'kimi-code', dir: path.join(PACKS_ROOT, 'kimi-code'), version: KIMI_CODE_PACK_VERSION },
   { id: 'opencode', dir: path.join(PACKS_ROOT, 'opencode'), version: OPENCODE_PACK_VERSION },
   { id: 'zcode', dir: path.join(PACKS_ROOT, 'zcode'), version: ZCODE_PACK_VERSION },
 ];

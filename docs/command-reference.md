@@ -34,7 +34,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws events`](#caws-events) — Read and maintain .caws/events.jsonl (list/show/rotate/migrate/verify-archive)
 - [`caws waiver`](#caws-waiver) — Manage CAWS waivers (bounded exception records that suppress matching gate violations)
 - [`caws reprieve`](#caws-reprieve) — Session-scoped guard reprieve: skip a PreToolUse guard for ONE session until a stated expiry. Use when a session legitimately needs to do what a guard blocks (e.g. editing a hook script) WITHOUT disabling it for every other session. Distinct from `caws waiver`: a reprieve skips a HOOK guard at dispatch time (operational cache, session-scoped, expiring); a waiver bypasses a GATE at policy-run time (governance state, kernel-adjudicated). Replaces the anti-pattern of commenting a guard out of the dispatcher HANDLERS array.
-- [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/amend-scope/close/archive/prune-archive/migrate/validate)
+- [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/amend-scope/close/reopen/archive/prune-archive/migrate/validate)
 - [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.
 - [`caws agents`](#caws-agents) — Agent liveness substrate: register/heartbeat/stop/list/show/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.
 - [`caws message`](#caws-message) — Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/poll/inbox/history/prune directed messages between running sessions, addressed by session id, over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
@@ -50,10 +50,11 @@ Bootstrap the canonical vNext .caws/ project state (idempotent; refuses to overw
 - `--plan` — Preview the canonical state, gitignore, hook-pack, and settings changes without writing anything.
 - `--dry-run` — Compatibility alias for --plan; previews init changes without writing anything.
 - `--json` — Emit the read-only init plan as JSON with --plan or --dry-run.
-- `--agent-surface <name>` — Install a hook pack for an agent harness. When omitted, init attempts filesystem detection and skips hook install when ambiguous: claude-code | codex | opencode | zcode | cursor | windsurf | none
+- `--agent-surface <name>` — Install a hook pack for an agent harness. When omitted, init attempts filesystem detection and skips hook install when ambiguous: claude-code | codex | opencode | zcode | kimi-code | cursor | windsurf | none
 - `--overwrite [paths...]` — For hook-pack install: select drifted or unmanaged files at managed pack paths for replacement — every pack file when bare, or only the listed destination paths. Without --force this previews a unified diff of each replacement and refuses (nothing is written); add --force to apply.
 - `--force` — With --overwrite: apply the previewed replacements. CAUTION: local edits to the selected files are lost. A usage error without --overwrite.
 - `--adopt` — For hook-pack install: leave drifted or unmanaged files in place without enforcing pack contents. CAUTION: pack drift is no longer tracked for those paths.
+- `--wire-user-config` — kimi-code only: merge the canonical CAWS [[hooks]] blocks into the user-level $KIMI_CODE_HOME/config.toml (append-only, idempotent). Without this flag init installs the pack and prints the wiring for manual paste.
 
 ## `caws doctor`
 
@@ -363,7 +364,8 @@ Grant a reprieve that skips the named handler(s) for the current session until e
 - `--handlers <list>` (**required**) — Comma-separated handler basenames to skip (e.g. protected-paths.sh)
 - `--reason <text>` (**required**) — Why this reprieve is safe; recorded
 - `--approved-by <id>` (**required**) — Approver identity
-- `--expires-at <iso>` (**required**) — Expiry as an ISO-8601 datetime
+- `--for <duration>` — Expiry as a duration from now, e.g. 30m, 1h30m, 120s, 2d (units: s, m, h/hr, d). Mutually exclusive with --expires-at; exactly one is required.
+- `--expires-at <iso>` — Expiry as an absolute ISO-8601 datetime, e.g. 2026-07-26T02:30:00Z (must include Z or a +/-HH:MM offset). Mutually exclusive with --for; prefer --for unless you need an exact instant.
 - `--current` — Resolve the session from env (default)
 - `--session <id>` — Explicit session id (overrides --current)
 - `--surface <name>` — Agent surface / vendor dir (default: detect)
@@ -408,7 +410,7 @@ List active guard reprieves across sessions, with each one's handlers, expiry, a
 
 ## `caws specs`
 
-Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/amend-scope/close/archive/prune-archive/migrate/validate)
+Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/amend-scope/close/reopen/archive/prune-archive/migrate/validate)
 
 **Options:**
 
@@ -558,16 +560,14 @@ Close an active spec. Non-destructive raw-byte YAML patch; appends spec_closed e
 
 ### `caws specs reopen <id>`
 
-Reopen a closed spec (closed -> active), the inverse of close. `caws worktree merge` auto-closes the bound spec; if the work is later judged incomplete, `reopen` is the governed path back to active. Removes `resolution`/`closure_notes`/`superseded_by` (mandatory — an active spec may not carry `resolution`); leaves the spec unbound (close already cleared the `worktree:` field — re-bind with `caws worktree create/bind`). Appends a `spec_reopened` event.
+Reopen a closed spec (closed -> active), the inverse of close. Removes resolution/closure_notes/superseded_by so the active spec is valid; leaves the spec unbound (re-bind with caws worktree create/bind). Appends spec_reopened event.
 
 **Argument:** `id` (required) — Closed spec id to reopen
 
 **Options:**
 
-- `--reason <text>` — Optional reason recorded on the `spec_reopened` event (e.g. "work determined incomplete after merge"). Not written as `closure_notes` (that field is removed by reopen).
+- `--reason <text>` — Optional reason recorded on the spec_reopened event (e.g. work determined incomplete)
 - `--data` — Show structured data block on diagnostics
-
-**Refusals:** an already-active spec ("nothing to reopen"); a draft (use `activate`); an archived spec (use `restore`). No mutation on refusal.
 
 ### `caws specs archive [id]`
 
@@ -819,12 +819,12 @@ Show one lease by session id. Read-only.
 
 ### `caws agents prune`
 
-Operator-invoked cleanup. Defaults to dry-run; pass --apply to actually delete. Never invoked by hooks. Two modes: --dead (PID-liveness: remove active/stopping leases on THIS host whose owning process is gone — collapses the verify→stop→prune dance into one step), or --status <stopped|stale> --older-than-ms <ms> (retention-based).
+Operator-invoked cleanup. Defaults to dry-run; pass --apply to actually delete. Never invoked by hooks. Three modes: --dead (PID-liveness: remove active/stopping leases on THIS host whose owning process is gone), --status <stopped|stale|legacy> --older-than-ms <ms> (retention-based; legacy is status-agnostic and reaches v10/early-v11 records with no status field), or --status legacy for age-based cleanup of orphan records.
 
 **Options:**
 
 - `--dead` — Remove leases whose owning process is dead (active/stopping, this host, pid not alive). Mutually exclusive with --status. Foreign-host leases are never touched.
-- `--status <s>` — stopped | stale (required unless --dead)
+- `--status <s>` — stopped | stale | legacy (required unless --dead). legacy is status-agnostic — selects by last_active age alone, reaching records with no status field.
 - `--older-than-ms <ms>` — Retention threshold in milliseconds (required with --status)
 - `--stale-ttl-ms <ms>` — TTL for stale classification (used with --status stale; default 30m)
 - `--apply` — Actually delete (default: dry-run)
