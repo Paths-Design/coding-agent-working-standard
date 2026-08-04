@@ -3,6 +3,7 @@ title: 'Session log renderer: handle Qwen Code transcripts'
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: wt-session-log-qwen
 created_at: '2026-08-04T17:14:03.173Z'
 updated_at: '2026-08-04T17:17:10.734Z'
 blast_radius:
