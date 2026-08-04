@@ -369,6 +369,7 @@ describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A6: precedence consolid
     expect(src).toMatch(/CLAUDE_SESSION_ID/);
     expect(src).toMatch(/CLAUDE_CODE_SESSION_ID/);
     expect(src).toMatch(/CODEX_THREAD_ID/);
+    expect(src).toMatch(/QWEN_CODE_SESSION_ID/);
     expect(src).toMatch(/CAWS_SESSION_ID/);
     expect(src).toMatch(/HOOK_SESSION_ID/);
   });
@@ -379,7 +380,8 @@ describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A6: precedence consolid
     const cases = [
       { env: { CLAUDE_SESSION_ID: 'a', CLAUDE_CODE_SESSION_ID: 'b', CODEX_THREAD_ID: 'c' }, want: 'a' },
       { env: { CLAUDE_CODE_SESSION_ID: 'b', CODEX_THREAD_ID: 'c', CAWS_SESSION_ID: 'd' }, want: 'b' },
-      { env: { CODEX_THREAD_ID: 'c', CAWS_SESSION_ID: 'd', HOOK_SESSION_ID: 'e' }, want: 'c' },
+      { env: { CODEX_THREAD_ID: 'c', QWEN_CODE_SESSION_ID: 'q', CAWS_SESSION_ID: 'd' }, want: 'c' },
+      { env: { QWEN_CODE_SESSION_ID: 'q', CAWS_SESSION_ID: 'd', HOOK_SESSION_ID: 'e' }, want: 'q' },
       { env: { CAWS_SESSION_ID: 'd', HOOK_SESSION_ID: 'e' }, want: 'd' },
       { env: { HOOK_SESSION_ID: 'e', CURSOR_TRACE_ID: 'f' }, want: 'e' },
       { env: { CURSOR_TRACE_ID: 'f' }, want: 'f' },
@@ -401,6 +403,7 @@ describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A6: precedence consolid
       'CLAUDE_SESSION_ID',
       'CLAUDE_CODE_SESSION_ID',
       'CODEX_THREAD_ID',
+      'QWEN_CODE_SESSION_ID',
       'CAWS_SESSION_ID',
       'HOOK_SESSION_ID',
       'CURSOR_TRACE_ID',
@@ -427,7 +430,7 @@ describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A6: precedence consolid
     // session id would win over the lower-precedence variable this case sets,
     // and the assertion would read back the planted value instead of 'e'.
     const childEnv = { ...process.env, HOOK_SESSION_ID: 'e' };
-    for (const v of ['CLAUDE_SESSION_ID', 'CODEX_THREAD_ID', 'CAWS_SESSION_ID', 'CURSOR_TRACE_ID'])
+    for (const v of ['CLAUDE_SESSION_ID', 'CODEX_THREAD_ID', 'QWEN_CODE_SESSION_ID', 'CAWS_SESSION_ID', 'CURSOR_TRACE_ID'])
       delete childEnv[v];
     // Plant a HIGHER-precedence id, exactly as a real harness would.
     childEnv.CLAUDE_CODE_SESSION_ID = 'ambient-leak-sentinel';

@@ -522,6 +522,17 @@ test-caws-project/
 .kimi-code/local.toml
 **/.kimi-code/local.toml
 
+# Qwen Code hook runtime state (same classes as the .kimi-code/ entries above)
+# plus the personal QWEN.local.md. The wiring itself (.qwen/settings.json,
+# .qwen/settings.json.example, .qwen/CAWS-HOOKS.md, .qwen/hooks/caws-qwen-hook.sh)
+# IS committed. (CAWS-HOOK-PACK-QWEN-CODE-001)
+.qwen/hooks/state/
+**/.qwen/hooks/state/
+.qwen/logs/
+**/.qwen/logs/
+.qwen/QWEN.local.md
+**/.qwen/QWEN.local.md
+
 # CAWS logs
 caws-debug.log*
 **/caws.log

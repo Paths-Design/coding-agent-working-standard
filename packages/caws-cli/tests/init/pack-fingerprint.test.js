@@ -69,6 +69,7 @@ const { CLAUDE_CODE_PACK_VERSION } = require('../../dist/init/hook-packs/manifes
 const { CODEX_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-codex');
 const { KIMI_CODE_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-kimi-code');
 const { OPENCODE_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-opencode');
+const { QWEN_CODE_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-qwen-code');
 const { ZCODE_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-zcode');
 
 const PACKS = [
@@ -81,6 +82,7 @@ const PACKS = [
   { id: 'codex', dir: path.join(PACKS_ROOT, 'codex'), version: CODEX_PACK_VERSION },
   { id: 'kimi-code', dir: path.join(PACKS_ROOT, 'kimi-code'), version: KIMI_CODE_PACK_VERSION },
   { id: 'opencode', dir: path.join(PACKS_ROOT, 'opencode'), version: OPENCODE_PACK_VERSION },
+  { id: 'qwen-code', dir: path.join(PACKS_ROOT, 'qwen-code'), version: QWEN_CODE_PACK_VERSION },
   { id: 'zcode', dir: path.join(PACKS_ROOT, 'zcode'), version: ZCODE_PACK_VERSION },
 ];
 

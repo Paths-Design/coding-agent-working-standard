@@ -59,6 +59,10 @@ const PACKS = {
     manifestFile: 'manifest-kimi-code.js',
     exportName: 'KIMI_CODE_PACK',
   },
+  'qwen-code': {
+    manifestFile: 'manifest-qwen-code.js',
+    exportName: 'QWEN_CODE_PACK',
+  },
   // CAWS-HOOK-PACK-SHARED-CORE-001: the real hook logic (oracle, agent-*.sh,
   // guards, dispatchers, libs) lives in the `shared` pack and installs under
   // .caws/hooks/. The vendor packs (claude-code/codex) are now thin adapters.
@@ -1423,6 +1427,218 @@ function runKimiTarballSmoke(tarballs) {
   ok(`Kimi Code tarball smoke project: ${projectDir}`);
 }
 
+// ─── Qwen Code surface smoke (CAWS-HOOK-PACK-QWEN-CODE-001) ─────────────
+//
+// Qwen Code reads hooks from the repo-local .qwen/settings.json (claude/zcode
+// precedent — no consent flag; the write stays in the repo). Every entry
+// invokes the pack-installed shim, which resolves the git root at invocation
+// time and exits 0 silently outside a CAWS repo. Qwen payloads carry RUNTIME
+// tool ids (write_file, run_shell_command, ...), so the pack also ships a
+// parse-input.sh override normalizing them to the canonical names the shared
+// guards self-filter on — the protected-path assertion below deliberately
+// uses the qwen id `write_file`, so it only passes when that normalization
+// works end to end.
+
+function assertCliTarballContainsQwenArtifacts(cliFiles) {
+  step('Qwen artifact proof — cli tarball file list');
+  const paths = cliFiles.map((file) => file.path);
+  const required = [
+    'dist/init/hook-packs/manifest-qwen-code.js',
+    'dist/init/hook-packs/manifest-shared.js',
+    'templates/hook-packs/qwen-code/hooks/caws-qwen-hook.sh',
+    'templates/hook-packs/qwen-code/hooks/lib/parse-input.sh',
+    'templates/hook-packs/qwen-code/CAWS-HOOKS.md',
+    'templates/hook-packs/shared/dispatch/pre_tool_use.sh',
+    'templates/hook-packs/shared/protected-paths.sh',
+  ];
+  const missing = required.filter((path) => !paths.includes(path));
+  if (missing.length > 0) {
+    fail('cli tarball is missing Qwen runtime artifacts', {
+      missing: JSON.stringify(missing, null, 2),
+      hint: 'package.json:files must include dist/** and templates/hook-packs/**',
+    });
+  }
+  for (const path of required) {
+    log(colors.dim(`  artifact tarball:${path}`));
+  }
+  ok(`cli tarball includes ${required.length} Qwen adapter/shared-core artifacts`);
+}
+
+const QWEN_EVENTS = ['PreToolUse', 'PostToolUse', 'SessionStart', 'Stop', 'PreCompact'];
+
+function runQwenInit(projectDir, installedRoot) {
+  step('git init + caws init --agent-surface qwen-code');
+  if (!existsSync(join(projectDir, '.git'))) {
+    execSync('git init -q', { cwd: projectDir });
+    execSync('git config user.email smoke@local', { cwd: projectDir });
+    execSync('git config user.name Smoke', { cwd: projectDir });
+    execSync('git commit --allow-empty -q -m init', { cwd: projectDir });
+  }
+  const cli = join(installedRoot, 'dist', 'index.js');
+  const result = spawnSync(
+    'node', [cli, 'init', '--agent-surface', 'qwen-code'],
+    { cwd: projectDir, encoding: 'utf8' }
+  );
+  if (result.status !== 0) {
+    fail('caws init --agent-surface qwen-code exited non-zero', {
+      exitCode: result.status,
+      stdout: result.stdout.trim().slice(0, 2000),
+      stderr: result.stderr.trim().slice(0, 2000),
+    });
+  }
+  ok('caws init (qwen-code) succeeded');
+}
+
+function readQwenSettings(projectDir) {
+  const settingsPath = join(projectDir, '.qwen', 'settings.json');
+  if (!existsSync(settingsPath)) {
+    fail('repo-local .qwen/settings.json was not written by init', {
+      expected: settingsPath,
+    });
+  }
+  return readFileSync(settingsPath, 'utf8');
+}
+
+function assertQwenSettingsMerged(projectDir) {
+  step('Qwen artifact proof — .qwen/settings.json gained all five CAWS entries');
+  const content = readQwenSettings(projectDir);
+  const missing = [];
+  for (const event of QWEN_EVENTS) {
+    if (!content.includes(`"${event}"`)) missing.push(event);
+  }
+  if (missing.length > 0) {
+    fail('.qwen/settings.json is missing CAWS hook events', { missing: missing.join(', ') });
+  }
+  const shimRefs = content.split('caws-qwen-hook.sh').length - 1;
+  // Each event references the shim twice (test -x probe + invocation).
+  if (shimRefs < QWEN_EVENTS.length * 2) {
+    fail('.qwen/settings.json does not reference the CAWS shim for every event', {
+      expectedAtLeast: QWEN_EVENTS.length * 2,
+      got: shimRefs,
+    });
+  }
+  ok(`.qwen/settings.json wires all ${QWEN_EVENTS.length} events to the CAWS shim`);
+
+  const examplePath = join(projectDir, '.qwen', 'settings.json.example');
+  if (!existsSync(examplePath)) {
+    fail('.qwen/settings.json.example was not written', { expected: examplePath });
+  }
+  ok('.qwen/settings.json.example materialized');
+
+  const qwenMdPath = join(projectDir, 'QWEN.md');
+  const qwenMd = existsSync(qwenMdPath) ? readFileSync(qwenMdPath, 'utf8') : '';
+  if (!qwenMd.includes('@.qwen/CAWS-HOOKS.md')) {
+    fail('root QWEN.md is missing the managed CAWS doctrine import', {
+      expected: '@.qwen/CAWS-HOOKS.md',
+    });
+  }
+  ok('root QWEN.md carries the managed doctrine import');
+}
+
+function assertQwenSettingsIdempotent(projectDir, installedRoot) {
+  step('Qwen artifact proof — second init run is a no-op');
+  const settingsBefore = readQwenSettings(projectDir);
+  const qwenMdBefore = readFileSync(join(projectDir, 'QWEN.md'), 'utf8');
+  runQwenInit(projectDir, installedRoot);
+  const settingsAfter = readQwenSettings(projectDir);
+  const qwenMdAfter = readFileSync(join(projectDir, 'QWEN.md'), 'utf8');
+  if (settingsBefore !== settingsAfter || qwenMdBefore !== qwenMdAfter) {
+    fail('second caws init run mutated .qwen/settings.json or QWEN.md', {
+      settingsChanged: settingsBefore !== settingsAfter,
+      qwenMdChanged: qwenMdBefore !== qwenMdAfter,
+    });
+  }
+  ok('re-running init left .qwen/settings.json and QWEN.md byte-identical');
+}
+
+function assertQwenShimInertInNonCawsRepo(projectDir) {
+  step('Qwen artifact proof — shim is inert in a non-CAWS git repo');
+  const plainRepo = makeSmokeDir('caws-smoke-qwen-plain-');
+  registerCleanup(plainRepo);
+  execSync('git init -q', { cwd: plainRepo });
+  const shim = join(projectDir, '.qwen', 'hooks', 'caws-qwen-hook.sh');
+  const payload = {
+    session_id: 'caws-smoke-qwen-inert',
+    cwd: plainRepo,
+    hook_event_name: 'PreToolUse',
+    tool_name: 'write_file',
+    tool_input: { file_path: '.qwen/hooks/caws-qwen-hook.sh', content: 'x' },
+  };
+  const result = spawnSync('bash', [shim, 'PreToolUse'], {
+    cwd: plainRepo,
+    input: JSON.stringify(payload),
+    encoding: 'utf8',
+  });
+  if (result.status !== 0 || result.stdout.trim() !== '') {
+    fail('qwen shim was not inert in a non-CAWS repo', {
+      exitCode: result.status,
+      stdout: result.stdout.trim().slice(0, 500),
+      stderr: result.stderr.trim().slice(0, 500),
+    });
+  }
+  ok('shim exited 0 silently outside a CAWS repo (a protected-path payload was NOT enforced there)');
+}
+
+function assertQwenProtectedPathDispatcher(projectDir) {
+  step('Qwen artifact proof — protected-path guard blocks through the shim (qwen tool id normalized)');
+  const shim = join(projectDir, '.qwen', 'hooks', 'caws-qwen-hook.sh');
+  // Deliberately the QWEN runtime tool id: the protected-paths guard
+  // self-filters on Write|Edit, so this payload only blocks when the vendor
+  // parse-input override normalized write_file -> Write.
+  const payload = {
+    session_id: 'caws-smoke-qwen-protected',
+    cwd: projectDir,
+    hook_event_name: 'PreToolUse',
+    tool_name: 'write_file',
+    tool_input: { file_path: '.qwen/hooks/caws-qwen-hook.sh', content: 'echo tampered\n' },
+  };
+  // Run from a subdirectory: the shim must resolve the git root from cwd
+  // (HOOK-PROJECT-DIR-ROOT-NOT-CWD-01) rather than assuming cwd == root.
+  const subdir = join(projectDir, 'subdir');
+  mkdirSync(subdir, { recursive: true });
+  const result = spawnSync('bash', [shim, 'PreToolUse'], {
+    cwd: subdir,
+    input: JSON.stringify(payload),
+    encoding: 'utf8',
+  });
+  log(colors.dim(`  artifact dispatcher_exit=${result.status}`));
+  log(colors.dim(`  artifact dispatcher_stderr=${result.stderr.trim().slice(0, 500)}`));
+  // protected-paths exits 1 for hook-script edits; the dispatcher returns
+  // the max non-2 code. Either way the guard must have FIRED: the stderr
+  // carries the protected-path evidence (fail-closed message present).
+  if (!result.stderr.includes('.qwen/hooks/caws-qwen-hook.sh is protected')) {
+    fail('Qwen protected-path dispatch did not fire for a write_file payload (normalization or guard regression)', {
+      exitCode: result.status,
+      stdout: result.stdout.trim().slice(0, 1000),
+      stderr: result.stderr.trim().slice(0, 1000),
+    });
+  }
+  if (result.status === 0) {
+    fail('Qwen protected-path dispatch exited 0 despite the guard firing', {
+      stdout: result.stdout.trim().slice(0, 1000),
+    });
+  }
+  ok('installed shim blocked a relative .qwen/hooks edit from a subdirectory via write_file normalization');
+}
+
+function runQwenTarballSmoke(tarballs) {
+  step('Qwen Code pack — install from local tarballs into a fresh project');
+  assertCliTarballContainsQwenArtifacts(tarballs.cliFiles);
+  const { projectDir, installedRoot } = installTarball(tarballs);
+  const pack = loadManifest(installedRoot, 'qwen-code');
+  const sharedPack = loadManifest(installedRoot, 'shared');
+  assertTemplateSourcesPresent(installedRoot, pack, 'qwen-code');
+  assertTemplateSourcesPresent(installedRoot, sharedPack, 'shared');
+  runQwenInit(projectDir, installedRoot);
+  assertDestFilesPresent(projectDir, pack);
+  assertDestFilesPresent(projectDir, sharedPack);
+  assertQwenSettingsMerged(projectDir);
+  assertQwenSettingsIdempotent(projectDir, installedRoot);
+  assertQwenShimInertInNonCawsRepo(projectDir);
+  assertQwenProtectedPathDispatcher(projectDir);
+  ok(`Qwen Code tarball smoke project: ${projectDir}`);
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────
 
 try {
@@ -1490,6 +1706,10 @@ try {
 
   if (packIds.includes('kimi-code')) {
     runKimiTarballSmoke(tarballs);
+  }
+
+  if (packIds.includes('qwen-code')) {
+    runQwenTarballSmoke(tarballs);
   }
 
   const elapsedMs = Date.now() - startMs;

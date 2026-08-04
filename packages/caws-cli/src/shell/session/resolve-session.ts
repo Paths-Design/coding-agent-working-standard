@@ -96,6 +96,8 @@ const AGENT_SURFACES = [
   'codex',
   'opencode',
   'zcode',
+  'kimi-code',
+  'qwen-code',
   'cursor',
   'windsurf',
   'none',
@@ -134,6 +136,17 @@ function surfaceFromEnv(env: NodeJS.ProcessEnv): AgentSurface {
     env['CODEX_THREAD_ID'] !== 'unknown'
   ) {
     return 'codex';
+  }
+  // CAWS-HOOK-PACK-QWEN-CODE-001: Qwen Code exports its session UUID here
+  // (probed live on 0.21.4). kimi-code has no per-session env var — its
+  // identity reaches hooks only via the payload session_id — so it has no
+  // tier in this chain.
+  if (
+    typeof env['QWEN_CODE_SESSION_ID'] === 'string' &&
+    env['QWEN_CODE_SESSION_ID'].length > 0 &&
+    env['QWEN_CODE_SESSION_ID'] !== 'unknown'
+  ) {
+    return 'qwen-code';
   }
   // CAWS_SESSION_ID is generic — it does not identify a harness. If it is the
   // only signal, we cannot know the surface; return 'none' (the documented

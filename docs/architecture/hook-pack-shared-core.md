@@ -64,6 +64,11 @@ templates/hook-packs/
     caws-hooks.toml.example   # the wiring Kimi Code reads (user-level; see below)
     AGENTS.md                 # surface doc
     hooks/lib/                # named override files (emit.sh, run-handlers.sh)
+
+  qwen-code/                  # vendor adapter — harness-specific ONLY
+    hooks/caws-qwen-hook.sh   # shim the repo-local settings.json wiring invokes
+    CAWS-HOOKS.md             # surface doc (imported from root QWEN.md)
+    hooks/lib/                # named override file (parse-input.sh)
 ```
 
 Installed layout in a consumer repo:
@@ -92,6 +97,20 @@ Installed layout in a consumer repo:
 # --wire-user-config` merges fenced CAWS blocks there behind an explicit
 # consent flag; each entry invokes the repo-local shim, which resolves the
 # git root at invocation time and exits 0 silently outside CAWS repos.
+
+.qwen/                        # qwen-code adapter
+  settings.json               # repo-local wiring -> hooks/caws-qwen-hook.sh
+  settings.json.example       # canonical wiring reference
+  CAWS-HOOKS.md               # surface doc (@-imported from root QWEN.md)
+  hooks/caws-qwen-hook.sh     # shim -> .caws/hooks/dispatch/<event>.sh
+  hooks/<override files>      # only the qwen-code overrides
+# qwen-code wiring is repo-local (claude/zcode precedent — no consent flag):
+# Qwen Code reads .qwen/settings.json per project. Qwen exports no env var
+# that reliably names the repo root (QWEN_CODE_PROJECT_DIR is the per-project
+# state dir under ~/.qwen/projects/<slug>, probed live on 0.21.4), so every
+# entry invokes the shim, which resolves the git root at invocation time and
+# exits 0 silently outside CAWS repos. QWEN.md gains a CAWS-managed
+# @.qwen/CAWS-HOOKS.md import so the surface doc loads every session.
 ```
 
 ## Dependency-injection environment contract
@@ -110,14 +129,14 @@ The shared core derives every other harness-dependent value from
 `CAWS_AGENT_SURFACE` via a single resolver in `lib/caws-state.sh` (or a small
 dedicated `lib/agent-surface.sh`):
 
-| Derived value | claude-code | codex | kimi-code |
-|---------------|-------------|-------|-----------|
-| vendor dir | `.claude` | `.codex` | `.kimi-code` |
-| log dir | `$CAWS_PROJECT_DIR/.claude/logs` | `$CAWS_PROJECT_DIR/.codex/logs` | `$CAWS_PROJECT_DIR/.kimi-code/logs` |
-| `--platform` flag | `claude-code` | `codex` | `kimi-code` |
-| permission-decision vocab | `ask` supported | `ask` → `deny` (Codex has no PreToolUse `ask`) | `ask` → `deny` (Kimi's `ask` is non-blocking — verified live) |
-| updatedInput rewrite | yes | yes | no (no documented contract; quiet-merge passes through) |
-| non-2 non-zero hook exit | warning (max returned) | warning (max returned) | promoted to blocking exit 2 — Kimi does not enforce exit 1 (verified live) |
+| Derived value | claude-code | codex | kimi-code | qwen-code |
+|---------------|-------------|-------|-----------|-----------|
+| vendor dir | `.claude` | `.codex` | `.kimi-code` | `.qwen` |
+| log dir | `$CAWS_PROJECT_DIR/.claude/logs` | `$CAWS_PROJECT_DIR/.codex/logs` | `$CAWS_PROJECT_DIR/.kimi-code/logs` | `$CAWS_PROJECT_DIR/.qwen/logs` |
+| `--platform` flag | `claude-code` | `codex` | `kimi-code` | `qwen-code` |
+| permission-decision vocab | `ask` supported | `ask` → `deny` (Codex has no PreToolUse `ask`) | `ask` → `deny` (Kimi's `ask` is non-blocking — verified live) | `ask` supported (interactive prompts; headless/background degrades to `deny` — verified live on 0.21.4) |
+| updatedInput rewrite | yes | yes | no (no documented contract; quiet-merge passes through) | no (documented but NOT enforced in 0.21.x — probed live; quiet-merge passes through) |
+| non-2 non-zero hook exit | warning (max returned) | warning (max returned) | promoted to blocking exit 2 — Kimi does not enforce exit 1 (verified live) | warning (max returned) — Qwen enforces exit 2 blocking and treats exit 1 as a non-blocking error, same contract as Claude Code (verified live) |
 
 Backward-compatibility: the resolver falls back to the legacy env var
 (`CLAUDE_PROJECT_DIR` / `CODEX_PROJECT_DIR`) when `CAWS_PROJECT_DIR` is unset, so
@@ -154,6 +173,19 @@ event = "PreToolUse"
 matcher = "Bash|Read|Write|Edit|Glob|Grep"
 command = 'ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"; test -x "$ROOT/.kimi-code/hooks/caws-kimi-hook.sh" && "$ROOT/.kimi-code/hooks/caws-kimi-hook.sh" PreToolUse || true'
 timeout = 45
+```
+
+qwen-code repo-local `.qwen/settings.json` (shim-mediated form — like kimi,
+the shim injects the surface env and resolves the git root itself, because
+Qwen exports no env var that reliably names the repo root; matchers use
+Qwen's runtime tool ids, and a vendor `parse-input.sh` override normalizes
+them to the canonical guard names):
+
+```jsonc
+{ "matcher": "run_shell_command|write_file|edit|read_file|glob|grep_search|notebook_edit",
+  "hooks": [ { "type": "command",
+    "command": "ROOT=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)\"; test -x \"$ROOT/.qwen/hooks/caws-qwen-hook.sh\" && \"$ROOT/.qwen/hooks/caws-qwen-hook.sh\" PreToolUse || true",
+    "timeout": 45 } ] }
 ```
 
 The shared dispatcher resolves its lib/handlers from its own location
@@ -195,6 +227,17 @@ genuine-divergence set (from the codex/claude-code comparison) is:
 - `lib/run-handlers.sh` (kimi-code) — the codex-style `deny` priority arm,
   plus promotion of any non-zero aggregate exit to the blocking exit 2 (Kimi
   does not enforce exit 1; both verified live against 0.31.1).
+- `hooks/caws-qwen-hook.sh` — qwen-code only: a shim, not an override (same
+  shape as the kimi shim). Repo-local wiring notwithstanding, Qwen exports no
+  reliable repo-root env var, so the shim resolves the git root, injects the
+  surface env, and exits 0 silently outside CAWS repos.
+- `lib/parse-input.sh` (qwen-code) — wraps the shared parser (no fork) and
+  normalizes Qwen runtime tool ids (`write_file`, `edit`,
+  `run_shell_command`, ...) to the canonical names (`Write`, `Edit`, `Bash`,
+  ...) every shared guard self-filters on, preserving the raw id in
+  `HOOK_ORIGINAL_TOOL_NAME`. No emit/run-handlers overrides: Qwen enforces
+  `deny` and exit-2 blocks natively and degrades `ask` to deny in
+  headless/background (all verified live against 0.21.4).
 
 Resolution rule at install time: for each shared file, the vendor adapter MAY
 provide an override; if present, the override is installed in place of the

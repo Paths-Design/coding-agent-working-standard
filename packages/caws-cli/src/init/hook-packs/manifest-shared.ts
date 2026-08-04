@@ -192,7 +192,15 @@ import type { HookPackV1 } from './types';
 // kimi-code case arm (vendor dir .kimi-code, deny vocab, AGENTS.md instruction
 // file) and SURFACES doc; quiet-merge.sh passes commands through unrewritten
 // on surfaces without an updatedInput contract (kimi). No guard logic changes.
-export const SHARED_PACK_VERSION = 30;
+//
+// Version 31: CAWS-HOOK-PACK-QWEN-CODE-001. lib/agent-surface.sh gains the
+// qwen-code case arm (vendor dir .qwen, ask vocab — deny/ask both enforced
+// natively per the 0.21.4 probe, QWEN.md instruction file,
+// CAWS_SUPPORTS_UPDATED_INPUT=0 — documented but not enforced in Qwen 0.21.x)
+// and SURFACES doc. lib/session-id.sh adds QWEN_CODE_SESSION_ID to the
+// canonical env-var precedence (tier 4, after CODEX_THREAD_ID), mirroring the
+// resolve-session.ts qwen tier. No guard logic changes.
+export const SHARED_PACK_VERSION = 31;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.
@@ -340,6 +348,18 @@ export const SHARED_PACK: HookPackV1 = {
     {
       destPath: '.caws/hooks/lib/worktree-claim-oracle.cjs',
       sourcePath: 'lib/worktree-claim-oracle.cjs',
+      executable: false,
+      managed: true,
+    },
+    {
+      // CAWS-GUARD-ALLOWLIST-SYNC-001 extracted this helper but shipped it
+      // without a manifest entry (the layout test has been red since
+      // b4c1d4b2 and consumers never received the file, degrading both
+      // write guards to their pre-sync allow behavior). Declared here so
+      // init installs it alongside the guards that source it
+      // (worktree-write-guard.sh, bash-write-guard.sh).
+      destPath: '.caws/hooks/lib/write-allowlist.sh',
+      sourcePath: 'lib/write-allowlist.sh',
       executable: false,
       managed: true,
     },

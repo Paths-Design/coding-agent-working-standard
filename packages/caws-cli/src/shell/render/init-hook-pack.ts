@@ -6,9 +6,11 @@
 // This renderer never decides outcomes; install/inspect decide.
 
 import {
+  CANONICAL_QWEN_SETTINGS_SNIPPET,
   CANONICAL_SETTINGS_SNIPPET,
   CANONICAL_ZCODE_CONFIG_SNIPPET,
   kimiUserConfigPath,
+  type InstructionImportResult,
   type SettingsMergeResult,
   type SettingsWiringStatus,
 } from '../../init/hook-install';
@@ -36,7 +38,7 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
         '  This repo is NOT agent-safe for multi-session work without external governance.'
       );
       lines.push(
-        '  If you intended to enable a hook pack, rerun with --agent-surface claude-code, codex, opencode, zcode, or kimi-code.'
+        '  If you intended to enable a hook pack, rerun with --agent-surface claude-code, codex, opencode, zcode, kimi-code, or qwen-code.'
       );
       return lines.join('\n');
     }
@@ -49,6 +51,8 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
       lines.push('    caws init --agent-surface codex');
       lines.push('    caws init --agent-surface opencode');
       lines.push('    caws init --agent-surface zcode');
+      lines.push('    caws init --agent-surface kimi-code');
+      lines.push('    caws init --agent-surface qwen-code');
       lines.push('    caws init --agent-surface none      # explicit opt-out');
       return lines.join('\n');
     }
@@ -291,6 +295,71 @@ export function renderKimiHookWiring(
   return lines.join('\n');
 }
 
+/** Render the qwen-code wiring step. Qwen reads repo-local
+ *  .qwen/settings.json, so the merge is in-place (claude/zcode precedent,
+ *  no consent flag). Reports the settings.json merge outcome and the root
+ *  QWEN.md doctrine-import result; a settings.json.example reference is
+ *  always written alongside. */
+export function renderQwenSettingsWiring(
+  mergeResult: SettingsMergeResult,
+  importResult?: InstructionImportResult
+): string {
+  const lines: string[] = [];
+  lines.push(section('Step: .qwen/settings.json wiring'));
+
+  switch (mergeResult.kind) {
+    case 'created':
+      lines.push('  Created .qwen/settings.json wiring the five CAWS shim');
+      lines.push('  entrypoints (PreToolUse/PostToolUse/SessionStart/Stop/PreCompact).');
+      break;
+    case 'merged':
+      lines.push('  Merged the CAWS shim wiring into your existing');
+      lines.push(`  .qwen/settings.json (added: ${mergeResult.added.join(', ')}).`);
+      lines.push('  Your other settings — tools, memory, env, and any existing');
+      lines.push('  hooks — were preserved unchanged.');
+      break;
+    case 'unchanged':
+      lines.push('  OK — .qwen/settings.json already wires all five CAWS shim');
+      lines.push('  entrypoints. No change.');
+      break;
+    case 'invalid':
+      lines.push(`  ERROR — .qwen/settings.json could not be parsed: ${mergeResult.error}`);
+      lines.push('  init did NOT modify the file. Repair the JSON (note: this merge');
+      lines.push('  parses strict JSON — a settings.json with // comments is left');
+      lines.push('  untouched), then re-run init or merge the canonical wiring by hand:');
+      lines.push('');
+      for (const line of CANONICAL_QWEN_SETTINGS_SNIPPET.split('\n')) {
+        lines.push(`    ${line}`);
+      }
+      break;
+  }
+
+  if (importResult) {
+    lines.push('');
+    switch (importResult.kind) {
+      case 'created':
+        lines.push('  Created QWEN.md with the managed @.qwen/CAWS-HOOKS.md import so');
+        lines.push('  Qwen Code loads the CAWS surface doctrine every session.');
+        break;
+      case 'merged':
+        lines.push('  Appended the managed @.qwen/CAWS-HOOKS.md import block to your');
+        lines.push('  existing QWEN.md; everything already in the file was preserved.');
+        break;
+      case 'unchanged':
+        lines.push('  OK — QWEN.md already carries the managed CAWS doctrine import.');
+        break;
+    }
+  }
+
+  lines.push('');
+  lines.push('  A .qwen/settings.json.example with the canonical wiring was also');
+  lines.push('  written for reference.');
+  lines.push('');
+  lines.push('  The wiring is repo-conditional: outside repos with the CAWS');
+  lines.push('  qwen-code pack installed, every entry exits silently.');
+  return lines.join('\n');
+}
+
 /** Render the settings.json wiring step. Reports what the in-place merge
  *  actually did (created / merged / unchanged / invalid), notes that a
  *  settings.json.example was written, and emits the leave-and-warn message
@@ -418,6 +487,7 @@ export function renderActivationContract(
   const isCodex = result.pack.id === 'codex';
   const isOpencode = result.pack.id === 'opencode';
   const isZcode = result.pack.id === 'zcode';
+  const isQwen = result.pack.id === 'qwen-code';
 
   switch (result.activation) {
     case 'immediate':
@@ -455,6 +525,18 @@ export function renderActivationContract(
           lines.push('  The CAWS bridge is installed. It is active in any ZCode session');
           lines.push('  started AFTER the install; restart ZCode if this session pre-dates');
           lines.push('  the install.');
+        }
+        break;
+      }
+      if (isQwen) {
+        if (changed) {
+          lines.push('  Hook files were installed or updated. Restart the Qwen Code session');
+          lines.push('  so .qwen/settings.json is re-read and the shim at');
+          lines.push('  .qwen/hooks/caws-qwen-hook.sh begins dispatching the shared CAWS hooks.');
+        } else {
+          lines.push('  The CAWS shim is installed. It is active in any Qwen Code session');
+          lines.push('  started AFTER the install; restart Qwen Code if this session');
+          lines.push('  pre-dates the install.');
         }
         break;
       }
