@@ -5,23 +5,31 @@ The agent-surface line continues: this release adds two new hook packs —
 and lands a wave of guard, worktree-merge, and session-recovery fixes, plus a
 broad pass of governed discovery / planning / handoff commands across the CLI.
 
-> **Not yet documented here (pending merge):** the kimi-code and qwen-code
-> surfaces. Both were authored in worktrees (`wt-kimi-parse-fix`,
-> `wt-qwen-surface`) and are not yet on `main`; their entries below are
-> placeholders to be filled at merge time. Do not tag this section until both
-> land and their bullets are confirmed.
-
 ### Added
 
-- **Agent surfaces — pending merge.** Two new harnesses are landing:
-  - **kimi-code** (`caws init --agent-surface kimi-code`) — hook pack +
-    user-level `config.toml` wiring. Inert outside CAWS repos. Status: spec
-    reopened for a parse-input follow-up; unmerged in `wt-kimi-parse-fix`.
-    *(CAWS-HOOK-PACK-KIMI-CODE-001 — fill in detail at merge.)*
-  - **qwen-code** (`caws init --agent-surface qwen-code`) — hook pack +
-    repo-local `.qwen/settings.json` wiring; declares
-    `CAWS_SUPPORTS_UPDATED_INPUT=0`. Status: unmerged in `wt-qwen-surface`.
-    *(CAWS-HOOK-PACK-QWEN-CODE-001 — fill in detail at merge.)*
+- **Agent surface — kimi-code** (`caws init --agent-surface kimi-code`).
+  Hook pack + opt-in user-level `$KIMI_CODE_HOME/config.toml` wiring: Kimi
+  Code has no project-level hook config, so `--wire-user-config` appends five
+  `[[hooks]]` blocks to the user-level config (append-only, idempotent, never
+  rewrites existing entries). The wiring is repo-conditional — the
+  `caws-kimi-hook.sh` shim resolves the git root at invocation time and is
+  inert (exit 0, silent) outside CAWS repos. Vendor overrides adapt Kimi's
+  contract: `emit.sh` maps `ask` → `deny` (Kimi's ask is non-blocking),
+  `parse-input.sh` normalizes `tool_input.path` so path guards see kimi file
+  edits, `run-handlers.sh` recognizes `deny` as priority-3. Declares
+  `CAWS_SUPPORTS_UPDATED_INPUT=0`. Contract verified live against kimi
+  0.31.1. *(CAWS-HOOK-PACK-KIMI-CODE-001.)*
+- **Agent surface — qwen-code** (`caws init --agent-surface qwen-code`).
+  Hook pack + repo-local wiring: five shim entries merged idempotently into
+  `.qwen/settings.json` (user keys preserved, JSONC-commented files reported
+  invalid and left untouched) plus a managed `@.qwen/CAWS-HOOKS.md` import in
+  root `QWEN.md`. The `parse-input.sh` override wraps the shared parser (no
+  fork) and normalizes qwen runtime tool ids (`write_file`, `edit`,
+  `run_shell_command`, …) to the canonical names every shared guard
+  self-filters on; no emit override needed — Qwen's exit contract matches
+  Claude Code's. Declares `CAWS_SUPPORTS_UPDATED_INPUT=0` (`updatedInput`
+  documented but not enforced). Contract verified live against Qwen Code
+  0.21.4. *(CAWS-HOOK-PACK-QWEN-CODE-001.)*
 - **`CAWS_SUPPORTS_UPDATED_INPUT` capability flag** in `agent-surface.sh`.
   Surfaces whose harness does not enforce `hookSpecificOutput.updatedInput`
   declare `0`; the shared `quiet-merge.sh` then passes the command through
@@ -111,10 +119,14 @@ broad pass of governed discovery / planning / handoff commands across the CLI.
   *(CAWS-FIX-CWD-GUARD-COVERAGE-001.)*
 - **Codex hooks JSON schema kept valid; shared-core hook commands rendered.**
   *(CAWS-CODEX-HOOKS-JSON-SCHEMA-001, CAWS-CODEX-SHARED-CORE-FRESH-INSTALL-001.)*
+- **`lib/write-allowlist.sh` added to the shared manifest.** The
+  CAWS-GUARD-ALLOWLIST-SYNC-001 helper shipped without a manifest entry, so
+  consumers never received the file on install; the manifest now declares it.
+  *(CAWS-HOOK-PACK-QWEN-CODE-001.)*
 
 ### Consumer upgrade notes
 
-- This release bumps the shared hook-pack (to v30, from v22 in 11.8.0). Existing
+- This release bumps the shared hook-pack (to v31, from v22 in 11.8.0). Existing
   consumers will see their installed pack as `managed_old_version`; refresh with
   `caws init --overwrite` (preview the diff first — see the force-gating above),
   `--adopt` to preserve local edits, or `--force` to apply. Several fixes
