@@ -9,12 +9,16 @@
 // under the explicit --wire-user-config flag, and the reference copy is
 // emitted as .kimi-code/caws-hooks.toml.example.
 //
-// Kimi's hook payload is Claude-compatible (verified live on 0.31.1), so the
-// shared parse-input.sh is used unchanged — the only genuine divergences are
-// output-side: emit.sh (ask->deny, block/ask reasons mirrored to stderr,
+// Kimi's hook payload is Claude-compatible in SHAPE (verified live on
+// 0.31.1) but not in every field NAME: file tools carry tool_input.path (not
+// file_path) and the call id is tool_call_id (not tool_use_id), so the pack
+// carries a parse-input.sh override that normalizes both — without it every
+// path-based guard silently admits every kimi file edit. Output-side
+// divergences: emit.sh (ask->deny, block/ask reasons mirrored to stderr,
 // which is Kimi's block-reason channel on exit 2) and run-handlers.sh ("deny"
 // recognized as priority-3 so a mapped ask->deny escalation short-circuits
-// with return 2 instead of ranking as displaceable context).
+// with return 2, and any non-zero aggregate exit promoted to 2 because Kimi
+// does not enforce exit 1).
 //
 // The override libs install to .kimi-code/hooks/lib/ which is exactly where
 // caws_source_lib looks for vendor overrides:
@@ -27,7 +31,7 @@
 
 import type { HookPackV1 } from './types';
 
-export const KIMI_CODE_PACK_VERSION = 1;
+export const KIMI_CODE_PACK_VERSION = 2;
 
 export const KIMI_CODE_PACK: HookPackV1 = {
   id: 'kimi-code',
@@ -105,6 +109,12 @@ export const KIMI_CODE_PACK: HookPackV1 = {
     {
       destPath: '.kimi-code/hooks/lib/run-handlers.sh',
       sourcePath: 'hooks/lib/run-handlers.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      destPath: '.kimi-code/hooks/lib/parse-input.sh',
+      sourcePath: 'hooks/lib/parse-input.sh',
       executable: false,
       managed: true,
     },

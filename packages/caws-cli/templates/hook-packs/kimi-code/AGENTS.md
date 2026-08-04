@@ -66,7 +66,7 @@ the shared default. `CAWS_VENDOR_DIR` is `.kimi-code` for this surface.
 
 | Behavior | Contract |
 |----------|----------|
-| Payload (stdin JSON) | `{hook_event_name, session_id, cwd, tool_name, tool_input, tool_call_id}` — Claude-compatible; the shared `parse-input.sh` is used unchanged |
+| Payload (stdin JSON) | `{hook_event_name, session_id, cwd, tool_name, tool_input, tool_call_id}` — Claude-compatible in shape, but file tools carry `tool_input.path` (not `file_path`) and the id is `tool_call_id` (not `tool_use_id`); the pack's `parse-input.sh` override normalizes both so the shared guards see `HOOK_FILE_PATH` / `HOOK_TOOL_USE_ID` |
 | Block | exit `2` + the reason on **stderr**; or stdout `{"hookSpecificOutput":{"permissionDecision":"deny","permissionDecisionReason":...}}` |
 | `ask` | NOT blocking (observed: the tool executed) — the emit override maps ask-level escalations to `deny` so governance never silently allows |
 | `hookEventName` in the envelope | tolerated (kept in the emitted envelopes) |
