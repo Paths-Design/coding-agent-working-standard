@@ -110,6 +110,148 @@ BLOCKING_PATTERNS = [
     re.compile(r"(?:^|\n)\s*(?:blocked|blocking|cannot proceed|stuck)[:\s]+(.+?)(?:\n|$)", re.IGNORECASE),
 ]
 
+# --- Qwen Code transcript support (CAWS-SESSION-LOG-QWEN-001) ---------------
+# Qwen Code transcripts (~/.qwen/projects/<slug>/chats/<session-id>.jsonl,
+# verified on 0.21.4) are Gemini-shaped: rows of type user/assistant/
+# tool_result/system with message.parts entries ({text[, thought]},
+# {functionCall}, {functionResponse}) — NOT Claude's message.content blocks.
+# The helpers below convert qwen rows to the same canonical event dicts the
+# claude branches emit, so accumulate_turns stays surface-neutral.
+#
+# Tool names arrive as qwen RUNTIME ids; they normalize to the canonical
+# harness names here (same boundary normalization as the qwen-code
+# parse-input.sh hook override) so every downstream tool branch applies.
+QWEN_TOOL_NAME_MAP = {
+    "write_file": "Write",
+    "edit": "Edit",
+    "read_file": "Read",
+    "run_shell_command": "Bash",
+    "glob": "Glob",
+    "grep_search": "Grep",
+    "notebook_edit": "NotebookEdit",
+    "web_fetch": "WebFetch",
+    "agent": "Agent",
+    "skill": "Skill",
+    "exit_plan_mode": "ExitPlanMode",
+}
+
+# When a prompt references a file (@-mention / editor context), Qwen delivers
+# the file content as SEPARATE user-type rows wrapped in marker lines. They
+# are context injection, not human turns — left in, each wrapper row opens a
+# phantom turn. Matched against stripped text (wrapper rows carry a leading
+# space). Verified on 0.21.4.
+QWEN_CONTEXT_INJECTION_PATTERNS = (
+    re.compile(r"^--- Content from referenced files ---"),
+    re.compile(r"^--- End of content ---"),
+    re.compile(r"^Content from /\S+"),
+    re.compile(r"^Showing lines \d+"),
+)
+
+
+def _qwen_message_parts(obj: dict[str, Any]) -> list[Any] | None:
+    """Gemini-style message.parts when present (None for Claude rows)."""
+    message = obj.get("message")
+    if not isinstance(message, dict):
+        return None
+    parts = message.get("parts")
+    return parts if isinstance(parts, list) else None
+
+
+def _is_qwen_row(obj: dict[str, Any]) -> bool:
+    kind = obj.get("type")
+    if kind == "tool_result":
+        # Only Qwen emits a top-level tool_result row type.
+        return True
+    if kind == "system":
+        # Qwen harness telemetry (ui_telemetry, attribution/file-history
+        # snapshots, slash-command echoes). Claude transcripts carry no
+        # system rows this parser consumes, so claiming them is a no-op for
+        # claude rendering.
+        return "systemPayload" in obj or obj.get("subtype") is not None
+    if kind in ("user", "assistant"):
+        return _qwen_message_parts(obj) is not None
+    return False
+
+
+def _parse_qwen_row(obj: dict[str, Any], ts: str | None) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    kind = obj.get("type")
+    parts = _qwen_message_parts(obj) or []
+
+    if kind == "system":
+        return events
+
+    if kind == "user":
+        is_interjection = obj.get("subtype") == "mid_turn_user_message"
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+            text = part.get("text")
+            if not isinstance(text, str) or not text.strip():
+                continue
+            stripped = text.strip()
+            if any(p.match(stripped) for p in QWEN_CONTEXT_INJECTION_PATTERNS):
+                continue
+            if is_interjection:
+                events.append({"ev": "interjection", "text": text, "ts": ts})
+            else:
+                # notification rows (task-notification envelopes) flow
+                # through as user_text; SESSION_EVENT_PREFIXES routes them
+                # to control events, same as Claude's task notifications.
+                events.append({"ev": "user_text", "text": text, "ts": ts})
+        return events
+
+    if kind == "assistant":
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+            text = part.get("text")
+            if isinstance(text, str) and text.strip():
+                events.append({"ev": "assistant_text", "text": text, "ts": ts})
+                continue
+            call = part.get("functionCall")
+            if isinstance(call, dict):
+                raw_name = call.get("name", "") or ""
+                args = call.get("args")
+                events.append(
+                    {
+                        "ev": "tool_use",
+                        "name": QWEN_TOOL_NAME_MAP.get(raw_name, raw_name),
+                        "id": call.get("id", ""),
+                        "input": args if isinstance(args, dict) else {},
+                        "ts": ts,
+                    }
+                )
+        return events
+
+    if kind == "tool_result":
+        call_result = obj.get("toolCallResult")
+        status = call_result.get("status") if isinstance(call_result, dict) else None
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+            response = part.get("functionResponse")
+            if not isinstance(response, dict):
+                continue
+            payload = response.get("response")
+            if isinstance(payload, dict):
+                output = payload.get("output", "")
+                if not isinstance(output, str):
+                    output = json.dumps(output, ensure_ascii=False)
+            else:
+                output = ""
+            events.append(
+                {
+                    "ev": "tool_result",
+                    "id": response.get("id", "")
+                    or (call_result.get("callId", "") if isinstance(call_result, dict) else ""),
+                    "content": output,
+                    "is_error": isinstance(status, str) and status != "success",
+                    "ts": ts,
+                }
+            )
+    return events
+
 
 def rel_path(path: str | None, cwd: str) -> str:
     if path and path.startswith(cwd + "/"):
@@ -305,6 +447,13 @@ def parse_transcript_events(transcript_path: str) -> list[dict[str, Any]]:
 
             ts = parse_timestamp(obj.get("timestamp"))
             kind = obj.get("type")
+
+            # Qwen Code rows (Gemini-shaped parts) convert to the same
+            # canonical events the claude branches emit; claude rows never
+            # match _is_qwen_row (no message.parts / tool_result type).
+            if _is_qwen_row(obj):
+                events.extend(_parse_qwen_row(obj, ts))
+                continue
 
             if kind == "user":
                 content = obj.get("message", {}).get("content")

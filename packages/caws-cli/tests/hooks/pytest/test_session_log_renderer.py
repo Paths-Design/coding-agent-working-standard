@@ -286,3 +286,155 @@ class TestMidTurnInterjectionCapture:
             },
         ])
         assert slr.parse_transcript_events(path) == []
+
+
+class TestQwenTranscript:
+    """CAWS-SESSION-LOG-QWEN-001: Qwen Code transcripts are Gemini-shaped
+    (message.parts with text/functionCall/functionResponse), stored under
+    ~/.qwen/projects/<slug>/chats/. Row shapes verified live on 0.21.4."""
+
+    def _write(self, rows):
+        tmp = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
+        for row in rows:
+            tmp.write(json.dumps(row) + "\n")
+        tmp.close()
+        return tmp.name
+
+    @staticmethod
+    def _user(text, subtype=None, ts="2026-08-04T00:00:00Z"):
+        row = {
+            "type": "user",
+            "provenance": "real_user",
+            "sessionId": "s",
+            "timestamp": ts,
+            "message": {"role": "user", "parts": [{"text": text}]},
+        }
+        if subtype:
+            row["subtype"] = subtype
+        return row
+
+    def test_user_assistant_and_tool_rows_normalize_to_canonical_events(self):
+        path = self._write([
+            self._user("run the tests"),
+            {
+                "type": "assistant",
+                "timestamp": "2026-08-04T00:00:01Z",
+                "message": {"role": "model", "parts": [
+                    {"text": "thinking about it", "thought": True},
+                    {"functionCall": {"id": "call_1", "name": "run_shell_command",
+                                       "args": {"command": "pytest", "description": "tests"}}},
+                ]},
+            },
+            {
+                "type": "tool_result",
+                "timestamp": "2026-08-04T00:00:02Z",
+                "message": {"role": "user", "parts": [
+                    {"functionResponse": {"id": "call_1", "name": "run_shell_command",
+                                           "response": {"output": "12 passed"}}},
+                ]},
+                "toolCallResult": {"callId": "call_1", "status": "success"},
+            },
+        ])
+        events = slr.parse_transcript_events(path)
+        kinds = [e["ev"] for e in events]
+        assert kinds == ["user_text", "assistant_text", "tool_use", "tool_result"]
+        tool_use = events[2]
+        # Runtime id normalizes to the canonical name the accumulation
+        # branches key on.
+        assert tool_use["name"] == "Bash"
+        assert tool_use["input"] == {"command": "pytest", "description": "tests"}
+        assert events[3]["content"] == "12 passed"
+        assert events[3]["is_error"] is False
+
+    def test_tool_result_failure_status_maps_to_is_error(self):
+        path = self._write([
+            {
+                "type": "tool_result",
+                "timestamp": "2026-08-04T00:00:02Z",
+                "message": {"role": "user", "parts": [
+                    {"functionResponse": {"id": "call_9", "name": "run_shell_command",
+                                           "response": {"output": "boom"}}},
+                ]},
+                "toolCallResult": {"callId": "call_9", "status": "error"},
+            },
+        ])
+        events = slr.parse_transcript_events(path)
+        assert events[0]["is_error"] is True
+
+    def test_system_telemetry_rows_are_dropped(self):
+        path = self._write([
+            {"type": "system", "subtype": "ui_telemetry", "systemPayload": {"x": 1},
+             "timestamp": "2026-08-04T00:00:00Z"},
+            self._user("real question"),
+        ])
+        events = slr.parse_transcript_events(path)
+        assert events == [{"ev": "user_text", "text": "real question", "ts": "2026-08-04T00:00:00Z"}]
+
+    def test_context_injection_wrapper_rows_do_not_open_phantom_turns(self):
+        # Qwen delivers @-mention file content as separate user rows wrapped
+        # in marker lines; they are context injection, not human turns.
+        path = self._write([
+            self._user("look at this file"),
+            self._user(" --- Content from referenced files ---"),
+            self._user("Content from /repo/src/x.py"),
+            self._user("Showing lines 1-10 of 20 total lines."),
+            self._user(" --- End of content ---"),
+        ])
+        events = slr.parse_transcript_events(path)
+        assert events == [{"ev": "user_text", "text": "look at this file", "ts": "2026-08-04T00:00:00Z"}]
+
+    def test_mid_turn_user_message_becomes_interjection(self):
+        path = self._write([self._user("steer this", subtype="mid_turn_user_message")])
+        events = slr.parse_transcript_events(path)
+        assert events == [{"ev": "interjection", "text": "steer this", "ts": "2026-08-04T00:00:00Z"}]
+
+    def test_qwen_bash_call_accumulates_into_commands(self):
+        path = self._write([
+            self._user("do it"),
+            {
+                "type": "assistant",
+                "timestamp": "2026-08-04T00:00:01Z",
+                "message": {"role": "model", "parts": [
+                    {"functionCall": {"id": "call_2", "name": "run_shell_command",
+                                       "args": {"command": "git status", "description": "check"}}},
+                ]},
+            },
+        ])
+        events = slr.parse_transcript_events(path)
+        turns, _session_events = slr.accumulate_turns(events, cwd="/repo")
+        assert len(turns) == 1
+        assert turns[0]["commands"][0]["command"] == "git status"
+
+    def test_qwen_write_edit_accumulate_into_edited_files(self):
+        path = self._write([
+            self._user("fix it"),
+            {
+                "type": "assistant",
+                "timestamp": "2026-08-04T00:00:01Z",
+                "message": {"role": "model", "parts": [
+                    {"functionCall": {"id": "call_3", "name": "write_file",
+                                       "args": {"file_path": "/repo/src/new.py", "content": "x"}}},
+                    {"functionCall": {"id": "call_4", "name": "edit",
+                                       "args": {"file_path": "/repo/src/old.py",
+                                                "old_string": "a", "new_string": "b"}}},
+                ]},
+            },
+        ])
+        events = slr.parse_transcript_events(path)
+        turns, _session_events = slr.accumulate_turns(events, cwd="/repo")
+        assert turns[0]["edited_files"] == ["src/new.py", "src/old.py"]
+
+    def test_claude_rows_still_parse_unchanged(self):
+        # Regression guard for the additive-shape invariant: claude-shaped
+        # rows (message.content, never message.parts) must not be claimed by
+        # the qwen path.
+        path = self._write([
+            {"type": "user", "timestamp": "2026-06-14T00:00:00Z",
+             "message": {"content": "claude question"}},
+            {"type": "assistant", "timestamp": "2026-06-14T00:00:01Z",
+             "message": {"content": [{"type": "tool_use", "name": "Bash", "id": "t1",
+                                       "input": {"command": "ls"}}]}},
+        ])
+        events = slr.parse_transcript_events(path)
+        assert [e["ev"] for e in events] == ["user_text", "tool_use"]
+        assert events[1]["name"] == "Bash"
