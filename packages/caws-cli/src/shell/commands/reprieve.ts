@@ -65,6 +65,8 @@ const VENDOR_DIRS = [
   '.cursor',
   '.windsurf',
   '.opencode',
+  '.kimi-code',
+  '.qwen',
 ] as const;
 
 function setupIO(opts: ReprieveCommandBase) {
@@ -148,12 +150,16 @@ function surfaceToVendorDir(
     cursor: '.cursor',
     windsurf: '.windsurf',
     opencode: '.opencode',
+    'kimi-code': '.kimi-code',
+    'qwen-code': '.qwen',
     '.claude': '.claude',
     '.codex': '.codex',
     '.zcode': '.zcode',
     '.cursor': '.cursor',
     '.windsurf': '.windsurf',
     '.opencode': '.opencode',
+    '.kimi-code': '.kimi-code',
+    '.qwen': '.qwen',
   };
   const v = map[surface];
   if (v === undefined) {
@@ -191,6 +197,7 @@ const SESSION_VAR_TO_VENDOR_DIR: Readonly<Record<string, string>> = {
   CLAUDE_SESSION_ID: '.claude',
   CLAUDE_CODE_SESSION_ID: '.claude',
   CODEX_THREAD_ID: '.codex',
+  QWEN_CODE_SESSION_ID: '.qwen',
   CURSOR_TRACE_ID: '.cursor',
 };
 
@@ -220,6 +227,8 @@ export function vendorDirFromPlatform(platform: string): string | null {
     cursor: '.cursor',
     windsurf: '.windsurf',
     opencode: '.opencode',
+    'kimi-code': '.kimi-code',
+    'qwen-code': '.qwen',
   };
   return map[platform] ?? null;
 }
@@ -318,6 +327,7 @@ const AGENT_SESSION_VARS = [
   'CLAUDE_SESSION_ID',
   'CLAUDE_CODE_SESSION_ID',
   'CODEX_THREAD_ID',
+  'QWEN_CODE_SESSION_ID',
   'CAWS_SESSION_ID',
   'HOOK_SESSION_ID',
   'CURSOR_TRACE_ID',

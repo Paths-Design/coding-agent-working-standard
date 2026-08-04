@@ -186,7 +186,7 @@ caws doctor && \
 
 - **No agent guidance API** (`caws iterate`, `caws workflow guidance` are removed). The runtime decides the loop.
 - **No quality scoring API** (`caws evaluate` is removed). Use `caws gates run` exit code + the per-gate event in `events.jsonl`.
-- **No git-hook installer** (`caws hooks install` is removed). <!-- agent-surfaces-prose:start --> Use `caws init --agent-surface <claude-code | codex | opencode | zcode | kimi-code | cursor | windsurf | none>` to install a hook pack. `claude-code`, `codex`, `opencode`, `zcode`, `kimi-code` are implemented; `cursor`, `windsurf` are declared surfaces but not implemented. <!-- agent-surfaces-prose:end -->
+- **No git-hook installer** (`caws hooks install` is removed). <!-- agent-surfaces-prose:start --> Use `caws init --agent-surface <claude-code | codex | opencode | zcode | kimi-code | qwen-code | cursor | windsurf | none>` to install a hook pack. `claude-code`, `codex`, `opencode`, `zcode`, `kimi-code`, `qwen-code` are implemented; `cursor`, `windsurf` are declared surfaces but not implemented. <!-- agent-surfaces-prose:end -->
 - **No provenance subsystem** (`caws provenance` is removed). The hash-chained `events.jsonl` is the audit surface.
 - **No `caws parallel setup`** (deferred to v11.3+). Loop `caws worktree create` per spec instead.
 

@@ -35,15 +35,17 @@
 #   3. CODEX_THREAD_ID        — Codex harness per-thread id; survives the tool
 #                               boundary. THE fix for the codex incident: codex
 #                               exports this, not CLAUDE_*_SESSION_ID.
-#   4. CAWS_SESSION_ID        — generic CAWS escape hatch (any harness)
-#   5. HOOK_SESSION_ID        — the hook-envelope id (set only inside the hook's
+#   4. QWEN_CODE_SESSION_ID   — Qwen Code harness session UUID (probed live on
+#                               0.21.4); survives the tool boundary.
+#   5. CAWS_SESSION_ID        — generic CAWS escape hatch (any harness)
+#   6. HOOK_SESSION_ID        — the hook-envelope id (set only inside the hook's
 #                               own shell; does NOT propagate to agent-Bash)
-#   6. CURSOR_TRACE_ID        — cursor low-stability fallback
+#   7. CURSOR_TRACE_ID        — cursor low-stability fallback
 #   → "unknown" sentinel when nothing is set (the resolver refuses this literal).
 #
 # This MUST stay in lockstep with resolve-session.ts's env-var tiers
-# (claude_env → claude_code_env → codex_thread_env → caws_env → hook_env →
-# cursor_env). If you add a source to one, add it to the other.
+# (claude_env → claude_code_env → codex_thread_env → qwen_env → caws_env →
+# hook_env → cursor_env). If you add a source to one, add it to the other.
 #
 # SURFACE DISPATCH. Each harness exports a DIFFERENT per-session id under a
 # DIFFERENT env var. Rather than branch on a hardcoded harness name (architecture
@@ -68,7 +70,8 @@ _CAWS_SESSION_ID_SH_LOADED=1
 # identity by construction — CAWS-SESSION-SHELL-RESOLVER-CAPSULE-001):
 #   1. $1 payload id (harness-stamped stdin session_id; wins when present)
 #   2. env identity vars (CLAUDE_SESSION_ID / CLAUDE_CODE_SESSION_ID /
-#      CODEX_THREAD_ID / CAWS_SESSION_ID / HOOK_SESSION_ID / CURSOR_TRACE_ID)
+#      CODEX_THREAD_ID / QWEN_CODE_SESSION_ID / CAWS_SESSION_ID /
+#      HOOK_SESSION_ID / CURSOR_TRACE_ID)
 #   3. the durable capsule at .caws/sessions/caws-<id>.json — the shell mirror
 #      of the TS resolver's tier-3 readCapsule, and the same file caws worktree
 #      create records as the owner. Reached when the env chain misses (the
@@ -96,6 +99,10 @@ resolve_caws_session_id() {
   fi
   if [[ -n "${CODEX_THREAD_ID:-}" && "${CODEX_THREAD_ID}" != "unknown" ]]; then
     printf '%s\n' "$CODEX_THREAD_ID"
+    return 0
+  fi
+  if [[ -n "${QWEN_CODE_SESSION_ID:-}" && "${QWEN_CODE_SESSION_ID}" != "unknown" ]]; then
+    printf '%s\n' "$QWEN_CODE_SESSION_ID"
     return 0
   fi
   if [[ -n "${CAWS_SESSION_ID:-}" && "${CAWS_SESSION_ID}" != "unknown" ]]; then

@@ -88,6 +88,7 @@ caws init --agent-surface codex
 caws init --agent-surface opencode
 caws init --agent-surface zcode
 caws init --agent-surface kimi-code
+caws init --agent-surface qwen-code
 ```
 <!-- agent-surfaces-install:end -->
 

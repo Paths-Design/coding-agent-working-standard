@@ -1796,3 +1796,414 @@ export function planKimiConfigExample(
     readOnly: true,
   };
 }
+
+// ─── qwen-code: repo-local .qwen/settings.json wiring (CAWS-HOOK-PACK-QWEN-CODE-001) ───
+//
+// Qwen Code reads hooks from the repo-local .qwen/settings.json (merged under
+// any user-level ~/.qwen/settings.json), so the wiring is repo-local — the
+// claude-code/zcode precedent, no consent flag needed.
+//
+// Qwen exports no env var that reliably names the repo root
+// (QWEN_CODE_PROJECT_DIR points at ~/.qwen/projects/<slug>, probed live on
+// 0.21.4 — tmp/qwen-hook-probe-findings.md), so every entry invokes the
+// repo-conditional shim .qwen/hooks/caws-qwen-hook.sh, which resolves the git
+// root at invocation time (codex/kimi precedent) and no-ops outside CAWS
+// repos.
+//
+// Matchers use Qwen's runtime tool ids (regex; probed live on 0.21.4), not
+// Claude's display names.
+
+/** Inline git-root-resolving shim invocation for one qwen hook event. The
+ *  shim itself is repo-conditional (inert outside CAWS repos), so the wiring
+ *  only needs the standard fail-open `|| true` tail. */
+function qwenShimCommand(event: string): string {
+  return (
+    'ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"; ' +
+    'test -x "$ROOT/.qwen/hooks/caws-qwen-hook.sh" && ' +
+    `"$ROOT/.qwen/hooks/caws-qwen-hook.sh" ${event} || true`
+  );
+}
+
+/** The canonical CAWS hook wiring for Qwen Code as a structured object.
+ *  Single source of truth for both the printed snippet and the in-place
+ *  merge. Five events (kimi precedent; the shared core ships all five
+ *  dispatchers). */
+export const CANONICAL_QWEN_HOOK_ENTRIES: Readonly<
+  Record<string, Record<string, unknown>>
+> = {
+  PreToolUse: {
+    matcher:
+      'run_shell_command|write_file|edit|read_file|glob|grep_search|notebook_edit',
+    hooks: [
+      {
+        type: 'command',
+        command: qwenShimCommand('PreToolUse'),
+        name: 'caws-qwen-pre-tool-use',
+        timeout: 45,
+      },
+    ],
+  },
+  PostToolUse: {
+    matcher: 'write_file|edit|notebook_edit|run_shell_command|exit_plan_mode',
+    hooks: [
+      {
+        type: 'command',
+        command: qwenShimCommand('PostToolUse'),
+        name: 'caws-qwen-post-tool-use',
+        timeout: 60,
+      },
+    ],
+  },
+  SessionStart: {
+    hooks: [
+      {
+        type: 'command',
+        command: qwenShimCommand('SessionStart'),
+        name: 'caws-qwen-session-start',
+        timeout: 30,
+      },
+    ],
+  },
+  Stop: {
+    hooks: [
+      {
+        type: 'command',
+        command: qwenShimCommand('Stop'),
+        name: 'caws-qwen-stop',
+        timeout: 30,
+      },
+    ],
+  },
+  PreCompact: {
+    hooks: [
+      {
+        type: 'command',
+        command: qwenShimCommand('PreCompact'),
+        name: 'caws-qwen-pre-compact',
+        timeout: 30,
+      },
+    ],
+  },
+};
+
+/** A fresh .qwen/settings.json containing ONLY the canonical CAWS wiring. */
+function canonicalQwenSettingsObject(): { hooks: Record<string, unknown[]> } {
+  const hooks: Record<string, unknown[]> = {};
+  for (const [key, entry] of Object.entries(CANONICAL_QWEN_HOOK_ENTRIES)) {
+    hooks[key] = [entry];
+  }
+  return { hooks };
+}
+
+/** Canonical .qwen/settings.json wiring snippet, returned as a JSON string
+ *  ready to print or copy. */
+export const CANONICAL_QWEN_SETTINGS_SNIPPET = JSON.stringify(
+  canonicalQwenSettingsObject(),
+  null,
+  2
+);
+
+/** Does this hook-event's entry array already contain a CAWS-owned qwen
+ *  entry? Matched by the shim path so hand-pasted canonical blocks count as
+ *  wired and re-running init never appends duplicates. */
+function arrayHasCawsQwenEntry(entryArray: unknown): boolean {
+  if (!Array.isArray(entryArray)) return false;
+  const shimTail = '/.qwen/hooks/caws-qwen-hook.sh';
+  for (const block of entryArray as unknown[]) {
+    const hookList = (block as { hooks?: unknown }).hooks;
+    if (!Array.isArray(hookList)) continue;
+    for (const h of hookList as unknown[]) {
+      const cmd = (h as { command?: unknown }).command;
+      if (typeof cmd === 'string' && cmd.includes(shimTail)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Merge the canonical CAWS hook wiring into `.qwen/settings.json`,
+ * non-destructively. The CAWS entry for each hook-event is appended only
+ * if an equivalent entry (matched by the shim path) is not already present.
+ * All other keys — tools, memory, env, user-authored hooks — are preserved
+ * outside the appended entries.
+ *
+ * JSONC note: Qwen tolerates `//` comments in settings.json, but this merge
+ * parses strict JSON (claude/zcode precedent). A commented file is reported
+ * as `invalid` and left untouched — never clobbered; the canonical snippet
+ * stays paste-able via .qwen/settings.json.example.
+ *
+ * Never overwrites an unparseable file. Idempotent: a second run on a
+ * fully-wired settings.json is a no-op and leaves the file byte-identical.
+ */
+export function mergeQwenSettings(repoRoot: string): SettingsMergeResult {
+  const settingsPath = path.join(repoRoot, '.qwen', 'settings.json');
+
+  if (!fs.existsSync(settingsPath)) {
+    ensureDir(path.dirname(settingsPath));
+    fs.writeFileSync(
+      settingsPath,
+      `${JSON.stringify(canonicalQwenSettingsObject(), null, 2)}\n`,
+      'utf8'
+    );
+    return { kind: 'created', path: settingsPath };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  } catch (e) {
+    return { kind: 'invalid', path: settingsPath, error: (e as Error).message };
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return {
+      kind: 'invalid',
+      path: settingsPath,
+      error: 'settings.json root is not an object',
+    };
+  }
+
+  const root = parsed as Record<string, unknown>;
+  const hooks: Record<string, unknown> =
+    root.hooks && typeof root.hooks === 'object' && !Array.isArray(root.hooks)
+      ? (root.hooks as Record<string, unknown>)
+      : {};
+
+  const added: string[] = [];
+  for (const [key, entry] of Object.entries(CANONICAL_QWEN_HOOK_ENTRIES)) {
+    const existing = hooks[key];
+    if (arrayHasCawsQwenEntry(existing)) continue; // already wired
+    if (Array.isArray(existing)) {
+      (existing as unknown[]).push(entry);
+    } else {
+      hooks[key] = [entry];
+    }
+    added.push(key);
+  }
+
+  if (added.length === 0) {
+    return { kind: 'unchanged', path: settingsPath };
+  }
+
+  root.hooks = hooks;
+  fs.writeFileSync(
+    settingsPath,
+    `${JSON.stringify(root, null, 2)}\n`,
+    'utf8'
+  );
+  return { kind: 'merged', path: settingsPath, added };
+}
+
+/** Read-only counterpart to mergeQwenSettings. Computes the same created /
+ * merged / unchanged / invalid outcome without writing settings.json. */
+export function planQwenSettingsMerge(
+  repoRoot: string
+): SettingsMergePlanResult {
+  const settingsPath = path.join(repoRoot, '.qwen', 'settings.json');
+
+  if (!fs.existsSync(settingsPath)) {
+    return { kind: 'created', path: settingsPath, readOnly: true };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  } catch (e) {
+    return {
+      kind: 'invalid',
+      path: settingsPath,
+      error: (e as Error).message,
+      readOnly: true,
+    };
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return {
+      kind: 'invalid',
+      path: settingsPath,
+      error: 'settings.json root is not an object',
+      readOnly: true,
+    };
+  }
+
+  const root = parsed as Record<string, unknown>;
+  const hooks: Record<string, unknown> =
+    root.hooks && typeof root.hooks === 'object' && !Array.isArray(root.hooks)
+      ? (root.hooks as Record<string, unknown>)
+      : {};
+
+  const added: string[] = [];
+  for (const key of Object.keys(CANONICAL_QWEN_HOOK_ENTRIES)) {
+    if (arrayHasCawsQwenEntry(hooks[key])) continue;
+    added.push(key);
+  }
+
+  if (added.length === 0) {
+    return { kind: 'unchanged', path: settingsPath, readOnly: true };
+  }
+
+  return { kind: 'merged', path: settingsPath, added, readOnly: true };
+}
+
+/** Inspect the qwen wiring state of `.qwen/settings.json` without changing
+ *  it. Mirrors inspectClaudeSettings; the CAWS marker is the shim path. */
+export function inspectQwenSettings(repoRoot: string): SettingsWiringStatus {
+  const settingsPath = path.join(repoRoot, '.qwen', 'settings.json');
+  if (!fs.existsSync(settingsPath)) {
+    return { kind: 'absent' };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  } catch (e) {
+    return { kind: 'invalid', error: (e as Error).message };
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    return { kind: 'invalid', error: 'settings.json root is not an object' };
+  }
+  const hooks = (parsed as { hooks?: unknown }).hooks;
+  const required = Object.keys(CANONICAL_QWEN_HOOK_ENTRIES);
+  if (!hooks || typeof hooks !== 'object') {
+    return { kind: 'partial', missing: required };
+  }
+  const shimTail = '/.qwen/hooks/caws-qwen-hook.sh';
+  const missing: string[] = [];
+  for (const key of required) {
+    const entry = (hooks as Record<string, unknown>)[key];
+    if (!Array.isArray(entry) || entry.length === 0) {
+      missing.push(key);
+      continue;
+    }
+    let found = false;
+    for (const block of entry as unknown[]) {
+      const hookList = (block as { hooks?: unknown }).hooks;
+      if (!Array.isArray(hookList)) continue;
+      for (const h of hookList as unknown[]) {
+        const cmd = (h as { command?: unknown }).command;
+        if (typeof cmd === 'string' && cmd.includes(shimTail)) {
+          found = true;
+          break;
+        }
+      }
+      if (found) break;
+    }
+    if (!found) missing.push(key);
+  }
+  if (missing.length === 0) return { kind: 'wired' };
+  return { kind: 'partial', missing };
+}
+
+/** Write `.qwen/settings.json.example` with the canonical CAWS wiring.
+ *  Idempotent (always writes the same bytes). Reference artifact for
+ *  hand-wiring or recovery. */
+export function writeQwenSettingsExample(repoRoot: string): string {
+  const examplePath = path.join(repoRoot, '.qwen', 'settings.json.example');
+  ensureDir(path.dirname(examplePath));
+  fs.writeFileSync(
+    examplePath,
+    `${CANONICAL_QWEN_SETTINGS_SNIPPET}\n`,
+    'utf8'
+  );
+  return examplePath;
+}
+
+/** Read-only counterpart to writeQwenSettingsExample. */
+export function planQwenSettingsExample(
+  repoRoot: string
+): SettingsExamplePlanResult {
+  const examplePath = path.join(repoRoot, '.qwen', 'settings.json.example');
+  const desired = `${CANONICAL_QWEN_SETTINGS_SNIPPET}\n`;
+  let existing: string | null = null;
+  try {
+    existing = fs.readFileSync(examplePath, 'utf8');
+  } catch {
+    existing = null;
+  }
+  return {
+    path: examplePath,
+    action:
+      existing === null
+        ? 'would_create'
+        : existing === desired
+          ? 'unchanged'
+          : 'would_update',
+    readOnly: true,
+  };
+}
+
+// ─── qwen-code: root QWEN.md doctrine import ───
+//
+// Qwen Code auto-loads the root QWEN.md (and ~/.qwen/QWEN.md,
+// .qwen/QWEN.local.md, root AGENTS.md) — nothing else under .qwen/. The
+// pack's doctrine doc therefore lands at .qwen/CAWS-HOOKS.md and this step
+// maintains a CAWS-managed @-import line in the root QWEN.md so Qwen loads
+// it every session. The block is fenced with markers; the merge appends it
+// when missing and is a byte-identical no-op when present.
+
+const QWEN_IMPORT_MARKER_BEGIN =
+  '<!-- >>> caws qwen-code doctrine import (managed, v1) >>> -->';
+const QWEN_IMPORT_MARKER_END =
+  '<!-- <<< caws qwen-code doctrine import (managed, v1) <<< -->';
+const QWEN_IMPORT_BLOCK = `${QWEN_IMPORT_MARKER_BEGIN}\n@.qwen/CAWS-HOOKS.md\n${QWEN_IMPORT_MARKER_END}`;
+
+/** Outcome of the root QWEN.md doctrine-import merge. */
+export type InstructionImportResult =
+  /** No QWEN.md existed; one was created carrying only the managed block. */
+  | { readonly kind: 'created'; readonly path: string }
+  /** QWEN.md existed without the block; the block was appended. */
+  | { readonly kind: 'merged'; readonly path: string }
+  /** The managed block was already present; nothing written. */
+  | { readonly kind: 'unchanged'; readonly path: string };
+
+export type InstructionImportPlanResult = InstructionImportResult & {
+  readonly readOnly: true;
+};
+
+function qwenInstructionImportPath(repoRoot: string): string {
+  return path.join(repoRoot, 'QWEN.md');
+}
+
+/** Merge the CAWS-managed doctrine import into the root QWEN.md. Creates the
+ *  file when absent; appends the fenced block when missing; idempotent. The
+ *  user's own QWEN.md content is never rewritten. */
+export function mergeQwenInstructionImport(
+  repoRoot: string
+): InstructionImportResult {
+  const qwenMdPath = qwenInstructionImportPath(repoRoot);
+
+  if (!fs.existsSync(qwenMdPath)) {
+    ensureDir(path.dirname(qwenMdPath));
+    fs.writeFileSync(qwenMdPath, `${QWEN_IMPORT_BLOCK}\n`, 'utf8');
+    return { kind: 'created', path: qwenMdPath };
+  }
+
+  const existing = fs.readFileSync(qwenMdPath, 'utf8');
+  if (existing.includes(QWEN_IMPORT_MARKER_BEGIN)) {
+    return { kind: 'unchanged', path: qwenMdPath };
+  }
+
+  const needsLeadingNewline = existing.length > 0 && !existing.endsWith('\n');
+  const separator = existing.length > 0 ? '\n' : '';
+  fs.writeFileSync(
+    qwenMdPath,
+    `${existing}${needsLeadingNewline ? '\n' : ''}${separator}${QWEN_IMPORT_BLOCK}\n`,
+    'utf8'
+  );
+  return { kind: 'merged', path: qwenMdPath };
+}
+
+/** Read-only counterpart to mergeQwenInstructionImport. */
+export function planQwenInstructionImport(
+  repoRoot: string
+): InstructionImportPlanResult {
+  const qwenMdPath = qwenInstructionImportPath(repoRoot);
+
+  if (!fs.existsSync(qwenMdPath)) {
+    return { kind: 'created', path: qwenMdPath, readOnly: true };
+  }
+  const existing = fs.readFileSync(qwenMdPath, 'utf8');
+  if (existing.includes(QWEN_IMPORT_MARKER_BEGIN)) {
+    return { kind: 'unchanged', path: qwenMdPath, readOnly: true };
+  }
+  return { kind: 'merged', path: qwenMdPath, readOnly: true };
+}

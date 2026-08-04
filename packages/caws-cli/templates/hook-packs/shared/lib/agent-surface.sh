@@ -39,7 +39,8 @@
 #   CAWS_SUPPORTS_UPDATED_INPUT — "1" when the harness honors the PreToolUse
 #                         updatedInput contract (quiet-merge.sh rewrites the
 #                         command), "0" when it does not (kimi-code: no
-#                         documented updatedInput contract — quiet-merge
+#                         documented updatedInput contract; qwen-code:
+#                         documented but not enforced in 0.21.x — quiet-merge
 #                         passes the command through unrewritten).
 #   CAWS_INSTRUCTION_FILES — space-separated root instruction filenames the
 #                         harness reads at the repo root (e.g. "CLAUDE.md" for
@@ -89,6 +90,18 @@
 #                  precedent) and no-ops outside CAWS repos. Deny-only PreToolUse
 #                  vocab (verified live: "ask" does not block); block reasons
 #                  go to stderr with exit 2.
+#   qwen-code    — Qwen Code CLI. Hooks live in the repo-local
+#                  .qwen/settings.json, but Qwen exports no env var that
+#                  reliably names the repo root (QWEN_CODE_PROJECT_DIR is the
+#                  per-project state dir under ~/.qwen/projects/<slug>, probed
+#                  live on 0.21.4), so the wiring is a repo-conditional shim
+#                  (caws-qwen-hook.sh) that resolves the git root at
+#                  invocation time (codex/kimi precedent) and no-ops outside
+#                  CAWS repos. Full allow/deny/ask PreToolUse vocab (ask
+#                  prompts interactively and degrades to deny in
+#                  headless/background); updatedInput is documented but NOT
+#                  enforced in 0.21.x, so quiet-merge passes the command
+#                  through unrewritten.
 #   (future)     — cursor, windsurf, vscode, idea, ... Add a case arm below.
 #
 # IDEMPOTENT: safe to source multiple times.
@@ -216,6 +229,19 @@ case "$CAWS_AGENT_SURFACE" in
     CAWS_INSTRUCTION_FILES="AGENTS.md"
     # No documented updatedInput contract — quiet-merge passes the command
     # through unrewritten on this surface.
+    CAWS_SUPPORTS_UPDATED_INPUT="0"
+    ;;
+  qwen-code)
+    CAWS_VENDOR_DIR=".qwen"
+    CAWS_PLATFORM_FLAG="qwen-code"
+    # Qwen Code supports allow/deny/ask natively (verified live on 0.21.4):
+    # interactive sessions prompt on ask; headless/background contexts
+    # degrade ask -> deny automatically. Same vocab as Claude Code.
+    CAWS_PERMISSION_VOCAB="ask"
+    CAWS_INSTRUCTION_FILES="QWEN.md"
+    # updatedInput is documented but NOT enforced in 0.21.x (probed
+    # 2026-08-03, tmp/qwen-hook-probe-findings.md) — quiet-merge passes the
+    # command through unrewritten on this surface.
     CAWS_SUPPORTS_UPDATED_INPUT="0"
     ;;
   *)

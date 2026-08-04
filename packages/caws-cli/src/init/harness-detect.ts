@@ -46,6 +46,10 @@ const SIGNALS: readonly SurfaceSignal[] = [
     markers: ['.kimi-code', '.kimi-code/local.toml', '.kimi-code/hooks'],
   },
   {
+    surface: 'qwen-code',
+    markers: ['.qwen', '.qwen/settings.json', '.qwen/hooks', 'QWEN.md'],
+  },
+  {
     surface: 'cursor',
     markers: ['.cursor', '.cursor/settings.json', '.cursor/rules'],
   },

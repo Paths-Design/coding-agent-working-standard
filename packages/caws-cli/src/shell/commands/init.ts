@@ -34,19 +34,26 @@ import {
   detectOrphanedDispatchDir,
   inspectClaudeSettings,
   inspectKimiUserConfig,
+  inspectQwenSettings,
   inspectZcodeConfig,
   installHookPack,
   mergeClaudeSettings,
   mergeKimiUserConfig,
+  mergeQwenInstructionImport,
+  mergeQwenSettings,
   mergeZcodeConfig,
   planClaudeSettingsMerge,
   planHookPackInstall,
   planKimiConfigExample,
   planKimiConfigMerge,
+  planQwenInstructionImport,
+  planQwenSettingsExample,
+  planQwenSettingsMerge,
   planSettingsExample,
   planZcodeConfigExample,
   planZcodeConfigMerge,
   writeKimiConfigExample,
+  writeQwenSettingsExample,
   writeSettingsExample,
   writeZcodeConfigExample,
 } from '../../init/hook-install';
@@ -83,10 +90,12 @@ import {
   renderActivationContract,
   renderHookPackInstall,
   renderKimiHookWiring,
+  renderQwenSettingsWiring,
   renderSettingsWiring,
   renderZcodeSettingsWiring,
 } from '../render/init-hook-pack';
 import type {
+  InstructionImportPlanResult,
   SettingsMergeResult,
   SettingsMergePlanResult,
   SettingsExamplePlanResult,
@@ -374,6 +383,11 @@ interface InitPlanDocument {
     readonly user_config?: SettingsMergePlanResult;
     readonly config_example: SettingsExamplePlanResult;
   };
+  readonly qwen_settings?: {
+    readonly settings_json: SettingsMergePlanResult;
+    readonly settings_example: SettingsExamplePlanResult;
+    readonly instruction_import: InstructionImportPlanResult;
+  };
   readonly codex_trust_note?: string;
   readonly next_apply_command: string;
 }
@@ -519,6 +533,26 @@ function renderInitPlan(plan: InitPlanDocument): string {
     );
   }
 
+  if (plan.qwen_settings) {
+    lines.push('');
+    lines.push('.qwen settings wiring:');
+    lines.push(`  settings.json: ${plan.qwen_settings.settings_json.kind}`);
+    if (plan.qwen_settings.settings_json.kind === 'merged') {
+      lines.push(
+        `  would add: ${plan.qwen_settings.settings_json.added.join(', ')}`
+      );
+    }
+    if (plan.qwen_settings.settings_json.kind === 'invalid') {
+      lines.push(`  error: ${plan.qwen_settings.settings_json.error}`);
+    }
+    lines.push(
+      `  settings.json.example: ${plan.qwen_settings.settings_example.action}`
+    );
+    lines.push(
+      `  QWEN.md doctrine import: ${plan.qwen_settings.instruction_import.kind}`
+    );
+  }
+
   if (plan.codex_trust_note) {
     lines.push('');
     lines.push(plan.codex_trust_note);
@@ -604,6 +638,14 @@ function runInitPlan(
           config_example: planKimiConfigExample(repoRoot),
         }
       : undefined;
+  const qwenSettings =
+    hookPlan.pack?.id === 'qwen-code'
+      ? {
+          settings_json: planQwenSettingsMerge(repoRoot),
+          settings_example: planQwenSettingsExample(repoRoot),
+          instruction_import: planQwenInstructionImport(repoRoot),
+        }
+      : undefined;
   const codexTrustNote =
     hookPlan.pack?.id === 'codex'
       ? 'Codex project hooks require project trust and /hooks review before changed command hooks run.'
@@ -629,6 +671,7 @@ function runInitPlan(
     ...(claudeSettings ? { claude_settings: claudeSettings } : {}),
     ...(zcodeSettings ? { zcode_settings: zcodeSettings } : {}),
     ...(kimiSettings ? { kimi_settings: kimiSettings } : {}),
+    ...(qwenSettings ? { qwen_settings: qwenSettings } : {}),
     ...(codexTrustNote ? { codex_trust_note: codexTrustNote } : {}),
     next_apply_command: applyCommand(opts),
   };
@@ -845,6 +888,18 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
       wiringStatus = inspectKimiUserConfig();
     }
     out(renderKimiHookWiring(wiringStatus, mergeResult));
+  } else if (hookPackResult.pack?.id === 'qwen-code') {
+    // Qwen reads repo-local .qwen/settings.json: merge the five shim entries
+    // in place (claude/zcode precedent — no consent flag needed; the write
+    // stays in the repo), always emit the settings.json.example reference,
+    // and maintain the managed doctrine import in the root QWEN.md.
+    mergeResult = mergeQwenSettings(repoRoot);
+    writeQwenSettingsExample(repoRoot);
+    const importResult = mergeQwenInstructionImport(repoRoot);
+    // Re-inspect AFTER the merge so the activation panel reflects the
+    // now-wired state, exactly as the claude-code branch does.
+    wiringStatus = inspectQwenSettings(repoRoot);
+    out(renderQwenSettingsWiring(mergeResult, importResult));
   } else if (opts.wireUserConfig === true) {
     // The flag only makes sense when the kimi-code pack was installed; on
     // any other outcome (no pack, a different detected surface) refuse
