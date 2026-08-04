@@ -84,9 +84,9 @@ The asymmetric rule:
 
 ### 1. Verify your PR is happy
 
-Before merging the PR whose content you'll release, verify the
-release-guard PR advisory check is green. It tells you what a tag for this PR's
-content would publish.
+Before merging the PR whose content you'll release, verify CI is green on it.
+There is no separate release-guard advisory under the tag-driven flow — the
+human decides what to tag and when.
 
 ### 2. Author the CHANGELOG section
 
@@ -131,9 +131,8 @@ git push origin main
 ```
 
 **Important**: this commit does NOT trigger a release. The release trigger
-is the tag push, NOT the branch push. The release-guard advisory at
-PR time told you nothing would publish from a branch push, and that
-remains true.
+is the tag push, NOT the branch push — nothing publishes until you push the
+matching tag.
 
 ### 5. Tag and push the tag
 
@@ -318,10 +317,14 @@ token can be retired entirely. That migration is out of scope for v1.
 ## Related specs
 
 - `CAWS-RELEASE-TAG-DRIVEN-001` — this slice
-- `RELEASE-AUTOMATION-GUARD-NONPUBLISH-COMMITS-001` — PR-time release-guard
-  advisory layers (Layer 1/2/3) that survive into the new workflow
 - `V11-DOCTRINE-HYGIENE-001` — tarball-truth hard-block (now invoked as a
   prepublishOnly smoke step, not a release.yml step)
+
+> The retired semantic-release release-guard scripts (`release-guard-dry-run`,
+> `release-guard-commit-analyzer-check`, `release-guard-scope-audit`,
+> `multi-package-release`) and the `RELEASE-AUTOMATION-GUARD-NONPUBLISH-COMMITS-001`
+> advisory model they backed were removed when this flow became tag-driven. They
+> described a commit-push-publish model that no longer exists.
 
 ## Migration note
 

@@ -27,14 +27,15 @@ name: Release
 # origin (pre-dating this slice) are NOT rewritten; only newly-pushed
 # refused tags trigger refusal-and-deletion.
 #
-# The release-guard layers (release-guard-dry-run.mjs,
-# release-guard-commit-analyzer-check.mjs, release-guard-scope-audit.mjs)
-# remain as PR-time advisory checks in pr-checks.yml. They tell reviewers
-# what a release-tag for a PR's content would publish. The human decides
-# whether to tag.
+# The tag-driven flow has no PR-time publish advisory: the human authors the
+# version bump + CHANGELOG and decides when to tag. CI only runs on the tag.
+# (The retired semantic-release release-guard scripts — release-guard-dry-run,
+# release-guard-commit-analyzer-check, release-guard-scope-audit,
+# multi-package-release — were removed when this became tag-driven; they
+# described a commit-push-publish model that no longer exists.)
 #
 # Releasing manually:
-#   1. Verify release-guard PR advisory is happy on your PR
+#   1. Verify the PR is green on CI
 #   2. Author/update packages/caws-cli/CHANGELOG.md section for the version
 #   3. Bump packages/caws-cli/package.json version to match
 #   4. Commit both as a single non-shipping commit on main
