@@ -7,12 +7,13 @@ created_at: '2026-08-06T11:11:24.245Z'
 updated_at: '2026-08-06T11:11:33.583Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/messages-store.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/store/messages-store.ts
     - packages/caws-cli/src/shell/commands/specs.ts
     - packages/caws-cli/src/store/worktrees-writer.ts
@@ -22,13 +23,26 @@ scope:
     - .caws/specs/CAWS-DEFECT-MSG-ENRICHMENT-01.yaml
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Rejections are message-string enrichments only. No gate behavior, no state-file shape, no event-shape changes.'
+  - 'isRecipientLive (the boolean predicate) keeps its existing Result<boolean> signature; the reason/age enrichment is additive (a richer helper called only on the false path) so no existing caller breaks.'
+  - 'The load-bearing "NOT sent / would look like silence" doctrine in the recipient_not_live message is preserved verbatim in intent.'
+  - 'specs-create contract hint fires on the rejection RULE (TIER1/TIER2_MISSING_CONTRACTS), not on the absence of a parsed --contract token, so a malformed contract no longer suppresses the shape hint.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'A recipient lease that is missing, stopped, or stale (>30m heartbeat).'
+    when: 'caws message send --to <id> runs with requireLive (default).'
+    then: 'The rejection message states the specific reason (no lease / not active / stale heartbeat), the humanized age when stale, and names both `caws agents list` and `caws message send --allow-dead` as next steps.'
+  - id: A2
+    given: 'A Tier 1 or Tier 2 specs create rejected for missing contracts, regardless of whether a malformed --contract was supplied.'
+    when: 'The rejection is rendered to the operator.'
+    then: 'The output leads with the `--contract` flag in a runnable retry command, not just the bare "Add at least one contract" repair text.'
+  - id: A3
+    given: 'A worktree destroy rejected because the branch is not merged into its base.'
+    when: 'The rejection is rendered to the operator.'
+    then: 'The output contains the full recovery command `caws worktree destroy <name> --abandon-unmerged`, not just the bare flag name.'
 non_functional: {}
+provenance:
+  source: 'tmp/CAWS-DEFECT-BACKLOG.md (DEFECT-01-msg, DEFECT-02, DEFECT-03a); harvested from ~9,700 invocations across 6 dogfooding projects.'
 contracts:
   - name: 'msg-error-enrichment'
     type: behavior
