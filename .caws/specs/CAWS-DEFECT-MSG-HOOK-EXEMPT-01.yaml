@@ -2,10 +2,11 @@ id: CAWS-DEFECT-MSG-HOOK-EXEMPT-01
 title: 'Exempt caws message send/poll from bash-write-guard false positives'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-msg-hook-exempt
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-msg-hook-exempt at 4152dd5dee4c200111079daa572c39e912960ba0'
 created_at: '2026-08-06T12:00:57.769Z'
-updated_at: '2026-08-06T12:00:58.923Z'
+updated_at: '2026-08-06T12:08:55.979Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh
