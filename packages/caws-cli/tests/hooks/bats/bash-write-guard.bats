@@ -116,3 +116,72 @@ _run_bwg_nojsyaml() {
   refute [ "$status" -eq 0 ]
   assert_output --partial 'caws-state.sh'
 }
+
+# --- CAWS-DEFECT-MSG-HOOK-EXEMPT-01: caws message send|poll are non-mutating ---
+# `caws message send/poll` never write an operator-named file (the only write is
+# an append to .caws/messages.jsonl). But extract_targets tokenizes the full
+# command without respecting shell quoting, so a `>` or a claimed path inside
+# the --text body gets misread as a write target. The guard short-circuits
+# before target extraction, mirroring quiet-merge.sh's self-filter — but ONLY
+# for the bare message command (the redirect-pipe guard preserves checks on a
+# genuine sibling mutation like `... && echo x > f.log`).
+
+# Seed a worktree claiming a path so the oracle WOULD block a mutation of it.
+# Used to prove the exemption (not a missing claim) is what lets the message through.
+_seed_claimed_path() {
+  local wt="wt-claim" spec="CLAIM-001" owner="${1:-other-session}"
+  mkdir -p "$CAWS_TEST_REPO/.caws/worktrees/$wt" "$CAWS_TEST_REPO/.caws/specs"
+  cat > "$CAWS_TEST_REPO/.caws/worktrees.json" <<JSON
+{"$wt":{"name":"$wt","spec_id":"$spec","path":"$CAWS_TEST_REPO/.caws/worktrees/$wt","owner":{"session_id":"$owner"},"baseBranch":"main"}}
+JSON
+  cat > "$CAWS_TEST_REPO/.caws/specs/$spec.yaml" <<YAML
+id: $spec
+lifecycle_state: active
+worktree: $wt
+scope:
+  in:
+    - engine/Assets/RC/Tests/**
+YAML
+}
+
+@test "A1: caws message send whose --text mentions a CLAIMED path still passes (exempt before oracle)" {
+  _seed_claimed_path
+  # The exact harvest scenario: text body names a path claimed by wt-claim.
+  # Without the exemption, extract_targets misreads the path as a write target
+  # and the oracle blocks it. With the exemption, the guard exits 0 early.
+  local envelope
+  envelope="$(jq -nc --arg c 'caws message send --to sess-abc --text "see engine/Assets/RC/Tests/foo for context"' --arg s "my-session" \
+    '{tool_name:"Bash", tool_input:{command:$c}, session_id:$s}')"
+  run_guard bash-write-guard.sh "$envelope"
+  assert_success
+  refute_output --partial 'BLOCKED'
+  refute_output --partial 'wt-claim'
+}
+
+@test "A2: a caws message send CHAINED with a sibling redirect is still checked (redirect-pipe guard)" {
+  _seed_claimed_path
+  # The sibling `echo done > engine/Assets/RC/Tests/out.log` is a genuine
+  # mutation. The exemption must NOT short-circuit it — the guard must still
+  # run target extraction and reach the oracle. We assert the observable proof
+  # that the exemption did not fire: the oracle ran. (In this harness js-yaml
+  # is unresolvable, so the claim check degrades to allow-with-advisory rather
+  # than a hard block; with js-yaml present the same path would block. Either
+  # way the redirect-pipe guard correctly prevented the early exit.)
+  local envelope
+  envelope="$(jq -nc --arg c 'caws message send --to sess-abc --text hi && echo done > engine/Assets/RC/Tests/out.log' --arg s "my-session" \
+    '{tool_name:"Bash", tool_input:{command:$c}, session_id:$s}')"
+  run_guard bash-write-guard.sh "$envelope"
+  # The oracle ran (advisory present) => the exemption did NOT fire.
+  assert_output --partial 'scope.in claim check'
+  refute_output --partial 'wt-claim'\''s payload'
+}
+
+@test "A3: caws message poll (read-only) is a clean pass" {
+  _seed_claimed_path
+  local envelope
+  envelope="$(jq -nc --arg c 'caws message poll --wait 5000' --arg s "my-session" \
+    '{tool_name:"Bash", tool_input:{command:$c}, session_id:$s}')"
+  run_guard bash-write-guard.sh "$envelope"
+  assert_success
+  refute_output --partial 'BLOCKED'
+}
