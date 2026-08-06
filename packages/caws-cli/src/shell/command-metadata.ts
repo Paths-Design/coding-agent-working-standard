@@ -618,6 +618,11 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
       options: [
         { flag: '--dry-run', description: 'Validate prerequisites only; no git, no file writes, no events' },
         {
+          flag: '--apply',
+          description:
+            'Run the dry-run gate, then merge if ready (collapses --dry-run + real merge into one call). Refuses with findings if not ready; never forces.',
+        },
+        {
           flag: '--message <text>',
           description: 'Custom merge commit message (default: merge(worktree): <name>)',
         },

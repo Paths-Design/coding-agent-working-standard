@@ -507,6 +507,7 @@ export function runWorktreeUntrackCommand(opts: WorktreeUntrackOptions): number 
 export interface WorktreeMergeOptions extends BaseCommandOptions {
   readonly name: string;
   readonly dryRun?: boolean;
+  readonly apply?: boolean;
   readonly message?: string;
 }
 
@@ -516,6 +517,16 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
   if (ctx === null) return 2;
   const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'merge');
   if (id === null) return 2;
+
+  // CAWS-DEFECT-MERGE-APPLY-FLAG-01: --dry-run and --apply are mutually
+  // exclusive. --apply implies the dry-run gate runs internally as a
+  // precondition, so passing both is a usage error (exit 2, no mutation).
+  if (opts.dryRun === true && opts.apply === true) {
+    err('caws worktree merge: --dry-run and --apply are mutually exclusive.');
+    err('  --apply runs the dry-run gate internally and then merges if ready;');
+    err('  --dry-run reports the plan without merging. Use one or the other.');
+    return 2;
+  }
 
   // See destroy: ownership-comparison surface needs the exhaustive
   // candidate set, distinct from the single-identity actor.
@@ -538,6 +549,37 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
   };
   if (opts.dryRun === true) (input as { dryRun?: boolean }).dryRun = true;
   if (opts.message !== undefined) (input as { message?: string }).message = opts.message;
+
+  // CAWS-DEFECT-MERGE-APPLY-FLAG-01 (DEFECT-04): --apply collapses the
+  // dry-run-then-real ceremony (95% of dry-run turns immediately re-ran the
+  // real merge). Run the dry-run gate first; if it reports canProceed, fall
+  // through to the real merge in the same command. If not, print findings and
+  // exit 1 WITHOUT merging (a precondition gate, not a force). The writer is
+  // unchanged — this is pure shell-layer composition of two calls.
+  if (opts.apply === true) {
+    const gate = mergeWorktree(ctx.cawsDir, { ...input, dryRun: true });
+    if (!isOk(gate)) {
+      err('caws worktree merge: failed.');
+      err(renderDiagnostics(gate.errors, { showData }));
+      return 1;
+    }
+    const gateOutcome = gate.value;
+    if (gateOutcome.kind !== 'dry_run') {
+      // Should not happen for dryRun:true, but fail closed.
+      err('caws worktree merge --apply: unexpected non-dry-run outcome from the gate.');
+      return 1;
+    }
+    if (!gateOutcome.canProceed) {
+      err(`caws worktree merge ${opts.name} --apply: NOT ready to merge.`);
+      for (const f of gateOutcome.findings) err(`  - ${f}`);
+      err('  Re-run without --apply (or with --dry-run) to inspect the plan;');
+      err('  resolve the findings above before merging.');
+      return 1;
+    }
+    // Gate passed; fall through to the real merge below using the original
+    // (non-dry-run) input. No output here — the success line comes from the
+    // real merge so the operator sees exactly the same result as a plain merge.
+  }
 
   const result = mergeWorktree(ctx.cawsDir, input);
   if (!isOk(result)) {
