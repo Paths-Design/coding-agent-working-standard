@@ -2,10 +2,11 @@ id: CAWS-DEFECT-MSG-ENRICHMENT-01
 title: 'Enrich CAWS rejection messages with full recovery commands and reasons'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-defect-msg-enrichment
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-defect-msg-enrichment at f8f8eea5644a5fef01782f0d3f5f10c286eebcbd'
 created_at: '2026-08-06T11:11:24.245Z'
-updated_at: '2026-08-06T11:11:33.583Z'
+updated_at: '2026-08-06T11:20:32.324Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/messages-store.ts
