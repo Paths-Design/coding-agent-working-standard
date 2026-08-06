@@ -44,6 +44,3 @@ non_functional:
 contracts:
   - name: 'merge-apply-flag'
     type: behavior
-contracts:
-  - name: 'merge-apply-flag'
-    type: behavior
