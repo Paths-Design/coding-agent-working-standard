@@ -1,0 +1,27 @@
+id: CAWS-DEFECT-MSG-HOOK-EXEMPT-01
+title: 'Exempt caws message send/poll from bash-write-guard false positives'
+risk_tier: 2
+mode: fix
+lifecycle_state: active
+created_at: '2026-08-06T12:00:57.769Z'
+updated_at: '2026-08-06T12:00:57.769Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'msg-hook-exempt'
+    type: behavior
