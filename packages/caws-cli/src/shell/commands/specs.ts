@@ -681,16 +681,24 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   if (!isOk(result)) {
     err('caws specs create: failed.');
     err(renderDiagnostics(result.errors, { showData }));
-    // FIX-SPECS-CONTRACT-ORIENTATION-001 (A2): the kernel's narrowRepair already
-    // says "Add at least one contract or change risk_tier to 3 or mode to chore",
-    // but does not state the contract SHAPE. When a tier-1/2 create was rejected
-    // without any --contract supplied, append the inline shape + the one-command
-    // path so the operator never has to look up an (unshipped) external doc.
-    if ((riskTier === 1 || riskTier === 2) && parsedContracts === undefined) {
+    // CAWS-DEFECT-MSG-ENRICHMENT-01 (DEFECT-02): the kernel's narrowRepair says
+    // "Add at least one contract" but does not name the --contract flag, and the
+    // prior hint only fired when parsedContracts === undefined (so a malformed
+    // contract suppressed the shape hint). Fire on the rejection RULE instead —
+    // the writer wraps kernel diagnostics with data.source_rule — and lead with
+    // the runnable retry command so the operator never has to look up the shape.
+    const TIER_CONTRACT_RULES = new Set([
+      'spec.semantic.tier1.contracts_required',
+      'spec.semantic.tier2.contracts_required',
+    ]);
+    const rejectedForMissingContracts = result.errors.some(
+      (d) => typeof d.data?.source_rule === 'string' && TIER_CONTRACT_RULES.has(d.data.source_rule as string)
+    );
+    if ((riskTier === 1 || riskTier === 2) && rejectedForMissingContracts) {
       err('');
       err(`  ${CONTRACT_SHAPE_HINT}`);
       err(
-        `  Example: caws specs create ${opts.id} --title "..." --mode ${mode} --risk-tier ${riskTier} --contract "core-api:behavior"`
+        `  Retry: caws specs create ${opts.id} --title "..." --mode ${mode} --risk-tier ${riskTier} --contract "core-api:behavior"`
       );
     }
     return 1;

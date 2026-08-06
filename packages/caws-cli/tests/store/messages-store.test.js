@@ -108,6 +108,73 @@ test('A2: a send to a recipient with no lease is refused and writes no record', 
   expect(fs.existsSync(path.join(caws, 'messages.jsonl'))).toBe(false);
 });
 
+// ─── A2 (DEFECT-01-msg): enriched "not live" reason + recovery hints ─────────
+// CAWS-DEFECT-MSG-ENRICHMENT-01: the rejection must state the specific reason
+// (no lease / not active / stale heartbeat + age) and name both recovery paths.
+
+test('A2-enriched: no-lease rejection names the reason and the recovery commands', () => {
+  const caws = cawsDir();
+  const sent = sendMessage(caws, { actor: sender, to: 'ghost', text: 'hi' });
+  expect(sent.ok).toBe(false);
+  const msg = sent.errors[0].message;
+  expect(msg).toContain('no lease found for this session id');
+  expect(msg).toContain('caws agents list');
+  expect(msg).toContain('caws message send --allow-dead');
+  // load-bearing doctrine preserved
+  expect(msg).toContain('NOT sent');
+  expect(msg).toMatch(/void|silence/);
+});
+
+test('A2-enriched: stopped-lease rejection names the lease status', () => {
+  const caws = cawsDir();
+  const leasesDir = path.join(caws, 'leases');
+  fs.mkdirSync(leasesDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(leasesDir, 'stopped-enriched.json'),
+    JSON.stringify({
+      lease_version: 1,
+      session_id: 'stopped-enriched',
+      platform: 'test',
+      status: 'stopped',
+      last_active: new Date().toISOString(),
+    })
+  );
+  const sent = sendMessage(caws, { actor: sender, to: 'stopped-enriched', text: 'hi' });
+  expect(sent.ok).toBe(false);
+  const msg = sent.errors[0].message;
+  expect(msg).toContain('lease status is "stopped"');
+  expect(msg).toContain('caws agents list');
+});
+
+test('A2-enriched: stale-heartbeat rejection names the age and TTL', () => {
+  const caws = cawsDir();
+  const leasesDir = path.join(caws, 'leases');
+  fs.mkdirSync(leasesDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(leasesDir, 'stale-enriched.json'),
+    JSON.stringify({
+      lease_version: 1,
+      session_id: 'stale-enriched',
+      platform: 'test',
+      status: 'active',
+      last_active: new Date(Date.now() - 47 * 60 * 1000).toISOString(), // 47m ago > 30m TTL
+    })
+  );
+  const sent = sendMessage(caws, { actor: sender, to: 'stale-enriched', text: 'hi' });
+  expect(sent.ok).toBe(false);
+  const msg = sent.errors[0].message;
+  expect(msg).toContain('stale heartbeat');
+  expect(msg).toMatch(/last active \d+ min ago/);
+  expect(msg).toContain('TTL is 30m');
+});
+
+test('A2-enriched: isRecipientLive stays a boolean predicate (no regression)', () => {
+  const caws = cawsDir();
+  makeLive(caws, 'recip-live');
+  expect(isRecipientLive(caws, 'recip-live')).toEqual({ ok: true, value: true });
+  expect(isRecipientLive(caws, 'ghost')).toEqual({ ok: true, value: false });
+});
+
 test('A2: a send to a STOPPED lease is refused (stopped is not live)', () => {
   const caws = cawsDir();
   const leasesDir = path.join(caws, 'leases');

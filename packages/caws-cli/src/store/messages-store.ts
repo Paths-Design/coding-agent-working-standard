@@ -75,18 +75,79 @@ function messagesPath(cawsDir: string): string {
  * be confused with "the send was dropped into a void."
  */
 export function isRecipientLive(cawsDir: string, sessionId: string): Result<boolean> {
+  const described = describeRecipientLiveness(cawsDir, sessionId);
+  if (!described.ok) return err(described.errors);
+  return ok(described.value.live);
+}
+
+/** Why a recipient is (or is not) live. `reason`/`ageMs` are set only when not live. */
+export interface RecipientLiveness {
+  readonly live: boolean;
+  readonly reason?: 'no_lease' | 'not_active' | 'stale_heartbeat';
+  readonly status?: string;
+  readonly ageMs?: number;
+}
+
+/**
+ * Same gate as {@link isRecipientLive}, but returns the discriminating detail
+ * (no lease / not active / stale heartbeat + age) so the rejection message can
+ * tell the sender *why* the recipient is unreachable instead of collapsing
+ * three causes into one generic string. See CAWS-DEFECT-MSG-ENRICHMENT-01.
+ */
+export function describeRecipientLiveness(cawsDir: string, sessionId: string): Result<RecipientLiveness> {
   const leasesResult = loadLeases(cawsDir);
   if (!leasesResult.ok) return err(leasesResult.errors);
   const lease = leasesResult.value.leases[sessionId];
-  if (!lease) return ok(false);
+  if (!lease) return ok({ live: false, reason: 'no_lease' });
   const status = (lease as { status?: string }).status;
-  if (status !== 'active' && status !== 'stopping') return ok(false);
+  if (status !== 'active' && status !== 'stopping') {
+    return ok({
+      live: false,
+      reason: 'not_active',
+      ...(status !== undefined ? { status } : {}),
+    });
+  }
   const lastActive = (lease as { last_active?: string }).last_active;
   if (typeof lastActive === 'string') {
     const ageMs = Date.now() - Date.parse(lastActive);
-    if (Number.isFinite(ageMs) && ageMs > LIVENESS_TTL_MS) return ok(false);
+    if (Number.isFinite(ageMs) && ageMs > LIVENESS_TTL_MS) {
+      return ok({
+        live: false,
+        reason: 'stale_heartbeat',
+        ...(status !== undefined ? { status } : {}),
+        ageMs,
+      });
+    }
   }
-  return ok(true);
+  return ok({ live: true });
+}
+
+/** Humanized "Nd ago" / "Nm ago" for a millisecond age, rounded down. */
+export function formatAge(ageMs: number): string {
+  const secs = Math.floor(ageMs / 1000);
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+const LIVENESS_TTL_HUMAN = '30m';
+
+/** Builds the enriched "not live" reason clause, e.g. "stale heartbeat — last active 47 min ago; TTL is 30m". */
+function describeNotLiveReason(liveness: RecipientLiveness): string {
+  switch (liveness.reason) {
+    case 'no_lease':
+      return 'no lease found for this session id';
+    case 'not_active':
+      return `lease status is "${liveness.status ?? 'unknown'}" (not "active" or "stopping")`;
+    case 'stale_heartbeat':
+      return `stale heartbeat — last active ${liveness.ageMs !== undefined ? formatAge(liveness.ageMs) : 'unknown'}; TTL is ${LIVENESS_TTL_HUMAN}`;
+    default:
+      return 'no active lease within the heartbeat TTL';
+  }
 }
 
 function appendLine(cawsDir: string, record: MessageRecord | DeliveryRecord): Result<void> {
@@ -126,15 +187,16 @@ export function sendMessage(
     );
   }
   if (params.requireLive !== false) {
-    const live = isRecipientLive(cawsDir, to);
-    if (!live.ok) return err(live.errors);
-    if (!live.value) {
+    const liveness = describeRecipientLiveness(cawsDir, to);
+    if (!liveness.ok) return err(liveness.errors);
+    if (!liveness.value.live) {
       return err(
         storeDiagnostic(
           STORE_RULES.MESSAGES_RECIPIENT_NOT_LIVE,
-          `Recipient session "${to}" is not live (no active lease within the heartbeat TTL). ` +
+          `Recipient session "${to}" is not live (reason: ${describeNotLiveReason(liveness.value)}). ` +
             `The message was NOT sent — a send to a dead session would queue into a void and ` +
-            `look identical to silence. Confirm the recipient session is running.`
+            `look identical to silence. Run \`caws agents list\` to confirm the recipient's status, ` +
+            `or re-send with \`caws message send --allow-dead\` to deliver anyway.`
         )
       );
     }

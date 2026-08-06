@@ -1090,7 +1090,7 @@ export function destroyWorktree(
     return err(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        `Branch "${entry.branch}" is not merged into "${entry.baseBranch}". Pass --abandon-unmerged to destroy anyway.`,
+        `Branch "${entry.branch}" is not merged into "${entry.baseBranch}". If this is intentional, retry with: caws worktree destroy ${input.name} --abandon-unmerged`,
         { subject: input.name }
       )
     );
