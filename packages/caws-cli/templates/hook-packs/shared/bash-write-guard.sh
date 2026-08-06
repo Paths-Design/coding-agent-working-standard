@@ -110,6 +110,21 @@ fi
 
 [[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] || exit 0
 
+# CAWS-DEFECT-MSG-HOOK-EXEMPT-01 (DEFECT-01-hook): `caws message send|poll` are
+# CAWS's own non-mutating commands — the only write is an append to
+# .caws/messages.jsonl, never a file the operator named on the command line.
+# But extract_targets tokenizes the FULL command string without respecting
+# shell quoting, so a `>` or a claimed path inside the --text body gets
+# misread as a write target (harvest: sterling 2474911e/t37 — message sends
+# blocked because the text mentioned engine/Assets/RC/Tests/** claimed by
+# wt-feel-trace). Short-circuit before target extraction, mirroring the
+# quiet-merge.sh self-filter pattern. The redirect-pipe guard mirrors
+# quiet-merge too: a genuine sibling mutation (e.g. `... && echo x > f.log`)
+# must still be checked, so only the bare message command is exempted.
+if echo "$COMMAND" | grep -qE 'caws[[:space:]]+message[[:space:]]+(send|poll)\b' && ! echo "$COMMAND" | grep -qE '[|>]'; then
+  exit 0
+fi
+
 AGENT_CWD="${HOOK_CWD:-${CAWS_PROJECT_DIR:-.}}"
 
 # --- target extraction (NARROW) --------------------------------------------
