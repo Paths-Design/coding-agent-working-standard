@@ -68,4 +68,44 @@ describe('caws specs create UX diagnostics', () => {
       'Did you mean --contract "verifychain-detects-tamper:behavior"?'
     );
   });
+
+  // CAWS-DEFECT-MSG-ENRICHMENT-01 (DEFECT-02): a Tier-1/2 create rejected for
+  // missing contracts must lead with the --contract flag in a runnable retry
+  // command, and must fire even when a malformed contract was supplied (the
+  // prior hint only fired when parsedContracts === undefined).
+  test('tier-2 create with no contracts prints a runnable --contract retry command', () => {
+    const root = mkRepo();
+    const result = runCreate(root, {
+      id: 'NO-CONTRACT-001',
+      title: 'Missing contract',
+      mode: 'feature',
+      riskTier: 2,
+    });
+
+    expect(result.code).toBe(1);
+    expect(result.err).toContain('Tier 2 specs require at least one contract');
+    expect(result.err).toContain('Contract shape:');
+    expect(result.err).toContain(
+      `Retry: caws specs create NO-CONTRACT-001 --title "..." --mode feature --risk-tier 2 --contract "core-api:behavior"`
+    );
+  });
+
+  test('tier-2 create with a MALFORMED contract still prints the contract retry hint', () => {
+    const root = mkRepo();
+    const result = runCreate(root, {
+      id: 'MALFORMED-CONTRACT-001',
+      title: 'Malformed contract',
+      mode: 'feature',
+      riskTier: 2,
+      // A single token with no ':' is not a valid tuple; parseContractFlags
+      // leaves parsedContracts populated but the create still fails the
+      // tier-2-missing-contracts rule because no contract parses to an entry.
+      // The hint must still fire (prior code suppressed it).
+      contract: ['bare-token-without-colon'],
+    });
+
+    expect(result.code).toBe(1);
+    // The hint should reach the operator regardless of malformed input.
+    expect(result.err).toContain('Contract shape:');
+  });
 });

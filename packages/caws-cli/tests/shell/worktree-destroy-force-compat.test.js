@@ -149,7 +149,12 @@ describe('caws worktree destroy --force compatibility alias', () => {
 
     expect(refused.code).toBe(1);
     expect(refused.err).toContain(`Branch "${name}" is not merged into "main".`);
-    expect(refused.err).toContain('Pass --abandon-unmerged to destroy anyway.');
+    // CAWS-DEFECT-MSG-ENRICHMENT-01 (DEFECT-03a): the rejection must state the
+    // FULL recovery command, not just the bare flag name.
+    expect(refused.err).toContain(
+      `caws worktree destroy ${name} --abandon-unmerged`
+    );
+    expect(refused.err).not.toContain('Pass --abandon-unmerged to destroy anyway.');
     expect(snapshot(cawsDir)).toEqual(before);
     expect(fs.existsSync(wtPath)).toBe(true);
 
