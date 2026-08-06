@@ -7,23 +7,32 @@ created_at: '2026-08-06T12:00:57.769Z'
 updated_at: '2026-08-06T12:00:58.923Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh
     - packages/caws-cli/tests/hooks/bats/bash-write-guard.bats
     - .caws/specs/CAWS-DEFECT-MSG-HOOK-EXEMPT-01.yaml
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'caws message send/poll never mutate files; any write-target extracted from their command line is necessarily from the --text body or args (a quoted string), never a real file mutation. Exempting them from bash-write-guard cannot admit a real write.'
+  - 'The exemption is early-exit ONLY when the command is caws message send|poll with no genuine sibling mutation (redirect/pipe to a real command). A compound like `caws message send ... && echo x > file.log` still runs the guard so the sibling redirect is checked.'
+  - 'The exemption mirrors the established quiet-merge.sh self-filter pattern (grep on caws subcommand prefix + redirect-pipe guard), not a reprieve.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'A bash-write-guard run where the Bash command is `caws message send --to X --text "...path-like string..."` and the message text contains tokens (>, a claimed path) that extract_targets would otherwise misread as write targets.'
+    when: 'The guard evaluates the command.'
+    then: 'The guard exits 0 (allow) without invoking the oracle, because the command is recognized as caws message send and has no genuine sibling mutation.'
+  - id: A2
+    given: 'A Bash command chaining `caws message send ... && echo x > out.log` (a genuine sibling redirect).'
+    when: 'The guard evaluates the command.'
+    then: 'The exemption does NOT fire; the guard still checks the sibling redirect target (the redirect-pipe guard prevents the early exit).'
+  - id: A3
+    given: 'A Bash command `caws message poll` (read-only).'
+    when: 'The guard evaluates the command.'
+    then: 'The guard exits 0 without engaging the oracle.'
 non_functional: {}
 contracts:
   - name: 'msg-hook-exempt'
