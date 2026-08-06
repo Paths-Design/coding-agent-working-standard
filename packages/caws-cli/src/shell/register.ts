@@ -1401,11 +1401,12 @@ export function registerShellCommands(
     .action(
       (
         name: string,
-        opts: { dryRun?: boolean; message?: string; data?: boolean }
+        opts: { dryRun?: boolean; apply?: boolean; message?: string; data?: boolean }
       ) => {
         const code = runWorktreeMergeCommand({
           name,
           ...(opts.dryRun === true ? { dryRun: true } : {}),
+          ...(opts.apply === true ? { apply: true } : {}),
           ...(opts.message !== undefined ? { message: opts.message } : {}),
           showData: opts.data === true,
         });
