@@ -41,8 +41,6 @@ acceptance:
     when: 'The rejection is rendered to the operator.'
     then: 'The output contains the full recovery command `caws worktree destroy <name> --abandon-unmerged`, not just the bare flag name.'
 non_functional: {}
-provenance:
-  source: 'tmp/CAWS-DEFECT-BACKLOG.md (DEFECT-01-msg, DEFECT-02, DEFECT-03a); harvested from ~9,700 invocations across 6 dogfooding projects.'
 contracts:
   - name: 'msg-error-enrichment'
     type: behavior
