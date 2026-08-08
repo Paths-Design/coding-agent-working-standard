@@ -7,7 +7,10 @@ created_at: '2026-08-08T01:17:51.091Z'
 updated_at: '2026-08-08T01:17:51.091Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -18,15 +21,36 @@ scope:
     - 'packages/caws-cli/src/store/worktrees-writer.ts'
     - 'packages/caws-cli/tests/store/lifecycle-rollback-harness.test.js'
     - 'packages/caws-cli/tests/shell/worktree-merge.test.js'
-  out: []
+  out:
+    - packages/caws-cli/src/store/specs-writer.ts
+    - docs/command-reference.md
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The --closure-notes flag mirrors the caws specs close closure-notes contract: --closure-notes is canonical; --reason, --notes, --note are aliases; passing more than one is a usage error (exit 2, no mutation).'
+  - 'When --closure-notes is supplied and the bound spec is active (the normal auto-close path), the user-supplied notes replace the machine stub as the reason passed to closeSpec. preserveExistingNotes stays true, so pre-written YAML closure_notes still win over the stub; user-supplied merge notes win only over an ABSENT field.'
+  - 'The closeSpec byte-patch logic and the CAWS-CLI-MERGE-AUTOCLOSE-PRESERVE-CLOSURE-NOTES-001 preserve contract (specs-writer.ts) are untouched. Existing A1/A1b/A2/A3 preserve tests keep pinning the same behavior.'
+  - 'On the already-closed fast path (spec pre-closed via caws specs close, so mergeWorktree skips closeSpec), --closure-notes cannot apply. The merge still proceeds (exit 0); the shell layer prints a stderr warning pointing at the real recovery path (caws specs reopen then caws specs close --closure-notes). The store writer stays pure (invariant #3) and the warning is rendered shell-side from result.value.data.spec_already_closed.'
+  - '--dry-run is unaffected: it returns before closeSpec, so --closure-notes is simply not consumed (same as --message today).'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'An active spec bound to a ready-to-merge worktree (clean tree, caller owns it, binding present) whose closure_notes field is ABSENT, and a caller cwd outside the worktree.'
+    when: 'caws worktree merge <name> --closure-notes "authored notes" runs.'
+    then: 'The merge proceeds; the bound spec is auto-closed with closure_notes set to the user-supplied "authored notes" (NOT the machine stub); the spec_closed event carries the same notes; exit 0.'
+  - id: A2
+    given: 'The same ready worktree, and a caller passing two note aliases (e.g. --closure-notes x --reason y).'
+    when: 'The command is parsed.'
+    then: 'A usage error is reported (exit 2) and no merge / spec close / event append occurs; the message matches the caws specs close mutual-exclusion shape ("all write closure_notes; pass only one").'
+  - id: A3
+    given: 'A spec pre-closed via caws specs close --closure-notes "pre-close notes" before the merge, then merged with --closure-notes "merge notes".'
+    when: 'caws worktree merge <name> --closure-notes "merge notes" runs.'
+    then: 'The merge still proceeds (exit 0); the spec closure_notes remain "pre-close notes" (unchanged — closeSpec was skipped); stderr contains a warning that --closure-notes was ignored because the spec was already closed, naming the reopen-then-close recovery path.'
+  - id: A4
+    given: 'The --notes and --note aliases.'
+    when: 'caws worktree merge <name> --notes "via alias" runs against a ready worktree.'
+    then: 'The spec closure_notes are set to "via alias" exactly as --closure-notes would (alias parity with caws specs close).'
+non_functional:
+  reliability:
+    - 'No new mutation path: --closure-notes only substitutes the reason string fed to the existing closeSpec call. The already-closed fast path, the partial-failure-honesty checks, and the retry budget are unchanged.'
+    - 'The warning on the already-closed path is shell-side rendering only; no new event field or store write is introduced for it, so the hash-chained events.jsonl semantics are unchanged.'
 contracts:
   - name: 'worktree-merge-closure-notes-flag'
     type: behavior
