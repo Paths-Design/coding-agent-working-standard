@@ -2,11 +2,9 @@ id: CAWS-AGENT-PID-SESSION-CORRELATION-001
 title: 'Agent-PID session correlation — canonical-checkout identity without env vars'
 risk_tier: 2
 mode: feature
-lifecycle_state: closed
-resolution: completed
-closure_notes: 'Auto-closed by caws worktree merge agent-pid-buildfix at 57f3a40314d0bde2f231f97291e7b6c20ce65134'
+lifecycle_state: active
 created_at: '2026-08-08T06:00:36.810Z'
-updated_at: '2026-08-08T06:37:06.737Z'
+updated_at: '2026-08-08T07:35:01.818Z'
 blast_radius:
   modules:
     - 'caws-cli hook-pack shared/lib: agent-surface.sh (process-name table), parse-input.sh (writer), session-id.sh (shell read tier)'
