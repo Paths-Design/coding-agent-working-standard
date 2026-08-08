@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-merge-notes
 created_at: '2026-08-08T01:17:51.091Z'
-updated_at: '2026-08-08T02:12:58.750Z'
+updated_at: '2026-08-08T02:13:19.782Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/worktree.ts
@@ -26,7 +26,6 @@ scope:
     - docs/command-reference.md
   out:
     - packages/caws-cli/src/store/specs-writer.ts
-    - docs/command-reference.md
 invariants:
   - 'The --closure-notes flag mirrors the caws specs close closure-notes contract: --closure-notes is canonical; --reason, --notes, --note are aliases; passing more than one is a usage error (exit 2, no mutation).'
   - 'When --closure-notes is supplied and the bound spec is active (the normal auto-close path), the user-supplied notes replace the machine stub as the reason passed to closeSpec. preserveExistingNotes stays true, so pre-written YAML closure_notes still win over the stub; user-supplied merge notes win only over an ABSENT field.'
