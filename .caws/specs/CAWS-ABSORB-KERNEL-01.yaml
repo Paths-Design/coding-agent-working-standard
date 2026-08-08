@@ -7,12 +7,14 @@ created_at: '2026-08-08T00:01:25.474Z'
 updated_at: '2026-08-08T00:01:30.931Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/kernel
+    - packages/caws-cli/package.json
+    - package.json
+    - turbo.json
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-kernel
     - packages/caws-types
     - packages/caws-cli/src/kernel
@@ -27,13 +29,26 @@ scope:
     - .caws/specs/CAWS-ABSORB-KERNEL-01.yaml
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Zero logic change. Pure move + import rewrite + build-graph simplification. The kernel src bytes are unchanged (git mv preserves history); only their location and import paths change.'
+  - 'Test equivalence: the 605 kernel tests (15 suites) and the 1160 passing CLI tests are unchanged in count and outcome after the absorption. Pre-existing failures stay at the same set (floor, not grown).'
+  - 'caws-types is deleted entirely (zero real imports anywhere — only two comment references). Not folded.'
+  - 'The caws binary still works: node dist/index.js --help and the governed commands run identically.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'The absorbed tree (kernel src at caws-cli/src/kernel/, tests at caws-cli/tests/kernel/, imports rewritten, packages caws-kernel and caws-types deleted).'
+    when: 'npm run build + npx jest run in packages/caws-cli.'
+    then: 'The kernel tests (15 suites / 605 tests) and CLI tests run together in one jest invocation; the kernel test count is unchanged (605); the CLI passing count is unchanged (1160); no NEW failures beyond the pre-existing 7.'
+  - id: A2
+    given: 'The absorbed tree.'
+    when: 'node dist/index.js --help is invoked.'
+    then: 'The CLI binary works and prints the v11 command surface (proves the import rewrite resolved all 59 sites).'
+  - id: A3
+    given: 'The root package.json workspaces array.'
+    when: 'Inspected after the slice.'
+    then: 'caws-kernel and caws-types are no longer workspace entries; packages/caws-kernel and packages/caws-types directories are gone.'
+non_functional:
+  reliability:
+    - 'A co-evolution slice (kernel + CLI changes in one commit) builds and tests cleanly in a git worktree with no cross-package resolution — the friction that motivated this absorption is gone.'
 contracts:
   - name: 'absorb-kernel'
     type: behavior
