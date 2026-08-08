@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-merge-notes
 created_at: '2026-08-08T01:17:51.091Z'
-updated_at: '2026-08-08T02:06:10.699Z'
+updated_at: '2026-08-08T02:12:58.750Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/worktree.ts
@@ -23,6 +23,7 @@ scope:
     - 'packages/caws-cli/tests/store/lifecycle-rollback-harness.test.js'
     - 'packages/caws-cli/tests/shell/worktree-merge.test.js'
     - packages/caws-cli/tests/store/worktree-merge-already-closed-spec.test.js
+    - docs/command-reference.md
   out:
     - packages/caws-cli/src/store/specs-writer.ts
     - docs/command-reference.md
