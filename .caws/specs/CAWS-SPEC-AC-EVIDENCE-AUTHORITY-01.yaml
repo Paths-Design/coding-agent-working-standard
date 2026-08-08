@@ -2,10 +2,11 @@ id: CAWS-SPEC-AC-EVIDENCE-AUTHORITY-01
 title: 'AC evidence authority: spec-resident evidence block + close gate'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: wt-ac-evidence
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-ac-evidence at fae188d8858eac4d206bd365b1c71f9a253762c3'
 created_at: '2026-08-08T01:03:29.133Z'
-updated_at: '2026-08-08T01:03:51.817Z'
+updated_at: '2026-08-08T02:03:21.598Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/kernel/schemas/spec.v1.json
