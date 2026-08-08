@@ -2,10 +2,11 @@ id: CAWS-ABSORB-KERNEL-01
 title: 'Absorb caws-kernel into caws-cli; delete dead caws-types package'
 risk_tier: 2
 mode: refactor
-lifecycle_state: active
-worktree: wt-absorb-kernel
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-absorb-kernel at a12fb2fb1fd0d67542ab15cd5fae66f67a9d03a7'
 created_at: '2026-08-08T00:01:25.474Z'
-updated_at: '2026-08-08T00:01:30.931Z'
+updated_at: '2026-08-08T00:54:24.839Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/kernel
