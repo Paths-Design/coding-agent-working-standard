@@ -825,17 +825,26 @@ function mintCapsule(
 // envelope scan, so a no-env-var caller (ZCode / generic harness) at canonical
 // checkout resolves deterministically to its own session id instead of hitting
 // the ≥2-envelope ambiguity refusal. Mirrors lib/agent-pid.sh's
-// read_session_id_from_agent_pid exactly (same record format, same freshness
-// window, same PID-reuse start-time guard).
+// read_session_id_from_agent_pid exactly (same record format, same PID-reuse
+// start-time guard).
+//
+// NO FRESHNESS WINDOW (refinement). Unlike the durable-envelope tier, this
+// record is keyed to a SPECIFIC LIVE PROCESS — the PID-walk just reached it
+// from process.pid, so it is alive by construction. Validity is liveness (the
+// walk) + the start-time match (guards PID reuse), NOT time-since-last-fire.
+// A record written days ago for a process that is still running (same start
+// time) is authoritative regardless of age. This is what lets a session leave
+// its worktree and return after any gap: the agent process is unchanged, so
+// the record is valid. (last_seen_at is still WRITTEN for hygiene/future
+// cleanup, but is NOT consulted here.)
 //
 // The PID-walk is parameterized by the per-surface process-name set
 // (CAWS_AGENT_PROCESS_NAMES, set by agent-surface.sh — the single adapter).
 // This core knows nothing about harness identity. An empty name set (unknown
 // surface) fail-opens to null. Mirrors resolveOwnerFromCwd's fail-open posture.
 //
-// Testability: processNames + pidWalkFn + now are injectable so jest can drive
-// the validation without a real process tree. The default pidWalkFn uses ps.
-const AGENT_PID_RECORD_FRESHNESS_MS = 24 * 60 * 60 * 1000;
+// Testability: processNames + pidWalkFn are injectable so jest can drive the
+// validation without a real process tree. The default pidWalkFn uses ps.
 const AGENT_PID_RECORD_PREFIX = 'agent-pid-';
 
 interface AgentPidRecord {
@@ -917,19 +926,9 @@ export function resolveAgentPidIdentity(args: {
   const rec = parsed as Partial<AgentPidRecord>;
   if (typeof rec.session_id !== 'string' || rec.session_id.length === 0) return null;
 
-  // Freshness: last_seen_at within the window.
-  const nowMs = (args.now ? args.now() : new Date()).getTime();
-  if (typeof rec.last_seen_at === 'string') {
-    const lsMs = Date.parse(rec.last_seen_at);
-    if (!Number.isFinite(lsMs) || nowMs - lsMs > AGENT_PID_RECORD_FRESHNESS_MS) {
-      return null; // stale
-    }
-  } else {
-    return null; // no last_seen_at — can't establish freshness
-  }
-
   // PID-reuse guard: if both the record and the live process carry a start
-  // time, they must match. A reused PID has a different start time.
+  // time, they must match. A reused PID has a different start time. This is
+  // the SOLE validity gate for this tier — see the function header.
   if (rec.started_at !== undefined && rec.started_at !== null && located.startEpoch !== null) {
     if (Math.floor(Number(rec.started_at)) !== Math.floor(located.startEpoch)) {
       return null; // PID reuse
