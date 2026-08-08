@@ -3,6 +3,7 @@ title: 'Add --closure-notes (and --reason/--notes/--note aliases) to caws worktr
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: wt-merge-notes
 created_at: '2026-08-08T01:17:51.091Z'
 updated_at: '2026-08-08T01:17:51.091Z'
 blast_radius:
