@@ -218,3 +218,107 @@ describe('A2: an active bound spec still closes normally on merge', () => {
     expect(branches(repo)).not.toContain(branch);
   });
 });
+
+// =========================================================================
+// mergeWorktree — closure_notes authored at merge time (CAWS-FEAT-WORKTREE-
+// MERGE-CLOSURE-NOTES-FLAG-01). The merge auto-close feeds closeSpec a
+// machine stub reason by default; the `closureNotes` input lets the operator
+// replace that stub. These cases pin the writer-side contract: user notes
+// land when the spec carried none, and pre-written YAML notes still win
+// (preserve contract unchanged). The already-closed + --closure-notes
+// warning is covered at the shell layer (tests/shell/worktree-merge.test.js
+// B4) because the warning is a shell-rendered message, not a store outcome.
+// =========================================================================
+
+function readSpecYaml(cawsDir, id) {
+  return fs.readFileSync(path.join(cawsDir, 'specs', `${id}.yaml`), 'utf8');
+}
+
+describe('mergeWorktree closure_notes authored at merge time [CAWS-FEAT-WORKTREE-MERGE-CLOSURE-NOTES-FLAG-01]', () => {
+  test('A4: closureNotes supplied at merge time replace the machine stub when the spec carried no closure_notes', () => {
+    const repo = mkRepo('mn-a4-');
+    const caws = setupCaws(repo);
+    const id = 'WT-MERGE-NOTES-001';
+    seedBoundableSpec(caws, id);
+    const created = createWorktree(caws, {
+      name: 'wt-mn',
+      specId: id,
+      session: SESSION,
+      actor: ACTOR,
+    });
+    expect(created.ok).toBe(true);
+    expect(created.value.kind).toBe('success');
+    // Non-empty commit on the worktree branch so the merge has something to merge.
+    commitCaws(repo, 'pre-merge state for closure-notes');
+
+    const userNotes = 'Closed via merge: A4 two-process replay verified, parity exact, LOCAL_ONLY retained.';
+    const result = mergeWorktree(caws, {
+      name: 'wt-mn',
+      session: SESSION,
+      sessionCandidates: CANDIDATES,
+      actor: ACTOR,
+      closureNotes: userNotes,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.value.kind).toBe('success');
+    // The auto-close discriminant: the spec was closed by THIS merge.
+    expect(result.value.data.spec_already_closed).toBe(false);
+
+    const yaml = readSpecYaml(caws, id);
+    // User-authored notes land verbatim; the machine stub is absent.
+    expect(yaml).toContain(`closure_notes: '${userNotes}'`);
+    expect(yaml).not.toContain('Auto-closed by caws worktree merge');
+    expect(yaml).toContain('lifecycle_state: closed');
+    expect((yaml.match(/^closure_notes:/gm) || []).length).toBe(1);
+
+    // The spec_closed event carries the user notes as closure_notes too.
+    const closedEvents = readEvents(caws).filter((e) => e.event === 'spec_closed');
+    expect(closedEvents.length).toBe(1);
+    expect(closedEvents[0].data.closure_notes).toBe(userNotes);
+  });
+
+  test('A4b: closureNotes at merge time do NOT clobber pre-written YAML closure_notes (preserve contract unchanged)', () => {
+    const repo = mkRepo('mn-a4b-');
+    const caws = setupCaws(repo);
+    const id = 'WT-MERGE-NOTES-PRE-002';
+    const preAuthoredNotes = 'Pre-written by the author before merging.';
+    seedBoundableSpec(caws, id);
+    // Splice a closure_notes line into the still-active spec — the shape an
+    // author who pre-wrote notes before merging produces.
+    const specPath = path.join(caws, 'specs', `${id}.yaml`);
+    const body = fs.readFileSync(specPath, 'utf8').replace(
+      'lifecycle_state: active',
+      `lifecycle_state: active\nclosure_notes: '${preAuthoredNotes}'`
+    );
+    fs.writeFileSync(specPath, body);
+    commitCaws(repo, 'spec with pre-written closure_notes');
+    const created = createWorktree(caws, {
+      name: 'wt-mn2',
+      specId: id,
+      session: SESSION,
+      actor: ACTOR,
+    });
+    expect(created.ok).toBe(true);
+    expect(created.value.kind).toBe('success');
+    commitCaws(repo, 'worktree branch commit');
+
+    const result = mergeWorktree(caws, {
+      name: 'wt-mn2',
+      session: SESSION,
+      sessionCandidates: CANDIDATES,
+      actor: ACTOR,
+      closureNotes: 'merge-time notes should NOT win over pre-written YAML notes',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.value.kind).toBe('success');
+
+    const yaml = readSpecYaml(caws, id);
+    // Pre-written YAML notes survive; merge-time closureNotes did NOT overwrite.
+    expect(yaml).toContain(`closure_notes: '${preAuthoredNotes}'`);
+    expect(yaml).not.toContain('merge-time notes should NOT win');
+    expect(yaml).toContain('lifecycle_state: closed');
+    expect((yaml.match(/^closure_notes:/gm) || []).length).toBe(1);
+  });
+});

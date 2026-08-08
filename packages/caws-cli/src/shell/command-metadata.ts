@@ -657,6 +657,14 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
           flag: '--message <text>',
           description: 'Custom merge commit message (default: merge(worktree): <name>)',
         },
+        {
+          flag: '--closure-notes <text>',
+          description:
+            'Closure notes written to the bound spec on auto-close (replaces the machine stub). Mirrors caws specs close.',
+        },
+        { flag: '--reason <text>', description: 'Alias for --closure-notes' },
+        { flag: '--notes <text>', description: 'Alias for --closure-notes' },
+        { flag: '--note <text>', description: 'Alias for --closure-notes' },
         DATA_OPTION,
       ],
     },

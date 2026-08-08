@@ -1436,13 +1436,26 @@ export function registerShellCommands(
     .action(
       (
         name: string,
-        opts: { dryRun?: boolean; apply?: boolean; message?: string; data?: boolean }
+        opts: {
+          dryRun?: boolean;
+          apply?: boolean;
+          message?: string;
+          closureNotes?: string;
+          reason?: string;
+          notes?: string;
+          note?: string;
+          data?: boolean;
+        }
       ) => {
         const code = runWorktreeMergeCommand({
           name,
           ...(opts.dryRun === true ? { dryRun: true } : {}),
           ...(opts.apply === true ? { apply: true } : {}),
           ...(opts.message !== undefined ? { message: opts.message } : {}),
+          ...(opts.closureNotes !== undefined ? { closureNotes: opts.closureNotes } : {}),
+          ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+          ...(opts.notes !== undefined ? { notes: opts.notes } : {}),
+          ...(opts.note !== undefined ? { note: opts.note } : {}),
           showData: opts.data === true,
         });
         exit(code);
