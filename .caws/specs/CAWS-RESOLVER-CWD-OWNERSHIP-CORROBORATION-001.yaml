@@ -2,10 +2,11 @@ id: CAWS-RESOLVER-CWD-OWNERSHIP-CORROBORATION-001
 title: 'Resolve session by worktree-cwd ownership when env vars are absent'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: resolver-cwd-ownership
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge resolver-cwd-ownership at 1aa014c3906856e706297ce791646917126db1cc'
 created_at: '2026-08-08T02:24:09.616Z'
-updated_at: '2026-08-08T02:24:09.616Z'
+updated_at: '2026-08-08T02:31:29.514Z'
 blast_radius:
   modules:
     - 'caws-cli/shell session identity resolution (resolve-session.ts ≥2-envelope branch only)'
