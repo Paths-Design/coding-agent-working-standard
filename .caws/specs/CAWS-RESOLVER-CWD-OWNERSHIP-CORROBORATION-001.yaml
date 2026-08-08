@@ -3,6 +3,7 @@ title: 'Resolve session by worktree-cwd ownership when env vars are absent'
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: resolver-cwd-ownership
 created_at: '2026-08-08T02:24:09.616Z'
 updated_at: '2026-08-08T02:24:09.616Z'
 blast_radius:
