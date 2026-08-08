@@ -3,6 +3,7 @@ title: 'Agent-PID session correlation — canonical-checkout identity without en
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: agent-pid-correlation
 created_at: '2026-08-08T06:00:36.810Z'
 updated_at: '2026-08-08T06:00:36.810Z'
 blast_radius:
