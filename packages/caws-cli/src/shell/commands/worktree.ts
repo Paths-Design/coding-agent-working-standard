@@ -509,6 +509,14 @@ export interface WorktreeMergeOptions extends BaseCommandOptions {
   readonly dryRun?: boolean;
   readonly apply?: boolean;
   readonly message?: string;
+  // CAWS-FEAT-WORKTREE-MERGE-CLOSURE-NOTES-FLAG-01: --closure-notes lets an
+  // operator author the bound spec's closure_notes THROUGH the merge, replacing
+  // the machine stub "Auto-closed by caws worktree merge ...". Aliases mirror
+  // caws specs close. Resolved into a single `closureNotes` on the writer input.
+  readonly closureNotes?: string;
+  readonly reason?: string;
+  readonly notes?: string;
+  readonly note?: string;
 }
 
 export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
@@ -549,6 +557,32 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
   };
   if (opts.dryRun === true) (input as { dryRun?: boolean }).dryRun = true;
   if (opts.message !== undefined) (input as { message?: string }).message = opts.message;
+
+  // CAWS-FEAT-WORKTREE-MERGE-CLOSURE-NOTES-FLAG-01: resolve the closure-notes
+  // alias set exactly as caws specs close does (specs.ts). --closure-notes is
+  // canonical; --reason/--notes/--note are aliases. At most one may be
+  // supplied, otherwise the write target is ambiguous and we refuse before any
+  // mutation (exit 2, same shape as specs close). On --dry-run the resolved
+  // value is simply not consumed downstream (the writer returns before
+  // closeSpec), so no special-casing is needed here.
+  const suppliedNoteAliases = [
+    opts.closureNotes !== undefined ? '--closure-notes' : null,
+    opts.reason !== undefined ? '--reason' : null,
+    opts.notes !== undefined ? '--notes' : null,
+    opts.note !== undefined ? '--note' : null,
+  ].filter((value): value is string => value !== null);
+
+  if (suppliedNoteAliases.length > 1) {
+    err(
+      `caws worktree merge: ${suppliedNoteAliases.join(' and ')} all write closure_notes; pass only one.`
+    );
+    return 2;
+  }
+
+  const closureNotes = opts.closureNotes ?? opts.reason ?? opts.notes ?? opts.note;
+  if (closureNotes !== undefined) {
+    (input as { closureNotes?: string }).closureNotes = closureNotes;
+  }
 
   // CAWS-DEFECT-MERGE-APPLY-FLAG-01 (DEFECT-04): --apply collapses the
   // dry-run-then-real ceremony (95% of dry-run turns immediately re-ran the
@@ -630,6 +664,23 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
         `  This is unexpected after a successful merge — git considers the branch unmerged.\n` +
         `  Inspect before removing it: git log --oneline main..${branchName}\n` +
         `  If that range is empty the branch is safe to delete: git branch -d ${branchName}`
+    );
+  }
+  // CAWS-FEAT-WORKTREE-MERGE-CLOSURE-NOTES-FLAG-01: when --closure-notes was
+  // supplied but the bound spec was ALREADY closed (pre-closed via
+  // `caws specs close`), the merge's already-closed fast path skipped closeSpec
+  // entirely, so the user's notes could not be applied. The merge itself is
+  // still complete and durable (exit 0) — this is a loud, actionable warning,
+  // not a failure. Point at the real recovery path: reopen-then-close. (There
+  // is no `caws specs amend-closure-notes` command; reopen strips closure_notes,
+  // so the operator re-closes with their notes.)
+  if (closureNotes !== undefined && outcome.data?.spec_already_closed === true) {
+    err(
+      `warning: --closure-notes was ignored: bound spec ${outcome.data?.spec_id} was already closed before this merge,\n` +
+        `  so its closure_notes were left unchanged ("${outcome.data?.spec_id}" closed by an earlier \`caws specs close\`).\n` +
+        `  To set closure_notes on an already-closed spec: reopen it, then close it with your notes:\n` +
+        `    caws specs reopen ${outcome.data?.spec_id}\n` +
+        `    caws specs close ${outcome.data?.spec_id} --closure-notes "<your notes>"`
     );
   }
   surfaceAuditCommit(outcome.data?.audit_commit, err);

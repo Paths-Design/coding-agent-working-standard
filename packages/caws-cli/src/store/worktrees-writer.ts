@@ -181,6 +181,17 @@ export interface MergeWorktreeInput {
    *  conventional "merge(worktree): <name>" form. */
   readonly message?: string;
   /**
+   * Optional closure notes authored by the operator and supplied at merge
+   * time (CAWS-FEAT-WORKTREE-MERGE-CLOSURE-NOTES-FLAG-01). When present,
+   * this replaces the machine stub as the `reason` passed to closeSpec on
+   * the auto-close path. `preserveExistingNotes` stays true, so pre-written
+   * YAML closure_notes still win; this field wins only over an ABSENT field.
+   * Not consumed on --dry-run (the writer returns before closeSpec) and not
+   * applied on the already-closed fast path (closeSpec is skipped — the
+   * shell layer warns).
+   */
+  readonly closureNotes?: string;
+  /**
    * The caller process's current working directory, captured once at CLI
    * invocation. When set and this is NOT a dry run, mergeWorktree refuses
    * if the cwd is the target worktree path or a descendant of it — the
@@ -1836,17 +1847,25 @@ export function mergeWorktree(
     // appended here — the prior `caws specs close` already appended one.
     closeResult = ok({ kind: 'success', id: specId, path: preCloseState.value.path });
   } else {
+    // CAWS-FEAT-WORKTREE-MERGE-CLOSURE-NOTES-FLAG-01: when the operator
+    // supplied --closure-notes at merge time, their notes replace the machine
+    // stub as the reason. The stub remains the default for a merge with no
+    // --closure-notes (audit provenance when the spec carried no notes).
+    const stubReason = `Auto-closed by caws worktree merge ${input.name} at ${mergeCommit}`;
+    const reason = input.closureNotes !== undefined ? input.closureNotes : stubReason;
     closeResult = closeSpec(cawsDir, {
       id: specId,
       resolution: 'completed',
-      reason: `Auto-closed by caws worktree merge ${input.name} at ${mergeCommit}`,
+      reason,
       mergeCommit,
       actor: input.actor,
       now: sharedNowFactory,
       // CAWS-CLI-MERGE-AUTOCLOSE-PRESERVE-CLOSURE-NOTES-001: the `reason`
-      // above is a machine-generated stub. Insert-only mode keeps it from
-      // clobbering closure_notes an author wrote on the bound spec — the
-      // stub fills closure_notes only when the spec carried none.
+      // above is a machine-generated stub (or operator-authored notes).
+      // Insert-only mode keeps it from clobbering closure_notes an author
+      // wrote on the bound spec — the reason fills closure_notes only when
+      // the spec carried none. Operator-authored --closure-notes therefore
+      // wins over an ABSENT field but never over pre-written YAML notes.
       preserveExistingNotes: true,
     });
   }
