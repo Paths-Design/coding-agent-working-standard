@@ -30,6 +30,7 @@
 //     same-slice scope.in is the discipline that keeps it honest.
 
 import {
+  EVIDENCE_STATUSES,
   RISK_TIERS,
   SPEC_MODES,
   SPEC_RESOLUTIONS,
@@ -138,7 +139,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'specs',
   description:
-    'Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/amend-scope/close/reopen/archive/prune-archive/migrate/validate)',
+    'Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate)',
   options: [
     {
       flag: '--status <status>',
@@ -406,6 +407,36 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
           flag: '--superseded-by <id>',
           description: 'Spec id that supersedes this one (use with --resolution superseded)',
         },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'evidence',
+      argument: { name: 'id', required: true, description: 'Active or draft spec id to record evidence for' },
+      description:
+        "Record per-criterion verified status (AC evidence) on the spec's evidence: block — the CLOSURE AUTHORITY read by the close gate. Dual-writes: patches the spec block AND appends an ac_recorded event in one transaction. The close gate requires each declared AC to have status pass or waived before close; this is the governed way to populate it. Active/draft only (a closed/archived spec's evidence is frozen).",
+      options: [
+        { flag: '--ac <id>', description: 'Acceptance criterion id (e.g. A1); must match a declared acceptance[].id', required: true },
+        {
+          flag: '--status <s>',
+          description: 'Verified status. pass/waived satisfy the close gate; fail/unchecked are recorded for audit but do not satisfy closure',
+          allowedValues: EVIDENCE_STATUSES,
+          required: true,
+        },
+        {
+          flag: '--evidence-ref <ref>',
+          description: 'Reference to the evidence (test command, artifact path, or waiver id). Required unless --status waived (where --waiver-reason supplies it)',
+        },
+        {
+          flag: '--waiver-reason <text>',
+          description: 'Mandatory when --status waived — an undocumented waiver is indistinguishable from an oversight',
+        },
+        { flag: '--test-nodeid <id>', description: 'Optional: specific test node id (jest/vitest/pytest) when status was determined by test execution' },
+        { flag: '--command <cmd>', description: 'Optional: the command run to determine status' },
+        { flag: '--exit-code <n>', description: 'Optional: exit code of the command run' },
+        { flag: '--artifact-path <path>', description: 'Optional: artifact path evidencing the criterion' },
+        { flag: '--commit-sha <sha>', description: 'Optional: commit sha (7-40 hex chars) evidencing the criterion' },
         DATA_OPTION,
       ],
     },

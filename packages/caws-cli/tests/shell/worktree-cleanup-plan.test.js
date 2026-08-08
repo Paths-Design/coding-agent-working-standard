@@ -10,7 +10,7 @@ const {
   runWorktreePruneCommand,
 } = require('../../dist/shell/commands/worktree');
 const { initProject } = require('../../dist/store/init-store');
-const { DOCTOR_RULES } = require('@paths.design/caws-kernel');
+const { DOCTOR_RULES } = require('../../dist/kernel');
 
 const repos = [];
 

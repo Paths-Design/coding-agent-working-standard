@@ -231,6 +231,46 @@
     "created_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" },
     "owner": { "type": "string" },
-    "closure_notes": { "type": "string" }
+    "closure_notes": { "type": "string" },
+    "evidence": {
+      "type": "array",
+      "description": "Per-criterion verified status, written by `caws specs evidence` (the record op) and read by the close gate. CLOSURE AUTHORITY for 'is this AC satisfied.' The ac_recorded event stream remains the immutable audit history of when evidence was recorded; this block is the close gate's input. Mirrors the successors pattern (structured lifecycle data on the authority surface, enforced at close, never reconciled by rewriting events). waiver_reason is semantically required iff status == waived (validate-semantics.ts).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["criterion_id", "status", "recorded_at"],
+        "properties": {
+          "criterion_id": {
+            "type": "string",
+            "pattern": "^A\\d+$",
+            "description": "Must match a declared acceptance[].id. A typo that satisfies nothing is rejected by validate-semantics.ts."
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pass", "fail", "unchecked", "waived"],
+            "description": "The closure gate admits pass and waived (with waiver_reason). fail and unchecked are recorded for audit but do not satisfy closure."
+          },
+          "evidence_ref": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Reference to the evidence: test command, test_nodeid, artifact path, or waiver id. Honor-system (no resolver) — same as the ac_recorded event payload."
+          },
+          "waiver_reason": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Mandatory when status is waived — an undocumented waiver is indistinguishable from an oversight (parallels successors[].disposition: declined)."
+          },
+          "recorded_at": { "type": "string", "format": "date-time" },
+          "test_nodeid": { "type": "string" },
+          "command": { "type": "string" },
+          "exit_code": { "type": "integer" },
+          "artifact_path": { "type": "string" },
+          "commit_sha": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{7,40}$"
+          }
+        }
+      }
+    }
   }
 }

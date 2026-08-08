@@ -346,6 +346,51 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
     }
   }
 
+  // Evidence (CAWS-SPEC-AC-EVIDENCE-AUTHORITY-01). Two INTRA-SPEC rules,
+  // decidable from the spec's own bytes with no filesystem access — mirroring
+  // the successor declaration rules. Whether every declared AC is SATISFIED
+  // for closure is a separate close-gate question (closeSpec), never here.
+  if (spec.evidence !== undefined && spec.evidence.length > 0) {
+    const declaredAcIds = new Set(spec.acceptance.map((a) => a.id));
+    for (const [index, entry] of spec.evidence.entries()) {
+      // (a) criterion_id must match a declared acceptance[].id. A typo that
+      // satisfies nothing is rejected here, at validation time — otherwise the
+      // close gate would silently see the declared AC as "still unevidenced"
+      // and the recorded evidence as orphaned, with no signal connecting them.
+      if (!declaredAcIds.has(entry.criterion_id)) {
+        errors.push(
+          diagnostic({
+            rule: SPEC_RULES.EVIDENCE_CRITERION_ID_UNKNOWN,
+            authority: 'kernel/spec',
+            message: `evidence[${index}].criterion_id "${entry.criterion_id}" does not match any declared acceptance[].id. A criterion id that satisfies nothing is rejected — did you typo the AC id?`,
+            subject: subjectBase,
+            location: { pointer: `/evidence/${index}/criterion_id` },
+            narrowRepair: `Use one of the declared AC ids: ${[...declaredAcIds].join(', ')}.`,
+          }),
+        );
+      }
+      // (b) waiver_reason required iff status === 'waived'. An undocumented
+      // waiver is indistinguishable from an oversight (parallels
+      // successors[].disposition: 'declined' rationale requirement).
+      if (
+        entry.status === 'waived' &&
+        (typeof entry.waiver_reason !== 'string' || entry.waiver_reason.trim().length === 0)
+      ) {
+        errors.push(
+          diagnostic({
+            rule: SPEC_RULES.EVIDENCE_WAIVER_MISSING_REASON,
+            authority: 'kernel/spec',
+            message: `evidence[${index}] (criterion "${entry.criterion_id}") has status "waived" but no waiver_reason. An undocumented waiver is indistinguishable from an oversight.`,
+            subject: subjectBase,
+            location: { pointer: `/evidence/${index}/waiver_reason` },
+            narrowRepair:
+              'Record why this AC is waived (--waiver-reason), or change the status to pass/fail/unchecked.',
+          }),
+        );
+      }
+    }
+  }
+
   if (errors.length > 0) {
     return err(errors);
   }

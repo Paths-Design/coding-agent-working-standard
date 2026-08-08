@@ -64,6 +64,19 @@ export const SPEC_RULES = {
    * spec.semantic.scope.exact_conflict).
    */
   SCOPE_OVERBROAD_OUT: 'spec.semantic.scope.overbroad_out',
+
+  /**
+   * Evidence (CAWS-SPEC-AC-EVIDENCE-AUTHORITY-01). Per-criterion verified
+   * status on the spec authority surface. Two INTRA-SPEC semantic rules —
+   * decidable from the spec's own bytes with no filesystem access, mirroring
+   * the successor declaration rules above. Whether every declared AC is
+   * actually SATISFIED for closure is a separate close-gate question
+   * (closeSpec), never here.
+   */
+  /** status=waived but waiver_reason is missing/empty — an undocumented waiver is indistinguishable from an oversight. */
+  EVIDENCE_WAIVER_MISSING_REASON: 'spec.semantic.evidence.waiver_reason_required',
+  /** evidence[].criterion_id does not match any declared acceptance[].id — a typo that satisfies nothing. */
+  EVIDENCE_CRITERION_ID_UNKNOWN: 'spec.semantic.evidence.criterion_id_unknown',
 } as const;
 
 export type SpecRule = (typeof SPEC_RULES)[keyof typeof SPEC_RULES];

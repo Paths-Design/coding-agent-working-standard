@@ -101,6 +101,38 @@ export interface Successor {
   absorbed_by?: string;
 }
 
+/**
+ * Per-criterion verified status, written by `caws specs evidence` and read by
+ * the close gate. CLOSURE AUTHORITY for "is this AC satisfied."
+ *
+ * Mirrors the `evidence` items schema in spec.v1.json. The dual-write contract:
+ * `recordSpecEvidence` patches this block (authority) AND appends an
+ * `ac_recorded` event (audit history) in one transaction, so the two surfaces
+ * agree by construction. The close gate reads ONLY this block — never the
+ * event stream (mirrors how the successor-custody gate reads spec.successors,
+ * not obligation events).
+ *
+ * `waiver_reason` is semantically required iff `status === 'waived'`
+ * (validate-semantics.ts) — JSON Schema cannot express "required iff". An
+ * undocumented waiver is indistinguishable from an oversight, paralleling
+ * successors[].disposition: 'declined'.
+ */
+export const EVIDENCE_STATUSES = ['pass', 'fail', 'unchecked', 'waived'] as const;
+export type EvidenceStatus = (typeof EVIDENCE_STATUSES)[number];
+
+export interface EvidenceRecord {
+  criterion_id: string;
+  status: EvidenceStatus;
+  evidence_ref?: string;
+  waiver_reason?: string;
+  recorded_at: string;
+  test_nodeid?: string;
+  command?: string;
+  exit_code?: number;
+  artifact_path?: string;
+  commit_sha?: string;
+}
+
 export interface Spec {
   id: string;
   title: string;
@@ -127,4 +159,5 @@ export interface Spec {
   updated_at?: string;
   owner?: string;
   closure_notes?: string;
+  evidence?: EvidenceRecord[];
 }

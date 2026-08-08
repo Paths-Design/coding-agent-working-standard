@@ -36,7 +36,7 @@ const {
 } = require('../../dist/shell/commands/worktree');
 const { initProject } = require('../../dist/store/init-store');
 const { loadEvents } = require('../../dist/store/events-store');
-const { verifyChain, DOCTOR_RULES } = require('@paths.design/caws-kernel');
+const { verifyChain, DOCTOR_RULES } = require('../../dist/kernel');
 
 const repos = [];
 
