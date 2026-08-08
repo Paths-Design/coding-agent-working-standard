@@ -7,21 +7,101 @@ created_at: '2026-08-08T02:24:09.616Z'
 updated_at: '2026-08-08T02:24:09.616Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli/shell session identity resolution (resolve-session.ts ≥2-envelope branch only)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
     - 'packages/caws-cli/src/shell/session/resolve-session.ts'
     - 'packages/caws-cli/tests/shell/session/resolver-guard-divergence.test.js'
-  out: []
+    - '.caws/specs/CAWS-RESOLVER-CWD-OWNERSHIP-CORROBORATION-001.yaml'
+  out:
+    # The shell-side resolver (lib/session-id.sh) is deliberately OUT of scope.
+    # It already has a tier-3 capsule fallback for the agent-Bash write path and
+    # carries a byte-identical-parity invariant with the TS resolver; touching it
+    # is a separate, riskier slice. The TS-side fix alone unblocks the CLI
+    # failure mode observed in the motivating transcript.
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/session-id.sh'
+    # The reprieve command's surface detection is a separate friction path; the
+    # grant path is already lease-backed (vendorDirFromLease). Not changed here.
+    - 'packages/caws-cli/src/shell/commands/reprieve.ts'
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    The env-var corroboration gate in the ≥2-fresh-envelope branch of
+    resolveSession is unchanged in behavior: it still selects only when a
+    per-surface env var (CLAUDE_SESSION_ID / CLAUDE_CODE_SESSION_ID /
+    CODEX_THREAD_ID / CAWS_SESSION_ID / HOOK_SESSION_ID / CURSOR_TRACE_ID)
+    matches the caller-pointer's named id. The cwd-ownership path is ADDITIONAL
+    corroboration, evaluated only when env corroboration did not fire, never a
+    replacement for it.
+  - >-
+    "Never newest-wins" is preserved. cwd-ownership selection requires the
+    caller's worktreeRoot (cwd) to resolve, via the authoritative
+    .caws/worktrees.json registry, to a registered owner whose session_id IS
+    one of the fresh envelope candidates. It selects an existing candidate; it
+    never manufactures one, never widens authority, and never selects a sibling
+    whose worktree the caller is not inside.
+  - >-
+    The foreign-claim refusal is not relaxed. A caller whose cwd resolves to a
+    worktree owned by a session that is NOT a fresh-envelope candidate falls
+    through to the existing ambiguity refusal. cwd ownership corroborates an
+    envelope candidate; it does not override the candidate set.
+  - >-
+    A caller at the canonical checkout (no worktree ancestor in the registry)
+    is unaffected by this change — the cwd-ownership path no-ops for it, so the
+    A3 "uncorroborated pointer refuses" behavior is byte-identical (that test
+    runs with worktreeRoot: cawsDir, which matches no worktree entry).
+  - >-
+    loadWorktrees is fail-open (returns {} on a missing worktrees.json) and
+    realpathSafe returns its input on ENOENT, so the cwd-ownership path is a
+    pure read that cannot raise or block on absent/malformed state; a missing
+    registry contributes no owner and the resolver falls through as before.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      Two fresh durable hook envelopes for the same repo_root (sess_a, sess_b),
+      a worktree registry entry whose realpath'd path is an ancestor-or-equal of
+      the caller's worktreeRoot and whose owner.session_id === 'sess_a', AND the
+      current process carries NO per-surface session env var.
+    when: >-
+      resolveSession reaches the ≥2-fresh-envelope branch.
+    then: >-
+      it resolves to sess_a (source === 'durable_hook_envelope') instead of
+      refusing — because the caller's cwd corroborates sess_a's ownership. This
+      is the motivating fix: a no-env-var caller operating inside its own bound
+      worktree resolves deterministically to its own identity.
+  - id: A2
+    given: >-
+      Two fresh envelopes (sess_a, sess_b), and a worktree registry entry whose
+      owner.session_id === 'sess_c' (a session that is NOT a fresh-envelope
+      candidate), with the caller's cwd inside that worktree, and NO env var.
+    when: >-
+      resolveSession reaches the ≥2-fresh-envelope branch.
+    then: >-
+      it REFUSES with the SESSION_DURABLE_ENVELOPE_AMBIGUOUS diagnostic. cwd
+      ownership of a non-candidate does not manufacture a selection — the
+      foreign/cross-ownership hazard stays refused.
+  - id: A3
+    given: >-
+      Two fresh envelopes and a caller at the canonical checkout (worktreeRoot
+      with no worktree ancestor in the registry), with the caller-pointer naming
+      one of them and NO env var corroborating.
+    when: >-
+      resolveSession reaches the ≥2-fresh-envelope branch.
+    then: >-
+      it REFUSES with SESSION_DURABLE_ENVELOPE_AMBIGUOUS, byte-identical to
+      pre-fix behavior (the existing A3 regression test still passes unchanged).
+  - id: A4
+    given: >-
+      The motivating multi-session scenario: ≥2 fresh envelopes, a caller inside
+      a worktree owned by one of them, and NO per-surface env var set (the ZCode
+      / generic-harness case where no session id reaches the CLI subprocess).
+    when: >-
+      the caller runs a governed-write command (e.g. caws worktree merge).
+    then: >-
+      resolveSession (via buildActorPair) resolves to the worktree owner without
+      requiring the operator to export CAWS_SESSION_ID, so the command proceeds
+      instead of failing with "failed to resolve session identity".
 non_functional: {}
 contracts:
   - name: 'resolver-cwd-ownership'
