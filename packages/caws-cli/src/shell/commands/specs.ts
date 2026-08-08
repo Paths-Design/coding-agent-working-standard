@@ -43,6 +43,7 @@ import {
   listSpecs,
   planCreateSpec,
   recoverArchivedSpec,
+  recordSpecEvidence,
   reopenSpec,
   restoreArchivedSpec,
   retireDraftSpec,
@@ -54,7 +55,7 @@ import {
   type SpecsListStatus,
 } from '../../store/specs-writer';
 import type { LifecycleMapping } from '../../kernel';
-import { SPEC_MODES, SPEC_RESOLUTIONS } from '../../kernel';
+import { EVIDENCE_STATUSES, SPEC_MODES, SPEC_RESOLUTIONS, type EvidenceStatus } from '../../kernel';
 import * as fs from 'node:fs';
 import { buildActor } from '../session/actor';
 import { resolveSession } from '../session/resolve-session';
@@ -1287,6 +1288,80 @@ export function runSpecsActivateCommand(opts: SpecsActivateOptions): number {
     return 1;
   }
   out(`activated ${outcome.id}`);
+  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  return 0;
+}
+
+// ─── caws specs evidence (CAWS-SPEC-AC-EVIDENCE-AUTHORITY-01) ─────────────
+//
+// Records per-criterion verified status into the spec's `evidence:` block
+// (CLOSURE AUTHORITY) AND appends an ac_recorded event (audit history) in one
+// transaction — dual-write. The close gate reads the evidence block; this is
+// the governed way to populate it.
+
+export interface SpecsEvidenceOptions extends BaseCommandOptions {
+  readonly id: string;
+  readonly ac: string;
+  readonly status: EvidenceStatus;
+  readonly evidenceRef?: string;
+  readonly waiverReason?: string;
+  readonly testNodeid?: string;
+  readonly command?: string;
+  readonly exitCode?: number;
+  readonly artifactPath?: string;
+  readonly commitSha?: string;
+}
+
+function isEvidenceStatus(value: unknown): value is EvidenceStatus {
+  return typeof value === 'string' && (EVIDENCE_STATUSES as readonly string[]).includes(value);
+}
+
+export function runSpecsEvidenceCommand(opts: SpecsEvidenceOptions): number {
+  const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
+
+  if (!isEvidenceStatus(opts.status)) {
+    err(
+      `caws specs evidence: invalid --status. Got ${JSON.stringify(opts.status)}; expected one of ${EVIDENCE_STATUSES.join('|')}.`
+    );
+    return 1;
+  }
+
+  const ctx = resolveCawsCtx(cwd, err, showData, 'evidence');
+  if (ctx === null) return 2;
+
+  const actor = buildActorOrError(
+    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'evidence'
+  );
+  if (actor === null) return 2;
+
+  const result = recordSpecEvidence(ctx.cawsDir, {
+    id: opts.id,
+    criterionId: opts.ac,
+    status: opts.status,
+    ...(opts.evidenceRef !== undefined ? { evidenceRef: opts.evidenceRef } : {}),
+    ...(opts.waiverReason !== undefined ? { waiverReason: opts.waiverReason } : {}),
+    ...(opts.testNodeid !== undefined ? { testNodeid: opts.testNodeid } : {}),
+    ...(opts.command !== undefined ? { command: opts.command } : {}),
+    ...(opts.exitCode !== undefined ? { exitCode: opts.exitCode } : {}),
+    ...(opts.artifactPath !== undefined ? { artifactPath: opts.artifactPath } : {}),
+    ...(opts.commitSha !== undefined ? { commitSha: opts.commitSha } : {}),
+    now: nowFn,
+    actor,
+  });
+  if (!isOk(result)) {
+    err('caws specs evidence: failed.');
+    err(renderDiagnostics(result.errors, { showData }));
+    return 1;
+  }
+  const outcome = result.value;
+  if (outcome.kind === 'partial_failure_recovered') {
+    err('caws specs evidence: partial failure recovered (no state change).');
+    err(renderDiagnostics(outcome.cause, { showData }));
+    return 1;
+  }
+  out(
+    `recorded evidence for ${opts.id} AC ${opts.ac} (status: ${opts.status}) — dual-write: spec evidence block + ac_recorded event`
+  );
   surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }

@@ -30,6 +30,7 @@ import * as path from 'path';
 
 import {
   type EventBody,
+  type EvidenceStatus,
   err,
   isOk,
   ok,
@@ -308,6 +309,35 @@ export interface AmendScopeSpecInput {
   readonly removeSupport?: readonly string[];
   /** Optional operator rationale recorded on the spec_scope_amended event. */
   readonly reason?: string;
+  readonly now?: () => Date;
+  readonly actor: EventBody['actor'];
+}
+
+/**
+ * Input for `recordSpecEvidence` (CAWS-SPEC-AC-EVIDENCE-AUTHORITY-01).
+ *
+ * Records per-criterion verified status into the spec's `evidence:` block
+ * (CLOSURE AUTHORITY) AND appends an `ac_recorded` event (audit history) in
+ * one lifecycle transaction — dual-write so the two surfaces agree by
+ * construction. Idempotent per `criterion_id`: recording again for the same
+ * AC updates the entry (upsert), it does not duplicate.
+ */
+export interface RecordSpecEvidenceInput {
+  readonly id: string;
+  /** Which acceptance criterion this evidence is for (must match acceptance[].id). */
+  readonly criterionId: string;
+  /** The verified status. `waived` requires `waiverReason`. */
+  readonly status: EvidenceStatus;
+  /** Reference to the evidence: test command, test_nodeid, artifact path, or waiver id. Required unless status is `waived` (where waiverReason is the record). */
+  readonly evidenceRef?: string;
+  /** Mandatory when status === 'waived'. An undocumented waiver is indistinguishable from an oversight. */
+  readonly waiverReason?: string;
+  /** Optional provenance fields, mirrored onto the ac_recorded event payload. */
+  readonly testNodeid?: string;
+  readonly command?: string;
+  readonly exitCode?: number;
+  readonly artifactPath?: string;
+  readonly commitSha?: string;
   readonly now?: () => Date;
   readonly actor: EventBody['actor'];
 }
@@ -690,7 +720,7 @@ function gitPathIgnored(repoRoot: string, relPath: string): boolean {
 function autoCommitSpecWrite(
   cawsDir: string,
   specId: string,
-  action: 'create' | 'activate' | 'close' | 'archive' | 'amend-scope' | 'restore' | 'reopen',
+  action: 'create' | 'activate' | 'close' | 'archive' | 'amend-scope' | 'restore' | 'reopen' | 'evidence',
   wasDirtyBeforeWrite: boolean,
   extraPaths: ReadonlyArray<string> = []
 ): AutoCommitOutcome {
@@ -717,7 +747,7 @@ function attachAutoCommit(
   outcome: Result<SpecWriterOutcome>,
   cawsDir: string,
   specId: string,
-  action: 'create' | 'activate' | 'close' | 'archive' | 'amend-scope' | 'restore' | 'reopen',
+  action: 'create' | 'activate' | 'close' | 'archive' | 'amend-scope' | 'restore' | 'reopen' | 'evidence',
   wasDirtyBeforeWrite: boolean,
   extraPaths: ReadonlyArray<string> = []
 ): Result<SpecWriterOutcome> {
@@ -1203,6 +1233,52 @@ export function closeSpec(
     }
   }
 
+  // CAWS-SPEC-AC-EVIDENCE-AUTHORITY-01: the AC-evidence-completeness close gate.
+  //
+  // WARN-MODE (initial rollout): the gate computes unsatisfied ACs and records
+  // them as an advisory warning on the close outcome, but does NOT refuse —
+  // the close proceeds. This ships the authority surface (the evidence: block,
+  // the record op, the dual-write) and makes the gate visible to agents
+  // immediately, without breaking the existing close/merge test corpus (which
+  // predates evidence). The flip to BLOCK mode is a one-line change in a
+  // follow-up slice that back-fills evidence on the affected test fixtures.
+  //
+  // The gate reads ONLY the spec's `evidence:` block — never the ac_recorded
+  // event stream (doctrinal: closure couples to the authority surface, not
+  // audit history — same as the successor-custody gate above).
+  const evidenceByCriterion = new Map<string, string>();
+  if (spec.evidence !== undefined) {
+    for (const entry of spec.evidence) {
+      evidenceByCriterion.set(entry.criterion_id, entry.status);
+    }
+  }
+  const unsatisfied: Array<{ id: string; reason: 'missing' | 'fail' | 'unchecked' }> = [];
+  for (const ac of spec.acceptance) {
+    const status = evidenceByCriterion.get(ac.id);
+    if (status === undefined) {
+      unsatisfied.push({ id: ac.id, reason: 'missing' });
+    } else if (status === 'fail' || status === 'unchecked') {
+      unsatisfied.push({ id: ac.id, reason: status });
+    }
+    // pass and waived satisfy the gate.
+  }
+  const evidenceWarnings: string[] = [];
+  if (unsatisfied.length > 0) {
+    // WARN (not block): the close proceeds, but the outcome carries an advisory
+    // so agents see which ACs lack evidence. When the gate flips to block, this
+    // becomes a `return err(...)` with the same message.
+    const lines = unsatisfied.map((u) => {
+      if (u.reason === 'missing') {
+        return `  - ${u.id}: no evidence recorded. Record pass evidence: caws specs evidence ${input.id} --ac ${u.id} --status pass --evidence-ref "<test command>"\n     or waive with a reason: caws specs evidence ${input.id} --ac ${u.id} --status waived --waiver-reason "<why this AC is not separately verified>"`;
+      }
+      return `  - ${u.id}: evidence status is "${u.reason}" (does not satisfy closure). Re-record as pass or waived: caws specs evidence ${input.id} --ac ${u.id} --status pass --evidence-ref "<test command>"`;
+    });
+    evidenceWarnings.push(
+      `Spec "${input.id}" closed with ${unsatisfied.length} acceptance criterion/criteria lacking satisfying evidence (pass or waived). ` +
+        `The evidence: block is the closure authority — each declared AC should have status pass or waived. [warn-mode: close proceeded; will block in a future slice]\n${lines.join('\n')}`
+    );
+  }
+
   // Raw-byte patch sequence:
   //   1. lifecycle_state → closed
   //   2. insert resolution after lifecycle_state
@@ -1380,7 +1456,14 @@ export function closeSpec(
     return err(txnResult.errors);
   }
   const outcome = mapTxnToOutcome(txnResult.value, input.id, targetPath);
-  return attachAutoCommit(outcome, cawsDir, input.id, 'close', wasDirtyBeforeWrite);
+  const committed = attachAutoCommit(outcome, cawsDir, input.id, 'close', wasDirtyBeforeWrite);
+  // CAWS-SPEC-AC-EVIDENCE-AUTHORITY-01 (warn-mode): fold the evidence advisory
+  // into the success outcome (additive, non-blocking) so agents see which ACs
+  // lack evidence when the close proceeds. Mirrors amendScopeSpec's composeWarnings.
+  if (evidenceWarnings.length > 0 && isOk(committed) && committed.value.kind === 'success') {
+    return ok({ ...committed.value, warnings: [...(committed.value.warnings ?? []), ...evidenceWarnings] });
+  }
+  return committed;
 }
 
 
@@ -2945,6 +3028,308 @@ export function amendScopeSpec(
     return ok({ ...committed.value, warnings: composeWarnings });
   }
   return committed;
+}
+
+// ─── recordSpecEvidence (CAWS-SPEC-AC-EVIDENCE-AUTHORITY-01) ───────────────
+//
+// Records per-criterion verified status into the spec's `evidence:` block
+// (CLOSURE AUTHORITY) AND appends an `ac_recorded` event (audit history) in
+// one lifecycle transaction. The dual-write makes the two surfaces agree BY
+// CONSTRUCTION: the close gate reads the spec block (authority, like
+// successors), the event stream is the immutable history.
+//
+// Idempotent per criterion_id: recording again for the same AC UPSERTS the
+// entry (replaces the prior record), it does not duplicate.
+
+/**
+ * Line-surgical upsert of an evidence entry under the top-level `evidence:`
+ * block. Operates on raw bytes to preserve comments/formatting. Mirrors the
+ * patchScopeSequence philosophy but for an array of OBJECTS keyed by
+ * `criterion_id`.
+ *
+ * YAML shape produced:
+ *   evidence:
+ *     - criterion_id: A1
+ *       status: pass
+ *       evidence_ref: npm test
+ *       recorded_at: 2026-08-07T20:00:00.000Z
+ *
+ * Returns the new bytes, or null when the block cannot be created/located
+ * (the null case is a fail-closed signal the caller surfaces as a plan reject).
+ */
+function patchEvidenceBlock(
+  source: string,
+  entry: {
+    criterion_id: string;
+    status: EvidenceStatus;
+    evidence_ref?: string;
+    waiver_reason?: string;
+    recorded_at: string;
+    test_nodeid?: string;
+    command?: string;
+    exit_code?: number;
+    artifact_path?: string;
+    commit_sha?: string;
+  }
+): string | null {
+  const lines = source.split('\n');
+
+  // Locate the top-level `evidence:` key (column 0). If absent, append the
+  // block at end of file (the spec schema makes it optional; first record
+  // creates it). Match either block form (`evidence:`) or inline-empty
+  // (`evidence: []`).
+  const evidenceIdx = lines.findIndex((l) => /^evidence:\s*(\[\s*\])?\s*$/.test(l));
+  if (evidenceIdx === -1) {
+    const trimmed = source.endsWith('\n') ? source : source + '\n';
+    const block = renderEvidenceEntry(entry, 0);
+    return trimmed + `evidence:\n${block}`;
+  }
+
+  // Normalize inline-empty `evidence: []` to block form.
+  if (/\[\s*\]/.test(lines[evidenceIdx] ?? '')) {
+    lines[evidenceIdx] = 'evidence:';
+  }
+
+  // Find the extent of the evidence block: items are `  - ` (2-space dash) at
+  // the top level. Each item is a map whose first key is `criterion_id`.
+  const itemStartRe = /^  - criterion_id:\s*(.+?)\s*$/;
+  const itemStartLines = new Map<string, number>();
+  let blockEnd = evidenceIdx + 1;
+  for (let i = evidenceIdx + 1; i < lines.length; i++) {
+    const line = lines[i] ?? '';
+    if (/^\S/.test(line)) break;
+    const m = itemStartRe.exec(line);
+    if (m && m[1] !== undefined) {
+      itemStartLines.set(unquoteScalar(m[1].trim()), i);
+    }
+    blockEnd = i + 1;
+  }
+
+  const rendered = renderEvidenceEntry(entry, 0);
+  const renderedLines = rendered.split('\n');
+
+  const existingItemLine = itemStartLines.get(entry.criterion_id);
+  if (existingItemLine !== undefined) {
+    // UPSERT: replace the existing item.
+    let itemEnd = existingItemLine + 1;
+    for (let i = existingItemLine + 1; i < blockEnd; i++) {
+      const line = lines[i] ?? '';
+      if (/^  - /.test(line)) break;
+      itemEnd = i + 1;
+    }
+    return [...lines.slice(0, existingItemLine), ...renderedLines, ...lines.slice(itemEnd)].join('\n');
+  }
+
+  // INSERT: append the new item at the end of the evidence block.
+  return [...lines.slice(0, blockEnd), ...renderedLines, ...lines.slice(blockEnd)].join('\n');
+}
+
+function renderEvidenceEntry(
+  entry: {
+    criterion_id: string;
+    status: EvidenceStatus;
+    evidence_ref?: string;
+    waiver_reason?: string;
+    recorded_at: string;
+    test_nodeid?: string;
+    command?: string;
+    exit_code?: number;
+    artifact_path?: string;
+    commit_sha?: string;
+  },
+  baseIndent: number
+): string {
+  const dash = `${' '.repeat(baseIndent)}  - `;
+  const cont = `${' '.repeat(baseIndent)}    `;
+  const fields: string[] = [];
+  const pushStr = (key: string, value: string | undefined) => {
+    if (value === undefined) return;
+    fields.push(`${key}: ${yamlScalar(value)}`);
+  };
+  fields.push(`criterion_id: ${yamlScalar(entry.criterion_id)}`);
+  fields.push(`status: ${entry.status}`);
+  pushStr('evidence_ref', entry.evidence_ref);
+  pushStr('waiver_reason', entry.waiver_reason);
+  fields.push(`recorded_at: ${yamlScalar(entry.recorded_at)}`);
+  pushStr('test_nodeid', entry.test_nodeid);
+  pushStr('command', entry.command);
+  if (entry.exit_code !== undefined) fields.push(`exit_code: ${entry.exit_code}`);
+  pushStr('artifact_path', entry.artifact_path);
+  pushStr('commit_sha', entry.commit_sha);
+  return fields.map((f, i) => `${i === 0 ? dash : cont}${f}`).join('\n');
+}
+
+/** Minimal YAML scalar formatter: quote strings containing YAML-special chars. */
+function yamlScalar(value: string): string {
+  if (value === '') return `""`;
+  if (/[:#\[\]{}&*!|>'"%@`,]/.test(value) || /^\s|\s$/.test(value) || value === 'true' || value === 'false' || value === 'null' || /^-?\d/.test(value)) {
+    return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+  }
+  return value;
+}
+
+export function recordSpecEvidence(
+  cawsDir: string,
+  input: RecordSpecEvidenceInput
+): Result<SpecWriterOutcome> {
+  const idValidation = validateSpecId(input.id);
+  if (!idValidation.ok) return idValidation;
+
+  const targetPath = specPath(cawsDir, input.id);
+  if (!fs.existsSync(targetPath)) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${input.id}" not found at ${targetPath}.`,
+        { subject: input.id }
+      )
+    );
+  }
+
+  const sourceResult = readYamlSource(targetPath);
+  if (!isOk(sourceResult)) return err(sourceResult.errors);
+  const originalBytes = sourceResult.value;
+  const parsed = parseAndValidateSpec(originalBytes);
+  if (!isOk(parsed)) {
+    return err(
+      parsed.errors.map((d) =>
+        storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
+          subject: d.subject ?? input.id,
+          data: { source_rule: d.rule },
+        })
+      )
+    );
+  }
+  const spec = parsed.value;
+
+  // Lifecycle guard: evidence records only on an active or draft spec.
+  if (spec.lifecycle_state !== 'active' && spec.lifecycle_state !== 'draft') {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${input.id}" is in lifecycle_state "${spec.lifecycle_state}"; evidence records only on active or draft specs (a closed/archived spec's evidence is frozen).`,
+        { subject: input.id, data: { current_state: spec.lifecycle_state } }
+      )
+    );
+  }
+
+  // Pre-validate against the declared ACs BEFORE patching.
+  const declaredAcIds = new Set(spec.acceptance.map((a) => a.id));
+  if (!declaredAcIds.has(input.criterionId)) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Criterion "${input.criterionId}" is not a declared acceptance criterion on spec "${input.id}". Declared AC ids: ${[...declaredAcIds].join(', ')}.`,
+        {
+          subject: input.id,
+          data: { criterion_id: input.criterionId, declared: [...declaredAcIds] },
+        }
+      )
+    );
+  }
+
+  if (
+    input.status === 'waived' &&
+    (typeof input.waiverReason !== 'string' || input.waiverReason.trim().length === 0)
+  ) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Evidence for criterion "${input.criterionId}" has status "waived" but no --waiver-reason. An undocumented waiver is indistinguishable from an oversight (parallels successors[].disposition: declined).`,
+        { subject: input.id, data: { criterion_id: input.criterionId, status: input.status } }
+      )
+    );
+  }
+  const effectiveEvidenceRef =
+    input.status === 'waived'
+      ? (input.waiverReason ?? input.evidenceRef ?? '')
+      : (input.evidenceRef ?? '');
+  if (effectiveEvidenceRef.trim().length === 0) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Evidence for criterion "${input.criterionId}" requires --evidence-ref (a test command, artifact path, or reference). For status "waived", --waiver-reason supplies it.`,
+        { subject: input.id, data: { criterion_id: input.criterionId } }
+      )
+    );
+  }
+
+  const now = (input.now ?? (() => new Date()))();
+  const nowIso = now.toISOString();
+
+  const entryRecord = {
+    criterion_id: input.criterionId,
+    status: input.status,
+    evidence_ref: effectiveEvidenceRef,
+    ...(input.status === 'waived' && input.waiverReason !== undefined
+      ? { waiver_reason: input.waiverReason }
+      : {}),
+    recorded_at: nowIso,
+    ...(input.testNodeid !== undefined ? { test_nodeid: input.testNodeid } : {}),
+    ...(input.command !== undefined ? { command: input.command } : {}),
+    ...(input.exitCode !== undefined ? { exit_code: input.exitCode } : {}),
+    ...(input.artifactPath !== undefined ? { artifact_path: input.artifactPath } : {}),
+    ...(input.commitSha !== undefined ? { commit_sha: input.commitSha } : {}),
+  };
+
+  const patched = patchEvidenceBlock(originalBytes, entryRecord);
+  if (patched === null) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Could not create or locate the evidence block in spec "${input.id}".`,
+        { subject: input.id }
+      )
+    );
+  }
+
+  const reparsed = parseAndValidateSpec(patched);
+  if (!isOk(reparsed)) {
+    return err(
+      reparsed.errors.map((d) =>
+        storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
+          subject: d.subject ?? input.id,
+          data: { source_rule: d.rule, hint: 'evidence record validation failed' },
+        })
+      )
+    );
+  }
+
+  const event = {
+    event: 'ac_recorded',
+    ts: nowIso,
+    actor: input.actor,
+    spec_id: input.id,
+    data: {
+      criterion_id: input.criterionId,
+      status: input.status,
+      evidence_ref: effectiveEvidenceRef,
+      ...(input.testNodeid !== undefined ? { test_nodeid: input.testNodeid } : {}),
+      ...(input.command !== undefined ? { command: input.command } : {}),
+      ...(input.exitCode !== undefined ? { exit_code: input.exitCode } : {}),
+      ...(input.artifactPath !== undefined ? { artifact_path: input.artifactPath } : {}),
+      ...(input.commitSha !== undefined ? { commit_sha: input.commitSha } : {}),
+    },
+  } as unknown as EventBody;
+
+  const repoRoot = repoRootFromCawsDir(cawsDir);
+  const wasDirtyBeforeWrite = isPathDirty(
+    repoRoot,
+    specRelPath(cawsDir, input.id, repoRoot)
+  );
+
+  const txnResult = withLifecycleLock(cawsDir, () =>
+    runLifecycleTransaction({
+      cawsDir,
+      plannedWrites: [{ path: targetPath, contents: patched }],
+      events: [event],
+    })
+  );
+  if (!txnResult.ok) {
+    return err(txnResult.errors);
+  }
+  const outcome = mapTxnToOutcome(txnResult.value, input.id, targetPath);
+  return attachAutoCommit(outcome, cawsDir, input.id, 'evidence', wasDirtyBeforeWrite);
 }
 
 // ─── Outcome mapper ──────────────────────────────────────────────────────

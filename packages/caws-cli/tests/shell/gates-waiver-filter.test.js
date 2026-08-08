@@ -19,7 +19,7 @@ const { filterWaivedViolations } = require('../../dist/shell/gates/waiver-filter
 const {
   effectiveWaiversForGate,
   waiverEffectiveness,
-} = require('@paths.design/caws-kernel');
+} = require('../../dist/kernel');
 
 const NOW = new Date('2026-06-13T12:00:00.000Z');
 const FUTURE = '2026-12-31T00:00:00.000Z';

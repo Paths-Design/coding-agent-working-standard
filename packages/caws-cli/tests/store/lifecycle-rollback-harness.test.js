@@ -47,7 +47,7 @@ const {
 } = require('../../dist/store/worktrees-writer');
 const { initProject } = require('../../dist/store/init-store');
 const { loadEvents } = require('../../dist/store/events-store');
-const { verifyChain } = require('@paths.design/caws-kernel');
+const { verifyChain } = require('../../dist/kernel');
 
 const FAULT_ENV = 'CAWS_TEST_INJECT_LIFECYCLE_FAULT';
 

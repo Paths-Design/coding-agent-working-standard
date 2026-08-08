@@ -80,6 +80,7 @@ import {
   runSpecsRetireDraftCommand,
   runSpecsPruneDraftsCommand,
   runSpecsCloseCommand,
+  runSpecsEvidenceCommand,
   runSpecsReopenCommand,
   runSpecsCreateCommand,
   runSpecsListCommand,
@@ -1195,6 +1196,40 @@ export function registerShellCommands(
           ...(opts.supersededBy !== undefined
             ? { supersededBy: opts.supersededBy }
             : {}),
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'evidence'))
+    .action(
+      (
+        id: string,
+        opts: {
+          ac: string;
+          status: string;
+          evidenceRef?: string;
+          waiverReason?: string;
+          testNodeid?: string;
+          command?: string;
+          exitCode?: string;
+          artifactPath?: string;
+          commitSha?: string;
+          data?: boolean;
+        }
+      ) => {
+        const code = runSpecsEvidenceCommand({
+          id,
+          ac: opts.ac,
+          status: opts.status as 'pass' | 'fail' | 'unchecked' | 'waived',
+          ...(opts.evidenceRef !== undefined ? { evidenceRef: opts.evidenceRef } : {}),
+          ...(opts.waiverReason !== undefined ? { waiverReason: opts.waiverReason } : {}),
+          ...(opts.testNodeid !== undefined ? { testNodeid: opts.testNodeid } : {}),
+          ...(opts.command !== undefined ? { command: opts.command } : {}),
+          ...(opts.exitCode !== undefined ? { exitCode: Number(opts.exitCode) } : {}),
+          ...(opts.artifactPath !== undefined ? { artifactPath: opts.artifactPath } : {}),
+          ...(opts.commitSha !== undefined ? { commitSha: opts.commitSha } : {}),
           showData: opts.data === true,
         });
         exit(code);

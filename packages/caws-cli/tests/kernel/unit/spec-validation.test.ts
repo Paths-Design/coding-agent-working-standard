@@ -2943,3 +2943,92 @@ describe('semantic layer: isPathSegmentPrefix boundary cases (kills L227/L244/L2
     }
   });
 });
+
+// ─── Evidence semantic rules (CAWS-SPEC-AC-EVIDENCE-AUTHORITY-01) ──────────
+
+describe('semantic layer: evidence rules (CAWS-SPEC-AC-EVIDENCE-AUTHORITY-01)', () => {
+  test('valid evidence block (one pass entry for a declared AC) is accepted', () => {
+    const spec = parseShape(VALID_TIER3);
+    const mutated = {
+      ...spec,
+      acceptance: [
+        { id: 'A1', given: 'g', when: 'w', then: 't' },
+        { id: 'A2', given: 'g', when: 'w', then: 't' },
+      ],
+      evidence: [
+        { criterion_id: 'A1', status: 'pass' as const, evidence_ref: 'npm test', recorded_at: '2026-08-07T20:00:00.000Z' },
+      ],
+    } as Spec;
+    const r = validateSpecSemantics(mutated);
+    expect(isOk(r)).toBe(true);
+  });
+
+  test('waived without waiver_reason is rejected (undocumented waiver = oversight)', () => {
+    const spec = parseShape(VALID_TIER3);
+    const mutated = {
+      ...spec,
+      acceptance: [{ id: 'A1', given: 'g', when: 'w', then: 't' }],
+      evidence: [
+        { criterion_id: 'A1', status: 'waived' as const, recorded_at: '2026-08-07T20:00:00.000Z' },
+      ],
+    } as Spec;
+    const r = validateSpecSemantics(mutated);
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) {
+      const d = r.errors.find((e) => e.rule === SPEC_RULES.EVIDENCE_WAIVER_MISSING_REASON);
+      expect(d).toBeDefined();
+      expect(d!.message).toContain('waived');
+      expect(d!.message).toContain('waiver_reason');
+      expect(d!.location).toEqual({ pointer: '/evidence/0/waiver_reason' });
+    }
+  });
+
+  test('waived WITH waiver_reason is accepted', () => {
+    const spec = parseShape(VALID_TIER3);
+    const mutated = {
+      ...spec,
+      acceptance: [{ id: 'A1', given: 'g', when: 'w', then: 't' }],
+      evidence: [
+        {
+          criterion_id: 'A1',
+          status: 'waived' as const,
+          waiver_reason: 'manual UI criterion; no automated test',
+          evidence_ref: 'manual UI criterion; no automated test',
+          recorded_at: '2026-08-07T20:00:00.000Z',
+        },
+      ],
+    } as Spec;
+    const r = validateSpecSemantics(mutated);
+    expect(isOk(r)).toBe(true);
+  });
+
+  test('evidence criterion_id not matching any declared AC is rejected (typo guard)', () => {
+    const spec = parseShape(VALID_TIER3);
+    const mutated = {
+      ...spec,
+      acceptance: [{ id: 'A1', given: 'g', when: 'w', then: 't' }],
+      evidence: [
+        { criterion_id: 'A99', status: 'pass' as const, evidence_ref: 'npm test', recorded_at: '2026-08-07T20:00:00.000Z' },
+      ],
+    } as Spec;
+    const r = validateSpecSemantics(mutated);
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) {
+      const d = r.errors.find((e) => e.rule === SPEC_RULES.EVIDENCE_CRITERION_ID_UNKNOWN);
+      expect(d).toBeDefined();
+      expect(d!.message).toContain('A99');
+      expect(d!.location).toEqual({ pointer: '/evidence/0/criterion_id' });
+      expect(d!.narrowRepair).toContain('A1');
+    }
+  });
+
+  test('a spec with declared ACs but no evidence block is structurally valid (the close gate enforces completeness, not semantics)', () => {
+    const spec = parseShape(VALID_TIER3);
+    const mutated = {
+      ...spec,
+      acceptance: [{ id: 'A1', given: 'g', when: 'w', then: 't' }],
+    } as Spec;
+    const r = validateSpecSemantics(mutated);
+    expect(isOk(r)).toBe(true);
+  });
+});
