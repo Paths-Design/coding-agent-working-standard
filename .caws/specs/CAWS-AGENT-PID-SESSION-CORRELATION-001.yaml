@@ -10,6 +10,7 @@ blast_radius:
   modules:
     - 'caws-cli hook-pack shared/lib: agent-surface.sh (process-name table), parse-input.sh (writer), session-id.sh (shell read tier)'
     - 'caws-cli shell session identity resolution: resolve-session.ts (TS read tier)'
+    - 'caws-cli shell commands/reprieve.ts (third resolution surface — env-only resolveSessionId)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -18,6 +19,7 @@ scope:
     - 'packages/caws-cli/templates/hook-packs/shared/lib/parse-input.sh'
     - 'packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh'
     - 'packages/caws-cli/src/shell/session/resolve-session.ts'
+    - 'packages/caws-cli/src/shell/commands/reprieve.ts'
     - 'packages/caws-cli/tests/hooks/bats/session-id-capsule.bats'
     - 'packages/caws-cli/tests/shell/session/resolver-guard-divergence.test.js'
     - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
@@ -40,6 +42,19 @@ scope:
     # envelope branch; this spec adds a tier AHEAD of the envelope scan, not a
     # replacement for it.
 invariants:
+  - >-
+    ONE SHARED READ PER LANGUAGE, CONSULTED BY ALL THREE RESOLUTION SURFACES.
+    The agent-PID read is a single shared function (a shell lib + a TS module),
+    NOT three independent reads. The three consuming surfaces — TS
+    resolveSession, shell resolve_caws_session_id, AND reprieve.ts's
+    resolveSessionId — all consult the same read. A new surface added later
+    consumes the same read rather than inventing a fourth precedence.
+    (Consumer map: TS resolveSession → merge/claim/gates/evidence/specs/events/
+    message/status/agents/worktree; shell resolve_caws_session_id →
+    bash-write-guard/worktree-write-guard/block-dangerous/reset-danger-latch/
+    run-handlers(reprieve consult); reprieve.ts → reprieve show/revoke.
+    Untouched: HOOK_SESSION_ID-direct readers — heartbeat/register/stop/audit/
+    session-log/scope-guard — which have the payload id and never resolve.)
   - >-
     HARNESS-AGNOSTIC CORE. The persistence format (agent-pid-<pid>.json), the
     read tiers (TS + shell), and the freshness/repo/start-time validation know
@@ -148,6 +163,21 @@ acceptance:
       the agent-PID tier resolves first (broader signal); the cwd-ownership
       path remains as a corroborator in the >=2-envelope branch. Worktree
       residents are unaffected — they still resolve, now one tier earlier.
+  - id: A7
+    given: >-
+      The same canonical-checkout zcode session, with the agent-PID record
+      present, running `caws reprieve show` (or revoke) with NO env var set —
+      the third resolution surface (reprieve.ts resolveSessionId), which today
+      is env-only and returns 'unknown'.
+    when: >-
+      reprieve.ts resolves the session id.
+    then: >-
+      it consults the same shared agent-PID read as the other two surfaces and
+      resolves to the record's session_id, so a reprieve granted against that
+      id is found. Today reprieve show prints "no reprieve for session unknown"
+      in this case (diagnosis point 2 of the motivating sterling review); the
+      shared read retires that friction. (The grant path is human-side and
+      remains env-free + lease-backed — unchanged.)
 non_functional: {}
 contracts:
   - name: 'agent-pid-correlation'
