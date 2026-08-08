@@ -62,6 +62,7 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { execSync } from 'node:child_process';
 
 import {
   err,
@@ -813,6 +814,141 @@ function mintCapsule(
   });
 }
 
+// CAWS-AGENT-PID-SESSION-CORRELATION-001
+//
+// The TS-side agent-PID correlation read: the harness-agnostic core. Resolves
+// the calling process's agent PID by walking the PID tree, then reads + validates
+// the agent-pid-<pid>.json record the hook wrote. Returns the recorded
+// SessionIdentity on a valid match, or null on any miss.
+//
+// This is the canonical-checkout identity bridge. It fires BEFORE the durable-
+// envelope scan, so a no-env-var caller (ZCode / generic harness) at canonical
+// checkout resolves deterministically to its own session id instead of hitting
+// the ≥2-envelope ambiguity refusal. Mirrors lib/agent-pid.sh's
+// read_session_id_from_agent_pid exactly (same record format, same freshness
+// window, same PID-reuse start-time guard).
+//
+// The PID-walk is parameterized by the per-surface process-name set
+// (CAWS_AGENT_PROCESS_NAMES, set by agent-surface.sh — the single adapter).
+// This core knows nothing about harness identity. An empty name set (unknown
+// surface) fail-opens to null. Mirrors resolveOwnerFromCwd's fail-open posture.
+//
+// Testability: processNames + pidWalkFn + now are injectable so jest can drive
+// the validation without a real process tree. The default pidWalkFn uses ps.
+const AGENT_PID_RECORD_FRESHNESS_MS = 24 * 60 * 60 * 1000;
+const AGENT_PID_RECORD_PREFIX = 'agent-pid-';
+
+interface AgentPidRecord {
+  readonly agent_pid: number;
+  readonly session_id: string;
+  readonly surface?: string;
+  readonly repo_root?: string;
+  readonly created_at?: string;
+  readonly last_seen_at?: string;
+  readonly started_at?: number | null;
+}
+
+/** Default PID-walk: walk the current process's ancestors via ps. */
+function defaultAgentPidWalk(names: readonly string[]): { pid: number; startEpoch: number | null } | null {
+  if (names.length === 0) return null;
+  try {
+    let pid = process.pid;
+    for (let hop = 0; hop < 16 && pid > 1; hop++) {
+      const comm = execSync(`ps -o comm= -p ${pid}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+      const base = comm.split('/').pop() ?? '';
+      if (names.includes(base)) {
+        let startEpoch: number | null = null;
+        try {
+          const lstart = execSync(`ps -o lstart= -p ${pid}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+          const ms = Date.parse(lstart);
+          startEpoch = Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
+        } catch {
+          /* lstart unavailable — leave null (reader skips start-time check) */
+        }
+        return { pid, startEpoch };
+      }
+      const ppidOut = execSync(`ps -o ppid= -p ${pid}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+      const next = parseInt(ppidOut, 10);
+      if (!Number.isFinite(next) || next <= 1 || next === pid) break;
+      pid = next;
+    }
+  } catch {
+    /* ps unavailable or failed — fail-open */
+  }
+  return null;
+}
+
+/**
+ * Resolve the session identity from the agent-PID correlation record. Returns
+ * the recorded SessionIdentity on a valid, fresh, start-time-matched record;
+ * returns null on any miss (fail-open — caller falls through to the existing
+ * env→envelope→capsule chain).
+ */
+export function resolveAgentPidIdentity(args: {
+  cawsDir: string;
+  env: NodeJS.ProcessEnv;
+  processNames?: readonly string[];
+  pidWalkFn?: (names: readonly string[]) => { pid: number; startEpoch: number | null } | null;
+  now?: () => Date;
+}): SessionIdentity | null {
+  // The per-surface name set comes from env (agent-surface.sh exports
+  // CAWS_AGENT_PROCESS_NAMES) or the explicit override. Empty -> fail-open.
+  const names = args.processNames ?? parseProcessNames(args.env['CAWS_AGENT_PROCESS_NAMES']);
+  if (names.length === 0) return null;
+
+  const walk = args.pidWalkFn ?? defaultAgentPidWalk;
+  const located = walk(names);
+  if (located === null) return null;
+
+  const recordPath = path.join(args.cawsDir, 'sessions', `${AGENT_PID_RECORD_PREFIX}${located.pid}.json`);
+  let raw: string;
+  try {
+    raw = fs.readFileSync(recordPath, 'utf8');
+  } catch {
+    return null; // absent or unreadable
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null; // malformed
+  }
+  if (parsed === null || typeof parsed !== 'object') return null;
+  const rec = parsed as Partial<AgentPidRecord>;
+  if (typeof rec.session_id !== 'string' || rec.session_id.length === 0) return null;
+
+  // Freshness: last_seen_at within the window.
+  const nowMs = (args.now ? args.now() : new Date()).getTime();
+  if (typeof rec.last_seen_at === 'string') {
+    const lsMs = Date.parse(rec.last_seen_at);
+    if (!Number.isFinite(lsMs) || nowMs - lsMs > AGENT_PID_RECORD_FRESHNESS_MS) {
+      return null; // stale
+    }
+  } else {
+    return null; // no last_seen_at — can't establish freshness
+  }
+
+  // PID-reuse guard: if both the record and the live process carry a start
+  // time, they must match. A reused PID has a different start time.
+  if (rec.started_at !== undefined && rec.started_at !== null && located.startEpoch !== null) {
+    if (Math.floor(Number(rec.started_at)) !== Math.floor(located.startEpoch)) {
+      return null; // PID reuse
+    }
+  }
+
+  const platform = typeof rec.surface === 'string' && rec.surface.length > 0 ? rec.surface : undefined;
+  return {
+    session_id: rec.session_id,
+    ...(platform !== undefined ? { platform } : {}),
+  };
+}
+
+/** Parse the space-separated CAWS_AGENT_PROCESS_NAMES env var into a list. */
+function parseProcessNames(raw: string | undefined): readonly string[] {
+  if (typeof raw !== 'string' || raw.length === 0) return [];
+  return raw.split(/\s+/).filter((n) => n.length > 0);
+}
+
 export function resolveSession(
   opts: ResolveSessionOptions
 ): Result<ResolvedSession> {
@@ -913,6 +1049,33 @@ export function resolveSession(
     return ok({
       identity: { session_id: hookId, platform: 'claude-code' },
       source: 'hook_env',
+    });
+  }
+
+  // 2.4. Agent-PID correlation record (authority source #2.4)
+  //      CAWS-AGENT-PID-SESSION-CORRELATION-001: bridges identity for callers
+  //      that carry NO session-id env var (ZCode / generic harness) — the case
+  //      the env tiers above and the durable-envelope scan below both miss.
+  //      The agent process is a stable, per-session-unique ancestor of this
+  //      process; its PID keys a record the hook wrote carrying the
+  //      authoritative HOOK_SESSION_ID. This fires BEFORE the envelope scan so
+  //      the ≥2-envelope ambiguity refusal is never reached when the caller's
+  //      own agent-PID record exists. Fail-opens (returns null) on any miss,
+  //      falling through to the envelope scan unchanged.
+  const agentPidIdentity = resolveAgentPidIdentity({
+    cawsDir: opts.cawsDir,
+    env,
+    now: opts.now,
+    ...(opts.agentProcessNames !== undefined ? { processNames: opts.agentProcessNames } : {}),
+    ...(opts.agentPidWalkFn !== undefined ? { pidWalkFn: opts.agentPidWalkFn } : {}),
+  });
+  if (agentPidIdentity !== null) {
+    return ok({
+      identity: {
+        session_id: agentPidIdentity.session_id,
+        platform: agentPidIdentity.platform ?? 'claude-code',
+      },
+      source: 'agent_pid_record',
     });
   }
 

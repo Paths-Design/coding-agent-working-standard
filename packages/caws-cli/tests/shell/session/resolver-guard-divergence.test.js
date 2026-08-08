@@ -126,6 +126,28 @@ function writeWorktreeEntry(cawsDir, name, ownerSessionId, opts = {}) {
   return wtPath;
 }
 
+/**
+ * Write an agent-PID correlation record at .caws/sessions/agent-pid-<pid>.json.
+ * CAWS-AGENT-PID-SESSION-CORRELATION-001. last_seen_at defaults to the fixed
+ * clock (now) so records are fresh within the 24h window unless overridden.
+ */
+function writeAgentPidRecord(cawsDir, pid, sessionId, opts = {}) {
+  const sessDir = path.join(cawsDir, 'sessions');
+  fs.mkdirSync(sessDir, { recursive: true });
+  const recordPath = path.join(sessDir, `agent-pid-${pid}.json`);
+  const payload = {
+    agent_pid: pid,
+    session_id: sessionId,
+    surface: opts.surface ?? 'zcode',
+    repo_root: opts.repoRoot ?? path.dirname(cawsDir),
+    created_at: opts.createdAt ?? '2026-07-14T10:00:00Z',
+    last_seen_at: opts.lastSeenAt ?? '2026-07-14T12:00:00Z',
+    started_at: opts.startedAt ?? null,
+  };
+  fs.writeFileSync(recordPath, JSON.stringify(payload) + '\n');
+  return recordPath;
+}
+
 // --- A1: per-surface env sources resolve at the right precedence ------------
 
 describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A1: per-surface env sources', () => {
@@ -372,6 +394,140 @@ describe('CAWS-RESOLVER-CWD-OWNERSHIP-CORROBORATION-001 — A3b: cwd ownership',
     expect(result.errors[0].data.candidateSessionIds).toEqual(
       expect.arrayContaining(['sess_a', 'sess_b'])
     );
+  });
+});
+
+// --- A7: agent-PID correlation (CAWS-AGENT-PID-SESSION-CORRELATION-001) -------
+//
+// The canonical-checkout identity bridge. The agent-PID tier fires BEFORE the
+// durable-envelope scan, so a no-env-var caller resolves deterministically to
+// its own session id (keyed by its agent process's PID) instead of hitting
+// the ≥2-envelope ambiguity refusal. Tests inject agentProcessNames +
+// agentPidWalkFn so no real process tree is required.
+
+describe('CAWS-AGENT-PID-SESSION-CORRELATION-001 — A7: agent-PID tier', () => {
+  test('A7-1: agent-PID record resolves at canonical checkout with no env var (the fix)', () => {
+    // Two fresh envelopes (would normally refuse), PLUS an agent-PID record
+    // naming sess_a. NO env var is set (the ZCode / generic-harness case).
+    // The injected pidWalkFn returns a fixed PID matching the record.
+    const { repoRoot, cawsDir, now } = makeProjectRoot();
+    writeEnvelope(cawsDir, 'sess_a', { platform: 'zcode' });
+    writeEnvelope(cawsDir, 'sess_b', { platform: 'codex' });
+    writeAgentPidRecord(cawsDir, 4242, 'sess_a', { surface: 'zcode', startedAt: 1700 });
+    const result = resolveSession({
+      cawsDir,
+      worktreeRoot: cawsDir, // canonical checkout
+      env: cleanEnv(), // no env var
+      now: () => now,
+      agentProcessNames: ['zcode-cli'],
+      agentPidWalkFn: () => ({ pid: 4242, startEpoch: 1700 }),
+    });
+    expect(result.ok).toBe(true);
+    expect(result.value.identity.session_id).toBe('sess_a');
+    expect(result.value.source).toBe('agent_pid_record');
+    expect(result.value.identity.platform).toBe('zcode');
+  });
+
+  test('A7-2: agent-PID tier fires BEFORE the envelope scan (no ambiguity refusal)', () => {
+    // Three fresh envelopes (would refuse), but the agent-PID record resolves
+    // first — the envelope scan is never reached.
+    const { cawsDir, now } = makeProjectRoot();
+    writeEnvelope(cawsDir, 'sess_a', { platform: 'zcode' });
+    writeEnvelope(cawsDir, 'sess_b', { platform: 'codex' });
+    writeEnvelope(cawsDir, 'sess_c', { platform: 'claude-code' });
+    writeAgentPidRecord(cawsDir, 9999, 'sess_c', { startedAt: 1700 });
+    const result = resolveSession({
+      cawsDir,
+      worktreeRoot: cawsDir,
+      env: cleanEnv(),
+      now: () => now,
+      agentProcessNames: ['zcode-cli'],
+      agentPidWalkFn: () => ({ pid: 9999, startEpoch: 1700 }),
+    });
+    expect(result.ok).toBe(true);
+    expect(result.value.identity.session_id).toBe('sess_c');
+    expect(result.value.source).toBe('agent_pid_record');
+  });
+
+  test('A7-3: stale agent-PID record falls through to the envelope scan (fail-open)', () => {
+    // A record whose last_seen_at is outside the 24h window is treated as
+    // stale and ignored — the resolver falls through to the existing chain.
+    const { cawsDir, now } = makeProjectRoot();
+    writeEnvelope(cawsDir, 'sess_a', { platform: 'zcode' });
+    writeAgentPidRecord(cawsDir, 4242, 'sess_stale', {
+      lastSeenAt: '2026-07-01T00:00:00Z', // 13 days before the fixed clock
+      startedAt: 1700,
+    });
+    const result = resolveSession({
+      cawsDir,
+      worktreeRoot: cawsDir,
+      env: cleanEnv(),
+      now: () => now,
+      agentProcessNames: ['zcode-cli'],
+      agentPidWalkFn: () => ({ pid: 4242, startEpoch: 1700 }),
+    });
+    // Did NOT resolve via the agent-PID tier (stale). sess_a's single envelope
+    // resolves instead (the scan admits it as the sole candidate).
+    expect(result.ok).toBe(true);
+    expect(result.value.source).not.toBe('agent_pid_record');
+  });
+
+  test('A7-4: PID-reuse (start-time mismatch) falls through (fail-open)', () => {
+    // The record says started_at=1700 but the live process has startEpoch=9999
+    // — the PID was reused by a different process. Must NOT resolve from it.
+    const { cawsDir, now } = makeProjectRoot();
+    writeEnvelope(cawsDir, 'sess_a', { platform: 'zcode' });
+    writeAgentPidRecord(cawsDir, 4242, 'sess-reused-pid', { startedAt: 1700 });
+    const result = resolveSession({
+      cawsDir,
+      worktreeRoot: cawsDir,
+      env: cleanEnv(),
+      now: () => now,
+      agentProcessNames: ['zcode-cli'],
+      agentPidWalkFn: () => ({ pid: 4242, startEpoch: 9999 }), // different start
+    });
+    expect(result.ok).toBe(true);
+    expect(result.value.source).not.toBe('agent_pid_record');
+  });
+
+  test('A7-5: unknown surface (empty process names) fail-opens to the existing chain', () => {
+    // No CAWS_AGENT_PROCESS_NAMES + no injected names -> the agent-PID tier
+    // returns null immediately, never calling pidWalkFn.
+    const { cawsDir, now } = makeProjectRoot();
+    writeEnvelope(cawsDir, 'sess_a', { platform: 'zcode' });
+    writeAgentPidRecord(cawsDir, 4242, 'sess-via-pid', { startedAt: 1700 });
+    let walkCalled = false;
+    const result = resolveSession({
+      cawsDir,
+      worktreeRoot: cawsDir,
+      env: cleanEnv(),
+      now: () => now,
+      agentProcessNames: [], // unknown surface
+      agentPidWalkFn: () => { walkCalled = true; return null; },
+    });
+    expect(walkCalled).toBe(false); // the walk was never invoked
+    expect(result.ok).toBe(true);
+    expect(result.value.source).not.toBe('agent_pid_record');
+  });
+
+  test('A7-6: two concurrent sessions resolve to their OWN records (no crossing)', () => {
+    // Two records for two PIDs in the same repo. Each pidWalkFn lands on its
+    // own PID -> each resolves to its own session id, never the sibling's.
+    const { cawsDir, now } = makeProjectRoot();
+    writeAgentPidRecord(cawsDir, 1111, 'sess_a', { startedAt: 1700 });
+    writeAgentPidRecord(cawsDir, 2222, 'sess_b', { startedAt: 1800 });
+    const a = resolveSession({
+      cawsDir, worktreeRoot: cawsDir, env: cleanEnv(), now: () => now,
+      agentProcessNames: ['zcode-cli'],
+      agentPidWalkFn: () => ({ pid: 1111, startEpoch: 1700 }),
+    });
+    const b = resolveSession({
+      cawsDir, worktreeRoot: cawsDir, env: cleanEnv(), now: () => now,
+      agentProcessNames: ['zcode-cli'],
+      agentPidWalkFn: () => ({ pid: 2222, startEpoch: 1800 }),
+    });
+    expect(a.value.identity.session_id).toBe('sess_a');
+    expect(b.value.identity.session_id).toBe('sess_b');
   });
 });
 

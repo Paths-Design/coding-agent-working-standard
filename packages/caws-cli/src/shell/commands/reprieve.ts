@@ -31,6 +31,11 @@ import * as path from 'node:path';
 import { loadLeases, resolveRepoRoot, storeDiagnostic } from '../../store';
 import { renderDiagnostics } from '../render/diagnostic';
 import { SHELL_RULES } from '../rules';
+// CAWS-AGENT-PID-SESSION-CORRELATION-001: the agent-PID record gives the
+// reprieve read path (show/revoke) a deterministic session id for no-env-var
+// callers, closing diagnosis point 2 of the motivating sterling review. The
+// grant path is human-side and remains env-free + lease-backed — unchanged.
+import { resolveAgentPidIdentity } from '../session/resolve-session';
 
 // ---------------------------------------------------------------------------
 // Common option/result shapes.
@@ -346,9 +351,17 @@ export function detectAgentSessionVars(env: NodeJS.ProcessEnv): string[] {
   return AGENT_SESSION_VARS.filter((name) => envHasValue(env, name));
 }
 
-function resolveSessionId(env: NodeJS.ProcessEnv): string {
+function resolveSessionId(env: NodeJS.ProcessEnv, cawsDir?: string): string {
   for (const name of AGENT_SESSION_VARS) {
     if (envHasValue(env, name)) return env[name] as string;
+  }
+  // CAWS-AGENT-PID-SESSION-CORRELATION-001: env chain missed. Consult the
+  // agent-PID record (the same shared read the other two resolution surfaces
+  // use) before degrading to 'unknown'. This unblocks reprieve show/revoke for
+  // no-env-var callers, which today print "no reprieve for session unknown".
+  if (cawsDir !== undefined) {
+    const fromPid = resolveAgentPidIdentity({ cawsDir, env });
+    if (fromPid !== null) return fromPid.session_id;
   }
   return 'unknown';
 }
@@ -761,7 +774,7 @@ export function runReprieveShowCommand(opts: ReprieveShowOptions): number {
   if (state === null) return 2;
 
   const env = opts.env ?? process.env;
-  const sessionId = opts.session ?? resolveSessionId(env);
+  const sessionId = opts.session ?? resolveSessionId(env, path.join(repo.value.repoRoot, '.caws'));
   const filePath = reprieveFileName(state.stateDir, sessionId);
 
   if (!fs.existsSync(filePath)) {
@@ -833,7 +846,7 @@ export function runReprieveRevokeCommand(opts: ReprieveRevokeOptions): number {
   }
 
   const env = opts.env ?? process.env;
-  const sessionId = opts.session ?? resolveSessionId(env);
+  const sessionId = opts.session ?? resolveSessionId(env, path.join(repo.value.repoRoot, '.caws'));
   const filePath = reprieveFileName(state.stateDir, sessionId);
 
   if (!fs.existsSync(filePath)) {
