@@ -7,12 +7,14 @@ created_at: '2026-08-08T01:03:29.133Z'
 updated_at: '2026-08-08T01:03:51.817Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/kernel/schemas/spec.v1.json
+    - packages/caws-cli/src/kernel/spec/validate-semantics.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/kernel/schemas/spec.v1.json
     - packages/caws-cli/src/kernel/spec/types.ts
     - packages/caws-cli/src/kernel/spec/rules.ts
@@ -28,13 +30,36 @@ scope:
     - .caws/specs/CAWS-SPEC-AC-EVIDENCE-AUTHORITY-01.yaml
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The spec YAML evidence: block is the CLOSURE AUTHORITY for "is this AC satisfied"; the ac_recorded event stream remains the immutable audit history. The close gate reads ONLY the spec block, never the event stream (mirrors the successors custody gate).'
+  - 'recordSpecEvidence dual-writes: it patches the spec evidence block (authority) AND appends an ac_recorded event (history) in one lifecycle transaction, so the two surfaces agree by construction rather than by later reconciliation.'
+  - 'A waiver is not a silent skip: status=waived requires waiver_reason (minLength 1) on the spec, paralleling successors[].disposition=declined where rationale is mandatory ("an undocumented decline is indistinguishable from an oversight").'
+  - 'Every evidence[].criterion_id must match a declared acceptance[].id — a typo that satisfies nothing is rejected at validation time.'
+  - 'The close gate runs BEFORE any byte mutation (same positioning as the successor custody gate), so a refusal writes nothing: no YAML mutation, no event.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'A spec with declared acceptance criteria (A1, A2) where A1 has an evidence entry with status=pass and A2 has status=waived (with waiver_reason).'
+    when: 'caws specs close is invoked.'
+    then: 'The close gate admits (both ACs satisfied: pass or waived-with-reason); the spec closes normally.'
+  - id: A2
+    given: 'A spec with declared acceptance criteria (A1, A2) where neither has an evidence entry.'
+    when: 'caws specs close is invoked.'
+    then: 'The close gate refuses (exit 1, no mutation) listing A1 and A2 as unsatisfied, with a narrowRepair naming the exact fix command.'
+  - id: A3
+    given: 'An active spec with a declared AC A1.'
+    when: 'caws specs evidence <spec> --ac A1 --status pass --evidence-ref "npm test" runs.'
+    then: 'The spec evidence block gains an entry for A1 (status=pass), AND an ac_recorded event is appended in the same transaction; recording again for A1 updates the entry (idempotent per criterion_id), not duplicates.'
+  - id: A4
+    given: 'A close attempt with --status waived but no --waiver-reason, OR an --ac id not in the spec acceptance block.'
+    when: 'caws specs evidence is invoked.'
+    then: 'The op refuses with a typed diagnostic (kernel semantic rule); no spec mutation, no event.'
+  - id: A5
+    given: 'A closed or archived spec.'
+    when: 'caws specs evidence is invoked on it.'
+    then: 'The op refuses (lifecycle frozen) with the same message shape as amend-scope on a closed spec.'
+non_functional:
+  reliability:
+    - 'recordSpecEvidence acquires the lifecycle lock; concurrent evidence records to the same spec serialize.'
+    - 'The close gate is pure (reads the parsed spec, no I/O) and placed before byte patching, matching the successor gate.'
 contracts:
   - name: 'ac-evidence-authority'
     type: behavior
