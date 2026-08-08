@@ -2,10 +2,11 @@ id: CAWS-FEAT-WORKTREE-MERGE-CLOSURE-NOTES-FLAG-01
 title: 'Add --closure-notes (and --reason/--notes/--note aliases) to caws worktree merge'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: wt-merge-notes
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-merge-notes at b290d86da73edc4addd2b7d2a90151d83f059aa7'
 created_at: '2026-08-08T01:17:51.091Z'
-updated_at: '2026-08-08T02:13:35.053Z'
+updated_at: '2026-08-08T02:33:49.418Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/worktree.ts
