@@ -1,7 +1,7 @@
-import { validateEventBody } from '../../src/evidence/validate';
-import { isErr, isOk } from '../../src/result';
-import { REQUIRES_SPEC_ID } from '../../src/evidence/types';
-import type { Actor } from '../../src/evidence/types';
+import { validateEventBody } from '../../../src/kernel/evidence/validate';
+import { isErr, isOk } from '../../../src/kernel/result';
+import { REQUIRES_SPEC_ID } from '../../../src/kernel/evidence/types';
+import type { Actor } from '../../../src/kernel/evidence/types';
 
 const ACTOR: Actor = { kind: 'agent', id: 'a', session_id: 's' };
 const TS = '2026-07-04T00:00:00.000Z';

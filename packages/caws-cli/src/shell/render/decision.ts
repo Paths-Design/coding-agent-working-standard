@@ -16,7 +16,7 @@
 // rule id stays the same in both cases — agents can rely on it as a stable
 // handle — but the human prose tells the user which repair to perform.
 
-import type { Decision } from '@paths.design/caws-kernel';
+import type { Decision } from '../../kernel';
 import type {
   AuthorityContextCandidate,
   ResolvedBinding,

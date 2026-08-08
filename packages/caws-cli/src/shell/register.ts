@@ -109,7 +109,7 @@ import {
   runWorktreeUntrackCommand,
   type EvidenceKind,
 } from './index';
-import type { LeaseReason } from '@paths.design/caws-kernel';
+import type { LeaseReason } from '../kernel';
 
 export interface RegisterShellCommandsOptions {
   /**

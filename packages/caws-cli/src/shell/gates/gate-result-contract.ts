@@ -21,7 +21,7 @@
 // Anything else is rejected. The command should only consume fields it has
 // validated.
 
-import { err, ok, type Diagnostic, type Result } from '@paths.design/caws-kernel';
+import { err, ok, type Diagnostic, type Result } from '../../kernel';
 
 import { storeDiagnostic } from '../../store/repo-root';
 import { SHELL_RULES } from '../rules';

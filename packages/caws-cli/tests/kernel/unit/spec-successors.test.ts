@@ -16,19 +16,19 @@
  *     a test asserts exactly that disagreement.
  */
 
-import { parseSpecYaml } from '../../src/spec/parse';
-import { validateSpecShape } from '../../src/spec/validate-shape';
-import { validateSpecSemantics } from '../../src/spec/validate-semantics';
-import { parseAndValidateSpec } from '../../src/spec';
-import { SPEC_RULES } from '../../src/spec/rules';
+import { parseSpecYaml } from '../../../src/kernel/spec/parse';
+import { validateSpecShape } from '../../../src/kernel/spec/validate-shape';
+import { validateSpecSemantics } from '../../../src/kernel/spec/validate-semantics';
+import { parseAndValidateSpec } from '../../../src/kernel/spec';
+import { SPEC_RULES } from '../../../src/kernel/spec/rules';
 import {
   createSuccessorResolver,
   findUnresolvedObligations,
   projectSuccessorsForEvent,
   type SpecCorpusEntry,
-} from '../../src/spec/successors';
-import { isOk, isErr } from '../../src/result/construct';
-import type { Spec } from '../../src/spec/types';
+} from '../../../src/kernel/spec/successors';
+import { isOk, isErr } from '../../../src/kernel/result/construct';
+import type { Spec } from '../../../src/kernel/spec/types';
 
 /** Build a tier-3 chore spec carrying an arbitrary successors block. */
 function specWith(successorsYaml: string, id = 'TEST-1'): string {

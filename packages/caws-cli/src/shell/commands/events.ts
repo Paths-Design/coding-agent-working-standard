@@ -42,7 +42,7 @@ import {
   isOk,
   prepareAppend,
   verifyChain,
-} from '@paths.design/caws-kernel';
+} from '../../kernel';
 
 import {
   loadEvents,

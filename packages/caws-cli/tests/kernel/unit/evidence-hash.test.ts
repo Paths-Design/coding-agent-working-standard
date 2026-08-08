@@ -9,15 +9,15 @@
  */
 
 import { createHash } from 'crypto';
-import { computeEventHash, type HashableEvent } from '../../src/evidence/hash';
-import { canonicalJson } from '../../src/evidence/canonical-json';
+import { computeEventHash, type HashableEvent } from '../../../src/kernel/evidence/hash';
+import { canonicalJson } from '../../../src/kernel/evidence/canonical-json';
 import {
   DOMAIN_SEPARATOR,
   HASH_REGEX,
   type Actor,
   type ChainedEvent,
   type Hash,
-} from '../../src/evidence/types';
+} from '../../../src/kernel/evidence/types';
 
 const actor: Actor = { kind: 'agent', id: 'a1', session_id: 's1', platform: 'test' };
 

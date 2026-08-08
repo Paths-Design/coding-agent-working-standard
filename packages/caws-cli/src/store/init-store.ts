@@ -53,8 +53,8 @@ import {
   type Diagnostic,
   type Policy,
   type Result,
-} from '@paths.design/caws-kernel';
-import { err, ok } from '@paths.design/caws-kernel';
+} from '../kernel';
+import { err, ok } from '../kernel';
 
 import { writeFileAtomic } from './atomic-write';
 import { storeDiagnostic } from './repo-root';

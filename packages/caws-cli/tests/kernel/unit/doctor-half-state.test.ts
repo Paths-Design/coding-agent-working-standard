@@ -17,12 +17,12 @@
  * lifecycle_state) cast through unknown — the standard kernel-test pattern.
  */
 
-import { inspectProjectState } from '../../src/doctor/inspect';
-import { DOCTOR_RULES } from '../../src/doctor/rules';
-import { computeEventHash } from '../../src/evidence/hash';
-import type { DoctorInput } from '../../src/doctor/types';
-import type { Spec } from '../../src/spec/types';
-import type { Actor, ChainedEvent, Hash } from '../../src/evidence/types';
+import { inspectProjectState } from '../../../src/kernel/doctor/inspect';
+import { DOCTOR_RULES } from '../../../src/kernel/doctor/rules';
+import { computeEventHash } from '../../../src/kernel/evidence/hash';
+import type { DoctorInput } from '../../../src/kernel/doctor/types';
+import type { Spec } from '../../../src/kernel/spec/types';
+import type { Actor, ChainedEvent, Hash } from '../../../src/kernel/evidence/types';
 
 // ─── Fixture builders ────────────────────────────────────────────────────
 

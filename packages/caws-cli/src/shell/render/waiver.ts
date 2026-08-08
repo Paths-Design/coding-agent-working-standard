@@ -18,7 +18,7 @@
 import type {
   Waiver,
   WaiverEffectiveness,
-} from '@paths.design/caws-kernel';
+} from '../../kernel';
 
 export interface RenderWaiverSummaryInput {
   readonly waiver: Waiver;

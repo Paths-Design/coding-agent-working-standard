@@ -40,8 +40,8 @@ import type {
   AgentRegistry,
   RegistryPatch,
   WorktreeRecord,
-} from '@paths.design/caws-kernel';
-import { err, ok, type Diagnostic, type Result } from '@paths.design/caws-kernel';
+} from '../kernel';
+import { err, ok, type Diagnostic, type Result } from '../kernel';
 
 import { writeFileAtomic } from './atomic-write';
 import { storeDiagnostic } from './repo-root';

@@ -15,12 +15,12 @@
  * hash + chain-verify like any other event.
  */
 
-import { validateEventBody } from '../../src/evidence/validate';
-import { computeEventHash } from '../../src/evidence/hash';
-import { verifyChain } from '../../src/evidence/verify';
-import { isOk, isErr } from '../../src/result';
-import { OPTIONAL_SPEC_ID, REQUIRES_SPEC_ID } from '../../src/evidence/types';
-import type { Actor, ChainedEvent, Hash } from '../../src/evidence/types';
+import { validateEventBody } from '../../../src/kernel/evidence/validate';
+import { computeEventHash } from '../../../src/kernel/evidence/hash';
+import { verifyChain } from '../../../src/kernel/evidence/verify';
+import { isOk, isErr } from '../../../src/kernel/result';
+import { OPTIONAL_SPEC_ID, REQUIRES_SPEC_ID } from '../../../src/kernel/evidence/types';
+import type { Actor, ChainedEvent, Hash } from '../../../src/kernel/evidence/types';
 
 const ACTOR: Actor = { kind: 'agent', id: 'a', session_id: 's' };
 const TS = '2026-06-15T00:00:00.000Z';

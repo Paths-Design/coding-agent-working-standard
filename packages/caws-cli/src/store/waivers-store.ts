@@ -23,7 +23,7 @@ import {
   type Diagnostic,
   type Result,
   type Waiver,
-} from '@paths.design/caws-kernel';
+} from '../kernel';
 
 import { writeFileAtomic } from './atomic-write';
 import { storeDiagnostic } from './repo-root';

@@ -57,7 +57,7 @@ import {
   refreshAgentClaim,
   updateAgentLeasePaths,
   type RegistryPatch,
-} from '@paths.design/caws-kernel';
+} from '../../kernel';
 
 import {
   applyLeasePatch,

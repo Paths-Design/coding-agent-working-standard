@@ -21,7 +21,7 @@ import type {
   BindingState,
   Spec,
   WorktreeRegistry,
-} from '@paths.design/caws-kernel';
+} from '../../kernel';
 
 export interface ResolveBindingInput {
   /** Repo root (from store/repo-root.ts, --git-common-dir based). */

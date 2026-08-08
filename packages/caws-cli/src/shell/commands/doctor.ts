@@ -25,8 +25,8 @@
 // receives a number. `registerShellCommands(program)` (Slice 5c.9) is the
 // only place that wires this to Commander.
 
-import type { Diagnostic, DoctorFinding } from '@paths.design/caws-kernel';
-import { DOCTOR_RULES, inspectProjectState } from '@paths.design/caws-kernel';
+import type { Diagnostic, DoctorFinding } from '../../kernel';
+import { DOCTOR_RULES, inspectProjectState } from '../../kernel';
 
 import { detectGitignoreDrift } from '../../init/gitignore-drift';
 import { detectBuildStaleness } from '../build-freshness';

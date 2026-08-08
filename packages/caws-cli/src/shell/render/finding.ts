@@ -5,7 +5,7 @@
 // is reading. The doctor command keeps store load diagnostics SEPARATE
 // from these findings (the renderer doesn't merge them).
 
-import type { DoctorFinding, FindingSeverity } from '@paths.design/caws-kernel';
+import type { DoctorFinding, FindingSeverity } from '../../kernel';
 
 const SEVERITY_RANK: Record<FindingSeverity, number> = {
   info: 0,

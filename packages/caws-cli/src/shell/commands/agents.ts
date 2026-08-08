@@ -44,7 +44,7 @@ import {
   type LeaseReason,
   type LeaseRegistry,
   type SessionIdentity,
-} from '@paths.design/caws-kernel';
+} from '../../kernel';
 
 import {
   applyLeasePatch,

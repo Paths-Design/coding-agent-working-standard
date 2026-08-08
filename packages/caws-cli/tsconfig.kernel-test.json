@@ -1,0 +1,40 @@
+// ts-jest config for the absorbed kernel tests (CAWS-ABSORB-KERNEL-01).
+//
+// The kernel's unit tests (now at tests/kernel/) compile against this config
+// via the jest `kernel` project's transform. It carries the kernel's full
+// build-time strictness for src/kernel/** (the correctness flags the kernel
+// always enforced) but drops the flags that fight test ergonomics
+// (noUnusedLocals/noUnusedParameters trip on arrange-only fixtures). This is
+// the direct successor of packages/caws-kernel/tsconfig.test.json, retargeted
+// to the absorbed location.
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "lib": ["ES2022"],
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    // Test ergonomics: arrange-only fixtures trip these.
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "types": ["node", "jest"]
+  },
+  "include": ["src/kernel/**/*.ts", "src/kernel/**/*.json", "tests/kernel/**/*.ts"]
+}

@@ -15,7 +15,7 @@
 // Severity bracket is fixed-width so output columns align. Rule id is
 // always present — agents key off it; the message is human prose only.
 
-import type { Diagnostic, Severity } from '@paths.design/caws-kernel';
+import type { Diagnostic, Severity } from '../../kernel';
 
 export interface RenderDiagnosticsOptions {
   /** Show the optional `data` block. Default false (keeps output tight). */

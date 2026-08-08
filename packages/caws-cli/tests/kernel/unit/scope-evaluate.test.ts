@@ -12,9 +12,9 @@
  *        NEVER admit. This is the load-bearing safety property.
  */
 
-import { evaluatePath, evaluatePathResult } from '../../src/scope/evaluate';
-import { SCOPE_RULES } from '../../src/scope/rules';
-import { isOk, isErr } from '../../src/result/construct';
+import { evaluatePath, evaluatePathResult } from '../../../src/kernel/scope/evaluate';
+import { SCOPE_RULES } from '../../../src/kernel/scope/rules';
+import { isOk, isErr } from '../../../src/kernel/result/construct';
 import { makePolicy, makeBound, UNBOUND, makeOneSided } from '../helpers/scope-fixtures';
 
 const policy = makePolicy();

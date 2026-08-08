@@ -45,7 +45,7 @@ import {
   type LeaseContext,
   type LeaseRegistry,
   type SessionIdentity,
-} from '@paths.design/caws-kernel';
+} from '../../kernel';
 import * as os from 'node:os';
 
 import {

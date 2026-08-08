@@ -44,7 +44,7 @@ import {
   ok,
   type Result,
   type Diagnostic,
-} from '@paths.design/caws-kernel';
+} from '../kernel';
 
 import { writeFileAtomic, fsyncDir } from './atomic-write';
 import { appendEvent } from './events-store';

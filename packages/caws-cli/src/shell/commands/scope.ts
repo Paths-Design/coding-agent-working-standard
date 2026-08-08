@@ -31,7 +31,7 @@ import {
   type Decision,
   type Policy,
   type Spec,
-} from '@paths.design/caws-kernel';
+} from '../../kernel';
 
 import { composeStoreSnapshot, resolveRepoRoot } from '../../store';
 import type { StoreSnapshot } from '../../store/types';

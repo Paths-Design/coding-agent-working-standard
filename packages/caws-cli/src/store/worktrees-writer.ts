@@ -40,7 +40,7 @@ import {
   type SessionIdentity,
   type Diagnostic,
   WORKTREE_NAME_REGEX,
-} from '@paths.design/caws-kernel';
+} from '../kernel';
 
 import { applyRegistryPatch } from './apply-patch';
 import { autoCommit, isPathDirty, type AutoCommitOutcome } from './git-autocommit';

@@ -11,13 +11,13 @@
  * the exact rules CLAUDE.md spec-authoring traps #3 and #6 reference.
  */
 
-import { parseSpecYaml } from '../../src/spec/parse';
-import { validateSpecShape } from '../../src/spec/validate-shape';
-import { validateSpecSemantics } from '../../src/spec/validate-semantics';
-import { parseAndValidateSpec } from '../../src/spec';
-import { SPEC_RULES } from '../../src/spec/rules';
-import { isOk, isErr } from '../../src/result/construct';
-import type { Spec } from '../../src/spec/types';
+import { parseSpecYaml } from '../../../src/kernel/spec/parse';
+import { validateSpecShape } from '../../../src/kernel/spec/validate-shape';
+import { validateSpecSemantics } from '../../../src/kernel/spec/validate-semantics';
+import { parseAndValidateSpec } from '../../../src/kernel/spec';
+import { SPEC_RULES } from '../../../src/kernel/spec/rules';
+import { isOk, isErr } from '../../../src/kernel/result/construct';
+import type { Spec } from '../../../src/kernel/spec/types';
 
 /**
  * A minimal VALID tier-3 chore spec. The schema requires: id, title,

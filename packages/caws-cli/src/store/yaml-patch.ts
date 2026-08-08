@@ -36,7 +36,7 @@
 //   etc.). This patcher does not interpret YAML semantics; it patches
 //   bytes.
 
-import { err, ok, type Result } from '@paths.design/caws-kernel';
+import { err, ok, type Result } from '../kernel';
 
 import { storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';

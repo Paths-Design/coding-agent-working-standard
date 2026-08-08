@@ -24,7 +24,7 @@
 // Each failure produces one violation with gate: 'spec_completeness'.
 // `caws-cli` shell decides whether to block based on policy.
 
-import type { Spec } from '@paths.design/caws-kernel';
+import type { Spec } from '../../../kernel';
 
 import type { GatesViolation } from '../gate-result-contract';
 

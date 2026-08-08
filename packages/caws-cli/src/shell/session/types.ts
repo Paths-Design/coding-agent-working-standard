@@ -20,7 +20,7 @@
 //
 // `agents.json last-active` is NEVER an authority source.
 
-import type { SessionIdentity } from '@paths.design/caws-kernel';
+import type { SessionIdentity } from '../../kernel';
 
 export type SessionSource =
   | 'claude_env'

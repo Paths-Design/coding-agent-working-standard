@@ -7,9 +7,9 @@
  * structure checks, not mocks.
  */
 
-import { ok, err, isOk, isErr } from '../../src/result/construct';
-import { map, flatMap, all } from '../../src/result/combinators';
-import type { Diagnostic } from '../../src/diagnostics/types';
+import { ok, err, isOk, isErr } from '../../../src/kernel/result/construct';
+import { map, flatMap, all } from '../../../src/kernel/result/combinators';
+import type { Diagnostic } from '../../../src/kernel/diagnostics/types';
 
 const warn = (rule: string): Diagnostic => ({
   severity: 'warning',

@@ -17,7 +17,7 @@
 //   - `actor.session_id` always mirrors the resolved session.
 //   - `actor.platform` always mirrors the resolved session.
 
-import type { Actor, ActorKind } from '@paths.design/caws-kernel';
+import type { Actor, ActorKind } from '../../kernel';
 import type { ResolvedSession } from './types';
 
 export interface BuildActorOptions {

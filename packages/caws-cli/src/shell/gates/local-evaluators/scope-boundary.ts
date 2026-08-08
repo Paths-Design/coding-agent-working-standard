@@ -13,8 +13,8 @@
 // "cannot decide" outcome consistent with the kernel's contract; the
 // caller's binding precondition is the authoritative gate.
 
-import { evaluatePath, type BindingState } from '@paths.design/caws-kernel';
-import type { Spec, Policy } from '@paths.design/caws-kernel';
+import { evaluatePath, type BindingState } from '../../../kernel';
+import type { Spec, Policy } from '../../../kernel';
 
 import type { GatesViolation } from '../gate-result-contract';
 import { listStagedChanges, type StagedFileChange } from './diff-helpers';

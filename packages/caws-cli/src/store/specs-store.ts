@@ -22,7 +22,7 @@ import {
   parseAndValidateSpec,
   type Diagnostic,
   type Spec,
-} from '@paths.design/caws-kernel';
+} from '../kernel';
 import { storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
 import { readYamlSource } from './yaml-store';

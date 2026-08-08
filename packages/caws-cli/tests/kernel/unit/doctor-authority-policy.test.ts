@@ -14,12 +14,12 @@
  * itself is regression-tested by doctor-half-state.test.ts.)
  */
 
-import { inspectProjectState } from '../../src/doctor/inspect';
-import { DOCTOR_RULES } from '../../src/doctor/rules';
-import { computeEventHash } from '../../src/evidence/hash';
-import type { DoctorInput } from '../../src/doctor/types';
-import type { Spec } from '../../src/spec/types';
-import type { Actor, ChainedEvent, Hash } from '../../src/evidence/types';
+import { inspectProjectState } from '../../../src/kernel/doctor/inspect';
+import { DOCTOR_RULES } from '../../../src/kernel/doctor/rules';
+import { computeEventHash } from '../../../src/kernel/evidence/hash';
+import type { DoctorInput } from '../../../src/kernel/doctor/types';
+import type { Spec } from '../../../src/kernel/spec/types';
+import type { Actor, ChainedEvent, Hash } from '../../../src/kernel/evidence/types';
 
 const NOW = new Date('2026-06-15T12:00:00.000Z');
 const ACTOR: Actor = { kind: 'agent', id: 'a', session_id: 's' };

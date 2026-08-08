@@ -20,7 +20,7 @@
 // docs/architecture/caws-vnext-command-surface.md invariant 14 and the
 // rotateEvents tolerant-scan helper in events-store.ts.
 
-import { err, ok, type Diagnostic, type Result } from '@paths.design/caws-kernel';
+import { err, ok, type Diagnostic, type Result } from '../kernel';
 import { storeDiagnostic } from './repo-root';
 
 // ---------------------------------------------------------------------------
