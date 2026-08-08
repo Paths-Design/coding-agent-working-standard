@@ -3,6 +3,7 @@ title: 'AC evidence authority: spec-resident evidence block + close gate'
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: wt-ac-evidence
 created_at: '2026-08-08T01:03:29.133Z'
 updated_at: '2026-08-08T01:03:51.817Z'
 blast_radius:
