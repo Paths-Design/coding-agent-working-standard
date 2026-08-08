@@ -92,6 +92,40 @@ function cleanEnv() {
   };
 }
 
+/**
+ * Write a worktree registry entry into .caws/worktrees.json so the resolver's
+ * cwd-ownership corroboration (resolveOwnerFromCwd) can match it. The `wtPath`
+ * defaults to a real dir under the repo's .caws/worktrees/<name> so realpath
+ * resolves it; pass an explicit path to model a worktree the caller is inside.
+ * CAWS-RESOLVER-CWD-OWNERSHIP-CORROBORATION-001.
+ */
+function writeWorktreeEntry(cawsDir, name, ownerSessionId, opts = {}) {
+  const wtPath = opts.path ?? path.join(cawsDir, 'worktrees', name);
+  fs.mkdirSync(wtPath, { recursive: true });
+  const registryPath = path.join(cawsDir, 'worktrees.json');
+  let registry = {};
+  if (fs.existsSync(registryPath)) {
+    try {
+      registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+    } catch {
+      registry = {};
+    }
+  }
+  registry[name] = {
+    specId: opts.specId ?? 'TEST-SPEC-01',
+    owner: {
+      session_id: ownerSessionId,
+      ...(opts.platform ? { platform: opts.platform } : {}),
+    },
+    branch: opts.branch ?? name,
+    baseBranch: 'main',
+    path: wtPath,
+    last_heartbeat: '2026-07-14T12:00:00Z',
+  };
+  fs.writeFileSync(registryPath, JSON.stringify(registry, null, 2) + '\n');
+  return wtPath;
+}
+
 // --- A1: per-surface env sources resolve at the right precedence ------------
 
 describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A1: per-surface env sources', () => {
@@ -256,6 +290,88 @@ describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A3: pointer advisory-on
     // The pointer selected sess_a's envelope; its platform flows through.
     expect(result.value.source).toBe('durable_hook_envelope');
     expect(result.value.identity.platform).toBe('codex');
+  });
+});
+
+// --- A3b: cwd-ownership corroboration (CAWS-RESOLVER-CWD-OWNERSHIP-CORROBORATION-001) ---
+//
+// A second, independent disambiguation path for the ≥2-fresh-envelope branch:
+// when the caller's cwd resolves (via the authoritative worktrees.json) to a
+// registered owner that IS one of the fresh candidates, the process is inside
+// its own bound worktree — positive evidence tying THIS process to that
+// candidate. This unblocks no-env-var callers (ZCode / generic harness / a
+// human terminal) that otherwise fall through to the ambiguity refusal.
+
+describe('CAWS-RESOLVER-CWD-OWNERSHIP-CORROBORATION-001 — A3b: cwd ownership', () => {
+  test('A3b-1: caller inside its own worktree resolves to that owner (no env var)', () => {
+    // Two fresh envelopes; the caller's cwd is inside a worktree owned by
+    // sess_a. NO env var is set (the ZCode / generic-harness case). Pre-fix
+    // this refused; post-fix the cwd corroborates sess_a and it resolves.
+    const { repoRoot, cawsDir, now } = makeProjectRoot();
+    writeEnvelope(cawsDir, 'sess_a', { platform: 'zcode' });
+    writeEnvelope(cawsDir, 'sess_b', { platform: 'codex' });
+    const wtPath = writeWorktreeEntry(cawsDir, 'wt-a', 'sess_a', {
+      platform: 'zcode',
+    });
+    const result = resolveSession({
+      cawsDir,
+      worktreeRoot: wtPath, // caller is inside sess_a's worktree
+      env: cleanEnv(), // no env var corroborates anything
+      now: () => now,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.value.identity.session_id).toBe('sess_a');
+    expect(result.value.source).toBe('durable_hook_envelope');
+    // The envelope's platform flows through (cwd owner platform is a fallback).
+    expect(result.value.identity.platform).toBe('zcode');
+  });
+
+  test('A3b-2: cwd owned by a NON-candidate still refuses (no manufactured selection)', () => {
+    // Two fresh envelopes (sess_a, sess_b), but the caller's worktree is owned
+    // by sess_c — a session that is NOT a fresh-envelope candidate. cwd
+    // ownership corroborates an existing candidate; it does not manufacture
+    // one, so the cross-ownership hazard stays refused.
+    const { repoRoot, cawsDir, now } = makeProjectRoot();
+    writeEnvelope(cawsDir, 'sess_a', { platform: 'zcode' });
+    writeEnvelope(cawsDir, 'sess_b', { platform: 'codex' });
+    const wtPath = writeWorktreeEntry(cawsDir, 'wt-c', 'sess_c', {
+      platform: 'claude-code',
+    });
+    const result = resolveSession({
+      cawsDir,
+      worktreeRoot: wtPath, // inside a worktree owned by sess_c (not a candidate)
+      env: cleanEnv(),
+      now: () => now,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.errors[0].rule).toMatch(/durable_envelope_ambiguous/);
+    expect(result.errors[0].data.candidateSessionIds).toEqual(
+      expect.arrayContaining(['sess_a', 'sess_b'])
+    );
+  });
+
+  test('A3b-3: canonical-checkout cwd (no worktree) still refuses (A3 preserved)', () => {
+    // Two fresh envelopes + an uncorroborated pointer, caller at the canonical
+    // checkout (worktreeRoot is cawsDir itself, which no registry entry
+    // contains). The cwd-ownership path no-ops, so A3 ambiguity refusal fires
+    // byte-identically. This is the regression guard for the existing A3
+    // behavior under the new corroboration path.
+    const { repoRoot, cawsDir, now } = makeProjectRoot();
+    writeEnvelope(cawsDir, 'sess_a', { platform: 'zcode' });
+    writeEnvelope(cawsDir, 'sess_b', { platform: 'codex' });
+    writeCallerPointer(cawsDir, repoRoot, 'sess_b');
+    // No worktree entry → cawsDir matches no worktree path.
+    const result = resolveSession({
+      cawsDir,
+      worktreeRoot: cawsDir, // canonical checkout, no worktree ancestor
+      env: cleanEnv(),
+      now: () => now,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.errors[0].rule).toMatch(/durable_envelope_ambiguous/);
+    expect(result.errors[0].data.candidateSessionIds).toEqual(
+      expect.arrayContaining(['sess_a', 'sess_b'])
+    );
   });
 });
 

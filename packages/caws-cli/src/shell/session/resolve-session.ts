@@ -68,10 +68,14 @@ import {
   ok,
   type Diagnostic,
   type Result,
+  type SessionIdentity,
+  type WorktreeRegistry,
+  type WorktreeRecord,
 } from '../../kernel';
 import { SHELL_RULES } from '../rules';
 import { writeFileAtomic } from '../../store/atomic-write';
-import { repoRootFromCawsDir, storeDiagnostic } from '../../store/repo-root';
+import { loadWorktrees } from '../../store';
+import { realpathSafe, repoRootFromCawsDir, storeDiagnostic } from '../../store/repo-root';
 import type {
   CandidateTraceEntry,
   ResolveCandidatesOptions,
@@ -318,6 +322,72 @@ function readCallerSessionPointerFromDir(args: {
     return null; // stale
   }
   return parsed.session_id;
+}
+
+/**
+ * CAWS-RESOLVER-CWD-OWNERSHIP-CORROBORATION-001
+ *
+ * Resolve the registered owner of the worktree the caller's cwd is inside,
+ * or null when the cwd is not inside any bound worktree.
+ *
+ * This is a CORROBORATING signal for the ≥2-fresh-envelope branch of
+ * resolveSession, NOT an independent identity source. When the caller is a
+ * no-env-var process (ZCode / generic harness / a human terminal) operating
+ * inside its own bound worktree, the registry's recorded owner for that
+ * worktree positively identifies THIS process's session — because only the
+ * owner operates inside a bound worktree. It selects an existing envelope
+ * candidate; it never manufactures one, never widens authority, and never
+ * relaxes the foreign-claim refusal.
+ *
+ * Mirrors the realpath-based containment match in
+ * shell/binding/resolve-binding.ts's findRegistryMatch: realpath both sides
+ * (realpathSafe returns its input on ENOENT, so this cannot raise), then find
+ * the entry whose path is an ancestor-or-equal of cwd. A canonical-checkout
+ * cwd matches no entry and returns null — leaving the A3 ambiguity refusal
+ * byte-identical for that case.
+ *
+ * loadWorktrees is fail-open (ok({}) on a missing worktrees.json), so an
+ * absent registry contributes no owner and the caller falls through as before.
+ */
+function resolveOwnerFromCwd(
+  cawsDir: string,
+  worktreeRoot: string
+): SessionIdentity | null {
+  const registryResult = loadWorktrees(cawsDir);
+  if (!registryResult.ok) return null;
+  const registry: WorktreeRegistry = registryResult.value;
+
+  const cwdReal = realpathSafe(worktreeRoot);
+  let best: WorktreeRecord | null = null;
+  let bestDepth = -1;
+  for (const record of Object.values(registry)) {
+    if (record === null || typeof record !== 'object') continue;
+    if (typeof record.path !== 'string') continue;
+    const recordReal = realpathSafe(record.path);
+    // Ancestor-or-equal: recordReal is cwdReal, or cwdReal is beneath it.
+    if (recordReal !== cwdReal) {
+      const withSep = recordReal.endsWith(path.sep)
+        ? recordReal
+        : recordReal + path.sep;
+      if (!cwdReal.startsWith(withSep)) continue;
+    }
+    const depth = recordReal.split(path.sep).length;
+    if (
+      depth > bestDepth ||
+      (depth === bestDepth && best !== null)
+    ) {
+      best = record;
+      bestDepth = depth;
+    }
+  }
+  if (best === null || best.owner === undefined) return null;
+  if (
+    typeof best.owner.session_id !== 'string' ||
+    best.owner.session_id.length === 0
+  ) {
+    return null;
+  }
+  return best.owner;
 }
 
 interface DurableEnvelopeShape {
@@ -944,8 +1014,55 @@ export function resolveSession(
           );
         }
       }
-      // Pointer present but uncorroborated → fall through to the ambiguity
-      // refusal. Do NOT silently select on the pointer alone.
+      // Pointer present but uncorroborated → fall through to the cwd-ownership
+      // corroboration below. Do NOT silently select on the pointer alone.
+    }
+
+    // CAWS-RESOLVER-CWD-OWNERSHIP-CORROBORATION-001: a SECOND, independent
+    // form of corroboration for the no-env-var case. The caller's cwd
+    // (worktreeRoot) resolves to a registered worktree owner via the
+    // authoritative .caws/worktrees.json registry. If that owner IS one of the
+    // fresh envelope candidates, the process is operating inside its own bound
+    // worktree — positive evidence tying THIS process (not a sibling) to that
+    // candidate. This is what unblocks ZCode / generic harnesses that export
+    // no session-id env var: a governed-write command run from inside the
+    // caller's own worktree resolves deterministically to its own identity,
+    // without the operator exporting CAWS_SESSION_ID.
+    //
+    // Safety (preserves every existing invariant):
+    //   - Never newest-wins: selection requires the cwd-derived owner to BE a
+    //     fresh candidate. It selects among existing candidates; it never
+    //     manufactures one.
+    //   - The env-var corroboration path above is byte-identical and runs
+    //     first; this is ADDITIONAL corroboration, not a replacement.
+    //   - Cannot widen authority: a foreign owner whose worktree the caller
+    //     sits in only matches if they are ALSO a fresh-envelope candidate —
+    //     and if they are, the envelope is theirs to resolve.
+    //   - A canonical-checkout cwd (no worktree ancestor) returns null here,
+    //     so the A3 "uncorroborated pointer refuses" behavior is unchanged.
+    const cwdOwner = resolveOwnerFromCwd(opts.cawsDir, opts.worktreeRoot);
+    if (cwdOwner !== null) {
+      const matches = envScan.candidates.filter(
+        (c) => c.envelope.session_id === cwdOwner.session_id
+      );
+      if (matches.length === 1) {
+        const mine = matches[0]!;
+        return ok(
+          {
+            identity: {
+              session_id: mine.envelope.session_id,
+              platform: mine.envelope.platform ?? cwdOwner.platform ?? 'claude-code',
+            },
+            source: 'durable_hook_envelope',
+            envelopePath: mine.envelopePath,
+          },
+          envScan.warnings.length > 0 ? envScan.warnings : undefined
+        );
+      }
+      // cwd resolves to an owner that is NOT a fresh-envelope candidate (or
+      // matches none / more than one): fall through to the ambiguity refusal.
+      // cwd ownership corroborates an envelope candidate; it does not override
+      // the candidate set.
     }
 
     const ids = envScan.candidates.map((c) => c.envelope.session_id);
@@ -953,7 +1070,7 @@ export function resolveSession(
     return err([
       diag(
         SHELL_RULES.SESSION_DURABLE_ENVELOPE_AMBIGUOUS,
-        `Multiple fresh durable hook envelopes match repo_root ${repoRoot}. The resolver cannot pick a winner. Disambiguate by setting CLAUDE_SESSION_ID, CLAUDE_CODE_SESSION_ID, CODEX_THREAD_ID, or CAWS_SESSION_ID to the current session's id, by routing through a hook context that sets HOOK_SESSION_ID, or by removing stale .caws/sessions/<id>/ directories (or legacy tmp/<id>/ dirs) for sessions that have ended.`,
+        `Multiple fresh durable hook envelopes match repo_root ${repoRoot}. The resolver cannot pick a winner. Disambiguate by setting CLAUDE_SESSION_ID, CLAUDE_CODE_SESSION_ID, CODEX_THREAD_ID, or CAWS_SESSION_ID to the current session's id, by routing through a hook context that sets HOOK_SESSION_ID, by running from inside your own bound worktree (caws worktree create), or by removing stale .caws/sessions/<id>/ directories (or legacy tmp/<id>/ dirs) for sessions that have ended.`,
         {
           repoRoot,
           candidateCount: envScan.candidates.length,
