@@ -34,7 +34,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws events`](#caws-events) — Read and maintain .caws/events.jsonl (list/show/rotate/migrate/verify-archive)
 - [`caws waiver`](#caws-waiver) — Manage CAWS waivers (bounded exception records that suppress matching gate violations)
 - [`caws reprieve`](#caws-reprieve) — Session-scoped guard reprieve: skip a PreToolUse guard for ONE session until a stated expiry. Use when a session legitimately needs to do what a guard blocks (e.g. editing a hook script) WITHOUT disabling it for every other session. Distinct from `caws waiver`: a reprieve skips a HOOK guard at dispatch time (operational cache, session-scoped, expiring); a waiver bypasses a GATE at policy-run time (governance state, kernel-adjudicated). Replaces the anti-pattern of commenting a guard out of the dispatcher HANDLERS array.
-- [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/amend-scope/close/reopen/archive/prune-archive/migrate/validate)
+- [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate)
 - [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.
 - [`caws agents`](#caws-agents) — Agent liveness substrate: register/heartbeat/stop/list/show/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.
 - [`caws message`](#caws-message) — Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/poll/inbox/history/prune directed messages between running sessions, addressed by session id, over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
@@ -410,7 +410,7 @@ List active guard reprieves across sessions, with each one's handlers, expiry, a
 
 ## `caws specs`
 
-Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/amend-scope/close/reopen/archive/prune-archive/migrate/validate)
+Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate)
 
 **Options:**
 
@@ -558,6 +558,25 @@ Close an active spec. Non-destructive raw-byte YAML patch; appends spec_closed e
 - `--superseded-by <id>` — Spec id that supersedes this one (use with --resolution superseded)
 - `--data` — Show structured data block on diagnostics
 
+### `caws specs evidence <id>`
+
+Record per-criterion verified status (AC evidence) on the spec's evidence: block — the CLOSURE AUTHORITY read by the close gate. Dual-writes: patches the spec block AND appends an ac_recorded event in one transaction. The close gate requires each declared AC to have status pass or waived before close; this is the governed way to populate it. Active/draft only (a closed/archived spec's evidence is frozen).
+
+**Argument:** `id` (required) — Active or draft spec id to record evidence for
+
+**Options:**
+
+- `--ac <id>` (**required**) — Acceptance criterion id (e.g. A1); must match a declared acceptance[].id
+- `--status <s>` (**required**) — Verified status. pass/waived satisfy the close gate; fail/unchecked are recorded for audit but do not satisfy closure: pass | fail | unchecked | waived
+- `--evidence-ref <ref>` — Reference to the evidence (test command, artifact path, or waiver id). Required unless --status waived (where --waiver-reason supplies it)
+- `--waiver-reason <text>` — Mandatory when --status waived — an undocumented waiver is indistinguishable from an oversight
+- `--test-nodeid <id>` — Optional: specific test node id (jest/vitest/pytest) when status was determined by test execution
+- `--command <cmd>` — Optional: the command run to determine status
+- `--exit-code <n>` — Optional: exit code of the command run
+- `--artifact-path <path>` — Optional: artifact path evidencing the criterion
+- `--commit-sha <sha>` — Optional: commit sha (7-40 hex chars) evidencing the criterion
+- `--data` — Show structured data block on diagnostics
+
 ### `caws specs reopen <id>`
 
 Reopen a closed spec (closed -> active), the inverse of close. Removes resolution/closure_notes/superseded_by so the active spec is valid; leaves the spec unbound (re-bind with caws worktree create/bind). Appends spec_reopened event.
@@ -692,7 +711,12 @@ Merge a worktree branch into its base. Auto-closes the bound spec via caws specs
 **Options:**
 
 - `--dry-run` — Validate prerequisites only; no git, no file writes, no events
+- `--apply` — Run the dry-run gate, then merge if ready (collapses --dry-run + real merge into one call). Refuses with findings if not ready; never forces.
 - `--message <text>` — Custom merge commit message (default: merge(worktree): <name>)
+- `--closure-notes <text>` — Closure notes written to the bound spec on auto-close (replaces the machine stub). Mirrors caws specs close.
+- `--reason <text>` — Alias for --closure-notes
+- `--notes <text>` — Alias for --closure-notes
+- `--note <text>` — Alias for --closure-notes
 - `--data` — Show structured data block on diagnostics
 
 ### `caws worktree migrate-registry`
