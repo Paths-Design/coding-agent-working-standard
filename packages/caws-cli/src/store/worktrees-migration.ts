@@ -33,7 +33,7 @@
 //   - Repair half-states (lives in PRUNE-REPAIR-WORKTREE-001 after
 //     authority closes).
 
-import { err, isOk, ok, type Diagnostic, type Result } from '@paths.design/caws-kernel';
+import { err, isOk, ok, type Diagnostic, type Result } from '../kernel';
 import { storeDiagnostic } from './repo-root';
 
 // ---- Stable rule ids ------------------------------------------------------

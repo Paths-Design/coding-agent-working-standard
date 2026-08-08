@@ -42,7 +42,7 @@ import {
   projectSuccessorsForEvent,
   type SpecCorpusEntry,
   type UnresolvedObligation,
-} from '@paths.design/caws-kernel';
+} from '../kernel';
 
 import { appendEvent, loadEvents } from './events-store';
 import { loadSpecs } from './specs-store';

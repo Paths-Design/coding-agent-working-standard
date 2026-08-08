@@ -42,7 +42,7 @@ import {
   type Diagnostic,
   type Waiver,
   type WaiverEffectiveness,
-} from '@paths.design/caws-kernel';
+} from '../../kernel';
 
 import {
   loadWaivers,

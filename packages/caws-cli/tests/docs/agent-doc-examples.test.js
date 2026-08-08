@@ -58,7 +58,9 @@ const EVIDENCE_SCHEMA_BY_TYPE = {
 function loadSchema(file) {
   return JSON.parse(
     fs.readFileSync(
-      path.join(ROOT, 'packages/caws-kernel/src/schemas/events', file),
+      // CAWS-ABSORB-KERNEL-01: kernel schemas moved from packages/caws-kernel/src/schemas
+      // to packages/caws-cli/src/kernel/schemas when the kernel was absorbed into the CLI.
+      path.join(ROOT, 'packages/caws-cli/src/kernel/schemas/events', file),
       'utf8'
     )
   );

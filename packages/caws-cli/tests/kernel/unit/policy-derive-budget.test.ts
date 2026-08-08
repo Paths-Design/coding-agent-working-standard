@@ -14,10 +14,10 @@
  * them; you do not hand-edit change_budget).
  */
 
-import { deriveBudget } from '../../src/policy/derive-budget';
-import { POLICY_RULES } from '../../src/policy/rules';
-import { isOk, isErr } from '../../src/result/construct';
-import type { Policy, Waiver } from '../../src/policy/types';
+import { deriveBudget } from '../../../src/kernel/policy/derive-budget';
+import { POLICY_RULES } from '../../../src/kernel/policy/rules';
+import { isOk, isErr } from '../../../src/kernel/result/construct';
+import type { Policy, Waiver } from '../../../src/kernel/policy/types';
 
 const NOW = '2026-06-13T12:00:00.000Z';
 

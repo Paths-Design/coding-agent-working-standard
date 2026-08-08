@@ -9,10 +9,10 @@
  * validation (those have their own suites).
  */
 
-import type { Policy } from '../../src/policy/types';
-import type { Scope } from '../../src/spec/types';
-import type { BindingState } from '../../src/worktree/types';
-import type { Spec } from '../../src/spec/types';
+import type { Policy } from '../../../src/kernel/policy/types';
+import type { Scope } from '../../../src/kernel/spec/types';
+import type { BindingState } from '../../../src/kernel/worktree/types';
+import type { Spec } from '../../../src/kernel/spec/types';
 
 /** A Policy with the evaluator-relevant fields set; the rest is inert filler. */
 export function makePolicy(overrides: Partial<Policy> = {}): Policy {

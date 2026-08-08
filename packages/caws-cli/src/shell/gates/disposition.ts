@@ -18,7 +18,7 @@
 // names are surfaced separately as `unmatchedViolations` so the renderer
 // can show them, but they do NOT drive policy disposition.
 
-import type { Policy } from '@paths.design/caws-kernel';
+import type { Policy } from '../../kernel';
 
 import type { GatesReport, GatesViolation } from './gate-result-contract';
 

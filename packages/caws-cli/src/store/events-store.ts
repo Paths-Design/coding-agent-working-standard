@@ -32,7 +32,7 @@ import {
   type Diagnostic,
   type EventBody,
   type Result,
-} from '@paths.design/caws-kernel';
+} from '../kernel';
 import { sleepSyncMs, storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
 import type { EventsLoadResult } from './types';

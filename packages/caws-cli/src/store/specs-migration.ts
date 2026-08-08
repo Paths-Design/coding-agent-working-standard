@@ -37,7 +37,7 @@ import {
   type LifecycleMapping,
   type MigrateOutcome,
   type Result,
-} from '@paths.design/caws-kernel';
+} from '../kernel';
 import { writeFileAtomic } from './atomic-write';
 import { repoRootFromCawsDir, storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';

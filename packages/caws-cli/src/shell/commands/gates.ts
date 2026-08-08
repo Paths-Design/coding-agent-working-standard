@@ -44,7 +44,7 @@ import {
   type GateConfig,
   type Policy,
   type Waiver,
-} from '@paths.design/caws-kernel';
+} from '../../kernel';
 
 import {
   appendEvent,

@@ -15,18 +15,18 @@
  * reliance on wall-clock) — the non_functional.reliability requirement.
  */
 
-import { canTransitionSpecWithWorktree } from '../../src/worktree/transitions';
-import { heartbeatAge, isStaleByTTL, refreshAgentClaim } from '../../src/worktree/freshness';
-import { WORKTREE_RULES } from '../../src/worktree/rules';
-import { isOk, isErr } from '../../src/result/construct';
-import type { Spec } from '../../src/spec/types';
+import { canTransitionSpecWithWorktree } from '../../../src/kernel/worktree/transitions';
+import { heartbeatAge, isStaleByTTL, refreshAgentClaim } from '../../../src/kernel/worktree/freshness';
+import { WORKTREE_RULES } from '../../../src/kernel/worktree/rules';
+import { isOk, isErr } from '../../../src/kernel/result/construct';
+import type { Spec } from '../../../src/kernel/spec/types';
 import type {
   SpecTransition,
   WorktreeRegistry,
   AgentRecord,
   AgentRegistry,
   SessionIdentity,
-} from '../../src/worktree/types';
+} from '../../../src/kernel/worktree/types';
 
 const spec = { id: 'SPEC-1' } as unknown as Spec;
 

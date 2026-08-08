@@ -32,7 +32,7 @@ import {
   type EventType,
   isOk,
   verifyChain,
-} from '@paths.design/caws-kernel';
+} from '../../kernel';
 
 import { appendEvent, loadEvents, resolveRepoRoot } from '../../store';
 import { buildActor } from '../session/actor';
@@ -199,11 +199,18 @@ export function evidenceRecordExampleCommand(kind: EvidenceKind): string {
 
 function schemaPathCandidates(eventType: EventType): readonly string[] {
   const schemaFile = `${eventType}.v1.json`;
-  const kernelMain = require.resolve('@paths.design/caws-kernel');
-  const kernelDistDir = path.dirname(kernelMain);
+  // CAWS-ABSORB-KERNEL-01: the kernel is now a local sibling at src/kernel/
+  // (source) and dist/kernel/ (built), not a workspace package. This file
+  // lives at src/shell/commands/ (depth 3) / dist/shell/commands/ (built),
+  // so the kernel schemas resolve two levels up: ../../kernel/schemas/events.
+  // Cover both the built layout (this file under dist/) and the source layout
+  // (ts-jest running this against src/) — the relative shape is identical.
+  const kernelSchemasDir = path.resolve(__dirname, '..', '..', 'kernel', 'schemas', 'events');
   return [
-    path.join(kernelDistDir, 'schemas', 'events', schemaFile),
-    path.join(kernelDistDir, '..', 'src', 'schemas', 'events', schemaFile),
+    path.join(kernelSchemasDir, schemaFile),
+    // Legacy fallback: source layout under packages/caws-kernel (no longer
+    // present after absorption, but harmless if a stale checkout has it).
+    path.join(kernelSchemasDir, '..', '..', 'src', 'schemas', 'events', schemaFile),
   ];
 }
 

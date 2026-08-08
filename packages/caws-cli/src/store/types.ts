@@ -20,7 +20,7 @@ import type {
   Spec,
   Waiver,
   WorktreeRegistry,
-} from '@paths.design/caws-kernel';
+} from '../kernel';
 
 // ----------------------------------------------------------------------------
 // SpecsLoadResult — output of specs-store.loadSpecs

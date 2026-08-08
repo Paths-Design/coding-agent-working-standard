@@ -24,7 +24,7 @@
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-import { deriveBindingState } from '@paths.design/caws-kernel';
+import { deriveBindingState } from '../../kernel';
 
 import { realpathSafe } from '../../store/repo-root';
 

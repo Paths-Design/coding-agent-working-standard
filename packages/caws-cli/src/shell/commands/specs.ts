@@ -26,7 +26,7 @@ import {
   type Actor,
   type ActorKind,
   type Diagnostic,
-} from '@paths.design/caws-kernel';
+} from '../../kernel';
 
 import { resolveRepoRoot, runSpecsMigrateApply } from '../../store';
 import type {
@@ -53,8 +53,8 @@ import {
   SPECS_LIST_STATUSES,
   type SpecsListStatus,
 } from '../../store/specs-writer';
-import type { LifecycleMapping } from '@paths.design/caws-kernel';
-import { SPEC_MODES, SPEC_RESOLUTIONS } from '@paths.design/caws-kernel';
+import type { LifecycleMapping } from '../../kernel';
+import { SPEC_MODES, SPEC_RESOLUTIONS } from '../../kernel';
 import * as fs from 'node:fs';
 import { buildActor } from '../session/actor';
 import { resolveSession } from '../session/resolve-session';

@@ -11,7 +11,7 @@ import {
   ok,
   type Result,
   type WorktreeRegistry,
-} from '@paths.design/caws-kernel';
+} from '../kernel';
 import { readJsonFile } from './json-store';
 import { storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';

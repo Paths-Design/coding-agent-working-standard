@@ -26,7 +26,7 @@ import {
   type Diagnostic,
   type Result,
   type Severity,
-} from '@paths.design/caws-kernel';
+} from '../kernel';
 import { STORE_RULES } from './rules';
 
 // ----------------------------------------------------------------------------

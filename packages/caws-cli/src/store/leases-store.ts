@@ -43,7 +43,7 @@ import {
   type LeasePatch,
   type LeaseRegistry,
   type Result,
-} from '@paths.design/caws-kernel';
+} from '../kernel';
 
 import { writeFileAtomic } from './atomic-write';
 import { storeDiagnostic } from './repo-root';

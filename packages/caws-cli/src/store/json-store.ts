@@ -2,7 +2,7 @@
 // missing/malformed via discrete rule ids.
 
 import * as fs from 'fs';
-import { err, ok, type Result } from '@paths.design/caws-kernel';
+import { err, ok, type Result } from '../kernel';
 import { storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
 

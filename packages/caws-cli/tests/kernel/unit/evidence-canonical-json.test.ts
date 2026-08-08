@@ -8,8 +8,8 @@
  * or silently emits null for NaN is killed.
  */
 
-import { canonicalJson, EvidenceCanonicalError } from '../../src/evidence/canonical-json';
-import { EVIDENCE_RULES } from '../../src/evidence/rules';
+import { canonicalJson, EvidenceCanonicalError } from '../../../src/kernel/evidence/canonical-json';
+import { EVIDENCE_RULES } from '../../../src/kernel/evidence/rules';
 
 describe('canonicalJson: primitives', () => {
   test('null/booleans/strings/finite numbers', () => {

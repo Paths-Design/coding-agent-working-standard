@@ -30,7 +30,7 @@ import {
   isOk,
   type Spec,
   type WorktreeRecord,
-} from '@paths.design/caws-kernel';
+} from '../../kernel';
 
 import { loadSpecs, loadWorktrees, realpathSafe, resolveRepoRoot, runGit, writeFileAtomic } from '../../store';
 import { composeDoctorSnapshot } from '../../store/doctor-snapshot';

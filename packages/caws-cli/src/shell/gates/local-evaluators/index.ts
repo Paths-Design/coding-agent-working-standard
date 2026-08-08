@@ -19,7 +19,7 @@
 // Each evaluator returns the same `GatesViolation[]` shape the
 // downstream disposition/waiver pipeline consumes.
 
-import type { Spec, Policy } from '@paths.design/caws-kernel';
+import type { Spec, Policy } from '../../../kernel';
 
 import type { GatesViolation } from '../gate-result-contract';
 import { evaluateBudgetLimit } from './budget-limit';

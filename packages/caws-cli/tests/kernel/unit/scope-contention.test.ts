@@ -10,9 +10,9 @@
  * NOT collapse to `clear`.
  */
 
-import { evaluateContention } from '../../src/scope/contention';
-import type { Spec } from '../../src/spec/types';
-import type { WorktreeRegistry } from '../../src/worktree/types';
+import { evaluateContention } from '../../../src/kernel/scope/contention';
+import type { Spec } from '../../../src/kernel/spec/types';
+import type { WorktreeRegistry } from '../../../src/kernel/worktree/types';
 
 function spec(id: string, scopeIn: string[], lifecycle: Spec['lifecycle_state'] = 'active'): Spec {
   return {

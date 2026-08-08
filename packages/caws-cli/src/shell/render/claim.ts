@@ -20,8 +20,8 @@ import type {
   PriorOwner,
   SessionIdentity,
   WorktreeRecord,
-} from '@paths.design/caws-kernel';
-import { heartbeatAge, isStaleByTTL } from '@paths.design/caws-kernel';
+} from '../../kernel';
+import { heartbeatAge, isStaleByTTL } from '../../kernel';
 
 export type OwnershipRelation = 'you' | 'foreign' | 'unowned';
 

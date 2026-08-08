@@ -1,18 +1,18 @@
-// caws-cli vNext typecheck config.
+// caws-cli vNext build/typecheck config.
 //
-// Cross-package resolution of @paths.design/caws-kernel is handled at the
-// task-graph layer, not at the tsconfig layer. turbo.json declares
-// `typecheck.dependsOn: ["^build"]`, which runs caws-kernel's `tsc` build
-// before this typecheck runs. The kernel's emitted dist/index.d.ts is then
-// resolved via npm workspaces' node_modules symlink the same way a published
-// consumer would resolve it.
+// CAWS-ABSORB-KERNEL-01: the kernel (formerly packages/caws-kernel) is now
+// absorbed into this package at src/kernel/. This config compiles the whole
+// src/ tree (store + shell + kernel) into dist/ in one tsc pass — no separate
+// kernel build, no workspace dependency, no cross-package resolution. The
+// former "validates the published surface via the workspace symlink" rationale
+// is moot: the kernel has no external consumer and is not published.
 //
-// Rationale (per CI-KERNEL-WORKSPACE-TYPECHECK-001 triage, Option 2):
-// validates the same artifact downstream consumers receive (kernel's
-// exports, declaration emit, files entry). A `paths` mapping pointing
-// directly at packages/caws-kernel/src/index.ts would be faster for inner-
-// loop typechecks, but would bypass the kernel's published surface and
-// could mask issues that only manifest after declaration emit.
+// Strictness: carries the kernel's full correctness flag set
+// (noImplicitReturns, noFallthroughCasesInSwitch, isolatedModules,
+// resolveJsonModule — the JSON schemas at src/kernel/schemas/*.json are
+// imported by validate-shape.ts and emitted to dist/ via resolveJsonModule)
+// for the whole src tree. The CLI's existing store/shell code benefits from
+// the same flags.
 {
   "compilerOptions": {
     "target": "ES2022",
@@ -21,6 +21,10 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
     "noUnusedLocals": true,
     "noUnusedParameters": false,
     "esModuleInterop": true,
@@ -33,5 +37,5 @@
     "rootDir": "src",
     "types": ["node"]
   },
-  "include": ["src/store/**/*.ts", "src/shell/**/*.ts"]
+  "include": ["src/store/**/*.ts", "src/shell/**/*.ts", "src/kernel/**/*.ts"]
 }

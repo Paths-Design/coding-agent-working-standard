@@ -229,6 +229,6 @@ if (require.main === module) {
 // legacy `generateWorkingSpec` / `validateGeneratedSpec` helpers were
 // part of v10.x's exported API; v11 ships only the binary entry point
 // and exposes no JS exports from this module. Programmatic consumers
-// should depend on `@paths.design/caws-kernel` (pure logic) or the
+// should depend on `./kernel` (pure logic) or the
 // `dist/shell` / `dist/store` modules directly.
 module.exports = {};

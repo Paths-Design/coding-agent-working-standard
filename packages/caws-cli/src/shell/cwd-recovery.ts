@@ -22,7 +22,7 @@
 
 import * as fs from 'fs';
 
-import type { DoctorFinding } from '@paths.design/caws-kernel';
+import type { DoctorFinding } from '../kernel';
 
 import { loadLeases } from '../store/leases-store';
 import { storeDiagnostic } from '../store/repo-root';

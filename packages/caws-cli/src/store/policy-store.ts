@@ -10,7 +10,7 @@ import {
   isOk,
   parseAndValidatePolicy,
   type Diagnostic,
-} from '@paths.design/caws-kernel';
+} from '../kernel';
 import { STORE_RULES } from './rules';
 import { readYamlSource } from './yaml-store';
 import type { PolicyLoadResult } from './types';

@@ -16,7 +16,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { err, ok, type Result } from '@paths.design/caws-kernel';
+import { err, ok, type Result } from '../kernel';
 import { storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
 

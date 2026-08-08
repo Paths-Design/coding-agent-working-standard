@@ -18,7 +18,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import type { DoctorFinding } from '@paths.design/caws-kernel';
+import type { DoctorFinding } from '../kernel';
 
 import { storeDiagnostic } from '../store/repo-root';
 

@@ -68,7 +68,7 @@ import {
   ok,
   type Diagnostic,
   type Result,
-} from '@paths.design/caws-kernel';
+} from '../../kernel';
 import { SHELL_RULES } from '../rules';
 import { writeFileAtomic } from '../../store/atomic-write';
 import { repoRootFromCawsDir, storeDiagnostic } from '../../store/repo-root';

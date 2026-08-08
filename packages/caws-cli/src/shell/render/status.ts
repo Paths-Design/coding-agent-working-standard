@@ -33,7 +33,7 @@ import type {
   Spec,
   SessionIdentity,
   WorktreeRegistry,
-} from '@paths.design/caws-kernel';
+} from '../../kernel';
 
 import type { ResolvedBinding } from '../binding/types';
 import type { ResolvedSession } from '../session/types';

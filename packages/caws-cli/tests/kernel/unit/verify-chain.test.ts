@@ -17,11 +17,11 @@
  * The detector is pure (no I/O), so these are deterministic in-memory tests.
  */
 
-import { verifyChain } from '../../src/evidence/verify';
-import { computeEventHash } from '../../src/evidence/hash';
-import { isErr, isOk } from '../../src/result';
-import { EVIDENCE_RULES } from '../../src/evidence/rules';
-import { type Actor, type ChainedEvent, type Hash } from '../../src/evidence/types';
+import { verifyChain } from '../../../src/kernel/evidence/verify';
+import { computeEventHash } from '../../../src/kernel/evidence/hash';
+import { isErr, isOk } from '../../../src/kernel/result';
+import { EVIDENCE_RULES } from '../../../src/kernel/evidence/rules';
+import { type Actor, type ChainedEvent, type Hash } from '../../../src/kernel/evidence/types';
 
 const actor: Actor = { kind: 'agent', id: 'a1', session_id: 's1', platform: 'test' };
 

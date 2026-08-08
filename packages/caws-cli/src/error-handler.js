@@ -309,7 +309,7 @@ function getRecoverySuggestions(error, category, context = {}) {
     case ERROR_CATEGORIES.VALIDATION:
       suggestions.push('Run: caws doctor for spec and policy drift detection');
       suggestions.push('Run: caws gates run --spec <id> for policy and quality gates');
-      suggestions.push('Check .caws/specs/<id>.yaml against the spec schema in packages/caws-kernel');
+      suggestions.push('Check .caws/specs/<id>.yaml against the spec schema in packages/caws-cli/src/kernel/schemas/spec.v1.json');
       break;
 
     case ERROR_CATEGORIES.CONFIGURATION:
@@ -545,7 +545,7 @@ const TROUBLESHOOTING_GUIDES = {
       'Run: caws doctor — drift detection over .caws/ state',
       'Inspect the failing spec at .caws/specs/<id>.yaml directly',
       'Compare against existing specs in .caws/specs/ for shape',
-      'See packages/caws-kernel for the canonical spec schema',
+      'See packages/caws-cli/src/kernel/schemas/spec.v1.json for the canonical spec schema',
     ],
     commands: [
       'caws doctor',

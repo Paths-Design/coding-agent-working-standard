@@ -33,7 +33,7 @@ import {
   RISK_TIERS,
   SPEC_MODES,
   SPEC_RESOLUTIONS,
-} from '@paths.design/caws-kernel';
+} from '../kernel';
 import { SPECS_LIST_STATUSES } from '../store/specs-writer';
 import { KNOWN_SURFACES } from '../init/hook-packs/register';
 

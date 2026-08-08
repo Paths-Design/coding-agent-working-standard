@@ -18,13 +18,13 @@
  *       and --takeover still yields the takeover_claim patch + prior_owners.
  */
 
-import { assertOwnership } from '../../src/worktree/ownership';
-import { WORKTREE_RULES } from '../../src/worktree/rules';
-import { isOk, isErr } from '../../src/result/construct';
+import { assertOwnership } from '../../../src/kernel/worktree/ownership';
+import { WORKTREE_RULES } from '../../../src/kernel/worktree/rules';
+import { isOk, isErr } from '../../../src/kernel/result/construct';
 import type {
   SessionIdentity,
   WorktreeRegistry,
-} from '../../src/worktree/types';
+} from '../../../src/kernel/worktree/types';
 
 const NOW = new Date('2026-07-30T12:00:00Z');
 

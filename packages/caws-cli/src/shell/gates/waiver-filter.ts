@@ -34,7 +34,7 @@
 import {
   effectiveWaiversForGate,
   type Waiver,
-} from '@paths.design/caws-kernel';
+} from '../../kernel';
 
 import type { GatesReport, GatesViolation } from './gate-result-contract';
 

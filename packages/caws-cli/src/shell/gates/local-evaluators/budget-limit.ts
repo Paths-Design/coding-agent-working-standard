@@ -12,8 +12,8 @@
 // risk-tier budget enforcement in the CLI where the active spec and
 // staged diff are authoritative.
 
-import type { Spec } from '@paths.design/caws-kernel';
-import type { Policy } from '@paths.design/caws-kernel';
+import type { Spec } from '../../../kernel';
+import type { Policy } from '../../../kernel';
 
 import type { GatesViolation } from '../gate-result-contract';
 import { listStagedChanges, totalInsertions, type StagedFileChange } from './diff-helpers';

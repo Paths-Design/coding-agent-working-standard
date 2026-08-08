@@ -28,7 +28,7 @@ import {
   type DoctorInput,
   type GitWorktreeEntry,
   type TemplateCheck,
-} from '@paths.design/caws-kernel';
+} from '../kernel';
 import { loadAgents } from './agents-store';
 import { loadEvents } from './events-store';
 import { loadLeases } from './leases-store';
