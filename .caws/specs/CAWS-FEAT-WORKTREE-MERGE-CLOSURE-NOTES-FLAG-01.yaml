@@ -1,0 +1,32 @@
+id: CAWS-FEAT-WORKTREE-MERGE-CLOSURE-NOTES-FLAG-01
+title: 'Add --closure-notes (and --reason/--notes/--note aliases) to caws worktree merge'
+risk_tier: 2
+mode: feature
+lifecycle_state: active
+created_at: '2026-08-08T01:17:51.091Z'
+updated_at: '2026-08-08T01:17:51.091Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/worktree.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/store/worktrees-writer.ts'
+    - 'packages/caws-cli/tests/store/lifecycle-rollback-harness.test.js'
+    - 'packages/caws-cli/tests/shell/worktree-merge.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'worktree-merge-closure-notes-flag'
+    type: behavior
