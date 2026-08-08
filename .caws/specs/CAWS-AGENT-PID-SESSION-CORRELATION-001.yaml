@@ -81,15 +81,26 @@ invariants:
     only its own.
   - >-
     FAIL-OPEN. A missing record, an unfound agent ancestor (unknown surface or
-    unsupported platform), a stale record, or a PID-reuse start-time mismatch
-    falls through to the existing env→envelope→capsule chain. No new refusal
-    modes are introduced; existing A3 ambiguity-refusal behavior is preserved
-    when no agent-PID record matches.
+    unsupported platform), or a PID-reuse start-time mismatch falls through to
+    the existing env→envelope→capsule chain. No new refusal modes are
+    introduced; existing A3 ambiguity-refusal behavior is preserved when no
+    agent-PID record matches.
   - >-
-    PID-REUSE GUARDED BY START-TIME. The record stores the agent process's
-    start time (started_at); the read side validates the live process at that
-    PID still has a matching start time before trusting the record. This closes
-    the residual PID-reuse window that a freshness floor alone leaves.
+    NO FRESHNESS WINDOW (refinement). Unlike the durable-envelope tier, this
+    record is keyed to a SPECIFIC LIVE PROCESS — resolve_agent_pid walked to it
+    from $$, so it is alive by construction. Validity is liveness (the walk) +
+    the start-time match, NOT time-since-last-fire. A record written days ago
+    for a process still running (same start time) is authoritative regardless
+    of age — this is what lets a session leave its worktree and return after
+    any gap. last_seen_at is still WRITTEN (refresh hygiene + future cleanup
+    heuristics) but is NOT consulted on the read path. (The envelope tier needs
+    a freshness window because it is a shared scan set; this tier is per-PID
+    and per-process, so the window would reject provably-valid records.)
+  - >-
+    PID-REUSE GUARDED BY START-TIME (the SOLE validity gate). The record stores
+    the agent process's start time (started_at); the read side validates the
+    live process at that PID still has a matching start time before trusting
+    the record. A reused PID has a different start time → rejected.
   - >-
     SHELL + TS PARITY. The shell resolver (lib/session-id.sh) and the TS
     resolver (resolve-session.ts) gain the agent-PID tier at the SAME
