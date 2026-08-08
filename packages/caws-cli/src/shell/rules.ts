@@ -33,6 +33,11 @@ export const SHELL_RULES = {
   // invocations where the env var doesn't propagate.
   SESSION_RESOLVED_FROM_DURABLE_ENVELOPE:
     'shell.session.resolved_from_durable_envelope',
+  // CAWS-AGENT-PID-SESSION-CORRELATION-001: priority 2.4 between hook_env and
+  // the durable envelope. Resolves canonical-checkout callers (no env var) by
+  // keying on the agent process PID — a stable, per-session-unique ancestor.
+  SESSION_RESOLVED_FROM_AGENT_PID:
+    'shell.session.resolved_from_agent_pid',
   /** Refusal: two or more fresh durable envelopes match the current
    *  repo_root. The resolver cannot pick a winner; the operator must
    *  disambiguate (set CLAUDE_SESSION_ID, or route through a hook

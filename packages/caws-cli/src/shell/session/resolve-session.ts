@@ -1065,7 +1065,7 @@ export function resolveSession(
   const agentPidIdentity = resolveAgentPidIdentity({
     cawsDir: opts.cawsDir,
     env,
-    now: opts.now,
+    ...(opts.now !== undefined ? { now: opts.now } : {}),
     ...(opts.agentProcessNames !== undefined ? { processNames: opts.agentProcessNames } : {}),
     ...(opts.agentPidWalkFn !== undefined ? { pidWalkFn: opts.agentPidWalkFn } : {}),
   });
@@ -1346,6 +1346,11 @@ export function describeSessionSource(s: ResolvedSession): Diagnostic {
       return infoDiag(
         SHELL_RULES.SESSION_RESOLVED_FROM_HOOK_ENV,
         `Session identity from HOOK_SESSION_ID env (Claude Code hook envelope): ${s.identity.session_id}`
+      );
+    case 'agent_pid_record':
+      return infoDiag(
+        SHELL_RULES.SESSION_RESOLVED_FROM_AGENT_PID,
+        `Session identity from agent-PID correlation record: ${s.identity.session_id}`
       );
     case 'durable_hook_envelope':
       return infoDiag(
