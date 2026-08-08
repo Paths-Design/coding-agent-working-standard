@@ -28,6 +28,7 @@ export type SessionSource =
   | 'codex_thread_env'
   | 'caws_env'
   | 'hook_env'
+  | 'agent_pid_record'
   | 'durable_hook_envelope'
   | 'capsule'
   | 'cursor_env'
@@ -226,4 +227,17 @@ export interface ResolveSessionOptions {
    * crypto-backed implementation. Injected for deterministic tests.
    */
   readonly mintIdSuffix?: () => string;
+  /**
+   * CAWS-AGENT-PID-SESSION-CORRELATION-001: override the per-surface process
+   * names used by the agent-PID tier (defaults to parsing
+   * CAWS_AGENT_PROCESS_NAMES from env). Injected for deterministic tests so
+   * the PID-walk need not run against a real process tree.
+   */
+  readonly agentProcessNames?: readonly string[];
+  /**
+   * CAWS-AGENT-PID-SESSION-CORRELATION-001: override the PID-walk used by the
+   * agent-PID tier. Returns the located agent PID + its start time, or null.
+   * Injected for deterministic tests (the default walks `ps`).
+   */
+  readonly agentPidWalkFn?: (names: readonly string[]) => { pid: number; startEpoch: number | null } | null;
 }

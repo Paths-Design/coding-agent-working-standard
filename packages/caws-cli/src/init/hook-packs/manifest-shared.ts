@@ -209,7 +209,16 @@ import type { HookPackV1 } from './types';
 // runtime tool ids in the PostToolUse plan-file trigger and gains chats/
 // transcript fallback candidates. Design validated against a real 1377-row
 // qwen transcript and sterling's harness_qwen adapter port.
-export const SHARED_PACK_VERSION = 32;
+//
+// Version 33: CAWS-AGENT-PID-SESSION-CORRELATION-001. New lib/agent-pid.sh
+// (harness-agnostic PID-walk + record read); agent-surface.sh gains a
+// CAWS_AGENT_PROCESS_NAMES column per surface; parse-input.sh writes an
+// agent-pid-<pid>.json correlation record on every hook event; session-id.sh
+// consults it as a new tier before the capsule fallback; the TS resolver
+// (resolve-session.ts) and reprieve.ts consult the same read. Closes the
+// canonical-checkout identity gap for harnesses that export no session-id
+// env var (ZCode and generic harnesses).
+export const SHARED_PACK_VERSION = 33;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.
@@ -342,6 +351,18 @@ export const SHARED_PACK: HookPackV1 = {
       // session" through ONE env-var chain that mirrors the TS resolver.
       destPath: '.caws/hooks/lib/session-id.sh',
       sourcePath: 'lib/session-id.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      // CAWS-AGENT-PID-SESSION-CORRELATION-001: harness-agnostic agent-PID
+      // correlation core (PID-walk + record read). Sourced best-effort by
+      // session-id.sh's new tier and by parse-input.sh's writer. The per-
+      // surface match set (CAWS_AGENT_PROCESS_NAMES) lives in agent-surface.sh
+      // — the single adapter — so this core carries no harness-specific
+      // knowledge.
+      destPath: '.caws/hooks/lib/agent-pid.sh',
+      sourcePath: 'lib/agent-pid.sh',
       executable: false,
       managed: true,
     },

@@ -117,13 +117,8 @@ resolve_caws_session_id() {
     printf '%s\n' "$CURSOR_TRACE_ID"
     return 0
   fi
-  # Tier 3 (CAWS-SESSION-SHELL-RESOLVER-CAPSULE-001): the durable capsule. This
-  # is the shell mirror of resolve-session.ts's tier-3 readCapsule — the same
-  # .caws/sessions/caws-<id>.json file caws worktree create records as the owner.
-  # Reached when the env chain misses (agent-Bash subshells carry no identity env
-  # var), so the resolver stops returning "unknown" for the owner's own process.
-  # Bounded: CAWS_PROJECT_DIR or this script's repo root, one glob, first match.
-  # Fail-opens to "unknown" when no capsule exists.
+  # Resolve the .caws dir (needed by the agent-PID and capsule tiers).
+  # Reused below by both — compute once.
   local _caws_sid_dir="${CAWS_PROJECT_DIR:-}"
   if [[ -z "$_caws_sid_dir" || "$_caws_sid_dir" == "." ]]; then
     local _caws_self="${BASH_SOURCE[0]:-}"
@@ -131,6 +126,40 @@ resolve_caws_session_id() {
       _caws_sid_dir="$(cd "$(dirname "$_caws_self")/../../.." 2>/dev/null && pwd)"
     fi
   fi
+  # Tier 2.8 (CAWS-AGENT-PID-SESSION-CORRELATION-001): the agent-PID
+  # correlation record. Reached when the env chain misses — exactly the case
+  # for harnesses that export no session-id env var (ZCode / generic). The
+  # agent process is a stable, per-session-unique ANCESTOR of this process;
+  # its PID keys a record the hook wrote (parse-input.sh's
+  # _write_agent_pid_record) carrying the authoritative HOOK_SESSION_ID.
+  # This is the canonical-checkout identity bridge — it resolves BEFORE the
+  # capsule tier so the first-match-wins capsule fallback can no longer
+  # silently misattribute. Fail-opens (prints nothing, continues) on any
+  # miss: missing record, unfound agent ancestor (unknown surface),
+  # stale record, or PID-reuse start-time mismatch.
+  if [[ -n "$_caws_sid_dir" ]]; then
+    # Source agent-pid.sh if the read function isn't already defined (a
+    # caller may have sourced session-id.sh without it). Best-effort.
+    if ! declare -F read_session_id_from_agent_pid >/dev/null 2>&1; then
+      local _caws_self2="${BASH_SOURCE[0]:-}"
+      [[ -n "$_caws_self2" ]] && source "$(dirname "$_caws_self2")/agent-pid.sh" 2>/dev/null || true
+    fi
+    if declare -F read_session_id_from_agent_pid >/dev/null 2>&1; then
+      local _caws_pid_sid
+      _caws_pid_sid="$(read_session_id_from_agent_pid \
+        "${_caws_sid_dir}/.caws" "${CAWS_AGENT_PROCESS_NAMES:-}")"
+      if [[ -n "$_caws_pid_sid" && "$_caws_pid_sid" != "unknown" ]]; then
+        printf '%s\n' "$_caws_pid_sid"
+        return 0
+      fi
+    fi
+  fi
+  # Tier 3 (CAWS-SESSION-SHELL-RESOLVER-CAPSULE-001): the durable capsule. This
+  # is the shell mirror of resolve-session.ts's tier-3 readCapsule — the same
+  # .caws/sessions/caws-<id>.json file caws worktree create records as the owner.
+  # Reached when the env chain AND the agent-PID tier miss, so the resolver
+  # stops returning "unknown" for the owner's own process. Bounded: one glob,
+  # first match. Fail-opens to "unknown" when no capsule exists.
   if [[ -n "$_caws_sid_dir" ]]; then
     local _caws_capsule
     # First caws-*.json capsule (skip dotfiles like .caller-session.json). The
