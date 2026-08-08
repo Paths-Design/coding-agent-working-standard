@@ -64,21 +64,27 @@ resolve_under() {
   assert_output "sess-via-agent-pid"
 }
 
-@test "session-id: a stale agent-PID record is skipped -> unknown (A7-3, fail-open)" {
+@test "session-id: a stale-but-alive agent-PID record STILL resolves (A7-3, no freshness gate)" {
+  # REFINEMENT (CAWS-AGENT-PID-SESSION-CORRELATION-001): this tier has NO
+  # freshness window. A record is valid as long as its named PID is alive
+  # (the walk reached it) and its start time matches — regardless of age.
+  # Plant a record with an ancient last_seen_at but a MATCHING start time;
+  # it must still resolve. This is the "leave and return after any gap" case.
   local anchor_pid
   anchor_pid="$(stable_ancestor_pid)"
   [[ -n "$anchor_pid" ]] || skip "no '$STABLE_ANCESTOR' ancestor found"
 
   local sess_dir="$CAWS_TEST_REPO/.caws/sessions"
   mkdir -p "$sess_dir"
-  # last_seen_at 10 days ago -> outside the 24h window.
-  printf '{"agent_pid":%s,"session_id":"sess-stale","last_seen_at":"2026-07-01T00:00:00Z","started_at":null}\n' \
-    "$anchor_pid" > "$sess_dir/agent-pid-${anchor_pid}.json"
+  local start_epoch
+  start_epoch=$(ps -o lstart= -p "$anchor_pid" 2>/dev/null | { read -r a b c d e; date -d "$a $b $c $d $e" +%s 2>/dev/null || date -jf '%a %b %d %T %Y' "$a $b $c $d $e" +%s 2>/dev/null || echo ""; } || echo "")
+  # last_seen_at 10 days ago, but started_at matches the LIVE process.
+  printf '{"agent_pid":%s,"session_id":"sess-long-idle","last_seen_at":"2026-07-01T00:00:00Z","started_at":%s}\n' \
+    "$anchor_pid" "${start_epoch:-null}" > "$sess_dir/agent-pid-${anchor_pid}.json"
 
-  # No capsule either -> the resolver bottoms out at "unknown".
   resolve_under "$CAWS_TEST_REPO" "$STABLE_ANCESTOR"
   assert_success
-  assert_output "unknown"
+  assert_output "sess-long-idle"
 }
 
 @test "session-id: empty process names (unknown surface) -> skips the tier (A7-5)" {

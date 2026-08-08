@@ -449,12 +449,16 @@ describe('CAWS-AGENT-PID-SESSION-CORRELATION-001 — A7: agent-PID tier', () => 
     expect(result.value.source).toBe('agent_pid_record');
   });
 
-  test('A7-3: stale agent-PID record falls through to the envelope scan (fail-open)', () => {
-    // A record whose last_seen_at is outside the 24h window is treated as
-    // stale and ignored — the resolver falls through to the existing chain.
+  test('A7-3: stale-but-alive agent-PID record STILL resolves (no freshness gate)', () => {
+    // REFINEMENT (CAWS-AGENT-PID-SESSION-CORRELATION-001): this tier has NO
+    // freshness window. A record is valid as long as its named PID is alive
+    // (the walk reached it) and its start time matches — regardless of how
+    // long ago last_seen_at was. This is the "leave the worktree, return
+    // after any gap" case: the agent process is unchanged, so the record is
+    // authoritative. Pre-refinement this failed open (stale); now it resolves.
     const { cawsDir, now } = makeProjectRoot();
     writeEnvelope(cawsDir, 'sess_a', { platform: 'zcode' });
-    writeAgentPidRecord(cawsDir, 4242, 'sess_stale', {
+    writeAgentPidRecord(cawsDir, 4242, 'sess-long-idle', {
       lastSeenAt: '2026-07-01T00:00:00Z', // 13 days before the fixed clock
       startedAt: 1700,
     });
@@ -464,12 +468,13 @@ describe('CAWS-AGENT-PID-SESSION-CORRELATION-001 — A7: agent-PID tier', () => 
       env: cleanEnv(),
       now: () => now,
       agentProcessNames: ['zcode-cli'],
+      // The walk finds PID 4242 with a MATCHING start time — alive + same
+      // process, despite the ancient last_seen_at. Must resolve.
       agentPidWalkFn: () => ({ pid: 4242, startEpoch: 1700 }),
     });
-    // Did NOT resolve via the agent-PID tier (stale). sess_a's single envelope
-    // resolves instead (the scan admits it as the sole candidate).
     expect(result.ok).toBe(true);
-    expect(result.value.source).not.toBe('agent_pid_record');
+    expect(result.value.identity.session_id).toBe('sess-long-idle');
+    expect(result.value.source).toBe('agent_pid_record');
   });
 
   test('A7-4: PID-reuse (start-time mismatch) falls through (fail-open)', () => {

@@ -37,9 +37,10 @@
 # agent ancestor; this core is unchanged.
 #
 # FAIL-OPEN. Every path returns empty (no identity) on any miss — missing
-# record, unfound ancestor, stale record, PID-reuse start-time mismatch — so
-# callers fall through to the existing env→envelope→capsule chain. No new
-# refusal modes.
+# record, unfound ancestor, or PID-reuse start-time mismatch — so callers
+# fall through to the existing env→envelope→capsule chain. No new refusal
+# modes. (A record's age is NOT a miss condition: validity is liveness + the
+# start-time match, not time-since-last-fire.)
 #
 # IDEMPOTENT: safe to source multiple times.
 
@@ -52,11 +53,6 @@ _CAWS_AGENT_PID_SH_LOADED=1
 # lib/session-id.sh's capsule tier) and the per-session <sid>/ subdirs that
 # hold .session-envelope.json. Files are flat: <sessions>/agent-pid-<pid>.json.
 CAWS_AGENT_PID_PREFIX="agent-pid-"
-
-# Freshness window — mirrors DURABLE_ENVELOPE_FRESHNESS_MS (24h). A record
-# older than this is treated as stale and ignored (never deleted by the read
-# path; cleanup is operator-driven or via the hook overwriting on next fire).
-CAWS_AGENT_PID_FRESHNESS_S=$((24 * 60 * 60))
 
 # resolve_agent_pid — walk up the current process's PID tree until an ancestor's
 # comm (basename) matches one of the space-separated names in $1. Prints the
@@ -118,11 +114,21 @@ resolve_agent_pid_with_start() {
 
 # read_session_id_from_agent_pid — the read-side of the correlation. Resolves
 # the current process's agent PID (via CAWS_AGENT_PROCESS_NAMES), reads
-# <sessions>/agent-pid-<pid>.json, and validates: freshness (last_seen_at
-# within the window) + PID-reuse guard (the live process at <pid> still has a
-# start time matching the record's started_at, when started_at is present).
+# <sessions>/agent-pid-<pid>.json, and validates the PID-reuse guard (the live
+# process at <pid> still has a start time matching the record's started_at).
 # Prints the session_id and returns 0 on a valid match; prints nothing and
 # returns 1 on any miss.
+#
+# NO FRESHNESS WINDOW (CAWS-AGENT-PID-SESSION-CORRELATION-001 refinement).
+# Unlike the durable-envelope tier, this record is keyed to a SPECIFIC LIVE
+# PROCESS — resolve_agent_pid just walked to it from $$, so it is alive by
+# construction. Validity is established by liveness (the walk) + the start-time
+# match (guards against PID reuse), NOT by time-since-last-fire. A record
+# written days ago for a process that is still running (same start time) is
+# authoritative regardless of age. This is what lets a session leave its
+# worktree and return after any gap: the agent process is unchanged, so the
+# record is valid. last_seen_at is still WRITTEN (refresh hygiene + future
+# cleanup heuristics) but is NOT consulted on the read path.
 #
 # $1 = cawsDir (the .caws dir; the sessions/ subdir under it holds the records).
 # $2 = CAWS_AGENT_PROCESS_NAMES (the per-surface match set; required).
@@ -143,14 +149,14 @@ read_session_id_from_agent_pid() {
 
   # One python call: read + validate + emit session_id. Validates:
   #   - shape (session_id is a non-empty string)
-  #   - freshness (last_seen_at within window)
   #   - PID-reuse (started_at, if present and start_epoch known, must match)
+  # No freshness check — see the function header for why this tier omits it.
   # Emits only the session_id on success; emits nothing on any validation
   # failure (fail-open — the caller falls through to the existing chain).
   local sid
-  sid=$(python3 - "$record" "${start_epoch:-}" "$CAWS_AGENT_PID_FRESHNESS_S" <<'PY' 2>/dev/null || true
-import json, sys, time
-record_path, live_start, freshness_s = sys.argv[1], sys.argv[2], int(sys.argv[3])
+  sid=$(python3 - "$record" "${start_epoch:-}" <<'PY' 2>/dev/null || true
+import json, sys
+record_path, live_start = sys.argv[1], sys.argv[2]
 try:
     with open(record_path) as f:
         d = json.load(f)
@@ -159,14 +165,6 @@ except Exception:
 sid = d.get("session_id")
 if not isinstance(sid, str) or not sid:
     sys.exit(0)
-now = time.time()
-last_seen = d.get("last_seen_at")
-try:
-    ls = time.mktime(time.strptime(last_seen, "%Y-%m-%dT%H:%M:%SZ")) if last_seen else None
-except Exception:
-    ls = None
-if ls is None or (now - ls) > freshness_s:
-    sys.exit(0)  # stale
 rec_start = d.get("started_at")
 if rec_start and live_start:
     try:
