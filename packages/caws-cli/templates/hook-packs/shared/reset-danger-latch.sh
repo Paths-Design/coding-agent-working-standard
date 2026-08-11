@@ -70,7 +70,18 @@ _caws_canonical_root() {
   # when the helper is unavailable or git is absent.
   if declare -F caws_canonical_state_dir >/dev/null 2>&1; then
     local hinted
-    hinted="$(caws_canonical_state_dir "${CAWS_PROJECT_DIR:-$PROJECT_DIR}" "${CAWS_VENDOR_DIR:-.claude}")"
+    # CAWS-RESET-LATCH-CWD-DEPENDENT-LOOKUP-001 (recurrence,
+    # CAWS-DEFECT-RED-SUITE-TRIAGE-01): agent-surface.sh sets
+    # CAWS_PROJECT_DIR="." when it cannot resolve an absolute root, and "." is
+    # non-empty so `${CAWS_PROJECT_DIR:-$PROJECT_DIR}` never falls back — the
+    # helper then fail-opens to the RELATIVE "./<vendor>/hooks/state", the
+    # search root becomes ".", and the reset searches whatever cwd the human
+    # is standing in. Treat "." (and empty) as unset: anchor at PROJECT_DIR
+    # (derived from this script's own install location above), which is
+    # absolute and git-walks to the canonical root on its own.
+    local start="${CAWS_PROJECT_DIR:-}"
+    [[ -z "$start" || "$start" == "." ]] && start="$PROJECT_DIR"
+    hinted="$(caws_canonical_state_dir "$start" "${CAWS_VENDOR_DIR:-.claude}")"
     # caws_canonical_state_dir returns <root>/<vendor>/hooks/state; recover the
     # root by chopping the trailing /<vendor>/hooks/state (two levels: the
     # vendor dir + hooks/state).

@@ -225,7 +225,15 @@ import type { HookPackV1 } from './types';
 // decision (observed live: "PreToolUse hook returned updatedInput without
 // permissionDecision:allow"). No guard logic changes; opt-out surfaces
 // (kimi-code, qwen-code) still pass commands through unrewritten.
-export const SHARED_PACK_VERSION = 34;
+//
+// Version 35: CAWS-DEFECT-RED-SUITE-TRIAGE-01. reset-danger-latch.sh's
+// _caws_canonical_root treats agent-surface.sh's CAWS_PROJECT_DIR="."
+// fallback as unset (it is non-empty, so `${CAWS_PROJECT_DIR:-$PROJECT_DIR}`
+// never fell back and the vendor-state-dir search anchored at the operator's
+// cwd — a recurrence of CAWS-RESET-LATCH-CWD-DEPENDENT-LOOKUP-001 through
+// the MULTIVENDOR helper path). Search root is again the hooks install /
+// canonical git root. No mode, warn-marker, or audit-log behavior changes.
+export const SHARED_PACK_VERSION = 35;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.

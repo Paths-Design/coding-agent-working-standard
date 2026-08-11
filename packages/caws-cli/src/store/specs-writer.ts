@@ -1113,23 +1113,6 @@ export function closeSpec(
   const idValidation = validateSpecId(input.id);
   if (!idValidation.ok) return idValidation;
 
-  // CAWS-GUARD-ALLOWLIST-SYNC-001 (Defect 2): a spec must not close without
-  // closure notes. An absent or whitespace-only reason is refused BEFORE any
-  // byte mutation or spec_closed event — the spec stays active and the event
-  // log stays clean. The mergeWorktree → closeSpec auto-close path always
-  // supplies a non-empty machine stub reason (preserveExistingNotes: true),
-  // so it is unaffected; this guards the agent/operator-driven close path.
-  const trimmedReason = (input.reason ?? '').trim();
-  if (trimmedReason.length === 0) {
-    return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        `Spec "${input.id}" cannot close without closure notes. A spec close must record what was done and why (--reason / --closure-notes / --notes / --note on the shell command; the "reason" field on closeSpec). Closing silently loses the audit trail and costs downstream agents loops.`,
-        { subject: input.id }
-      )
-    );
-  }
-
   const targetPath = specPath(cawsDir, input.id);
   if (!fs.existsSync(targetPath)) {
     // TOMBSTONE-SHELL-TEST-RECONCILIATION-001: archived-id detection
@@ -1193,6 +1176,28 @@ export function closeSpec(
   const spec = parsed.value;
   if (spec.lifecycle_state !== 'active') {
     return nonActiveCloseSpecError(input.id, spec.lifecycle_state);
+  }
+
+  // CAWS-GUARD-ALLOWLIST-SYNC-001 (Defect 2): a spec must not close without
+  // closure notes. An absent or whitespace-only reason is refused BEFORE any
+  // byte mutation or spec_closed event — the spec stays active and the event
+  // log stays clean. The mergeWorktree → closeSpec auto-close path always
+  // supplies a non-empty machine stub reason (preserveExistingNotes: true),
+  // so it is unaffected; this guards the agent/operator-driven close path.
+  //
+  // Ordered AFTER the lifecycle-state check (CAWS-DEFECT-RED-SUITE-TRIAGE-01):
+  // an already-closed spec must get the state-aware refusal naming
+  // reopen/show/archive/recover, not the notes-required error — the state
+  // diagnostic is the actionable one for a spec that cannot transition.
+  const trimmedReason = (input.reason ?? '').trim();
+  if (trimmedReason.length === 0) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${input.id}" cannot close without closure notes. A spec close must record what was done and why (--reason / --closure-notes / --notes / --note on the shell command; the "reason" field on closeSpec). Closing silently loses the audit trail and costs downstream agents loops.`,
+        { subject: input.id }
+      )
+    );
   }
 
   // CAWS-SPEC-SUCCESSOR-DECLARATION-CUSTODY-01: the successor close gate.

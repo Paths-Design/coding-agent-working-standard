@@ -220,7 +220,10 @@ describe('reset-danger-latch resolves its state dir independently of cwd', () =>
 
     // The absolute searched path is the evidence that distinguishes "searched
     // the right tree, nothing armed" from "searched the wrong tree entirely".
-    expect(out).toMatch(/searched:/);
+    // The wording is the MULTIVENDOR-001 form (also pinned by
+    // tests/hooks/bats/reset-danger-latch.bats); this regex drifted from the
+    // pre-multivendor "(searched: <dir>)" phrasing.
+    expect(out).toMatch(/searched vendor state dirs:/);
     expect(out).toContain(stateDir);
   });
 
