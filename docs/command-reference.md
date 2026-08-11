@@ -567,7 +567,7 @@ Record per-criterion verified status (AC evidence) on the spec's evidence: block
 **Options:**
 
 - `--ac <id>` (**required**) — Acceptance criterion id (e.g. A1); must match a declared acceptance[].id
-- `--status <s>` (**required**) — Verified status. pass/waived satisfy the close gate; fail/unchecked are recorded for audit but do not satisfy closure: pass | fail | unchecked | waived
+- `--status <s>` — Verified status (required). pass/waived satisfy the close gate; fail/unchecked are recorded for audit but do not satisfy closure: pass | fail | unchecked | waived
 - `--evidence-ref <ref>` — Reference to the evidence (test command, artifact path, or waiver id). Required unless --status waived (where --waiver-reason supplies it)
 - `--waiver-reason <text>` — Mandatory when --status waived — an undocumented waiver is indistinguishable from an oversight
 - `--test-nodeid <id>` — Optional: specific test node id (jest/vitest/pytest) when status was determined by test execution

@@ -1208,7 +1208,7 @@ export function registerShellCommands(
         id: string,
         opts: {
           ac: string;
-          status: string;
+          status?: string;
           evidenceRef?: string;
           waiverReason?: string;
           testNodeid?: string;
@@ -1217,12 +1217,21 @@ export function registerShellCommands(
           artifactPath?: string;
           commitSha?: string;
           data?: boolean;
-        }
+        },
+        command: Command
       ) => {
+        // Same parent-shadow class as CAWS-CLI-SPECS-ARCHIVE-STATUS-PARENT-SHADOW-001:
+        // the specs group declares a group-level `--status` (and `--data`), so a
+        // `--status` after the leaf name binds to the PARENT and `opts.status`
+        // here is always undefined on the real parse path. optsWithGlobals()
+        // surfaces the effective value regardless of which command it bound to.
+        // The handler owns the missing/invalid --status check (the option is
+        // deliberately not commander-required — see command-metadata.ts).
+        const globals = command.optsWithGlobals() as { status?: string; data?: boolean };
         const code = runSpecsEvidenceCommand({
           id,
           ac: opts.ac,
-          status: opts.status as 'pass' | 'fail' | 'unchecked' | 'waived',
+          status: globals.status as 'pass' | 'fail' | 'unchecked' | 'waived',
           ...(opts.evidenceRef !== undefined ? { evidenceRef: opts.evidenceRef } : {}),
           ...(opts.waiverReason !== undefined ? { waiverReason: opts.waiverReason } : {}),
           ...(opts.testNodeid !== undefined ? { testNodeid: opts.testNodeid } : {}),
@@ -1230,7 +1239,7 @@ export function registerShellCommands(
           ...(opts.exitCode !== undefined ? { exitCode: Number(opts.exitCode) } : {}),
           ...(opts.artifactPath !== undefined ? { artifactPath: opts.artifactPath } : {}),
           ...(opts.commitSha !== undefined ? { commitSha: opts.commitSha } : {}),
-          showData: opts.data === true,
+          showData: globals.data === true,
         });
         exit(code);
       }

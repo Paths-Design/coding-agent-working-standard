@@ -5,7 +5,10 @@
  */
 
 const path = require('path');
-const chalk = require('chalk');
+// chalk 5.x is ESM-only; under Node's require(esm) the callable instance is
+// on `.default` (see error-handler.js for the same interop).
+const chalkModule = require('chalk');
+const chalk = chalkModule.default || chalkModule;
 
 // Import detection utilities
 const { detectCAWSSetup } = require('../utils/detection');

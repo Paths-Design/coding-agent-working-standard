@@ -1321,7 +1321,9 @@ export function runSpecsEvidenceCommand(opts: SpecsEvidenceOptions): number {
 
   if (!isEvidenceStatus(opts.status)) {
     err(
-      `caws specs evidence: invalid --status. Got ${JSON.stringify(opts.status)}; expected one of ${EVIDENCE_STATUSES.join('|')}.`
+      opts.status === undefined
+        ? `caws specs evidence: missing --status (required). Expected one of ${EVIDENCE_STATUSES.join('|')}.`
+        : `caws specs evidence: invalid --status. Got ${JSON.stringify(opts.status)}; expected one of ${EVIDENCE_STATUSES.join('|')}.`
     );
     return 1;
   }

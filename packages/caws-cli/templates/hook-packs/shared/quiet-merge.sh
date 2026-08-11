@@ -82,7 +82,11 @@ if echo "$COMMAND" | grep -qE 'caws\s+worktree\s+(merge|destroy)\b' && ! echo "$
   # Always prepend cd to repo root for CWD safety (critical for subagents
   # whose CWD is inside the worktree being destroyed)
   QUIET_CMD="cd \"$PROJECT_DIR\" && $COMMAND 2>/dev/null | tail -3; echo '---'; git log --oneline -1"
-  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":%s}}}' "$(printf '%s' "$QUIET_CMD" | jq -Rs .)"
+  # Hosts that enforce the updatedInput contract (observed live: "PreToolUse
+  # hook returned updatedInput without permissionDecision:allow") reject a
+  # rewrite that carries no explicit decision. The rewrite is an allow-with-
+  # modification by construction, so say so.
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"quiet-merge: rewrite merge/destroy for CWD safety and output quieting","updatedInput":{"command":%s}}}' "$(printf '%s' "$QUIET_CMD" | jq -Rs .)"
   exit 0
 fi
 
