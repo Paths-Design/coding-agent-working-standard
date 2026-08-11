@@ -1,0 +1,31 @@
+id: CAWS-DEFECT-CLI-ERROR-PATH-FIXES-01
+title: 'Fix specs evidence --status parse shadowing, error-handler chalk crash, quiet-merge missing permissionDecision'
+risk_tier: 2
+mode: fix
+lifecycle_state: active
+created_at: '2026-08-11T00:59:31.156Z'
+updated_at: '2026-08-11T00:59:31.156Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'specs-evidence-status-parse'
+    type: contract-test
+  - name: 'error-handler-chalk-esm'
+    type: contract-test
+  - name: 'quiet-merge-permission-decision'
+    type: behavior
