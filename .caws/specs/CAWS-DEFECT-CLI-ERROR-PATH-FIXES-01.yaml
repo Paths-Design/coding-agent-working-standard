@@ -71,3 +71,9 @@ evidence:
     recorded_at: "2026-08-11T02:37:18.674Z"
     command: npx jest tests/shell/specs-evidence-status-routing.test.js
     exit_code: 0
+  - criterion_id: A2
+    status: pass
+    evidence_ref: npx jest tests/shell/error-handler-chalk.test.js (3/3)
+    recorded_at: "2026-08-11T02:37:48.123Z"
+    command: npx jest tests/shell/error-handler-chalk.test.js
+    exit_code: 0
