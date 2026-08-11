@@ -3,6 +3,7 @@ title: 'Move provenance teeth to the merge boundary; rework prepush to inductive
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: wt-prepush-provenance
 created_at: '2026-08-11T02:25:08.525Z'
 updated_at: '2026-08-11T02:28:26.721Z'
 blast_radius:
