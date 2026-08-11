@@ -7,21 +7,46 @@ created_at: '2026-08-11T00:59:31.156Z'
 updated_at: '2026-08-11T00:59:31.156Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/error-handler.js
+    - .caws/hooks/quiet-merge.sh
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/error-handler.js
+    - packages/caws-cli/tests/shell/specs-evidence-status-routing.test.js
+    - packages/caws-cli/tests/shell/specs-archive-status-routing.test.js
+    - packages/caws-cli/tests/hooks/bats/quiet-merge.bats
+    - .caws/hooks/quiet-merge.sh
+    - .caws/specs/CAWS-DEFECT-CLI-ERROR-PATH-FIXES-01.yaml
+  out:
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/src/kernel
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The specs group-level --status compat handoff (caws specs --status <s> -> specs list) keeps working unchanged; the group option is not removed.'
+  - 'caws specs evidence --status remains semantically required: a missing or invalid value is rejected by the handler with rich guidance (exit 1), never by an unactionable commander parse error.'
+  - 'quiet-merge keeps passing commands through unrewritten on surfaces with CAWS_SUPPORTS_UPDATED_INPUT=0 (kimi-code, qwen-code); where it does rewrite, the emitted envelope carries permissionDecision: allow alongside updatedInput.'
+  - 'handleCliError human-readable output renders without throwing under the installed chalk 5.x (ESM) regardless of CJS/ESM interop shape; error content and exit behavior are otherwise unchanged.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'The specs group declares a group-level --status compat option that shadows the evidence leaf option at the commander layer.'
+    when: 'caws specs evidence <id> --ac A1 --status pass --evidence-ref <ref> is run through the real commander parse path.'
+    then: 'The leaf action receives status=pass and records the evidence (exit 0); caws specs evidence <id> --ac A1 without --status fails with a handler-owned guidance error, not "required option not specified".'
+  - id: A2
+    given: 'chalk 5.6.2 (ESM-only) installed and the CLI built as CJS.'
+    when: 'Any CLI error reaches handleCliError human-readable branch (e.g. a commander parse error or a domain failure).'
+    then: 'The error message and suggestions render to stderr without a TypeError; no "chalk.red is not a function" stack trace appears.'
+  - id: A3
+    given: 'A Bash command matching caws worktree merge|destroy on a surface with CAWS_SUPPORTS_UPDATED_INPUT=1.'
+    when: 'quiet-merge.sh emits its PreToolUse envelope.'
+    then: 'The envelope contains hookSpecificOutput.permissionDecision = "allow" together with updatedInput, so hosts that require an explicit decision accept the rewrite.'
+non_functional:
+  reliability:
+    - 'The A1 fix follows the proven CAWS-CLI-SPECS-ARCHIVE-STATUS-PARENT-SHADOW-001 pattern (optsWithGlobals), so no new parse-path behavior is invented.'
 contracts:
   - name: 'specs-evidence-status-parse'
     type: contract-test
