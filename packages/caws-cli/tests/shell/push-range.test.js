@@ -1,22 +1,35 @@
 'use strict';
 
 /**
- * Unit tests for the push-range guard (A1, lineage E18 — silent push of a
- * parallel-session commit).
+ * Unit tests for the push-range guard (lineage E18 — silent push of a
+ * parallel-session commit), reworked for CAWS-PREPUSH-PROVENANCE-REWORK-001.
  *
  * CAWS-TEST-CLI-SHELL-001. classifyRange is a PURE classifier: given the
- * outgoing commits, the specs + their scope.in, the current slice, and the
- * acked SHAs, it produces a report and a refuse/proceed decision. The guard's
- * whole point is to REFUSE a commit that is not attributable to the current
- * slice — exactly the Entry 18 failure (an authority push silently carried a
- * peer session's commit). Tests assert the actual classification + refusal, so
- * a mutation that admits a foreign commit is killed.
+ * outgoing commits, the governed-merge coverage (from worktree_merged
+ * events), the specs + their scope.in (advisory attribution), and the
+ * acked SHAs, it produces a report and a refuse/proceed decision.
+ *
+ * The refusal model is GOVERNANCE PROVENANCE, not slice attribution: a
+ * commit refuses iff governance never touched it — no worktree_merged
+ * coverage, no recognized CLI bookkeeping shape, no operator ack
+ * (unvetted_direct) — or an ERROR-severity foreign worktree exists. A
+ * registered, fully-merged worktree whose owner session is dead is a
+ * GHOST: advisory, never ERROR (A7).
  *
  * SUT loaded from dist/.
  */
 
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
 const { classifyRange } = require('../../dist/shell/push-range/classify-range');
 const { scopeEntryMatches, normalizeRel } = require('../../dist/shell/push-range/scope-match');
+const {
+  normalizeCliAcks,
+  loadAckStore,
+  saveAckStore,
+} = require('../../dist/shell/commands/prepush');
 
 const ORIGIN_MAIN = { remote: 'origin', branch: 'main' };
 
@@ -32,6 +45,18 @@ function input(over = {}) {
 
 const spec = (specId, scopeIn, lifecycleState = 'active') => ({ specId, scopeIn, lifecycleState });
 const commit = (sha, subject, touchedFiles, over = {}) => ({ sha, subject, touchedFiles, ...over });
+
+// helper: asserts array is a real array before returning it
+function isOk_guard(arr) {
+  expect(Array.isArray(arr)).toBe(true);
+  return arr;
+}
+
+// 40-char hex fixtures for the ack helpers.
+const SHA_A = '72321aabd9967a8dd4bba72d990936f750b9c96c';
+const SHA_B = 'c7b4b42aeb1f8c563fc1d3e6e9479f6e41d64615';
+const SHA_PFX1 = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const SHA_PFX2 = 'aaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 
 describe('scope-match: normalizeRel + scopeEntryMatches', () => {
   test('normalizeRel strips ./ prefix, trailing slash, backslashes', () => {
@@ -58,7 +83,7 @@ describe('scope-match: normalizeRel + scopeEntryMatches', () => {
   });
 });
 
-describe('classifyRange: provenance attribution', () => {
+describe('classifyRange: provenance attribution (advisory)', () => {
   test('a commit touching a spec scope.in is attributed by file_touch', () => {
     const r = classifyRange(
       input({
@@ -130,61 +155,156 @@ describe('classifyRange: provenance attribution', () => {
   });
 });
 
-describe('classifyRange: refusal (E18 — foreign/unattributable commit is REFUSED)', () => {
-  test('a current-slice commit alone PROCEEDS (not refused)', () => {
+describe('classifyRange: governance classes (CAWS-PREPUSH-PROVENANCE-REWORK-001)', () => {
+  test('a commit covered by a worktree_merged event is governed_merge and PROCEEDS', () => {
+    const r = classifyRange(
+      input({
+        commits: [commit('aaa', 'merge(worktree): wt-x', [])],
+        governedMergeShas: ['aaa'],
+      })
+    );
+    expect(r.commits[0].governanceClass).toBe('governed_merge');
+    expect(r.refused).toBe(false);
+    expect(r.unvettedShas).toEqual([]);
+  });
+
+  test('a lane-range commit covered by an event is governed_merge (not just the merge commit)', () => {
+    const r = classifyRange(
+      input({
+        commits: [
+          commit('lane1', 'feat: lane work', ['src/x.ts']),
+          commit('merge1', 'merge(worktree): wt-x', []),
+        ],
+        governedMergeShas: ['lane1', 'merge1'],
+      })
+    );
+    expect(r.commits[0].governanceClass).toBe('governed_merge');
+    expect(r.commits[1].governanceClass).toBe('governed_merge');
+    expect(r.refused).toBe(false);
+  });
+
+  test('a CLI bookkeeping commit (chore(caws): + governed-state paths) is cli_bookkeeping and PROCEEDS', () => {
+    const r = classifyRange(
+      input({
+        commits: [commit('b1', 'chore(caws): close SPEC-1', ['.caws/specs/SPEC-1.yaml'])],
+      })
+    );
+    expect(r.commits[0].governanceClass).toBe('cli_bookkeeping');
+    expect(r.refused).toBe(false);
+  });
+
+  test('a forged chore(caws): subject touching NON-governed paths is NOT bookkeeping', () => {
+    const r = classifyRange(
+      input({
+        commits: [commit('b2', 'chore(caws): lookalike', ['src/store/x.ts'])],
+      })
+    );
+    expect(r.commits[0].governanceClass).toBe('unvetted_direct');
+    expect(r.refused).toBe(true);
+    expect(r.unvettedShas).toEqual(['b2']);
+  });
+
+  test('.caws/policy.yaml is NOT bookkeeping-shaped (gate policy is supply-chain-sensitive)', () => {
+    const r = classifyRange(
+      input({
+        commits: [commit('b3', 'chore(caws): tweak policy', ['.caws/policy.yaml'])],
+      })
+    );
+    expect(r.commits[0].governanceClass).toBe('unvetted_direct');
+    expect(r.refused).toBe(true);
+  });
+
+  test('.caws/hooks/ is NOT bookkeeping-shaped (guard source)', () => {
+    const r = classifyRange(
+      input({
+        commits: [commit('b4', 'chore(caws): tweak hooks', ['.caws/hooks/scope-guard.sh'])],
+      })
+    );
+    expect(r.commits[0].governanceClass).toBe('unvetted_direct');
+    expect(r.refused).toBe(true);
+  });
+
+  test('a chore(caws): commit touching NOTHING cannot be verified -> unvetted', () => {
+    const r = classifyRange(
+      input({
+        commits: [commit('b5', 'chore(caws): empty', [])],
+      })
+    );
+    expect(r.commits[0].governanceClass).toBe('unvetted_direct');
+  });
+
+  test('an acknowledged unvetted commit is acked_exception and PROCEEDS', () => {
+    const r = classifyRange(
+      input({
+        commits: [commit('e1', 'docs: direct trunk commit', ['docs/x.md'])],
+        ackedShas: ['e1'],
+      })
+    );
+    expect(r.commits[0].governanceClass).toBe('acked_exception');
+    expect(r.refused).toBe(false);
+    expect(r.unvettedShas).toEqual([]);
+  });
+
+  test('precedence: governed-merge beats ack; bookkeeping beats ack', () => {
+    const r = classifyRange(
+      input({
+        commits: [
+          commit('p1', 'merge(worktree): wt-x', []),
+          commit('p2', 'chore(caws): close SPEC-1', ['.caws/specs/SPEC-1.yaml']),
+        ],
+        governedMergeShas: ['p1'],
+        ackedShas: ['p1', 'p2'],
+      })
+    );
+    expect(r.commits[0].governanceClass).toBe('governed_merge');
+    expect(r.commits[1].governanceClass).toBe('cli_bookkeeping');
+  });
+
+  test('A3: a fully-governed range (governed merges + bookkeeping) proceeds with ZERO acks', () => {
+    const r = classifyRange(
+      input({
+        commits: [
+          commit('m1', 'merge(worktree): wt-a', []),
+          commit('lane1', 'feat: lane work', ['src/a.ts']),
+          commit('k1', 'chore(caws): close SPEC-A-1', ['.caws/specs/SPEC-A-1.yaml']),
+        ],
+        governedMergeShas: ['m1', 'lane1'],
+      })
+    );
+    expect(r.refused).toBe(false);
+    expect(r.unvettedShas).toEqual([]);
+    expect(r.maxSeverity).toBe('INFO');
+  });
+
+  test('A4: an unvetted direct commit refuses, naming EXACTLY the unvetted commits', () => {
+    const r = classifyRange(
+      input({
+        commits: [
+          commit('m1', 'merge(worktree): wt-a', []),
+          commit('x1', 'direct edit one', ['src/a.ts']),
+          commit('k1', 'chore(caws): close SPEC-A-1', ['.caws/specs/SPEC-A-1.yaml']),
+          commit('x2', 'direct edit two', ['README.md']),
+        ],
+        governedMergeShas: ['m1'],
+      })
+    );
+    expect(r.refused).toBe(true);
+    expect(r.unvettedShas).toEqual(['x1', 'x2']);
+    expect(r.maxSeverity).toBe('ERROR');
+  });
+
+  test('advisory fields survive the rework (slice attribution still reported)', () => {
     const r = classifyRange(
       input({
         commits: [commit('aaa', 'work', ['src/store/x.ts'])],
         specs: [spec('SPEC-1', ['src/store'])],
         currentSpecId: 'SPEC-1',
+        governedMergeShas: ['aaa'],
       })
     );
-    expect(r.refused).toBe(false);
-    expect(r.unexpectedUnacked).toEqual([]);
-  });
-
-  test('a commit NOT matching the current slice is unexpected -> REFUSED', () => {
-    const r = classifyRange(
-      input({
-        commits: [
-          commit('aaa', 'mine', ['src/store/x.ts']),
-          commit('bbb', 'a peer-session commit', ['other/y.ts']), // foreign
-        ],
-        specs: [spec('SPEC-1', ['src/store'])],
-        currentSpecId: 'SPEC-1',
-      })
-    );
-    expect(r.refused).toBe(true);
-    expect(r.unexpectedUnacked).toEqual(['bbb']);
-    expect(r.maxSeverity).toBe('ERROR');
-  });
-
-  test('acking the foreign SHA clears the refusal (per-SHA acknowledgement)', () => {
-    const r = classifyRange(
-      input({
-        commits: [
-          commit('aaa', 'mine', ['src/store/x.ts']),
-          commit('bbb', 'peer', ['other/y.ts']),
-        ],
-        specs: [spec('SPEC-1', ['src/store'])],
-        currentSpecId: 'SPEC-1',
-        ackedShas: ['bbb'],
-      })
-    );
-    expect(r.refused).toBe(false);
-    expect(r.unexpectedUnacked).toEqual([]);
-  });
-
-  test('an ambiguous (unattributable) commit is unexpected and REFUSED', () => {
-    const r = classifyRange(
-      input({
-        commits: [commit('zzz', 'mystery', ['nowhere/x.ts'])],
-        specs: [spec('SPEC-1', ['src/store'])],
-        currentSpecId: 'SPEC-1',
-      })
-    );
-    expect(r.refused).toBe(true);
-    expect(r.unexpectedUnacked).toEqual(['zzz']);
+    expect(r.commits[0].currentSliceMatch).toBe(true);
+    expect(r.commits[0].inferredSpecIds).toEqual(['SPEC-1']);
+    expect(r.commits[0].governanceClass).toBe('governed_merge');
   });
 });
 
@@ -229,6 +349,54 @@ describe('classifyRange: foreign-worktree severity (origin/main escalates; featu
   });
 });
 
+describe('classifyRange: ghost worktrees (A7 — dead owner + fully merged = advisory, never ERROR)', () => {
+  const fwt = (over = {}) => ({
+    name: 'wt-ghost',
+    path: '/wt/ghost',
+    unregistered: false,
+    unmerged: false,
+    ...over,
+  });
+
+  test('registered + fully merged + dead owner session is a GHOST: WARN with remediation, does NOT refuse', () => {
+    const r = classifyRange(
+      input({ foreignWorktrees: [fwt({ ownerSessionLive: false })] })
+    );
+    const f = r.foreignWorktrees[0];
+    expect(f.ghost).toBe(true);
+    expect(f.severity).toBe('WARN');
+    expect(f.reasons).toContain('branch fully merged into base');
+    expect(f.reasons).toContain('owner session is not live (no active lease or dead pid)');
+    expect(f.remediation).toMatch(/caws worktree destroy/);
+    expect(r.refused).toBe(false);
+    expect(r.maxSeverity).toBe('WARN'); // never ERROR
+  });
+
+  test('a ghost-shaped worktree with a LIVE owner is not a ghost (WARN, live-residue)', () => {
+    const r = classifyRange(
+      input({ foreignWorktrees: [fwt({ ownerSessionLive: true })] })
+    );
+    expect(r.foreignWorktrees[0].ghost).toBeUndefined();
+    expect(r.foreignWorktrees[0].severity).toBe('WARN');
+  });
+
+  test('dead owner but UNMERGED branch is NOT a ghost — still ERROR (work could be lost)', () => {
+    const r = classifyRange(
+      input({ foreignWorktrees: [fwt({ unmerged: true, ownerSessionLive: false })] })
+    );
+    expect(r.foreignWorktrees[0].ghost).toBeUndefined();
+    expect(r.foreignWorktrees[0].severity).toBe('ERROR');
+    expect(r.refused).toBe(true);
+  });
+
+  test('liveness UNKNOWN (ownerSessionLive undefined) keeps the legacy escalation', () => {
+    const r = classifyRange(
+      input({ foreignWorktrees: [fwt({ unmerged: true })] })
+    );
+    expect(r.foreignWorktrees[0].severity).toBe('ERROR');
+  });
+});
+
 describe('classifyRange: closed specs are considered', () => {
   test('a closed spec is considered for file-touch attribution', () => {
     const r = classifyRange(
@@ -236,6 +404,7 @@ describe('classifyRange: closed specs are considered', () => {
         commits: [commit('abc', 'work', ['src/store/x.ts'])],
         specs: [spec('SPEC-CLOSED', ['src/store'], 'closed')],
         currentSpecId: 'SPEC-CLOSED',
+        governedMergeShas: ['abc'],
       })
     );
     expect(isOk_guard(r.commits[0].inferredSpecIds)).toContain('SPEC-CLOSED');
@@ -251,18 +420,12 @@ describe('classifyRange: closed specs are considered', () => {
         currentSpecId: 'SPEC-DRAFT',
       })
     );
-    // Draft excluded → ambiguous, currentSliceMatch false, refused
+    // Draft excluded → ambiguous, currentSliceMatch false, unvetted → refused
     expect(r.commits[0].inferredSpecIds).toEqual([]);
     expect(r.commits[0].currentSliceMatch).toBe(false);
     expect(r.refused).toBe(true);
   });
 });
-
-// helper: asserts array is a real array before returning it
-function isOk_guard(arr) {
-  expect(Array.isArray(arr)).toBe(true);
-  return arr;
-}
 
 describe('classifyRange: SPEC_ID_IN_SUBJECT regex', () => {
   test('extracts a standard SPEC-123 from commit subject', () => {
@@ -287,17 +450,13 @@ describe('classifyRange: SPEC_ID_IN_SUBJECT regex', () => {
   });
 
   test('does NOT match partial word like SPEC-42xxx (suffix boundary violated)', () => {
-    // SPEC-42xxx is not in the known spec list, so even if regex matched, it
-    // wouldn't land in inferredSpecIds. Confirm it stays ambiguous.
     const r = classifyRange(
       input({
         commits: [commit('s3', 'fix: SPEC-42xxx', ['unrelated/x.ts'])],
         specs: [spec('SPEC-42', ['src/store'])],
       })
     );
-    // The regex extracts SPEC-42 from SPEC-42xxx? No — \b ensures word boundary.
-    // If 'SPEC-42' is extracted from 'SPEC-42xxx', that's a regex accuracy issue.
-    // What we need: SPEC-42 alone in the subject → attributed; SPEC-42xxx → 42 substring NOT extracted.
+    expect(r.commits[0].ambiguous).toBe(true);
     const r2 = classifyRange(
       input({
         commits: [commit('s3b', 'fix: SPEC-42', ['unrelated/x.ts'])],
@@ -333,13 +492,12 @@ describe('classifyRange: severity rank ordering and maxSeverity', () => {
   });
 
   test('maxSeverity is WARN when only a clean foreign worktree exists (not ERROR)', () => {
-    // WARN ranks between INFO and ERROR; a clean foreign worktree must not collapse to INFO
     const r = classifyRange(input({ foreignWorktrees: [fwt()] }));
     expect(r.maxSeverity).toBe('WARN');
     expect(r.refused).toBe(false);
   });
 
-  test('maxSeverity is ERROR when only unexpectedUnacked commits exist (no foreign wts)', () => {
+  test('maxSeverity is ERROR when only unvetted commits exist (no foreign wts)', () => {
     const r = classifyRange(
       input({
         commits: [commit('foreign1', 'peer work', ['other/x.ts'])],
@@ -348,13 +506,12 @@ describe('classifyRange: severity rank ordering and maxSeverity', () => {
         foreignWorktrees: [],
       })
     );
-    expect(r.unexpectedUnacked).toEqual(['foreign1']);
+    expect(r.unvettedShas).toEqual(['foreign1']);
     expect(r.maxSeverity).toBe('ERROR');
     expect(r.refused).toBe(true);
   });
 
-  test('maxSeverity stays ERROR (highest) when both WARN foreign wt and unexpected commits', () => {
-    // ERROR > WARN — ensures the loop correctly upgrades severity
+  test('maxSeverity stays ERROR (highest) when both WARN foreign wt and unvetted commits', () => {
     const r = classifyRange(
       input({
         commits: [commit('foreign2', 'peer', ['other/y.ts'])],
@@ -366,23 +523,22 @@ describe('classifyRange: severity rank ordering and maxSeverity', () => {
     expect(r.maxSeverity).toBe('ERROR');
   });
 
-  test('maxSeverity from a WARN worktree does NOT become ERROR without unexpectedUnacked', () => {
-    // Prove WARN + 0 unexpectedUnacked = maxSeverity WARN, not ERROR
+  test('maxSeverity from a WARN worktree does NOT become ERROR without unvetted commits', () => {
     const r = classifyRange(
       input({
         commits: [commit('mine', 'work', ['src/store/x.ts'])],
         specs: [spec('SPEC-1', ['src/store'])],
         currentSpecId: 'SPEC-1',
+        governedMergeShas: ['mine'],
         foreignWorktrees: [fwt()], // WARN on origin/main (no hard conditions)
       })
     );
-    expect(r.unexpectedUnacked).toEqual([]);
+    expect(r.unvettedShas).toEqual([]);
     expect(r.maxSeverity).toBe('WARN');
     expect(r.refused).toBe(false);
   });
 
   test('maxSeverity accumulates across multiple foreign worktrees — highest wins', () => {
-    // If the loop uses <= instead of >, the highest severity won't be picked
     const r = classifyRange(
       input({
         foreignWorktrees: [
@@ -392,19 +548,19 @@ describe('classifyRange: severity rank ordering and maxSeverity', () => {
       })
     );
     expect(r.maxSeverity).toBe('ERROR');
-    // ERROR worktree refuses even with no unexpectedUnacked
+    // ERROR worktree refuses even with no unvetted commits
     expect(r.refused).toBe(true);
   });
 });
 
 describe('classifyRange: file-touch matching uses some() not every()', () => {
   test('a commit touching ONE in-scope file (of several touched) is attributed', () => {
-    // Touching one in-scope file among several is sufficient for attribution.
     const r = classifyRange(
       input({
         commits: [commit('x1', 'work', ['src/store/x.ts', 'unrelated/y.ts'])],
         specs: [spec('SPEC-1', ['src/store'])],
         currentSpecId: 'SPEC-1',
+        governedMergeShas: ['x1'],
       })
     );
     expect(r.commits[0].inferredSpecIds).toContain('SPEC-1');
@@ -413,7 +569,6 @@ describe('classifyRange: file-touch matching uses some() not every()', () => {
   });
 
   test('a spec with one matching entry (of multiple scope.in) attributes the commit', () => {
-    // Matching any one scope.in entry is sufficient for attribution; not all entries need to match.
     const r = classifyRange(
       input({
         commits: [commit('x2', 'work', ['src/store/x.ts'])],
@@ -528,7 +683,6 @@ describe('classifyRange: originWorktree → foreign worktree severity escalation
   });
 
   test('a worktree not originating any commit stays WARN on origin/main when clean', () => {
-    // Contrast: proves the escalation is ONLY from commit origin, not structural
     const r = classifyRange(
       input({
         commits: [commit('p3', 'my work', ['src/x.ts'], { originWorktree: 'wt-mine' })],
@@ -540,7 +694,6 @@ describe('classifyRange: originWorktree → foreign worktree severity escalation
   });
 
   test('commit originWorktree equality is name-exact', () => {
-    // A commit whose originWorktree differs from the worktree must not escalate severity to that worktree.
     const r = classifyRange(
       input({
         commits: [
@@ -553,11 +706,9 @@ describe('classifyRange: originWorktree → foreign worktree severity escalation
         ],
       })
     );
-    // wt-peer: originated p4a → 'commits in the outgoing range originate from it'
     const peer = r.foreignWorktrees.find((f) => f.name === 'wt-peer');
     expect(peer).toBeDefined();
     expect(peer.reasons).toContain('commits in the outgoing range originate from it');
-    // wt-other: originated p4b → also has the reason
     const other = r.foreignWorktrees.find((f) => f.name === 'wt-other');
     expect(other).toBeDefined();
     expect(other.reasons).toContain('commits in the outgoing range originate from it');
@@ -599,7 +750,6 @@ describe('classifyRange: reason string literals', () => {
       })
     );
     expect(r.foreignWorktrees[0].severity).toBe('INFO');
-    // INFO does not refuse
     expect(r.refused).toBe(false);
   });
 
@@ -623,7 +773,6 @@ describe('classifyRange: reasons.length > 0 boundary', () => {
   });
 
   test('zero reasons on origin/main → WARN (not ERROR), refuses=false', () => {
-    // On origin/main: a foreign worktree with no hard conditions gets WARN (not ERROR)
     const r = classifyRange(input({ foreignWorktrees: [fwt()] }));
     expect(r.foreignWorktrees[0].reasons).toHaveLength(0);
     expect(r.foreignWorktrees[0].severity).toBe('WARN');
@@ -636,8 +785,8 @@ describe('classifyRange: reasons.length > 0 boundary', () => {
   });
 });
 
-describe('classifyRange: unexpectedUnacked and fullPosture', () => {
-  test('unexpectedUnacked contains the actual unexpected SHA', () => {
+describe('classifyRange: unvettedShas and fullPosture', () => {
+  test('unvettedShas names the unvetted SHAs, governed commits excluded', () => {
     const r = classifyRange(
       input({
         commits: [
@@ -646,10 +795,11 @@ describe('classifyRange: unexpectedUnacked and fullPosture', () => {
         ],
         specs: [spec('SPEC-1', ['src/store'])],
         currentSpecId: 'SPEC-1',
+        governedMergeShas: ['sha-mine'],
       })
     );
-    expect(r.unexpectedUnacked).toEqual(['sha-peer']);
-    expect(r.unexpectedUnacked).not.toContain('sha-mine');
+    expect(r.unvettedShas).toEqual(['sha-peer']);
+    expect(r.unvettedShas).not.toContain('sha-mine');
   });
 
   test('fullPosture requires BOTH remote=origin AND branch=main', () => {
@@ -674,7 +824,6 @@ describe('classifyRange: unexpectedUnacked and fullPosture', () => {
         foreignWorktrees: [fwt],
       })
     );
-    // upstream/main is NOT full posture → WARN
     expect(r.foreignWorktrees[0].severity).toBe('WARN');
     expect(r.refused).toBe(false);
   });
@@ -694,8 +843,8 @@ describe('classifyRange: maxSeverity loop', () => {
   });
 });
 
-describe('classifyRange: maxSeverity set from unexpectedUnacked', () => {
-  test('maxSeverity = ERROR when unexpectedUnacked > 0 even if foreignWorktrees is empty', () => {
+describe('classifyRange: maxSeverity set from unvettedShas', () => {
+  test('maxSeverity = ERROR when unvettedShas > 0 even if foreignWorktrees is empty', () => {
     const r = classifyRange(
       input({
         commits: [commit('unexp', 'foreign work', ['other/x.ts'])],
@@ -703,24 +852,25 @@ describe('classifyRange: maxSeverity set from unexpectedUnacked', () => {
         currentSpecId: 'SPEC-1',
       })
     );
-    expect(r.unexpectedUnacked).toEqual(['unexp']);
+    expect(r.unvettedShas).toEqual(['unexp']);
     expect(r.maxSeverity).toBe('ERROR');
   });
 
-  test('maxSeverity stays at ERROR from foreign-wt even when unexpectedUnacked length is 0', () => {
+  test('maxSeverity stays at ERROR from foreign-wt even when unvettedShas length is 0', () => {
     const r = classifyRange(
       input({
         commits: [commit('mine', 'mine', ['src/store/x.ts'])],
         specs: [spec('SPEC-1', ['src/store'])],
         currentSpecId: 'SPEC-1',
+        governedMergeShas: ['mine'],
         foreignWorktrees: [{
           name: 'wt-err', path: '/wt/err',
           unregistered: false, unmerged: true,
         }],
       })
     );
-    expect(r.unexpectedUnacked).toEqual([]);
-    expect(r.maxSeverity).toBe('ERROR'); // set by the worktree loop, not by the unexpectedUnacked branch
+    expect(r.unvettedShas).toEqual([]);
+    expect(r.maxSeverity).toBe('ERROR'); // set by the worktree loop, not by the unvetted branch
     expect(r.refused).toBe(true);
   });
 });
@@ -766,7 +916,6 @@ describe('scope-match: normalizeRel regex behavior', () => {
   });
 
   test('path boundary: stripped trailing slash prevents false prefix match', () => {
-    // After normalization: 'src/store' must NOT match 'src/storefront.ts'
     expect(scopeEntryMatches('src/store/', 'src/storefront.ts')).toBe(false);
     expect(scopeEntryMatches('./src/store', 'src/store/x.ts')).toBe(true);
   });
@@ -777,7 +926,6 @@ describe('scope-match: normalizeRel regex behavior', () => {
   });
 
   test('./ in the middle of a path is NOT stripped (only leading ./ is removed)', () => {
-    // Only the leading ./ prefix is stripped; a ./ that appears mid-path must be preserved.
     expect(normalizeRel('a/./b.ts')).toBe('a/./b.ts');
   });
 });
@@ -793,8 +941,8 @@ describe('classifyRange: currentSpecId=undefined does not grant currentSliceMatc
     );
     expect(r.commits[0].inferredSpecIds).toContain('SPEC-1');
     expect(r.commits[0].currentSliceMatch).toBe(false);
-    // Everything is unexpected with no currentSpecId
-    expect(r.unexpectedUnacked).toContain('a1');
+    // Nothing covers it → unvetted
+    expect(r.unvettedShas).toContain('a1');
   });
 });
 
@@ -808,13 +956,11 @@ describe('classifyRange: ackedShas default', () => {
         // ackedShas intentionally omitted — tests the default
       })
     );
-    // peer-sha is not acked by default and is not current-slice → unexpectedUnacked
-    expect(r.unexpectedUnacked).toContain('peer-sha');
+    expect(r.unvettedShas).toContain('peer-sha');
     expect(r.refused).toBe(true);
   });
 
   test('ackedShas defaults do not falsely ack any SHA that is not explicitly listed', () => {
-    // Complement: with explicit empty ackedShas vs omitted — same outcome
     const rOmitted = classifyRange(
       input({
         commits: [commit('some-sha', 'peer', ['other/x.ts'])],
@@ -830,7 +976,7 @@ describe('classifyRange: ackedShas default', () => {
         ackedShas: [],
       })
     );
-    expect(rOmitted.unexpectedUnacked).toEqual(rEmpty.unexpectedUnacked);
+    expect(rOmitted.unvettedShas).toEqual(rEmpty.unvettedShas);
     expect(rOmitted.refused).toBe(rEmpty.refused);
   });
 });
@@ -875,7 +1021,7 @@ describe('classifyRange: severityRank ERROR comparison with existing maxSeverity
     ...over,
   });
 
-  test('unexpectedUnacked sets maxSeverity to ERROR even when maxSeverity is already WARN from a foreign wt', () => {
+  test('unvettedShas sets maxSeverity to ERROR even when maxSeverity is already WARN from a foreign wt', () => {
     const rWithWt = classifyRange(
       input({
         commits: [commit('unexp2', 'peer', ['other/x.ts'])],
@@ -884,23 +1030,138 @@ describe('classifyRange: severityRank ERROR comparison with existing maxSeverity
         foreignWorktrees: [fwt()], // WARN worktree
       })
     );
-    // unexpectedUnacked should push maxSeverity to ERROR
-    expect(rWithWt.unexpectedUnacked).toEqual(['unexp2']);
+    expect(rWithWt.unvettedShas).toEqual(['unexp2']);
     expect(rWithWt.maxSeverity).toBe('ERROR');
   });
 
-  test('no unexpectedUnacked + WARN worktree → maxSeverity stays WARN, not ERROR', () => {
-    // Without unexpectedUnacked, the ERROR severity must not be set solely from a WARN worktree.
+  test('no unvettedShas + WARN worktree → maxSeverity stays WARN, not ERROR', () => {
     const r = classifyRange(
       input({
         commits: [commit('mine', 'mine', ['src/store/x.ts'])],
         specs: [spec('SPEC-1', ['src/store'])],
         currentSpecId: 'SPEC-1',
+        governedMergeShas: ['mine'],
         foreignWorktrees: [fwt()], // WARN on origin/main
       })
     );
-    expect(r.unexpectedUnacked).toEqual([]);
-    expect(r.maxSeverity).toBe('WARN'); // not ERROR — a WARN worktree with no unexpectedUnacked must not escalate
+    expect(r.unvettedShas).toEqual([]);
+    expect(r.maxSeverity).toBe('WARN'); // not ERROR
     expect(r.refused).toBe(false);
+  });
+});
+
+// =========================================================================
+// Command-layer ack helpers (CAWS-PREPUSH-PROVENANCE-REWORK-001 A5/A6).
+// =========================================================================
+
+describe('normalizeCliAcks (A6 — prefix-tolerant, never silently ignored)', () => {
+  const noop = [];
+  const report = (line) => noop.push(line);
+  beforeEach(() => { noop.length = 0; });
+
+  test('a FULL 40-char SHA (git rev-list output) matches', () => {
+    const matched = normalizeCliAcks([SHA_A], [SHA_A, SHA_B], report);
+    expect(matched).toEqual([SHA_A]);
+    expect(noop).toEqual([]);
+  });
+
+  test('a 12-char prefix (the display form) matches', () => {
+    const matched = normalizeCliAcks([SHA_A.slice(0, 12)], [SHA_A, SHA_B], report);
+    expect(matched).toEqual([SHA_A]);
+    expect(noop).toEqual([]);
+  });
+
+  test('a 7-char prefix (git abbrev minimum) matches', () => {
+    const matched = normalizeCliAcks([SHA_A.slice(0, 7)], [SHA_A, SHA_B], report);
+    expect(matched).toEqual([SHA_A]);
+  });
+
+  test('uppercase input is normalized to lowercase', () => {
+    const matched = normalizeCliAcks([SHA_A.toUpperCase()], [SHA_A, SHA_B], report);
+    expect(matched).toEqual([SHA_A]);
+  });
+
+  test('a non-matching ack produces a diagnostic NAMING it and is not recorded', () => {
+    const matched = normalizeCliAcks(['fffffff'], [SHA_A, SHA_B], report);
+    expect(matched).toEqual([]);
+    expect(noop).toHaveLength(1);
+    expect(noop[0]).toContain('fffffff');
+    expect(noop[0]).toMatch(/did not match/);
+  });
+
+  test('an ambiguous prefix produces a diagnostic and is not recorded', () => {
+    const matched = normalizeCliAcks(['aaaaaaa'], [SHA_PFX1, SHA_PFX2], report);
+    expect(matched).toEqual([]);
+    expect(noop).toHaveLength(1);
+    expect(noop[0]).toMatch(/ambiguous/);
+  });
+
+  test('the ambiguous prefix lengthened to uniqueness resolves', () => {
+    const matched = normalizeCliAcks(['aaaaaaaab'], [SHA_PFX1, SHA_PFX2], report);
+    expect(matched).toEqual([SHA_PFX2]);
+  });
+
+  test('a non-hex / too-short ack produces a diagnostic', () => {
+    const matched = normalizeCliAcks(['zz12'], [SHA_A], report);
+    expect(matched).toEqual([]);
+    expect(noop).toHaveLength(1);
+    expect(noop[0]).toMatch(/not a valid hex SHA prefix/);
+  });
+});
+
+describe('durable ack store (A5 — persists across invocations and sessions)', () => {
+  const tmpDirs = [];
+  function mkCawsDir() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ack-store-'));
+    const caws = path.join(root, '.caws');
+    fs.mkdirSync(caws, { recursive: true });
+    tmpDirs.push(root);
+    return caws;
+  }
+  afterAll(() => {
+    for (const d of tmpDirs) {
+      try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ }
+    }
+  });
+
+  test('an absent store reads as empty (no diagnostic)', () => {
+    const store = loadAckStore(mkCawsDir());
+    expect(store.acks).toEqual([]);
+    expect(store.diagnostic).toBeUndefined();
+  });
+
+  test('save -> load round-trips the records (durable)', () => {
+    const caws = mkCawsDir();
+    saveAckStore(caws, [{ sha: SHA_A, acked_at: '2026-08-11T00:00:00Z' }]);
+    const store = loadAckStore(caws);
+    expect(store.acks).toEqual([{ sha: SHA_A, acked_at: '2026-08-11T00:00:00Z' }]);
+  });
+
+  test('save appends (accumulates) rather than replacing prior acks', () => {
+    const caws = mkCawsDir();
+    saveAckStore(caws, [{ sha: SHA_A, acked_at: '2026-08-11T00:00:00Z' }]);
+    const prior = loadAckStore(caws).acks;
+    saveAckStore(caws, [...prior, { sha: SHA_B, acked_at: '2026-08-11T01:00:00Z' }]);
+    const store = loadAckStore(caws);
+    expect(store.acks.map((a) => a.sha)).toEqual([SHA_A, SHA_B]);
+  });
+
+  test('a malformed store degrades to empty WITH a diagnostic (never a refusal)', () => {
+    const caws = mkCawsDir();
+    fs.writeFileSync(path.join(caws, 'prepush-acks.json'), '{not json', 'utf8');
+    const store = loadAckStore(caws);
+    expect(store.acks).toEqual([]);
+    expect(store.diagnostic).toMatch(/malformed/);
+  });
+
+  test('records with invalid SHAs are filtered out on load', () => {
+    const caws = mkCawsDir();
+    fs.writeFileSync(
+      path.join(caws, 'prepush-acks.json'),
+      JSON.stringify({ version: 1, acks: [{ sha: 'not-a-sha', acked_at: 'x' }, { sha: SHA_A, acked_at: 'x' }] }),
+      'utf8'
+    );
+    const store = loadAckStore(caws);
+    expect(store.acks.map((a) => a.sha)).toEqual([SHA_A]);
   });
 });

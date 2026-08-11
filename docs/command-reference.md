@@ -38,7 +38,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.
 - [`caws agents`](#caws-agents) — Agent liveness substrate: register/heartbeat/stop/list/show/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.
 - [`caws message`](#caws-message) — Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/poll/inbox/history/prune directed messages between running sessions, addressed by session id, over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
-- [`caws prepush`](#caws-prepush) — Classify the outgoing commit range before publish and refuse commits not attributable to the current slice. Diagnose/decide only — does NOT run git push.
+- [`caws prepush`](#caws-prepush) — Classify the outgoing commit range by governance provenance (governed merge / CLI bookkeeping / acked exception / unvetted direct) and refuse unvetted direct commits. The per-slice provenance check runs at caws worktree merge; prepush re-verifies what merge already vetted. Diagnose/decide only — does NOT run git push.
 
 ## `caws init`
 
@@ -921,13 +921,13 @@ Plan or apply retention cleanup for delivered non-authoritative chat messages. D
 
 ## `caws prepush`
 
-Classify the outgoing commit range before publish and refuse commits not attributable to the current slice. Diagnose/decide only — does NOT run git push.
+Classify the outgoing commit range by governance provenance (governed merge / CLI bookkeeping / acked exception / unvetted direct) and refuse unvetted direct commits. The per-slice provenance check runs at caws worktree merge; prepush re-verifies what merge already vetted. Diagnose/decide only — does NOT run git push.
 
 **Options:**
 
 - `--remote <remote>` (default: `origin`) — Push remote
 - `--branch <branch>` (default: `main`) — Push branch
 - `--base <ref>` — Base ref override (default <remote>/<branch>)
-- `--spec <id>` — Current session active spec id (for slice-match)
-- `--ack <sha>` (repeatable, default: `[]`) — Acknowledge an unexpected commit by SHA (repeatable)
+- `--spec <id>` — Current session active spec id (advisory attribution report only)
+- `--ack <sha>` (repeatable, default: `[]`) — Durably acknowledge an unvetted direct commit by SHA prefix (7-40 hex, repeatable; persisted in .caws/prepush-acks.json)
 - `--data` — Show structured data block on diagnostics

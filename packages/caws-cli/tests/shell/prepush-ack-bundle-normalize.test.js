@@ -41,7 +41,7 @@ describe('caws prepush --ack bundle normalization', () => {
     expect(result.status).toBe(0);
     expect(result.stderr).toBe('');
     expect(result.stdout).toContain('Usage: caws prepush [options]');
-    expect(result.stdout).toContain('Acknowledge an unexpected commit by SHA');
+    expect(result.stdout).toContain('Durably acknowledge an unvetted direct commit by SHA');
   });
 
   test('does not normalize ack bundles for other commands', () => {

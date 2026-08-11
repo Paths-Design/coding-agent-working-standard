@@ -18,7 +18,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const { createSpec, closeSpec } = require('../../dist/store/specs-writer');
-const { createWorktree } = require('../../dist/store/worktrees-writer');
+const { createWorktree, mergeWorktree } = require('../../dist/store/worktrees-writer');
 const { initProject } = require('../../dist/store/init-store');
 const { runWorktreeMergeCommand } = require('../../dist/shell/commands/worktree');
 const { cleanupAll } = require('../helpers/git-repo-factory');
@@ -54,8 +54,12 @@ function commitCaws(repoRoot, message) {
   execFileSync('git', ['-C', repoRoot, 'commit', '--quiet', '--no-verify', '-m', message]);
 }
 
-function seedSpec(caws, id) {
-  const r = createSpec(caws, { id, title: 'apply fixture', mode: 'chore', riskTier: 3, actor: ACTOR });
+function seedSpec(caws, id, scopeIn = ['work.txt']) {
+  // scopeIn defaults to the fixture's lane file: CAWS-PREPUSH-PROVENANCE-
+  // REWORK-001's merge-time lane check verifies every lane-branch commit
+  // against the bound spec's scope.in, so fixtures must declare scope or
+  // their own 'branch work' commit reads as foreign.
+  const r = createSpec(caws, { id, title: 'apply fixture', mode: 'chore', riskTier: 3, actor: ACTOR, scopeIn });
   if (!r.ok || r.value.kind !== 'success') {
     throw new Error('seed spec failed: ' + JSON.stringify(r));
   }
@@ -244,5 +248,116 @@ describe('caws worktree merge --closure-notes (CAWS-FEAT-WORKTREE-MERGE-CLOSURE-
     const yaml = readSpecYaml(caws, 'MERGE-NOTES-B4-001');
     expect(yaml).toContain(`closure_notes: '${preCloseNotes}'`);
     expect(yaml).not.toContain('merge-time notes should be ignored');
+  });
+});
+
+// =========================================================================
+// Lane provenance at the merge boundary (CAWS-PREPUSH-PROVENANCE-REWORK-001).
+// MERGE IS THE SINGLE GOVERNED LANDING DOOR: every commit a lane lands must
+// belong to the lane, verified BEFORE the CAS sequence. Attribution is
+// SCOPE-keyed, never author/session-keyed (A8). Real git worktrees, real
+// compiled shell + store.
+// =========================================================================
+
+describe('caws worktree merge — lane provenance (CAWS-PREPUSH-PROVENANCE-REWORK-001)', () => {
+  test('P1 (A1): a clean lane merge records lane_tip + base_before in worktree_merged', () => {
+    const { repo, caws, wtPath } = setupReadyWorktree('prov-p1-', 'wt-p1', 'PROV-P1-001');
+    const registry = JSON.parse(fs.readFileSync(path.join(caws, 'worktrees.json'), 'utf8'));
+    const branch = registry['wt-p1'].branch;
+    const laneTip = execFileSync('git', ['-C', repo, 'rev-parse', branch], { encoding: 'utf8' }).trim();
+
+    const result = runMerge(repo, 'wt-p1');
+    expect(result.code).toBe(0);
+    expect(fs.existsSync(wtPath)).toBe(false); // teardown ran
+
+    const events = fs.readFileSync(path.join(caws, 'events.jsonl'), 'utf8')
+      .trim().split('\n').map((l) => JSON.parse(l));
+    const merged = events.filter((e) => e.event === 'worktree_merged').pop();
+    expect(merged).toBeDefined();
+    expect(merged.data.lane_tip).toBe(laneTip);
+    expect(merged.data.base_before).toMatch(/^[0-9a-f]{40}$/);
+    // The recorded range resolves and contains the lane's commit(s).
+    const range = execFileSync(
+      'git',
+      ['-C', repo, 'rev-list', `${merged.data.base_before}..${merged.data.lane_tip}`],
+      { encoding: 'utf8' }
+    ).trim().split('\n').filter(Boolean);
+    expect(range.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('P2 (A2): a lane commit OUTSIDE the spec scope refuses pre-merge and writes nothing', () => {
+    const { repo, caws, wtPath } = setupReadyWorktree('prov-p2-', 'wt-p2', 'PROV-P2-001');
+    fs.writeFileSync(path.join(wtPath, 'foreign.txt'), 'not lane work\n');
+    execFileSync('git', ['-C', wtPath, 'add', 'foreign.txt']);
+    execFileSync('git', ['-C', wtPath, 'commit', '--quiet', '-m', 'foreign work swept into the lane']);
+
+    const beforeEvents = fs.readFileSync(path.join(caws, 'events.jsonl'), 'utf8');
+    const result = runMerge(repo, 'wt-p2');
+
+    expect(result.code).toBe(1);
+    expect(result.err).toMatch(/outside spec scope/);
+    expect(result.err).toMatch(/foreign\.txt/);
+    // Nothing was written: no destroy, no new events, main did not advance.
+    expect(fs.existsSync(wtPath)).toBe(true);
+    expect(fs.readFileSync(path.join(caws, 'events.jsonl'), 'utf8')).toBe(beforeEvents);
+    expect(() =>
+      execFileSync('git', ['-C', repo, 'show', 'main:foreign.txt'], { stdio: 'pipe' })
+    ).toThrow();
+  });
+
+  test('P2b (A2/dry-run honesty): a dry run reports the same provenance findings', () => {
+    const { repo, wtPath } = setupReadyWorktree('prov-p2b-', 'wt-p2b', 'PROV-P2B-001');
+    fs.writeFileSync(path.join(wtPath, 'foreign.txt'), 'not lane work\n');
+    execFileSync('git', ['-C', wtPath, 'add', 'foreign.txt']);
+    execFileSync('git', ['-C', wtPath, 'commit', '--quiet', '-m', 'foreign work']);
+
+    const result = runMerge(repo, 'wt-p2b', { dryRun: true });
+    expect(result.out + result.err).toMatch(/outside spec scope/);
+    expect(fs.existsSync(wtPath)).toBe(true);
+  });
+
+  test('P3 (A2 remediation): the refusal names candidate lanes for the out-of-scope paths', () => {
+    const { repo, caws, wtPath } = setupReadyWorktree('prov-p3-', 'wt-p3', 'PROV-P3-001');
+    // A second ACTIVE spec whose scope admits the foreign path — the lane the
+    // commit might actually belong to.
+    seedSpec(caws, 'OTHER-LANE-1', ['foreign.txt']);
+    commitCaws(repo, 'seed other spec');
+    fs.writeFileSync(path.join(wtPath, 'foreign.txt'), 'x\n');
+    execFileSync('git', ['-C', wtPath, 'add', 'foreign.txt']);
+    execFileSync('git', ['-C', wtPath, 'commit', '--quiet', '-m', 'foreign work']);
+
+    // Store-level: the refusal diagnostic carries structured foreign_commits
+    // detail (offending sha, out-of-scope paths, candidate spec ids).
+    const result = mergeWorktree(caws, {
+      name: 'wt-p3',
+      session: SESSION,
+      actor: ACTOR,
+      sessionCandidates: CANDIDATES,
+      now: () => new Date('2026-08-06T12:00:00.000Z'),
+    });
+    expect(result.ok).toBe(false);
+    const payload = JSON.stringify(result.errors);
+    expect(payload).toContain('foreign.txt');
+    expect(payload).toContain('OTHER-LANE-1');
+    expect(fs.existsSync(wtPath)).toBe(true); // nothing written
+  });
+
+  test('P4 (A8): provenance is scope-keyed, never author/session-keyed — a lane commit by a DIFFERENT author merges', () => {
+    const { repo, wtPath } = setupReadyWorktree('prov-p4-', 'wt-p4', 'PROV-P4-001');
+    // Simulates the takeover chain: a second session (different git author)
+    // commits in-scope lane work. The lane is the authority unit, so the
+    // authorship change must not affect the verdict.
+    fs.appendFileSync(path.join(wtPath, 'work.txt'), 'more lane work\n');
+    execFileSync('git', ['-C', wtPath, 'add', 'work.txt']);
+    execFileSync('git', [
+      '-C', wtPath,
+      '-c', 'user.name=OtherSession',
+      '-c', 'user.email=other@t.com',
+      'commit', '--quiet', '-m', 'lane work from a second session (takeover chain)',
+    ]);
+
+    const result = runMerge(repo, 'wt-p4');
+    expect(result.code).toBe(0);
+    expect(result.out).toMatch(/merged wt-p4 \(merge_commit:/);
   });
 });

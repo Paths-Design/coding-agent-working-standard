@@ -900,15 +900,15 @@ export const PREPUSH_COMMAND_META: LeafCommandMeta = {
   kind: 'leaf',
   name: 'prepush',
   description:
-    'Classify the outgoing commit range before publish and refuse commits not attributable to the current slice. Diagnose/decide only — does NOT run git push.',
+    'Classify the outgoing commit range by governance provenance (governed merge / CLI bookkeeping / acked exception / unvetted direct) and refuse unvetted direct commits. The per-slice provenance check runs at caws worktree merge; prepush re-verifies what merge already vetted. Diagnose/decide only — does NOT run git push.',
   options: [
     { flag: '--remote <remote>', description: 'Push remote', defaultValue: 'origin' },
     { flag: '--branch <branch>', description: 'Push branch', defaultValue: 'main' },
     { flag: '--base <ref>', description: 'Base ref override (default <remote>/<branch>)' },
-    { flag: '--spec <id>', description: 'Current session active spec id (for slice-match)' },
+    { flag: '--spec <id>', description: 'Current session active spec id (advisory attribution report only)' },
     {
       flag: '--ack <sha>',
-      description: 'Acknowledge an unexpected commit by SHA (repeatable)',
+      description: 'Durably acknowledge an unvetted direct commit by SHA prefix (7-40 hex, repeatable; persisted in .caws/prepush-acks.json)',
       collect: true,
       // Seed []: the prepush handler reads opts.ack as an array unconditionally.
       defaultValue: [],

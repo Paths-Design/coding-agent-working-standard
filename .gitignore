@@ -457,6 +457,9 @@ public
 .caws/worktrees/
 **/.caws/state/
 .caws/duplication-cache.json
+# Operator-local durable prepush acknowledgments (CAWS-PREPUSH-PROVENANCE-
+# REWORK-001 A5) — per-checkout state, never committed.
+.caws/prepush-acks.json
 
 # CAWSFIX-15: agent-session tracking is per-CLI-invocation state, not repo state
 .caws/worktrees.json

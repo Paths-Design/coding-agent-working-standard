@@ -392,7 +392,8 @@ added `events` (eleventh) for hash-chained audit-log maintenance
 (`migrate/rotate/verify-archive`), `agents` (twelfth) for multi-agent
 observability, `message` for directed inter-agent messages, and `prepush` — the governed pre-push range
 check (MULTI-AGENT-PUSH-RANGE-GUARD-001) that classifies the outgoing
-commit range and refuses commits not attributable to the current slice
+commit range by governance provenance (merged-lane / CLI bookkeeping /
+acked exception / unvetted direct) and refuses unvetted direct commits
 without running `git push` itself. `agents` shipped ahead of the broader
 v11.2 multi-agent plan: its `register/heartbeat/stop/list/show/prune`
 subcommands are all live. `message send/poll` is deliberately not authority:
@@ -457,7 +458,7 @@ Option A.
 | `caws message send/poll` | Directed inter-agent messages over `.caws/messages.jsonl`. Separate from the audit chain and not authority. |
 | `caws claim --takeover` | Acquire ownership from a foreign session; writes `prior_owners` audit entry. |
 | `caws claim --paths <path>` | Declare working-tree path ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001). |
-| `caws prepush [--base <ref>] [--ack <sha>]` | Governed pre-push range check (MULTI-AGENT-PUSH-RANGE-GUARD-001). Enumerates the outgoing commit range (`<base>..HEAD`, default `origin/main`), classifies each commit's spec provenance (file-touch + commit-subject), escalates foreign-worktree presence, and refuses commits not attributable to the current slice unless `--ack <sha>`'d. Diagnose/decide only — never rewrites, drops, or pushes. v1 is opt-in (`prepush`-first; no raw `git push` interception). |
+| `caws prepush [--base <ref>] [--ack <sha>]` | Governed pre-push range check (MULTI-AGENT-PUSH-RANGE-GUARD-001, reworked by CAWS-PREPUSH-PROVENANCE-REWORK-001). Enumerates the outgoing range (`<base>..HEAD`, default `origin/main`) and classifies each commit by governance provenance: `governed_merge` (inside a lane range recorded by a `worktree_merged` event — `lane_tip`/`base_before` when present, else derived from the merge commit's parents), `cli_bookkeeping` (CAWS auto-commits over governed state), `acked_exception` (durable `--ack <sha>`, persisted in `.caws/prepush-acks.json`), or `unvetted_direct`. Refuses on any `unvetted_direct` commit; foreign-worktree escalation is severity-keyed on owner-session liveness. The per-slice provenance teeth live at the merge boundary (`caws worktree merge` refuses a lane whose commits touch paths outside the bound spec's scope); prepush is the inductive delta check over what merge already vetted. Diagnose/decide only — never rewrites, drops, or pushes. v1 is opt-in (`prepush`-first; no raw `git push` interception). |
 
 ### Planned in v11.2 (multi-agent authority and observability)
 

@@ -300,3 +300,36 @@ export function isPathDirty(repoRoot: string, relPath: string): boolean {
 export function relativeToRepoRoot(repoRoot: string, abs: string): string {
   return path.relative(repoRoot, abs);
 }
+
+// ─── Bookkeeping shape recognition (CAWS-PREPUSH-PROVENANCE-REWORK-001) ───
+
+/**
+ * The conventional commit-subject prefix every CAWS auto-commit uses. The
+ * push-range classifier recognizes CLI bookkeeping commits by this prefix
+ * PLUS a governed-state path set (shape, never actor — a hand-forged
+ * lookalike touching non-governed paths is not bookkeeping).
+ */
+export const CAWS_BOOKKEEPING_SUBJECT_PREFIX = 'chore(caws):';
+
+/**
+ * True when a repo-root-relative path is governed operational state that a
+ * CLI bookkeeping commit may touch. Deliberately EXCLUDES `.caws/policy.yaml`
+ * (gate policy is supply-chain-sensitive — a commit changing gate modes must
+ * surface as unvetted) and `.caws/hooks/` (guard source). Both stay outside
+ * the bookkeeping shape so a forged `chore(caws):` commit touching them is
+ * refused by `caws prepush` unless a human acknowledges it.
+ */
+export function isGovernedStatePath(relPath: string): boolean {
+  const p = relPath.replace(/\\/g, '/').replace(/^\.\//, '');
+  return (
+    p.startsWith('.caws/specs/') ||
+    p.startsWith('.caws/waivers/') ||
+    p.startsWith('.caws/leases/') ||
+    p.startsWith('.caws/sessions/') ||
+    p === '.caws/worktrees.json' ||
+    p === '.caws/agents.json' ||
+    p === '.caws/messages.jsonl' ||
+    p === '.caws/events.jsonl' ||
+    p.startsWith('.caws/events-archive/')
+  );
+}
