@@ -56,8 +56,11 @@ function commitCaws(repoRoot, message) {
   git(repoRoot, ['commit', '--quiet', '--no-verify', '-m', message]);
 }
 
-function seedSpec(caws, id) {
-  const r = createSpec(caws, { id, title: 'x', mode: 'chore', riskTier: 3, actor: ACTOR });
+function seedSpec(caws, id, scopeIn) {
+  // CAWS-PREPUSH-PROVENANCE-REWORK-001: merge now enforces lane provenance —
+  // every lane commit must touch only paths inside the bound spec's scope.in.
+  // Seed that scope so the fixture lanes stay mergeable.
+  const r = createSpec(caws, { id, title: 'x', mode: 'chore', riskTier: 3, actor: ACTOR, scopeIn });
   if (!r.ok || r.value.kind !== 'success') throw new Error('seed failed');
 }
 
@@ -97,8 +100,8 @@ describe('A1: concurrent merges both land; the base never moves backward', () =>
   test('two worktrees merged back-to-back are BOTH ancestors of the final base', () => {
     const caws = setupCaws(mkRepo('cas-a1-'));
     const repo = path.dirname(caws);
-    seedSpec(caws, 'CAS-A1-001');
-    seedSpec(caws, 'CAS-A1-002');
+    seedSpec(caws, 'CAS-A1-001', ['a.txt']);
+    seedSpec(caws, 'CAS-A1-002', ['b.txt']);
     commitCaws(repo, 'seed specs');
 
     const branchA = seedWorktree(caws, 'wt-a', 'CAS-A1-001', 'a.txt');
@@ -206,7 +209,7 @@ describe('A4: the merge never checks out the base branch', () => {
     // tree. The object-database path cannot: nothing is checked out.
     const caws = setupCaws(mkRepo('cas-a4-'));
     const repo = path.dirname(caws);
-    seedSpec(caws, 'CAS-A4-001');
+    seedSpec(caws, 'CAS-A4-001', ['x.txt']);
     commitCaws(repo, 'seed spec');
     seedWorktree(caws, 'wt-a4', 'CAS-A4-001', 'x.txt');
 
@@ -231,8 +234,8 @@ describe('A5: a real conflict is reported without dirtying the working tree', ()
   test('conflicting branches refuse the merge and leave no merge in progress', () => {
     const caws = setupCaws(mkRepo('cas-a5-'));
     const repo = path.dirname(caws);
-    seedSpec(caws, 'CAS-A5-001');
-    seedSpec(caws, 'CAS-A5-002');
+    seedSpec(caws, 'CAS-A5-001', ['shared.txt']);
+    seedSpec(caws, 'CAS-A5-002', ['shared.txt']);
 
     // A file both branches will edit differently.
     fs.writeFileSync(path.join(repo, 'shared.txt'), 'original\n');
@@ -283,7 +286,7 @@ describe('A6: nothing destructive happens before the ref advances', () => {
   test('the merged branch is deleted only after it is an ancestor of the new base', () => {
     const caws = setupCaws(mkRepo('cas-a6-'));
     const repo = path.dirname(caws);
-    seedSpec(caws, 'CAS-A6-001');
+    seedSpec(caws, 'CAS-A6-001', ['y.txt']);
     commitCaws(repo, 'seed spec');
     const branch = seedWorktree(caws, 'wt-a6', 'CAS-A6-001', 'y.txt');
 
