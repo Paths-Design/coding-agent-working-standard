@@ -3,6 +3,7 @@ title: 'Seed scopeIn in worktree-merge test fixtures so lanes pass the provenanc
 risk_tier: 3
 mode: fix
 lifecycle_state: active
+worktree: wt-merge-test-lane-scope
 created_at: '2026-08-11T02:00:00.000Z'
 updated_at: '2026-08-11T02:00:00.000Z'
 blast_radius:
