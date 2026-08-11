@@ -55,3 +55,9 @@ contracts:
     type: contract-test
   - name: 'cli-md-leaf-coverage'
     type: contract-test
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: npx jest tests/shell/specs-close-handoff.test.js tests/shell/specs-reopen.test.js tests/shell/specs-close-requires-closure-notes.test.js tests/shell/specs-close-closure-notes-alias.test.js (24/24)
+    recorded_at: "2026-08-11T21:03:51.442Z"
+    exit_code: 0
