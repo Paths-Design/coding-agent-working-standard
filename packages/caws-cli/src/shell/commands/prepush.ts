@@ -1,22 +1,45 @@
-// caws prepush — MULTI-AGENT-PUSH-RANGE-GUARD-001 command surface.
+// caws prepush — MULTI-AGENT-PUSH-RANGE-GUARD-001 command surface,
+// reworked by CAWS-PREPUSH-PROVENANCE-REWORK-001.
 //
 // Thin command over the pure classifier (push-range/classify-range). It
 // does the git READS (outgoing range, per-commit touched files, foreign
-// worktree state, dirty-tree preflight), hands the collected facts to
-// classifyRange(), renders the structured report, and returns an exit code.
+// worktree state, dirty-tree preflight, governed-merge coverage from
+// events.jsonl), hands the collected facts to classifyRange(), renders
+// the structured report, and returns an exit code.
 //
-// It NEVER invokes git push, never mutates repo state. v1 is prepush-first:
-// `caws prepush` classifies + refuses; it does not wrap the transport. The
-// operator runs `git push` themselves after a clean pass. (Per ADR 0001 +
-// the maintainer's prepush-first v1 narrowing.)
+// It NEVER invokes git push. v1 is prepush-first: `caws prepush`
+// classifies + refuses; it does not wrap the transport. The operator runs
+// `git push` themselves after a clean pass. (Per ADR 0001 + the
+// maintainer's prepush-first v1 narrowing.)
+//
+// MUTATION POSTURE (changed by CAWS-PREPUSH-PROVENANCE-REWORK-001):
+// classification is read-only, but `--ack <sha>` is a disclosed write —
+// it records a durable operator acknowledgment in .caws/prepush-acks.json
+// (SHA-keyed, atomic tmp+rename) so an acknowledged commit stays
+// acknowledged across invocations and sessions (A5). Without --ack,
+// prepush mutates nothing.
+//
+// REFUSAL SEMANTICS (changed by the same spec): the ONLY refusal classes
+// are (a) unvetted direct-on-trunk commits — no worktree_merged coverage,
+// no recognized CLI bookkeeping shape, no recorded acknowledgment — and
+// (b) ERROR-severity foreign worktrees after liveness pruning (ghosts:
+// dead owner + fully merged branch — are advisory, never ERROR). The
+// legacy "attributable to the current slice" model is retired: in a
+// multi-agent repo the pusher is never the author of the whole range, so
+// that model refused the normal trunk-publish by construction. The
+// per-commit spec attribution remains as advisory report output.
 
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 import {
   resolveRepoRoot,
   loadSpecs,
   loadWorktrees,
+  loadEvents,
+  loadLeases,
+  defaultIsPidAlive,
 } from '../../store';
 import {
   classifyRange,
@@ -245,7 +268,9 @@ function collectGitFacts(
       .filter(Boolean);
     const origin = attributeOriginWorktree(git, repoRoot, sha, registered);
     return {
-      sha: sha.slice(0, 12),
+      // Full 40-char SHA, lowercase (CAWS-PREPUSH-PROVENANCE-REWORK-001
+      // A6): acks match against the full form; display truncates.
+      sha: sha.toLowerCase(),
       subject,
       touchedFiles: files,
       ...(origin !== undefined ? { originWorktree: origin } : {}),
@@ -255,21 +280,172 @@ function collectGitFacts(
   return { commits, dirtyPaths };
 }
 
+/**
+ * Collect every SHA covered by a governed merge: each worktree_merged
+ * event's merge commit plus its lane range. Post-extension events record
+ * the range explicitly (lane_tip + base_before); pre-extension events are
+ * derived from the merge commit's parents. An unreadable ledger or an
+ * underivable range degrades to less coverage (those commits surface as
+ * unvetted — the operator can ack) — a toolchain fault must not fabricate
+ * a refusal (spec invariant).
+ */
+function collectGovernedMergeShas(
+  git: GitRunner,
+  repoRoot: string,
+  cawsDir: string
+): ReadonlySet<string> {
+  const covered = new Set<string>();
+  const eventsResult = loadEvents(cawsDir);
+  if (!eventsResult.ok) return covered;
+  for (const ev of eventsResult.value.events) {
+    if (ev.event !== 'worktree_merged') continue;
+    const data = ev.data as
+      | { merge_commit?: unknown; lane_tip?: unknown; base_before?: unknown }
+      | undefined;
+    const mergeCommit =
+      typeof data?.merge_commit === 'string' ? data.merge_commit : undefined;
+    if (mergeCommit === undefined) continue;
+    covered.add(mergeCommit.toLowerCase());
+    const laneTip =
+      typeof data?.lane_tip === 'string' ? data.lane_tip : undefined;
+    const baseBefore =
+      typeof data?.base_before === 'string' ? data.base_before : undefined;
+    const rangeSpec =
+      laneTip !== undefined && baseBefore !== undefined
+        ? `${baseBefore}..${laneTip}`
+        : `${mergeCommit}^1..${mergeCommit}^2`;
+    try {
+      const out = git(['rev-list', rangeSpec], repoRoot);
+      for (const line of out.split('\n')) {
+        const s = line.trim();
+        if (s) covered.add(s.toLowerCase());
+      }
+    } catch {
+      // Underivable range (shallow clone, pruned objects) — degrade to
+      // merge-commit-only coverage for this event.
+    }
+  }
+  return covered;
+}
+
+// ─── Durable ack store (CAWS-PREPUSH-PROVENANCE-REWORK-001 A5) ──────────
+//
+// .caws/prepush-acks.json: operator acknowledgments of unvetted direct
+// commits, keyed by full SHA. Durable across invocations and sessions so
+// a moving trunk costs only the delta — previously acked SHAs never
+// demand re-acknowledgment. Written ONLY when --ack matches a range
+// commit (atomic tmp+rename); read leniently (absent is normal; malformed
+// degrades to empty with a diagnostic — never a refusal).
+
+interface PrepushAckRecord {
+  readonly sha: string;
+  readonly acked_at: string;
+}
+
+function ackStorePath(cawsDir: string): string {
+  return path.join(cawsDir, 'prepush-acks.json');
+}
+
+export function loadAckStore(cawsDir: string): {
+  acks: PrepushAckRecord[];
+  diagnostic?: string;
+} {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(ackStorePath(cawsDir), 'utf8');
+  } catch {
+    return { acks: [] }; // absent is normal — no acks recorded yet.
+  }
+  try {
+    const parsed = JSON.parse(raw) as { acks?: unknown };
+    const acks = Array.isArray(parsed?.acks)
+      ? parsed.acks.filter(
+          (a): a is PrepushAckRecord =>
+            typeof a === 'object' &&
+            a !== null &&
+            typeof (a as PrepushAckRecord).sha === 'string' &&
+            /^[0-9a-f]{40}$/.test((a as PrepushAckRecord).sha) &&
+            typeof (a as PrepushAckRecord).acked_at === 'string'
+        )
+      : [];
+    return { acks };
+  } catch (e) {
+    return {
+      acks: [],
+      diagnostic: `caws prepush: .caws/prepush-acks.json is malformed (${(e as Error).message}) — treating as empty. No recorded acks applied.`,
+    };
+  }
+}
+
+export function saveAckStore(
+  cawsDir: string,
+  acks: readonly PrepushAckRecord[]
+): void {
+  const p = ackStorePath(cawsDir);
+  const tmp = `${p}.tmp.${process.pid}`;
+  fs.writeFileSync(
+    tmp,
+    JSON.stringify({ version: 1, acks }, null, 2) + '\n',
+    'utf8'
+  );
+  fs.renameSync(tmp, p);
+}
+
+const ACK_SHA_RE = /^[0-9a-f]{7,40}$/;
+
+/**
+ * Normalize --ack flags against the outgoing range's full SHAs (A6): a
+ * valid hex prefix (7-40 chars, so `git rev-list` output works verbatim)
+ * matching exactly one range commit resolves to that commit's full SHA.
+ * Zero or multiple matches produce a diagnostic naming the ack — an ack
+ * is never silently ignored.
+ */
+export function normalizeCliAcks(
+  cliAcks: readonly string[],
+  rangeShas: readonly string[],
+  report: (line: string) => void
+): string[] {
+  const matched: string[] = [];
+  for (const raw of cliAcks) {
+    const ack = raw.trim().toLowerCase();
+    if (!ACK_SHA_RE.test(ack)) {
+      report(
+        `caws prepush: --ack "${raw}" is not a valid hex SHA prefix (7-40 chars) — not recorded.`
+      );
+      continue;
+    }
+    const hits = rangeShas.filter((s) => s.startsWith(ack));
+    if (hits.length === 1) {
+      matched.push(hits[0]!);
+    } else if (hits.length === 0) {
+      report(
+        `caws prepush: --ack ${ack} did not match any commit in the outgoing range — not recorded.`
+      );
+    } else {
+      report(
+        `caws prepush: --ack ${ack} is ambiguous (${hits.length} outgoing commits match) — not recorded.`
+      );
+    }
+  }
+  return matched;
+}
+
 function renderReport(report: PushRangeReport, out: (s: string) => void): void {
   out(`prepush: outgoing range ${report.baseRef}..HEAD → ${report.target.remote} ${report.target.branch}`);
   if (report.commits.length === 0) {
     out('  (no outgoing commits)');
   }
   for (const c of report.commits) {
-    const flag = c.currentSliceMatch
-      ? 'current-slice'
-      : c.acknowledged
-        ? 'acknowledged'
-        : c.ambiguous
-          ? 'AMBIGUOUS'
-          : 'UNEXPECTED';
+    const flag =
+      c.governanceClass === 'governed_merge'
+        ? 'governed-merge'
+        : c.governanceClass === 'cli_bookkeeping'
+          ? 'bookkeeping'
+          : c.governanceClass === 'acked_exception'
+            ? 'acknowledged'
+            : 'UNVETTED';
     const specs = c.inferredSpecIds.length > 0 ? c.inferredSpecIds.join(',') : '(none)';
-    out(`  ${c.sha} [${flag}] ${c.subject}`);
+    out(`  ${c.sha.slice(0, 12)} [${flag}] ${c.subject}`);
     out(`      specs: ${specs}  via: ${c.provenanceSource}  files: ${c.touchedFiles.length}`);
     if (c.originWorktree !== undefined) {
       out(`      origin-worktree: ${c.originWorktree}`);
@@ -278,6 +454,7 @@ function renderReport(report: PushRangeReport, out: (s: string) => void): void {
   for (const f of report.foreignWorktrees) {
     out(`  [${f.severity}] foreign worktree ${f.name} (${f.path})${f.branch ? ' @ ' + f.branch : ''}`);
     for (const r of f.reasons) out(`      - ${r}`);
+    if (f.remediation !== undefined) out(`      remediation: ${f.remediation}`);
   }
 }
 
@@ -306,8 +483,15 @@ export function runPrepushCommand(opts: PrepushCommandOptions): number {
   // 2. Load the worktree registry FIRST — its branches feed per-commit origin
   //    attribution (git branch --contains) inside collectGitFacts.
   const wtResult = loadWorktrees(cawsDir);
-  const registry: Record<string, { specId?: string; path?: string; branch?: string }> =
-    wtResult.ok ? wtResult.value : {};
+  const registry: Record<
+    string,
+    {
+      specId?: string;
+      path?: string;
+      branch?: string;
+      owner?: { session_id?: unknown };
+    }
+  > = wtResult.ok ? wtResult.value : {};
   const registered: RegisteredWorktreeRef[] = Object.entries(registry).map(
     ([name, rec]) => ({
       name,
@@ -334,6 +518,36 @@ export function runPrepushCommand(opts: PrepushCommandOptions): number {
     err('  Commit or stash these (and confirm they are yours) before prepush.');
     return 1;
   }
+
+  // 4b. Governed-merge coverage from the events ledger + durable acks.
+  //     (CAWS-PREPUSH-PROVENANCE-REWORK-001.) The events ledger is the
+  //     provenance record: every commit a governed merge landed is covered
+  //     by construction. Durable acks cover the human-blessed exceptions.
+  const governedMergeShas = collectGovernedMergeShas(git, repoRoot, cawsDir);
+  const ackStore = loadAckStore(cawsDir);
+  if (ackStore.diagnostic !== undefined) err(ackStore.diagnostic);
+  const rangeShas = facts.commits.map((c) => c.sha);
+  const cliAcks = normalizeCliAcks(opts.ack ?? [], rangeShas, err);
+  // Persist newly matched acks — the one disclosed write (A5). A
+  // persistence failure is non-fatal: the ack still applies to this run.
+  const alreadyRecorded = new Set(ackStore.acks.map((a) => a.sha));
+  const freshAcks = cliAcks.filter((s) => !alreadyRecorded.has(s));
+  if (freshAcks.length > 0) {
+    try {
+      saveAckStore(cawsDir, [
+        ...ackStore.acks,
+        ...freshAcks.map((sha) => ({ sha, acked_at: new Date().toISOString() })),
+      ]);
+      for (const sha of freshAcks) {
+        out(`  acknowledged: ${sha.slice(0, 12)} recorded in .caws/prepush-acks.json`);
+      }
+    } catch (e) {
+      err(
+        `caws prepush: failed to persist acks (${(e as Error).message}) — acknowledgment applies to this run only.`
+      );
+    }
+  }
+  const ackedShas = [...ackStore.acks.map((a) => a.sha), ...cliAcks];
 
   // 5. Load specs (control-plane facts for attribution).
   const specsLoad = loadSpecs(cawsDir);
@@ -378,6 +592,14 @@ export function runPrepushCommand(opts: PrepushCommandOptions): number {
       .map((r) => [r.branch as string, r.name])
   );
 
+  // Agent-liveness substrate for ghost detection (A7): a registered
+  // worktree whose owner session has no live lease (stopped/absent, or a
+  // dead pid) and whose branch is fully merged is residue — advisory,
+  // never ERROR. Leases are operational cache; an unreadable leases dir
+  // degrades to "liveness unknown" (the legacy escalation applies).
+  const leasesResult = loadLeases(cawsDir);
+  const leases = leasesResult.ok ? leasesResult.value.leases : {};
+
   const foreignWorktrees: ForeignWorktree[] = [];
   for (const phys of listPhysicalWorktrees(git, repoRoot)) {
     let physReal: string;
@@ -401,12 +623,23 @@ export function runPrepushCommand(opts: PrepushCommandOptions): number {
       (phys.branch !== undefined ? nameByBranch.get(phys.branch) : undefined) ??
       phys.branch ??
       phys.path;
+    // Liveness of the registered owner's session, when evaluable.
+    let ownerSessionLive: boolean | undefined;
+    const ownerSid = registry[name]?.owner?.session_id;
+    if (typeof ownerSid === 'string' && ownerSid.length > 0) {
+      const lease = leases[ownerSid];
+      ownerSessionLive =
+        lease !== undefined &&
+        lease.status === 'active' &&
+        (typeof lease.pid !== 'number' || defaultIsPidAlive(lease.pid));
+    }
     foreignWorktrees.push({
       name,
       path: phys.path,
       ...(phys.branch !== undefined ? { branch: phys.branch } : {}),
       unregistered,
       unmerged,
+      ...(ownerSessionLive !== undefined ? { ownerSessionLive } : {}),
     });
   }
 
@@ -416,7 +649,8 @@ export function runPrepushCommand(opts: PrepushCommandOptions): number {
     specs,
     ...(opts.specId !== undefined ? { currentSpecId: opts.specId } : {}),
     foreignWorktrees,
-    ...(opts.ack !== undefined ? { ackedShas: opts.ack } : {}),
+    governedMergeShas: [...governedMergeShas],
+    ackedShas,
     baseRef,
     target,
   });
@@ -424,18 +658,22 @@ export function runPrepushCommand(opts: PrepushCommandOptions): number {
   // 8. Render + decide.
   renderReport(report, out);
   if (report.refused) {
-    err('caws prepush: REFUSED. The outgoing range contains commits not');
-    err('  attributable to the current slice, or an ERROR-severity foreign');
-    err('  worktree. Acknowledge specific commits with --ack <sha> after');
-    err('  confirming they belong in this push, or resolve the foreign');
-    err('  worktree, then re-run. This is a governed pre-push check; it does');
-    err('  NOT run git push.');
-    if (report.unexpectedUnacked.length > 0) {
-      err(`  unexpected (unacknowledged): ${report.unexpectedUnacked.join(', ')}`);
+    err('caws prepush: REFUSED. The outgoing range contains direct-on-trunk');
+    err('  commits governance never touched (no governed-merge coverage, no');
+    err('  recognized CLI bookkeeping shape, no recorded acknowledgment), or');
+    err('  an ERROR-severity foreign worktree. Acknowledge specific commits');
+    err('  with --ack <sha> after confirming they belong in this push (acks');
+    err('  are recorded durably in .caws/prepush-acks.json), or resolve the');
+    err('  foreign worktree, then re-run. This is a governed pre-push check;');
+    err('  it does NOT run git push.');
+    if (report.unvettedShas.length > 0) {
+      err(
+        `  unvetted (unacknowledged): ${report.unvettedShas.map((s) => s.slice(0, 12)).join(', ')}`
+      );
     }
     return 1;
   }
 
-  out('caws prepush: range is cleanly attributable. Safe to git push.');
+  out('caws prepush: range is fully provenance-covered. Safe to git push.');
   return 0;
 }

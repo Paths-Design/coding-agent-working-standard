@@ -26,6 +26,16 @@
     "spec_already_closed": {
       "type": "boolean",
       "description": "True when the merge found the bound spec already in lifecycle_state: closed and skipped closeSpec (the close was performed by an earlier `caws specs close`). Implies the merge appended no second spec_closed event. Optional; absent is equivalent to false."
+    },
+    "lane_tip": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "Tip of the worktree lane at merge time (the second parent of merge_commit). Optional; absent on events written before CAWS-PREPUSH-PROVENANCE-REWORK-001. Prepush uses merge_commit..lane_tip as the governed lane range when present."
+    },
+    "base_before": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "Base branch tip before the merge advanced it (the first parent of merge_commit). Optional; absent on events written before CAWS-PREPUSH-PROVENANCE-REWORK-001."
     }
   }
 }

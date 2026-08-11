@@ -6,7 +6,7 @@
 
 The v11 cutover is complete. `main` runs the v11 surface (kernel/store/shell architecture, A1 posture). The doctrine source is [`docs/architecture/caws-vnext-command-surface.md`](docs/architecture/caws-vnext-command-surface.md). When this doc and the doctrine doc disagree, the doctrine doc wins.
 
-**The v11 line ships fifteen top-level commands/groups** (plus the auto-generated `help`): the governed core plus `specs`, `worktree`, `events`, `agents`, `message`, `reprieve`, and `prepush`. Run `caws --help` for the authoritative list. Commands removed in v11.0 and not planned to return (`validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `provenance`, `hooks`, `scaffold`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `templates`, `sidecar`) will fail if invoked. `caws agents list/show` **ship in v11.1** (liveness substrate). `caws message send/poll` is a directed message channel, not authority. `caws prepush` is the governed pre-push range check (MULTI-AGENT-PUSH-RANGE-GUARD-001): it classifies the outgoing commit range and refuses commits not attributable to the current slice; it does NOT run `git push`. Only `caws session` and `caws parallel` are deferred (v11.3+); bridge claims and lease-backed *authority* are the v11.2 plan.
+**The v11 line ships fifteen top-level commands/groups** (plus the auto-generated `help`): the governed core plus `specs`, `worktree`, `events`, `agents`, `message`, `reprieve`, and `prepush`. Run `caws --help` for the authoritative list. Commands removed in v11.0 and not planned to return (`validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `provenance`, `hooks`, `scaffold`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `templates`, `sidecar`) will fail if invoked. `caws agents list/show` **ship in v11.1** (liveness substrate). `caws message send/poll` is a directed message channel, not authority. `caws prepush` is the governed pre-push range check (MULTI-AGENT-PUSH-RANGE-GUARD-001): it classifies the outgoing commit range by governance provenance (governed merge / CLI bookkeeping / acked exception / unvetted direct) and refuses unvetted direct commits; it does NOT run `git push`. The per-slice provenance teeth live at the merge boundary — `caws worktree merge` refuses a lane whose commits touch paths outside the bound spec's scope — so prepush only re-verifies what merge already vetted, never re-attributes peer lanes to the pushing session. Only `caws session` and `caws parallel` are deferred (v11.3+); bridge claims and lease-backed *authority* are the v11.2 plan.
 
 **Migrating from v10.2?** Read [`docs/migration-v10-to-v11.md`](docs/migration-v10-to-v11.md) before upgrading. It classifies every v10.2 command (Replaced / Renamed / Removed-no-replacement / Deferred) and includes a rollback one-liner. v11 is not a drop-in replacement for every v10.2 workflow.
 
@@ -28,7 +28,7 @@ The v11 cutover is complete. `main` runs the v11 surface (kernel/store/shell arc
 | `caws worktree create / list / bind / destroy / untrack / merge / migrate-registry / repair-sparse / repair / prune / cleanup-plan` | Manage CAWS worktrees bound to active specs (`repair` prunes ghost registry entries + clears dead spec→worktree bindings; `repair-sparse` restores the `.caws/specs` sparse-checkout invariant; `untrack` releases the registry binding while keeping the directory; `prune` and `cleanup-plan` are dry-run-by-default cleanup planners). |
 | `caws agents register / heartbeat / stop / list / show / prune` | Agent-liveness substrate (`.caws/leases/`). Operational cache only — never authority. `prune` modes: `--dead` (PID-liveness), `--status stopped|stale --older-than-ms` (retention), `--status legacy --older-than-ms` (age-based, reaches v10/early-v11 leases with no status field). |
 | `caws message send / poll` | Directed inter-agent message channel over `.caws/messages.jsonl`. Not authority; verify claims before acting. |
-| `caws prepush [--base <ref>] [--ack <sha>]` | Governed pre-push range check. Diagnose/decide only — does NOT run `git push`. |
+| `caws prepush [--base <ref>] [--ack <sha>]` | Governed pre-push range check. Classifies each outgoing commit by governance provenance (governed merge / CLI bookkeeping / acked exception / unvetted direct) and refuses unvetted direct commits. Diagnose/decide only — does NOT run `git push`. |
 
 Run `caws <group> --help` for full options and flag details.
 
@@ -148,6 +148,15 @@ Only a genuine conflict or an exhausted retry budget is reported as a failure,
 and the diagnostic distinguishes them — contention names the base branch and the
 retry command; a conflict names the paths and leaves your working tree clean
 (no `MERGE_HEAD`, no conflict markers to clean up).
+
+Merge is also where **lane provenance** is enforced: every commit in the lane
+range must touch only paths inside the bound spec's `scope.in`. A lane carrying
+out-of-scope commits is refused before the merge is computed, and the refusal
+names candidate lanes for the foreign paths — scope-keyed, never author- or
+session-keyed, so a `--takeover`-handed worktree merges cleanly. A successful
+merge records `lane_tip`/`base_before` on the `worktree_merged` event; that
+record is what `caws prepush` later trusts as already-vetted when classifying
+the outgoing range.
 
 Hand-running `git checkout main && git merge` reintroduces the hazard this
 removes, and the bare checkout can trip the danger latch. Use the governed

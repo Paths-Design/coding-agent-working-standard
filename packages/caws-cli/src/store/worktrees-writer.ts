@@ -43,7 +43,7 @@ import {
 } from '../kernel';
 
 import { applyRegistryPatch } from './apply-patch';
-import { autoCommit, isPathDirty, type AutoCommitOutcome } from './git-autocommit';
+import { autoCommit, isPathDirty, isGovernedStatePath, type AutoCommitOutcome } from './git-autocommit';
 import { configureWorktreeSparseCheckout } from './git-sparse-checkout';
 import {
   linkWorktreeArtifacts,
@@ -1475,6 +1475,145 @@ export function untrackWorktree(
   });
 }
 
+// ─── Lane provenance (CAWS-PREPUSH-PROVENANCE-REWORK-001) ────────────────
+//
+// MERGE IS THE SINGLE GOVERNED LANDING DOOR: every commit a lane lands on
+// the base branch must belong to the lane. Verified here, BEFORE the CAS
+// sequence — a refusal writes nothing (no ref updates, no events, no
+// registry/spec mutation; unreferenced objects are GC-able garbage).
+//
+// Attribution is SCOPE-based, never session-based: the lane is the
+// authority unit, so an authorized takeover (prior_owners) does not affect
+// the verdict. Governed-state paths (.caws/specs/** etc. — the CLI's own
+// bookkeeping commits ride the lane branch) are always in-lane.
+
+// normalizeRel/scopeEntryMatches are an intentional THIRD copy of the
+// scope.in admission rule (canonical: shell/binding/resolve-binding.ts,
+// module-private; second copy: shell/push-range/scope-match.ts). The store
+// layer cannot import from shell, and the codebase precedent (see
+// scope-match.ts's header) is a small local copy over a cross-layer
+// import. INVARIANT: if the canonical matching rule changes, update ALL
+// copies — exact match, directory-prefix on a path boundary, or anchored
+// `*`/`?` glob.
+function normalizeRel(p: string): string {
+  return p.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+}
+
+function scopeEntryMatches(entry: string, target: string): boolean {
+  const e = normalizeRel(entry);
+  const t = normalizeRel(target);
+  if (e === t) return true;
+  if (!/[*?]/.test(e)) {
+    return t.startsWith(e + '/');
+  }
+  const rx = e
+    .split('')
+    .map((ch) => {
+      if (ch === '*') return '.*';
+      if (ch === '?') return '.';
+      return ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    })
+    .join('');
+  return new RegExp(`^${rx}$`).test(t);
+}
+
+/** One lane commit touching paths outside the lane's scope. */
+interface LaneForeignCommit {
+  readonly sha: string;
+  readonly outOfScopePaths: readonly string[];
+  /** Other ACTIVE specs whose scope.in admits the out-of-scope paths —
+   *  the lanes the commit might actually belong to (remediation hint). */
+  readonly candidateSpecIds: readonly string[];
+}
+
+interface LaneProvenanceResult {
+  readonly foreignCommits: readonly LaneForeignCommit[];
+  /** Set when the verification itself could not run (git failure). A
+   *  merge must not proceed unverified — the caller refuses. */
+  readonly verificationFailure?: string;
+}
+
+/**
+ * Verify every commit on `<baseBranch>..<branch>` belongs to the lane
+ * bound to `specId`: each touched path must match the spec's scope.in or
+ * be governed operational state (isGovernedStatePath). Merge commits on
+ * the lane branch yield an empty diff-tree file set and pass vacuously.
+ * Pure reads; never mutates.
+ */
+function verifyLaneProvenance(
+  cawsDir: string,
+  repoRoot: string,
+  baseBranch: string,
+  branch: string,
+  specId: string
+): LaneProvenanceResult {
+  const range = runGit(['rev-list', `${baseBranch}..${branch}`], repoRoot);
+  if (!range.ok) {
+    return {
+      foreignCommits: [],
+      verificationFailure: `git rev-list ${baseBranch}..${branch} failed: ${range.reason}`,
+    };
+  }
+  const shas = range.stdout
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (shas.length === 0) return { foreignCommits: [] };
+
+  const specResult = loadSpecOrError(cawsDir, specId);
+  if (!isOk(specResult)) {
+    return {
+      foreignCommits: [],
+      verificationFailure: `bound spec ${specId} could not be loaded: ${specResult.errors.map((d) => d.message).join('; ')}`,
+    };
+  }
+  const scopeRaw = (specResult.value.spec as { scope?: { in?: unknown } })
+    .scope?.in;
+  const scopeIn: readonly string[] = Array.isArray(scopeRaw)
+    ? scopeRaw.filter((e): e is string => typeof e === 'string')
+    : [];
+
+  // Candidate lanes for remediation: other ACTIVE specs.
+  const allSpecs = loadSpecs(cawsDir);
+  const candidateScopes = allSpecs.specs
+    .filter((s) => s.lifecycle_state === 'active' && s.id !== specId)
+    .map((s) => ({ id: s.id, scopeIn: s.scope.in }));
+
+  const foreignCommits: LaneForeignCommit[] = [];
+  for (const sha of shas) {
+    const files = runGit(
+      ['diff-tree', '--no-commit-id', '--name-only', '-r', sha],
+      repoRoot
+    );
+    if (!files.ok) {
+      return {
+        foreignCommits: [],
+        verificationFailure: `git diff-tree ${sha} failed: ${files.reason}`,
+      };
+    }
+    const touched = files.stdout
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const outOfScopePaths = touched.filter(
+      (f) =>
+        !isGovernedStatePath(f) &&
+        !scopeIn.some((entry) => scopeEntryMatches(entry, f))
+    );
+    if (outOfScopePaths.length === 0) continue;
+    const candidateSpecIds = candidateScopes
+      .filter((c) =>
+        outOfScopePaths.some((f) =>
+          c.scopeIn.some((entry) => scopeEntryMatches(entry, f))
+        )
+      )
+      .map((c) => c.id)
+      .sort();
+    foreignCommits.push({ sha, outOfScopePaths, candidateSpecIds });
+  }
+  return { foreignCommits };
+}
+
 // ─── mergeWorktree ───────────────────────────────────────────────────────
 
 /** How many times a lost compare-and-swap is retried before giving up. */
@@ -1702,6 +1841,38 @@ export function mergeWorktree(
     findings.push('missing branch or base_branch on registry entry');
   }
 
+  // CAWS-PREPUSH-PROVENANCE-REWORK-001 (lane provenance teeth): every
+  // commit the lane would land must belong to the lane — verified BEFORE
+  // the dry-run return so a dry run reports the same verdict the real
+  // merge would enforce, and BEFORE the CAS sequence so a refusal writes
+  // nothing. Runs only when the binding facts exist (their absence is
+  // already a finding above).
+  let foreignCommits: readonly LaneForeignCommit[] = [];
+  if (
+    entry.specId !== undefined &&
+    entry.branch !== undefined &&
+    entry.baseBranch !== undefined
+  ) {
+    const provenance = verifyLaneProvenance(
+      cawsDir,
+      repoRootFromCawsDir(cawsDir),
+      entry.baseBranch,
+      entry.branch,
+      entry.specId
+    );
+    if (provenance.verificationFailure !== undefined) {
+      findings.push(
+        `lane provenance could not be verified (${provenance.verificationFailure}) — refusing rather than merging unverified`
+      );
+    }
+    foreignCommits = provenance.foreignCommits;
+    for (const fc of foreignCommits) {
+      findings.push(
+        `lane branch contains commit ${fc.sha.slice(0, 12)} outside spec scope: ${fc.outOfScopePaths.join(', ')}`
+      );
+    }
+  }
+
   // Dry-run: report and return without mutation.
   if (input.dryRun === true) {
     return ok({
@@ -1734,7 +1905,22 @@ export function mergeWorktree(
         {
           subject: input.name,
           narrowRepair: mergeRepairHint(input.name, entry),
-          data: { findings, next_commands: mergeRecoveryNextCommands(input.name, entry) },
+          data: {
+            findings,
+            next_commands: mergeRecoveryNextCommands(input.name, entry),
+            // A2: name the offending commits, their out-of-scope paths, and
+            // the lanes they might belong to (empty for non-provenance
+            // refusals).
+            ...(foreignCommits.length > 0
+              ? {
+                  foreign_commits: foreignCommits.map((fc) => ({
+                    sha: fc.sha,
+                    out_of_scope_paths: fc.outOfScopePaths,
+                    candidate_spec_ids: fc.candidateSpecIds,
+                  })),
+                }
+              : {}),
+          },
         }
       )
     );
@@ -1769,6 +1955,12 @@ export function mergeWorktree(
   const branch = entry.branch as string;
   const specId = entry.specId as string;
   const message = input.message ?? `merge(worktree): ${input.name}`;
+
+  // A1 (CAWS-PREPUSH-PROVENANCE-REWORK-001): capture the lane tip BEFORE
+  // the CAS sequence so the worktree_merged event records the lane's
+  // contributed range explicitly (base_before comes from the CAS witness).
+  const laneTipResult = runGit(['rev-parse', branch], repoRoot);
+  const laneTip = laneTipResult.ok ? laneTipResult.stdout.trim() : undefined;
 
   const casOutcome = mergeViaCompareAndSwap(
     repoRoot,
@@ -1926,6 +2118,15 @@ export function mergeWorktree(
       worktree_name: input.name,
       merge_commit: mergeCommit,
       base_branch: baseBranch,
+      // CAWS-PREPUSH-PROVENANCE-REWORK-001 (A1): the lane's contributed
+      // range, recorded explicitly so publish-time provenance never
+      // re-derives it from the merge commit's parents for post-extension
+      // merges. ADDITIVE — pre-extension consumers are unaffected, and
+      // pre-extension events are derived from parents at read time.
+      // lane_tip is omitted only when its rev-parse failed (the merge
+      // itself already succeeded; the range remains parent-derivable).
+      ...(laneTip !== undefined ? { lane_tip: laneTip } : {}),
+      base_before: casOutcome.baseBefore,
       auto_closed_spec: true,
       // CAWS-FIX-N5-MERGE-IDEMPOTENT-CLOSE-001: true when the merge skipped
       // closeSpec because the bound spec was already closed. auto_closed_spec
@@ -1955,6 +2156,32 @@ export function mergeWorktree(
           subject: input.name,
           data: {
             merge_commit: mergeCommit,
+            recovery_instruction: `Manually destroy the worktree: caws worktree destroy ${input.name}`,
+          },
+        }
+      )
+    );
+  }
+
+  // CAWS-PREPUSH-PROVENANCE-REWORK-001: same honest-completion invariant as
+  // the closeResult check above. runLifecycleTransaction wraps
+  // `partial_failure_recovered` in `ok()` — and with `plannedWrites: []` and
+  // zero prior events, a rolled-back worktree_merged append arrives exactly
+  // that way. isOk() alone would let the merge report success while the
+  // provenance ledger silently lost the worktree_merged event — precisely
+  // the event prepush's inductive delta check depends on. Refuse instead.
+  if (mergedTxn.value.kind !== 'success') {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+        `Merge succeeded (commit ${mergeCommit}) but worktree_merged event append rolled back; the provenance ledger is missing the merge record. Worktree has NOT been destroyed.`,
+        {
+          subject: input.name,
+          data: {
+            merge_commit: mergeCommit,
+            merged_outcome_kind: mergedTxn.value.kind,
+            merged_cause:
+              mergedTxn.value.kind === 'partial_failure_recovered' ? mergedTxn.value.cause : undefined,
             recovery_instruction: `Manually destroy the worktree: caws worktree destroy ${input.name}`,
           },
         }
