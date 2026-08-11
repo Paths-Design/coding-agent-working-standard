@@ -66,3 +66,8 @@ evidence:
     evidence_ref: npx jest tests/docs/agent-recovery-path-drift.test.js (20/20) + npx bats tests/hooks/bats/reset-danger-latch.bats
     recorded_at: "2026-08-11T21:03:52.337Z"
     exit_code: 0
+  - criterion_id: A3
+    status: pass
+    evidence_ref: npx jest tests/docs/cli-api-reference-coverage.test.js (1/1)
+    recorded_at: "2026-08-11T21:03:53.213Z"
+    exit_code: 0
