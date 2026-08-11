@@ -64,3 +64,10 @@ contracts:
     type: contract-test
   - name: 'quiet-merge-permission-decision'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: npx jest tests/shell/specs-evidence-status-routing.test.js (3/3)
+    recorded_at: "2026-08-11T02:37:18.674Z"
+    command: npx jest tests/shell/specs-evidence-status-routing.test.js
+    exit_code: 0
