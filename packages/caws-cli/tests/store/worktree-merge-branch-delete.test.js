@@ -63,7 +63,18 @@ function commitCaws(repoRoot, message) {
 }
 
 function seedBoundableSpec(caws, id) {
-  const r = createSpec(caws, { id, title: 'x', mode: 'chore', riskTier: 3, actor: ACTOR });
+  // scopeIn covers the files this suite's lanes commit (payload.txt merged;
+  // unmerged.txt carried unmerged): the merge-time lane-provenance guard
+  // (CAWS-PREPUSH-PROVENANCE-REWORK-001) refuses any lane commit touching
+  // paths outside the bound spec's scope.
+  const r = createSpec(caws, {
+    id,
+    title: 'x',
+    mode: 'chore',
+    riskTier: 3,
+    actor: ACTOR,
+    scopeIn: ['payload.txt', 'unmerged.txt'],
+  });
   if (!r.ok || r.value.kind !== 'success') {
     throw new Error('seed spec failed: ' + JSON.stringify(r));
   }
