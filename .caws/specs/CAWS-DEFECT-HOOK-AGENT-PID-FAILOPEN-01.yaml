@@ -7,19 +7,60 @@ created_at: '2026-08-11T22:51:24.058Z'
 updated_at: '2026-08-11T22:51:24.058Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/shared
+    - .caws/hooks (installed mirror, tracked)
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/templates/hook-packs/shared/lib/parse-input.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/agent-pid.sh
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/tests/hooks/bats/parse-input.bats
+    - .caws/hooks/lib/parse-input.sh
+    - .caws/hooks/lib/agent-pid.sh
+  out:
+    - packages/caws-cli/src/store
+    - packages/caws-cli/src/kernel
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    _write_agent_pid_record and read_session_id_from_agent_pid keep their
+    documented fail-open contracts ("all failures silently swallowed";
+    "returns empty on any miss") regardless of the caller's set -e context:
+    no agent ancestor, missing ps, or a missing record must never abort the
+    sourcing guard.
+  - >-
+    The lane of changes touches no guard DECISION logic: every guard's
+    allow/block/ask behavior for matched inputs is byte-identical; only the
+    silent-death path is removed.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      an environment with no agent-process ancestor in the PID tree (bats
+      harness / CI / plain terminal) and CAWS_AGENT_PROCESS_NAMES non-empty
+      (claude-code surface)
+    when: >-
+      a guard that calls parse_hook_input (e.g. bash-write-guard.sh) receives
+      a benign read-only Bash envelope carrying a real session_id
+    then: >-
+      the guard exits 0 with its normal clean-pass behavior instead of dying
+      with exit 1 and zero output; the full bash-write-guard.bats suite (7
+      tests) passes
+  - id: A2
+    given: >-
+      read_session_id_from_agent_pid invoked from a set -e-active caller when
+      the agent-PID walk finds no matching ancestor
+    when: the read-group consumes the resolver's (empty) output
+    then: >-
+      the function returns 1 per its contract without aborting the caller —
+      the read-group is guarded so EOF is tolerated
+  - id: A3
+    given: the shared hook pack templates changed
+    when: the version/fingerprint governance runs
+    then: >-
+      SHARED_PACK_VERSION is bumped (35 -> 36) with a version-history comment,
+      pack-fingerprints.json is recomputed, pack-fingerprint.test.js is green,
+      and the tracked .caws/hooks/lib mirror matches the templates
 non_functional: {}
 contracts: []
