@@ -1,0 +1,31 @@
+id: CAWS-DEFECT-RED-SUITE-TRIAGE-01
+title: 'Fix pre-existing red suites: close state-vs-notes ordering, reset-danger-latch cwd-dependent canonical root, cli.md missing specs evidence/reopen'
+risk_tier: 2
+mode: fix
+lifecycle_state: active
+created_at: '2026-08-11T20:45:01.931Z'
+updated_at: '2026-08-11T20:45:01.931Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'close-state-before-notes'
+    type: behavior
+  - name: 'reset-latch-canonical-root'
+    type: contract-test
+  - name: 'cli-md-leaf-coverage'
+    type: contract-test
