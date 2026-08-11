@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 30
+# hook_pack_version: 33
 # caws_min_major: 11
 # lineage_refs: (new in shared-core-001)
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -39,7 +39,8 @@
 #   CAWS_SUPPORTS_UPDATED_INPUT — "1" when the harness honors the PreToolUse
 #                         updatedInput contract (quiet-merge.sh rewrites the
 #                         command), "0" when it does not (kimi-code: no
-#                         documented updatedInput contract — quiet-merge
+#                         documented updatedInput contract; qwen-code:
+#                         documented but not enforced in 0.21.x — quiet-merge
 #                         passes the command through unrewritten).
 #   CAWS_INSTRUCTION_FILES — space-separated root instruction filenames the
 #                         harness reads at the repo root (e.g. "CLAUDE.md" for
@@ -89,6 +90,18 @@
 #                  precedent) and no-ops outside CAWS repos. Deny-only PreToolUse
 #                  vocab (verified live: "ask" does not block); block reasons
 #                  go to stderr with exit 2.
+#   qwen-code    — Qwen Code CLI. Hooks live in the repo-local
+#                  .qwen/settings.json, but Qwen exports no env var that
+#                  reliably names the repo root (QWEN_CODE_PROJECT_DIR is the
+#                  per-project state dir under ~/.qwen/projects/<slug>, probed
+#                  live on 0.21.4), so the wiring is a repo-conditional shim
+#                  (caws-qwen-hook.sh) that resolves the git root at
+#                  invocation time (codex/kimi precedent) and no-ops outside
+#                  CAWS repos. Full allow/deny/ask PreToolUse vocab (ask
+#                  prompts interactively and degrades to deny in
+#                  headless/background); updatedInput is documented but NOT
+#                  enforced in 0.21.x, so quiet-merge passes the command
+#                  through unrewritten.
 #   (future)     — cursor, windsurf, vscode, idea, ... Add a case arm below.
 #
 # IDEMPOTENT: safe to source multiple times.
@@ -170,6 +183,7 @@ case "$CAWS_AGENT_SURFACE" in
     CAWS_PLATFORM_FLAG="claude-code"
     CAWS_PERMISSION_VOCAB="ask"
     CAWS_INSTRUCTION_FILES="CLAUDE.md"
+    CAWS_AGENT_PROCESS_NAMES="claude"
     ;;
   codex)
     CAWS_VENDOR_DIR=".codex"
@@ -177,18 +191,21 @@ case "$CAWS_AGENT_SURFACE" in
     # Codex has no PreToolUse "ask" decision; map ask -> deny.
     CAWS_PERMISSION_VOCAB="deny"
     CAWS_INSTRUCTION_FILES="AGENTS.md"
+    CAWS_AGENT_PROCESS_NAMES="codex"
     ;;
   cursor)
     CAWS_VENDOR_DIR=".cursor"
     CAWS_PLATFORM_FLAG="cursor"
     CAWS_PERMISSION_VOCAB="ask"
     CAWS_INSTRUCTION_FILES="AGENTS.md"
+    CAWS_AGENT_PROCESS_NAMES="cursor"
     ;;
   windsurf)
     CAWS_VENDOR_DIR=".windsurf"
     CAWS_PLATFORM_FLAG="windsurf"
     CAWS_PERMISSION_VOCAB="ask"
     CAWS_INSTRUCTION_FILES="AGENTS.md"
+    CAWS_AGENT_PROCESS_NAMES="windsurf"
     ;;
   opencode)
     CAWS_VENDOR_DIR=".opencode"
@@ -198,6 +215,7 @@ case "$CAWS_AGENT_SURFACE" in
     # deny, matching the codex adapter precedent.
     CAWS_PERMISSION_VOCAB="deny"
     CAWS_INSTRUCTION_FILES="AGENTS.md"
+    CAWS_AGENT_PROCESS_NAMES="opencode"
     ;;
   zcode)
     CAWS_VENDOR_DIR=".zcode"
@@ -205,6 +223,15 @@ case "$CAWS_AGENT_SURFACE" in
     # ZCode supports allow/ask/deny for PreToolUse — same as Claude Code.
     CAWS_PERMISSION_VOCAB="ask"
     CAWS_INSTRUCTION_FILES="AGENTS.md"
+    # CAWS-AGENT-PID-SESSION-CORRELATION-001: the agent process basename(s)
+    # whose PID identifies this session in the process tree. ZCode's agent
+    # runs as `zcode-cli` (a child of `zcode-host-local-N`, itself a child of
+    # the ZCode app); the host is also listed so the PID-walk can stop at the
+    # per-session agent even if the cli process is briefly absent during a
+    # tool-spawn race. Used by resolveAgentPid (lib/agent-pid.sh) to key the
+    # agent-pid-<pid>.json correlation record — the canonical-checkout
+    # identity bridge for harnesses that export no session-id env var.
+    CAWS_AGENT_PROCESS_NAMES="zcode-cli zcode-host-local-1 zcode-host-local-2 zcode-host-local-3"
     ;;
   kimi-code)
     CAWS_VENDOR_DIR=".kimi-code"
@@ -217,6 +244,7 @@ case "$CAWS_AGENT_SURFACE" in
     # No documented updatedInput contract — quiet-merge passes the command
     # through unrewritten on this surface.
     CAWS_SUPPORTS_UPDATED_INPUT="0"
+    CAWS_AGENT_PROCESS_NAMES="kimi-code kimi"
     ;;
   qwen-code)
     CAWS_VENDOR_DIR=".qwen"
@@ -229,6 +257,7 @@ case "$CAWS_AGENT_SURFACE" in
     # updatedInput is documented but NOT enforced in 0.21.x (probed
     # 2026-08-03, tmp/qwen-hook-probe-findings.md) — quiet-merge passes the
     # command through unrewritten on this surface.
+    CAWS_AGENT_PROCESS_NAMES="qwen qwen-code"
     CAWS_SUPPORTS_UPDATED_INPUT="0"
     ;;
   *)
@@ -244,6 +273,10 @@ case "$CAWS_AGENT_SURFACE" in
     CAWS_PLATFORM_FLAG="claude-code"
     CAWS_PERMISSION_VOCAB="ask"
     CAWS_INSTRUCTION_FILES="CLAUDE.md AGENTS.md"
+    # Unknown surface: no process names -> the agent-PID tier fail-opens
+    # (returns no identity), falling through to the existing chain. This is
+    # the deliberate safe default for an unrecognized harness.
+    CAWS_AGENT_PROCESS_NAMES=""
     ;;
 esac
 

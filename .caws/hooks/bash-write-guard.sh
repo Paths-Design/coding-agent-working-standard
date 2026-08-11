@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 29
+# hook_pack_version: 33
 # caws_min_major: 11
 # lineage_refs: 4,8,13,20,32
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -67,6 +67,15 @@ caws_source_lib emit.sh 2>/dev/null || true
 # — a missing helper degrades to the legacy HOOK_SESSION_ID-only path, never a
 # hard block.
 [[ -f "$SCRIPT_DIR/lib/session-id.sh" ]] && source "$SCRIPT_DIR/lib/session-id.sh"
+# shellcheck source=lib/write-allowlist.sh
+# CAWS-GUARD-ALLOWLIST-SYNC-001: the shared unconditional-allow path set. A
+# Bash mutation of an allowlisted path (docs/*, .caws/* minus payload, .tmp/*,
+# .github/*, vendor dir, instruction files, agent-home dir) must get the SAME
+# allow verdict as a Write/Edit of that path — this guard consults the SAME
+# helper worktree-write-guard uses, so the two guards cannot diverge by tool.
+# Best-effort source: a missing helper degrades to oracle-everything (the
+# pre-fix behavior), never a hard block.
+[[ -f "$SCRIPT_DIR/lib/write-allowlist.sh" ]] && source "$SCRIPT_DIR/lib/write-allowlist.sh"
 parse_hook_input
 
 # CAWS_ORACLE_SESSION_ID: the fully-resolved operating identity. Falls back to
@@ -100,6 +109,21 @@ else
 fi
 
 [[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] || exit 0
+
+# CAWS-DEFECT-MSG-HOOK-EXEMPT-01 (DEFECT-01-hook): `caws message send|poll` are
+# CAWS's own non-mutating commands — the only write is an append to
+# .caws/messages.jsonl, never a file the operator named on the command line.
+# But extract_targets tokenizes the FULL command string without respecting
+# shell quoting, so a `>` or a claimed path inside the --text body gets
+# misread as a write target (harvest: sterling 2474911e/t37 — message sends
+# blocked because the text mentioned engine/Assets/RC/Tests/** claimed by
+# wt-feel-trace). Short-circuit before target extraction, mirroring the
+# quiet-merge.sh self-filter pattern. The redirect-pipe guard mirrors
+# quiet-merge too: a genuine sibling mutation (e.g. `... && echo x > f.log`)
+# must still be checked, so only the bare message command is exempted.
+if echo "$COMMAND" | grep -qE 'caws[[:space:]]+message[[:space:]]+(send|poll)\b' && ! echo "$COMMAND" | grep -qE '[|>]'; then
+  exit 0
+fi
 
 AGENT_CWD="${HOOK_CWD:-${CAWS_PROJECT_DIR:-.}}"
 
@@ -263,6 +287,21 @@ escalate() {
 while IFS= read -r cand; do
   [[ -z "$cand" ]] && continue
   abs="$(abspath "$cand")"
+  # CAWS-GUARD-ALLOWLIST-SYNC-001 + CAWS-GUARD-SCOPE-PRIORITY-001: record
+  # whether this target is on the unconditional allowlist (docs/*, .caws/*
+  # minus payload, .tmp/*, .github/*, vendor dir, instruction files,
+  # agent-home dir). The oracle STILL runs — a scope.in CLAIM overrides the
+  # allowlist, so a claimed docs/** path must block (block_claimed) just like
+  # a claimed src/** path. But for an allowlisted path, only a CLAIM/ownership
+  # block escalates; pass/degraded/ask/error do NOT (an unclaimed allowlisted
+  # path is permitted, and a toolchain fault must not block it). Payload paths
+  # (.caws/worktrees/*) are excluded by the helper and always escalate normally.
+  _CAND_ALLOWLISTED=0
+  if declare -F caws_is_write_allowlisted >/dev/null 2>&1; then
+    if caws_is_write_allowlisted "$abs" "$PROJECT_DIR"; then
+      _CAND_ALLOWLISTED=1
+    fi
+  fi
   out="$(CAWS_ORACLE_PROJECT_DIR="$PROJECT_DIR" \
     CAWS_ORACLE_CURRENT_BRANCH="" \
     CAWS_ORACLE_REL_PATH="$abs" \
@@ -287,7 +326,18 @@ while IFS= read -r cand; do
     # is absent). Record it for a single post-loop advisory; the mutation flows.
     degraded_no_yaml) _DEGRADED_NO_YAML=1 ;;
     block_foreign_worktree|block_claimed) escalate block "$detail" "$outcome" ;;
-    ask_uncertain|error_fail_closed)      escalate ask "$detail" "$outcome" ;;
+    ask_uncertain|error_fail_closed)
+      # CAWS-GUARD-SCOPE-PRIORITY-001: an allowlisted path defers to the
+      # allowlist on non-claim verdicts — a toolchain fault or uncertain
+      # ownership must not block a docs/** or .caws/** coordination edit.
+      # Only a positive claim (block_claimed/block_foreign_worktree, handled
+      # above) overrides the allowlist. Non-allowlisted paths escalate normally.
+      if [[ "$_CAND_ALLOWLISTED" == "1" ]]; then
+        :
+      else
+        escalate ask "$detail" "$outcome"
+      fi
+      ;;
   esac
 done < <(extract_targets "$COMMAND")
 
