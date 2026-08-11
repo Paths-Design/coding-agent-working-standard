@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-red-suite-triage
 created_at: '2026-08-11T01:10:00.000Z'
-updated_at: '2026-08-11T01:10:00.000Z'
+updated_at: '2026-08-11T20:52:15.199Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/specs.ts
@@ -24,6 +24,7 @@ scope:
     - packages/caws-cli/tests/init/pack-fingerprints.json
     - docs/api/cli.md
     - .caws/specs/CAWS-DEFECT-RED-SUITE-TRIAGE-01.yaml
+    - packages/caws-cli/tests/docs/agent-recovery-path-drift.test.js
   out:
     - packages/caws-cli/src/kernel
 invariants:
