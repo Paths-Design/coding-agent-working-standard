@@ -1,0 +1,25 @@
+id: CAWS-DEFECT-HOOK-AGENT-PID-FAILOPEN-01
+title: 'Hook guards die silently when no agent ancestor (set -e + unguarded read-group)'
+risk_tier: 3
+mode: fix
+lifecycle_state: active
+created_at: '2026-08-11T22:51:24.058Z'
+updated_at: '2026-08-11T22:51:24.058Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
