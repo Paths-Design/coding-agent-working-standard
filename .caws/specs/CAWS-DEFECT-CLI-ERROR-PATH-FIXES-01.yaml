@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-cli-error-path-fixes
 created_at: '2026-08-11T00:59:31.156Z'
-updated_at: '2026-08-11T01:06:12.073Z'
+updated_at: '2026-08-11T01:15:58.189Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/register.ts
@@ -25,6 +25,10 @@ scope:
     - .caws/hooks/quiet-merge.sh
     - .caws/specs/CAWS-DEFECT-CLI-ERROR-PATH-FIXES-01.yaml
     - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/index.js
+    - packages/caws-cli/src/config/index.js
+    - packages/caws-cli/src/utils/detection.js
+    - packages/caws-cli/tests/shell/error-handler-chalk.test.js
   out:
     - packages/caws-cli/src/store/specs-writer.ts
     - packages/caws-cli/src/kernel
