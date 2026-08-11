@@ -43,3 +43,8 @@ evidence:
     evidence_ref: "npx jest tests/store/worktree-merge-{already-closed-spec,branch-delete,concurrency,cwd-self-destruct-guard}.test.js: 4 suites, 24 tests, all pass in worktree"
     recorded_at: "2026-08-11T21:59:49.144Z"
     exit_code: 0
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "refusal intent preserved: A5 conflict test still fails merge with /conflicting changes/i; destroy-refusal and cwd-guard suites green; production code untouched (scope.out)"
+    recorded_at: "2026-08-11T22:00:03.222Z"
+    exit_code: 0
