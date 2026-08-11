@@ -3,23 +3,36 @@ title: 'Seed scopeIn in worktree-merge test fixtures so lanes pass the provenanc
 risk_tier: 3
 mode: fix
 lifecycle_state: active
-created_at: '2026-08-11T21:45:57.536Z'
-updated_at: '2026-08-11T21:45:57.536Z'
+created_at: '2026-08-11T02:00:00.000Z'
+updated_at: '2026-08-11T02:00:00.000Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/tests/store/worktree-merge-already-closed-spec.test.js
+    - packages/caws-cli/tests/store/worktree-merge-branch-delete.test.js
+    - packages/caws-cli/tests/store/worktree-merge-concurrency.test.js
+    - packages/caws-cli/tests/store/worktree-merge-cwd-self-destruct-guard.test.js
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/tests/store/worktree-merge-already-closed-spec.test.js
+    - packages/caws-cli/tests/store/worktree-merge-branch-delete.test.js
+    - packages/caws-cli/tests/store/worktree-merge-concurrency.test.js
+    - packages/caws-cli/tests/store/worktree-merge-cwd-self-destruct-guard.test.js
+    - .caws/specs/CAWS-DEFECT-MERGE-TEST-LANE-SCOPE-01.yaml
+  out:
+    - packages/caws-cli/src/store
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The lane-provenance guard (verifyLaneProvenance in worktrees-writer.ts) is NOT weakened: no production code changes; the guard, refusal messages, and scope-matching rule stay byte-identical.'
+  - 'Each fixed suite still exercises its original merge semantics (idempotent close, branch deletion, back-to-back merges, conflict refusal, cwd self-destruct guard) — only the seed specs gain scopeIn coverage for the files their lanes commit.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'The four worktree-merge suites that the lane-provenance guard refuses (fixtures commit payload files outside the scaffold scope).'
+    when: 'npx jest tests/store/worktree-merge-already-closed-spec.test.js tests/store/worktree-merge-branch-delete.test.js tests/store/worktree-merge-concurrency.test.js tests/store/worktree-merge-cwd-self-destruct-guard.test.js runs.'
+    then: 'All four suites pass with the guard active; no "outside spec scope" refusal appears for seeded lanes.'
+  - id: A2
+    given: 'A suite whose test intent is a REFUSAL (conflicting branches, unmerged-work destroy refusal).'
+    when: 'Its lane scopes are seeded.'
+    then: 'The test still fails-to-merge for the intended reason (genuine conflict / guard refusal), not for a provenance refusal — assertions target the intended failure class.'
 non_functional: {}
 contracts: []
