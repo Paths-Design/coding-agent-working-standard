@@ -3,6 +3,7 @@ title: 'Fix pre-existing red suites: close state-vs-notes ordering, reset-danger
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: wt-red-suite-triage
 created_at: '2026-08-11T01:10:00.000Z'
 updated_at: '2026-08-11T01:10:00.000Z'
 blast_radius:
