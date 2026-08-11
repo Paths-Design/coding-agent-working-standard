@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-prepush-provenance
 created_at: '2026-08-11T02:25:08.525Z'
-updated_at: '2026-08-11T07:08:17.636Z'
+updated_at: '2026-08-11T07:31:09.663Z'
 blast_radius:
   modules:
     - 'caws-cli store: worktrees-writer.ts (mergeWorktree lane-provenance check + worktree_merged event data extension)'
@@ -30,6 +30,7 @@ scope:
     - packages/caws-cli/README.md
     - .caws/specs/CAWS-PREPUSH-PROVENANCE-REWORK-001.yaml
     - .gitignore
+    - packages/caws-cli/src/kernel/schemas/events/worktree_merged.v1.json
   out:
     # The PreToolUse hook chain (installed hooks AND pack templates) is
     # untouched: this spec changes merge-time and publish-time CLI behavior,
@@ -40,9 +41,17 @@ scope:
     - '.caws/hooks'
     # Kernel purity invariant (AGENTS.md #3): doctor/kernel stay pure; this
     # work lives in the store/shell composition layers.
-    - 'packages/caws-cli/src/kernel'
     # The evidence base for this spec (already committed; reference only):
     # docs/architecture/design/prepush-slice-attribution-dead-by-design.md
+    - packages/caws-cli/src/kernel/doctor
+    - packages/caws-cli/src/kernel/evidence
+    - packages/caws-cli/src/kernel/policy
+    - packages/caws-cli/src/kernel/scope
+    - packages/caws-cli/src/kernel/spec
+    - packages/caws-cli/src/kernel/waiver
+    - packages/caws-cli/src/kernel/worktree
+    - packages/caws-cli/src/kernel/diagnostics
+    - packages/caws-cli/src/kernel/result
 invariants:
   - >-
     THE LANE IS THE AUTHORITY UNIT. Provenance is recorded per lane (spec +
