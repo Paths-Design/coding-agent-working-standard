@@ -4,7 +4,7 @@ risk_tier: 2
 mode: feature
 lifecycle_state: active
 created_at: '2026-08-11T02:25:08.525Z'
-updated_at: '2026-08-11T02:25:08.525Z'
+updated_at: '2026-08-11T02:28:26.721Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
@@ -13,6 +13,19 @@ operational_rollback_slo: 5m
 scope:
   in:
     - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/src/shell/commands/prepush.ts
+    - packages/caws-cli/src/shell/push-range/classify-range.ts
+    - packages/caws-cli/src/shell/push-range/scope-match.ts
+    - packages/caws-cli/src/store/git-autocommit.ts
+    - packages/caws-cli/tests/shell/push-range.test.js
+    - packages/caws-cli/tests/shell/prepush-ack-bundle-normalize.test.js
+    - packages/caws-cli/tests/shell/worktree-merge.test.js
+    - packages/caws-cli/tests/shell/worktree-merge-recovery-guidance.test.js
+    - docs/architecture/caws-vnext-command-surface.md
+    - AGENTS.md
+    - packages/caws-cli/README.md
+    - .caws/specs/CAWS-PREPUSH-PROVENANCE-REWORK-001.yaml
   out: []
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'
