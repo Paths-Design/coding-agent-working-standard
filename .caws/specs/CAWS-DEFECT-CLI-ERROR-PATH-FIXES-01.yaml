@@ -77,3 +77,9 @@ evidence:
     recorded_at: "2026-08-11T02:37:48.123Z"
     command: npx jest tests/shell/error-handler-chalk.test.js
     exit_code: 0
+  - criterion_id: A3
+    status: pass
+    evidence_ref: npx bats tests/hooks/bats/quiet-merge.bats (5/5)
+    recorded_at: "2026-08-11T02:37:49.067Z"
+    command: npx bats tests/hooks/bats/quiet-merge.bats
+    exit_code: 0
