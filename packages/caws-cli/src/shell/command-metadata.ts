@@ -420,9 +420,16 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         { flag: '--ac <id>', description: 'Acceptance criterion id (e.g. A1); must match a declared acceptance[].id', required: true },
         {
           flag: '--status <s>',
-          description: 'Verified status. pass/waived satisfy the close gate; fail/unchecked are recorded for audit but do not satisfy closure',
+          // Semantically required, but NOT commander-required: the specs group
+          // declares a group-level `--status` compat option, and commander binds
+          // a `--status` after the leaf name to the PARENT — a .requiredOption()
+          // here could never be satisfied on the real parse path (the leaf would
+          // be unusable). The handler (runSpecsEvidenceCommand) owns the
+          // missing/invalid check and emits rich guidance; register.ts routes
+          // the value via optsWithGlobals(). Same shadow class as
+          // CAWS-CLI-SPECS-ARCHIVE-STATUS-PARENT-SHADOW-001.
+          description: 'Verified status (required). pass/waived satisfy the close gate; fail/unchecked are recorded for audit but do not satisfy closure',
           allowedValues: EVIDENCE_STATUSES,
-          required: true,
         },
         {
           flag: '--evidence-ref <ref>',

@@ -218,7 +218,14 @@ import type { HookPackV1 } from './types';
 // (resolve-session.ts) and reprieve.ts consult the same read. Closes the
 // canonical-checkout identity gap for harnesses that export no session-id
 // env var (ZCode and generic harnesses).
-export const SHARED_PACK_VERSION = 33;
+//
+// Version 34: CAWS-DEFECT-CLI-ERROR-PATH-FIXES-01. quiet-merge.sh emits
+// permissionDecision "allow" (+ reason) alongside updatedInput — hosts that
+// enforce the updatedInput contract reject a rewrite carrying no explicit
+// decision (observed live: "PreToolUse hook returned updatedInput without
+// permissionDecision:allow"). No guard logic changes; opt-out surfaces
+// (kimi-code, qwen-code) still pass commands through unrewritten.
+export const SHARED_PACK_VERSION = 34;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.

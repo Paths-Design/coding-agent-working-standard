@@ -6,7 +6,10 @@
 
 const fs = require('fs-extra');
 const path = require('path');
-const chalk = require('chalk');
+// chalk 5.x is ESM-only; under Node's require(esm) the callable instance is
+// on `.default` (see error-handler.js for the same interop).
+const chalkModule = require('chalk');
+const chalk = chalkModule.default || chalkModule;
 
 /**
  * Find the package root directory by looking for package.json

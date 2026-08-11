@@ -4,7 +4,11 @@
  * @author @darianrosebrook
  */
 
-const chalk = require('chalk');
+// chalk 5.x is ESM-only; under Node's require(esm) the namespace lands here
+// with the callable instance on `.default` — without this interop every
+// chalk.<color>() call throws "chalk.red is not a function" on error paths.
+const chalkModule = require('chalk');
+const chalk = chalkModule.default || chalkModule;
 const {
   ERROR_CATEGORIES,
   getErrorCategory,
