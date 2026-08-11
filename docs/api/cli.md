@@ -850,6 +850,26 @@ Governed scope amendments for an active spec. Use one invocation with all `--add
 
 `--reason <text>` is optional and records the operator rationale on the `spec_scope_amended` event.
 
+### `caws specs evidence <id>`
+
+```bash
+caws specs evidence FEAT-1 --ac A1 --status pass --evidence-ref "npm test"
+caws specs evidence FEAT-1 --ac A2 --status waived --waiver-reason "covered by FEAT-2 integration run"
+```
+
+Record per-criterion verified status (AC evidence) on the spec's `evidence:` block — the closure authority read by the close gate. Dual-writes: patches the spec block and appends an `ac_recorded` event in one transaction. Active/draft specs only; a closed or archived spec's evidence is frozen.
+
+`--ac <id>` and `--status <s>` are required. Status is a closed enum: `pass` and `waived` satisfy the close gate; `fail` and `unchecked` are recorded for audit but do not satisfy closure. `--evidence-ref <ref>` is required unless `--status waived` (where `--waiver-reason` supplies it). Optional provenance flags: `--test-nodeid`, `--command`, `--exit-code`, `--artifact-path`, `--commit-sha`.
+
+### `caws specs reopen <id>`
+
+```bash
+caws specs reopen FEAT-1
+caws specs reopen FEAT-1 --reason "merge auto-close was premature"
+```
+
+Reopen a closed spec (closed → active), the inverse of close. Removes `resolution`/`closure_notes`/`superseded_by` so the active spec is valid; leaves the spec unbound (re-bind with `caws worktree create`/`bind`). Appends a `spec_reopened` event. Use when the auto-close from `caws worktree merge` was premature.
+
 ### `caws specs close <id>`
 
 ```bash

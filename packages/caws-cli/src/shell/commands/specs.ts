@@ -145,6 +145,28 @@ function resolveCawsCtx(
   return { repoRoot: r.value.repoRoot, cawsDir: r.value.cawsDir };
 }
 
+/** Lightweight lifecycle probe for guards that must be state-aware BEFORE
+ * calling a writer (CAWS-DEFECT-RED-SUITE-TRIAGE-01). Returns the spec's
+ * lifecycle_state, or undefined when the spec is missing or unparseable —
+ * callers must treat undefined as "let the writer emit the real diagnostic"
+ * (not-found / archived-tombstone / schema error), never as "active". */
+function probeSpecLifecycleState(
+  cawsDir: string,
+  id: string
+): 'draft' | 'active' | 'closed' | 'archived' | undefined {
+  const specFile = path.join(cawsDir, 'specs', `${id}.yaml`);
+  if (!fs.existsSync(specFile)) return undefined;
+  let source: string;
+  try {
+    source = fs.readFileSync(specFile, 'utf8');
+  } catch {
+    return undefined;
+  }
+  const parsed = parseAndValidateSpec(source);
+  if (!isOk(parsed)) return undefined;
+  return parsed.value.lifecycle_state;
+}
+
 function buildActorOrError(
   cawsDir: string,
   cwd: string,
@@ -1465,20 +1487,28 @@ export function runSpecsCloseCommand(opts: SpecsCloseOptions): number {
 
   const closureNotes = opts.closureNotes ?? opts.notes ?? opts.note ?? opts.reason;
 
-  // CAWS-GUARD-ALLOWLIST-SYNC-001 (Defect 2): a spec must not close without
-  // closure notes. Refuse before resolving ctx/actor so the agent gets a fast,
-  // clear error instead of a silent close that loses the audit trail. The
-  // store-layer closeSpec enforces the same contract (defense in depth); this
-  // shell guard gives the better message and avoids the wasted work.
-  if (closureNotes === undefined || closureNotes.trim().length === 0) {
-    err(
-      `caws specs close: --reason (or --closure-notes / --notes / --note) is required — a spec must not close without closure notes recording what was done and why. Closing silently loses the audit trail and costs downstream agents loops.`
-    );
-    return 1;
-  }
-
   const ctx = resolveCawsCtx(cwd, err, showData, 'close');
   if (ctx === null) return 2;
+
+  // CAWS-GUARD-ALLOWLIST-SYNC-001 (Defect 2): a spec must not close without
+  // closure notes. The store-layer closeSpec enforces the same contract
+  // (defense in depth); this shell guard gives the better message and avoids
+  // the wasted work.
+  //
+  // State-aware (CAWS-DEFECT-RED-SUITE-TRIAGE-01): the fast notes-required
+  // refusal applies only to an ACTIVE spec. For a closed/archived/missing/
+  // malformed spec the lifecycle diagnostic from closeSpec is the actionable
+  // one — an already-closed spec must get the "already closed; close is a
+  // no-op" refusal naming reopen/show/archive/recover, not a demand for
+  // closure notes on a spec that cannot transition.
+  if (closureNotes === undefined || closureNotes.trim().length === 0) {
+    if (probeSpecLifecycleState(ctx.cawsDir, opts.id) === 'active') {
+      err(
+        `caws specs close: --reason (or --closure-notes / --notes / --note) is required — a spec must not close without closure notes recording what was done and why. Closing silently loses the audit trail and costs downstream agents loops.`
+      );
+      return 1;
+    }
+  }
 
   const actor = buildActorOrError(
     ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'close'
