@@ -1,0 +1,29 @@
+id: CAWS-PREPUSH-PROVENANCE-REWORK-001
+title: 'Move provenance teeth to the merge boundary; rework prepush to inductive delta check'
+risk_tier: 2
+mode: feature
+lifecycle_state: active
+created_at: '2026-08-11T02:25:08.525Z'
+updated_at: '2026-08-11T02:25:08.525Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'lane-provenance-at-merge'
+    type: behavior
+  - name: 'publish-inductive-delta-check'
+    type: behavior
