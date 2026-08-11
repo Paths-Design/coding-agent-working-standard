@@ -2,10 +2,11 @@ id: CAWS-DEFECT-CLI-ERROR-PATH-FIXES-01
 title: 'Fix specs evidence --status parse shadowing, error-handler chalk crash, quiet-merge missing permissionDecision'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-cli-error-path-fixes
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-cli-error-path-fixes at 06ccbae4717145fac42ec22c0e06993ebb392799'
 created_at: '2026-08-11T00:59:31.156Z'
-updated_at: '2026-08-11T02:35:09.758Z'
+updated_at: '2026-08-11T02:41:35.573Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/register.ts
