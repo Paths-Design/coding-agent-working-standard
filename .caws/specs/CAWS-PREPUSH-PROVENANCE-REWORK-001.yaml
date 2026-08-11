@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-prepush-provenance
 created_at: '2026-08-11T02:25:08.525Z'
-updated_at: '2026-08-11T07:31:09.663Z'
+updated_at: '2026-08-11T07:39:14.684Z'
 blast_radius:
   modules:
     - 'caws-cli store: worktrees-writer.ts (mergeWorktree lane-provenance check + worktree_merged event data extension)'
@@ -31,6 +31,7 @@ scope:
     - .caws/specs/CAWS-PREPUSH-PROVENANCE-REWORK-001.yaml
     - .gitignore
     - packages/caws-cli/src/kernel/schemas/events/worktree_merged.v1.json
+    - packages/caws-cli/src/shell/command-metadata.ts
   out:
     # The PreToolUse hook chain (installed hooks AND pack templates) is
     # untouched: this spec changes merge-time and publish-time CLI behavior,
