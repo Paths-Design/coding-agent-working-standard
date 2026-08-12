@@ -2,10 +2,11 @@ id: CAWS-DEFECT-SPECS-CREATE-TODO-SCAFFOLD-01
 title: 'specs create writes committed TODO placeholders into fields it exposes no flag to fill'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-specs-scaffold
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'caws specs create wrote literal TODO: strings into blast_radius.modules and invariants -- both required by the schema, neither reachable from any flag -- so every spec this CLI created carried committed TODOs into governed state, and ~441 already-created specs across consumers had no route to discharge them. Fixed in two halves, because a create-time flag alone would have left every existing spec permanently un-dischargeable. (1) --module and --invariant on specs create, repeatable, mirroring the six existing content flags; proven through a spawned dist/index.js run rather than a handler call, because handler tests bypass Commander and cannot catch a dropped register.ts forward. (2) caws specs amend as the discharge path for specs that already exist, appending a spec_body_amended event. Its lifecycle rule is the substantive design decision: on a CLOSED spec, filling a scaffolded blank is admitted but removing or rewriting real content is refused and pointed at caws specs reopen -- a closed spec may have a blank filled and never a claim rewritten, so the discharge path cannot become a retroactive-edit tool. Archived specs are refused outright as tombstones. Refusing closed specs entirely would have covered only 5 of the 12 affected specs in this repo; allowing free edits would have made it a rewrite tool. Both refusals were falsified by disabling the rule and confirming exactly the predicted tests reddened. Known limitation, recorded in A1 evidence rather than papered over: a live probe showed FOUR scaffold sites, not two -- scope.in and acceptance also emit TODO -- so A1''s ''body contains no TODO string'' holds only when --scope-in and --acceptance are supplied as well. The AC''s load-bearing clause still holds, since all four sites do have create flags. Not done here: the 12 placeholder-carrying specs in this repo are not backfilled; that touches shared state and is a separate sweep, live-specs-only, never the 23 archived bodies.'
 created_at: '2026-08-12T09:08:04.748Z'
-updated_at: '2026-08-12T16:43:39.630Z'
+updated_at: '2026-08-12T18:20:59.295Z'
 blast_radius:
   modules:
     - 'caws-cli spec authoring surface (specs create flags)'
