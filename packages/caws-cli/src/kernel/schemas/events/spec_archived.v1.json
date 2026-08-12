@@ -12,7 +12,12 @@
       "required": ["from_path", "to_path"],
       "properties": {
         "from_path": { "type": "string", "minLength": 1 },
-        "to_path": { "type": "string", "minLength": 1 }
+        "to_path": { "type": "string", "minLength": 1 },
+        "superseded_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Present only for `caws specs archive --replace`. Path the PRIOR archived body was copied to before this one overwrote the canonical archive path. Its presence is the audit record that a stale archived body was demoted, and that nothing was discarded."
+        }
       }
     },
     {

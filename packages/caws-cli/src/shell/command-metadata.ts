@@ -511,6 +511,11 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
           flag: '--without-worktree',
           description: 'Batch selector: archive only closed specs that do not still carry a worktree binding',
         },
+        {
+          flag: '--replace',
+          description:
+            'Archive over an id that already has a body in .caws/specs/.archive/. The existing body is first copied to <id>.superseded-<timestamp>.yaml — nothing is discarded. Without this, a stale archived body shadows the live spec permanently, because recover prefers the on-disk archived body.',
+        },
         { flag: '--apply', description: 'Apply batch archive (default: dry-run)' },
         { flag: '--json', description: 'Emit CAWS-native JSON to stdout' },
         DATA_OPTION,

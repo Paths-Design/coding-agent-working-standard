@@ -1288,6 +1288,11 @@ export function registerShellCommands(
           withoutWorktree?: boolean;
           apply?: boolean;
           json?: boolean;
+          // `--replace` is a plain boolean, NOT a Commander negation: the flag
+          // name does not begin with `no-`, so it lands on `opts.replace` as
+          // written. (Contrast `--no-close` on `worktree merge`, which binds to
+          // `opts.close === false`.)
+          replace?: boolean;
           data?: boolean;
         },
         command: Command
@@ -1318,6 +1323,7 @@ export function registerShellCommands(
           ...(opts.withoutWorktree === true ? { withoutWorktree: true } : {}),
           ...(opts.apply === true ? { apply: true } : {}),
           ...(opts.json === true ? { json: true } : {}),
+          ...(opts.replace === true ? { replace: true } : {}),
           showData: opts.data === true,
         });
         exit(code);

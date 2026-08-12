@@ -51,6 +51,7 @@ import {
   selectDraftSpecsForPrune,
   selectClosedSpecsForArchive,
   showSpec,
+  supersededArchiveSnapshots,
   SPECS_LIST_STATUSES,
   unsatisfiedAcceptanceCriteria,
   type SpecsListStatus,
@@ -1060,6 +1061,7 @@ export function runSpecsShowCommand(opts: SpecsShowOptions): number {
       return 1;
     }
     out(result.value.source);
+    warnSupersededSnapshots(ctx.cawsDir, opts.id, err);
     return 0;
   }
 
@@ -1141,7 +1143,32 @@ export function runSpecsRecoverCommand(opts: SpecsRecoverOptions): number {
   } else {
     stdoutFn(result.value.source);
   }
+  warnSupersededSnapshots(ctx.cawsDir, opts.id, err);
   return 0;
+}
+
+/**
+ * CAWS-DEFECT-ARCHIVE-STALE-BODY-SHADOW-01 (A4): name any demoted archived
+ * bodies on the single-spec read paths.
+ *
+ * The archive is far too large to read directly, so every consumer arrives
+ * through recover/show for one id and has no cheap cross-check. When more than
+ * one body has existed for that id, silence about the others is what turns a
+ * visible divergence into an invisible one.
+ */
+function warnSupersededSnapshots(
+  cawsDir: string,
+  id: string,
+  err: (line: string) => void
+): void {
+  const snapshots = supersededArchiveSnapshots(cawsDir, id);
+  if (snapshots.length === 0) return;
+  err(
+    `caws advisory (non-blocking): ${id} has ${snapshots.length} superseded archived ` +
+      `${snapshots.length === 1 ? 'body' : 'bodies'} on disk, demoted by \`caws specs archive --replace\`. ` +
+      `The body above is the current one; the others are kept for audit:\n` +
+      snapshots.map((p) => `  - ${p}`).join('\n')
+  );
 }
 
 // ─── caws specs restore ──────────────────────────────────────────────────
@@ -1751,6 +1778,9 @@ export interface SpecsArchiveOptions extends BaseCommandOptions {
   readonly withoutWorktree?: boolean;
   readonly apply?: boolean;
   readonly json?: boolean;
+  // CAWS-DEFECT-ARCHIVE-STALE-BODY-SHADOW-01: archive over an existing archived
+  // body, preserving it as a timestamped superseded snapshot first.
+  readonly replace?: boolean;
 }
 
 export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
@@ -1916,6 +1946,7 @@ export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
     actor,
   };
   if (opts.reason !== undefined) (input as { reason?: string }).reason = opts.reason;
+  if (opts.replace === true) (input as { replace?: boolean }).replace = true;
 
   const result = archiveSpec(ctx.cawsDir, input);
   if (!isOk(result)) {

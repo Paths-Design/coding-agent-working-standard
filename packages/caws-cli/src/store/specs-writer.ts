@@ -360,6 +360,23 @@ export interface ArchiveSpecInput {
   readonly now?: () => Date;
   readonly actor: EventBody['actor'];
   readonly autoCommit?: boolean;
+  /**
+   * CAWS-DEFECT-ARCHIVE-STALE-BODY-SHADOW-01: archive an id that already has a
+   * body at the canonical archive path, demoting the existing one instead of
+   * refusing.
+   *
+   * Without this, two individually defensible behaviors compose into an
+   * unfixable state: archive refuses to overwrite (to prevent data loss) and
+   * recover prefers the on-disk archived body over git history. A spec that is
+   * archived, returns to canonical, and is closed again with a DIFFERENT
+   * outcome therefore has its first snapshot win forever — and the governed
+   * read path returns a body asserting the opposite of what actually happened.
+   *
+   * The prior body is copied to `<id>.superseded-<ts>.yaml` in the same
+   * directory, never discarded, so the refusal's data-loss concern is answered
+   * rather than overridden.
+   */
+  readonly replace?: boolean;
 }
 
 export interface ArchiveClosedSpecsSelectionInput {
@@ -590,6 +607,62 @@ function hasComplexTopLevelValue(source: string, key: string): boolean {
 }
 function archivedSpecPath(cawsDir: string, id: string): string {
   return path.join(cawsDir, 'specs', '.archive', `${id}.yaml`);
+}
+
+/**
+ * CAWS-DEFECT-ARCHIVE-STALE-BODY-SHADOW-01: `updated_at` read by regex rather
+ * than through the schema parser.
+ *
+ * The whole point of reading it is to compare a body that may be YEARS old
+ * against a current one, and an old body can easily fail today's schema. A
+ * parse-based read would therefore report "unknown" exactly in the cases the
+ * comparison exists to serve. Returns null when absent or unparseable.
+ */
+function topLevelUpdatedAt(source: string): string | null {
+  const m = /^updated_at:[ \t]*['"]?([^'"\n]+?)['"]?[ \t]*$/m.exec(source);
+  return m?.[1] ?? null;
+}
+
+/**
+ * Destination for a prior archived body demoted by `archive --replace`.
+ *
+ * Timestamped so repeated replaces accumulate rather than overwrite each other,
+ * and suffixed on collision so two replaces inside the same second still cannot
+ * lose one. Colons are stripped: they are legal on POSIX but not on Windows or
+ * in many archive tools, and a spec body that cannot be copied off the machine
+ * is a poor audit record.
+ */
+function supersededArchivePath(archiveDir: string, id: string, nowIso: string): string {
+  const stamp = nowIso.replace(/:/g, '-').replace(/\.\d+Z$/, 'Z');
+  const base = path.join(archiveDir, `${id}.superseded-${stamp}`);
+  let candidate = `${base}.yaml`;
+  for (let n = 2; fs.existsSync(candidate); n += 1) {
+    candidate = `${base}.${n}.yaml`;
+  }
+  return candidate;
+}
+
+/**
+ * Prior archived bodies demoted by `archive --replace`, newest filename first.
+ *
+ * Read at recover/show time so a divergence that legitimately exists is visible
+ * instead of silent — the archive is far too large to read directly (measured
+ * in one consumer: 2,770 specs, ~6M tokens), so every reader arrives through a
+ * single-spec lookup with no cheap cross-check available.
+ */
+export function supersededArchiveSnapshots(cawsDir: string, id: string): string[] {
+  const archiveDir = path.join(cawsDir, 'specs', '.archive');
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(archiveDir);
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((name) => name.startsWith(`${id}.superseded-`) && name.endsWith('.yaml'))
+    .sort()
+    .reverse()
+    .map((name) => path.join(archiveDir, name));
 }
 
 /** Find a spec on disk under either active or archived locations. */
@@ -1823,14 +1896,59 @@ export function archiveSpec(
   const toPath = archivedSpecPath(cawsDir, input.id);
   const toRel = path.relative(repoRoot, toPath);
 
+  // CAWS-DEFECT-ARCHIVE-STALE-BODY-SHADOW-01: a body already at the canonical
+  // archive path means this id was archived before and has since returned to
+  // canonical. Default is still to refuse — but the refusal now names the
+  // remedy and shows WHICH body is stale, and --replace demotes rather than
+  // discards.
+  let supersededPath: string | null = null;
+  let supersededBytes: string | null = null;
   if (fs.existsSync(toPath)) {
-    return err(
-      storeDiagnostic(
-        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        `Spec "${input.id}" already has an archived body at ${toPath}. Refusing to overwrite it.`,
-        { subject: input.id, data: { from_path: fromRel, to_path: toRel } }
-      )
-    );
+    const existingBytes = readYamlSource(toPath);
+    // An unreadable existing body is not a reason to proceed blindly: we would
+    // be overwriting something we cannot preserve. Surface it as the collision.
+    const existingUpdatedAt = isOk(existingBytes)
+      ? topLevelUpdatedAt(existingBytes.value)
+      : null;
+    const incomingUpdatedAt = topLevelUpdatedAt(originalBytes);
+
+    if (input.replace !== true) {
+      const staleness =
+        existingUpdatedAt !== null && incomingUpdatedAt !== null
+          ? existingUpdatedAt < incomingUpdatedAt
+            ? ` The archived body is OLDER than the one being archived, so it is very likely stale.`
+            : ` The archived body is NEWER than or the same age as the one being archived.`
+          : '';
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Spec "${input.id}" already has an archived body at ${toPath}. Refusing to overwrite it.\n` +
+            `  archived body updated_at: ${existingUpdatedAt ?? 'unknown'}\n` +
+            `  incoming body  updated_at: ${incomingUpdatedAt ?? 'unknown'}` +
+            staleness,
+          {
+            subject: input.id,
+            // The refusal used to name no remedy at all, which made a
+            // recoverable state read as permanent — the operator's only
+            // remaining move was to hand-edit the archive directory.
+            narrowRepair:
+              `Compare the two bodies, then archive over the stale one with: ` +
+              `caws specs archive ${input.id} --replace  ` +
+              `(the existing body is copied to ${input.id}.superseded-<timestamp>.yaml first — nothing is discarded).`,
+            data: {
+              from_path: fromRel,
+              to_path: toRel,
+              archived_updated_at: existingUpdatedAt,
+              incoming_updated_at: incomingUpdatedAt,
+            },
+          }
+        )
+      );
+    }
+
+    if (!isOk(existingBytes)) return err(existingBytes.errors);
+    supersededBytes = existingBytes.value;
+    supersededPath = supersededArchivePath(archiveDir, input.id, now);
   }
 
   let patched = originalBytes;
@@ -1877,6 +1995,11 @@ export function archiveSpec(
 
   const archivePathIgnored = gitPathIgnored(repoRoot, toRel);
   const eventData: Record<string, unknown> = { from_path: fromRel, to_path: toRel };
+  if (supersededPath !== null) {
+    // The audit record that a stale archived body was demoted AND preserved.
+    // Without it, `--replace` would be indistinguishable from a first archive.
+    eventData.superseded_path = path.relative(repoRoot, supersededPath);
+  }
 
   const event: EventBody = {
     event: 'spec_archived',
@@ -1894,7 +2017,15 @@ export function archiveSpec(
   const txnResult = withLifecycleLock(cawsDir, () => {
     const r = runLifecycleTransaction({
       cawsDir,
-      plannedWrites: [{ path: toPath, contents: patched }],
+      plannedWrites: [
+        // The superseded copy is planned BEFORE the overwrite so both land in
+        // one transaction. Copy-then-overwrite rather than move-then-write:
+        // there is never an instant where the prior body exists nowhere.
+        ...(supersededPath !== null && supersededBytes !== null
+          ? [{ path: supersededPath, contents: supersededBytes }]
+          : []),
+        { path: toPath, contents: patched },
+      ],
       events: [event],
     });
     if (!r.ok) return r;
@@ -1953,11 +2084,20 @@ export function archiveSpec(
           wasDirtyBeforeWrite,
         });
 
-  const warnings = archivePathIgnored
-    ? [
-        `${toRel} is ignored by git, so it was not staged in the audit commit. The archived YAML remains on disk. To track archived specs, remove or narrow the ignore rule for .caws/specs/.archive/ and run git add ${toRel} && git commit.`,
-      ]
-    : undefined;
+  const warningList: string[] = [];
+  if (archivePathIgnored) {
+    warningList.push(
+      `${toRel} is ignored by git, so it was not staged in the audit commit. The archived YAML remains on disk. To track archived specs, remove or narrow the ignore rule for .caws/specs/.archive/ and run git add ${toRel} && git commit.`
+    );
+  }
+  if (supersededPath !== null) {
+    // Loud on purpose: --replace demoted a body that was, until this command,
+    // the governed answer for this id. The operator should be able to find it.
+    warningList.push(
+      `The prior archived body for "${input.id}" was preserved at ${path.relative(repoRoot, supersededPath)} before this archive overwrote ${toRel}. Nothing was discarded; inspect or delete that snapshot deliberately.`
+    );
+  }
+  const warnings = warningList.length > 0 ? warningList : undefined;
 
   return ok({
     kind: 'success',
