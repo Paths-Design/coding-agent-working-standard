@@ -139,7 +139,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'specs',
   description:
-    'Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate)',
+    'Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate)',
   options: [
     {
       flag: '--status <status>',
@@ -475,6 +475,20 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         {
           flag: '--reason <text>',
           description: 'Optional reason recorded on the spec_reopened event (e.g. work determined incomplete)',
+        },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'deactivate',
+      argument: { name: 'id', required: true, description: 'Active spec id to demote to draft' },
+      description:
+        'Demote an active spec back to draft (active -> draft), the inverse of activate. Use it when a spec was activated by mistake or its slice has not started — unlike close, it writes no resolution, so it makes no claim that the work concluded. Removes any resolution/closure_notes/superseded_by residue. Refused for a spec bound to a worktree. Appends spec_deactivated event.',
+      options: [
+        {
+          flag: '--reason <text>',
+          description: 'Optional reason recorded on the spec_deactivated event (e.g. activated against the wrong id)',
         },
         DATA_OPTION,
       ],

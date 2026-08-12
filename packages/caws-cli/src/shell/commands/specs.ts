@@ -45,6 +45,7 @@ import {
   recoverArchivedSpec,
   recordSpecEvidence,
   reopenSpec,
+  deactivateSpec,
   restoreArchivedSpec,
   retireDraftSpec,
   retireDraftSpecs,
@@ -1761,6 +1762,53 @@ export function runSpecsReopenCommand(opts: SpecsReopenOptions): number {
     return 1;
   }
   out(`reopened ${outcome.id} (lifecycle_state: active)`);
+  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  return 0;
+}
+
+// ─── caws specs deactivate ─────────────────────────────────────────────────
+
+export interface SpecsDeactivateOptions extends BaseCommandOptions {
+  readonly id: string;
+  readonly reason?: string;
+}
+
+// CAWS-DEFECT-SPEC-DEACTIVATE-MISSING-01: the governed active -> draft
+// demotion, the inverse of activate. Mirrors runSpecsReopenCommand. `--reason`
+// is recorded on the spec_deactivated event and never as closure_notes —
+// deactivation makes no claim that the work concluded, which is the whole
+// reason it exists alongside close.
+export function runSpecsDeactivateCommand(opts: SpecsDeactivateOptions): number {
+  const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
+
+  const ctx = resolveCawsCtx(cwd, err, showData, 'deactivate');
+  if (ctx === null) return 2;
+
+  const actor = buildActorOrError(
+    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'deactivate'
+  );
+  if (actor === null) return 2;
+
+  const input: Parameters<typeof deactivateSpec>[1] = {
+    id: opts.id,
+    now: nowFn,
+    actor,
+  };
+  if (opts.reason !== undefined) (input as { reason?: string }).reason = opts.reason;
+
+  const result = deactivateSpec(ctx.cawsDir, input);
+  if (!isOk(result)) {
+    err('caws specs deactivate: failed.');
+    err(renderDiagnostics(result.errors, { showData }));
+    return 1;
+  }
+  const outcome = result.value;
+  if (outcome.kind === 'partial_failure_recovered') {
+    err('caws specs deactivate: partial failure recovered (no state change).');
+    err(renderDiagnostics(outcome.cause, { showData }));
+    return 1;
+  }
+  out(`deactivated ${outcome.id} (lifecycle_state: draft)`);
   surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }

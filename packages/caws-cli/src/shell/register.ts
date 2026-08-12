@@ -82,6 +82,7 @@ import {
   runSpecsCloseCommand,
   runSpecsEvidenceCommand,
   runSpecsReopenCommand,
+  runSpecsDeactivateCommand,
   runSpecsCreateCommand,
   runSpecsListCommand,
   runSpecsMigrateCommand,
@@ -1266,6 +1267,24 @@ export function registerShellCommands(
         }
       ) => {
         const code = runSpecsReopenCommand({
+          id,
+          ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'deactivate'))
+    .action(
+      (
+        id: string,
+        opts: {
+          reason?: string;
+          data?: boolean;
+        }
+      ) => {
+        const code = runSpecsDeactivateCommand({
           id,
           ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
           showData: opts.data === true,

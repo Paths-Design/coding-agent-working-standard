@@ -203,6 +203,7 @@ export {
   runSpecsCloseCommand,
   runSpecsEvidenceCommand,
   runSpecsReopenCommand,
+  runSpecsDeactivateCommand,
   runSpecsArchiveCommand,
   runSpecsPruneArchiveCommand,
   runSpecsRecoverCommand,

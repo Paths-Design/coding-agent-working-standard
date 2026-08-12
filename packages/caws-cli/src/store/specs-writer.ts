@@ -805,7 +805,16 @@ function gitPathIgnored(repoRoot: string, relPath: string): boolean {
 function autoCommitSpecWrite(
   cawsDir: string,
   specId: string,
-  action: 'create' | 'activate' | 'close' | 'archive' | 'amend-scope' | 'restore' | 'reopen' | 'evidence',
+  action:
+    | 'create'
+    | 'activate'
+    | 'deactivate'
+    | 'close'
+    | 'archive'
+    | 'amend-scope'
+    | 'restore'
+    | 'reopen'
+    | 'evidence',
   wasDirtyBeforeWrite: boolean,
   extraPaths: ReadonlyArray<string> = []
 ): AutoCommitOutcome {
@@ -832,7 +841,16 @@ function attachAutoCommit(
   outcome: Result<SpecWriterOutcome>,
   cawsDir: string,
   specId: string,
-  action: 'create' | 'activate' | 'close' | 'archive' | 'amend-scope' | 'restore' | 'reopen' | 'evidence',
+  action:
+    | 'create'
+    | 'activate'
+    | 'deactivate'
+    | 'close'
+    | 'archive'
+    | 'amend-scope'
+    | 'restore'
+    | 'reopen'
+    | 'evidence',
   wasDirtyBeforeWrite: boolean,
   extraPaths: ReadonlyArray<string> = []
 ): Result<SpecWriterOutcome> {
@@ -1821,6 +1839,224 @@ export function reopenSpec(
   }
   const outcome = mapTxnToOutcome(txnResult.value, input.id, targetPath);
   return attachAutoCommit(outcome, cawsDir, input.id, 'reopen', wasDirtyBeforeWrite);
+}
+
+// ─── deactivateSpec ──────────────────────────────────────────────────────
+
+export interface DeactivateSpecInput {
+  readonly id: string;
+  readonly reason?: string;
+  readonly now?: () => Date;
+  readonly actor: EventBody['actor'];
+}
+
+const TERMINAL_SPEC_KEYS = ['resolution', 'closure_notes', 'superseded_by'] as const;
+
+// CAWS-DEFECT-SPEC-DEACTIVATE-MISSING-01: the governed active -> draft
+// demotion, the inverse of activateSpec.
+//
+// Without it the lifecycle has no non-terminal exit from active, so a spec
+// activated against the wrong id — or activated before its slice turned out to
+// be unnecessary — can only leave that state through `close`, which writes a
+// `resolution` asserting the work concluded. That is a false statement in the
+// audit trail, and the audit trail is the product. Deactivation asserts nothing
+// about outcomes: it returns the spec to the editable draft state and writes no
+// resolution or closure_notes.
+//
+// The one-way property of `active` is still load-bearing where work has
+// actually STARTED, which is exactly what a worktree binding records — so a
+// bound spec is refused (below) rather than silently demoted out from under a
+// live lane.
+//
+// Mirrors reopenSpec exactly (validate id -> load -> state-guard -> raw-byte
+// YAML patch -> re-validate -> event -> dirty-capture -> withLifecycleLock +
+// runLifecycleTransaction -> attachAutoCommit).
+export function deactivateSpec(
+  cawsDir: string,
+  input: DeactivateSpecInput
+): Result<SpecWriterOutcome> {
+  const idValidation = validateSpecId(input.id);
+  if (!idValidation.ok) return idValidation;
+
+  const targetPath = specPath(cawsDir, input.id);
+  if (!fs.existsSync(targetPath)) {
+    const archived = archivedSpecPath(cawsDir, input.id);
+    if (fs.existsSync(archived) || isArchivedViaTombstone(cawsDir, input.id)) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Spec "${input.id}" is archived; deactivate operates on active canonical specs only.`,
+          {
+            subject: input.id,
+            narrowRepair: `Recover it first with \`caws specs restore ${input.id}\`, then deactivate if it comes back active.`,
+          }
+        )
+      );
+    }
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${input.id}" not found at ${targetPath}.`,
+        { subject: input.id }
+      )
+    );
+  }
+
+  const sourceResult = readYamlSource(targetPath);
+  if (!isOk(sourceResult)) return err(sourceResult.errors);
+  const originalBytes = sourceResult.value;
+  const parsed = parseAndValidateSpec(originalBytes);
+  if (!isOk(parsed)) {
+    return err(
+      parsed.errors.map((d) =>
+        storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
+          subject: d.subject ?? input.id,
+        })
+      )
+    );
+  }
+  const spec = parsed.value;
+
+  // State guard. Each refusal names the transition that IS correct for the
+  // state the spec is actually in — deactivate is the active exit, not a
+  // general-purpose state setter.
+  if (spec.lifecycle_state !== 'active') {
+    if (spec.lifecycle_state === 'draft') {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Spec "${input.id}" is already a draft; nothing to deactivate.`,
+          {
+            subject: input.id,
+            narrowRepair: `To discard it entirely, use \`caws specs retire-draft ${input.id}\`.`,
+            data: { lifecycle_state: spec.lifecycle_state },
+          }
+        )
+      );
+    }
+    if (spec.lifecycle_state === 'closed') {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Spec "${input.id}" is closed; deactivate operates on active specs only.`,
+          {
+            subject: input.id,
+            narrowRepair: `Reopen it first with \`caws specs reopen ${input.id}\`, then \`caws specs deactivate ${input.id}\` if it should go back to draft.`,
+            data: { lifecycle_state: spec.lifecycle_state },
+          }
+        )
+      );
+    }
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${input.id}" is ${spec.lifecycle_state}; deactivate operates on active specs only.`,
+        {
+          subject: input.id,
+          narrowRepair: `Recover it first with \`caws specs restore ${input.id}\`.`,
+          data: { lifecycle_state: spec.lifecycle_state },
+        }
+      )
+    );
+  }
+
+  // Binding guard: a bound spec has a lane. Demoting it would leave a worktree
+  // whose authority is a draft — every write in that lane would resolve to NO
+  // AUTHORITY, and the operator would discover it one strike at a time.
+  if (spec.worktree !== undefined && spec.worktree.length > 0) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${input.id}" is bound to worktree "${spec.worktree}"; deactivating it would leave that lane writing under a draft.`,
+        {
+          subject: input.id,
+          narrowRepair:
+            `If the lane is live, finish or abandon it first: \`caws worktree merge ${spec.worktree}\`, or ` +
+            `\`caws worktree destroy ${spec.worktree} --abandon-unmerged\`. ` +
+            `If the worktree is already gone and this binding is residue, clear it with \`caws worktree repair\`.`,
+          data: { worktree: spec.worktree },
+        }
+      )
+    );
+  }
+
+  const now = (input.now ?? (() => new Date()))().toISOString();
+  let patched = originalBytes;
+
+  const stepLifecycle = setTopLevelScalar(patched, 'lifecycle_state', 'draft');
+  if (!stepLifecycle.ok) return err(stepLifecycle.errors);
+  patched = stepLifecycle.value;
+
+  if (/^updated_at:/m.test(patched)) {
+    const updated = setTopLevelScalar(patched, 'updated_at', `'${now}'`);
+    if (!updated.ok) return err(updated.errors);
+    patched = updated.value;
+  } else {
+    const anchorKey = /^created_at:/m.test(patched) ? 'created_at' : 'lifecycle_state';
+    const updated = insertTopLevelScalarAfter(patched, anchorKey, 'updated_at', `'${now}'`);
+    if (!updated.ok) return err(updated.errors);
+    patched = updated.value;
+  }
+
+  // Strip close-only residue. Normally a no-op: reopen already removes these on
+  // the closed -> active leg. It is not redundant, because the demoted body is
+  // what a future reader treats as the spec's whole claim — a draft carrying
+  // `closure_notes` from a closure that no longer applies is a lie the audit
+  // trail cannot detect. Record what was actually cleared on the event.
+  const clearedTerminalFields: string[] = [];
+  for (const terminalKey of TERMINAL_SPEC_KEYS) {
+    const present = new RegExp(`^${terminalKey}:`, 'm').test(patched);
+    const removed = removeTopLevelScalar(patched, terminalKey);
+    if (!removed.ok) return err(removed.errors);
+    if (present) clearedTerminalFields.push(terminalKey);
+    patched = removed.value;
+  }
+
+  const reparsed = parseAndValidateSpec(patched);
+  if (!isOk(reparsed)) {
+    return err(
+      reparsed.errors.map((d) =>
+        storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
+          subject: d.subject ?? input.id,
+          data: { source_rule: d.rule, hint: 'planned-bytes validation failed' },
+        })
+      )
+    );
+  }
+
+  const eventData: Record<string, unknown> = {
+    previous_lifecycle_state: 'active',
+  };
+  if (input.reason !== undefined && input.reason.length > 0) {
+    eventData.reason = input.reason;
+  }
+  if (clearedTerminalFields.length > 0) {
+    eventData.cleared_terminal_fields = clearedTerminalFields;
+  }
+
+  const event: EventBody = {
+    event: 'spec_deactivated',
+    ts: now,
+    actor: input.actor,
+    spec_id: input.id,
+    data: eventData,
+  } as unknown as EventBody;
+
+  const repoRoot = repoRootFromCawsDir(cawsDir);
+  const wasDirtyBeforeWrite = isPathDirty(repoRoot, specRelPath(cawsDir, input.id, repoRoot));
+
+  const txnResult = withLifecycleLock(cawsDir, () =>
+    runLifecycleTransaction({
+      cawsDir,
+      plannedWrites: [{ path: targetPath, contents: patched }],
+      events: [event],
+    })
+  );
+  if (!txnResult.ok) {
+    return err(txnResult.errors);
+  }
+  const outcome = mapTxnToOutcome(txnResult.value, input.id, targetPath);
+  return attachAutoCommit(outcome, cawsDir, input.id, 'deactivate', wasDirtyBeforeWrite);
 }
 
 // ─── archiveSpec ─────────────────────────────────────────────────────────

@@ -870,6 +870,21 @@ caws specs reopen FEAT-1 --reason "merge auto-close was premature"
 
 Reopen a closed spec (closed → active), the inverse of close. Removes `resolution`/`closure_notes`/`superseded_by` so the active spec is valid; leaves the spec unbound (re-bind with `caws worktree create`/`bind`). Appends a `spec_reopened` event. Use when the auto-close from `caws worktree merge` was premature.
 
+### `caws specs deactivate <id>`
+
+```bash
+caws specs deactivate FEAT-1
+caws specs deactivate FEAT-1 --reason "activated against the wrong id"
+```
+
+Demote an active spec back to draft (active → draft), the inverse of activate. Appends a `spec_deactivated` event.
+
+Use it when a spec was activated by mistake, or when its slice turns out not to be needed before work starts. Unlike close, it writes no `resolution` — closing asserts the work concluded, which is a false claim for a spec that never began, and the audit trail is the product. `--reason` is recorded on the event only, never as `closure_notes`.
+
+Any `resolution`/`closure_notes`/`superseded_by` residue is removed from the demoted body and named in the event's `cleared_terminal_fields`.
+
+Refused for a spec bound to a worktree: once a lane exists, demoting the spec would leave every write in that lane resolving to NO AUTHORITY. Finish the lane (`caws worktree merge <name>`), abandon it (`caws worktree destroy <name> --abandon-unmerged`), or clear a stale binding with `caws worktree repair` first. Every other lifecycle state is refused too, each naming its own correct transition: a draft points at `retire-draft`, a closed spec at `reopen`, an archived one at `restore`.
+
 ### `caws specs close <id>`
 
 ```bash
