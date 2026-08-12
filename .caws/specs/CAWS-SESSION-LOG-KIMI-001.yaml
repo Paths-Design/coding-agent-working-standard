@@ -2,9 +2,11 @@ id: CAWS-SESSION-LOG-KIMI-001
 title: 'Session log renderer learns Kimi Code wire transcripts'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Renderer + transcript-resolution + pack-fingerprint verified green on main (pytest test_session_log_renderer.py 48/48; jest pack-fingerprint+kimi-config-merge 35/35). Evidence A1-A3 recorded.'
 created_at: '2026-08-12T07:10:47.303Z'
-updated_at: '2026-08-12T07:12:45.246Z'
+updated_at: '2026-08-12T19:58:30.539Z'
 blast_radius:
   modules:
     - shared hook pack session-log surface (renderer + session-log.sh templates)
