@@ -36,3 +36,8 @@ non_functional: {}
 contracts:
   - name: 'merge-partial-failure-recovery'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "commit f350364f: worktree-merge-split-state.test.js 'a rolled-back spec close prints the ordered recovery commands on stderr' asserts both recovery commands and the real merge SHA appear in the DEFAULT stderr rendering (no --data). Falsified: inverting the destroy-step guard reddens this test plus the --no-close test, exactly as predicted."
+    recorded_at: "2026-08-12T10:31:41.836Z"
