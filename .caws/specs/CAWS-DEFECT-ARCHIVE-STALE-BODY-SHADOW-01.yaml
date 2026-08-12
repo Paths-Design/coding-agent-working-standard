@@ -57,3 +57,7 @@ evidence:
     status: pass
     evidence_ref: "4 tests: byte-for-byte superseded copy at ARCREP-010.superseded-2026-08-12T09-00-00Z.yaml (no colons); spec_archived.superseded_path recorded; two same-second replaces both survive (falsified: removing the collision suffix reddens exactly this test); atomicity — a rejected new body leaves zero superseded files and the prior body intact."
     recorded_at: "2026-08-12T08:50:21.310Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "spawned CLI: before --replace, recover does NOT serve the new body; after, stdout contains 'Auto-closed by caws worktree merge' and NOT 'REGISTRY RECONCILIATION ONLY' — the read path stops asserting the opposite of the outcome. Falsified: dropping the register.ts forwarding reddens this test."
+    recorded_at: "2026-08-12T08:50:33.620Z"
