@@ -40,3 +40,8 @@ non_functional: {}
 contracts:
   - name: 'claim-takeover-audit'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "3 tests: event carries worktree_name/prior_owner.session_id+last_seen/new_owner.session_id and spec_id, actor.id == new owner; chain integrity — seq extends and prev_hash equals the preceding event_hash; last_seen is the registry last_heartbeat, explicit null (key present) when the entry has none."
+    recorded_at: "2026-08-12T09:19:11.996Z"
