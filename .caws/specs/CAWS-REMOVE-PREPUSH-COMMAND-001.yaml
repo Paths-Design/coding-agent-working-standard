@@ -79,3 +79,8 @@ non_functional: {}
 contracts:
   - name: 'prepush-removed'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "node dist/index.js prepush -> \"error: unknown command 'prepush'\" via the standard suggester; node dist/index.js --help greps zero prepush hits (13 groups listed)"
+    recorded_at: "2026-08-12T20:47:57.077Z"
