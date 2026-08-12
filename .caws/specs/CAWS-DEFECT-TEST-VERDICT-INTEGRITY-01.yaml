@@ -55,3 +55,7 @@ evidence:
     status: pass
     evidence_ref: "commit d6228e5b: verdict returns 1 and prints result.error.message when spawnSync never launched the child. Pinned by \"verdict maps a failed spawn to non-zero and surfaces the spawn error message\" and \"jest failing to spawn exits non-zero and reports the spawn error\" in tests/shell/run-tests-exit-code.test.js."
     recorded_at: "2026-08-12T17:46:56.473Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "commit d6228e5b: jest-over-cleanup precedence preserved and now under test - \"an ordinary jest failure still exits with jest exit code\", \"a cleanup failure never masks a jest failure\" (jest 1 + cleanup 3 => 1), \"a cleanup failure decides the verdict only when jest passed\" (jest 0 + cleanup 3 => 3). End-to-end proof of the unchanged CLI entry: node scripts/run-tests.js tests/shell/run-tests-exit-code.test.js ran build then jest 14/14 then cleanup, exit 0."
+    recorded_at: "2026-08-12T17:49:02.900Z"
