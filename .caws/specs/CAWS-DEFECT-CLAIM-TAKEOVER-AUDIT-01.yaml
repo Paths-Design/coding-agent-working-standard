@@ -53,3 +53,7 @@ evidence:
     status: pass
     evidence_ref: "2 tests: same-session claim without --takeover appends zero claim_taken_over events (kernel emits a null patch, so the emission site is never reached); foreign claim without --takeover exits 1, appends nothing, and leaves owner == peer-session."
     recorded_at: "2026-08-12T09:19:23.034Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "2 tests: phantom-root refusal (CLAUDE_PROJECT_DIR outside the worktree) exits 1 with 'phantom' and appends nothing — the emission sits AFTER that guard by construction; --plan previews without appending and leaves ownership unchanged. Both assert owner == peer-session so 'no event' is not confused with 'no transfer'."
+    recorded_at: "2026-08-12T09:19:24.264Z"
