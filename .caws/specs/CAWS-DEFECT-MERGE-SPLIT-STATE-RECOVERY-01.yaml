@@ -45,3 +45,7 @@ evidence:
     status: pass
     evidence_ref: "commit f350364f: splitStateRepair computes the state line from what actually landed, not fixed text. Two tests pin opposite states: 'the surface-by-surface state names which surfaces moved' (spec still active, ledger NOT appended, worktree still registered) and 'a failed teardown reports the spec CLOSED and asks only for the destroy' (spec CLOSED, ledger appended, destroy-only recovery, and NOT the close command). Both verified against on-disk spec YAML and events.jsonl, so the reported state is checked against reality."
     recorded_at: "2026-08-12T10:31:52.496Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "commit f350364f: 'the success path prints no recovery text and leaves no partial state' asserts neither stdout nor stderr contains the split-state text on a healthy merge, and the control is non-vacuous — it verifies the spec really closed and the worktree directory is really gone."
+    recorded_at: "2026-08-12T10:31:53.707Z"
