@@ -66,6 +66,10 @@ import {
   loadLeases,
   resolveRepoRoot,
 } from '../../store';
+// Imported from the writer directly rather than the store barrel, matching how
+// specs.ts reaches specs-writer. The takeover's registry write and its audit
+// append must be ONE transaction, so the composition lives in the store layer.
+import { applyTakeoverWithAudit } from '../../store/worktrees-writer';
 import { resolveBinding } from '../binding/resolve-binding';
 import { renderClaimPanel, classifyOwnership } from '../render/claim';
 import { renderDiagnostics } from '../render/diagnostic';
@@ -631,8 +635,46 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
       return 1;
     }
 
-    // Apply the takeover.
-    const applyResult = applyRegistryPatch(cawsDir, patch);
+    // Apply the takeover AND its audit event in one transaction
+    // (CAWS-DEFECT-CLAIM-TAKEOVER-AUDIT-01). Ownership is the highest-authority
+    // mutation in the control plane; transferring it with no record of who
+    // transferred it is what made the hash chain read as provenance while
+    // asserting nothing about authorized ownership continuity.
+    //
+    // Reached only on the takeover branch: `patch` is non-null exactly when the
+    // kernel emitted a takeover_claim. A same-session refresh produces a null
+    // patch and never lands here, so `claim_taken_over` means a genuine
+    // authority TRANSFER and not a heartbeat.
+    //
+    // Placed AFTER the phantom-root refusal above so a refused takeover leaves
+    // no audit implying it happened.
+    const priorOwnerRecord =
+      patch.kind === 'takeover_claim' ? patch.prior_owner : undefined;
+    const applyResult = applyTakeoverWithAudit(cawsDir, {
+      name: worktreeName,
+      patch,
+      // claim has no --actor-kind option, and the session driving a takeover is
+      // by construction the agent/operator at the keyboard. The session id is
+      // the identifier that matters here: it is the same value recorded as
+      // new_owner, so the actor and the beneficiary are provably one party.
+      actor: { kind: 'agent', id: session.session_id, session_id: session.session_id },
+      priorOwner: {
+        session_id: priorOwnerRecord?.session_id ?? record.owner?.session_id ?? 'unknown',
+        ...(priorOwnerRecord?.platform !== undefined
+          ? { platform: priorOwnerRecord.platform }
+          : {}),
+        // Explicit null (not omitted) when the prior session's agent record was
+        // already TTL-pruned: the schema models that case, and an absent field
+        // would be indistinguishable from "we did not look".
+        last_seen: priorOwnerRecord?.last_seen ?? null,
+      },
+      newOwner: {
+        session_id: session.session_id,
+        ...(session.platform !== undefined ? { platform: session.platform } : {}),
+      },
+      ...(record.specId !== undefined ? { specId: record.specId } : {}),
+      now: () => now,
+    });
     if (!applyResult.ok) {
       err('caws claim: failed to apply takeover patch.');
       err(renderDiagnostics(applyResult.errors, { showData }));
