@@ -415,7 +415,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
       name: 'evidence',
       argument: { name: 'id', required: true, description: 'Active or draft spec id to record evidence for' },
       description:
-        "Record per-criterion verified status (AC evidence) on the spec's evidence: block — the CLOSURE AUTHORITY read by the close gate. Dual-writes: patches the spec block AND appends an ac_recorded event in one transaction. The close gate requires each declared AC to have status pass or waived before close; this is the governed way to populate it. Active/draft only (a closed/archived spec's evidence is frozen).",
+        "Record per-criterion verified status (AC evidence) on the spec's evidence: block — the CLOSURE AUTHORITY read by the close gate. Dual-writes: patches the spec block AND appends an ac_recorded event in one transaction. This is the ONLY command that writes the block (`caws evidence record --type ac` is refused and redirects here). The close gate WARNS when a declared AC lacks pass/waived evidence and names the criteria on close and merge; it does not currently refuse the close (warn-mode). Active/draft only (a closed/archived spec's evidence is frozen).",
       options: [
         { flag: '--ac <id>', description: 'Acceptance criterion id (e.g. A1); must match a declared acceptance[].id', required: true },
         {
@@ -1073,9 +1073,13 @@ export const EVIDENCE_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'record',
       description:
-        'Append a typed evidence event (test|gate|ac). Payload examples: test {"command":"npm test","exit_code":0}; gate {"gate_id":"budget_limit","mode":"block","result":"pass","violations":[]}; ac {"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}. Use `caws evidence schema --type <kind>` for the full kernel schema.',
+        'Append a typed evidence event (test|gate). Payload examples: test {"command":"npm test","exit_code":0}; gate {"gate_id":"budget_limit","mode":"block","result":"pass","violations":[]}. Use `caws evidence schema --type <kind>` for the full kernel schema. `--type ac` is REFUSED here: it would append an audit event without writing the spec evidence: block that the close gate reads — use `caws specs evidence <id> --ac <ac> --status <s>` instead (it dual-writes both).',
       options: [
-        { flag: '--type <kind>', required: true, description: 'Evidence kind: test | gate | ac' },
+        {
+          flag: '--type <kind>',
+          required: true,
+          description: 'Evidence kind: test | gate (ac is refused — use `caws specs evidence`)',
+        },
         { flag: '--spec <id>', required: true, description: 'Spec id this evidence is about' },
         { flag: '--data <json>', required: true, description: 'Event payload as a JSON object string' },
         {
@@ -1117,7 +1121,7 @@ export const EVIDENCE_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'schema',
       description:
-        'Print the kernel-derived payload schema and a copy-pasteable `caws evidence record` example for one evidence kind. Read-only; does not read or write .caws/events.jsonl.',
+        'Print the kernel-derived payload schema and a copy-pasteable example command for one evidence kind. Read-only; does not read or write .caws/events.jsonl. For test|gate the example is a `caws evidence record` call; for ac it is the `caws specs evidence` call that actually writes the closure authority.',
       options: [
         { flag: '--type <kind>', required: true, description: 'Evidence kind: test | gate | ac' },
         { flag: '--json', description: 'Emit schema, required fields, and example command as JSON.' },

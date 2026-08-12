@@ -126,7 +126,7 @@ Alternatively, do the migration on `caws-cli@10.2.x` and then upgrade.
 | Take over worktree (with authorization) | `caws claim --takeover` |
 | Run quality gates | `caws gates run --spec <id>` |
 | Record test evidence | `caws evidence record --type test --spec <id> --data '{...}'` |
-| Record AC closure | `caws evidence record --type ac --spec <id> --data '{...}'` |
+| Record AC closure | `caws specs evidence <id> --ac A1 --status pass --evidence-ref "<test command>"` |
 | Open a waiver | `caws waiver create <id> --gate <g> --reason "..." --approved-by "..." --expires-at <iso8601>` |
 | List waivers | `caws waiver list` |
 | Show waiver | `caws waiver show <id>` |
@@ -151,7 +151,7 @@ Alternatively, do the migration on `caws-cli@10.2.x` and then upgrade.
 2. **Create and enter the worktree**: `caws worktree create <name> --spec <id>`. Run `caws claim` inside to surface ownership.
 3. **Verify scope** with `caws scope check <path>` for each file you intend to touch.
 4. **Implement and test.** Run your project's test suite as usual.
-5. **Record typed evidence** as ACs close: `caws evidence record --type ac --spec <id> --data '{"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}'` (run `caws evidence schema --type ac` for the authoritative shape).
+5. **Record AC evidence** as each criterion is satisfied: `caws specs evidence <id> --ac A1 --status pass --evidence-ref "npm test"`. This is the only command that writes the spec's `evidence:` block, which is the closure authority the close gate reads; it dual-writes the `ac_recorded` audit event in the same transaction. (`caws evidence record --type ac` is refused — it could only write the event.) Closing or merging with a criterion that has no `pass`/`waived` evidence prints a warning naming the criterion; it does not currently refuse the close.
 6. **Run gates** with `caws gates run --spec <id>`. If anything blocks, fix or waive.
 7. **Re-check** with `caws doctor` and `caws status` before declaring done.
 8. **Merge and close**: `caws worktree merge <name>` (auto-closes the bound spec). Then `caws worktree destroy <name>`.
