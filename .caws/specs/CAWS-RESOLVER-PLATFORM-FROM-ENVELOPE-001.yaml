@@ -117,3 +117,9 @@ evidence:
     recorded_at: "2026-08-12T19:59:22.613Z"
     command: "jest tests/shell/session/resolver-platform-from-envelope.test.js (passing, 40-test contract run)"
     exit_code: 0
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "jest tests/shell/session/resolver-platform-from-envelope.test.js (passing, 40-test contract run)"
+    recorded_at: "2026-08-12T19:59:23.799Z"
+    command: "jest tests/shell/session/resolver-platform-from-envelope.test.js (passing, 40-test contract run)"
+    exit_code: 0
