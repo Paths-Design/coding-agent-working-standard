@@ -74,3 +74,7 @@ evidence:
     status: pass
     evidence_ref: "npx jest tests/shell/worktree-merge-no-close.test.js (11 passed): merge lands (git show main:payload.txt + merge-base --is-ancestor), spec stays active, zero spec_closed events, worktree destroyed and binding cleared, post-merge caws specs evidence exits 0; spawned-CLI test proves the Commander negation forwarding"
     recorded_at: "2026-08-12T07:40:00.545Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "A4 describe block (3 tests): bare merge sets auto_closed_spec true, writes lifecycle_state closed + resolution completed, appends exactly one spec_closed whose merge_commit matches, and omits spec_left_open entirely; spawned-CLI default test confirms via the real parse path"
+    recorded_at: "2026-08-12T07:40:08.339Z"
