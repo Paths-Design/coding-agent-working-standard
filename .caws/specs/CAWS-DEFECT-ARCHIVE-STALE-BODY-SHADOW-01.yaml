@@ -1,0 +1,48 @@
+id: CAWS-DEFECT-ARCHIVE-STALE-BODY-SHADOW-01
+title: 'a stale archived body permanently shadows the live spec: archive refuses to overwrite it and names no remedy'
+risk_tier: 2
+mode: fix
+lifecycle_state: active
+created_at: '2026-08-12T08:37:24.633Z'
+updated_at: '2026-08-12T08:37:24.633Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/specs-writer.ts'
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/tests/shell/specs-archive-replace.test.js'
+    - 'docs/command-reference.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'a closed spec whose id already has a body in .caws/specs/.archive/'
+    when: 'caws specs archive runs without --replace'
+    then: 'it still refuses, and the refusal names --replace as the remedy and prints BOTH bodies'' updated_at so the operator can see which one is stale without a second investigation'
+  - id: A2
+    given: 'the same collision'
+    when: 'caws specs archive <id> --replace runs'
+    then: 'the existing archived body is MOVED to .caws/specs/.archive/<id>.superseded-<timestamp>.yaml byte-for-byte and the new body takes the canonical archive path — nothing is discarded'
+  - id: A3
+    given: 'an id archived with --replace'
+    when: 'caws specs recover <id> runs'
+    then: 'it returns the NEW body, not the superseded snapshot, so the governed read path stops asserting the opposite of the spec''s actual outcome'
+  - id: A4
+    given: 'an id with one or more superseded snapshots on disk'
+    when: 'caws specs recover <id> or caws specs show <id> --archived runs'
+    then: 'a non-blocking advisory names the superseded files, so a divergence that legitimately exists is visible rather than silent'
+  - id: A5
+    given: 'a closed spec with NO existing archived body'
+    when: 'caws specs archive <id> --replace runs'
+    then: 'it behaves exactly like a plain archive and creates no superseded file — the flag widens what archive can do without changing what it does normally'
+non_functional: {}
+contracts:
+  - name: 'specs-archive-replace'
+    type: behavior
