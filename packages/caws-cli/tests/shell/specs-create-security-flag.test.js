@@ -185,6 +185,86 @@ describe('the refusal names the flags that satisfy it', () => {
   });
 });
 
+describe('--plan prints a create command that actually works', () => {
+  // Found post-merge by running the shipped binary: --plan's "create command:"
+  // preview is built by createCommandPreview, which enumerates the flags it
+  // knows about. It did not know about the tier-1 trio, so --plan on a valid
+  // tier-1 candidate printed a command that OMITS them — and copying that
+  // command produces a refusal. A preview whose whole purpose is to be copied
+  // must reproduce the candidate it previewed.
+  test('the tier-1 flags appear in the --plan create-command preview', () => {
+    const { root } = mkRepo();
+
+    const planned = spawnSync(
+      process.execPath,
+      [
+        CLI, 'specs', 'create', 'TIER1-201',
+        '--title', 'plan preview',
+        '--mode', 'feature',
+        '--risk-tier', '1',
+        '--contract', 'core-api:api',
+        '--observability', 'obs item',
+        '--rollback', 'rb item',
+        '--security', 'sec item',
+        '--plan',
+      ],
+      { cwd: root, encoding: 'utf8', env: { ...process.env, CAWS_QUIET: '1' } }
+    );
+
+    expect(planned.status).toBe(0);
+    expect(planned.stdout).toContain('valid candidate');
+    expect(planned.stdout).toContain("--observability 'obs item'");
+    expect(planned.stdout).toContain("--rollback 'rb item'");
+    expect(planned.stdout).toContain("--security 'sec item'");
+  });
+
+  test('the previewed command, run verbatim, creates the spec it previewed', () => {
+    const { root } = mkRepo();
+
+    const planned = spawnSync(
+      process.execPath,
+      [
+        CLI, 'specs', 'create', 'TIER1-202',
+        '--title', 'roundtrip',
+        '--mode', 'feature',
+        '--risk-tier', '1',
+        '--contract', 'core-api:api',
+        '--observability', 'obs roundtrip',
+        '--rollback', 'rb roundtrip',
+        '--security', 'sec roundtrip',
+        '--plan',
+      ],
+      { cwd: root, encoding: 'utf8', env: { ...process.env, CAWS_QUIET: '1' } }
+    );
+    // The header line ("caws specs create --plan: valid candidate for X") also
+    // starts with the command name; the preview is the one carrying flags.
+    const previewLine = planned.stdout
+      .split('\n')
+      .map((l) => l.trim())
+      .find((l) => l.startsWith('caws specs create') && l.includes('--title'));
+    expect(previewLine).toBeDefined();
+
+    // Replay it through a shell so the preview's own quoting is exercised —
+    // quoting the preview gets wrong is the same defect as a flag it omits.
+    const replay = spawnSync(
+      'bash',
+      ['-c', previewLine.replace(/^caws /, `${JSON.stringify(process.execPath)} ${JSON.stringify(CLI)} `)],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: { ...process.env, CAWS_QUIET: '1', CLAUDE_CODE_SESSION_ID: 'tier1-roundtrip' },
+      }
+    );
+
+    expect(replay.stderr).not.toContain('Tier 1 specs require');
+    expect(replay.status).toBe(0);
+    const spec = fs.readFileSync(path.join(root, '.caws', 'specs', 'TIER1-202.yaml'), 'utf8');
+    expect(spec).toContain('obs roundtrip');
+    expect(spec).toContain('rb roundtrip');
+    expect(spec).toContain('sec roundtrip');
+  });
+});
+
 describe('lower tiers are unaffected', () => {
   test('a tier-3 chore spec still creates with no tier-1 flags and renders non_functional: {}', () => {
     const { root, cawsDir } = mkRepo();
