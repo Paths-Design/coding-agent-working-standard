@@ -191,26 +191,50 @@ test('poll --peek shows the message without consuming it; a later poll still del
 
 // ─── --wait: long-poll blocks then returns on arrival ────────────────────────
 
-test('poll --wait returns immediately when a message is already waiting', () => {
+test('poll --wait returns on the first attempt when a message is already waiting', () => {
   const root = mkRepo();
   makeLive(root, 'bob');
   runMessageSendCommand({ ...io(root, 'alice').opts, to: 'bob', text: 'already here' });
   const { out, opts } = io(root, 'bob');
-  const t0 = Date.now();
-  const code = runMessagePollCommand({ ...opts, waitMs: 2000 });
-  expect(code).toBe(0);
-  expect(out.join('\n')).toMatch(/already here/);
-  // should not have burned the full window
-  expect(Date.now() - t0).toBeLessThan(1500);
+
+  // The long-poll loop sleeps ONLY when it is about to retry, so observing that
+  // no sleep happened proves the poll returned on its first attempt — the
+  // behavior this test exists to pin. Elapsed wall-clock time cannot prove it:
+  // an assertion like `Date.now() - t0 < 1500` measures the machine's load, and
+  // reddened this suite under full-suite CPU contention while the code was
+  // correct. Nothing else in this fixture contends for the message-log lock, so
+  // the lock helper's own retry sleep is not reachable here.
+  // [CAWS-DEFECT-TEST-VERDICT-INTEGRITY-01]
+  const repoRoot = require('../../dist/store/repo-root');
+  const sleepSpy = jest.spyOn(repoRoot, 'sleepSyncMs');
+  try {
+    const code = runMessagePollCommand({ ...opts, waitMs: 2000 });
+    expect(code).toBe(0);
+    expect(out.join('\n')).toMatch(/already here/);
+    expect(sleepSpy).not.toHaveBeenCalled();
+  } finally {
+    sleepSpy.mockRestore();
+  }
 });
 
-test('poll --wait on an empty mailbox returns "(no messages)" after the window', () => {
+test('poll --wait on an empty mailbox retries until the window closes, then returns "(no messages)"', () => {
   const root = mkRepo();
   const { out, opts } = io(root, 'bob');
+
+  // Positive control for the sibling test above: the same spy DOES record the
+  // retry sleep when the loop runs, so `not.toHaveBeenCalled()` there is a real
+  // assertion about the code and not a spy that never intercepted anything.
+  const repoRoot = require('../../dist/store/repo-root');
+  const sleepSpy = jest.spyOn(repoRoot, 'sleepSyncMs');
   const t0 = Date.now();
-  const code = runMessagePollCommand({ ...opts, waitMs: 300 });
-  expect(code).toBe(0);
-  expect(out.join('\n')).toMatch(/no messages/);
+  try {
+    const code = runMessagePollCommand({ ...opts, waitMs: 300 });
+    expect(code).toBe(0);
+    expect(out.join('\n')).toMatch(/no messages/);
+    expect(sleepSpy).toHaveBeenCalled();
+  } finally {
+    sleepSpy.mockRestore();
+  }
   // it actually waited ~the window (not instant), proving the long-poll loop ran
   expect(Date.now() - t0).toBeGreaterThanOrEqual(250);
 });
