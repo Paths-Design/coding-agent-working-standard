@@ -86,3 +86,9 @@ evidence:
     recorded_at: "2026-08-12T20:38:16.004Z"
     command: jest tests/store/worktree-artifacts.test.js (3/3 pass — new test pinning the ROOT_CANDIDATES .caws/hooks/node_modules discovery+link path)
     exit_code: 0
+  - criterion_id: A2
+    status: pass
+    evidence_ref: jest tests/store/worktree-artifacts.test.js (3/3 pass — new test pinning the ROOT_CANDIDATES .caws/hooks/node_modules discovery+link path)
+    recorded_at: "2026-08-12T20:38:27.220Z"
+    command: jest tests/store/worktree-artifacts.test.js (3/3 pass — new test pinning the ROOT_CANDIDATES .caws/hooks/node_modules discovery+link path)
+    exit_code: 0
