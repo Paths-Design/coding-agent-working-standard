@@ -233,7 +233,18 @@ import type { HookPackV1 } from './types';
 // cwd — a recurrence of CAWS-RESET-LATCH-CWD-DEPENDENT-LOOKUP-001 through
 // the MULTIVENDOR helper path). Search root is again the hooks install /
 // canonical git root. No mode, warn-marker, or audit-log behavior changes.
-export const SHARED_PACK_VERSION = 35;
+//
+// Version 36: CAWS-DEFECT-HOOK-AGENT-PID-FAILOPEN-01. parse-input.sh's
+// _write_agent_pid_record and agent-pid.sh's read_session_id_from_agent_pid
+// guard their agent-PID read-groups with `|| true`: when
+// CAWS_AGENT_PROCESS_NAMES is non-empty but no ancestor matches (bats/CI/
+// plain terminal), the resolver prints nothing and the unguarded `read` hit
+// EOF — in parse-input.sh (called unchecked from parse_hook_input under
+// `set -euo pipefail`) that aborted the whole guard with exit 1 and zero
+// output (observed: bash-write-guard.bats 6/7 red). agent-pid.sh's site is
+// the same latent defect class, guarded for internal control-flow integrity.
+// No guard allow/block/ask decision logic changes.
+export const SHARED_PACK_VERSION = 36;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.

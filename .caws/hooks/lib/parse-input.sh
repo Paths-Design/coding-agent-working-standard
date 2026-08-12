@@ -318,10 +318,16 @@ _write_agent_pid_record() {
   [[ -z "$names" ]] && return 0
 
   local agent_pid start_epoch
+  # The read-group MUST tolerate EOF (CAWS-DEFECT-HOOK-AGENT-PID-FAILOPEN-01):
+  # when no ancestor matches (bats/CI/plain terminal — names non-empty but no
+  # agent process), the resolver prints nothing and the second read fails. An
+  # unguarded failure here aborts the whole guard under `set -euo pipefail`
+  # with exit 1 and zero output — the exact silent death this function's
+  # "all failures silently swallowed" contract forbids.
   {
     read -r agent_pid
     read -r start_epoch
-  } < <(resolve_agent_pid_with_start "$names")
+  } < <(resolve_agent_pid_with_start "$names") || true
   [[ -z "$agent_pid" ]] && return 0
 
   # Canonical repo root (same resolution as _write_durable_session_envelope).
