@@ -69,3 +69,10 @@ non_functional:
 contracts:
   - name: 'close-gate-advisory'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: npx jest tests/shell/specs-close-evidence-warning.test.js (5 passed)
+    recorded_at: "2026-08-12T02:28:57.691Z"
+    command: npx jest tests/shell/specs-close-evidence-warning.test.js
+    exit_code: 0
