@@ -7,7 +7,9 @@ created_at: '2026-08-12T06:14:51.367Z'
 updated_at: '2026-08-12T06:14:51.367Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli shell: specs create acceptance-clause parser'
+    - 'caws-cli shell: specs create flag surface (command-metadata + register)'
+    - 'caws-cli store: createSpec input and spec body renderer'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -21,12 +23,26 @@ scope:
     - 'docs/command-reference.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The acceptance-clause parser treats ONLY the given:/when:/then: label boundaries as field separators. A semicolon inside a clause body is ordinary prose and must never change how the value parses.'
+  - 'Every requirement the create-time validator enforces must be satisfiable through the create command surface. A validator that demands a field no flag can supply is a door that only opens from the outside, and it pushes authors to hand-write spec YAML — bypassing the template discipline create exists to enforce.'
+  - 'A refusal message must describe the actual failure. "Fields are missing" is wrong when all three fields are present and correctly labeled.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'An --acceptance value carrying all three labels where a clause body itself contains a semicolon (e.g. "then: zero classes hold X; mutation kill required: Y").'
+    when: 'caws specs create runs with that value.'
+    then: 'The spec is created and the three fields are parsed at the label boundaries, so the clause-internal semicolon is preserved verbatim in the then: text rather than splitting the value.'
+  - id: A2
+    given: 'An --acceptance value that is genuinely malformed (a label present but another missing entirely).'
+    when: 'caws specs create runs with that value.'
+    then: 'It is still refused — the fix widens what parses, it does not stop rejecting real malformations.'
+  - id: A3
+    given: 'A risk_tier 1 spec being created through the CLI.'
+    when: 'caws specs create <id> --risk-tier 1 --security "<text>" runs with the other required flags.'
+    then: 'The spec is created with non_functional.security populated from the flag, and the tier-1 semantic validator passes — no hand-written YAML is required to author a tier-1 spec.'
+  - id: A4
+    given: 'A risk_tier 1 spec being created with no --security flag.'
+    when: 'caws specs create runs.'
+    then: 'It is refused, and the refusal names --security as the flag that satisfies the requirement, so the operator is not left to discover that the surface cannot meet its own demand.'
 non_functional: {}
 contracts:
   - name: 'specs-create-cli'
