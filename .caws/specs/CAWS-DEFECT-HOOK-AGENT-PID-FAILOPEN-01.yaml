@@ -76,3 +76,8 @@ evidence:
     evidence_ref: "agent-pid.sh read-group guarded (|| true); new bats test 'read_session_id_from_agent_pid miss still returns cleanly under set -e' passes; session-id-agent-pid.bats contract suite green in full 139/139 sweep"
     recorded_at: "2026-08-12T06:21:20.975Z"
     exit_code: 0
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "SHARED_PACK_VERSION 35->36 with history comment; pack-fingerprints.json recomputed (6bda6784...); pack-fingerprint.test.js + full jest 123 suites/1816 tests green; .caws/hooks mirror == templates modulo version stamp"
+    recorded_at: "2026-08-12T06:21:22.682Z"
+    exit_code: 0
