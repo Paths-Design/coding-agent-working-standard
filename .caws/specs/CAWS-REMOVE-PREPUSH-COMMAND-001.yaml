@@ -4,7 +4,7 @@ risk_tier: 2
 mode: refactor
 lifecycle_state: active
 created_at: '2026-08-12T19:35:47.293Z'
-updated_at: '2026-08-12T19:35:47.293Z'
+updated_at: '2026-08-12T19:36:00.792Z'
 blast_radius:
   modules:
     - 'caws-cli shell: prepush command + push-range classifier (deleted); register/command-metadata/index surface'
@@ -15,6 +15,37 @@ operational_rollback_slo: 5m
 scope:
   in:
     - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/src/shell/commands/prepush.ts
+    - packages/caws-cli/src/shell/push-range/classify-range.ts
+    - packages/caws-cli/src/shell/push-range/scope-match.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/index.ts
+    - packages/caws-cli/src/index.js
+    - packages/caws-cli/src/shell/registered-command-groups.js
+    - packages/caws-cli/src/shell/legacy-command-map.js
+    - packages/caws-cli/src/store/repo-root.ts
+    - packages/caws-cli/src/store/git-autocommit.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/tests/shell/prepush-ack-bundle-normalize.test.js
+    - packages/caws-cli/tests/shell/push-range.test.js
+    - packages/caws-cli/tests/store/shared-utils-consolidation.test.js
+    - packages/caws-cli/stryker.shell.conf.js
+    - docs/architecture/caws-vnext-command-surface.md
+    - docs/api/cli.md
+    - docs/command-reference.md
+    - docs/v11-surface-matrix.yaml
+    - docs/agents/full-guide.md
+    - docs/migration-v10-to-v11.md
+    - docs/guides/hooks-and-agent-workflows.md
+    - docs/guides/agent-integration-guide.md
+    - docs/architecture/adr/0001-multi-agent-push-range-guard.md
+    - docs/architecture/design/prepush-slice-attribution-dead-by-design.md
+    - AGENTS.md
+    - README.md
+    - packages/caws-cli/README.md
+    - packages/caws-cli/templates/CLAUDE.md
+    - packages/caws-cli/templates/agents.md
   out: []
 invariants:
   - 'The merge-boundary lane-provenance check (verifyLaneProvenance in store/worktrees-writer.ts) is untouched — the per-slice teeth stay at caws worktree merge, which is where they were deliberately placed. Only the publish-side check is removed.'
