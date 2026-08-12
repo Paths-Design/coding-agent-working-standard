@@ -84,3 +84,7 @@ evidence:
     status: pass
     evidence_ref: "node dist/index.js prepush -> \"error: unknown command 'prepush'\" via the standard suggester; node dist/index.js --help greps zero prepush hits (13 groups listed)"
     recorded_at: "2026-08-12T20:47:57.077Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "repo-wide grep for prepush across *.ts/*.js/*.md/*.json/*.yaml/*.sh (excl node_modules,dist,events.jsonl,sessions): only intentional hits remain — the new doctrine removal section (caws-vnext-command-surface.md) and the removed-command lists in AGENTS.md + docs/agents/full-guide.md. Historical records untouched (CHANGELOG, failure-lineage, docs/rewrite, cli-ux audit, ADR 0001, design doc)"
+    recorded_at: "2026-08-12T20:47:58.209Z"
