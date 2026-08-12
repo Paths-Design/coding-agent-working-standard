@@ -436,7 +436,7 @@ describe('A4: the default auto-close path is unchanged by this slice', () => {
     expect(result.err).toContain(`caws specs reopen ${SPEC}`);
   });
 
-  test('the default records the unsatisfied ids in closure_notes (A2 via merge)', () => {
+  test('the default leaves closure_notes unannotated — the gap is derived, not stored (A2)', () => {
     const caws = setupCaws(mkRepo('acwin-default-notes-'));
     const repo = path.dirname(caws);
     const SPEC = 'ACWIN-DEFAULT-003';
@@ -452,12 +452,26 @@ describe('A4: the default auto-close path is unchanged by this slice', () => {
     });
     expect(result.ok && result.value.kind === 'success').toBe(true);
 
-    // The merge auto-close writes the machine stub into closure_notes (the spec
-    // carried none), so the annotation rides along on the same line.
+    // `closure_notes` means "what the operator said about this closure" on BOTH
+    // the YAML and the event. Neither may be overloaded with a machine gap
+    // report — the reader-facing answer is re-derived by `caws specs show`.
     const notesLine = readSpec(caws, SPEC)
       .split('\n')
       .find((l) => l.startsWith('closure_notes:'));
     expect(notesLine).toContain('Auto-closed by caws worktree merge');
-    expect(notesLine).toContain('AC evidence missing at close: A1 (missing)');
+    expect(notesLine).not.toContain('AC evidence missing at close');
+
+    const closed = readEvents(caws).filter((e) => e.event === 'spec_closed' && e.spec_id === SPEC);
+    expect(closed).toHaveLength(1);
+    expect(closed[0].data.closure_notes).not.toContain('AC evidence missing at close');
+
+    // The gap is still reachable — via the read path a future reader uses.
+    const shown = spawnSync(process.execPath, [CLI, 'specs', 'show', SPEC], {
+      cwd: repo,
+      encoding: 'utf8',
+      env: { ...process.env, CAWS_QUIET: '1' },
+    });
+    expect(shown.status).toBe(0);
+    expect(shown.stderr).toContain('A1 (missing)');
   });
 });
