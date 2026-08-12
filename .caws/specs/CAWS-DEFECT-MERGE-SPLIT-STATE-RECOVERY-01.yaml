@@ -2,10 +2,11 @@ id: CAWS-DEFECT-MERGE-SPLIT-STATE-RECOVERY-01
 title: 'worktree merge can land the git merge and roll back the close, and hides the recovery commands behind --data'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-merge-split-state
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-merge-split-state at 7cd0db12f00202211144b8f95747378a7e02cf75'
 created_at: '2026-08-12T08:37:37.564Z'
-updated_at: '2026-08-12T08:37:37.564Z'
+updated_at: '2026-08-12T10:32:17.641Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
