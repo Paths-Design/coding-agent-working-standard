@@ -48,3 +48,10 @@ non_functional: {}
 contracts:
   - name: 'specs-create-cli'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "npx jest tests/shell/specs-create-acceptance-semicolon.test.js (7 passed); clause-internal semicolon preserved in then: text"
+    recorded_at: "2026-08-12T06:35:01.357Z"
+    command: npx jest tests/shell/specs-create-acceptance-semicolon.test.js
+    exit_code: 0
