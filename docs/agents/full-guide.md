@@ -14,7 +14,7 @@ updated: 2026-05-28
 **Version**: 11.1.6
 **Last Updated**: 2026-05-28
 
-> **v11 posture (A1).** This guide describes the v11 surface — fifteen command groups: `init`, `doctor`, `scope`, `status`, `claim`, `gates`, `prepush`, `evidence`, `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message` (plus the auto-generated `help`). Run `caws --help` for the authoritative list. Removed v10 commands (`validate`, `iterate`, `evaluate`, `diagnose`, `provenance`, `scaffold`, `parallel`, `mode`, `verify-acs`, `burnup`, `sidecar`, `test-analysis`, `templates`, legacy `hooks install`) are not registered with the CLI. Do NOT pin `caws-cli@^10.2.x`; v11.1 ships the full spec/worktree/agents surface.
+> **v11 posture (A1).** This guide describes the v11 surface — fourteen command groups: `init`, `doctor`, `scope`, `status`, `claim`, `gates`, `evidence`, `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message` (plus the auto-generated `help`). Run `caws --help` for the authoritative list. Removed commands (`validate`, `iterate`, `evaluate`, `diagnose`, `provenance`, `scaffold`, `parallel`, `mode`, `verify-acs`, `burnup`, `sidecar`, `test-analysis`, `templates`, `prepush`, legacy `hooks install`) are not registered with the CLI. Do NOT pin `caws-cli@^10.2.x`; v11.1 ships the full spec/worktree/agents surface.
 >
 > Doctrine source: [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md). Full CLI reference: [`docs/api/cli.md`](../api/cli.md). When this guide and the doctrine doc disagree, the doctrine doc wins.
 
@@ -468,15 +468,18 @@ caws agents prune --status stopped --older-than-ms 604800000 --apply
                           # retention cleanup; operator-invoked, never hook-invoked
 ```
 
-### Message and pre-push checks
+### Directed messages
 
 ```bash
 caws message send --to <session-id> --text "Please inspect FEAT-1"
 caws message poll --wait 60000
                           # directed messages; not authority, verify claims before acting
-caws prepush --base origin/main --spec <id>
-                          # classify outgoing commits; diagnose/decide only, does not push
 ```
+
+There is no pre-push range check: provenance is enforced at the merge
+boundary by `caws worktree merge`, which refuses a lane carrying commits
+outside its bound spec's scope and records the landing as a
+`worktree_merged` event.
 
 (v11 does not ship `caws hooks install` or `caws provenance` commands. The hash-chained `events.jsonl` is the audit trail; record evidence with `caws evidence record`.)
 

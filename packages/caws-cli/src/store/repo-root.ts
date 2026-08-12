@@ -72,8 +72,7 @@ export const defaultGitRunner: GitRunner = (args, options) => {
  * NOTE: this is the result-shape helper. Divergent variants stay in place —
  * the THROWING runGit in shell/gates/local-evaluators/diff-helpers.ts, the
  * SWAPPED-arg runGit/gitOutput in git-sparse-checkout.ts and
- * shell/commands/worktree.ts, and the positional-cwd defaultGitRunner in
- * shell/commands/prepush.ts. Only the two identical twins consolidated.
+ * shell/commands/worktree.ts. Only the two identical twins consolidated.
  */
 export function runGit(
   args: readonly string[],

@@ -179,7 +179,7 @@ describe('CAWS-REFACTOR-SHARED-UTILS-001 — consolidation invariants (no privat
     const readSrc = (rel) => fs.readFileSync(path.join(__dirname, '../../src', rel), 'utf8');
     // git-autocommit.ts and worktrees-writer.ts formerly each had their own runGit.
     // After consolidation they import it; the divergent variants (diff-helpers,
-    // git-sparse-checkout, worktree.ts gitOutput, prepush) are deliberately NOT
+    // git-sparse-checkout, worktree.ts gitOutput) are deliberately NOT
     // touched and are NOT in this assertion.
     expect(readSrc('store/git-autocommit.ts')).not.toMatch(/function\s+runGit\s*\(/);
     expect(readSrc('store/worktrees-writer.ts')).not.toMatch(/function\s+runGit\s*\(/);

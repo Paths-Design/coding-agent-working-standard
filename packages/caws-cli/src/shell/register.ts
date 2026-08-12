@@ -24,7 +24,6 @@ import {
   DOCTOR_COMMAND_META,
   STATUS_COMMAND_META,
   CLAIM_COMMAND_META,
-  PREPUSH_COMMAND_META,
   SCOPE_COMMAND_META,
   GATES_COMMAND_META,
   EVIDENCE_COMMAND_META,
@@ -67,7 +66,6 @@ import {
   runGatesListCommand,
   runGatesRunCommand,
   runInitCommand,
-  runPrepushCommand,
   runScopeCommand,
   runScopeContentionCommand,
   runScopePlanCommand,
@@ -185,8 +183,7 @@ function renderOptionDescription(opt: CommandOptionMeta): string {
 
 /** Commander value collector for repeatable string options — accumulates each
  * occurrence into an array, verbatim caller order, no normalization. Shared by
- * every `collect: true` metadata option (claim --paths, prepush --ack, waiver
- * create --gate). */
+ * every `collect: true` metadata option (claim --paths, waiver create --gate). */
 function collectOption(
   value: string,
   previous: readonly string[] | undefined
@@ -212,9 +209,9 @@ function applyOptionMeta(cmd: Command, opt: CommandOptionMeta): void {
   if (opt.collect === true) {
     // Repeatable option: Commander needs the collector fn. Whether to seed an
     // initial [] is preserved from the prior hand-written behavior and encoded
-    // in metadata as defaultValue: [] (e.g. prepush --ack, waiver --gate seed
-    // so the value is always an array; claim --paths omits the seed so an
-    // unsupplied option stays `undefined`).
+    // in metadata as defaultValue: [] (e.g. waiver --gate seeds so the value is
+    // always an array; claim --paths omits the seed so an unsupplied option
+    // stays `undefined`).
     const seed =
       opt.defaultValue !== undefined ? (opt.defaultValue as string[]) : undefined;
     if (opt.required === true) {
@@ -281,7 +278,7 @@ function applyGroupMeta(group: Command, meta: GroupCommandMeta): void {
 }
 
 /** Register a FLAT top-level command from LeafCommandMeta (init/doctor/status/
- * claim/prepush): name(+arg), description, options — all metadata-driven.
+ * claim): name(+arg), description, options — all metadata-driven.
  * Returns the configured Command so the caller can attach `.action()`. */
 function defineFlat(program: Command, leaf: LeafCommandMeta): Command {
   const cmd = program.command(leafCommandName(leaf)).description(leaf.description);
@@ -539,31 +536,6 @@ export function registerShellCommands(
             showData: opts.data === true,
           }
         );
-        exit(code);
-      }
-    );
-
-  // -------------------------------------------------------------------
-  // caws prepush — MULTI-AGENT-PUSH-RANGE-GUARD-001
-  // -------------------------------------------------------------------
-  defineFlat(program, PREPUSH_COMMAND_META)
-    .action(
-      (opts: {
-        remote: string;
-        branch: string;
-        base?: string;
-        spec?: string;
-        ack: string[];
-        data?: boolean;
-      }) => {
-        const code = runPrepushCommand({
-          remote: opts.remote,
-          branch: opts.branch,
-          ...(opts.base !== undefined ? { base: opts.base } : {}),
-          ...(opts.spec !== undefined ? { specId: opts.spec } : {}),
-          ack: opts.ack,
-          showData: opts.data === true,
-        });
         exit(code);
       }
     );

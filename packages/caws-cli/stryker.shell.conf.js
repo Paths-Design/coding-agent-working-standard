@@ -5,10 +5,10 @@
  * so each surface runs its own tests and stays independently fast: this config
  * mutates the shell pure-logic dist files against tests/shell only.
  *
- * SURFACE: the 5 shell decision-logic modules the shell suite (52 tests)
- * covers — push-range (E18 commit attribution), gates (block/warn disposition
- * + waiver filtering), and binding resolution (bound/unbound/one_sided). These
- * are pure decision functions (no I/O), the right mutation surface. NOTE: init
+ * SURFACE: the 3 shell decision-logic modules the shell suite covers — gates
+ * (block/warn disposition + waiver filtering) and binding resolution
+ * (bound/unbound/one_sided). These are pure decision functions (no I/O), the
+ * right mutation surface. NOTE: init
  * is deliberately NOT mutation-gated — its manifests are static data and its
  * install logic is FS-side-effect code tested behaviorally (per the
  * CAWS-TEST-SHELL-MUTATION-001 decision); hooks are bats/pytest (Stryker is
@@ -25,7 +25,7 @@
  * mutate range is restricted to its real-logic lines (64-334). This is a
  * non-source exclusion (same discipline as the store config), NOT an
  * equivalent-mutant exclusion — the 80 floor applies to every line we wrote.
- * The other 4 files use require() (no preamble) and mutate whole-file.
+ * The other 2 files use require() (no preamble) and mutate whole-file.
  *
  * thresholds.break = 80: every gated shell file must clear 80% raw by tests.
  *
@@ -33,9 +33,6 @@
  */
 module.exports = {
   mutate: [
-    // push-range — E18 commit-attribution guard (require(), whole-file).
-    'dist/shell/push-range/classify-range.js',
-    'dist/shell/push-range/scope-match.js',
     // gates — block/warn disposition + waiver filtering (require(), whole-file).
     'dist/shell/gates/disposition.js',
     'dist/shell/gates/waiver-filter.js',

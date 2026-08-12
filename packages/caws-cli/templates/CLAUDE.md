@@ -30,7 +30,7 @@ The governed command groups are:
 
 <!-- command-groups:start -->
 ```
-init  doctor  status  scope  claim  gates  evidence  events  waiver  reprieve  specs  worktree  agents  message  prepush
+init  doctor  status  scope  claim  gates  evidence  events  waiver  reprieve  specs  worktree  agents  message
 ```
 <!-- command-groups:end -->
 
@@ -39,7 +39,7 @@ session legitimately needs to do what that guard blocks — distinct from `waive
 which bypasses a policy GATE. `message` is the inter-agent channel: directed
 messages between running sessions, addressed by session id.
 
-The multi-agent `agents` surface ships in v11.1 for read-only lease inspection (`agents list/show`) plus hook-facing registration/heartbeat/stop/prune operations. Ownership authority still lives in `claim` and `worktree`. `prepush` is a governed pre-push range check — it classifies the outgoing commit range and refuses commits not attributable to the current slice; it does NOT run `git push` itself.
+The multi-agent `agents` surface ships in v11.1 for read-only lease inspection (`agents list/show`) plus hook-facing registration/heartbeat/stop/prune operations. Ownership authority still lives in `claim` and `worktree`. Commit provenance is enforced at the merge boundary by `caws worktree merge`, which refuses a lane carrying commits outside its bound spec's scope.
 
 ### Per-feature workflow
 

@@ -301,13 +301,13 @@ export function relativeToRepoRoot(repoRoot: string, abs: string): string {
   return path.relative(repoRoot, abs);
 }
 
-// ─── Bookkeeping shape recognition (CAWS-PREPUSH-PROVENANCE-REWORK-001) ───
+// ─── Bookkeeping shape recognition ───────────────────────────────────────
 
 /**
- * The conventional commit-subject prefix every CAWS auto-commit uses. The
- * push-range classifier recognizes CLI bookkeeping commits by this prefix
- * PLUS a governed-state path set (shape, never actor — a hand-forged
- * lookalike touching non-governed paths is not bookkeeping).
+ * The conventional commit-subject prefix every CAWS auto-commit uses.
+ * Bookkeeping commits are recognized by this prefix PLUS a governed-state
+ * path set (shape, never actor — a hand-forged lookalike touching
+ * non-governed paths is not bookkeeping).
  */
 export const CAWS_BOOKKEEPING_SUBJECT_PREFIX = 'chore(caws):';
 
@@ -317,7 +317,7 @@ export const CAWS_BOOKKEEPING_SUBJECT_PREFIX = 'chore(caws):';
  * (gate policy is supply-chain-sensitive — a commit changing gate modes must
  * surface as unvetted) and `.caws/hooks/` (guard source). Both stay outside
  * the bookkeeping shape so a forged `chore(caws):` commit touching them is
- * refused by `caws prepush` unless a human acknowledges it.
+ * never mistaken for CLI-authored bookkeeping.
  */
 export function isGovernedStatePath(relPath: string): boolean {
   const p = relPath.replace(/\\/g, '/').replace(/^\.\//, '');

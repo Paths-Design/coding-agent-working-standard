@@ -18,7 +18,7 @@ governs:
 
 # CAWS vNext command surface (v11.0.0 → v11.2)
 
-**Status:** active. v11.0.0 → v11.8.0 shipped (governed core, worktree lifecycle, events, agents, message, prepush; v11.8.0 adds the zcode agent surface, links `.caws/hooks/node_modules` into worktrees, fixes cross-harness worktree-ownership misattribution, and adds `caws reprieve` for session-scoped guard skips). Multi-agent authority remains in planning (see §1).
+**Status:** active. v11.0.0 → v11.8.0 shipped (governed core, worktree lifecycle, events, agents, message; v11.8.0 adds the zcode agent surface, links `.caws/hooks/node_modules` into worktrees, fixes cross-harness worktree-ownership misattribution, and adds `caws reprieve` for session-scoped guard skips). Multi-agent authority remains in planning (see §1).
 **Branch:** `main` post-cutover.
 **Authors:** vNext rewrite team
 **Last updated:** 2026-07-17
@@ -386,15 +386,12 @@ to preserve recon's no-side-edit discipline.
 ## 2. Command surface
 
 The v11.0.0 governed core shipped eight command groups. The current v11 line has
-**fourteen** top-level commands/groups (plus the auto-generated `help`): it
+**thirteen** top-level commands/groups (plus the auto-generated `help`): it
 restored `worktree` (ninth) and `specs` (tenth) as lifecycle commands,
 added `events` (eleventh) for hash-chained audit-log maintenance
 (`migrate/rotate/verify-archive`), `agents` (twelfth) for multi-agent
-observability, `message` for directed inter-agent messages, and `prepush` — the governed pre-push range
-check (MULTI-AGENT-PUSH-RANGE-GUARD-001) that classifies the outgoing
-commit range by governance provenance (merged-lane / CLI bookkeeping /
-acked exception / unvetted direct) and refuses unvetted direct commits
-without running `git push` itself. `agents` shipped ahead of the broader
+observability, and `message` for directed inter-agent messages.
+`agents` shipped ahead of the broader
 v11.2 multi-agent plan: its `register/heartbeat/stop/list/show/prune`
 subcommands are all live. `message send/poll` is deliberately not authority:
 message bodies are unverified claims until checked against repo/runtime state.
@@ -458,7 +455,40 @@ Option A.
 | `caws message send/poll` | Directed inter-agent messages over `.caws/messages.jsonl`. Separate from the audit chain and not authority. |
 | `caws claim --takeover` | Acquire ownership from a foreign session; writes `prior_owners` audit entry. |
 | `caws claim --paths <path>` | Declare working-tree path ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001). |
-| `caws prepush [--base <ref>] [--ack <sha>]` | Governed pre-push range check (MULTI-AGENT-PUSH-RANGE-GUARD-001, reworked by CAWS-PREPUSH-PROVENANCE-REWORK-001). Enumerates the outgoing range (`<base>..HEAD`, default `origin/main`) and classifies each commit by governance provenance: `governed_merge` (inside a lane range recorded by a `worktree_merged` event — `lane_tip`/`base_before` when present, else derived from the merge commit's parents), `cli_bookkeeping` (CAWS auto-commits over governed state), `acked_exception` (durable `--ack <sha>`, persisted in `.caws/prepush-acks.json`), or `unvetted_direct`. Refuses on any `unvetted_direct` commit; foreign-worktree escalation is severity-keyed on owner-session liveness. The per-slice provenance teeth live at the merge boundary (`caws worktree merge` refuses a lane whose commits touch paths outside the bound spec's scope); prepush is the inductive delta check over what merge already vetted. Diagnose/decide only — never rewrites, drops, or pushes. v1 is opt-in (`prepush`-first; no raw `git push` interception). |
+
+### Removed after the cutover: `caws prepush` (CAWS-REMOVE-PREPUSH-COMMAND-001)
+
+`caws prepush` shipped in v11.1 as the governed pre-push range check
+(ADR 0001 / MULTI-AGENT-PUSH-RANGE-GUARD-001) and is **removed**. Invoking
+it fails through the standard unknown-command suggester.
+
+Its predicate was reworked once (`CAWS-PREPUSH-PROVENANCE-REWORK-001`),
+which correctly replaced "attributable to the pushing slice" with
+"produced under governance" and cut a 100%-refusal range to a single
+unvetted commit out of 97. Two conditions survived that rework and are why
+the command is gone rather than fixed again:
+
+- **A live peer worktree is an automatic refusal with no escape.** Any
+  foreign worktree with an unmerged branch escalated to ERROR, and a
+  worktree exists precisely to hold unmerged work. `--ack` matched only
+  commit SHAs, so no acknowledgment could clear a worktree finding. In a
+  repo with concurrent lanes the check could not pass, and the only moves
+  available to an agent were to wait indefinitely or to take over and merge
+  a peer's unfinished lane.
+- **Its runtime exceeded the arrival rate of what it classified.** The
+  check spawned git synchronously per commit (no batching); on a 97-commit
+  range under normal multi-agent load one run took 14m43s at 1% CPU —
+  longer than the observed mean inter-commit interval, so the range it
+  validated was stale before it finished. Nothing consumed the result
+  either: prepush never wrapped the transport, so a pass was already
+  time-of-check-to-time-of-use.
+
+Provenance enforcement stays at the merge boundary, where the object being
+checked is bounded and owned: `caws worktree merge` refuses a lane whose
+commits touch paths outside the bound spec's `scope.in`, and records
+`lane_tip`/`base_before` on the `worktree_merged` event. `caws status` and
+`caws doctor` cover the observability the classifier provided. Evidence
+base: `docs/architecture/design/prepush-slice-attribution-dead-by-design.md`.
 
 ### Planned in v11.2 (multi-agent authority and observability)
 
@@ -502,8 +532,8 @@ lease writes.
 ### Help banner (v11.0.0 historical snapshot)
 
 > **Historical — captured at v11.0.0.** The current surface has
-> fourteen top-level commands/groups: `init doctor status scope claim gates
-> evidence events waiver specs worktree agents message prepush` plus the auto-generated `help`. Run
+> thirteen top-level commands/groups: `init doctor status scope claim gates
+> evidence events waiver specs worktree agents message` plus the auto-generated `help`. Run
 > `caws --help` against the installed CLI to see the live banner.
 
 ```

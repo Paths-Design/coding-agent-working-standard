@@ -27,7 +27,6 @@ store, and a thin shell. It replaces v10.x.
 | `caws worktree create / list / bind / destroy / merge / migrate-registry / repair-sparse / repair` | Worktree lifecycle on the vNext substrate. Canonical path for parallel agent work. |
 | `caws agents register / heartbeat / stop / list / show / prune` | Agent-liveness substrate in `.caws/leases/`; operational cache only. |
 | `caws message send / poll` | Directed inter-agent messages over `.caws/messages.jsonl`; not authority. |
-| `caws prepush` | Governed pre-push range classifier: governance-provenance classes (governed merge / CLI bookkeeping / acked exception / unvetted direct); refuses unvetted direct commits. Diagnose/decide only; does not run `git push`. |
 
 Run `caws <group> --help` for live options. The repository also ships a generated exhaustive reference at `docs/command-reference.md`, rendered from the same `COMMAND_SURFACE_METADATA` used by CLI help.
 
