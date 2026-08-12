@@ -1,0 +1,40 @@
+id: CAWS-DEFECT-SPECS-CREATE-TODO-SCAFFOLD-01
+title: 'specs create writes committed TODO placeholders into fields it exposes no flag to fill'
+risk_tier: 2
+mode: fix
+lifecycle_state: active
+created_at: '2026-08-12T09:08:04.748Z'
+updated_at: '2026-08-12T09:08:04.748Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/specs-writer.ts'
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/tests/shell/specs-create-scaffold-flags.test.js'
+    - 'docs/command-reference.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'a spec being created through the CLI'
+    when: 'caws specs create runs with --module <text> and --invariant <text> (both repeatable)'
+    then: 'blast_radius.modules and invariants are populated from the flags and the spec body contains no TODO string — every field the template scaffolds is reachable from the command surface that scaffolds it'
+  - id: A2
+    given: 'a create with neither flag supplied'
+    when: 'caws specs create runs'
+    then: 'the TODO scaffold is still written and the command still succeeds, so existing callers and the guided-authoring flow are unchanged by this slice'
+  - id: A3
+    given: 'a created spec whose body still carries TODO placeholders'
+    when: 'the operator runs caws specs show or the create command finishes'
+    then: 'a non-blocking advisory names the placeholder fields and the flags that fill them, so the gap is discoverable at the moment it is created rather than at review time'
+non_functional: {}
+contracts:
+  - name: 'specs-create-authoring-completeness'
+    type: behavior
