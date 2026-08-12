@@ -106,6 +106,18 @@ export interface CreateSpecInput {
     readonly type: 'api' | 'schema' | 'contract-test' | 'behavior';
     readonly path?: string;
   }[];
+  /**
+   * The three fields validate-semantics.ts REQUIRES non-empty on risk_tier 1
+   * (CAWS-DEFECT-SPECS-CREATE-AUTHORING-01, Sterling ledger N15). Without
+   * these, a tier-1 spec could not be authored through `caws specs create` at
+   * all — the validator demanded fields the command surface had no flag for,
+   * so the only route was hand-written YAML that bypassed this renderer
+   * entirely. Optional and valid at any tier; a lower-tier spec may supply
+   * them voluntarily.
+   */
+  readonly observability?: readonly string[];
+  readonly rollback?: readonly string[];
+  readonly security?: readonly string[];
   /** Override the timestamp used for created_at + the event ts. Tests inject. */
   readonly now?: () => Date;
   /** The EventBody actor envelope (built by the shell layer). */
@@ -827,6 +839,26 @@ function renderInitialSpecYaml(input: CreateSpecInput): string {
           ]),
         ]
       : [`contracts: []`];
+  // CAWS-DEFECT-SPECS-CREATE-AUTHORING-01: the tier-1 trio. Each renders as a
+  // top-level string sequence when supplied; when absent the prior scaffold
+  // shape is preserved exactly (`non_functional: {}`, no observability/rollback
+  // keys) so lower-tier creates are byte-identical to before.
+  const stringSeq = (key: string, values: readonly string[]): string[] => [
+    `${key}:`,
+    ...values.map((v) => `  - ${sq(v)}`),
+  ];
+  const observabilityLines =
+    input.observability !== undefined && input.observability.length > 0
+      ? stringSeq('observability', input.observability)
+      : [];
+  const rollbackLines =
+    input.rollback !== undefined && input.rollback.length > 0
+      ? stringSeq('rollback', input.rollback)
+      : [];
+  const nonFunctionalLines =
+    input.security !== undefined && input.security.length > 0
+      ? [`non_functional:`, `  security:`, ...input.security.map((v) => `    - ${sq(v)}`)]
+      : [`non_functional: {}`];
   // Render a minimum-viable v11 spec. Plain-string fields are
   // single-quoted to be defensive against embedded colons. The body
   // is intentionally minimal but satisfies the kernel's structural
@@ -852,7 +884,9 @@ function renderInitialSpecYaml(input: CreateSpecInput): string {
     `invariants:`,
     `  - 'TODO: describe one invariant this spec guarantees.'`,
     ...acceptanceLines,
-    `non_functional: {}`,
+    ...observabilityLines,
+    ...rollbackLines,
+    ...nonFunctionalLines,
     ...contractsLines,
     ``,
   ].join('\n');

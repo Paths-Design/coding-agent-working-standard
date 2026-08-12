@@ -998,6 +998,9 @@ export function registerShellCommands(
           'scope.in'?: string[];
           acceptance?: string[];
           contract?: string[];
+          observability?: string[];
+          rollback?: string[];
+          security?: string[];
           type?: string;
           plan?: boolean;
           json?: boolean;
@@ -1019,6 +1022,14 @@ export function registerShellCommands(
           // by Commander (so --help shows it) but dropped at this hand-mapping
           // layer, so a live `--contract` never reached the writer.
           ...(opts.contract !== undefined ? { contract: opts.contract } : {}),
+          // CAWS-DEFECT-SPECS-CREATE-AUTHORING-01: same forwarding discipline as
+          // --contract above — Commander parsing a flag is NOT the same as the
+          // handler receiving it, and a handler-only test would pass over a
+          // dropped mapping here. The tier-1 trio is proven end-to-end through
+          // the spawned CLI for exactly that reason.
+          ...(opts.observability !== undefined ? { observability: opts.observability } : {}),
+          ...(opts.rollback !== undefined ? { rollback: opts.rollback } : {}),
+          ...(opts.security !== undefined ? { security: opts.security } : {}),
           ...(opts.type !== undefined ? { legacyType: opts.type } : {}),
           plan: opts.plan === true,
           json: opts.json === true,
