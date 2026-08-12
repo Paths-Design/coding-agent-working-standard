@@ -96,3 +96,8 @@ evidence:
     status: pass
     evidence_ref: "cd packages/caws-cli && npx jest (unpiped, real exit code): JEST EXIT=0, Test Suites 136 passed/136 total, Tests 1868 passed/1868 total, 1019.754s. Deleted suites prepush-ack-bundle-normalize.test.js + push-range.test.js absent; no remaining suite references the deleted modules"
     recorded_at: "2026-08-12T20:48:11.665Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "npx jest tests/shell/worktree-merge.test.js -t 'lane provenance' -> EXIT=0, 5 passed / 7 skipped: P1(A1) clean lane records lane_tip+base_before; P2(A2) out-of-scope lane commit refuses pre-merge and writes nothing; P2b dry-run reports same findings; P3 refusal names candidate lanes; P4(A8) scope-keyed not author-keyed. verifyLaneProvenance in store/worktrees-writer.ts untouched by this slice"
+    recorded_at: "2026-08-12T20:48:12.810Z"
+    test_nodeid: caws worktree merge — lane provenance (CAWS-PREPUSH-PROVENANCE-REWORK-001)
