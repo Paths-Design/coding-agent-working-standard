@@ -185,6 +185,20 @@ function shellQuote(value: string): string {
 
 function exampleCommandForKind(kind: EvidenceKind): EvidenceSchemaExample {
   const data = exampleDataForKind(kind);
+  // CAWS-DEFECT-AC-EVIDENCE-VISIBILITY-01: `caws evidence record --type ac` is
+  // refused (it writes the audit event but not the closure authority), so the
+  // example for `ac` must name the governed writer. An example that prints a
+  // command the CLI then rejects is worse than no example. The payload schema
+  // above still describes the ac_recorded event faithfully — `caws specs
+  // evidence` is what produces it.
+  if (kind === 'ac') {
+    return {
+      data,
+      command:
+        `caws specs evidence FEAT-1 --ac ${String(data.criterion_id)} ` +
+        `--status ${String(data.status)} --evidence-ref ${shellQuote(String(data.evidence_ref))}`,
+    };
+  }
   return {
     data,
     command:
@@ -315,6 +329,44 @@ export function runEvidenceRecordCommand(opts: EvidenceRecordOptions): number {
     err(
       `(rule: ${SHELL_RULES.COMMAND_INVALID_EVIDENCE_TYPE})`
     );
+    return 1;
+  }
+
+  // CAWS-DEFECT-AC-EVIDENCE-VISIBILITY-01: refuse `--type ac` and redirect,
+  // BEFORE any I/O — no event is appended.
+  //
+  // This command only ever appended an ac_recorded event. The close gate reads
+  // ONLY the spec's `evidence:` block (specs-writer.ts: "closure couples to the
+  // authority surface, not audit history"), so evidence recorded here satisfied
+  // nothing while showing up in `caws evidence list --type ac` and looking
+  // complete. Measured in a consumer repo (2026-08-11): 13 of 28 specs with
+  // ac_recorded events had no evidence: block at all — every one of them took
+  // this route.
+  //
+  // The fix is a redirect, not a dual-write: `caws specs evidence` must remain
+  // the SINGLE writer of the closure authority. Teaching a second command to
+  // patch the block would give the authority surface two writers and reopen the
+  // reconciliation problem the single-writer doctrine exists to prevent.
+  if (opts.kind === 'ac') {
+    const criterion = typeof opts.data?.criterion_id === 'string' ? opts.data.criterion_id : '<A1>';
+    const status = typeof opts.data?.status === 'string' ? opts.data.status : '<pass|waived>';
+    const evidenceRef =
+      typeof opts.data?.evidence_ref === 'string' ? opts.data.evidence_ref : '<test command>';
+    const specId =
+      typeof opts.specId === 'string' && opts.specId.length > 0 ? opts.specId : '<spec-id>';
+    err(
+      'caws evidence record: --type ac is not the acceptance-criterion surface. This command appends an ' +
+        'ac_recorded AUDIT event only; it does NOT write the spec\'s evidence: block, which is the CLOSURE ' +
+        'AUTHORITY the close gate reads. Evidence recorded here satisfies nothing at close time.'
+    );
+    err('  Use the governed command instead — it dual-writes the block AND the event in one transaction:');
+    err(
+      `    caws specs evidence ${specId} --ac ${criterion} --status ${status} --evidence-ref ${shellQuote(evidenceRef)}`
+    );
+    err('  (For a criterion you are deliberately not verifying separately, use');
+    err(`    caws specs evidence ${specId} --ac ${criterion} --status waived --waiver-reason "<why>")`);
+    err('  Read-only inspection of already-recorded AC evidence is unaffected: caws evidence list --type ac');
+    err(`(rule: ${SHELL_RULES.COMMAND_EVIDENCE_AC_WRONG_SURFACE})`);
     return 1;
   }
 

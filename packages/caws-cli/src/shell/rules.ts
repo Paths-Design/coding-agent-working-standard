@@ -72,6 +72,12 @@ export const SHELL_RULES = {
   COMMAND_PRE_CHAINED_EVENT_REFUSED: 'shell.command.pre_chained_event_refused',
   COMMAND_INVALID_EVIDENCE_TYPE: 'shell.command.invalid_evidence_type',
   COMMAND_MISSING_SPEC_ID: 'shell.command.missing_spec_id',
+  // CAWS-DEFECT-AC-EVIDENCE-VISIBILITY-01: `evidence record --type ac` appended
+  // an ac_recorded AUDIT event without touching the spec's evidence: block —
+  // the surface the close gate actually reads. The two command names read as
+  // synonyms, so agents picked the one that satisfies nothing. Refused and
+  // redirected to `caws specs evidence`, the single writer of the authority.
+  COMMAND_EVIDENCE_AC_WRONG_SURFACE: 'shell.command.evidence_ac_wrong_surface',
 
   // gates report JSON contract.
   GATES_REPORT_NOT_JSON: 'shell.gates.report_not_json',

@@ -47,11 +47,6 @@ describe('caws evidence record --data parse guidance', () => {
       '{"gate_id":"budget_limit","mode":"block","result":"pass","violations":[]}',
       'caws evidence record --type gate --spec FEAT-1 --data \'{"gate_id":"budget_limit","mode":"block","result":"pass","violations":[]}\'',
     ],
-    [
-      'ac',
-      '{"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}',
-      'caws evidence record --type ac --spec FEAT-1 --data \'{"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}\'',
-    ],
   ])(
     'malformed %s payload shows schema and valid copy-pasteable example',
     (kind, dataFragment, exampleCommand) => {
@@ -80,6 +75,37 @@ describe('caws evidence record --data parse guidance', () => {
       expectNoMutableEvidenceState(cawsDir);
     }
   );
+
+  // CAWS-DEFECT-AC-EVIDENCE-VISIBILITY-01: `ac` is deliberately NOT in the
+  // table above. The parse error fires at the Commander layer before the
+  // handler's --type ac refusal, so a malformed ac payload still reports the
+  // JSON problem — but the guidance must not hand back a `caws evidence record
+  // --type ac` command, because the CLI refuses that command. It points at the
+  // governed writer instead, which is the actionable next step either way.
+  test('malformed ac payload redirects to the governed writer, not back to itself', () => {
+    const { root, cawsDir } = mkRepo();
+
+    const result = runCli(root, [
+      'evidence',
+      'record',
+      '--type',
+      'ac',
+      '--spec',
+      'FEAT-1',
+      '--data',
+      '{criterion_id:"A1"}',
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('caws evidence record: invalid --data JSON');
+    expect(result.stderr).toContain('Run: caws evidence schema --type ac');
+    expect(result.stderr).toContain(
+      "caws specs evidence FEAT-1 --ac A1 --status pass --evidence-ref 'npm test'"
+    );
+    expect(result.stderr).not.toContain('caws evidence record --type ac --spec');
+    expectNoMutableEvidenceState(cawsDir);
+  });
 
   test('malformed data with unknown type still points to schema discovery before mutation', () => {
     const { root, cawsDir } = mkRepo();
