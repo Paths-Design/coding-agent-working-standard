@@ -850,6 +850,29 @@ Governed scope amendments for an active spec. Use one invocation with all `--add
 
 `--reason <text>` is optional and records the operator rationale on the `spec_scope_amended` event.
 
+### `caws specs amend <id>`
+
+```bash
+caws specs amend FEAT-1 --add-module packages/foo --add-invariant "ordering survives retries"
+caws specs amend FEAT-1 --remove-module packages/old
+```
+
+Amend a spec's `blast_radius.modules` or `invariants`. For `scope.*`, use `caws specs amend-scope` instead. Appends a `spec_body_amended` event.
+
+Both fields are schema-required non-empty, so `caws specs create` writes a scaffolded default when no `--module`/`--invariant` supplies one. This command is how a spec that already exists replaces that default — without it the only route was a hand edit of the YAML, which bypasses the audit trail.
+
+Adding to a field whose only entry is the scaffolded default **replaces** that entry rather than appending beside it. Removal matches the logical value regardless of how the entry is quoted on disk. An amendment that would change nothing is refused rather than reported as success.
+
+**Permitted operations depend on lifecycle state:**
+
+| State | Permitted |
+|---|---|
+| `draft`, `active` | add and remove, freely |
+| `closed` | only filling a field that still holds its scaffolded default |
+| `archived` | refused — restore it first |
+
+A closed spec is the audit record of concluded work: it may have a blank filled, never a claim rewritten. Attempting to add to or remove from a field that already holds real content is refused and points at `caws specs reopen <id>`, which is the governed way to change a concluded spec. An archived body is a tombstone; rewriting it would falsify the record rather than correct it.
+
 ### `caws specs evidence <id>`
 
 ```bash

@@ -204,6 +204,7 @@ export {
   runSpecsEvidenceCommand,
   runSpecsReopenCommand,
   runSpecsDeactivateCommand,
+  runSpecsAmendCommand,
   runSpecsArchiveCommand,
   runSpecsPruneArchiveCommand,
   runSpecsRecoverCommand,

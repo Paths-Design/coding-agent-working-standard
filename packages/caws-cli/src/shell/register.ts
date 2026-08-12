@@ -83,6 +83,7 @@ import {
   runSpecsEvidenceCommand,
   runSpecsReopenCommand,
   runSpecsDeactivateCommand,
+  runSpecsAmendCommand,
   runSpecsCreateCommand,
   runSpecsListCommand,
   runSpecsMigrateCommand,
@@ -1275,6 +1276,30 @@ export function registerShellCommands(
         const code = runSpecsReopenCommand({
           id,
           ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'amend'))
+    .action(
+      (
+        id: string,
+        opts: {
+          addModule?: string[];
+          removeModule?: string[];
+          addInvariant?: string[];
+          removeInvariant?: string[];
+          data?: boolean;
+        }
+      ) => {
+        const code = runSpecsAmendCommand({
+          id,
+          ...(opts.addModule !== undefined ? { addModule: opts.addModule } : {}),
+          ...(opts.removeModule !== undefined ? { removeModule: opts.removeModule } : {}),
+          ...(opts.addInvariant !== undefined ? { addInvariant: opts.addInvariant } : {}),
+          ...(opts.removeInvariant !== undefined ? { removeInvariant: opts.removeInvariant } : {}),
           showData: opts.data === true,
         });
         exit(code);

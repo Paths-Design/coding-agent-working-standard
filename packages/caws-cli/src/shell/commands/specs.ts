@@ -57,6 +57,7 @@ import {
   unsatisfiedAcceptanceCriteria,
   type SpecsListStatus,
 } from '../../store/specs-writer';
+import { amendSpecBody } from '../../store/specs-body-writer';
 import type { LifecycleMapping } from '../../kernel';
 import { EVIDENCE_STATUSES, SPEC_MODES, SPEC_RESOLUTIONS, type EvidenceStatus } from '../../kernel';
 import * as fs from 'node:fs';
@@ -1806,6 +1807,56 @@ export function runSpecsReopenCommand(opts: SpecsReopenOptions): number {
     return 1;
   }
   out(`reopened ${outcome.id} (lifecycle_state: active)`);
+  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  return 0;
+}
+
+// ─── caws specs amend ──────────────────────────────────────────────────────
+
+export interface SpecsAmendOptions extends BaseCommandOptions {
+  readonly id: string;
+  readonly addModule?: readonly string[];
+  readonly removeModule?: readonly string[];
+  readonly addInvariant?: readonly string[];
+  readonly removeInvariant?: readonly string[];
+}
+
+// Sterling ledger N16: the discharge path. `caws specs create --module/
+// --invariant` only helps specs that do not exist yet; this is what an
+// already-created spec uses to replace a scaffolded default without a
+// hand-edit that bypasses the audit trail.
+export function runSpecsAmendCommand(opts: SpecsAmendOptions): number {
+  const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
+
+  const ctx = resolveCawsCtx(cwd, err, showData, 'amend');
+  if (ctx === null) return 2;
+
+  const actor = buildActorOrError(
+    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'amend'
+  );
+  if (actor === null) return 2;
+
+  const result = amendSpecBody(ctx.cawsDir, {
+    id: opts.id,
+    now: nowFn,
+    actor,
+    ...(opts.addModule !== undefined ? { addModules: opts.addModule } : {}),
+    ...(opts.removeModule !== undefined ? { removeModules: opts.removeModule } : {}),
+    ...(opts.addInvariant !== undefined ? { addInvariants: opts.addInvariant } : {}),
+    ...(opts.removeInvariant !== undefined ? { removeInvariants: opts.removeInvariant } : {}),
+  });
+  if (!isOk(result)) {
+    err('caws specs amend: failed.');
+    err(renderDiagnostics(result.errors, { showData }));
+    return 1;
+  }
+  const outcome = result.value;
+  if (outcome.kind === 'partial_failure_recovered') {
+    err('caws specs amend: partial failure recovered (no state change).');
+    err(renderDiagnostics(outcome.cause, { showData }));
+    return 1;
+  }
+  out(`amended ${outcome.id}`);
   surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }

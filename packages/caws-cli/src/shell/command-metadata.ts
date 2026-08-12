@@ -139,7 +139,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'specs',
   description:
-    'Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate)',
+    'Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate)',
   options: [
     {
       flag: '--status <status>',
@@ -488,6 +488,20 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
           flag: '--reason <text>',
           description: 'Optional reason recorded on the spec_reopened event (e.g. work determined incomplete)',
         },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'amend',
+      argument: { name: 'id', required: true, description: 'Spec id to amend' },
+      description:
+        "Amend a spec's blast_radius.modules or invariants. These fields are schema-required non-empty, so create writes a scaffolded default when no flag supplies one; this is how an already-created spec replaces that default without a hand edit that bypasses the audit trail. Appends spec_body_amended. Draft and active specs allow add and remove. A CLOSED spec allows only filling a field still holding its scaffolded default — a concluded record may have a blank filled, never a claim rewritten. Archived specs are refused (restore first). For scope, use caws specs amend-scope.",
+      options: [
+        { flag: '--add-module <text>', description: 'Add a blast_radius.modules entry (repeatable). Replaces the scaffolded default when that is the only entry.', collect: true },
+        { flag: '--remove-module <text>', description: 'Remove a blast_radius.modules entry (repeatable); matches the logical value regardless of quoting.', collect: true },
+        { flag: '--add-invariant <text>', description: 'Add an invariants entry (repeatable). Replaces the scaffolded default when that is the only entry.', collect: true },
+        { flag: '--remove-invariant <text>', description: 'Remove an invariants entry (repeatable); matches the logical value regardless of quoting.', collect: true },
         DATA_OPTION,
       ],
     },

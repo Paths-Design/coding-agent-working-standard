@@ -69,6 +69,7 @@ export type EventType =
   | 'spec_reopened'
   | 'spec_deleted'
   | 'spec_scope_amended'
+  | 'spec_body_amended'
   | 'spec_binding_cleared'
   | 'spec_drift_detected'
   | 'worktree_created'
@@ -113,6 +114,7 @@ export const REQUIRES_SPEC_ID: ReadonlySet<EventType> = new Set<EventType>([
   'spec_reopened',
   'spec_deleted',
   'spec_scope_amended',
+  'spec_body_amended',
   'spec_drift_detected',
   // WORKTREE-REPAIR-EVENT-CONTRACT-001: clearing a stale worktree: field always
   // names the spec whose binding is being cleared.

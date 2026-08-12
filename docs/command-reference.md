@@ -34,7 +34,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws events`](#caws-events) — Read and maintain .caws/events.jsonl (list/show/rotate/migrate/verify-archive)
 - [`caws waiver`](#caws-waiver) — Manage CAWS waivers (bounded exception records that suppress matching gate violations)
 - [`caws reprieve`](#caws-reprieve) — Session-scoped guard reprieve: skip a PreToolUse guard for ONE session until a stated expiry. Use when a session legitimately needs to do what a guard blocks (e.g. editing a hook script) WITHOUT disabling it for every other session. Distinct from `caws waiver`: a reprieve skips a HOOK guard at dispatch time (operational cache, session-scoped, expiring); a waiver bypasses a GATE at policy-run time (governance state, kernel-adjudicated). Replaces the anti-pattern of commenting a guard out of the dispatcher HANDLERS array.
-- [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate)
+- [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate)
 - [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.
 - [`caws agents`](#caws-agents) — Agent liveness substrate: register/heartbeat/stop/list/show/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.
 - [`caws message`](#caws-message) — Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/poll/inbox/history/prune directed messages between running sessions, addressed by session id, over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
@@ -410,7 +410,7 @@ List active guard reprieves across sessions, with each one's handlers, expiry, a
 
 ## `caws specs`
 
-Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate)
+Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate)
 
 **Options:**
 
@@ -434,6 +434,8 @@ Create a new spec in lifecycle_state: active.
 - `--scope.in <path>` (repeatable) — Alias for --scope-in using the YAML field name; writes canonical scope.in and is repeatable.
 - `--acceptance <text>` (repeatable) — Seed an acceptance criterion at creation time (repeatable). Free text becomes the then clause; "given: ...; when: ...; then: ..." sets all fields.
 - `--contract <spec>` (repeatable) — Add a contract at creation (repeatable), as "name:type[:path]" where type is api|schema|contract-test|behavior. Example: --contract "core-api:behavior". Tier 1/2 specs REQUIRE at least one contract; tier 3 / --mode chore do not.
+- `--module <text>` (repeatable) — Populate blast_radius.modules at creation (repeatable). The field is schema-required non-empty; without this flag the command writes a scaffolded default you cannot replace from the command surface.
+- `--invariant <text>` (repeatable) — Populate invariants at creation (repeatable). The field is schema-required non-empty; without this flag the command writes a scaffolded default you cannot replace from the command surface.
 - `--observability <text>` (repeatable) — Add an observability item at creation (repeatable): a log, metric, trace, or alert. REQUIRED non-empty for --risk-tier 1.
 - `--rollback <text>` (repeatable) — Add a rollback step at creation (repeatable). REQUIRED non-empty for --risk-tier 1.
 - `--security <text>` (repeatable) — Add a non_functional.security requirement at creation (repeatable). REQUIRED non-empty for --risk-tier 1.
@@ -589,6 +591,20 @@ Reopen a closed spec (closed -> active), the inverse of close. Removes resolutio
 **Options:**
 
 - `--reason <text>` — Optional reason recorded on the spec_reopened event (e.g. work determined incomplete)
+- `--data` — Show structured data block on diagnostics
+
+### `caws specs amend <id>`
+
+Amend a spec's blast_radius.modules or invariants. These fields are schema-required non-empty, so create writes a scaffolded default when no flag supplies one; this is how an already-created spec replaces that default without a hand edit that bypasses the audit trail. Appends spec_body_amended. Draft and active specs allow add and remove. A CLOSED spec allows only filling a field still holding its scaffolded default — a concluded record may have a blank filled, never a claim rewritten. Archived specs are refused (restore first). For scope, use caws specs amend-scope.
+
+**Argument:** `id` (required) — Spec id to amend
+
+**Options:**
+
+- `--add-module <text>` (repeatable) — Add a blast_radius.modules entry (repeatable). Replaces the scaffolded default when that is the only entry.
+- `--remove-module <text>` (repeatable) — Remove a blast_radius.modules entry (repeatable); matches the logical value regardless of quoting.
+- `--add-invariant <text>` (repeatable) — Add an invariants entry (repeatable). Replaces the scaffolded default when that is the only entry.
+- `--remove-invariant <text>` (repeatable) — Remove an invariants entry (repeatable); matches the logical value regardless of quoting.
 - `--data` — Show structured data block on diagnostics
 
 ### `caws specs deactivate <id>`
