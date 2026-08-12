@@ -1,0 +1,49 @@
+id: CAWS-REMOVE-PREPUSH-COMMAND-001
+title: 'Remove caws prepush from the command surface'
+risk_tier: 2
+mode: refactor
+lifecycle_state: active
+created_at: '2026-08-12T19:35:47.293Z'
+updated_at: '2026-08-12T19:35:47.293Z'
+blast_radius:
+  modules:
+    - 'caws-cli shell: prepush command + push-range classifier (deleted); register/command-metadata/index surface'
+    - 'caws-cli tests: prepush + push-range suites (deleted); stryker shell config'
+    - 'docs: command surface doctrine, generated command reference, agent guides, templates'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'The merge-boundary lane-provenance check (verifyLaneProvenance in store/worktrees-writer.ts) is untouched — the per-slice teeth stay at caws worktree merge, which is where they were deliberately placed. Only the publish-side check is removed.'
+  - 'No hook, script, template, or npm script invokes caws prepush after removal; the command resolves through the standard unknown-command suggester.'
+  - 'Historical records keep their lineage and are not rewritten: CHANGELOG.md, docs/failure-lineage.md, docs/rewrite/**, and docs/architecture/cli-ux-job-model-audit.md are out of scope. ADR 0001 and the dead-by-design design doc gain a status line recording the removal decision, not a content rewrite.'
+acceptance:
+  - id: A1
+    given: 'a CLI built from this branch'
+    when: 'caws prepush runs'
+    then: 'it exits non-zero as an unknown command and caws --help lists no prepush group'
+  - id: A2
+    given: 'the repository after removal'
+    when: 'prepush is grepped across live source, tests, config, templates and authoritative docs'
+    then: 'no live reference remains — matches survive only in CHANGELOG, failure-lineage, docs/rewrite, the cli-ux audit, ADR 0001 and the design doc'
+  - id: A3
+    given: 'the docs toolchain'
+    when: 'npm run docs:check runs'
+    then: 'it passes with no prepush leaf in the generated command reference'
+  - id: A4
+    given: 'the caws-cli jest suite'
+    when: 'it runs after the prepush and push-range suites are deleted'
+    then: 'it is green and no remaining suite references the deleted modules'
+  - id: A5
+    given: 'a worktree lane containing a commit touching paths outside its bound spec scope'
+    when: 'caws worktree merge runs'
+    then: 'it still refuses before the CAS sequence — proving lane provenance survives prepush removal'
+rollback:
+  - 'git revert the removal commit; the deleted modules and their tests are recoverable from history'
+non_functional: {}
+contracts:
+  - name: 'prepush-removed'
+    type: behavior
