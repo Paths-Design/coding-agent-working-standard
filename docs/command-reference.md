@@ -34,7 +34,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws events`](#caws-events) — Read and maintain .caws/events.jsonl (list/show/rotate/migrate/verify-archive)
 - [`caws waiver`](#caws-waiver) — Manage CAWS waivers (bounded exception records that suppress matching gate violations)
 - [`caws reprieve`](#caws-reprieve) — Session-scoped guard reprieve: skip a PreToolUse guard for ONE session until a stated expiry. Use when a session legitimately needs to do what a guard blocks (e.g. editing a hook script) WITHOUT disabling it for every other session. Distinct from `caws waiver`: a reprieve skips a HOOK guard at dispatch time (operational cache, session-scoped, expiring); a waiver bypasses a GATE at policy-run time (governance state, kernel-adjudicated). Replaces the anti-pattern of commenting a guard out of the dispatcher HANDLERS array.
-- [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate)
+- [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate)
 - [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.
 - [`caws agents`](#caws-agents) — Agent liveness substrate: register/heartbeat/stop/list/show/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.
 - [`caws message`](#caws-message) — Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/poll/inbox/history/prune directed messages between running sessions, addressed by session id, over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
@@ -410,7 +410,7 @@ List active guard reprieves across sessions, with each one's handlers, expiry, a
 
 ## `caws specs`
 
-Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate)
+Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate)
 
 **Options:**
 
@@ -589,6 +589,17 @@ Reopen a closed spec (closed -> active), the inverse of close. Removes resolutio
 **Options:**
 
 - `--reason <text>` — Optional reason recorded on the spec_reopened event (e.g. work determined incomplete)
+- `--data` — Show structured data block on diagnostics
+
+### `caws specs deactivate <id>`
+
+Demote an active spec back to draft (active -> draft), the inverse of activate. Use it when a spec was activated by mistake or its slice has not started — unlike close, it writes no resolution, so it makes no claim that the work concluded. Removes any resolution/closure_notes/superseded_by residue. Refused for a spec bound to a worktree. Appends spec_deactivated event.
+
+**Argument:** `id` (required) — Active spec id to demote to draft
+
+**Options:**
+
+- `--reason <text>` — Optional reason recorded on the spec_deactivated event (e.g. activated against the wrong id)
 - `--data` — Show structured data block on diagnostics
 
 ### `caws specs archive [id]`

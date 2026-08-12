@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/spec_deactivated.v1.json",
+  "title": "spec_deactivated event payload",
+  "$comment": "Class: REQUIRES_SPEC_ID. Records a governed active-to-draft demotion (caws specs deactivate), the inverse of spec_activated. Distinct from spec_closed: closing asserts the work concluded and writes a resolution, so it is the wrong exit for a spec that was activated by mistake or whose slice has not started. Deactivation asserts nothing about outcomes — it returns the spec to the editable draft state and writes no resolution or closure_notes. Refused for a spec bound to a worktree: once work has actually started, the one-way property of active is load-bearing.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["previous_lifecycle_state"],
+  "properties": {
+    "previous_lifecycle_state": {
+      "type": "string",
+      "enum": ["active"],
+      "description": "The lifecycle state the spec held before deactivation (always active; other states are refused by deactivateSpec)."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional operator-supplied reason for demoting the spec (e.g. 'activated against the wrong id'). Recorded on the event only — deactivation never writes closure_notes, because it makes no claim about the work."
+    },
+    "cleared_terminal_fields": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["resolution", "closure_notes", "superseded_by"]
+      },
+      "uniqueItems": true,
+      "description": "Terminal close-only fields removed from the body during demotion. Normally empty: reopen already strips them on the closed-to-active leg. Non-empty when a spec reached active still carrying closure residue, which the demoted draft must not keep."
+    }
+  }
+}
