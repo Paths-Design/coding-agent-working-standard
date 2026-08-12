@@ -41,3 +41,7 @@ evidence:
     status: pass
     evidence_ref: "commit f350364f: worktree-merge-split-state.test.js 'a rolled-back spec close prints the ordered recovery commands on stderr' asserts both recovery commands and the real merge SHA appear in the DEFAULT stderr rendering (no --data). Falsified: inverting the destroy-step guard reddens this test plus the --no-close test, exactly as predicted."
     recorded_at: "2026-08-12T10:31:41.836Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "commit f350364f: splitStateRepair computes the state line from what actually landed, not fixed text. Two tests pin opposite states: 'the surface-by-surface state names which surfaces moved' (spec still active, ledger NOT appended, worktree still registered) and 'a failed teardown reports the spec CLOSED and asks only for the destroy' (spec CLOSED, ledger appended, destroy-only recovery, and NOT the close command). Both verified against on-disk spec YAML and events.jsonl, so the reported state is checked against reality."
+    recorded_at: "2026-08-12T10:31:52.496Z"
