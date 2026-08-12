@@ -824,6 +824,77 @@ export function createWorktree(
   });
 }
 
+// ─── splitStateRepair (CAWS-DEFECT-MERGE-SPLIT-STATE-RECOVERY-01) ─────────
+
+/**
+ * Render the recovery for a merge that landed the git merge but did not
+ * complete every downstream step.
+ *
+ * `caws worktree merge` moves three surfaces that normally travel together:
+ * git (branch merged into base), the spec (closed), and the registry (worktree
+ * de-registered and removed). The git merge is durable the instant the
+ * compare-and-swap lands, so a later failure cannot be rolled back — it can
+ * only be *reported*. Until this helper existed, it was reported badly: the
+ * recovery commands sat in the diagnostic's `data` block, which
+ * renderDiagnostics prints ONLY under `--data`. An operator hitting this was
+ * told what broke and nothing about what to do, at the exact moment three
+ * surfaces had come apart.
+ *
+ * An agent that stops at such an error leaves governance state wrong in the
+ * direction CAWS exists to prevent: work is shipped while the spec reads as
+ * unfinished and the worktree reads as still claimed.
+ *
+ * The state line is computed from what actually happened rather than fixed
+ * text, because the two failures differ — a close that never landed needs a
+ * different repair from a close that landed before the ledger append failed.
+ */
+function splitStateRepair(s: {
+  readonly name: string;
+  readonly specId: string;
+  readonly mergeCommit: string;
+  readonly baseBranch: string;
+  /** False when the close failed or rolled back. */
+  readonly specClosed?: boolean;
+  /** False when the worktree_merged append did not land. */
+  readonly mergedEventAppended?: boolean;
+  readonly worktreeDestroyed: boolean;
+}): string {
+  const specClosed = s.specClosed ?? false;
+  const mergedEventAppended = s.mergedEventAppended ?? false;
+
+  const surfaces = [
+    `git: branch merged into ${s.baseBranch} at ${s.mergeCommit} (durable — the merge cannot be undone by retrying)`,
+    `spec ${s.specId}: ${specClosed ? 'CLOSED' : 'still active'}`,
+    `provenance ledger: worktree_merged ${mergedEventAppended ? 'appended' : 'NOT appended'}`,
+    `worktree "${s.name}": ${s.worktreeDestroyed ? 'destroyed' : 'still registered and on disk'}`,
+  ];
+
+  const steps: string[] = [];
+  if (!specClosed) {
+    steps.push(
+      `caws specs close ${s.specId} --resolution completed --merge-commit ${s.mergeCommit} --reason "<closure notes>"`
+    );
+  }
+  if (!s.worktreeDestroyed) {
+    steps.push(`caws worktree destroy ${s.name}`);
+  }
+
+  // renderDiagnostic prints `repair:` at a fixed 12-space label indent, putting
+  // the value at column 21, and does NOT re-indent continuation lines — a
+  // multi-line repair has to align itself or it renders ragged.
+  const pad = ' '.repeat(21);
+  const item = ' '.repeat(23);
+
+  return (
+    `State is SPLIT across the surfaces this merge moves:\n` +
+    surfaces.map((line) => `${item}- ${line}`).join('\n') +
+    (steps.length > 0
+      ? `\n${pad}Recover by running, in order:\n` + steps.map((cmd) => `${item}${cmd}`).join('\n')
+      : '') +
+    `\n${pad}Re-running \`caws worktree merge ${s.name}\` will NOT help: the branch is already merged.`
+  );
+}
+
 function rollbackGitWorktree(repoRoot: string, wtPath: string): void {
   // Best-effort. We're already in an error path.
   runGit(['worktree', 'remove', '--force', wtPath], repoRoot);
@@ -2243,11 +2314,22 @@ export function mergeWorktree(
         `Merge succeeded (commit ${mergeCommit}) but spec close failed. The bound spec remains active.`,
         {
           subject: input.name,
+          // CAWS-DEFECT-MERGE-SPLIT-STATE-RECOVERY-01: the recovery lives in
+          // narrowRepair, which renders unconditionally. It used to sit in
+          // `data`, which renderDiagnostics prints ONLY under --data — so an
+          // operator hitting this was told what broke and nothing about what to
+          // do, at the exact moment three surfaces had come apart.
+          narrowRepair: splitStateRepair({
+            name: input.name,
+            specId,
+            mergeCommit,
+            baseBranch,
+            worktreeDestroyed: false,
+          }),
           data: {
             merge_commit: mergeCommit,
             spec_id: specId,
             close_errors: closeResult.errors.map((d) => d.message),
-            recovery_instruction: `Manually run: caws specs close ${specId} --resolution completed --merge-commit ${mergeCommit}`,
           },
         }
       )
@@ -2269,12 +2351,18 @@ export function mergeWorktree(
         `Merge succeeded (commit ${mergeCommit}) but spec close transaction rolled back; the bound spec remains active. Worktree has NOT been destroyed.`,
         {
           subject: input.name,
+          narrowRepair: splitStateRepair({
+            name: input.name,
+            specId,
+            mergeCommit,
+            baseBranch,
+            worktreeDestroyed: false,
+          }),
           data: {
             merge_commit: mergeCommit,
             spec_id: specId,
             close_outcome_kind: closeResult.value.kind,
             close_cause: closeResult.value.kind === 'partial_failure_recovered' ? closeResult.value.cause : undefined,
-            recovery_instruction: `Manually run: caws specs close ${specId} --resolution completed --merge-commit ${mergeCommit}; then: caws worktree destroy ${input.name}`,
           },
         }
       )
@@ -2340,9 +2428,17 @@ export function mergeWorktree(
         `Merge succeeded and spec_closed event appended, but worktree_merged event append failed. The worktree was not destroyed.`,
         {
           subject: input.name,
+          narrowRepair: splitStateRepair({
+            name: input.name,
+            specId,
+            mergeCommit,
+            baseBranch,
+            specClosed: !specLeftOpen,
+            mergedEventAppended: false,
+            worktreeDestroyed: false,
+          }),
           data: {
             merge_commit: mergeCommit,
-            recovery_instruction: `Manually destroy the worktree: caws worktree destroy ${input.name}`,
           },
         }
       )
@@ -2363,12 +2459,20 @@ export function mergeWorktree(
         `Merge succeeded (commit ${mergeCommit}) but worktree_merged event append rolled back; the provenance ledger is missing the merge record. Worktree has NOT been destroyed.`,
         {
           subject: input.name,
+          narrowRepair: splitStateRepair({
+            name: input.name,
+            specId,
+            mergeCommit,
+            baseBranch,
+            specClosed: !specLeftOpen,
+            mergedEventAppended: false,
+            worktreeDestroyed: false,
+          }),
           data: {
             merge_commit: mergeCommit,
             merged_outcome_kind: mergedTxn.value.kind,
             merged_cause:
               mergedTxn.value.kind === 'partial_failure_recovered' ? mergedTxn.value.cause : undefined,
-            recovery_instruction: `Manually destroy the worktree: caws worktree destroy ${input.name}`,
           },
         }
       )
@@ -2402,6 +2506,15 @@ export function mergeWorktree(
         `Merge succeeded but post-merge worktree destroy failed. Run caws worktree destroy ${input.name} manually.`,
         {
           subject: input.name,
+          narrowRepair: splitStateRepair({
+            name: input.name,
+            specId,
+            mergeCommit,
+            baseBranch,
+            specClosed: !specLeftOpen,
+            mergedEventAppended: true,
+            worktreeDestroyed: false,
+          }),
           data: {
             merge_commit: mergeCommit,
             destroy_errors: destroyResult.errors.map((d) => d.message),
