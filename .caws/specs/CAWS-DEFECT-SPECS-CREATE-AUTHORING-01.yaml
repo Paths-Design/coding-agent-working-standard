@@ -65,3 +65,7 @@ evidence:
     recorded_at: "2026-08-12T06:39:08.582Z"
     command: npx jest tests/shell/specs-create-security-flag.test.js
     exit_code: 0
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "'the refusal names the flags that satisfy it' describe block: bare tier-1 create names all three flags; partial create omits the already-supplied --security"
+    recorded_at: "2026-08-12T06:41:12.365Z"
