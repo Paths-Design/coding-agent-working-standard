@@ -51,3 +51,7 @@ evidence:
     status: pass
     evidence_ref: "commit d6228e5b: verdict maps status===null to 1 and names the signal; tests/shell/run-tests-exit-code.test.js pins it at the verdict unit AND through main for build/jest/cleanup. Premise proven at runtime not assumed: spawnSync of a self-SIGKILLing node child returns status=null signal=SIGKILL. Falsified by reverting the null branch to return 0 - exactly 4 tests reddened, by predicted name."
     recorded_at: "2026-08-12T17:44:50.299Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "commit d6228e5b: verdict returns 1 and prints result.error.message when spawnSync never launched the child. Pinned by \"verdict maps a failed spawn to non-zero and surfaces the spawn error message\" and \"jest failing to spawn exits non-zero and reports the spawn error\" in tests/shell/run-tests-exit-code.test.js."
+    recorded_at: "2026-08-12T17:46:56.473Z"
