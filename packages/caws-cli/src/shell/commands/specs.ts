@@ -226,6 +226,16 @@ export interface SpecsCreateOptions extends BaseCommandOptions {
    * (FIX-SPECS-CONTRACT-ORIENTATION-001).
    */
   readonly contract?: readonly string[];
+  /**
+   * The three fields validate-semantics REQUIRES non-empty on risk_tier 1
+   * (CAWS-DEFECT-SPECS-CREATE-AUTHORING-01, Sterling ledger N15). Each is
+   * repeatable. Before these existed, a tier-1 spec was uncreatable through
+   * this command — the validator demanded fields no flag could supply, so
+   * hand-written YAML was the only route.
+   */
+  readonly observability?: readonly string[];
+  readonly rollback?: readonly string[];
+  readonly security?: readonly string[];
   /** Read-only preflight: render and validate the candidate without writing. */
   readonly plan?: boolean;
   /** Emit machine-readable plan output. */
@@ -314,29 +324,61 @@ function parseAcceptanceFlags(
   return { acceptance };
 }
 
+/**
+ * Label anchors for the structured acceptance form. A label counts only at the
+ * start of the value or immediately after a `;` separator — that is what makes
+ * "then: ... ; mutation kill required: ..." parse as ONE clause rather than
+ * splitting at the inner semicolon.
+ */
+const ACCEPTANCE_LABEL_ANCHOR = /(?:^|;)\s*(given|when|then)\s*:\s*/gi;
+
 function parseStructuredAcceptance(
   value: string
 ): { acceptance: AcceptanceEntry } | { error: string } {
-  const parts = value.split(';').map((p) => p.trim()).filter((p) => p.length > 0);
-  const labeled: Partial<Record<'given' | 'when' | 'then', string>> = {};
-  let sawLabel = false;
-  for (const part of parts) {
-    const match = /^(given|when|then)\s*:\s*(.+)$/i.exec(part);
-    if (match === null) continue;
-    sawLabel = true;
-    const key = match[1]!.toLowerCase() as 'given' | 'when' | 'then';
-    labeled[key] = match[2]!.trim();
+  // CAWS-DEFECT-SPECS-CREATE-AUTHORING-01 (Sterling ledger N14): split at the
+  // given:/when:/then: label boundaries, NOT at every ';'. The old
+  // `value.split(';')` made a semicolon inside a clause body produce an
+  // unlabeled fragment, which then failed the `keys.length === parts.length`
+  // shape check — and the refusal claimed the fields were missing when all
+  // three were present. Clause text legitimately uses semicolons; prose is not
+  // a delimiter.
+  const anchors: { key: 'given' | 'when' | 'then'; bodyStart: number; matchStart: number }[] = [];
+  ACCEPTANCE_LABEL_ANCHOR.lastIndex = 0;
+  for (let m = ACCEPTANCE_LABEL_ANCHOR.exec(value); m !== null; m = ACCEPTANCE_LABEL_ANCHOR.exec(value)) {
+    anchors.push({
+      key: m[1]!.toLowerCase() as 'given' | 'when' | 'then',
+      bodyStart: m.index + m[0].length,
+      matchStart: m.index,
+    });
   }
+
+  const labeled: Partial<Record<'given' | 'when' | 'then', string>> = {};
+  const sawLabel = anchors.length > 0;
+  for (let i = 0; i < anchors.length; i += 1) {
+    const anchor = anchors[i]!;
+    const next = anchors[i + 1];
+    // A clause runs to the start of the next label anchor (which includes that
+    // anchor's leading ';'), or to the end of the value. A single trailing ';'
+    // is cosmetic and dropped.
+    const end = next === undefined ? value.length : next.matchStart;
+    labeled[anchor.key] = value.slice(anchor.bodyStart, end).trim().replace(/;$/, '').trim();
+  }
+
   if (sawLabel) {
     const missing = (['given', 'when', 'then'] as const).filter((key) => {
       const field = labeled[key];
       return field === undefined || field.length === 0;
     });
-    if (missing.length > 0 || Object.keys(labeled).length !== parts.length) {
+    // Text before the first label is unlabeled leader prose — still a
+    // malformation, and still refused.
+    const hasLeader = anchors.length > 0 && value.slice(0, anchors[0]!.matchStart).trim().length > 0;
+    if (missing.length > 0 || hasLeader) {
       return {
         error:
           'invalid --acceptance: structured values must use all fields as ' +
-          '"given: ...; when: ...; then: ...", or pass plain free text.',
+          '"given: ...; when: ...; then: ...", or pass plain free text. ' +
+          'A semicolon inside a clause is fine — only the given:/when:/then: ' +
+          'labels separate fields.',
       };
     }
     return {
@@ -619,6 +661,16 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     ...(parsedContracts !== undefined && parsedContracts.length > 0
       ? { contracts: parsedContracts }
       : {}),
+    // CAWS-DEFECT-SPECS-CREATE-AUTHORING-01: the tier-1 trio.
+    ...(opts.observability !== undefined && opts.observability.length > 0
+      ? { observability: opts.observability }
+      : {}),
+    ...(opts.rollback !== undefined && opts.rollback.length > 0
+      ? { rollback: opts.rollback }
+      : {}),
+    ...(opts.security !== undefined && opts.security.length > 0
+      ? { security: opts.security }
+      : {}),
   } as const;
 
   if (opts.plan === true) {
@@ -722,6 +774,45 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
       err(`  ${CONTRACT_SHAPE_HINT}`);
       err(
         `  Retry: caws specs create ${opts.id} --title "..." --mode ${mode} --risk-tier ${riskTier} --contract "core-api:behavior"`
+      );
+    }
+    // CAWS-DEFECT-SPECS-CREATE-AUTHORING-01 (Sterling ledger N15): the kernel
+    // narrowRepair says "Add at least one observability item" without naming a
+    // flag — and until this slice there WAS no flag, so an operator reading it
+    // concluded the requirement was unsatisfiable from the CLI and hand-wrote
+    // the YAML. Name the flag that satisfies each rule, and prescribe only the
+    // ones still missing (re-listing a flag the operator already passed sends
+    // them to re-pass it).
+    const TIER1_FIELD_FLAGS: readonly { rule: string; flag: string; example: string }[] = [
+      {
+        rule: 'spec.semantic.tier1.observability_required',
+        flag: '--observability',
+        example: 'Log the decision path and refusal reason for each governed operation.',
+      },
+      {
+        rule: 'spec.semantic.tier1.rollback_required',
+        flag: '--rollback',
+        example: 'Revert the implementation commit and rerun caws doctor plus focused tests.',
+      },
+      {
+        rule: 'spec.semantic.tier1.security_required',
+        flag: '--security',
+        example: 'No new secret material is logged, persisted, or exposed in diagnostics.',
+      },
+    ];
+    const rejectedRules = new Set(
+      result.errors
+        .map((d) => d.data?.source_rule)
+        .filter((r): r is string => typeof r === 'string')
+    );
+    const missingTier1 = TIER1_FIELD_FLAGS.filter((f) => rejectedRules.has(f.rule));
+    if (missingTier1.length > 0) {
+      err('');
+      err('  Tier-1 specs require these fields; each flag is repeatable:');
+      for (const f of missingTier1) err(`    ${f.flag} "${f.example}"`);
+      err(
+        `  Retry: caws specs create ${opts.id} --title "..." --mode ${mode} --risk-tier ${riskTier} ` +
+          missingTier1.map((f) => `${f.flag} "..."`).join(' ')
       );
     }
     return 1;

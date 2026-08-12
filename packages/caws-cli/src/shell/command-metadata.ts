@@ -204,6 +204,24 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
           collect: true,
         },
         {
+          flag: '--observability <text>',
+          description:
+            'Add an observability item at creation (repeatable): a log, metric, trace, or alert. REQUIRED non-empty for --risk-tier 1.',
+          collect: true,
+        },
+        {
+          flag: '--rollback <text>',
+          description:
+            'Add a rollback step at creation (repeatable). REQUIRED non-empty for --risk-tier 1.',
+          collect: true,
+        },
+        {
+          flag: '--security <text>',
+          description:
+            'Add a non_functional.security requirement at creation (repeatable). REQUIRED non-empty for --risk-tier 1.',
+          collect: true,
+        },
+        {
           flag: '--plan',
           description:
             'Read-only preflight: validate and print the candidate spec without writing .caws/specs or events',
