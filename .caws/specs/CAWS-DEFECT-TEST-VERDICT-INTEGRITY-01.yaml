@@ -63,3 +63,7 @@ evidence:
     status: pass
     evidence_ref: "commit 20c6e771: the wall-clock assertion Date.now()-t0 < 1500 is replaced by a jest.spyOn on dist/store/repo-root sleepSyncMs asserting the retry sleep never ran. Non-vacuity is proven by a positive control in the sibling empty-mailbox test, where the same spy asserts toHaveBeenCalled. 12/12 green in message-command.test.js."
     recorded_at: "2026-08-12T17:50:50.229Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "commit 83fbf38c: bare npx jest from the repo root now runs 136 suites / 1946 tests across both projects, all passing, exit 0, in 1197s. Before the fix the identical command reported 125 of 137 suites failed to run in 4.8s with Cannot find module @babel/preset-env. Suite count reconciles exactly against the package-dir baseline: main is 135 suites / 1932 tests, plus this slice new run-tests-exit-code suite = 136 / 1946, so the root run loses no suite. The intermediate naive form projects=[packages/caws-cli] was rejected on evidence: jest warned that a nested projects key is unsupported, dropped both projects, and tests/kernel/unit/evidence-hash.test.ts failed to parse; after lifting the projects with an explicit rootDir the same file passes 9/9."
+    recorded_at: "2026-08-12T17:51:54.925Z"
