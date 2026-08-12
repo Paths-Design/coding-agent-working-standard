@@ -49,3 +49,7 @@ evidence:
     status: pass
     evidence_ref: "3 tests: corrupt events.jsonl -> applyTakeoverWithAudit returns !ok, owner stays peer-session, and unmodelled entry fields (branch, specId) survive because compensation restores prior BYTES; refusal names the prior owner; CONTROL test proves the same call succeeds on a healthy chain, so the rollback assertions are not passing on a malformed patch. Falsified: removing the compensation reddens exactly the rollback test."
     recorded_at: "2026-08-12T09:19:13.230Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "2 tests: same-session claim without --takeover appends zero claim_taken_over events (kernel emits a null patch, so the emission site is never reached); foreign claim without --takeover exits 1, appends nothing, and leaves owner == peer-session."
+    recorded_at: "2026-08-12T09:19:23.034Z"
