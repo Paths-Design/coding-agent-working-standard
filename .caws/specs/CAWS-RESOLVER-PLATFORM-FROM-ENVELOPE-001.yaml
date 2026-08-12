@@ -110,3 +110,10 @@ contracts:
   - name: 'resolver-platform-from-envelope'
     type: contract-test
     path: 'packages/caws-cli/tests/shell/session/resolver-platform-from-envelope.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "jest tests/shell/session/resolver-platform-from-envelope.test.js (passing, 40-test contract run)"
+    recorded_at: "2026-08-12T19:59:22.613Z"
+    command: "jest tests/shell/session/resolver-platform-from-envelope.test.js (passing, 40-test contract run)"
+    exit_code: 0
