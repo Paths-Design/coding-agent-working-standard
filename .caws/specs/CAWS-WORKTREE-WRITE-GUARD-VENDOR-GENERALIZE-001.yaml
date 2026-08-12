@@ -116,3 +116,9 @@ evidence:
     recorded_at: "2026-08-12T19:59:30.715Z"
     command: "jest tests/hooks/vendor-allowlist-generalized.test.js (passing, 40-test contract run)"
     exit_code: 0
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "jest tests/hooks/vendor-allowlist-generalized.test.js (passing, 40-test contract run)"
+    recorded_at: "2026-08-12T19:59:31.557Z"
+    command: "jest tests/hooks/vendor-allowlist-generalized.test.js (passing, 40-test contract run)"
+    exit_code: 0
