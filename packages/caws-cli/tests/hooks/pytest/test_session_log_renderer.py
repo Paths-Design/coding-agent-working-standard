@@ -438,3 +438,134 @@ class TestQwenTranscript:
         events = slr.parse_transcript_events(path)
         assert [e["ev"] for e in events] == ["user_text", "tool_use"]
         assert events[1]["name"] == "Bash"
+
+
+class TestKimiTranscript:
+    """CAWS-SESSION-LOG-KIMI-001: Kimi Code durable transcripts are wire logs
+    (~/.kimi-code/sessions/<slug>/session_<id>/agents/main/wire.jsonl) of
+    {"type": "<dotted.type>", "time": <epoch ms>, ...} rows — turn.prompt user
+    input and context.append_loop_event content.part/tool.call/tool.result
+    loop events. Row shapes verified live against wire protocol 1.4
+    (kimi-code 0.31.x, 2026-08-12)."""
+
+    def _write(self, rows):
+        tmp = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
+        for row in rows:
+            tmp.write(json.dumps(row) + "\n")
+        tmp.close()
+        return tmp.name
+
+    @staticmethod
+    def _loop(event, t=1785792371660):
+        return {"type": "context.append_loop_event", "event": event, "time": t}
+
+    def test_prompt_part_and_tool_rows_normalize_to_canonical_events(self):
+        path = self._write([
+            {"type": "turn.prompt", "time": 1785792371657,
+             "input": [{"type": "text", "text": "run the tests"}],
+             "origin": {"kind": "user"}},
+            self._loop({"type": "content.part", "uuid": "u1", "turnId": "0", "step": 1,
+                        "part": {"type": "think", "think": "reasoning about it"}}, 1785792371661),
+            self._loop({"type": "content.part", "uuid": "u2", "turnId": "0", "step": 1,
+                        "part": {"type": "text", "text": "Running them now."}}, 1785792371662),
+            self._loop({"type": "tool.call", "toolCallId": "tool_1", "name": "Bash",
+                        "args": {"command": "pytest", "description": "tests"}}, 1785792371663),
+            self._loop({"type": "tool.result", "toolCallId": "tool_1",
+                        "result": {"output": "12 passed"}}, 1785792371700),
+        ])
+        events = slr.parse_transcript_events(path)
+        assert [e["ev"] for e in events] == [
+            "user_text", "assistant_text", "assistant_text", "tool_use", "tool_result",
+        ]
+        assert events[0]["text"] == "run the tests"
+        assert events[1]["text"] == "reasoning about it"
+        assert events[3]["name"] == "Bash"
+        assert events[3]["id"] == "tool_1"
+        assert events[3]["input"] == {"command": "pytest", "description": "tests"}
+        assert events[4]["content"] == "12 passed"
+        assert events[4]["is_error"] is False
+
+    def test_epoch_ms_time_converts_to_iso(self):
+        path = self._write([
+            {"type": "turn.prompt", "time": 1785792371657,
+             "input": [{"type": "text", "text": "hi"}], "origin": {"kind": "user"}},
+        ])
+        events = slr.parse_transcript_events(path)
+        # kimi `time` is epoch MILLISECONDS; a seconds interpretation would
+        # overflow and fall back to the raw string. 1785792371657 ms ==
+        # 2026-08-03T...Z (checked against the live wire log).
+        assert events[0]["ts"].endswith("Z")
+        assert events[0]["ts"].startswith("2026-")
+
+    def test_file_tool_path_mirrors_to_file_path_and_accumulates(self):
+        # kimi file tools carry the target in args.path; the accumulation
+        # branches read file_path, so the adapter mirrors it at the boundary
+        # (same normalization as the kimi-code parse-input.sh hook override).
+        path = self._write([
+            {"type": "turn.prompt", "time": 1785792371657,
+             "input": [{"type": "text", "text": "fix it"}], "origin": {"kind": "user"}},
+            self._loop({"type": "tool.call", "toolCallId": "tool_2", "name": "Write",
+                        "args": {"path": "/repo/src/new.py", "content": "x"}}),
+            self._loop({"type": "tool.call", "toolCallId": "tool_3", "name": "Edit",
+                        "args": {"path": "/repo/src/old.py", "old_string": "a", "new_string": "b"}}),
+        ])
+        events = slr.parse_transcript_events(path)
+        assert events[1]["input"]["file_path"] == "/repo/src/new.py"
+        assert events[2]["input"]["file_path"] == "/repo/src/old.py"
+        turns, _session_events = slr.accumulate_turns(events, cwd="/repo")
+        assert turns[0]["edited_files"] == ["src/new.py", "src/old.py"]
+
+    def test_tool_result_is_error_maps_from_isError(self):
+        path = self._write([
+            self._loop({"type": "tool.result", "toolCallId": "tool_9",
+                        "result": {"output": "boom", "isError": True}}),
+        ])
+        events = slr.parse_transcript_events(path)
+        assert events == [{"ev": "tool_result", "id": "tool_9", "content": "boom",
+                           "is_error": True, "ts": events[0]["ts"]}]
+
+    def test_append_message_duplicate_and_telemetry_rows_are_dropped(self):
+        path = self._write([
+            {"type": "metadata", "protocol_version": "1.4", "created_at": 1785792325896},
+            {"type": "llm.request", "kind": "loop", "model": "k3-256k", "time": 1785792371663},
+            {"type": "usage.record", "model": "kimi-code/k3-256k",
+             "usage": {"output": 1450}, "time": 1785792598102},
+            self._loop({"type": "step.begin", "uuid": "s1", "turnId": "0", "step": 1}),
+            self._loop({"type": "step.end", "uuid": "s1", "turnId": "0", "step": 1,
+                        "finishReason": "stop"}),
+            {"type": "turn.prompt", "time": 1785792371657,
+             "input": [{"type": "text", "text": "real question"}], "origin": {"kind": "user"}},
+            # context.append_message echoes turn.prompt's user text; claiming
+            # it would open the turn twice.
+            {"type": "context.append_message", "time": 1785792371658,
+             "message": {"role": "user",
+                         "content": [{"type": "text", "text": "real question"}],
+                         "origin": {"kind": "user"}}},
+        ])
+        events = slr.parse_transcript_events(path)
+        assert [(e["ev"], e["text"]) for e in events] == [("user_text", "real question")]
+
+    def test_kimi_bash_result_joins_into_commands(self):
+        path = self._write([
+            {"type": "turn.prompt", "time": 1785792371657,
+             "input": [{"type": "text", "text": "do it"}], "origin": {"kind": "user"}},
+            self._loop({"type": "tool.call", "toolCallId": "tool_4", "name": "Bash",
+                        "args": {"command": "git status", "description": "check"}}, 1785792371663),
+            self._loop({"type": "tool.result", "toolCallId": "tool_4",
+                        "result": {"output": "On branch main"}}, 1785792371800),
+        ])
+        events = slr.parse_transcript_events(path)
+        turns, _session_events = slr.accumulate_turns(events, cwd="/repo")
+        assert len(turns) == 1
+        assert turns[0]["commands"][0]["command"] == "git status"
+        assert turns[0]["commands"][0]["output_preview"] == "On branch main"
+
+    def test_claude_rows_are_not_claimed_by_the_kimi_path(self):
+        # Regression guard for the additive-shape invariant: claude rows stamp
+        # `timestamp` and never carry a numeric `time` key.
+        path = self._write([
+            {"type": "user", "timestamp": "2026-06-14T00:00:00Z",
+             "message": {"content": "claude question"}},
+        ])
+        events = slr.parse_transcript_events(path)
+        assert [e["ev"] for e in events] == ["user_text"]

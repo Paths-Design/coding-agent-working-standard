@@ -7,12 +7,12 @@ created_at: '2026-08-12T07:10:47.303Z'
 updated_at: '2026-08-12T07:12:45.246Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - shared hook pack session-log surface (renderer + session-log.sh templates)
+    - installed .caws/hooks session-log copies in this repo
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/templates/hook-packs/shared/session_log_renderer.py
     - packages/caws-cli/templates/hook-packs/shared/session-log.sh
     - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
@@ -22,11 +22,34 @@ scope:
     - .caws/hooks/session_log_renderer.py
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - Claude- and qwen-shaped transcripts keep rendering unchanged — the kimi path is additive shape detection (numeric `time` key + dotted type), never a rewrite of the existing parse branches.
+  - Kimi file-tool args.path mirrors to file_path at the parse boundary (same normalization as the kimi-code parse-input.sh hook override) so downstream tool branches stay surface-neutral.
+  - The renderer stays fail-open on malformed rows — a decode error skips the row, never aborts the render.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: a real Kimi Code wire log (agents/main/wire.jsonl, protocol 1.4, verified on kimi-code 0.31.x)
+    when: the renderer parses it
+    then: turn.prompt rows become turns, content.part think/text rows become reasoning, tool.call/tool.result rows join into commands and edited files with correct epoch-ms timestamps, and llm.request/usage.record/step.*/context.append_message rows produce no events and no phantom turns
+  - id: A2
+    given: the session-log.sh hook script on the kimi-code surface (hook payload carries no transcript_path)
+    when: Stop/SessionStart/PreCompact fires for a kimi session
+    then: resolve_transcript finds the transcript via session_index.jsonl -> <sessionDir>/agents/main/wire.jsonl
+  - id: A3
+    given: the shared pack templates changed
+    when: the pack fingerprint and version are re-recorded and the init/hooks test suites run
+    then: pack-fingerprint passes at version 37 and the existing claude/qwen render tests stay green
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "python3 .caws/hooks/session_log_renderer.py on real 2542-row wire.jsonl -> 3 turns, reasoning/tool_calls/edits captured, epoch-ms ts correct; pytest TestKimiTranscript"
+    recorded_at: "2026-08-12T07:18:39.378Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "live jq lookup of ~/.kimi-code/session_index.jsonl for session_f89972ba resolves agents/main/wire.jsonl (7.6MB, present)"
+    recorded_at: "2026-08-12T07:18:40.090Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "jest tests/init 139/139 (pack-fingerprint 10/10 @ shared v37); pytest tests/hooks/pytest 113/113"
+    recorded_at: "2026-08-12T07:18:40.680Z"

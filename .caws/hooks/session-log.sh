@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 33
+# hook_pack_version: 37
 # caws_min_major: 11
 # lineage_refs: 10
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -26,11 +26,13 @@
 # — gitignored, provenance-adjacent — NOT repo-root tmp/, which is user-owned
 # scratch that bloats and gets committed.)
 #
-# FLAG (session transcript discovery): resolve_transcript uses
-# $HOME/${CAWS_VENDOR_DIR}/projects/ which is the claude-code-specific
-# transcript store path. Other surfaces may store transcripts differently;
-# an adapter can override resolve_transcript or wire a different TRANSCRIPT_PATH
-# source. The session output (session.json etc.) is surface-neutral.
+# Transcript discovery: resolve_transcript tries the payload's
+# transcript_path first, then surface-specific stores — the claude-code
+# $HOME/${CAWS_VENDOR_DIR}/projects/<slug>/<sid>.jsonl layout, qwen's
+# projects/<slug>/chats/ subdir (CAWS-SESSION-LOG-QWEN-001), and kimi's
+# session_index.jsonl -> agents/main/wire.jsonl lookup
+# (CAWS-SESSION-LOG-KIMI-001). The session output (turn-NNN.json files) is
+# surface-neutral.
 
 set -euo pipefail
 
@@ -115,6 +117,24 @@ resolve_transcript() {
   if [[ -f "$candidate" ]]; then
     printf '%s\n' "$candidate"
     return
+  fi
+
+  # Kimi Code keeps durable transcripts as per-session wire logs:
+  # ~/.kimi-code/session_index.jsonl maps sessionId -> sessionDir, and the
+  # transcript is <sessionDir>/agents/main/wire.jsonl
+  # (CAWS-SESSION-LOG-KIMI-001, wire protocol 1.4 verified against kimi-code
+  # 0.31.x). Kimi's hook payload carries no transcript_path, so this index
+  # lookup is the primary resolution path on that surface. Harmless on other
+  # surfaces: session_index.jsonl exists only under .kimi-code.
+  local index_file session_dir
+  index_file="$HOME/${CAWS_VENDOR_DIR}/session_index.jsonl"
+  if [[ -f "$index_file" ]]; then
+    session_dir=$(jq -r --arg sid "$SESSION_ID" \
+      'select(.sessionId == $sid) | .sessionDir' "$index_file" 2>/dev/null | tail -n 1)
+    if [[ -n "$session_dir" ]] && [[ -f "$session_dir/agents/main/wire.jsonl" ]]; then
+      printf '%s\n' "$session_dir/agents/main/wire.jsonl"
+      return
+    fi
   fi
 
   printf '\n'

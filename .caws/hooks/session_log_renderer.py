@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 33
+# hook_pack_version: 37
 # caws_min_major: 11
 # lineage_refs: 10
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -253,6 +253,109 @@ def _parse_qwen_row(obj: dict[str, Any], ts: str | None) -> list[dict[str, Any]]
     return events
 
 
+# --- Kimi Code transcript support (CAWS-SESSION-LOG-KIMI-001) ---------------
+# Kimi Code durable transcripts are the per-session wire logs at
+# ~/.kimi-code/sessions/<workspace-slug>/session_<id>/agents/main/wire.jsonl
+# (indexed by ~/.kimi-code/session_index.jsonl; wire protocol 1.4 verified
+# live against kimi-code 0.31.x, 2026-08-12). Rows are
+# {"type": "<dotted.type>", "time": <epoch ms>, ...} — NOT Claude's
+# timestamp/message.content and NOT Qwen's timestamp/message.parts. The
+# helpers below convert kimi rows to the same canonical event dicts the
+# claude branches emit, so accumulate_turns stays surface-neutral.
+#
+# Kimi tool names already arrive canonical (Read, Write, Edit, Bash, ...),
+# but kimi's file tools carry the target in args.path, not the Claude-schema
+# file_path the accumulation branches read. Same boundary normalization as
+# the kimi-code parse-input.sh hook override: args.path mirrors to file_path
+# so Write/Edit/Read land in edited_files/read_files.
+def _is_kimi_row(obj: dict[str, Any]) -> bool:
+    # Every kimi wire row stamps `time` (epoch ms); claude and qwen rows stamp
+    # `timestamp` and never carry `time`. A numeric `time` plus a string
+    # `type` is unique to kimi across the three shapes. (The kimi `metadata`
+    # header row has no `time` and falls through to the claude branches,
+    # which ignore its unmatched type.)
+    return isinstance(obj.get("time"), (int, float)) and isinstance(obj.get("type"), str)
+
+
+def _parse_kimi_row(obj: dict[str, Any], _ts: str | None) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    # kimi `time` is epoch MILLISECONDS (wire protocol 1.4); parse_timestamp's
+    # numeric branch expects seconds, so convert here rather than per-event.
+    raw_time = obj.get("time")
+    ts = parse_timestamp(raw_time / 1000) if isinstance(raw_time, (int, float)) else None
+    kind = obj.get("type")
+
+    if kind == "turn.prompt":
+        # Human turn input: {input: [{type: "text", text}], origin: {kind}}.
+        for block in obj.get("input") or []:
+            if not isinstance(block, dict):
+                continue
+            text = block.get("text")
+            if isinstance(text, str) and text.strip():
+                events.append({"ev": "user_text", "text": text, "ts": ts})
+        return events
+
+    if kind != "context.append_loop_event":
+        # context.append_message duplicates turn.prompt for user messages
+        # (same text, one row later) — claiming it would open each turn
+        # twice. Everything else (llm.request, usage.record, config.update,
+        # tools.update_store, plan_mode.*, compaction rows) is harness
+        # telemetry, not agent work.
+        return events
+
+    event = obj.get("event")
+    if not isinstance(event, dict):
+        return events
+    sub = event.get("type")
+
+    if sub == "content.part":
+        part = event.get("part")
+        if not isinstance(part, dict):
+            return events
+        # {type: "text", text} is model output; {type: "think", think} is
+        # reasoning. Both become assistant_text (the timeline's reasoning
+        # kind) — kimi's think parts are this surface's reasoning trace.
+        part_type = part.get("type")
+        text = part.get("text") if part_type == "text" else part.get("think") if part_type == "think" else None
+        if isinstance(text, str) and text.strip():
+            events.append({"ev": "assistant_text", "text": text, "ts": ts})
+
+    elif sub == "tool.call":
+        args = event.get("args")
+        tool_input = dict(args) if isinstance(args, dict) else {}
+        if "file_path" not in tool_input and isinstance(tool_input.get("path"), str):
+            tool_input["file_path"] = tool_input["path"]
+        events.append(
+            {
+                "ev": "tool_use",
+                "name": event.get("name", ""),
+                "id": event.get("toolCallId", ""),
+                "input": tool_input,
+                "ts": ts,
+            }
+        )
+
+    elif sub == "tool.result":
+        result = event.get("result")
+        if not isinstance(result, dict):
+            result = {}
+        output = result.get("output", "")
+        if not isinstance(output, str):
+            output = json.dumps(output, ensure_ascii=False)
+        events.append(
+            {
+                "ev": "tool_result",
+                "id": event.get("toolCallId", ""),
+                "content": output,
+                "is_error": bool(result.get("isError")),
+                "ts": ts,
+            }
+        )
+
+    # step.begin / step.end carry usage and latency telemetry, not content.
+    return events
+
+
 def rel_path(path: str | None, cwd: str) -> str:
     if path and path.startswith(cwd + "/"):
         return path[len(cwd) + 1 :]
@@ -453,6 +556,13 @@ def parse_transcript_events(transcript_path: str) -> list[dict[str, Any]]:
             # match _is_qwen_row (no message.parts / tool_result type).
             if _is_qwen_row(obj):
                 events.extend(_parse_qwen_row(obj, ts))
+                continue
+
+            # Kimi Code wire rows (epoch-ms `time`, dotted types) convert to
+            # the same canonical events; claude/qwen rows never match
+            # _is_kimi_row (no numeric `time` key).
+            if _is_kimi_row(obj):
+                events.extend(_parse_kimi_row(obj, ts))
                 continue
 
             if kind == "user":

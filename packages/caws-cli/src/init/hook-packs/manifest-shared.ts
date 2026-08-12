@@ -244,7 +244,20 @@ import type { HookPackV1 } from './types';
 // output (observed: bash-write-guard.bats 6/7 red). agent-pid.sh's site is
 // the same latent defect class, guarded for internal control-flow integrity.
 // No guard allow/block/ask decision logic changes.
-export const SHARED_PACK_VERSION = 36;
+//
+// Version 37: CAWS-SESSION-LOG-KIMI-001. session_log_renderer.py learns
+// Kimi Code transcripts (wire.jsonl rows: epoch-ms `time`, dotted types —
+// turn.prompt user input, context.append_loop_event content.part/
+// tool.call/tool.result); rows convert to the same canonical events the
+// claude branches emit, and args.path mirrors to file_path at the parse
+// boundary (same normalization as the kimi-code parse-input.sh override).
+// context.append_message is skipped (it duplicates turn.prompt) and
+// llm.request/usage.record/step.* rows drop as harness telemetry.
+// session-log.sh resolves kimi transcripts via session_index.jsonl ->
+// <sessionDir>/agents/main/wire.jsonl (kimi's hook payload carries no
+// transcript_path). Row shapes verified live against a real 2542-row kimi
+// wire log (protocol 1.4, kimi-code 0.31.x).
+export const SHARED_PACK_VERSION = 37;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.
