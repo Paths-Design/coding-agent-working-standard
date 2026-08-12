@@ -2,12 +2,14 @@ id: CAWS-DEFECT-SPECS-CREATE-TODO-SCAFFOLD-01
 title: 'specs create writes committed TODO placeholders into fields it exposes no flag to fill'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
 created_at: '2026-08-12T09:08:04.748Z'
-updated_at: '2026-08-12T15:25:15.855Z'
+updated_at: '2026-08-12T15:26:07.839Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli spec authoring surface (specs create flags)'
+    - 'caws-cli spec body amendment surface (specs amend)'
+    - 'caws-kernel event vocabulary (spec_body_amended)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -16,11 +18,20 @@ scope:
     - 'packages/caws-cli/src/shell/commands/specs.ts'
     - 'packages/caws-cli/src/shell/register.ts'
     - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/shell/index.ts'
+    - 'packages/caws-cli/src/kernel/schemas/events/spec_body_amended.v1.json'
+    - 'packages/caws-cli/src/kernel/schemas/events.v1.json'
+    - 'packages/caws-cli/src/kernel/evidence/validate.ts'
+    - 'packages/caws-cli/src/kernel/evidence/types.ts'
     - 'packages/caws-cli/tests/shell/specs-create-scaffold-flags.test.js'
+    - 'packages/caws-cli/tests/shell/specs-amend.test.js'
     - 'docs/command-reference.md'
+    - 'docs/api/cli.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Every field the create template scaffolds is reachable from the command surface that scaffolds it.'
+  - 'A remediation is only printed where the command it names can actually be run.'
+  - 'A closed spec may have a blank filled but never a substantive claim rewritten.'
 acceptance:
   - id: A1
     given: 'a spec being created through the CLI'
@@ -31,9 +42,21 @@ acceptance:
     when: 'caws specs create runs'
     then: 'the TODO scaffold is still written and the command still succeeds, so existing callers and the guided-authoring flow are unchanged by this slice'
   - id: A3
-    given: 'a created spec whose body still carries TODO placeholders'
-    when: 'the operator runs caws specs show or the create command finishes'
-    then: 'a non-blocking advisory names the placeholder fields and the flags that fill them, so the gap is discoverable at the moment it is created rather than at review time'
+    given: 'a create that leaves TODO placeholders in the body'
+    when: 'the create command finishes'
+    then: 'a non-blocking advisory names the placeholder fields and the create flags that fill them — and that advisory is emitted ONLY at create time, because --module and --invariant cannot be run against a spec that already exists; caws specs show must never print create-flag remediation'
+  - id: A4
+    given: 'an existing draft or active spec whose body carries a TODO placeholder'
+    when: 'caws specs amend <id> --add-module <text> --add-invariant <text> runs'
+    then: 'the placeholder is replaced by the supplied values, a spec_body_amended event is appended, and the discharge is reachable without hand-editing YAML — a create-time flag alone would leave every already-created spec permanently un-dischargeable'
+  - id: A5
+    given: 'a CLOSED spec, which is an audit record of concluded work'
+    when: 'caws specs amend runs against it'
+    then: 'filling a TODO placeholder is admitted, but removing or rewriting a substantive existing module or invariant is refused — a closed spec may have a blank filled and never a claim rewritten, so the discharge path cannot become a retroactive-edit tool'
+  - id: A6
+    given: 'an archived spec'
+    when: 'caws specs amend runs against it'
+    then: 'it is refused, because an archived body is a tombstone and rewriting it would falsify the historical record rather than correct it'
 non_functional: {}
 contracts:
   - name: 'specs-create-authoring-completeness'
