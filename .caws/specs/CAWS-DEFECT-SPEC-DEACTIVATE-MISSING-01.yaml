@@ -58,3 +58,7 @@ evidence:
     status: pass
     evidence_ref: "commit a605799a: 'the refusal names the worktree and mutates nothing' asserts exit 1, the worktree name in the message, both lane exits (merge / destroy --abandon-unmerged) and the stale-binding remedy (worktree repair) in the remediation, plus a byte-identical spec file and zero spec_deactivated events. Falsified: disabling the binding guard reddens this test alone (1 of 10)."
     recorded_at: "2026-08-12T11:02:47.809Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "commit a605799a: A3 group (3 tests) — draft refused pointing at retire-draft, closed refused pointing at reopen (not close), archived refused pointing at restore. The two canonical-path cases also assert byte-identical spec files."
+    recorded_at: "2026-08-12T11:02:49.003Z"
