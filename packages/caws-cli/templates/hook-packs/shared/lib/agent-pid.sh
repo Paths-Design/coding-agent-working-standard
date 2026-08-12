@@ -138,10 +138,15 @@ read_session_id_from_agent_pid() {
   [[ -z "$caws_dir" || -z "$names" ]] && return 1
 
   local pid start_epoch
+  # Tolerate EOF (CAWS-DEFECT-HOOK-AGENT-PID-FAILOPEN-01): a no-match walk
+  # prints nothing, so the reads fail. Guarded so this function's own control
+  # flow (the `[[ -z "$pid" ]] && return 1` below) always decides the miss
+  # return — an unguarded read-group failure is a latent mid-function abort
+  # under set -e, the same defect class fixed in parse-input.sh.
   {
     read -r pid
     read -r start_epoch
-  } < <(resolve_agent_pid_with_start "$names")
+  } < <(resolve_agent_pid_with_start "$names") || true
   [[ -z "$pid" ]] && return 1
 
   local record="$caws_dir/sessions/${CAWS_AGENT_PID_PREFIX}${pid}.json"

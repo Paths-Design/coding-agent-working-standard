@@ -97,6 +97,47 @@ with open(sys.argv[1]) as f:
   [ "$(envelope_platform "$sid")" = "opencode" ]
 }
 
+@test "parse-input: parse_hook_input survives a no-agent-ancestor walk under set -euo pipefail (CAWS-DEFECT-HOOK-AGENT-PID-FAILOPEN-01)" {
+  # Root cause of the bash-write-guard silent-death cluster: with a real
+  # session_id and CAWS_AGENT_PROCESS_NAMES naming a process ABSENT from the
+  # PID tree (bats/CI/plain terminal), _write_agent_pid_record's unguarded
+  # read-group hit EOF and aborted the whole guard with exit 1 and zero
+  # output. This drives parse_hook_input directly under the same
+  # `set -euo pipefail` posture every guard script runs with.
+  local payload
+  payload="$(jq -nc --arg cwd "$CAWS_TEST_REPO" \
+    '{tool_name:"Bash", tool_input:{command:"git status"}, session_id:"bats_failopen", cwd:$cwd}')"
+  run env \
+    CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
+    CAWS_AGENT_PROCESS_NAMES="caws-nonexistent-agent-ancestor" \
+    HOOK_EVENT_NAME="PreToolUse" \
+    bash -c '
+      set -euo pipefail
+      source "$1/lib/parse-input.sh"
+      printf "%s" "$2" | parse_hook_input
+    ' _ "$CAWS_TEST_HOOKS_DIR" "$payload"
+  assert_success
+}
+
+@test "parse-input: read_session_id_from_agent_pid miss still returns cleanly under set -e (A2)" {
+  # The sibling read-group in agent-pid.sh: a no-match walk must let the
+  # function reach its own `return 1` miss path (checked here in an if
+  # condition) instead of dying mid-function on the read-group EOF.
+  run env \
+    bash -c '
+      set -euo pipefail
+      source "$1/lib/agent-pid.sh"
+      if read_session_id_from_agent_pid "$2/.caws" "caws-nonexistent-agent-ancestor"; then
+        echo unexpected-hit
+        exit 9
+      fi
+      echo miss-returned-cleanly
+    ' _ "$CAWS_TEST_HOOKS_DIR" "$CAWS_TEST_REPO"
+  assert_success
+  assert_output --partial 'miss-returned-cleanly'
+  refute_output --partial 'unexpected-hit'
+}
+
 @test "parse-input: durable envelope platform defaults to claude-code when CAWS_PLATFORM_FLAG unset (A5 back-compat)" {
   # Simulate a wiring that has not sourced agent-surface.sh: surface is
   # unknown, so CAWS_PLATFORM_FLAG is unset and the default fires.
