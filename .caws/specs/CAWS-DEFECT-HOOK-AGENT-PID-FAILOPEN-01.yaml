@@ -65,3 +65,9 @@ acceptance:
       and the tracked .caws/hooks/lib mirror matches the templates
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "bats parse-input.bats+bash-write-guard.bats in worktree: 13/13 green incl. 6 previously-red silent-death tests; new regression test 'parse_hook_input survives a no-agent-ancestor walk under set -euo pipefail' passes"
+    recorded_at: "2026-08-12T06:21:18.935Z"
+    exit_code: 0
