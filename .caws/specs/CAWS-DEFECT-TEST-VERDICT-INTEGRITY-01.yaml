@@ -59,3 +59,7 @@ evidence:
     status: pass
     evidence_ref: "commit d6228e5b: jest-over-cleanup precedence preserved and now under test - \"an ordinary jest failure still exits with jest exit code\", \"a cleanup failure never masks a jest failure\" (jest 1 + cleanup 3 => 1), \"a cleanup failure decides the verdict only when jest passed\" (jest 0 + cleanup 3 => 3). End-to-end proof of the unchanged CLI entry: node scripts/run-tests.js tests/shell/run-tests-exit-code.test.js ran build then jest 14/14 then cleanup, exit 0."
     recorded_at: "2026-08-12T17:49:02.900Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "commit 20c6e771: the wall-clock assertion Date.now()-t0 < 1500 is replaced by a jest.spyOn on dist/store/repo-root sleepSyncMs asserting the retry sleep never ran. Non-vacuity is proven by a positive control in the sibling empty-mailbox test, where the same spy asserts toHaveBeenCalled. 12/12 green in message-command.test.js."
+    recorded_at: "2026-08-12T17:50:50.229Z"
