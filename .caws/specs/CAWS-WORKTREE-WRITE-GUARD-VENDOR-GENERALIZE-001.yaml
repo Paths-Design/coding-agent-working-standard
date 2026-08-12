@@ -97,3 +97,10 @@ contracts:
   - name: 'vendor-allowlist-generalized'
     type: contract-test
     path: 'packages/caws-cli/tests/hooks/vendor-allowlist-generalized.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "jest tests/hooks/vendor-allowlist-generalized.test.js (passing, 40-test contract run)"
+    recorded_at: "2026-08-12T19:59:28.976Z"
+    command: "jest tests/hooks/vendor-allowlist-generalized.test.js (passing, 40-test contract run)"
+    exit_code: 0
