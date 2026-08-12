@@ -61,3 +61,8 @@ non_functional:
 contracts:
   - name: 'close-gate-remediation'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "npx jest tests/shell/specs-close-evidence-warning.test.js (12 passed): advisory names 'caws specs reopen <id>', the word frozen, and asserts reopen<record<reclose ordering by index; plus the --no-close pointer"
+    recorded_at: "2026-08-12T07:39:45.067Z"
