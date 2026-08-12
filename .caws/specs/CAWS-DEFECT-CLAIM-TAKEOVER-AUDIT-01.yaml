@@ -3,6 +3,7 @@ title: 'claim --takeover writes the highest-authority mutation in the control pl
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: wt-claim-takeover-audit
 created_at: '2026-08-12T08:36:13.534Z'
 updated_at: '2026-08-12T08:36:13.534Z'
 blast_radius:
