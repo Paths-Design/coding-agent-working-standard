@@ -92,3 +92,9 @@ evidence:
     recorded_at: "2026-08-12T02:29:35.942Z"
     command: npx jest tests/shell/evidence-record-ac-redirect.test.js
     exit_code: 0
+  - criterion_id: A5
+    status: pass
+    evidence_ref: caws specs evidence --help live output now states warn-mode and does-not-refuse; npx jest tests/docs (45 passed) incl. command-reference-sync
+    recorded_at: "2026-08-12T02:29:47.794Z"
+    command: node packages/caws-cli/dist/index.js specs evidence --help
+    exit_code: 0
