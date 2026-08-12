@@ -48,3 +48,8 @@ non_functional: {}
 contracts:
   - name: 'specs-archive-replace'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "3 tests: refusal names --replace + both updated_at + OLDER judgement; inverted-age case says NEWER and withholds 'very likely stale'; a body failing today's schema still reports its updated_at (regex read, not parser). Nothing moves on refusal — canonical file intact, archive dir unchanged."
+    recorded_at: "2026-08-12T08:50:20.033Z"
