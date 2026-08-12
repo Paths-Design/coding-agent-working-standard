@@ -88,3 +88,7 @@ evidence:
     status: pass
     evidence_ref: "repo-wide grep for prepush across *.ts/*.js/*.md/*.json/*.yaml/*.sh (excl node_modules,dist,events.jsonl,sessions): only intentional hits remain — the new doctrine removal section (caws-vnext-command-surface.md) and the removed-command lists in AGENTS.md + docs/agents/full-guide.md. Historical records untouched (CHANGELOG, failure-lineage, docs/rewrite, cli-ux audit, ADR 0001, design doc)"
     recorded_at: "2026-08-12T20:47:58.209Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "npm run docs:check -> 'command-reference.md is up to date' + all 4 marker docs 'up to date', after generate-command-reference.mjs and populate-doc-markers.mjs regenerated them"
+    recorded_at: "2026-08-12T20:47:59.365Z"
