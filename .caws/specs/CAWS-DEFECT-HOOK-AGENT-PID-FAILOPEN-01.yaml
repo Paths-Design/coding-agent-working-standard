@@ -71,3 +71,8 @@ evidence:
     evidence_ref: "bats parse-input.bats+bash-write-guard.bats in worktree: 13/13 green incl. 6 previously-red silent-death tests; new regression test 'parse_hook_input survives a no-agent-ancestor walk under set -euo pipefail' passes"
     recorded_at: "2026-08-12T06:21:18.935Z"
     exit_code: 0
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "agent-pid.sh read-group guarded (|| true); new bats test 'read_session_id_from_agent_pid miss still returns cleanly under set -e' passes; session-id-agent-pid.bats contract suite green in full 139/139 sweep"
+    recorded_at: "2026-08-12T06:21:20.975Z"
+    exit_code: 0
