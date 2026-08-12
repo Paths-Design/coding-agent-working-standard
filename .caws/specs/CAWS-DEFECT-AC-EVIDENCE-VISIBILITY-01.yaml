@@ -1,0 +1,39 @@
+id: CAWS-DEFECT-AC-EVIDENCE-VISIBILITY-01
+title: 'AC-evidence close gate: surface the warn-mode advisory and route ac evidence to the closure authority'
+risk_tier: 2
+mode: fix
+lifecycle_state: active
+created_at: '2026-08-12T00:31:47.872Z'
+updated_at: '2026-08-12T00:31:47.872Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/src/shell/commands/worktree.ts'
+    - 'packages/caws-cli/src/shell/commands/evidence.ts'
+    - 'packages/caws-cli/src/store/worktrees-writer.ts'
+    - 'packages/caws-cli/tests/shell/specs-close-evidence-warning.test.js'
+    - 'packages/caws-cli/tests/shell/worktree-merge-evidence-warning.test.js'
+    - 'packages/caws-cli/tests/shell/evidence-record-ac-redirect.test.js'
+    - 'packages/caws-cli/tests/shell/evidence-readback.test.js'
+    - 'packages/caws-cli/tests/shell/evidence-schema.test.js'
+    - 'packages/caws-cli/tests/shell/evidence-data-parse-guidance.test.js'
+    - 'docs/command-reference.md'
+    - 'docs/agent-workflow-tools.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'close-gate-advisory'
+    type: behavior
