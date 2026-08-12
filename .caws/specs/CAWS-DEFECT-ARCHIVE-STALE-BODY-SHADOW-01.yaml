@@ -53,3 +53,7 @@ evidence:
     status: pass
     evidence_ref: "3 tests: refusal names --replace + both updated_at + OLDER judgement; inverted-age case says NEWER and withholds 'very likely stale'; a body failing today's schema still reports its updated_at (regex read, not parser). Nothing moves on refusal — canonical file intact, archive dir unchanged."
     recorded_at: "2026-08-12T08:50:20.033Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "4 tests: byte-for-byte superseded copy at ARCREP-010.superseded-2026-08-12T09-00-00Z.yaml (no colons); spec_archived.superseded_path recorded; two same-second replaces both survive (falsified: removing the collision suffix reddens exactly this test); atomicity — a rejected new body leaves zero superseded files and the prior body intact."
+    recorded_at: "2026-08-12T08:50:21.310Z"
