@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/spec_body_amended.v1.json",
+  "title": "spec_body_amended event payload",
+  "$comment": "Class: REQUIRES_SPEC_ID. Records a governed amendment to a spec's blast_radius.modules or invariants via `caws specs amend`. Distinct from spec_scope_amended, which covers scope.in/out/support only. Exists because both fields are schema-required non-empty, so `caws specs create` had to emit a scaffolded default, and until this command there was no surface that could replace it on an already-created spec — the discharge route was a hand edit that bypassed the audit trail entirely. On a CLOSED spec the writer permits filling a scaffolded entry but refuses removing or rewriting a substantive one, so this event can never record a retroactive rewrite of what a concluded spec claimed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["resulting_modules", "resulting_invariants"],
+  "properties": {
+    "added_modules": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "blast_radius.modules entries added by this amendment (may be empty)."
+    },
+    "removed_modules": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "blast_radius.modules entries removed by this amendment (may be empty)."
+    },
+    "added_invariants": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "invariants entries added by this amendment (may be empty)."
+    },
+    "removed_invariants": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "invariants entries removed by this amendment (may be empty)."
+    },
+    "discharged_scaffold_fields": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["blast_radius.modules", "invariants"]
+      },
+      "uniqueItems": true,
+      "description": "Fields whose scaffolded default was replaced by operator content in this amendment. This is the discriminator that makes an amendment on a closed spec legitimate: a closed spec may have a blank filled and never a claim rewritten."
+    },
+    "previous_lifecycle_state": {
+      "type": "string",
+      "enum": ["draft", "active", "closed"],
+      "description": "The lifecycle state of the amended spec. Recorded because the permitted operations differ by state, so a reader cannot judge the amendment without it."
+    },
+    "resulting_modules": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "blast_radius.modules after the amendment. Schema-required non-empty, so the post-state is always assertable."
+    },
+    "resulting_invariants": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "invariants after the amendment."
+    }
+  }
+}

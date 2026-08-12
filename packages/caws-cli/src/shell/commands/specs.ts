@@ -57,6 +57,7 @@ import {
   unsatisfiedAcceptanceCriteria,
   type SpecsListStatus,
 } from '../../store/specs-writer';
+import { amendSpecBody } from '../../store/specs-body-writer';
 import type { LifecycleMapping } from '../../kernel';
 import { EVIDENCE_STATUSES, SPEC_MODES, SPEC_RESOLUTIONS, type EvidenceStatus } from '../../kernel';
 import * as fs from 'node:fs';
@@ -239,6 +240,14 @@ export interface SpecsCreateOptions extends BaseCommandOptions {
   readonly observability?: readonly string[];
   readonly rollback?: readonly string[];
   readonly security?: readonly string[];
+  /**
+   * blast_radius.modules and invariants (Sterling ledger N16). Both are
+   * schema-required non-empty, so the renderer had to emit a scaffolded
+   * default and no flag could replace it. Repeatable; omitting them leaves the
+   * scaffolded default in place.
+   */
+  readonly module?: readonly string[];
+  readonly invariant?: readonly string[];
   /** Read-only preflight: render and validate the candidate without writing. */
   readonly plan?: boolean;
   /** Emit machine-readable plan output. */
@@ -690,6 +699,15 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     ...(opts.security !== undefined && opts.security.length > 0
       ? { security: opts.security }
       : {}),
+    // Sterling ledger N16: the two scaffolded fields. Both are schema-required
+    // non-empty, so before these flags the renderer had to invent a value and
+    // no flag could replace it.
+    ...(opts.module !== undefined && opts.module.length > 0
+      ? { modules: opts.module }
+      : {}),
+    ...(opts.invariant !== undefined && opts.invariant.length > 0
+      ? { invariants: opts.invariant }
+      : {}),
   } as const;
 
   if (opts.plan === true) {
@@ -871,16 +889,43 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     scopeIn !== undefined && scopeIn.length > 0;
   const acceptanceWasPopulated =
     parsedAcceptance !== undefined && parsedAcceptance.length > 0;
-  const fillGuidance = acceptanceWasPopulated
-    ? 'Fill in invariants and review acceptance'
-    : 'Fill in invariants + acceptance';
+  const invariantsWasPopulated = opts.invariant !== undefined && opts.invariant.length > 0;
+  const modulesWasPopulated = opts.module !== undefined && opts.module.length > 0;
+  const remainingToFill = [
+    ...(invariantsWasPopulated ? [] : ['invariants']),
+    ...(acceptanceWasPopulated ? [] : ['acceptance']),
+  ];
+  const fillGuidance =
+    remainingToFill.length === 0
+      ? 'Review the body'
+      : `Fill in ${remainingToFill.join(' + ')}`;
+
+  // Sterling ledger N16 (A3): report the fields still carrying a scaffolded
+  // default, and name the flags that would have filled them.
+  //
+  // Create-time ONLY, deliberately. --module/--invariant cannot be run against
+  // a spec that already exists, so the same text emitted from `caws specs show`
+  // would be a remediation the CLI refuses — the failure class this repo treats
+  // as most dangerous, because it trains agents to stop trusting the guidance.
+  // Here it IS actionable: it applies to the operator's next create.
+  const scaffolded = [
+    ...(modulesWasPopulated ? [] : ['blast_radius.modules (--module)']),
+    ...(invariantsWasPopulated ? [] : ['invariants (--invariant)']),
+  ];
+  if (scaffolded.length > 0) {
+    err(
+      `caws advisory (non-blocking): ${outcome.id} was created with scaffolded defaults in ` +
+        `${scaffolded.join(', ')}. These fields are schema-required non-empty, so create had to ` +
+        `write a value. Supply them at creation next time — both flags are repeatable.`
+    );
+  }
   out('');
   // CAWS-SPECS-CREATE-COMMIT-BEFORE-WORKTREE-GUIDANCE-001: both branches must
   // tell the first-timer to COMMIT the spec (after filling in the body) BEFORE
-  // `caws worktree create`. The body fields (invariants/acceptance) have no CLI
-  // setter and are hand-edited, which leaves the spec YAML dirty; walking that
-  // dirty tree straight into `worktree create` produces the confusing "the
-  // transition was applied but NOT committed" warning. Committing first keeps
+  // `caws worktree create`. Any body field left unsupplied is hand-edited,
+  // which leaves the spec YAML dirty; walking that dirty tree straight into
+  // `worktree create` produces the confusing "the transition was applied but
+  // NOT committed" warning. Committing first keeps
   // the audit commit clean. We also name how to inspect the filled-in spec —
   // there is intentionally no `caws specs validate` verb in v11.
   if (scopeInWasPopulated) {
@@ -1762,6 +1807,56 @@ export function runSpecsReopenCommand(opts: SpecsReopenOptions): number {
     return 1;
   }
   out(`reopened ${outcome.id} (lifecycle_state: active)`);
+  surfaceAuditCommit(outcome.data?.audit_commit, err);
+  return 0;
+}
+
+// ─── caws specs amend ──────────────────────────────────────────────────────
+
+export interface SpecsAmendOptions extends BaseCommandOptions {
+  readonly id: string;
+  readonly addModule?: readonly string[];
+  readonly removeModule?: readonly string[];
+  readonly addInvariant?: readonly string[];
+  readonly removeInvariant?: readonly string[];
+}
+
+// Sterling ledger N16: the discharge path. `caws specs create --module/
+// --invariant` only helps specs that do not exist yet; this is what an
+// already-created spec uses to replace a scaffolded default without a
+// hand-edit that bypasses the audit trail.
+export function runSpecsAmendCommand(opts: SpecsAmendOptions): number {
+  const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
+
+  const ctx = resolveCawsCtx(cwd, err, showData, 'amend');
+  if (ctx === null) return 2;
+
+  const actor = buildActorOrError(
+    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'amend'
+  );
+  if (actor === null) return 2;
+
+  const result = amendSpecBody(ctx.cawsDir, {
+    id: opts.id,
+    now: nowFn,
+    actor,
+    ...(opts.addModule !== undefined ? { addModules: opts.addModule } : {}),
+    ...(opts.removeModule !== undefined ? { removeModules: opts.removeModule } : {}),
+    ...(opts.addInvariant !== undefined ? { addInvariants: opts.addInvariant } : {}),
+    ...(opts.removeInvariant !== undefined ? { removeInvariants: opts.removeInvariant } : {}),
+  });
+  if (!isOk(result)) {
+    err('caws specs amend: failed.');
+    err(renderDiagnostics(result.errors, { showData }));
+    return 1;
+  }
+  const outcome = result.value;
+  if (outcome.kind === 'partial_failure_recovered') {
+    err('caws specs amend: partial failure recovered (no state change).');
+    err(renderDiagnostics(outcome.cause, { showData }));
+    return 1;
+  }
+  out(`amended ${outcome.id}`);
   surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }

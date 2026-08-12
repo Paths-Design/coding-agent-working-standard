@@ -83,6 +83,7 @@ import {
   runSpecsEvidenceCommand,
   runSpecsReopenCommand,
   runSpecsDeactivateCommand,
+  runSpecsAmendCommand,
   runSpecsCreateCommand,
   runSpecsListCommand,
   runSpecsMigrateCommand,
@@ -1002,6 +1003,8 @@ export function registerShellCommands(
           observability?: string[];
           rollback?: string[];
           security?: string[];
+          module?: string[];
+          invariant?: string[];
           type?: string;
           plan?: boolean;
           json?: boolean;
@@ -1031,6 +1034,10 @@ export function registerShellCommands(
           ...(opts.observability !== undefined ? { observability: opts.observability } : {}),
           ...(opts.rollback !== undefined ? { rollback: opts.rollback } : {}),
           ...(opts.security !== undefined ? { security: opts.security } : {}),
+          // Sterling ledger N16: same forwarding discipline. A dropped mapping
+          // here is invisible to every handler-level test.
+          ...(opts.module !== undefined ? { module: opts.module } : {}),
+          ...(opts.invariant !== undefined ? { invariant: opts.invariant } : {}),
           ...(opts.type !== undefined ? { legacyType: opts.type } : {}),
           plan: opts.plan === true,
           json: opts.json === true,
@@ -1269,6 +1276,30 @@ export function registerShellCommands(
         const code = runSpecsReopenCommand({
           id,
           ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
+
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'amend'))
+    .action(
+      (
+        id: string,
+        opts: {
+          addModule?: string[];
+          removeModule?: string[];
+          addInvariant?: string[];
+          removeInvariant?: string[];
+          data?: boolean;
+        }
+      ) => {
+        const code = runSpecsAmendCommand({
+          id,
+          ...(opts.addModule !== undefined ? { addModule: opts.addModule } : {}),
+          ...(opts.removeModule !== undefined ? { removeModule: opts.removeModule } : {}),
+          ...(opts.addInvariant !== undefined ? { addInvariant: opts.addInvariant } : {}),
+          ...(opts.removeInvariant !== undefined ? { removeInvariant: opts.removeInvariant } : {}),
           showData: opts.data === true,
         });
         exit(code);

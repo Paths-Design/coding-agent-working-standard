@@ -118,6 +118,15 @@ export interface CreateSpecInput {
   readonly observability?: readonly string[];
   readonly rollback?: readonly string[];
   readonly security?: readonly string[];
+  /**
+   * blast_radius.modules and invariants. Both are REQUIRED non-empty by
+   * spec.v1.json, and until CAWS-DEFECT-SPECS-CREATE-TODO-SCAFFOLD-01 neither
+   * had a flag — so every spec the CLI created committed a literal TODO string
+   * into tracked governance state, with no surface able to discharge it.
+   * Optional: omitting them preserves the placeholder scaffold byte-for-byte.
+   */
+  readonly modules?: readonly string[];
+  readonly invariants?: readonly string[];
   /** Override the timestamp used for created_at + the event ts. Tests inject. */
   readonly now?: () => Date;
   /** The EventBody actor envelope (built by the shell layer). */
@@ -938,6 +947,21 @@ function renderInitialSpecYaml(input: CreateSpecInput): string {
     `${key}:`,
     ...values.map((v) => `  - ${sq(v)}`),
   ];
+  // CAWS-DEFECT-SPECS-CREATE-TODO-SCAFFOLD-01: blast_radius.modules and
+  // invariants are REQUIRED non-empty by spec.v1.json, so the template had to
+  // emit something — and with no flag to supply it, that something was a
+  // literal TODO string committed into tracked governance state. These two
+  // flags make the scaffolded fields reachable from the command that scaffolds
+  // them. The placeholders remain the fallback (A2): existing callers and the
+  // guided-authoring flow must be byte-identical when the flags are absent.
+  const moduleLines =
+    input.modules !== undefined && input.modules.length > 0
+      ? input.modules.map((v) => `    - ${sq(v)}`)
+      : [`    - ${sq(MODULES_PLACEHOLDER)}`];
+  const invariantLines =
+    input.invariants !== undefined && input.invariants.length > 0
+      ? input.invariants.map((v) => `  - ${sq(v)}`)
+      : [`  - ${sq(INVARIANTS_PLACEHOLDER)}`];
   const observabilityLines =
     input.observability !== undefined && input.observability.length > 0
       ? stringSeq('observability', input.observability)
@@ -965,7 +989,7 @@ function renderInitialSpecYaml(input: CreateSpecInput): string {
     `updated_at: '${now}'`,
     `blast_radius:`,
     `  modules:`,
-    `    - 'TODO: list one or more modules this spec touches.'`,
+    ...moduleLines,
     `  data_migration: false`,
     `operational_rollback_slo: 5m`,
     `scope:`,
@@ -973,7 +997,7 @@ function renderInitialSpecYaml(input: CreateSpecInput): string {
     ...scopeInLines,
     `  out: []`,
     `invariants:`,
-    `  - 'TODO: describe one invariant this spec guarantees.'`,
+    ...invariantLines,
     ...acceptanceLines,
     ...observabilityLines,
     ...rollbackLines,
@@ -981,6 +1005,38 @@ function renderInitialSpecYaml(input: CreateSpecInput): string {
     ...contractsLines,
     ``,
   ].join('\n');
+}
+
+// ─── placeholder scaffold (CAWS-DEFECT-SPECS-CREATE-TODO-SCAFFOLD-01) ────
+
+/**
+ * The exact strings `caws specs create` writes when no `--module` /
+ * `--invariant` is supplied.
+ *
+ * Single-sourced deliberately. Three surfaces must agree on what a placeholder
+ * IS — the renderer that writes it, the create-time advisory that reports it,
+ * and `caws specs amend`, which treats "this entry is a placeholder" as
+ * permission to overwrite an otherwise-immutable closed spec. If those drift,
+ * amend either refuses a legitimate discharge or silently rewrites a real
+ * claim, so the constant is the contract.
+ */
+export const MODULES_PLACEHOLDER = 'TODO: list one or more modules this spec touches.';
+export const INVARIANTS_PLACEHOLDER = 'TODO: describe one invariant this spec guarantees.';
+
+export function isScaffoldPlaceholder(value: string): boolean {
+  return value === MODULES_PLACEHOLDER || value === INVARIANTS_PLACEHOLDER;
+}
+
+/** Placeholder fields still present in a parsed spec, for advisories. */
+export function placeholderFields(spec: Spec): string[] {
+  const fields: string[] = [];
+  if (spec.blast_radius?.modules?.some((m) => m === MODULES_PLACEHOLDER) === true) {
+    fields.push('blast_radius.modules');
+  }
+  if (spec.invariants?.some((i) => i === INVARIANTS_PLACEHOLDER) === true) {
+    fields.push('invariants');
+  }
+  return fields;
 }
 
 // ─── createSpec ──────────────────────────────────────────────────────────
