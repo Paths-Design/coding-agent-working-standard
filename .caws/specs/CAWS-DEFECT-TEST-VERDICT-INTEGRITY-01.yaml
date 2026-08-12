@@ -1,0 +1,45 @@
+id: CAWS-DEFECT-TEST-VERDICT-INTEGRITY-01
+title: 'test entry points must not report a verdict the run did not produce'
+risk_tier: 2
+mode: fix
+lifecycle_state: active
+created_at: '2026-08-12T17:22:47.279Z'
+updated_at: '2026-08-12T17:22:47.279Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/scripts/run-tests.js'
+    - 'packages/caws-cli/tests/shell/run-tests-exit-code.test.js'
+    - 'packages/caws-cli/tests/shell/message-command.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'run-tests.js spawns jest and jest is terminated by a signal (spawnSync returns status null)'
+    when: 'run-tests.js computes its exit code'
+    then: 'it exits non-zero and names the signal, instead of collapsing null to 0'
+  - id: A2
+    given: 'jest fails to spawn at all (spawnSync sets .error, status null)'
+    when: 'run-tests.js computes its exit code'
+    then: 'it exits non-zero and prints the spawn error'
+  - id: A3
+    given: 'a normal jest failure (status 1)'
+    when: 'run-tests.js computes its exit code'
+    then: 'it still exits 1 and cleanup failure never masks it'
+  - id: A4
+    given: 'a message is already waiting in the mailbox'
+    when: 'caws message poll --wait runs'
+    then: 'the test proves the retry sleep never ran by call-observation, not by wall-clock elapsed time'
+  - id: A5
+    given: 'a developer runs bare npx jest from the repo root'
+    when: 'the run starts'
+    then: 'it either runs the packages own working configuration or does not exist as an entry point at all — it never reports 125 spurious suite failures'
+non_functional: {}
+contracts:
+  - name: 'run-tests-exit-code'
+    type: behavior
