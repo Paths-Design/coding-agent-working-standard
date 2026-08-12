@@ -3,6 +3,7 @@ title: 'specs create writes committed TODO placeholders into fields it exposes n
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: wt-specs-scaffold
 created_at: '2026-08-12T09:08:04.748Z'
 updated_at: '2026-08-12T15:26:07.839Z'
 blast_radius:
