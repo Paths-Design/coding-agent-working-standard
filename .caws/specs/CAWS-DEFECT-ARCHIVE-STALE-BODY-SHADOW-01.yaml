@@ -3,6 +3,7 @@ title: 'a stale archived body permanently shadows the live spec: archive refuses
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: wt-archive-replace
 created_at: '2026-08-12T08:37:24.633Z'
 updated_at: '2026-08-12T08:37:24.633Z'
 blast_radius:
