@@ -61,3 +61,7 @@ evidence:
     status: pass
     evidence_ref: "spawned CLI: before --replace, recover does NOT serve the new body; after, stdout contains 'Auto-closed by caws worktree merge' and NOT 'REGISTRY RECONCILIATION ONLY' — the read path stops asserting the opposite of the outcome. Falsified: dropping the register.ts forwarding reddens this test."
     recorded_at: "2026-08-12T08:50:33.620Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "3 tests: recover and show --archived both emit the superseded advisory on stderr naming ARCREP-0xx.superseded-*; stdout stays free of 'caws advisory' (piped into editors); an id with no superseded snapshot emits nothing. Falsified: forwarding mutant reddens both advisory tests."
+    recorded_at: "2026-08-12T08:50:34.871Z"
