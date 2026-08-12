@@ -1,0 +1,36 @@
+id: CAWS-DEFECT-SCOPE-SUPPORT-UNMERGEABLE-01
+title: 'scope.support paths are editable but cannot be landed or removed'
+risk_tier: 2
+mode: fix
+lifecycle_state: active
+created_at: '2026-08-12T17:54:47.558Z'
+updated_at: '2026-08-12T17:54:47.558Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/worktrees-writer.ts'
+    - 'packages/caws-cli/src/store/specs-writer.ts'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'a spec whose scope.support lists a repo-root path, and a lane branch with a commit touching only that path'
+    when: 'caws worktree merge runs its prerequisite check'
+    then: 'the commit is accepted, because scope.support is documented as editable-but-not-worktree-claimed and caws scope show already ADMITs it — today the merge refuses with ''contains commit outside spec scope'''
+  - id: A2
+    given: 'a spec whose scope.support holds exactly one entry'
+    when: 'caws specs amend-scope --remove-support removes it'
+    then: 'the amendment succeeds and scope.support becomes an empty array — today it fails with store.lifecycle.plan_rejected ''Expected array'' at /scope/support'
+  - id: A3
+    given: 'the amend-scope advisory that recommends --add-support for a repo-root deliverable'
+    when: 'an agent follows that recommendation'
+    then: 'the resulting branch is mergeable — the advisory must not steer agents into an unlandable state'
+non_functional: {}
+contracts:
+  - name: 'scope-support-lifecycle'
+    type: behavior
