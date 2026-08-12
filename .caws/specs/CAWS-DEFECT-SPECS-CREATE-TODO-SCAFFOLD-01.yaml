@@ -76,3 +76,7 @@ evidence:
     status: pass
     evidence_ref: "commit d0920ffa: four tests — the advisory names both fields and flags, names only the fields actually left scaffolded, is silenced when both flags are supplied, and caws specs show emits neither flag name nor the advisory text. Falsified: relaxing the emit guard to >= 0 reddens exactly the 'supplying both flags silences it' test."
     recorded_at: "2026-08-12T15:42:05.766Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "commit ae94f6f1: caws specs amend replaces the scaffold on draft/active specs, appends spec_body_amended, and supports add+remove with quote-insensitive matching; a no-op amendment is refused rather than reported as success. Live run in a scratch repo: LIVE-001 went from both scaffolds to operator values, event seq=2 recorded discharged_scaffold_fields=[blast_radius.modules,invariants] in the hash chain."
+    recorded_at: "2026-08-12T16:55:26.357Z"
