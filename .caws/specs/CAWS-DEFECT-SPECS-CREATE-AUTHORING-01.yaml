@@ -55,3 +55,7 @@ evidence:
     recorded_at: "2026-08-12T06:35:01.357Z"
     command: npx jest tests/shell/specs-create-acceptance-semicolon.test.js
     exit_code: 0
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "3 negative tests: missing when: label, empty clause body, and leader-prose-before-first-label all still refused"
+    recorded_at: "2026-08-12T06:37:01.924Z"
