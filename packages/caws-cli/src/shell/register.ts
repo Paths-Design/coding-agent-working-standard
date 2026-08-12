@@ -1002,6 +1002,8 @@ export function registerShellCommands(
           observability?: string[];
           rollback?: string[];
           security?: string[];
+          module?: string[];
+          invariant?: string[];
           type?: string;
           plan?: boolean;
           json?: boolean;
@@ -1031,6 +1033,10 @@ export function registerShellCommands(
           ...(opts.observability !== undefined ? { observability: opts.observability } : {}),
           ...(opts.rollback !== undefined ? { rollback: opts.rollback } : {}),
           ...(opts.security !== undefined ? { security: opts.security } : {}),
+          // Sterling ledger N16: same forwarding discipline. A dropped mapping
+          // here is invisible to every handler-level test.
+          ...(opts.module !== undefined ? { module: opts.module } : {}),
+          ...(opts.invariant !== undefined ? { invariant: opts.invariant } : {}),
           ...(opts.type !== undefined ? { legacyType: opts.type } : {}),
           plan: opts.plan === true,
           json: opts.json === true,

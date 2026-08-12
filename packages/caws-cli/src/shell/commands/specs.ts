@@ -239,6 +239,14 @@ export interface SpecsCreateOptions extends BaseCommandOptions {
   readonly observability?: readonly string[];
   readonly rollback?: readonly string[];
   readonly security?: readonly string[];
+  /**
+   * blast_radius.modules and invariants (Sterling ledger N16). Both are
+   * schema-required non-empty, so the renderer had to emit a scaffolded
+   * default and no flag could replace it. Repeatable; omitting them leaves the
+   * scaffolded default in place.
+   */
+  readonly module?: readonly string[];
+  readonly invariant?: readonly string[];
   /** Read-only preflight: render and validate the candidate without writing. */
   readonly plan?: boolean;
   /** Emit machine-readable plan output. */
@@ -689,6 +697,15 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
       : {}),
     ...(opts.security !== undefined && opts.security.length > 0
       ? { security: opts.security }
+      : {}),
+    // Sterling ledger N16: the two scaffolded fields. Both are schema-required
+    // non-empty, so before these flags the renderer had to invent a value and
+    // no flag could replace it.
+    ...(opts.module !== undefined && opts.module.length > 0
+      ? { modules: opts.module }
+      : {}),
+    ...(opts.invariant !== undefined && opts.invariant.length > 0
+      ? { invariants: opts.invariant }
       : {}),
   } as const;
 

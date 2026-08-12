@@ -204,6 +204,18 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
           collect: true,
         },
         {
+          flag: '--module <text>',
+          description:
+            'Populate blast_radius.modules at creation (repeatable). The field is schema-required non-empty; without this flag the command writes a scaffolded default you cannot replace from the command surface.',
+          collect: true,
+        },
+        {
+          flag: '--invariant <text>',
+          description:
+            'Populate invariants at creation (repeatable). The field is schema-required non-empty; without this flag the command writes a scaffolded default you cannot replace from the command surface.',
+          collect: true,
+        },
+        {
           flag: '--observability <text>',
           description:
             'Add an observability item at creation (repeatable): a log, metric, trace, or alert. REQUIRED non-empty for --risk-tier 1.',
