@@ -220,3 +220,163 @@ describe('caws specs close: the AC-evidence warn-mode advisory is printed', () =
     expect(result.stderr).toContain('caws specs evidence ACWARN-005 --ac A1');
   });
 });
+
+/**
+ * CAWS-DEFECT-AC-EVIDENCE-WINDOW-01.
+ *
+ * The advisory above fires from the SUCCESS outcome — i.e. after the close has
+ * already landed. At that instant the spec is closed, so every `caws specs
+ * evidence` command the advisory prints is refused by the freeze. A remediation
+ * that the CLI itself rejects teaches the reader to treat the advisory as noise;
+ * and because the advisory is terminal output, the gap it names dies with the
+ * session that closed the spec.
+ */
+describe('CAWS-DEFECT-AC-EVIDENCE-WINDOW-01: the advisory is achievable and durable', () => {
+  test('A1: the advisory names the reopen that makes its own commands runnable', () => {
+    const root = mkRepo();
+    const cawsDir = path.join(root, '.caws');
+    writeActiveSpec(cawsDir, 'ACWIN-001');
+
+    const result = runClose(root, 'ACWIN-001');
+
+    expect(result.code).toBe(0);
+    // The prescribed command is refused until the spec is reopened, so the
+    // reopen must be named — with the spec id, not as a bare concept.
+    expect(result.err).toContain('caws specs reopen ACWIN-001');
+    // and the reader must be told WHY the reopen is needed, otherwise the
+    // three-step sequence reads as ceremony.
+    expect(result.err).toContain('frozen');
+    // Ordering is load-bearing: reopen precedes the record, and the re-close
+    // follows it. Assert the actual sequence, not just co-presence.
+    const reopenAt = result.err.indexOf('caws specs reopen ACWIN-001');
+    const recordAt = result.err.indexOf('caws specs evidence ACWIN-001 --ac A1');
+    const recloseAt = result.err.indexOf('caws specs close ACWIN-001');
+    expect(reopenAt).toBeGreaterThan(-1);
+    expect(recordAt).toBeGreaterThan(reopenAt);
+    expect(recloseAt).toBeGreaterThan(reopenAt);
+  });
+
+  test('A1: the advisory points at --no-close as the way to avoid the round trip', () => {
+    const root = mkRepo();
+    const cawsDir = path.join(root, '.caws');
+    writeActiveSpec(cawsDir, 'ACWIN-002');
+
+    const result = runClose(root, 'ACWIN-002');
+
+    expect(result.err).toContain('caws worktree merge <name> --no-close');
+  });
+
+  test('A2: the unsatisfied criterion ids land in closure_notes on disk', () => {
+    const root = mkRepo();
+    const cawsDir = path.join(root, '.caws');
+    writeActiveSpec(
+      cawsDir,
+      'ACWIN-003',
+      evidence([{ id: 'A1', status: 'pass', ref: 'npx jest -t A1' }])
+    );
+
+    const result = runClose(root, 'ACWIN-003');
+    expect(result.code).toBe(0);
+
+    const onDisk = fs.readFileSync(path.join(cawsDir, 'specs', 'ACWIN-003.yaml'), 'utf8');
+    const notesLine = onDisk.split('\n').find((l) => l.startsWith('closure_notes:'));
+    expect(notesLine).toBeDefined();
+    // The operator's own reason survives — the machine note is appended, never
+    // a replacement.
+    expect(notesLine).toContain('fixture close');
+    // A2 is the unsatisfied criterion, with its reason. A1 passed and must not
+    // be recorded as a gap.
+    expect(notesLine).toContain('AC evidence missing at close: A2 (missing)');
+    expect(notesLine).not.toContain('A1 (');
+  });
+
+  test('A2: a fully-evidenced close writes closure_notes with NO gap annotation', () => {
+    const root = mkRepo();
+    const cawsDir = path.join(root, '.caws');
+    writeActiveSpec(
+      cawsDir,
+      'ACWIN-004',
+      evidence([
+        { id: 'A1', status: 'pass', ref: 'npx jest -t A1' },
+        { id: 'A2', status: 'waived', waiverReason: 'covered by A1' },
+      ])
+    );
+
+    const result = runClose(root, 'ACWIN-004');
+    expect(result.code).toBe(0);
+
+    const onDisk = fs.readFileSync(path.join(cawsDir, 'specs', 'ACWIN-004.yaml'), 'utf8');
+    const notesLine = onDisk.split('\n').find((l) => l.startsWith('closure_notes:'));
+    expect(notesLine).toBe("closure_notes: 'fixture close'");
+  });
+
+  test('A2: the closed spec still parses — the annotation does not corrupt the YAML', () => {
+    const root = mkRepo();
+    const cawsDir = path.join(root, '.caws');
+    // A reason carrying a single quote exercises the YAML escape alongside the
+    // appended annotation; a naive concatenation would emit unbalanced quoting.
+    writeActiveSpec(cawsDir, 'ACWIN-005');
+    const result = runClose(root, 'ACWIN-005', { reason: "operator's own notes" });
+    expect(result.code).toBe(0);
+
+    const validated = spawnSync(
+      process.execPath,
+      [CLI, 'specs', 'validate', path.join('.caws', 'specs', 'ACWIN-005.yaml')],
+      { cwd: root, encoding: 'utf8', env: { ...process.env, CAWS_QUIET: '1' } }
+    );
+    expect(validated.status).toBe(0);
+
+    const onDisk = fs.readFileSync(path.join(cawsDir, 'specs', 'ACWIN-005.yaml'), 'utf8');
+    expect(onDisk).toContain("operator''s own notes");
+    expect(onDisk).toContain('AC evidence missing at close: A1 (missing), A2 (missing)');
+  });
+
+  test('A2: the spec_closed event carries the same annotation as the YAML', () => {
+    const root = mkRepo();
+    const cawsDir = path.join(root, '.caws');
+    writeActiveSpec(cawsDir, 'ACWIN-006');
+    expect(runClose(root, 'ACWIN-006').code).toBe(0);
+
+    const events = fs
+      .readFileSync(path.join(cawsDir, 'events.jsonl'), 'utf8')
+      .split('\n')
+      .filter((l) => l.trim().length > 0)
+      .map((l) => JSON.parse(l));
+    const closed = events.filter((e) => e.event === 'spec_closed' && e.spec_id === 'ACWIN-006');
+    expect(closed).toHaveLength(1);
+    // The event is the hash-chained record. It must carry the gap even on the
+    // preserveExistingNotes path where the YAML write is deliberately skipped.
+    expect(closed[0].data.closure_notes).toContain('AC evidence missing at close: A1 (missing)');
+  });
+
+  test('A5: the freeze is preserved — evidence against a CLOSED spec is still refused', () => {
+    const root = mkRepo();
+    const cawsDir = path.join(root, '.caws');
+    writeActiveSpec(cawsDir, 'ACWIN-007');
+    expect(runClose(root, 'ACWIN-007').code).toBe(0);
+
+    const attempt = spawnSync(
+      process.execPath,
+      [
+        CLI, 'specs', 'evidence', 'ACWIN-007',
+        '--ac', 'A1', '--status', 'pass', '--evidence-ref', 'npx jest -t A1',
+      ],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: { ...process.env, CAWS_QUIET: '1', CLAUDE_CODE_SESSION_ID: 'acwin-freeze-test' },
+      }
+    );
+
+    // This slice widens the window BEFORE the freeze; it must not open the
+    // freeze itself. If this ever goes green with status 0, closed specs have
+    // become editable and the closure authority is no longer authoritative.
+    expect(attempt.status).not.toBe(0);
+    const combined = `${attempt.stdout}${attempt.stderr}`;
+    expect(combined).toMatch(/active or draft|closed/i);
+
+    // And the spec's evidence block on disk is unchanged by the refused write.
+    const onDisk = fs.readFileSync(path.join(cawsDir, 'specs', 'ACWIN-007.yaml'), 'utf8');
+    expect(onDisk).not.toContain('criterion_id: A1');
+  });
+});

@@ -1312,11 +1312,33 @@ export function closeSpec(
       }
       return `  - ${u.id}: evidence status is "${u.reason}" (does not satisfy closure). Re-record as pass or waived: caws specs evidence ${input.id} --ac ${u.id} --status pass --evidence-ref "<test command>"`;
     });
+    // CAWS-DEFECT-AC-EVIDENCE-WINDOW-01 (A1): this advisory is folded into the
+    // SUCCESS outcome, i.e. it is emitted AFTER the close has landed — at which
+    // point `caws specs evidence` refuses with the frozen-spec diagnostic
+    // ("evidence records only on active or draft specs"). Printing a remediation
+    // that the CLI immediately refuses is how a reader learns to treat
+    // close-gate advisories as noise. Name the reopen that makes the commands
+    // below runnable, and keep the ordering explicit: reopen, then record, then
+    // re-close.
     evidenceWarnings.push(
       `Spec "${input.id}" closed with ${unsatisfied.length} acceptance criterion/criteria lacking satisfying evidence (pass or waived). ` +
-        `The evidence: block is the closure authority — each declared AC should have status pass or waived. [warn-mode: close proceeded; will block in a future slice]\n${lines.join('\n')}`
+        `The evidence: block is the closure authority — each declared AC should have status pass or waived. [warn-mode: close proceeded; will block in a future slice]\n` +
+        `The spec is now CLOSED, so its evidence is frozen — the commands below are refused until you reopen it first:\n` +
+        `  1. caws specs reopen ${input.id} --reason "recording AC evidence missed at close"\n` +
+        `  2. run the per-criterion command(s) below\n` +
+        `  3. caws specs close ${input.id} --resolution completed --reason "<your closure notes>"\n` +
+        `To avoid the round trip next time, record evidence BEFORE closing, or land with ` +
+        `\`caws worktree merge <name> --no-close\` and close once the evidence is in.\n${lines.join('\n')}`
     );
   }
+  // CAWS-DEFECT-AC-EVIDENCE-WINDOW-01 (A2): the advisory above is terminal
+  // output — it dies with the session. The unsatisfied ids also go into
+  // closure_notes, which is tracked and pushed, so a future reader can see which
+  // criteria closed without evidence without having the original terminal.
+  const unsatisfiedNote =
+    unsatisfied.length > 0
+      ? ` [AC evidence missing at close: ${unsatisfied.map((u) => `${u.id} (${u.reason})`).join(', ')}]`
+      : '';
 
   // Raw-byte patch sequence:
   //   1. lifecycle_state → closed
@@ -1348,8 +1370,22 @@ export function closeSpec(
     patched = step2.value;
   }
 
-  if (input.reason !== undefined && input.reason.length > 0) {
-    const escaped = `'${input.reason.replace(/'/g, "''")}'`;
+  // CAWS-DEFECT-AC-EVIDENCE-WINDOW-01 (A2): the missing-evidence record rides
+  // along with the operator's own closure notes, so it lands on the tracked,
+  // pushed surface rather than only in terminal output.
+  //
+  // CARVE-OUT: under preserveExistingNotes (the merge auto-close path over
+  // author-written notes) the whole write is skipped to honor
+  // CAWS-CLI-MERGE-AUTOCLOSE-PRESERVE-CLOSURE-NOTES-001 — a machine stub must
+  // never replace author content. In that case the durable record is the
+  // spec_closed event payload below plus the printed advisory, not the YAML.
+  const closureReason =
+    input.reason !== undefined && input.reason.length > 0
+      ? `${input.reason}${unsatisfiedNote}`
+      : undefined;
+
+  if (closureReason !== undefined) {
+    const escaped = `'${closureReason.replace(/'/g, "''")}'`;
     const hasNotes = /^closure_notes:/m.test(patched);
     if (hasNotes) {
       // CAWS-CLI-MERGE-AUTOCLOSE-PRESERVE-CLOSURE-NOTES-001:
@@ -1448,8 +1484,10 @@ export function closeSpec(
   }
 
   const eventData: Record<string, unknown> = { resolution: input.resolution };
-  if (input.reason !== undefined && input.reason.length > 0) {
-    eventData.closure_notes = input.reason;
+  if (closureReason !== undefined) {
+    // Carries the unsatisfied-AC note too, so the hash-chained event records the
+    // gap even on the preserveExistingNotes path where the YAML is left alone.
+    eventData.closure_notes = closureReason;
   }
   if (input.mergeCommit !== undefined) eventData.merge_commit = input.mergeCommit;
   if (input.supersededBy !== undefined) eventData.superseded_by = input.supersededBy;

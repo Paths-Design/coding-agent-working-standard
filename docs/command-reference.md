@@ -720,6 +720,7 @@ Merge a worktree branch into its base. Auto-closes the bound spec via caws specs
 - `--reason <text>` — Alias for --closure-notes
 - `--notes <text>` — Alias for --closure-notes
 - `--note <text>` — Alias for --closure-notes
+- `--no-close` — Land the merge but leave the bound spec ACTIVE (no spec_closed event), so caws specs evidence is still accepted. Close explicitly afterwards. Mutually exclusive with --closure-notes.
 - `--data` — Show structured data block on diagnostics
 
 ### `caws worktree migrate-registry`
