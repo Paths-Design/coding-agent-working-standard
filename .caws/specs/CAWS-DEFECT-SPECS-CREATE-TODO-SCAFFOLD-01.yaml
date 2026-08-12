@@ -62,3 +62,8 @@ non_functional: {}
 contracts:
   - name: 'specs-create-authoring-completeness'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "commits 91c26499 + 0ffdffa4: --module/--invariant are repeatable and replace the scaffold; a spawned dist/index.js run proves the Commander forward, and specs validate confirms the body is kernel-valid. CAVEAT on the AC wording: 'contains no TODO string' is only true if --scope-in and --acceptance are ALSO supplied — a live probe showed scope.in and acceptance carry their own scaffolds, so there are four scaffold sites, not two. Tests assert the two in-scope fields via the exported constants."
+    recorded_at: "2026-08-12T15:41:54.995Z"
