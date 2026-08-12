@@ -230,7 +230,7 @@ Repeat `--gate` for multiple gates. Gate names must appear in `.caws/policy.yaml
 - [ ] Types check (`npm run typecheck`)
 - [ ] No scope violations (`caws gates run --spec <id>` passes scope_boundary)
 - [ ] Change budget not exceeded (`caws gates run` passes budget_limit; check `policy.yaml risk_tiers` for the threshold)
-- [ ] Acceptance criteria proven (each `acceptance[i]` carries `test_nodeids:` or `evidence:`; record proofs via `caws evidence record --type ac --spec <id>`)
+- [ ] Acceptance criteria proven (each `acceptance[i]` carries `test_nodeids:` or `evidence:`; record proofs via `caws specs evidence <id> --ac <ac> --status pass --evidence-ref "<test command>"` — the only writer of the `evidence:` block the close gate reads)
 - [ ] Conventional commit message
 
 ## Removed commands (do not use)

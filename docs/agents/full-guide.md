@@ -294,7 +294,7 @@ npm run test:e2e          # End-to-end smoke tests
 
 - [ ] Commits follow conventional commits format
 - [ ] PR title references ticket ID
-- [ ] Evidence recorded: `caws evidence record --type ac --spec <id> --data '{...}'`
+- [ ] AC evidence recorded: `caws specs evidence <id> --ac A1 --status pass --evidence-ref "<test command>"`
 ```
 
 ---
@@ -341,10 +341,13 @@ caws gates run --spec <id>
 caws evidence record --type test --spec <id> \
   --data '{"command":"npm test -- login_happy_path","exit_code":0}'
 
-# Record an acceptance-criterion closure
+# Record an acceptance-criterion closure. This goes through `specs evidence`,
+# not `evidence record`: only this command writes the spec's evidence: block,
+# which is the closure authority the close gate reads. It dual-writes the
+# ac_recorded audit event in the same transaction.
+# (`caws evidence record --type ac` is refused and redirects here.)
 # status is a closed enum: pass | fail | unchecked | waived
-caws evidence record --type ac --spec <id> \
-  --data '{"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}'
+caws specs evidence <id> --ac A1 --status pass --evidence-ref "npm test"
 
 # Record a gate decision (rare — gates run records this automatically)
 caws evidence record --type gate --spec <id> --data '{...}'
@@ -871,11 +874,17 @@ The log is never required at rest — invariant 5. `caws doctor` does not flag a
 When a change is AI-assisted, record an evidence event so the audit trail captures it:
 
 ```bash
-caws evidence record --type ac --spec <id> \
-  --data '{"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}'
+# A test run that backs the change:
+caws evidence record --type test --spec <id> \
+  --data '{"command":"npm test","exit_code":0}'
+
+# An acceptance criterion the change satisfies — via specs evidence, which
+# writes the spec's evidence: block (the closure authority) AND appends the
+# ac_recorded audit event in one transaction:
+caws specs evidence <id> --ac A1 --status pass --evidence-ref "npm test"
 ```
 
-The evidence-event schema accepts arbitrary `--data` payloads; the project's policy decides which fields are required.
+Each evidence-event payload is validated against a closed kernel schema (`additionalProperties: false`); print the authoritative shape with `caws evidence schema --type <kind>`.
 
 ---
 
@@ -1103,14 +1112,15 @@ du -k dist/main.js | awk '{if ($1 > 50) exit 1}'
 
 ### Q: How do I record an AI-assisted change in the audit trail?
 
-**A: Use `caws evidence record`.** v11 has no `caws provenance` or `caws hooks install` — the hash-chained `.caws/events.jsonl` is the audit surface. Record evidence per AC closure or test result:
+**A: Record typed evidence.** v11 has no `caws provenance` or `caws hooks install` — the hash-chained `.caws/events.jsonl` is the audit surface. Use `caws evidence record` for test and gate results, and `caws specs evidence` for AC closures:
 
 ```bash
-caws evidence record --type ac --spec <id> \
-  --data '{"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}'
+caws evidence record --type test --spec <id> \
+  --data '{"command":"npm test","exit_code":0}'
+caws specs evidence <id> --ac A1 --status pass --evidence-ref "npm test"
 ```
 
-The store appends a hash-chained event. There is no separate provenance file to maintain.
+The store appends a hash-chained event either way. There is no separate provenance file to maintain. `caws evidence record --type ac` is refused: it can only write the event, never the spec's `evidence:` block that the close gate reads.
 
 ---
 
@@ -1164,7 +1174,7 @@ Before submitting PR:
 - [ ] Contracts validate (if applicable)
 - [ ] Performance budgets met
 - [ ] No secret scan violations
-- [ ] Evidence recorded for each AC closure (`caws evidence record --type ac --spec <id>`)
+- [ ] Evidence recorded for each AC closure (`caws specs evidence <id> --ac <ac> --status pass`)
 
 **Questions?** Check the full guide or ask your human collaborator.
 

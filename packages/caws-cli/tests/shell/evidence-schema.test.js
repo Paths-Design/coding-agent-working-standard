@@ -85,9 +85,16 @@ describe('caws evidence schema', () => {
     expect(ac.code).toBe(0);
     expect(ac.out).toContain('ac (ac_recorded)');
     expect(ac.out).toContain('required: criterion_id, status, evidence_ref');
+    // CAWS-DEFECT-AC-EVIDENCE-VISIBILITY-01: the ac example must name the
+    // governed writer. `caws evidence record --type ac` is refused (it writes
+    // the audit event but never the evidence: block the close gate reads), so
+    // an example printing that command would hand the reader a command the CLI
+    // immediately rejects. The payload schema still describes ac_recorded
+    // faithfully — `caws specs evidence` is what produces it.
     expect(ac.out).toContain(
-      'caws evidence record --type ac --spec FEAT-1 --data \'{"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}\''
+      "caws specs evidence FEAT-1 --ac A1 --status pass --evidence-ref 'npm test'"
     );
+    expect(ac.out).not.toContain('caws evidence record --type ac');
   });
 
   test('invalid types fail before repo or event-log access', () => {

@@ -83,13 +83,16 @@ Each evidence event is hash-chained and atomic. The runtime should record:
 caws evidence record --type test --spec <id> \
   --data '{"command":"npm test -- unit/login","exit_code":0}'
 
-# An acceptance-criterion closure
-caws evidence record --type ac --spec <id> \
-  --data '{"criterion_id":"A1","status":"pass","evidence_ref":"unit/login"}'
+# An acceptance-criterion closure. This one is NOT `evidence record`:
+# `caws specs evidence` is the only command that writes the spec's evidence:
+# block, which is the closure authority the close gate reads. It appends the
+# ac_recorded audit event too, so both surfaces agree by construction.
+# (`caws evidence record --type ac` is refused and redirects here.)
+caws specs evidence <id> --ac A1 --status pass --evidence-ref "unit/login"
 
 # The same closure, pinned to a specific test node
-caws evidence record --type ac --spec <id> \
-  --data '{"criterion_id":"A1","status":"pass","evidence_ref":"npm test","test_nodeid":"unit/login"}'
+caws specs evidence <id> --ac A1 --status pass \
+  --evidence-ref "npm test" --test-nodeid "unit/login"
 ```
 
 **The `--data` payload is not free-form.** Each `--type` has a closed kernel
@@ -179,7 +182,7 @@ Before declaring the feature done:
 ```bash
 caws doctor && \
   caws gates run --spec <id> && \
-  caws evidence record --type ac --spec <id> --data '{"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}'
+  caws specs evidence <id> --ac A1 --status pass --evidence-ref "npm test"
 ```
 
 ## What CAWS v11 does NOT provide

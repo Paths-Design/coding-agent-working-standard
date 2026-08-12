@@ -425,10 +425,12 @@ scope:
 ### Record completion evidence
 
 ```bash
-# Record each acceptance criterion as satisfied
-caws evidence record --type ac --spec PREF-001 --data '{"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}'
-caws evidence record --type ac --spec PREF-001 --data '{"criterion_id":"A2","status":"pass","evidence_ref":"npm test"}'
-caws evidence record --type ac --spec PREF-001 --data '{"criterion_id":"A3","status":"pass","evidence_ref":"npm test"}'
+# Record each acceptance criterion as satisfied. `specs evidence` writes the
+# spec's evidence: block — the surface the close gate reads — and appends the
+# ac_recorded audit event in the same transaction.
+caws specs evidence PREF-001 --ac A1 --status pass --evidence-ref "npm test"
+caws specs evidence PREF-001 --ac A2 --status pass --evidence-ref "npm test"
+caws specs evidence PREF-001 --ac A3 --status pass --evidence-ref "npm test"
 
 # Check overall spec status
 caws status
