@@ -78,3 +78,7 @@ evidence:
     status: pass
     evidence_ref: "A4 describe block (3 tests): bare merge sets auto_closed_spec true, writes lifecycle_state closed + resolution completed, appends exactly one spec_closed whose merge_commit matches, and omits spec_left_open entirely; spawned-CLI default test confirms via the real parse path"
     recorded_at: "2026-08-12T07:40:08.339Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "A5 test: spawned caws specs evidence against a CLOSED spec exits non-zero, message matches /active or draft|closed/, and the spec YAML gains no criterion_id A1 entry — the freeze is unrelaxed"
+    recorded_at: "2026-08-12T07:40:15.207Z"
