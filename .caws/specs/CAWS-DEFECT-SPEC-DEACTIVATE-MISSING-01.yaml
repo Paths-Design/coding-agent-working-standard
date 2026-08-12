@@ -1,0 +1,48 @@
+id: CAWS-DEFECT-SPEC-DEACTIVATE-MISSING-01
+title: 'the spec lifecycle has no active-to-draft demotion, so the only exit from a mistakenly-active spec is a false closure'
+risk_tier: 2
+mode: fix
+lifecycle_state: active
+created_at: '2026-08-12T08:37:52.990Z'
+updated_at: '2026-08-12T08:37:52.990Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/specs-writer.ts'
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/kernel/schemas/events/spec_deactivated.v1.json'
+    - 'packages/caws-cli/src/kernel/schemas/events.v1.json'
+    - 'packages/caws-cli/src/kernel/evidence/validate.ts'
+    - 'packages/caws-cli/src/kernel/evidence/types.ts'
+    - 'packages/caws-cli/tests/shell/specs-deactivate.test.js'
+    - 'docs/command-reference.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'an active spec that is not bound to any worktree'
+    when: 'caws specs deactivate <id> runs'
+    then: 'the spec returns to lifecycle_state draft, a spec_deactivated event is appended, and no resolution or closure_notes is written — the round trip out of active no longer requires asserting that work concluded'
+  - id: A2
+    given: 'an active spec bound to a live worktree'
+    when: 'caws specs deactivate <id> runs'
+    then: 'it is refused and the refusal names the worktree, because the one-way property is load-bearing where work has actually started'
+  - id: A3
+    given: 'a spec in any state other than active'
+    when: 'caws specs deactivate <id> runs'
+    then: 'it is refused and the refusal names the correct transition for that state — deactivate is the active exit, not a general state setter'
+  - id: A4
+    given: 'a spec that was closed and carries resolution and closure_notes'
+    when: 'it is reopened and then deactivated'
+    then: 'the terminal fields are absent from the draft body, so a demoted spec never carries the residue of a closure that no longer applies'
+non_functional: {}
+contracts:
+  - name: 'specs-deactivate'
+    type: behavior
