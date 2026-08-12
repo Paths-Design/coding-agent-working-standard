@@ -43,3 +43,7 @@ evidence:
     status: pass
     evidence_ref: "commit 5f7fd8c4: verifyLaneProvenance in worktrees-writer.ts now admits the union of scope.in and scope.support. Proven against a REAL git repo and the real merge writer, not a mock: a lane whose only commit edits a support path merges, and git show main:README.md confirms the edit actually landed on the base branch. Negative control in the same suite holds - a commit touching a path in NEITHER list is still refused and the diagnostic still names it - so the widening did not disarm the guard. Falsified by reverting the union to scope.in alone: exactly the one support-merge test reddened, control stayed green."
     recorded_at: "2026-08-12T19:37:14.765Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "commit 5f7fd8c4: patchScopeSequence now writes an emptied block as an explicit empty list instead of a valueless key header that parses as null. Four tests assert the on-disk result after a real round trip through the writer and loader: emptying support yields [], scope.in is undisturbed, scope.out reaches the same path and is equally fixed, and the add+remove-in-one-call shape an operator reaches for when moving a path from support to in now succeeds. Falsified by disabling the normalization: exactly those four reddened, the two A1 tests stayed green."
+    recorded_at: "2026-08-12T19:39:21.232Z"
