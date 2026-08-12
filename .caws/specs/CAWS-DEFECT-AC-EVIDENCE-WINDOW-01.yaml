@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-ac-evidence-window
 created_at: '2026-08-12T07:16:25.468Z'
-updated_at: '2026-08-12T07:16:25.468Z'
+updated_at: '2026-08-12T08:01:13.937Z'
 blast_radius:
   modules:
     - 'caws-cli store: closeSpec AC-evidence gate advisory and closure_notes composition'
@@ -24,6 +24,7 @@ scope:
     - 'packages/caws-cli/tests/shell/worktree-merge-evidence-warning.test.js'
     - 'packages/caws-cli/tests/shell/worktree-merge-no-close.test.js'
     - 'docs/command-reference.md'
+    - packages/caws-cli/src/shell/commands/specs.ts
   out: []
 invariants:
   - 'A remediation command the CLI prints must be runnable at the moment it is printed, or must name the step that makes it runnable. The AC-evidence advisory fires after the close has landed, so a bare "caws specs evidence <id> --ac ..." is refused by the freeze — the advisory must name the reopen that precedes it.'
