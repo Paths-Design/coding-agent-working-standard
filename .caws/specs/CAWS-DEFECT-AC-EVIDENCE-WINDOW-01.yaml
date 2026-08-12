@@ -66,3 +66,7 @@ evidence:
     status: pass
     evidence_ref: "npx jest tests/shell/specs-close-evidence-warning.test.js (12 passed): advisory names 'caws specs reopen <id>', the word frozen, and asserts reopen<record<reclose ordering by index; plus the --no-close pointer"
     recorded_at: "2026-08-12T07:39:45.067Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "closure_notes on disk carries 'AC evidence missing at close: A2 (missing)' with the operator reason preserved; spec_closed event data.closure_notes carries the same; single-quote reason round-trips through caws specs validate (exit 0)"
+    recorded_at: "2026-08-12T07:39:52.492Z"
