@@ -2,10 +2,11 @@ id: CAWS-DEFECT-SPEC-DEACTIVATE-MISSING-01
 title: 'the spec lifecycle has no active-to-draft demotion, so the only exit from a mistakenly-active spec is a false closure'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-spec-deactivate
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-spec-deactivate at 9f90a2bdfabb45e377b892c03f4a914db327a0d8'
 created_at: '2026-08-12T08:37:52.990Z'
-updated_at: '2026-08-12T11:01:16.905Z'
+updated_at: '2026-08-12T11:03:22.734Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
