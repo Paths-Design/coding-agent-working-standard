@@ -1785,17 +1785,30 @@ function verifyLaneProvenance(
       verificationFailure: `bound spec ${specId} could not be loaded: ${specResult.errors.map((d) => d.message).join('; ')}`,
     };
   }
-  const scopeRaw = (specResult.value.spec as { scope?: { in?: unknown } })
-    .scope?.in;
-  const scopeIn: readonly string[] = Array.isArray(scopeRaw)
-    ? scopeRaw.filter((e): e is string => typeof e === 'string')
-    : [];
+  // A lane may edit BOTH scope.in and scope.support, so both admit its
+  // commits. The two differ in CLAIM (support paths are not worktree-claimed,
+  // so a sibling lane may edit them too), not in whether this lane's own work
+  // belongs to it. Reading scope.in alone made every support edit committable
+  // but unlandable — `caws scope show` admitted the write and then merge
+  // refused the commit as "outside spec scope", with amend-scope's own
+  // advisory recommending support for exactly the repo-root deliverables that
+  // hit it. [CAWS-DEFECT-SCOPE-SUPPORT-UNMERGEABLE-01]
+  const scopeOf = (spec: unknown): readonly string[] => {
+    const scope = (spec as { scope?: { in?: unknown; support?: unknown } }).scope;
+    return [scope?.in, scope?.support]
+      .filter((v): v is unknown[] => Array.isArray(v))
+      .flat()
+      .filter((e): e is string => typeof e === 'string');
+  };
+  const laneScope = scopeOf(specResult.value.spec);
 
-  // Candidate lanes for remediation: other ACTIVE specs.
+  // Candidate lanes for remediation: other ACTIVE specs. Same union — a spec
+  // that could legitimately hold this commit is one whose scope admits the
+  // path for editing, by either route.
   const allSpecs = loadSpecs(cawsDir);
   const candidateScopes = allSpecs.specs
     .filter((s) => s.lifecycle_state === 'active' && s.id !== specId)
-    .map((s) => ({ id: s.id, scopeIn: s.scope.in }));
+    .map((s) => ({ id: s.id, scopeIn: scopeOf(s) }));
 
   const foreignCommits: LaneForeignCommit[] = [];
   for (const sha of shas) {
@@ -1816,7 +1829,7 @@ function verifyLaneProvenance(
     const outOfScopePaths = touched.filter(
       (f) =>
         !isGovernedStatePath(f) &&
-        !scopeIn.some((entry) => scopeEntryMatches(entry, f))
+        !laneScope.some((entry) => scopeEntryMatches(entry, f))
     );
     if (outOfScopePaths.length === 0) continue;
     const candidateSpecIds = candidateScopes
