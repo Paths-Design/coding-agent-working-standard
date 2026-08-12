@@ -20,7 +20,7 @@ This guide does not promise compatibility. It documents the gap, the workarounds
 
 ## What v11 is and is not
 
-**v11.1 is** a complete rewrite of the CAWS governance core onto the kernel/store/shell architecture. The 13 command groups (`init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents`, `prepush`) are stable, hardened with lifecycle-transaction discipline, and operationally proven on the project's own self-hosted use.
+**v11.1 is** a complete rewrite of the CAWS governance core onto the kernel/store/shell architecture. The 12 command groups (`init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents`) are stable, hardened with lifecycle-transaction discipline, and operationally proven on the project's own self-hosted use.
 
 **v11.1 is not** a compatibility shim over v10.2. A meaningful fraction of the v10.2 surface has been removed without replacement; another fraction is deferred to v11.2 or v11.3+. If your team relies daily on the removed surfaces, this upgrade is operational work, not a version bump.
 

@@ -9,7 +9,7 @@ updated: 2026-07-03
 
 # CAWS CLI API Reference (v11.6.0)
 
-The CAWS CLI (`@paths.design/caws-cli`) is the governance surface for the Coding Agent Working Standard. The v11 line ships fourteen top-level commands/groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents`, `message`, `prepush`, plus the auto-generated `help`.
+The CAWS CLI (`@paths.design/caws-cli`) is the governance surface for the Coding Agent Working Standard. The v11 line ships thirteen top-level commands/groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents`, `message`, plus the auto-generated `help`.
 
 **Doctrine source:** [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md). When this reference and the doctrine doc disagree, the doctrine doc wins.
 
@@ -1318,34 +1318,6 @@ caws message prune --status delivered --include <message-id>,<message-id> --excl
 ```
 
 Dry-run-first retention cleanup for non-authoritative chat logs. Only delivered message records are candidates; undelivered inbox messages are preserved and reported as skipped. `--apply` rewrites `.caws/messages.jsonl` only when paired with an explicit retention selector such as `--older-than-ms` or `--include`, and removes selected delivered messages plus their delivery markers.
-
----
-
-## 15. `caws prepush`
-
-Governed pre-push range check (MULTI-AGENT-PUSH-RANGE-GUARD-001). Classifies the outgoing commit range and refuses commits not attributable to the current slice. Diagnose/decide only — does not run `git push`.
-
-```bash
-caws prepush
-caws prepush --base origin/main --spec FEAT-1
-caws prepush --ack <sha>
-caws prepush "--ack <sha> --ack <sha>"
-```
-
-| Flag | Description |
-|---|---|
-| `--remote <remote>` | Push remote (default: `origin`). |
-| `--branch <branch>` | Push branch (default: `main`). |
-| `--base <ref>` | Base ref override (default `<remote>/<branch>`). |
-| `--spec <id>` | Current session active spec id for slice matching. |
-| `--ack <sha>` | Acknowledge an unexpected commit by SHA. Repeatable. |
-| `--data` | Show structured data block on diagnostics. |
-
-For compatibility with agents that accidentally shell-quote a generated
-sequence of repeated ack flags, `caws prepush "--ack <sha> --ack <sha>"` is
-normalized before Commander parses options. This normalization is limited to
-`prepush --ack` bundles; other commands and options keep normal unknown-option
-behavior.
 
 ---
 

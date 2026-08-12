@@ -1,6 +1,6 @@
 # ADR 0001 — Multi-Agent Push-Range Guard
 
-- **Status:** Proposed (activation gate for `MULTI-AGENT-PUSH-RANGE-GUARD-001`)
+- **Status:** Superseded by `CAWS-REMOVE-PREPUSH-COMMAND-001` — the guard this ADR authorized (`caws prepush`) is removed from the command surface. The coordination failure it addresses is now handled at the merge boundary: `caws worktree merge` refuses a lane carrying commits outside its bound spec's scope and records the landing as a `worktree_merged` event. See `docs/architecture/design/prepush-slice-attribution-dead-by-design.md` for the evidence that the publish-side predicate could not converge in a multi-agent repo.
 - **Date:** 2026-05-28
 - **Spec:** `MULTI-AGENT-PUSH-RANGE-GUARD-001`
 - **Decision class:** Authority Decision Record (ADR). Satisfies the spec's `A0` activation prerequisite: the spec is REJECTED for activation until this ADR exists and answers Q1–Q6.

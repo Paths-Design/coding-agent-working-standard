@@ -43,38 +43,17 @@ const {
 // docs/architecture/caws-vnext-command-surface.md for the doctrine,
 // removal table, and the canonical v11 surface.
 //
-// What v11.1 ships: the thirteen registered command groups — init,
-// doctor, status, scope, claim, gates, evidence, events, waiver, specs,
-// worktree, agents, prepush. The authoritative list is
-// REGISTERED_COMMAND_GROUPS (./shell/registered-command-groups), consumed by
-// both register.ts and the unknown-command suggester below. (The original
-// v11.0.0 governed core was eight groups; v11.1 restored specs and worktree
-// and added events, agents, and prepush. v11.2 multi-agent authority and
-// v11.3 session/parallel remain in planning.)
+// What ships: the twelve registered command groups — init, doctor, status,
+// scope, claim, gates, evidence, events, waiver, specs, worktree, agents.
+// The authoritative list is REGISTERED_COMMAND_GROUPS
+// (./shell/registered-command-groups), consumed by both register.ts and the
+// unknown-command suggester below. (The original v11.0.0 governed core was
+// eight groups; v11.1 restored specs and worktree and added events and
+// agents. v11.2 multi-agent authority and v11.3 session/parallel remain in
+// planning.)
 
 // Initialize global configuration
 const program = new Command();
-
-function normalizePrepushAckBundleArgv(argv) {
-  if (argv[2] !== 'prepush') return argv;
-  const normalized = argv.slice(0, 3);
-  for (const arg of argv.slice(3)) {
-    const trimmed = typeof arg === 'string' ? arg.trim() : '';
-    if (trimmed.startsWith('--ack ')) {
-      const parts = trimmed.split(/\s+/);
-      const isAckBundle =
-        parts.length >= 2 &&
-        parts.length % 2 === 0 &&
-        parts.every((part, index) => (index % 2 === 0 ? part === '--ack' : part.length > 0));
-      if (isAckBundle) {
-        normalized.push(...parts);
-        continue;
-      }
-    }
-    normalized.push(arg);
-  }
-  return normalized;
-}
 
 function normalizeWorktreePruneArgv(argv) {
   if (argv[2] !== 'worktree' || argv[3] !== '--prune') return argv;
@@ -82,7 +61,7 @@ function normalizeWorktreePruneArgv(argv) {
 }
 
 function normalizeCompatibilityArgv(argv) {
-  return normalizeWorktreePruneArgv(normalizePrepushAckBundleArgv(argv));
+  return normalizeWorktreePruneArgv(argv);
 }
 
 program

@@ -1705,14 +1705,13 @@ export function untrackWorktree(
 // the verdict. Governed-state paths (.caws/specs/** etc. — the CLI's own
 // bookkeeping commits ride the lane branch) are always in-lane.
 
-// normalizeRel/scopeEntryMatches are an intentional THIRD copy of the
+// normalizeRel/scopeEntryMatches are an intentional SECOND copy of the
 // scope.in admission rule (canonical: shell/binding/resolve-binding.ts,
-// module-private; second copy: shell/push-range/scope-match.ts). The store
-// layer cannot import from shell, and the codebase precedent (see
-// scope-match.ts's header) is a small local copy over a cross-layer
-// import. INVARIANT: if the canonical matching rule changes, update ALL
-// copies — exact match, directory-prefix on a path boundary, or anchored
-// `*`/`?` glob.
+// module-private). The store layer cannot import from shell, and the
+// codebase precedent is a small local copy over a cross-layer import.
+// INVARIANT: if the canonical matching rule changes, update BOTH copies —
+// exact match, directory-prefix on a path boundary, or anchored `*`/`?`
+// glob.
 function normalizeRel(p: string): string {
   return p.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
 }
@@ -2450,8 +2449,8 @@ export function mergeWorktree(
   // `partial_failure_recovered` in `ok()` — and with `plannedWrites: []` and
   // zero prior events, a rolled-back worktree_merged append arrives exactly
   // that way. isOk() alone would let the merge report success while the
-  // provenance ledger silently lost the worktree_merged event — precisely
-  // the event prepush's inductive delta check depends on. Refuse instead.
+  // provenance ledger silently lost the worktree_merged event — the durable
+  // record that this lane's commits landed under governance. Refuse instead.
   if (mergedTxn.value.kind !== 'success') {
     return err(
       storeDiagnostic(

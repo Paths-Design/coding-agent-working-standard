@@ -1,7 +1,13 @@
 # Prepush slice-attribution is dead by design in a fully-utilized CAWS repo
 
-Status: **design verdict** (evidence base for a doctrine decision; not yet a
-spec). Author: kimi-code session, canonical checkout, 2026-08-11.
+Status: **design verdict — resolved as Option C** (`CAWS-REMOVE-PREPUSH-COMMAND-001`).
+Option B was implemented first (`CAWS-PREPUSH-PROVENANCE-REWORK-001`) and fixed
+the commit-attribution predicate, but left two conditions that reproduce the
+same non-convergence: a live peer worktree escalates to ERROR by construction
+with no acknowledgment path, and the check's own O(commits) serial-spawn
+runtime exceeded the inter-arrival time of the commits it classifies. `caws
+prepush` is removed; the provenance teeth remain at the merge boundary.
+Author: kimi-code session, canonical checkout, 2026-08-11.
 Scope: `caws prepush`'s refusal semantics (MULTI-AGENT-PUSH-RANGE-GUARD-001),
 NOT its classification/report engine, which is sound and worth keeping.
 

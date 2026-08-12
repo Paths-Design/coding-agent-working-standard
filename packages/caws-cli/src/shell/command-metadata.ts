@@ -838,7 +838,7 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
   ],
 };
 
-// ─── flat top-level commands (init/doctor/status/claim/prepush) ───────────
+// ─── flat top-level commands (init/doctor/status/claim) ───────────────────
 // These are registered directly on `program` (no subcommand layer); they are
 // LeafCommandMeta entries at the top of COMMAND_SURFACE_METADATA. register.ts
 // consumes them via the defineFlat helper.
@@ -959,27 +959,6 @@ export const CLAIM_COMMAND_META: LeafCommandMeta = {
       description:
         'Declare a path as claimed by the current session. Repeatable; order preserved; strings stored verbatim. Refused with no write if no lease exists for the current session.',
       collect: true,
-    },
-    DATA_OPTION,
-  ],
-};
-
-export const PREPUSH_COMMAND_META: LeafCommandMeta = {
-  kind: 'leaf',
-  name: 'prepush',
-  description:
-    'Classify the outgoing commit range by governance provenance (governed merge / CLI bookkeeping / acked exception / unvetted direct) and refuse unvetted direct commits. The per-slice provenance check runs at caws worktree merge; prepush re-verifies what merge already vetted. Diagnose/decide only — does NOT run git push.',
-  options: [
-    { flag: '--remote <remote>', description: 'Push remote', defaultValue: 'origin' },
-    { flag: '--branch <branch>', description: 'Push branch', defaultValue: 'main' },
-    { flag: '--base <ref>', description: 'Base ref override (default <remote>/<branch>)' },
-    { flag: '--spec <id>', description: 'Current session active spec id (advisory attribution report only)' },
-    {
-      flag: '--ack <sha>',
-      description: 'Durably acknowledge an unvetted direct commit by SHA prefix (7-40 hex, repeatable; persisted in .caws/prepush-acks.json)',
-      collect: true,
-      // Seed []: the prepush handler reads opts.ack as an array unconditionally.
-      defaultValue: [],
     },
     DATA_OPTION,
   ],
@@ -1685,10 +1664,10 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
  * The complete v11 command-surface metadata — the single authority for every
  * `.description()` / `.argument()` / `.option()` in register.ts.
  *
- * SLICE 3: all thirteen surface entries are populated and consumed by
- * register.ts — the five flat top-level commands (init/doctor/status/claim/
- * prepush) as LeafCommandMeta, and eight groups (scope/gates/evidence/events/
- * waiver/agents/specs/worktree). The lock test enforces full set-equality with
+ * SLICE 3: every surface entry is populated and consumed by register.ts — the
+ * flat top-level commands (init/doctor/status/claim) as LeafCommandMeta, and
+ * the groups (scope/gates/evidence/events/waiver/reprieve/agents/message/specs/
+ * worktree). The lock test enforces full set-equality with
  * REGISTERED_COMMAND_GROUPS (L1), enum/value-list parity (L3), non-empty
  * descriptions (L4), and the global no-inline-strings invariant on register.ts
  * (L5).
@@ -1708,5 +1687,4 @@ export const COMMAND_SURFACE_METADATA: readonly CommandMeta[] = Object.freeze([
   WORKTREE_COMMAND_META,
   AGENTS_COMMAND_META,
   MESSAGE_COMMAND_META,
-  PREPUSH_COMMAND_META,
 ]);
