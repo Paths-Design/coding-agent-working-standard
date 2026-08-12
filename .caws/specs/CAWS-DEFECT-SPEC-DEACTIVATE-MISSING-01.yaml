@@ -54,3 +54,7 @@ evidence:
     status: pass
     evidence_ref: "commit a605799a: specs-deactivate.test.js A1 group (3 tests) — deactivating an active unbound spec writes lifecycle_state draft, appends spec_deactivated with previous_lifecycle_state active, writes NO resolution/closure_notes, and appends zero spec_closed events. A round-trip test then drives the real dist/index.js activate leg over the demoted body, proving it is a genuinely valid draft rather than one that merely looks like one."
     recorded_at: "2026-08-12T11:02:38.127Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "commit a605799a: 'the refusal names the worktree and mutates nothing' asserts exit 1, the worktree name in the message, both lane exits (merge / destroy --abandon-unmerged) and the stale-binding remedy (worktree repair) in the remediation, plus a byte-identical spec file and zero spec_deactivated events. Falsified: disabling the binding guard reddens this test alone (1 of 10)."
+    recorded_at: "2026-08-12T11:02:47.809Z"
