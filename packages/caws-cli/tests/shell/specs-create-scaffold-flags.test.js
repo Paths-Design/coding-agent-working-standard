@@ -26,7 +26,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const { initProject } = require('../../dist/store/init-store');
-const { runSpecsCreateCommand } = require('../../dist/shell/commands/specs');
+const { runSpecsCreateCommand, runSpecsShowCommand } = require('../../dist/shell/commands/specs');
 const {
   MODULES_PLACEHOLDER,
   INVARIANTS_PLACEHOLDER,
@@ -146,6 +146,64 @@ describe('isScaffoldPlaceholder is the shared contract', () => {
     // would let it rewrite a real claim.
     expect(isScaffoldPlaceholder(`${MODULES_PLACEHOLDER} and more`)).toBe(false);
     expect(isScaffoldPlaceholder('')).toBe(false);
+  });
+});
+
+describe('A3: the advisory is emitted where it is actionable, and nowhere else', () => {
+  test('create without the flags names both fields and both flags', () => {
+    const { root } = setupRepo();
+
+    const result = runCreate(root, 'SCAFFOLD-A3-001');
+    expect(result.code).toBe(0);
+
+    expect(result.err).toContain('scaffolded defaults');
+    expect(result.err).toContain('blast_radius.modules (--module)');
+    expect(result.err).toContain('invariants (--invariant)');
+    // Non-blocking: an advisory must not fail the create.
+    expect(result.code).toBe(0);
+  });
+
+  test('the advisory names only the fields actually left scaffolded', () => {
+    const { root } = setupRepo();
+
+    const result = runCreate(root, 'SCAFFOLD-A3-002', { module: ['packages/alpha'] });
+    expect(result.err).toContain('invariants (--invariant)');
+    expect(result.err).not.toContain('blast_radius.modules');
+  });
+
+  test('supplying both flags silences it entirely', () => {
+    const { root } = setupRepo();
+
+    const result = runCreate(root, 'SCAFFOLD-A3-003', {
+      module: ['packages/alpha'],
+      invariant: ['it holds'],
+    });
+    expect(result.err).not.toContain('scaffolded defaults');
+  });
+
+  test('caws specs show NEVER prints create-flag remediation', () => {
+    const { root } = setupRepo();
+    // A spec that genuinely still carries both scaffolded defaults — so if the
+    // advisory were wired to show, this is exactly where it would fire.
+    expect(runCreate(root, 'SCAFFOLD-A3-004').code).toBe(0);
+
+    const out = [];
+    const err = [];
+    const code = runSpecsShowCommand({
+      cwd: root,
+      env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'test-session' },
+      id: 'SCAFFOLD-A3-004',
+      out: (line) => out.push(line),
+      err: (line) => err.push(line),
+    });
+    expect(code).toBe(0);
+
+    // HEADLINE: --module/--invariant cannot be run against an existing spec, so
+    // naming them here would be a remediation the CLI refuses.
+    const combined = `${out.join('\n')}\n${err.join('\n')}`;
+    expect(combined).not.toContain('--module');
+    expect(combined).not.toContain('--invariant');
+    expect(combined).not.toContain('scaffolded defaults');
   });
 });
 

@@ -888,16 +888,43 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     scopeIn !== undefined && scopeIn.length > 0;
   const acceptanceWasPopulated =
     parsedAcceptance !== undefined && parsedAcceptance.length > 0;
-  const fillGuidance = acceptanceWasPopulated
-    ? 'Fill in invariants and review acceptance'
-    : 'Fill in invariants + acceptance';
+  const invariantsWasPopulated = opts.invariant !== undefined && opts.invariant.length > 0;
+  const modulesWasPopulated = opts.module !== undefined && opts.module.length > 0;
+  const remainingToFill = [
+    ...(invariantsWasPopulated ? [] : ['invariants']),
+    ...(acceptanceWasPopulated ? [] : ['acceptance']),
+  ];
+  const fillGuidance =
+    remainingToFill.length === 0
+      ? 'Review the body'
+      : `Fill in ${remainingToFill.join(' + ')}`;
+
+  // Sterling ledger N16 (A3): report the fields still carrying a scaffolded
+  // default, and name the flags that would have filled them.
+  //
+  // Create-time ONLY, deliberately. --module/--invariant cannot be run against
+  // a spec that already exists, so the same text emitted from `caws specs show`
+  // would be a remediation the CLI refuses — the failure class this repo treats
+  // as most dangerous, because it trains agents to stop trusting the guidance.
+  // Here it IS actionable: it applies to the operator's next create.
+  const scaffolded = [
+    ...(modulesWasPopulated ? [] : ['blast_radius.modules (--module)']),
+    ...(invariantsWasPopulated ? [] : ['invariants (--invariant)']),
+  ];
+  if (scaffolded.length > 0) {
+    err(
+      `caws advisory (non-blocking): ${outcome.id} was created with scaffolded defaults in ` +
+        `${scaffolded.join(', ')}. These fields are schema-required non-empty, so create had to ` +
+        `write a value. Supply them at creation next time — both flags are repeatable.`
+    );
+  }
   out('');
   // CAWS-SPECS-CREATE-COMMIT-BEFORE-WORKTREE-GUIDANCE-001: both branches must
   // tell the first-timer to COMMIT the spec (after filling in the body) BEFORE
-  // `caws worktree create`. The body fields (invariants/acceptance) have no CLI
-  // setter and are hand-edited, which leaves the spec YAML dirty; walking that
-  // dirty tree straight into `worktree create` produces the confusing "the
-  // transition was applied but NOT committed" warning. Committing first keeps
+  // `caws worktree create`. Any body field left unsupplied is hand-edited,
+  // which leaves the spec YAML dirty; walking that dirty tree straight into
+  // `worktree create` produces the confusing "the transition was applied but
+  // NOT committed" warning. Committing first keeps
   // the audit commit clean. We also name how to inspect the filled-in spec —
   // there is intentionally no `caws specs validate` verb in v11.
   if (scopeInWasPopulated) {
