@@ -84,3 +84,7 @@ evidence:
     status: pass
     evidence_ref: "commit ae94f6f1: on a CLOSED spec, filling a scaffolded field is admitted (closure fields untouched) while adding to or removing from a field holding real content is refused byte-identically with no event, pointing at caws specs reopen. A control test proves the same rewrite IS allowed once active, so the refusal is about lifecycle state and not a malformed edit. Falsified: disabling the closed-spec rule reddens exactly the two refusal tests."
     recorded_at: "2026-08-12T16:55:27.672Z"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "commit ae94f6f1: amending an archived spec is refused with a 'tombstone' diagnostic naming caws specs restore, and the archived body is asserted byte-identical afterwards."
+    recorded_at: "2026-08-12T16:55:35.658Z"
