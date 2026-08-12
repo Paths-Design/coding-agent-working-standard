@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-ac-evidence-visibility
 created_at: '2026-08-12T00:31:47.872Z'
-updated_at: '2026-08-12T00:31:47.872Z'
+updated_at: '2026-08-12T00:46:05.748Z'
 blast_radius:
   modules:
     - 'caws-cli shell: specs close, worktree merge, evidence record command handlers'
@@ -28,6 +28,7 @@ scope:
     - 'packages/caws-cli/tests/shell/evidence-data-parse-guidance.test.js'
     - 'docs/command-reference.md'
     - 'docs/agent-workflow-tools.md'
+    - packages/caws-cli/src/shell/rules.ts
   out: []
 invariants:
   - 'An advisory the close gate computes must reach the operator on EVERY path that closes a spec. closeSpec already folds evidence advisories into the success outcome warnings; both the direct path (caws specs close) and the composed path (caws worktree merge auto-close) must print them.'
