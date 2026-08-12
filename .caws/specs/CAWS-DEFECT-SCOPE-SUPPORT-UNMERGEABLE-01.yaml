@@ -38,3 +38,8 @@ non_functional: {}
 contracts:
   - name: 'scope-support-lifecycle'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "commit 5f7fd8c4: verifyLaneProvenance in worktrees-writer.ts now admits the union of scope.in and scope.support. Proven against a REAL git repo and the real merge writer, not a mock: a lane whose only commit edits a support path merges, and git show main:README.md confirms the edit actually landed on the base branch. Negative control in the same suite holds - a commit touching a path in NEITHER list is still refused and the diagnostic still names it - so the widening did not disarm the guard. Falsified by reverting the union to scope.in alone: exactly the one support-merge test reddened, control stayed green."
+    recorded_at: "2026-08-12T19:37:14.765Z"
