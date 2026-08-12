@@ -674,6 +674,21 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
   // not a failure. Point at the real recovery path: reopen-then-close. (There
   // is no `caws specs amend-closure-notes` command; reopen strips closure_notes,
   // so the operator re-closes with their notes.)
+  // CAWS-DEFECT-AC-EVIDENCE-VISIBILITY-01: print the auto-close's non-blocking
+  // advisories — chiefly the AC-evidence warn-mode gate, which names the
+  // criteria lacking pass/waived evidence and the exact `caws specs evidence`
+  // command to record them. mergeWorktree now threads these out of closeSpec;
+  // before, the gate computed them and the composition dropped them, so the
+  // majority of closures (which happen through merge) saw nothing. The merge
+  // is complete and durable — this never changes the exit code.
+  // `data` is Record<string, unknown>; narrow before iterating so a malformed
+  // payload degrades to "no advisory" rather than throwing after a durable merge.
+  const evidenceWarnings = outcome.data?.evidence_warnings;
+  if (Array.isArray(evidenceWarnings)) {
+    for (const w of evidenceWarnings) {
+      err(`caws advisory (non-blocking): ${String(w)}`);
+    }
+  }
   if (closureNotes !== undefined && outcome.data?.spec_already_closed === true) {
     err(
       `warning: --closure-notes was ignored: bound spec ${outcome.data?.spec_id} was already closed before this merge,\n` +

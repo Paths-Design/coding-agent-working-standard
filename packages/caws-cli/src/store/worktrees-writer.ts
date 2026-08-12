@@ -2107,6 +2107,16 @@ export function mergeWorktree(
     );
   }
 
+  // CAWS-DEFECT-AC-EVIDENCE-VISIBILITY-01: carry closeSpec's non-blocking
+  // advisories across the composition boundary. The AC-evidence warn-mode gate
+  // lives in closeSpec and folds its remediation text into the close outcome's
+  // `warnings`; merge is the path most closures actually take, so dropping them
+  // here made the gate invisible for the majority of closes. A composed
+  // lifecycle command must not swallow the diagnostics of the writer it
+  // composes. (Empty on the already-closed fast path — that synthesized
+  // outcome ran no gate, and the earlier `caws specs close` already printed.)
+  const closeWarnings = closeResult.value.warnings ?? [];
+
   // Append worktree_merged AFTER spec_closed so the chain reflects
   // the actual order of state transitions.
   const mergedEvent: EventBody = {
@@ -2270,6 +2280,10 @@ export function mergeWorktree(
       ...(branchDeleted
         ? {}
         : { branch_delete_error: branchDeleteResult.reason }),
+      // CAWS-DEFECT-AC-EVIDENCE-VISIBILITY-01: the auto-close's non-blocking
+      // advisories, for runWorktreeMergeCommand to print. Omitted entirely
+      // when the close had nothing to say, so a clean merge stays quiet.
+      ...(closeWarnings.length > 0 ? { evidence_warnings: closeWarnings } : {}),
     },
   });
 }

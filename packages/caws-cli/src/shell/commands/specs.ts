@@ -1538,6 +1538,16 @@ export function runSpecsCloseCommand(opts: SpecsCloseOptions): number {
     return 1;
   }
   out(`closed ${outcome.id} (resolution: ${opts.resolution})`);
+  // CAWS-DEFECT-AC-EVIDENCE-VISIBILITY-01: print the non-blocking advisories
+  // closeSpec folded into the outcome — chiefly the AC-evidence warn-mode gate,
+  // which computes the unsatisfied criteria and the exact
+  // `caws specs evidence …` remediation. Warn mode exists to make the gate
+  // visible to agents immediately; that only holds if someone prints it. Same
+  // pattern as runSpecsAmendScopeCommand. The close already succeeded — these
+  // never change the exit code.
+  for (const w of outcome.warnings ?? []) {
+    err(`caws advisory (non-blocking): ${w}`);
+  }
   surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }
