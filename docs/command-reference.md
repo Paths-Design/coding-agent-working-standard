@@ -606,6 +606,7 @@ Archive one closed spec, or batch-archive closed specs with --status closed. Bat
 - `--older-than-ms <ms>` — Batch selector: archive only closed specs whose updated_at/created_at age is at least this many milliseconds
 - `--updated-before <timestamp>` — Batch selector: archive only closed specs whose updated_at/created_at timestamp is before this cutoff
 - `--without-worktree` — Batch selector: archive only closed specs that do not still carry a worktree binding
+- `--replace` — Archive over an id that already has a body in .caws/specs/.archive/. The existing body is first copied to <id>.superseded-<timestamp>.yaml — nothing is discarded. Without this, a stale archived body shadows the live spec permanently, because recover prefers the on-disk archived body.
 - `--apply` — Apply batch archive (default: dry-run)
 - `--json` — Emit CAWS-native JSON to stdout
 - `--data` — Show structured data block on diagnostics
