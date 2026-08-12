@@ -49,3 +49,8 @@ non_functional: {}
 contracts:
   - name: 'specs-deactivate'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "commit a605799a: specs-deactivate.test.js A1 group (3 tests) — deactivating an active unbound spec writes lifecycle_state draft, appends spec_deactivated with previous_lifecycle_state active, writes NO resolution/closure_notes, and appends zero spec_closed events. A round-trip test then drives the real dist/index.js activate leg over the demoted body, proving it is a genuinely valid draft rather than one that merely looks like one."
+    recorded_at: "2026-08-12T11:02:38.127Z"
