@@ -3327,6 +3327,26 @@ function patchScopeSequence(
     working = [...working.slice(0, insertAt), ...newItems, ...working.slice(insertAt)];
   }
 
+  // A block that ends up with no items must be written as an explicit empty
+  // list. A bare `  support:` header with nothing under it parses as null, and
+  // the spec schema rejects null with "Expected array" at /scope/support — so
+  // removing the LAST entry failed while removing any other entry succeeded.
+  // The inverse normalization (inline `[]` -> block header) already happens
+  // above when items are about to be added; this is its counterpart for the
+  // emptying direction, and it applies to every key, since scope.out reaches
+  // the same path. [CAWS-DEFECT-SCOPE-SUPPORT-UNMERGEABLE-01]
+  const stillHasItems = (() => {
+    for (let i = newKeyIdx + 1; i < working.length; i++) {
+      const line = working[i];
+      if (line === undefined) break;
+      if (/^\S/.test(line)) break;
+      if (/^ {2}\S/.test(line) && !/^ {4}/.test(line)) break;
+      if (itemRe.test(line)) return true;
+    }
+    return false;
+  })();
+  if (!stillHasItems) working[newKeyIdx] = `  ${key}: []`;
+
   return working.join('\n');
 }
 
