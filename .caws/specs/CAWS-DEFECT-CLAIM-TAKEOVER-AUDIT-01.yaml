@@ -1,0 +1,41 @@
+id: CAWS-DEFECT-CLAIM-TAKEOVER-AUDIT-01
+title: 'claim --takeover writes the highest-authority mutation in the control plane with no audit event'
+risk_tier: 2
+mode: fix
+lifecycle_state: active
+created_at: '2026-08-12T08:36:13.534Z'
+updated_at: '2026-08-12T08:36:13.534Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/claim.ts'
+    - 'packages/caws-cli/src/store/worktrees-writer.ts'
+    - 'packages/caws-cli/tests/shell/claim-takeover-event.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'a worktree owned by a foreign session'
+    when: 'caws claim --takeover runs and succeeds'
+    then: 'a claim_taken_over event is appended naming the worktree, the prior owner session id and last_seen, and the new owner session id'
+  - id: A2
+    given: 'the same takeover'
+    when: 'the audit append fails'
+    then: 'the ownership mutation does not land either — the registry write and the event append are one transaction, so a reader can never find ownership transferred with no record of who transferred it'
+  - id: A3
+    given: 'a claim by the session that already owns the worktree'
+    when: 'caws claim runs with no --takeover'
+    then: 'no claim_taken_over event is appended, so the event means an authority TRANSFER and not merely a heartbeat refresh'
+  - id: A4
+    given: 'a takeover refused by the phantom-root guard'
+    when: 'caws claim --takeover runs from a transient cd'
+    then: 'no claim_taken_over event is appended — a refused takeover must leave no audit implying it happened'
+non_functional: {}
+contracts:
+  - name: 'claim-takeover-audit'
+    type: behavior
