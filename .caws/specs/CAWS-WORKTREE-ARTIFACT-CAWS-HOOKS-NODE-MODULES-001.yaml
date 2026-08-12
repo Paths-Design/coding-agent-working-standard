@@ -79,3 +79,10 @@ contracts:
   - name: 'worktree-artifact-discovery'
     type: behavior
     path: 'packages/caws-cli/src/store/worktree-artifacts.ts'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: jest tests/store/worktree-artifacts.test.js (3/3 pass — new test pinning the ROOT_CANDIDATES .caws/hooks/node_modules discovery+link path)
+    recorded_at: "2026-08-12T20:38:16.004Z"
+    command: jest tests/store/worktree-artifacts.test.js (3/3 pass — new test pinning the ROOT_CANDIDATES .caws/hooks/node_modules discovery+link path)
+    exit_code: 0
