@@ -2,10 +2,11 @@ id: CAWS-DEFECT-AC-EVIDENCE-WINDOW-01
 title: 'AC evidence: a recordable window before close, and a durable record when it is missed'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-ac-evidence-window
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Closes ledger N12 (zero-width AC-evidence window) and N16 (advisory prescribing a command refused at print time). Ships: caws worktree merge --no-close, which lands work and leaves the bound spec active so evidence can be recorded before an explicit close; a close-gate advisory that names the reopen making its own commands runnable; and caws specs show re-deriving the unsatisfied-AC gap on closed/archived specs via the new exported unsatisfiedAcceptanceCriteria(), single-sourced with the close gate. A2 shipped a DIFFERENT mechanism than its text prescribes (derivation, not closure_notes annotation) — recorded on the A2 evidence entry with the reasoning: annotating closure_notes broke 12 tests across 6 suites that pin it to the operator''s text verbatim, on both the YAML and the spec_closed event. Full suite 131/131 suites, 1893/1893 tests.'
 created_at: '2026-08-12T07:16:25.468Z'
-updated_at: '2026-08-12T08:01:13.937Z'
+updated_at: '2026-08-12T08:34:08.578Z'
 blast_radius:
   modules:
     - 'caws-cli store: closeSpec AC-evidence gate advisory and closure_notes composition'
