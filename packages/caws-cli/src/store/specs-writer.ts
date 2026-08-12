@@ -1138,6 +1138,48 @@ export function activateSpec(
   return attachAutoCommit(outcome, cawsDir, input.id, 'activate', wasDirtyBeforeWrite);
 }
 
+// ─── acceptance-criteria evidence gap ────────────────────────────────────
+
+/** An acceptance criterion whose evidence does not satisfy closure. */
+export interface UnsatisfiedCriterion {
+  readonly id: string;
+  /** `missing` — no entry at all; `fail`/`unchecked` — an entry that does not satisfy. */
+  readonly reason: 'missing' | 'fail' | 'unchecked';
+}
+
+/**
+ * The acceptance criteria whose evidence does not satisfy closure.
+ *
+ * CAWS-DEFECT-AC-EVIDENCE-WINDOW-01 (A2): DERIVED, never stored. A closed spec
+ * must show a future reader which criteria closed without evidence, but writing
+ * that list into the YAML would denormalize state the spec already carries — and
+ * a stored list goes stale the moment evidence is recorded after a reopen. This
+ * is the single definition both the close gate and `caws specs show` call, so
+ * the two can never disagree about what "unsatisfied" means.
+ *
+ * Reads ONLY the spec's `evidence:` block, never the ac_recorded event stream:
+ * closure couples to the authority surface, not to audit history. `pass` and
+ * `waived` satisfy; everything else does not.
+ */
+export function unsatisfiedAcceptanceCriteria(spec: Spec): UnsatisfiedCriterion[] {
+  const evidenceByCriterion = new Map<string, string>();
+  if (spec.evidence !== undefined) {
+    for (const entry of spec.evidence) {
+      evidenceByCriterion.set(entry.criterion_id, entry.status);
+    }
+  }
+  const unsatisfied: UnsatisfiedCriterion[] = [];
+  for (const ac of spec.acceptance) {
+    const status = evidenceByCriterion.get(ac.id);
+    if (status === undefined) {
+      unsatisfied.push({ id: ac.id, reason: 'missing' });
+    } else if (status === 'fail' || status === 'unchecked') {
+      unsatisfied.push({ id: ac.id, reason: status });
+    }
+  }
+  return unsatisfied;
+}
+
 // ─── closeSpec ───────────────────────────────────────────────────────────
 
 export function closeSpec(
@@ -1285,22 +1327,7 @@ export function closeSpec(
   // The gate reads ONLY the spec's `evidence:` block — never the ac_recorded
   // event stream (doctrinal: closure couples to the authority surface, not
   // audit history — same as the successor-custody gate above).
-  const evidenceByCriterion = new Map<string, string>();
-  if (spec.evidence !== undefined) {
-    for (const entry of spec.evidence) {
-      evidenceByCriterion.set(entry.criterion_id, entry.status);
-    }
-  }
-  const unsatisfied: Array<{ id: string; reason: 'missing' | 'fail' | 'unchecked' }> = [];
-  for (const ac of spec.acceptance) {
-    const status = evidenceByCriterion.get(ac.id);
-    if (status === undefined) {
-      unsatisfied.push({ id: ac.id, reason: 'missing' });
-    } else if (status === 'fail' || status === 'unchecked') {
-      unsatisfied.push({ id: ac.id, reason: status });
-    }
-    // pass and waived satisfy the gate.
-  }
+  const unsatisfied = unsatisfiedAcceptanceCriteria(spec);
   const evidenceWarnings: string[] = [];
   if (unsatisfied.length > 0) {
     // WARN (not block): the close proceeds, but the outcome carries an advisory
@@ -1312,11 +1339,37 @@ export function closeSpec(
       }
       return `  - ${u.id}: evidence status is "${u.reason}" (does not satisfy closure). Re-record as pass or waived: caws specs evidence ${input.id} --ac ${u.id} --status pass --evidence-ref "<test command>"`;
     });
+    // CAWS-DEFECT-AC-EVIDENCE-WINDOW-01 (A1): this advisory is folded into the
+    // SUCCESS outcome, i.e. it is emitted AFTER the close has landed — at which
+    // point `caws specs evidence` refuses with the frozen-spec diagnostic
+    // ("evidence records only on active or draft specs"). Printing a remediation
+    // that the CLI immediately refuses is how a reader learns to treat
+    // close-gate advisories as noise. Name the reopen that makes the commands
+    // below runnable, and keep the ordering explicit: reopen, then record, then
+    // re-close.
     evidenceWarnings.push(
       `Spec "${input.id}" closed with ${unsatisfied.length} acceptance criterion/criteria lacking satisfying evidence (pass or waived). ` +
-        `The evidence: block is the closure authority — each declared AC should have status pass or waived. [warn-mode: close proceeded; will block in a future slice]\n${lines.join('\n')}`
+        `The evidence: block is the closure authority — each declared AC should have status pass or waived. [warn-mode: close proceeded; will block in a future slice]\n` +
+        `The spec is now CLOSED, so its evidence is frozen — the commands below are refused until you reopen it first:\n` +
+        `  1. caws specs reopen ${input.id} --reason "recording AC evidence missed at close"\n` +
+        `  2. run the per-criterion command(s) below\n` +
+        `  3. caws specs close ${input.id} --resolution completed --reason "<your closure notes>"\n` +
+        `To avoid the round trip next time, record evidence BEFORE closing, or land with ` +
+        `\`caws worktree merge <name> --no-close\` and close once the evidence is in.\n${lines.join('\n')}`
     );
   }
+  // CAWS-DEFECT-AC-EVIDENCE-WINDOW-01 (A2): the advisory above is terminal
+  // output — it dies with the session. Two earlier revisions of this slice tried
+  // to persist the unsatisfied-AC list, first by appending it to the spec's
+  // closure_notes and then to the spec_closed event's closure_notes. Both broke
+  // tests that pin those fields to the operator's text verbatim, and rightly so:
+  // `closure_notes` means "what the operator said about this closure" on BOTH
+  // surfaces, and overloading it with a second concern is the same mistake
+  // twice. It is also unnecessary — the close-time state is already recoverable
+  // from the hash-chained log (ac_recorded events preceding this spec_closed),
+  // and the reader-facing question is answered by re-deriving the gap at read
+  // time in `caws specs show` via unsatisfiedAcceptanceCriteria(). Derived state
+  // cannot go stale the way a field written at first close would after a reopen.
 
   // Raw-byte patch sequence:
   //   1. lifecycle_state → closed
@@ -1348,8 +1401,20 @@ export function closeSpec(
     patched = step2.value;
   }
 
-  if (input.reason !== undefined && input.reason.length > 0) {
-    const escaped = `'${input.reason.replace(/'/g, "''")}'`;
+  // CAWS-DEFECT-AC-EVIDENCE-WINDOW-01 (A2): closure_notes is the OPERATOR's
+  // field and carries their text verbatim. An earlier revision of this slice
+  // appended the unsatisfied-AC annotation here; it broke 12 tests across 6
+  // suites that pin exact closure_notes content, and rightly so — appending
+  // machine text to author content is a softer form of the clobbering
+  // CAWS-CLI-MERGE-AUTOCLOSE-PRESERVE-CLOSURE-NOTES-001 forbids. The durable
+  // record lives in the spec_closed event payload (below) and is re-derived at
+  // read time by `caws specs show`, which cannot go stale the way a
+  // denormalized YAML field would.
+  const closureReason =
+    input.reason !== undefined && input.reason.length > 0 ? input.reason : undefined;
+
+  if (closureReason !== undefined) {
+    const escaped = `'${closureReason.replace(/'/g, "''")}'`;
     const hasNotes = /^closure_notes:/m.test(patched);
     if (hasNotes) {
       // CAWS-CLI-MERGE-AUTOCLOSE-PRESERVE-CLOSURE-NOTES-001:
@@ -1448,8 +1513,8 @@ export function closeSpec(
   }
 
   const eventData: Record<string, unknown> = { resolution: input.resolution };
-  if (input.reason !== undefined && input.reason.length > 0) {
-    eventData.closure_notes = input.reason;
+  if (closureReason !== undefined) {
+    eventData.closure_notes = closureReason;
   }
   if (input.mergeCommit !== undefined) eventData.merge_commit = input.mergeCommit;
   if (input.supersededBy !== undefined) eventData.superseded_by = input.supersededBy;

@@ -690,6 +690,11 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
         { flag: '--reason <text>', description: 'Alias for --closure-notes' },
         { flag: '--notes <text>', description: 'Alias for --closure-notes' },
         { flag: '--note <text>', description: 'Alias for --closure-notes' },
+        {
+          flag: '--no-close',
+          description:
+            'Land the merge but leave the bound spec ACTIVE (no spec_closed event), so caws specs evidence is still accepted. Close explicitly afterwards. Mutually exclusive with --closure-notes.',
+        },
         DATA_OPTION,
       ],
     },

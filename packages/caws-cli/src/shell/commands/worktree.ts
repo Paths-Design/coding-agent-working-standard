@@ -517,6 +517,9 @@ export interface WorktreeMergeOptions extends BaseCommandOptions {
   readonly reason?: string;
   readonly notes?: string;
   readonly note?: string;
+  // CAWS-DEFECT-AC-EVIDENCE-WINDOW-01 (A3): land the merge and leave the bound
+  // spec ACTIVE, so AC evidence can be recorded before an explicit close.
+  readonly noClose?: boolean;
 }
 
 export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
@@ -557,6 +560,7 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
   };
   if (opts.dryRun === true) (input as { dryRun?: boolean }).dryRun = true;
   if (opts.message !== undefined) (input as { message?: string }).message = opts.message;
+  if (opts.noClose === true) (input as { noClose?: boolean }).noClose = true;
 
   // CAWS-FEAT-WORKTREE-MERGE-CLOSURE-NOTES-FLAG-01: resolve the closure-notes
   // alias set exactly as caws specs close does (specs.ts). --closure-notes is
@@ -648,11 +652,26 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
   // case earns extra output.
   const branchName = outcome.data?.branch;
   const branchDeleted = outcome.data?.branch_deleted === true;
+  // CAWS-DEFECT-AC-EVIDENCE-WINDOW-01 (A3): under --no-close the spec is
+  // deliberately still active, so the success line must not claim it was
+  // auto-closed. The follow-up close is named immediately below.
+  const specLeftOpen = outcome.data?.spec_left_open === true;
   out(
     `merged ${outcome.name} (merge_commit: ${outcome.data?.merge_commit}; ` +
-      `auto_closed_spec: ${outcome.data?.spec_id}; ` +
+      (specLeftOpen
+        ? `spec_left_open: ${outcome.data?.spec_id}; `
+        : `auto_closed_spec: ${outcome.data?.spec_id}; `) +
       `branch: ${branchName}${branchDeleted ? ' deleted' : ' RETAINED'})`
   );
+  if (specLeftOpen) {
+    out(
+      `Spec ${outcome.data?.spec_id} was NOT closed (--no-close): it remains active, so ` +
+        `\`caws specs evidence\` is accepted against it.\n` +
+        `  1. caws specs evidence ${outcome.data?.spec_id} --ac <id> --status pass --evidence-ref "<test command>"\n` +
+        `  2. caws specs close ${outcome.data?.spec_id} --resolution completed --merge-commit ${outcome.data?.merge_commit} --reason "<your closure notes>"\n` +
+        `Until step 2 runs the spec stays open, and \`caws status\` will keep listing it as active work.`
+    );
+  }
   if (!branchDeleted) {
     // The merge itself is complete and durable — exit code stays 0. But git
     // refused to delete a branch it should consider merged, which is worth

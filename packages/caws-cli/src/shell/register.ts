@@ -1464,6 +1464,14 @@ export function registerShellCommands(
           reason?: string;
           notes?: string;
           note?: string;
+          // CAWS-DEFECT-AC-EVIDENCE-WINDOW-01 (A3): Commander treats a
+          // `--no-<x>` flag as the NEGATION of `--<x>`, so `--no-close` does
+          // NOT produce `opts.noClose`. It defines `close` with an implicit
+          // default of true and sets it to false when the flag is present.
+          // Reading `opts.noClose` here would silently always be undefined and
+          // the flag would parse cleanly while doing nothing — the exact
+          // "reports success while doing nothing" class. Read `close === false`.
+          close?: boolean;
           data?: boolean;
         }
       ) => {
@@ -1476,6 +1484,7 @@ export function registerShellCommands(
           ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
           ...(opts.notes !== undefined ? { notes: opts.notes } : {}),
           ...(opts.note !== undefined ? { note: opts.note } : {}),
+          ...(opts.close === false ? { noClose: true } : {}),
           showData: opts.data === true,
         });
         exit(code);

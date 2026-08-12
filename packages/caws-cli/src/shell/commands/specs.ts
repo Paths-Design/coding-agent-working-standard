@@ -52,6 +52,7 @@ import {
   selectClosedSpecsForArchive,
   showSpec,
   SPECS_LIST_STATUSES,
+  unsatisfiedAcceptanceCriteria,
   type SpecsListStatus,
 } from '../../store/specs-writer';
 import type { LifecycleMapping } from '../../kernel';
@@ -1072,6 +1073,29 @@ export function runSpecsShowCommand(opts: SpecsShowOptions): number {
     return 1;
   }
   out(result.value.source);
+  // CAWS-DEFECT-AC-EVIDENCE-WINDOW-01 (A2): a spec that closed with acceptance
+  // criteria lacking pass/waived evidence must say so to a future reader, not
+  // only to the terminal of the session that closed it. Derived here rather
+  // than stored: the spec already carries both lists, and a denormalized field
+  // would lie the moment evidence is recorded after a reopen.
+  //
+  // stderr, and only for terminal states — `caws specs show` output is piped
+  // into editors and parsers, and an ACTIVE spec with incomplete evidence is
+  // the normal mid-slice condition, not a finding.
+  const shown = result.value.spec;
+  if (shown.lifecycle_state === 'closed' || shown.lifecycle_state === 'archived') {
+    const unsatisfied = unsatisfiedAcceptanceCriteria(shown);
+    if (unsatisfied.length > 0) {
+      err(
+        `caws advisory (non-blocking): ${opts.id} is ${shown.lifecycle_state} with ` +
+          `${unsatisfied.length} acceptance criterion/criteria lacking satisfying evidence: ` +
+          `${unsatisfied.map((u) => `${u.id} (${u.reason})`).join(', ')}.\n` +
+          `  The evidence: block is the closure authority; these criteria closed without it.\n` +
+          `  To record it now: caws specs reopen ${opts.id} --reason "recording AC evidence missed at close", ` +
+          `then caws specs evidence ${opts.id} --ac <id> --status pass --evidence-ref "<test command>", then re-close.`
+      );
+    }
+  }
   return 0;
 }
 

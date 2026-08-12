@@ -192,6 +192,20 @@ export interface MergeWorktreeInput {
    */
   readonly closureNotes?: string;
   /**
+   * CAWS-DEFECT-AC-EVIDENCE-WINDOW-01 (A3): land the merge WITHOUT closing the
+   * bound spec. The default auto-close makes the window in which AC evidence
+   * can be recorded zero-width — the spec is active while the work is unlanded
+   * and frozen the instant it lands. With this set the merge lands, the
+   * worktree is destroyed and its binding cleared, and the spec stays ACTIVE so
+   * `caws specs evidence` is accepted; the operator closes explicitly
+   * afterwards. No spec_closed event is appended, and worktree_merged carries
+   * auto_closed_spec: false.
+   *
+   * Mutually exclusive with closureNotes — those exist only to feed the close
+   * this flag suppresses.
+   */
+  readonly noClose?: boolean;
+  /**
    * The caller process's current working directory, captured once at CLI
    * invocation. When set and this is NOT a dry run, mergeWorktree refuses
    * if the cwd is the target worktree path or a descendant of it — the
@@ -1772,6 +1786,24 @@ export function mergeWorktree(
   const nameValidation = validateWorktreeName(input.name);
   if (!nameValidation.ok) return nameValidation;
 
+  // CAWS-DEFECT-AC-EVIDENCE-WINDOW-01 (A3): --closure-notes exists only to feed
+  // the close that --no-close suppresses. Accepting both would silently discard
+  // the operator's notes — refuse before any git operation instead.
+  if (input.noClose === true && input.closureNotes !== undefined) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `--no-close and --closure-notes are mutually exclusive: --no-close leaves the spec open, so there is no close for the notes to attach to.`,
+        {
+          subject: input.name,
+          narrowRepair:
+            `Either drop --closure-notes and pass the notes to the explicit close ` +
+            `(\`caws specs close <id> --resolution completed --reason "..."\`), or drop --no-close.`,
+        }
+      )
+    );
+  }
+
   const registry = loadWorktrees(cawsDir);
   if (!isOk(registry)) return err(registry.errors);
   const entry = registry.value[input.name];
@@ -2032,8 +2064,17 @@ export function mergeWorktree(
   }
   const specWasAlreadyClosed = preCloseState.value.lifecycleState === 'closed';
 
+  // CAWS-DEFECT-AC-EVIDENCE-WINDOW-01 (A3): --no-close skips the close the same
+  // way the already-closed fast path does — by synthesizing a success outcome
+  // so the completion-honesty checks below need no special case. The difference
+  // is the resulting state: already-closed means the spec IS closed; --no-close
+  // means it deliberately is NOT, and the shell layer must say so.
+  const specLeftOpen = input.noClose === true && !specWasAlreadyClosed;
+
   let closeResult: Result<SpecWriterOutcome>;
-  if (specWasAlreadyClosed) {
+  if (specLeftOpen) {
+    closeResult = ok({ kind: 'success', id: specId, path: preCloseState.value.path });
+  } else if (specWasAlreadyClosed) {
     // Synthesize a success outcome so the existing completion-honesty
     // checks below pass without a special case. No spec_closed event is
     // appended here — the prior `caws specs close` already appended one.
@@ -2137,7 +2178,9 @@ export function mergeWorktree(
       // itself already succeeded; the range remains parent-derivable).
       ...(laneTip !== undefined ? { lane_tip: laneTip } : {}),
       base_before: casOutcome.baseBefore,
-      auto_closed_spec: true,
+      // False only under --no-close (A3): the spec is deliberately left active
+      // so AC evidence can be recorded before an explicit close.
+      auto_closed_spec: !specLeftOpen,
       // CAWS-FIX-N5-MERGE-IDEMPOTENT-CLOSE-001: true when the merge skipped
       // closeSpec because the bound spec was already closed. auto_closed_spec
       // stays true (the spec is closed as of this merge); this discriminant
@@ -2270,8 +2313,12 @@ export function mergeWorktree(
     data: {
       merge_commit: mergeCommit,
       spec_id: specId,
-      auto_closed_spec: true,
+      auto_closed_spec: !specLeftOpen,
       spec_already_closed: specWasAlreadyClosed,
+      // CAWS-DEFECT-AC-EVIDENCE-WINDOW-01 (A3): present only under --no-close,
+      // so runWorktreeMergeCommand can state that the spec remains active and
+      // name the close command the operator still owes.
+      ...(specLeftOpen ? { spec_left_open: true } : {}),
       audit_commit: autoCommitOutcome,
       branch,
       branch_deleted: branchDeleted,
