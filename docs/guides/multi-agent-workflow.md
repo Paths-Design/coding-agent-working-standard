@@ -115,11 +115,13 @@ Implement, run your project's test suite as usual.
 caws evidence record --type test --spec user-auth \
   --data '{"command":"npm test -- login_happy_path","exit_code":0}'
 
-caws evidence record --type ac --spec user-auth \
-  --data '{"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}'
+caws specs evidence user-auth --ac A1 --status pass --evidence-ref "npm test"
 ```
 
-Both append hash-chained events to `.caws/events.jsonl` via the store.
+Both append hash-chained events to `.caws/events.jsonl` via the store. AC
+evidence goes through `caws specs evidence` rather than `caws evidence record
+--type ac` (which is refused): only `specs evidence` also writes the spec's
+`evidence:` block, the closure authority the close gate reads.
 
 ### Step 6 — run gates per spec
 

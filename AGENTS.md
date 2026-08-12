@@ -98,8 +98,11 @@ caws gates run --spec FEAT-1               # policy decides block/warn/skip
 # 4. Record typed evidence (test results, AC closures)
 caws evidence record --type test --spec FEAT-1 \
   --data '{"command":"npm test","exit_code":0}'
-caws evidence record --type ac --spec FEAT-1 \
-  --data '{"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}'
+# AC evidence goes through specs evidence, NOT evidence record: only this
+# command writes the spec's evidence: block, which is the closure authority
+# the close gate reads. It dual-writes the ac_recorded event too.
+# (`caws evidence record --type ac` is refused and redirects here.)
+caws specs evidence FEAT-1 --ac A1 --status pass --evidence-ref "npm test"
 # Payload shapes are closed (additionalProperties: false) and status is a closed
 # enum. Print the authoritative shape + a runnable example for any kind with:
 #   caws evidence schema --type <test|gate|ac>

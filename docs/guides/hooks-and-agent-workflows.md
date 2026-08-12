@@ -118,7 +118,7 @@ Cascade enables structured development workflows invoked via `/[workflow-name]`.
 5. **Final validation**
    - `caws doctor` (drift)
    - `caws status` (dashboard)
-   - Record AC closures: `caws evidence record --type ac --spec <id> --data '{"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}'`
+   - Record AC closures: `caws specs evidence <id> --ac A1 --status pass --evidence-ref "npm test"`
    - Ready for review/merge
 ```
 
@@ -332,7 +332,7 @@ class DriftAwareAgent {
 
 6. **Completion check**
    - `caws gates run --spec <id>` returns 0.
-   - Record AC closures: `caws evidence record --type ac --spec <id> --data '{"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}'`.
+   - Record AC closures: `caws specs evidence <id> --ac A1 --status pass --evidence-ref "npm test"`.
    - Final `caws doctor && caws status`. Ready for review.
 
 **Agent decision points**:
@@ -433,7 +433,8 @@ caws init
 # Set up your runtime's hooks externally — they call into v11 commands:
 caws doctor            # drift detection
 caws gates run --spec <id>   # quality gates
-caws evidence record --type ac --spec <id> --data '{...}'   # audit
+caws evidence record --type test --spec <id> --data '{...}'  # audit (test/gate)
+caws specs evidence <id> --ac A1 --status pass --evidence-ref "..."  # AC closure
 caws waiver create <id>-w --gate <g> --reason "..." --approved-by "..." --expires-at <iso>   # legitimate bypass
 ```
 
