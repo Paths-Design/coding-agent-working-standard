@@ -942,7 +942,12 @@ export function applyTakeoverWithAudit(
         `Takeover of worktree "${input.name}" was rolled back: the claim_taken_over audit event could not be appended, and ownership must not transfer without it. The prior owner (${input.priorOwner.session_id}) is unchanged.`,
         {
           subject: input.name,
-          narrowRepair: `Inspect .caws/events.jsonl integrity with \`caws events verify\`, then retry \`caws claim --takeover\`.`,
+          // `caws claim` reads the CURRENT DIRECTORY and takes no worktree-name
+          // argument, so the retry must carry the cd or it refuses when run
+          // from canonical. Pinned by tests/docs/agent-recovery-path-drift.
+          narrowRepair:
+            `Inspect the event chain with \`caws events verify\`, then retry from inside the worktree: ` +
+            `cd .caws/worktrees/${input.name} && caws claim --takeover`,
           data: {
             worktree_name: input.name,
             prior_owner_session_id: input.priorOwner.session_id,
