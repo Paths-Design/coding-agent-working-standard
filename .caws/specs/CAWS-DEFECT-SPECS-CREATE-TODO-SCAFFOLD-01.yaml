@@ -2,9 +2,9 @@ id: CAWS-DEFECT-SPECS-CREATE-TODO-SCAFFOLD-01
 title: 'specs create writes committed TODO placeholders into fields it exposes no flag to fill'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
 created_at: '2026-08-12T09:08:04.748Z'
-updated_at: '2026-08-12T11:03:42.344Z'
+updated_at: '2026-08-12T11:03:58.812Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
