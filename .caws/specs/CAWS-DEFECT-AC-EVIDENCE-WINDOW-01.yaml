@@ -69,8 +69,8 @@ evidence:
     recorded_at: "2026-08-12T07:39:45.067Z"
   - criterion_id: A2
     status: pass
-    evidence_ref: "closure_notes on disk carries 'AC evidence missing at close: A2 (missing)' with the operator reason preserved; spec_closed event data.closure_notes carries the same; single-quote reason round-trips through caws specs validate (exit 0)"
-    recorded_at: "2026-08-12T07:39:52.492Z"
+    evidence_ref: "MECHANISM CHANGED from the AC text: closure_notes is NOT annotated. Appending machine text to the operator's field broke 12 tests across 6 suites that pin exact closure_notes content, and is a softer form of the clobbering CAWS-CLI-MERGE-AUTOCLOSE-PRESERVE-CLOSURE-NOTES-001 forbids. A2's INTENT (a future reader sees the gap without the closing session's terminal) is met two ways instead: (1) the hash-chained spec_closed event data.closure_notes carries the close-time snapshot; (2) caws specs show re-DERIVES the gap on closed/archived specs via the new exported unsatisfiedAcceptanceCriteria(), single-sourced with the close gate. Derivation beats storage here: the stale-after-reopen test (ACWIN-010) proves a stored field would lie once evidence is recorded post-reopen."
+    recorded_at: "2026-08-12T08:06:50.475Z"
   - criterion_id: A3
     status: pass
     evidence_ref: "npx jest tests/shell/worktree-merge-no-close.test.js (11 passed): merge lands (git show main:payload.txt + merge-base --is-ancestor), spec stays active, zero spec_closed events, worktree destroyed and binding cleared, post-merge caws specs evidence exits 0; spawned-CLI test proves the Commander negation forwarding"
