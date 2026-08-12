@@ -86,3 +86,9 @@ evidence:
     status: pass
     evidence_ref: "'a fully-evidenced spec closes with NO evidence advisory' (close path) + 'a fully-evidenced spec merges with no advisory on stderr' and 'no evidence_warnings key at all' (merge path)"
     recorded_at: "2026-08-12T02:29:21.291Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "npx jest tests/shell/evidence-record-ac-redirect.test.js (7 passed): exit 1, no events.jsonl written, redirect echoes caller values"
+    recorded_at: "2026-08-12T02:29:35.942Z"
+    command: npx jest tests/shell/evidence-record-ac-redirect.test.js
+    exit_code: 0
