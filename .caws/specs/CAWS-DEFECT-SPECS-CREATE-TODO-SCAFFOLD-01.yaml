@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-specs-scaffold
 created_at: '2026-08-12T09:08:04.748Z'
-updated_at: '2026-08-12T15:26:07.839Z'
+updated_at: '2026-08-12T16:43:39.630Z'
 blast_radius:
   modules:
     - 'caws-cli spec authoring surface (specs create flags)'
@@ -28,6 +28,7 @@ scope:
     - 'packages/caws-cli/tests/shell/specs-amend.test.js'
     - 'docs/command-reference.md'
     - 'docs/api/cli.md'
+    - packages/caws-cli/src/store/specs-body-writer.ts
   out: []
 invariants:
   - 'Every field the create template scaffolds is reachable from the command surface that scaffolds it.'
