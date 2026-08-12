@@ -92,3 +92,7 @@ evidence:
     status: pass
     evidence_ref: "npm run docs:check -> 'command-reference.md is up to date' + all 4 marker docs 'up to date', after generate-command-reference.mjs and populate-doc-markers.mjs regenerated them"
     recorded_at: "2026-08-12T20:47:59.365Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "cd packages/caws-cli && npx jest (unpiped, real exit code): JEST EXIT=0, Test Suites 136 passed/136 total, Tests 1868 passed/1868 total, 1019.754s. Deleted suites prepush-ack-bundle-normalize.test.js + push-range.test.js absent; no remaining suite references the deleted modules"
+    recorded_at: "2026-08-12T20:48:11.665Z"
