@@ -46,3 +46,8 @@ non_functional: {}
 contracts:
   - name: 'run-tests-exit-code'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "commit d6228e5b: verdict maps status===null to 1 and names the signal; tests/shell/run-tests-exit-code.test.js pins it at the verdict unit AND through main for build/jest/cleanup. Premise proven at runtime not assumed: spawnSync of a self-SIGKILLing node child returns status=null signal=SIGKILL. Falsified by reverting the null branch to return 0 - exactly 4 tests reddened, by predicted name."
+    recorded_at: "2026-08-12T17:44:50.299Z"
