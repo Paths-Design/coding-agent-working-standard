@@ -80,3 +80,7 @@ evidence:
     status: pass
     evidence_ref: "commit ae94f6f1: caws specs amend replaces the scaffold on draft/active specs, appends spec_body_amended, and supports add+remove with quote-insensitive matching; a no-op amendment is refused rather than reported as success. Live run in a scratch repo: LIVE-001 went from both scaffolds to operator values, event seq=2 recorded discharged_scaffold_fields=[blast_radius.modules,invariants] in the hash chain."
     recorded_at: "2026-08-12T16:55:26.357Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "commit ae94f6f1: on a CLOSED spec, filling a scaffolded field is admitted (closure fields untouched) while adding to or removing from a field holding real content is refused byte-identically with no event, pointing at caws specs reopen. A control test proves the same rewrite IS allowed once active, so the refusal is about lifecycle state and not a malformed edit. Falsified: disabling the closed-spec rule reddens exactly the two refusal tests."
+    recorded_at: "2026-08-12T16:55:27.672Z"
