@@ -65,3 +65,7 @@ evidence:
     status: pass
     evidence_ref: "3 tests: recover and show --archived both emit the superseded advisory on stderr naming ARCREP-0xx.superseded-*; stdout stays free of 'caws advisory' (piped into editors); an id with no superseded snapshot emits nothing. Falsified: forwarding mutant reddens both advisory tests."
     recorded_at: "2026-08-12T08:50:34.871Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "2 tests: --replace on a clean id yields archive dir == ['ARCREP-040.yaml'] and a spec_archived event with NO superseded_path property; spawned-CLI opt-forwarding proof exits 0, creates the superseded file, and prints 'was preserved at'."
+    recorded_at: "2026-08-12T08:50:36.133Z"
