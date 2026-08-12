@@ -2,10 +2,11 @@ id: CAWS-REMOVE-PREPUSH-COMMAND-001
 title: 'Remove caws prepush from the command surface'
 risk_tier: 2
 mode: refactor
-lifecycle_state: active
-worktree: wt-remove-prepush
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-remove-prepush at 7f9a7e2b1deeac7b93818fe4b901ef374dc8b3c2'
 created_at: '2026-08-12T19:35:47.293Z'
-updated_at: '2026-08-12T19:36:00.792Z'
+updated_at: '2026-08-12T20:48:28.631Z'
 blast_radius:
   modules:
     - 'caws-cli shell: prepush command + push-range classifier (deleted); register/command-metadata/index surface'
