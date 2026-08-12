@@ -2,10 +2,11 @@ id: CAWS-DEFECT-SCOPE-SUPPORT-UNMERGEABLE-01
 title: 'scope.support paths are editable but cannot be landed or removed'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-scope-support
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'scope.support existed for repo-root deliverables a lane must EDIT but must not CLAIM -- README, package.json, CHANGELOG -- and amend-scope advisory actively recommends it for exactly that case. Two surfaces disagreed with the contract, and between them the feature could not be used end to end. (1) The merge-time lane-provenance guard read scope.in only, so a lane commit touching a support path was reported as outside spec scope. The failure mode is the expensive shape: caws scope show ADMITs the write, the commit succeeds, and only the merge refuses -- after the work is done. scope.in and scope.support differ in CLAIM, not in whether a lane''s own work belongs to it, so the admitted set is now their union; the candidate-lane remediation hint uses the same union so both halves of the diagnostic agree. (2) Removing the LAST entry from a scope sequence left a bare key header with nothing under it, which parses as null, and the schema rejected it as Expected array at /scope/support. Removing any other entry worked, so the bug only appeared on the final one, and the natural recovery shape -- move a path from support to in with --add X --remove-support X in one call -- hit it every time. An emptied block is now written as an explicit empty list, the counterpart of the inline-to-block normalization already performed in the adding direction; this applies to every key, and scope.out reached the same path and was equally broken. Hit live while merging wt-test-verdict, which is how it was found. Both halves falsified independently: reverting the union reddened exactly the support-merge test with the negative control still green; disabling the empty-list normalization reddened exactly the four emptying tests. The negative control matters more than the fixes here -- widening an admitted set is exactly the change that can silently disarm a guard, so a commit touching a path in NEITHER list is asserted to still be refused, by name, in the same suite. Full suite green at 139 suites / 1974 tests.'
 created_at: '2026-08-12T17:54:47.558Z'
-updated_at: '2026-08-12T19:16:18.339Z'
+updated_at: '2026-08-12T19:56:30.764Z'
 blast_radius:
   modules:
     - 'caws-cli worktree merge prerequisite check'
