@@ -2,10 +2,11 @@ id: CAWS-DEFECT-CLAIM-TAKEOVER-AUDIT-01
 title: 'claim --takeover writes the highest-authority mutation in the control plane with no audit event'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-claim-takeover-audit
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Closes ledger N10. caws claim --takeover now emits claim_taken_over, and the ownership transfer plus its audit append are ONE transaction via the new applyTakeoverWithAudit store function: prior registry bytes are captured for compensation, and a rolled-back append refuses the takeover rather than leaving ownership moved with no record. The event means a TRANSFER — same-session refresh, foreign claim without --takeover, phantom-root refusal, and --plan all append nothing. Falsification: removing the compensation reddened exactly the one predicted test. A follow-up commit fixed my own narrowRepair, which named ''caws claim --takeover'' without the required cd; the repo''s agent-recovery-path-drift guard caught it. Full suite 133/133 suites, 1917/1917 tests.'
 created_at: '2026-08-12T08:36:13.534Z'
-updated_at: '2026-08-12T08:36:13.534Z'
+updated_at: '2026-08-12T09:54:46.947Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
