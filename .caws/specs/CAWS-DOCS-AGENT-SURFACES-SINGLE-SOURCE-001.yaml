@@ -126,3 +126,9 @@ evidence:
     recorded_at: "2026-08-12T19:59:34.999Z"
     command: "jest tests/docs/agent-surfaces-sync.test.js (passing, 40-test contract run)"
     exit_code: 0
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "jest tests/docs/agent-surfaces-sync.test.js (passing, 40-test contract run)"
+    recorded_at: "2026-08-12T19:59:35.855Z"
+    command: "jest tests/docs/agent-surfaces-sync.test.js (passing, 40-test contract run)"
+    exit_code: 0
