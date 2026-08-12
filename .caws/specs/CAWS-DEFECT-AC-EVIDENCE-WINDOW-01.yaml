@@ -70,3 +70,7 @@ evidence:
     status: pass
     evidence_ref: "closure_notes on disk carries 'AC evidence missing at close: A2 (missing)' with the operator reason preserved; spec_closed event data.closure_notes carries the same; single-quote reason round-trips through caws specs validate (exit 0)"
     recorded_at: "2026-08-12T07:39:52.492Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "npx jest tests/shell/worktree-merge-no-close.test.js (11 passed): merge lands (git show main:payload.txt + merge-base --is-ancestor), spec stays active, zero spec_closed events, worktree destroyed and binding cleared, post-merge caws specs evidence exits 0; spawned-CLI test proves the Commander negation forwarding"
+    recorded_at: "2026-08-12T07:40:00.545Z"
