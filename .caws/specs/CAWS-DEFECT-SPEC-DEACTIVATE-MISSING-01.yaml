@@ -62,3 +62,7 @@ evidence:
     status: pass
     evidence_ref: "commit a605799a: A3 group (3 tests) — draft refused pointing at retire-draft, closed refused pointing at reopen (not close), archived refused pointing at restore. The two canonical-path cases also assert byte-identical spec files."
     recorded_at: "2026-08-12T11:02:49.003Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "commit a605799a: A4 group (2 tests). NOTE a divergence from the AC text: the AC describes a close-reopen-deactivate round trip, but reopen already strips the terminal fields, so that path would pass even with deactivate's own strip removed — a vacuous green. The test instead plants closure_notes on an active body (asserting it is present first), so it pins deactivate's own strip; a second test asserts cleared_terminal_fields is ABSENT on a clean body. Falsified: skipping the strip reddens the residue test alone (1 of 10)."
+    recorded_at: "2026-08-12T11:02:57.534Z"
