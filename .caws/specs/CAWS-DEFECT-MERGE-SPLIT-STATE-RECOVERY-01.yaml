@@ -3,6 +3,7 @@ title: 'worktree merge can land the git merge and roll back the close, and hides
 risk_tier: 2
 mode: fix
 lifecycle_state: active
+worktree: wt-merge-split-state
 created_at: '2026-08-12T08:37:37.564Z'
 updated_at: '2026-08-12T08:37:37.564Z'
 blast_radius:
