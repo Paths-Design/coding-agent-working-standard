@@ -429,6 +429,9 @@ function createCommandPreview(opts: {
   readonly scopeIn?: readonly string[];
   readonly acceptance?: readonly string[];
   readonly contract?: readonly string[];
+  readonly observability?: readonly string[];
+  readonly rollback?: readonly string[];
+  readonly security?: readonly string[];
 }): string {
   const parts = [
     'caws',
@@ -450,6 +453,19 @@ function createCommandPreview(opts: {
   }
   for (const c of opts.contract ?? []) {
     parts.push('--contract', shellQuote(c));
+  }
+  // CAWS-DEFECT-SPECS-CREATE-AUTHORING-01: the preview must reproduce the
+  // candidate it previewed. Omitting the tier-1 trio printed a command that is
+  // REFUSED when copied — which is worse than printing nothing, because the
+  // operator trusts a preview whose entire purpose is to be pasted.
+  for (const o of opts.observability ?? []) {
+    parts.push('--observability', shellQuote(o));
+  }
+  for (const r of opts.rollback ?? []) {
+    parts.push('--rollback', shellQuote(r));
+  }
+  for (const s of opts.security ?? []) {
+    parts.push('--security', shellQuote(s));
   }
   return parts.join(' ');
 }
@@ -697,6 +713,15 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
         : {}),
       ...(opts.contract !== undefined && opts.contract.length > 0
         ? { contract: opts.contract }
+        : {}),
+      ...(opts.observability !== undefined && opts.observability.length > 0
+        ? { observability: opts.observability }
+        : {}),
+      ...(opts.rollback !== undefined && opts.rollback.length > 0
+        ? { rollback: opts.rollback }
+        : {}),
+      ...(opts.security !== undefined && opts.security.length > 0
+        ? { security: opts.security }
         : {}),
     });
     if (opts.json === true) {
