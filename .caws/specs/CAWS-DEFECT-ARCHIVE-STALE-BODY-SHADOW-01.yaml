@@ -2,10 +2,11 @@ id: CAWS-DEFECT-ARCHIVE-STALE-BODY-SHADOW-01
 title: 'a stale archived body permanently shadows the live spec: archive refuses to overwrite it and names no remedy'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-archive-replace
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Closes ledger N11 (med-high, reproduced live in a consumer repo the same day). Ships caws specs archive --replace, which demotes a stale archived body to <id>.superseded-<timestamp>.yaml inside the archive transaction rather than discarding it; a collision refusal that now names --replace and prints both bodies'' updated_at with a stale/newer judgement; and a superseded-snapshot advisory on recover and show --archived. spec_archived gains an optional superseded_path. Falsification: two mutants (dropped register.ts forwarding, removed same-second collision suffix) reddened exactly the 5 predicted tests by name. Full suite 132/132 suites, 1906/1906 tests.'
 created_at: '2026-08-12T08:37:24.633Z'
-updated_at: '2026-08-12T08:39:42.560Z'
+updated_at: '2026-08-12T09:08:28.145Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
