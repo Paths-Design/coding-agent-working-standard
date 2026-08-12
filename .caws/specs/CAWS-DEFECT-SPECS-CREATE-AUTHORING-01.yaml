@@ -59,3 +59,9 @@ evidence:
     status: pass
     evidence_ref: "3 negative tests: missing when: label, empty clause body, and leader-prose-before-first-label all still refused"
     recorded_at: "2026-08-12T06:37:01.924Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: npx jest tests/shell/specs-create-security-flag.test.js (8 passed); tier-1 spec created via spawned CLI passes caws specs validate; falsified via register.ts forwarding removal
+    recorded_at: "2026-08-12T06:39:08.582Z"
+    command: npx jest tests/shell/specs-create-security-flag.test.js
+    exit_code: 0
