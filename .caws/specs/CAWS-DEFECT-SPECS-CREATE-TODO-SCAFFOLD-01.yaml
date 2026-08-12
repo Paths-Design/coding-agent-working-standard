@@ -67,3 +67,7 @@ evidence:
     status: pass
     evidence_ref: "commits 91c26499 + 0ffdffa4: --module/--invariant are repeatable and replace the scaffold; a spawned dist/index.js run proves the Commander forward, and specs validate confirms the body is kernel-valid. CAVEAT on the AC wording: 'contains no TODO string' is only true if --scope-in and --acceptance are ALSO supplied — a live probe showed scope.in and acceptance carry their own scaffolds, so there are four scaffold sites, not two. Tests assert the two in-scope fields via the exported constants."
     recorded_at: "2026-08-12T15:41:54.995Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "commit 0ffdffa4: two tests — omitting both flags still writes both scaffolds and exits 0, and supplying only one leaves the other scaffolded (the flags are independent). Backward compatibility for existing callers."
+    recorded_at: "2026-08-12T15:42:04.553Z"
