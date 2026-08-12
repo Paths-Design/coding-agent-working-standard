@@ -36,6 +36,7 @@ import {
   isOk,
   ok,
   parseAndValidateSpec,
+  type RegistryPatch,
   type Result,
   type SessionIdentity,
   type Diagnostic,
@@ -826,6 +827,138 @@ export function createWorktree(
 function rollbackGitWorktree(repoRoot: string, wtPath: string): void {
   // Best-effort. We're already in an error path.
   runGit(['worktree', 'remove', '--force', wtPath], repoRoot);
+}
+
+// ─── applyTakeoverWithAudit (CAWS-DEFECT-CLAIM-TAKEOVER-AUDIT-01) ─────────
+
+export interface ApplyTakeoverWithAuditInput {
+  readonly name: string;
+  /** The kernel's takeover_claim patch, already validated by assertOwnership. */
+  readonly patch: RegistryPatch;
+  readonly actor: EventBody['actor'];
+  readonly priorOwner: {
+    readonly session_id: string;
+    readonly platform?: string;
+    /** Null when the prior session's agent record was already TTL-pruned. */
+    readonly last_seen: string | null;
+  };
+  readonly newOwner: {
+    readonly session_id: string;
+    readonly platform?: string;
+  };
+  readonly reason?: string;
+  readonly specId?: string;
+  readonly now?: () => Date;
+}
+
+/**
+ * Apply a worktree ownership takeover AND append its `claim_taken_over` audit
+ * event as one transaction.
+ *
+ * `worktrees.json[name].owner` is the sole ownership authority, which makes a
+ * takeover the highest-authority mutation in the control plane — and until this
+ * function existed it was the one lifecycle transition that left no audit
+ * record at all. The `claim_taken_over` event type has been in the kernel schema
+ * since v11 with no emitter anywhere in the CLI.
+ *
+ * Why that gap was sharp rather than cosmetic: the events chain is
+ * hash-linked, so a reader who verifies it end-to-end learns that nothing was
+ * altered or reordered — and learns nothing about whether the session emitting
+ * events after a transfer was entitled to. Chain integrity READS as provenance
+ * and is not. A transfer was visible only as the `actor` field quietly changing
+ * between two consecutive events, with prev_hash/event_hash linking cleanly
+ * straight across it.
+ *
+ * Atomicity is the point, not a bonus. If the registry write landed and the
+ * append did not, the result would be ownership transferred with no record of
+ * who transferred it — the exact state this slice exists to make impossible. On
+ * append failure the prior registry bytes are restored.
+ */
+export function applyTakeoverWithAudit(
+  cawsDir: string,
+  input: ApplyTakeoverWithAuditInput
+): Result<true> {
+  const registryPath = path.join(cawsDir, 'worktrees.json');
+  // Captured BEFORE the patch so the compensation restores the exact prior
+  // bytes — including fields applyRegistryPatch does not model. Restoring a
+  // re-serialized object could silently drop them.
+  let priorBytes: string | null = null;
+  try {
+    priorBytes = fs.readFileSync(registryPath, 'utf8');
+  } catch {
+    priorBytes = null;
+  }
+
+  const now = (input.now ?? (() => new Date()))().toISOString();
+  const event: EventBody = {
+    event: 'claim_taken_over',
+    ts: now,
+    actor: input.actor,
+    ...(input.specId !== undefined ? { spec_id: input.specId } : {}),
+    data: {
+      worktree_name: input.name,
+      prior_owner: {
+        session_id: input.priorOwner.session_id,
+        ...(input.priorOwner.platform !== undefined
+          ? { platform: input.priorOwner.platform }
+          : {}),
+        last_seen: input.priorOwner.last_seen,
+      },
+      new_owner: {
+        session_id: input.newOwner.session_id,
+        ...(input.newOwner.platform !== undefined ? { platform: input.newOwner.platform } : {}),
+      },
+      ...(input.reason !== undefined ? { reason: input.reason } : {}),
+    },
+  } as unknown as EventBody;
+
+  const outcome = withLifecycleLock(cawsDir, () => {
+    const applyResult = applyRegistryPatch(cawsDir, input.patch);
+    if (!isOk(applyResult)) return err(applyResult.errors);
+    return runLifecycleTransaction({ cawsDir, plannedWrites: [], events: [event] });
+  });
+
+  const restorePriorRegistry = (): void => {
+    if (priorBytes === null) return;
+    try {
+      fs.writeFileSync(registryPath, priorBytes);
+    } catch {
+      /* best-effort; the error below already refuses the takeover */
+    }
+  };
+
+  if (!outcome.ok) {
+    restorePriorRegistry();
+    return err(outcome.errors);
+  }
+  // runLifecycleTransaction wraps `partial_failure_recovered` in ok(), and with
+  // plannedWrites: [] a rolled-back append arrives exactly that way. isOk alone
+  // would let the takeover report success with the audit silently missing.
+  if (outcome.value.kind !== 'success') {
+    restorePriorRegistry();
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED,
+        `Takeover of worktree "${input.name}" was rolled back: the claim_taken_over audit event could not be appended, and ownership must not transfer without it. The prior owner (${input.priorOwner.session_id}) is unchanged.`,
+        {
+          subject: input.name,
+          // `caws claim` reads the CURRENT DIRECTORY and takes no worktree-name
+          // argument, so the retry must carry the cd or it refuses when run
+          // from canonical. Pinned by tests/docs/agent-recovery-path-drift.
+          narrowRepair:
+            `Inspect the event chain with \`caws events verify\`, then retry from inside the worktree: ` +
+            `cd .caws/worktrees/${input.name} && caws claim --takeover`,
+          data: {
+            worktree_name: input.name,
+            prior_owner_session_id: input.priorOwner.session_id,
+            new_owner_session_id: input.newOwner.session_id,
+            append_outcome_kind: outcome.value.kind,
+          },
+        }
+      )
+    );
+  }
+  return ok(true);
 }
 
 function rollbackRegistryEntry(cawsDir: string, name: string): void {
