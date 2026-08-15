@@ -87,3 +87,7 @@ evidence:
     status: pass
     evidence_ref: "headless qwen -p run 2026-08-15T18:32:06Z: session_start entry written to worktree .qwen/logs/audit.log (first successful hook completion since ship)"
     recorded_at: "2026-08-15T18:34:21.525Z"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "templates/hook-packs/qwen-code/CAWS-HOOKS.md: Timeout row (ms contract), updatedInput ACP nuance, trusted-folder activation note, version line 0.21.11"
+    recorded_at: "2026-08-15T18:34:24.989Z"
