@@ -1,24 +1,36 @@
-// `caws message send | poll` — the inter-agent message channel command surface
-// (AGENT-MESSAGE-CHANNEL-001). Sessions exchange directed messages addressed by
-// session id, over .caws/messages.jsonl (a separate log from the events audit
-// chain). The sender is attributed via the resolved session actor; a send to a
-// session that is not live in the lease registry is refused.
+// `caws message send | reply | poll | inbox | history | status | prune` — the
+// inter-agent message channel command surface (AGENT-MESSAGE-CHANNEL-001,
+// CAWS-MESSAGE-DELIVERY-UX-001). Sessions exchange directed messages addressed
+// by session id (or a wt:/spec: alias), over .caws/messages.jsonl (a separate
+// log from the events audit chain). The sender is attributed via the resolved
+// session actor; a send to a recipient with no lease or a stale heartbeat is
+// refused — a stopped lease with a FRESH heartbeat is idle, not dead.
 //
-//   message send --to <sid> --text <t>   directed send (refuses non-live recipient)
-//   message poll [--me <sid>]            pull next message addressed to me (default
-//                                        me = resolved session id)
+//   message send --to <sid|wt:name|spec:id> --text <t>   directed send
+//   message reply <message-id> --text <t>                reply on the same channel
+//   message poll [--me <sid>]                            pull next message addressed to me
+//   message status <message-id>                          observe delivered state of one message
+//
+// OUTPUT CONTRACT: a refusal is observable on STDOUT (one verdict line naming
+// the refusal class) with full diagnostics on stderr — an agent that follows
+// the common `2>/dev/null` habit cannot mistake a refusal for a successful
+// send. Success lines stay byte-stable (`sent to <id> (id ..., channel ...)`).
 
 import {
   pollMessage,
   resolveRepoRoot,
+  resolveRecipient,
   sendMessage,
+  getMessageDeliveryState,
   inboxCount,
   inboxMessages,
   channelHistory,
   pruneMessages,
+  storeDiagnostic,
+  STORE_RULES,
   type MessageActor,
-  type MessageRecord,
   type MessagePruneEntry,
+  type MessageRecord,
 } from '../../store';
 import { buildActor } from '../session/actor';
 import { resolveSession } from '../session/resolve-session';
@@ -46,6 +58,25 @@ export interface MessageSendCommandOptions extends BaseCommandOptions {
   readonly text: string;
   /** Skip the recipient-liveness check (escape hatch; default false). */
   readonly allowDead?: boolean;
+}
+
+/** Maps a refusal's first store rule to a short class name for the stdout verdict. */
+function refusalClass(errors: ReadonlyArray<{ rule?: string }>): string {
+  const rule = (errors[0] as { rule?: string } | undefined)?.rule;
+  switch (rule) {
+    case STORE_RULES.MESSAGES_RECIPIENT_NOT_LIVE:
+      return 'recipient not live';
+    case STORE_RULES.MESSAGES_ALIAS_UNRESOLVED:
+      return 'recipient alias unresolved';
+    case STORE_RULES.MESSAGES_RECIPIENT_INVALID:
+      return 'invalid recipient';
+    case STORE_RULES.MESSAGES_MESSAGE_NOT_FOUND:
+      return 'message not found';
+    case STORE_RULES.MESSAGES_REPLY_TO_SELF:
+      return 'reply-to-self refused';
+    default:
+      return 'refused';
+  }
 }
 
 /**
@@ -80,18 +111,207 @@ export function runMessageSendCommand(opts: MessageSendCommandOptions): number {
   }
   const actor = buildActor({ session: sessionResult.value, kind: 'agent' }) as MessageActor;
 
+  // Resolve wt:/spec: aliases to a session id; raw session ids pass through.
+  const recipient = resolveRecipient(cawsDir, opts.to);
+  if (!recipient.ok) {
+    out(`caws message send: not sent — ${refusalClass(recipient.errors)} (details on stderr).`);
+    err('caws message send: not sent.');
+    err(renderDiagnostics(recipient.errors, { showData }));
+    return 1;
+  }
+  if (recipient.value.alias !== undefined) {
+    out(`(alias ${recipient.value.alias} -> session ${recipient.value.sessionId})`);
+  }
+
   const sent = sendMessage(cawsDir, {
     actor,
-    to: opts.to,
+    to: recipient.value.sessionId,
     text: opts.text,
     ...(opts.allowDead === true ? { requireLive: false } : {}),
   });
   if (!sent.ok) {
+    out(`caws message send: not sent — ${refusalClass(sent.errors)} (details on stderr).`);
     err('caws message send: not sent.');
     err(renderDiagnostics(sent.errors, { showData }));
     return 1;
   }
-  out(`sent to ${sent.value.to} (id ${sent.value.id}, channel ${sent.value.channel})`);
+  out(`sent to ${sent.value.message.to} (id ${sent.value.message.id}, channel ${sent.value.message.channel})`);
+  if (sent.value.recipientIdle) {
+    out(
+      `(note: recipient lease is stopped but its heartbeat is fresh — idle between turns; ` +
+        `the message surfaces at its next tool call, not into a void.)`
+    );
+  }
+  return 0;
+}
+
+export interface MessageReplyCommandOptions extends BaseCommandOptions {
+  /** The message id being replied to (its sender becomes the recipient). */
+  readonly id: string;
+  readonly text: string;
+  /** Skip the recipient-liveness check (escape hatch; default false). */
+  readonly allowDead?: boolean;
+}
+
+/**
+ * `caws message reply <message-id>` — reply to a message on its own channel.
+ * The recipient is the original message's kernel-attributed sender, so a
+ * recipient never transcribes a session id to answer. Exit codes: 0 sent,
+ * 1 refused (unknown id / self-reply / not live / no session), 2 repo error.
+ */
+export function runMessageReplyCommand(opts: MessageReplyCommandOptions): number {
+  const { cwd, env, out, err, showData } = defaults(opts);
+
+  if (typeof opts.id !== 'string' || opts.id.length === 0) {
+    err('caws message reply: <message_id> is required.');
+    return 1;
+  }
+  if (typeof opts.text !== 'string' || opts.text.length === 0) {
+    err('caws message reply: --text "<message>" is required and must be non-empty.');
+    return 1;
+  }
+
+  const rootResult = resolveRepoRoot(cwd);
+  if (!rootResult.ok) {
+    err('caws message reply: failed to resolve repo root.');
+    err(renderDiagnostics(rootResult.errors, { showData }));
+    return 2;
+  }
+  const { cawsDir } = rootResult.value;
+
+  const sessionResult = resolveSession({ cawsDir, worktreeRoot: cwd, env, allowMint: true });
+  if (!sessionResult.ok) {
+    err('caws message reply: could not resolve your session identity (who is sending).');
+    err(renderDiagnostics(sessionResult.errors, { showData }));
+    return 1;
+  }
+  const actor = buildActor({ session: sessionResult.value, kind: 'agent' }) as MessageActor;
+  const me = actor.session_id ?? actor.id;
+
+  const target = getMessageDeliveryState(cawsDir, opts.id);
+  if (!target.ok) {
+    err('caws message reply: failed to read the message log.');
+    err(renderDiagnostics(target.errors, { showData }));
+    return 2;
+  }
+  if (target.value === null) {
+    const notFound = [
+      storeDiagnostic(
+        STORE_RULES.MESSAGES_MESSAGE_NOT_FOUND,
+        `No message with id "${opts.id}" in this repo's message log — a reply to an unknown id would fabricate a recipient.`
+      ),
+    ];
+    out(`caws message reply: not sent — ${refusalClass(notFound)} (details on stderr).`);
+    err('caws message reply: not sent.');
+    err(renderDiagnostics(notFound, { showData }));
+    return 1;
+  }
+  const origSender = target.value.message.actor.session_id ?? target.value.message.actor.id;
+  if (origSender === me) {
+    const selfReply = [
+      storeDiagnostic(
+        STORE_RULES.MESSAGES_REPLY_TO_SELF,
+        `Message "${opts.id}" was sent by you (${me}) — a self-reply is a routing error, not a conversation.`
+      ),
+    ];
+    out(`caws message reply: not sent — ${refusalClass(selfReply)} (details on stderr).`);
+    err('caws message reply: not sent.');
+    err(renderDiagnostics(selfReply, { showData }));
+    return 1;
+  }
+
+  const sent = sendMessage(cawsDir, {
+    actor,
+    to: origSender,
+    text: opts.text,
+    ...(opts.allowDead === true ? { requireLive: false } : {}),
+  });
+  if (!sent.ok) {
+    out(`caws message reply: not sent — ${refusalClass(sent.errors)} (details on stderr).`);
+    err('caws message reply: not sent.');
+    err(renderDiagnostics(sent.errors, { showData }));
+    return 1;
+  }
+  out(
+    `replied to ${sent.value.message.to} (reply to ${opts.id}, id ${sent.value.message.id}, channel ${sent.value.message.channel})`
+  );
+  if (sent.value.recipientIdle) {
+    out(
+      `(note: recipient lease is stopped but its heartbeat is fresh — idle between turns; ` +
+        `the message surfaces at its next tool call, not into a void.)`
+    );
+  }
+  return 0;
+}
+
+export interface MessageStatusCommandOptions extends BaseCommandOptions {
+  readonly id: string;
+  readonly json?: boolean;
+}
+
+/**
+ * `caws message status <message-id>` — observe one message's delivery state.
+ * Read-only. Lets a SENDER distinguish "queued" from "seen" without polling
+ * the recipient's mailbox. Exit codes: 0 found, 1 (unknown id / no session),
+ * 2 repo error.
+ */
+export function runMessageStatusCommand(opts: MessageStatusCommandOptions): number {
+  const { cwd, out, err, showData } = defaults(opts);
+
+  if (typeof opts.id !== 'string' || opts.id.length === 0) {
+    err('caws message status: <message_id> is required.');
+    return 1;
+  }
+
+  const rootResult = resolveRepoRoot(cwd);
+  if (!rootResult.ok) {
+    err('caws message status: failed to resolve repo root.');
+    err(renderDiagnostics(rootResult.errors, { showData }));
+    return 2;
+  }
+  const { cawsDir } = rootResult.value;
+
+  const target = getMessageDeliveryState(cawsDir, opts.id);
+  if (!target.ok) {
+    err('caws message status: failed to read the message log.');
+    err(renderDiagnostics(target.errors, { showData }));
+    return 2;
+  }
+  if (target.value === null) {
+    const notFound = [
+      storeDiagnostic(
+        STORE_RULES.MESSAGES_MESSAGE_NOT_FOUND,
+        `No message with id "${opts.id}" in this repo's message log.`
+      ),
+    ];
+    err('caws message status: not found.');
+    err(renderDiagnostics(notFound, { showData }));
+    return 1;
+  }
+  const { message, delivered, deliveredAt } = target.value;
+  const from = message.actor.session_id ?? message.actor.id;
+
+  if (opts.json === true) {
+    out(
+      JSON.stringify({
+        ok: true,
+        read_only: true,
+        message,
+        delivered,
+        ...(deliveredAt !== undefined ? { delivered_at: deliveredAt } : {}),
+      })
+    );
+    return 0;
+  }
+  out(`message ${message.id}`);
+  out(`from ${from} -> ${message.to} (channel ${message.channel})`);
+  out(`sent: ${message.ts}`);
+  out(
+    delivered
+      ? `delivered: yes (at ${deliveredAt})`
+      : 'delivered: no (still queued — surfaces at the recipient\'s next poll/tool call)'
+  );
+  out(message.text);
   return 0;
 }
 
@@ -149,7 +369,7 @@ export function runMessagePollCommand(opts: MessagePollCommandOptions): number {
     err(renderDiagnostics(polled.errors, { showData }));
     return 2;
   }
-  const { message } = polled.value;
+  const { message, sender } = polled.value;
 
   // Mailbox depth for triage. On a peek/empty result this tells the agent how
   // many more are waiting; best-effort (a count failure does not fail the poll).
@@ -157,7 +377,7 @@ export function runMessagePollCommand(opts: MessagePollCommandOptions): number {
   const waiting = countResult.ok ? countResult.value : null;
 
   if (opts.json === true) {
-    out(JSON.stringify({ message, waiting }));
+    out(JSON.stringify({ message, ...(sender !== undefined ? { sender } : {}), waiting }));
     return 0;
   }
   if (!message) {
@@ -165,7 +385,12 @@ export function runMessagePollCommand(opts: MessagePollCommandOptions): number {
     return 0;
   }
   const peekTag = opts.peek === true ? ' (peek — not consumed)' : '';
-  out(`from ${message.actor.session_id ?? message.actor.id}${peekTag}:`);
+  const senderBits: string[] = [];
+  if (sender?.worktree !== undefined) senderBits.push(`worktree ${sender.worktree}`);
+  if (sender?.specId !== undefined) senderBits.push(`spec ${sender.specId}`);
+  if (sender?.branch !== undefined) senderBits.push(`branch ${sender.branch}`);
+  const senderTag = senderBits.length > 0 ? ` (${senderBits.join(', ')})` : '';
+  out(`from ${message.actor.session_id ?? message.actor.id}${senderTag}${peekTag}:`);
   out(message.text);
   // `waiting` is computed AFTER this poll: on a consume it's the post-delivery
   // remainder; on a peek it still includes the message just shown. Report how many
@@ -231,8 +456,21 @@ function sanitizeLimit(limit: number | undefined): number | undefined {
   return Math.max(0, Math.floor(limit));
 }
 
-function renderMessageLine(message: MessageRecord): string {
-  return `${message.ts} ${message.actor.session_id ?? message.actor.id} -> ${message.to}: ${message.text}`;
+/**
+ * Minimal renderable shape shared by inbox messages (undelivered by
+ * definition — rendered [queued]) and history entries (annotated).
+ */
+type RenderableMessage = Pick<MessageRecord, 'ts' | 'actor' | 'to' | 'text'> & {
+  delivered?: boolean;
+  deliveredAt?: string;
+};
+
+function renderMessageLine(message: RenderableMessage): string {
+  const from = message.actor.session_id ?? message.actor.id;
+  const delivery = message.delivered
+    ? ` [delivered${message.deliveredAt !== undefined ? ` ${message.deliveredAt}` : ''}]`
+    : ' [queued]';
+  return `${message.ts} ${from} -> ${message.to}${delivery}: ${message.text}`;
 }
 
 function renderPruneEntry(entry: MessagePruneEntry): string {

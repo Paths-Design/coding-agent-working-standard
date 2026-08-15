@@ -37,7 +37,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate)
 - [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.
 - [`caws agents`](#caws-agents) — Agent liveness substrate: register/heartbeat/stop/list/show/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.
-- [`caws message`](#caws-message) — Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/poll/inbox/history/prune directed messages between running sessions, addressed by session id, over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
+- [`caws message`](#caws-message) — Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/reply/poll/inbox/history/status/prune directed messages between running sessions, addressed by session id (or a wt:/spec: alias), over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
 
 ## `caws init`
 
@@ -888,29 +888,40 @@ Operator-invoked cleanup. Defaults to dry-run; pass --apply to actually delete. 
 
 ## `caws message`
 
-Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/poll/inbox/history/prune directed messages between running sessions, addressed by session id, over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
+Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/reply/poll/inbox/history/status/prune directed messages between running sessions, addressed by session id (or a wt:/spec: alias), over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
 
 ### `caws message send`
 
-Send a message to another session. Attributes the sender via this session's identity; refuses a recipient that is not live in the agent registry.
+Send a message to another session. Attributes the sender via this session's identity; refuses a recipient with no lease or a stale heartbeat (a stopped lease with a fresh heartbeat is idle between turns, not dead). A refused send prints a not-sent verdict to stdout — judge sends by their printed output.
 
 **Options:**
 
-- `--to <session_id>` — Recipient session id (required)
+- `--to <endpoint>` — Recipient endpoint (required): a session id, or an alias wt:<worktree-name> / spec:<spec-id> resolving to the freshest bound session
 - `--text <message>` — Message body (required, non-empty)
+- `--allow-dead` — Send even if the recipient is not live in the registry (escape hatch; default off)
+- `--data` — Show structured data block on diagnostics
+
+### `caws message reply`
+
+Reply to a message on its own channel — the recipient is the original message's kernel-attributed sender, so no session id is transcribed. Same liveness semantics as send; refuses an unknown id and refuses replying to your own message.
+
+**Options:**
+
+- `--id <message_id>` — Id of the message being replied to (required)
+- `--text <message>` — Reply body (required, non-empty)
 - `--allow-dead` — Send even if the recipient is not live in the registry (escape hatch; default off)
 - `--data` — Show structured data block on diagnostics
 
 ### `caws message poll`
 
-Pull the next undelivered message addressed to you. Deliver-once. Defaults --me to this session id.
+Pull the next undelivered message addressed to you. Deliver-once. The result carries registry-derived sender context (worktree/spec/branch) when the sender has a lease. Defaults --me to this session id.
 
 **Options:**
 
 - `--me <session_id>` — Endpoint to poll for (default: this session id)
 - `--wait <ms>` — Block up to <ms> for a message before returning (long-poll; capped at 60000)
 - `--peek` — Show the next message without consuming it (no delivery record)
-- `--json` — Emit JSON ({message, waiting}) instead of human text
+- `--json` — Emit JSON ({message, sender?, waiting}) instead of human text
 - `--data` — Show structured data block on diagnostics
 
 ### `caws message inbox`
@@ -926,7 +937,7 @@ List undelivered messages addressed to you without consuming them. Read-only; po
 
 ### `caws message history`
 
-Show retained channel history between this session and another endpoint. Read-only; message bodies are communication, not authority.
+Show retained channel history between this session and another endpoint, each message annotated with its delivery state ([queued] vs [delivered]). Read-only; message bodies are communication, not authority.
 
 **Options:**
 
@@ -934,6 +945,16 @@ Show retained channel history between this session and another endpoint. Read-on
 - `--with <session_id>` — Other endpoint in the channel (required)
 - `--limit <n>` — Maximum recent messages to print, preserving log order
 - `--json` — Emit JSON ({ok, read_only, channel, total, messages})
+- `--data` — Show structured data block on diagnostics
+
+### `caws message status`
+
+Observe one message's delivery state (queued vs delivered, with timestamps) — lets a sender distinguish "queued" from "seen" without polling the recipient. Read-only.
+
+**Options:**
+
+- `--id <message_id>` — Id of the message to observe (required)
+- `--json` — Emit JSON ({ok, read_only, message, delivered, delivered_at?})
 - `--data` — Show structured data block on diagnostics
 
 ### `caws message prune`

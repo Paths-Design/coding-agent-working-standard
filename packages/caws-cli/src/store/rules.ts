@@ -186,6 +186,17 @@ export const STORE_RULES = {
   /** A single line in messages.jsonl is not valid JSON. Skipped with a
    *  diagnostic; never fatal — a corrupt chat line is not an integrity failure. */
   MESSAGES_LINE_MALFORMED: 'store.messages.line_malformed',
+  /** `caws message reply`/`status` targeted a message id that is not present
+   *  in messages.jsonl. No send happens — a reply to an unknown id would
+   *  fabricate a recipient. */
+  MESSAGES_MESSAGE_NOT_FOUND: 'store.messages.message_not_found',
+  /** `caws message reply` targeted a message the caller itself sent. A
+   *  self-reply is a routing error, not a conversation. */
+  MESSAGES_REPLY_TO_SELF: 'store.messages.reply_to_self',
+  /** A `wt:<worktree>` / `spec:<spec-id>` recipient alias resolved to no
+   *  session with a fresh heartbeat. The alias names a binding, not an
+   *  address — resolution is refused rather than guessed. */
+  MESSAGES_ALIAS_UNRESOLVED: 'store.messages.alias_unresolved',
 } as const;
 
 export type StoreRule = (typeof STORE_RULES)[keyof typeof STORE_RULES];

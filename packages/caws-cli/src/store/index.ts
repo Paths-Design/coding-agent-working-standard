@@ -105,7 +105,9 @@ export type {
 
 // ─── messages (AGENT-MESSAGE-CHANNEL-001) ───────────────────────────────
 // Inter-agent message channel over .caws/messages.jsonl — separate from the
-// events audit chain by design. sendMessage refuses a non-live recipient.
+// events audit chain by design. sendMessage refuses a recipient with no lease
+// or a stale heartbeat (liveness is age-based; a stopped lease with a fresh
+// heartbeat is idle, not dead — CAWS-MESSAGE-DELIVERY-UX-001).
 export {
   sendMessage,
   pollMessage,
@@ -114,15 +116,22 @@ export {
   channelHistory,
   pruneMessages,
   isRecipientLive,
+  resolveRecipient,
+  getMessageDeliveryState,
   channelId,
 } from './messages-store';
 export type {
   MessageRecord,
   MessageActor,
+  MessageSendOutcome,
+  MessageSenderContext,
+  MessageDeliveryState,
+  HistoryEntry,
   PollResult,
   PollOptions,
   MessagePruneOptions,
   MessagePruneEntry,
   MessagePrunePlan,
   MessagePruneResult,
+  ResolvedRecipient,
 } from './messages-store';

@@ -69,10 +69,14 @@ function messagesPath(cawsDir: string): string {
 /**
  * Is `sessionId` a live recipient per the lease registry?
  *
- * Live := a lease exists with status 'active' or 'stopping' AND last_active
- * within the TTL. A 'stopped' lease, a stale heartbeat, or no lease at all is
- * NOT live — a send to such a recipient must fail loudly so "no reply" can never
- * be confused with "the send was dropped into a void."
+ * Liveness is decided by HEARTBEAT AGE, not by lease status alone
+ * (CAWS-MESSAGE-DELIVERY-UX-001). A lease whose last_active is within the TTL
+ * is a deliverable recipient regardless of status: an agent that ended its
+ * turn while background work runs is written "stopped" by the Stop hook but
+ * is idle, not dead — auto-delivery surfaces the message at its next tool
+ * call, so there is no void. Hard refusals are exactly two: no lease at all
+ * (typo/foreign-id protection) and a stale heartbeat older than the TTL
+ * (genuinely unreachable).
  */
 export function isRecipientLive(cawsDir: string, sessionId: string): Result<boolean> {
   const described = describeRecipientLiveness(cawsDir, sessionId);
@@ -80,46 +84,55 @@ export function isRecipientLive(cawsDir: string, sessionId: string): Result<bool
   return ok(described.value.live);
 }
 
-/** Why a recipient is (or is not) live. `reason`/`ageMs` are set only when not live. */
+/** Why a recipient is (or is not) live. `reason`/`ageMs` are set only when not live; `idle` only when live-but-stopped. */
 export interface RecipientLiveness {
   readonly live: boolean;
-  readonly reason?: 'no_lease' | 'not_active' | 'stale_heartbeat';
+  readonly reason?: 'no_lease' | 'stale_heartbeat';
+  /** True when the recipient is deliverable but its lease is stopped (idle between turns, fresh heartbeat). */
+  readonly idle?: boolean;
   readonly status?: string;
   readonly ageMs?: number;
 }
 
 /**
  * Same gate as {@link isRecipientLive}, but returns the discriminating detail
- * (no lease / not active / stale heartbeat + age) so the rejection message can
- * tell the sender *why* the recipient is unreachable instead of collapsing
- * three causes into one generic string. See CAWS-DEFECT-MSG-ENRICHMENT-01.
+ * (no lease / stale heartbeat + age / idle-but-deliverable) so the rejection
+ * message can tell the sender *why* the recipient is unreachable, and a
+ * successful send can note an idle recipient. See CAWS-DEFECT-MSG-ENRICHMENT-01
+ * and CAWS-MESSAGE-DELIVERY-UX-001.
  */
 export function describeRecipientLiveness(cawsDir: string, sessionId: string): Result<RecipientLiveness> {
   const leasesResult = loadLeases(cawsDir);
   if (!leasesResult.ok) return err(leasesResult.errors);
-  const lease = leasesResult.value.leases[sessionId];
+  const lease = leasesResult.value.leases[sessionId] as
+    | { status?: string; last_active?: string }
+    | undefined;
   if (!lease) return ok({ live: false, reason: 'no_lease' });
-  const status = (lease as { status?: string }).status;
-  if (status !== 'active' && status !== 'stopping') {
+  const status = lease.status;
+  const ageMs = typeof lease.last_active === 'string' ? Date.now() - Date.parse(lease.last_active) : NaN;
+  const ageKnown = Number.isFinite(ageMs);
+  if (ageKnown && ageMs > LIVENESS_TTL_MS) {
+    // Stale heartbeat dominates every status — even an 'active' lease older
+    // than the TTL is not a deliverable recipient.
     return ok({
       live: false,
-      reason: 'not_active',
+      reason: 'stale_heartbeat',
       ...(status !== undefined ? { status } : {}),
+      ageMs,
     });
   }
-  const lastActive = (lease as { last_active?: string }).last_active;
-  if (typeof lastActive === 'string') {
-    const ageMs = Date.now() - Date.parse(lastActive);
-    if (Number.isFinite(ageMs) && ageMs > LIVENESS_TTL_MS) {
-      return ok({
-        live: false,
-        reason: 'stale_heartbeat',
-        ...(status !== undefined ? { status } : {}),
-        ageMs,
-      });
+  if (status === 'stopped') {
+    if (!ageKnown) {
+      // A stopped lease with no usable heartbeat age carries no evidence of
+      // life; conservatively not live (folded into the stale-heartbeat class
+      // so the hard-refusal classes stay exactly two).
+      return ok({ live: false, reason: 'stale_heartbeat', status });
     }
+    // Stopped + fresh heartbeat: the session ended a turn (Stop hook) but its
+    // heart is minutes fresh — idle between turns, deliverable.
+    return ok({ live: true, idle: true, status });
   }
-  return ok({ live: true });
+  return ok({ live: true, ...(status !== undefined ? { status } : {}) });
 }
 
 /** Humanized "Nd ago" / "Nm ago" for a millisecond age, rounded down. */
@@ -141,12 +154,12 @@ function describeNotLiveReason(liveness: RecipientLiveness): string {
   switch (liveness.reason) {
     case 'no_lease':
       return 'no lease found for this session id';
-    case 'not_active':
-      return `lease status is "${liveness.status ?? 'unknown'}" (not "active" or "stopping")`;
     case 'stale_heartbeat':
-      return `stale heartbeat — last active ${liveness.ageMs !== undefined ? formatAge(liveness.ageMs) : 'unknown'}; TTL is ${LIVENESS_TTL_HUMAN}`;
+      return `stale heartbeat — last active ${
+        liveness.ageMs !== undefined ? formatAge(liveness.ageMs) : 'unknown'
+      }; TTL is ${LIVENESS_TTL_HUMAN}`;
     default:
-      return 'no active lease within the heartbeat TTL';
+      return 'no lease with a fresh heartbeat within the TTL';
   }
 }
 
@@ -165,18 +178,32 @@ function appendLine(cawsDir: string, record: MessageRecord | DeliveryRecord): Re
   }
 }
 
+/** A successful send: the persisted record plus delivery-relevant detail. */
+export interface MessageSendOutcome {
+  /** The persisted message record (identical to what was appended). */
+  readonly message: MessageRecord;
+  /**
+   * True when the recipient's lease is stopped but its heartbeat is fresh —
+   * idle between turns. The send is deliverable (auto-delivery surfaces it at
+   * the recipient's next tool call); surfaces carry an informational note.
+   */
+  readonly recipientIdle: boolean;
+}
+
 /**
  * Send a directed message from `actor` to recipient `to`.
  *
  * Refuses (err) when:
  *   - `to` is empty or contains characters outside the endpoint allowlist
- *   - `requireLive` is set and the recipient is not live in the registry
+ *   - `requireLive` is set and the recipient has no lease, or its heartbeat
+ *     is older than the TTL (a stopped lease with a FRESH heartbeat is
+ *     deliverable — see {@link describeRecipientLiveness})
  * On success, persists a 'message' record and returns it.
  */
 export function sendMessage(
   cawsDir: string,
   params: { actor: MessageActor; to: string; text: string; requireLive?: boolean }
-): Result<MessageRecord> {
+): Result<MessageSendOutcome> {
   const { actor, to, text } = params;
   if (typeof to !== 'string' || to.length === 0 || !ENDPOINT_RE.test(to)) {
     return err(
@@ -186,6 +213,7 @@ export function sendMessage(
       )
     );
   }
+  let recipientIdle = false;
   if (params.requireLive !== false) {
     const liveness = describeRecipientLiveness(cawsDir, to);
     if (!liveness.ok) return err(liveness.errors);
@@ -200,6 +228,7 @@ export function sendMessage(
         )
       );
     }
+    recipientIdle = liveness.value.idle === true;
   }
   const from = actor.session_id ?? actor.id;
   const record: MessageRecord = {
@@ -213,13 +242,142 @@ export function sendMessage(
   };
   const appended = appendLine(cawsDir, record);
   if (!appended.ok) return err(appended.errors);
-  return ok(record);
+  return ok({ message: record, recipientIdle });
+}
+
+// ─── recipient aliases (CAWS-MESSAGE-DELIVERY-UX-001) ─────────────────────
+
+const WT_ALIAS_PREFIX = 'wt:';
+const SPEC_ALIAS_PREFIX = 'spec:';
+
+/** A resolved `--to` value: the raw endpoint id plus how it was obtained. */
+export interface ResolvedRecipient {
+  /** The endpoint id to address (a session id). */
+  readonly sessionId: string;
+  /** The original `--to` value when it was an alias (wt:…/spec:…); absent for raw ids. */
+  readonly alias?: string;
+}
+
+/**
+ * Resolve a `--to` value into a session id. Raw session ids pass through
+ * unchanged. `wt:<worktree-name>` and `spec:<spec-id>` aliases resolve to the
+ * FRESHEST lease (max last_active within the TTL) bound to that worktree or
+ * spec — ties prefer a non-stopped status. An alias with no fresh bound lease
+ * is refused with MESSAGES_ALIAS_UNRESOLVED rather than guessed.
+ */
+export function resolveRecipient(cawsDir: string, to: string): Result<ResolvedRecipient> {
+  if (typeof to !== 'string' || to.length === 0) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.MESSAGES_RECIPIENT_INVALID,
+        `Recipient "${to}" is empty or contains characters outside ${ENDPOINT_RE}.`
+      )
+    );
+  }
+  if (!to.startsWith(WT_ALIAS_PREFIX) && !to.startsWith(SPEC_ALIAS_PREFIX)) {
+    if (!ENDPOINT_RE.test(to)) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.MESSAGES_RECIPIENT_INVALID,
+          `Recipient "${to}" is empty or contains characters outside ${ENDPOINT_RE}. ` +
+            `(Aliases take the form wt:<worktree-name> or spec:<spec-id>.)`
+        )
+      );
+    }
+    return ok({ sessionId: to });
+  }
+  const isWorktreeAlias = to.startsWith(WT_ALIAS_PREFIX);
+  const aliasValue = to.slice(isWorktreeAlias ? WT_ALIAS_PREFIX.length : SPEC_ALIAS_PREFIX.length);
+  if (aliasValue.length === 0) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.MESSAGES_ALIAS_UNRESOLVED,
+        `Alias "${to}" is empty after its prefix — supply the ${
+          isWorktreeAlias ? 'worktree name' : 'spec id'
+        } (e.g. ${isWorktreeAlias ? 'wt:wt-auth' : 'spec:FEAT-1'}).`
+      )
+    );
+  }
+  const leasesResult = loadLeases(cawsDir);
+  if (!leasesResult.ok) return err(leasesResult.errors);
+  const field = isWorktreeAlias ? 'bound_worktree' : 'bound_spec_id';
+  let best: { sessionId: string; ageMs: number; stopped: boolean } | null = null;
+  for (const [sessionId, lease] of Object.entries(leasesResult.value.leases)) {
+    const bound = field === 'bound_worktree' ? lease.bound_worktree : lease.bound_spec_id;
+    if (bound !== aliasValue) continue;
+    const ts = Date.parse(lease.last_active);
+    if (!Number.isFinite(ts)) continue;
+    const ageMs = Date.now() - ts;
+    if (ageMs > LIVENESS_TTL_MS) continue;
+    const stopped = lease.status === 'stopped';
+    // Freshest heartbeat wins; on a tie prefer a non-stopped lease (a live
+    // turn beats an idle one at identical age).
+    if (
+      best === null ||
+      ageMs < best.ageMs ||
+      (ageMs === best.ageMs && best.stopped && !stopped)
+    ) {
+      best = { sessionId, ageMs, stopped };
+    }
+  }
+  if (best === null) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.MESSAGES_ALIAS_UNRESOLVED,
+        `Alias "${to}" resolves to no session with a fresh heartbeat (no lease bound to this ${
+          isWorktreeAlias ? 'worktree' : 'spec'
+        } within the ${LIVENESS_TTL_HUMAN} TTL). The alias names a binding, not an address — ` +
+          `run \`caws agents list\` to see live sessions and their worktrees/specs, ` +
+          `or address the session id directly.`
+      )
+    );
+  }
+  return ok({ sessionId: best.sessionId, alias: to });
 }
 
 export interface PollResult {
   /** The next undelivered message addressed to `me`, or null if none. */
   readonly message: MessageRecord | null;
+  /**
+   * Sender context joined from the lease registry at read time (worktree /
+   * spec / branch — each present only when the sender's lease records it), so
+   * a recipient never depends on the sender self-identifying in the body.
+   * Absent when the message is null or the sender has no lease.
+   */
+  readonly sender?: MessageSenderContext;
   readonly diagnostics: ReadonlyArray<Diagnostic>;
+}
+
+/** Registry-derived context about a message's sender (CAWS-MESSAGE-DELIVERY-UX-001). */
+export interface MessageSenderContext {
+  readonly worktree?: string;
+  readonly specId?: string;
+  readonly branch?: string;
+}
+
+/**
+ * Best-effort join of a sender endpoint id against the lease registry.
+ * Returns undefined when the sender has no lease or the registry fails to
+ * load — enrichment must never fail a poll (fail-open, like the hook).
+ */
+function senderContextFor(cawsDir: string, senderId: string): MessageSenderContext | undefined {
+  const leasesResult = loadLeases(cawsDir);
+  if (!leasesResult.ok) return undefined;
+  const lease = leasesResult.value.leases[senderId] as
+    | { bound_worktree?: unknown; bound_spec_id?: unknown; branch?: unknown }
+    | undefined;
+  if (!lease) return undefined;
+  const ctx: { worktree?: string; specId?: string; branch?: string } = {};
+  if (typeof lease.bound_worktree === 'string' && lease.bound_worktree.length > 0) {
+    ctx.worktree = lease.bound_worktree;
+  }
+  if (typeof lease.bound_spec_id === 'string' && lease.bound_spec_id.length > 0) {
+    ctx.specId = lease.bound_spec_id;
+  }
+  if (typeof lease.branch === 'string' && lease.branch.length > 0) {
+    ctx.branch = lease.branch;
+  }
+  return Object.keys(ctx).length > 0 ? ctx : undefined;
 }
 
 export interface MessageInboxListResult {
@@ -538,10 +696,14 @@ function pollMessageLocked(cawsDir: string, me: string, peek: boolean): Result<P
 
   const next = messages.find((m) => m.to === me && !delivered.has(m.id));
   if (!next) return ok({ message: null, diagnostics });
+  const sender = senderContextFor(cawsDir, next.actor.session_id ?? next.actor.id);
+  const withSender = { ...(sender !== undefined ? { sender } : {}) };
 
   // Peek: return the message but do NOT consume it — no delivery record, so a
   // subsequent normal poll still delivers it.
-  if (peek) return ok({ message: next, diagnostics });
+  if (peek) {
+    return ok({ message: next, ...withSender, diagnostics });
+  }
 
   const deliveryAppend = appendLine(cawsDir, {
     record: 'delivery',
@@ -549,7 +711,7 @@ function pollMessageLocked(cawsDir: string, me: string, peek: boolean): Result<P
     ts: new Date().toISOString(),
   });
   if (!deliveryAppend.ok) return err(deliveryAppend.errors);
-  return ok({ message: next, diagnostics });
+  return ok({ message: next, ...withSender, diagnostics });
 }
 
 /**
@@ -652,31 +814,78 @@ export function inboxMessages(
   });
 }
 
-/** Full, non-lossy history between two endpoints (both directions, in order). */
-export function channelHistory(cawsDir: string, a: string, b: string): Result<MessageRecord[]> {
-  const file = messagesPath(cawsDir);
-  if (!fs.existsSync(file)) return ok([]);
-  let raw: string;
-  try {
-    raw = fs.readFileSync(file, 'utf8');
-  } catch (e) {
-    return err(
-      storeDiagnostic(
-        STORE_RULES.MESSAGES_LOG_UNREADABLE,
-        `Failed to read ${MESSAGES_FILENAME}: ${(e as Error).message}`
-      )
-    );
-  }
-  const ch = channelId(a, b);
-  const out: MessageRecord[] = [];
-  for (const line of raw.split('\n')) {
-    if (line.length === 0) continue;
-    try {
-      const rec = JSON.parse(line) as { record?: string; channel?: string };
-      if (rec.record === 'message' && rec.channel === ch) out.push(rec as MessageRecord);
-    } catch {
-      /* lenient: skip malformed history lines */
+/** A message record plus its read-time derived delivery state. */
+export interface MessageDeliveryState {
+  readonly message: MessageRecord;
+  /** True when a delivery record for this message id exists (the recipient consumed it). */
+  readonly delivered: boolean;
+  /** Delivery-record timestamp; present only when delivered. */
+  readonly deliveredAt?: string;
+}
+
+/**
+ * Find a message by id, with its derived delivery state (CAWS-MESSAGE-DELIVERY-
+ * UX-001). Read-only: appends nothing. Returns ok(null) when the id is absent —
+ * absence is a not-found answer, not a load error.
+ */
+export function getMessageDeliveryState(cawsDir: string, messageId: string): Result<MessageDeliveryState | null> {
+  const loaded = readMessageLines(cawsDir);
+  if (!loaded.ok) return err(loaded.errors);
+  let target: MessageRecord | null = null;
+  let deliveredAt: string | undefined;
+  for (const entry of loaded.value.lines) {
+    if (entry.parsed?.record === 'message' && entry.parsed.id === messageId) {
+      target = entry.parsed;
+    } else if (entry.parsed?.record === 'delivery' && entry.parsed.deliver_id === messageId) {
+      deliveredAt = entry.parsed.ts;
     }
   }
-  return ok(out);
+  if (target === null) return ok(null);
+  return ok({
+    message: target,
+    delivered: deliveredAt !== undefined,
+    ...(deliveredAt !== undefined ? { deliveredAt } : {}),
+  });
+}
+
+/** A channel-history entry: the message plus its derived delivery state. */
+export interface HistoryEntry extends MessageRecord {
+  readonly delivered: boolean;
+  readonly deliveredAt?: string;
+}
+
+/**
+ * Full, non-lossy history between two endpoints (both directions, in order),
+ * each entry annotated with its derived delivery state so a SENDER can observe
+ * whether a message was consumed (queued vs seen) without polling the
+ * recipient's mailbox.
+ */
+export function channelHistory(cawsDir: string, a: string, b: string): Result<HistoryEntry[]> {
+  const loaded = readMessageLines(cawsDir);
+  if (!loaded.ok) return err(loaded.errors);
+  const ch = channelId(a, b);
+  // Two passes: a message's delivery record ALWAYS trails the message in line
+  // order (delivery happens after the send), so a single interleaved pass
+  // would annotate every entry undelivered.
+  const deliveredAt = new Map<string, string>();
+  const channelMessages: MessageRecord[] = [];
+  for (const entry of loaded.value.lines) {
+    if (entry.parsed?.record === 'delivery' && typeof entry.parsed.deliver_id === 'string') {
+      // First delivery record wins for the timestamp (deliver-once; a second
+      // record for the same id would be a replay artifact, not a re-delivery).
+      if (!deliveredAt.has(entry.parsed.deliver_id)) deliveredAt.set(entry.parsed.deliver_id, entry.parsed.ts);
+    } else if (entry.parsed?.record === 'message' && entry.parsed.channel === ch) {
+      channelMessages.push(entry.parsed);
+    }
+  }
+  return ok(
+    channelMessages.map((message) => {
+      const at = deliveredAt.get(message.id);
+      return {
+        ...message,
+        delivered: at !== undefined,
+        ...(at !== undefined ? { deliveredAt: at } : {}),
+      };
+    })
+  );
 }
