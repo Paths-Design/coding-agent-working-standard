@@ -164,3 +164,9 @@ evidence:
     recorded_at: "2026-08-15T19:31:31.166Z"
     command: npx jest tests/init tests/docs
     exit_code: 0
+  - criterion_id: A4
+    status: pass
+    evidence_ref: jest tests/init/init-upgrade-retrofit.test.js (9/9) + full tests/init 154/154 + tests/docs 203 combined green
+    recorded_at: "2026-08-15T19:31:32.961Z"
+    command: npx jest tests/init tests/docs
+    exit_code: 0
