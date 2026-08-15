@@ -7,20 +7,181 @@ created_at: '2026-08-15T18:01:21.763Z'
 updated_at: '2026-08-15T18:01:21.763Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/messages-store.ts
+    - packages/caws-cli/src/shell/commands/message.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/templates/hook-packs/shared/agent-heartbeat.sh
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/store/messages-store.ts
+    - packages/caws-cli/src/store/rules.ts
+    - packages/caws-cli/src/store/index.ts
+    - packages/caws-cli/src/shell/commands/message.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/templates/hook-packs/shared/agent-heartbeat.sh
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - .caws/hooks/agent-heartbeat.sh
+    - packages/caws-cli/tests/store/messages-store.test.js
+    - packages/caws-cli/tests/shell/message-command.test.js
+    - packages/caws-cli/docs/command-reference.md
+    - packages/caws-cli/README.md
+    - AGENTS.md
+    - docs/architecture/caws-vnext-command-surface.md
+  out:
+    - packages/caws-cli/src/kernel/schemas/messages.v1.json
+    - packages/caws-cli/src/store/leases-store.ts
+    - packages/caws-cli/src/store/events-store.ts
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Recipient liveness for `caws message send` is decided by HEARTBEAT AGE, not
+    by lease status alone. A lease whose last_active is within the 30-minute
+    TTL is a deliverable recipient regardless of status (active, stopping, or
+    stopped): an agent that ended its turn while background work runs is
+    idle, not dead, and auto-delivery surfaces the message at its next tool
+    call. A send to such a recipient succeeds and the stdout note says the
+    recipient is idle between turns. Hard refusals remain exactly two: no
+    lease at all (typo/foreign-id protection) and a stale heartbeat older
+    than the TTL (genuinely unreachable). `--allow-dead` keeps its escape-
+    hatch semantics for both.
+  - >-
+    A refused send is observable on STDOUT, not only stderr: the command
+    prints a one-line "not sent" verdict to stdout before diagnostics go to
+    stderr, so an agent that follows the common `2>/dev/null` habit (or chains
+    `&& echo`) cannot mistake a refusal for a successful send. Successful
+    sends keep the existing "sent to <id> (id ..., channel ...)" stdout line
+    byte-stable — the installed hook notice teaches agents to judge sends by
+    exactly that line.
+  - >-
+    `caws message reply <message-id>` resolves the original message's sender
+    from the kernel-attributed actor envelope (actor.session_id ?? actor.id)
+    and sends over the SAME normalized unordered channel — reply never
+    synthesizes a new channel shape. Reply refuses an unknown message id and
+    refuses replying to a message the caller itself sent (a self-reply is a
+    routing error, not a conversation). The recipient-liveness gate applies
+    to reply exactly as to send.
+  - >-
+    Delivery observability is derived, never guessed: `caws message history`
+    (both text and JSON) and a new `caws message status <id>` report each
+    message's delivered state by joining message records against delivery
+    records already present in messages.jsonl. No new record kind is written
+    and messages.v1.json is untouched (read-time derivation only).
+  - >-
+    `--to wt:<worktree-name>` and `--to spec:<spec-id>` alias resolution maps
+    to the freshest live-or-idle lease bound to that worktree/spec (max
+    last_active among leases within the TTL, preferring non-stopped when ages
+    tie). An alias with no resolvable lease is refused with a diagnostic that
+    names the alias and suggests `caws agents list`. Raw session-id `--to` is
+    unchanged and remains the canonical address.
+  - >-
+    Poll output carries sender context so recipients never depend on senders
+    self-identifying in the body: the poll JSON gains a `sender` object
+    (worktree, spec_id, branch — each present only when the sender's lease
+    records it) joined from the lease registry at read time. The hook
+    injection renders it when present and degrades to today's bare-session-id
+    rendering when the sender has no lease. The channel remains not-authority:
+    the injected "unverified claim — verify against the repo" footer is
+    preserved verbatim.
+  - >-
+    The messages.jsonl storage model is unchanged: separate append-only log,
+    no hash chain, line order authoritative, at-most-once delivery under the
+    dedicated message-log lock. Sender-context enrichment and delivered state
+    are read-time derivations; reply and alias sends write ordinary message
+    records.
+  - >-
+    Editing the shared hook template bumps SHARED_PACK_VERSION and recomputes
+    tests/init/pack-fingerprints.json; the repo's installed
+    .caws/hooks/agent-heartbeat.sh is updated to match the template; the
+    growth-doctrine header invariant (edit_stance present, parseManagedHeader
+    resolves) holds after the edit.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      A lease for session R with status "stopped" and last_active two minutes
+      ago (a session that ended its turn while background work runs).
+    when: >-
+      Session S runs `caws message send --to R --text "..."` without
+      --allow-dead.
+    then: >-
+      The send succeeds (exit 0), a message record addressed to R is appended,
+      and stdout carries the "sent to R" line plus an informational note that
+      R is idle between turns (stopped lease, fresh heartbeat).
+  - id: A2
+    given: >-
+      A lease for session R with last_active older than the 30-minute TTL
+      (any status), or no lease at all for R.
+    when: >-
+      Session S runs `caws message send --to R --text "..."` without
+      --allow-dead.
+    then: >-
+      The send is refused (exit 1) with the enriched not-live reason
+      (stale heartbeat with age, or no-lease) and NO message record is
+      appended; `--allow-dead` still delivers.
+  - id: A3
+    given: >-
+      Any send refusal (not-live recipient or invalid recipient).
+    when: >-
+      The command runs with stderr discarded (2>/dev/null).
+    then: >-
+      Stdout still contains a one-line "not sent" verdict naming the refusal
+      class, so the outcome cannot be mistaken for a successful send.
+  - id: A4
+    given: >-
+      A message record M sent by session B (undelivered or delivered — both
+      work), addressed to the caller.
+    when: >-
+      The caller runs `caws message reply <M.id> --text "..."`.
+    then: >-
+      A message addressed to B is appended on the same normalized channel
+      (channel id identical to M.channel), attributed to the caller's actor.
+      An unknown id refuses (exit 1) with a not-found diagnostic; replying to
+      a message the caller itself sent refuses (exit 1).
+  - id: A5
+    given: >-
+      Message M addressed to the caller with a delivery record present, and
+      message N addressed to the caller with no delivery record.
+    when: >-
+      The caller runs `caws message history --with <peer> --json` and
+      `caws message status <M.id>` / `caws message status <N.id>`.
+    then: >-
+      history marks M delivered:true and N delivered:false; status reports
+      M delivered (with delivery timestamp) and N undelivered; both commands
+      are read-only (no records appended).
+  - id: A6
+    given: >-
+      A fresh lease bound to worktree wt-demo (spec SPEC-1), plus no lease
+      bound to worktree wt-gone.
+    when: >-
+      `caws message send --to wt:wt-demo --text "..."` and
+      `caws message send --to spec:SPEC-1 --text "..."` and
+      `caws message send --to wt:wt-gone --text "..."`.
+    then: >-
+      The first two resolve to the bound session and send normally (stdout
+      notes the alias expansion); the third refuses (exit 1) with a
+      diagnostic naming wt:wt-gone and suggesting `caws agents list`.
+  - id: A7
+    given: >-
+      An undelivered message from session B whose lease records
+      bound_worktree wt-demo, bound_spec_id SPEC-1, branch feature/x.
+    when: >-
+      The recipient polls (CLI --json, and the PreToolUse injection).
+    then: >-
+      The poll JSON's message carries sender context (worktree wt-demo, spec
+      SPEC-1, branch feature/x); the hook injection renders "from session B
+      (worktree wt-demo, spec SPEC-1)". When the sender has no lease, both
+      surfaces degrade to today's bare-session-id rendering.
+  - id: A8
+    given: >-
+      The edited agent-heartbeat.sh template and bumped SHARED_PACK_VERSION.
+    when: >-
+      `npm run docs:check` and the pack-fingerprint/init test suites run.
+    then: >-
+      Fingerprints match the recomputed pack-fingerprints.json, the growth-
+      doctrine header parses, and docs:check is green (command reference
+      regenerated for the new reply/status subcommands and --to aliases).
 non_functional: {}
 contracts:
   - name: 'message-delivery-ux-store'
