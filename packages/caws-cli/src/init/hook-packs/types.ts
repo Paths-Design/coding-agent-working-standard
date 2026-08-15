@@ -146,6 +146,13 @@ export interface HookPackFileAction {
    *  attached to a forceRequired refusal so the operator (human or agent)
    *  can port local edits manually instead of accepting the replacement. */
   readonly diff?: string;
+  /** True when action === 'updated' and the update is a version-stamp
+   *  re-stamp only (bodies proved identical modulo the version line) — the
+   *  file was never edited, it just predates the current pack version.
+   *  Lets plan/diff surfaces present re-stamps as their own committable
+   *  unit instead of mixing them into content updates.
+   *  (CAWS-HOOKPACK-UPGRADE-RETROFIT-001 A2.) */
+  readonly restampOnly?: boolean;
 }
 
 /** Result of installing a pack into a repo. */

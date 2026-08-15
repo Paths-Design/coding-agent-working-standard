@@ -14,7 +14,7 @@ The v11 cutover is complete. `main` runs the v11 surface (kernel/store/shell arc
 
 | Command | Purpose |
 |---|---|
-| `caws init` | Bootstrap canonical `.caws/` state. Idempotent. Refuses legacy single-spec residue. No `--force`. |
+| `caws init` | Bootstrap canonical `.caws/` state. Idempotent. Refuses legacy single-spec residue. Subcommands: `init diff` (read-only pack drift; `--three-way <path>` splits local growth vs upstream) and `init port <path> --from <file>` (CLI-mediated hook retrofit — never hand-edit installed hooks). `--overwrite` without `--force` writes nothing, not even re-stamps. |
 | `caws doctor` | Drift detection over `.caws/` state. Exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure). |
 | `caws status` | Read-only dashboard: project, current context, claim, doctor findings. Never mutates `.caws/`. |
 | `caws scope show / check / contention` | Explain scope, enforce scope, or report cross-worktree path contention. |

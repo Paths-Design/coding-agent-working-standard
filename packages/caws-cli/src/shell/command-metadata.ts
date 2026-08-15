@@ -847,7 +847,7 @@ export const INIT_COMMAND_META: LeafCommandMeta = {
   kind: 'leaf',
   name: 'init',
   description:
-    'Bootstrap the canonical vNext .caws/ project state (idempotent; refuses to overwrite legacy single-spec layout). With --agent-surface, also installs the corresponding hook pack.',
+    'Bootstrap the canonical vNext .caws/ project state (idempotent; refuses to overwrite legacy single-spec layout). With --agent-surface, also installs the corresponding hook pack. Subcommands: `init diff` (read-only pack drift view incl. three-way decomposition) and `init port <path> --from <file>` (CLI-mediated retrofit landing — no agent-side hook editing).',
   options: [
     DATA_OPTION,
     {
@@ -873,7 +873,17 @@ export const INIT_COMMAND_META: LeafCommandMeta = {
     {
       flag: '--overwrite [paths...]',
       description:
-        'For hook-pack install: select drifted or unmanaged files at managed pack paths for replacement — every pack file when bare, or only the listed destination paths. Without --force this previews a unified diff of each replacement and refuses (nothing is written); add --force to apply.',
+        'For hook-pack install: select drifted or unmanaged files at managed pack paths for replacement — every pack file when bare, or only the listed destination paths. Without --force this is a pure preview: NOTHING is written (not even version re-stamps); add --force to apply.',
+    },
+    {
+      flag: '--three-way <path>',
+      description:
+        'init diff only: decompose one pack path into LOCAL GROWTH (installed vs pristine baseline) and UPSTREAM (baseline vs template) hunks, so a hand-edited hook can be retrofitted without conflating your edits with the pack changes.',
+    },
+    {
+      flag: '--from <file>',
+      description:
+        'init port only: staging file OUTSIDE the protected hooks tree carrying the ported content (new template + local growth). init validates it, version-stamps it, lands it atomically, records the pristine baseline, and audit-commits — the agent never edits the protected hook path itself.',
     },
     {
       flag: '--force',

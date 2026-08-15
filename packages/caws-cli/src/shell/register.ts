@@ -320,18 +320,38 @@ export function registerShellCommands(
   // src/index.js as part of slice 7b.
   // -------------------------------------------------------------------
   defineFlat(program, INIT_COMMAND_META)
+    .argument('[action]', 'subcommand: diff | port')
+    .argument(
+      '[actionArg]',
+      'port: the managed pack destination path being retrofitted'
+    )
     .action(
-      (opts: {
-        data?: boolean;
-        agentSurface?: string;
-        overwrite?: boolean | string[];
-        force?: boolean;
-        adopt?: boolean;
-        plan?: boolean;
-        dryRun?: boolean;
-        json?: boolean;
-        wireUserConfig?: boolean;
-      }) => {
+      (
+        action: string | undefined,
+        actionArg: string | undefined,
+        opts: {
+          data?: boolean;
+          agentSurface?: string;
+          overwrite?: boolean | string[];
+          force?: boolean;
+          adopt?: boolean;
+          plan?: boolean;
+          dryRun?: boolean;
+          json?: boolean;
+          wireUserConfig?: boolean;
+          threeWay?: string;
+          from?: string;
+        }
+      ) => {
+        // Positional subcommands (CAWS-HOOKPACK-UPGRADE-RETROFIT-001).
+        // Unknown positional = usage error, not silently ignored.
+        if (action !== undefined && action !== 'diff' && action !== 'port') {
+          process.stderr.write(
+            `caws init: unknown subcommand "${action}" (expected diff | port).\n`
+          );
+          exit(2);
+          return;
+        }
         // Commander hands back the raw string for agentSurface; the
         // runInitCommand validator rejects unknown values with exit 2.
         const runOpts: Parameters<typeof runInitCommand>[0] = {
@@ -370,6 +390,18 @@ export function registerShellCommands(
         if (opts.wireUserConfig !== undefined) {
           (runOpts as { wireUserConfig?: boolean }).wireUserConfig =
             opts.wireUserConfig;
+        }
+        if (action !== undefined) {
+          (runOpts as { action?: 'diff' | 'port' }).action = action;
+        }
+        if (actionArg !== undefined) {
+          (runOpts as { actionArg?: string }).actionArg = actionArg;
+        }
+        if (opts.threeWay !== undefined) {
+          (runOpts as { threeWayPath?: string }).threeWayPath = opts.threeWay;
+        }
+        if (opts.from !== undefined) {
+          (runOpts as { fromFile?: string }).fromFile = opts.from;
         }
         const code = runInitCommand(runOpts);
         exit(code);

@@ -58,6 +58,7 @@ export const EPHEMERAL_CAWS_ENTRIES: readonly string[] = [
   '.caws/cache/',
   '.caws/sessions/',
   '.caws/state/',
+  '.caws/hooks/.pristine/',
   '.caws/duplication-cache.json',
   '.caws/events.jsonl',
   '.caws/events.jsonl.lock',

@@ -14,7 +14,7 @@ store, and a thin shell. It replaces v10.x.
 
 | Command | What it does |
 |---|---|
-| `caws init` | Bootstrap the canonical `.caws/` project state. Idempotent. Refuses to overwrite legacy single-spec layout. `--agent-surface` installs hook packs for supported agent harnesses. |
+| `caws init` | Bootstrap the canonical `.caws/` project state. Idempotent. Refuses to overwrite legacy single-spec layout. `--agent-surface` installs hook packs for supported agent harnesses. `--overwrite` without `--force` is a pure preview (nothing is written, not even version re-stamps). Subcommands: `init diff` (read-only pack drift view: kinds, installed-vs-template versions, diffs; `--three-way <path>` separates local growth from upstream change) and `init port <path> --from <file>` (CLI-mediated retrofit landing — validated, version-stamped, baseline-recorded, audit-committed; the agent never edits a protected hook path itself). |
 | `caws doctor` | Drift detection over `.caws/` state. Exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure). |
 | `caws status` | Read-only dashboard: project, current context, claim, doctor findings. Always exits 0; never mutates governance state. |
 | `caws scope show / check / contention` | Explain scope, enforce scope, or report cross-worktree path contention. |

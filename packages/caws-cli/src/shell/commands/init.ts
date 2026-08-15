@@ -36,6 +36,7 @@ import {
   inspectKimiUserConfig,
   inspectQwenSettings,
   inspectZcodeConfig,
+  diffHookPack,
   installHookPack,
   mergeClaudeSettings,
   mergeKimiUserConfig,
@@ -44,6 +45,7 @@ import {
   mergeZcodeConfig,
   planClaudeSettingsMerge,
   planHookPackInstall,
+  portHookFile,
   planKimiConfigExample,
   planKimiConfigMerge,
   planQwenInstructionImport,
@@ -67,7 +69,9 @@ import { SHARED_PACK } from '../../init/hook-packs/manifest-shared';
 import type {
   AgentSurface,
   HookPackInstallResult,
+  HookPackV1,
 } from '../../init/hook-packs/types';
+import { autoCommit } from '../../store/git-autocommit';
 import {
   manageGitignore,
   planGitignore,
@@ -143,6 +147,16 @@ export interface InitCommandOptions {
    *  explicit consent for that out-of-repo write. Usage error with any other
    *  surface. */
   readonly wireUserConfig?: boolean;
+  /** Positional subcommand: 'diff' (read-only pack diff) or 'port'
+   *  (CLI-mediated retrofit landing). (CAWS-HOOKPACK-UPGRADE-RETROFIT-001.) */
+  readonly action?: 'diff' | 'port';
+  /** port: the managed destination path being retrofitted. */
+  readonly actionArg?: string;
+  /** diff: restrict the three-way decomposition to this pack path. */
+  readonly threeWayPath?: string;
+  /** port: staging file OUTSIDE the protected hooks tree carrying the
+   *  ported content. */
+  readonly fromFile?: string;
 }
 
 function chooseSurface(
@@ -258,6 +272,16 @@ function performHookPackStep(
       actions: [],
       activation: 'not_applicable',
     };
+  }
+
+  // A2 (CAWS-HOOKPACK-UPGRADE-RETROFIT-001): --overwrite without --force is
+  // a PREVIEW, and a preview writes NOTHING — including the stamp-only
+  // re-stamps the apply path lands unconditionally for unedited files.
+  // (Observed 2026-08-15: a preview-intent --overwrite run wrote 42
+  // stamp-only files and left them as surprise residue on main; a parallel
+  // session hit the same side effect with 45.)
+  if (options.overwrite === true && options.force !== true) {
+    return planHookPackStep(repoRoot, surface, options);
   }
 
   const installOpts: Parameters<typeof installHookPack>[1] = {
@@ -414,6 +438,164 @@ function applyCommand(opts: InitCommandOptions): string {
   return parts.join(' ');
 }
 
+// ─── init diff / init port (CAWS-HOOKPACK-UPGRADE-RETROFIT-001 A1/A4/A5) ──
+
+/** Resolve the packs a diff/port operates over: the shared pack always, the
+ *  vendor pack when a surface is chosen/detected. Mirrors performHookPackStep's
+ *  resolution so the two can never disagree about scope. */
+function resolveDiffPacks(
+  opts: InitCommandOptions,
+  repoRoot: string
+): { readonly packs: readonly HookPackV1[]; readonly surface: AgentSurface | null } {
+  const detection = detectAgentHarness(repoRoot);
+  const chosen = chooseSurface(opts.agentSurface, detection);
+  if (chosen.surface === null || chosen.surface === 'none') {
+    return { packs: [SHARED_PACK], surface: null };
+  }
+  const resolution = resolveHookPack(chosen.surface);
+  if (resolution.kind !== 'pack') {
+    return { packs: [SHARED_PACK], surface: null };
+  }
+  return { packs: [SHARED_PACK, resolution.pack], surface: chosen.surface };
+}
+
+function indentBlock(text: string, pad: string): string[] {
+  if (text === '') return [];
+  return text.split('\n').map((l) => `${pad}${l}`);
+}
+
+function runInitSubcommand(
+  repoRoot: string,
+  opts: InitCommandOptions,
+  out: (line: string) => void,
+  err: (line: string) => void,
+  _showData: boolean
+): number {
+  const { packs, surface } = resolveDiffPacks(opts, repoRoot);
+
+  if (opts.action === 'diff') {
+    if (surface === null && opts.agentSurface === undefined) {
+      out('caws init diff: no agent surface detected — diffing the shared pack only.');
+      out('  Pass --agent-surface <name> to include the vendor pack.');
+    }
+
+    const diffs = packs.flatMap((pack) => [
+      ...diffHookPack(pack, { repoRoot }),
+    ]);
+
+    if (opts.threeWayPath !== undefined) {
+      const target = diffs.find((d) => d.destPath === opts.threeWayPath);
+      if (target === undefined) {
+        err(`caws init diff: "${opts.threeWayPath}" is not a pack path of the resolved packs.`);
+        return 2;
+      }
+      if (target.threeWay.available) {
+        out(`Three-way decomposition for ${target.destPath} (baseline: pristine ${target.packId} install):`);
+        out('  LOCAL GROWTH (your repo vs the pristine install):');
+        for (const l of indentBlock(target.threeWay.localGrowthDiff, '    ')) out(l);
+        if (target.threeWay.localGrowthDiff === '') out('    (none — the installed file is the pristine install)');
+        out('  UPSTREAM (new template vs the pristine install):');
+        for (const l of indentBlock(target.threeWay.upstreamDiff, '    ')) out(l);
+        if (target.threeWay.upstreamDiff === '') out('    (none — the template has not changed since your install)');
+      } else {
+        out(`Three-way decomposition for ${target.destPath}: unavailable.`);
+        out(`  ${target.threeWay.reason}`);
+        out('  Two-way diff (installed vs template):');
+        for (const l of indentBlock(target.twoWayDiff, '    ')) out(l);
+      }
+      out('');
+      out('Read-only — nothing was written.');
+      return 0;
+    }
+
+    if (opts.json === true) {
+      out(JSON.stringify({ command: 'init diff', repo_root: repoRoot, files: diffs }, null, 2));
+      return 0;
+    }
+
+    out('Hook pack diff (read-only — nothing was written):');
+    for (const d of diffs) {
+      const versions =
+        d.installedVersion === null
+          ? `template v${d.packVersion}`
+          : `installed v${d.installedVersion} → template v${d.packVersion}`;
+      out(`  ${d.destPath} [${d.kind}] ${versions}`);
+      for (const l of indentBlock(d.twoWayDiff, '    ')) out(l);
+    }
+    out('');
+    out('Decompose one path with: caws init diff --three-way <path>');
+    return 0;
+  }
+
+  // ── init port ──
+  if (opts.actionArg === undefined) {
+    err('caws init port: <destPath> is required (e.g. .caws/hooks/scope-guard.sh).');
+    return 2;
+  }
+  if (opts.fromFile === undefined) {
+    err('caws init port: --from <staging-file> is required.');
+    err('  Stage the ported content OUTSIDE the protected hooks tree (e.g. /tmp),');
+    err('  then port it: init validates, version-stamps, lands, and audit-commits it.');
+    return 2;
+  }
+  const destPath = opts.actionArg;
+  const owningPack = packs.find((p) =>
+    p.installedFiles.some((f) => f.destPath === destPath)
+  );
+  if (owningPack === undefined) {
+    err(`caws init port: "${destPath}" is not a pack path of the resolved packs.`);
+    err('  List paths with: caws init diff');
+    return 2;
+  }
+
+  // Honest audit-commit preconditions: refuse to land a port over a dest with
+  // uncommitted local edits — the audit commit could not attribute them.
+  if (isInsideGitWorkingTree(repoRoot)) {
+    const status = execFileSync(
+      'git',
+      ['-C', repoRoot, 'status', '--porcelain', '--', destPath],
+      { encoding: 'utf8' }
+    ).trim();
+    if (status !== '') {
+      err(`caws init port: ${destPath} has uncommitted changes.`);
+      err('  Commit or discard them first — a port must land over a clean file so');
+      err('  the audit commit attributes exactly the port.');
+      return 1;
+    }
+  }
+
+  const result = portHookFile(owningPack, {
+    repoRoot,
+    destPath,
+    fromFile: opts.fromFile,
+  });
+  if (!result.ok) {
+    err(`caws init port: candidate refused for ${destPath}:`);
+    err(`  ${result.reason}`);
+    return 1;
+  }
+
+  out(`Ported ${result.destPath} → ${result.packId} v${result.packVersion} (baseline recorded, drift tracking resumed).`);
+
+  if (isInsideGitWorkingTree(repoRoot)) {
+    const commit = autoCommit({
+      repoRoot,
+      paths: [result.destPath],
+      message: `chore(caws): port hook ${result.destPath} to ${result.packId} v${result.packVersion} (CAWS-HOOKPACK-UPGRADE-RETROFIT-001)`,
+      wasDirtyBeforeWrite: false,
+    });
+    const sha = commit.kind === 'committed' ? (commit.sha ?? '') : '';
+    if (commit.kind === 'committed' && sha !== '') {
+      out(`Audit commit landed: ${sha.slice(0, 8)}`);
+    } else if (commit.kind === 'committed') {
+      out('Audit commit: nothing tracked to commit (path gitignored) — the port is on disk.');
+    } else {
+      out(`Audit commit did NOT land (${commit.kind}): commit ${result.destPath} manually.`);
+    }
+  }
+  return 0;
+}
+
 function renderActionList(
   actions: readonly HookPackInstallResult['actions'][number][]
 ): string[] {
@@ -421,19 +603,25 @@ function renderActionList(
   const groups: Record<string, string[]> = {
     created: [],
     updated: [],
+    restamped: [],
     unchanged: [],
     refused: [],
   };
   for (const action of actions) {
-    groups[action.action]?.push(action.destPath);
+    if (action.action === 'updated' && action.restampOnly === true) {
+      groups.restamped?.push(action.destPath);
+    } else {
+      groups[action.action]?.push(action.destPath);
+    }
   }
   const labels: Record<string, string> = {
     created: 'Would create',
     updated: 'Would update',
+    restamped: 'Would re-stamp (version-only, content identical)',
     unchanged: 'Unchanged',
     refused: 'Would refuse',
   };
-  for (const key of ['created', 'updated', 'unchanged', 'refused']) {
+  for (const key of ['created', 'updated', 'restamped', 'unchanged', 'refused']) {
     const values = groups[key] ?? [];
     if (values.length === 0) continue;
     lines.push(`  ${labels[key]} (${values.length}):`);
@@ -694,8 +882,20 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   const err = opts.err ?? ((s: string) => process.stderr.write(s + '\n'));
   const showData = opts.showData === true;
 
-  if (opts.json === true && opts.plan !== true) {
-    err('caws init: --json is only supported with --plan.');
+  // A7 (CAWS-HOOKPACK-UPGRADE-RETROFIT-001): init mutates the CANONICAL
+  // checkout's hooks and settings. Run from inside a linked worktree it
+  // silently targets main-checkout state (the 2026-08-15 gotcha a parallel
+  // session hit and had to repair by hand) — refuse instead of guessing.
+  if (/(?:^|\/)\.caws\/worktrees\/[^/]+(?:\/|$)/.test(cwd)) {
+    err(`caws init: refusing to run from inside a CAWS worktree (${cwd}).`);
+    err('  init installs hooks/settings for the canonical checkout; from inside');
+    err('  a worktree it would silently mutate main-checkout state. Run it from');
+    err('  the repo root, or carry worktree hook changes through a lane merge.');
+    return 1;
+  }
+
+  if (opts.json === true && opts.plan !== true && opts.action !== 'diff') {
+    err('caws init: --json is only supported with --plan or init diff.');
     return 2;
   }
 
@@ -775,6 +975,17 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     }
   }
 
+  if (opts.plan === true && opts.action !== undefined) {
+    err(`caws init: --plan does not combine with the "${opts.action}" subcommand (diff is already read-only).`);
+    return 2;
+  }
+
+  // Subcommand dispatch (CAWS-HOOKPACK-UPGRADE-RETROFIT-001). diff and port
+  // never bootstrap canonical state — they operate on the installed packs.
+  if (opts.action === 'diff' || opts.action === 'port') {
+    return runInitSubcommand(repoRoot, opts, out, err, showData);
+  }
+
   if (opts.plan === true) {
     return runInitPlan(repoRoot, opts, out, err, showData);
   }
@@ -846,7 +1057,28 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     }
   }
 
-  out(renderHookPackInstall(hookPackResult));
+  // A2: when the hook step was a preview (overwrite without force), say so
+  // plainly and render plan-style labels + withheld diffs — the apply
+  // renderer's "Updated" would claim writes that did not happen.
+  if (opts.overwrite === true && opts.force !== true && chosen.surface !== null) {
+    out('Hook pack (--overwrite preview — NOTHING was written, including version re-stamps):');
+    for (const line of renderActionList(hookPackResult.actions)) out(line);
+    for (const a of hookPackResult.actions) {
+      if (a.action === 'refused' && a.forceRequired === true) {
+        out(`  Overwrite withheld — needs --force: ${a.destPath}`);
+        if (a.diff !== undefined) {
+          for (const l of a.diff.split('\n')) out(`    ${l}`);
+        }
+      }
+    }
+    const targets =
+      opts.overwriteTargets !== undefined && opts.overwriteTargets.length > 0
+        ? ` ${opts.overwriteTargets.join(' ')}`
+        : '';
+    out(`  Apply with: caws init --agent-surface ${chosen.surface} --overwrite${targets} --force`);
+  } else {
+    out(renderHookPackInstall(hookPackResult));
+  }
 
   // Step 3: wire .claude/settings.json. Only meaningful when the Claude Code
   // pack was installed. For Codex, hooks.json is the installed activation
