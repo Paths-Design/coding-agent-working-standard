@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-msg-delivery-ux
 created_at: '2026-08-15T18:01:21.763Z'
-updated_at: '2026-08-15T18:33:06.998Z'
+updated_at: '2026-08-15T18:54:01.856Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/messages-store.ts
@@ -32,6 +32,7 @@ scope:
     - AGENTS.md
     - docs/architecture/caws-vnext-command-surface.md
     - docs/command-reference.md
+    - packages/caws-cli/src/shell/index.ts
   out:
     - packages/caws-cli/src/kernel/schemas/messages.v1.json
     - packages/caws-cli/src/store/leases-store.ts
