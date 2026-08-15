@@ -48,3 +48,9 @@ evidence:
     recorded_at: "2026-08-15T18:13:33.694Z"
     command: "npm run test:bats && npx jest agent-doc-examples"
     exit_code: 0
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "jest agent-doc-examples A2 — blocked renderGatesRun names caws waiver create <id> --gate --reason --approved-by --expires-at + reprieve distinction; clean run omits the line"
+    recorded_at: "2026-08-15T18:13:34.648Z"
+    command: npx jest agent-doc-examples
+    exit_code: 0
