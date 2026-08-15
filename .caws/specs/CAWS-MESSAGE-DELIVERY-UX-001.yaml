@@ -218,3 +218,7 @@ evidence:
     status: pass
     evidence_ref: "jest 'UX A6': wt:wt-demo and spec:SPEC-1 resolve to freshest bound session with alias-expansion stdout line; wt:wt-gone refuses with alias_unresolved naming the alias"
     recorded_at: "2026-08-15T19:01:01.232Z"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "jest 'UX A7': poll JSON carries sender {worktree,specId,branch} joined from the lease registry; command renders 'from alice (worktree wt-alice, spec SPEC-A):'; no-lease sender degrades to bare id; hook template renders senderTag and suggests caws message reply <id>"
+    recorded_at: "2026-08-15T19:01:02.143Z"
