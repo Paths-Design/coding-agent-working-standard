@@ -222,3 +222,7 @@ evidence:
     status: pass
     evidence_ref: "jest 'UX A7': poll JSON carries sender {worktree,specId,branch} joined from the lease registry; command renders 'from alice (worktree wt-alice, spec SPEC-A):'; no-lease sender degrades to bare id; hook template renders senderTag and suggests caws message reply <id>"
     recorded_at: "2026-08-15T19:01:02.143Z"
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "SHARED_PACK_VERSION 37->38; pack-fingerprints.json recomputed (3e5fc0b3...); tests/init/pack-fingerprint.test.js green; docs:check green; cli-api-reference-coverage green after documenting reply/status"
+    recorded_at: "2026-08-15T19:01:03.088Z"
