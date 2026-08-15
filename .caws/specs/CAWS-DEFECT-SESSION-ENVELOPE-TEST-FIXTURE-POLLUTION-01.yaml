@@ -1,0 +1,27 @@
+id: CAWS-DEFECT-SESSION-ENVELOPE-TEST-FIXTURE-POLLUTION-01
+title: 'Test-fixture durable hook envelopes pollute the canonical .caws/sessions/ and widen resolver ambiguity'
+risk_tier: 2
+mode: fix
+lifecycle_state: active
+created_at: '2026-08-15T17:52:00.806Z'
+updated_at: '2026-08-15T17:52:00.806Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'session-envelope-hygiene'
+    type: behavior
