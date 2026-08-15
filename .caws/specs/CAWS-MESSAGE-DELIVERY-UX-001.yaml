@@ -202,3 +202,7 @@ evidence:
     status: pass
     evidence_ref: "jest: no-lease and stale-heartbeat (47m/60m, any status) refusals write no record and keep --allow-dead bypass; stopped+no-age also refused"
     recorded_at: "2026-08-15T19:00:43.221Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "jest 'UX A3': refused send prints 'not sent — recipient not live' to stdout; messages.jsonl absent after refusal"
+    recorded_at: "2026-08-15T19:00:44.159Z"
