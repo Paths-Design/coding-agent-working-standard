@@ -24,10 +24,16 @@
 // run-handlers overrides are needed (unlike kimi): deny via
 // permissionDecision is enforced natively (even under yolo), exit-2 stderr
 // reasons reach the model natively, and ask degrades to deny in
-// headless/background contexts automatically. The one
-// documented-but-unenforced contract is updatedInput (0.21.x): the surface
-// declares CAWS_SUPPORTS_UPDATED_INPUT=0 in agent-surface.sh so quiet-merge
-// passes commands through unrewritten.
+// headless/background contexts automatically. updatedInput is NOT applied
+// on the plain-CLI tool path (0.21.4 and 0.21.11 alike; the ACP/daemon
+// surface does apply it as of 0.21.11): the surface declares
+// CAWS_SUPPORTS_UPDATED_INPUT=0 in agent-surface.sh so quiet-merge passes
+// commands through unrewritten.
+//
+// Pack 2 (CAWS-QWEN-HOOK-TIMEOUT-001): the doctrine doc now records the
+// millisecond timeout contract. The seconds-era wiring values live in the
+// settings.json merge (hook-install.ts), not in this template tree; the
+// merge upgrades stale CAWS-owned entries in place on re-run.
 //
 // Doctrine landing: .qwen/CAWS-HOOKS.md. Qwen auto-loads only the root
 // QWEN.md (plus ~/.qwen/QWEN.md, .qwen/QWEN.local.md, and root AGENTS.md),
@@ -36,7 +42,7 @@
 
 import type { HookPackV1 } from './types';
 
-export const QWEN_CODE_PACK_VERSION = 1;
+export const QWEN_CODE_PACK_VERSION = 2;
 
 export const QWEN_CODE_PACK: HookPackV1 = {
   id: 'qwen-code',

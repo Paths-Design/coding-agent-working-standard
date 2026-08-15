@@ -312,12 +312,25 @@ export function renderQwenSettingsWiring(
       lines.push('  Created .qwen/settings.json wiring the five CAWS shim');
       lines.push('  entrypoints (PreToolUse/PostToolUse/SessionStart/Stop/PreCompact).');
       break;
-    case 'merged':
+    case 'merged': {
+      const actions: string[] = [];
+      if (mergeResult.added.length > 0) {
+        actions.push(`added: ${mergeResult.added.join(', ')}`);
+      }
+      if (mergeResult.repaired && mergeResult.repaired.length > 0) {
+        actions.push(`upgraded in place: ${mergeResult.repaired.join(', ')}`);
+      }
       lines.push('  Merged the CAWS shim wiring into your existing');
-      lines.push(`  .qwen/settings.json (added: ${mergeResult.added.join(', ')}).`);
+      lines.push(`  .qwen/settings.json (${actions.join('; ')}).`);
+      if (mergeResult.repaired && mergeResult.repaired.length > 0) {
+        lines.push('  The upgraded entries carried stale seconds-era timeouts:');
+        lines.push('  Qwen measures command-hook timeouts in milliseconds, so the');
+        lines.push('  old values killed every hook before the shim could run.');
+      }
       lines.push('  Your other settings — tools, memory, env, and any existing');
       lines.push('  hooks — were preserved unchanged.');
       break;
+    }
     case 'unchanged':
       lines.push('  OK — .qwen/settings.json already wires all five CAWS shim');
       lines.push('  entrypoints. No change.');

@@ -538,9 +538,13 @@ function renderInitPlan(plan: InitPlanDocument): string {
     lines.push('.qwen settings wiring:');
     lines.push(`  settings.json: ${plan.qwen_settings.settings_json.kind}`);
     if (plan.qwen_settings.settings_json.kind === 'merged') {
-      lines.push(
-        `  would add: ${plan.qwen_settings.settings_json.added.join(', ')}`
-      );
+      const qwenJson = plan.qwen_settings.settings_json;
+      if (qwenJson.added.length > 0) {
+        lines.push(`  would add: ${qwenJson.added.join(', ')}`);
+      }
+      if (qwenJson.repaired && qwenJson.repaired.length > 0) {
+        lines.push(`  would upgrade in place: ${qwenJson.repaired.join(', ')}`);
+      }
     }
     if (plan.qwen_settings.settings_json.kind === 'invalid') {
       lines.push(`  error: ${plan.qwen_settings.settings_json.error}`);

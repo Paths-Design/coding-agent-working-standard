@@ -12,6 +12,8 @@
  * The merge contract under test:
  *   - absent file → created with exactly the five canonical shim entries
  *   - existing file → append-only per event key; every other key preserved
+ *   - stale CAWS-owned entries (seconds-era timeouts) → upgraded in place,
+ *     user-authored entries preserved (CAWS-QWEN-HOOK-TIMEOUT-001)
  *   - already wired (by merge OR by a hand-pasted block) → unchanged no-op
  *   - idempotent: a second run is byte-identical
  *   - unparseable file (incl. JSONC comments) → invalid, left untouched
@@ -59,6 +61,21 @@ function countShimRefs(content) {
   return (content.match(/caws-qwen-hook\.sh/g) || []).length;
 }
 
+/** Reconstruct a shipped-11.9.0 (seconds-era) wiring block: byte-identical
+ *  to the canonical one except the timeout unit (CAWS-QWEN-HOOK-TIMEOUT-001). */
+function secondsEraEntry(canonical, seconds) {
+  const clone = JSON.parse(JSON.stringify(canonical));
+  clone.hooks[0].timeout = seconds;
+  return clone;
+}
+const SECONDS_ERA_WIRING = {
+  PreToolUse: secondsEraEntry(CANONICAL_QWEN_HOOK_ENTRIES.PreToolUse, 45),
+  PostToolUse: secondsEraEntry(CANONICAL_QWEN_HOOK_ENTRIES.PostToolUse, 60),
+  SessionStart: secondsEraEntry(CANONICAL_QWEN_HOOK_ENTRIES.SessionStart, 30),
+  Stop: secondsEraEntry(CANONICAL_QWEN_HOOK_ENTRIES.Stop, 30),
+  PreCompact: secondsEraEntry(CANONICAL_QWEN_HOOK_ENTRIES.PreCompact, 30),
+};
+
 describe('registration: qwen-code is a first-class surface', () => {
   test("resolveHookPack('qwen-code') returns the qwen-code pack", () => {
     const r = resolveHookPack('qwen-code');
@@ -81,6 +98,22 @@ describe('registration: qwen-code is a first-class surface', () => {
       expect(entry.hooks[0].command).toContain('git rev-parse --show-toplevel');
       expect(entry.hooks[0].command).toContain('test -x "$ROOT/.qwen/hooks/caws-qwen-hook.sh"');
       expect(entry.hooks[0].command).toContain(`caws-qwen-hook.sh" ${event} || true`);
+    }
+  });
+
+  test('canonical timeouts are milliseconds — the Qwen command-hook contract', () => {
+    // Qwen passes `timeout` raw to setTimeout (default 60000). Seconds-era
+    // values (45/60/30) SIGTERMed every hook before the ~3s shim completed,
+    // silently disabling all guards (CAWS-QWEN-HOOK-TIMEOUT-001).
+    const expectedMs = {
+      PreToolUse: 45000,
+      PostToolUse: 60000,
+      SessionStart: 30000,
+      Stop: 30000,
+      PreCompact: 30000,
+    };
+    for (const [event, ms] of Object.entries(expectedMs)) {
+      expect(CANONICAL_QWEN_HOOK_ENTRIES[event].hooks[0].timeout).toBe(ms);
     }
   });
 
@@ -224,6 +257,90 @@ describe('mergeQwenSettings: merged (existing settings.json)', () => {
   });
 });
 
+describe('mergeQwenSettings: in-place repair of stale CAWS entries (CAWS-QWEN-HOOK-TIMEOUT-001)', () => {
+  let repo;
+  beforeEach(() => {
+    repo = makeRepo();
+    fs.mkdirSync(path.join(repo, '.qwen'), { recursive: true });
+  });
+  afterEach(() => fs.rmSync(repo, { recursive: true, force: true }));
+
+  function writeSecondsEraWiring(extraRoot = {}) {
+    const hooks = {};
+    for (const [event, block] of Object.entries(SECONDS_ERA_WIRING)) {
+      hooks[event] = [block];
+    }
+    fs.writeFileSync(
+      settingsPathFor(repo),
+      JSON.stringify({ ...extraRoot, hooks }, null, 2),
+      'utf8'
+    );
+  }
+
+  test('seconds-era CAWS entries are upgraded in place and reported as repaired', () => {
+    writeSecondsEraWiring({ tools: { approvalMode: 'default' } });
+    const result = mergeQwenSettings(repo);
+    expect(result.kind).toBe('merged');
+    expect(result.added).toHaveLength(0);
+    expect([...result.repaired].sort()).toEqual([...ALL_EVENTS].sort());
+    const parsed = JSON.parse(readSettings(repo));
+    expect(parsed.tools).toEqual({ approvalMode: 'default' });
+    for (const event of ALL_EVENTS) {
+      expect(parsed.hooks[event]).toEqual([CANONICAL_QWEN_HOOK_ENTRIES[event]]);
+    }
+  });
+
+  test('user-authored entries survive the repair exactly, order preserved', () => {
+    const userBlock = {
+      matcher: 'run_shell_command',
+      hooks: [{ type: 'command', command: 'echo user-hook', timeout: 5 }],
+    };
+    const hooks = {};
+    for (const [event, block] of Object.entries(SECONDS_ERA_WIRING)) {
+      hooks[event] = [block];
+    }
+    hooks.PreToolUse = [userBlock, SECONDS_ERA_WIRING.PreToolUse];
+    fs.writeFileSync(
+      settingsPathFor(repo),
+      JSON.stringify({ hooks }, null, 2),
+      'utf8'
+    );
+    const result = mergeQwenSettings(repo);
+    expect(result.kind).toBe('merged');
+    expect(result.added).toHaveLength(0);
+    expect([...result.repaired].sort()).toEqual([...ALL_EVENTS].sort());
+    const parsed = JSON.parse(readSettings(repo));
+    expect(parsed.hooks.PreToolUse).toHaveLength(2);
+    expect(parsed.hooks.PreToolUse[0]).toEqual(userBlock);
+    expect(parsed.hooks.PreToolUse[1]).toEqual(
+      CANONICAL_QWEN_HOOK_ENTRIES.PreToolUse
+    );
+  });
+
+  test('a second run after repair is a byte-identical no-op (unchanged)', () => {
+    writeSecondsEraWiring();
+    mergeQwenSettings(repo);
+    const afterRepair = readSettings(repo);
+    const second = mergeQwenSettings(repo);
+    expect(second.kind).toBe('unchanged');
+    expect(readSettings(repo)).toBe(afterRepair);
+  });
+
+  test('partial stale wiring: stale event repaired, missing events appended', () => {
+    fs.writeFileSync(
+      settingsPathFor(repo),
+      JSON.stringify({ hooks: { PreToolUse: [SECONDS_ERA_WIRING.PreToolUse] } }, null, 2),
+      'utf8'
+    );
+    const result = mergeQwenSettings(repo);
+    expect(result.kind).toBe('merged');
+    expect(result.repaired).toEqual(['PreToolUse']);
+    expect([...result.added].sort()).toEqual(
+      ['PostToolUse', 'SessionStart', 'Stop', 'PreCompact'].sort()
+    );
+  });
+});
+
 describe('planQwenSettingsMerge (read-only)', () => {
   let repo;
   beforeEach(() => {
@@ -251,6 +368,21 @@ describe('planQwenSettingsMerge (read-only)', () => {
     mergeQwenSettings(repo);
     const plan = planQwenSettingsMerge(repo);
     expect(plan.kind).toBe('unchanged');
+  });
+
+  test('stale CAWS entries → merged preview listing repaired events, nothing written', () => {
+    fs.mkdirSync(path.join(repo, '.qwen'), { recursive: true });
+    const hooks = {};
+    for (const [event, block] of Object.entries(SECONDS_ERA_WIRING)) {
+      hooks[event] = [block];
+    }
+    fs.writeFileSync(settingsPathFor(repo), JSON.stringify({ hooks }, null, 2), 'utf8');
+    const before = fs.readFileSync(settingsPathFor(repo), 'utf8');
+    const plan = planQwenSettingsMerge(repo);
+    expect(plan.kind).toBe('merged');
+    expect(plan.added).toHaveLength(0);
+    expect([...plan.repaired].sort()).toEqual([...ALL_EVENTS].sort());
+    expect(fs.readFileSync(settingsPathFor(repo), 'utf8')).toBe(before);
   });
 });
 

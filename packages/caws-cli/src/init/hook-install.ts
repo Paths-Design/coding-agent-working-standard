@@ -928,8 +928,16 @@ export type SettingsMergeResult =
   /** No settings.json existed; a fresh one was written with CAWS wiring. */
   | { readonly kind: 'created'; readonly path: string }
   /** settings.json existed and was missing CAWS entries; they were
-   *  appended. `added` lists the hook-event keys that gained an entry. */
-  | { readonly kind: 'merged'; readonly path: string; readonly added: readonly string[] }
+   *  appended. `added` lists the hook-event keys that gained an entry.
+   *  `repaired` (when present) lists keys whose CAWS-owned entry already
+   *  existed but was stale (e.g. seconds-era qwen timeouts) and was
+   *  replaced in place; user-authored entries are never touched. */
+  | {
+      readonly kind: 'merged';
+      readonly path: string;
+      readonly added: readonly string[];
+      readonly repaired?: readonly string[];
+    }
   /** settings.json already wired all four entries; nothing written. */
   | { readonly kind: 'unchanged'; readonly path: string }
   /** settings.json existed but could not be parsed; left untouched. */
@@ -1827,7 +1835,13 @@ function qwenShimCommand(event: string): string {
 /** The canonical CAWS hook wiring for Qwen Code as a structured object.
  *  Single source of truth for both the printed snippet and the in-place
  *  merge. Five events (kimi precedent; the shared core ships all five
- *  dispatchers). */
+ *  dispatchers).
+ *
+ *  Timeouts are MILLISECONDS: Qwen's command-hook contract passes
+ *  `timeout` raw to setTimeout (default 60000), unlike Claude Code where
+ *  the same field is seconds. Seconds-era values (45/60/30) made every
+ *  hook SIGTERM before the ~3s shim completed, silently disabling every
+ *  guard (CAWS-QWEN-HOOK-TIMEOUT-001). */
 export const CANONICAL_QWEN_HOOK_ENTRIES: Readonly<
   Record<string, Record<string, unknown>>
 > = {
@@ -1839,7 +1853,7 @@ export const CANONICAL_QWEN_HOOK_ENTRIES: Readonly<
         type: 'command',
         command: qwenShimCommand('PreToolUse'),
         name: 'caws-qwen-pre-tool-use',
-        timeout: 45,
+        timeout: 45000,
       },
     ],
   },
@@ -1850,7 +1864,7 @@ export const CANONICAL_QWEN_HOOK_ENTRIES: Readonly<
         type: 'command',
         command: qwenShimCommand('PostToolUse'),
         name: 'caws-qwen-post-tool-use',
-        timeout: 60,
+        timeout: 60000,
       },
     ],
   },
@@ -1860,7 +1874,7 @@ export const CANONICAL_QWEN_HOOK_ENTRIES: Readonly<
         type: 'command',
         command: qwenShimCommand('SessionStart'),
         name: 'caws-qwen-session-start',
-        timeout: 30,
+        timeout: 30000,
       },
     ],
   },
@@ -1870,7 +1884,7 @@ export const CANONICAL_QWEN_HOOK_ENTRIES: Readonly<
         type: 'command',
         command: qwenShimCommand('Stop'),
         name: 'caws-qwen-stop',
-        timeout: 30,
+        timeout: 30000,
       },
     ],
   },
@@ -1880,7 +1894,7 @@ export const CANONICAL_QWEN_HOOK_ENTRIES: Readonly<
         type: 'command',
         command: qwenShimCommand('PreCompact'),
         name: 'caws-qwen-pre-compact',
-        timeout: 30,
+        timeout: 30000,
       },
     ],
   },
@@ -1903,20 +1917,21 @@ export const CANONICAL_QWEN_SETTINGS_SNIPPET = JSON.stringify(
   2
 );
 
-/** Does this hook-event's entry array already contain a CAWS-owned qwen
- *  entry? Matched by the shim path so hand-pasted canonical blocks count as
- *  wired and re-running init never appends duplicates. */
-function arrayHasCawsQwenEntry(entryArray: unknown): boolean {
-  if (!Array.isArray(entryArray)) return false;
-  const shimTail = '/.qwen/hooks/caws-qwen-hook.sh';
-  for (const block of entryArray as unknown[]) {
-    const hookList = (block as { hooks?: unknown }).hooks;
-    if (!Array.isArray(hookList)) continue;
-    for (const h of hookList as unknown[]) {
-      const cmd = (h as { command?: unknown }).command;
-      if (typeof cmd === 'string' && cmd.includes(shimTail)) {
-        return true;
-      }
+/** Ownership marker for CAWS qwen wiring: any hook whose command invokes
+ *  the repo-conditional shim. Hand-pasted canonical blocks count as
+ *  CAWS-owned too (inspectQwenSettings uses the same marker). */
+const QWEN_SHIM_TAIL = '/.qwen/hooks/caws-qwen-hook.sh';
+
+/** Is a single wiring block (one matcher group) CAWS-owned? Matched by the
+ *  shim path so hand-pasted canonical blocks count as wired — re-running
+ *  init upgrades them in place instead of appending duplicates. */
+function isCawsQwenBlock(block: unknown): boolean {
+  const hookList = (block as { hooks?: unknown }).hooks;
+  if (!Array.isArray(hookList)) return false;
+  for (const h of hookList as unknown[]) {
+    const cmd = (h as { command?: unknown }).command;
+    if (typeof cmd === 'string' && cmd.includes(QWEN_SHIM_TAIL)) {
+      return true;
     }
   }
   return false;
@@ -1926,8 +1941,10 @@ function arrayHasCawsQwenEntry(entryArray: unknown): boolean {
  * Merge the canonical CAWS hook wiring into `.qwen/settings.json`,
  * non-destructively. The CAWS entry for each hook-event is appended only
  * if an equivalent entry (matched by the shim path) is not already present.
- * All other keys — tools, memory, env, user-authored hooks — are preserved
- * outside the appended entries.
+ * A CAWS-owned entry that exists but differs from the canonical one (e.g.
+ * the shipped-11.9.0 seconds-era timeouts) is upgraded in place — the
+ * repair reported as `repaired`. All other keys — tools, memory, env,
+ * user-authored hooks — are preserved outside the CAWS-owned entries.
  *
  * JSONC note: Qwen tolerates `//` comments in settings.json, but this merge
  * parses strict JSON (claude/zcode precedent). A commented file is reported
@@ -1971,18 +1988,31 @@ export function mergeQwenSettings(repoRoot: string): SettingsMergeResult {
       : {};
 
   const added: string[] = [];
+  const repaired: string[] = [];
   for (const [key, entry] of Object.entries(CANONICAL_QWEN_HOOK_ENTRIES)) {
     const existing = hooks[key];
-    if (arrayHasCawsQwenEntry(existing)) continue; // already wired
     if (Array.isArray(existing)) {
-      (existing as unknown[]).push(entry);
+      const entryArray = existing as unknown[];
+      let sawCawsEntry = false;
+      for (let i = 0; i < entryArray.length; i += 1) {
+        if (!isCawsQwenBlock(entryArray[i])) continue;
+        sawCawsEntry = true;
+        // CAWS-owned but stale (e.g. seconds-era timeouts): replace in
+        // place, preserving position among any user-authored blocks.
+        if (JSON.stringify(entryArray[i]) !== JSON.stringify(entry)) {
+          entryArray[i] = entry;
+          if (!repaired.includes(key)) repaired.push(key);
+        }
+      }
+      if (sawCawsEntry) continue; // already wired (current or just repaired)
+      entryArray.push(entry);
     } else {
       hooks[key] = [entry];
     }
     added.push(key);
   }
 
-  if (added.length === 0) {
+  if (added.length === 0 && repaired.length === 0) {
     return { kind: 'unchanged', path: settingsPath };
   }
 
@@ -1992,7 +2022,12 @@ export function mergeQwenSettings(repoRoot: string): SettingsMergeResult {
     `${JSON.stringify(root, null, 2)}\n`,
     'utf8'
   );
-  return { kind: 'merged', path: settingsPath, added };
+  return {
+    kind: 'merged',
+    path: settingsPath,
+    added,
+    ...(repaired.length > 0 ? { repaired } : {}),
+  };
 }
 
 /** Read-only counterpart to mergeQwenSettings. Computes the same created /
@@ -2033,16 +2068,38 @@ export function planQwenSettingsMerge(
       : {};
 
   const added: string[] = [];
-  for (const key of Object.keys(CANONICAL_QWEN_HOOK_ENTRIES)) {
-    if (arrayHasCawsQwenEntry(hooks[key])) continue;
+  const repaired: string[] = [];
+  for (const [key, entry] of Object.entries(CANONICAL_QWEN_HOOK_ENTRIES)) {
+    const existing = hooks[key];
+    if (Array.isArray(existing)) {
+      let sawCawsEntry = false;
+      for (const block of existing as unknown[]) {
+        if (!isCawsQwenBlock(block)) continue;
+        sawCawsEntry = true;
+        if (
+          JSON.stringify(block) !== JSON.stringify(entry) &&
+          !repaired.includes(key)
+        ) {
+          repaired.push(key);
+        }
+      }
+      if (!sawCawsEntry) added.push(key);
+      continue;
+    }
     added.push(key);
   }
 
-  if (added.length === 0) {
+  if (added.length === 0 && repaired.length === 0) {
     return { kind: 'unchanged', path: settingsPath, readOnly: true };
   }
 
-  return { kind: 'merged', path: settingsPath, added, readOnly: true };
+  return {
+    kind: 'merged',
+    path: settingsPath,
+    added,
+    ...(repaired.length > 0 ? { repaired } : {}),
+    readOnly: true,
+  };
 }
 
 /** Inspect the qwen wiring state of `.qwen/settings.json` without changing
@@ -2066,7 +2123,7 @@ export function inspectQwenSettings(repoRoot: string): SettingsWiringStatus {
   if (!hooks || typeof hooks !== 'object') {
     return { kind: 'partial', missing: required };
   }
-  const shimTail = '/.qwen/hooks/caws-qwen-hook.sh';
+  const shimTail = QWEN_SHIM_TAIL;
   const missing: string[] = [];
   for (const key of required) {
     const entry = (hooks as Record<string, unknown>)[key];

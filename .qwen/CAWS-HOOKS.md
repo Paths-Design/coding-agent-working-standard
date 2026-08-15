@@ -1,7 +1,7 @@
 <!--
 # CAWS-MANAGED-HOOK
 # hook_pack: qwen-code
-# hook_pack_version: 1
+# hook_pack_version: 2
 # caws_min_major: 11
 # lineage_refs: 1,4,6,8,11,12,13,16,17,19,20
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -28,8 +28,11 @@ Qwen Code reads hooks from the repo-local `.qwen/settings.json` (merged under
 any user-level `~/.qwen/settings.json`). `caws init --agent-surface qwen-code`
 merges five managed hook entries — PreToolUse, PostToolUse, SessionStart,
 Stop, PreCompact — into `.qwen/settings.json` non-destructively (your other
-settings are preserved; a second run is a byte-identical no-op) and writes
-`.qwen/settings.json.example` as a reference artifact.
+settings are preserved; a second run on current wiring is a byte-identical
+no-op) and writes `.qwen/settings.json.example` as a reference artifact.
+CAWS-owned entries that have gone stale — e.g. the seconds-era timeouts
+shipped in 11.9.0 — are upgraded in place on re-run; user-authored hook
+entries are never touched.
 
 Qwen exports no env var that reliably names the repo root
 (`QWEN_CODE_PROJECT_DIR` points at the per-project state dir under
@@ -69,7 +72,7 @@ The override file is resolved at runtime by `caws_source_lib` (defined in
 `$CAWS_PROJECT_DIR/$CAWS_VENDOR_DIR/hooks/lib/<name>` before falling back to
 the shared default. `CAWS_VENDOR_DIR` is `.qwen` for this surface.
 
-## Qwen contract (verified live against Qwen Code 0.21.4)
+## Qwen contract (probed live on 0.21.4, re-verified against the 0.21.11 runtime)
 
 | Behavior | Contract |
 |----------|----------|
@@ -77,9 +80,10 @@ the shared default. `CAWS_VENDOR_DIR` is `.qwen` for this surface.
 | Block | stdout `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":...}}` (exit 0) — enforced even in yolo mode; or exit `2` with the reason on stderr |
 | `ask` | Native: interactive sessions show a confirmation prompt; headless/background contexts degrade ask → deny automatically |
 | exit 1 | Non-blocking error — the tool call proceeds; CAWS block paths never rely on it |
-| `updatedInput` | documented but NOT enforced in 0.21.x — `CAWS_SUPPORTS_UPDATED_INPUT=0`; quiet-merge passes commands through unrewritten |
+| Timeout | command-hook `timeout` is MILLISECONDS (default 60000) — Claude Code's seconds convention does NOT apply. The 11.9.0 wiring shipped seconds-style values that SIGTERMed every hook before the shim (~3s) could run, silently disabling all guards; fixed in CAWS-QWEN-HOOK-TIMEOUT-001 — re-run `caws init` to upgrade existing entries in place |
+| `updatedInput` | NOT applied on the plain-CLI tool path (0.21.4 and 0.21.11 alike); the ACP/daemon surface DOES apply it as of 0.21.11. CAWS still ships `CAWS_SUPPORTS_UPDATED_INPUT=0` — quiet-merge passes commands through unrewritten |
 | Matchers | regex on runtime tool ids (`run_shell_command`, `write_file`, `edit`, `read_file`, `glob`, `grep_search`, ...) |
-| Session identity | `session_id` in the payload; `QWEN_CODE_SESSION_ID` env var outside hooks |
+| Session identity | `session_id` in the payload; `QWEN_CODE_SESSION_ID` env var outside hooks (exported by the runtime — confirmed on 0.21.11) |
 
 ## These are CAWS-managed files — and you may grow them
 
@@ -124,3 +128,7 @@ mid-session does NOT activate it. After `caws init --agent-surface qwen-code`,
 **start a new qwen session** before relying on enforcement. Sessions launched
 from a subdirectory of the repo still scope governance to the git root (the
 shim resolves it at invocation time).
+
+Project-level hooks also require **trusted-folder status**: if Qwen Code has
+never been granted trust for this repo it prompts on first open, and hooks
+stay inactive until trust is granted.
