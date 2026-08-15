@@ -55,6 +55,20 @@ export function renderGatesRun(result: DispositionResult): string {
     }
   }
 
+  // A blocked disposition names the bounded exception path with its required
+  // flags — an agent that has never read the docs learns the sanctioned
+  // off-ramp at the point of block, and learns it is NOT the hook-guard
+  // escape (reprieve), which lives at a different enforcement layer.
+  if (result.anyBlocks) {
+    lines.push('');
+    lines.push(
+      'Bounded exception path: caws waiver create <id> --gate <gate-id> --reason "<why>" ' +
+        '--approved-by "<approver>" --expires-at "<iso-ts>" filters these violations out of ' +
+        'the disposition without changing gate mode. (A waiver never lifts a hook guard — ' +
+        'that is caws reprieve, a different enforcement layer.)'
+    );
+  }
+
   lines.push('');
   lines.push(`Overall: ${result.anyBlocks ? 'BLOCKED by policy' : 'OK'}`);
   return lines.join('\n');

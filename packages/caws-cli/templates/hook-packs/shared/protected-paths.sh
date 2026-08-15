@@ -59,6 +59,10 @@ else
   exit 2
 fi
 parse_hook_input
+# Shared legibility helpers (identity prefix + escape-hatch naming) — same
+# fail-soft pattern scope-guard.sh uses: absence degrades the message, never
+# the enforcement.
+[[ -f "$SCRIPT_DIR/lib/guard-message.sh" ]] && source "$SCRIPT_DIR/lib/guard-message.sh"
 
 case "$HOOK_TOOL_NAME" in
   Write|Edit) ;;
@@ -102,6 +106,9 @@ if _hooks_prefix_match; then
       # *.cjs, lib/, caws_dispatch/, or an unrecognized extension). Fail closed.
       echo "BLOCKED: $FILE_PATH is protected." >&2
       echo "Ask the user for permission before editing CAWS hook scripts." >&2
+      if command -v guard_reprieve_hint >/dev/null 2>&1; then
+        guard_reprieve_hint protected-paths.sh >&2
+      fi
       exit 1
       ;;
   esac
@@ -114,6 +121,9 @@ if _strikes_match; then
   echo "  bash ${CAWS_HOOKS_DIR:-.caws/hooks}/reset-strikes.sh --current" >&2
   echo "(or --session <uuid> / --worktree <name> / --all --confirm; resets are logged)." >&2
   echo "Otherwise switch into the correct worktree, update the active CAWS spec scope, or ask the user for direction." >&2
+  if command -v guard_reprieve_hint >/dev/null 2>&1; then
+    guard_reprieve_hint protected-paths.sh >&2
+  fi
   exit 2
 fi
 
