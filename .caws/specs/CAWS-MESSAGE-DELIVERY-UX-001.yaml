@@ -206,3 +206,7 @@ evidence:
     status: pass
     evidence_ref: "jest 'UX A3': refused send prints 'not sent — recipient not live' to stdout; messages.jsonl absent after refusal"
     recorded_at: "2026-08-15T19:00:44.159Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "jest 'UX A4': reply lands on identical channel id from kernel-attributed actor; unknown id and self-reply exit 1 with named verdicts"
+    recorded_at: "2026-08-15T19:00:45.089Z"
