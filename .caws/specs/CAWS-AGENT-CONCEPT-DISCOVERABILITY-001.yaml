@@ -41,3 +41,10 @@ non_functional: {}
 contracts:
   - name: 'guard-remediation-names-its-escape-hatch'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "bats hooks 139/139 + jest agent-doc-examples A1 — scope-guard (strikes 2/3 + env-block), protected-paths (both block sites), lib/guard-message.sh all name caws reprieve grant with mandatory flags"
+    recorded_at: "2026-08-15T18:13:33.694Z"
+    command: "npm run test:bats && npx jest agent-doc-examples"
+    exit_code: 0
