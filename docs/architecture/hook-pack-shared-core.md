@@ -135,7 +135,7 @@ dedicated `lib/agent-surface.sh`):
 | log dir | `$CAWS_PROJECT_DIR/.claude/logs` | `$CAWS_PROJECT_DIR/.codex/logs` | `$CAWS_PROJECT_DIR/.kimi-code/logs` | `$CAWS_PROJECT_DIR/.qwen/logs` |
 | `--platform` flag | `claude-code` | `codex` | `kimi-code` | `qwen-code` |
 | permission-decision vocab | `ask` supported | `ask` → `deny` (Codex has no PreToolUse `ask`) | `ask` → `deny` (Kimi's `ask` is non-blocking — verified live) | `ask` supported (interactive prompts; headless/background degrades to `deny` — verified live on 0.21.4) |
-| updatedInput rewrite | yes | yes | no (no documented contract; quiet-merge passes through) | no (documented but NOT enforced in 0.21.x — probed live; quiet-merge passes through) |
+| updatedInput rewrite | yes | yes | no (no documented contract; quiet-merge passes through) | no on the plain-CLI path (0.21.4 and 0.21.11 alike); the ACP/daemon surface applies it as of 0.21.11 — quiet-merge still passes through |
 | non-2 non-zero hook exit | warning (max returned) | warning (max returned) | promoted to blocking exit 2 — Kimi does not enforce exit 1 (verified live) | warning (max returned) — Qwen enforces exit 2 blocking and treats exit 1 as a non-blocking error, same contract as Claude Code (verified live) |
 
 Backward-compatibility: the resolver falls back to the legacy env var
@@ -179,13 +179,16 @@ qwen-code repo-local `.qwen/settings.json` (shim-mediated form — like kimi,
 the shim injects the surface env and resolves the git root itself, because
 Qwen exports no env var that reliably names the repo root; matchers use
 Qwen's runtime tool ids, and a vendor `parse-input.sh` override normalizes
-them to the canonical guard names):
+them to the canonical guard names). Note the `timeout` unit: Qwen command
+hooks measure it in MILLISECONDS (default 60000), unlike Claude Code's
+seconds — the seconds-style values shipped in 11.9.0 SIGTERMed every hook
+before the shim ran and were repaired by CAWS-QWEN-HOOK-TIMEOUT-001:
 
 ```jsonc
 { "matcher": "run_shell_command|write_file|edit|read_file|glob|grep_search|notebook_edit",
   "hooks": [ { "type": "command",
     "command": "ROOT=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)\"; test -x \"$ROOT/.qwen/hooks/caws-qwen-hook.sh\" && \"$ROOT/.qwen/hooks/caws-qwen-hook.sh\" PreToolUse || true",
-    "timeout": 45 } ] }
+    "timeout": 45000 } ] }
 ```
 
 The shared dispatcher resolves its lib/handlers from its own location
@@ -242,7 +245,8 @@ genuine-divergence set (from the codex/claude-code comparison) is:
   ...) every shared guard self-filters on, preserving the raw id in
   `HOOK_ORIGINAL_TOOL_NAME`. No emit/run-handlers overrides: Qwen enforces
   `deny` and exit-2 blocks natively and degrades `ask` to deny in
-  headless/background (all verified live against 0.21.4).
+  headless/background (probed live on 0.21.4, re-verified against the
+  0.21.11 runtime).
 
 Resolution rule at install time: for each shared file, the vendor adapter MAY
 provide an override; if present, the override is installed in place of the
