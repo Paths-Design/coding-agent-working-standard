@@ -1,0 +1,27 @@
+id: CAWS-HOOKPACK-UPGRADE-RETROFIT-001
+title: 'Agents can see, decompose, and land hook-pack upgrades without hand-editing protected hooks'
+risk_tier: 2
+mode: feature
+lifecycle_state: active
+created_at: '2026-08-15T18:56:06.105Z'
+updated_at: '2026-08-15T18:56:06.105Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'hookpack-upgrade-retrofit'
+    type: behavior
