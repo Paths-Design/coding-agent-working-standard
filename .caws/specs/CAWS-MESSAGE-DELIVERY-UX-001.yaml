@@ -198,3 +198,7 @@ evidence:
     status: pass
     evidence_ref: "jest UX A1 (store+command): stopped lease + 2m-old heartbeat sends exit 0 with recipient_idle flag and 'idle between turns' stdout note"
     recorded_at: "2026-08-15T19:00:42.302Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "jest: no-lease and stale-heartbeat (47m/60m, any status) refusals write no record and keep --allow-dead bypass; stopped+no-age also refused"
+    recorded_at: "2026-08-15T19:00:43.221Z"
