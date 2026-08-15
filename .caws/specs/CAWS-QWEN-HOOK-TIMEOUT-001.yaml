@@ -2,10 +2,11 @@ id: CAWS-QWEN-HOOK-TIMEOUT-001
 title: 'Fix qwen-code hook timeout unit mismatch (ms vs s)'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-qwen-timeout
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-qwen-timeout at d9b8d8278dd01e356aa71d5fec21b4cda5126678'
 created_at: '2026-08-15T18:04:24.092Z'
-updated_at: '2026-08-15T18:09:25.495Z'
+updated_at: '2026-08-15T18:36:21.807Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/init (qwen-code hook wiring engine)
