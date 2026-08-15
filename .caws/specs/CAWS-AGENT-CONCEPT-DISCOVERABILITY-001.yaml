@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-discoverability
 created_at: '2026-07-25T07:06:20.473Z'
-updated_at: '2026-08-15T17:57:30.006Z'
+updated_at: '2026-08-15T17:59:25.063Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
@@ -20,6 +20,7 @@ scope:
     - packages/caws-cli/src/shell/render/gates.ts
     - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
     - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/templates/hook-packs/shared/lib/guard-message.sh
   out: []
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'
