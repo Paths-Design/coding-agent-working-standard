@@ -79,3 +79,7 @@ evidence:
     status: pass
     evidence_ref: "jest: user-authored entries survive the repair exactly, order preserved"
     recorded_at: "2026-08-15T18:34:12.509Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "jest: second run byte-identical after create and after repair (unchanged)"
+    recorded_at: "2026-08-15T18:34:16.563Z"
