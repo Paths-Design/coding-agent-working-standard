@@ -214,3 +214,7 @@ evidence:
     status: pass
     evidence_ref: "jest 'UX A5': status reports queued->delivered with ts; history text shows [delivered]/[queued] and --json carries delivered flags; two-pass channelHistory annotated correctly"
     recorded_at: "2026-08-15T19:01:00.317Z"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "jest 'UX A6': wt:wt-demo and spec:SPEC-1 resolve to freshest bound session with alias-expansion stdout line; wt:wt-gone refuses with alias_unresolved naming the alias"
+    recorded_at: "2026-08-15T19:01:01.232Z"
