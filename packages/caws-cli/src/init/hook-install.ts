@@ -33,6 +33,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { spawnSync } from 'child_process';
 
 import { unifiedDiff } from './unified-diff';
 import type {
@@ -539,24 +540,73 @@ function ensureDir(target: string): void {
   fs.mkdirSync(target, { recursive: true });
 }
 
-function writeFile(
-  destAbs: string,
-  sourceAbs: string,
-  executable: boolean,
+// ─── Pristine baselines (CAWS-HOOKPACK-UPGRADE-RETROFIT-001 A3/A4) ────────
+//
+// The as-installed copy of every managed file is stashed under
+// .caws/hooks/.pristine/<packId>/<destPath> so a later upgrade can
+// three-way-decompose a drifted hook into LOCAL GROWTH (installed vs the
+// pristine it was installed as) and UPSTREAM change (pristine vs the new
+// template). Without a baseline, a drifted hook's two-way diff conflates the
+// two and an agent retrofitting by hand cannot tell its repo's edits from
+// the pack's changes. Baselines are per-checkout runtime state (gitignored
+// via EPHEMERAL_CAWS_ENTRIES), current install only — writing a new
+// baseline retires the old one (same path, atomic write).
+
+export function pristinePathFor(
   repoRoot: string,
+  packId: string,
+  destPath: string
+): string {
+  return path.join(
+    repoRoot,
+    '.caws',
+    'hooks',
+    '.pristine',
+    packId,
+    ...destPath.split('/')
+  );
+}
+
+function writePristineBaseline(
+  repoRoot: string,
+  packId: string,
   file: HookPackFile,
-  packVersion: number
+  rendered: Buffer
 ): void {
+  if (!file.managed) return;
+  const p = pristinePathFor(repoRoot, packId, file.destPath);
+  ensureDir(path.dirname(p));
+  fs.writeFileSync(p, rendered);
+}
+
+/** The pristine as-installed content for a managed pack path, or null when
+ *  no baseline is recorded (fresh clone, or the file predates baselines). */
+export function readPristineBaseline(
+  repoRoot: string,
+  packId: string,
+  destPath: string
+): string | null {
+  const bytes = readBytes(pristinePathFor(repoRoot, packId, destPath));
+  return bytes === null ? null : bytes.toString('utf8');
+}
+
+function writeFile(ctx: InstallContext, file: HookPackFile): void {
+  const destAbs = path.join(ctx.repoRoot, file.destPath);
+  const sourceAbs = path.join(ctx.packRoot, file.sourcePath);
   ensureDir(path.dirname(destAbs));
   const sourceBytes = readBytes(sourceAbs);
   if (sourceBytes === null) {
     throw new Error(`template file missing: ${sourceAbs}`);
   }
-  fs.writeFileSync(
-    destAbs,
-    renderPackFileBytes(sourceBytes, repoRoot, file, packVersion)
+  const rendered = renderPackFileBytes(
+    sourceBytes,
+    ctx.repoRoot,
+    file,
+    ctx.pack.packVersion
   );
-  if (executable) {
+  fs.writeFileSync(destAbs, rendered);
+  writePristineBaseline(ctx.repoRoot, ctx.pack.id, file, rendered);
+  if (file.executable) {
     try {
       fs.chmodSync(destAbs, 0o755);
     } catch {
@@ -569,8 +619,6 @@ function applyOne(
   ctx: InstallContext,
   file: HookPackFile
 ): HookPackFileAction {
-  const destAbs = path.join(ctx.repoRoot, file.destPath);
-  const sourceAbs = path.join(ctx.packRoot, file.sourcePath);
   const state = evaluateFileState(
     ctx.repoRoot,
     ctx.packRoot,
@@ -579,10 +627,9 @@ function applyOne(
     file
   );
 
-  const pv = ctx.pack.packVersion;
   switch (state.kind) {
     case 'absent':
-      writeFile(destAbs, sourceAbs, file.executable, ctx.repoRoot, file, pv);
+      writeFile(ctx, file);
       return { destPath: file.destPath, action: 'created' };
 
     case 'managed_clean':
@@ -594,8 +641,8 @@ function applyOne(
       // bodies are equal modulo the version line), so updating it loses no
       // growth — it just re-stamps the version. Safe to write.
       // (CAWS-HOOK-PACK-MANAGED-HEADER-GROWTH-DOCTRINE-001.)
-      writeFile(destAbs, sourceAbs, file.executable, ctx.repoRoot, file, pv);
-      return { destPath: file.destPath, action: 'updated' };
+      writeFile(ctx, file);
+      return { destPath: file.destPath, action: 'updated', restampOnly: true };
 
     case 'managed_drift':
       return resolveCollision(ctx, file, 'managed_drift', true);
@@ -642,16 +689,7 @@ function resolveCollision(
   if (overwriteSelects(ctx, file)) {
     if (ctx.force) {
       if (apply) {
-        const destAbs = path.join(ctx.repoRoot, file.destPath);
-        const sourceAbs = path.join(ctx.packRoot, file.sourcePath);
-        writeFile(
-          destAbs,
-          sourceAbs,
-          file.executable,
-          ctx.repoRoot,
-          file,
-          ctx.pack.packVersion
-        );
+        writeFile(ctx, file);
       }
       return { destPath: file.destPath, action: 'updated' };
     }
@@ -692,7 +730,7 @@ function planOne(
     case 'managed_clean':
       return { destPath: file.destPath, action: 'unchanged' };
     case 'managed_old_version':
-      return { destPath: file.destPath, action: 'updated' };
+      return { destPath: file.destPath, action: 'updated', restampOnly: true };
     case 'managed_drift':
       return resolveCollision(ctx, file, 'managed_drift', false);
     case 'unmanaged_collision':
@@ -759,6 +797,256 @@ export function planHookPackInstall(
     actions,
     activation: pack.activation,
     readOnly: true,
+  };
+}
+
+// ─── Read-only diff (CAWS-HOOKPACK-UPGRADE-RETROFIT-001 A1/A4) ────────────
+
+/** Per-file diff view of one pack: the classification kind, BOTH version
+ *  numbers (the installed header stamp and the running CLI's template
+ *  version — never conflated), the two-way installed-vs-template diff, and —
+ *  when a pristine baseline exists — the three-way decomposition separating
+ *  local growth from upstream change. */
+export interface HookPackFileDiff {
+  readonly packId: string;
+  readonly packVersion: number;
+  readonly destPath: string;
+  readonly kind: InstallFileState['kind'];
+  /** The installed file's managed-header stamp, null when absent/unmanaged. */
+  readonly installedVersion: number | null;
+  /** Unified diff installed → rendered template. '' when identical. */
+  readonly twoWayDiff: string;
+  readonly threeWay:
+    | {
+        readonly available: true;
+        /** Pristine install → installed: the repo's own growth. */
+        readonly localGrowthDiff: string;
+        /** Pristine install → new template: the pack's changes. */
+        readonly upstreamDiff: string;
+      }
+    | { readonly available: false; readonly reason: string };
+}
+
+/** Read-only diff of a pack against the repo. Performs ZERO writes — unlike
+ *  the install path, not even pristine baselines are touched. */
+export function diffHookPack(
+  pack: HookPackV1,
+  options: Pick<HookPackInstallOptions, 'repoRoot' | 'packRootOverride'>
+): readonly HookPackFileDiff[] {
+  const ctx = contextFromOptions(pack, options);
+  const out: HookPackFileDiff[] = [];
+
+  for (const file of pack.installedFiles) {
+    const state = evaluateFileState(
+      ctx.repoRoot,
+      ctx.packRoot,
+      pack.id,
+      pack.packVersion,
+      file
+    );
+    const destAbs = path.join(ctx.repoRoot, file.destPath);
+    const local = readBytes(destAbs)?.toString('utf8') ?? '';
+    const raw = readBytes(path.join(ctx.packRoot, file.sourcePath));
+    const incoming =
+      raw === null
+        ? null
+        : renderPackFileBytes(raw, ctx.repoRoot, file, pack.packVersion).toString(
+            'utf8'
+          );
+
+    const twoWayDiff =
+      incoming === null
+        ? '(pack template missing; no diff available)'
+        : unifiedDiff(
+            `installed: ${file.destPath}`,
+            `template: ${pack.id} v${pack.packVersion}`,
+            local,
+            incoming
+          );
+
+    let threeWay: HookPackFileDiff['threeWay'];
+    if (!file.managed) {
+      threeWay = {
+        available: false,
+        reason: 'unmanaged pack file — no baseline is kept',
+      };
+    } else {
+      const baseline = readPristineBaseline(
+        ctx.repoRoot,
+        pack.id,
+        file.destPath
+      );
+      if (baseline === null) {
+        threeWay = {
+          available: false,
+          reason:
+            'no pristine baseline recorded (fresh clone, or installed before baselines shipped) — two-way diff only',
+        };
+      } else {
+        threeWay = {
+          available: true,
+          localGrowthDiff: unifiedDiff(
+            `baseline: pristine ${pack.id} install`,
+            `installed: ${file.destPath}`,
+            baseline,
+            local
+          ),
+          upstreamDiff:
+            incoming === null
+              ? '(pack template missing)'
+              : unifiedDiff(
+                  `baseline: pristine ${pack.id} install`,
+                  `template: ${pack.id} v${pack.packVersion}`,
+                  baseline,
+                  incoming
+                ),
+        };
+      }
+    }
+
+    out.push({
+      packId: pack.id,
+      packVersion: pack.packVersion,
+      destPath: file.destPath,
+      kind: state.kind,
+      installedVersion: 'header' in state ? state.header.hookPackVersion : null,
+      twoWayDiff,
+      threeWay,
+    });
+  }
+  return out;
+}
+
+// ─── CLI-mediated port (CAWS-HOOKPACK-UPGRADE-RETROFIT-001 A5) ────────────
+
+export interface HookPackPortOptions {
+  readonly repoRoot: string;
+  /** Managed pack destination path being retrofitted. */
+  readonly destPath: string;
+  /** Staging file OUTSIDE the protected hooks tree carrying the ported
+   *  content (new template + local growth re-applied). The agent never
+   *  Edit/Writes the protected path itself — that is the whole point:
+   *  protected-paths never fires during a sanctioned upgrade. */
+  readonly fromFile: string;
+  readonly packRootOverride?: string;
+}
+
+export type HookPackPortResult =
+  | {
+      readonly ok: true;
+      readonly destPath: string;
+      readonly packId: string;
+      readonly packVersion: number;
+    }
+  | { readonly ok: false; readonly reason: string };
+
+/** Land an agent-prepared port of a managed hook. Validates the candidate
+ *  (managed header for THIS pack, edit_stance preserved, bash -n / JSON
+ *  syntax), re-stamps it at the current pack version, installs it
+ *  atomically, records the pristine baseline, and thereby RESUMES drift
+ *  tracking (unlike --adopt, which ends it): the landed file is the new
+ *  managed baseline. The caller owns the audit commit. */
+export function portHookFile(
+  pack: HookPackV1,
+  options: HookPackPortOptions
+): HookPackPortResult {
+  const file = pack.installedFiles.find((f) => f.destPath === options.destPath);
+  if (file === undefined) {
+    return {
+      ok: false,
+      reason: `"${options.destPath}" is not a ${pack.id} pack path; list them with caws init diff`,
+    };
+  }
+  if (!file.managed) {
+    return {
+      ok: false,
+      reason: `"${options.destPath}" is not a managed hook file`,
+    };
+  }
+
+  const candidateBytes = readBytes(options.fromFile);
+  if (candidateBytes === null) {
+    return { ok: false, reason: `staging file not readable: ${options.fromFile}` };
+  }
+  const candidate = candidateBytes.toString('utf8');
+
+  const header = parseManagedHeader(candidate);
+  if (header === null) {
+    return {
+      ok: false,
+      reason:
+        'candidate carries no CAWS-MANAGED-HOOK header — a port preserves the managed header (pack identity + lineage), it never lands an unmanaged file',
+    };
+  }
+  if (header.hookPack !== pack.id) {
+    return {
+      ok: false,
+      reason: `candidate declares hook_pack "${header.hookPack}", expected "${pack.id}"`,
+    };
+  }
+  // The doctrine line is part of the managed header block, so scope the
+  // check to the same header window parseManagedHeader reads — a body that
+  // merely mentions "edit_stance" must not satisfy it.
+  const headerWindow = candidate.split('\n').slice(0, 30).join('\n');
+  if (!headerWindow.includes('edit_stance')) {
+    return {
+      ok: false,
+      reason:
+        'candidate dropped the edit_stance doctrine line from its managed header — ports preserve the header block, edit_stance included',
+    };
+  }
+  if (file.destPath.endsWith('.sh')) {
+    const syntax = spawnSync('bash', ['-n', options.fromFile], {
+      encoding: 'utf8',
+    });
+    if (syntax.status !== 0) {
+      return {
+        ok: false,
+        reason: `candidate fails bash -n: ${(syntax.stderr ?? '').trim()}`,
+      };
+    }
+  }
+  if (file.destPath.endsWith('.json')) {
+    try {
+      JSON.parse(candidate);
+    } catch (e) {
+      return {
+        ok: false,
+        reason: `candidate is not valid JSON: ${(e as Error).message}`,
+      };
+    }
+  }
+
+  const ctx = contextFromOptions(pack, {
+    repoRoot: options.repoRoot,
+    ...(options.packRootOverride !== undefined
+      ? { packRootOverride: options.packRootOverride }
+      : {}),
+  });
+  // Re-stamp at the current pack version: the agent ports CONTENT; the
+  // version stamp is pack state, owned here. This is what resumes drift
+  // tracking against the current version.
+  const rendered = Buffer.from(
+    stampPackVersion(candidate, pack.packVersion),
+    'utf8'
+  );
+  const destAbs = path.join(ctx.repoRoot, file.destPath);
+  ensureDir(path.dirname(destAbs));
+  fs.writeFileSync(destAbs, rendered);
+  if (file.executable) {
+    try {
+      fs.chmodSync(destAbs, 0o755);
+    } catch {
+      // chmod can fail on some filesystems (Windows). Non-fatal.
+    }
+  }
+  writePristineBaseline(options.repoRoot, pack.id, file, rendered);
+
+  return {
+    ok: true,
+    destPath: file.destPath,
+    packId: pack.id,
+    packVersion: pack.packVersion,
   };
 }
 

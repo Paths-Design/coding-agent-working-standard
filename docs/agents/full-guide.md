@@ -311,6 +311,42 @@ caws init                # idempotent; refuses legacy .caws/working-spec.yaml re
                           # there is no --force in v11
 ```
 
+### Upgrading installed hook packs (diff → three-way → port)
+
+An installed pack can fall behind its templates (or a repo can have grown a
+hook by hand). The upgrade flow never requires editing a protected hook
+yourself — the guards stay active the whole way, and no reprieve is needed:
+
+```bash
+# 1. SEE the drift, read-only. Names each path's kind (unchanged /
+#    managed_old_version / managed_drift / unmanaged_collision) and BOTH
+#    version numbers — the installed stamp and the running CLI's template.
+caws init diff --agent-surface claude-code [--json]
+
+# 2. DECOMPOSE one hand-edited hook: which hunks are your repo's growth and
+#    which are the pack's changes (needs a pristine baseline, recorded
+#    automatically at install time under .caws/hooks/.pristine/).
+caws init diff --agent-surface claude-code --three-way .caws/hooks/scope-guard.sh
+
+# 3. PORT: apply the upstream hunks to a copy staged OUTSIDE the hooks tree,
+#    then land it through init. init validates the candidate (managed header,
+#    edit_stance, bash -n), version-stamps it, records the new baseline,
+#    resumes drift tracking, and audit-commits.
+caws init port .caws/hooks/scope-guard.sh --from /tmp/scope-guard.staged.sh
+```
+
+Notes:
+
+- `caws init --overwrite <paths>` without `--force` is a pure preview:
+  NOTHING is written — including version-stamp re-stamps, which surface as
+  their own explicitly committable unit ("Would re-stamp"). Add `--force` to
+  apply replacements (local edits to selected files are lost).
+- `--adopt` keeps a drifted file forever but STOPS tracking drift for it —
+  prefer `init port`, which keeps you upgradeable.
+- `caws init` refuses to run from inside a `.caws/worktrees/*` worktree: it
+  targets the canonical checkout and would otherwise silently mutate
+  main-checkout state from a lane.
+
 ### Validation and drift detection
 
 ```bash
