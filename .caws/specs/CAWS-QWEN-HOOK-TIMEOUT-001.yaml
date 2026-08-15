@@ -4,15 +4,16 @@ risk_tier: 2
 mode: fix
 lifecycle_state: active
 created_at: '2026-08-15T18:04:24.092Z'
-updated_at: '2026-08-15T18:04:59.605Z'
+updated_at: '2026-08-15T18:06:04.574Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/init (qwen-code hook wiring engine)
+    - packages/caws-cli/templates/hook-packs/qwen-code (surface templates)
+    - docs/architecture (hook-pack contract documentation)
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/init/hook-install.ts
     - packages/caws-cli/src/init/hook-packs/manifest-qwen-code.ts
     - packages/caws-cli/templates/hook-packs/qwen-code
@@ -25,12 +26,35 @@ scope:
     - .qwen/CAWS-HOOKS.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - Every qwen-code hook entry shipped or repaired by caws init carries a timeout expressed in milliseconds, each >= 30000 (well above the ~3s measured shim wall time).
+  - Settings repair mutates only CAWS-owned entries (name caws-qwen-*); user-authored hook entries and all non-hook settings keys are never modified.
+  - Re-running caws init --agent-surface qwen-code stays idempotent - byte-identical no-op once the wiring is current.
+  - The deny/ask/exit-2 decision contract and the fail-open shim behavior (outside CAWS repos, on unknown events) are unchanged.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: the canonical qwen-code hook entries in hook-install.ts
+    when: the settings.json wiring is rendered for a fresh install
+    then: every timeout is in milliseconds (PreToolUse 45000, PostToolUse 60000, SessionStart/Stop/PreCompact 30000)
+  - id: A2
+    given: an existing consumer .qwen/settings.json whose CAWS-owned entries still carry seconds-era values (45/60/30)
+    when: caws init --agent-surface qwen-code is re-run
+    then: the CAWS-owned entries are upgraded in place to the millisecond values and the file stays valid JSON
+  - id: A3
+    given: a settings.json that also contains a user-authored hook entry (including one on an event CAWS wires)
+    when: the repair runs
+    then: the user entry is preserved exactly (matcher, command, timeout) and only caws-qwen-* entries change
+  - id: A4
+    given: a fresh git repo
+    when: caws init --agent-surface qwen-code runs twice
+    then: the second run is a byte-identical no-op
+  - id: A5
+    given: the self-installed caws repo after repair
+    when: a qwen session starts (SessionStart hook fires)
+    then: .qwen/logs/audit.log gains a session_start entry (hooks are no longer SIGTERMed by the timeout)
+  - id: A6
+    given: the qwen-code CAWS-HOOKS.md template
+    when: its Qwen contract table is read
+    then: it documents timeouts in milliseconds, updatedInput enforcement status re-verified on 0.21.11 (ACP path applies it, plain-CLI path does not), and the trusted-folder requirement for project hooks
 non_functional: {}
 contracts:
   - name: 'qwen-hook-timeout-units'
