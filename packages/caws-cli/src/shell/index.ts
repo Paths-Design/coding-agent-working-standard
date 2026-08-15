@@ -286,16 +286,20 @@ export type {
 // ─── caws message (AGENT-MESSAGE-CHANNEL-001) ────────────────────────────
 export {
   runMessageSendCommand,
+  runMessageReplyCommand,
   runMessagePollCommand,
   runMessageInboxCommand,
   runMessageHistoryCommand,
+  runMessageStatusCommand,
   runMessagePruneCommand,
 } from './commands/message';
 export type {
   MessageSendCommandOptions,
+  MessageReplyCommandOptions,
   MessagePollCommandOptions,
   MessageInboxCommandOptions,
   MessageHistoryCommandOptions,
+  MessageStatusCommandOptions,
   MessagePruneCommandOptions,
 } from './commands/message';
 

@@ -1275,9 +1275,20 @@ Directed inter-agent messages over `.caws/messages.jsonl`. Messages are not auth
 ```bash
 caws message send --to <session-id> --text "Please inspect DOC-1"
 caws message send --to <session-id> --text "Please inspect DOC-1" --allow-dead
+caws message send --to wt:<worktree-name> --text "eta on the sweep?"
+caws message send --to spec:<spec-id> --text "eta on the sweep?"
 ```
 
-Send a message to another session. By default refuses recipients that are not live in the agent registry.
+Send a message to another session. `--to` accepts a raw session id, or an alias — `wt:<worktree-name>` / `spec:<spec-id>` — resolving to the freshest session bound to that worktree or spec. Recipient liveness is heartbeat-age-based: a recipient with no lease or a stale heartbeat (>30m) is refused with a not-sent verdict printed to stdout (details on stderr), while an idle peer — a stopped lease with a fresh heartbeat, e.g. a session that ended its turn while background work runs — is deliverable and receives the message at its next tool call.
+
+### `caws message reply`
+
+```bash
+caws message reply <message-id> --text "answer: temp roots only"
+caws message reply <message-id> --text "ack" --allow-dead
+```
+
+Reply to a message on its own channel — the recipient is the original message's kernel-attributed sender, so no session id is transcribed. Same liveness semantics as `send`; refuses an unknown message id and refuses replying to your own message.
 
 ### `caws message poll`
 
@@ -1287,7 +1298,7 @@ caws message poll --me <session-id> --wait 60000
 caws message poll --peek --json
 ```
 
-Pull the next undelivered message addressed to the current session, or to `--me`. Default behavior is deliver-once; `--peek` observes without consuming.
+Pull the next undelivered message addressed to the current session, or to `--me`. Default behavior is deliver-once; `--peek` observes without consuming. The result carries registry-derived sender context (worktree/spec/branch, when the sender's lease records it) so a recipient never depends on a sender self-identifying in the message body.
 
 ### `caws message inbox`
 
@@ -1307,7 +1318,16 @@ caws message history --me <session-id> --with <other-session-id> --limit 50
 caws message history --with <session-id> --json
 ```
 
-Read-only channel history between two endpoints. History includes both directions in message-log order; `--limit` returns the most recent messages while preserving log order. Message bodies remain communication, not authority or evidence.
+Read-only channel history between two endpoints. History includes both directions in message-log order; each message is annotated with its delivery state (`[queued]` vs `[delivered <ts>]`) so a sender can distinguish "queued" from "seen". `--limit` returns the most recent messages while preserving log order. Message bodies remain communication, not authority or evidence.
+
+### `caws message status`
+
+```bash
+caws message status <message-id>
+caws message status <message-id> --json
+```
+
+Read-only delivery observation for one message — reports queued vs delivered (with the delivery timestamp). Lets a sender check whether their message was consumed without polling the recipient's mailbox. JSON output includes `read_only: true`, the `message` record, `delivered`, and `delivered_at` when delivered.
 
 ### `caws message prune`
 

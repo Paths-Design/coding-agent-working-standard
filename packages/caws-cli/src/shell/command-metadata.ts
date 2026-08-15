@@ -1567,16 +1567,35 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'message',
   description:
-    'Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/poll/inbox/history/prune directed messages between running sessions, addressed by session id, over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.',
+    'Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/reply/poll/inbox/history/status/prune directed messages between running sessions, addressed by session id (or a wt:/spec: alias), over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.',
   subcommands: [
     {
       kind: 'leaf',
       name: 'send',
       description:
-        "Send a message to another session. Attributes the sender via this session's identity; refuses a recipient that is not live in the agent registry.",
+        "Send a message to another session. Attributes the sender via this session's identity; refuses a recipient with no lease or a stale heartbeat (a stopped lease with a fresh heartbeat is idle between turns, not dead). A refused send prints a not-sent verdict to stdout — judge sends by their printed output.",
       options: [
-        { flag: '--to <session_id>', description: 'Recipient session id (required)' },
+        {
+          flag: '--to <endpoint>',
+          description:
+            'Recipient endpoint (required): a session id, or an alias wt:<worktree-name> / spec:<spec-id> resolving to the freshest bound session',
+        },
         { flag: '--text <message>', description: 'Message body (required, non-empty)' },
+        {
+          flag: '--allow-dead',
+          description: 'Send even if the recipient is not live in the registry (escape hatch; default off)',
+        },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'reply',
+      description:
+        "Reply to a message on its own channel — the recipient is the original message's kernel-attributed sender, so no session id is transcribed. Same liveness semantics as send; refuses an unknown id and refuses replying to your own message.",
+      options: [
+        { flag: '--id <message_id>', description: 'Id of the message being replied to (required)' },
+        { flag: '--text <message>', description: 'Reply body (required, non-empty)' },
         {
           flag: '--allow-dead',
           description: 'Send even if the recipient is not live in the registry (escape hatch; default off)',
@@ -1588,7 +1607,7 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'poll',
       description:
-        'Pull the next undelivered message addressed to you. Deliver-once. Defaults --me to this session id.',
+        'Pull the next undelivered message addressed to you. Deliver-once. The result carries registry-derived sender context (worktree/spec/branch) when the sender has a lease. Defaults --me to this session id.',
       options: [
         { flag: '--me <session_id>', description: 'Endpoint to poll for (default: this session id)' },
         {
@@ -1596,7 +1615,7 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
           description: 'Block up to <ms> for a message before returning (long-poll; capped at 60000)',
         },
         { flag: '--peek', description: 'Show the next message without consuming it (no delivery record)' },
-        { flag: '--json', description: 'Emit JSON ({message, waiting}) instead of human text' },
+        { flag: '--json', description: 'Emit JSON ({message, sender?, waiting}) instead of human text' },
         DATA_OPTION,
       ],
     },
@@ -1616,12 +1635,23 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'history',
       description:
-        'Show retained channel history between this session and another endpoint. Read-only; message bodies are communication, not authority.',
+        'Show retained channel history between this session and another endpoint, each message annotated with its delivery state ([queued] vs [delivered]). Read-only; message bodies are communication, not authority.',
       options: [
         { flag: '--me <session_id>', description: 'This endpoint (default: this session id)' },
         { flag: '--with <session_id>', description: 'Other endpoint in the channel (required)' },
         { flag: '--limit <n>', description: 'Maximum recent messages to print, preserving log order' },
         { flag: '--json', description: 'Emit JSON ({ok, read_only, channel, total, messages})' },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'status',
+      description:
+        "Observe one message's delivery state (queued vs delivered, with timestamps) — lets a sender distinguish \"queued\" from \"seen\" without polling the recipient. Read-only.",
+      options: [
+        { flag: '--id <message_id>', description: 'Id of the message to observe (required)' },
+        { flag: '--json', description: 'Emit JSON ({ok, read_only, message, delivered, delivered_at?})' },
         DATA_OPTION,
       ],
     },

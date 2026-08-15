@@ -46,9 +46,11 @@ import {
   runAgentsShowCommand,
   runAgentsStopCommand,
   runMessageSendCommand,
+  runMessageReplyCommand,
   runMessagePollCommand,
   runMessageInboxCommand,
   runMessageHistoryCommand,
+  runMessageStatusCommand,
   runMessagePruneCommand,
   runClaimCommand,
   runDoctorCommand,
@@ -1776,6 +1778,17 @@ export function registerShellCommands(
       exit(code);
     });
 
+  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'reply'))
+    .action((opts: { id?: string; text?: string; allowDead?: boolean; data?: boolean }) => {
+      const code = runMessageReplyCommand({
+        id: opts.id ?? '',
+        text: opts.text ?? '',
+        ...(opts.allowDead === true ? { allowDead: true } : {}),
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
   defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'poll'))
     .action((opts: { me?: string; wait?: string; peek?: boolean; json?: boolean; data?: boolean }) => {
       const waitMs = opts.wait !== undefined ? Number(opts.wait) : undefined;
@@ -1808,6 +1821,16 @@ export function registerShellCommands(
         ...(opts.me !== undefined ? { me: opts.me } : {}),
         with: opts.with ?? '',
         ...(limit !== undefined && Number.isFinite(limit) ? { limit } : {}),
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'status'))
+    .action((opts: { id?: string; json?: boolean; data?: boolean }) => {
+      const code = runMessageStatusCommand({
+        id: opts.id ?? '',
         json: opts.json === true,
         showData: opts.data === true,
       });

@@ -26,7 +26,7 @@ store, and a thin shell. It replaces v10.x.
 | `caws specs create / list / show / recover / retire-draft / activate / amend-scope / close / archive / prune-archive / migrate / validate` | Manage the per-spec lifecycle in `.caws/specs/`. Batch archive supports `--status closed`, `--include`, `--exclude`, and `--apply`. |
 | `caws worktree create / list / bind / destroy / merge / migrate-registry / repair-sparse / repair` | Worktree lifecycle on the vNext substrate. Canonical path for parallel agent work. |
 | `caws agents register / heartbeat / stop / list / show / prune` | Agent-liveness substrate in `.caws/leases/`; operational cache only. |
-| `caws message send / poll` | Directed inter-agent messages over `.caws/messages.jsonl`; not authority. |
+| `caws message send / reply / poll / inbox / history / status / prune` | Directed inter-agent messages over `.caws/messages.jsonl`; not authority. `--to` accepts `wt:<worktree>` / `spec:<spec-id>` aliases; a send to an idle (stopped-lease, fresh-heartbeat) recipient succeeds and surfaces at its next tool call; refusals print a not-sent verdict to stdout; `reply <message_id>` answers on the same channel; `status <message_id>` observes queued-vs-delivered. |
 
 Run `caws <group> --help` for live options. The repository also ships a generated exhaustive reference at `docs/command-reference.md`, rendered from the same `COMMAND_SURFACE_METADATA` used by CLI help.
 
@@ -45,10 +45,14 @@ replacement is planned in any current milestone): `scaffold`, `validate`,
 `caws init --agent-surface <name>`).
 
 The v11 line includes the `caws agents` liveness substrate and the
-`caws message send/poll` directed message channel. Messages are not
-authority; verify any claim in a message against repo/runtime state.
-Still planned for a later multi-agent authority line: bridge-claim
-authority such as `caws claim --spec <id>`.
+`caws message` directed message channel (send/reply/poll/inbox/history/
+status/prune). Recipient liveness is heartbeat-age-based: no lease or a
+stale heartbeat refuses the send (not-sent verdict on stdout), while an
+idle peer — a stopped lease with a fresh heartbeat, e.g. a session that
+ended its turn while background work runs — receives at its next tool
+call. Messages are not authority; verify any claim in a message against
+repo/runtime state. Still planned for a later multi-agent authority line:
+bridge-claim authority such as `caws claim --spec <id>`.
 
 Explicitly deferred to v11.3+: `caws session` and `caws parallel`. The
 `caws worktree create` loop pattern replaces `parallel` for multi-agent

@@ -125,7 +125,10 @@ test('A2-enriched: no-lease rejection names the reason and the recovery commands
   expect(msg).toMatch(/void|silence/);
 });
 
-test('A2-enriched: stopped-lease rejection names the lease status', () => {
+test('A2-enriched: a STOPPED lease with a FRESH heartbeat is deliverable (idle, not dead)', () => {
+  // CAWS-MESSAGE-DELIVERY-UX-001 A1: the Stop hook writes 'stopped' at turn
+  // end while background work runs — liveness is age-based, so this send
+  // succeeds and flags the recipient as idle.
   const caws = cawsDir();
   const leasesDir = path.join(caws, 'leases');
   fs.mkdirSync(leasesDir, { recursive: true });
@@ -136,14 +139,13 @@ test('A2-enriched: stopped-lease rejection names the lease status', () => {
       session_id: 'stopped-enriched',
       platform: 'test',
       status: 'stopped',
-      last_active: new Date().toISOString(),
+      last_active: new Date(Date.now() - 2 * 60 * 1000).toISOString(), // 2m ago < 30m TTL
     })
   );
   const sent = sendMessage(caws, { actor: sender, to: 'stopped-enriched', text: 'hi' });
-  expect(sent.ok).toBe(false);
-  const msg = sent.errors[0].message;
-  expect(msg).toContain('lease status is "stopped"');
-  expect(msg).toContain('caws agents list');
+  expect(sent.ok).toBe(true);
+  expect(sent.value.recipientIdle).toBe(true);
+  expect(sent.value.message.to).toBe('stopped-enriched');
 });
 
 test('A2-enriched: stale-heartbeat rejection names the age and TTL', () => {
@@ -175,7 +177,7 @@ test('A2-enriched: isRecipientLive stays a boolean predicate (no regression)', (
   expect(isRecipientLive(caws, 'ghost')).toEqual({ ok: true, value: false });
 });
 
-test('A2: a send to a STOPPED lease is refused (stopped is not live)', () => {
+test('A2: a send to a STOPPED lease with a STALE heartbeat is refused (stale dominates status)', () => {
   const caws = cawsDir();
   const leasesDir = path.join(caws, 'leases');
   fs.mkdirSync(leasesDir, { recursive: true });
@@ -186,10 +188,29 @@ test('A2: a send to a STOPPED lease is refused (stopped is not live)', () => {
       session_id: 'stopped-1',
       platform: 'test',
       status: 'stopped',
-      last_active: new Date().toISOString(),
+      last_active: new Date(Date.now() - 47 * 60 * 1000).toISOString(), // 47m ago > 30m TTL
     })
   );
   const sent = sendMessage(caws, { actor: sender, to: 'stopped-1', text: 'hi' });
+  expect(sent.ok).toBe(false);
+  expect(sent.errors[0].rule).toBe(NOT_LIVE);
+  expect(sent.errors[0].message).toContain('stale heartbeat');
+});
+
+test('A2: a send to a STOPPED lease with NO heartbeat age is refused (no evidence of life)', () => {
+  const caws = cawsDir();
+  const leasesDir = path.join(caws, 'leases');
+  fs.mkdirSync(leasesDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(leasesDir, 'stopped-noage.json'),
+    JSON.stringify({
+      lease_version: 1,
+      session_id: 'stopped-noage',
+      platform: 'test',
+      status: 'stopped',
+    })
+  );
+  const sent = sendMessage(caws, { actor: sender, to: 'stopped-noage', text: 'hi' });
   expect(sent.ok).toBe(false);
   expect(sent.errors[0].rule).toBe(NOT_LIVE);
 });
@@ -329,7 +350,7 @@ test("the channel uses actor.id as 'from' when the actor has no session_id", () 
   const sent = sendMessage(caws, { actor: idOnly, to: 'recip-1', text: 'hi' });
   expect(sent.ok).toBe(true);
   // channel keyed by id 'human-cli', not undefined — kills the `?? -> &&` mutant
-  expect(sent.value.channel).toBe(channelId('human-cli', 'recip-1'));
+  expect(sent.value.message.channel).toBe(channelId('human-cli', 'recip-1'));
 });
 
 // ─── poll tolerates blank + malformed lines (lenient skip with a diagnostic) ──
@@ -485,4 +506,134 @@ test('poll --wait returns immediately when a message is already present', () => 
   const r = pollMessage(caws, 'recip-1', { waitMs: 5000 });
   expect(r.value.message.text).toBe('here now');
   expect(Date.now() - t0).toBeLessThan(1000); // did not burn the 5s window
+});
+
+// ─── CAWS-MESSAGE-DELIVERY-UX-001: aliases, reply lookup, delivery state ─────
+
+const {
+  resolveRecipient,
+  getMessageDeliveryState,
+} = require('../../dist/store/messages-store');
+
+const ALIAS_UNRESOLVED = 'store.messages.alias_unresolved';
+
+/** Write a lease with explicit worktree/spec bindings and controllable age. */
+function makeBound(caws, sessionId, { worktree, spec, ageMs = 1000, status = 'active', branch }) {
+  const leasesDir = path.join(caws, 'leases');
+  fs.mkdirSync(leasesDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(leasesDir, `${sessionId}.json`),
+    JSON.stringify({
+      lease_version: 1,
+      session_id: sessionId,
+      platform: 'test',
+      status,
+      last_active: new Date(Date.now() - ageMs).toISOString(),
+      ...(worktree !== undefined ? { bound_worktree: worktree } : {}),
+      ...(spec !== undefined ? { bound_spec_id: spec } : {}),
+      ...(branch !== undefined ? { branch } : {}),
+    })
+  );
+}
+
+test('UX A6: wt:<name> resolves to the freshest lease bound to that worktree', () => {
+  const caws = cawsDir();
+  makeBound(caws, 'older', { worktree: 'wt-demo', ageMs: 10 * 60 * 1000 });
+  makeBound(caws, 'newer', { worktree: 'wt-demo', ageMs: 1000 });
+  const r = resolveRecipient(caws, 'wt:wt-demo');
+  expect(r.ok).toBe(true);
+  expect(r.value.sessionId).toBe('newer');
+  expect(r.value.alias).toBe('wt:wt-demo');
+});
+
+test('UX A6: spec:<id> resolves to the freshest bound lease; stale candidates are skipped', () => {
+  const caws = cawsDir();
+  makeBound(caws, 'stale', { spec: 'SPEC-9', ageMs: 47 * 60 * 1000 }); // > TTL
+  makeBound(caws, 'fresh', { spec: 'SPEC-9', ageMs: 2000 });
+  const r = resolveRecipient(caws, 'spec:SPEC-9');
+  expect(r.ok).toBe(true);
+  expect(r.value.sessionId).toBe('fresh');
+});
+
+test('UX A6: an alias with no fresh bound lease is refused with alias_unresolved', () => {
+  const caws = cawsDir();
+  makeBound(caws, 'gone', { worktree: 'wt-gone', ageMs: 2 * 60 * 60 * 1000 }); // stale
+  const r = resolveRecipient(caws, 'wt:wt-gone');
+  expect(r.ok).toBe(false);
+  expect(r.errors[0].rule).toBe(ALIAS_UNRESOLVED);
+  expect(r.errors[0].message).toContain('wt:wt-gone');
+  expect(r.errors[0].message).toContain('caws agents list');
+});
+
+test('UX A6: a raw session id passes through unchanged; invalid raw ids are refused', () => {
+  const caws = cawsDir();
+  expect(resolveRecipient(caws, 'recip-1')).toEqual({ ok: true, value: { sessionId: 'recip-1' } });
+  const bad = resolveRecipient(caws, 'bad id/with spaces');
+  expect(bad.ok).toBe(false);
+  expect(bad.errors[0].rule).toBe(RECIPIENT_INVALID);
+});
+
+test('UX A5: getMessageDeliveryState reports undelivered, then delivered with its timestamp', () => {
+  const caws = cawsDir();
+  makeLive(caws, 'recip-1');
+  const sent = sendMessage(caws, { actor: sender, to: 'recip-1', text: 'observe me' });
+  const id = sent.value.message.id;
+  const before = getMessageDeliveryState(caws, id);
+  expect(before.ok).toBe(true);
+  expect(before.value.delivered).toBe(false);
+  pollMessage(caws, 'recip-1');
+  const after = getMessageDeliveryState(caws, id);
+  expect(after.ok).toBe(true);
+  expect(after.value.delivered).toBe(true);
+  expect(typeof after.value.deliveredAt).toBe('string');
+  // unknown id is a not-found answer, not an error
+  const missing = getMessageDeliveryState(caws, 'no-such-id');
+  expect(missing).toEqual({ ok: true, value: null });
+});
+
+test('UX A5: channelHistory annotates each entry with its delivery state', () => {
+  const caws = cawsDir();
+  makeLive(caws, 'recip-1');
+  const first = sendMessage(caws, { actor: sender, to: 'recip-1', text: 'one' });
+  sendMessage(caws, { actor: sender, to: 'recip-1', text: 'two' });
+  pollMessage(caws, 'recip-1'); // consumes 'one' only
+  const history = channelHistory(caws, 'sender-1', 'recip-1');
+  expect(history.ok).toBe(true);
+  expect(history.value).toHaveLength(2);
+  const one = history.value.find((e) => e.id === first.value.message.id);
+  const two = history.value.find((e) => e.text === 'two');
+  expect(one.delivered).toBe(true);
+  expect(one.deliveredAt).toBeDefined();
+  expect(two.delivered).toBe(false);
+  expect(two.deliveredAt).toBeUndefined();
+});
+
+test('UX A7: poll result carries registry-derived sender context when the sender has a lease', () => {
+  const caws = cawsDir();
+  makeLive(caws, 'recip-1');
+  makeBound(caws, 'sender-1', { worktree: 'wt-demo', spec: 'SPEC-1', branch: 'feature/x' });
+  sendMessage(caws, { actor: sender, to: 'recip-1', text: 'with context' });
+  const polled = pollMessage(caws, 'recip-1');
+  expect(polled.ok).toBe(true);
+  expect(polled.value.sender).toEqual({
+    worktree: 'wt-demo',
+    specId: 'SPEC-1',
+    branch: 'feature/x',
+  });
+});
+
+test('UX A7: poll result degrades to no sender context when the sender has no lease', () => {
+  const caws = cawsDir();
+  makeLive(caws, 'recip-1');
+  // sender-1 has NO lease here
+  sendMessage(caws, { actor: sender, to: 'recip-1', text: 'no context' });
+  const polled = pollMessage(caws, 'recip-1');
+  expect(polled.ok).toBe(true);
+  expect(polled.value.sender).toBeUndefined();
+});
+
+test('UX A1: an idle (stopped, fresh-heartbeat) recipient is live per isRecipientLive', () => {
+  const caws = cawsDir();
+  makeBound(caws, 'idle-1', { status: 'stopped', ageMs: 2 * 60 * 1000 });
+  expect(isRecipientLive(caws, 'idle-1')).toEqual({ ok: true, value: true });
 });
