@@ -54,3 +54,9 @@ evidence:
     recorded_at: "2026-08-15T18:13:34.648Z"
     command: npx jest agent-doc-examples
     exit_code: 0
+  - criterion_id: A3
+    status: pass
+    evidence_ref: jest agent-doc-examples A3 — node dist/index.js reprieve grant --help and waiver create --help both exit 0 (commands named in remediation exist and run)
+    recorded_at: "2026-08-15T18:13:35.677Z"
+    command: npx jest agent-doc-examples
+    exit_code: 0
