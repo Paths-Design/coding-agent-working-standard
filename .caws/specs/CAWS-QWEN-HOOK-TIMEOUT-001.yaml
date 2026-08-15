@@ -71,3 +71,7 @@ evidence:
     status: pass
     evidence_ref: "jest: canonical timeouts are milliseconds (45000/60000/30000); rendered snippet + example inherit"
     recorded_at: "2026-08-15T18:34:05.057Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "jest repair suite (4 cases) + live init plan: would upgrade in place: PreToolUse..PreCompact; applied merge repaired self-installed wiring"
+    recorded_at: "2026-08-15T18:34:08.419Z"
