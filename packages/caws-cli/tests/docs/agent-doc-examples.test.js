@@ -177,3 +177,100 @@ describe('caws specs create examples satisfy the tier/contract rule', () => {
     expect(failures).toEqual([]);
   });
 });
+
+// CAWS-AGENT-CONCEPT-DISCOVERABILITY-001 (A1/A2/A3): every guard refusal and
+// blocked gate disposition names its sanctioned escape hatch — reprieve for
+// hook guards, waiver create for policy gates — WITH the mandatory flags, and
+// every command it names actually exists and runs. An agent blocked with no
+// named off-ramp invents one; that is the failure mode this pins shut.
+describe('remediation text names real, runnable escape-hatch commands', () => {
+  const { renderGatesRun } = require('../../dist/shell/render/gates');
+  const TEMPLATES = path.join(PKG_ROOT, 'templates', 'hook-packs', 'shared');
+  const GUARD_SURFACES = [
+    'scope-guard.sh',
+    'protected-paths.sh',
+    path.join('lib', 'guard-message.sh'),
+  ];
+  const REPRIEVE_RE =
+    /caws reprieve grant --current --handlers (\S+) --reason "<why>" --approved-by "<approver>" --expires-at "<iso-ts>"/;
+  const CLI = path.resolve(__dirname, '..', '..', 'dist', 'index.js');
+
+  test('A1: every blocking guard surface names caws reprieve grant with its mandatory flags', () => {
+    const failures = [];
+    for (const rel of GUARD_SURFACES) {
+      const body = fs.readFileSync(path.join(TEMPLATES, rel), 'utf8');
+      // The lib carries the canonical hint text; a guard satisfies A1 either by
+      // calling guard_reprieve_hint with ITS OWN handler name (delegation — the
+      // command text lives in the lib) or by inlining the identical string.
+      const delegates = body.includes(`guard_reprieve_hint ${path.basename(rel)}`);
+      const inlines = body.includes('caws reprieve grant --current --handlers');
+      if (rel !== path.join('lib', 'guard-message.sh') && !delegates && !inlines) {
+        failures.push(`${rel}: no reprieve grant guidance`);
+        continue;
+      }
+      if (rel === path.join('lib', 'guard-message.sh')) {
+        if (REPRIEVE_RE.exec(body) === null) {
+          failures.push(`${rel}: reprieve hint missing mandatory flags`);
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  test('A1: the reprieve hint names its own handler as a real shared-pack file', () => {
+    const body = fs.readFileSync(path.join(TEMPLATES, 'lib', 'guard-message.sh'), 'utf8');
+    for (const m of body.matchAll(/--handlers (\S+)/g)) {
+      const handler = m[1].replace(/['"]$/, '');
+      // Skip placeholders: '<handler>' in prose and '%s' in the printf format.
+      if (handler.includes('<') || handler.includes('%')) continue;
+      expect(fs.existsSync(path.join(TEMPLATES, handler))).toBe(true);
+    }
+  });
+
+  test('A2: a blocked gate disposition names caws waiver create with its required flags', () => {
+    const blocked = {
+      dispositions: [
+        {
+          gate_id: 'budget_limit',
+          mode: 'block',
+          outcome: 'fail',
+          blocks: true,
+          violations: [{ gate: 'budget_limit', message: 'max_files exceeded' }],
+        },
+      ],
+      unmatchedViolations: [],
+      anyBlocks: true,
+    };
+    const text = renderGatesRun(blocked);
+    expect(text).toMatch(/Overall: BLOCKED by policy/);
+    expect(text).toMatch(
+      /caws waiver create <id> --gate <gate-id> --reason "<why>" --approved-by "<approver>" --expires-at "<iso-ts>"/
+    );
+    // The waiver line must distinguish itself from the hook-guard escape.
+    expect(text).toMatch(/caws reprieve/);
+    // A clean run must NOT advertise the exception path.
+    const clean = renderGatesRun({
+      dispositions: [
+        { gate_id: 'budget_limit', mode: 'block', outcome: 'pass', blocks: false, violations: [] },
+      ],
+      unmatchedViolations: [],
+      anyBlocks: false,
+    });
+    expect(clean).not.toMatch(/caws waiver create/);
+  });
+
+  test('A3: every escape-hatch command named in remediation exists and runs', () => {
+    // Runs the built CLI's help surface for each named subcommand — pinning
+    // that remediation never teaches a command that does not run.
+    const commands = [
+      ['reprieve', 'grant', '--help'],
+      ['waiver', 'create', '--help'],
+    ];
+    for (const args of commands) {
+      const r = require('child_process').spawnSync('node', [CLI, ...args], {
+        encoding: 'utf8',
+      });
+      expect([args.join(' '), r.status]).toEqual([args.join(' '), 0]);
+    }
+  });
+});

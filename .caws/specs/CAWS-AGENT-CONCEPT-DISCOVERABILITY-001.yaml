@@ -2,10 +2,11 @@ id: CAWS-AGENT-CONCEPT-DISCOVERABILITY-001
 title: 'Escape hatches and core concepts are discoverable at the point of need, not by accident'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: wt-discoverability
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-discoverability at 7d99e3166b71cca3d9d34fcb494858bf0062164d'
 created_at: '2026-07-25T07:06:20.473Z'
-updated_at: '2026-08-15T17:59:25.063Z'
+updated_at: '2026-08-15T18:13:48.992Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
@@ -41,3 +42,22 @@ non_functional: {}
 contracts:
   - name: 'guard-remediation-names-its-escape-hatch'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "bats hooks 139/139 + jest agent-doc-examples A1 — scope-guard (strikes 2/3 + env-block), protected-paths (both block sites), lib/guard-message.sh all name caws reprieve grant with mandatory flags"
+    recorded_at: "2026-08-15T18:13:33.694Z"
+    command: "npm run test:bats && npx jest agent-doc-examples"
+    exit_code: 0
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "jest agent-doc-examples A2 — blocked renderGatesRun names caws waiver create <id> --gate --reason --approved-by --expires-at + reprieve distinction; clean run omits the line"
+    recorded_at: "2026-08-15T18:13:34.648Z"
+    command: npx jest agent-doc-examples
+    exit_code: 0
+  - criterion_id: A3
+    status: pass
+    evidence_ref: jest agent-doc-examples A3 — node dist/index.js reprieve grant --help and waiver create --help both exit 0 (commands named in remediation exist and run)
+    recorded_at: "2026-08-15T18:13:35.677Z"
+    command: npx jest agent-doc-examples
+    exit_code: 0

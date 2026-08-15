@@ -1,7 +1,7 @@
 {
   "shared": {
-    "fingerprint": "3e5fc0b3e34a84d4a90acc6c487065d119e036e4ff2657016b1877d1c9f69605",
-    "version": 38
+    "fingerprint": "b343cd73e61dd3d79f10c9ba3b1dc186abb7ca7d9e86a654bc10568c101d190f",
+    "version": 39
   },
   "claude-code": {
     "version": 22,
@@ -24,7 +24,7 @@
     "fingerprint": "9fd158977853e2d359455b2f3b593df3f517f73ed6241944169375f89e7d8ed7"
   },
   "qwen-code": {
-    "version": 1,
-    "fingerprint": "52be8d3d8704970d098968655067a5699692f22168771afddebb9e6ef04c6b00"
+    "version": 2,
+    "fingerprint": "cc0114a1958633e6616f376ba63f8ba2e2fc5eede98762be0c86ee633c533dae"
   }
 }

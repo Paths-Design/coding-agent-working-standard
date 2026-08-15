@@ -257,7 +257,7 @@ import type { HookPackV1 } from './types';
 // <sessionDir>/agents/main/wire.jsonl (kimi's hook payload carries no
 // transcript_path). Row shapes verified live against a real 2542-row kimi
 // wire log (protocol 1.4, kimi-code 0.31.x).
-export const SHARED_PACK_VERSION = 38;
+export const SHARED_PACK_VERSION = 39;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.

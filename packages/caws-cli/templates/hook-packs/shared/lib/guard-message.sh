@@ -47,6 +47,14 @@
 #   guard_not_harness_note
 #       Echo a one-line disambiguation reminding the reader this is CAWS
 #       governance, not an agent-harness permission prompt.
+#
+#   guard_reprieve_hint <handler-script>
+#       Echo the sanctioned session-scoped escape for a blocked hook guard,
+#       with its literal grant command and mandatory flags, AND the one-line
+#       distinction from caws waiver create — the two exception paths live at
+#       different enforcement layers (hook dispatch vs policy-run) and are
+#       routinely confused by an agent that has never read the docs
+#       (CAWS-AGENT-CONCEPT-DISCOVERABILITY-001).
 
 # Guard against double-sourcing.
 if [[ -n "${_CAWS_GUARD_MESSAGE_SH_LOADED:-}" ]]; then
@@ -88,4 +96,15 @@ guard_not_harness_note() {
   else
     printf 'This is a CAWS governance decision, not an agent harness prompt.'
   fi
+}
+
+# guard_reprieve_hint <handler-script>
+#   The sanctioned session-scoped escape, printed at the point of block so an
+#   agent that has never opened the docs learns it exists. Names the literal
+#   grant command with its mandatory flags and distinguishes it from a waiver:
+#   a reprieve skips one hook guard for one session until expiry; a waiver
+#   filters GATE violations at policy-run time and never lifts a hook guard.
+guard_reprieve_hint() {
+  local handler="${1:-<handler>.sh}"
+  printf 'Session-scoped escape for THIS guard (one session, expires): caws reprieve grant --current --handlers %s --reason "<why>" --approved-by "<approver>" --expires-at "<iso-ts>". Not to be confused with caws waiver create, which exempts GATE violations at policy-run time and never lifts a hook guard.' "$handler"
 }

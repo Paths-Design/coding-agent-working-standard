@@ -1,0 +1,139 @@
+id: CAWS-HOOKPACK-UPGRADE-RETROFIT-001
+title: 'Agents can see, decompose, and land hook-pack upgrades without hand-editing protected hooks'
+risk_tier: 2
+mode: feature
+lifecycle_state: active
+created_at: '2026-08-15T18:56:06.105Z'
+updated_at: '2026-08-15T18:56:06.105Z'
+blast_radius:
+  modules:
+    - packages/caws-cli/src/init/hook-install.ts (classification, baseline capture, port landing)
+    - packages/caws-cli/src/init/unified-diff.ts (three-way decomposition)
+    - packages/caws-cli/src/shell/commands/init.ts (init diff / init port surface)
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - packages/caws-cli/src/init/hook-install.ts
+    - packages/caws-cli/src/init/unified-diff.ts
+    - packages/caws-cli/src/shell/commands/init.ts
+    - packages/caws-cli/tests/init/
+  out:
+    - >-
+      protected-paths.sh and the guard doctrine are NOT weakened or re-scoped:
+      agent-side Edit/Write to installed hooks stays blocked. The upgrade path
+      lands through the CLI (A5), not through a guard exemption — a standing
+      "upgrade mode" reprieve or a broadened allowlist is explicitly rejected
+      (see invariants). The reprieve surface itself is unchanged (already
+      names its escape at the point of block, merged 7d99e316).
+    - >-
+      Automatic conflict-marker merging (git merge-file style) is a follow-up
+      slice, as is a maintained per-version pack changelog; this spec ships
+      decomposition + CLI-mediated landing, not auto-merge.
+invariants:
+  - >-
+    Agent-side hook editing stays blocked. Every upgrade landing is
+    CLI-mediated, validated (managed header intact, edit_stance present,
+    bash -n on shell files, pack version stamped), and audited via the
+    existing init audit-commit path. An agent preparing a port writes to a
+    staging location OUTSIDE the protected hooks tree; protected-paths never
+    fires during the sanctioned upgrade flow, so no reprieve is required for
+    it. A session-scoped reprieve remains the escape for genuinely manual
+    live-wiring work — never a routine step of pack upgrades: it disables the
+    guard for the WHOLE session (every protected path, not one file), and its
+    mandatory --approved-by must not become a rubber stamp that autonomous
+    upgrades fabricate.
+  - >-
+    No silent writes, in either direction. Any init invocation that is
+    documented as a preview (--plan, --overwrite without --force, init diff)
+    performs ZERO writes — including the stamp-only "safe updates" that today
+    land unconditionally (observed 2026-08-15: a preview-intent --overwrite
+    run wrote 42 stamp-only files 33->37; a parallel session hit the same
+    side effect and left 45 re-stamps uncommitted on main). Stamp-only
+    refreshes surface as an explicit, separately-committable unit.
+  - >-
+    Drift tracking never silently ends. --adopt remains the explicit
+    dead-end opt-out it is today; the new port path RESUMES tracking against
+    the landed pack version (the ported file becomes the managed baseline at
+    the current version), so a retrofitted hook keeps receiving upgrade
+    signals.
+  - >-
+    Pristine baselines are per-checkout runtime state (gitignored, sibling to
+    the hooks they describe, current-version only). They enable three-way
+    decomposition locally; after a fresh clone the baseline is absent and
+    init diff degrades to the honest two-way view rather than guessing.
+  - >-
+    Version arithmetic is legible: every diff/plan surface that compares
+    installed against template names BOTH numbers (installed stamp N, running
+    CLI template M) and refuses to conflate them when they differ. A repo
+    whose on-PATH caws build is behind its own merged templates (dist at v37,
+    main at v38) must say so, not silently stamp the older number.
+acceptance:
+  - id: A1
+    given: 'A repo with an installed pack (any mix of unchanged / stamp-only-behind / body-drifted / unmanaged paths).'
+    when: 'caws init diff [--agent-surface <s>] [--json] runs.'
+    then: >-
+      The repo is byte-identical before and after; every pack path is listed
+      with its kind (unchanged / managed_old_version / managed_drift /
+      unmanaged_collision), its installed stamp and the running CLI's
+      template version (both numbers named), and a unified diff for
+      non-unchanged paths. --json emits the same per-path kinds the plan
+      classification already produces.
+  - id: A2
+    given: 'A repo with pending stamp-only safe-updates AND drifted files.'
+    when: 'caws init --overwrite <paths> runs WITHOUT --force (or caws init diff runs).'
+    then: >-
+      Nothing is written — stamp-only updates are withheld into the preview
+      alongside the drift refusals, and the preview names the stamp-only set
+      as its own explicitly committable unit (so the 42/45-file re-stamp
+      residue two sessions hit on 2026-08-15 cannot recur as a surprise).
+  - id: A3
+    given: 'A pack install or stamp-only update that writes a managed file.'
+    when: 'The write lands.'
+    then: >-
+      The pristine as-installed copy is recorded at
+      .caws/hooks/.pristine/<pack>/<relpath> (gitignored, current version
+      only — the previous baseline rotates out atomically with the install).
+  - id: A4
+    given: 'A body-drifted managed path WITH a pristine baseline present.'
+    when: 'caws init diff --three-way <path> runs.'
+    then: >-
+      The output separates LOCAL-GROWTH hunks (installed vs baseline) from
+      UPSTREAM hunks (baseline vs template), each labeled by side, so an
+      agent retrofitting a hand-edited hook can tell its repo's edits from
+      the pack's changes across a multi-version jump (e.g. installed v33 vs
+      template v38). Without a baseline, the same command degrades to the
+      labeled two-way diff and says why.
+  - id: A5
+    given: >-
+      An agent that has prepared a ported hook (upstream template + local
+      growth re-applied) at a staging path OUTSIDE the protected hooks tree.
+    when: 'caws init port <dest-path> --from <staging-file> runs.'
+    then: >-
+      init validates the candidate (CAWS-MANAGED-HOOK header present,
+      edit_stance preserved, bash -n clean for shell files, current pack
+      version stamped — refusing with a named reason otherwise), installs it
+      atomically as the managed file, records the pristine baseline, RESUMES
+      drift tracking against the current version, and audit-commits the
+      landing. protected-paths never fired: the agent never Edit/Wrote the
+      protected path itself.
+  - id: A6
+    given: 'The complete upgrade flow (diff -> three-way -> port) run by an agent session.'
+    when: 'Each step executes.'
+    then: >-
+      protected-paths remains active and un-reprieved for the entire flow,
+      and a deliberate Edit of an installed hook mid-flow is still blocked
+      with the refusal naming the reprieve escape (7d99e316) — proving the
+      sanctioned path needs no guard exemption.
+  - id: A7
+    given: 'A caller inside a .caws/worktrees/* linked worktree.'
+    when: 'caws init (or init diff / init port) runs.'
+    then: >-
+      The command either targets that worktree's own .caws state explicitly
+      or refuses with a diagnostic — it NEVER silently writes the canonical
+      main checkout's hooks/settings from inside a worktree (the gotcha a
+      parallel session hit on 2026-08-15 and had to repair by hand).
+non_functional: {}
+contracts:
+  - name: 'hookpack-upgrade-retrofit'
+    type: behavior

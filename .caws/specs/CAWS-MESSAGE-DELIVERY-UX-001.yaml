@@ -3,8 +3,9 @@ title: 'Message channel delivery UX: age-based liveness, reply, delivery observa
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: wt-msg-delivery-ux
 created_at: '2026-08-15T18:01:21.763Z'
-updated_at: '2026-08-15T18:01:21.763Z'
+updated_at: '2026-08-15T18:57:36.647Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/messages-store.ts
@@ -27,10 +28,12 @@ scope:
     - .caws/hooks/agent-heartbeat.sh
     - packages/caws-cli/tests/store/messages-store.test.js
     - packages/caws-cli/tests/shell/message-command.test.js
-    - packages/caws-cli/docs/command-reference.md
     - packages/caws-cli/README.md
     - AGENTS.md
     - docs/architecture/caws-vnext-command-surface.md
+    - docs/command-reference.md
+    - packages/caws-cli/src/shell/index.ts
+    - docs/api/cli.md
   out:
     - packages/caws-cli/src/kernel/schemas/messages.v1.json
     - packages/caws-cli/src/store/leases-store.ts
@@ -190,3 +193,36 @@ contracts:
   - name: 'message-delivery-ux-command'
     type: contract-test
     path: 'packages/caws-cli/tests/shell/message-command.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "jest UX A1 (store+command): stopped lease + 2m-old heartbeat sends exit 0 with recipient_idle flag and 'idle between turns' stdout note"
+    recorded_at: "2026-08-15T19:00:42.302Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "jest: no-lease and stale-heartbeat (47m/60m, any status) refusals write no record and keep --allow-dead bypass; stopped+no-age also refused"
+    recorded_at: "2026-08-15T19:00:43.221Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "jest 'UX A3': refused send prints 'not sent — recipient not live' to stdout; messages.jsonl absent after refusal"
+    recorded_at: "2026-08-15T19:00:44.159Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "jest 'UX A4': reply lands on identical channel id from kernel-attributed actor; unknown id and self-reply exit 1 with named verdicts"
+    recorded_at: "2026-08-15T19:00:45.089Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "jest 'UX A5': status reports queued->delivered with ts; history text shows [delivered]/[queued] and --json carries delivered flags; two-pass channelHistory annotated correctly"
+    recorded_at: "2026-08-15T19:01:00.317Z"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "jest 'UX A6': wt:wt-demo and spec:SPEC-1 resolve to freshest bound session with alias-expansion stdout line; wt:wt-gone refuses with alias_unresolved naming the alias"
+    recorded_at: "2026-08-15T19:01:01.232Z"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "jest 'UX A7': poll JSON carries sender {worktree,specId,branch} joined from the lease registry; command renders 'from alice (worktree wt-alice, spec SPEC-A):'; no-lease sender degrades to bare id; hook template renders senderTag and suggests caws message reply <id>"
+    recorded_at: "2026-08-15T19:01:02.143Z"
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "SHARED_PACK_VERSION 37->38; pack-fingerprints.json recomputed (3e5fc0b3...); tests/init/pack-fingerprint.test.js green; docs:check green; cli-api-reference-coverage green after documenting reply/status"
+    recorded_at: "2026-08-15T19:01:03.088Z"

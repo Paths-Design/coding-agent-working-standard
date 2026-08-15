@@ -87,7 +87,7 @@ emit_scope_progression() {
   # otherwise it falls back to a placeholdered form.
   local spec_id="${2:-}"
 
-  local _id _hint _note
+  local _id _hint _note _reprieve
   if command -v guard_identity >/dev/null 2>&1; then
     _id="$(guard_identity scope-guard)"
     _hint="$(guard_amend_scope_hint "$spec_id" "$REL_PATH")"
@@ -96,6 +96,11 @@ emit_scope_progression() {
     _id="CAWS scope-guard"
     _hint="caws specs amend-scope ${spec_id:-<spec-id>} --add $REL_PATH"
     _note="This is a CAWS governance decision, not a harness prompt."
+  fi
+  if command -v guard_reprieve_hint >/dev/null 2>&1; then
+    _reprieve="$(guard_reprieve_hint scope-guard.sh)"
+  else
+    _reprieve='Session-scoped escape for THIS guard (one session, expires): caws reprieve grant --current --handlers scope-guard.sh --reason "<why>" --approved-by "<approver>" --expires-at "<iso-ts>". Not to be confused with caws waiver create, which exempts GATE violations at policy-run time and never lifts a hook guard.'
   fi
 
   local widen="If this path SHOULD be in scope, widen the bound spec: $_hint"
@@ -132,8 +137,8 @@ emit_scope_progression() {
     "scope_guard" \
     "$WORK_DIR" \
     "$_id strike 1 of 3 for '$REL_PATH'. $_note This edit proceeds, but a second out-of-scope edit will require user approval. $detail $widen" \
-    "$_id strike 2 of 3 for '$REL_PATH'. $_note Blocked — asking the user for approval. $detail $fix_options" \
-    "$_id strike 3 of 3 for '$REL_PATH'. $_note Hard-blocked until scope is corrected. $detail $fix_options $hard_block_guidance"
+    "$_id strike 2 of 3 for '$REL_PATH'. $_note Blocked — asking the user for approval. $detail $fix_options $_reprieve" \
+    "$_id strike 3 of 3 for '$REL_PATH'. $_note Hard-blocked until scope is corrected. $detail $fix_options $hard_block_guidance $_reprieve"
 }
 
 resolve_worktree_root() {
@@ -281,10 +286,15 @@ _scope_env_block() {
   local msg="$1"
   local _id="CAWS scope-guard"
   command -v guard_identity >/dev/null 2>&1 && _id="$(guard_identity scope-guard)"
+  # Fail-closed infra blocks still name the session-scoped escape: a session
+  # wedged by missing infrastructure needs the same sanctioned off-ramp as a
+  # scope refusal, or it starts inventing one.
+  local _reprieve='Session-scoped escape for THIS guard (one session, expires): caws reprieve grant --current --handlers scope-guard.sh --reason "<why>" --approved-by "<approver>" --expires-at "<iso-ts>".'
+  command -v guard_reprieve_hint >/dev/null 2>&1 && _reprieve="$(guard_reprieve_hint scope-guard.sh)"
   if command -v emit_block >/dev/null 2>&1; then
-    emit_block "$_id: $msg"
+    emit_block "$_id: $msg $_reprieve"
   else
-    printf '%s\n' "$_id: $msg" >&2
+    printf '%s\n' "$_id: $msg $_reprieve" >&2
   fi
 }
 
