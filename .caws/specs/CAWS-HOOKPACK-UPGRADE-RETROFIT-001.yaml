@@ -145,3 +145,10 @@ non_functional: {}
 contracts:
   - name: 'hookpack-upgrade-retrofit'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: jest tests/init/init-upgrade-retrofit.test.js (9/9) + full tests/init 154/154 + tests/docs 203 combined green
+    recorded_at: "2026-08-15T19:31:28.848Z"
+    command: npx jest tests/init tests/docs
+    exit_code: 0
