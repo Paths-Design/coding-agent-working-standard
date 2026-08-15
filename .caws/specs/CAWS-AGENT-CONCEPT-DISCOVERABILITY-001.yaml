@@ -3,6 +3,7 @@ title: 'Escape hatches and core concepts are discoverable at the point of need, 
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: wt-discoverability
 created_at: '2026-07-25T07:06:20.473Z'
 updated_at: '2026-08-15T17:57:30.006Z'
 blast_radius:
