@@ -193,3 +193,8 @@ contracts:
   - name: 'message-delivery-ux-command'
     type: contract-test
     path: 'packages/caws-cli/tests/shell/message-command.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "jest UX A1 (store+command): stopped lease + 2m-old heartbeat sends exit 0 with recipient_idle flag and 'idle between turns' stdout note"
+    recorded_at: "2026-08-15T19:00:42.302Z"
