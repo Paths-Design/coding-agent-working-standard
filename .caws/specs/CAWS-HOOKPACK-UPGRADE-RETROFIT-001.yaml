@@ -3,6 +3,7 @@ title: 'Agents can see, decompose, and land hook-pack upgrades without hand-edit
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: wt-upgrade-retrofit
 created_at: '2026-08-15T18:56:06.105Z'
 updated_at: '2026-08-15T19:07:21.362Z'
 blast_radius:
