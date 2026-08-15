@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-qwen-timeout
 created_at: '2026-08-15T18:04:24.092Z'
-updated_at: '2026-08-15T18:06:04.574Z'
+updated_at: '2026-08-15T18:09:25.495Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/init (qwen-code hook wiring engine)
@@ -25,6 +25,8 @@ scope:
     - .qwen/settings.json
     - .qwen/settings.json.example
     - .qwen/CAWS-HOOKS.md
+    - packages/caws-cli/src/shell/commands/init.ts
+    - packages/caws-cli/src/shell/render/init-hook-pack.ts
   out: []
 invariants:
   - Every qwen-code hook entry shipped or repaired by caws init carries a timeout expressed in milliseconds, each >= 30000 (well above the ~3s measured shim wall time).
