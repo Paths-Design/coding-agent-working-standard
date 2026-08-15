@@ -66,3 +66,8 @@ contracts:
   - name: 'qwen-settings-merge-repair'
     type: contract-test
     path: 'packages/caws-cli/tests/init/qwen-config-merge.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "jest: canonical timeouts are milliseconds (45000/60000/30000); rendered snippet + example inherit"
+    recorded_at: "2026-08-15T18:34:05.057Z"
