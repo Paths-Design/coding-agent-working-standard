@@ -1,0 +1,70 @@
+id: CAWS-SPEC-ACTIVATION-BINDS-001
+title: 'Worktree binding confers activation; spec creation yields draft'
+risk_tier: 2
+mode: feature
+lifecycle_state: active
+created_at: '2026-08-18T22:37:59.400Z'
+updated_at: '2026-08-18T22:37:59.400Z'
+blast_radius:
+  modules:
+    - 'caws-cli/store (worktrees-writer, specs-writer)'
+    - 'caws-cli/shell (specs, scope, command-metadata, register, render/decision)'
+    - 'caws-cli/kernel/doctor (inspect, rules)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/worktrees-writer.ts'
+    - 'packages/caws-cli/src/store/specs-writer.ts'
+    - 'packages/caws-cli/src/store/index.ts'
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/src/shell/commands/scope.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/render/decision.ts'
+    - 'packages/caws-cli/src/kernel/doctor/inspect.ts'
+    - 'packages/caws-cli/src/kernel/doctor/rules.ts'
+    - 'packages/caws-cli/src/kernel/doctor/types.ts'
+    - 'packages/caws-cli/tests/shell'
+    - 'packages/caws-cli/tests/kernel'
+    - 'packages/caws-cli/tests/store'
+    - 'packages/caws-cli/tests/docs'
+    - 'docs/api/cli.md'
+    - 'docs/command-reference.md'
+    - 'packages/caws-cli/CHANGELOG.md'
+  out: []
+invariants:
+  - 'caws specs activate <id> and caws specs deactivate <id> REMAIN on the command surface with unchanged semantics. Bind-time activation is an ADDITIONAL path, never a replacement: a spec can still be activated or demoted standalone.'
+  - 'Activation is ATOMIC with binding. A worktree create/bind that fails at any step must leave the spec in lifecycle_state draft — no half-activated spec, no spec_activated event without the matching worktree_bound in the same transaction.'
+  - 'spec_activated and spec_deactivated payloads are emitted against the EXISTING kernel schemas (additionalProperties: false). No event schema field is added by this slice; the surrounding event ordering carries the bind context.'
+  - 'Demotion on destroy fires ONLY when the destroyed branch carried zero commits beyond its base. A slice abandoned WITH work stays active — per spec_deactivated.v1.json, once work has actually started the one-way property of active is load-bearing.'
+  - 'Doctor aggregation must not drop information: every affected spec id stays machine-readable in the finding''s data block, even when the human message truncates the inline list.'
+acceptance:
+  - id: A1
+    given: 'a draft spec with no worktree'
+    when: 'caws worktree create <name> --spec <draft-id> runs'
+    then: 'the worktree is created AND the spec is patched to lifecycle_state active AND spec_activated is appended in the same lifecycle transaction as worktree_created and worktree_bound'
+  - id: A2
+    given: 'a draft spec and an existing registry worktree with no binding'
+    when: 'caws worktree bind <name> --spec <draft-id> runs'
+    then: 'the bind succeeds and activates the draft in the same transaction, while caws specs activate <id> standalone still activates a draft unchanged'
+  - id: A3
+    given: 'caws specs create invoked with no lifecycle flag'
+    when: 'it writes the spec'
+    then: 'lifecycle_state is draft and stdout names worktree create as the activation path; passing --activate writes lifecycle_state active instead'
+  - id: A4
+    given: 'several active specs with no worktree binding past the staleness threshold'
+    when: 'caws doctor runs'
+    then: 'it emits ONE aggregate finding naming the count rather than one finding per spec, escalating warning to error above a configured count, with every affected spec id in the finding data'
+  - id: A5
+    given: 'an unbound scope query on a path some active spec scope.in admits'
+    when: 'caws scope show <path> --json runs'
+    then: 'remediation.authorityCandidates lists only the specs whose scope.in admits that path, and when none admit it the full active list is returned with a note saying no spec claims the path'
+  - id: A6
+    given: 'a bound active spec whose worktree branch has zero commits beyond base'
+    when: 'caws worktree destroy <name> runs'
+    then: 'the spec is demoted to draft with spec_deactivated in the same transaction, whereas a branch carrying commits leaves the spec active and prints the close/deactivate handoff'
+non_functional: {}
+contracts:
+  - name: 'spec-activation-conferred-by-binding'
+    type: behavior
