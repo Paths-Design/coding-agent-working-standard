@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-activation-binds
 created_at: '2026-08-18T22:37:59.400Z'
-updated_at: '2026-08-18T22:37:59.400Z'
+updated_at: '2026-08-18T23:13:38.617Z'
 blast_radius:
   modules:
     - 'caws-cli/store (worktrees-writer, specs-writer)'
@@ -33,6 +33,9 @@ scope:
     - 'docs/api/cli.md'
     - 'docs/command-reference.md'
     - 'packages/caws-cli/CHANGELOG.md'
+    - packages/caws-cli/src/shell/binding/types.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/store/specs-body-writer.ts
   out: []
 invariants:
   - 'caws specs activate <id> and caws specs deactivate <id> REMAIN on the command surface with unchanged semantics. Bind-time activation is an ADDITIONAL path, never a replacement: a spec can still be activated or demoted standalone.'
