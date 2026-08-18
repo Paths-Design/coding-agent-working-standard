@@ -1,5 +1,45 @@
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING (default): `caws specs create` now writes `lifecycle_state: draft`.**
+  `active` asserts that a worktree is bound and the slice is being worked, which
+  creation cannot truthfully claim. Minting `active` at create time made the
+  state a record of "someone ran a command" rather than a work signal, and repos
+  accumulated large active sets nobody was working (one measured repo: 27 of 41
+  active specs had never been worked). Pass `--activate` for the previous
+  behavior. `caws specs activate` / `caws specs deactivate` are unchanged.
+- **`caws worktree create|bind --spec <id>` accepts a draft and activates it**
+  inside the same lifecycle transaction as the binding writes, rather than
+  refusing and handing off to `caws specs activate`. A create/bind that fails at
+  any step leaves the spec `draft`; `spec_activated` is appended last so a
+  rolled-back append can never claim an activation the spec body never received.
+  Terminal specs (closed/archived) are still refused, now naming reopen/restore.
+- **`caws worktree destroy` returns an unstarted slice to `draft`**, emitting
+  `spec_deactivated`. The condition is exact and narrow: the branch must still be
+  at the commit it was forked from (recorded as `baseSha` on the registry entry
+  at create time). A branch that carried any commit — merged or abandoned — keeps
+  the spec active, because once work has started the one-way property of `active`
+  is load-bearing.
+- **`caws doctor` reports the unbound-active backlog once, not once per spec.**
+  The per-spec `doctor.spec.unbound_active_stale` finding drops to `info` (the
+  repair plan still uses its per-spec `next_command`); a new aggregate
+  `doctor.spec.unbound_active_backlog` carries the severity and escalates
+  `warning` → `error` at 10 specs. The human message names five ids;
+  `data.spec_ids` is always complete.
+- **`caws scope show|check|plan` ranks authority candidates by scope fit.**
+  `remediation.authorityCandidates` previously listed every active spec by id
+  and the renderer truncated to five, so with a large active set the spec that
+  actually claims the path was routinely not shown. Candidates that claim the
+  path now come first and carry the matching `scope.in` entry; when none claim
+  it, the full set is returned with a note saying so.
+
+### Added
+
+- `caws specs create --activate` — opt back into creating a spec `active`.
+- `worktrees.json` entries record `baseSha`, the base commit the worktree was
+  forked at. Descriptive governance metadata, never an authority claim.
+
 ## [11.9.0] (2026-08-04)
 
 The agent-surface line continues: this release adds two new hook packs —

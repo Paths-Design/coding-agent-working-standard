@@ -24,7 +24,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 
 ## Groups
 
-- [`caws init`](#caws-init) — Bootstrap the canonical vNext .caws/ project state (idempotent; refuses to overwrite legacy single-spec layout). With --agent-surface, also installs the corresponding hook pack.
+- [`caws init`](#caws-init) — Bootstrap the canonical vNext .caws/ project state (idempotent; refuses to overwrite legacy single-spec layout). With --agent-surface, also installs the corresponding hook pack. Subcommands: `init diff` (read-only pack drift view incl. three-way decomposition) and `init port <path> --from <file>` (CLI-mediated retrofit landing — no agent-side hook editing).
 - [`caws doctor`](#caws-doctor) — Run drift detection against the current .caws/ state
 - [`caws status`](#caws-status) — Read-only dashboard: project, current context, claim, and doctor findings
 - [`caws scope`](#caws-scope) — Evaluate file paths against the bound spec scope
@@ -41,7 +41,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 
 ## `caws init`
 
-Bootstrap the canonical vNext .caws/ project state (idempotent; refuses to overwrite legacy single-spec layout). With --agent-surface, also installs the corresponding hook pack.
+Bootstrap the canonical vNext .caws/ project state (idempotent; refuses to overwrite legacy single-spec layout). With --agent-surface, also installs the corresponding hook pack. Subcommands: `init diff` (read-only pack drift view incl. three-way decomposition) and `init port <path> --from <file>` (CLI-mediated retrofit landing — no agent-side hook editing).
 
 **Options:**
 
@@ -50,7 +50,9 @@ Bootstrap the canonical vNext .caws/ project state (idempotent; refuses to overw
 - `--dry-run` — Compatibility alias for --plan; previews init changes without writing anything.
 - `--json` — Emit the read-only init plan as JSON with --plan or --dry-run.
 - `--agent-surface <name>` — Install a hook pack for an agent harness. When omitted, init attempts filesystem detection and skips hook install when ambiguous: claude-code | codex | opencode | zcode | kimi-code | qwen-code | cursor | windsurf | none
-- `--overwrite [paths...]` — For hook-pack install: select drifted or unmanaged files at managed pack paths for replacement — every pack file when bare, or only the listed destination paths. Without --force this previews a unified diff of each replacement and refuses (nothing is written); add --force to apply.
+- `--overwrite [paths...]` — For hook-pack install: select drifted or unmanaged files at managed pack paths for replacement — every pack file when bare, or only the listed destination paths. Without --force this is a pure preview: NOTHING is written (not even version re-stamps); add --force to apply.
+- `--three-way <path>` — init diff only: decompose one pack path into LOCAL GROWTH (installed vs pristine baseline) and UPSTREAM (baseline vs template) hunks, so a hand-edited hook can be retrofitted without conflating your edits with the pack changes.
+- `--from <file>` — init port only: staging file OUTSIDE the protected hooks tree carrying the ported content (new template + local growth). init validates it, version-stamps it, lands it atomically, records the pristine baseline, and audit-commits — the agent never edits the protected hook path itself.
 - `--force` — With --overwrite: apply the previewed replacements. CAUTION: local edits to the selected files are lost. A usage error without --overwrite.
 - `--adopt` — For hook-pack install: leave drifted or unmanaged files in place without enforcing pack contents. CAUTION: pack drift is no longer tracked for those paths.
 - `--wire-user-config` — kimi-code only: merge the canonical CAWS [[hooks]] blocks into the user-level $KIMI_CODE_HOME/config.toml (append-only, idempotent). Without this flag init installs the pack and prints the wiring for manual paste.
@@ -418,7 +420,7 @@ Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-
 
 ### `caws specs create [id]`
 
-Create a new spec in lifecycle_state: active.
+Create a new spec in lifecycle_state: draft. Binding a worktree (caws worktree create <name> --spec <id>) activates it, so active means the slice is being worked. Use --activate to create it active instead.
 
 **Argument:** `id` (optional) — Spec id to create
 
@@ -437,6 +439,7 @@ Create a new spec in lifecycle_state: active.
 - `--invariant <text>` (repeatable) — Populate invariants at creation (repeatable). The field is schema-required non-empty; without this flag the command writes a scaffolded default you cannot replace from the command surface.
 - `--observability <text>` (repeatable) — Add an observability item at creation (repeatable): a log, metric, trace, or alert. REQUIRED non-empty for --risk-tier 1.
 - `--rollback <text>` (repeatable) — Add a rollback step at creation (repeatable). REQUIRED non-empty for --risk-tier 1.
+- `--activate` — Create the spec in lifecycle_state: active instead of draft. Only for a slice you are working without a worktree — the normal path is caws worktree create --spec <id>, which activates on bind.
 - `--security <text>` (repeatable) — Add a non_functional.security requirement at creation (repeatable). REQUIRED non-empty for --risk-tier 1.
 - `--plan` — Read-only preflight: validate and print the candidate spec without writing .caws/specs or events
 - `--json` — With --plan, emit the candidate, diagnostics, missing fields, and create command as JSON

@@ -154,7 +154,8 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'create',
       argument: { name: 'id', required: false, description: 'Spec id to create' },
-      description: 'Create a new spec in lifecycle_state: active.',
+      description:
+        'Create a new spec in lifecycle_state: draft. Binding a worktree (caws worktree create <name> --spec <id>) activates it, so active means the slice is being worked. Use --activate to create it active instead.',
       // W3: --title/--mode/--risk-tier are functionally required, but the
       // handler (runSpecsCreateCommand) owns the missing-args check so it can
       // emit rich guidance (usage block + --type hint) that Commander's
@@ -226,6 +227,11 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
           description:
             'Add a rollback step at creation (repeatable). REQUIRED non-empty for --risk-tier 1.',
           collect: true,
+        },
+        {
+          flag: '--activate',
+          description:
+            'Create the spec in lifecycle_state: active instead of draft. Only for a slice you are working without a worktree — the normal path is caws worktree create --spec <id>, which activates on bind.',
         },
         {
           flag: '--security <text>',
