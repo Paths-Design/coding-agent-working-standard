@@ -417,6 +417,16 @@ export function runWorktreeDestroyCommand(opts: WorktreeDestroyOptions): number 
     return 2;
   }
   out(`destroyed ${outcome.name}`);
+  // CAWS-SPEC-ACTIVATION-BINDS-001: a destroy that undid an activation is a
+  // lifecycle transition the operator did not name, so say it happened. Silence
+  // here would leave them believing the spec is still active.
+  const demotedSpecId = outcome.data?.demoted_spec_id;
+  if (typeof demotedSpecId === 'string') {
+    out(
+      `  ${demotedSpecId} returned to draft — the branch carried no commits, so the slice never started.`
+    );
+    out(`  Re-activate by binding it again: caws worktree create <name> --spec ${demotedSpecId}`);
+  }
   surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }
