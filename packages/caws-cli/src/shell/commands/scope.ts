@@ -116,22 +116,65 @@ function renderExplicitSpecContextNote(spec: Spec): string[] {
   return lines;
 }
 
-function buildAuthorityContextCandidates(
-  specs: readonly Spec[]
-): AuthorityContextCandidate[] {
-  return specs
-    .filter((spec) => spec.lifecycle_state === 'active')
-    .map((spec) => {
-      const candidate: AuthorityContextCandidate = {
-        specId: spec.id,
-        lifecycleState: spec.lifecycle_state,
-      };
-      if (spec.worktree !== undefined) {
-        return { ...candidate, worktreeName: spec.worktree };
-      }
-      return candidate;
+/**
+ * Does `entry` (a scope.in value) admit `target`? Mirrors the kernel's scope.in
+ * semantics: an exact match, a bare directory entry admitting descendants on a
+ * path boundary, or a `*`/`?` glob anchored end-to-end.
+ */
+function scopeInAdmits(entry: string, target: string): boolean {
+  const e = entry.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+  const t = target.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+  if (e.length === 0) return false;
+  if (e === t) return true;
+  if (!/[*?]/.test(e)) return t.startsWith(`${e}/`);
+  const rx = e
+    .split('')
+    .map((ch) => {
+      if (ch === '*') return '.*';
+      if (ch === '?') return '.';
+      return ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
     })
-    .sort((a, b) => a.specId.localeCompare(b.specId));
+    .join('');
+  return new RegExp(`^${rx}$`).test(t);
+}
+
+/**
+ * Active specs offered as the authority context for an unbound path.
+ *
+ * RANKED BY SCOPE FIT, not alphabetically (CAWS-SPEC-ACTIVATION-BINDS-001).
+ * The prior implementation sorted every active spec by id and the renderer cut
+ * it to five, so in a repo with dozens of active specs the five suggested
+ * authorities were whichever ids sorted first — the spec that actually claims
+ * the path frequently was not among them. Specs whose scope.in admits the path
+ * now come first and carry the matching entry.
+ *
+ * When NO active spec claims the path we still return the full active set: the
+ * operator needs *some* authority to choose, and an empty list would degrade
+ * the handoff to "replace <spec-id>". The note attached in render/decision.ts
+ * says which case they are looking at, so a fallback list is never mistaken for
+ * a claim.
+ */
+function buildAuthorityContextCandidates(
+  specs: readonly Spec[],
+  targetPath?: string
+): AuthorityContextCandidate[] {
+  const active = specs.filter((spec) => spec.lifecycle_state === 'active');
+  const candidates = active.map((spec) => {
+    const matched =
+      targetPath === undefined
+        ? undefined
+        : (spec.scope?.in ?? []).find((entry) => scopeInAdmits(entry, targetPath));
+    return {
+      specId: spec.id,
+      lifecycleState: spec.lifecycle_state,
+      ...(spec.worktree !== undefined ? { worktreeName: spec.worktree } : {}),
+      ...(matched !== undefined ? { matchedScopeInEntry: matched } : {}),
+    } as AuthorityContextCandidate;
+  });
+
+  const claiming = candidates.filter((c) => c.matchedScopeInEntry !== undefined);
+  const ordered = claiming.length > 0 ? claiming : candidates;
+  return ordered.sort((a, b) => a.specId.localeCompare(b.specId));
 }
 
 function withAuthorityContext(
@@ -180,7 +223,7 @@ export function runScopeCommand(opts: ScopeCommandOptions): number {
   //    resolveBinding fall back to the path's owning worktree / claiming
   //    spec when cwd is the main checkout, so `caws scope check <path>` is
   //    cwd-independent and matches what the bound author sees.
-  const authorityCandidates = buildAuthorityContextCandidates(snapshot.specs);
+  const authorityCandidates = buildAuthorityContextCandidates(snapshot.specs, opts.path);
   const bound = withAuthorityContext(
     explicitSpec?.binding ?? resolveBinding({
       repoRoot,
@@ -540,7 +583,7 @@ export function runScopePlanCommand(opts: ScopePlanOptions): number {
         registry: snapshot.worktrees,
         specs: snapshot.specs,
       }),
-      buildAuthorityContextCandidates(snapshot.specs)
+      buildAuthorityContextCandidates(snapshot.specs, p)
     );
     if (bound.ambiguous !== undefined) {
       results.push(ambiguousPlanPayload(bound.ambiguous.targetPath, bound.ambiguous.claimants));

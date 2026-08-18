@@ -269,12 +269,27 @@ function authorityCandidateCommands(
 function authorityCandidateNotes(
   candidates: readonly AuthorityContextCandidate[]
 ): readonly string[] {
+  const claiming = candidates.filter((c) => c.matchedScopeInEntry !== undefined);
   const notes = [
     'Use the read-only scope --spec check first; it compares path fit but does not grant current-checkout write authority.',
   ];
+  // CAWS-SPEC-ACTIVATION-BINDS-001: a list of specs that CLAIM the path and a
+  // list of specs that merely happen to be active are very different handoffs.
+  // Saying which one this is stops the fallback list from reading as a claim.
+  if (claiming.length > 0) {
+    notes.unshift(
+      claiming.length === 1
+        ? `${claiming[0]?.specId} claims this path via scope.in "${claiming[0]?.matchedScopeInEntry}".`
+        : `${claiming.length} active specs claim this path via scope.in; listed in id order.`
+    );
+  } else {
+    notes.unshift(
+      'No active spec claims this path via scope.in, so every active spec is listed as a fallback. Widen the owning spec with caws specs amend-scope <id> --add <path> instead of picking an unrelated one.'
+    );
+  }
   if (candidates.length > 5) {
     notes.push(
-      `Showing first 5 active specs; run caws specs list --status active for all ${candidates.length}.`
+      `Showing first 5 of ${candidates.length}; run caws specs list --status active for the full set.`
     );
   }
   return notes;

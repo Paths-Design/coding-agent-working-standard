@@ -86,6 +86,92 @@ function runScopeHuman(cwd, targetPath, mode = 'show') {
 }
 
 describe('scope authority-context handoff', () => {
+  // ── CAWS-SPEC-ACTIVATION-BINDS-001: candidates are ranked by scope fit ──
+  //
+  // The renderer shows the first five candidates. Ranking them alphabetically
+  // meant that in a repo with dozens of active specs, the five shown were
+  // whichever ids sorted first — the spec that actually claims the path was
+  // routinely absent. These pin fit-first ordering and the note that says
+  // which case the operator is looking at.
+
+  test('only the specs whose scope.in admits the path are offered when one does', () => {
+    const { root, caws } = mkRepo();
+    // AAA sorts first but does NOT claim the path; ZZZ sorts last and does.
+    writeSpec(caws, 'AAA-UNRELATED-001', ['packages/unrelated']);
+    writeSpec(caws, 'MMM-UNRELATED-002', ['packages/other']);
+    writeSpec(caws, 'ZZZ-OWNER-003', ['packages/owned']);
+
+    const result = runScopeJson(root, 'packages/owned/deep/file.ts');
+
+    expect(result.json.decision).toBe('no_authority');
+    expect(result.json.remediation.authorityCandidates).toEqual([
+      {
+        specId: 'ZZZ-OWNER-003',
+        lifecycleState: 'active',
+        matchedScopeInEntry: 'packages/owned',
+      },
+    ]);
+    // The alphabetically-first specs are gone, not merely demoted.
+    const commands = result.json.remediation.commands.map((c) => c.command).join('\n');
+    expect(commands).not.toContain('AAA-UNRELATED-001');
+    expect(commands).toContain('ZZZ-OWNER-003');
+    expect(result.json.remediation.notes[0]).toBe(
+      'ZZZ-OWNER-003 claims this path via scope.in "packages/owned".'
+    );
+  });
+
+  test('two claiming specs are both offered and the note says so', () => {
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'CLAIM-A-001', ['packages/shared']);
+    writeSpec(caws, 'CLAIM-B-002', ['packages/shared/sub']);
+    writeSpec(caws, 'NOCLAIM-C-003', ['packages/elsewhere']);
+
+    const result = runScopeJson(root, 'packages/shared/sub/file.ts');
+
+    expect(
+      result.json.remediation.authorityCandidates.map((c) => c.specId)
+    ).toEqual(['CLAIM-A-001', 'CLAIM-B-002']);
+    expect(result.json.remediation.notes[0]).toBe(
+      '2 active specs claim this path via scope.in; listed in id order.'
+    );
+  });
+
+  test('when no active spec claims the path, the full active set is a labelled fallback', () => {
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'AAA-UNRELATED-001', ['packages/unrelated']);
+    writeSpec(caws, 'ZZZ-UNRELATED-002', ['packages/other']);
+
+    const result = runScopeJson(root, 'packages/no-owner/file.ts');
+
+    expect(
+      result.json.remediation.authorityCandidates.map((c) => c.specId)
+    ).toEqual(['AAA-UNRELATED-001', 'ZZZ-UNRELATED-002']);
+    // None carry a match, so none of them is presented as a claim.
+    expect(
+      result.json.remediation.authorityCandidates.every(
+        (c) => c.matchedScopeInEntry === undefined
+      )
+    ).toBe(true);
+    expect(result.json.remediation.notes[0]).toContain('No active spec claims this path');
+    expect(result.json.remediation.notes[0]).toContain('caws specs amend-scope');
+  });
+
+  test('a glob scope.in entry is matched, not treated as a literal', () => {
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'GLOB-OWNER-001', ['packages/*/src/index.ts']);
+    writeSpec(caws, 'OTHER-002', ['docs']);
+
+    const result = runScopeJson(root, 'packages/thing/src/index.ts');
+
+    expect(result.json.remediation.authorityCandidates).toEqual([
+      {
+        specId: 'GLOB-OWNER-001',
+        lifecycleState: 'active',
+        matchedScopeInEntry: 'packages/*/src/index.ts',
+      },
+    ]);
+  });
+
   test('canonical unbound refusal names active spec candidates and read-only spec-context checks', () => {
     const { root, caws } = mkRepo();
     writeSpec(caws, 'ACTIVE-UNBOUND-001', ['packages/owned-a']);
