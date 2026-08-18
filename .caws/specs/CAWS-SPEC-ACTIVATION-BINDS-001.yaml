@@ -3,6 +3,7 @@ title: 'Worktree binding confers activation; spec creation yields draft'
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: wt-activation-binds
 created_at: '2026-08-18T22:37:59.400Z'
 updated_at: '2026-08-18T22:37:59.400Z'
 blast_radius:
