@@ -2,10 +2,11 @@ id: CAWS-DEFECT-SMOKE-FRESH-INSTALL-KERNEL-RESIDUE-01
 title: 'fresh-install smoke still builds/packs/installs the absorbed caws-kernel; the release gate is red at main'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: wt-smoke-kernel-residue
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-smoke-kernel-residue at 2ce9a10027f748239e558f80aa6e78f13857fcf3'
 created_at: '2026-08-19T18:51:28.103Z'
-updated_at: '2026-08-19T18:54:38.684Z'
+updated_at: '2026-08-19T18:57:41.106Z'
 blast_radius:
   modules:
     - 'caws-cli/scripts (release smoke gate)'
