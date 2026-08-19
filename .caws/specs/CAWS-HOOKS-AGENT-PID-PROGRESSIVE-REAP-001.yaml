@@ -47,3 +47,7 @@ evidence:
     status: pass
     evidence_ref: "npx bats tests/hooks/bats/parse-input.bats — 'reap: orphaned .tmp atomic-write remnants older than 60 minutes are swept; fresh ones survive'"
     recorded_at: "2026-08-19T19:31:15.106Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "npx bats tests/hooks/bats/parse-input.bats — 'reap: rate-limited to once per hour via the marker file — a second call in the same window is a no-op'; full suite npx jest — 148 suites/1991 tests passed"
+    recorded_at: "2026-08-19T19:31:15.562Z"
