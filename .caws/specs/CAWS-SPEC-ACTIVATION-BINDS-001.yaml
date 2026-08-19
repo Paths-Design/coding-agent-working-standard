@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-activation-binds
 created_at: '2026-08-18T22:37:59.400Z'
-updated_at: '2026-08-19T00:04:56.919Z'
+updated_at: '2026-08-19T00:31:46.385Z'
 blast_radius:
   modules:
     - 'caws-cli/store (worktrees-writer, specs-writer)'
@@ -26,10 +26,6 @@ scope:
     - 'packages/caws-cli/src/kernel/doctor/inspect.ts'
     - 'packages/caws-cli/src/kernel/doctor/rules.ts'
     - 'packages/caws-cli/src/kernel/doctor/types.ts'
-    - 'packages/caws-cli/tests/shell'
-    - 'packages/caws-cli/tests/kernel'
-    - 'packages/caws-cli/tests/store'
-    - 'packages/caws-cli/tests/docs'
     - 'docs/api/cli.md'
     - 'docs/command-reference.md'
     - 'packages/caws-cli/CHANGELOG.md'
@@ -41,6 +37,14 @@ scope:
     - packages/caws-cli/templates/CLAUDE.md
     - packages/caws-cli/templates/agents.md
     - packages/caws-cli/src/shell/gates/local-evaluators/spec-completeness.ts
+    - packages/caws-cli/tests/kernel/unit/doctor-unbound-active-backlog.test.ts
+    - packages/caws-cli/tests/shell/doctor-plan.test.js
+    - packages/caws-cli/tests/shell/gates-run-positional-spec.test.js
+    - packages/caws-cli/tests/shell/gates-spec-not-active-remediation.test.js
+    - packages/caws-cli/tests/shell/scope-authority-context-handoff.test.js
+    - packages/caws-cli/tests/shell/specs-create-draft-default.test.js
+    - packages/caws-cli/tests/shell/worktree-destroy-demote-unstarted.test.js
+    - packages/caws-cli/tests/shell/worktree-draft-bind-handoff.test.js
   out: []
   support:
     - README.md
