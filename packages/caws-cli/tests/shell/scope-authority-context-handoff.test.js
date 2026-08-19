@@ -304,8 +304,8 @@ describe('scope authority-context handoff', () => {
     const result = runScopeHuman(unboundPath, 'packages/no-owner/file.ts');
 
     expect(result.code).toBe(0);
-    expect(result.out).toContain('active spec candidates:');
-    expect(result.out).toContain('ACTIVE-UNBOUND-002 (no worktree)');
+    expect(result.out).toContain('spec candidates:');
+    expect(result.out).toContain('ACTIVE-UNBOUND-002 (active, no worktree)');
     expect(result.out).toContain(
       'caws scope show packages/no-owner/file.ts --spec ACTIVE-UNBOUND-002'
     );
