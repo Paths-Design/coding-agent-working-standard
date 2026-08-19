@@ -7,19 +7,28 @@ created_at: '2026-08-19T18:29:25.602Z'
 updated_at: '2026-08-19T18:29:25.602Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli/shell (command registration / argument strictness)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/tests/shell/specs-amend-scope-reason.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Observed 2026-08-19: `caws specs amend-scope <id> --add <a> <b>` added only <a>, silently discarded <b>, and printed "amended scope" — the reports-success-while-doing-less class. `--add` is declared single-valued repeatable; the stray positional is absorbed after the <id> argument with no diagnostic.'
+  - 'The fix must make excess positional arguments an ERROR naming the discarded token and the repeatable form (--add <a> --add <b>), not a warning and not a silent success. A refusal is recoverable; a false confirmation trains agents to distrust the control plane.'
+  - 'CLAUDE.md scope-discipline wording "one amend-scope call with all missing paths (--add <path>...)" must be reconciled with the actual arity: either the CLI accepts variadic --add, or the doctrine text and remediation strings say --add per path. Doc and CLI may not disagree.'
+  - 'The proof must be a full-parse-path test (spawn dist/index.js or drive the Commander program), not a handler-unit test: handler tests bypass Commander and cannot see argument-absorption behavior.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'A draft or active spec and the CLI parsed end-to-end (dist or full Commander parse).'
+    when: 'caws specs amend-scope <id> --add path/a path/b is invoked.'
+    then: 'The command exits non-zero with a diagnostic naming the stray positional path/b and showing the repeatable form; scope.in is NOT partially amended.'
+  - id: A2
+    given: 'The same spec.'
+    when: 'caws specs amend-scope <id> --add path/a --add path/b is invoked.'
+    then: 'Both paths are added in one call and one spec_scope_amended event, preserving the existing repeatable contract.'
 non_functional: {}
 contracts: []
