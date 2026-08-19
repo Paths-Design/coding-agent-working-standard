@@ -16,6 +16,17 @@
   `guardExcessArguments` both read the declared count through one shared
   accessor so the advertised and enforced shapes cannot diverge again.
 
+- **Shared hook pack v43: `protected-paths.sh` now covers `.caws/hooks/`, the
+  directory the shared pack actually installs every guard script into, and
+  blocks with exit 2.** `_hooks_prefix_match` previously matched only the
+  per-surface vendor-dir convention (`.claude/hooks/` for claude-code), so
+  for claude-code every installed guard script under `.caws/hooks/` was
+  agent-writable. Separately, the fail-closed guard-artifact branch exited
+  1; the Claude Code PreToolUse protocol treats only exit 2 as a block, so a
+  Write/Edit to a guard script proceeded despite the "BLOCKED" diagnostic.
+  Both are fixed; `caws init --adopt`/`--overwrite` picks up the new
+  template version.
+
 ## [12.0.0] (2026-08-19)
 
 ### Changed (breaking)
