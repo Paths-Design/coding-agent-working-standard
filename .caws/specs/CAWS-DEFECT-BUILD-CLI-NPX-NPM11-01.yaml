@@ -1,0 +1,30 @@
+id: CAWS-DEFECT-BUILD-CLI-NPX-NPM11-01
+title: 'build-cli.js npx fallback misparses under npm 11: npx --no tsc -p file installs ''file'' as a package'
+risk_tier: 3
+mode: fix
+lifecycle_state: draft
+created_at: '2026-08-19T20:46:08.895Z'
+updated_at: '2026-08-19T20:46:08.895Z'
+blast_radius:
+  modules:
+    - 'caws-cli build script'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/scripts/build-cli.js'
+  out: []
+invariants:
+  - 'The tsc invocation must not depend on npx argument semantics (npm 10''s --no was reinterpreted by npm 11, turning -p into npx''s --package and fetching tsconfig.vnext.json from the registry) nor on a hardcoded node_modules/.bin layout. Resolve the compiler through Node module resolution from the package root and execute it with process.execPath.'
+  - 'When typescript cannot be resolved at all, fail loudly naming what was tried — never fall back to npx.'
+acceptance:
+  - id: A1
+    given: 'the monorepo with typescript installed (hoisted or nested)'
+    when: 'node scripts/build-cli.js runs'
+    then: 'tsc is executed via the module-resolved bin path and the build completes with dist emitted'
+  - id: A2
+    given: 'any npm version on PATH including npm 11'
+    when: 'the build runs'
+    then: 'no npm registry fetch is attempted for tsconfig.vnext.json or any tool'
+non_functional: {}
+contracts: []
