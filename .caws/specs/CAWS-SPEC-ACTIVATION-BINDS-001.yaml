@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-activation-binds
 created_at: '2026-08-18T22:37:59.400Z'
-updated_at: '2026-08-18T23:59:24.502Z'
+updated_at: '2026-08-19T00:01:53.343Z'
 blast_radius:
   modules:
     - 'caws-cli/store (worktrees-writer, specs-writer)'
@@ -37,12 +37,13 @@ scope:
     - packages/caws-cli/src/shell/commands/worktree.ts
     - packages/caws-cli/src/store/specs-body-writer.ts
     - packages/caws-cli/src/kernel/worktree/types.ts
-    - README.md
-    - CLAUDE.md
     - docs/agents/full-guide.md
     - packages/caws-cli/templates/CLAUDE.md
     - packages/caws-cli/templates/agents.md
   out: []
+  support:
+    - README.md
+    - CLAUDE.md
 invariants:
   - 'caws specs activate <id> and caws specs deactivate <id> REMAIN on the command surface with unchanged semantics. Bind-time activation is an ADDITIONAL path, never a replacement: a spec can still be activated or demoted standalone.'
   - 'Activation is ATOMIC with binding. A worktree create/bind that fails at any step must leave the spec in lifecycle_state draft — no half-activated spec, no spec_activated event without the matching worktree_bound in the same transaction.'
