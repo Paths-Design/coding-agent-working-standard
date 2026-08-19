@@ -20,7 +20,7 @@ function mkRepo() {
   return { root, caws: path.join(root, '.caws') };
 }
 
-function writeSpec(caws, id, scopeIn, { worktree } = {}) {
+function writeSpec(caws, id, scopeIn, { worktree, lifecycleState = 'active' } = {}) {
   const wtLine = worktree !== undefined ? `worktree: ${worktree}\n` : '';
   const inLines = scopeIn.map((p) => `    - ${p}`).join('\n');
   fs.writeFileSync(
@@ -29,7 +29,7 @@ function writeSpec(caws, id, scopeIn, { worktree } = {}) {
 title: 'Authority context fixture'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
+lifecycle_state: ${lifecycleState}
 ${wtLine}created_at: '2026-07-04T00:00:00.000Z'
 updated_at: '2026-07-04T00:00:00.000Z'
 blast_radius:
@@ -132,7 +132,7 @@ describe('scope authority-context handoff', () => {
       result.json.remediation.authorityCandidates.map((c) => c.specId)
     ).toEqual(['CLAIM-A-001', 'CLAIM-B-002']);
     expect(result.json.remediation.notes[0]).toBe(
-      '2 active specs claim this path via scope.in; listed in id order.'
+      '2 specs claim this path via scope.in; listed in id order.'
     );
   });
 
@@ -154,6 +154,68 @@ describe('scope authority-context handoff', () => {
     ).toBe(true);
     expect(result.json.remediation.notes[0]).toContain('No active spec claims this path');
     expect(result.json.remediation.notes[0]).toContain('caws specs amend-scope');
+  });
+
+  // ── A DRAFT that claims the path is the common case now ────────────────
+  //
+  // `specs create` writes a draft, and binding is what activates it. So the
+  // normal sequence for a new slice is: create the spec (draft, scope.in
+  // populated) → try to edit → hit no_authority. If the candidate list only
+  // ever considers ACTIVE specs, it omits the one spec that actually claims
+  // the path and tells the agent "no active spec claims this path", steering
+  // it to amend-scope some unrelated spec. The draft has to be visible here.
+
+  test('a draft spec that claims the path is offered, labelled as a draft', () => {
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'AAA-ACTIVE-UNRELATED-001', ['packages/unrelated']);
+    writeSpec(caws, 'ZZZ-DRAFT-OWNER-002', ['packages/owned'], {
+      lifecycleState: 'draft',
+    });
+
+    const result = runScopeJson(root, 'packages/owned/file.ts');
+
+    expect(result.json.remediation.authorityCandidates).toEqual([
+      {
+        specId: 'ZZZ-DRAFT-OWNER-002',
+        lifecycleState: 'draft',
+        matchedScopeInEntry: 'packages/owned',
+      },
+    ]);
+    // The command that resolves it must be the one that ALSO activates.
+    const commands = result.json.remediation.commands.map((c) => c.command);
+    expect(commands).toContain('caws worktree create <name> --spec ZZZ-DRAFT-OWNER-002');
+    // ...and it must not describe a draft as active, or say nothing claims it.
+    const notes = result.json.remediation.notes.join('\n');
+    expect(notes).not.toContain('No active spec claims this path');
+    expect(notes).toContain('draft');
+  });
+
+  test('the list command offered alongside a draft claimant is not --status active', () => {
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'DRAFT-ONLY-001', ['packages/owned'], { lifecycleState: 'draft' });
+
+    const result = runScopeJson(root, 'packages/owned/file.ts');
+
+    // `caws specs list --status active` hides the very spec being recommended.
+    const commands = result.json.remediation.commands.map((c) => c.command);
+    expect(commands).toContain('caws specs list');
+    expect(commands).not.toContain('caws specs list --status active');
+  });
+
+  test('a draft that does NOT claim the path stays out of the fallback list', () => {
+    // Drafts are the resting state, so a repo can hold dozens. Listing them all
+    // as fallback candidates would bury the active set in backlog noise. Only a
+    // CLAIMING draft earns a place.
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'ACTIVE-A-001', ['packages/a']);
+    writeSpec(caws, 'DRAFT-B-002', ['packages/b'], { lifecycleState: 'draft' });
+    writeSpec(caws, 'DRAFT-C-003', ['packages/c'], { lifecycleState: 'draft' });
+
+    const result = runScopeJson(root, 'packages/no-owner/file.ts');
+
+    expect(
+      result.json.remediation.authorityCandidates.map((c) => c.specId)
+    ).toEqual(['ACTIVE-A-001']);
   });
 
   test('a glob scope.in entry is matched, not treated as a literal', () => {
@@ -226,7 +288,9 @@ describe('scope authority-context handoff', () => {
   });
 
   test('tracked unbound worktree suggests binding that worktree to visible active specs', () => {
-    const { root, caws } = mkRepo();
+    // The probe runs from inside the loose worktree, not the repo root, so the
+    // root path is deliberately unused here.
+    const { caws } = mkRepo();
     writeSpec(caws, 'ACTIVE-UNBOUND-002', ['packages/owned']);
     const unboundPath = path.join(caws, 'worktrees', 'loose-wt');
     fs.mkdirSync(unboundPath, { recursive: true });

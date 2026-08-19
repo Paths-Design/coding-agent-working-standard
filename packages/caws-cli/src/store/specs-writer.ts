@@ -299,11 +299,28 @@ function nonActiveCloseSpecError(id: string, lifecycleState: string): Result<nev
     );
   }
 
+  // CAWS-SPEC-ACTIVATION-BINDS-001: `draft` is what `specs create` writes now,
+  // so closing a draft is a HOT PATH — an agent abandoning an unstarted slice
+  // reaches for `close` because that is the verb it knows. This branch used to
+  // refuse with no next command at all, which is how an agent ends up
+  // `git rm`-ing the spec: the governed exit exists (retire-draft) but nothing
+  // named it at the moment of the refusal.
+  const nextCommands =
+    lifecycleState === 'draft'
+      ? [`caws specs retire-draft ${id}`, `caws worktree create <name> --spec ${id}`]
+      : [`caws specs restore ${id} --state active --apply`];
+  const handoff =
+    lifecycleState === 'draft'
+      ? `\n\nA draft has not started, so there is nothing to close — close writes a resolution asserting the work concluded.\n` +
+        `To discard it (governed tombstone, recoverable — never \`git rm\`): ${nextCommands[0]}\n` +
+        `To start it instead (binding activates the draft): ${nextCommands[1]}`
+      : `\n\nRestore it first if you need it back: ${nextCommands[0]}`;
   return err(
     storeDiagnostic(
       STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-      `Spec "${id}" is in lifecycle_state "${lifecycleState}"; only active specs can be closed.`,
-      { subject: id, data: { current_state: lifecycleState } }
+      `Spec "${id}" is in lifecycle_state "${lifecycleState}"; only active specs can be closed.` +
+        handoff,
+      { subject: id, data: { current_state: lifecycleState, next_commands: nextCommands } }
     )
   );
 }

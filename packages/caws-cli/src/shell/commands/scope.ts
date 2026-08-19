@@ -139,7 +139,7 @@ function scopeInAdmits(entry: string, target: string): boolean {
 }
 
 /**
- * Active specs offered as the authority context for an unbound path.
+ * Specs offered as the authority context for an unbound path.
  *
  * RANKED BY SCOPE FIT, not alphabetically (CAWS-SPEC-ACTIVATION-BINDS-001).
  * The prior implementation sorted every active spec by id and the renderer cut
@@ -148,18 +148,29 @@ function scopeInAdmits(entry: string, target: string): boolean {
  * the path frequently was not among them. Specs whose scope.in admits the path
  * now come first and carry the matching entry.
  *
- * When NO active spec claims the path we still return the full active set: the
- * operator needs *some* authority to choose, and an empty list would degrade
- * the handoff to "replace <spec-id>". The note attached in render/decision.ts
- * says which case they are looking at, so a fallback list is never mistaken for
- * a claim.
+ * DRAFTS COUNT AS CLAIMANTS, and that is the whole point once `specs create`
+ * yields a draft. The ordinary sequence for a new slice is: create the spec
+ * (draft, scope.in populated) → try to edit → land here. Considering only
+ * ACTIVE specs would omit the one spec that actually claims the path and tell
+ * the agent "no active spec claims this path", steering it to amend-scope some
+ * unrelated spec — the wrong authority, recorded in the audit trail. The
+ * resolving command for a draft claimant (`caws worktree create --spec <id>`)
+ * activates it as it binds, so nothing extra is asked of the caller.
+ *
+ * A NON-claiming draft is deliberately excluded from the fallback. Drafts are
+ * the resting state, so a repo can hold dozens; listing them all would bury
+ * the active set in backlog noise. Only a claiming draft earns a place.
+ *
+ * When NOTHING claims the path we return the active set: the caller needs
+ * *some* authority to choose from, and an empty list would degrade the handoff
+ * to "replace <spec-id>". The note attached in render/decision.ts says which
+ * case they are looking at, so a fallback list is never mistaken for a claim.
  */
 function buildAuthorityContextCandidates(
   specs: readonly Spec[],
   targetPath?: string
 ): AuthorityContextCandidate[] {
-  const active = specs.filter((spec) => spec.lifecycle_state === 'active');
-  const candidates = active.map((spec) => {
+  const toCandidate = (spec: Spec): AuthorityContextCandidate => {
     const matched =
       targetPath === undefined
         ? undefined
@@ -170,11 +181,22 @@ function buildAuthorityContextCandidates(
       ...(spec.worktree !== undefined ? { worktreeName: spec.worktree } : {}),
       ...(matched !== undefined ? { matchedScopeInEntry: matched } : {}),
     } as AuthorityContextCandidate;
-  });
+  };
 
-  const claiming = candidates.filter((c) => c.matchedScopeInEntry !== undefined);
-  const ordered = claiming.length > 0 ? claiming : candidates;
-  return ordered.sort((a, b) => a.specId.localeCompare(b.specId));
+  const bindable = specs.filter(
+    (spec) => spec.lifecycle_state === 'active' || spec.lifecycle_state === 'draft'
+  );
+  const claiming = bindable
+    .map(toCandidate)
+    .filter((c) => c.matchedScopeInEntry !== undefined);
+  if (claiming.length > 0) {
+    return claiming.sort((a, b) => a.specId.localeCompare(b.specId));
+  }
+
+  return specs
+    .filter((spec) => spec.lifecycle_state === 'active')
+    .map(toCandidate)
+    .sort((a, b) => a.specId.localeCompare(b.specId));
 }
 
 function withAuthorityContext(

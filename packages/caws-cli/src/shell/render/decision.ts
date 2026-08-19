@@ -215,12 +215,29 @@ function authorityCandidates(
   return boundContext?.authorityCandidates ?? [];
 }
 
-function activeSpecListCommand(): ScopeRemediationCommand {
-  return {
-    command: 'caws specs list --status active',
-    description: 'List active specs before choosing the authority context.',
-    mutates: false,
-  };
+/**
+ * The "go look at the candidates" command.
+ *
+ * CAWS-SPEC-ACTIVATION-BINDS-001: `--status active` HIDES a draft claimant, so
+ * when one is being recommended the filter would send the caller to a listing
+ * that omits the very spec named one line above. Drop the filter in that case.
+ */
+function specListCommand(
+  candidates: readonly AuthorityContextCandidate[]
+): ScopeRemediationCommand {
+  const hasDraft = candidates.some((c) => c.lifecycleState === 'draft');
+  return hasDraft
+    ? {
+        command: 'caws specs list',
+        description:
+          'List specs in every lifecycle state — a draft claimant is not in the active listing.',
+        mutates: false,
+      }
+    : {
+        command: 'caws specs list --status active',
+        description: 'List active specs before choosing the authority context.',
+        mutates: false,
+      };
 }
 
 function authorityCandidateCommands(
@@ -239,7 +256,10 @@ function authorityCandidateCommands(
       if (candidate.worktreeName === undefined) {
         commands.push({
           command: `caws worktree bind ${shellQuote(opts.trackedWorktreeName)} --spec ${shellQuote(candidate.specId)}`,
-          description: `Bind this tracked worktree to active spec ${candidate.specId}.`,
+          description:
+            candidate.lifecycleState === 'draft'
+              ? `Bind this tracked worktree to draft spec ${candidate.specId} — the bind activates it.`
+              : `Bind this tracked worktree to active spec ${candidate.specId}.`,
           mutates: true,
         });
       } else {
@@ -252,7 +272,10 @@ function authorityCandidateCommands(
     } else if (candidate.worktreeName === undefined) {
       commands.push({
         command: `caws worktree create <name> --spec ${shellQuote(candidate.specId)}`,
-        description: `Create a governed worktree for active spec ${candidate.specId}.`,
+        description:
+          candidate.lifecycleState === 'draft'
+            ? `Create a governed worktree for draft spec ${candidate.specId} — creating it activates the draft.`
+            : `Create a governed worktree for active spec ${candidate.specId}.`,
         mutates: true,
       });
     } else {
@@ -277,10 +300,17 @@ function authorityCandidateNotes(
   // list of specs that merely happen to be active are very different handoffs.
   // Saying which one this is stops the fallback list from reading as a claim.
   if (claiming.length > 0) {
+    const one = claiming[0];
     notes.unshift(
       claiming.length === 1
-        ? `${claiming[0]?.specId} claims this path via scope.in "${claiming[0]?.matchedScopeInEntry}".`
-        : `${claiming.length} active specs claim this path via scope.in; listed in id order.`
+        ? `${one?.specId} claims this path via scope.in "${one?.matchedScopeInEntry}"` +
+          (one?.lifecycleState === 'draft'
+            ? ' and is a draft — creating or binding its worktree activates it.'
+            : '.')
+        : `${claiming.length} specs claim this path via scope.in; listed in id order` +
+          (claiming.some((c) => c.lifecycleState === 'draft')
+            ? ' (drafts among them activate on bind).'
+            : '.')
     );
   } else {
     notes.unshift(
@@ -431,7 +461,7 @@ export function buildScopeRemediation(
     const normPath = decision.normalizedPath ?? decision.path;
     if (typeof boundContext?.worktreeName === 'string') {
       const commands: ScopeRemediationCommand[] = [
-        activeSpecListCommand(),
+        specListCommand(candidates),
         ...authorityCandidateCommands(normPath, candidates, {
           trackedWorktreeName: boundContext.worktreeName,
         }),
@@ -456,7 +486,7 @@ export function buildScopeRemediation(
       };
     }
     const commands: ScopeRemediationCommand[] = [
-      activeSpecListCommand(),
+      specListCommand(candidates),
       ...authorityCandidateCommands(normPath, candidates),
     ];
     if (candidates.length === 0) {
