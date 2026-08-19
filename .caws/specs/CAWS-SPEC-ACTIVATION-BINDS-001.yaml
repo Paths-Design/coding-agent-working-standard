@@ -116,3 +116,11 @@ evidence:
     command: npx jest tests/shell/specs-create-draft-default.test.js
     exit_code: 0
     commit_sha: "762cf8d6"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: packages/caws-cli/tests/kernel/unit/doctor-unbound-active-backlog.test.ts
+    recorded_at: "2026-08-19T16:17:11.513Z"
+    test_nodeid: the aggregate escalates to error at the configured count and says why
+    command: npx jest tests/kernel/unit/doctor-unbound-active-backlog.test.ts
+    exit_code: 0
+    commit_sha: e2c64172
