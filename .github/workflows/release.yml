@@ -131,17 +131,26 @@ jobs:
           npm config set fetch-retries 3
           npm config set fetch-retry-factor 10
 
+          # NOTE the retry shape: the old `npm ci || { ...; sleep; } && break`
+          # FAILED OPEN — on attempts 1-2 the failure branch ended in `sleep`
+          # (exit 0), so `&& break` exited the loop green after a FAILED
+          # install; the build then ran against an empty node_modules and npx
+          # fetched tools from the registry (the 12.0.0 lockfile-sync failure
+          # was masked exactly this way). A failed install must fail the step.
+          ok=""
           for i in {1..3}; do
             echo "Attempt $i of 3..."
-            npm ci --prefer-offline --no-audit --no-fund || {
-              if [ $i -eq 3 ]; then
-                echo "All attempts failed"
-                exit 1
-              fi
-              echo "Attempt $i failed, waiting before retry..."
-              sleep $((i * 10))
-            } && break
+            if npm ci --prefer-offline --no-audit --no-fund; then
+              ok=1
+              break
+            fi
+            echo "Attempt $i failed, waiting before retry..."
+            sleep $((i * 10))
           done
+          if [ -z "$ok" ]; then
+            echo "::error::npm ci failed on all 3 attempts — refusing to continue to a build with an empty node_modules."
+            exit 1
+          fi
 
       - name: Verify tag-ref API access
         # This confirms the workflow can READ the pushed tag ref via gh api.
