@@ -89,4 +89,3 @@ The tag-driven release workflow (`.github/workflows/release.yml`):
 The maintainer authors the CHANGELOG and creates the tag manually. CI does not
 generate changelogs, bump versions, or modify any branch. See
 [`docs/release-procedure.md`](docs/release-procedure.md).
-- ✅ Release notes generation

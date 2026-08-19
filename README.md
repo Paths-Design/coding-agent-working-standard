@@ -4,11 +4,11 @@
 
 CAWS is a kernel/store/shell architecture that gives coding agents and humans a shared, observable, auditable view of a project's quality state. The CLI is the governance surface; the kernel is pure governance primitives; the store owns all I/O; `.caws/` is the state directory.
 
-This repository is the source for the `@paths.design/caws-cli` and `@paths.design/caws-kernel` npm packages. CAWS self-hosts: `.caws/` drives real quality gates on this codebase.
+This repository is the source for the `@paths.design/caws-cli` npm package (the kernel is absorbed into it — there is no separate `@paths.design/caws-kernel` publish). CAWS self-hosts: `.caws/` drives real quality gates on this codebase.
 
 ## Status: v11.x is the canonical line
 
-The v11 cutover is complete. `main` runs the v11 surface published to npm as `@paths.design/caws-cli`. v11.1 restored the spec and worktree lifecycle on top of the v11.0 governed core and shipped the agent-liveness visibility substrate (`caws agents`, `.caws/leases/`). v11.2 is in planning (multi-agent *authority* — bridge claims, lease-backed enforcement — see the doctrine doc §1).
+The v11 cutover is complete. `main` runs the v11 surface published to npm as `@paths.design/caws-cli` (currently 11.9.x; the kernel is absorbed into this single package — see below). v11.1 restored the spec and worktree lifecycle on top of the v11.0 governed core and shipped the agent-liveness visibility substrate (`caws agents`, `.caws/leases/`). v11.8 added `caws reprieve` (session-scoped guard reprieves) and the `zcode` agent surface. Multi-agent *authority* (bridge claims, lease-backed enforcement) remains in planning — see the doctrine doc §1.
 
 **Doctrine source:** [`docs/architecture/caws-vnext-command-surface.md`](docs/architecture/caws-vnext-command-surface.md). Read it before relying on any other doc in this repo — historical context in deeper docs may still describe v10 behavior.
 
@@ -28,11 +28,12 @@ Fourteen top-level commands/groups (plus the auto-generated `help`).
 | `caws gates run --spec <id> [--context <cli\|commit\|ci>]` | Run policy-driven quality gates. Appends one `gate_evaluated` event per declared gate. |
 | `caws evidence record --type <kind> --spec <id> --data <json>` | Append a typed evidence event (`test` / `gate` / `ac`) to `.caws/events.jsonl`. |
 | `caws events migrate / rotate / verify-archive` | Maintenance for the hash-chained `.caws/events.jsonl` (v10→v11 migration, rotation, archive integrity). |
-| `caws waiver create / list / show / revoke` | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. |
-| `caws specs create / list / show / recover / retire-draft / activate / amend-scope / close / archive / prune-archive / migrate / validate` | Manage CAWS spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. Batch archive supports `--status closed`, `--include`, `--exclude`, and `--apply`. |
-| `caws worktree create / list / bind / destroy / merge / repair-sparse / repair / migrate-registry` | Manage CAWS worktrees bound to active specs (`repair` prunes ghost registry entries + clears dead spec→worktree bindings; `repair-sparse` restores the `.caws/specs` sparse-checkout invariant). |
+| `caws waiver create / list / show / revoke` | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. `create` requires `--title`, `--gate`, `--reason`, `--approved-by`, `--expires-at`. |
+| `caws reprieve grant / show / revoke / list` | Session-scoped guard reprieve: skip a PreToolUse guard for one session until expiry. |
+| `caws specs create / list / show / recover / restore / retire-draft / prune-drafts / activate / deactivate / amend / amend-scope / evidence / close / reopen / archive / prune-archive / migrate / validate` | Manage CAWS spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. `create` writes `lifecycle_state: draft` by default (`--activate` creates active directly); the normal path is `caws worktree create --spec <id>`, which activates on bind. Batch archive supports `--status closed`, `--include`, `--exclude`, and `--apply`. |
+| `caws worktree create / list / bind / destroy / untrack / merge / migrate-registry / repair-sparse / repair / prune / cleanup-plan` | Manage CAWS worktrees bound to active specs (`repair` prunes ghost registry entries + clears dead spec→worktree bindings; `repair-sparse` restores the `.caws/specs` sparse-checkout invariant; `untrack` releases the registry binding while keeping the directory; `prune`/`cleanup-plan` are dry-run-by-default cleanup planners). |
 | `caws agents register / heartbeat / stop / list / show / prune` | Agent-liveness substrate (`.caws/leases/`). Operational cache only — never authority. |
-| `caws message send / poll` | Directed inter-agent message channel over `.caws/messages.jsonl`. Not authority; verify claims before acting. |
+| `caws message send / reply / poll / inbox / history / status / prune` | Directed inter-agent message channel over `.caws/messages.jsonl`. Not authority; verify claims before acting. |
 
 Run `caws <group> --help` for live options, or read the generated [`docs/command-reference.md`](docs/command-reference.md) for the exhaustive leaf and flag surface.
 
@@ -46,7 +47,7 @@ Run `caws <group> --help` for live options, or read the generated [`docs/command
 ### Install
 
 ```bash
-npm install -g @paths.design/caws-cli@^11.6.0
+npm install -g @paths.design/caws-cli@^11.9.0
 caws --version
 ```
 

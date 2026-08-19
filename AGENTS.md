@@ -24,7 +24,7 @@ The v11 cutover is complete. `main` runs the v11 surface (kernel/store/shell arc
 | `caws waiver create / list / show / revoke` | Manage waiver records. Singular surface — no plural alias. |
 | `caws reprieve grant / show / revoke / list` | Session-scoped guard reprieve: skip a PreToolUse guard for ONE session until expiry. Replaces commenting a guard out of the dispatcher HANDLERS array. See [Reprieves](#reprieves). |
 | `caws events migrate / rotate / verify-archive` | Maintenance for the hash-chained `.caws/events.jsonl`. |
-| `caws specs create / list / show / recover / retire-draft / activate / amend-scope / close / reopen / archive / prune-archive / migrate / validate` | Manage spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. `close` (auto-fired by `worktree merge`) → `reopen` reverses it when the work was premature (closed→active, removes resolution/closure_notes). Batch archive supports `--status closed`, `--include`, `--exclude`, and `--apply`. |
+| `caws specs create / list / show / recover / restore / retire-draft / prune-drafts / activate / deactivate / amend / amend-scope / evidence / close / reopen / archive / prune-archive / migrate / validate` | Manage spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. `create` writes `lifecycle_state: draft` by default (pass `--activate` to create active directly); the normal path is `caws worktree create --spec <id>`, which activates on bind. `close` (auto-fired by `worktree merge`) → `reopen` reverses it when the work was premature (closed→active, removes resolution/closure_notes). Batch archive supports `--status closed`, `--include`, `--exclude`, and `--apply`. |
 | `caws worktree create / list / bind / destroy / untrack / merge / migrate-registry / repair-sparse / repair / prune / cleanup-plan` | Manage CAWS worktrees bound to active specs (`repair` prunes ghost registry entries + clears dead spec→worktree bindings; `repair-sparse` restores the `.caws/specs` sparse-checkout invariant; `untrack` releases the registry binding while keeping the directory; `prune` and `cleanup-plan` are dry-run-by-default cleanup planners). |
 | `caws agents register / heartbeat / stop / list / show / prune` | Agent-liveness substrate (`.caws/leases/`). Operational cache only — never authority. `prune` modes: `--dead` (PID-liveness), `--status stopped|stale --older-than-ms` (retention), `--status legacy --older-than-ms` (age-based, reaches v10/early-v11 leases with no status field). |
 | `caws message send / reply / poll / inbox / history / status / prune` | Directed inter-agent message channel over `.caws/messages.jsonl`. Not authority; verify claims before acting. `--to` accepts `wt:<worktree>` / `spec:<spec-id>` aliases; liveness is heartbeat-age-based (idle peer = stopped lease + fresh heartbeat = deliverable); refused sends print a not-sent verdict to stdout; `reply <message_id>` answers on the same channel; `status <message_id>` reports queued-vs-delivered. |
@@ -205,15 +205,16 @@ Set the tier in your spec's `risk_tier` field (integer `1`/`2`/`3`). Tier govern
 Waivers legitimately bypass a gate violation. They do not change gate mode — they filter violations out of the disposition.
 
 ```bash
-caws waiver create FEAT-1-w \
+caws waiver create FEAT-1a \
+  --title "Budget breach during emergency refactor" \
   --gate budget_limit \
   --reason "Refactor required emergency budget breach; cleanup tracked in FEAT-2" \
   --approved-by "team-lead@example.com" \
   --expires-at "2026-12-01T00:00:00Z"
 
 caws waiver list
-caws waiver show FEAT-1-w
-caws waiver revoke FEAT-1-w
+caws waiver show FEAT-1a
+caws waiver revoke FEAT-1a
 ```
 
 ## Reprieves

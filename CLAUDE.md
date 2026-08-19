@@ -81,8 +81,9 @@ governance.
 - `change_budget` keys in any spec YAML — use waivers, not edits.
 - Pre-commit hooks — do not bypass with `--no-verify`.
 
-Legitimate escape: `caws waiver create <id> --gate <gate> --reason "..."
---approved-by "..." --expires-at <iso8601>` (singular `waiver`, not plural).
+Legitimate escape: `caws waiver create <id> --title "<title>" --gate <gate>
+--reason "..." --approved-by "..." --expires-at <iso8601>` (singular `waiver`,
+not plural; `--title` is required).
 
 ## Spec authoring — the recurring traps
 
@@ -103,13 +104,13 @@ Get them right at spec-activation time:
    `scope.in` paths in your `scope.out` refuses YOUR edits to those paths in
    union mode. Omit the entry, or accept you cannot edit those paths.
 5. **Kernel-change escape must be explicit.** The scope guard treats
-   `packages/caws-kernel/src` as a literal prefix. If a kernel change proves
+   `packages/caws-cli/src/kernel` as a literal prefix. If a kernel change proves
    necessary, amend the *specific* file into `scope.in` (e.g.
    `.../schemas/events/spec_closed.v1.json`) — that admits it while leaving the
    rest of the kernel out.
 6. **`non_functional` admits exactly four subkeys:** `accessibility`,
    `performance`, `reliability`, `security` (`additionalProperties: false` in
-   `packages/caws-kernel/src/schemas/spec.v1.json`). Observability belongs under
+   `packages/caws-cli/src/kernel/schemas/spec.v1.json`). Observability belongs under
    `reliability`; anything else is `spec.schema.violation`.
 7. **Releases are tag-driven; branch pushes never publish.** The Release
    workflow triggers only on `caws-cli-v*` tag pushes. The maintainer bumps
@@ -295,7 +296,7 @@ Full list: `.claude/rules/worktree-isolation.md`.
   Always inspect `result.value.kind !== 'success'` for store-layer outcomes,
   especially in composed lifecycle commands (`mergeWorktree → closeSpec`).
 - **Event-data fields must match the kernel schema.** Event payloads under
-  `packages/caws-kernel/src/schemas/events/*.v1.json` use
+  `packages/caws-cli/src/kernel/schemas/events/*.v1.json` use
   `additionalProperties: false`. A new field added at the call site without
   amending the schema is rejected by the lifecycle validator → rollback →
   surfaces as `partial_failure_recovered`. Update the kernel schema *first* (and
@@ -369,8 +370,8 @@ play-by-play of hesitation.
 
 ## Test suite
 
-- CLI tests (vNext shell + store): `cd packages/caws-cli && npx jest`
-- Kernel tests: `cd packages/caws-kernel && npm test`
+- CLI tests (vNext shell + store, includes the absorbed kernel under
+  `src/kernel`): `cd packages/caws-cli && npx jest`
 - Per `~/.claude/CLAUDE.md` and `~/Desktop/Projects/CLAUDE.md`: interpret pass
   counts critically, print the concrete runtime artifacts the scenario produced,
   cite specific evidence, name the false-confidence risks, and state what
