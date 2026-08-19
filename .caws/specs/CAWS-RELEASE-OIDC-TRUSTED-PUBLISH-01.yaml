@@ -1,0 +1,31 @@
+id: CAWS-RELEASE-OIDC-TRUSTED-PUBLISH-01
+title: 'release pipeline publishes by token, preempting the package''s configured OIDC trusted publisher'
+risk_tier: 3
+mode: fix
+lifecycle_state: draft
+created_at: '2026-08-19T20:38:20.112Z'
+updated_at: '2026-08-19T20:38:20.112Z'
+blast_radius:
+  modules:
+    - 'release pipeline (workflow + tag-publish script)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - '.github/workflows/release.yml'
+    - 'scripts/release-tag-publish.mjs'
+  out: []
+invariants:
+  - 'The package has an npm trusted publisher configured; id-token: write is already granted (release.yml:74). The publish step must let npm''s OIDC exchange engage: no NPM_TOKEN/NODE_AUTH_TOKEN injection and no setup-node registry-url authToken npmrc, and the job npm must be >= 11.5.1 (Node 22 bundles 10.x, which predates trusted publishing).'
+  - 'Fail closed is preserved by the existing crossing-point contract: any publish failure still deletes the tag; OIDC mode must not weaken the no-token guard for environments with no OIDC endpoint (absent ACTIONS_ID_TOKEN_REQUEST_URL and absent NPM_TOKEN still refuses).'
+acceptance:
+  - id: A1
+    given: 'a caws-cli-v* tag push on GitHub Actions with the trusted publisher configured'
+    when: 'the release workflow runs'
+    then: 'npm >= 11.5.1 publishes via OIDC (no token env injected), provenance is attached, and the version lands on the registry'
+  - id: A2
+    given: 'no NPM_TOKEN and no ACTIONS_ID_TOKEN_REQUEST_URL (local/non-CI run)'
+    when: 'the publish phase is reached'
+    then: 'the script refuses with the existing no-auth diagnostic and rolls the tag back'
+non_functional: {}
+contracts: []
