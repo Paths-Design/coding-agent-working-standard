@@ -1,0 +1,44 @@
+id: CAWS-DEFECT-MERGE-STALE-CANONICAL-INDEX-001
+title: 'worktree merge leaves canonical''s index stale; the next commit there silently reverts the merge'
+risk_tier: 1
+mode: fix
+lifecycle_state: draft
+created_at: '2026-08-19T17:25:27.073Z'
+updated_at: '2026-08-19T17:25:27.073Z'
+blast_radius:
+  modules:
+    - 'caws-cli/store (worktrees-writer, mergeWorktree)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/worktrees-writer.ts'
+    - 'packages/caws-cli/src/shell/commands/worktree.ts'
+    - 'packages/caws-cli/tests/store/worktree-merge-canonical-consistency.test.js'
+  out: []
+invariants:
+  - 'After a successful merge, the canonical checkout must not be left in a state where an ordinary commit reverts the merge. Either the index/working tree is brought to the new HEAD, or the command refuses to leave the inconsistency silent.'
+  - 'The fix must NOT reintroduce the hazard the CAS design removes: the merge must still never check out the base branch as a mutation of a working tree other agents share.'
+acceptance:
+  - id: A1
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'GIVEN a worktree merged via caws worktree merge WHEN any subsequent commit is made from the canonical checkout THEN the merged content is preserved and is not recorded as deletions'
+  - id: A2
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'GIVEN a merge that advances the base ref WHEN the command returns success THEN the canonical checkout is either consistent with the new HEAD or the operator is told explicitly that it is not, with the exact refresh command'
+  - id: A3
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'GIVEN concurrent agents WHEN the consistency fix runs THEN the base branch is still never checked out and the compare-and-swap safety property is preserved'
+observability:
+  - 'Emit the canonical checkout''s post-merge consistency state (in-sync | stale) in the merge outcome data, so the condition is visible in the audit trail rather than only in a later diffstat.'
+rollback:
+  - 'Revert the merge commit; the hazard is in post-merge checkout state, not in the merge objects, so no history rewrite is required.'
+non_functional:
+  security:
+    - 'A silently stale index causes unattributed deletion of committed work under an unrelated commit message, defeating the audit trail that scope and lifecycle enforcement depend on.'
+contracts:
+  - name: 'merge-leaves-canonical-consistent'
+    type: behavior
