@@ -69,3 +69,11 @@ evidence:
     command: npx jest tests/store/git-binary.test.js
     exit_code: 0
     commit_sha: "2f3eed7e"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: packages/caws-cli/tests/store/git-binary.test.js
+    recorded_at: "2026-08-19T16:57:53.758Z"
+    test_nodeid: falls back to the bare name when PATH holds no git at all
+    command: npx jest tests/store/git-binary.test.js
+    exit_code: 0
+    commit_sha: "2f3eed7e"
