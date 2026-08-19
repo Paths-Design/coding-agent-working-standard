@@ -1,0 +1,31 @@
+id: CAWS-DEFECT-RELEASE-LOCKFILE-NPM11-SYNC-01
+title: 'lockfile missing platform-dep matrix fails npm 11 ci, and the install retry loop fails open masking it'
+risk_tier: 3
+mode: fix
+lifecycle_state: draft
+created_at: '2026-08-19T20:50:41.253Z'
+updated_at: '2026-08-19T20:50:41.253Z'
+blast_radius:
+  modules:
+    - 'release pipeline (lockfile + install step)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'package-lock.json'
+    - '.github/workflows/release.yml'
+  out: []
+invariants:
+  - 'npm 11 validates platform-conditional optional deps (@unrs/resolver-binding-*) against the lockfile; the committed lockfile must enumerate the full matrix so npm ci succeeds on any platform/npm>=10.'
+  - 'The install step must FAIL when npm ci fails. The retry loop''s failure branch ended in sleep (exit 0) so ''&& break'' exited the loop green after a failed install — the build then ran against an empty node_modules and npx fetched tools from the registry. Fail-open retry is the source-guard fail-soft class.'
+acceptance:
+  - id: A1
+    given: 'the committed lockfile'
+    when: 'npm@^11.5.1 ci --dry-run runs at the repo root'
+    then: 'it exits 0 (package.json and lockfile in sync, platform matrix present)'
+  - id: A2
+    given: 'an npm ci that fails all attempts'
+    when: 'the install step runs'
+    then: 'the step exits non-zero — a failed install can never fall through to the build'
+non_functional: {}
+contracts: []
