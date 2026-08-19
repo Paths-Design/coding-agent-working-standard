@@ -35,3 +35,7 @@ evidence:
     status: pass
     evidence_ref: "npx npm@^11.5.1 ci --dry-run --ignore-scripts against an isolated copy of package.json+lockfile: resolves the full tree cleanly (no EUSAGE); lockfile regenerated with npm 11 --package-lock-only, 56 @unrs/resolver-binding entries present (was: 'Missing: @unrs/resolver-binding-* from lock file' in CI run 32300463750)"
     recorded_at: "2026-08-19T20:52:44.320Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "retry loop rewritten: break only inside the success branch; ok sentinel checked after the loop with exit 1 + ::error naming the empty-node_modules hazard. Old shape's fail-open mechanism ('|| { sleep } && break') documented inline; YAML validated via js-yaml"
+    recorded_at: "2026-08-19T20:52:44.713Z"
