@@ -28,7 +28,13 @@
  * Environment:
  *   GITHUB_REPOSITORY  required for tag-deletion and GitHub Release API
  *   GITHUB_TOKEN       required for tag-deletion and GitHub Release API
- *   NPM_TOKEN          required for npm publish (bypass-2FA token)
+ *   NPM_TOKEN          optional token auth for npm publish. The sanctioned
+ *                      CI path is OIDC trusted publishing (npm >= 11.5.1,
+ *                      id-token: write, trusted publisher configured on the
+ *                      package) — detected via ACTIONS_ID_TOKEN_REQUEST_URL.
+ *                      When NPM_TOKEN is set it is used and PREEMPTS OIDC;
+ *                      when neither is available, publish refuses and rolls
+ *                      the tag back (fail closed).
  *   CAWS_RELEASE_DRY_RUN  set to "1" to disable npm publish + tag deletion
  *                         (also enabled by --dry-run flag)
  *
@@ -430,8 +436,18 @@ function main() {
   // Before this step: failures rollback the tag.
   // After this step:  failures preserve the tag (registry is authoritative).
   // ---------------------------------------------------------------------------
-  if (!process.env.NPM_TOKEN && !isDryRun) {
-    logError('publish.no_token', { hint: 'NPM_TOKEN env var required for non-dry-run publish' });
+  // Auth-mode resolution. OIDC trusted publishing is the sanctioned CI path:
+  // npm >= 11.5.1 exchanges the Actions id-token with the registry when NO
+  // auth token is configured — a token, valid or not, preempts the exchange.
+  // A token is still honored when explicitly provided (local/emergency use).
+  // With neither, refuse and roll the tag back: an unauthenticated PUT would
+  // fail at the registry anyway, but this diagnostic names the real gap.
+  const hasNpmToken = Boolean(process.env.NPM_TOKEN);
+  const oidcAvailable = Boolean(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
+  if (!hasNpmToken && !oidcAvailable && !isDryRun) {
+    logError('publish.no_auth', {
+      hint: 'no NPM_TOKEN and no OIDC id-token endpoint (ACTIONS_ID_TOKEN_REQUEST_URL); set a token for local publish, or run in GitHub Actions with id-token: write and the npm trusted publisher configured',
+    });
     const del = deleteTagFromOrigin(tag, isDryRun);
     process.exit(del.ok ? 20 : 21);
   }
@@ -439,16 +455,23 @@ function main() {
   if (isDryRun) {
     logInfo('publish.dry_run', { pkg: pkg.name, version });
   } else {
+    logInfo('publish.auth_mode', {
+      mode: hasNpmToken ? 'token' : 'oidc-trusted-publisher',
+    });
     const publishStep = runStep(
       'npm_publish',
       'npm',
       ['publish', '--access', 'public', '--provenance'],
       {
         cwd: path.join(rootDir, pkg.pkgPath),
-        env: {
-          NODE_AUTH_TOKEN: process.env.NPM_TOKEN,
-          NPM_TOKEN: process.env.NPM_TOKEN,
-        },
+        // In OIDC mode inject NO token env: npm must see no configured
+        // authToken for the registry, or it skips the OIDC exchange.
+        env: hasNpmToken
+          ? {
+              NODE_AUTH_TOKEN: process.env.NPM_TOKEN,
+              NPM_TOKEN: process.env.NPM_TOKEN,
+            }
+          : {},
       }
     );
     if (!publishStep.ok) {

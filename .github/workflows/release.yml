@@ -69,8 +69,11 @@ permissions:
   # deletes-tag). Verified at workflow init via the "Verify tag-deletion
   # permission" step below.
   contents: write
-  # id-token: write — retained for future OIDC trusted-publisher adoption
-  # (deferred to a follow-up slice; current publish uses NPM_TOKEN).
+  # id-token: write — used by npm OIDC trusted publishing (the package has a
+  # trusted publisher configured for this repo + workflow) and by provenance
+  # signing. The publish step intentionally injects NO npm token: a configured
+  # authToken preempts the OIDC exchange, which is exactly how the 12.0.0
+  # first attempt failed (E404 on PUT with a token the registry refused).
   id-token: write
 
 jobs:
@@ -109,7 +112,17 @@ jobs:
           node-version: "22"
           cache: "npm"
           cache-dependency-path: "package-lock.json"
-          registry-url: "https://registry.npmjs.org"
+          # NO registry-url here: setup-node's registry-url writes an .npmrc
+          # authToken line, and npm uses a configured token INSTEAD of the
+          # OIDC trusted-publisher exchange. Public installs need no auth.
+
+      - name: Upgrade npm for OIDC trusted publishing
+        # Node 22 bundles npm 10.x, which predates trusted publishing
+        # (requires npm >= 11.5.1). The OIDC exchange silently never happens
+        # on the bundled npm — publish falls back to token auth and fails.
+        run: |
+          npm install -g npm@^11.5.1
+          echo "npm version: $(npm --version)"
 
       - name: Install dependencies
         run: |
@@ -149,10 +162,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run tag-driven publish
+        # Auth is OIDC trusted publishing: id-token: write + npm >= 11.5.1 +
+        # the trusted publisher configured on npmjs.com for this repo and
+        # workflow file. NPM_TOKEN is deliberately NOT injected — a token,
+        # valid or not, preempts the OIDC exchange.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -e
           node scripts/release-tag-publish.mjs "${GITHUB_REF_NAME}"
