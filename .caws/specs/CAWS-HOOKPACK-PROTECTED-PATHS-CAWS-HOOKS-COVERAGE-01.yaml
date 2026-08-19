@@ -2,9 +2,11 @@ id: CAWS-HOOKPACK-PROTECTED-PATHS-CAWS-HOOKS-COVERAGE-01
 title: 'protected-paths.sh covers the shared pack''s real .caws/hooks/ install dir and blocks with exit 2'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'shared pack v43 merged (d30af9bb): protected-paths.sh covers .caws/hooks/ and blocks with exit 2; all 4 ACs proven via bats live-execution + jest fingerprint regen, evidence recorded'
 created_at: '2026-08-19T22:41:01.343Z'
-updated_at: '2026-08-19T22:58:55.454Z'
+updated_at: '2026-08-19T22:59:13.822Z'
 blast_radius:
   modules:
     - 'caws-cli shared hook pack (protected-paths guard)'
