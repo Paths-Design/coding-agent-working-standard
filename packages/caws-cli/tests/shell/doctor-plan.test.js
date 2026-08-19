@@ -104,7 +104,12 @@ describe('caws doctor repair-plan', () => {
       subject: 'DOCTOR-PLAN-STALE-001',
       state_class: 'active-spec-unbound',
       source_rule: 'doctor.spec.unbound_active_stale',
-      severity: 'warning',
+      // CAWS-SPEC-ACTIVATION-BINDS-001: the per-spec finding is INFO now. It is
+      // kept (the repair plan needs the per-spec subject + next_command) but
+      // the severity moved to the one aggregate
+      // doctor.spec.unbound_active_backlog finding, so N instances of one
+      // condition can no longer dominate the warning tier.
+      severity: 'info',
       allowed_mutation: null,
       next_command: 'caws worktree create <name> --spec DOCTOR-PLAN-STALE-001',
     });

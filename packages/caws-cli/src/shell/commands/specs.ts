@@ -241,6 +241,15 @@ export interface SpecsCreateOptions extends BaseCommandOptions {
   readonly rollback?: readonly string[];
   readonly security?: readonly string[];
   /**
+   * --activate: create the spec directly in lifecycle_state active
+   * (CAWS-SPEC-ACTIVATION-BINDS-001). The DEFAULT is draft, because `active`
+   * now means "a worktree is bound and the slice is being worked" — a state
+   * creation cannot truthfully assert. Use this only when you are about to
+   * work the spec without a worktree; the normal path is
+   * `caws worktree create <name> --spec <id>`, which activates on bind.
+   */
+  readonly activate?: boolean;
+  /**
    * blast_radius.modules and invariants (Sterling ledger N16). Both are
    * schema-required non-empty, so the renderer had to emit a scaffolded
    * default and no flag could replace it. Repeatable; omitting them leaves the
@@ -677,7 +686,6 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     title,
     mode: mode as ValidMode,
     riskTier: riskTier as 1 | 2 | 3,
-    initialState: 'active',
     now: nowFn,
     actor,
     ...(scopeIn !== undefined && scopeIn.length > 0
@@ -708,6 +716,11 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     ...(opts.invariant !== undefined && opts.invariant.length > 0
       ? { invariants: opts.invariant }
       : {}),
+    // CAWS-SPEC-ACTIVATION-BINDS-001: draft is the default creation state.
+    // `active` now asserts that a worktree is bound and the slice is being
+    // worked, which creation cannot truthfully claim. Opt back in with
+    // --activate.
+    initialState: opts.activate === true ? ('active' as const) : ('draft' as const),
   } as const;
 
   if (opts.plan === true) {
@@ -761,7 +774,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
           title,
           mode,
           risk_tier: riskTier,
-          lifecycle_state: 'active',
+          lifecycle_state: opts.activate === true ? 'active' : 'draft',
           scope_in: scopeIn ?? [],
           acceptance: parsedAcceptance ?? [],
           contracts: parsedContracts ?? [],
@@ -870,7 +883,39 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     return 1;
   }
   const relSpecPath = path.relative(ctx.repoRoot, outcome.path);
-  out(`created ${outcome.id} at ${relSpecPath} (lifecycle_state: active)`);
+  const createdActive = opts.activate === true;
+  // AX PROBE D1: createSpec auto-commits the spec, then the next-steps block
+  // told the operator to `git add && git commit` it — an instruction that
+  // exits 1 with "nothing added to commit" for every compliant caller. The
+  // probed agent ran it verbatim and burned two diagnostic commands working
+  // out what had happened. A remediation the CLI itself refuses is the class
+  // this repo treats as most dangerous, because it teaches agents that the
+  // printed guidance is not worth following. Derive the step from the outcome:
+  // report the sha when the commit landed, and print the manual instruction
+  // ONLY on the refused_dirty path, where it is genuinely the next action.
+  const auditCommit = outcome.data?.audit_commit as
+    | { readonly kind?: string; readonly sha?: string }
+    | undefined;
+  const autoCommitted = auditCommit?.kind === 'committed';
+  const commitSha =
+    typeof auditCommit?.sha === 'string' && auditCommit.sha.length > 0
+      ? auditCommit.sha.slice(0, 8)
+      : undefined;
+  const commitStep = autoCommitted
+    ? `already committed${commitSha !== undefined ? ` as ${commitSha}` : ''} (chore(caws): create ${outcome.id}) — nothing further to stage`
+    : `git add ${relSpecPath} && git commit   (the audit commit did NOT land; commit BEFORE the worktree so its state is clean)`;
+  out(
+    `created ${outcome.id} at ${relSpecPath} (lifecycle_state: ${createdActive ? 'active' : 'draft'})`
+  );
+  if (!createdActive) {
+    // CAWS-SPEC-ACTIVATION-BINDS-001. Say what draft costs and what lifts it,
+    // or the first-timer reads "draft" as "broken" and reaches for --activate,
+    // recreating the condition this default exists to prevent.
+    out(
+      '  draft is the working state for a slice that has not started. It is fully editable, ' +
+        'it does not appear in the active set, and binding a worktree activates it.'
+    );
+  }
   // CAWS-SPECS-CREATE-SCOPE-IN-001: when --scope-in was supplied, scope.in is
   // already populated in the created spec, so the guidance must NOT tell the
   // user to hand-edit the YAML to set it — that instruction is the very
@@ -933,11 +978,9 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     out(
       `  1. caws specs show ${outcome.id}   (re-read the spec; or run \`caws doctor\` to check for drift)`
     );
+    out(`  2. ${commitStep}`);
     out(
-      `  2. git add .caws/specs/${outcome.id}.yaml && git commit   (commit BEFORE the worktree so its audit commit is clean)`
-    );
-    out(
-      `  3. caws worktree create <name> --spec ${outcome.id}   (binds + enforces scope.in)`
+      `  3. caws worktree create <name> --spec ${outcome.id}   (activates the draft, binds, enforces scope.in)`
     );
     out(
       '  Later: caws specs amend-scope ' +
@@ -954,10 +997,10 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     out(`  2. ${fillGuidance}, then inspect with \`caws specs show ` +
         outcome.id +
         '` (or `caws doctor`).');
+    out(`  3. ${commitStep}`);
     out(
-      `  3. git add .caws/specs/${outcome.id}.yaml && git commit   (commit BEFORE the worktree so its audit commit is clean)`
+      `  4. caws worktree create <name> --spec ${outcome.id}   (activates the draft and binds it)`
     );
-    out(`  4. caws worktree create <name> --spec ${outcome.id}`);
     out(
       '  (scope.in is authoritative inside that worktree; base-branch writes are'
     );

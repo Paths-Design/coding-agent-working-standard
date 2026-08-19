@@ -395,7 +395,8 @@ All append hash-chained events through the store's `appendEvent`. There is no ot
 
 ```bash
 caws specs create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --risk-tier <1|2|3>
-                          # creates .caws/specs/<id>.yaml in lifecycle_state: active
+                          # creates .caws/specs/<id>.yaml in lifecycle_state: draft
+                          # (--activate creates it active; worktree create activates on bind)
 caws specs list           # list specs (excludes archived by default)
 caws specs show <id>      # read a spec (resolves through canonical control plane)
 caws specs recover <id>   # recover an archived or retired spec body

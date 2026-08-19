@@ -572,28 +572,212 @@ function patchSpecClearWorktree(source: string): Result<string> {
   return removeTopLevelScalar(source, 'worktree');
 }
 
-function nonActiveSpecBindingError(specId: string, lifecycleState: string): Result<never> {
-  const isDraft = lifecycleState === 'draft';
-  const nextCommand = `caws specs activate ${specId}`;
-  const handoff = isDraft
-    ? `\n\nNext: ${nextCommand}\n` +
-      'Activation runs the draft spec preflight and only proceeds when the spec is complete. ' +
-      'After activation succeeds, re-run the worktree create/bind command.'
-    : '';
+function nonGovernableSpecBindingError(
+  specId: string,
+  lifecycleState: string
+): Result<never> {
+  const alternative =
+    lifecycleState === 'closed'
+      ? `Reopen it first: caws specs reopen ${specId}.`
+      : lifecycleState === 'archived'
+        ? `Restore it first: caws specs restore ${specId} --state draft --apply.`
+        : `Inspect it with caws specs show ${specId}.`;
   return err(
     storeDiagnostic(
       STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-      `Spec "${specId}" is in lifecycle_state "${lifecycleState}"; only active specs can be bound to a worktree.` +
-        handoff,
+      `Spec "${specId}" is in lifecycle_state "${lifecycleState}"; only draft or active specs can be bound to a worktree. ${alternative}`,
       {
         subject: specId,
-        data: {
-          lifecycle_state: lifecycleState,
-          ...(isDraft ? { next_command: nextCommand } : {}),
-        },
+        data: { lifecycle_state: lifecycleState },
       }
     )
   );
+}
+
+// ─── Destroy-time demotion (CAWS-SPEC-ACTIVATION-BINDS-001) ──────────────
+
+/**
+ * Has `branch` moved at all since the worktree was created at `baseSha`?
+ *
+ * Returns `null` when the question cannot be answered — no recorded fork sha
+ * (a pre-existing registry entry), a missing ref, or a git failure. Callers
+ * MUST treat null as "assume work happened": the demotion this gates is only
+ * safe on a provably untouched branch.
+ *
+ * Reachability deliberately is NOT used here. `rev-list --count base..branch`
+ * returns 0 both for a branch that never received a commit AND for one whose
+ * commits have since been merged into base — so a merge teardown would read as
+ * "never started" and demote a spec whose work actually landed. Comparing the
+ * branch tip to its recorded fork point distinguishes the two exactly.
+ */
+function branchMovedSinceFork(
+  repoRoot: string,
+  branch: string,
+  baseSha: string | undefined
+): boolean | null {
+  if (typeof baseSha !== 'string' || baseSha.length === 0) return null;
+  const tip = runGit(['rev-parse', branch], repoRoot);
+  if (!tip.ok) return null;
+  const tipSha = tip.stdout.trim();
+  if (tipSha.length === 0) return null;
+  return tipSha !== baseSha;
+}
+
+/**
+ * When a worktree is destroyed without its branch ever carrying a commit, the
+ * slice never started — so the spec goes back to `draft`, the state binding
+ * promoted it out of. Without this, every abandoned worktree left an
+ * active-and-unbound spec behind: the exact leak this slice exists to close,
+ * reintroduced one destroy at a time.
+ *
+ * The condition is deliberately narrow. `spec_deactivated.v1.json` records the
+ * doctrine that once work has actually started the one-way property of `active`
+ * is load-bearing, so a branch carrying ANY commit — merged, abandoned via
+ * --abandon-unmerged, or indeterminate — leaves the spec active. Demotion makes
+ * no claim about outcomes (that is what `close` is for); it only undoes a
+ * promotion whose premise turned out to be false.
+ */
+function demoteSpecOnUnstartedDestroy(
+  source: string,
+  specId: string,
+  lifecycleState: string,
+  worktreeName: string,
+  branchMoved: boolean | null,
+  actor: EventBody['actor'],
+  nowIso: string
+): Result<BindActivation> {
+  const noWork = lifecycleState === 'active' && branchMoved === false;
+  if (!noWork) return ok({ bytes: source, event: null, activated: false });
+
+  const stateStep = setTopLevelScalar(source, 'lifecycle_state', 'draft');
+  if (!stateStep.ok) return err(stateStep.errors);
+  let patched = stateStep.value;
+
+  if (/^updated_at:/m.test(patched)) {
+    const tsStep = setTopLevelScalar(patched, 'updated_at', `'${nowIso}'`);
+    if (!tsStep.ok) return err(tsStep.errors);
+    patched = tsStep.value;
+  }
+
+  const reparsed = parseAndValidateSpec(patched);
+  if (!isOk(reparsed)) {
+    // Do not fail the destroy over a demotion we cannot make cleanly — the
+    // worktree teardown is the operation the caller asked for. Leave the spec
+    // active; doctor's unbound-active backlog will surface it.
+    return ok({ bytes: source, event: null, activated: false });
+  }
+
+  const event: EventBody = {
+    event: 'spec_deactivated',
+    ts: nowIso,
+    actor,
+    spec_id: specId,
+    data: {
+      previous_lifecycle_state: 'active',
+      reason: `worktree "${worktreeName}" was destroyed with its branch still at the commit it was forked from; the slice never started`,
+      cleared_terminal_fields: [],
+    },
+  } as unknown as EventBody;
+
+  return ok({ bytes: patched, event, activated: true });
+}
+
+// ─── Bind-time activation (CAWS-SPEC-ACTIVATION-BINDS-001) ────────────────
+
+/**
+ * The result of promoting a draft spec at bind time: the spec bytes to write
+ * and, when a promotion actually happened, the `spec_activated` event that
+ * records it. `activated: false` means the spec was already active and the
+ * bytes are returned untouched.
+ */
+interface BindActivation {
+  readonly bytes: string;
+  readonly event: EventBody | null;
+  readonly activated: boolean;
+}
+
+/**
+ * Binding a worktree is what STARTS a slice, so binding is what activates the
+ * spec (CAWS-SPEC-ACTIVATION-BINDS-001). Before this, `specs create` minted
+ * `active` and create/bind refused anything else, so `active` recorded only
+ * that someone had typed `specs create` — it carried no information about
+ * whether work had begun, and repos accumulated dozens of active specs nobody
+ * was working.
+ *
+ * The promotion is computed here and applied by the CALLER inside the same
+ * lifecycle transaction as the registry and spec-binding writes. That ordering
+ * is the invariant: a create/bind that fails at any later step leaves the spec
+ * `draft`, so there is never a `spec_activated` without its `worktree_bound`.
+ *
+ * `caws specs activate` is untouched and remains the standalone promotion; this
+ * is an additional path, not a replacement.
+ *
+ * The emitted payload matches `spec_activated.v1.json` exactly (that schema is
+ * `additionalProperties: false`); the bind context is carried by the
+ * `worktree_created`/`worktree_bound` events appended alongside it, not by an
+ * extra field.
+ */
+function activateSpecOnBind(
+  source: string,
+  specId: string,
+  lifecycleState: string,
+  actor: EventBody['actor'],
+  nowIso: string
+): Result<BindActivation> {
+  if (lifecycleState !== 'draft') {
+    return ok({ bytes: source, event: null, activated: false });
+  }
+
+  const stateStep = setTopLevelScalar(source, 'lifecycle_state', 'active');
+  if (!stateStep.ok) return err(stateStep.errors);
+  let patched = stateStep.value;
+
+  // Mirror activateSpec: the promotion is a real body change, so updated_at
+  // must move with it or staleness checks read the draft's authoring time.
+  if (/^updated_at:/m.test(patched)) {
+    const tsStep = setTopLevelScalar(patched, 'updated_at', `'${nowIso}'`);
+    if (!tsStep.ok) return err(tsStep.errors);
+    patched = tsStep.value;
+  } else {
+    const anchor = /^created_at:/m.test(patched) ? 'created_at' : 'lifecycle_state';
+    const tsStep = insertTopLevelScalarAfter(patched, anchor, 'updated_at', `'${nowIso}'`);
+    if (!tsStep.ok) return err(tsStep.errors);
+    patched = tsStep.value;
+  }
+
+  // Re-validate the promoted body BEFORE it can be written. A draft may carry
+  // scaffolding that only the active-state semantics reject; surfacing that
+  // here means the bind refuses with the spec's own diagnostic instead of
+  // writing an invalid active spec.
+  const reparsed = parseAndValidateSpec(patched);
+  if (!isOk(reparsed)) {
+    return err(
+      reparsed.errors.map((d) =>
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Cannot activate draft spec "${specId}" while binding it: ${d.message}`,
+          {
+            subject: d.subject ?? specId,
+            ...(d.narrowRepair !== undefined ? { narrowRepair: d.narrowRepair } : {}),
+            data: { source_rule: d.rule, attempted_lifecycle_state: 'active' },
+          }
+        )
+      )
+    );
+  }
+
+  const event: EventBody = {
+    event: 'spec_activated',
+    ts: nowIso,
+    actor,
+    spec_id: specId,
+    data: {
+      previous_lifecycle_state: 'draft',
+      lifecycle_state: 'active',
+    },
+  } as unknown as EventBody;
+
+  return ok({ bytes: patched, event, activated: true });
 }
 
 // ─── createWorktree ──────────────────────────────────────────────────────
@@ -617,8 +801,14 @@ export function createWorktree(
 
   const specInfo = loadSpecOrError(cawsDir, input.specId);
   if (!isOk(specInfo)) return err(specInfo.errors);
-  if (specInfo.value.lifecycleState !== 'active') {
-    return nonActiveSpecBindingError(input.specId, specInfo.value.lifecycleState);
+  // CAWS-SPEC-ACTIVATION-BINDS-001: draft is a GOVERNABLE bind state, not a
+  // refusal. A draft bound here is promoted to active inside the transaction
+  // below; only terminal states (closed/archived) are refused.
+  if (
+    specInfo.value.lifecycleState !== 'active' &&
+    specInfo.value.lifecycleState !== 'draft'
+  ) {
+    return nonGovernableSpecBindingError(input.specId, specInfo.value.lifecycleState);
   }
   if (
     specInfo.value.currentWorktree !== undefined &&
@@ -660,6 +850,10 @@ export function createWorktree(
   }
   const branch = input.branch ?? input.name;
   const wtPath = worktreePathFor(cawsDir, input.name);
+  // Fork point, captured BEFORE `git worktree add` creates the branch, so it
+  // is the base tip the branch actually started from.
+  const baseShaResult = runGit(['rev-parse', baseBranch], repoRoot);
+  const baseSha = baseShaResult.ok ? baseShaResult.stdout.trim() : null;
 
   // ─ Git operation: outside lifecycle-transaction ─
   //
@@ -724,7 +918,23 @@ export function createWorktree(
   //   compensation. ─
 
   const now = (input.now ?? (() => new Date()))().toISOString();
-  const newSpecBytes = patchSpecSetWorktree(specInfo.value.source, input.name);
+
+  // CAWS-SPEC-ACTIVATION-BINDS-001: promote a draft to active FIRST, so the
+  // worktree pointer is written onto the already-promoted body and both land
+  // as one set of bytes in one transaction.
+  const activation = activateSpecOnBind(
+    specInfo.value.source,
+    input.specId,
+    specInfo.value.lifecycleState,
+    input.actor,
+    now
+  );
+  if (!isOk(activation)) {
+    rollbackGitWorktree(repoRoot, wtPath);
+    return err(activation.errors);
+  }
+
+  const newSpecBytes = patchSpecSetWorktree(activation.value.bytes, input.name);
   if (!isOk(newSpecBytes)) {
     rollbackGitWorktree(repoRoot, wtPath);
     return err(newSpecBytes.errors);
@@ -776,13 +986,36 @@ export function createWorktree(
     // Augment the entry with descriptive metadata the kernel does NOT
     // model (branch, baseBranch, path). These are governance metadata
     // for merge/destroy decisions, not authority claims.
-    augmentRegistryEntry(cawsDir, input.name, { branch, baseBranch, path: wtPath });
+    augmentRegistryEntry(cawsDir, input.name, {
+      branch,
+      baseBranch,
+      path: wtPath,
+      ...(baseSha !== null ? { baseSha } : {}),
+    });
 
     // Then run the lifecycle transaction for spec YAML + events.
+    // spec_activated goes LAST, and the ordering is load-bearing.
+    //
+    // runLifecycleTransaction rolls back planned FILE writes, but events it
+    // already appended are hash-chained and cannot be un-appended (the
+    // rollback harness classifies this as governance-half-state). So whichever
+    // events precede the failure point survive a rollback. Appending
+    // spec_activated first would leave an audit record asserting an activation
+    // that the rolled-back spec body never received — a lie in the chain.
+    // Appending it last means the only residue a failure can leave is
+    // worktree_created/worktree_bound, which is the pre-existing residue class
+    // doctor already reports as worktree.event_without_control_plane_binding.
+    //
+    // Causally it also reads correctly: created → bound → therefore activated.
+    const events =
+      activation.value.event !== null
+        ? [createdEvent, boundEvent, activation.value.event]
+        : [createdEvent, boundEvent];
+
     return runLifecycleTransaction({
       cawsDir,
       plannedWrites: [{ path: specInfo.value.path, contents: newSpecBytes.value }],
-      events: [createdEvent, boundEvent],
+      events,
     });
   });
 
@@ -820,6 +1053,7 @@ export function createWorktree(
       spec_id: input.specId,
       artifact_links: artifactLinks,
       audit_commit: autoCommitOutcome,
+      spec_activated: activation.value.activated,
     },
   });
 }
@@ -1057,7 +1291,12 @@ function rollbackRegistryEntry(cawsDir: string, name: string): void {
 function augmentRegistryEntry(
   cawsDir: string,
   name: string,
-  extra: { readonly branch?: string; readonly baseBranch?: string; readonly path?: string }
+  extra: {
+    readonly branch?: string;
+    readonly baseBranch?: string;
+    readonly path?: string;
+    readonly baseSha?: string;
+  }
 ): void {
   const p = path.join(cawsDir, 'worktrees.json');
   try {
@@ -1089,8 +1328,14 @@ export function bindWorktreeRepair(
 
   const specInfo = loadSpecOrError(cawsDir, input.specId);
   if (!isOk(specInfo)) return err(specInfo.errors);
-  if (specInfo.value.lifecycleState !== 'active') {
-    return nonActiveSpecBindingError(input.specId, specInfo.value.lifecycleState);
+  // CAWS-SPEC-ACTIVATION-BINDS-001: draft is a GOVERNABLE bind state, not a
+  // refusal. A draft bound here is promoted to active inside the transaction
+  // below; only terminal states (closed/archived) are refused.
+  if (
+    specInfo.value.lifecycleState !== 'active' &&
+    specInfo.value.lifecycleState !== 'draft'
+  ) {
+    return nonGovernableSpecBindingError(input.specId, specInfo.value.lifecycleState);
   }
 
   const registry = loadWorktrees(cawsDir);
@@ -1138,13 +1383,26 @@ export function bindWorktreeRepair(
     }
   }
 
+  const now = (input.now ?? (() => new Date()))().toISOString();
+
+  // CAWS-SPEC-ACTIVATION-BINDS-001: binding is what starts the slice, so a
+  // draft bound here is promoted to active in the same transaction as the
+  // binding writes. See activateSpecOnBind for the atomicity rationale.
+  const activation = activateSpecOnBind(
+    specInfo.value.source,
+    input.specId,
+    specInfo.value.lifecycleState,
+    input.actor,
+    now
+  );
+  if (!isOk(activation)) return err(activation.errors);
+
   // Patch the spec YAML to set worktree: <name>.
-  const newSpecBytes = patchSpecSetWorktree(specInfo.value.source, input.name);
+  const newSpecBytes = patchSpecSetWorktree(activation.value.bytes, input.name);
   if (!isOk(newSpecBytes)) return err(newSpecBytes.errors);
 
   // Apply registry patch to set specId on the entry. We use the
   // kernel bindWorktree to get the right patch shape.
-  const now = (input.now ?? (() => new Date()))().toISOString();
   const txnOutcome = withLifecycleLock(cawsDir, () => {
     const bindResult = kernelBindWorktree(
       specInfo.value.spec,
@@ -1199,6 +1457,11 @@ export function bindWorktreeRepair(
       } as unknown as EventBody);
     }
 
+    // spec_activated LAST — same rationale as createWorktree: an event that
+    // survives a rollback must not claim an activation the spec body did not
+    // receive.
+    if (activation.value.event !== null) events.push(activation.value.event);
+
     return runLifecycleTransaction({
       cawsDir,
       plannedWrites: [{ path: specInfo.value.path, contents: newSpecBytes.value }],
@@ -1221,7 +1484,10 @@ export function bindWorktreeRepair(
     kind: 'success',
     name: input.name,
     action: 'bound',
-    data: { audit_commit: autoCommitOutcome },
+    data: {
+      audit_commit: autoCommitOutcome,
+      spec_activated: activation.value.activated,
+    },
   });
 }
 
@@ -1344,18 +1610,44 @@ export function destroyWorktree(
     removedGitWorktree = true;
   }
 
-  // Clear spec.worktree field if a spec was bound.
+  // Clear spec.worktree field if a spec was bound, and — when the branch never
+  // carried a commit — undo the activation the bind conferred.
   const now = (input.now ?? (() => new Date()))().toISOString();
   const plannedWrites: { path: string; contents: string }[] = [];
+  let demotionEvent: EventBody | null = null;
+  let demotedSpecId: string | null = null;
   if (entry.specId !== undefined) {
     const specInfo = loadSpecOrError(cawsDir, entry.specId);
     if (isOk(specInfo)) {
       const newSpecBytes = patchSpecClearWorktree(specInfo.value.source);
-      if (isOk(newSpecBytes) && newSpecBytes.value !== specInfo.value.source) {
-        plannedWrites.push({
-          path: specInfo.value.path,
-          contents: newSpecBytes.value,
-        });
+      if (isOk(newSpecBytes)) {
+        // An entry with no recorded fork sha (created before baseSha existed)
+        // reads as indeterminate, so the conservative branch is taken and the
+        // spec stays active.
+        const branchMoved =
+          entry.branch !== undefined
+            ? branchMovedSinceFork(repoRoot, entry.branch, entry.baseSha)
+            : null;
+        const demotion = demoteSpecOnUnstartedDestroy(
+          newSpecBytes.value,
+          entry.specId,
+          specInfo.value.lifecycleState,
+          input.name,
+          branchMoved,
+          input.actor,
+          now
+        );
+        const finalBytes = isOk(demotion) ? demotion.value.bytes : newSpecBytes.value;
+        if (isOk(demotion) && demotion.value.event !== null) {
+          demotionEvent = demotion.value.event;
+          demotedSpecId = entry.specId;
+        }
+        if (finalBytes !== specInfo.value.source) {
+          plannedWrites.push({
+            path: specInfo.value.path,
+            contents: finalBytes,
+          });
+        }
       }
     }
   }
@@ -1379,10 +1671,14 @@ export function destroyWorktree(
   const txnOutcome = withLifecycleLock(cawsDir, () => {
     // Remove the registry entry first.
     rollbackRegistryEntry(cawsDir, input.name); // misnomer — also used here as the canonical remover
+    // spec_deactivated LAST, for the same reason spec_activated is last in
+    // create/bind: a rolled-back append must not leave a lifecycle claim the
+    // spec body never received.
+    const events = demotionEvent !== null ? [event, demotionEvent] : [event];
     return runLifecycleTransaction({
       cawsDir,
       plannedWrites,
-      events: [event],
+      events,
     });
   });
 
@@ -1404,6 +1700,7 @@ export function destroyWorktree(
     data: {
       removed_git_worktree: removedGitWorktree,
       audit_commit: autoCommitOutcome,
+      ...(demotedSpecId !== null ? { demoted_spec_id: demotedSpecId } : {}),
     },
   });
 }
