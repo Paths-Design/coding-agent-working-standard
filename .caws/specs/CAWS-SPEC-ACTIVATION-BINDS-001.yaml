@@ -124,3 +124,11 @@ evidence:
     command: npx jest tests/kernel/unit/doctor-unbound-active-backlog.test.ts
     exit_code: 0
     commit_sha: e2c64172
+  - criterion_id: A5
+    status: pass
+    evidence_ref: packages/caws-cli/tests/shell/scope-authority-context-handoff.test.js
+    recorded_at: "2026-08-19T16:17:12.510Z"
+    test_nodeid: only the specs whose scope.in admits the path are offered when one does
+    command: npx jest tests/shell/scope-authority-context-handoff.test.js
+    exit_code: 0
+    commit_sha: cfe60b2e
