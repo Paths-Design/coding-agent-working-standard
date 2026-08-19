@@ -1,0 +1,60 @@
+id: CAWS-GIT-SPAWN-COST-001
+title: 'Resolve the git binary once; build test repos by copy, not by spawn'
+risk_tier: 2
+mode: refactor
+lifecycle_state: active
+created_at: '2026-08-19T16:21:09.392Z'
+updated_at: '2026-08-19T16:21:09.392Z'
+blast_radius:
+  modules:
+    - 'caws-cli/store (git invocation)'
+    - 'caws-cli/tests (repo factory)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/git-binary.ts'
+    - 'packages/caws-cli/src/store/repo-root.ts'
+    - 'packages/caws-cli/src/store/index.ts'
+    - 'packages/caws-cli/src/store/specs-writer.ts'
+    - 'packages/caws-cli/src/store/worktree-artifacts.ts'
+    - 'packages/caws-cli/src/shell/commands/scope.ts'
+    - 'packages/caws-cli/src/shell/commands/worktree.ts'
+    - 'packages/caws-cli/src/shell/commands/init.ts'
+    - 'packages/caws-cli/src/shell/binding/resolve-binding.ts'
+    - 'packages/caws-cli/src/shell/gates/local-evaluators/diff-helpers.ts'
+    - 'packages/caws-cli/tests/helpers/git-repo-factory.js'
+    - 'packages/caws-cli/tests/store/git-binary.test.js'
+    - 'packages/caws-cli/tests/store/git-repo-factory-parity.test.js'
+    - 'packages/caws-cli/CHANGELOG.md'
+  out: []
+invariants:
+  - 'Resolution NEVER changes which git runs: the resolver walks the same PATH in the same order execvp would, and falls back to the bare name ''git'' when no entry is executable, so behavior is identical on any machine where resolution fails.'
+  - 'The resolved path is cached per PROCESS, never across processes. No cache file, no persisted state — a stale cached binary path is the one failure mode this must not create.'
+  - 'A template-copied test repo is behaviorally identical to a git-init one: same branch, clean status, and rev-parse --show-toplevel resolving to the copy''s own path, not the template''s.'
+  - 'CAWS_GIT_BINARY, when set, wins over PATH resolution and is used verbatim, so a caller can pin the binary without editing PATH.'
+acceptance:
+  - id: A1
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'GIVEN a process that invokes git more than once WHEN the second invocation runs THEN the binary path is resolved from cache with no filesystem probe and no subprocess, and the git actually executed is the same one bare ''git'' would have selected'
+  - id: A2
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'GIVEN PATH contains no executable named git WHEN the resolver runs THEN it returns the bare name ''git'' and every call site behaves exactly as it does today'
+  - id: A3
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'GIVEN CAWS_GIT_BINARY is set WHEN any call site invokes git THEN that path is used verbatim in preference to PATH resolution'
+  - id: A4
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'GIVEN the test repo factory WHEN a caller requests a repo THEN it is materialized by copying a per-worker template built once, and is indistinguishable from a git-init repo in branch, status, and toplevel resolution'
+  - id: A5
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'GIVEN the full jest suite WHEN it runs with no PATH manipulation by the caller THEN wall time is materially below the pre-change baseline and the pass/fail set is identical'
+non_functional: {}
+contracts:
+  - name: 'git-invocation-parity'
+    type: behavior
