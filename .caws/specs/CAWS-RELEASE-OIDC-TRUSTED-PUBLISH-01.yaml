@@ -35,3 +35,8 @@ evidence:
     status: pass
     evidence_ref: "env -u NPM_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL node scripts/release-tag-publish.mjs caws-cli-v12.0.0: all pre-publish phases pass (validate/build/smoke chain), then publish.no_auth refusal, node exit 21 (verified via zsh pipestatus, not the pipe's exit)"
     recorded_at: "2026-08-19T20:43:16.427Z"
+  - criterion_id: A1
+    status: waived
+    evidence_ref: "Provable only by the live caws-cli-v12.0.0 tag push on GitHub Actions (OIDC exchange requires the real id-token endpoint + the npm-side trusted publisher). Fails safe: any publish failure rolls the tag back per the crossing-point contract. The live Release run is the proof; workflow YAML validated, npm>=11.5.1 step present, no token injected, id-token: write granted."
+    waiver_reason: "Provable only by the live caws-cli-v12.0.0 tag push on GitHub Actions (OIDC exchange requires the real id-token endpoint + the npm-side trusted publisher). Fails safe: any publish failure rolls the tag back per the crossing-point contract. The live Release run is the proof; workflow YAML validated, npm>=11.5.1 step present, no token injected, id-token: write granted."
+    recorded_at: "2026-08-19T20:43:16.804Z"
