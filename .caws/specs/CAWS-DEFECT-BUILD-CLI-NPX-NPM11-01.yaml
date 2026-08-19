@@ -29,3 +29,8 @@ acceptance:
     then: 'no npm registry fetch is attempted for tsconfig.vnext.json or any tool'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "node scripts/build-cli.js in wt-build-npx-npm11: 'caws-cli build complete (v11 allowlist)', dist/index.js + dist/kernel/index.js emitted; tsc executed via require.resolve('typescript/bin/tsc') + process.execPath"
+    recorded_at: "2026-08-19T20:47:20.021Z"
