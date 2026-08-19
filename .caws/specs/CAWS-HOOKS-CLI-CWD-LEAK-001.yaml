@@ -36,3 +36,8 @@ non_functional: {}
 contracts:
   - name: 'caws-run-cli'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "npx bats tests/hooks/bats/agent-surface.bats — 'caws_run_cli invokes the binary from CAWS_PROJECT_DIR, not the inherited cwd' (3x repeated run, green); end-to-end verified by re-running reprieve.bats and confirming canonical .caws/leases count stayed at 49 with zero new sess-a*/bats_* entries (previously visibly polluted)"
+    recorded_at: "2026-08-19T19:55:46.426Z"
