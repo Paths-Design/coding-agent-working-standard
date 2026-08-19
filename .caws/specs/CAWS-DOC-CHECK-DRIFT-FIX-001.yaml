@@ -57,3 +57,8 @@ acceptance:
     then: 'every finding from the audit is corrected and re-verified against the live repo state'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "8 commits (54fef384..090b61d5) fixing every finding from the /doc-check audit across 35+ files; re-verified via grep sweep for remaining caws-kernel/--risk-tier-T/--title patterns post-fix"
+    recorded_at: "2026-08-19T19:35:21.565Z"
