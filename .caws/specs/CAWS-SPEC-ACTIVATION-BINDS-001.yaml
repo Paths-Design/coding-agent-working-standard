@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-activation-binds
 created_at: '2026-08-18T22:37:59.400Z'
-updated_at: '2026-08-19T15:44:35.005Z'
+updated_at: '2026-08-19T15:58:45.496Z'
 blast_radius:
   modules:
     - 'caws-cli/store (worktrees-writer, specs-writer)'
@@ -50,6 +50,8 @@ scope:
     - packages/caws-cli/tests/shell/status-binding-legibility.test.js
     - packages/caws-cli/tests/shell/ax-probe-remediation-fixes.test.js
     - packages/caws-cli/src/kernel/scope/index.ts
+    - docs/api/schema.md
+    - docs/agents/scope-discipline.md
   out: []
   support:
     - README.md
