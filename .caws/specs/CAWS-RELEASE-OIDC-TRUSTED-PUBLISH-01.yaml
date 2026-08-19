@@ -2,9 +2,10 @@ id: CAWS-RELEASE-OIDC-TRUSTED-PUBLISH-01
 title: 'release pipeline publishes by token, preempting the package''s configured OIDC trusted publisher'
 risk_tier: 3
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-release-oidc
 created_at: '2026-08-19T20:38:20.112Z'
-updated_at: '2026-08-19T20:38:20.112Z'
+updated_at: '2026-08-19T20:38:20.778Z'
 blast_radius:
   modules:
     - 'release pipeline (workflow + tag-publish script)'
