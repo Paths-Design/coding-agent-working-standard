@@ -77,3 +77,11 @@ evidence:
     command: npx jest tests/store/git-binary.test.js
     exit_code: 0
     commit_sha: "2f3eed7e"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: packages/caws-cli/tests/store/git-binary.test.js
+    recorded_at: "2026-08-19T16:57:54.200Z"
+    test_nodeid: "CAWS_GIT_BINARY is used verbatim, in preference to PATH"
+    command: npx jest tests/store/git-binary.test.js
+    exit_code: 0
+    commit_sha: "2f3eed7e"
