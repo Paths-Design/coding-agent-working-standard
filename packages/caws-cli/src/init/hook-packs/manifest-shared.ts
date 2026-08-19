@@ -257,7 +257,19 @@ import type { HookPackV1 } from './types';
 // <sessionDir>/agents/main/wire.jsonl (kimi's hook payload carries no
 // transcript_path). Row shapes verified live against a real 2542-row kimi
 // wire log (protocol 1.4, kimi-code 0.31.x).
-export const SHARED_PACK_VERSION = 39;
+//
+// Version 40: CAWS-GUARD-COMMIT-DELETES-UNNAMED-001. classify_command.py
+// stops auto-admitting a bare `git commit` on the false premise that a
+// plain commit is "not destructive": with no pathspec it commits the
+// ENTIRE index, and a stale/foreign index (failed `git revert -n`,
+// cross-worktree sweep) deletes tracked content under an unrelated
+// message. A new commit_deletions pipeline stage inspects staged state at
+// classify time — staged deletions (or unreadable staged state: fail
+// closed) → ask with source=commit_deletions/enforcement=confirm;
+// block-dangerous.sh refuses that command with the path-scoped remediation
+// (`git commit -m <msg> -- <paths>`) WITHOUT arming the session latch.
+// Explicit-pathspec, --dry-run, and clean-index bare commits stay admitted.
+export const SHARED_PACK_VERSION = 40;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.

@@ -12,12 +12,46 @@ Lineage anchors:
   E32 scope-amend tripped its latch  -> spec-only cherry-pick carveout (allow)
 """
 
+import os
+import subprocess
+
 import pytest
 
 
 def decision_of(result):
     """classify_command returns (decision, reason, source, enforcement)."""
     return result[0]
+
+
+def _git(repo, *args):
+    """Run git in a test repo with global/system config isolated away."""
+    env = {
+        **os.environ,
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null",
+    }
+    return subprocess.run(
+        ["git", *args], cwd=repo, env=env, capture_output=True, text=True, check=True
+    )
+
+
+@pytest.fixture
+def commit_repo(tmp_path):
+    """A real git repo with one committed file (tracked.txt) and a clean index.
+
+    The commit-deletions guard inspects live staged state, so its tests need a
+    repo whose index they control — not the classify fixture's bare temp dir.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.name", "CAWS Test")
+    _git(repo, "config", "user.email", "test@caws.invalid")
+    _git(repo, "config", "commit.gpgsign", "false")
+    (repo / "tracked.txt").write_text("content\n")
+    _git(repo, "add", "tracked.txt")
+    _git(repo, "commit", "-q", "-m", "add tracked file")
+    return repo
 
 
 # ---------------------------------------------------------------------------
@@ -47,9 +81,14 @@ class TestGitInitFamily:
         # The classifier must not be a blunt "all git is dangerous" instrument.
         assert decision_of(classify("git status")) == "allow"
 
-    def test_git_add_and_commit_are_allowed(self, classify):
+    def test_git_add_and_commit_are_allowed(self, classify, commit_repo):
+        # A bare commit over a CLEAN index in a real repo is ordinary work —
+        # the classifier must not become a blunt "all commits are dangerous"
+        # instrument. (A bare commit whose staged state cannot be seen, or
+        # whose index stages deletions, is governed by the commit-deletions
+        # guard — TestCommitDeletionsGuard below.)
         assert decision_of(classify("git add -A")) == "allow"
-        assert decision_of(classify("git commit -m 'work'")) == "allow"
+        assert decision_of(classify("git commit -m 'work'", cwd=commit_repo)) == "allow"
 
     def test_branch_creation_checkout_b_is_allowed(self, classify):
         assert decision_of(classify("git checkout -b feature/x")) == "allow"
@@ -309,6 +348,124 @@ class TestPureHelpers:
         joined = " ".join(segs)
         assert "a" in joined and "b" in joined and "c" in joined and "d" in joined
         assert len(segs) >= 4
+
+
+# ---------------------------------------------------------------------------
+# CAWS-GUARD-COMMIT-DELETES-UNNAMED-001 — bare-commit staged-deletions guard
+# ---------------------------------------------------------------------------
+
+class TestCommitDeletionsGuard:
+    """A bare `git commit` (no pathspec) commits the ENTIRE index. Under a
+    stale or foreign index that deletes tracked content under an unrelated
+    message — so it must not be auto-admitted when the staged set contains
+    deletions of tracked files, and never auto-admitted when the staged set
+    cannot be seen at all."""
+
+    def test_bare_commit_with_staged_deletion_asks_naming_count_A1(self, classify, commit_repo):
+        _git(commit_repo, "rm", "-q", "tracked.txt")  # stages a deletion
+        decision, reason, source, enforcement = classify("git commit -m 'sweep'", cwd=commit_repo)
+        assert decision == "ask", (decision, reason)
+        # The reason names the deletion count, the swept path, and the
+        # path-scoped remediation the agent can apply itself.
+        assert "1 deletion" in reason
+        assert "tracked.txt" in reason
+        assert "-- <paths>" in reason
+        assert source == "commit_deletions"
+        assert enforcement == "confirm"
+
+    def test_pathspec_commit_with_staged_deletion_is_admitted_A2(self, classify, commit_repo):
+        _git(commit_repo, "rm", "-q", "tracked.txt")
+        decision, reason, _, _ = classify(
+            "git commit -m 'remove tracked' -- tracked.txt", cwd=commit_repo
+        )
+        # Naming the paths after `--` IS the author asserting intent — the
+        # same discipline CAWS's own autoCommit uses. Stays admitted.
+        assert decision == "allow", (decision, reason)
+
+    def test_bare_commit_with_only_additions_is_admitted_A3(self, classify, commit_repo):
+        (commit_repo / "new.txt").write_text("x\n")
+        _git(commit_repo, "add", "new.txt")
+        decision, reason, _, _ = classify("git commit -m 'add new'", cwd=commit_repo)
+        # Additions/modifications only — ordinary work must not be slowed.
+        assert decision == "allow", (decision, reason)
+
+    def test_unreadable_staged_state_is_not_auto_admitted_A4(self, classify):
+        # The classify fixture's default cwd is a temp dir that is NOT a git
+        # repo: the guard cannot see what the commit would sweep — fail
+        # closed (ask), never a silent allow.
+        decision, reason, source, enforcement = classify("git commit -m 'work'")
+        assert decision == "ask", (decision, reason)
+        assert "could not be verified" in reason
+        assert source == "commit_deletions"
+        assert enforcement == "confirm"
+
+    def test_commit_dash_a_sees_working_tree_deletion(self, classify, commit_repo):
+        # -a stages tracked working-tree deletions at commit time: an rm'd
+        # but UNSTAGED tracked file must still be seen by the guard.
+        (commit_repo / "tracked.txt").unlink()
+        decision, reason, _, _ = classify("git commit -am 'sweep'", cwd=commit_repo)
+        assert decision == "ask", (decision, reason)
+        assert "tracked.txt" in reason
+
+    def test_bare_commit_ignores_unstaged_deletion(self, classify, commit_repo):
+        # Without -a an unstaged working-tree deletion is NOT committed by a
+        # bare commit (the index is clean) — the guard must not ask about it.
+        (commit_repo / "tracked.txt").unlink()
+        decision, reason, _, _ = classify("git commit -m 'unrelated'", cwd=commit_repo)
+        assert decision == "allow", (decision, reason)
+
+    def test_bundled_short_flags_dash_ma_is_message_not_all(self, classify_module):
+        # `-ma` is `-m a` (the message "a"), NOT `-m` + `-a`: in a bundle the
+        # first value-taking short opt swallows the rest of the token.
+        assert classify_module._commit_stages_all(["-ma"]) is False
+        assert classify_module._commit_stages_all(["-am"]) is True
+        assert classify_module._commit_stages_all(["--all"]) is True
+        assert classify_module._commit_stages_all(["-m", "all deletions"]) is False
+
+    def test_dry_run_commit_is_not_gated(self, classify, commit_repo):
+        _git(commit_repo, "rm", "-q", "tracked.txt")
+        decision, reason, _, _ = classify("git commit --dry-run", cwd=commit_repo)
+        # --dry-run mutates nothing; refusing it would only add friction.
+        assert decision == "allow", (decision, reason)
+
+    def test_redirected_git_env_fails_closed(self, classify, commit_repo):
+        # GIT_INDEX_FILE points the commit at an index the guard cannot see
+        # from cwd — it must not auto-admit on the visible (clean) one.
+        decision, reason, _, _ = classify(
+            "GIT_INDEX_FILE=/elsewhere/index git commit -m 'x'", cwd=commit_repo
+        )
+        assert decision == "ask", (decision, reason)
+        assert "could not be verified" in reason
+
+    def test_dash_C_commit_checks_the_named_repo(self, classify, commit_repo):
+        # `git -C <repo> commit` sweeps <repo>'s index even though the
+        # classification cwd is elsewhere — the guard must follow -C.
+        _git(commit_repo, "rm", "-q", "tracked.txt")
+        decision, reason, _, _ = classify(f"git -C {commit_repo} commit -m 'sweep'")
+        assert decision == "ask", (decision, reason)
+        assert "tracked.txt" in reason
+
+    def test_amend_still_falls_to_the_amend_ask(self, classify, commit_repo):
+        # --amend stays governed by its existing path; the deletions guard
+        # must not shadow the history-rewrite reason with a deletions reason.
+        _git(commit_repo, "rm", "-q", "tracked.txt")
+        decision, reason, _, _ = classify("git commit --amend -m 'x'", cwd=commit_repo)
+        assert decision == "ask"
+        assert "amend" in reason.lower()
+
+    def test_incident_shape_add_then_bare_commit_over_stale_index_asks(self, classify, commit_repo):
+        # The incident shape: a failed `git revert -n` left staged deletions
+        # in the index; the user then ran `git add <one-file> && git commit
+        # -m <one-line message>`, sweeping 40 files. At classify time the
+        # stale deletions are ALREADY staged — the guard must catch the
+        # commit segment of the compound command.
+        (commit_repo / "mine.txt").write_text("my work\n")
+        _git(commit_repo, "rm", "-q", "tracked.txt")  # the stale/foreign deletion
+        decision, reason, _, _ = classify(
+            "git add mine.txt && git commit -m 'fix(hooks): tweak'", cwd=commit_repo
+        )
+        assert decision == "ask", (decision, reason)
+        assert "tracked.txt" in reason
 
 
 # ---------------------------------------------------------------------------
