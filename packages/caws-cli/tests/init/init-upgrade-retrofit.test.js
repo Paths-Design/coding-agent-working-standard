@@ -340,7 +340,9 @@ describe('CAWS-HOOKPACK-UPGRADE-RETROFIT-001', () => {
         encoding: 'utf8',
       }
     );
-    expect(blocked.status).toBe(1);
+    // Exit 2, not 1: the Claude Code PreToolUse protocol treats ONLY exit 2
+    // as a block (CAWS-HOOKPACK-PROTECTED-PATHS-CAWS-HOOKS-COVERAGE-01).
+    expect(blocked.status).toBe(2);
     expect(blocked.stderr).toContain('protected');
 
     // And the sanctioned flow on the same repo runs clean end-to-end.
