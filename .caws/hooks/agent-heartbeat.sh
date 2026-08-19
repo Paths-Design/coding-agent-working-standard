@@ -1,11 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-<<<<<<< HEAD
 # hook_pack_version: 37
-=======
-# hook_pack_version: 1
->>>>>>> parent of 2a8eddf5 (chore(caws): create CAWS-HOOKS-AGENT-PID-PROGRESSIVE-REAP-001)
 # caws_min_major: 11
 # lineage_refs: 19
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
