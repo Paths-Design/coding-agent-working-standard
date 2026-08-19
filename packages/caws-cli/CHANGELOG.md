@@ -32,7 +32,10 @@
   and the renderer truncated to five, so with a large active set the spec that
   actually claims the path was routinely not shown. Candidates that claim the
   path now come first and carry the matching `scope.in` entry; when none claim
-  it, the full set is returned with a note saying so.
+  it, the full set is returned with a note saying so. "Claims the path" is
+  decided by the scope kernel's own `matchGlob`, the same function
+  `caws scope check` decides admission with, so the ranking and the enforcement
+  cannot disagree about which spec owns a path.
 
 ### Added
 
