@@ -34,3 +34,7 @@ evidence:
     status: pass
     evidence_ref: "node scripts/build-cli.js in wt-build-npx-npm11: 'caws-cli build complete (v11 allowlist)', dist/index.js + dist/kernel/index.js emitted; tsc executed via require.resolve('typescript/bin/tsc') + process.execPath"
     recorded_at: "2026-08-19T20:47:20.021Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "npx is no longer invoked anywhere in build-cli.js (grep: zero npx references); no registry fetch is possible by construction — the compiler runs as process.execPath + resolved file path. npm-11 CI failure mode (GET registry/tsconfig.vnext.json) eliminated at the call-shape level"
+    recorded_at: "2026-08-19T20:47:20.405Z"
