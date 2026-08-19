@@ -27,3 +27,8 @@ acceptance:
     then: 'it packs only the CLI tarball, installs it, runs the smoke checks, and exits 0'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "node scripts/fresh-install-smoke.mjs from the fix worktree: PASS 16.7s, chains events-migration-smoke (PASS 6.5s) and specs-migration-smoke (PASS 4.6s), exit 0. Pre-fix control: same invocation died ENOENT reading packages/caws-kernel/package.json before the first pack. Kernel probes redirected to dist/kernel inside the installed tarball; tarball-contents assertions moved to dist/kernel/{schemas/events,evidence,spec} paths."
+    recorded_at: "2026-08-19T18:57:40.335Z"
