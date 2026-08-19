@@ -1,0 +1,38 @@
+id: CAWS-DEFECT-CLAIM-ORACLE-CWD-RELATIVE-PATH-01
+title: 'Claim oracle hard-blocks a worktree owner from its own file when the path is cwd-relative'
+risk_tier: 2
+mode: fix
+lifecycle_state: active
+created_at: '2026-08-19T00:59:18.669Z'
+updated_at: '2026-08-19T00:59:18.669Z'
+blast_radius:
+  modules:
+    - 'caws-cli/templates/hook-packs/shared (worktree-claim-oracle.cjs, bash-write-guard.sh)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/worktree-claim-oracle.cjs'
+    - 'packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh'
+  out: []
+invariants:
+  - 'The oracle''s answer must not depend on how the caller SPELLS the path. The same file, same session, same owner must produce the same outcome whether the path is given cwd-relative, canonical-absolute, or worktree-absolute.'
+  - 'The fix must not weaken block_claimed for a genuine canonical-root write by a non-owner. A canonical-checkout session writing a path claimed by someone else''s worktree must still block, and the repair must carry a regression control proving that.'
+  - 'Fail closed on ambiguity. If the operating session''s cwd cannot be resolved, the oracle must NOT assume worktree-relative — an unresolvable cwd is ask/error_fail_closed, never a silent pass.'
+acceptance:
+  - id: A1
+    given: 'session S owns worktree W and the path P is in the bound spec''s scope.in'
+    when: 'the oracle is invoked with P spelled cwd-relative while S''s cwd is inside W'
+    then: 'the outcome is pass (owner-self), identical to the outcome for the worktree-absolute spelling of P'
+  - id: A2
+    given: 'a canonical-checkout session that does NOT own worktree W'
+    when: 'it targets a path claimed by W''s bound spec scope.in'
+    then: 'the outcome is still block_claimed — the widening must not disarm the cross-lane guard'
+  - id: A3
+    given: 'the operating session''s cwd cannot be determined'
+    when: 'the oracle classifies a relative path'
+    then: 'it emits ask_uncertain or error_fail_closed rather than assuming the path is worktree-relative'
+non_functional: {}
+contracts:
+  - name: 'claim-oracle-path-classification'
+    type: behavior
