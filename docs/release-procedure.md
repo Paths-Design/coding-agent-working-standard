@@ -54,10 +54,11 @@ Refused tags are **DELETED from origin** via `gh api`:
   **Existing historical `v*` tags on origin are NOT rewritten** — they
   pre-date this slice and remain as audit record. Only newly-pushed bare-v
   tags trigger refusal-and-deletion.
-- **`caws-kernel-v*` tags**: refused and deleted with "kernel CI publish is
-  not enabled in v1." The prefix is RESERVED until a future kernel CI publish
-  slice activates it. Kernel still publishes manually (see
-  [Publishing caws-kernel](#publishing-caws-kernel)).
+- **`caws-kernel-v*` tags**: refused and deleted. The kernel is absorbed into
+  the CLI (CAWS-ABSORB-KERNEL-01) and ships inside the caws-cli tarball at
+  `dist/kernel/`; there is no separate kernel package to publish, so this
+  prefix has nothing to trigger (see
+  [The absorbed kernel](#the-absorbed-kernel)).
 - **Malformed `caws-cli-v*` tags** (e.g., `caws-cli-vabc`): refused and
   deleted with a version-format error.
 
@@ -230,89 +231,64 @@ gh release create caws-cli-v11.1.5 \
   --verify-tag
 ```
 
-## Publishing caws-kernel
+## The absorbed kernel
 
-**Manual only in v1.** Tag-driven CI publish for `caws-kernel` is a
-follow-up slice. Until that lands, publish kernel by hand:
+`@paths.design/caws-kernel` is no longer a separate package
+(CAWS-ABSORB-KERNEL-01). The kernel ships inside the CLI tarball at
+`dist/kernel/`; the CLI declares no kernel dependency, and the standalone
+npm package is frozen at its last release. There is nothing to publish,
+no coupled-release ordering, and no cross-package version-skew footgun —
+the failure class where `npm install <cli-tarball>` resolved a
+registry-stale kernel missing newly-coupled symbols is structurally gone,
+because one tarball carries both surfaces.
 
-```bash
-cd packages/caws-kernel
-# Update package.json version and CHANGELOG.md (if maintained)
-npm publish --access public --provenance
-```
+What remains of that old discipline is the single-tarball smoke: the
+`fresh-install-smoke.mjs` chain (run as release step 5) packs the CLI,
+asserts the absorbed kernel's load-bearing files are in the tarball
+(`dist/kernel/index.js`, `dist/kernel/schemas/events/`,
+`dist/kernel/spec/`), installs into a scratch project, and probe-asserts
+the installed kernel entry exports the symbols the CLI imports. Installed
+artifacts are the proof surface — source tests can pass while installed
+users crash.
 
-The `NPM_TOKEN` you used to publish v1.1.0 and v1.1.1 still works (bypass-2FA
-token created during the cascade).
+## Publish authentication: OIDC trusted publishing
 
-## Coupled-release ordering
+Publishing authenticates via **npm trusted publishing (OIDC)** — no npm
+token exists in the pipeline. First release on this path: `12.0.0`
+(auth_mode `oidc-trusted-publisher`, signed provenance). Three things make
+it work, and all three must hold:
 
-For a coupled release where caws-cli depends on a new caws-kernel version:
+1. **The trusted publisher configured on npmjs.com** (package →
+   Settings → Trusted publisher) must match this repo exactly; every
+   field is case-sensitive: organization/user `Paths-Design`, repository
+   `coding-agent-working-standard`, workflow filename `release.yml` (the
+   filename with `.yml`, not the display name), environment blank or
+   exactly `Release` (the job runs in `environment: Release`).
+2. **`permissions: id-token: write`** in the workflow (also used by
+   provenance signing).
+3. **npm ≥ 11.5.1 on the runner.** Node 22 bundles npm 10.x, which
+   silently never attempts the OIDC exchange — the workflow upgrades npm
+   explicitly before installing.
 
-1. Publish kernel manually first (see above). Verify registry.
-2. Update `packages/caws-cli/package.json` to depend on the new kernel
-   version (and any other necessary code changes).
-3. Bump caws-cli version, update its CHANGELOG.
-4. Commit. Tag `caws-cli-vX.Y.Z`. Push tag.
+Two failure shapes worth knowing (both observed live in the 12.0.0
+release):
 
-If the cli publish fails post-publish-of-kernel, **kernel is not rolled
-back**. Coupled-release atomicity is "ordered, observable, repairable" —
-not all-or-nothing. npm does not provide cross-package transactionality.
+- **A configured auth token preempts the OIDC exchange** — even an
+  invalid one. That includes `NPM_TOKEN`/`NODE_AUTH_TOKEN` env vars and
+  the `.npmrc` authToken line that `actions/setup-node`'s `registry-url`
+  input writes. The workflow intentionally sets none of these. npm is
+  also restricting bypass-2FA tokens for direct publishing, so the token
+  path is being sunset registry-wide.
+- **A rejected exchange surfaces as a misleading generic `E404`/
+  `ENEEDAUTH`** rather than a trusted-publishing diagnostic
+  (npm/cli#9088). If publish fails with either, check the trusted
+  publisher's match fields before suspecting the pipeline.
 
-### Footgun: registry-stale kernel resolution
-
-Any CLI release depending on **newly added kernel symbols** must prove
-the matching kernel tarball is the one npm will install — not a
-registry-stale kernel that happens to satisfy the semver range but
-predates the new symbols. Caught live during
-`MULTI-AGENT-ACTIVITY-REGISTRY-001` commit 6: the CLI's
-`agents register` shell command imports `registerAgentSession` from
-`@paths.design/caws-kernel`, and the CLI's dep range
-(`"^1.0.0"`) is satisfied by the registry's `1.1.1` — but that
-registry kernel was published **before** the lease symbols were added.
-`npm install <cli-tarball>` resolved kernel from the registry and the
-CLI crashed at runtime with
-`(0, caws_kernel_1.registerAgentSession) is not a function`.
-
-Two enforcement layers, in order of strength:
-
-1. **Pre-publish (preferred):** the
-   `packages/caws-cli/scripts/fresh-install-smoke.mjs` script (run by
-   `prepublishOnly`) packs BOTH the local kernel tarball AND the local
-   cli tarball and installs both into a scratch project. It then
-   probe-asserts that the installed kernel exports the symbols the CLI
-   imports (currently `registerAgentSession`; extend the probe as new
-   coupled symbols land). If npm resolution picks up a registry copy
-   instead of the local tarball, this assertion fails fast with a
-   structured diagnostic naming the missing symbol and the version
-   gap. This catches the footgun before any tag is pushed.
-
-2. **Post-publish (release-time):** within ~5 minutes of publishing
-   the kernel, run the smoke against the registry copy
-   (not the local tarball) to confirm `npm install
-   @paths.design/caws-cli@<new>` actually resolves
-   `@paths.design/caws-kernel@<new>`. If a downstream consumer's lock
-   file pins an older kernel, the same `not a function` failure
-   reappears for them on `npm ci`.
-
-The doctrinal rule: a CLI release that depends on coupled kernel
-symbols is incomplete until either the prepublishOnly smoke or a
-post-publish equivalent has run against installed artifacts (NOT
-against source). Source tests can pass while installed users crash.
-
-## What to do if the bypass-2FA NPM_TOKEN expires or is revoked
-
-The token is stored as `NPM_TOKEN` in the `Release` GitHub environment.
-Created 2025-10-01, last refreshed 2026-05-20.
-
-To rotate:
-1. On npmjs.com, generate a new granular token with:
-   - Permission: **Read and write** for `@paths.design/caws-cli` (and `caws-kernel`)
-   - **Bypass 2FA for write actions: enabled** (required for non-interactive publish)
-2. In the GitHub repo settings → Environments → Release → update `NPM_TOKEN`.
-3. No workflow change needed.
-
-If you migrate to OIDC trusted-publisher (future follow-up slice), the
-token can be retired entirely. That migration is out of scope for v1.
+`scripts/release-tag-publish.mjs` resolves the auth mode explicitly and
+logs it (`publish.auth_mode`): a provided `NPM_TOKEN` is honored (local /
+emergency use — it preempts OIDC), the OIDC path engages when
+`ACTIONS_ID_TOKEN_REQUEST_URL` is present, and with neither the publish
+refuses (`publish.no_auth`) and rolls the tag back.
 
 ## Related specs
 
