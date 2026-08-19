@@ -100,3 +100,11 @@ evidence:
     command: npx jest tests/shell/worktree-draft-bind-handoff.test.js
     exit_code: 0
     commit_sha: b078ddbc
+  - criterion_id: A2
+    status: pass
+    evidence_ref: packages/caws-cli/tests/shell/worktree-draft-bind-handoff.test.js
+    recorded_at: "2026-08-19T16:16:59.020Z"
+    test_nodeid: bind promotes a draft spec on an existing unbound worktree entry
+    command: npx jest tests/shell/worktree-draft-bind-handoff.test.js
+    exit_code: 0
+    commit_sha: b078ddbc
