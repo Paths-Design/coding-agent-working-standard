@@ -1,0 +1,26 @@
+id: CAWS-DEFECT-SMOKE-FRESH-INSTALL-KERNEL-RESIDUE-01
+title: 'fresh-install smoke still builds/packs/installs the absorbed caws-kernel; the release gate is red at main'
+risk_tier: 3
+mode: fix
+lifecycle_state: draft
+created_at: '2026-08-19T18:51:28.103Z'
+updated_at: '2026-08-19T18:51:28.103Z'
+blast_radius:
+  modules:
+    - 'caws-cli/scripts (release smoke gate)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/scripts/fresh-install-smoke.mjs'
+  out: []
+invariants:
+  - 'CAWS-ABSORB-KERNEL-01 removed packages/caws-kernel from git and the CLI no longer depends on @paths.design/caws-kernel; the smoke must pack and install ONLY the CLI tarball. Release procedure step 5 (smoke) must be green at the tag SHA.'
+  - 'The smoke must keep verifying what it verified before minus the kernel: CLI tarball packs, installs into a fresh project, and the installed binary executes its checked commands.'
+acceptance:
+  - id: A1
+    given: 'main after CAWS-ABSORB-KERNEL-01'
+    when: 'the fresh-install smoke runs from a checkout with no packages/caws-kernel directory'
+    then: 'it packs only the CLI tarball, installs it, runs the smoke checks, and exits 0'
+non_functional: {}
+contracts: []
