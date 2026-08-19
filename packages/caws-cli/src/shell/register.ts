@@ -261,6 +261,46 @@ function leafCommandName(leaf: LeafCommandMeta): string {
   return required ? `${leaf.name} <${name}>` : `${leaf.name} [${name}]`;
 }
 
+/** Refuse excess positional arguments with a diagnostic that names the
+ * discarded tokens and the correct repeatable-option shape.
+ *
+ * Commander ^11 defaults to allowExcessArguments(true): a stray positional
+ * parses cleanly and vanishes. For a control-plane CLI that is the
+ * reports-success-while-doing-less class — `specs amend-scope <id> --add a b`
+ * added only `a`, printed "amended scope", and the caller took a scope strike
+ * on the edit it believed was admitted
+ * (CAWS-DEFECT-AMEND-SCOPE-EXCESS-ARGS-SILENT-DROP-01).
+ *
+ * No leaf declares a variadic positional (leafCommandName supports at most
+ * one argument), so there are zero legitimate excess-positional callers. The
+ * check runs as a preAction hook — before the action, so NOTHING is applied —
+ * rather than via allowExcessArguments(false), whose built-in message names
+ * only a count, not the dropped token or the remediation. */
+function guardExcessArguments(cmd: Command, leaf: LeafCommandMeta): void {
+  cmd.hook('preAction', (thisCommand) => {
+    const declared = leaf.argument ? 1 : 0;
+    const extras = thisCommand.args.slice(declared);
+    if (extras.length === 0) return;
+    const names: string[] = [];
+    for (let c: Command | null = thisCommand; c !== null; c = c.parent) {
+      names.unshift(c.name());
+    }
+    const expected = leaf.argument
+      ? `exactly one positional argument (<${leaf.argument.name}>)`
+      : 'no positional arguments';
+    const repeatable = leaf.options
+      .filter((opt) => opt.collect === true)
+      .map((opt) => opt.flag.split(' ')[0]);
+    const repeatableHint =
+      repeatable.length > 0
+        ? ` If you meant to pass another value to a repeatable option (${repeatable.join(', ')}), repeat the flag per value: ${repeatable[0]} <value> ${repeatable[0]} <value2>.`
+        : '';
+    thisCommand.error(
+      `${names.join(' ')}: unexpected extra argument(s): ${extras.join(', ')} — nothing was applied. This command takes ${expected}.${repeatableHint}`
+    );
+  });
+}
+
 /** Register a leaf subcommand from metadata: name(+arg), description, options.
  * Returns the configured Command so the caller can attach `.action()`. */
 function defineLeaf(group: Command, leaf: LeafCommandMeta): Command {
@@ -268,6 +308,7 @@ function defineLeaf(group: Command, leaf: LeafCommandMeta): Command {
   for (const opt of leaf.options) {
     applyOptionMeta(cmd, opt);
   }
+  guardExcessArguments(cmd, leaf);
   return cmd;
 }
 
@@ -287,6 +328,7 @@ function defineFlat(program: Command, leaf: LeafCommandMeta): Command {
   for (const opt of leaf.options) {
     applyOptionMeta(cmd, opt);
   }
+  guardExcessArguments(cmd, leaf);
   return cmd;
 }
 
