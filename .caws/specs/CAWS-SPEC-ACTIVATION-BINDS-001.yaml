@@ -132,3 +132,11 @@ evidence:
     command: npx jest tests/shell/scope-authority-context-handoff.test.js
     exit_code: 0
     commit_sha: cfe60b2e
+  - criterion_id: A6
+    status: pass
+    evidence_ref: packages/caws-cli/tests/shell/worktree-destroy-demote-unstarted.test.js
+    recorded_at: "2026-08-19T16:17:13.487Z"
+    test_nodeid: a MERGED branch keeps the spec active — reachability alone cannot tell it from an unstarted one
+    command: npx jest tests/shell/worktree-destroy-demote-unstarted.test.js
+    exit_code: 0
+    commit_sha: b24f1b80
