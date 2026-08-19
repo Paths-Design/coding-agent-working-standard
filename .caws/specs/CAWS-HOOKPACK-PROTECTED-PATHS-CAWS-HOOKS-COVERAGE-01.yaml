@@ -96,3 +96,7 @@ evidence:
     status: pass
     evidence_ref: "npx bats tests/hooks/bats/protected-paths.bats -> ok 1/2 assert_failure 2 exactly; negative control against pre-fix template: expected 2 actual 1, commit 31a11760"
     recorded_at: "2026-08-19T22:59:06.170Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "npx bats tests/hooks/bats/protected-paths.bats -> ok 4 '.caws/hooks/ *.md doc still admitted'; ok 5/6 vendor-dir doc admission unchanged"
+    recorded_at: "2026-08-19T22:59:06.565Z"
