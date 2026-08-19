@@ -2,9 +2,10 @@ id: CAWS-DEFECT-INIT-ACTION-POSITIONALS-REFUSED-01
 title: 'init diff and init port are listed in caws init --help but refused by the excess-args guard before their action runs'
 risk_tier: 3
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-init-positionals
 created_at: '2026-08-19T00:00:00.000Z'
-updated_at: '2026-08-19T00:00:00.000Z'
+updated_at: '2026-08-19T22:22:05.184Z'
 blast_radius:
   modules:
     - 'caws-cli/shell (command registration / argument strictness)'
