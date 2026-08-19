@@ -7,20 +7,60 @@ created_at: '2026-08-15T17:52:00.806Z'
 updated_at: '2026-08-15T17:52:00.806Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/tests/hooks/bats (suites that drive real hook scripts against the repo)
+    - canonical .caws/sessions/ (one-time fixture-envelope removal)
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/tests/hooks/bats/reprieve.bats
+    - packages/caws-cli/tests/hooks/bats/bash-write-guard.bats
+    - packages/caws-cli/tests/hooks/bats/
+    - .caws/sessions/
+  out:
+    - >-
+      The resolver's admission logic (freshness windows, candidate caps,
+      caller disambiguation) is NOT modified here — that is
+      SESSION-CANDIDATE-RESOLUTION-HARDENING-001. This spec stops the
+      pollution at the source so the resolver never sees the fixtures.
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    No test suite (bats, jest, pytest) or manual dogfood harness writes a
+    durable hook envelope into the CANONICAL <repo>/.caws/sessions/. Suites
+    that exercise real hook scripts (parse-input.sh, reprieve, write-guards)
+    run against a temp repo root or redirect the session dir, so fixture
+    session ids (my-session, s, s1, sess-a1-int, sess-a2-foreign, sess-a3-001,
+    sess-a5-001, sess-a7-noreprieve, dogfood-manual) never appear as resolver
+    candidates in a developer's real checkout.
+  - >-
+    Running the hooks test suites is side-effect-free on .caws/sessions/: a
+    byte-identical snapshot before and after. A test that needs a durable
+    envelope creates it inside its own temp fixture tree, never via the
+    canonical repo path.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'A clean canonical checkout with .caws/sessions/ snapshotted.'
+    when: 'The full bats hooks suite runs (reprieve.bats, bash-write-guard.bats, parse-input.bats).'
+    then: >-
+      .caws/sessions/ is unchanged — no new fixture session dirs, no new
+      .session-envelope.json files. The suites redirect session state to
+      their temp fixtures.
+  - id: A2
+    given: 'A session resolving identity in this repo alongside only real live sessions.'
+    when: 'resolveSessionCandidates scans durable envelopes.'
+    then: >-
+      The admitted candidate list contains only real session ids — none of
+      the known fixture ids — so the durable_hook_envelope admitted count
+      observed on 2026-08-15 (19 candidates) reflects real sessions only.
+  - id: A3
+    given: 'The Aug-2026 fixture pollution already present in .caws/sessions/.'
+    when: 'The one-time cleanup ships.'
+    then: >-
+      The fixture envelope dirs are removed (my-session, s, s1, sess-a1-int,
+      sess-a2-foreign, sess-a3-001, sess-a5-001, sess-a7-noreprieve,
+      dogfood-manual and any other non-uuid, non-agent residue), and mutating
+      caws commands stop needing CAWS_SESSION_ID disambiguation in a
+      single-real-session repo.
 non_functional: {}
 contracts:
   - name: 'session-envelope-hygiene'

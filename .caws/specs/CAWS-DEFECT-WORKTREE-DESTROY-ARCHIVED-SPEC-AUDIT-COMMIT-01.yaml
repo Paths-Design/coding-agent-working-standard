@@ -7,20 +7,64 @@ created_at: '2026-08-15T17:51:59.734Z'
 updated_at: '2026-08-15T17:51:59.734Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/git-autocommit.ts (vanished-path handling in the trackable filter)
+    - packages/caws-cli/src/store/worktrees-writer.ts (destroy transition audit path set)
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/store/git-autocommit.ts
+    - packages/caws-cli/src/store/worktrees-writer.ts
+    - packages/caws-cli/tests/store/worktree-destroy-archived-spec-commit.test.js
+  out:
+    - >-
+      The merge path (worktree merge auto-close) is NOT modified — at merge
+      time the bound spec still lives at the live .caws/specs/<id>.yaml path,
+      so that audit set is correct today. Only the destroy transition's path
+      composition and autoCommit's tolerance for vanished paths change.
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    autoCommit never feeds `git add` a path that does not exist on disk. A
+    vanished path (moved, archived, or deleted by an earlier transition) is
+    dropped from the trackable set exactly like an intentionally-gitignored
+    path, because `git add -- <nonexistent>` fails fatally and converts an
+    otherwise-clean transition into a refused_dirty "NOT committed" surface.
+    Vanished is filtered by existence, never force-added or recreated.
+  - >-
+    A destroy of a worktree whose bound spec is ARCHIVED
+    (.caws/specs/.archive/<id>.yaml) composes its audit set from paths that
+    actually changed in THIS transition: the registry entry
+    (.caws/worktrees.json) is gitignored and already dropped, and the archived
+    spec YAML is included only at its real .archive/ path and only if the
+    destroy mutated it. When nothing tracked changed, destroy reports the
+    clean committed no-op (kind committed, sha '') — never a failure.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      A registered worktree whose bound spec was archived by its own merge
+      (spec YAML at .caws/specs/.archive/<id>.yaml, no live copy), owned by
+      the caller, clean tree, merged branch.
+    when: 'caws worktree destroy <name> runs.'
+    then: >-
+      The transition completes with a landed audit commit or the clean
+      committed no-op — never the surface observed on wt-merge-notes
+      2026-08-15: "the transition was applied but NOT committed ... git add
+      failed: fatal: pathspec '.caws/specs/<id>.yaml' did not match any files".
+  - id: A2
+    given: 'autoCommit input.paths containing at least one path absent on disk.'
+    when: 'autoCommit runs.'
+    then: >-
+      The absent path is dropped (same tier as the gitignored filter) and the
+      remaining existing tracked paths stage and commit; the outcome kind is
+      committed, not refused_dirty carrying "git add failed: fatal:
+      pathspec".
+  - id: A3
+    given: 'autoCommit input.paths in which EVERY path is absent or gitignored.'
+    when: 'autoCommit runs.'
+    then: >-
+      The outcome is the committed no-op (kind committed, sha ''), matching
+      the existing all-ignored contract — absence and ignorement are the same
+      "nothing tracked to commit" condition.
 non_functional: {}
 contracts:
   - name: 'worktree-destroy-audit-commit'

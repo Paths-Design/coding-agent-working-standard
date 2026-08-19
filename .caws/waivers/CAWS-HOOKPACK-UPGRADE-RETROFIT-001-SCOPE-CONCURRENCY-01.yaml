@@ -1,0 +1,11 @@
+id: CAWS-HOOKPACK-UPGRADE-RETROFIT-001-SCOPE-CONCURRENCY-01
+title: 'scope_boundary violations are a peer session''s staged canonical files'
+status: active
+gates:
+  - scope_boundary
+reason: 'The 3 violations are a concurrent session''s staged files in the canonical checkout (docs/api/cli.md, docs/architecture/caws-vnext-command-surface.md, docs/command-reference.md) — not this lane''s changes. Lane 8ca7ed21''s diff is 100% within scope.in (verified via git show --name-only); the scope evaluator reads the canonical working tree even when gates run from the linked worktree.'
+approved_by: 'darian'
+created_at: '2026-08-15T19:31:08.569Z'
+expires_at: '2026-08-22T00:00:00Z'
+scope:
+  spec_id: CAWS-HOOKPACK-UPGRADE-RETROFIT-001
