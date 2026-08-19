@@ -47,3 +47,8 @@ non_functional: {}
 contracts:
   - name: 'commit-deletion-classification'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "pytest TestCommitDeletionsGuard::test_bare_commit_with_staged_deletion_asks_naming_count_A1 (ask; reason names 1 deletion + tracked.txt + '-- <paths>'; source=commit_deletions, enforcement=confirm) + bats 'bare git commit over a STAGED DELETION is refused with remediation and arms NO latch'"
+    recorded_at: "2026-08-19T18:28:01.639Z"
