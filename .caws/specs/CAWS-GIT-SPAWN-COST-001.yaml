@@ -93,3 +93,10 @@ evidence:
     command: npx jest tests/store/git-repo-factory-parity.test.js
     exit_code: 0
     commit_sha: "2f3eed7e"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "full jest suite: baseline 1490.457s (1970 tests) -> 272.767s (1988 tests, 148 suites, 0 failures); no PATH manipulation in either run"
+    recorded_at: "2026-08-19T16:57:55.190Z"
+    command: npx jest
+    exit_code: 0
+    commit_sha: "2f3eed7e"
