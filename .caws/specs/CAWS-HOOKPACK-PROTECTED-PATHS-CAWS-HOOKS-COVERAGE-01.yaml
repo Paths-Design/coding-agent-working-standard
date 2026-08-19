@@ -92,3 +92,7 @@ evidence:
     status: pass
     evidence_ref: "npx bats tests/hooks/bats/protected-paths.bats -> ok 3 'protected-paths: editing a guard SCRIPT under .caws/hooks/ (the real install dir) is blocked with exit 2'; negative control against pre-fix template: status 0 (silently admitted), commit 31a11760"
     recorded_at: "2026-08-19T22:59:05.787Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "npx bats tests/hooks/bats/protected-paths.bats -> ok 1/2 assert_failure 2 exactly; negative control against pre-fix template: expected 2 actual 1, commit 31a11760"
+    recorded_at: "2026-08-19T22:59:06.170Z"
