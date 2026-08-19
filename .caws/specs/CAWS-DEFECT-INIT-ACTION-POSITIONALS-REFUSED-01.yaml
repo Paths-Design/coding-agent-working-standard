@@ -56,3 +56,7 @@ evidence:
     status: pass
     evidence_ref: "spawned dist/index.js: 'init a b c' exits non-zero, diagnostic 'unexpected extra argument(s): c ... at most 2 positional arguments ([action] [actionArg])' (test A3). Live artifact matches verbatim."
     recorded_at: "2026-08-19T22:36:33.391Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "spawned dist/index.js: 'specs list stray-token' still refused 'unexpected extra argument(s): stray-token ... no positional arguments' (test A4 control). Confirms guardExcessArguments is not weakened for other leaves."
+    recorded_at: "2026-08-19T22:36:33.803Z"
