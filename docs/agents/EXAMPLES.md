@@ -2,16 +2,16 @@
 doc_id: agents-examples
 authority: reference
 status: active
-title: CAWS Examples — Real Feature Specs (v11.1.6)
+title: CAWS Examples — Real Feature Specs (v11.9.0)
 owner: vNext rewrite team
-updated: 2026-05-28
+updated: 2026-08-19
 ---
 
 # CAWS Examples — Real Feature Specs
 
 **Example working specifications from real projects**
 
-> All examples conform to the v11.1.6 kernel schema (`packages/caws-kernel/src/schemas/spec.v1.json`). Create specs with `caws specs create <id> --title "..." --mode <mode> --risk-tier <n>`, then edit to add scope/invariants/acceptance. Fields `change_budget`, `threats`, `migrations`, `human_override`, `ai_assessment` are rejected by the schema and must not appear. `non_functional` accepts only four string-array subkeys: `accessibility`, `performance`, `reliability`, `security`.
+> All examples conform to the v11.9.0 kernel schema (`packages/caws-cli/src/kernel/schemas/spec.v1.json`). Create specs with `caws specs create <id> --title "..." --mode <mode> --risk-tier <n>`, then edit to add scope/invariants/acceptance. Fields `change_budget`, `threats`, `migrations`, `human_override`, `ai_assessment` are rejected by the schema and must not appear. `non_functional` accepts only four string-array subkeys: `accessibility`, `performance`, `reliability`, `security`.
 
 ---
 

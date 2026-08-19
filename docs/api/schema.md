@@ -2,9 +2,9 @@
 doc_id: caws-schema
 authority: reference
 status: active
-title: CAWS Schema Specifications (v11.1.6)
+title: CAWS Schema Specifications (v11.9.0)
 owner: vNext rewrite team
-updated: 2026-05-28
+updated: 2026-08-19
 ---
 
 # CAWS Schema Specifications
@@ -15,7 +15,7 @@ CAWS uses JSON Schema for validation and TypeScript interfaces for type safety. 
 
 ## Feature Specification Schema
 
-> **Note:** vNext is multi-spec only. Specs live at `.caws/specs/<id>.yaml`. There is no legacy single-file `working-spec.yaml`. The kernel's canonical JSON Schema lives at `packages/caws-kernel/src/schemas/spec.v1.json` with `additionalProperties: false` — it rejects any field not listed in that schema (including `change_budget`, `acceptance_criteria`, `status`, and any v10 aliases).
+> **Note:** vNext is multi-spec only. Specs live at `.caws/specs/<id>.yaml`. There is no legacy single-file `working-spec.yaml`. The kernel's canonical JSON Schema lives at `packages/caws-cli/src/kernel/schemas/spec.v1.json` with `additionalProperties: false` — it rejects any field not listed in that schema (including `change_budget`, `acceptance_criteria`, `status`, and any v10 aliases).
 
 The feature specification defines a single feature's requirements and constraints.
 
@@ -451,12 +451,12 @@ lifecycle_state: active
 operational_rollback_slo: "5m"
 blast_radius:
   modules:
-    - packages/caws-kernel/src/store
+    - packages/caws-cli/src/kernel/store
   data_migration: true
 scope:
   in:
-    - packages/caws-kernel/src/store
-    - packages/caws-kernel/tests/store
+    - packages/caws-cli/src/kernel/store
+    - packages/caws-cli/tests/store
 invariants:
   - "events.jsonl remains hash-chained after migration"
   - "All existing event types validate against their v1 schemas"
@@ -475,7 +475,7 @@ non_functional:
 contracts:
   - name: "events-jsonl-append-only"
     type: schema
-    path: packages/caws-kernel/src/schemas/events
+    path: packages/caws-cli/src/kernel/schemas/events
 observability:
   - "Emit migration_started and migration_completed events"
   - "Log event count and chain-hash before and after"
@@ -489,7 +489,7 @@ owner: "darianrosebrook"
 
 ## Audit Surface: .caws/events.jsonl
 
-The `caws provenance` command was removed in v11 and there is no provenance schema in the kernel. The audit surface is the hash-chained `.caws/events.jsonl` file, which receives typed event records appended by lifecycle commands (`caws gates run`, `caws specs close`, `caws specs archive`, `caws worktree create`, etc.). Each event record carries a `prev_hash` field that chains to the previous entry. The event schemas live at `packages/caws-kernel/src/schemas/events/*.v1.json`.
+The `caws provenance` command was removed in v11 and there is no provenance schema in the kernel. The audit surface is the hash-chained `.caws/events.jsonl` file, which receives typed event records appended by lifecycle commands (`caws gates run`, `caws specs close`, `caws specs archive`, `caws worktree create`, etc.). Each event record carries a `prev_hash` field that chains to the previous entry. The event schemas live at `packages/caws-cli/src/kernel/schemas/events/*.v1.json`.
 
 Users needing an audit trail wire their own hooks against `caws gates run` output; they do not consume a provenance manifest.
 
@@ -850,7 +850,7 @@ stored.
 Users can extend CAWS schemas with care:
 - The spec schema uses `additionalProperties: false` — unknown top-level fields cause validation failure
 - Policy and gate configuration in `.caws/policy.yaml` is the extension point for budget and threshold customization
-- The events schema (`packages/caws-kernel/src/schemas/events/*.v1.json`) must be updated before new fields can appear in event payloads
+- The events schema (`packages/caws-cli/src/kernel/schemas/events/*.v1.json`) must be updated before new fields can appear in event payloads
 
 ### Schema Evolution
 - The kernel schema is the single source of truth; this document tracks it
@@ -859,7 +859,7 @@ Users can extend CAWS schemas with care:
 
 ## References
 
-- [`packages/caws-kernel/src/schemas/spec.v1.json`](../../packages/caws-kernel/src/schemas/spec.v1.json) — canonical spec schema (authority)
+- [`packages/caws-cli/src/kernel/schemas/spec.v1.json`](../../packages/caws-cli/src/kernel/schemas/spec.v1.json) — canonical spec schema (authority)
 - [JSON Schema Specification](https://json-schema.org/)
 - [SPDX Specification](https://spdx.github.io/spdx-spec/)
 - [SLSA Specification](https://slsa.dev/spec/v0.1/)

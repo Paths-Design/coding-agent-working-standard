@@ -2,16 +2,16 @@
 doc_id: agents-tutorial
 authority: reference
 status: active
-title: CAWS Tutorial — Step-by-Step Guide (v11.1.6)
+title: CAWS Tutorial — Step-by-Step Guide (v11.9.0)
 owner: vNext rewrite team
-updated: 2026-05-28
+updated: 2026-08-19
 ---
 
 # CAWS Tutorial — Step-by-Step Guide
 
-**Hands-on tutorial for implementing CAWS v11.1.6 in your project**
+**Hands-on tutorial for implementing CAWS v11.9.0 in your project**
 
-> **v11.1 surface.** This tutorial uses the v11.1.6 commands: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents`. Removed v10 commands (`validate`, `iterate`, `evaluate`, `diagnose`, `scaffold`, `verify-acs`, `burnup`, `sidecar`) are not used. Doctrine source: [`../architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md).
+> **v11.1 surface.** This tutorial uses the v11.9.0 commands: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents`. Removed v10 commands (`validate`, `iterate`, `evaluate`, `diagnose`, `scaffold`, `verify-acs`, `burnup`, `sidecar`) are not used. Doctrine source: [`../architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md).
 
 ---
 
@@ -108,7 +108,7 @@ contracts:
     description: "localStorage contract for preference persistence"
 ```
 
-(See the kernel schema at `packages/caws-kernel/src/schemas/spec.v1.json` for all valid fields.)
+(See the kernel schema at `packages/caws-cli/src/kernel/schemas/spec.v1.json` for all valid fields.)
 
 ### Verify spec / drift
 
