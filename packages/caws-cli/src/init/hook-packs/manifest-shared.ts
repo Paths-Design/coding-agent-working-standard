@@ -269,7 +269,19 @@ import type { HookPackV1 } from './types';
 // block-dangerous.sh refuses that command with the path-scoped remediation
 // (`git commit -m <msg> -- <paths>`) WITHOUT arming the session latch.
 // Explicit-pathspec, --dry-run, and clean-index bare commits stay admitted.
-export const SHARED_PACK_VERSION = 40;
+// Version 41: CAWS-HOOKS-AGENT-PID-PROGRESSIVE-REAP-001. Nothing ever
+// deleted .caws/sessions/agent-pid-<pid>.json records — one file per
+// distinct OS pid that ever fired a hook, growing forever (observed: 65
+// records + 4 orphaned .tmp remnants after ~2 weeks in a real project).
+// _write_agent_pid_record now calls a new, rate-limited (once/hour)
+// _reap_stale_agent_pid_records after each successful write: records
+// under 3 days old are untouched, 3-7 days old are deleted only if the
+// recorded pid is confirmed dead (kill -0), and records past 7 days are
+// deleted unconditionally as a hard backstop — tiered to how long a real
+// agent session actually runs, never a single cliff-edge TTL. Orphaned
+// .agent-pid-<pid>.tmp.<random> atomic-write remnants past 60 minutes are
+// swept the same way, no liveness check needed.
+export const SHARED_PACK_VERSION = 41;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.
