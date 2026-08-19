@@ -72,6 +72,30 @@
 - `caws specs create --activate` — opt back into creating a spec `active`.
 - `worktrees.json` entries record `baseSha`, the base commit the worktree was
   forked at. Descriptive governance metadata, never an authority claim.
+- **The command classifier stops auto-admitting a bare `git commit` whose index
+  stages deletions of tracked files** (shared hook pack **v39 → v40**). The old
+  premise — "a plain commit creates a new commit object; not destructive" — is
+  false: a commit with no pathspec commits the ENTIRE index, and a stale or
+  foreign index (a failed `git revert -n`, another session's staged work)
+  deletes tracked content under an unrelated message. A new `commit_deletions`
+  classifier stage inspects staged state at classify time: staged deletions —
+  or staged state it cannot read (fail closed) — make the commit ask-class, and
+  `block-dangerous.sh` refuses that one command with the path-scoped remediation
+  (`git commit -m <msg> -- <paths>`) **without arming the session latch**.
+  Explicit-pathspec, `--dry-run`, and clean-index bare commits stay admitted;
+  `--amend` keeps its existing governed ask; `-a`/`--all` is checked against
+  HEAD because it stages working-tree deletions at commit time.
+
+### Fixed
+
+- **Excess positional arguments are refused instead of silently discarded.**
+  Commander's default let `caws specs amend-scope <id> --add a b` bind `a`,
+  drop `b` as an unparsed operand, and print "amended scope" — the caller then
+  took a scope strike on the edit it believed was admitted. Every
+  metadata-driven command now errors non-zero on extra positionals, naming the
+  dropped tokens and, where the command has repeatable options, the
+  repeat-the-flag form (`--add <a> --add <b>`). The check runs before the
+  action, so nothing is partially applied.
 
 ## [11.9.0] (2026-08-04)
 
