@@ -15,7 +15,7 @@ updated: 2026-05-15
 
 CAWS does not ship its own runtime hooks. The integration patterns below describe how *agent runtimes* should call out to v11 CAWS commands during their own hook lifecycles.
 
-> **v11.1.6 posture (A1).** CAWS v11.1.6 ships twelve command groups: `init`, `doctor`, `scope`, `status`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents`. The hook examples that follow use the subset relevant to agent integration. References to removed v10 commands (`evaluate`, `iterate`, `validate`, `provenance`, `hooks install`, `scaffold`, `quality-gates`, `waivers` plural) have been replaced with v11 equivalents. Doctrine source: [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md).
+> **v11 posture (A1).** The current v11 line ships fourteen command groups: `init`, `doctor`, `scope`, `status`, `claim`, `gates`, `evidence`, `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message`. The hook examples that follow use the subset relevant to agent integration. References to removed v10 commands (`evaluate`, `iterate`, `validate`, `provenance`, `hooks install`, `scaffold`, `quality-gates`, `waivers` plural) have been replaced with v11 equivalents. Doctrine source: [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md).
 
 ## Integration Patterns
 
@@ -113,7 +113,7 @@ Cascade enables structured development workflows invoked via `/[workflow-name]`.
 
 4. **Quality gates**
    - Run: `caws gates run --spec <id>` (exit 0 = pass)
-   - For acceptable violations, open a waiver: `caws waiver create <id>-w --gate <g> --reason "..." --approved-by "..." --expires-at <iso>`
+   - For acceptable violations, open a waiver: `caws waiver create <id>-w --title "<title>" --gate <g> --reason "..." --approved-by "..." --expires-at <iso>`
 
 5. **Final validation**
    - `caws doctor` (drift)
@@ -327,7 +327,7 @@ class DriftAwareAgent {
 
 5. **Address issues**
    - Fix failing gates, OR
-   - Open a waiver: `caws waiver create <id>-w --gate <g> --reason "..." --approved-by "..." --expires-at <iso>`
+   - Open a waiver: `caws waiver create <id>-w --title "<title>" --gate <g> --reason "..." --approved-by "..." --expires-at <iso>`
    - Update spec if scope/requirements changed.
 
 6. **Completion check**
@@ -435,7 +435,7 @@ caws doctor            # drift detection
 caws gates run --spec <id>   # quality gates
 caws evidence record --type test --spec <id> --data '{...}'  # audit (test/gate)
 caws specs evidence <id> --ac A1 --status pass --evidence-ref "..."  # AC closure
-caws waiver create <id>-w --gate <g> --reason "..." --approved-by "..." --expires-at <iso>   # legitimate bypass
+caws waiver create <id>-w --title "<title>" --gate <g> --reason "..." --approved-by "..." --expires-at <iso>   # legitimate bypass
 ```
 
 ### Platform-Specific Migration

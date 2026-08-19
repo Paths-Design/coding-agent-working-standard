@@ -2,19 +2,19 @@
 doc_id: multi-agent-workflow-guide
 authority: reference
 status: active
-title: Multi-agent workflow (v11.1)
+title: Multi-agent workflow (v11.9.0)
 owner: vNext rewrite team
-updated: 2026-05-28
+updated: 2026-08-19
 audience: consumer
 ---
 
-# Multi-agent workflow (v11.1)
+# Multi-agent workflow (v11.9.0)
 
 **Each agent works on its own per-feature spec, in its own git worktree, with non-overlapping scope.**
 
-This guide describes the v11.1 multi-agent pattern. For worktree mechanics, see [`worktree-isolation.md`](worktree-isolation.md). For the full CLI surface, see [`docs/api/cli.md`](../api/cli.md).
+This guide describes the v11 multi-agent pattern. For worktree mechanics, see [`worktree-isolation.md`](worktree-isolation.md). For the full CLI surface, see [`docs/api/cli.md`](../api/cli.md).
 
-> **v11.1 surface.** v11.1 ships twelve command groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents` (plus the auto-generated `help`). Use `caws specs create` to author specs, `caws worktree create <name> --spec <id>` to bind worktrees, and `caws worktree merge <name>` to close out. Removed and not returning: `validate`, `iterate`, `evaluate`, `diagnose`, `parallel setup`.
+> **v11 surface.** The current v11 line ships fourteen command groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message` (plus the auto-generated `help`). Use `caws specs create` to author specs, `caws worktree create <name> --spec <id>` to bind worktrees (this also activates a draft spec), and `caws worktree merge <name>` to close out. Removed and not returning: `validate`, `iterate`, `evaluate`, `diagnose`, `parallel setup`.
 
 ## The pattern
 
@@ -27,7 +27,7 @@ This guide describes the v11.1 multi-agent pattern. For worktree mechanics, see 
 | Agent visibility | `caws agents list` / `caws agents show <id>` (liveness cache — not authority) |
 | Per-spec gates | `caws gates run --spec <id>` |
 | Per-spec evidence | `caws evidence record --type <kind> --spec <id> --data '{...}'` |
-| Per-spec waivers | `caws waiver create <id>-w --gate <gate> --reason "..." --approved-by "..." --expires-at <iso>` |
+| Per-spec waivers | `caws waiver create <id>-w --title "<title>" --gate <gate> --reason "..." --approved-by "..." --expires-at <iso>` |
 
 ## Anti-pattern (do not do this)
 
@@ -42,19 +42,19 @@ v11 has no project-level working spec. `caws init` refuses legacy `.caws/working
 The host (or first agent) creates per-feature specs via the CLI:
 
 ```bash
-caws specs create user-auth --title "User Authentication System" --risk-tier T1
-caws specs create payment-system --title "Payment System" --risk-tier T1
-caws specs create dashboard-ui --title "Dashboard UI" --risk-tier T1
+caws specs create FEAT-001 --title "User Authentication System" --mode feature --risk-tier 1
+caws specs create FEAT-002 --title "Payment System" --mode feature --risk-tier 1
+caws specs create FEAT-003 --title "Dashboard UI" --mode feature --risk-tier 1
 ```
 
 Each generated spec lives at `.caws/specs/<id>.yaml`. Edit it to define non-overlapping `scope.in` and explicitly exclude the other features in `scope.out` (defensive — prevents accidental cross-feature edits even if `scope.in` is too broad).
 
-Example (`user-auth.yaml`):
+Example (`FEAT-001.yaml`):
 
 ```yaml
 id: FEAT-001
 title: User Authentication System
-risk_tier: T1
+risk_tier: 1
 mode: feature
 scope:
   in:
@@ -79,9 +79,9 @@ acceptance:
 Use `caws worktree create` — it creates the git worktree, writes the bidirectional binding to `.caws/worktrees.json`, and emits `worktree_created` + `worktree_bound` events in a single transaction. Loop once per spec; there is no `caws parallel setup`.
 
 ```bash
-caws worktree create proj-auth --spec user-auth
-caws worktree create proj-payments --spec payment-system
-caws worktree create proj-dashboard --spec dashboard-ui
+caws worktree create proj-auth --spec FEAT-001
+caws worktree create proj-payments --spec FEAT-002
+caws worktree create proj-dashboard --spec FEAT-003
 ```
 
 Worktrees are created under `.caws/worktrees/<name>/` by default. List them with `caws worktree list`.
@@ -112,10 +112,10 @@ Implement, run your project's test suite as usual.
 ### Step 5 — record evidence as ACs close
 
 ```bash
-caws evidence record --type test --spec user-auth \
+caws evidence record --type test --spec FEAT-001 \
   --data '{"command":"npm test -- login_happy_path","exit_code":0}'
 
-caws specs evidence user-auth --ac A1 --status pass --evidence-ref "npm test"
+caws specs evidence FEAT-001 --ac A1 --status pass --evidence-ref "npm test"
 ```
 
 Both append hash-chained events to `.caws/events.jsonl` via the store. AC
@@ -126,13 +126,13 @@ evidence goes through `caws specs evidence` rather than `caws evidence record
 ### Step 6 — run gates per spec
 
 ```bash
-caws gates run --spec user-auth
+caws gates run --spec FEAT-001
 ```
 
 Each spec evaluates its own gates against the current diff. If a blocking gate fails:
 
 - Fix the issue, re-run, OR
-- Open a waiver: `caws waiver create user-auth-w --gate <gate> --reason "..." --approved-by "..." --expires-at <iso>`. Subsequent runs filter that violation out of the disposition.
+- Open a waiver: `caws waiver create FEAT-001a --title "<title>" --gate <gate> --reason "..." --approved-by "..." --expires-at <iso>`. Subsequent runs filter that violation out of the disposition.
 
 ### Step 7 — verify and merge
 
@@ -153,7 +153,7 @@ caws worktree destroy proj-auth
 
 ## Detecting scope conflicts
 
-`caws specs conflicts` does not exist in v11.1. To check whether two specs have overlapping `scope.in` patterns, compare them manually. A defensive `scope.out` per spec — listing the other features' directories — catches accidents at `caws scope check` time.
+There is no bulk spec-vs-spec `scope.in` comparator. For a specific path, `caws scope contention <path>` reports which other active worktrees (on the same base branch) have a bound spec whose `scope.in` also claims it — always exits 0, so it's safe to run before starting work on a file. To check whole specs for overlap, compare `scope.in` patterns manually. A defensive `scope.out` per spec — listing the other features' directories — catches accidents at `caws scope check` time.
 
 ## Listing specs
 

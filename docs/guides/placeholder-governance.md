@@ -1,5 +1,23 @@
 # Placeholder Governance System
 
+> **Historical — the package this doc describes is deleted (2026-08-19).**
+> Every code example below imports from `@paths.design/caws-types`
+> (`AgentEnvelope`, `validatePlaceholderGovernance`,
+> `passesPlaceholderGovernance`, `assertNoBlockingPlaceholders`,
+> `calculateDebtScore`, `DEFAULT_PLACEHOLDER_CONFIG`,
+> `PlaceholderGovernanceConfig`). `packages/caws-types` was deleted in
+> `CAWS-ABSORB-KERNEL-01` — it has no `src/` or `package.json` and is
+> untracked by git; what's on disk is stale `dist/` build output. This doc
+> also describes a "placeholder governance gate" running as part of
+> `caws gates run`; the current gate set (`caws gates list`) is exactly
+> `budget_limit`, `spec_completeness`, `scope_boundary`, `god_object`,
+> `todo_detection` — there is no placeholder-governance gate. The closest
+> live equivalent for "no fake implementations / no silent placeholders" is
+> the edit-time `.caws/hooks/shortcut-language-check.sh` hook plus the
+> `todo_detection` gate, neither of which implements the envelope/schema
+> model documented below. Kept as a historical design record, not a current
+> reference.
+
 **Explicit, bounded placeholder degradations with "no-surprises" contract enforcement.**
 
 ## Overview
