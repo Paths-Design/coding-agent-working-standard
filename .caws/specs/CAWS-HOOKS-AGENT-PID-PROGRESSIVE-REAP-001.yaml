@@ -1,0 +1,40 @@
+id: CAWS-HOOKS-AGENT-PID-PROGRESSIVE-REAP-001
+title: 'Progressive age-based reap for agent-pid session records'
+risk_tier: 2
+mode: fix
+lifecycle_state: active
+created_at: '2026-08-19T16:58:56.640Z'
+updated_at: '2026-08-19T16:58:56.640Z'
+blast_radius:
+  modules:
+    - 'hook-packs/shared'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/parse-input.sh'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/hooks/bats/parse-input.bats'
+    - 'packages/caws-cli/tests/hooks/bats/session-id-agent-pid.bats'
+  out: []
+invariants:
+  - 'Reap never deletes a record for a still-live process younger than the 7-day hard cutoff'
+  - 'Reap failures are silently swallowed and never block the hook (fail-open contract preserved)'
+acceptance:
+  - id: A1
+    given: 'agent-pid-<pid>.json records exist across a range of mtimes'
+    when: 'the write path''s rate-limited reap runs'
+    then: 'records older than 7 days are deleted unconditionally, records 3-7 days old are deleted only when their recorded pid is confirmed dead via kill -0, and records under 3 days old are never touched'
+  - id: A2
+    given: 'orphaned .agent-pid-<pid>.tmp.<random> atomic-write remnants older than 60 minutes'
+    when: 'the reap runs'
+    then: 'they are deleted regardless of pid liveness'
+  - id: A3
+    given: 'the reap ran less than 60 minutes ago (marker file fresh)'
+    when: '_write_agent_pid_record fires again'
+    then: 'the reap is skipped (rate-limited, no repeated directory scans per hook call)'
+non_functional: {}
+contracts:
+  - name: 'agent-pid-reap'
+    type: behavior
