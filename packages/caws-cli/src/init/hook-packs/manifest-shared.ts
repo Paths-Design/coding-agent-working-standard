@@ -281,7 +281,18 @@ import type { HookPackV1 } from './types';
 // agent session actually runs, never a single cliff-edge TTL. Orphaned
 // .agent-pid-<pid>.tmp.<random> atomic-write remnants past 60 minutes are
 // swept the same way, no liveness check needed.
-export const SHARED_PACK_VERSION = 41;
+// Version 42: CAWS-HOOKS-CLI-CWD-LEAK-001. agent-heartbeat.sh, agent-
+// register.sh, and agent-stop.sh shelled out to `$CAWS_BIN agents ...` /
+// `$CAWS_BIN message poll` relying on the process's INHERITED cwd — but the
+// CLI itself has no knowledge of CAWS_PROJECT_DIR (repo-root resolution
+// reads process.cwd()), so a caller whose real cwd differs from
+// CAWS_PROJECT_DIR (invisible in ordinary harness use, but exactly what a
+// test fixture does) silently registered leases/heartbeats/session records
+// against the WRONG repo. New agent-surface.sh helper caws_run_cli wraps
+// every such call with `cd "$CAWS_PROJECT_DIR" &&` (falling open to the
+// plain invocation when unset/"."/missing), and the three hook call sites
+// now go through it instead of invoking "$CAWS_BIN" directly.
+export const SHARED_PACK_VERSION = 42;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.

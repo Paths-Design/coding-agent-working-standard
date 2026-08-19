@@ -112,3 +112,72 @@ RESOLVE_CMD="source '$AS_LIB' >/dev/null 2>&1; printf '%s\n' \"\${CAWS_PROJECT_D
   assert_output "$outside"
   rm -rf "$outside"
 }
+
+# ─── caws_run_cli (CAWS-HOOKS-CLI-CWD-LEAK-001) ────────────────────────────
+#
+# A hook that shells out to `"$CAWS_BIN" <cmd>` directly inherits whatever cwd
+# the calling process happens to have — invisible in ordinary harness use
+# (PWD naturally sits inside the repo the harness drives), but wrong the
+# moment CAWS_PROJECT_DIR names a DIFFERENT directory than the inherited cwd,
+# which is exactly what happened here: agent-heartbeat.sh/-register.sh/-stop.sh
+# registered real leases/session records against whatever repo the bats
+# process's true cwd sat in, not the isolated fixture. caws_run_cli fixes this
+# by `cd`-ing into CAWS_PROJECT_DIR before invoking the binary.
+#
+# A fake CAWS_BIN that just records its cwd — proves the mechanism directly,
+# independent of the real CLI's own behavior.
+FAKE_CAWS_BIN_SRC='#!/bin/bash
+pwd > "$CAPTURE_FILE"'
+
+@test "agent-surface: caws_run_cli invokes the binary from CAWS_PROJECT_DIR, not the inherited cwd" {
+  local fake_bin="$BATS_TEST_TMPDIR/fake-caws"
+  printf '%s\n' "$FAKE_CAWS_BIN_SRC" >"$fake_bin"
+  chmod +x "$fake_bin"
+
+  local capture="$BATS_TEST_TMPDIR/captured-pwd"
+  local inherited_cwd="$BATS_TEST_TMPDIR/inherited"
+  mkdir -p "$inherited_cwd"
+
+  # CAWS_TEST_REPO stands in for CAWS_PROJECT_DIR, deliberately DIFFERENT
+  # from the process's real cwd (inherited_cwd) — the exact leak scenario.
+  run env -i \
+    PATH="$PATH" \
+    CAWS_BIN="$fake_bin" \
+    CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
+    CAPTURE_FILE="$capture" \
+    bash -c 'cd "$1" && source "$2/lib/agent-surface.sh" >/dev/null 2>&1 && caws_run_cli whatever-args' \
+    _ "$inherited_cwd" "$CAWS_TEST_HOOKS_DIR"
+  assert_success
+  # Normalize CAWS_TEST_REPO the SAME way the fake binary computes its own
+  # answer (plain `cd && pwd`, no -P): CAWS_TEST_REPO itself carries a
+  # double slash (mktemp concatenates a trailing-slash $TMPDIR verbatim) and
+  # is not realpath-resolved, so comparing against it — or against the
+  # realpath-resolved CAWS_TEST_REPO_REAL — both spuriously mismatch a
+  # correct cd on pure string spelling, not on actual directory identity.
+  local expected
+  expected="$(cd "$CAWS_TEST_REPO" && pwd)"
+  [ "$(cat "$capture")" = "$expected" ]
+}
+
+@test "agent-surface: caws_run_cli falls open to the plain invocation when CAWS_PROJECT_DIR is unset" {
+  local fake_bin="$BATS_TEST_TMPDIR/fake-caws"
+  printf '%s\n' "$FAKE_CAWS_BIN_SRC" >"$fake_bin"
+  chmod +x "$fake_bin"
+
+  local capture="$BATS_TEST_TMPDIR/captured-pwd"
+  local inherited_cwd="$BATS_TEST_TMPDIR/inherited"
+  mkdir -p "$inherited_cwd"
+  local inherited_real
+  inherited_real="$(cd "$inherited_cwd" && pwd)"
+
+  run env -i \
+    PATH="$PATH" \
+    CAWS_BIN="$fake_bin" \
+    CAPTURE_FILE="$capture" \
+    bash -c 'cd "$1" && source "$2/lib/agent-surface.sh" >/dev/null 2>&1 && caws_run_cli whatever-args' \
+    _ "$inherited_cwd" "$CAWS_TEST_HOOKS_DIR"
+  assert_success
+  # agent-surface.sh's own resolution falls CAWS_PROJECT_DIR back to "." when
+  # unset (§1 above), so caws_run_cli's "." branch is what fires here.
+  [ "$(cat "$capture")" = "$inherited_real" ]
+}
