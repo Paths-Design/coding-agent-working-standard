@@ -2,9 +2,10 @@ id: CAWS-DOC-RELEASE-PROCEDURE-OIDC-ABSORB-01
 title: 'release-procedure doc still teaches the token publish path and the pre-absorption kernel coupled release'
 risk_tier: 3
 mode: doc
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-release-doc-oidc
 created_at: '2026-08-19T21:48:08.794Z'
-updated_at: '2026-08-19T21:48:08.794Z'
+updated_at: '2026-08-19T21:48:09.435Z'
 blast_radius:
   modules:
     - 'release documentation'
