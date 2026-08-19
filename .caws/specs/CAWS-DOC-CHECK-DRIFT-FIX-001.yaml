@@ -2,11 +2,9 @@ id: CAWS-DOC-CHECK-DRIFT-FIX-001
 title: 'Fix doc-check drift across 35 documentation files'
 risk_tier: 3
 mode: chore
-lifecycle_state: closed
-resolution: completed
-closure_notes: 'Auto-closed by caws worktree merge wt-doc-drift-fix at 9dafae9329d2b55233787dbb61de6eaa7baad3e6'
+lifecycle_state: active
 created_at: '2026-08-19T17:10:16.126Z'
-updated_at: '2026-08-19T19:35:07.098Z'
+updated_at: '2026-08-19T19:35:15.161Z'
 blast_radius:
   modules:
     - 'documentation'
