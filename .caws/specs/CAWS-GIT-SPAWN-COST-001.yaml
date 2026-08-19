@@ -85,3 +85,11 @@ evidence:
     command: npx jest tests/store/git-binary.test.js
     exit_code: 0
     commit_sha: "2f3eed7e"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: packages/caws-cli/tests/store/git-repo-factory-parity.test.js
+    recorded_at: "2026-08-19T16:57:54.722Z"
+    test_nodeid: "a repo is a real repository rooted at its own path, not the template"
+    command: npx jest tests/store/git-repo-factory-parity.test.js
+    exit_code: 0
+    commit_sha: "2f3eed7e"
