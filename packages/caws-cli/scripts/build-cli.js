@@ -103,14 +103,28 @@ for (const rel of JS_ALLOWLIST) {
 // 3. Compile TS vNext layer (store + shell). tsc emits JS into dist/
 //    according to outDir in tsconfig.vnext.json. No .ts source files
 //    leak into dist (only .d.ts declarations, which are typed surface).
-const tscBin = path.resolve(pkgRoot, '..', '..', 'node_modules', '.bin', 'tsc');
+//
+//    tsc is resolved through Node module resolution and executed with the
+//    current node — never through npx. The old fallback
+//    (`npx --no tsc -p tsconfig.vnext.json`) broke under npm 11, whose npx
+//    reparses the arguments so `-p` becomes npx's own --package flag and it
+//    tries to install "tsconfig.vnext.json" from the registry (E404 in the
+//    12.0.0 release run). Module resolution also handles hoisted vs nested
+//    node_modules layouts, which the old hardcoded ../../node_modules/.bin
+//    path did not (CAWS-DEFECT-BUILD-CLI-NPX-NPM11-01).
 const tscArg = ['-p', 'tsconfig.vnext.json'];
-if (fs.existsSync(tscBin)) {
-  run(tscBin, tscArg, pkgRoot);
-} else {
-  // Fall back to PATH-resolved tsc (workspace install pattern).
-  run('npx', ['--no', 'tsc', ...tscArg], pkgRoot);
+let tscEntry;
+try {
+  tscEntry = require.resolve('typescript/bin/tsc', { paths: [pkgRoot] });
+} catch {
+  console.error(
+    'build-cli: cannot resolve typescript/bin/tsc from ' +
+      pkgRoot +
+      ' — is typescript installed? (npm ci at the repo root)'
+  );
+  process.exit(1);
 }
+run(process.execPath, [tscEntry, ...tscArg], pkgRoot);
 
 // 4. Set executable bit on dist/index.js (CAWS-CLI-BIN-EXECUTABLE-BIT-001).
 //    npm install's bin-linking handles this at install time for downstream
