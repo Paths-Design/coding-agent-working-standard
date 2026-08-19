@@ -150,7 +150,6 @@ describe('both guards source the shared allowlist helper (no re-divergence)', ()
     // per-target loop. We assert the helper call appears before the oracle
     // node spawn in the source order.
     const helperIdx = bashGuard.indexOf('caws_is_write_allowlisted');
-    const oracleIdx = bashGuard.indexOf('CAWS_CLAIM_ORACLE');
     expect(helperIdx).toBeGreaterThan(-1);
     // The oracle variable is defined early (line ~91), so find the oracle
     // SPAWN inside the loop instead.

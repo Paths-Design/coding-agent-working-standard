@@ -137,7 +137,7 @@ function runCleanupPlan(cwd, opts = {}) {
 
 describe('caws worktree cleanup-plan --apply cwd self-destruct guard (CAWS-FIX-CWD-GUARD-COVERAGE-001)', () => {
   test('refuses to destroy a destroy-ready worktree when the operator cwd is inside it (A1)', () => {
-    const { repoRoot, caws, wtPath } = fixture();
+    const { caws, wtPath } = fixture();
 
     // Operator runs cleanup-plan --apply FROM INSIDE the worktree dir.
     const result = runCleanupPlan(wtPath, {
@@ -187,7 +187,7 @@ describe('caws worktree cleanup-plan --apply cwd self-destruct guard (CAWS-FIX-C
   });
 
   test('refuses when cwd is a DESCENDANT of the worktree dir, not just the dir itself', () => {
-    const { repoRoot, caws, wtPath } = fixture();
+    const { caws, wtPath } = fixture();
     // A subdirectory inside the worktree.
     const nestedCwd = path.join(wtPath, 'packages', 'caws-cli');
     fs.mkdirSync(nestedCwd, { recursive: true });

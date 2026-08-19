@@ -5,7 +5,7 @@ const tseslint = require('typescript-eslint');
 module.exports = [
   // Ignore patterns
   {
-    ignores: ['node_modules/**', 'dist/**', 'build/**', 'coverage/**', 'test-*/**'],
+    ignores: ['node_modules/**', 'dist/**', 'build/**', 'coverage/**', 'test-*/**', '**/.venv/**'],
   },
 
   // Base configuration (JS)

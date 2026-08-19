@@ -871,9 +871,7 @@ describe('evaluatePathResult: decisionToDiagnostic narrowRepair field (L297-298)
     // Mutation: "decision.normalizedPath && decision.path" would use decision.path (string&&)
     // when normalizedPath is truthy. Kill: normalizedPath !== path when path has './' prefix.
     // We need a path where normalizedPath differs from path.
-    const r = evaluatePathResult('./src/x.ts', makeBound({ in: ['src'] }), policy);
-    // The decision should admit (normalizedPath = 'src/x.ts')
-    // If it's an admit, we can't get a diagnostic. Let's use a rejecting path with './' prefix.
+    // An admitting path yields no diagnostic, so use a rejecting path with './' prefix.
     const rReject = evaluatePathResult('./lib/x.ts', makeBound({ in: ['src'] }), policy);
     if (isErr(rReject)) {
       // subject should be normalizedPath ('lib/x.ts'), not './lib/x.ts'

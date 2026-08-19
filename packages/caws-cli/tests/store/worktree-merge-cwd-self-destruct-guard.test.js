@@ -242,9 +242,6 @@ describe('A4: merge --dry-run is exempt', () => {
     // guard must not turn a read-only readiness check into a refusal.
     const { repo, caws, wtPath } = setupWorktree('cwdg-a4-', 'wt-a4', 'CWDG-A4-001');
     commitCaws(repo, 'bind wt-a4');
-    const wtBranch = execFileSync('git', ['-C', wtPath, 'rev-parse', '--abbrev-ref', 'HEAD'], {
-      encoding: 'utf8',
-    }).trim();
     // Put a real commit on the branch so the merge would be non-empty.
     fs.writeFileSync(path.join(wtPath, 'payload.txt'), 'work\n');
     execFileSync('git', ['-C', wtPath, 'add', 'payload.txt']);

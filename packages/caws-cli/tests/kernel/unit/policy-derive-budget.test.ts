@@ -214,8 +214,8 @@ describe('deriveBudget: diagnostic fields for tier-not-found error (L59-64 Strin
       expect(d.message).toBe('Policy has no risk_tiers entry for tier 2.');
       expect(d.subject).toBe('.caws/policy.yaml');
       // location is an object with a pointer field — not {}
-      expect((d as any).location).toEqual({ pointer: '/risk_tiers/2' });
-      expect((d as any).narrowRepair).toBe('Add risk_tiers["2"] with max_files and max_loc.');
+      expect(d.location).toEqual({ pointer: '/risk_tiers/2' });
+      expect(d.narrowRepair).toBe('Add risk_tiers["2"] with max_files and max_loc.');
     }
   });
 
@@ -227,8 +227,8 @@ describe('deriveBudget: diagnostic fields for tier-not-found error (L59-64 Strin
     if (isErr(r)) {
       const d = r.errors[0]!;
       expect(d.message).toBe('Policy has no risk_tiers entry for tier 3.');
-      expect((d as any).location).toEqual({ pointer: '/risk_tiers/3' });
-      expect((d as any).narrowRepair).toBe('Add risk_tiers["3"] with max_files and max_loc.');
+      expect(d.location).toEqual({ pointer: '/risk_tiers/3' });
+      expect(d.narrowRepair).toBe('Add risk_tiers["3"] with max_files and max_loc.');
     }
   });
 });
@@ -249,7 +249,7 @@ describe('deriveBudget: skipped waiver detail field presence/absence (L83 Condit
   });
 
   test('status_not_active skip: detail encodes the actual status (expired_license)', () => {
-    const r = deriveBudget(policy(), { risk_tier: 1 }, [waiver({ status: 'expired' as any })], { now: NOW });
+    const r = deriveBudget(policy(), { risk_tier: 1 }, [waiver({ status: 'expired' })], { now: NOW });
     expect(isOk(r)).toBe(true);
     if (isOk(r)) {
       const skipped = r.value.trace.skippedWaivers[0]!;
@@ -330,7 +330,7 @@ describe('deriveBudget: skipped waiver detail field presence/absence (L83 Condit
 
 describe('deriveBudget: optional chaining — delta and approvers may be undefined (L133, L134, L142)', () => {
   test('waiver with no delta field (undefined) -> treated as 0/0 -> applied (no crash)', () => {
-    const w = waiver({ delta: undefined as any });
+    const w = waiver({ delta: undefined });
     const r = deriveBudget(policy(), { risk_tier: 1 }, [w], { now: NOW });
     expect(isOk(r)).toBe(true);
     if (isOk(r)) {
@@ -341,7 +341,7 @@ describe('deriveBudget: optional chaining — delta and approvers may be undefin
   });
 
   test('waiver with no approvers field (undefined) and delta=0 -> applied (no crash on ?.length)', () => {
-    const w = waiver({ delta: { max_files: 0, max_loc: 0 }, approvers: undefined as any });
+    const w = waiver({ delta: { max_files: 0, max_loc: 0 }, approvers: undefined });
     const r = deriveBudget(policy(), { risk_tier: 1 }, [w], { now: NOW });
     expect(isOk(r)).toBe(true);
     if (isOk(r)) {
@@ -352,7 +352,7 @@ describe('deriveBudget: optional chaining — delta and approvers may be undefin
 
   test('waiver with no approvers field (undefined) but positive delta -> insufficient_approvers', () => {
     // approvers is undefined -> ?.length ?? 0 = 0 < minApprovers(1) -> skip
-    const w = waiver({ approvers: undefined as any });
+    const w = waiver({ approvers: undefined });
     const r = deriveBudget(policy(), { risk_tier: 1 }, [w], { now: NOW });
     expect(isOk(r)).toBe(true);
     if (isOk(r)) {
@@ -425,7 +425,7 @@ describe('deriveBudget: expires_at absent branch (L123 ConditionalExpression)', 
   test('waiver with no expires_at field -> expiry check skipped -> waiver applied', () => {
     // If ConditionalExpression mutant forces "true", the absent-expires_at case
     // would enter the expiry block and hit parseDate(undefined) or crash.
-    const w = waiver({ expires_at: undefined as any });
+    const w = waiver({ expires_at: undefined });
     const r = deriveBudget(policy(), { risk_tier: 1 }, [w], { now: NOW });
     expect(isOk(r)).toBe(true);
     if (isOk(r)) {

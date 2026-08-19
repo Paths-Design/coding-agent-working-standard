@@ -214,7 +214,7 @@ describe('A1: the collision refusal names the remedy and shows which body is sta
 
 describe('A2: --replace preserves the prior body instead of discarding it', () => {
   test('the existing body is copied byte-for-byte to a superseded snapshot', () => {
-    const { root, cawsDir } = seedShadow('ARCREP-010');
+    const { cawsDir } = seedShadow('ARCREP-010');
     const priorBytes = fs.readFileSync(
       path.join(cawsDir, 'specs', '.archive', 'ARCREP-010.yaml'),
       'utf8'
@@ -322,7 +322,7 @@ describe('A2: --replace preserves the prior body instead of discarding it', () =
 
 describe('A3: recover returns the new body after a replace', () => {
   test('the governed read path stops returning the stale snapshot', () => {
-    const { root, cawsDir } = seedShadow('ARCREP-020');
+    const { root } = seedShadow('ARCREP-020');
 
     const before = spawnSync(process.execPath, [CLI, 'specs', 'recover', 'ARCREP-020'], {
       cwd: root,

@@ -21,24 +21,6 @@ afterAll(() => {
   cleanupAll();
 });
 
-function writeLease(cawsDir, sessionId, fields) {
-  const leasesDir = path.join(cawsDir, 'leases');
-  fs.mkdirSync(leasesDir, { recursive: true });
-  fs.writeFileSync(
-    path.join(leasesDir, `${sessionId}.json`),
-    JSON.stringify({
-      lease_version: 1,
-      session_id: sessionId,
-      platform: 'claude-code',
-      status: 'active',
-      started_at: '2026-07-01T00:00:00.000Z',
-      last_active: '2026-07-01T00:00:00.000Z',
-      repo_root: path.dirname(cawsDir),
-      ...fields,
-    }, null, 2) + '\n'
-  );
-}
-
 // A LEGACY lease: no status field, no pid (the unreachable shape).
 function writeLegacyLease(cawsDir, sessionId, lastActiveIso) {
   const leasesDir = path.join(cawsDir, 'leases');

@@ -416,7 +416,6 @@ describe('verifyChain: conditional expression killers', () => {
     // Mutants that replace `ev === undefined` with `false` skip the guard,
     // causing a crash when we access ev.seq. Mutants that replace with `true`
     // always emit the error and skip valid events.
-    const sparse = validChain(1);
     // Insert an undefined hole at position 0 via JS array construction.
     const sparseArr: ChainedEvent[] = [];
     sparseArr.length = 1; // creates sparse array with no defined slot 0

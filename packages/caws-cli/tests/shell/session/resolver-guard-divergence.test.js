@@ -329,7 +329,7 @@ describe('CAWS-RESOLVER-CWD-OWNERSHIP-CORROBORATION-001 — A3b: cwd ownership',
     // Two fresh envelopes; the caller's cwd is inside a worktree owned by
     // sess_a. NO env var is set (the ZCode / generic-harness case). Pre-fix
     // this refused; post-fix the cwd corroborates sess_a and it resolves.
-    const { repoRoot, cawsDir, now } = makeProjectRoot();
+    const { cawsDir, now } = makeProjectRoot();
     writeEnvelope(cawsDir, 'sess_a', { platform: 'zcode' });
     writeEnvelope(cawsDir, 'sess_b', { platform: 'codex' });
     const wtPath = writeWorktreeEntry(cawsDir, 'wt-a', 'sess_a', {
@@ -353,7 +353,7 @@ describe('CAWS-RESOLVER-CWD-OWNERSHIP-CORROBORATION-001 — A3b: cwd ownership',
     // by sess_c — a session that is NOT a fresh-envelope candidate. cwd
     // ownership corroborates an existing candidate; it does not manufacture
     // one, so the cross-ownership hazard stays refused.
-    const { repoRoot, cawsDir, now } = makeProjectRoot();
+    const { cawsDir, now } = makeProjectRoot();
     writeEnvelope(cawsDir, 'sess_a', { platform: 'zcode' });
     writeEnvelope(cawsDir, 'sess_b', { platform: 'codex' });
     const wtPath = writeWorktreeEntry(cawsDir, 'wt-c', 'sess_c', {
@@ -410,7 +410,7 @@ describe('CAWS-AGENT-PID-SESSION-CORRELATION-001 — A7: agent-PID tier', () => 
     // Two fresh envelopes (would normally refuse), PLUS an agent-PID record
     // naming sess_a. NO env var is set (the ZCode / generic-harness case).
     // The injected pidWalkFn returns a fixed PID matching the record.
-    const { repoRoot, cawsDir, now } = makeProjectRoot();
+    const { cawsDir, now } = makeProjectRoot();
     writeEnvelope(cawsDir, 'sess_a', { platform: 'zcode' });
     writeEnvelope(cawsDir, 'sess_b', { platform: 'codex' });
     writeAgentPidRecord(cawsDir, 4242, 'sess_a', { surface: 'zcode', startedAt: 1700 });

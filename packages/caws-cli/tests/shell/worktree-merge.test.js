@@ -119,7 +119,7 @@ afterAll(() => {
 
 describe('caws worktree merge --apply (CAWS-DEFECT-MERGE-APPLY-FLAG-01)', () => {
   test('A1: --apply on a ready worktree gates then merges in one command', () => {
-    const { repo, caws, wtPath } = setupReadyWorktree('apply-a1-', 'wt-a1', 'APPLY-A1-001');
+    const { repo, wtPath } = setupReadyWorktree('apply-a1-', 'wt-a1', 'APPLY-A1-001');
     const result = runMerge(repo, 'wt-a1', { apply: true });
 
     // One command merged: exit 0 + the same success line a plain merge emits.

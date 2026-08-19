@@ -71,7 +71,7 @@ function tunePolicy(cawsDir) {
   const policyPath = path.join(cawsDir, 'policy.yaml');
   let raw = fs.readFileSync(policyPath, 'utf8');
   raw = raw.replace(
-    /  god_object:\n    enabled: true\n    mode: warn\n/,
+    / {2}god_object:\n {4}enabled: true\n {4}mode: warn\n/,
     [
       `  god_object:`,
       `    enabled: true`,

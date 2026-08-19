@@ -96,7 +96,7 @@ export function normalizeRelativePosixPath(input: unknown): PathValidationResult
   }
 
   // Strip a leading './'
-  let working = input.startsWith('./') ? input.slice(2) : input;
+  const working = input.startsWith('./') ? input.slice(2) : input;
 
   // Re-check for empty after './' strip — './' alone is empty after strip.
   if (working.length === 0) {

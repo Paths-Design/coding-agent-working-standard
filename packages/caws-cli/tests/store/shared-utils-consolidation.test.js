@@ -23,7 +23,6 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const store = require('../../dist/store');
-const repoRootModule = require('../../dist/store/repo-root');
 const kernel = require('../../dist/kernel');
 
 const repos = [];

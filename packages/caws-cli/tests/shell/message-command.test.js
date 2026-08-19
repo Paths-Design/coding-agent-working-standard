@@ -317,7 +317,7 @@ test('UX A4: reply sends to the original sender on the same channel', () => {
 test('UX A4: reply refuses an unknown message id and a self-reply', () => {
   const root = mkRepo();
   makeLive(root, 'bob');
-  const { out, opts } = io(root, 'alice');
+  const { opts } = io(root, 'alice');
   expect(runMessageSendCommand({ ...opts, to: 'bob', text: 'hi' })).toBe(0);
   const original = readLog(root).find((r) => r.record === 'message');
 

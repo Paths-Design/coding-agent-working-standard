@@ -33,7 +33,7 @@ afterAll(() => {
   cleanupAll();
 });
 
-function writeClosedSpec(cawsDir, id, extra = {}) {
+function writeClosedSpec(cawsDir, id, _extra = {}) {
   const body = `id: ${id}
 title: '${id}'
 risk_tier: 3

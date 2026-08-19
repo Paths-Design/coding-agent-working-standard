@@ -104,8 +104,8 @@ describe('A1: concurrent merges both land; the base never moves backward', () =>
     seedSpec(caws, 'CAS-A1-002', ['b.txt']);
     commitCaws(repo, 'seed specs');
 
-    const branchA = seedWorktree(caws, 'wt-a', 'CAS-A1-001', 'a.txt');
-    const branchB = seedWorktree(caws, 'wt-b', 'CAS-A1-002', 'b.txt');
+    seedWorktree(caws, 'wt-a', 'CAS-A1-001', 'a.txt');
+    seedWorktree(caws, 'wt-b', 'CAS-A1-002', 'b.txt');
 
     const baseAtStart = git(repo, ['rev-parse', 'main']);
 
