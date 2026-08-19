@@ -52,3 +52,7 @@ evidence:
     status: pass
     evidence_ref: "pytest TestCommitDeletionsGuard::test_bare_commit_with_staged_deletion_asks_naming_count_A1 (ask; reason names 1 deletion + tracked.txt + '-- <paths>'; source=commit_deletions, enforcement=confirm) + bats 'bare git commit over a STAGED DELETION is refused with remediation and arms NO latch'"
     recorded_at: "2026-08-19T18:28:01.639Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "pytest test_pathspec_commit_with_staged_deletion_is_admitted_A2 (allow) + bats 'the SAME staged deletion with an explicit pathspec passes'"
+    recorded_at: "2026-08-19T18:28:02.499Z"
