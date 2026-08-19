@@ -1,0 +1,38 @@
+id: CAWS-HOOKS-CLI-CWD-LEAK-001
+title: 'Hook-invoked CAWS CLI calls resolve repo root from CAWS_PROJECT_DIR, not inherited cwd'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-08-19T19:37:23.872Z'
+updated_at: '2026-08-19T19:37:23.872Z'
+blast_radius:
+  modules:
+    - 'hook-packs/shared'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/agent-heartbeat.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/agent-register.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/agent-stop.sh'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/hooks/bats/agent-surface.bats'
+  out: []
+invariants:
+  - 'caws_run_cli never changes which binary resolves (CAWS_BIN override still honored); it only changes the cwd the binary is invoked from'
+  - 'A cd failure into a stale/missing CAWS_PROJECT_DIR falls open to the plain invocation rather than aborting the hook'
+acceptance:
+  - id: A1
+    given: 'CAWS_PROJECT_DIR points at a directory different from the hook process''s inherited cwd'
+    when: 'a shared hook shells out to the CAWS CLI via the new caws_run_cli helper'
+    then: 'the CLI subprocess runs from CAWS_PROJECT_DIR, not the inherited cwd, so repo-root resolution (git rev-parse / resolveRepoRoot) lands in the intended repo'
+  - id: A2
+    given: 'CAWS_PROJECT_DIR is unset or ''.'''
+    when: 'caws_run_cli is invoked'
+    then: 'behavior is unchanged from before (invokes the binary in the inherited cwd), preserving back-compat for wiring that never set the var'
+non_functional: {}
+contracts:
+  - name: 'caws-run-cli'
+    type: behavior
