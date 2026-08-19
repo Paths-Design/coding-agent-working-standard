@@ -3,6 +3,7 @@ title: 'Fix doc-check drift across 35 documentation files'
 risk_tier: 3
 mode: chore
 lifecycle_state: active
+worktree: wt-doc-drift-fix
 created_at: '2026-08-19T17:10:16.126Z'
 updated_at: '2026-08-19T17:10:16.126Z'
 blast_radius:
