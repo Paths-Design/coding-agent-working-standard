@@ -2,10 +2,11 @@ id: CAWS-GIT-SPAWN-COST-001
 title: 'Resolve the git binary once; build test repos by copy, not by spawn'
 risk_tier: 2
 mode: refactor
-lifecycle_state: active
-worktree: wt-git-spawn-cost
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-git-spawn-cost at 8b1a7cdc3c473f8637e5fac2524d4a7db3f20dd6'
 created_at: '2026-08-19T16:21:09.392Z'
-updated_at: '2026-08-19T16:35:40.958Z'
+updated_at: '2026-08-19T17:23:37.971Z'
 blast_radius:
   modules:
     - 'caws-cli/store (git invocation)'
