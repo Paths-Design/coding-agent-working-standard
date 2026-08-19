@@ -1011,6 +1011,7 @@ export function registerShellCommands(
           security?: string[];
           module?: string[];
           invariant?: string[];
+          activate?: boolean;
           type?: string;
           plan?: boolean;
           json?: boolean;
@@ -1044,6 +1045,10 @@ export function registerShellCommands(
           // here is invisible to every handler-level test.
           ...(opts.module !== undefined ? { module: opts.module } : {}),
           ...(opts.invariant !== undefined ? { invariant: opts.invariant } : {}),
+          // CAWS-SPEC-ACTIVATION-BINDS-001. Same forwarding discipline as the
+          // flags above: Commander parsing --activate is NOT the same as the
+          // handler receiving it, and a handler-level test cannot see a gap here.
+          activate: opts.activate === true,
           ...(opts.type !== undefined ? { legacyType: opts.type } : {}),
           plan: opts.plan === true,
           json: opts.json === true,

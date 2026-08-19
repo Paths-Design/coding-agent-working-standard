@@ -151,7 +151,7 @@ The feature specification defines a single feature's requirements and constraint
           "type": "array",
           "items": { "type": "string", "minLength": 1 },
           "minItems": 1,
-          "description": "Files/directories in scope (literal prefix matches)"
+          "description": "Files/directories in scope. An entry with no glob character is a boundary-safe directory prefix; an entry containing one is a picomatch glob. See 'scope.in matching' below."
         },
         "out": {
           "type": "array",
@@ -284,6 +284,30 @@ The feature specification defines a single feature's requirements and constraint
 
 > **Rejected fields (kernel returns `spec.schema.violation`):** `change_budget`, `acceptance_criteria`, `scope.include`, `scope.exclude`, `status` (use `lifecycle_state`), `migrations`, `human_override`, `ai_assessment`, `git_config`, `threats`, `notes`, `non_goals`, `bounded_claim`, `dependencies`, `type` (top-level), `description` (top-level).
 
+#### `scope.in` matching
+
+Each entry is read one of two ways. An entry containing any of `* ? [ ] ( ) { } ! @ + |` is a **glob**, matched by picomatch with `dot: true`. Every other entry is a **boundary-safe directory prefix** — it admits itself and its descendants, and nothing else.
+
+| Entry | Admits | Does not admit |
+|---|---|---|
+| `packages/caws-cli/src` | `packages/caws-cli/src`, `packages/caws-cli/src/shell/x.ts` | `packages/caws-cli/srcx/y.ts` |
+| `packages/*` | `packages/a` | `packages/a/b.ts` |
+| `packages/**` | `packages`, `packages/a/b/c.ts` | — |
+| `src/a?c.ts` | `src/abc.ts` | `src/a/c.ts` |
+| `docs/{api,agents}/x.md` | `docs/api/x.md`, `docs/agents/x.md` | `docs/other/x.md` |
+| `src/[abc]/x.ts` | `src/b/x.ts` | `src/d/x.ts` |
+
+Two consequences are worth stating because both have caused real mistakes:
+
+- **`*` does not cross a path separator; `**` does.** `packages/*` claims the immediate children of `packages/` and nothing below them. If you mean the subtree, write `packages/**` — or, more simply, write the bare directory `packages`, which is a prefix and admits the whole subtree.
+- **`**` also matches the directory it names**, so `docs/**` admits `docs` itself, not only its contents.
+
+`dot: true` means a leading dot is not special: `*` matches `.caws`, and `.caws/**` matches `.caws/specs/x.yaml`.
+
+This is one function — `matchGlob` in the scope kernel — and both the admission decision (`caws scope check`) and every surface that explains or ranks scope fit (`caws scope show --json` authority candidates) call it. A second implementation of these rules is a defect even when it agrees on the common cases.
+
+`scope.out` is different: the schema rejects globs there outright, and entries are matched as boundary-safe prefixes only.
+
 ### TypeScript Interface
 
 ```typescript
@@ -324,7 +348,7 @@ interface BlastRadius {
 }
 
 interface SpecScope {
-  in: string[];            // Required, non-empty; literal prefix matches
+  in: string[];            // Required, non-empty; directory prefix or picomatch glob
   out?: string[];          // Optional; directory paths only, no glob patterns
 }
 
