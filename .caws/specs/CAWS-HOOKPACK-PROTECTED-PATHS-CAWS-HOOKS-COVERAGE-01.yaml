@@ -4,22 +4,85 @@ risk_tier: 3
 mode: fix
 lifecycle_state: draft
 created_at: '2026-08-19T22:41:01.343Z'
-updated_at: '2026-08-19T22:41:01.343Z'
+updated_at: '2026-08-19T22:41:49.537Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli shared hook pack (protected-paths guard)'
+    - 'caws-cli init hook-pack manifest (shared pack version/fingerprint)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/templates/hook-packs/shared/protected-paths.sh
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/CHANGELOG.md
+    - packages/caws-cli/tests/hooks/bats/protected-paths.bats
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    protected-paths.sh protects every directory the shared pack actually
+    installs guard scripts into, not only the per-surface vendor-dir
+    convention (CAWS_VENDOR_DIR selects a settings/config directory, e.g.
+    .claude for claude-code, and is not necessarily where the shared core's
+    executable guards live).
+  - >-
+    A guard that names itself BLOCKED in its diagnostic must enforce that
+    block via the exit code the calling protocol actually treats as
+    blocking. Claude Code's PreToolUse protocol treats ONLY exit 2 as a
+    block; a fail-closed branch that exits 1 is a non-blocking error and the
+    write proceeds despite the diagnostic.
+  - >-
+    Any change to a shared hook-pack template is paired with a
+    SHARED_PACK_VERSION bump and a regenerated fingerprint in
+    pack-fingerprints.json, so the fix reaches every consumer that runs
+    caws init --adopt/--overwrite rather than silently landing only in the
+    template source tree.
+  - >-
+    Documentation under the hooks dir (*.md) stays admitted after widening
+    the protected-directory match — the docs-not-scripts allowlist
+    (CAWS-PROTECTED-PATHS-DOCS-NOT-SCRIPTS-001) is not regressed by this fix.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: >-
+      the shared pack installs its executable guard scripts to .caws/hooks/
+      regardless of agent surface, while CAWS_VENDOR_DIR resolves to a
+      different, surface-specific directory (e.g. .claude for claude-code)
+    when: >-
+      protected-paths.sh's _hooks_prefix_match evaluates a Write/Edit target
+      under .caws/hooks/ (e.g. .caws/hooks/scope-guard.sh or a new file
+      .caws/hooks/.protected-probe)
+    then: >-
+      the path matches and the guard-artifact branch is entered — closing
+      the previously unprotected surface where every installed guard script
+      was agent-writable
+  - id: A2
+    given: 'a Write/Edit target under the hooks dir that is a guard artifact (not a *.md doc) and reaches the fail-closed case branch'
+    when: 'protected-paths.sh emits its "BLOCKED" diagnostic and exits'
+    then: >-
+      it exits with status 2, not 1 — the only exit code the Claude Code
+      PreToolUse protocol treats as a block, consistent with the sibling
+      missing-lib and strike-state branches which already exit 2
+  - id: A3
+    given: 'a *.md doc under .caws/hooks/ (e.g. CLAUDE.md or README.md)'
+    when: 'protected-paths.sh evaluates it after the .caws/hooks/ coverage fix'
+    then: >-
+      it is still admitted (exit 0) — widening _hooks_prefix_match to cover
+      .caws/hooks/ does not regress the existing docs-not-scripts allowlist
+  - id: A4
+    given: 'protected-paths.sh (a shared hook-pack template file) changed'
+    when: 'the pack-fingerprint guard test runs (packages/caws-cli/tests/init/pack-fingerprint.test.js)'
+    then: >-
+      SHARED_PACK_VERSION is bumped and the recorded fingerprint in
+      pack-fingerprints.json matches the live template content, proving the
+      version-bump discipline that prevents a template fix from landing
+      without the mechanism that gets it re-installed by consumers
+non_functional:
+  security:
+    - >-
+      Closes an agent-writable gap in a security-enforcement guard: prior to
+      this fix, every executable guard script installed by the shared pack
+      was writable by the agent it is meant to constrain, and even a
+      correctly-matched block did not stop the write due to the exit-code
+      defect.
 contracts: []
