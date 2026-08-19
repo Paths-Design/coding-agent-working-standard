@@ -2,10 +2,11 @@ id: CAWS-GUARD-COMMIT-DELETES-UNNAMED-001
 title: 'A bare git commit that deletes tracked content is not non-destructive; the classifier must stop admitting it'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-guard-commit-deletes
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-guard-commit-deletes at ea8a3e9655cc889b82cec54e2660eaa8638a393b'
 created_at: '2026-08-19T17:34:42.807Z'
-updated_at: '2026-08-19T18:23:30.543Z'
+updated_at: '2026-08-19T18:28:40.965Z'
 blast_radius:
   modules:
     - 'caws-cli/hook-packs (shared classifier)'
