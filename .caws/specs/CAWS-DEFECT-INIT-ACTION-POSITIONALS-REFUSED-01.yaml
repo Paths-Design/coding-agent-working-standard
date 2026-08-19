@@ -52,3 +52,7 @@ evidence:
     status: pass
     evidence_ref: "spawned dist/index.js: 'init port .caws/hooks/scope-guard.sh' (no --from) exits non-zero with 'caws init port: --from <staging-file> is required.', not the excess-args error (test A2). Live artifact: exit 2, same message."
     recorded_at: "2026-08-19T22:36:32.985Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "spawned dist/index.js: 'init a b c' exits non-zero, diagnostic 'unexpected extra argument(s): c ... at most 2 positional arguments ([action] [actionArg])' (test A3). Live artifact matches verbatim."
+    recorded_at: "2026-08-19T22:36:33.391Z"
