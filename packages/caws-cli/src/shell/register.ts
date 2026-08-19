@@ -37,6 +37,7 @@ import {
   type GroupCommandMeta,
   type LeafCommandMeta,
   type CommandOptionMeta,
+  type CommandArgMeta,
 } from './command-metadata';
 import {
   runAgentsHeartbeatCommand,
@@ -253,12 +254,28 @@ function parseOptionalNonNegativeInteger(raw: string | undefined): number | unde
   return parsed;
 }
 
+/** The single source of truth for a leaf's declared positionals, whether
+ * authored as one `argument` or as an ordered `arguments` list — every other
+ * reader (leafCommandName, guardExcessArguments) goes through this so a
+ * leaf's advertised shape and its enforced shape can never diverge again
+ * (CAWS-DEFECT-INIT-ACTION-POSITIONALS-REFUSED-01: init declared its two
+ * positionals only via bolted-on `.argument()` calls in register.ts, which
+ * this guard's Commander-arg-count check never saw, so `init diff` and
+ * `init port <path>` were refused before their action ran). */
+function declaredArguments(leaf: LeafCommandMeta): readonly CommandArgMeta[] {
+  if (leaf.arguments !== undefined) return leaf.arguments;
+  if (leaf.argument !== undefined) return [leaf.argument];
+  return [];
+}
+
 /** Construct the `.command()` name string with the metadata's positional
- * argument suffix (`<name>` required, `[name]` optional), e.g. "create <id>". */
+ * argument suffix (`<name>` required, `[name]` optional), e.g. "create <id>"
+ * or "init [action] [actionArg]" for a multi-positional leaf. */
 function leafCommandName(leaf: LeafCommandMeta): string {
-  if (!leaf.argument) return leaf.name;
-  const { name, required } = leaf.argument;
-  return required ? `${leaf.name} <${name}>` : `${leaf.name} [${name}]`;
+  const args = declaredArguments(leaf);
+  if (args.length === 0) return leaf.name;
+  const suffix = args.map((a) => (a.required ? `<${a.name}>` : `[${a.name}]`)).join(' ');
+  return `${leaf.name} ${suffix}`;
 }
 
 /** Refuse excess positional arguments with a diagnostic that names the
@@ -271,23 +288,29 @@ function leafCommandName(leaf: LeafCommandMeta): string {
  * on the edit it believed was admitted
  * (CAWS-DEFECT-AMEND-SCOPE-EXCESS-ARGS-SILENT-DROP-01).
  *
- * No leaf declares a variadic positional (leafCommandName supports at most
- * one argument), so there are zero legitimate excess-positional callers. The
- * check runs as a preAction hook — before the action, so NOTHING is applied —
- * rather than via allowExcessArguments(false), whose built-in message names
- * only a count, not the dropped token or the remediation. */
+ * declaredArguments() is authoritative for how many positionals a leaf takes
+ * (0, 1, or — for init — 2), so there are zero legitimate excess-positional
+ * callers beyond that count. The check runs as a preAction hook — before the
+ * action, so NOTHING is applied — rather than via allowExcessArguments(false),
+ * whose built-in message names only a count, not the dropped token or the
+ * remediation. */
 function guardExcessArguments(cmd: Command, leaf: LeafCommandMeta): void {
   cmd.hook('preAction', (thisCommand) => {
-    const declared = leaf.argument ? 1 : 0;
+    const args = declaredArguments(leaf);
+    const declared = args.length;
     const extras = thisCommand.args.slice(declared);
     if (extras.length === 0) return;
     const names: string[] = [];
     for (let c: Command | null = thisCommand; c !== null; c = c.parent) {
       names.unshift(c.name());
     }
-    const expected = leaf.argument
-      ? `exactly one positional argument (<${leaf.argument.name}>)`
-      : 'no positional arguments';
+    const argNames = args.map((a) => (a.required ? `<${a.name}>` : `[${a.name}]`));
+    const expected =
+      argNames.length === 0
+        ? 'no positional arguments'
+        : argNames.length === 1
+          ? `exactly one positional argument (${argNames[0]})`
+          : `at most ${argNames.length} positional arguments (${argNames.join(' ')})`;
     const repeatable = leaf.options
       .filter((opt) => opt.collect === true)
       .map((opt) => opt.flag.split(' ')[0]);
@@ -362,11 +385,6 @@ export function registerShellCommands(
   // src/index.js as part of slice 7b.
   // -------------------------------------------------------------------
   defineFlat(program, INIT_COMMAND_META)
-    .argument('[action]', 'subcommand: diff | port')
-    .argument(
-      '[actionArg]',
-      'port: the managed pack destination path being retrofitted'
-    )
     .action(
       (
         action: string | undefined,
