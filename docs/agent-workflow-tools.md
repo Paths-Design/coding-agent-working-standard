@@ -11,7 +11,7 @@ updated: 2026-05-28
 
 This guide shows agents how to use the v11.1 CAWS surface to navigate quality gates and recover from common blocks. The full CLI reference is at [`docs/api/cli.md`](api/cli.md); the doctrine source is [`docs/architecture/caws-vnext-command-surface.md`](architecture/caws-vnext-command-surface.md).
 
-> **v11.1 surface.** This doc references the thirteen v11.1 command groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents`. v10 commands (`burnup`, `validate`, `evaluate`, `iterate`, `diagnose`, `waivers` plural, etc.) are removed and not returning.
+> **v11 surface.** This doc references the fourteen current v11 command groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message`. v10 commands (`burnup`, `validate`, `evaluate`, `iterate`, `diagnose`, `waivers` plural, etc.) are removed and not returning.
 
 ## When you get blocked
 
@@ -127,11 +127,12 @@ Alternatively, do the migration on `caws-cli@10.2.x` and then upgrade.
 | Run quality gates | `caws gates run --spec <id>` |
 | Record test evidence | `caws evidence record --type test --spec <id> --data '{...}'` |
 | Record AC closure | `caws specs evidence <id> --ac A1 --status pass --evidence-ref "<test command>"` |
-| Open a waiver | `caws waiver create <id> --gate <g> --reason "..." --approved-by "..." --expires-at <iso8601>` |
+| Open a waiver | `caws waiver create <id> --title "<title>" --gate <g> --reason "..." --approved-by "..." --expires-at <iso8601>` |
 | List waivers | `caws waiver list` |
 | Show waiver | `caws waiver show <id>` |
 | Revoke waiver | `caws waiver revoke <id>` |
-| Create a spec | `caws specs create <id> --title "..." --risk-tier T1` |
+| Grant a guard reprieve | `caws reprieve grant --handlers <handler.sh> --reason "..." --approved-by "..." --for 1h` |
+| Create a spec | `caws specs create <id> --title "..." --mode <feature\|refactor\|fix\|doc\|chore> --risk-tier 1` |
 | List specs | `caws specs list` |
 | Show a spec | `caws specs show <id>` |
 | Close a spec | `caws specs close <id>` |
@@ -142,6 +143,7 @@ Alternatively, do the migration on `caws-cli@10.2.x` and then upgrade.
 | Destroy a worktree | `caws worktree destroy <name>` |
 | List active agents | `caws agents list` |
 | Show one agent | `caws agents show <session-id>` |
+| Send a message to another session | `caws message send --to <session-id> --text "..."` |
 
 ---
 

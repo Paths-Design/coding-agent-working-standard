@@ -7,25 +7,32 @@ This directory contains comprehensive documentation for the CAWS (Coding Agent W
 ```
 docs/
 ├── README.md              # This file - documentation overview
+├── command-reference.md   # Generated: exhaustive CLI leaf/flag surface
+├── failure-lineage.md     # Incident-derived doctrine, entry per failure class
+├── release-procedure.md   # Tag-driven release procedure
 ├── api/                   # API reference documentation
 │   ├── cli.md            # CLI tool documentation
 │   └── schema.md         # Schema specifications
 ├── agents/                # Agent-specific guides and tutorials
-│   ├── examples.md       # Agent examples
-│   ├── full-guide.md     # Complete agent guide
-│   └── tutorial.md       # Agent tutorial
+│   ├── EXAMPLES.md        # Agent examples
+│   ├── full-guide.md      # Complete agent guide
+│   ├── scope-discipline.md # Pre-edit scope admission procedure
+│   └── TUTORIAL.md        # Agent tutorial
+├── architecture/           # Architecture doctrine, ADRs, design notes
+│   └── caws-vnext-command-surface.md  # Command-surface doctrine source
 ├── guides/                # General guides and documentation
 │   ├── agent-integration-guide.md    # Agent integration guide
-│   ├── agent-workflow-extensions.md  # Agent workflow extensions
+│   ├── caws-contracts.md             # Contract authoring
 │   ├── caws-developer-guide.md       # Developer guide
-│   └── hooks-and-agent-workflows.md  # Unified hooks and agent workflows
-└── internal/             # Internal documentation (gitignored)
-    ├── COMPLETED_UX_IMPROVEMENTS.md
-    ├── CURRENT_DIR_INIT_FIX.md
-    ├── FEAT-CLI-TOOLS/
-    ├── FEEDBACK_RESPONSE_CLAUDE_4.5.md
-    ├── HOOK_STRATEGY.md
-    └── UX_IMPROVEMENTS_ROADMAP.md
+│   ├── hook-packs.md                 # Hook pack structure
+│   ├── hooks-and-agent-workflows.md  # Unified hooks and agent workflows
+│   ├── multi-agent-workflow.md       # Multi-agent worktree pattern
+│   ├── placeholder-governance.md     # Historical — see file banner
+│   ├── waiver-troubleshooting.md     # Waiver debugging
+│   └── worktree-isolation.md         # Worktree lifecycle
+└── internal/              # Untracked, gitignored local scratch notes —
+                            # content varies by checkout; not part of the
+                            # tracked doc tree
 ```
 
 ## Core Documentation

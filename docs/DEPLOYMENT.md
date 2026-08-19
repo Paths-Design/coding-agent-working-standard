@@ -4,13 +4,13 @@ authority: reference
 status: active
 title: CAWS Production Deployment Guide
 owner: vNext rewrite team
-updated: 2026-05-28
+updated: 2026-08-19
 ---
 
 # CAWS Production Deployment Guide
 
 **Author**: @darianrosebrook  
-**Last Updated**: 2026-05-28  
+**Last Updated**: 2026-08-19  
 **Status**: Production Ready
 
 ## Overview
@@ -25,8 +25,7 @@ This guide covers deploying CAWS to production environments. CAWS is primarily d
 
 CAWS packages are published to npm under the `@paths.design` scope:
 
-- **@paths.design/caws-cli** - Command-line interface (v11.1.6, `latest` dist-tag)
-- **@caws/mcp-server** - Model Context Protocol server
+- **@paths.design/caws-cli** - Command-line interface (v11.9.0, `latest` dist-tag). This is the only package CAWS publishes — the kernel is absorbed into it; there is no separate `@paths.design/caws-kernel` publish, and no `@caws/mcp-server` package exists.
 
 ```mermaid
 graph TB
@@ -150,7 +149,9 @@ CAWS_SPEC_ID=<feature-spec-id>
 **For Production Services**:
 
 ```bash
-# Production MCP server
+# Production CLI usage (there is no separate CAWS server process to deploy —
+# `caws` is a CLI invoked by CI/hooks; these are illustrative variables a
+# team's own tooling might read around it, not variables the CLI itself reads)
 CAWS_ENABLE_MONITORING=true
 CAWS_LOG_LEVEL=info
 NODE_ENV=production
