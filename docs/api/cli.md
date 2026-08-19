@@ -2,12 +2,12 @@
 doc_id: caws-cli-api-reference
 authority: reference
 status: active
-title: CAWS CLI API Reference (v11.6.0)
+title: CAWS CLI API Reference (v11.9.0)
 owner: vNext rewrite team
-updated: 2026-07-03
+updated: 2026-08-19
 ---
 
-# CAWS CLI API Reference (v11.6.0)
+# CAWS CLI API Reference (v11.9.0)
 
 The CAWS CLI (`@paths.design/caws-cli`) is the governance surface for the Coding Agent Working Standard. The v11 line ships thirteen top-level commands/groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents`, `message`, plus the auto-generated `help`.
 

@@ -23,7 +23,7 @@ audience: consumer
 
 ```bash
 # create a spec for the change
-caws specs create FEAT-1234 --title "Apply coupon at checkout" --risk-tier T1
+caws specs create FEAT-1234 --title "Apply coupon at checkout" --mode feature --risk-tier 1
 
 # edit spec & plan
 code .caws/specs/FEAT-1234.yaml docs/FEAT-1234/feature.plan.md docs/FEAT-1234/test-plan.md

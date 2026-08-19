@@ -56,6 +56,13 @@ Related: `MULTI-AGENT-PUSH-RANGE-GUARD-001`, `WORKING-TREE-PROVENANCE-GUARD-001`
 > doctrinal-amendment block is the authoritative substrate decision.
 > This doc remains historical.
 
+> **Path note (2026-08-19).** `CAWS-ABSORB-KERNEL-01` deleted the separate
+> `packages/caws-kernel` package and moved its source into
+> `packages/caws-cli/src/kernel/`. Every `packages/caws-kernel/...` path cited
+> in the historical body below is accurate to when it was written; for the
+> current location of the same file, replace that prefix with
+> `packages/caws-cli/src/kernel/`.
+
 ## Purpose
 
 Resolve the six open design questions on `SESSION-OWNERSHIP-METADATA-001` (Q1–Q6 in the spec's triage block) before activation, plus document a structural drift in `.caws/agents.json` discovered during recon that the spec did not anticipate.

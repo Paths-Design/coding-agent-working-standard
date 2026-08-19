@@ -33,8 +33,8 @@ Planned write targets:
 - ...
 
 Scope proof:
-- caws scope show <path> => <ADMIT | REFUSE>
-- caws scope show <path> => <ADMIT | REFUSE>
+- caws scope show <path> => <ADMIT | REFUSE | NO AUTHORITY>
+- caws scope show <path> => <ADMIT | REFUSE | NO AUTHORITY>
 - ...
 
 No edits before this proof is complete.

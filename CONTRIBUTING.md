@@ -111,6 +111,11 @@ Submit a pull request with:
 5. **Mutation Tests**: Ensure test effectiveness
 
 ### Coverage Requirements
+**Coverage and mutation are NOT v11 CAWS gates** — `caws gates run --spec <id>`
+only evaluates the gates declared in `.caws/policy.yaml` (`budget_limit`,
+`spec_completeness`, `scope_boundary`, `god_object`, `todo_detection`); none of
+them encode a coverage or mutation threshold. The tier-scaled targets below are
+a recommendation for your own CI, not something `caws gates run` enforces:
 - **Tier 1 Projects**: ≥90% branch coverage, ≥70% mutation score
 - **Tier 2 Projects**: ≥80% branch coverage, ≥50% mutation score
 - **Tier 3 Projects**: ≥70% branch coverage, ≥30% mutation score

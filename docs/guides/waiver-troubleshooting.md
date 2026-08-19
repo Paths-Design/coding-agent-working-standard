@@ -2,13 +2,13 @@
 doc_id: waiver-troubleshooting
 authority: reference
 status: active
-title: Waiver troubleshooting (v11.0.0)
+title: Waiver troubleshooting (v11.9.0)
 owner: vNext rewrite team
-updated: 2026-05-15
+updated: 2026-08-19
 audience: consumer
 ---
 
-# Waiver troubleshooting (v11.0.0)
+# Waiver troubleshooting (v11.9.0)
 
 **For AI agents and developers working with CAWS v11 waivers.**
 
@@ -16,7 +16,7 @@ audience: consumer
 
 ## How waivers work in v11
 
-Waivers in v11 are records under `.caws/waivers/<id>.yaml`, written through the store via `caws waiver create`. Each waiver targets one gate name. When `caws gates run --spec <id>` evaluates that gate and a violation matches an active, non-expired waiver, the violation is filtered out of the disposition.
+Waivers in v11 are records under `.caws/waivers/<id>.yaml`, written through the store via `caws waiver create`. A waiver targets one or more gate names (`gates:`, an array — repeat `--gate` on the CLI for more than one). When `caws gates run --spec <id>` evaluates a targeted gate and a violation matches an active, non-expired waiver, the violation is filtered out of the disposition.
 
 **Waivers do not change gate `mode`.** `mode` is owned by `policy.yaml` (block / warn / skip). Waivers filter individual violations.
 
@@ -47,6 +47,7 @@ caws doctor                          # surfaces malformed waiver files as findin
 ```bash
 caws waiver revoke <old-id>
 caws waiver create <new-id> \
+  --title "<short title>" \
   --gate <correct-gate-name> \
   --reason "..." \
   --approved-by "..." \
@@ -57,7 +58,7 @@ caws waiver create <new-id> \
 
 **Cause**: a waiver with that id already exists at `.caws/waivers/<id>.yaml`.
 
-**Fix**: pick a different id (waiver ids are arbitrary strings; convention is `<spec-id>-<short>`, e.g. `FEAT-1-w1`). Or revoke the existing waiver first if it's stale.
+**Fix**: pick a different id. Waiver ids must match `^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+[a-z]?$` (ends in digits, optionally one trailing lowercase letter — `FEAT-1-w` and `FEAT-1-w1` both fail this since they end in a letter-only segment). Convention: `<spec-id>-<n>`, e.g. `FEAT-1a` or `FEAT-1-2`. Or revoke the existing waiver first if it's stale.
 
 The exit code for this case is `1` (domain failure), and the diagnostic mentions the duplicate id explicitly. The CLI uses the `STORE_RULES.WAIVERS_ALREADY_EXISTS` rule constant (8a1).
 
@@ -74,7 +75,8 @@ The exit code for this case is `1` (domain failure), and the diagnostic mentions
 **Fix**: revert the spec edit and open a waiver:
 
 ```bash
-caws waiver create FEAT-1-budget \
+caws waiver create FEAT-1a \
+  --title "Budget breach during emergency refactor" \
   --gate budget_limit \
   --reason "Refactor required emergency budget breach; cleanup tracked in FEAT-2" \
   --approved-by "tech-lead@example.com" \
@@ -101,7 +103,8 @@ caws doctor                          # surfaces composition findings as "load er
 
 ```bash
 # Create
-caws waiver create FEAT-1-w \
+caws waiver create FEAT-1a \
+  --title "Emergency budget extension" \
   --gate budget_limit \
   --reason "Emergency budget extension for FEAT-1 integration" \
   --approved-by "tech-lead@example.com" \
@@ -109,10 +112,10 @@ caws waiver create FEAT-1-w \
 
 # Inspect
 caws waiver list                     # all waivers
-caws waiver show FEAT-1-w            # one waiver
+caws waiver show FEAT-1a            # one waiver
 
 # Revoke (idempotent)
-caws waiver revoke FEAT-1-w
+caws waiver revoke FEAT-1a
 ```
 
 Each operation appends an event to `.caws/events.jsonl` via the store's hash-chained `appendEvent`. The audit trail is durable and verifiable.
@@ -122,23 +125,33 @@ Each operation appends an event to `.caws/events.jsonl` via the store's hash-cha
 `.caws/waivers/<id>.yaml`:
 
 ```yaml
-id: FEAT-1-w
-gate: budget_limit
+id: FEAT-1a
+title: Emergency budget extension
+status: active
+effectiveness: active
+gates:
+  - budget_limit
 reason: |
   Emergency budget extension for FEAT-1 integration.
   Cleanup tracked in FEAT-2.
 approved_by: tech-lead@example.com
 created_at: 2026-05-15T10:00:00Z
 expires_at: 2026-12-31T23:59:59Z
-status: active
+scope: {}
 ```
+
+`title` is required (≥5 non-whitespace characters). `gates` is an array — a
+waiver can target more than one gate; repeat `--gate` on the CLI to add more.
+`status` is the stored lifecycle value (active/revoked); `effectiveness`
+reflects whether the waiver is currently in force (accounts for expiry,
+independent of `status`).
 
 Authored by `caws waiver create`. Do not hand-edit. The store enforces atomic writes via `writeFileAtomic`.
 
 Fields v11 does NOT use (legacy v3/v10 leftovers — ignore them):
 
 - `delta:` (max_files / max_loc) — budget is policy-driven in v11.
-- `gates:` plural — v11 waivers target one gate per waiver.
+- `gate:` singular — the current field is `gates:`, an array.
 - `risk_assessment:` (impact_level / mitigation_plan) — capture in `reason` instead.
 - `approvers:` plural — v11 records a single `approved_by`.
 - `description:` — capture in `reason`.

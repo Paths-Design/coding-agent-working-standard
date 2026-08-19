@@ -11,7 +11,7 @@ updated: 2026-05-28
 
 This guide explains how to integrate an AI agent runtime (Claude Code, Cursor, custom orchestrator, etc.) with CAWS v11 as a quality and audit substrate.
 
-> **v11 surface.** The v11 line ships twelve command groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents` (plus the auto-generated `help`). The legacy `caws evaluate`, `caws iterate`, `caws diagnose`, `caws agent evaluate` surfaces are removed. The integration patterns below use only the v11 surface.
+> **v11 surface.** The v11 line ships fourteen command groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message` (plus the auto-generated `help`). The legacy `caws evaluate`, `caws iterate`, `caws diagnose`, `caws agent evaluate` surfaces are removed. The integration patterns below use only the v11 surface.
 >
 > Doctrine source: [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md). Full CLI reference: [`docs/api/cli.md`](../api/cli.md).
 
@@ -37,7 +37,7 @@ All commands are scriptable. Exit codes are uniform: 0 success/observation, 1 do
 
 - v11 CLI installed: `npm install -g @paths.design/caws-cli@^11.5.0` (or `@latest`)
 - Project initialized: `caws init` (idempotent; refuses legacy `.caws/working-spec.yaml` residue)
-- At least one spec created: `caws specs create <id> --title "..." --risk-tier T1`
+- At least one spec created: `caws specs create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --risk-tier 1`
 
 ## Pre-implementation checks
 
@@ -127,6 +127,7 @@ When a gate violation is acceptable but cannot be fixed in the current change:
 
 ```bash
 caws waiver create <id>-w \
+  --title "<short title>" \
   --gate <gate-name> \
   --reason "Why the violation is acceptable + mitigation plan" \
   --approved-by "approver@example.com" \

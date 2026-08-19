@@ -766,7 +766,7 @@ This is unusually direct evidence: the substrate gap is current, not historical.
 | Slice-base SHA tracking | TBD (per ADR Q2) | Record base SHA at slice activation OR commit 1 of an implementation pass. Storage shape pending the ADR. |
 | Spec provenance inference | Same as classifier | Minimum: file-touch + commit-subject pattern matching. Stronger (deferred): session ledger mapping each commit SHA to the active spec at commit time. |
 
-The slice is filed as `MULTI-AGENT-PUSH-RANGE-GUARD-001` (`.caws/specs/MULTI-AGENT-PUSH-RANGE-GUARD-001.yaml`, committed at `2777e58`) at `lifecycle_state: draft` pending an Authority Decision Record. A0 of the spec is the ADR gate; A1–A7 lock the test fixtures, including a fixture for the exact session-13 condition (foreign worktree's commit in `origin/main..HEAD` produces ERROR-severity refuse-or-ack).
+The slice was filed as `MULTI-AGENT-PUSH-RANGE-GUARD-001` (committed at `2777e58`) at `lifecycle_state: draft` pending an Authority Decision Record; it is now `archived` (recover the body via `caws specs show MULTI-AGENT-PUSH-RANGE-GUARD-001 --archived`). A0 of the spec was the ADR gate; A1–A7 locked the test fixtures, including a fixture for the exact session-13 condition (foreign worktree's commit in `origin/main..HEAD` produces ERROR-severity refuse-or-ack).
 
 ### What it doesn't catch (even after the planned fix lands)
 
@@ -839,7 +839,7 @@ This entry documents the **visibility substrate** that closes the diagnostic gap
 
 | Surface | What | How visibility works |
 |---|---|---|
-| **Kernel** (`packages/caws-kernel/src/worktree/leases.ts`) | Pure patch logic: `registerAgentSession`, `heartbeatAgentSession`, `stopAgentSession`, `summarizeActiveAgents`, `pruneLeasesByStatus`. Time-injected. No I/O. Patches are a separate `LeasePatch` type, not mixed into `RegistryPatch`. | Renders three buckets (active / stale / stopped) from per-session lease files. |
+| **Kernel** (`packages/caws-cli/src/kernel/worktree/leases.ts`) | Pure patch logic: `registerAgentSession`, `heartbeatAgentSession`, `stopAgentSession`, `summarizeActiveAgents`, `pruneLeasesByStatus`. Time-injected. No I/O. Patches are a separate `LeasePatch` type, not mixed into `RegistryPatch`. | Renders three buckets (active / stale / stopped) from per-session lease files. |
 | **Store** (`packages/caws-cli/src/store/leases-store.ts`) | Atomic per-session-file I/O at `.caws/leases/<safe-session-id>.json`. Strict-allowlist filename (`^[A-Za-z0-9._:-]+$`); refuses `unknown`. Lenient `loadLeases` (a corrupted lease emits a diagnostic but does not block the rest). No lifecycle-lock — per-session file ownership eliminates contention. | Each session writes only its own file; reads are concurrent-safe. |
 | **Shell** (`packages/caws-cli/src/shell/commands/agents.ts`) | New `caws agents register / heartbeat / stop / list / show / prune` group. `--session-id` flag overrides env-walking session resolution; required for hook-invoked commands. `--json --include-active-summary` returns CAWS-native JSON describing all currently-active leases — never Claude Code's `hookSpecificOutput` envelope. | The hook-protocol-agnostic JSON the hook script consumes. |
 | **Status panel** (`packages/caws-cli/src/shell/render/status.ts`) | New "Agents" panel rendering BEFORE the Doctor panel. Annotates the current session and marks peers when N>1. Status remains read-only by default; `--heartbeat` (not `--session-id` alone) is the explicit write trigger. | Visibility at every `caws status` invocation. |
@@ -918,7 +918,7 @@ What this does NOT close: dirty-overlap cleanup at worktree boundaries; push-ran
 
 **Severity:** High (cross-repo migration blocker; every v10→v11 migrant repo with `validation_completed` entries in `events.jsonl` could not complete the first `caws worktree create`/`caws specs close`/any event-appending lifecycle command after upgrade — and the failure mode masqueraded as `partial_failure_recovered (no state change)`, which appears benign)
 **Era:** v11.1.7, immediately post-publish
-**Surface that failed:** `validateChainedEvent` in `packages/caws-kernel/src/evidence/validate.ts`
+**Surface that failed:** `validateChainedEvent` in `packages/caws-cli/src/kernel/evidence/validate.ts`
 **Substrate that exposed it:** Sterling-side `caws worktree create` invocation, surfaced via Sterling's bootstrap-slice diagnosis recorded in `/Users/darianrosebrook/Desktop/Projects/sterling/tmp/14320677-a846-4c89-a2c0-b540397f0bac/turn-020.json`
 
 ### What happened
@@ -966,7 +966,7 @@ Two structural reasons.
 
 ### What this slice (KERNEL-EVENT-V10-COMPAT-ALIAS-001) shipped
 
-A narrow read-side compatibility alias: `validateChainedEvent` routes inputs whose `event === 'validation_completed'` through a separate compat schema (`packages/caws-kernel/src/schemas/events/validation_completed.v1.json`) that admits the exact v10 envelope shape. Every other event name flows through the canonical v11 path unchanged.
+A narrow read-side compatibility alias: `validateChainedEvent` routes inputs whose `event === 'validation_completed'` through a separate compat schema (`packages/caws-cli/src/kernel/schemas/events/validation_completed.v1.json`) that admits the exact v10 envelope shape. Every other event name flows through the canonical v11 path unchanged.
 
 Five load-bearing properties of the implementation:
 
@@ -1280,7 +1280,7 @@ Both are idempotent and never block. They write to `<plan-path>.transcript.jsonl
 
 ### What happened
 
-The canonical `god_object` gate (`packages/quality-gates/check-god-objects.mjs`) classifies a file by SLOC against warning/critical/severe thresholds (1750/2000/3000). It runs only when an operator invokes `caws gates run`. Nothing fired at edit time, so an agent writing or growing a large module received no feedback in the loop where the decision was being made. The signal existed; its timing was wrong for the agent's workflow.
+The canonical `god_object` gate classified a file by SLOC against warning/critical/severe thresholds (1750/2000/3000), implemented at the time as `packages/quality-gates/check-god-objects.mjs`. It ran only when an operator invoked `caws gates run`. Nothing fired at edit time, so an agent writing or growing a large module received no feedback in the loop where the decision was being made. The signal existed; its timing was wrong for the agent's workflow. (The `packages/quality-gates` package was later removed entirely; the equivalent check now runs at edit time as `.caws/hooks/god-object-check.sh` — see [Quality gates deprecation](architecture/quality-gates-deprecation.md).)
 
 ### What we built or changed because of it
 
@@ -1307,7 +1307,7 @@ The canonical `god_object` gate (`packages/quality-gates/check-god-objects.mjs`)
 
 ### What happened
 
-The CAWS key rule "No fake implementations — no placeholder stubs, no TODO in committed code" lived in the doctrine docs. The `todo_detection` gate (`packages/quality-gates/todo-analyzer.mjs`) catches it at gate-run time, but — like the god-object gate — only when an operator runs `caws gates run`. At edit time, an agent could write a stub and the doctrine had no mechanism to push back in the loop.
+The CAWS key rule "No fake implementations — no placeholder stubs, no TODO in committed code" lived in the doctrine docs. The `todo_detection` gate, implemented at the time as `packages/quality-gates/todo-analyzer.mjs`, caught it at gate-run time, but — like the god-object gate — only when an operator ran `caws gates run`. At edit time, an agent could write a stub and the doctrine had no mechanism to push back in the loop. (`packages/quality-gates` is now removed; the edit-time equivalent is `.caws/hooks/shortcut-language-check.sh`.)
 
 ### What we built or changed because of it
 
@@ -1427,7 +1427,7 @@ The git-ignore status was a red herring: it suppressed local visibility but did 
 
 - **Writers** (`session-log.sh`, `lib/parse-input.sh`) write turn logs + `.session-envelope.json` to `.caws/sessions/<session-id>/` and the per-repo caller-pointer to `.caws/sessions/.caller-session.json`, resolved via git-common-dir + `pwd -P` so a linked worktree writes to the canonical `.caws/sessions/`, not a per-worktree copy. Writers only fire where a `.caws/` directory exists (a real CAWS project).
 - **Reader** (`resolve-session.ts`) scans the new `.caws/sessions/` home first and the legacy `tmp/` home second — a **bounded read-both fallback** so an in-flight session whose envelope was written to the old path before the cutover is not orphaned (no session-resolution regression). Deduped by session_id, new home wins. New writes go only to `.caws/sessions/`; the legacy read is a labeled, removable transition aid.
-- **Packaging guard** excludes `templates/hook-packs/claude-code/tmp/` from the tarball — verified to drop the 27 stray files to 0 while shipping all legitimate pack files. A packaging test (`tests/init/session-log-packaging-guard.test.js`) invokes `npm pack --dry-run --json` and asserts zero `tmp/` session files ship, locking the leak against recurrence at CI. **Correction (`CAWS-SESSION-LOG-PACK-LEAK-HOTFIX-001`):** the RELOCATE slice first shipped a `.npmignore` exclusion, but **npm's `files`-field inclusion takes precedence over `.npmignore`** — so `.npmignore` alone did NOT drop the files on canonical (it false-passed in the sparse worktree where the `tmp/` dirs weren't materialized). The operative guard is a **negation entry in the `package.json` `files` array** (`!templates/hook-packs/claude-code/tmp` + `…/tmp/**`); `.npmignore` is retained as documented defense-in-depth. The test was hardened to SEED a real stray probe before `npm pack` (proven by mutation to fail when the negation is removed) so it can no longer false-pass on an empty `tmp/`.
+- **Packaging guard** excludes `templates/hook-packs/claude-code/tmp/` from the tarball — verified to drop the 27 stray files to 0 while shipping all legitimate pack files. A packaging test asserting zero `tmp/` session files ship via `npm pack --dry-run --json` locked the leak against recurrence at CI at the time; that specific test file no longer exists in the current test tree (searched; no `packages/caws-cli/tests/**` file matches this assertion pattern today) — treat this entry as historical record of the guard's original shape, not a live pointer. **Correction (`CAWS-SESSION-LOG-PACK-LEAK-HOTFIX-001`):** the RELOCATE slice first shipped a `.npmignore` exclusion, but **npm's `files`-field inclusion takes precedence over `.npmignore`** — so `.npmignore` alone did NOT drop the files on canonical (it false-passed in the sparse worktree where the `tmp/` dirs weren't materialized). The operative guard is a **negation entry in the `package.json` `files` array** (`!templates/hook-packs/claude-code/tmp` + `…/tmp/**`); `.npmignore` is retained as documented defense-in-depth. The test was hardened to SEED a real stray probe before `npm pack` (proven by mutation to fail when the negation is removed) so it can no longer false-pass on an empty `tmp/`.
 - **Manifest stateModel** + **doctrine** (root + template CLAUDE.md/AGENTS.md, `.claude/rules/worktree-isolation.md`) updated to name `.caws/sessions/<sessionId>/` everywhere the old `tmp/<sessionId>/` pointer was referenced.
 
 ### What it doesn't catch

@@ -2,17 +2,17 @@
 doc_id: agents-full-guide
 authority: reference
 status: active
-title: CAWS Agent Workflow Guide (v11.1.6)
+title: CAWS Agent Workflow Guide (v11.9.0)
 owner: vNext rewrite team
-updated: 2026-05-28
+updated: 2026-08-19
 ---
 
-# CAWS — Agent Workflow Guide (v11.1.6)
+# CAWS — Agent Workflow Guide (v11.9.0)
 
 **Coding Agent Working Standard** — engineering-grade operating system for AI-assisted development.
 
 **Version**: 11.1.6
-**Last Updated**: 2026-05-28
+**Last Updated**: 2026-08-19
 
 > **v11 posture (A1).** This guide describes the v11 surface — fourteen command groups: `init`, `doctor`, `scope`, `status`, `claim`, `gates`, `evidence`, `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message` (plus the auto-generated `help`). Run `caws --help` for the authoritative list. Removed commands (`validate`, `iterate`, `evaluate`, `diagnose`, `provenance`, `scaffold`, `parallel`, `mode`, `verify-acs`, `burnup`, `sidecar`, `test-analysis`, `templates`, `prepush`, legacy `hooks install`) are not registered with the CLI. Do NOT pin `caws-cli@^10.2.x`; v11.1 ships the full spec/worktree/agents surface.
 >
