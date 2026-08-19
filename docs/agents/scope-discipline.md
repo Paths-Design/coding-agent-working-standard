@@ -127,13 +127,9 @@ When you draft scope.in, mentally walk every file you'll create or modify:
   repos): is the new test file path in scope.in?
 
 If you're listing one or two paths and the rest are "in this directory,"
-consider whether the directory itself is the right scope.in entry — a bare
-directory entry admits its whole subtree, and it is the shape least likely to
-surprise you. An entry containing a glob character is matched by picomatch
-instead, where `*` stops at a path separator: `packages/*` admits `packages/a`
-but NOT `packages/a/b.ts`. Write `packages` or `packages/**` for the subtree.
-Full table: [`docs/api/schema.md`](../api/schema.md) § `scope.in` matching.
-Either way the entry is enforcement, not documentation.
+consider whether the directory itself is the right scope.in entry. The scope
+kernel treats scope.in entries as literal prefix matches (or globs where
+supported), not as documentation.
 
 ### 2. Amend scope BEFORE the speculative edit, not after the strike
 

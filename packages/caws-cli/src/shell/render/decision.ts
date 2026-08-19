@@ -215,29 +215,12 @@ function authorityCandidates(
   return boundContext?.authorityCandidates ?? [];
 }
 
-/**
- * The "go look at the candidates" command.
- *
- * CAWS-SPEC-ACTIVATION-BINDS-001: `--status active` HIDES a draft claimant, so
- * when one is being recommended the filter would send the caller to a listing
- * that omits the very spec named one line above. Drop the filter in that case.
- */
-function specListCommand(
-  candidates: readonly AuthorityContextCandidate[]
-): ScopeRemediationCommand {
-  const hasDraft = candidates.some((c) => c.lifecycleState === 'draft');
-  return hasDraft
-    ? {
-        command: 'caws specs list',
-        description:
-          'List specs in every lifecycle state — a draft claimant is not in the active listing.',
-        mutates: false,
-      }
-    : {
-        command: 'caws specs list --status active',
-        description: 'List active specs before choosing the authority context.',
-        mutates: false,
-      };
+function activeSpecListCommand(): ScopeRemediationCommand {
+  return {
+    command: 'caws specs list --status active',
+    description: 'List active specs before choosing the authority context.',
+    mutates: false,
+  };
 }
 
 function authorityCandidateCommands(
@@ -256,10 +239,7 @@ function authorityCandidateCommands(
       if (candidate.worktreeName === undefined) {
         commands.push({
           command: `caws worktree bind ${shellQuote(opts.trackedWorktreeName)} --spec ${shellQuote(candidate.specId)}`,
-          description:
-            candidate.lifecycleState === 'draft'
-              ? `Bind this tracked worktree to draft spec ${candidate.specId} — the bind activates it.`
-              : `Bind this tracked worktree to active spec ${candidate.specId}.`,
+          description: `Bind this tracked worktree to active spec ${candidate.specId}.`,
           mutates: true,
         });
       } else {
@@ -272,10 +252,7 @@ function authorityCandidateCommands(
     } else if (candidate.worktreeName === undefined) {
       commands.push({
         command: `caws worktree create <name> --spec ${shellQuote(candidate.specId)}`,
-        description:
-          candidate.lifecycleState === 'draft'
-            ? `Create a governed worktree for draft spec ${candidate.specId} — creating it activates the draft.`
-            : `Create a governed worktree for active spec ${candidate.specId}.`,
+        description: `Create a governed worktree for active spec ${candidate.specId}.`,
         mutates: true,
       });
     } else {
@@ -292,34 +269,12 @@ function authorityCandidateCommands(
 function authorityCandidateNotes(
   candidates: readonly AuthorityContextCandidate[]
 ): readonly string[] {
-  const claiming = candidates.filter((c) => c.matchedScopeInEntry !== undefined);
   const notes = [
     'Use the read-only scope --spec check first; it compares path fit but does not grant current-checkout write authority.',
   ];
-  // CAWS-SPEC-ACTIVATION-BINDS-001: a list of specs that CLAIM the path and a
-  // list of specs that merely happen to be active are very different handoffs.
-  // Saying which one this is stops the fallback list from reading as a claim.
-  if (claiming.length > 0) {
-    const one = claiming[0];
-    notes.unshift(
-      claiming.length === 1
-        ? `${one?.specId} claims this path via scope.in "${one?.matchedScopeInEntry}"` +
-          (one?.lifecycleState === 'draft'
-            ? ' and is a draft — creating or binding its worktree activates it.'
-            : '.')
-        : `${claiming.length} specs claim this path via scope.in; listed in id order` +
-          (claiming.some((c) => c.lifecycleState === 'draft')
-            ? ' (drafts among them activate on bind).'
-            : '.')
-    );
-  } else {
-    notes.unshift(
-      'No active spec claims this path via scope.in, so every active spec is listed as a fallback. Widen the owning spec with caws specs amend-scope <id> --add <path> instead of picking an unrelated one.'
-    );
-  }
   if (candidates.length > 5) {
     notes.push(
-      `Showing first 5 of ${candidates.length}; run caws specs list --status active for the full set.`
+      `Showing first 5 active specs; run caws specs list --status active for all ${candidates.length}.`
     );
   }
   return notes;
@@ -461,7 +416,7 @@ export function buildScopeRemediation(
     const normPath = decision.normalizedPath ?? decision.path;
     if (typeof boundContext?.worktreeName === 'string') {
       const commands: ScopeRemediationCommand[] = [
-        specListCommand(candidates),
+        activeSpecListCommand(),
         ...authorityCandidateCommands(normPath, candidates, {
           trackedWorktreeName: boundContext.worktreeName,
         }),
@@ -476,7 +431,7 @@ export function buildScopeRemediation(
         );
       }
       return {
-        summary: `Tracked worktree ${boundContext.worktreeName} is not bound to a spec; choose a spec authority before editing.`,
+        summary: `Tracked worktree ${boundContext.worktreeName} is not bound to a spec; choose an active spec authority before editing.`,
         commands,
         notes:
           candidates.length > 0
@@ -486,7 +441,7 @@ export function buildScopeRemediation(
       };
     }
     const commands: ScopeRemediationCommand[] = [
-      specListCommand(candidates),
+      activeSpecListCommand(),
       ...authorityCandidateCommands(normPath, candidates),
     ];
     if (candidates.length === 0) {
@@ -497,7 +452,7 @@ export function buildScopeRemediation(
       });
     }
     return {
-      summary: 'No worktree is bound for this context; choose a spec authority and create or enter its worktree before editing.',
+      summary: 'No worktree is bound for this context; choose an active spec authority and create or enter its worktree before editing.',
       commands,
       notes:
         candidates.length > 0
@@ -562,20 +517,13 @@ export function renderDecision(
     lines.push('             remediation:');
     lines.push(`               ${remediation.summary}`);
     if ((remediation.authorityCandidates ?? []).length > 0) {
-      // AX PROBE D3: the heading said "active spec candidates" while the list
-      // could contain drafts, and one of the offered commands explained that a
-      // draft claimant is NOT in the active listing — a direct contradiction two
-      // lines apart. Drop the state from the heading and put it on each row,
-      // where it is actually true.
-      lines.push('               spec candidates:');
+      lines.push('               active spec candidates:');
       for (const candidate of remediation.authorityCandidates ?? []) {
         const wt =
           candidate.worktreeName !== undefined
-            ? `, worktree ${candidate.worktreeName}`
-            : ', no worktree';
-        lines.push(
-          `               - ${candidate.specId} (${candidate.lifecycleState}${wt})`
-        );
+            ? ` (worktree ${candidate.worktreeName})`
+            : ' (no worktree)';
+        lines.push(`               - ${candidate.specId}${wt}`);
       }
     }
     for (const command of remediation.commands) {

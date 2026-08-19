@@ -27,7 +27,6 @@ import * as nodePath from 'node:path';
 import {
   evaluateContention,
   evaluatePath,
-  matchGlob,
   type ContentionClaimant,
   type Decision,
   type Policy,
@@ -117,91 +116,21 @@ function renderExplicitSpecContextNote(spec: Spec): string[] {
   return lines;
 }
 
-/**
- * Does `entry` (a scope.in value) admit `target`?
- *
- * Delegates to the kernel's `matchGlob` — the same function `evaluatePath` uses
- * to decide admission — because this ranking must not be a SECOND reading of
- * scope.in. An earlier hand-rolled matcher here diverged from the kernel in both
- * directions on legal scope.in values: it treated only `*` and `?` as glob
- * characters (so `docs/{api,agents}/cli.md` and `src/[abc]/x.ts` were compared
- * as literals and missed), and it expanded `*` to `.*` (which crosses `/`, so
- * `packages/*` claimed `packages/a/b/c.ts` that picomatch refuses). Both errors
- * corrupt the handoff: an omitted claimant makes the CLI say "no spec claims
- * this path" about the spec that owns it, steering an amend-scope onto an
- * unrelated authority; a phantom claimant offers a spec whose worktree will then
- * refuse the edit.
- *
- * `matchGlob` expects a normalized POSIX-relative target, so normalize here
- * rather than at each call site. Entries are passed through untouched —
- * `matchGlob` trims its own trailing slash and treats a glob-free entry as a
- * boundary-safe directory prefix.
- */
-function scopeInAdmits(entry: string, target: string): boolean {
-  if (entry.length === 0) return false;
-  const normalizedTarget = target.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
-  if (normalizedTarget.length === 0) return false;
-  return matchGlob(normalizedTarget, [entry]) !== null;
-}
-
-/**
- * Specs offered as the authority context for an unbound path.
- *
- * RANKED BY SCOPE FIT, not alphabetically (CAWS-SPEC-ACTIVATION-BINDS-001).
- * The prior implementation sorted every active spec by id and the renderer cut
- * it to five, so in a repo with dozens of active specs the five suggested
- * authorities were whichever ids sorted first — the spec that actually claims
- * the path frequently was not among them. Specs whose scope.in admits the path
- * now come first and carry the matching entry.
- *
- * DRAFTS COUNT AS CLAIMANTS, and that is the whole point once `specs create`
- * yields a draft. The ordinary sequence for a new slice is: create the spec
- * (draft, scope.in populated) → try to edit → land here. Considering only
- * ACTIVE specs would omit the one spec that actually claims the path and tell
- * the agent "no active spec claims this path", steering it to amend-scope some
- * unrelated spec — the wrong authority, recorded in the audit trail. The
- * resolving command for a draft claimant (`caws worktree create --spec <id>`)
- * activates it as it binds, so nothing extra is asked of the caller.
- *
- * A NON-claiming draft is deliberately excluded from the fallback. Drafts are
- * the resting state, so a repo can hold dozens; listing them all would bury
- * the active set in backlog noise. Only a claiming draft earns a place.
- *
- * When NOTHING claims the path we return the active set: the caller needs
- * *some* authority to choose from, and an empty list would degrade the handoff
- * to "replace <spec-id>". The note attached in render/decision.ts says which
- * case they are looking at, so a fallback list is never mistaken for a claim.
- */
 function buildAuthorityContextCandidates(
-  specs: readonly Spec[],
-  targetPath?: string
+  specs: readonly Spec[]
 ): AuthorityContextCandidate[] {
-  const toCandidate = (spec: Spec): AuthorityContextCandidate => {
-    const matched =
-      targetPath === undefined
-        ? undefined
-        : (spec.scope?.in ?? []).find((entry) => scopeInAdmits(entry, targetPath));
-    return {
-      specId: spec.id,
-      lifecycleState: spec.lifecycle_state,
-      ...(spec.worktree !== undefined ? { worktreeName: spec.worktree } : {}),
-      ...(matched !== undefined ? { matchedScopeInEntry: matched } : {}),
-    } as AuthorityContextCandidate;
-  };
-
-  const bindable = specs.filter(
-    (spec) => spec.lifecycle_state === 'active' || spec.lifecycle_state === 'draft'
-  );
-  const claiming = bindable
-    .map(toCandidate)
-    .filter((c) => c.matchedScopeInEntry !== undefined);
-  if (claiming.length > 0) {
-    return claiming.sort((a, b) => a.specId.localeCompare(b.specId));
-  }
-
   return specs
     .filter((spec) => spec.lifecycle_state === 'active')
-    .map(toCandidate)
+    .map((spec) => {
+      const candidate: AuthorityContextCandidate = {
+        specId: spec.id,
+        lifecycleState: spec.lifecycle_state,
+      };
+      if (spec.worktree !== undefined) {
+        return { ...candidate, worktreeName: spec.worktree };
+      }
+      return candidate;
+    })
     .sort((a, b) => a.specId.localeCompare(b.specId));
 }
 
@@ -251,7 +180,7 @@ export function runScopeCommand(opts: ScopeCommandOptions): number {
   //    resolveBinding fall back to the path's owning worktree / claiming
   //    spec when cwd is the main checkout, so `caws scope check <path>` is
   //    cwd-independent and matches what the bound author sees.
-  const authorityCandidates = buildAuthorityContextCandidates(snapshot.specs, opts.path);
+  const authorityCandidates = buildAuthorityContextCandidates(snapshot.specs);
   const bound = withAuthorityContext(
     explicitSpec?.binding ?? resolveBinding({
       repoRoot,
@@ -611,7 +540,7 @@ export function runScopePlanCommand(opts: ScopePlanOptions): number {
         registry: snapshot.worktrees,
         specs: snapshot.specs,
       }),
-      buildAuthorityContextCandidates(snapshot.specs, p)
+      buildAuthorityContextCandidates(snapshot.specs)
     );
     if (bound.ambiguous !== undefined) {
       results.push(ambiguousPlanPayload(bound.ambiguous.targetPath, bound.ambiguous.claimants));

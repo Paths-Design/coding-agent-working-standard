@@ -393,8 +393,7 @@ added `events` (eleventh) for hash-chained audit-log maintenance
 observability, and `message` for directed inter-agent messages.
 `agents` shipped ahead of the broader
 v11.2 multi-agent plan: its `register/heartbeat/stop/list/show/prune`
-subcommands are all live. `message` (send/reply/poll/inbox/history/status/
-prune) is deliberately not authority:
+subcommands are all live. `message send/poll` is deliberately not authority:
 message bodies are unverified claims until checked against repo/runtime state.
 The remaining multi-agent authority line (bridge claims and lease-backed
 ownership) is still forthcoming. Every command group is
@@ -453,7 +452,7 @@ Option A.
 | `caws specs validate` | Validate spec YAML records and optionally apply safe date normalization repairs with `--fix-dates --apply`. |
 | `caws events migrate/rotate/verify-archive` | Hash-chained audit-log maintenance over `.caws/events.jsonl`. |
 | `caws agents register/heartbeat/stop/list/show/prune` | Agent-liveness substrate + read-only inspector. Shipped ahead of the broader v11.2 multi-agent plan: `list/show` restore agent visibility removed in v11.0.0; `register/heartbeat/stop` back the hook pack; `prune` is operator cleanup. |
-| `caws message send/reply/poll/inbox/history/status/prune` | Directed inter-agent messages over `.caws/messages.jsonl`. Separate from the audit chain and not authority. Delivery-UX posture (CAWS-MESSAGE-DELIVERY-UX-001): recipient liveness is heartbeat-age-based — no lease or stale heartbeat refuses the send with a not-sent verdict on stdout; an idle peer (stopped lease, fresh heartbeat — a session between turns) is deliverable at its next tool call; `--to` resolves `wt:`/`spec:` aliases; `reply` answers a message on its own channel; `status` observes queued-vs-delivered; poll carries registry-derived sender context (worktree/spec/branch) so senders never self-identify in the body. |
+| `caws message send/poll` | Directed inter-agent messages over `.caws/messages.jsonl`. Separate from the audit chain and not authority. |
 | `caws claim --takeover` | Acquire ownership from a foreign session; writes `prior_owners` audit entry. |
 | `caws claim --paths <path>` | Declare working-tree path ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001). |
 

@@ -26,10 +26,6 @@ function mkRepo() {
     mode: 'fix',
     tier: 3,
     scopeIn: ['README.md'],
-    // CAWS-SPEC-ACTIVATION-BINDS-001: create yields a draft now, and gates only
-    // enforce against active specs. This suite is about positional-argument
-    // routing, so activate at creation rather than route around the lifecycle.
-    activate: true,
     now: () => new Date('2026-07-04T00:00:00.000Z'),
     out: () => {},
     err: () => {},

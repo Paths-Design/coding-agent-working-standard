@@ -82,16 +82,6 @@ export interface WorktreeRecord {
   readonly path?: string;
   /** Base branch from which the worktree was forked. */
   readonly baseBranch?: string;
-  /**
-   * The base-branch commit the worktree was forked AT
-   * (CAWS-SPEC-ACTIVATION-BINDS-001). Descriptive governance metadata, never
-   * an authority claim. It exists so destroy can answer one question exactly:
-   * "has this branch moved since it was created?" Reachability cannot answer
-   * it — after a merge, `rev-list base..branch` is 0 for a branch that did all
-   * of the work, identically to one that did none. Absent on entries created
-   * before this field existed, which reads as indeterminate.
-   */
-  readonly baseSha?: string;
   /** The current ownership claim. */
   readonly owner?: SessionIdentity;
   /** Heartbeat for the current owner. ISO-8601. */

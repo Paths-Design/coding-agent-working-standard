@@ -116,25 +116,6 @@ export function renderShortStatus(input: StatusRenderInput): string {
   ].join('\n');
 }
 
-/**
- * Active specs that no worktree claims and that claim no worktree themselves.
- * Mirrors the doctor's unbound-active predicate (both sides silent) so the two
- * surfaces cannot disagree about what "unbound" means.
- */
-function countUnboundActiveSpecs(input: StatusRenderInput): number {
-  const registrySpecIds = new Set<string>();
-  for (const record of Object.values(input.worktrees)) {
-    if (typeof record?.specId === 'string' && record.specId.length > 0) {
-      registrySpecIds.add(record.specId);
-    }
-  }
-  return input.specs.filter((spec) => {
-    if (spec.lifecycle_state !== 'active') return false;
-    const hasSpecPointer = typeof spec.worktree === 'string' && spec.worktree.length > 0;
-    return !registrySpecIds.has(spec.id) && !hasSpecPointer;
-  }).length;
-}
-
 function countSpecsByLifecycle(specs: readonly Spec[]): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const s of specs) {
@@ -199,28 +180,27 @@ function describeCwdRelation(binding: ResolvedBinding): string {
   return 'unknown';
 }
 
-function describeBindingState(state: BindingState, _activeSpecCount: number): string {
+function describeBindingState(
+  state: BindingState,
+  activeSpecCount: number
+): string {
   switch (state.kind) {
     case 'bound':
       return `bound → ${state.spec.id} (worktree '${state.worktreeName}')`;
     case 'one_sided':
       return 'one_sided (corrupt asymmetric binding — see doctor)';
     case 'unbound':
-      // 'unbound' does NOT mean edits are unrestricted, and the reader has to
-      // be told that or they read it as 'free' (friction-probe Event 8). But
-      // the previous wording — "scope still enforced — union mode over N active
-      // specs" — described a mechanism the kernel does not implement.
-      // evaluatePath returns no_authority.unbound at step 1, BEFORE any spec is
-      // consulted, so the answer is identical with forty active specs or zero;
-      // no spec's scope.in/out is evaluated here at all. Naming a spec count
-      // also invited the reading that more active specs means more enforcement,
-      // which is what let an unworked active backlog look load-bearing.
-      //
-      // State the actual rule: no authority, so nothing is admitted, and the
-      // repair is to bind — not to go inspect N specs.
-      // (Supersedes CAWS-STATUS-UNBOUND-ENFORCEMENT-CAVEAT-001's wording;
-      // CAWS-SPEC-ACTIVATION-BINDS-001.)
-      return 'unbound (no write authority here — every governed path is refused for lack of a binding, not by any spec\'s scope.out; bind one to edit)';
+      // 'unbound' means no spec is bound to THIS checkout — it does NOT mean
+      // edits are unrestricted. When any spec is active, the scope guard falls
+      // back to union mode and enforces every active spec's scope.in/out, so a
+      // main-checkout edit is still governed. Surface that so a first-timer does
+      // not misread 'unbound' as 'free' (friction-probe Event 8). With zero
+      // active specs there is nothing to enforce, so the bare word is accurate.
+      return activeSpecCount > 0
+        ? `unbound (scope still enforced — union mode over ${activeSpecCount} active spec${
+            activeSpecCount === 1 ? '' : 's'
+          })`
+        : 'unbound';
   }
 }
 
@@ -347,24 +327,6 @@ export function renderStatus(input: StatusRenderInput): string {
           .map(([k, v]) => `${v} ${k}`)
           .join(', ');
   lines.push(`  specs:       ${lifecycleSummary}`);
-
-  // CAWS-SPEC-ACTIVATION-BINDS-001: `active` means a worktree is bound and the
-  // slice is being worked, so "N active" alone cannot answer the question a
-  // reader actually has — how much of this is in flight? Split it. An
-  // active spec with no binding is the drift signal doctor counts, and naming
-  // it here is what makes the count self-explaining rather than a number to
-  // look up elsewhere.
-  const unboundActive = countUnboundActiveSpecs(input);
-  const activeTotal = lifecycle['active'] ?? 0;
-  if (activeTotal > 0) {
-    const bound = activeTotal - unboundActive;
-    lines.push(
-      unboundActive === 0
-        ? `  in flight:   ${bound} of ${activeTotal} active bound to a worktree`
-        : `  in flight:   ${bound} of ${activeTotal} active bound to a worktree; ` +
-          `${unboundActive} active with no worktree (see doctor)`
-    );
-  }
 
   const worktreeCount = Object.keys(input.worktrees).length;
   lines.push(`  worktrees:   ${worktreeCount}`);

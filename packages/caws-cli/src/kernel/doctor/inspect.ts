@@ -23,27 +23,11 @@ import type {
 
 const DEFAULT_STALE_AGENT_TTL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_UNBOUND_ACTIVE_THRESHOLD_MS = 60 * 60 * 1000;
-/** Count at which the unbound-active backlog stops being drift and becomes an error. */
-const DEFAULT_UNBOUND_ACTIVE_ERROR_COUNT = 10;
-/** Spec ids named inline in the aggregate message; the rest live in data. */
-const UNBOUND_ACTIVE_INLINE_LIMIT = 5;
 const DEFAULT_PRIOR_OWNERS_THRESHOLD = 25;
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Render a spec-id list for a human message: the first
- * UNBOUND_ACTIVE_INLINE_LIMIT ids, then "(+N more)". The FULL list always
- * travels in the finding's `data`, so truncation is presentational only and no
- * consumer has to re-derive it.
- */
-function describeSpecIds(ids: readonly string[]): string {
-  if (ids.length <= UNBOUND_ACTIVE_INLINE_LIMIT) return ids.join(', ');
-  const shown = ids.slice(0, UNBOUND_ACTIVE_INLINE_LIMIT).join(', ');
-  return `${shown} (+${ids.length - UNBOUND_ACTIVE_INLINE_LIMIT} more; full list in data.spec_ids)`;
-}
 
 function finding(
   rule: string,
@@ -104,8 +88,6 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   const staleAgentTtlMs = input.staleAgentTtlMs ?? DEFAULT_STALE_AGENT_TTL_MS;
   const unboundActiveThresholdMs =
     input.unboundActiveThresholdMs ?? DEFAULT_UNBOUND_ACTIVE_THRESHOLD_MS;
-  const unboundActiveErrorCount =
-    input.unboundActiveErrorCount ?? DEFAULT_UNBOUND_ACTIVE_ERROR_COUNT;
   const priorOwnersThreshold =
     input.priorOwnersGrowthThreshold ?? DEFAULT_PRIOR_OWNERS_THRESHOLD;
 
@@ -120,11 +102,6 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
       registrySpecIds.add(record.specId);
     }
   }
-
-  // CAWS-SPEC-ACTIVATION-BINDS-001: collect first, report once. The per-spec
-  // findings this loop used to push are aggregated below into a single
-  // SPEC_UNBOUND_ACTIVE_BACKLOG finding.
-  const staleUnboundActive: { readonly specId: string; readonly ageMs: number }[] = [];
 
   for (const spec of specs) {
     if (spec.lifecycle_state !== 'active') continue;
@@ -172,20 +149,14 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
 
     const ageMs = now.getTime() - updatedAtMs;
     if (ageMs > unboundActiveThresholdMs) {
-      staleUnboundActive.push({ specId: spec.id, ageMs });
-      // Per-spec finding retained at INFO (it was `warning`). The repair-plan
-      // builder keys on `subject` to emit a per-spec next_command, so dropping
-      // these would cost real actionability. Demoting them is what stops 27
-      // instances of one condition from dominating the warning tier; the
-      // aggregate below carries the severity.
       findings.push(
         finding(
           DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_STALE,
-          'info',
+          'warning',
           `Active spec ${spec.id} has no bound worktree and has exceeded the unbound-active threshold.`,
           {
             subject: spec.id,
-            narrowRepair: `Bind a worktree to ${spec.id} via \`caws worktree create <name> --spec ${spec.id}\` (binding a draft also activates it), or demote it with \`caws specs deactivate ${spec.id}\` (no resolution written — the slice never started), or close it via \`caws specs close ${spec.id}\` (writes a resolution asserting the work concluded).`,
+            narrowRepair: `Bind a worktree to ${spec.id} via \`caws worktree create <name> --spec ${spec.id}\` (or \`caws worktree bind <name> --spec ${spec.id}\` if a worktree already exists), or close the spec via \`caws specs close ${spec.id}\`.`,
             data: {
               spec_id: spec.id,
               age_ms: ageMs,
@@ -196,40 +167,6 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
         )
       );
     }
-  }
-
-  if (staleUnboundActive.length > 0) {
-    // Sort oldest-first so the truncated inline list names the specs that have
-    // been sitting active-and-unworked the longest.
-    const ordered = [...staleUnboundActive].sort((a, b) => b.ageMs - a.ageMs);
-    const ids = ordered.map((entry) => entry.specId);
-    const count = ids.length;
-    const severity = count >= unboundActiveErrorCount ? 'error' : 'warning';
-    findings.push(
-      finding(
-        DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG,
-        severity,
-        `${count} active spec(s) have no bound worktree and have exceeded the unbound-active threshold: ${describeSpecIds(ids)}` +
-          (severity === 'error'
-            ? ` At ${count} (threshold ${unboundActiveErrorCount}), "active" no longer distinguishes work in progress from a backlog.`
-            : ''),
-        {
-          // The parenthetical on `deactivate` is measurably load-bearing — an
-          // AX probe agent quoted it verbatim as its reason for not closing
-          // unworked specs. `close` was carrying no matching clause, so the
-          // asymmetry did the steering by accident. State both consequences.
-          narrowRepair:
-            'For each spec that is genuinely being worked, bind it: `caws worktree create <name> --spec <id>` (binding activates a draft). For the rest, demote with `caws specs deactivate <id>` (no resolution written — makes no claim the work concluded) or, only if the work actually finished, close it with `caws specs close <id>` (writes a resolution asserting it concluded).',
-          data: {
-            spec_count: count,
-            spec_ids: ids,
-            threshold_ms: unboundActiveThresholdMs,
-            error_count_threshold: unboundActiveErrorCount,
-            oldest_age_ms: ordered[0]?.ageMs ?? 0,
-          },
-        }
-      )
-    );
   }
 
   // -------------------------------------------------------------------------

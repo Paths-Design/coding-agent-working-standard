@@ -9,16 +9,6 @@ export const DOCTOR_RULES = {
   SPEC_UNBOUND_ACTIVE_STALE: 'doctor.spec.unbound_active_stale',
   /** Active spec with no bound worktree and no updated_at to compare against. */
   SPEC_UNBOUND_ACTIVE_TIMESTAMP_MISSING: 'doctor.spec.unbound_active_timestamp_missing',
-  /**
-   * The AGGREGATE of the two rules above (CAWS-SPEC-ACTIVATION-BINDS-001).
-   * One finding for the whole repo, not one per spec: a repo that has drifted
-   * to 27 unbound-active specs produced 27 warnings that buried every other
-   * doctor finding, which is how the condition went unnoticed long enough to
-   * reach 27. Escalates to `error` above unboundActiveErrorCount. Every
-   * affected spec id stays in `data.spec_ids`; only the human message
-   * truncates.
-   */
-  SPEC_UNBOUND_ACTIVE_BACKLOG: 'doctor.spec.unbound_active_backlog',
 
   // ---- binding integrity ---------------------------------------------------
   /** Registry has specId AND spec.worktree, but they disagree about each other. */

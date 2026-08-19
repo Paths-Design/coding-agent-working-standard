@@ -77,9 +77,7 @@ It refuses to run if legacy `.caws/working-spec.yaml` is present. Migrate that f
 caws specs create FEAT-1 --title "Short title" --mode feature --risk-tier 3
 ```
 
-This creates `.caws/specs/FEAT-1.yaml` in `lifecycle_state: draft`. Edit it to fill in `scope.in`/`scope.out`, `invariants`, `acceptance` (Given/When/Then), `non_functional`, and `contracts` — see existing specs in this repo's `.caws/specs/` for the shape, and [`docs/api/schema.md`](docs/api/schema.md) for the field reference.
-
-`caws worktree create <name> --spec FEAT-1` activates the draft as it binds it, so `active` means the slice is being worked rather than merely written down. Pass `--activate` to `specs create` if you are working a slice without a worktree.
+This creates `.caws/specs/FEAT-1.yaml` in `lifecycle_state: active`. Edit it to fill in `scope.in`/`scope.out`, `invariants`, `acceptance` (Given/When/Then), `non_functional`, and `contracts` — see existing specs in this repo's `.caws/specs/` for the shape, and [`docs/api/schema.md`](docs/api/schema.md) for the field reference.
 
 ### Daily commands
 

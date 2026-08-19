@@ -47,9 +47,7 @@ The multi-agent `agents` surface ships in v11.1 for read-only lease inspection (
 # 1. Check project health and binding state (read-only)
 caws status
 
-# 2. Create a feature spec (v11 takes --mode from a closed enum, not --type).
-#    It is created as a DRAFT: `active` means a worktree is bound and the slice
-#    is being worked, so step 4 is what activates it. `--activate` opts out.
+# 2. Create a feature spec (v11 takes --mode from a closed enum, not --type)
 caws specs create FEAT-001 --title "description" --mode feature --risk-tier 3
 
 # 3. Edit .caws/specs/FEAT-001.yaml to populate scope.in / scope.out / invariants /
@@ -57,8 +55,7 @@ caws specs create FEAT-001 --title "description" --mode feature --risk-tier 3
 #    `caws worktree create` snapshots the repo at creation time; uncommitted specs are not copied.
 git add .caws/specs/FEAT-001.yaml && git commit -m "chore(caws): create FEAT-001 spec"
 
-# 4. Create the worktree bound to your spec (atomic bidirectional binding).
-#    This ACTIVATES the draft in the same transaction that binds it.
+# 4. Create the worktree bound to your spec (atomic bidirectional binding)
 caws worktree create wt-feat-001 --spec FEAT-001
 cd .caws/worktrees/wt-feat-001
 

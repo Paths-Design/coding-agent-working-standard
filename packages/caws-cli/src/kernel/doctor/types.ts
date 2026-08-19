@@ -135,15 +135,6 @@ export interface DoctorInput {
   readonly unboundActiveThresholdMs?: number;
 
   /**
-   * Count of stale unbound-active specs at or above which the aggregate
-   * SPEC_UNBOUND_ACTIVE_BACKLOG finding is raised from `warning` to `error`.
-   * Default 10. Below it the condition is ordinary backlog drift; at or above
-   * it, `active` has stopped distinguishing live work from a wish list and the
-   * repo needs `caws specs deactivate` on the ones nobody is working.
-   */
-  readonly unboundActiveErrorCount?: number;
-
-  /**
    * Length threshold above which a worktree's prior_owners list is flagged
    * as hygiene warning. Default 25. Kernel never truncates.
    */

@@ -91,14 +91,6 @@ export interface AuthorityContextCandidate {
   readonly specId: string;
   readonly lifecycleState: string;
   readonly worktreeName?: string;
-  /**
-   * The spec's scope.in entry that admits the queried path, when one does
-   * (CAWS-SPEC-ACTIVATION-BINDS-001). Present ⇒ this spec actually claims the
-   * path and is a real authority candidate. Absent on every candidate ⇒ no
-   * active spec claims the path and the caller is being shown the whole active
-   * set as a fallback, which the accompanying note says explicitly.
-   */
-  readonly matchedScopeInEntry?: string;
 }
 
 export interface ResolvedBinding {

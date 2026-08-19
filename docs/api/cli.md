@@ -727,19 +727,9 @@ caws specs create --id FEAT-4 \
 | `--contract <entry>` | Seed a contract entry; repeatable. |
 | `--plan` | Read-only preflight. Render and validate the candidate without writing `.caws/specs/<id>.yaml` or appending events. |
 | `--json` | With `--plan`, emit the candidate, diagnostics, missing fields, and create command as JSON. |
-| `--activate` | Create the spec in `lifecycle_state: active` instead of `draft`. |
 | `--data` | Show structured data block on diagnostics. |
 
-Creates a new spec in `lifecycle_state: draft`. `active` means a worktree is
-bound and the slice is being worked, which creation cannot assert — so the
-promotion happens at `caws worktree create <name> --spec <id>`, which activates
-the draft inside the same transaction that binds it. A draft is fully editable,
-takes `amend-scope` and `evidence` like an active spec, and simply does not
-appear in the active set. Use `--activate` only when you are working a slice
-without a worktree; `caws specs activate <id>` promotes a draft on demand and
-`caws specs deactivate <id>` demotes an active spec back.
-
-The spec id may be supplied as
+Creates a new spec in `lifecycle_state: active`. The spec id may be supplied as
 the positional `<id>` or with `--id <id>` for option-shaped command builders.
 Supplying both refuses before mutation. `--plan` validates the same
 candidate path that normal create would write, but exits without mutation; this
@@ -848,13 +838,6 @@ caws specs activate FEAT-1
 ```
 
 Governed activation of a pre-authored draft spec. Draft-only: patches `lifecycle_state: active`, refreshes `updated_at`, and appends `spec_activated`.
-
-`caws worktree create <name> --spec <id>` and `caws worktree bind` perform the
-same promotion automatically when the spec is a draft, inside the transaction
-that writes the binding — so the usual path never needs this command. Reach for
-it when you are working a slice without a worktree. The inverse is `caws specs
-deactivate <id>`, which returns an active spec to draft without writing a
-resolution (unlike `close`, it makes no claim that the work concluded).
 
 ### `caws specs amend-scope <id>`
 

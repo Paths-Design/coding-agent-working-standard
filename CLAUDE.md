@@ -275,17 +275,9 @@ Full list: `.claude/rules/worktree-isolation.md`.
   retire-draft is the governed draft exit — it tombstones the YAML and appends a
   recoverable `spec_retired` event (recover via `caws specs show <id>
   --archived`). **Never `git rm` a spec** to retire it — raw deletion bypasses
-  the YAML-state audit, the hash-chained event, and the recovery path.
-- **`active` means bound and being worked; `draft` is the normal resting state.**
-  `caws specs create` writes a *draft*; `caws worktree create <name> --spec <id>`
-  activates it inside the transaction that binds it, and `caws worktree destroy`
-  returns it to draft when the branch never moved off its fork point. So a draft
-  on disk is the ordinary case — an unstarted or paused slice — NOT residue, and
-  retire-draft is for the ones you have decided against, not for every draft you
-  find. `caws specs activate` / `caws specs deactivate` still move a spec between
-  the two states directly when there is no worktree in play. An active spec with
-  no bound worktree is the drift signal; `caws doctor` reports the count and
-  escalates it to an error past ten.
+  the YAML-state audit, the hash-chained event, and the recovery path. `caws
+  specs create` always makes *active* specs, so a `draft` on disk is
+  hand-authored or residue, and retire-draft is its sanctioned removal.
 
 ## Implementation hygiene (lessons from prior sessions)
 

@@ -48,12 +48,9 @@ Run `caws <group> --help` for the authoritative options of any group.
 For a new feature:
 
 ```bash
-# Created as a DRAFT — `active` means a worktree is bound and the slice is being
-# worked, which creation cannot claim. `--activate` opts out.
 caws specs create FEAT-001 --title "My Feature" --mode feature --risk-tier 3
 # Then edit .caws/specs/FEAT-001.yaml to populate scope/invariants/acceptance/...
 git add .caws/specs/FEAT-001.yaml && git commit -m "chore(caws): create FEAT-001 spec"
-# Binding activates the draft in the same transaction.
 caws worktree create wt-feat-001 --spec FEAT-001
 cd .caws/worktrees/wt-feat-001
 ```
