@@ -42,9 +42,12 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PACKAGE_ROOT = resolve(__dirname, '..');
-const KERNEL_ROOT = resolve(__dirname, '..', '..', 'caws-kernel');
 const PACKAGE_NAME = '@paths.design/caws-cli';
-const KERNEL_NAME = '@paths.design/caws-kernel';
+// CAWS-ABSORB-KERNEL-01: the kernel is no longer a separate package — it ships
+// inside the CLI at dist/kernel/. The kernel-surface probes below require this
+// entry from the INSTALLED tarball, so they still verify exactly what a
+// consumer resolves, without a second tarball to pack or wire.
+const KERNEL_ENTRY_RELPATH = ['dist', 'kernel', 'index.js'];
 const PACK_ID = 'claude-code';
 const PACKS = {
   'claude-code': {
@@ -200,44 +203,18 @@ function packOne(packageRoot, label) {
   return { tarball, filename, files };
 }
 
-function buildKernelForPack() {
-  const result = spawnSync('npm', ['run', 'build'], {
-    cwd: KERNEL_ROOT,
-    encoding: 'utf8',
-    env: npmEnv(),
-  });
-  if (result.status !== 0) {
-    fail('kernel build failed before npm pack', {
-      exitCode: result.status,
-      stdout: result.stdout.trim().slice(0, 1000),
-      stderr: result.stderr.trim().slice(0, 1000),
-    });
-  }
-}
-
 function packTarball() {
-  // Pack BOTH the kernel and the CLI from this worktree. The published
-  // CLI tarball depends on the latest registry-published kernel by
-  // version range, but the multi-agent slice's CLI code requires kernel
-  // symbols (registerAgentSession, heartbeatAgentSession,
-  // stopAgentSession, summarizeActiveAgents) that don't exist in any
-  // released kernel yet. Installing only the CLI tarball would resolve
-  // the kernel from npm and the CLI would crash at runtime with
-  // "(0, caws_kernel_1.registerAgentSession) is not a function".
-  //
-  // Both tarballs are needed for the smoke to faithfully model what a
-  // user gets when both packages release together.
-  step('npm pack (kernel + cli)');
-  buildKernelForPack();
-  const kernel = packOne(KERNEL_ROOT, 'kernel');
-  ok(`packed kernel: ${kernel.filename}`);
+  // Pack the CLI from this worktree. The kernel is absorbed into the CLI
+  // (CAWS-ABSORB-KERNEL-01) and ships inside the tarball at dist/kernel/;
+  // there is no second package to build, pack, or wire.
+  step('npm pack (cli)');
   const cli = packOne(PACKAGE_ROOT, 'cli');
   ok(`packed cli: ${cli.filename}`);
-  return { kernelTarball: kernel.tarball, cliTarball: cli.tarball, cliFiles: cli.files };
+  return { cliTarball: cli.tarball, cliFiles: cli.files };
 }
 
-function installTarball({ kernelTarball, cliTarball }) {
-  step('install kernel+cli tarballs into fresh project');
+function installTarball({ cliTarball }) {
+  step('install cli tarball into fresh project');
   const projectDir = makeSmokeDir('caws-smoke-project-');
   registerCleanup(projectDir);
 
@@ -245,19 +222,14 @@ function installTarball({ kernelTarball, cliTarball }) {
   const pkgJson = { name: 'caws-fresh-install-smoke', version: '0.0.0', private: true };
   writeFileSync(join(projectDir, 'package.json'), JSON.stringify(pkgJson));
 
-  // Install BOTH tarballs in a single npm install call. npm resolves
-  // intra-tarball dependencies (the cli's @paths.design/caws-kernel
-  // entry will pick up the locally-installed kernel tarball rather than
-  // reaching out to the registry).
   // --ignore-scripts is intentional — we want the published bits as-is,
   // not prepare/postinstall hooks that might paper over packaging gaps.
   const result = spawnSync(
-    'npm', ['install', '--no-audit', '--no-fund', '--ignore-scripts',
-      kernelTarball, cliTarball],
+    'npm', ['install', '--no-audit', '--no-fund', '--ignore-scripts', cliTarball],
     { cwd: projectDir, encoding: 'utf8', env: npmEnv() }
   );
   if (result.status !== 0) {
-    fail('npm install of tarballs failed', {
+    fail('npm install of tarball failed', {
       exitCode: result.status,
       stderr: result.stderr.trim().slice(0, 1000),
     });
@@ -267,28 +239,34 @@ function installTarball({ kernelTarball, cliTarball }) {
   if (!existsSync(installedRoot)) {
     fail('installed cli package root missing', { expected: installedRoot });
   }
-  const installedKernel = join(projectDir, 'node_modules', KERNEL_NAME);
+  // The absorbed kernel entry inside the installed tarball. Every kernel-
+  // surface probe requires THIS path, so it verifies exactly what a consumer
+  // resolves at runtime — the same faithfulness the two-tarball wiring used
+  // to provide, without the second package.
+  const installedKernel = join(installedRoot, ...KERNEL_ENTRY_RELPATH);
   if (!existsSync(installedKernel)) {
-    fail('installed kernel package root missing', { expected: installedKernel });
+    fail('absorbed kernel entry missing from installed cli package', {
+      expected: installedKernel,
+      hint: 'dist/kernel may be missing from the package.json files field or the build',
+    });
   }
 
-  // Verify the installed kernel actually exports registerAgentSession.
-  // If npm resolution picked up a registry copy instead of our tarball
-  // (e.g. semver mismatch), the CLI will crash at runtime — better to
-  // fail fast here with a clear diagnostic.
+  // Verify the absorbed kernel actually exports registerAgentSession — the
+  // symbol the CLI crashes without at runtime. Better to fail fast here with
+  // a clear diagnostic than in a consumer's first `caws status`.
   const probe = spawnSync('node', ['-e',
     `const k = require(${JSON.stringify(installedKernel)}); ` +
     `process.stdout.write(typeof k.registerAgentSession);`,
   ], { encoding: 'utf8' });
   if (probe.stdout !== 'function') {
-    fail('installed kernel does not export registerAgentSession', {
+    fail('absorbed kernel does not export registerAgentSession', {
       installedKernel,
       gotType: probe.stdout,
       stderr: probe.stderr.trim().slice(0, 500),
-      hint: 'npm may have resolved kernel from registry instead of the local tarball — check the cli tarball\'s package.json:dependencies version range',
+      hint: 'dist/kernel/index.js may be stale or truncated in the packed tarball',
     });
   }
-  ok(`installed ${KERNEL_NAME} + ${PACKAGE_NAME} into ${projectDir}`);
+  ok(`installed ${PACKAGE_NAME} (with absorbed kernel) into ${projectDir}`);
   return { projectDir, installedRoot, installedKernel };
 }
 

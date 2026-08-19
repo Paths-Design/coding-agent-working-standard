@@ -3,22 +3,22 @@
 //
 // Release gate for CAWS-MIGRATE-V10-SPECS-001 (A12 / acceptance gate
 // per spec invariant 12 "functional completeness is not unit tests pass").
-// Proves the published kernel + CLI tarballs together contain every
-// artifact needed to run the v10→v11 specs migration end-to-end against
-// the installed binary — NOT against worktree dist, NOT against source.
+// Proves the published CLI tarball contains every artifact needed to
+// run the v10→v11 specs migration end-to-end against the installed
+// binary — NOT against worktree dist, NOT against source. The kernel is
+// absorbed into the CLI (CAWS-ABSORB-KERNEL-01): one tarball, both surfaces.
 //
 // What it certifies:
-//   1. npm pack BOTH packages (kernel first, then CLI).
-//   2. Inspect tarball contents and assert load-bearing files are
-//      present in BOTH tarballs:
-//        kernel: dist/spec/migrate-v10.js + .d.ts
-//                dist/spec/index.js (re-exports migrateSpecV10, etc.)
-//        CLI:    dist/store/specs-migration.js + .d.ts
-//                dist/shell/commands/specs.js  (contains runSpecsMigrateCommand)
+//   1. npm pack the CLI.
+//   2. Inspect tarball contents and assert load-bearing files:
+//        absorbed kernel: dist/kernel/spec/migrate-v10.js + .d.ts
+//                         dist/kernel/spec/index.js (re-exports migrateSpecV10, etc.)
+//        CLI:             dist/store/specs-migration.js + .d.ts
+//                         dist/shell/commands/specs.js  (contains runSpecsMigrateCommand)
 //      These are the regression class this smoke prevents: a missing
 //      kernel module silently breaks transformer authority; a missing
 //      store/shell file leaves the surface unregistered.
-//   3. Install both tarballs into a fresh scratch project (no global
+//   3. Install the tarball into a fresh scratch project (no global
 //      install, no source-tree resolution).
 //   4. Hand-author a small v10 spec corpus (3 files: 1 happy, 1 refused,
 //      1 lifecycle-mapped) plus an operator mapping.json fixture.
@@ -63,9 +63,7 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const CLI_ROOT = resolve(__dirname, '..');
-const KERNEL_ROOT = resolve(CLI_ROOT, '..', 'caws-kernel');
 const CLI_PACKAGE_NAME = '@paths.design/caws-cli';
-const KERNEL_PACKAGE_NAME = '@paths.design/caws-kernel';
 
 // ─── Output helpers (mirrors events-migration-smoke.mjs) ─────────────────
 
@@ -162,8 +160,8 @@ function assertTarballContains(tarball, expectedFiles, label) {
   ok(`${label} tarball contains all ${expectedFiles.length} required migrator file(s)`);
 }
 
-function installTarballs(cliTarball, kernelTarball) {
-  step('install both tarballs into fresh scratch project');
+function installTarballs(cliTarball) {
+  step('install cli tarball into fresh scratch project');
   const projectDir = mkdtempSync(join(tmpdir(), 'caws-specs-smoke-'));
   registerCleanup(projectDir);
 
@@ -176,6 +174,8 @@ function installTarballs(cliTarball, kernelTarball) {
     }, null, 2),
   );
 
+  // The kernel is absorbed into the CLI tarball (CAWS-ABSORB-KERNEL-01);
+  // a single install models exactly what a consumer gets.
   const installResult = spawnSync(
     'npm',
     [
@@ -183,30 +183,27 @@ function installTarballs(cliTarball, kernelTarball) {
       '--no-audit',
       '--no-fund',
       '--ignore-scripts',
-      kernelTarball,
       cliTarball,
     ],
     { cwd: projectDir, encoding: 'utf8' },
   );
   if (installResult.status !== 0) {
-    fail('npm install of tarballs failed', {
+    fail('npm install of tarball failed', {
       exitCode: installResult.status,
       stderr: installResult.stderr.trim().slice(0, 2000),
     });
   }
 
-  for (const name of [KERNEL_PACKAGE_NAME, CLI_PACKAGE_NAME]) {
-    const root = join(projectDir, 'node_modules', name);
-    if (!existsSync(root)) {
-      fail(`installed package root missing: ${name}`, { expected: root });
-    }
+  const installedRoot = join(projectDir, 'node_modules', CLI_PACKAGE_NAME);
+  if (!existsSync(installedRoot)) {
+    fail('installed cli package root missing', { expected: installedRoot });
   }
 
   const cawsBin = join(projectDir, 'node_modules', '.bin', 'caws');
   if (!existsSync(cawsBin)) {
     fail('caws binary missing from node_modules/.bin/', { expected: cawsBin });
   }
-  ok(`installed kernel + CLI into ${projectDir}; binary at .bin/caws`);
+  ok(`installed caws-cli (with absorbed kernel) into ${projectDir}; binary at .bin/caws`);
   return { projectDir, cawsBin };
 }
 
@@ -509,22 +506,18 @@ function runEndToEndSmoke(cawsBin, repoDir, cawsDir, mappingPath) {
 
 const startMs = Date.now();
 try {
-  // Pack BOTH. Kernel first because CLI's runtime deps on it.
-  const kernelTarball = packPackage(KERNEL_ROOT, KERNEL_PACKAGE_NAME);
+  // Pack the CLI (the kernel is absorbed — CAWS-ABSORB-KERNEL-01).
   const cliTarball = packPackage(CLI_ROOT, CLI_PACKAGE_NAME);
 
-  // The load-bearing artifacts for the migrator surface. If any of
-  // these are missing from the tarball, install will succeed but the
-  // command will fail at runtime — exactly the regression class this
-  // smoke prevents.
-  assertTarballContains(kernelTarball, [
-    'dist/spec/migrate-v10.js',
-    'dist/spec/migrate-v10.d.ts',
-    'dist/spec/index.js',
-    'dist/spec/index.d.ts',
-  ], 'kernel');
-
+  // The load-bearing artifacts for the migrator surface, including the
+  // absorbed kernel's transformer at dist/kernel/. If any of these are
+  // missing from the tarball, install will succeed but the command will
+  // fail at runtime — exactly the regression class this smoke prevents.
   assertTarballContains(cliTarball, [
+    'dist/kernel/spec/migrate-v10.js',
+    'dist/kernel/spec/migrate-v10.d.ts',
+    'dist/kernel/spec/index.js',
+    'dist/kernel/spec/index.d.ts',
     'dist/store/specs-migration.js',
     'dist/store/specs-migration.d.ts',
     'dist/shell/commands/specs.js',
@@ -532,7 +525,7 @@ try {
   ], 'CLI');
 
   // Install + run.
-  const { projectDir, cawsBin } = installTarballs(cliTarball, kernelTarball);
+  const { projectDir, cawsBin } = installTarballs(cliTarball);
   const { repoDir, cawsDir, mappingPath } = setupScratchRepo(projectDir);
   runEndToEndSmoke(cawsBin, repoDir, cawsDir, mappingPath);
 
