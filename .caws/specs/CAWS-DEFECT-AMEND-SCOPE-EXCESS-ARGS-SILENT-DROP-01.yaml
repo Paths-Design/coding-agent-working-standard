@@ -38,3 +38,7 @@ evidence:
     status: pass
     evidence_ref: "spawned dist/index.js: 'specs amend-scope X --add docs/a.md docs/b.md' exits 1, diagnostic names docs/b.md + 'nothing was applied' + repeat-the-flag form; spec scope.in unchanged (test A1 in specs-amend-scope-reason.test.js, full parse path). Live artifact: 'caws specs amend-scope: unexpected extra argument(s): docs/b.md — nothing was applied...'"
     recorded_at: "2026-08-19T18:44:49.989Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "spawned dist/index.js: '--add docs/a.md --add docs/b.md' exits 0, both paths in scope.in, exactly one spec_scope_amended event with added_in [docs/a.md, docs/b.md] (test A2)"
+    recorded_at: "2026-08-19T18:44:50.356Z"
