@@ -132,7 +132,7 @@ authority, not by inter-agent messaging. See [`docs/guides/multi-agent-workflow.
 
 Three layers:
 
-1. **Kernel** (`@paths.design/caws-kernel`) — pure TypeScript. Spec parsing, policy validation, scope evaluation, doctor inspection, waiver effectiveness, hash-chained event verification. No `fs`, `path`, `process.env`, `Date.now()`, or `new Date()` in executable code; all time is injected.
+1. **Kernel** (`packages/caws-cli/src/kernel/` — absorbed into the CLI package; no separate `@paths.design/caws-kernel` publish) — pure TypeScript. Spec parsing, policy validation, scope evaluation, doctor inspection, waiver effectiveness, hash-chained event verification. No `fs`, `path`, `process.env`, `Date.now()`, or `new Date()` in executable code; all time is injected.
 2. **Store** — Node I/O. Atomic writes via `writeFileAtomic`, hash-chained `events.jsonl` via lock + `prepareAppend`, snapshot composition for the doctor, legacy `working-spec.yaml` residue detection.
 3. **Shell** — Commander commands and renderers. Composes store snapshots, calls kernel functions, prints diagnostics.
 
@@ -157,13 +157,16 @@ Three layers:
 ```
 caws/
 ├── packages/
-│   ├── caws-cli/                 # CLI (governance surface)
-│   │   ├── src/
-│   │   │   ├── shell/            # vNext command implementations (TS)
-│   │   │   ├── store/            # vNext I/O layer (TS)
-│   │   │   └── ...               # legacy v10 sources (orphaned post-8a3, deleted in 8e)
-│   │   └── README.md             # v11-honest package README
-│   └── caws-kernel/              # Pure governance primitives (TS, no I/O)
+│   └── caws-cli/                 # CLI (governance surface) — the only
+│       │                         # published package; the kernel is
+│       │                         # absorbed into it (no separate
+│       │                         # @paths.design/caws-kernel publish)
+│       ├── src/
+│       │   ├── shell/            # vNext command implementations (TS)
+│       │   ├── store/            # vNext I/O layer (TS)
+│       │   ├── kernel/           # Pure governance primitives (TS, no I/O)
+│       │   └── ...               # legacy v10 sources (orphaned post-8a3, deleted in 8e)
+│       └── README.md             # v11-honest package README
 ├── docs/
 │   ├── architecture/
 │   │   └── caws-vnext-command-surface.md   # ← doctrine source
@@ -196,8 +199,7 @@ If you find a doc that still teaches removed commands as current workflow, file 
 ```bash
 npm install
 npm run build
-cd packages/caws-cli && npx jest      # CLI shell + store tests
-cd packages/caws-kernel && npm test   # kernel tests
+cd packages/caws-cli && npx jest      # CLI shell + store tests (includes the absorbed kernel under src/kernel)
 ```
 
 This project uses CAWS for its own development — see [`AGENTS.md`](AGENTS.md) and the doctrine doc for contributor workflow.
