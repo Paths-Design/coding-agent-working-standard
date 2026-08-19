@@ -2,20 +2,20 @@
 // events-migration-smoke.mjs
 //
 // Release gate for CAWS-MIGRATE-V10-EVENTS-001: proves the published
-// kernel + CLI tarballs together contain every artifact needed to run
-// the v10→v11 event-log migration end-to-end against the installed
-// binary (NOT against source).
+// CLI tarball contains every artifact needed to run the v10→v11
+// event-log migration end-to-end against the installed binary (NOT
+// against source). The kernel is absorbed into the CLI
+// (CAWS-ABSORB-KERNEL-01), so one tarball carries both surfaces.
 //
 // This smoke is the final acceptance gate per the slice's invariants:
-//   - npm pack BOTH packages (kernel + CLI, in that order — kernel
-//     ships the chain_rotated payload schema; CLI depends on it).
+//   - npm pack the CLI.
 //   - Inspect tarball contents and assert the load-bearing files:
-//       * kernel: dist/schemas/events/chain_rotated.v1.json
-//       * CLI:   dist/shell/commands/events.js
+//       * absorbed kernel: dist/kernel/schemas/events/chain_rotated.v1.json
+//       * CLI:             dist/shell/commands/events.js
 //     These are the regression class this slice was built to prevent:
 //     a missing schema file silently breaks payload validation; a
 //     missing shell command file leaves the surface unregistered.
-//   - Install both tarballs into a fresh scratch project (no global
+//   - Install the tarball into a fresh scratch project (no global
 //     install, no source-tree resolution).
 //   - Hand-author a v10 events.jsonl + a v11 spec fixture in .caws/.
 //   - Execute the real installed `caws` binary (node_modules/.bin/caws)
@@ -58,9 +58,7 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const CLI_ROOT = resolve(__dirname, '..');
-const KERNEL_ROOT = resolve(CLI_ROOT, '..', 'caws-kernel');
 const CLI_PACKAGE_NAME = '@paths.design/caws-cli';
-const KERNEL_PACKAGE_NAME = '@paths.design/caws-kernel';
 
 // ─── Output helpers ──────────────────────────────────────────────────────
 
@@ -176,8 +174,8 @@ function assertTarballContains(tarball, expectedFiles) {
   ok(`tarball contains all ${expectedFiles.length} required file(s)`);
 }
 
-function installTarballs(cliTarball, kernelTarball) {
-  step('install both tarballs into fresh project');
+function installTarballs(cliTarball) {
+  step('install cli tarball into fresh project');
   const projectDir = mkdtempSync(join(tmpdir(), 'caws-events-smoke-'));
   registerCleanup(projectDir);
 
@@ -191,9 +189,8 @@ function installTarballs(cliTarball, kernelTarball) {
     JSON.stringify(pkgJson, null, 2)
   );
 
-  // Install kernel first, then CLI. The CLI's package.json declares
-  // a dep on @paths.design/caws-kernel by version range; we want the
-  // local tarball to satisfy it, so install kernel by tarball first.
+  // The kernel is absorbed into the CLI tarball (CAWS-ABSORB-KERNEL-01);
+  // a single install models exactly what a consumer gets.
   const installResult = spawnSync(
     'npm',
     [
@@ -201,24 +198,20 @@ function installTarballs(cliTarball, kernelTarball) {
       '--no-audit',
       '--no-fund',
       '--ignore-scripts',
-      kernelTarball,
       cliTarball,
     ],
     { cwd: projectDir, encoding: 'utf8' }
   );
   if (installResult.status !== 0) {
-    fail('npm install of tarballs failed', {
+    fail('npm install of tarball failed', {
       exitCode: installResult.status,
       stderr: installResult.stderr.trim().slice(0, 2000),
     });
   }
 
-  // Sanity: both packages are installed.
-  for (const name of [KERNEL_PACKAGE_NAME, CLI_PACKAGE_NAME]) {
-    const root = join(projectDir, 'node_modules', name);
-    if (!existsSync(root)) {
-      fail(`installed package root missing: ${name}`, { expected: root });
-    }
+  const installedRoot = join(projectDir, 'node_modules', CLI_PACKAGE_NAME);
+  if (!existsSync(installedRoot)) {
+    fail('installed cli package root missing', { expected: installedRoot });
   }
 
   // The caws binary is at node_modules/.bin/caws (symlink).
@@ -226,7 +219,7 @@ function installTarballs(cliTarball, kernelTarball) {
   if (!existsSync(cawsBin)) {
     fail('caws binary missing from node_modules/.bin/', { expected: cawsBin });
   }
-  ok(`installed caws-kernel + caws-cli into ${projectDir}`);
+  ok(`installed caws-cli (with absorbed kernel) into ${projectDir}`);
   return { projectDir, cawsBin };
 }
 
@@ -471,27 +464,24 @@ try {
   const startMs = Date.now();
   log(colors.dim(`events-migration-smoke for CAWS-MIGRATE-V10-EVENTS-001`));
   log(colors.dim(`  CLI root:    ${CLI_ROOT}`));
-  log(colors.dim(`  Kernel root: ${KERNEL_ROOT}`));
 
-  // 1. Pack both packages.
-  const kernelTarball = packPackage(KERNEL_ROOT, KERNEL_PACKAGE_NAME);
+  // 1. Pack the CLI (the kernel is absorbed — CAWS-ABSORB-KERNEL-01).
   const cliTarball = packPackage(CLI_ROOT, CLI_PACKAGE_NAME);
 
-  // 2. Inspect tarball contents — assert the load-bearing files.
-  assertTarballContains(kernelTarball, [
-    'dist/schemas/events/chain_rotated.v1.json',
-    'dist/evidence/validate.js',
-    'dist/evidence/types.js',
-  ]);
+  // 2. Inspect tarball contents — assert the load-bearing files, including
+  //    the absorbed kernel's schema + evidence surfaces at dist/kernel/.
   assertTarballContains(cliTarball, [
+    'dist/kernel/schemas/events/chain_rotated.v1.json',
+    'dist/kernel/evidence/validate.js',
+    'dist/kernel/evidence/types.js',
     'dist/shell/commands/events.js',
     'dist/shell/index.js',
     'dist/store/events-store.js',
     'dist/store/events-migration.js',
   ]);
 
-  // 3. Install both into a scratch project.
-  const { projectDir, cawsBin } = installTarballs(cliTarball, kernelTarball);
+  // 3. Install into a scratch project.
+  const { projectDir, cawsBin } = installTarballs(cliTarball);
 
   // 4. Build fixture (scratch repo with v10 events.jsonl + v11 spec).
   const { repoDir, expectedDigest, expectedLineCount } = setupScratchRepo(
