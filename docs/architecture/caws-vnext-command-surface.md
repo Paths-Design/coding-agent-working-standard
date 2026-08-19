@@ -11,9 +11,9 @@ governs:
     - packages/caws-cli/src/shell/
     - packages/caws-cli/src/store/
     - packages/caws-cli/src/commands/
-    - packages/caws-kernel/src/
+    - packages/caws-cli/src/kernel/
   schemas:
-    - packages/caws-kernel/src/schemas/events/
+    - packages/caws-cli/src/kernel/schemas/events/
 ---
 
 # CAWS vNext command surface (v11.0.0 → v11.2)
@@ -374,7 +374,7 @@ a parallel lane.
 
 §1.3's framing implies `non_functional` permits only `reliability` and
 `performance`. The kernel schema at
-`packages/caws-kernel/src/schemas/spec.v1.json` actually permits
+`packages/caws-cli/src/kernel/schemas/spec.v1.json` actually permits
 `performance`, `security`, `accessibility`, and `reliability`. Several
 existing specs use `security` legitimately (e.g.,
 `WORKTREE-CAWS-SHARED-STATE-001`, `PRUNE-REPAIR-WORKTREE-001`).
@@ -386,11 +386,12 @@ to preserve recon's no-side-edit discipline.
 ## 2. Command surface
 
 The v11.0.0 governed core shipped eight command groups. The current v11 line has
-**thirteen** top-level commands/groups (plus the auto-generated `help`): it
+**fourteen** top-level commands/groups (plus the auto-generated `help`): it
 restored `worktree` (ninth) and `specs` (tenth) as lifecycle commands,
 added `events` (eleventh) for hash-chained audit-log maintenance
 (`migrate/rotate/verify-archive`), `agents` (twelfth) for multi-agent
-observability, and `message` for directed inter-agent messages.
+observability, `message` (thirteenth) for directed inter-agent messages, and
+`reprieve` (fourteenth, v11.8.0) for session-scoped guard reprieves.
 `agents` shipped ahead of the broader
 v11.2 multi-agent plan: its `register/heartbeat/stop/list/show/prune`
 subcommands are all live. `message` (send/reply/poll/inbox/history/status/
@@ -399,7 +400,8 @@ message bodies are unverified claims until checked against repo/runtime state.
 The remaining multi-agent authority line (bridge claims and lease-backed
 ownership) is still forthcoming. Every command group is
 implemented in `packages/caws-cli/src/shell/`, composed atop
-`packages/caws-cli/src/store/` and `packages/caws-kernel/`.
+`packages/caws-cli/src/store/` and `packages/caws-cli/src/kernel/` (the kernel
+is absorbed into this package; there is no separate `caws-kernel` publish).
 
 ### v11.0.0 (governed core)
 
@@ -408,12 +410,12 @@ implemented in `packages/caws-cli/src/shell/`, composed atop
 | `caws init` | Bootstrap canonical vNext `.caws/` state. Idempotent. Refuses legacy residue; no flag overrides that. Hook-pack `--overwrite` previews replacement diffs (optionally per-path targets) and only `--overwrite --force` applies them. |
 | `caws doctor` | Drift detection over `.caws/` state; exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure). |
 | `caws status` | Read-only dashboard: project, current context, claim, doctor findings. Always observability — never mutates. |
-| `caws scope show <path>` | Explain the scope decision for `<path>`; always exits 0. |
-| `caws scope check <path>` | Enforce the scope decision for `<path>`; exits 0 on admit, 1 otherwise. |
+| `caws scope show/check/plan/contention` | Explain a scope decision, enforce it, preview a candidate scope, or report cross-worktree path contention. `show`/`plan` always exit 0; `check` exits 0 on admit, 1 otherwise. |
 | `caws claim [--takeover]` | Surface or take ownership of the current worktree; writes `prior_owners` audit on takeover. |
-| `caws gates run --spec <id>` | Run CAWS-local policy evaluators against current changes; policy decides block/warn/skip; appends one `gate_evaluated` event per policy-declared gate. |
+| `caws gates list/explain/run` | `list` shows declared gates, `explain` describes one, `run --spec <id>` executes CAWS-local policy evaluators against current changes; policy decides block/warn/skip; appends one `gate_evaluated` event per policy-declared gate. |
 | `caws evidence record` | Append a typed evidence event (`test`/`gate`/`ac`) to `.caws/events.jsonl`. |
-| `caws waiver create/list/show/revoke` | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. |
+| `caws waiver create/list/show/revoke` | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. `create` requires `--title`. |
+| `caws reprieve grant/show/revoke/list` | Session-scoped guard reprieve (v11.8.0): skip a PreToolUse guard for one session until expiry. Replaces commenting a guard out of the dispatcher HANDLERS array. |
 
 **Quality-gates package removal (2026-06-12).**
 `@paths.design/quality-gates` is removed as a standalone batch-scanner
@@ -439,11 +441,11 @@ Option A.
 
 | Command | Purpose |
 |---|---|
-| `caws worktree create/list/bind/destroy/merge` | Worktree lifecycle on the vNext substrate. Canonical path for parallel agent work. |
+| `caws worktree create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan` | Worktree lifecycle on the vNext substrate. Canonical path for parallel agent work. `repair` prunes ghost registry entries + clears dead spec→worktree bindings; `repair-sparse` restores the `.caws/specs` sparse-checkout invariant; `untrack` releases the registry binding while keeping the directory; `prune`/`cleanup-plan` are dry-run-by-default cleanup planners. |
 | `caws worktree migrate-registry` | Convert v10.2 legacy-envelope `.caws/worktrees.json` into the v11 flat-map shape. Idempotent on already-flat files. |
 | `caws worktree repair-sparse <name>` | Restore the `/*` + `!/.caws/specs/` sparse-checkout invariant on a linked worktree. Idempotent and non-destructive: refuses dirty/untracked content under `<wt>/.caws/specs/` rather than stashing, cleaning, resetting, or deleting. Added by `WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001`. |
 | `caws worktree repair` | Repair unambiguous worktree/spec half-states surfaced by `caws doctor`: prune ghost registry entries and clear dead spec→worktree bindings. Never creates or deletes a git worktree directory. |
-| `caws specs create/list/show/recover/retire-draft/activate/amend-scope/close/archive/prune-archive/migrate/validate` | vNext spec lifecycle. Exits by state: draft → activate or retire-draft, active → close, closed → archive. |
+| `caws specs create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate` | vNext spec lifecycle. `create` writes `lifecycle_state: draft` by default (`--activate` creates active directly); the normal path is `caws worktree create --spec <id>`, which activates on bind. Exits by state: draft → activate or retire-draft, active → close, closed → archive; `reopen` reverses `close` (closed→active). |
 | `caws specs activate <id>` | Governed activation of a pre-authored draft spec. Draft-only: patches `lifecycle_state: active`, refreshes `updated_at`, and appends `spec_activated`. This is the sanctioned alternative to hand-editing lifecycle state before `caws worktree create --spec <id>`. |
 | `caws specs recover <id>` | Recover an archived OR retired spec body via the event log + git history. Topology-independent; does NOT mutate `.caws/specs/`. |
 | `caws specs retire-draft <id>` | Governed retirement of a never-activated DRAFT spec (CAWS-SPECS-RETIRE-DRAFT-001). Draft-only: refuses active (use close), closed (use archive), archived. Tombstone — deletes the draft YAML and appends a recoverable `spec_retired` event (recover via `specs show --archived` / `specs recover`). The sanctioned alternative to raw `git rm .caws/specs/<id>.yaml`, which bypasses the audit + recovery path. |
@@ -497,8 +499,14 @@ base: `docs/architecture/design/prepush-slice-attribution-dead-by-design.md`.
 |---|---|
 | `caws claim --spec <id>` | Bridge claim — session ↔ spec binding outside a worktree. |
 | `caws claim --release [--spec <id>]` | Explicit relinquishment of a bridge binding. |
-| `caws worktree prune` | Remove ghost worktree registry entries and ghost bridge bindings. Never removes live git worktrees. |
 | `caws worktree reconcile` | Read-only drift diagnostic across git worktrees, registry, spec fields, and bridge bindings. |
+
+`caws worktree prune` shipped ahead of this table (dry-run-by-default cleanup
+plan from doctor evidence; `--apply` mutates only apply-capable classes) — its
+shipped shape is a general cleanup planner, not the narrower
+ghost-registry/ghost-bridge-binding remover originally sketched here.
+`caws worktree untrack` and `caws worktree cleanup-plan` also shipped ahead of
+this table.
 
 ### Shipped ahead of v11.2 (MULTI-AGENT-ACTIVITY-REGISTRY-001)
 
@@ -533,9 +541,10 @@ lease writes.
 ### Help banner (v11.0.0 historical snapshot)
 
 > **Historical — captured at v11.0.0.** The current surface has
-> thirteen top-level commands/groups: `init doctor status scope claim gates
-> evidence events waiver specs worktree agents message` plus the auto-generated `help`. Run
-> `caws --help` against the installed CLI to see the live banner.
+> fourteen top-level commands/groups: `init doctor status scope claim gates
+> evidence events waiver specs worktree agents message reprieve` plus the
+> auto-generated `help`. Run `caws --help` against the installed CLI to see
+> the live banner.
 
 ```
 $ caws --help   # v11.0.0 snapshot — 8 groups only
@@ -728,7 +737,7 @@ update to this document.
    do not change the gate's policy mode. Removing all waiver matches
    does not magically downgrade a `block` gate to `warn`.
 
-3. **Doctor is pure.** `packages/caws-kernel/src/doctor/` has no
+3. **Doctor is pure.** `packages/caws-cli/src/kernel/doctor/` has no
    `fs`/`path`/`process.env`/`Date.now()`/`new Date()` access in
    executable code. Time enters via the injected `now: Date` field on
    `DoctorInput`; everything else is constructed by the store.
@@ -1314,13 +1323,14 @@ but should land alongside cutover for coherence.
 
 ## 8. References
 
-- `packages/caws-kernel/` — pure logic
+- `packages/caws-cli/src/kernel/` — pure logic (absorbed from the formerly
+  separate `caws-kernel` package; no separate publish)
 - `packages/caws-cli/src/store/` — I/O and snapshot composition
 - `packages/caws-cli/src/shell/` — vNext command surface
 - `packages/caws-cli/src/commands/` — legacy handlers (kept on disk for
   v11.0; deleted in v11.1 per Slice 8e)
 - `packages/caws-cli/src/index.js` — registration; subject to Slice 8a3
   removals
-- `.caws/events.jsonl` schema: `packages/caws-kernel/src/schemas/events/`
+- `.caws/events.jsonl` schema: `packages/caws-cli/src/kernel/schemas/events/`
 - Slice closure notes: see commits `52d6165`, `2ed4a6f`, `4286c20`,
   `157df5a`, `7dfd865`, `8f8ac56`, `2ed7435`, `8f33580`

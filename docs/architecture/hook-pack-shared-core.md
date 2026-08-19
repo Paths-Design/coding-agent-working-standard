@@ -69,6 +69,18 @@ templates/hook-packs/
     hooks/caws-qwen-hook.sh   # shim the repo-local settings.json wiring invokes
     CAWS-HOOKS.md             # surface doc (imported from root QWEN.md)
     hooks/lib/                # named override file (parse-input.sh)
+
+  zcode/                      # vendor adapter — harness-specific ONLY
+    hooks/caws-bridge.sh      # shim adapting the shared dispatchers to
+                               # ZCode's strict-JSON hook output contract
+
+  opencode/                   # vendor adapter — harness-specific ONLY
+    plugin.ts                 # in-process TS plugin translating opencode's
+                               # plugin callbacks into calls to the shared
+                               # bash dispatchers (no hooks/ dir — opencode's
+                               # interposition surface is a TS plugin, not a
+                               # shell-invoked hook file)
+    AGENTS.md                 # surface doc
 ```
 
 Installed layout in a consumer repo:
@@ -111,6 +123,18 @@ Installed layout in a consumer repo:
 # entry invokes the shim, which resolves the git root at invocation time and
 # exits 0 silently outside CAWS repos. QWEN.md gains a CAWS-managed
 # @.qwen/CAWS-HOOKS.md import so the surface doc loads every session.
+
+.zcode/                       # zcode adapter
+  hooks/caws-bridge.sh        # shim -> .caws/hooks/dispatch/<event>.sh,
+                               # re-wrapping shared-dispatcher output into
+                               # ZCode's strict-JSON hook contract
+
+.opencode/                    # opencode adapter
+  plugins/caws.ts             # in-process plugin invoking the shared
+                               # dispatchers directly (no shell shim layer);
+                               # throws on block/ask in tool.execute.before
+                               # and surfaces dispatcher context via
+                               # experimental.chat.system.transform
 ```
 
 ## Dependency-injection environment contract
@@ -129,14 +153,14 @@ The shared core derives every other harness-dependent value from
 `CAWS_AGENT_SURFACE` via a single resolver in `lib/caws-state.sh` (or a small
 dedicated `lib/agent-surface.sh`):
 
-| Derived value | claude-code | codex | kimi-code | qwen-code |
-|---------------|-------------|-------|-----------|-----------|
-| vendor dir | `.claude` | `.codex` | `.kimi-code` | `.qwen` |
-| log dir | `$CAWS_PROJECT_DIR/.claude/logs` | `$CAWS_PROJECT_DIR/.codex/logs` | `$CAWS_PROJECT_DIR/.kimi-code/logs` | `$CAWS_PROJECT_DIR/.qwen/logs` |
-| `--platform` flag | `claude-code` | `codex` | `kimi-code` | `qwen-code` |
-| permission-decision vocab | `ask` supported | `ask` → `deny` (Codex has no PreToolUse `ask`) | `ask` → `deny` (Kimi's `ask` is non-blocking — verified live) | `ask` supported (interactive prompts; headless/background degrades to `deny` — verified live on 0.21.4) |
-| updatedInput rewrite | yes | yes | no (no documented contract; quiet-merge passes through) | no on the plain-CLI path (0.21.4 and 0.21.11 alike); the ACP/daemon surface applies it as of 0.21.11 — quiet-merge still passes through |
-| non-2 non-zero hook exit | warning (max returned) | warning (max returned) | promoted to blocking exit 2 — Kimi does not enforce exit 1 (verified live) | warning (max returned) — Qwen enforces exit 2 blocking and treats exit 1 as a non-blocking error, same contract as Claude Code (verified live) |
+| Derived value | claude-code | codex | kimi-code | qwen-code | zcode | opencode |
+|---------------|-------------|-------|-----------|-----------|-------|----------|
+| vendor dir | `.claude` | `.codex` | `.kimi-code` | `.qwen` | `.zcode` | `.opencode` |
+| log dir | `$CAWS_PROJECT_DIR/.claude/logs` | `$CAWS_PROJECT_DIR/.codex/logs` | `$CAWS_PROJECT_DIR/.kimi-code/logs` | `$CAWS_PROJECT_DIR/.qwen/logs` | `$CAWS_PROJECT_DIR/.zcode/logs` | `$CAWS_PROJECT_DIR/.opencode/logs` |
+| `--platform` flag | `claude-code` | `codex` | `kimi-code` | `qwen-code` | `zcode` | `opencode` |
+| permission-decision vocab | `ask` supported | `ask` → `deny` (Codex has no PreToolUse `ask`) | `ask` → `deny` (Kimi's `ask` is non-blocking — verified live) | `ask` supported (interactive prompts; headless/background degrades to `deny` — verified live on 0.21.4) | `ask` → block (ZCode's hook runner has no non-blocking ask primitive) | `ask` → block (opencode's only block primitive is `throw` inside `tool.execute.before` — no PreToolUse `ask`, codex precedent) |
+| updatedInput rewrite | yes | yes | no (no documented contract; quiet-merge passes through) | no on the plain-CLI path (0.21.4 and 0.21.11 alike); the ACP/daemon surface applies it as of 0.21.11 — quiet-merge still passes through | yes, via the bridge shim re-wrapping dispatcher output | yes — `plugin.ts` mutates `output.args.command` before the tool runs |
+| non-2 non-zero hook exit | warning (max returned) | warning (max returned) | promoted to blocking exit 2 — Kimi does not enforce exit 1 (verified live) | warning (max returned) — Qwen enforces exit 2 blocking and treats exit 1 as a non-blocking error, same contract as Claude Code (verified live) | N/A — ZCode's hook runner requires strict JSON on stdout; the bridge re-wraps every shared-dispatcher exit into that contract | N/A — opencode interposition is in-process; `plugin.ts` throws directly rather than relying on a process exit code |
 
 Backward-compatibility: the resolver falls back to the legacy env var
 (`CLAUDE_PROJECT_DIR` / `CODEX_PROJECT_DIR`) when `CAWS_PROJECT_DIR` is unset, so
@@ -247,6 +271,21 @@ genuine-divergence set (from the codex/claude-code comparison) is:
   `deny` and exit-2 blocks natively and degrades `ask` to deny in
   headless/background (probed live on 0.21.4, re-verified against the
   0.21.11 runtime).
+- `hooks/caws-bridge.sh` (zcode) — zcode only: a bridge shim, not a thin
+  wrapper. ZCode's hook runner parses stdout as strict JSON against a schema
+  (extra keys → reject, non-JSON → `hook.run.failed`); the shared dispatchers
+  already emit valid JSON for PreToolUse/PostToolUse/Stop via `emit.sh`, but
+  the SessionStart dispatcher's plain-text banners (free-form text under
+  Claude Code) are rejected by ZCode, so the bridge re-wraps that path.
+- `plugins/caws.ts` (opencode) — opencode only: not a shell override at all.
+  opencode's lifecycle interposition is an in-process TypeScript plugin
+  surface, not a process the shared dispatchers are invoked as; `plugin.ts`
+  translates opencode's plugin callbacks into calls to the same shared bash
+  dispatchers every other surface uses, reusing 100% of the guard/check
+  logic. It throws on block/ask in `tool.execute.before` (ask degrades to
+  block, codex precedent) and appends dispatcher-produced context via
+  `experimental.chat.system.transform` on the next model call (a direct
+  `client.session.prompt` call from inside a tool hook silently no-ops).
 
 Resolution rule at install time: for each shared file, the vendor adapter MAY
 provide an override; if present, the override is installed in place of the

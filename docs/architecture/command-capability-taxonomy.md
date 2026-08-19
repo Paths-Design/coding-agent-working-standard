@@ -2,7 +2,7 @@
 
 Status: active (capability classifier Slice 0 — `HOOK-CAPABILITY-ENGINE-000`)
 Authority: this document is the governed source of truth for the capability model that
-`packages/caws-cli/templates/hook-packs/claude-code/classify_command.py` implements and that
+`packages/caws-cli/templates/hook-packs/shared/classify_command.py` implements and that
 `.caws/command-adapters.schema.json` constrains. When the schema, the Python, and this doc
 disagree, **this doc plus the schema win** — and the Python is corrected, not the doc.
 
