@@ -27,6 +27,7 @@ import * as nodePath from 'node:path';
 import {
   evaluateContention,
   evaluatePath,
+  matchGlob,
   type ContentionClaimant,
   type Decision,
   type Policy,
@@ -117,25 +118,30 @@ function renderExplicitSpecContextNote(spec: Spec): string[] {
 }
 
 /**
- * Does `entry` (a scope.in value) admit `target`? Mirrors the kernel's scope.in
- * semantics: an exact match, a bare directory entry admitting descendants on a
- * path boundary, or a `*`/`?` glob anchored end-to-end.
+ * Does `entry` (a scope.in value) admit `target`?
+ *
+ * Delegates to the kernel's `matchGlob` — the same function `evaluatePath` uses
+ * to decide admission — because this ranking must not be a SECOND reading of
+ * scope.in. An earlier hand-rolled matcher here diverged from the kernel in both
+ * directions on legal scope.in values: it treated only `*` and `?` as glob
+ * characters (so `docs/{api,agents}/cli.md` and `src/[abc]/x.ts` were compared
+ * as literals and missed), and it expanded `*` to `.*` (which crosses `/`, so
+ * `packages/*` claimed `packages/a/b/c.ts` that picomatch refuses). Both errors
+ * corrupt the handoff: an omitted claimant makes the CLI say "no spec claims
+ * this path" about the spec that owns it, steering an amend-scope onto an
+ * unrelated authority; a phantom claimant offers a spec whose worktree will then
+ * refuse the edit.
+ *
+ * `matchGlob` expects a normalized POSIX-relative target, so normalize here
+ * rather than at each call site. Entries are passed through untouched —
+ * `matchGlob` trims its own trailing slash and treats a glob-free entry as a
+ * boundary-safe directory prefix.
  */
 function scopeInAdmits(entry: string, target: string): boolean {
-  const e = entry.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
-  const t = target.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
-  if (e.length === 0) return false;
-  if (e === t) return true;
-  if (!/[*?]/.test(e)) return t.startsWith(`${e}/`);
-  const rx = e
-    .split('')
-    .map((ch) => {
-      if (ch === '*') return '.*';
-      if (ch === '?') return '.';
-      return ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-    })
-    .join('');
-  return new RegExp(`^${rx}$`).test(t);
+  if (entry.length === 0) return false;
+  const normalizedTarget = target.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+  if (normalizedTarget.length === 0) return false;
+  return matchGlob(normalizedTarget, [entry]) !== null;
 }
 
 /**

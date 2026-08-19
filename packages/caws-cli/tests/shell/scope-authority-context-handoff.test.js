@@ -234,6 +234,74 @@ describe('scope authority-context handoff', () => {
     ]);
   });
 
+  // ── The ranking matcher IS the kernel's admission matcher ──────────────
+  //
+  // `packages/*/src/index.ts` vs `packages/thing/src/index.ts` above is a
+  // single-segment substitution — the case where every plausible glob
+  // implementation agrees, so it passes over a matcher that is wrong in
+  // general. These three pin the places a hand-rolled matcher diverges from
+  // kernel/scope/match.matchGlob, in both directions. Each one is a concrete
+  // corruption of the handoff, not a style preference: an omitted claimant
+  // makes the CLI say "no spec claims this path" about the spec that owns it,
+  // and a phantom claimant offers a spec whose worktree then refuses the edit.
+
+  test('`**` claims the directory it names, not only its descendants', () => {
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'GLOBSTAR-OWNER-001', ['packages/caws-cli/tests/hooks/**']);
+    writeSpec(caws, 'OTHER-002', ['docs']);
+
+    const result = runScopeJson(root, 'packages/caws-cli/tests/hooks');
+
+    expect(result.json.remediation.authorityCandidates).toEqual([
+      {
+        specId: 'GLOBSTAR-OWNER-001',
+        lifecycleState: 'active',
+        matchedScopeInEntry: 'packages/caws-cli/tests/hooks/**',
+      },
+    ]);
+  });
+
+  test('a single `*` does not cross a path separator, so it claims no descendant', () => {
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'ONE-SEGMENT-001', ['packages/*']);
+
+    const result = runScopeJson(root, 'packages/deep/nested/file.ts');
+
+    // Nothing claims the path, so the active set comes back as the labelled
+    // fallback — and the entry that did NOT match must not be reported as one.
+    const [candidate] = result.json.remediation.authorityCandidates;
+    expect(candidate.specId).toBe('ONE-SEGMENT-001');
+    expect(candidate.matchedScopeInEntry).toBeUndefined();
+    expect(result.json.remediation.notes.join('\n')).toContain(
+      'No active spec claims this path via scope.in'
+    );
+  });
+
+  test('brace and bracket entries are globs, not literal filenames', () => {
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'BRACE-OWNER-001', ['docs/{api,agents}/cli.md']);
+    writeSpec(caws, 'BRACKET-OWNER-002', ['src/[abc]/x.ts']);
+
+    expect(
+      runScopeJson(root, 'docs/api/cli.md').json.remediation.authorityCandidates
+    ).toEqual([
+      {
+        specId: 'BRACE-OWNER-001',
+        lifecycleState: 'active',
+        matchedScopeInEntry: 'docs/{api,agents}/cli.md',
+      },
+    ]);
+    expect(
+      runScopeJson(root, 'src/a/x.ts').json.remediation.authorityCandidates
+    ).toEqual([
+      {
+        specId: 'BRACKET-OWNER-002',
+        lifecycleState: 'active',
+        matchedScopeInEntry: 'src/[abc]/x.ts',
+      },
+    ]);
+  });
+
   test('canonical unbound refusal names active spec candidates and read-only spec-context checks', () => {
     const { root, caws } = mkRepo();
     writeSpec(caws, 'ACTIVE-UNBOUND-001', ['packages/owned-a']);
