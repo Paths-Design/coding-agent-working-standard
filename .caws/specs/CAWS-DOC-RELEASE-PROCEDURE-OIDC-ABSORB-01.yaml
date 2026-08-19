@@ -24,3 +24,8 @@ acceptance:
     then: 'no step instructs creating/rotating NPM_TOKEN or publishing caws-kernel, the OIDC trusted-publisher match fields are documented, and the smoke description matches the single-tarball reality'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "docs/release-procedure.md: kernel-publish/coupled-release/token-rotation sections replaced with absorbed-kernel + OIDC sections; every claim matches the live 12.0.0 release evidence (run 32305364264: auth_mode=oidc-trusted-publisher, signed provenance, registry latest=12.0.0); jest tests/docs pass"
+    recorded_at: "2026-08-19T21:50:01.543Z"
