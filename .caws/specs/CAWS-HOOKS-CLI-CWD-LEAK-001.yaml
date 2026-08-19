@@ -2,9 +2,11 @@ id: CAWS-HOOKS-CLI-CWD-LEAK-001
 title: 'Hook-invoked CAWS CLI calls resolve repo root from CAWS_PROJECT_DIR, not inherited cwd'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'caws_run_cli shipped in shared hook pack v42 (agent-surface.sh), wired into agent-heartbeat.sh/agent-register.sh/agent-stop.sh. Both ACs pass with bats evidence; leak closed and verified end-to-end against canonical''s own .caws/leases.'
 created_at: '2026-08-19T19:37:23.872Z'
-updated_at: '2026-08-19T19:55:30.409Z'
+updated_at: '2026-08-19T19:55:47.190Z'
 blast_radius:
   modules:
     - 'hook-packs/shared'
