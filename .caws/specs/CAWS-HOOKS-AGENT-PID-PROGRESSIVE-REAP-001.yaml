@@ -2,9 +2,11 @@ id: CAWS-HOOKS-AGENT-PID-PROGRESSIVE-REAP-001
 title: 'Progressive age-based reap for agent-pid session records'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Progressive reap shipped in shared hook pack v41 (parse-input.sh _reap_stale_agent_pid_records, called from _write_agent_pid_record). All 3 ACs pass with bats evidence; full jest suite (1991 tests) and full bats suite (148 tests) green after the change.'
 created_at: '2026-08-19T16:58:56.640Z'
-updated_at: '2026-08-19T19:31:05.677Z'
+updated_at: '2026-08-19T19:31:21.823Z'
 blast_radius:
   modules:
     - 'hook-packs/shared'
