@@ -41,3 +41,7 @@ evidence:
     status: pass
     evidence_ref: "npx bats tests/hooks/bats/agent-surface.bats — 'caws_run_cli invokes the binary from CAWS_PROJECT_DIR, not the inherited cwd' (3x repeated run, green); end-to-end verified by re-running reprieve.bats and confirming canonical .caws/leases count stayed at 49 with zero new sess-a*/bats_* entries (previously visibly polluted)"
     recorded_at: "2026-08-19T19:55:46.426Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "npx bats tests/hooks/bats/agent-surface.bats — 'caws_run_cli falls open to the plain invocation when CAWS_PROJECT_DIR is unset'; full jest suite green (1990/1991, 1 pre-existing unrelated failure reproduced on untouched main)"
+    recorded_at: "2026-08-19T19:55:46.809Z"
