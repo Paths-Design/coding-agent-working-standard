@@ -1,0 +1,44 @@
+id: CAWS-DEFECT-INIT-ACTION-POSITIONALS-REFUSED-01
+title: 'init diff and init port are listed in caws init --help but refused by the excess-args guard before their action runs'
+risk_tier: 3
+mode: fix
+lifecycle_state: draft
+created_at: '2026-08-19T00:00:00.000Z'
+updated_at: '2026-08-19T00:00:00.000Z'
+blast_radius:
+  modules:
+    - 'caws-cli/shell (command registration / argument strictness)'
+    - 'caws-cli/shell (init subcommand dispatch)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/tests/shell/init-action-positionals.test.js'
+    - 'packages/caws-cli/CHANGELOG.md'
+  out: []
+invariants:
+  - 'Observed 2026-08-19 (shipped in v12.0.0): `caws init diff` and `caws init port <path> --from <file>` are documented in `caws init --help` (INIT_COMMAND_META description names both subcommands) but every invocation is refused by guardExcessArguments with "unexpected extra argument(s): ... This command takes no positional arguments." — the action body never runs. Root cause: INIT_COMMAND_META declares options only (no `argument`/`arguments` field, so guardExcessArguments computes declared=0), while register.ts bolts on TWO `.argument()` calls after defineFlat() returns, so Commander accepts the positionals but the metadata-driven guard does not know they exist.'
+  - 'The fix is metadata-first: LeafCommandMeta gains an optional multi-positional field (the single-argument `argument` field keeps working for every other leaf unchanged), INIT_COMMAND_META declares its two optional positionals, and leafCommandName + guardExcessArguments both derive the declared-positional count/suffix from ONE shared accessor so the declared shape and the enforced shape can never disagree again. The bolt-on `.argument()` calls in register.ts are removed; Commander wiring comes from metadata only.'
+  - 'guardExcessArguments must still refuse a genuine excess positional on init (three or more positionals) and must still refuse excess positionals on single- and zero-argument leaves elsewhere in the surface — the guard is not weakened, only made aware of a leaf that legitimately declares more than one positional.'
+  - 'The proof must be a full-parse-path test (spawn dist/index.js), not a handler-unit test: existing init tests call runInitCommand directly and bypass Commander entirely, which is why this regression shipped undetected.'
+acceptance:
+  - id: A1
+    given: 'The CLI parsed end-to-end (spawned dist/index.js) inside an initialized repo.'
+    when: '`caws init diff` is invoked with no further positionals.'
+    then: 'The process exits 0 and prints the diff/pack output (e.g. "Hook pack diff"), not the excess-args error.'
+  - id: A2
+    given: 'The CLI parsed end-to-end inside an initialized repo.'
+    when: '`caws init port <path>` is invoked without `--from`.'
+    then: "The process exits non-zero with port's own usage diagnostic naming --from as required, not \"unexpected extra argument(s)\"."
+  - id: A3
+    given: 'The CLI parsed end-to-end.'
+    when: '`caws init a b c` is invoked (three positionals).'
+    then: 'The process exits non-zero and the diagnostic names the excess token "c" — the guard still refuses genuine excess positionals on init.'
+  - id: A4
+    given: 'The CLI parsed end-to-end and a leaf other than init (e.g. `specs amend-scope`).'
+    when: 'An excess positional is passed beyond that leaf''s declared arity.'
+    then: 'The command is still refused by guardExcessArguments — the fix does not weaken the guard for any other leaf.'
+non_functional: {}
+contracts: []
