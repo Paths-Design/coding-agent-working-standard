@@ -60,3 +60,12 @@ non_functional: {}
 contracts:
   - name: 'git-invocation-parity'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: packages/caws-cli/tests/store/git-binary.test.js
+    recorded_at: "2026-08-19T16:57:53.319Z"
+    test_nodeid: "the result is cached: a PATH change after the first call has no effect until reset"
+    command: npx jest tests/store/git-binary.test.js
+    exit_code: 0
+    commit_sha: "2f3eed7e"
