@@ -97,8 +97,16 @@ export interface LeafCommandMeta {
   readonly kind: 'leaf';
   /** Command name as passed to `.command()` (without the `<arg>` suffix). */
   readonly name: string;
-  /** The positional argument, if any. */
+  /** The positional argument, if any. Mutually exclusive with `arguments`
+   *  in practice — every leaf declares at most one of the two — but both
+   *  are read through the shared `declaredArguments()` accessor so a leaf
+   *  can never disagree with itself about its own positional count. */
   readonly argument?: CommandArgMeta;
+  /** Multiple positionals, in declaration order (e.g. init's `[action]`
+   *  then `[actionArg]`). Use this instead of `argument` when a leaf takes
+   *  more than one positional; leave both leaves' worth of other metadata
+   *  (name/description/options) unchanged. */
+  readonly arguments?: readonly CommandArgMeta[];
   /** The `.description()` text. */
   readonly description: string;
   /** Declared options, in display order. */
@@ -854,6 +862,14 @@ export const INIT_COMMAND_META: LeafCommandMeta = {
   name: 'init',
   description:
     'Bootstrap the canonical vNext .caws/ project state (idempotent; refuses to overwrite legacy single-spec layout). With --agent-surface, also installs the corresponding hook pack. Subcommands: `init diff` (read-only pack drift view incl. three-way decomposition) and `init port <path> --from <file>` (CLI-mediated retrofit landing — no agent-side hook editing).',
+  arguments: [
+    { name: 'action', required: false, description: 'subcommand: diff | port' },
+    {
+      name: 'actionArg',
+      required: false,
+      description: 'port: the managed pack destination path being retrofitted',
+    },
+  ],
   options: [
     DATA_OPTION,
     {

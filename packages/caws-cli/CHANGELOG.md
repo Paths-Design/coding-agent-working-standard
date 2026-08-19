@@ -1,3 +1,21 @@
+## [Unreleased]
+
+### Fixed
+
+- **`caws init diff` and `caws init port <path> --from <file>` are reachable
+  again.** `INIT_COMMAND_META` documented both subcommands in `caws init
+  --help` but declared no positional arguments, so `guardExcessArguments`
+  (the metadata-driven excess-positional refusal shipped in 12.0.0) computed
+  zero declared positionals for `init` while register.ts separately bolted
+  the two positionals onto the Command object with `.argument()` calls —
+  Commander accepted `init diff`/`init port <path>`, but the guard's own
+  count never saw them and refused every invocation with "unexpected extra
+  argument(s)" before the action ran. `LeafCommandMeta` gains an `arguments`
+  field for leaves with more than one positional; `init` now declares
+  `[action]`/`[actionArg]` there, and `leafCommandName` +
+  `guardExcessArguments` both read the declared count through one shared
+  accessor so the advertised and enforced shapes cannot diverge again.
+
 ## [12.0.0] (2026-08-19)
 
 ### Changed (breaking)
@@ -85,7 +103,10 @@
 - `worktrees.json` entries record `baseSha`, the base commit the worktree was
   forked at. Descriptive governance metadata, never an authority claim.
 - **The command classifier stops auto-admitting a bare `git commit` whose index
-  stages deletions of tracked files** (shared hook pack **v39 → v40**). The old
+  stages deletions of tracked files** (shared hook pack **v39 → v40** for this
+  change; two further unrelated housekeeping bumps landed before the release
+  tag, so the pack version actually shipped in 12.0.0 is **v42** — see
+  `src/init/hook-packs/manifest-shared.ts`). The old
   premise — "a plain commit creates a new commit object; not destructive" — is
   false: a commit with no pathspec commits the ENTIRE index, and a stale or
   foreign index (a failed `git revert -n`, another session's staged work)
