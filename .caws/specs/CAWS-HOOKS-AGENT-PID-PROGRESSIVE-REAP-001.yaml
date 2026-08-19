@@ -38,3 +38,8 @@ non_functional: {}
 contracts:
   - name: 'agent-pid-reap'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "npx bats tests/hooks/bats/parse-input.bats — 'reap: records under 3 days old are never touched', 'reap: 3-7 day band deletes only when the recorded pid is confirmed dead (kill -0)', 'reap: records past the 7-day hard cutoff are deleted unconditionally' — 3x repeated run, all green (11/11)"
+    recorded_at: "2026-08-19T19:31:14.640Z"
