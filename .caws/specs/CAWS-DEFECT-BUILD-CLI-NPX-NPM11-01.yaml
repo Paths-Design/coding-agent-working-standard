@@ -2,9 +2,10 @@ id: CAWS-DEFECT-BUILD-CLI-NPX-NPM11-01
 title: 'build-cli.js npx fallback misparses under npm 11: npx --no tsc -p file installs ''file'' as a package'
 risk_tier: 3
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-build-npx-npm11
 created_at: '2026-08-19T20:46:08.895Z'
-updated_at: '2026-08-19T20:46:08.895Z'
+updated_at: '2026-08-19T20:46:09.478Z'
 blast_radius:
   modules:
     - 'caws-cli build script'
