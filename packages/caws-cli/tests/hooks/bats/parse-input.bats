@@ -153,3 +153,148 @@ with open(sys.argv[1]) as f:
   [ "$(envelope_platform "$sid")" = "claude-code" ]
 }
 
+# CAWS-HOOKS-AGENT-PID-PROGRESSIVE-REAP-001 — _reap_stale_agent_pid_records
+# unit coverage. Drives the function directly (source + call), independent
+# of the resolver/dispatcher chain, since bats has no real agent ancestor
+# in its PID tree for _write_agent_pid_record to walk to.
+
+# Backdate a file's mtime by $2 days (fractional allowed) via python3's
+# os.utime — portable across the BSD/GNU `touch`/`date` split this repo
+# already works around elsewhere.
+_bats_backdate() {
+  python3 -c '
+import os, sys, time
+path, days = sys.argv[1], float(sys.argv[2])
+t = time.time() - days * 86400
+os.utime(path, (t, t))
+' "$1" "$2"
+}
+
+_bats_write_agent_pid_json() {
+  local path="$1" pid="$2"
+  printf '{"agent_pid": %s, "session_id": "s", "surface": "claude-code", "repo_root": "r", "created_at": "x", "last_seen_at": "x", "started_at": null}\n' "$pid" > "$path"
+}
+
+@test "reap: records under 3 days old are never touched regardless of pid liveness" {
+  # BATS_TEST_TMPDIR is unique per test (bats-core) — deliberately NOT the
+  # shared $CAWS_TEST_REPO/.caws/sessions, since the reap's own rate-limit
+  # marker is stateful and would otherwise leak across tests in this file
+  # and make every test after the first a silent no-op.
+  local sdir="$BATS_TEST_TMPDIR/sessions"
+  mkdir -p "$sdir"
+  _bats_write_agent_pid_json "$sdir/agent-pid-999999.json" 999999
+  _bats_backdate "$sdir/agent-pid-999999.json" 1
+
+  run bash -c '
+    set -euo pipefail
+    source "$1/lib/parse-input.sh"
+    _reap_stale_agent_pid_records "$2"
+  ' _ "$CAWS_TEST_HOOKS_DIR" "$sdir"
+  assert_success
+  [[ -f "$sdir/agent-pid-999999.json" ]]
+}
+
+@test "reap: 3-7 day band deletes only when the recorded pid is confirmed dead (kill -0)" {
+  local sdir="$BATS_TEST_TMPDIR/sessions"
+  mkdir -p "$sdir"
+
+  # A live pid: a background sleep this test owns and cleans up. Redirected
+  # away from the test shell's stdout/stderr — otherwise `run`'s output
+  # capture below blocks until this backgrounded process's inherited fds
+  # close too (a classic `cmd & | capture` hang), not just the tracked command.
+  sleep 60 >/dev/null 2>&1 &
+  local live_pid=$!
+
+  # A dead pid: a subprocess that has already exited and been reaped.
+  ( exit 0 ) >/dev/null 2>&1 &
+  local dead_pid=$!
+  wait "$dead_pid" || true
+
+  _bats_write_agent_pid_json "$sdir/agent-pid-${live_pid}.json" "$live_pid"
+  _bats_backdate "$sdir/agent-pid-${live_pid}.json" 5
+  _bats_write_agent_pid_json "$sdir/agent-pid-${dead_pid}.json" "$dead_pid"
+  _bats_backdate "$sdir/agent-pid-${dead_pid}.json" 5
+
+  run bash -c '
+    set -euo pipefail
+    source "$1/lib/parse-input.sh"
+    _reap_stale_agent_pid_records "$2"
+  ' _ "$CAWS_TEST_HOOKS_DIR" "$sdir"
+  assert_success
+
+  kill "$live_pid" 2>/dev/null || true
+  wait "$live_pid" 2>/dev/null || true
+
+  [[ -f "$sdir/agent-pid-${live_pid}.json" ]]
+  [[ ! -f "$sdir/agent-pid-${dead_pid}.json" ]]
+}
+
+@test "reap: records past the 7-day hard cutoff are deleted unconditionally, even for a live pid" {
+  local sdir="$BATS_TEST_TMPDIR/sessions"
+  mkdir -p "$sdir"
+
+  sleep 60 >/dev/null 2>&1 &
+  local live_pid=$!
+  _bats_write_agent_pid_json "$sdir/agent-pid-${live_pid}.json" "$live_pid"
+  _bats_backdate "$sdir/agent-pid-${live_pid}.json" 10
+
+  run bash -c '
+    set -euo pipefail
+    source "$1/lib/parse-input.sh"
+    _reap_stale_agent_pid_records "$2"
+  ' _ "$CAWS_TEST_HOOKS_DIR" "$sdir"
+  assert_success
+
+  kill "$live_pid" 2>/dev/null || true
+  wait "$live_pid" 2>/dev/null || true
+
+  [[ ! -f "$sdir/agent-pid-${live_pid}.json" ]]
+}
+
+@test "reap: orphaned .tmp atomic-write remnants older than 60 minutes are swept; fresh ones survive" {
+  local sdir="$BATS_TEST_TMPDIR/sessions"
+  mkdir -p "$sdir"
+  : > "$sdir/.agent-pid-11111.tmp.old"
+  _bats_backdate "$sdir/.agent-pid-11111.tmp.old" 0.1
+  : > "$sdir/.agent-pid-22222.tmp.fresh"
+
+  run bash -c '
+    set -euo pipefail
+    source "$1/lib/parse-input.sh"
+    _reap_stale_agent_pid_records "$2"
+  ' _ "$CAWS_TEST_HOOKS_DIR" "$sdir"
+  assert_success
+
+  [[ ! -f "$sdir/.agent-pid-11111.tmp.old" ]]
+  [[ -f "$sdir/.agent-pid-22222.tmp.fresh" ]]
+}
+
+@test "reap: rate-limited to once per hour via the marker file — a second call in the same window is a no-op" {
+  local sdir="$BATS_TEST_TMPDIR/sessions"
+  mkdir -p "$sdir"
+  _bats_write_agent_pid_json "$sdir/agent-pid-31111.json" 31111
+  _bats_backdate "$sdir/agent-pid-31111.json" 10
+
+  run bash -c '
+    set -euo pipefail
+    source "$1/lib/parse-input.sh"
+    _reap_stale_agent_pid_records "$2"
+  ' _ "$CAWS_TEST_HOOKS_DIR" "$sdir"
+  assert_success
+  [[ ! -f "$sdir/agent-pid-31111.json" ]]
+  [[ -f "$sdir/.agent-pid-reap-marker" ]]
+
+  # Second seed, past the hard cutoff too — but the marker is fresh (just
+  # written), so this call must be a rate-limited no-op and leave it alone.
+  _bats_write_agent_pid_json "$sdir/agent-pid-32222.json" 32222
+  _bats_backdate "$sdir/agent-pid-32222.json" 10
+
+  run bash -c '
+    set -euo pipefail
+    source "$1/lib/parse-input.sh"
+    _reap_stale_agent_pid_records "$2"
+  ' _ "$CAWS_TEST_HOOKS_DIR" "$sdir"
+  assert_success
+  [[ -f "$sdir/agent-pid-32222.json" ]]
+}
+
