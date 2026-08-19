@@ -292,7 +292,18 @@ import type { HookPackV1 } from './types';
 // every such call with `cd "$CAWS_PROJECT_DIR" &&` (falling open to the
 // plain invocation when unset/"."/missing), and the three hook call sites
 // now go through it instead of invoking "$CAWS_BIN" directly.
-export const SHARED_PACK_VERSION = 42;
+// Version 43: CAWS-HOOKPACK-PROTECTED-PATHS-CAWS-HOOKS-COVERAGE-01.
+// protected-paths.sh's _hooks_prefix_match checked only
+// */${CAWS_VENDOR_DIR}/hooks/, but the shared pack installs every executable
+// guard to .caws/hooks/ regardless of agent surface — for claude-code
+// (CAWS_VENDOR_DIR=.claude) that left the guard's own install directory
+// unprotected: every live guard script was agent-writable. Add literal
+// .caws/hooks/ match clauses alongside the vendor-dir conditional. Separately,
+// the fail-closed guard-artifact branch exited 1; the Claude Code PreToolUse
+// protocol treats ONLY exit 2 as a block, so a Write/Edit to a guard script
+// proceeded despite the "BLOCKED" diagnostic. Both branches now exit 2,
+// consistent with the sibling missing-lib and strike-state branches.
+export const SHARED_PACK_VERSION = 43;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.
