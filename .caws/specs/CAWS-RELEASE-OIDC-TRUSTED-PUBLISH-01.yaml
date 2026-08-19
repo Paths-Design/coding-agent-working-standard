@@ -30,3 +30,8 @@ acceptance:
     then: 'the script refuses with the existing no-auth diagnostic and rolls the tag back'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "env -u NPM_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL node scripts/release-tag-publish.mjs caws-cli-v12.0.0: all pre-publish phases pass (validate/build/smoke chain), then publish.no_auth refusal, node exit 21 (verified via zsh pipestatus, not the pipe's exit)"
+    recorded_at: "2026-08-19T20:43:16.427Z"
