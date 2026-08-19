@@ -43,3 +43,8 @@ acceptance:
     then: 'The command is still refused by guardExcessArguments — the fix does not weaken the guard for any other leaf.'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "spawned dist/index.js: 'init diff' exits 0, prints 'Hook pack diff (read-only...)' (test A1 in tests/shell/init-action-positionals.test.js, full parse path). Live artifact from canonical checkout: exit 0, full pack diff printed for all 47 managed hook files."
+    recorded_at: "2026-08-19T22:36:24.925Z"
