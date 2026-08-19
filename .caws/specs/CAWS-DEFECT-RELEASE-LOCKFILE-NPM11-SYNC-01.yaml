@@ -30,3 +30,8 @@ acceptance:
     then: 'the step exits non-zero — a failed install can never fall through to the build'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "npx npm@^11.5.1 ci --dry-run --ignore-scripts against an isolated copy of package.json+lockfile: resolves the full tree cleanly (no EUSAGE); lockfile regenerated with npm 11 --package-lock-only, 56 @unrs/resolver-binding entries present (was: 'Missing: @unrs/resolver-binding-* from lock file' in CI run 32300463750)"
+    recorded_at: "2026-08-19T20:52:44.320Z"
