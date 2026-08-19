@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-smoke-kernel-residue
 created_at: '2026-08-19T18:51:28.103Z'
-updated_at: '2026-08-19T18:54:02.022Z'
+updated_at: '2026-08-19T18:54:38.684Z'
 blast_radius:
   modules:
     - 'caws-cli/scripts (release smoke gate)'
@@ -15,6 +15,7 @@ scope:
   in:
     - 'packages/caws-cli/scripts/fresh-install-smoke.mjs'
     - packages/caws-cli/scripts/events-migration-smoke.mjs
+    - packages/caws-cli/scripts/specs-migration-smoke.mjs
   out: []
 invariants:
   - 'CAWS-ABSORB-KERNEL-01 removed packages/caws-kernel from git and the CLI no longer depends on @paths.design/caws-kernel; the smoke must pack and install ONLY the CLI tarball. Release procedure step 5 (smoke) must be green at the tag SHA.'
