@@ -110,6 +110,27 @@ function surfaceAuditCommit(
   }
 }
 
+/**
+ * Announce a bind-time draft→active promotion.
+ *
+ * AX PROBE D4: the promotion was SILENT. `worktree create` printed only
+ * "created <name> ... (spec: <id>)", so the one command that changes a spec's
+ * lifecycle was the one command that never said so — while destroy's demotion
+ * notice, printed at the moment it happens, let a fresh session reconstruct the
+ * whole history from it. The asymmetry left probed agents carrying the old
+ * two-step model and re-reading the YAML to check what the tool had done, and
+ * an agent that re-verifies a tool's work is one step from routing around it.
+ */
+function surfaceBindActivation(
+  data: { readonly spec_activated?: unknown } | undefined,
+  specId: string,
+  out: (s: string) => void
+): void {
+  if (data?.spec_activated === true) {
+    out(`  ${specId} activated (draft → active) by this binding.`);
+  }
+}
+
 function surfaceArtifactLinks(
   summary: unknown,
   out: (s: string) => void
@@ -267,6 +288,7 @@ export function runWorktreeCreateCommand(opts: WorktreeCreateOptions): number {
   const wtPath = outcome.data?.path ?? '';
   const relWtPath = path.relative(ctx.repoRoot, String(wtPath));
   out(`created ${outcome.name} at ${relWtPath} (spec: ${opts.specId})`);
+  surfaceBindActivation(outcome.data, opts.specId, out);
   // CAWS-FIRST-CONTACT-UX-001 A3: tell the user where to work next.
   // Without this hint, users continue editing in the canonical checkout
   // and trigger union-mode scope behavior they can't explain.
@@ -358,6 +380,7 @@ export function runWorktreeBindCommand(opts: WorktreeBindOptions): number {
   } else {
     out(`bound ${outcome.name} → ${opts.specId}`);
   }
+  surfaceBindActivation(outcome.data, opts.specId, out);
   surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }

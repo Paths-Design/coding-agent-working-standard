@@ -884,6 +884,26 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   }
   const relSpecPath = path.relative(ctx.repoRoot, outcome.path);
   const createdActive = opts.activate === true;
+  // AX PROBE D1: createSpec auto-commits the spec, then the next-steps block
+  // told the operator to `git add && git commit` it — an instruction that
+  // exits 1 with "nothing added to commit" for every compliant caller. The
+  // probed agent ran it verbatim and burned two diagnostic commands working
+  // out what had happened. A remediation the CLI itself refuses is the class
+  // this repo treats as most dangerous, because it teaches agents that the
+  // printed guidance is not worth following. Derive the step from the outcome:
+  // report the sha when the commit landed, and print the manual instruction
+  // ONLY on the refused_dirty path, where it is genuinely the next action.
+  const auditCommit = outcome.data?.audit_commit as
+    | { readonly kind?: string; readonly sha?: string }
+    | undefined;
+  const autoCommitted = auditCommit?.kind === 'committed';
+  const commitSha =
+    typeof auditCommit?.sha === 'string' && auditCommit.sha.length > 0
+      ? auditCommit.sha.slice(0, 8)
+      : undefined;
+  const commitStep = autoCommitted
+    ? `already committed${commitSha !== undefined ? ` as ${commitSha}` : ''} (chore(caws): create ${outcome.id}) — nothing further to stage`
+    : `git add ${relSpecPath} && git commit   (the audit commit did NOT land; commit BEFORE the worktree so its state is clean)`;
   out(
     `created ${outcome.id} at ${relSpecPath} (lifecycle_state: ${createdActive ? 'active' : 'draft'})`
   );
@@ -958,9 +978,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     out(
       `  1. caws specs show ${outcome.id}   (re-read the spec; or run \`caws doctor\` to check for drift)`
     );
-    out(
-      `  2. git add .caws/specs/${outcome.id}.yaml && git commit   (commit BEFORE the worktree so its audit commit is clean)`
-    );
+    out(`  2. ${commitStep}`);
     out(
       `  3. caws worktree create <name> --spec ${outcome.id}   (activates the draft, binds, enforces scope.in)`
     );
@@ -979,9 +997,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     out(`  2. ${fillGuidance}, then inspect with \`caws specs show ` +
         outcome.id +
         '` (or `caws doctor`).');
-    out(
-      `  3. git add .caws/specs/${outcome.id}.yaml && git commit   (commit BEFORE the worktree so its audit commit is clean)`
-    );
+    out(`  3. ${commitStep}`);
     out(
       `  4. caws worktree create <name> --spec ${outcome.id}   (activates the draft and binds it)`
     );

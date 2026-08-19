@@ -185,7 +185,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
           `Active spec ${spec.id} has no bound worktree and has exceeded the unbound-active threshold.`,
           {
             subject: spec.id,
-            narrowRepair: `Bind a worktree to ${spec.id} via \`caws worktree create <name> --spec ${spec.id}\` (binding a draft also activates it), or demote it with \`caws specs deactivate ${spec.id}\` if the slice has not started, or close it via \`caws specs close ${spec.id}\`.`,
+            narrowRepair: `Bind a worktree to ${spec.id} via \`caws worktree create <name> --spec ${spec.id}\` (binding a draft also activates it), or demote it with \`caws specs deactivate ${spec.id}\` (no resolution written — the slice never started), or close it via \`caws specs close ${spec.id}\` (writes a resolution asserting the work concluded).`,
             data: {
               spec_id: spec.id,
               age_ms: ageMs,
@@ -214,8 +214,12 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
             ? ` At ${count} (threshold ${unboundActiveErrorCount}), "active" no longer distinguishes work in progress from a backlog.`
             : ''),
         {
+          // The parenthetical on `deactivate` is measurably load-bearing — an
+          // AX probe agent quoted it verbatim as its reason for not closing
+          // unworked specs. `close` was carrying no matching clause, so the
+          // asymmetry did the steering by accident. State both consequences.
           narrowRepair:
-            'For each spec that is genuinely being worked, bind it: `caws worktree create <name> --spec <id>` (binding activates a draft). For the rest, demote with `caws specs deactivate <id>` (no resolution written, unlike close) or close it with `caws specs close <id>`.',
+            'For each spec that is genuinely being worked, bind it: `caws worktree create <name> --spec <id>` (binding activates a draft). For the rest, demote with `caws specs deactivate <id>` (no resolution written — makes no claim the work concluded) or, only if the work actually finished, close it with `caws specs close <id>` (writes a resolution asserting it concluded).',
           data: {
             spec_count: count,
             spec_ids: ids,

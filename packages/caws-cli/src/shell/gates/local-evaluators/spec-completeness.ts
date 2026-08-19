@@ -50,9 +50,17 @@ export function evaluateSpecCompleteness(input: SpecCompletenessInput): SpecComp
   // failure class that trains agents to stop trusting guidance. Name the
   // command that actually applies to the state the spec is in.
   if (input.spec.lifecycle_state !== 'active') {
+    // AX PROBE P2: offering `specs activate` as a COEQUAL remedy is a trap for
+    // any agent whose task is shaped as "make the gate pass". The probed agent
+    // took the shorter option and ended the session with an activated spec, no
+    // worktree, and no work done — re-manufacturing the unbound-active backlog
+    // this whole slice exists to remove. The bind is the remedy; the direct
+    // activate is a narrow exception and must carry its condition inline,
+    // exactly as the --activate flag help does.
     const remediation =
       input.spec.lifecycle_state === 'draft'
-        ? `Bind a worktree — \`caws worktree create <name> --spec ${input.spec.id}\` activates the draft as it binds — or activate it directly with \`caws specs activate ${input.spec.id}\`.`
+        ? `Bind a worktree: \`caws worktree create <name> --spec ${input.spec.id}\` activates the draft as it binds. ` +
+          `Only if you are working this slice right now WITHOUT a worktree, activate it directly with \`caws specs activate ${input.spec.id}\` — activating to make a gate pass leaves an active spec nobody is working, which caws doctor reports as drift.`
         : input.spec.lifecycle_state === 'closed'
           ? `Reopen it with \`caws specs reopen ${input.spec.id}\`, or run gates against an active spec.`
           : `Restore it with \`caws specs restore ${input.spec.id} --state active --apply\`, or run gates against an active spec.`;

@@ -476,7 +476,7 @@ export function buildScopeRemediation(
         );
       }
       return {
-        summary: `Tracked worktree ${boundContext.worktreeName} is not bound to a spec; choose an active spec authority before editing.`,
+        summary: `Tracked worktree ${boundContext.worktreeName} is not bound to a spec; choose a spec authority before editing.`,
         commands,
         notes:
           candidates.length > 0
@@ -497,7 +497,7 @@ export function buildScopeRemediation(
       });
     }
     return {
-      summary: 'No worktree is bound for this context; choose an active spec authority and create or enter its worktree before editing.',
+      summary: 'No worktree is bound for this context; choose a spec authority and create or enter its worktree before editing.',
       commands,
       notes:
         candidates.length > 0
@@ -562,13 +562,20 @@ export function renderDecision(
     lines.push('             remediation:');
     lines.push(`               ${remediation.summary}`);
     if ((remediation.authorityCandidates ?? []).length > 0) {
-      lines.push('               active spec candidates:');
+      // AX PROBE D3: the heading said "active spec candidates" while the list
+      // could contain drafts, and one of the offered commands explained that a
+      // draft claimant is NOT in the active listing — a direct contradiction two
+      // lines apart. Drop the state from the heading and put it on each row,
+      // where it is actually true.
+      lines.push('               spec candidates:');
       for (const candidate of remediation.authorityCandidates ?? []) {
         const wt =
           candidate.worktreeName !== undefined
-            ? ` (worktree ${candidate.worktreeName})`
-            : ' (no worktree)';
-        lines.push(`               - ${candidate.specId}${wt}`);
+            ? `, worktree ${candidate.worktreeName}`
+            : ', no worktree';
+        lines.push(
+          `               - ${candidate.specId} (${candidate.lifecycleState}${wt})`
+        );
       }
     }
     for (const command of remediation.commands) {
