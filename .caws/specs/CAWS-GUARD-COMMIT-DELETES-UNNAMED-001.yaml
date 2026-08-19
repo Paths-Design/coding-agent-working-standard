@@ -1,0 +1,45 @@
+id: CAWS-GUARD-COMMIT-DELETES-UNNAMED-001
+title: 'A bare git commit that deletes tracked content is not non-destructive; the classifier must stop admitting it'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-08-19T17:34:42.807Z'
+updated_at: '2026-08-19T17:34:42.807Z'
+blast_radius:
+  modules:
+    - 'caws-cli/hook-packs (shared classifier)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/classify_command.py'
+    - 'packages/caws-cli/tests/hooks/pytest/test_classify_command.py'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+  out: []
+invariants:
+  - 'CAWS''s own autoCommit is already path-scoped and is NOT the vulnerable surface; this slice must not change it. The hole is raw git run by an agent, which the classifier auto-admits.'
+  - 'The new check must fail CLOSED: if staged state cannot be read (not a repo, git error, timeout), the commit is not auto-admitted.'
+  - 'Classification is ask-class, never latch-class. A commit that deletes tracked files is worth one confirmation; it is not catastrophic-only, and arming the sticky latch on it would punish ordinary deletions.'
+  - 'An explicitly path-scoped commit (git commit -- <paths>) stays admitted regardless of deletions: naming the paths IS the author asserting intent, and it is the remediation the guard recommends.'
+acceptance:
+  - id: A1
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'GIVEN a staged index containing deletions of tracked files WHEN a bare git commit with no pathspec is classified THEN the verdict is ask, and the reason names the deletion count and the path-scoped remediation'
+  - id: A2
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'GIVEN the same staged deletions WHEN the commit names an explicit pathspec after -- THEN the verdict is allow, because the author has asserted which paths they intend'
+  - id: A3
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'GIVEN a staged index with only additions and modifications WHEN a bare git commit is classified THEN it is still allowed, so ordinary work is not slowed'
+  - id: A4
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'GIVEN git cannot report staged state (not a repo, non-zero exit, or timeout) WHEN a bare git commit is classified THEN it is NOT auto-admitted'
+non_functional: {}
+contracts:
+  - name: 'commit-deletion-classification'
+    type: behavior
