@@ -1,4 +1,16 @@
-## [Unreleased]
+## [12.0.0] (2026-08-19)
+
+### Changed (breaking)
+
+- **`@paths.design/caws-kernel` is absorbed into the CLI.** The kernel ships
+  inside `@paths.design/caws-cli` at `dist/kernel/`; the CLI no longer declares
+  a kernel dependency, installs are a single tarball, and the standalone
+  `@paths.design/caws-kernel` npm package is frozen at its last release. This
+  is transparent to CLI users; only direct importers of the kernel package are
+  affected.
+- **`caws specs create` now writes `lifecycle_state: draft` by default**
+  (details under Changed below; `--activate` restores the old behavior). This
+  is the behavioral break that makes this release a major.
 
 ### Performance
 
