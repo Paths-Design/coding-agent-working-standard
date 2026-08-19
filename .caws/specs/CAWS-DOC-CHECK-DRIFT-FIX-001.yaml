@@ -2,9 +2,11 @@ id: CAWS-DOC-CHECK-DRIFT-FIX-001
 title: 'Fix doc-check drift across 35 documentation files'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Fixed every finding from the /doc-check audit (34 files with drift across root docs, docs/agents+api, docs/architecture, docs/guides, docs/ top-level, docs/rewrite) plus 1 additional finding caught by a final verification sweep (README.md kernel-path refs). Skipped docs/internal/caws-cli-defect-triage.md (untracked/gitignored local scratch, never materializes into a worktree) and 2 docs/rewrite/investigations files where the original audit''s own verdict was ''no fix needed'' (self-labeled historical logs).'
 created_at: '2026-08-19T17:10:16.126Z'
-updated_at: '2026-08-19T19:35:15.161Z'
+updated_at: '2026-08-19T19:35:28.755Z'
 blast_radius:
   modules:
     - 'documentation'
