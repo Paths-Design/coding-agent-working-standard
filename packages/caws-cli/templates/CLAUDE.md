@@ -256,6 +256,16 @@ git add .caws/specs/FEAT-001.yaml && git commit -m "chore(caws): create FEAT-001
 caws worktree create wt-feat-001 --spec FEAT-001
 ```
 
+One commit shape gets an extra check: a **bare `git commit` (no pathspec)
+whose index stages deletions of tracked files** is refused with a
+remediation — a commit with no pathspec sweeps the ENTIRE index, and a
+stale or foreign index (a failed `git revert -n`, another session's staged
+work) deletes tracked content under your message. The refusal does NOT arm
+the latch; fix it yourself: inspect the staged set (`git status`,
+`git diff --cached --stat`), then name the paths you intend —
+`git commit -m "<msg>" -- <paths>`. If the staged set contains work that
+is not yours, stop and ask the user before unstaging anything.
+
 The latch is reserved for genuinely dangerous or bypass-shaped commands:
 force-push, `reset --hard`, `rebase`, `cherry-pick`, `clean -f`,
 `commit --amend` (history rewrite), bare `checkout <path>` / `checkout .`

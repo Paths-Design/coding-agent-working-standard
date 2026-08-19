@@ -316,6 +316,23 @@ case "$DECISION" in
         emit_block_json "$FULL_REASON"
         exit 0
       fi
+      # Bare-commit staged-deletions carve-out
+      # (CAWS-GUARD-COMMIT-DELETES-UNNAMED-001): a bare `git commit` whose
+      # index stages deletions of tracked files — or whose staged state the
+      # classifier could not verify — is REFUSED with the path-scoped
+      # remediation, but it does NOT arm the sticky session latch. A commit
+      # with no pathspec sweeps the ENTIRE index; under a stale or foreign
+      # index that deletes tracked content under an unrelated message (two
+      # real sweeps shipped this way). The safe fix — inspect the staged
+      # set, then name the intended paths after `--` — is entirely in the
+      # agent's own hands, so ordinary deletions get one refusal-with-
+      # remediation, never a session freeze. Keyed on the classifier source
+      # so it cannot swallow any other confirm-class ask.
+      if [[ "$SOURCE" == "commit_deletions" ]]; then
+        FULL_REASON="CAWS command-safety: $REASON. This command was refused — the session danger latch was NOT armed. Do this instead: (1) inspect what is actually staged: git status && git diff --cached --stat; (2) if the staged set is exactly what you intend, commit it with the paths named explicitly: git commit -m \"<msg>\" -- <paths>; (3) if the staged set contains work that is NOT yours (another session's files, a half-applied revert), STOP and ask the user before unstaging anything. Do NOT rephrase the same bare commit to evade this. Command was: $COMMAND"
+        emit_block_json "$FULL_REASON"
+        exit 0
+      fi
       if [[ "$SOURCE" == "capability" ]]; then
         WARN_FILE="$(danger_warn_file "$SESSION_ID")"
         if [[ ! -f "$WARN_FILE" ]]; then

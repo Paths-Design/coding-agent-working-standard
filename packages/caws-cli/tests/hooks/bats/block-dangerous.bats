@@ -150,6 +150,91 @@ _cmd_envelope_sid() {
   assert _latch_exists_for "$sid"
 }
 
+# --- bare-commit staged-deletions carve-out (CAWS-GUARD-COMMIT-DELETES-UNNAMED-001) ---
+#
+# A bare `git commit` (no pathspec) sweeps the ENTIRE index. Under a stale or
+# foreign index that deletes tracked content under an unrelated message — two
+# real sweeps (2656- and 178-deleted-line commits) shipped through the old
+# "plain commit is not destructive" premise. The classifier now asks
+# (source=commit_deletions, enforcement=confirm) and this guard refuses the
+# command with the path-scoped remediation WITHOUT arming the session latch:
+# the fix (name the intended paths after `--`) is in the agent's own hands.
+
+# Run the guard with a CONTROLLED cwd: block-dangerous passes --cwd "$(pwd)"
+# to the classifier, and the commit-deletions check inspects staged git state
+# there — the bats process cwd (this checkout, with whatever happens to be
+# staged in it) must never leak into the assertion.
+run_guard_in_dir() {
+  local dir="$1" envelope="$2"
+  run env \
+    CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
+    CAWS_AGENT_SURFACE="claude-code" \
+    HOOK_CWD="$dir" \
+    bash -c "cd '$dir' && printf '%s' '$envelope' | bash '$CAWS_TEST_HOOKS_DIR/block-dangerous.sh'"
+}
+
+# A throwaway repo with one committed file (tracked.txt) and a STAGED DELETION
+# of it — the exact index shape a failed `git revert -n` / foreign-session
+# sweep leaves behind.
+_mk_staged_deletion_repo() {
+  local repo
+  repo="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-delrepo-XXXXXX")"
+  git -C "$repo" init -q -b main
+  git -C "$repo" config user.name 'CAWS Test'
+  git -C "$repo" config user.email 'test@caws.invalid'
+  git -C "$repo" config commit.gpgsign false
+  printf 'content\n' > "$repo/tracked.txt"
+  git -C "$repo" add tracked.txt
+  git -C "$repo" commit -q -m 'add tracked file'
+  git -C "$repo" rm -q tracked.txt
+  printf '%s' "$repo"
+}
+
+@test "block-dangerous: bare git commit over a STAGED DELETION is refused with remediation and arms NO latch" {
+  local sid="commitdel-$$"
+  local repo; repo="$(_mk_staged_deletion_repo)"
+  run_guard_in_dir "$repo" "$(_cmd_envelope_sid "$sid" 'git commit -m sweep')"
+  assert_output --partial '"decision": "block"'
+  assert_output --partial 'deletion(s) of tracked files'
+  assert_output --partial 'NOT armed'
+  refute _latch_exists_for "$sid"
+  rm -rf "$repo"
+}
+
+@test "block-dangerous: the SAME staged deletion with an explicit pathspec passes (the remediation works)" {
+  local sid="commitdel-path-$$"
+  local repo; repo="$(_mk_staged_deletion_repo)"
+  run_guard_in_dir "$repo" "$(_cmd_envelope_sid "$sid" 'git commit -m remove -- tracked.txt')"
+  refute_output --partial '"decision": "block"'
+  refute _latch_exists_for "$sid"
+  rm -rf "$repo"
+}
+
+@test "block-dangerous: bare git commit with UNREADABLE staged state (not a repo) is refused, not silently admitted" {
+  local sid="commitdel-norepo-$$"
+  local dir; dir="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-norepo-XXXXXX")"
+  run_guard_in_dir "$dir" "$(_cmd_envelope_sid "$sid" 'git commit -m work')"
+  assert_output --partial '"decision": "block"'
+  assert_output --partial 'could not be verified'
+  refute _latch_exists_for "$sid"
+  rm -rf "$dir"
+}
+
+@test "block-dangerous: bare git commit over a CLEAN index still passes (ordinary work is not slowed)" {
+  local sid="commitdel-clean-$$"
+  local repo
+  repo="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-cleanrepo-XXXXXX")"
+  git -C "$repo" init -q -b main
+  git -C "$repo" config user.name 'CAWS Test'
+  git -C "$repo" config user.email 'test@caws.invalid'
+  git -C "$repo" config commit.gpgsign false
+  git -C "$repo" commit -q --allow-empty -m root
+  run_guard_in_dir "$repo" "$(_cmd_envelope_sid "$sid" 'git commit -m work')"
+  refute_output --partial '"decision": "block"'
+  refute _latch_exists_for "$sid"
+  rm -rf "$repo"
+}
+
 # --- missing load-bearing lib must fail LOUD, not silently disarm the latch ---
 # CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001. The danger latch lives in this guard;
 # block-dangerous sources lib/agent-surface.sh for CAWS_VENDOR_DIR / caws_source_lib
