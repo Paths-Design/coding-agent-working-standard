@@ -23,6 +23,7 @@
 
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { resolveGitBinary } from '../../store/git-binary';
 
 import { deriveBindingState } from '../../kernel';
 
@@ -46,7 +47,7 @@ function isAncestorOrEqual(maybeAncestor: string, descendant: string): boolean {
 }
 
 function defaultGitWorktreeList(repoRoot: string): readonly GitWorktreeEntry[] {
-  const r = spawnSync('git', ['-C', repoRoot, 'worktree', 'list', '--porcelain'], {
+  const r = spawnSync(resolveGitBinary(), ['-C', repoRoot, 'worktree', 'list', '--porcelain'], {
     encoding: 'utf8',
   });
   if (r.status !== 0 || typeof r.stdout !== 'string') return [];

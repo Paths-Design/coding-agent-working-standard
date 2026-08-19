@@ -23,6 +23,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import * as nodePath from 'node:path';
+import { resolveGitBinary } from '../../store/git-binary';
 
 import {
   evaluateContention,
@@ -744,7 +745,7 @@ function resolveCurrentBranch(
 ): string | undefined {
   if (injected !== undefined) return injected();
   try {
-    const b = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+    const b = execFileSync(resolveGitBinary(), ['rev-parse', '--abbrev-ref', 'HEAD'], {
       cwd: repoRoot,
       encoding: 'utf8',
     }).trim();

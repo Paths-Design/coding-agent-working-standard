@@ -8,6 +8,7 @@
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { resolveGitBinary } from './git-binary';
 
 export type WorktreeArtifactKind =
   | 'node_dependencies'
@@ -453,7 +454,7 @@ function firstManifestMismatch(
 // reflects git's true lstat-based decision.
 function isIgnored(worktreeRoot: string, relPath: string): boolean {
   try {
-    execFileSync('git', ['-C', worktreeRoot, 'check-ignore', '-q', '--', relPath], {
+    execFileSync(resolveGitBinary(), ['-C', worktreeRoot, 'check-ignore', '-q', '--', relPath], {
       stdio: ['ignore', 'ignore', 'ignore'],
     });
     return true;
@@ -475,7 +476,7 @@ function ensureSharedExclude(
 ): { readonly ok: true } | { readonly ok: false; readonly reason: string } {
   let excludePath: string;
   try {
-    excludePath = execFileSync('git', ['-C', worktreeRoot, 'rev-parse', '--git-path', 'info/exclude'], {
+    excludePath = execFileSync(resolveGitBinary(), ['-C', worktreeRoot, 'rev-parse', '--git-path', 'info/exclude'], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
     }).trim();

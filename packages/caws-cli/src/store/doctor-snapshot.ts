@@ -21,6 +21,7 @@
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { resolveGitBinary } from './git-binary';
 
 import {
   isOk,
@@ -268,7 +269,7 @@ function observeGitWorktrees(repoRoot: string): GitObservationResult {
   let result;
   try {
     result = spawnSync(
-      'git',
+      resolveGitBinary(),
       ['-C', repoRoot, 'worktree', 'list', '--porcelain'],
       { encoding: 'utf8' }
     );

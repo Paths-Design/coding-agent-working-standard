@@ -26,6 +26,7 @@
 //       target
 
 import { execFileSync } from 'child_process';
+import { resolveGitBinary } from '../../store/git-binary';
 import {
   detectAgentHarness,
   type HarnessDetectionResult,
@@ -107,7 +108,7 @@ import type {
 
 function isInsideGitWorkingTree(cwd: string): boolean {
   try {
-    const r = execFileSync('git', ['rev-parse', '--is-inside-work-tree'], {
+    const r = execFileSync(resolveGitBinary(), ['rev-parse', '--is-inside-work-tree'], {
       cwd,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
@@ -552,7 +553,7 @@ function runInitSubcommand(
   // uncommitted local edits — the audit commit could not attribute them.
   if (isInsideGitWorkingTree(repoRoot)) {
     const status = execFileSync(
-      'git',
+      resolveGitBinary(),
       ['-C', repoRoot, 'status', '--porcelain', '--', destPath],
       { encoding: 'utf8' }
     ).trim();
