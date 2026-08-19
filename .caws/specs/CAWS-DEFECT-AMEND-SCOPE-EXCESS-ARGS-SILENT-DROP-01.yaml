@@ -2,9 +2,10 @@ id: CAWS-DEFECT-AMEND-SCOPE-EXCESS-ARGS-SILENT-DROP-01
 title: 'amend-scope silently discards stray positional paths after a single-valued --add while printing success'
 risk_tier: 3
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-excess-args
 created_at: '2026-08-19T18:29:25.602Z'
-updated_at: '2026-08-19T18:29:25.602Z'
+updated_at: '2026-08-19T18:37:44.127Z'
 blast_radius:
   modules:
     - 'caws-cli/shell (command registration / argument strictness)'
