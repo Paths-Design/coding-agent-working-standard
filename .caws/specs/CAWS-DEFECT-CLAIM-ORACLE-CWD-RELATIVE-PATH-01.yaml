@@ -2,9 +2,9 @@ id: CAWS-DEFECT-CLAIM-ORACLE-CWD-RELATIVE-PATH-01
 title: 'Claim oracle hard-blocks a worktree owner from its own file when the path is cwd-relative'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
+lifecycle_state: draft
 created_at: '2026-08-19T00:59:18.669Z'
-updated_at: '2026-08-19T00:59:18.669Z'
+updated_at: '2026-08-19T00:59:38.164Z'
 blast_radius:
   modules:
     - 'caws-cli/templates/hook-packs/shared (worktree-claim-oracle.cjs, bash-write-guard.sh)'
