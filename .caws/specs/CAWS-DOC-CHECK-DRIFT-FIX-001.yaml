@@ -1,0 +1,59 @@
+id: CAWS-DOC-CHECK-DRIFT-FIX-001
+title: 'Fix doc-check drift across 35 documentation files'
+risk_tier: 3
+mode: chore
+lifecycle_state: active
+created_at: '2026-08-19T17:10:16.126Z'
+updated_at: '2026-08-19T17:10:16.126Z'
+blast_radius:
+  modules:
+    - 'documentation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'README.md'
+    - 'CLAUDE.md'
+    - 'AGENTS.md'
+    - 'CONTRIBUTING.md'
+    - 'COMMIT_CONVENTIONS.md'
+    - 'docs/failure-lineage.md'
+    - 'docs/README.md'
+    - 'docs/DEPLOYMENT.md'
+    - 'docs/MONITORING.md'
+    - 'docs/agent-workflow-tools.md'
+    - 'docs/migration-v10-to-v11.md'
+    - 'docs/command-reference.md'
+    - 'docs/ROLLBACK.md'
+    - 'docs/api/schema.md'
+    - 'docs/agents/TUTORIAL.md'
+    - 'docs/agents/EXAMPLES.md'
+    - 'docs/agents/scope-discipline.md'
+    - 'docs/agents/full-guide.md'
+    - 'docs/api/cli.md'
+    - 'docs/architecture/caws-vnext-command-surface.md'
+    - 'docs/architecture/cli-ux-job-model-audit.md'
+    - 'docs/architecture/command-capability-taxonomy.md'
+    - 'docs/architecture/hook-pack-shared-core.md'
+    - 'docs/architecture/session-ownership-metadata.md'
+    - 'docs/guides/waiver-troubleshooting.md'
+    - 'docs/guides/multi-agent-workflow.md'
+    - 'docs/guides/placeholder-governance.md'
+    - 'docs/guides/agent-integration-guide.md'
+    - 'docs/guides/caws-developer-guide.md'
+    - 'docs/guides/hooks-and-agent-workflows.md'
+    - 'docs/guides/worktree-isolation.md'
+    - 'docs/internal/caws-cli-defect-triage.md'
+    - 'docs/rewrite/corpus/00-corpus-index.md'
+    - 'docs/rewrite/investigations/01-hooks.md'
+    - 'docs/rewrite/investigations/05-workspace.md'
+  out: []
+invariants:
+  - 'Every path, command, flag, and package reference in a fixed doc must exist in the current working tree at commit time'
+acceptance:
+  - id: A1
+    given: 'a doc-check audit found path/command/flag drift across 35 markdown files'
+    when: 'this spec closes'
+    then: 'every finding from the audit is corrected and re-verified against the live repo state'
+non_functional: {}
+contracts: []
