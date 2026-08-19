@@ -5,7 +5,7 @@ mode: refactor
 lifecycle_state: active
 worktree: wt-git-spawn-cost
 created_at: '2026-08-19T16:21:09.392Z'
-updated_at: '2026-08-19T16:21:09.392Z'
+updated_at: '2026-08-19T16:35:40.958Z'
 blast_radius:
   modules:
     - 'caws-cli/store (git invocation)'
@@ -28,6 +28,7 @@ scope:
     - 'packages/caws-cli/tests/store/git-binary.test.js'
     - 'packages/caws-cli/tests/store/git-repo-factory-parity.test.js'
     - 'packages/caws-cli/CHANGELOG.md'
+    - packages/caws-cli/src/store/doctor-snapshot.ts
   out: []
 invariants:
   - 'Resolution NEVER changes which git runs: the resolver walks the same PATH in the same order execvp would, and falls back to the bare name ''git'' when no entry is executable, so behavior is identical on any machine where resolution fails.'
