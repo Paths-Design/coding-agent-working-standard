@@ -36,7 +36,7 @@ if ! command -v "$CAWS_BIN" >/dev/null 2>&1; then
   exit 0
 fi
 
-"$CAWS_BIN" agents stop \
+caws_run_cli agents stop \
   --session-id "$HOOK_SESSION_ID" \
   --platform "$CAWS_PLATFORM_FLAG" \
   2>/dev/null || true
