@@ -6,6 +6,7 @@
 // in, violations out).
 
 import { execFileSync } from 'node:child_process';
+import { resolveGitBinary } from '../../../store/git-binary';
 
 export interface StagedFileChange {
   /** Repo-relative POSIX path of the changed file. */
@@ -17,7 +18,7 @@ export interface StagedFileChange {
 }
 
 function runGit(args: readonly string[], cwd: string): string {
-  return execFileSync('git', [...args], {
+  return execFileSync(resolveGitBinary(), [...args], {
     cwd,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],

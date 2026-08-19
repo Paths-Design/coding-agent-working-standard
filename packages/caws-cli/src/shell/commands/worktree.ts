@@ -21,6 +21,7 @@
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { resolveGitBinary } from '../../store/git-binary';
 
 import {
   type ActorKind,
@@ -1609,7 +1610,7 @@ function isGitWorktree(p: string): boolean {
 
 function gitStatusPorcelain(cwd: string, pathspec: string): { ok: true; output: string } | { ok: false; reason: string } {
   try {
-    const output = execFileSync('git', ['status', '--porcelain', '--', pathspec], {
+    const output = execFileSync(resolveGitBinary(), ['status', '--porcelain', '--', pathspec], {
       cwd,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -1629,7 +1630,7 @@ function gitStatusPorcelain(cwd: string, pathspec: string): { ok: true; output: 
 
 function gitConfigGet(cwd: string, key: string): string | null {
   try {
-    const output = execFileSync('git', ['config', '--get', key], {
+    const output = execFileSync(resolveGitBinary(), ['config', '--get', key], {
       cwd,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],

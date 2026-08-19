@@ -1,5 +1,35 @@
 ## [Unreleased]
 
+### Performance
+
+- **The `git` executable is resolved once per process instead of once per
+  spawn.** On macOS `posix_spawnp` walks `$PATH` *in the parent process*,
+  attempting a real spawn per entry, at a cost proportional to the parent's
+  resident set — so a bare `execFileSync('git', ...)` measured **194 ms** from
+  a 130 MB process versus **30 ms** by absolute path. Every git call site in
+  the CLI (13 across 9 files) now goes through `resolveGitBinary()`, which
+  scans `$PATH` once (~300 µs) and memoizes for the life of the process.
+  This affects the shipped CLI, not only the test suite; every `caws` command
+  was paying the walk on every git invocation.
+
+  Resolution never changes *which* git runs: it takes the first executable
+  regular file named `git` in `$PATH` order and falls back to the bare name
+  when it finds none. `CAWS_GIT_BINARY` pins the binary explicitly. Nothing is
+  persisted — the cache dies with the process, because a stale binary path is a
+  worse failure than a slow one.
+
+- **The test-repo factory builds by copying a template rather than by spawning
+  git six times.** `makeTempRepo` cost 1257 ms per repo in a jest worker; it now
+  copies a per-worker, per-shape template built once, at 5.1 ms. Combined with
+  the resolver, the full jest suite went from **1490 s to 273 s (5.5x)** with
+  every test still running (1970 → 1988 tests, the 18 new ones covering these
+  changes).
+
+  One behavioral change for test authors: repos of the same shape from one
+  worker now share a root-commit SHA, where each previously got a distinct one
+  from its own timestamp. A test that needs two repos with different histories
+  must commit into them rather than rely on the root commits differing.
+
 ### Changed
 
 - **BREAKING (default): `caws specs create` now writes `lifecycle_state: draft`.**

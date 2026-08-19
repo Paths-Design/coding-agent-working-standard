@@ -27,6 +27,7 @@
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { resolveGitBinary } from './git-binary';
 
 import {
   type EventBody,
@@ -747,7 +748,7 @@ function runGitQuery(
 ): string | null {
   const trim = opts.trim !== false; // default true
   try {
-    const output = execFileSync('git', [...args], {
+    const output = execFileSync(resolveGitBinary(), [...args], {
       cwd: repoRoot,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -798,7 +799,7 @@ function gitLastCommitForPath(
 
 function gitPathIgnored(repoRoot: string, relPath: string): boolean {
   try {
-    execFileSync('git', ['check-ignore', '-q', '--', relPath], {
+    execFileSync(resolveGitBinary(), ['check-ignore', '-q', '--', relPath], {
       cwd: repoRoot,
       stdio: ['ignore', 'ignore', 'ignore'],
     });

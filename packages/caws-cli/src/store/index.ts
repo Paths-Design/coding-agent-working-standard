@@ -27,6 +27,10 @@ export {
 } from './repo-root';
 export type { GitDirInfo, GitRunner, RepoRoot, ResolveRepoRootOptions } from './repo-root';
 
+// The one place the `git` executable is named. Every call site resolves through
+// this so the PATH walk is paid once per process rather than once per spawn.
+export { resolveGitBinary, resetGitBinaryCache } from './git-binary';
+
 export { fsyncDir, writeFileAtomic } from './atomic-write';
 export { readJsonFile } from './json-store';
 export { readYamlFile, readYamlSource } from './yaml-store';
