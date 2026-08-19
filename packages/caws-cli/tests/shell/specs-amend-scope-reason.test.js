@@ -112,3 +112,85 @@ describe('caws specs amend-scope --reason', () => {
     expect(amendScope.options.map((option) => option.flag)).toContain('--reason <text>');
   });
 });
+
+// ---------------------------------------------------------------------------
+// CAWS-DEFECT-AMEND-SCOPE-EXCESS-ARGS-SILENT-DROP-01 — full CLI parse path.
+//
+// Commander ^11 defaults to allowExcessArguments(true), so
+// `amend-scope <id> --add a b` bound `a` to --add, treated `b` as a stray
+// operand, silently discarded it, and printed "amended scope" (observed live
+// 2026-08-19). Handler-level tests above CANNOT see this: they bypass
+// Commander entirely. These tests spawn dist/index.js so the argument-
+// absorption behavior itself is what is pinned.
+// ---------------------------------------------------------------------------
+
+const { spawnSync } = require('child_process');
+const CLI = path.resolve(__dirname, '..', '..', 'dist', 'index.js');
+
+function spawnCli(root, args) {
+  return spawnSync(process.execPath, [CLI, ...args], {
+    cwd: root,
+    encoding: 'utf8',
+    env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'specs-amend-scope-excess-args-test' },
+  });
+}
+
+function readSpecScopeIn(root, id) {
+  const body = readBytes(path.join(root, '.caws', 'specs', `${id}.yaml`));
+  const match = body.match(/scope:\n {2}in:\n((?: {4}- .*\n)+)/);
+  return match ? match[1].split('\n').filter(Boolean).map((l) => l.replace(/^ {4}- /, '').replace(/^'(.*)'$/, '$1')) : [];
+}
+
+describe('amend-scope excess positional arguments (full CLI parse path)', () => {
+  test('A1: a stray positional after --add errors naming the token and the repeatable form; NOTHING is amended', () => {
+    const root = mkRepo();
+    const cawsDir = path.join(root, '.caws');
+    writeActiveSpec(cawsDir, 'EXCESS-ARGS-A1-001');
+    const before = readSpecScopeIn(root, 'EXCESS-ARGS-A1-001');
+
+    const result = spawnCli(root, [
+      'specs', 'amend-scope', 'EXCESS-ARGS-A1-001',
+      '--add', 'docs/a.md', 'docs/b.md',
+    ]);
+    const output = `${result.stdout}${result.stderr}`;
+
+    // Non-zero exit, no false success line.
+    expect(result.status).not.toBe(0);
+    expect(output).not.toContain('amended scope');
+    // The diagnostic names the dropped token and the repeatable remediation.
+    expect(output).toContain('docs/b.md');
+    expect(output).toContain('nothing was applied');
+    expect(output).toContain('--add <value> --add <value2>');
+    // And the spec is NOT partially amended — not even the first path.
+    expect(readSpecScopeIn(root, 'EXCESS-ARGS-A1-001')).toEqual(before);
+  });
+
+  test('A2: the repeatable form adds both paths in one call and one spec_scope_amended event', () => {
+    const root = mkRepo();
+    const cawsDir = path.join(root, '.caws');
+    writeActiveSpec(cawsDir, 'EXCESS-ARGS-A2-001');
+
+    const result = spawnCli(root, [
+      'specs', 'amend-scope', 'EXCESS-ARGS-A2-001',
+      '--add', 'docs/a.md', '--add', 'docs/b.md',
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(`${result.stdout}${result.stderr}`).toContain('amended scope');
+    const scopeIn = readSpecScopeIn(root, 'EXCESS-ARGS-A2-001');
+    expect(scopeIn).toContain('docs/a.md');
+    expect(scopeIn).toContain('docs/b.md');
+    const amended = readEvents(cawsDir).filter((event) => event.event === 'spec_scope_amended');
+    expect(amended).toHaveLength(1);
+    expect(amended[0].data.added_in).toEqual(['docs/a.md', 'docs/b.md']);
+  });
+
+  test('a stray positional on a no-argument leaf is also refused (guard is universal)', () => {
+    const root = mkRepo();
+    const result = spawnCli(root, ['specs', 'list', 'stray-token']);
+    const output = `${result.stdout}${result.stderr}`;
+    expect(result.status).not.toBe(0);
+    expect(output).toContain('stray-token');
+    expect(output).toContain('no positional arguments');
+  });
+});
