@@ -59,7 +59,7 @@ Captures of the live policy and live working-spec at the time of rewrite. These 
 
 ---
 
-## hooks/ — 24 files
+## hooks/ — 19 files
 
 Captures of the live hook surface and template hooks per `01-hooks.md`'s capture roster. These preserve hook behavior that must be replicated, replaced fail-closed, or explicitly dropped in vNext.
 
