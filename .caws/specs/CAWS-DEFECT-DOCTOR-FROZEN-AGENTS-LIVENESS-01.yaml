@@ -1,0 +1,38 @@
+id: CAWS-DEFECT-DOCTOR-FROZEN-AGENTS-LIVENESS-01
+title: 'doctor agent-freshness rule iterates the frozen agents.json registry, emitting un-dischargeable stale warnings'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-08-20T04:08:52.504Z'
+updated_at: '2026-08-20T04:08:52.504Z'
+blast_radius:
+  modules:
+    - 'caws-cli kernel doctor inspect (agent freshness rules)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/kernel/doctor/inspect.ts'
+    - 'packages/caws-cli/src/kernel/doctor/rules.ts'
+    - 'packages/caws-cli/src/shell/commands/doctor.ts'
+    - 'packages/caws-cli/tests/kernel/unit/doctor-agents-registry-not-liveness.test.ts'
+  out: []
+invariants:
+  - 'The frozen .caws/agents.json registry is compatibility metadata and must not source any doctor finding'
+  - 'Agent liveness diagnostics derive only from .caws/leases/ via the structural agent-lease predicate, which distinguishes stopped from stale'
+  - 'Doctor must not emit a warning whose only repair is that no repair exists'
+acceptance:
+  - id: A1
+    given: 'a .caws/agents.json carrying records older than the stale TTL and a populated leases directory'
+    when: 'caws doctor runs'
+    then: 'no doctor.agent.stale_display_only finding is emitted for any agents.json record'
+  - id: A2
+    given: 'the same fixture'
+    when: 'caws doctor runs'
+    then: 'lease-sourced owner-without-live-lease diagnostics from section 3b are still emitted unchanged'
+rollback:
+  - 'restore the agents.json freshness loop and its rule code in inspect.ts, rules.ts and doctor.ts'
+non_functional: {}
+contracts:
+  - name: 'doctor-report-rules'
+    type: behavior
