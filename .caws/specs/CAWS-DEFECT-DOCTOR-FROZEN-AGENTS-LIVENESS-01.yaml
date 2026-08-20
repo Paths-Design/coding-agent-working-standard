@@ -2,9 +2,10 @@ id: CAWS-DEFECT-DOCTOR-FROZEN-AGENTS-LIVENESS-01
 title: 'doctor agent-freshness rule iterates the frozen agents.json registry, emitting un-dischargeable stale warnings'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-doctor-frozen-agents
 created_at: '2026-08-20T04:08:52.504Z'
-updated_at: '2026-08-20T04:08:52.504Z'
+updated_at: '2026-08-20T04:19:43.981Z'
 blast_radius:
   modules:
     - 'caws-cli kernel doctor inspect (agent freshness rules)'
