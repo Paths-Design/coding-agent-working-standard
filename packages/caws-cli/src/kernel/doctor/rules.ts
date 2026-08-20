@@ -101,13 +101,12 @@ export const DOCTOR_RULES = {
   TRANSITION_ACTIVE_BINDING_BLOCKS_CLOSE: 'doctor.transition.active_binding_blocks_close',
 
   // ---- agent freshness (display-only; never authority) ---------------------
-  /**
-   * An agent record's last_active is older than `staleAgentTtlMs`. This is a
-   * DISPLAY signal only. It does NOT imply takeover authority. The shell may
-   * choose to prune it from views; ownership decisions still consult
-   * worktrees.json owner.
-   */
-  AGENT_STALE_DISPLAY_ONLY: 'doctor.agent.stale_display_only',
+  // AGENT_STALE_DISPLAY_ONLY ('doctor.agent.stale_display_only') was removed by
+  // CAWS-DEFECT-DOCTOR-FROZEN-AGENTS-LIVENESS-01. It reported per-record
+  // freshness from the frozen `.caws/agents.json`, could not distinguish a
+  // stopped session from a stale one, and no command could discharge it.
+  // Agent liveness is a lease concern — see WORKTREE_OWNER_LEASE_MISSING below
+  // and `caws agents list` for the human-facing freshness view.
 
   // ---- lease/worktree liveness drift (AGENT-LIVENESS-DOCTOR-001 D10) --------
   /**

@@ -99,7 +99,6 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   const findings: DoctorFinding[] = [];
   const specs = input.specs;
   const registry = input.worktrees ?? {};
-  const agents = input.agents ?? {};
   const now = input.now;
   const staleAgentTtlMs = input.staleAgentTtlMs ?? DEFAULT_STALE_AGENT_TTL_MS;
   const unboundActiveThresholdMs =
@@ -719,30 +718,27 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   }
 
   // -------------------------------------------------------------------------
-  // 3. Agent freshness (display-only).
+  // 3. Agent freshness — deliberately absent.
+  //
+  // CAWS-DEFECT-DOCTOR-FROZEN-AGENTS-LIVENESS-01. A per-record freshness loop
+  // over `.caws/agents.json` used to live here. It is gone, not relocated:
+  //
+  //   - agents.json is FROZEN compatibility metadata
+  //     (MULTI-AGENT-ACTIVITY-REGISTRY-001). store/agents-store.ts scopes its
+  //     surviving readers to the legacy claim path and `caws status` display
+  //     WHEN NO LEASES EXIST. Doctor was never in that set.
+  //   - It could not tell `stopped` from `stale`, so it reported deliberately
+  //     stopped sessions as stale — of course a stopped session stops
+  //     heartbeating.
+  //   - Its own repair text was "No automatic action", and `caws agents prune`
+  //     reads `.caws/leases/`, so records present only in agents.json were
+  //     un-dischargeable by any command. Warnings nobody can act on bury the
+  //     ones somebody must (the same dynamic as the unbound-active backlog).
+  //
+  // Agent liveness now derives solely from `.caws/leases/` in §3b below, via a
+  // structural predicate that excludes non-lease keys and honors the status
+  // enum. Human-facing freshness display belongs to `caws agents list`.
   // -------------------------------------------------------------------------
-
-  for (const [sessionId, record] of Object.entries(agents)) {
-    if (isStaleByTTL(record, staleAgentTtlMs, now)) {
-      findings.push(
-        finding(
-          DOCTOR_RULES.AGENT_STALE_DISPLAY_ONLY,
-          'warning',
-          `Agent ${sessionId} has not heartbeated within the TTL — display only; stale heartbeat is NOT abandonment.`,
-          {
-            subject: sessionId,
-            narrowRepair:
-              'No automatic action. Ownership decisions still consult worktrees.json owner.',
-            data: {
-              session_id: sessionId,
-              last_active: record.last_active,
-              ttl_ms: staleAgentTtlMs,
-            },
-          }
-        )
-      );
-    }
-  }
 
   // -------------------------------------------------------------------------
   // 3b. Lease/worktree liveness drift (AGENT-LIVENESS-DOCTOR-001 D10).
