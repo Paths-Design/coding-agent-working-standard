@@ -1831,11 +1831,21 @@ export function registerShellCommands(
         }
 
         // Retention mode: --status + --older-than-ms required.
-        const status = opts.status === 'stopped' || opts.status === 'stale' ? opts.status : null;
+        //
+        // The admitted set is declared once and the usage text is derived from
+        // it. Holding those apart is what made `--status legacy` unreachable:
+        // the handler, its option type, and --help all accepted legacy while
+        // this validator silently coerced it to null.
+        const RETENTION_STATUSES = ['stopped', 'stale', 'legacy'] as const;
+        type RetentionStatus = (typeof RETENTION_STATUSES)[number];
+        const isRetentionStatus = (value: string | undefined): value is RetentionStatus =>
+          RETENTION_STATUSES.includes(value as RetentionStatus);
+
+        const status = isRetentionStatus(opts.status) ? opts.status : null;
         const olderThanMs = Number(opts.olderThanMs);
         if (status === null || !Number.isFinite(olderThanMs)) {
           process.stderr.write(
-            'caws agents prune: pass --dead, or --status <stopped|stale> with a numeric --older-than-ms.\n'
+            `caws agents prune: pass --dead, or --status <${RETENTION_STATUSES.join('|')}> with a numeric --older-than-ms.\n`
           );
           exit(1);
           return;
