@@ -34,3 +34,12 @@ non_functional: {}
 contracts:
   - name: 'agents-prune-cli-options'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: tests/shell/agents-prune-legacy.test.js A1 (dist/index.js spawn)
+    recorded_at: "2026-08-20T04:16:36.654Z"
+    test_nodeid: "CAWS-DEFECT-AGENTS-PRUNE-LEGACY-PARSE-DEAD-01 — --status legacy survives the parse layer › A1: --status legacy reaches the handler and selects the aged legacy lease"
+    command: npx jest tests/shell/agents-prune-legacy.test.js
+    exit_code: 0
+    commit_sha: "854fdb0d"
