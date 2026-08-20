@@ -192,13 +192,6 @@ function doctorRepairPlanItem(finding: DoctorFinding): DoctorRepairPlanItem {
           'Immutable event history references a worktree without live control-plane binding; reconcile authority manually.',
       });
 
-    case DOCTOR_RULES.AGENT_STALE_DISPLAY_ONLY:
-      return genericPlanItem(finding, {
-        stateClass: 'stale-agent-display-only',
-        nextCommand: 'caws agents list --json',
-        refusalReason:
-          'Stale heartbeats are display-only and do not prove abandonment or authorize takeover.',
-      });
 
     case DOCTOR_RULES.WORKTREE_OWNER_LEASE_MISSING:
       return genericPlanItem(finding, {
