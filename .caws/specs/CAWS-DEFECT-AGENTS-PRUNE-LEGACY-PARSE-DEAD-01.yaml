@@ -1,0 +1,35 @@
+id: CAWS-DEFECT-AGENTS-PRUNE-LEGACY-PARSE-DEAD-01
+title: 'agents prune --status legacy is documented and implemented but unreachable through the CLI parse layer'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-08-20T04:08:41.118Z'
+updated_at: '2026-08-20T04:08:41.118Z'
+blast_radius:
+  modules:
+    - 'caws-cli shell parse layer (register.ts agents prune leaf)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/tests/shell/agents-prune-legacy.test.js'
+  out: []
+invariants:
+  - 'A flag documented in --help and accepted by the handler type must be reachable through the Commander parse layer'
+  - 'Parse-layer option admission is proven by spawning dist/index.js, never by calling the handler directly'
+acceptance:
+  - id: A1
+    given: 'a status-less legacy lease older than retention'
+    when: 'caws agents prune --status legacy --older-than-ms N is run through dist/index.js'
+    then: 'the lease is listed as a prune candidate instead of the usage error'
+  - id: A2
+    given: 'an unsupported --status value'
+    when: 'prune is run through dist/index.js'
+    then: 'it still fails with the usage error naming the admitted values'
+rollback:
+  - 'revert the register.ts status admission to the two-value form'
+non_functional: {}
+contracts:
+  - name: 'agents-prune-cli-options'
+    type: behavior
