@@ -37,3 +37,12 @@ non_functional: {}
 contracts:
   - name: 'doctor-report-rules'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "tests/kernel/unit/doctor-agents-registry-not-liveness.test.ts A1 + non-vacuous guard; live: node dist/index.js doctor went 0E/21W/7I -> 0E/8W/7I"
+    recorded_at: "2026-08-20T04:29:17.711Z"
+    test_nodeid: "CAWS-DEFECT-DOCTOR-FROZEN-AGENTS-LIVENESS-01 — agents.json sources no finding › A1: long-stale agents.json records produce no stale_display_only finding"
+    command: npx jest tests/kernel/unit/doctor-agents-registry-not-liveness.test.ts
+    exit_code: 0
+    commit_sha: "4ff8512c"
