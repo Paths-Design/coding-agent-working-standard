@@ -12,10 +12,13 @@
 
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 const { initProject } = require('../../dist/store/init-store');
 const { runAgentsPruneCommand } = require('../../dist/shell/commands/agents');
 const { cleanupAll, makeTempRepo } = require('../helpers/git-repo-factory');
+
+const CLI = path.resolve(__dirname, '..', '..', 'dist', 'index.js');
 
 afterAll(() => {
   cleanupAll();
@@ -104,5 +107,62 @@ describe('CAWS-AGENTS-PRUNE-LEGACY-001 — prune --status legacy', () => {
     const result = runPrune(root, { status: 'legacy', olderThanMs: 86400000 });
     expect(result.code).toBe(0);
     expect(result.out).not.toContain('legacy-badts');
+  });
+});
+
+/**
+ * CAWS-DEFECT-AGENTS-PRUNE-LEGACY-PARSE-DEAD-01 — parse-layer reachability.
+ *
+ * Every test above calls runAgentsPruneCommand() directly, which is precisely
+ * why they stayed green while `caws agents prune --status legacy` was dead at
+ * the CLI: register.ts admitted only 'stopped' and 'stale', coerced 'legacy'
+ * to null, and fell into the usage error before the handler was ever reached.
+ * Handler-level coverage is structurally blind to a parse-layer defect, so
+ * these spawn the compiled dist/index.js and exercise the real Commander
+ * wiring instead.
+ */
+describe('CAWS-DEFECT-AGENTS-PRUNE-LEGACY-PARSE-DEAD-01 — --status legacy survives the parse layer', () => {
+  test('A1: --status legacy reaches the handler and selects the aged legacy lease', () => {
+    const root = makeTempRepo();
+    initProject(root);
+    // Dated far enough back that the real wall-clock `now` in a spawned run is
+    // unambiguously past the 1-day retention passed below.
+    writeLegacyLease(path.join(root, '.caws'), 'parse-legacy-old', '2020-01-01T00:00:00.000Z');
+
+    const run = spawnSync(
+      process.execPath,
+      [CLI, 'agents', 'prune', '--status', 'legacy', '--older-than-ms', '86400000'],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'test-session' },
+      }
+    );
+
+    expect(run.status).toBe(0);
+    // The specific symptom: the parse layer refusing before the handler runs.
+    expect(run.stderr).not.toContain('pass --dead');
+    expect(run.stdout).toContain('parse-legacy-old');
+  });
+
+  test('A2: an unsupported --status value is still refused, and the usage text names legacy', () => {
+    const root = makeTempRepo();
+    initProject(root);
+
+    const run = spawnSync(
+      process.execPath,
+      [CLI, 'agents', 'prune', '--status', 'bogus', '--older-than-ms', '86400000'],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'test-session' },
+      }
+    );
+
+    // Admitting 'legacy' must not degrade into admitting anything at all.
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('pass --dead');
+    // --help and the usage error must agree on the admitted set.
+    expect(run.stderr).toContain('legacy');
   });
 });
