@@ -46,3 +46,11 @@ evidence:
     command: npx jest tests/kernel/unit/doctor-agents-registry-not-liveness.test.ts
     exit_code: 0
     commit_sha: "4ff8512c"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "tests/kernel/unit/doctor-agents-registry-not-liveness.test.ts A2 pair: live owner not flagged, stopped owner still flagged; live doctor INFO count unchanged at 7"
+    recorded_at: "2026-08-20T04:29:56.854Z"
+    test_nodeid: "CAWS-DEFECT-DOCTOR-FROZEN-AGENTS-LIVENESS-01 — agents.json sources no finding › A2: a stopped owner lease is still flagged, and stopped is not called stale"
+    command: npx jest tests/kernel/unit/doctor-agents-registry-not-liveness.test.ts
+    exit_code: 0
+    commit_sha: "4ff8512c"
