@@ -43,3 +43,11 @@ evidence:
     command: npx jest tests/shell/agents-prune-legacy.test.js
     exit_code: 0
     commit_sha: "854fdb0d"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "tests/shell/agents-prune-legacy.test.js A2 (negative control); live run: caws agents prune --status bogus prints '<stopped|stale|legacy>'"
+    recorded_at: "2026-08-20T04:17:13.026Z"
+    test_nodeid: "CAWS-DEFECT-AGENTS-PRUNE-LEGACY-PARSE-DEAD-01 — --status legacy survives the parse layer › A2: an unsupported --status value is still refused, and the usage text names legacy"
+    command: npx jest tests/shell/agents-prune-legacy.test.js
+    exit_code: 0
+    commit_sha: "854fdb0d"
