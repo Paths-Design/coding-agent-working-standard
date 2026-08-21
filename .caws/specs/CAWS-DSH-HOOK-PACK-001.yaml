@@ -64,3 +64,7 @@ evidence:
     status: pass
     evidence_ref: "DSH_SESSION_ID=session-dsh-test caws status -> session-dsh-test:dsh (source: dsh_env)"
     recorded_at: "2026-08-21T02:41:49.055Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: jest tests/docs/agent-surfaces-sync.test.js (populate-doc-markers --check exits 0)
+    recorded_at: "2026-08-21T02:41:49.479Z"
