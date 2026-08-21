@@ -3,7 +3,6 @@ title: 'resolver-guard-divergence test: cover and isolate DSH_SESSION_ID'
 risk_tier: 3
 mode: fix
 lifecycle_state: active
-worktree: wt-dsh-test-sync
 created_at: '2026-08-21T02:59:54.152Z'
 updated_at: '2026-08-21T02:59:55.102Z'
 blast_radius:
