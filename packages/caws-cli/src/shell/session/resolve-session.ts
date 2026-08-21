@@ -1664,6 +1664,41 @@ export function resolveSessionCandidates(
     });
   }
 
+  // 1.65. DSH_SESSION_ID env (refuse literal 'unknown' and empty).
+  //      The DeepSeek Harness per-session id, exported by DSH into every tool
+  //      subprocess like Codex's CODEX_THREAD_ID. Admitted as a candidate so
+  //      ownership comparison (destroy/merge) can match a worktree owner
+  //      stamped from this same source. Mirrors tiers 1.5/1.6.
+  const dshSessionId = env['DSH_SESSION_ID'];
+  if (
+    typeof dshSessionId === 'string' &&
+    dshSessionId.length > 0 &&
+    dshSessionId !== 'unknown'
+  ) {
+    candidates.push({
+      identity: { session_id: dshSessionId, platform: 'dsh' },
+      source: 'dsh_env',
+    });
+    trace.push({
+      source: 'dsh_env',
+      outcome: 'admitted',
+      count: 1,
+      admittedIds: [dshSessionId],
+    });
+  } else if (dshSessionId === 'unknown') {
+    trace.push({
+      source: 'dsh_env',
+      outcome: 'rejected',
+      reason: 'DSH_SESSION_ID is literal "unknown"',
+    });
+  } else {
+    trace.push({
+      source: 'dsh_env',
+      outcome: 'absent',
+      reason: 'DSH_SESSION_ID not set',
+    });
+  }
+
   // 1.7. CAWS_SESSION_ID env (generic escape hatch for any harness).
   //      Same slice (A1): gives opencode/zcode/windsurf a deterministic env
   //      path. Platform derived via surfaceFromEnv (may be 'none' — honest).
