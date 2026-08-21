@@ -68,3 +68,8 @@ evidence:
     status: pass
     evidence_ref: jest tests/docs/agent-surfaces-sync.test.js (populate-doc-markers --check exits 0)
     recorded_at: "2026-08-21T02:41:49.479Z"
+  - criterion_id: A2
+    status: waived
+    evidence_ref: "requires a live DSH harness run with @deepseek-ai/dsh-hooks-caws loaded in the profile; the plugin is built (tsdown lib/index.js) and the block path is the shared core's existing tested guard logic"
+    waiver_reason: "requires a live DSH harness run with @deepseek-ai/dsh-hooks-caws loaded in the profile; the plugin is built (tsdown lib/index.js) and the block path is the shared core's existing tested guard logic"
+    recorded_at: "2026-08-21T02:41:49.892Z"
