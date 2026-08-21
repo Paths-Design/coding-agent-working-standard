@@ -86,6 +86,7 @@ function cleanEnv() {
     CLAUDE_SESSION_ID: '',
     CLAUDE_CODE_SESSION_ID: '',
     CODEX_THREAD_ID: '',
+    DSH_SESSION_ID: '',
     CAWS_SESSION_ID: '',
     HOOK_SESSION_ID: '',
     CURSOR_TRACE_ID: '',
@@ -207,6 +208,19 @@ describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A1: per-surface env sou
     expect(result.value.identity.session_id).toBe('generic-sid');
   });
 
+  test('DSH_SESSION_ID resolves at tier 1.65 as platform dsh', () => {
+    const { cawsDir } = makeProjectRoot();
+    const result = resolveSession({
+      cawsDir,
+      worktreeRoot: cawsDir,
+      env: { ...cleanEnv(), DSH_SESSION_ID: 'session-dsh-123' },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.value.source).toBe('dsh_env');
+    expect(result.value.identity.session_id).toBe('session-dsh-123');
+    expect(result.value.identity.platform).toBe('dsh');
+  });
+
   test('precedence: CLAUDE_SESSION_ID > CLAUDE_CODE_SESSION_ID > CODEX_THREAD_ID', () => {
     const { cawsDir } = makeProjectRoot();
     const result = resolveSession({
@@ -248,19 +262,24 @@ describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A2: candidate mirror', 
       env: {
         ...cleanEnv(),
         CODEX_THREAD_ID: 'codex-owner',
+        DSH_SESSION_ID: 'dsh-owner',
         CAWS_SESSION_ID: 'caws-owner',
       },
     });
     const ids = candidates.map((c) => c.identity.session_id);
     expect(ids).toContain('codex-owner');
+    expect(ids).toContain('dsh-owner');
     expect(ids).toContain('caws-owner');
-    // The codex candidate carries platform codex (so a destroy/merge comparison
-    // against a codex-stamped owner admits it).
+    // Each candidate carries its own platform (so a destroy/merge comparison
+    // against a surface-stamped owner admits it).
     const codexCand = candidates.find((c) => c.identity.session_id === 'codex-owner');
     expect(codexCand.identity.platform).toBe('codex');
-    // Both sources recorded in the trace.
+    const dshCand = candidates.find((c) => c.identity.session_id === 'dsh-owner');
+    expect(dshCand.identity.platform).toBe('dsh');
+    // All three sources recorded in the trace.
     const sources = trace.map((t) => t.source);
     expect(sources).toContain('codex_thread_env');
+    expect(sources).toContain('dsh_env');
     expect(sources).toContain('caws_env');
   });
 });
@@ -647,6 +666,7 @@ describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A6: precedence consolid
     expect(src).toMatch(/CLAUDE_CODE_SESSION_ID/);
     expect(src).toMatch(/CODEX_THREAD_ID/);
     expect(src).toMatch(/QWEN_CODE_SESSION_ID/);
+    expect(src).toMatch(/DSH_SESSION_ID/);
     expect(src).toMatch(/CAWS_SESSION_ID/);
     expect(src).toMatch(/HOOK_SESSION_ID/);
   });
@@ -659,6 +679,8 @@ describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A6: precedence consolid
       { env: { CLAUDE_CODE_SESSION_ID: 'b', CODEX_THREAD_ID: 'c', CAWS_SESSION_ID: 'd' }, want: 'b' },
       { env: { CODEX_THREAD_ID: 'c', QWEN_CODE_SESSION_ID: 'q', CAWS_SESSION_ID: 'd' }, want: 'c' },
       { env: { QWEN_CODE_SESSION_ID: 'q', CAWS_SESSION_ID: 'd', HOOK_SESSION_ID: 'e' }, want: 'q' },
+      { env: { QWEN_CODE_SESSION_ID: 'q', DSH_SESSION_ID: 'x', CAWS_SESSION_ID: 'd' }, want: 'q' },
+      { env: { DSH_SESSION_ID: 'x', CAWS_SESSION_ID: 'd', HOOK_SESSION_ID: 'e' }, want: 'x' },
       { env: { CAWS_SESSION_ID: 'd', HOOK_SESSION_ID: 'e' }, want: 'd' },
       { env: { HOOK_SESSION_ID: 'e', CURSOR_TRACE_ID: 'f' }, want: 'e' },
       { env: { CURSOR_TRACE_ID: 'f' }, want: 'f' },
@@ -681,6 +703,7 @@ describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A6: precedence consolid
       'CLAUDE_CODE_SESSION_ID',
       'CODEX_THREAD_ID',
       'QWEN_CODE_SESSION_ID',
+      'DSH_SESSION_ID',
       'CAWS_SESSION_ID',
       'HOOK_SESSION_ID',
       'CURSOR_TRACE_ID',
