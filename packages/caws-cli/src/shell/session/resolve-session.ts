@@ -103,6 +103,7 @@ const AGENT_SURFACES = [
   'zcode',
   'kimi-code',
   'qwen-code',
+  'dsh',
   'cursor',
   'windsurf',
   'none',
@@ -152,6 +153,13 @@ function surfaceFromEnv(env: NodeJS.ProcessEnv): AgentSurface {
     env['QWEN_CODE_SESSION_ID'] !== 'unknown'
   ) {
     return 'qwen-code';
+  }
+  if (
+    typeof env['DSH_SESSION_ID'] === 'string' &&
+    env['DSH_SESSION_ID'].length > 0 &&
+    env['DSH_SESSION_ID'] !== 'unknown'
+  ) {
+    return 'dsh';
   }
   // CAWS_SESSION_ID is generic — it does not identify a harness. If it is the
   // only signal, we cannot know the surface; return 'none' (the documented
@@ -1018,6 +1026,23 @@ export function resolveSession(
     });
   }
 
+  // 1.65. DSH_SESSION_ID env (authority source #1.65 — the DeepSeek Harness's
+  //      per-session id, exported by DSH into every tool subprocess, like Codex's
+  //      CODEX_THREAD_ID). Resolves the agent-Bash path deterministically to the
+  //      true caller. Refuse literal 'unknown'/empty (same discipline as the
+  //      sibling tiers).
+  const dshSessionId = env['DSH_SESSION_ID'];
+  if (
+    typeof dshSessionId === 'string' &&
+    dshSessionId.length > 0 &&
+    dshSessionId !== 'unknown'
+  ) {
+    return ok({
+      identity: { session_id: dshSessionId, platform: 'dsh' },
+      source: 'dsh_env',
+    });
+  }
+
   // 1.7. CAWS_SESSION_ID env (authority source #1.7 — the generic CAWS escape
   //      hatch, usable by any harness that does not have a dedicated per-
   //      surface var). CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001: gives
@@ -1149,6 +1174,7 @@ export function resolveSession(
         env['CLAUDE_SESSION_ID'],
         env['CLAUDE_CODE_SESSION_ID'],
         env['CODEX_THREAD_ID'],
+        env['DSH_SESSION_ID'],
         env['CAWS_SESSION_ID'],
         env['HOOK_SESSION_ID'],
         env['CURSOR_TRACE_ID'],
@@ -1335,6 +1361,11 @@ export function describeSessionSource(s: ResolvedSession): Diagnostic {
       return infoDiag(
         SHELL_RULES.SESSION_RESOLVED_FROM_CLAUDE_CODE_ENV,
         `Session identity from CODEX_THREAD_ID env (Codex harness, survives the tool boundary): ${s.identity.session_id}`
+      );
+    case 'dsh_env':
+      return infoDiag(
+        SHELL_RULES.SESSION_RESOLVED_FROM_CLAUDE_CODE_ENV,
+        `Session identity from DSH_SESSION_ID env (DeepSeek Harness, survives the tool boundary): ${s.identity.session_id}`
       );
     case 'caws_env':
       return infoDiag(

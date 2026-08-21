@@ -26,7 +26,7 @@
 // mechanism.
 
 /** Supported agent harnesses. Implemented packs: claude-code, codex, opencode, zcode, kimi-code, qwen-code. */
-export type AgentSurface = 'claude-code' | 'codex' | 'opencode' | 'zcode' | 'kimi-code' | 'qwen-code' | 'cursor' | 'windsurf' | 'none';
+export type AgentSurface = 'claude-code' | 'codex' | 'opencode' | 'zcode' | 'kimi-code' | 'qwen-code' | 'dsh' | 'cursor' | 'windsurf' | 'none';
 
 /** Lifecycle interception points a pack may register on a harness. */
 export type LifecycleEvent =

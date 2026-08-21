@@ -13,6 +13,7 @@ import { KIMI_CODE_PACK } from './manifest-kimi-code';
 import { OPENCODE_PACK } from './manifest-opencode';
 import { QWEN_CODE_PACK } from './manifest-qwen-code';
 import { ZCODE_PACK } from './manifest-zcode';
+import { DSH_PACK } from './manifest-dsh';
 
 export type PackResolution =
   | { readonly kind: 'pack'; readonly pack: HookPackV1 }
@@ -45,6 +46,9 @@ export function resolveHookPack(surface: AgentSurface): PackResolution {
   if (surface === 'qwen-code') {
     return { kind: 'pack', pack: QWEN_CODE_PACK };
   }
+  if (surface === 'dsh') {
+    return { kind: 'pack', pack: DSH_PACK };
+  }
   // cursor / windsurf: recognized but not yet implemented.
   return { kind: 'declared_not_implemented', surface };
 }
@@ -58,6 +62,7 @@ export const KNOWN_SURFACES: readonly AgentSurface[] = [
   'zcode',
   'kimi-code',
   'qwen-code',
+  'dsh',
   'cursor',
   'windsurf',
   'none',
@@ -71,6 +76,7 @@ export const IMPLEMENTED_SURFACES: readonly AgentSurface[] = [
   'zcode',
   'kimi-code',
   'qwen-code',
+  'dsh',
 ];
 
 export function isKnownSurface(value: string): value is AgentSurface {

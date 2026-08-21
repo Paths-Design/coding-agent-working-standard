@@ -234,6 +234,7 @@ export function vendorDirFromPlatform(platform: string): string | null {
     opencode: '.opencode',
     'kimi-code': '.kimi-code',
     'qwen-code': '.qwen',
+    dsh: '.dsh',
   };
   return map[platform] ?? null;
 }

@@ -260,6 +260,15 @@ case "$CAWS_AGENT_SURFACE" in
     CAWS_AGENT_PROCESS_NAMES="qwen qwen-code"
     CAWS_SUPPORTS_UPDATED_INPUT="0"
     ;;
+  dsh)
+    CAWS_VENDOR_DIR=".dsh"
+    CAWS_PLATFORM_FLAG="dsh"
+    # DSH supports allow/ask/deny on tools/pre-execute via the typed
+    # PreToolDecision + the approval seam (ask prompts through ctx.approval).
+    CAWS_PERMISSION_VOCAB="ask"
+    CAWS_INSTRUCTION_FILES="AGENTS.md"
+    CAWS_AGENT_PROCESS_NAMES="dsh"
+    ;;
   *)
     # Unknown surface — fall through to claude-code defaults so a
     # misconfigured wiring does not become a hard block. Emit a warning to

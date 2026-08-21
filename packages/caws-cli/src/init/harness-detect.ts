@@ -50,6 +50,10 @@ const SIGNALS: readonly SurfaceSignal[] = [
     markers: ['.qwen', '.qwen/settings.json', '.qwen/hooks', 'QWEN.md'],
   },
   {
+    surface: 'dsh',
+    markers: ['.dsh', '.dsh/AGENTS.md', '.dsh/skills'],
+  },
+  {
     surface: 'cursor',
     markers: ['.cursor', '.cursor/settings.json', '.cursor/rules'],
   },

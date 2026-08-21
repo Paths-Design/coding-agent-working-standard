@@ -105,6 +105,10 @@ resolve_caws_session_id() {
     printf '%s\n' "$QWEN_CODE_SESSION_ID"
     return 0
   fi
+  if [[ -n "${DSH_SESSION_ID:-}" && "${DSH_SESSION_ID}" != "unknown" ]]; then
+    printf '%s\n' "$DSH_SESSION_ID"
+    return 0
+  fi
   if [[ -n "${CAWS_SESSION_ID:-}" && "${CAWS_SESSION_ID}" != "unknown" ]]; then
     printf '%s\n' "$CAWS_SESSION_ID"
     return 0
