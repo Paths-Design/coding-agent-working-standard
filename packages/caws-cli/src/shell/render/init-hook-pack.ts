@@ -501,6 +501,7 @@ export function renderActivationContract(
   const isOpencode = result.pack.id === 'opencode';
   const isZcode = result.pack.id === 'zcode';
   const isQwen = result.pack.id === 'qwen-code';
+  const isDsh = result.pack.id === 'dsh';
 
   switch (result.activation) {
     case 'immediate':
@@ -550,6 +551,18 @@ export function renderActivationContract(
           lines.push('  The CAWS shim is installed. It is active in any Qwen Code session');
           lines.push('  started AFTER the install; restart Qwen Code if this session');
           lines.push('  pre-dates the install.');
+        }
+        break;
+      }
+      if (isDsh) {
+        if (changed) {
+          lines.push('  Hook files were installed or updated. The DSH shim ships in the');
+          lines.push('  harness package tree — add @deepseek-ai/dsh-hooks-caws to the');
+          lines.push('  profile bundles, then restart the profile so the shim loads.');
+        } else {
+          lines.push('  The DSH surface doctrine is installed. The shim is active once');
+          lines.push('  @deepseek-ai/dsh-hooks-caws is in the profile bundles and the');
+          lines.push('  profile is restarted.');
         }
         break;
       }
