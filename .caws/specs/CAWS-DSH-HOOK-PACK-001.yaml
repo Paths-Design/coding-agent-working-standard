@@ -1,0 +1,37 @@
+id: CAWS-DSH-HOOK-PACK-001
+title: 'DSH agent surface: hook pack, platform registry, session identity'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-08-21T02:25:17.351Z'
+updated_at: '2026-08-21T02:25:17.351Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/init/hook-packs'
+    - 'packages/caws-cli/src/init/harness-detect.ts'
+    - 'packages/caws-cli/src/shell/commands/reprieve.ts'
+    - 'packages/caws-cli/src/shell/session/resolve-session.ts'
+    - 'packages/caws-cli/templates/hook-packs/dsh'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/session-id.sh'
+    - 'packages/caws-cli/README.md'
+    - 'docs/guides/agent-integration-guide.md'
+    - 'docs/architecture/hook-pack-shared-core.md'
+    - 'docs/guides/hook-packs.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'dsh-surface'
+    type: behavior
