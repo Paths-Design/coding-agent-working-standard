@@ -2,10 +2,11 @@ id: CAWS-DSH-ACTIVATION-BANNER-001
 title: 'dsh init activation banner: surface-specific restart guidance'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: wt-dsh-banner
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'DSH activation banner now surface-specific; verified via fresh init'
 created_at: '2026-08-21T02:44:10.979Z'
-updated_at: '2026-08-21T02:44:25.642Z'
+updated_at: '2026-08-21T02:45:37.643Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
