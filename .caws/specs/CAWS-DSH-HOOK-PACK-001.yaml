@@ -55,3 +55,8 @@ non_functional: {}
 contracts:
   - name: 'dsh-surface'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "node dist/index.js init --agent-surface dsh (scratch repo): shared core + .dsh/AGENTS.md installed; init diff managed_clean v1"
+    recorded_at: "2026-08-21T02:41:48.644Z"
