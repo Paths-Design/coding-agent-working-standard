@@ -1,0 +1,25 @@
+id: CAWS-DSH-RESOLVER-TEST-SYNC-001
+title: 'resolver-guard-divergence test: cover and isolate DSH_SESSION_ID'
+risk_tier: 3
+mode: fix
+lifecycle_state: draft
+created_at: '2026-08-21T02:59:54.152Z'
+updated_at: '2026-08-21T02:59:54.152Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/shell/session/resolver-guard-divergence.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'the DSH surface added DSH_SESSION_ID to the resolver chain'
+    when: 'the resolver-guard-divergence suite runs from a DSH session (DSH_SESSION_ID in ambient env)'
+    then: 'the suite passes and asserts the DSH tier'
+non_functional: {}
+contracts: []
