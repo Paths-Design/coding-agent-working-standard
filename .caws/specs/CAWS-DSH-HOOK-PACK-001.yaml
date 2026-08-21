@@ -2,12 +2,17 @@ id: CAWS-DSH-HOOK-PACK-001
 title: 'DSH agent surface: hook pack, platform registry, session identity'
 risk_tier: 2
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-dsh-hook-pack
 created_at: '2026-08-21T02:25:17.351Z'
-updated_at: '2026-08-21T02:25:17.351Z'
+updated_at: '2026-08-21T02:25:57.342Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli/src/init/hook-packs'
+    - 'packages/caws-cli/src/init'
+    - 'packages/caws-cli/src/shell'
+    - 'packages/caws-cli/templates/hook-packs'
+    - 'docs'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -25,12 +30,26 @@ scope:
     - 'docs/guides/hook-packs.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Existing agent surfaces are byte-for-byte behaviorally unchanged; the `dsh` surface is purely additive.'
+  - 'A dsh session resolves its identity deterministically from DSH_SESSION_ID, never from an OS platform string or the claude-code fallback.'
+  - 'The surface list stays in lockstep across register.ts, resolve-session.ts, lib/agent-surface.sh, and lib/session-id.sh (enforced by the agent-surfaces-sync gate).'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a CAWS repo with no prior dsh pack'
+    when: '`caws init --agent-surface dsh` runs'
+    then: 'the shared core plus `.dsh/AGENTS.md` install, `caws init diff` reports no drift, and `caws status` recognizes the dsh surface'
+  - id: A2
+    given: 'a DSH session loading `@deepseek-ai/dsh-hooks-caws` in a `.caws` repo'
+    when: 'it issues a Bash/Write/Edit tool call that a CAWS guard would block'
+    then: 'the pre_tool_use dispatchers fire and the block surfaces as a typed tool denial'
+  - id: A3
+    given: 'the same DSH session exporting DSH_SESSION_ID into a subprocess'
+    when: 'a `caws` shell command resolves session identity'
+    then: 'platform resolves to `dsh`, not `none` or `claude-code`'
+  - id: A4
+    given: 'the updated surface constants'
+    when: '`node packages/caws-cli/scripts/populate-doc-markers.mjs --check` runs'
+    then: 'it exits 0 (README.md and the agent-integration-guide markers are in sync)'
 non_functional: {}
 contracts:
   - name: 'dsh-surface'
