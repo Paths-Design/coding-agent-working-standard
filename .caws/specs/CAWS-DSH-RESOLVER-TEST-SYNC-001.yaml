@@ -23,3 +23,8 @@ acceptance:
     then: 'the suite passes and asserts the DSH tier'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "npx jest resolver-guard-divergence.test.js (+ init-hook-pack-render, resolver-platform-from-envelope, reprieve-surface-detection, agent-surfaces-sync): 94 passed"
+    recorded_at: "2026-08-21T03:02:12.034Z"
