@@ -2,9 +2,11 @@ id: CAWS-DSH-RESOLVER-TEST-SYNC-001
 title: 'resolver-guard-divergence test: cover and isolate DSH_SESSION_ID'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'DSH_SESSION_ID tier now covered + isolated in the resolver-guard-divergence suite; full 5-suite run green'
 created_at: '2026-08-21T02:59:54.152Z'
-updated_at: '2026-08-21T02:59:55.102Z'
+updated_at: '2026-08-21T03:02:12.533Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
