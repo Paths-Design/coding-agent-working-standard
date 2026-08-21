@@ -27,5 +27,5 @@ contracts: []
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "node dist/index.js init --agent-surface dsh (scratch repo): activation panel shows DSH-specific restart guidance (profile bundles + @deepseek-ai/dsh-hooks-caws)"
-    recorded_at: "2026-08-21T02:45:37.245Z"
+    evidence_ref: init --agent-surface dsh renders DSH-specific activation banner; resolveSessionCandidates DSH_SESSION_ID tier verified by successful dsh-owned worktree merge (4e1a13cb)
+    recorded_at: "2026-08-21T02:51:29.878Z"
