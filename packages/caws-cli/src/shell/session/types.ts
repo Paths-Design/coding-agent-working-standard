@@ -26,6 +26,7 @@ export type SessionSource =
   | 'claude_env'
   | 'claude_code_env'
   | 'codex_thread_env'
+  | 'dsh_env'
   | 'caws_env'
   | 'hook_env'
   | 'agent_pid_record'

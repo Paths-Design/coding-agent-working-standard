@@ -303,7 +303,12 @@ import type { HookPackV1 } from './types';
 // protocol treats ONLY exit 2 as a block, so a Write/Edit to a guard script
 // proceeded despite the "BLOCKED" diagnostic. Both branches now exit 2,
 // consistent with the sibling missing-lib and strike-state branches.
-export const SHARED_PACK_VERSION = 43;
+// v44 (CAWS-DSH-HOOK-PACK-001): lib/agent-surface.sh gains a `dsh` case arm
+// (vendor dir .dsh, ask vocab, AGENTS.md instruction file, process name `dsh`)
+// and lib/session-id.sh gains the DSH_SESSION_ID tier (mirroring
+// resolve-session.ts). No guard logic changes; bump re-propagates the two
+// shared-lib template changes to consumers.
+export const SHARED_PACK_VERSION = 44;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.

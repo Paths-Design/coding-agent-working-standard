@@ -92,6 +92,7 @@ caws init --agent-surface opencode
 caws init --agent-surface zcode
 caws init --agent-surface kimi-code
 caws init --agent-surface qwen-code
+caws init --agent-surface dsh
 ```
 <!-- agent-surfaces-install:end -->
 
