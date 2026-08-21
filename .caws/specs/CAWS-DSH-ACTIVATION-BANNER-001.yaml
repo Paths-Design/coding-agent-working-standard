@@ -24,3 +24,8 @@ acceptance:
     then: 'it gives DSH-specific restart guidance, not the Claude Code .claude/settings.json text'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "node dist/index.js init --agent-surface dsh (scratch repo): activation panel shows DSH-specific restart guidance (profile bundles + @deepseek-ai/dsh-hooks-caws)"
+    recorded_at: "2026-08-21T02:45:37.245Z"
