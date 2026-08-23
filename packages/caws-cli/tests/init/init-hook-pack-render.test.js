@@ -39,6 +39,7 @@ const { SHARED_PACK } = require('../../dist/init/hook-packs/manifest-shared');
 const { CLAUDE_CODE_PACK } = require('../../dist/init/hook-packs/manifest-claude-code');
 const { OPENCODE_PACK } = require('../../dist/init/hook-packs/manifest-opencode');
 const { CODEX_PACK } = require('../../dist/init/hook-packs/manifest-codex');
+const { IMPLEMENTED_SURFACES } = require('../../dist/init/hook-packs/register');
 const { renderHookPackInstall } = require('../../dist/shell/render/init-hook-pack');
 
 const EXCLUDED_DIRS = new Set(['tmp', '.caws', '__pycache__', 'node_modules']);
@@ -563,5 +564,44 @@ describe('A6: Codex hooks.json stays parser-valid while reinstall keeps ownershi
     expect(a.action).toBe('refused');
     expect(a.refusalReason).toBe('unmanaged_collision');
     expect(fs.readFileSync(abs(CODEX_HOOKS_REL), 'utf8')).toBe(before);
+  });
+});
+
+/**
+ * A7 — skip-panel surface lockstep (CAWS-INIT-SKIP-LIST-SURFACE-LOCKSTEP-001).
+ * The skipped_ambiguous / skipped_explicit_none panels once hardcoded the
+ * rerun surface list, so the `dsh` surface shipped while the message still
+ * said "claude-code, codex, opencode, zcode, kimi-code, or qwen-code". The
+ * renderer now derives the list from IMPLEMENTED_SURFACES; these tests assert
+ * the rendered output matches the registry, so a future surface addition
+ * cannot silently leave the skip message stale again.
+ */
+describe('A7: skip panels derive their surface list from IMPLEMENTED_SURFACES', () => {
+  function renderSkip(outcome) {
+    return renderHookPackInstall({
+      pack: null,
+      outcome,
+      activation: 'not_applicable',
+      actions: [],
+    });
+  }
+
+  test('skipped_ambiguous lists every implemented surface, including dsh, plus the none opt-out', () => {
+    const out = renderSkip('skipped_ambiguous');
+    for (const surface of IMPLEMENTED_SURFACES) {
+      expect(out).toContain(`caws init --agent-surface ${surface}`);
+    }
+    expect(out).toContain('caws init --agent-surface none      # explicit opt-out');
+    // Declared-but-unimplemented surfaces must not be advertised as rerun targets.
+    expect(out).not.toContain('caws init --agent-surface cursor');
+    expect(out).not.toContain('caws init --agent-surface windsurf');
+  });
+
+  test('skipped_explicit_none names the same registry-derived list, dsh included', () => {
+    const out = renderSkip('skipped_explicit_none');
+    for (const surface of IMPLEMENTED_SURFACES) {
+      expect(out).toContain(surface);
+    }
+    expect(out).toContain('dsh');
   });
 });

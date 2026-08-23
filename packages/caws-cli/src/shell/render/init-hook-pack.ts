@@ -14,6 +14,7 @@ import {
   type SettingsMergeResult,
   type SettingsWiringStatus,
 } from '../../init/hook-install';
+import { IMPLEMENTED_SURFACES } from '../../init/hook-packs/register';
 import type { HookPackInstallResult } from '../../init/hook-packs/types';
 
 function repeatChar(ch: string, n: number): string {
@@ -38,7 +39,7 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
         '  This repo is NOT agent-safe for multi-session work without external governance.'
       );
       lines.push(
-        '  If you intended to enable a hook pack, rerun with --agent-surface claude-code, codex, opencode, zcode, kimi-code, or qwen-code.'
+        `  If you intended to enable a hook pack, rerun with --agent-surface ${IMPLEMENTED_SURFACES.join(', ')}.`
       );
       return lines.join('\n');
     }
@@ -47,12 +48,9 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
       lines.push('  Skipped — no harness detected and no --agent-surface flag passed.');
       lines.push('  No pre-tool-call governance was installed.');
       lines.push('  To enable a hook pack now, rerun with one of:');
-      lines.push('    caws init --agent-surface claude-code');
-      lines.push('    caws init --agent-surface codex');
-      lines.push('    caws init --agent-surface opencode');
-      lines.push('    caws init --agent-surface zcode');
-      lines.push('    caws init --agent-surface kimi-code');
-      lines.push('    caws init --agent-surface qwen-code');
+      for (const surface of IMPLEMENTED_SURFACES) {
+        lines.push(`    caws init --agent-surface ${surface}`);
+      }
       lines.push('    caws init --agent-surface none      # explicit opt-out');
       return lines.join('\n');
     }

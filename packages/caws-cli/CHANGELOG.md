@@ -1,6 +1,24 @@
 ## [Unreleased]
 
+### Features
+
+- **DeepSeek Harness (`dsh`) agent surface.** `caws init --agent-surface dsh`
+  installs the dsh pack (surface doctrine at `.dsh/AGENTS.md`); the shared
+  resolver maps `CAWS_AGENT_SURFACE=dsh` to vendor dir `.dsh`, platform flag
+  `dsh`, the "ask" permission vocab, `AGENTS.md` instruction allowlisting, and
+  the `dsh` agent-process name. Session identity resolves from `DSH_SESSION_ID`
+  (resolver candidate tier + durable hook envelope), and the init activation
+  banner carries DSH-specific restart guidance (the interposition plugin
+  `@deepseek-ai/dsh-hooks-caws` loads at harness profile start).
+
 ### Fixed
+
+- **`caws init` skip-message surface list is derived from
+  `IMPLEMENTED_SURFACES` and now includes `dsh`.** The skipped-ambiguous and
+  explicit-`none` panels hardcoded their rerun surface list, so they kept
+  suggesting only claude-code/codex/opencode/zcode/kimi-code/qwen-code after
+  the dsh surface shipped. The list is now generated from the registry, so a
+  future surface addition cannot leave the skip guidance stale again.
 
 - **`caws init diff` and `caws init port <path> --from <file>` are reachable
   again.** `INIT_COMMAND_META` documented both subcommands in `caws init
