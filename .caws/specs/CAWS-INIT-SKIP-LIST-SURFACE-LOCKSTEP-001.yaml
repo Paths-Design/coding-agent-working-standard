@@ -40,6 +40,10 @@ acceptance:
     given: 'the updated renderer and its test file'
     when: 'tests/init/init-hook-pack-render.test.js runs against a freshly rebuilt dist'
     then: 'the new lockstep tests pass and the affected jest suites stay green'
+  - id: A4
+    given: 'the full caws-cli jest suite'
+    when: 'it runs against the rebuilt dist, including inside a DSH-harness session whose env exports DSH_SESSION_ID'
+    then: 'every suite is green: the surface-registry canary includes dsh, the shared-pack fingerprint baseline matches template v44, documented tier-1/2 create examples carry --contract, and the claim-takeover suite isolates itself from ambient harness env'
 non_functional:
   reliability:
     - 'The lockstep test derives its expectation from the registry, so adding a future surface updates the skip message without a renderer edit.'
