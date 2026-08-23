@@ -48,3 +48,8 @@ non_functional:
   reliability:
     - 'The lockstep test derives its expectation from the registry, so adding a future surface updates the skip message without a renderer edit.'
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: npx jest tests/init/init-hook-pack-render.test.js — 30/30 incl. A7 lockstep
+    recorded_at: "2026-08-23T21:32:13.818Z"
