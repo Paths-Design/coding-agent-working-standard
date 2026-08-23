@@ -2,10 +2,11 @@ id: CAWS-DSH-RELEASE-121-001
 title: 'Release caws-cli 12.1.0: version bump + changelog section'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
-worktree: wt-release-121
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-release-121 at 722e4ea160f69bcc6fcfa8aeaa57c679fb8e42cd'
 created_at: '2026-08-23T21:33:23.728Z'
-updated_at: '2026-08-23T21:33:47.727Z'
+updated_at: '2026-08-23T21:34:32.774Z'
 blast_radius:
   modules:
     - packages/caws-cli
