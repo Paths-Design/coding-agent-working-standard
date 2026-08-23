@@ -57,3 +57,7 @@ evidence:
     status: pass
     evidence_ref: A7 skipped_explicit_none assertion
     recorded_at: "2026-08-23T21:32:14.149Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: render suite 30/30 after rebuild
+    recorded_at: "2026-08-23T21:32:14.482Z"
