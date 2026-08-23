@@ -53,3 +53,7 @@ evidence:
     status: pass
     evidence_ref: npx jest tests/init/init-hook-pack-render.test.js — 30/30 incl. A7 lockstep
     recorded_at: "2026-08-23T21:32:13.818Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: A7 skipped_explicit_none assertion
+    recorded_at: "2026-08-23T21:32:14.149Z"
