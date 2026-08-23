@@ -33,7 +33,20 @@ const { initProject } = require('../../../dist/store/init-store');
 const { runClaimCommand } = require('../../../dist/shell/commands/claim');
 const { cleanupAll, makeTempRepo } = require('../../helpers/git-repo-factory');
 
+// Ambient-harness isolation: resolveSessionCandidates reads DSH_SESSION_ID
+// from process.env (the dsh candidate tier), so a suite running inside the
+// DeepSeek Harness would otherwise resolve the TEST RUNNER's own session as
+// "self" and the takeover assertions would exercise the wrong identity. The
+// resolver behavior is correct; the fixture must not inherit the host env.
+const SAVED_DSH_SESSION_ID = process.env.DSH_SESSION_ID;
+beforeAll(() => {
+  delete process.env.DSH_SESSION_ID;
+});
+
 afterAll(() => {
+  if (SAVED_DSH_SESSION_ID !== undefined) {
+    process.env.DSH_SESSION_ID = SAVED_DSH_SESSION_ID;
+  }
   cleanupAll();
 });
 

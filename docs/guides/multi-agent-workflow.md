@@ -42,9 +42,9 @@ v11 has no project-level working spec. `caws init` refuses legacy `.caws/working
 The host (or first agent) creates per-feature specs via the CLI:
 
 ```bash
-caws specs create FEAT-001 --title "User Authentication System" --mode feature --risk-tier 1
-caws specs create FEAT-002 --title "Payment System" --mode feature --risk-tier 1
-caws specs create FEAT-003 --title "Dashboard UI" --mode feature --risk-tier 1
+caws specs create FEAT-001 --title "User Authentication System" --mode feature --risk-tier 1 --contract "auth-api:api"
+caws specs create FEAT-002 --title "Payment System" --mode feature --risk-tier 1 --contract "payments-api:api"
+caws specs create FEAT-003 --title "Dashboard UI" --mode feature --risk-tier 1 --contract "dashboard-ui:behavior"
 ```
 
 Each generated spec lives at `.caws/specs/<id>.yaml`. Edit it to define non-overlapping `scope.in` and explicitly exclude the other features in `scope.out` (defensive — prevents accidental cross-feature edits even if `scope.in` is too broad).

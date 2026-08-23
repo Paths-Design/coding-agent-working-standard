@@ -132,7 +132,7 @@ Alternatively, do the migration on `caws-cli@10.2.x` and then upgrade.
 | Show waiver | `caws waiver show <id>` |
 | Revoke waiver | `caws waiver revoke <id>` |
 | Grant a guard reprieve | `caws reprieve grant --handlers <handler.sh> --reason "..." --approved-by "..." --for 1h` |
-| Create a spec | `caws specs create <id> --title "..." --mode <feature\|refactor\|fix\|doc\|chore> --risk-tier 1` |
+| Create a spec | `caws specs create <id> --title "..." --mode <feature\|refactor\|fix\|doc\|chore> --risk-tier 1 --contract "<name>:<behavior\|api\|schema\|contract-test>"` |
 | List specs | `caws specs list` |
 | Show a spec | `caws specs show <id>` |
 | Close a spec | `caws specs close <id>` |
