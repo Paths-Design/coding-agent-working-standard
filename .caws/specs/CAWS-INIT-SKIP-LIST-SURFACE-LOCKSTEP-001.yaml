@@ -2,9 +2,10 @@ id: CAWS-INIT-SKIP-LIST-SURFACE-LOCKSTEP-001
 title: 'init skip-message surface list derives from IMPLEMENTED_SURFACES'
 risk_tier: 3
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-init-skip-list
 created_at: '2026-08-23T21:14:41.669Z'
-updated_at: '2026-08-23T21:14:41.669Z'
+updated_at: '2026-08-23T21:16:38.348Z'
 blast_radius:
   modules:
     - 'packages/caws-cli/src/shell/render'
