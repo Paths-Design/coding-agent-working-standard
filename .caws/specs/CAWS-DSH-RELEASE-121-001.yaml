@@ -7,19 +7,25 @@ created_at: '2026-08-23T21:33:23.728Z'
 updated_at: '2026-08-23T21:33:23.728Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/CHANGELOG.md
+    - packages/caws-cli/package.json
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Release content is deterministic: package.json version, the CHANGELOG section header, and the tag name all say 12.1.0 (CI validates tag == version == changelog section before publishing).'
+  - 'The release lane touches only CHANGELOG.md and package.json; all feature/fix content landed in prior lanes (dsh surface, skip-list lockstep, suite cleanup).'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'the release lane merged to main'
+    when: 'the two files are inspected at the merge commit'
+    then: 'packages/caws-cli/package.json version is 12.1.0 and packages/caws-cli/CHANGELOG.md opens with a [12.1.0] (2026-08-23) section carrying the dsh Feature entry and the fixed entries, with no [Unreleased] header remaining'
+  - id: A2
+    given: 'the lane range'
+    when: 'git diff main..lane is inspected'
+    then: 'only CHANGELOG.md and package.json are touched'
 non_functional: {}
 contracts: []
