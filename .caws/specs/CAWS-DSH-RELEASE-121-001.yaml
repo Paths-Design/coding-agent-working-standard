@@ -30,3 +30,8 @@ acceptance:
     then: 'only CHANGELOG.md and package.json are touched'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "release commit a7ef6691: package.json 12.1.0 + CHANGELOG [12.1.0] (2026-08-23) section, no [Unreleased]"
+    recorded_at: "2026-08-23T21:34:26.406Z"
