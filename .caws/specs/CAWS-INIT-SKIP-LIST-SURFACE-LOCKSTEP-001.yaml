@@ -61,3 +61,7 @@ evidence:
     status: pass
     evidence_ref: render suite 30/30 after rebuild
     recorded_at: "2026-08-23T21:32:14.482Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: full suite exit 0 under DSH env; 4 previously failing suites 27/27
+    recorded_at: "2026-08-23T21:32:14.816Z"
