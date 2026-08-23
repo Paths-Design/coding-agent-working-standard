@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-init-skip-list
 created_at: '2026-08-23T21:14:41.669Z'
-updated_at: '2026-08-23T21:16:38.348Z'
+updated_at: '2026-08-23T21:25:23.205Z'
 blast_radius:
   modules:
     - 'packages/caws-cli/src/shell/render'
@@ -17,6 +17,12 @@ scope:
     - packages/caws-cli/src/shell/render/init-hook-pack.ts
     - packages/caws-cli/tests/init/init-hook-pack-render.test.js
     - packages/caws-cli/CHANGELOG.md
+    - packages/caws-cli/tests/init/hook-pack-register.test.js
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/tests/shell/session/claim-takeover-foreign-envelope.test.js
+    - docs/agent-workflow-tools.md
+    - docs/guides/agent-integration-guide.md
+    - docs/guides/multi-agent-workflow.md
   out: []
 invariants:
   - 'The caws init hook-pack skip messages (skipped_ambiguous and skipped_explicit_none) derive their surface suggestion lists from IMPLEMENTED_SURFACES in init/hook-packs/register.ts — no hardcoded enumeration in the renderer can drift from the registry again.'
