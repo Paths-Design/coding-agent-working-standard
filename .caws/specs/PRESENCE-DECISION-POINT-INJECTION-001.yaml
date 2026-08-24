@@ -140,3 +140,7 @@ evidence:
     status: pass
     evidence_ref: "jest A3: corrupt garbage.json lease -> activate succeeds with baseline output, no peer block, no refusal"
     recorded_at: "2026-08-24T19:30:49.522Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "jest A4: self+peer leases -> block lists only peer; self never rendered"
+    recorded_at: "2026-08-24T19:30:49.907Z"
