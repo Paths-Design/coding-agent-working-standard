@@ -125,6 +125,9 @@ cd .caws/worktrees/wt-auth
 caws claim                                 # prints owner; exits 0 if you own it
 caws status                                # Agents panel: other live sessions
 caws agents list                           # active / stale / stopped sessions
+# The authority-mutating commands (specs activate, worktree create/bind/merge,
+# mutating claim) also print an advisory peer-presence block themselves when
+# live peers exist — visibility only, never a refusal or an authority input.
 
 # When done: merge (auto-closes the bound spec, deletes the merged branch)
 caws worktree merge wt-auth

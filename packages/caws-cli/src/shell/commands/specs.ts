@@ -64,6 +64,7 @@ import * as fs from 'node:fs';
 import { buildActor } from '../session/actor';
 import { resolveSession } from '../session/resolve-session';
 import { renderDiagnostics } from '../render/diagnostic';
+import { emitPeerPresence } from '../render/peer-presence';
 
 // --mode / --resolution validation reads the kernel's single enum source
 // (SPEC_MODES / SPEC_RESOLUTIONS) rather than re-declaring the values here.
@@ -1548,6 +1549,16 @@ export function runSpecsActivateCommand(opts: SpecsActivateOptions): number {
     ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'activate'
   );
   if (actor === null) return 2;
+
+  // PRESENCE-DECISION-POINT-INJECTION-001: advisory peer block at the
+  // authority decision point (Entry 36 — activate is where a slice claim
+  // becomes exclusive). Render-only, fail-open; emits nothing with no peers.
+  emitPeerPresence({
+    cawsDir: ctx.cawsDir,
+    now: nowFn(),
+    selfSessionId: actor.session_id,
+    out,
+  });
 
   const result = activateSpec(ctx.cawsDir, {
     id: opts.id,

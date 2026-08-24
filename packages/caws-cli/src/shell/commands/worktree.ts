@@ -58,6 +58,7 @@ import { clearSpecBinding } from '../../store/specs-writer';
 import { buildActor } from '../session/actor';
 import { admitsOwner, resolveSession, resolveSessionCandidates } from '../session/resolve-session';
 import { renderDiagnostics } from '../render/diagnostic';
+import { emitPeerPresence } from '../render/peer-presence';
 
 interface BaseCommandOptions {
   readonly cwd?: string;
@@ -270,6 +271,16 @@ export function runWorktreeCreateCommand(opts: WorktreeCreateOptions): number {
     (input as { baseBranch?: string }).baseBranch = opts.baseBranch;
   if (opts.branch !== undefined) (input as { branch?: string }).branch = opts.branch;
 
+  // PRESENCE-DECISION-POINT-INJECTION-001: advisory peer block at the
+  // authority decision point (Entry 36 — create is the point of no easy
+  // return, where ownership is stamped). Render-only, fail-open.
+  emitPeerPresence({
+    cawsDir: ctx.cawsDir,
+    now: nowFn(),
+    selfSessionId: id.session.session_id,
+    out,
+  });
+
   const result = createWorktree(ctx.cawsDir, input);
   if (!isOk(result)) {
     err('caws worktree create: failed.');
@@ -350,6 +361,15 @@ export function runWorktreeBindCommand(opts: WorktreeBindOptions): number {
   // exhaustive candidate set destroy/merge build. Distinct from id.session
   // (single-identity event actor).
   const sessionCandidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env });
+
+  // PRESENCE-DECISION-POINT-INJECTION-001: advisory peer block at the
+  // authority decision point (bind mutates the worktree↔spec binding).
+  emitPeerPresence({
+    cawsDir: ctx.cawsDir,
+    now: nowFn(),
+    selfSessionId: id.session.session_id,
+    out,
+  });
 
   const result = bindWorktreeRepair(ctx.cawsDir, {
     name: opts.name,
@@ -628,6 +648,17 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
   // through to the real merge in the same command. If not, print findings and
   // exit 1 WITHOUT merging (a precondition gate, not a force). The writer is
   // unchanged — this is pure shell-layer composition of two calls.
+  //
+  // PRESENCE-DECISION-POINT-INJECTION-001: advisory peer block at the
+  // authority decision point (merge advances the base branch for everyone).
+  // Emitted after argument validation so usage refusals stay clean.
+  emitPeerPresence({
+    cawsDir: ctx.cawsDir,
+    now: nowFn(),
+    selfSessionId: id.session.session_id,
+    out,
+  });
+
   if (opts.apply === true) {
     const gate = mergeWorktree(ctx.cawsDir, { ...input, dryRun: true });
     if (!isOk(gate)) {

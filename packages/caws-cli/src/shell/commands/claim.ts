@@ -73,6 +73,7 @@ import { applyTakeoverWithAudit } from '../../store/worktrees-writer';
 import { resolveBinding } from '../binding/resolve-binding';
 import { renderClaimPanel, classifyOwnership } from '../render/claim';
 import { renderDiagnostics } from '../render/diagnostic';
+import { emitPeerPresence } from '../render/peer-presence';
 import { resolveSession, resolveSessionCandidates } from '../session/resolve-session';
 
 export interface ClaimCommandOptions {
@@ -353,6 +354,19 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
   // cwd-independent capsule read, so an agent claiming its OWN worktree is not
   // forced to --takeover. Never mints; read-only resolution over env + capsules.
   const sessionCandidates = resolveSessionCandidates({ cawsDir, env });
+
+  // PRESENCE-DECISION-POINT-INJECTION-001: advisory peer block at the
+  // authority decision point — only on the MUTATING paths (claim/takeover/
+  // --paths/--release-paths --apply); --plan and dry-run release-paths stay
+  // byte-identical to the pre-change read-only output. Render-only, fail-open.
+  if (!isReadOnly) {
+    emitPeerPresence({
+      cawsDir,
+      now: nowFn(),
+      selfSessionId: session.session_id,
+      out,
+    });
+  }
 
   // 4. Binding from cwd.
   const bound = resolveBinding({
