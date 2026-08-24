@@ -127,3 +127,8 @@ contracts:
   - name: 'lease-work-state-command'
     type: contract-test
     path: 'packages/caws-cli/tests/shell/agents-work-state.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "jest A1: --set writes work_state+note+updated_at, refreshes last_active, preserves status/started_at, own per-session file"
+    recorded_at: "2026-08-24T21:06:51.201Z"
