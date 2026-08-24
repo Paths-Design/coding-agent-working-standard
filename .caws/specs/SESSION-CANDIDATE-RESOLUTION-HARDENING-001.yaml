@@ -2,9 +2,10 @@ id: SESSION-CANDIDATE-RESOLUTION-HARDENING-001
 title: 'Stop resolveSessionCandidates over-matching distinct same-repo sessions (D3 successor); a capsule must not admit a foreign session as a candidate'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-cand-harden
 created_at: '2026-05-31T00:00:00.000Z'
-updated_at: '2026-05-31T00:00:00.000Z'
+updated_at: '2026-08-24T21:39:41.365Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/session/resolve-session.ts
