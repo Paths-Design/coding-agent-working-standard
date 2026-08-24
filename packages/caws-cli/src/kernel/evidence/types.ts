@@ -80,6 +80,9 @@ export type EventType =
   | 'worktree_untracked'
   | 'worktree_ownership_seized'
   | 'claim_taken_over'
+  | 'claim_bridged'
+  | 'bridge_claim_taken_over'
+  | 'claim_released'
   | 'evidence_recorded'
   | 'ac_recorded'
   | 'test_recorded'
@@ -125,6 +128,9 @@ export const REQUIRES_SPEC_ID: ReadonlySet<EventType> = new Set<EventType>([
   'gate_evaluated',
   'waiver_applied',
   'waiver_revoked',
+  // AUTH-BINDING-BRIDGE-001: bridge acquire/takeover always name the spec.
+  'claim_bridged',
+  'bridge_claim_taken_over',
   'worktree_bound',
   // WORKTREE-ISOLATION-HARDENING-001 Fix 4: a forced bind-steal always binds
   // to a spec, so the seizure event carries the bound spec_id like
@@ -148,6 +154,7 @@ export const OPTIONAL_SPEC_ID: ReadonlySet<EventType> = new Set<EventType>([
   // one exists, but registry-only releases are legitimate.
   'worktree_untracked',
   'claim_taken_over',
+  'claim_released',
   'commit_made',
 ]);
 

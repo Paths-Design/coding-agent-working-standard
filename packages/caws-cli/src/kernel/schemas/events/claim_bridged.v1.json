@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/claim_bridged.v1.json",
+  "title": "claim_bridged event payload",
+  "$comment": "Class: REQUIRES_SPEC_ID. AUTH-BINDING-BRIDGE-001: a non-worktree session acquired a bridge authority binding to the named spec. The state twin is .caws/claims/bridge.json (written in the same lifecycle transaction). Bridge is authority, not scope expansion: the bound spec's scope.in is the admission surface, nothing wider.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["session_id"],
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The session that acquired the bridge binding."
+    },
+    "platform": {
+      "type": "string",
+      "description": "claude-code | codex | zcode | other; informational."
+    },
+    "context_cwd": {
+      "type": "string",
+      "description": "The cwd the bridge was acquired from (diagnostic provenance)."
+    }
+  }
+}

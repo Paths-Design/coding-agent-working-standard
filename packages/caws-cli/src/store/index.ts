@@ -56,6 +56,23 @@ export type {
 } from './specs-migration';
 
 export { loadPolicy } from './policy-store';
+
+// ─── bridge claims (AUTH-BINDING-BRIDGE-001) ─────────────────────────────
+// Authority binding store for non-worktree contexts. Sole I/O surface for
+// .caws/claims/bridge.json; every mutation pairs state + audit event in one
+// lifecycle transaction (retire/prune is read-side + eventless hygiene).
+export {
+  loadBridges,
+  acquireBridge,
+  takeoverBridge,
+  releaseBridge,
+  pruneBridgeGhosts,
+} from './bridge-store';
+export type {
+  BridgeEntry,
+  BridgeRegistry,
+  BridgeGhostCandidate,
+} from './bridge-store';
 export { loadWorktrees } from './worktrees-store';
 export { loadAgents } from './agents-store';
 export { appendEvent, loadEvents, rotateEvents } from './events-store';

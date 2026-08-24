@@ -197,6 +197,9 @@ export const STORE_RULES = {
    *  session with a fresh heartbeat. The alias names a binding, not an
    *  address — resolution is refused rather than guessed. */
   MESSAGES_ALIAS_UNRESOLVED: 'store.messages.alias_unresolved',
+  // AUTH-BINDING-BRIDGE-001: bridge-binding refusals.
+  BRIDGE_FOREIGN_OWNER: 'store.claims.bridge_foreign_owner',
+  BRIDGE_FILE_INVALID: 'store.claims.bridge_file_invalid',
 } as const;
 
 export type StoreRule = (typeof STORE_RULES)[keyof typeof STORE_RULES];
