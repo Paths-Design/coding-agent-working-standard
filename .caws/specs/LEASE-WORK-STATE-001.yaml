@@ -132,3 +132,7 @@ evidence:
     status: pass
     evidence_ref: "jest A1: --set writes work_state+note+updated_at, refreshes last_active, preserves status/started_at, own per-session file"
     recorded_at: "2026-08-24T21:06:51.201Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "jest A2: agents list renders 'review_ready' for declaring lease; non-declaring lease renders legacy shape with no placeholder"
+    recorded_at: "2026-08-24T21:06:51.564Z"
