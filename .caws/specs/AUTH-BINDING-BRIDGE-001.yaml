@@ -208,3 +208,7 @@ evidence:
     status: pass
     evidence_ref: "jest A1: claim --spec BR-901 records bridge.json + claim_bridged; scope show in-scope => admit/bridged/authoritative; out-of-scope => reject/bridged; foreign session => no_authority (identity-keyed)"
     recorded_at: "2026-08-24T22:30:48.019Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "jest A2: worktree-held spec refuses the bridge naming wt-held + owner-w; no bridge.json; zero events. Store A2: foreign-acquire rule store.claims.bridge_foreign_owner"
+    recorded_at: "2026-08-24T22:30:48.391Z"
