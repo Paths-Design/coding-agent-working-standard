@@ -47,10 +47,13 @@ export { canTransitionSpecWithWorktree } from './transitions';
 export {
   LAST_MODIFIED_PATHS_MAX_ENTRIES,
   LEASE_RULES,
+  LEASE_WORK_STATES,
+  WORK_STATE_NOTE_MAX_CHARS,
   registerAgentSession,
   heartbeatAgentSession,
   stopAgentSession,
   summarizeActiveAgents,
+  setAgentLeaseWorkState,
   updateAgentLeasePaths,
   validateLeasePathMetadata,
 } from './leases';
@@ -62,6 +65,8 @@ export type {
   LeaseReason,
   LeaseRegistry,
   LeaseRule,
+  LeaseWorkState,
+  SetAgentLeaseWorkStateOptions,
   UpdateAgentLeasePathsOptions,
   ValidatedLeasePathMetadata,
 } from './leases';

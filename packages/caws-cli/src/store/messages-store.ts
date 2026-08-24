@@ -353,6 +353,8 @@ export interface MessageSenderContext {
   readonly worktree?: string;
   readonly specId?: string;
   readonly branch?: string;
+  /** Visibility-only work-state annotation (LEASE-WORK-STATE-001), when the sender's lease records it. */
+  readonly workState?: string;
 }
 
 /**
@@ -364,10 +366,10 @@ function senderContextFor(cawsDir: string, senderId: string): MessageSenderConte
   const leasesResult = loadLeases(cawsDir);
   if (!leasesResult.ok) return undefined;
   const lease = leasesResult.value.leases[senderId] as
-    | { bound_worktree?: unknown; bound_spec_id?: unknown; branch?: unknown }
+    | { bound_worktree?: unknown; bound_spec_id?: unknown; branch?: unknown; work_state?: unknown }
     | undefined;
   if (!lease) return undefined;
-  const ctx: { worktree?: string; specId?: string; branch?: string } = {};
+  const ctx: { worktree?: string; specId?: string; branch?: string; workState?: string } = {};
   if (typeof lease.bound_worktree === 'string' && lease.bound_worktree.length > 0) {
     ctx.worktree = lease.bound_worktree;
   }
@@ -376,6 +378,9 @@ function senderContextFor(cawsDir: string, senderId: string): MessageSenderConte
   }
   if (typeof lease.branch === 'string' && lease.branch.length > 0) {
     ctx.branch = lease.branch;
+  }
+  if (typeof lease.work_state === 'string' && lease.work_state.length > 0) {
+    ctx.workState = lease.work_state;
   }
   return Object.keys(ctx).length > 0 ? ctx : undefined;
 }

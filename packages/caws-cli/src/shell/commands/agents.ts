@@ -37,12 +37,15 @@ import {
   registerAgentSession,
   heartbeatAgentSession,
   stopAgentSession,
+  setAgentLeaseWorkState,
   summarizeActiveAgents,
+  LEASE_WORK_STATES,
   type ActivitySummary,
   type AgentLease,
   type LeaseContext,
   type LeaseReason,
   type LeaseRegistry,
+  type LeaseWorkState,
   type SessionIdentity,
 } from '../../kernel';
 
@@ -561,7 +564,10 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
   } else {
     out(`active: ${summary.active.length}`);
     for (const l of summary.active) {
-      out(`  ${l.session_id}  ${l.bound_worktree ?? '(no worktree)'}  ${l.bound_spec_id ?? '(no spec)'}`);
+      // LEASE-WORK-STATE-001: append the visibility-only state tag when
+      // declared; absent renders nothing extra.
+      const stateTag = l.work_state !== undefined ? `  ${l.work_state}` : '';
+      out(`  ${l.session_id}  ${l.bound_worktree ?? '(no worktree)'}  ${l.bound_spec_id ?? '(no spec)'}${stateTag}`);
     }
     if (wantsStale) {
       out(`stale:  ${summary.stale.length}`);
@@ -720,6 +726,147 @@ export function runAgentsPruneCommand(opts: PruneOpts): number {
       const tag = r.value.deleted.includes(id) ? 'DELETED' : 'would-delete';
       out(`  ${tag} ${id}`);
     }
+  }
+  return 0;
+}
+
+// ─── caws agents work-state (LEASE-WORK-STATE-001) ─────────────────────────
+
+export interface WorkStateOpts extends BaseAgentsOpts {
+  /** State to set (closed enum). Mutually exclusive with clear. */
+  readonly set?: string;
+  /** Remove the work-state annotation entirely. Mutually exclusive with set. */
+  readonly clear?: boolean;
+  /** Optional bounded note accompanying the state. */
+  readonly note?: string;
+}
+
+/**
+ * `caws agents work-state [--set <state> [--note <t>]] | --clear`.
+ *
+ * Bare form is read-only: prints the resolved (or --session-id) session's
+ * work state, or "(none)". Write forms go through the kernel's
+ * setAgentLeaseWorkState (enum validation, note caps, not-a-fabrication-
+ * route existence check) and the store's narrow applyLeasePatch arm.
+ *
+ * VISIBILITY ONLY: the annotation is read by agents list/show, the status
+ * Agents panel, and the message sender-context join; no authority path
+ * consults it (spec A4 mutation-negative test enforces this).
+ * Exit codes: 0 success/observation, 1 domain refusal, 2 composition failure.
+ */
+export function runAgentsWorkStateCommand(opts: WorkStateOpts = {}): number {
+  const { cwd, nowFn, env, out, err, showData, json } = setupIO(opts);
+
+  const repoRootResult = resolveRepoRoot(cwd);
+  if (!isOk(repoRootResult)) {
+    err('caws agents work-state: failed to resolve repo root.');
+    err(renderDiagnostics(repoRootResult.errors, { showData }));
+    return 2;
+  }
+  const { cawsDir } = repoRootResult.value;
+
+  const idRes = resolveIdentityForCommand(
+    opts,
+    { cawsDir, cwd, env, nowFn },
+    /* allowMint */ false,
+    err
+  );
+  if (idRes === null) return 1;
+  const sid = idRes.identity.session_id;
+
+  // Write path.
+  if (opts.set !== undefined || opts.clear === true) {
+    if (opts.set !== undefined && opts.clear === true) {
+      err('caws agents work-state: --set and --clear are mutually exclusive.');
+      return 1;
+    }
+    if (opts.clear !== true && !(LEASE_WORK_STATES as readonly string[]).includes(opts.set ?? '')) {
+      err(`caws agents work-state: "${opts.set}" is not a valid work state.`);
+      err(`Accepted values: ${LEASE_WORK_STATES.join(', ')}`);
+      return 1;
+    }
+
+    const loadRes = loadLeases(cawsDir);
+    if (!isOk(loadRes)) {
+      err('caws agents work-state: lease directory unreadable.');
+      err(renderDiagnostics(loadRes.errors, { showData }));
+      return 2;
+    }
+
+    const patchRes = setAgentLeaseWorkState(
+      loadRes.value.leases,
+      idRes.identity,
+      {
+        ...(opts.clear === true ? { clear: true } : {}),
+        ...(opts.set !== undefined ? { work_state: opts.set as LeaseWorkState } : {}),
+        ...(opts.note !== undefined ? { work_state_note: opts.note } : {}),
+      },
+      nowFn()
+    );
+    if (!isOk(patchRes)) {
+      err('caws agents work-state: kernel refused.');
+      err(renderDiagnostics(patchRes.errors, { showData }));
+      return 1;
+    }
+
+    const applyRes = applyLeasePatch(cawsDir, patchRes.value);
+    if (!isOk(applyRes)) {
+      err('caws agents work-state: store write failed.');
+      err(renderDiagnostics(applyRes.errors, { showData }));
+      return 1;
+    }
+
+    if (json) {
+      emitJson(out, {
+        ok: true,
+        session_id: sid,
+        ...(opts.clear === true
+          ? { cleared: true }
+          : { work_state: opts.set, ...(opts.note !== undefined ? { note: opts.note } : {}) }),
+      });
+    } else {
+      out(
+        opts.clear === true
+          ? `cleared work state for ${sid}`
+          : `set work state ${opts.set} for ${sid}${opts.note !== undefined ? ` (note: ${opts.note})` : ''}`
+      );
+    }
+    return 0;
+  }
+
+  if (opts.note !== undefined) {
+    err('caws agents work-state: --note requires --set.');
+    return 1;
+  }
+
+  // Bare form: read-only show.
+  const loadRes = loadLeases(cawsDir);
+  if (!isOk(loadRes)) {
+    err('caws agents work-state: lease directory unreadable.');
+    err(renderDiagnostics(loadRes.errors, { showData }));
+    return 2;
+  }
+  const lease = (loadRes.value.leases[sid] ?? null) as AgentLease | null;
+  if (lease === null) {
+    if (json) emitJson(out, { ok: true, session_id: sid, work_state: null });
+    else out(`no lease for ${sid} (register first to declare work state)`);
+    return 0;
+  }
+  if (json) {
+    emitJson(out, {
+      ok: true,
+      session_id: sid,
+      work_state: lease.work_state ?? null,
+      ...(lease.work_state_note !== undefined ? { note: lease.work_state_note } : {}),
+      ...(lease.work_state_updated_at !== undefined
+        ? { updated_at: lease.work_state_updated_at }
+        : {}),
+    });
+  } else if (lease.work_state === undefined) {
+    out(`work state for ${sid}: (none)`);
+  } else {
+    out(`work state for ${sid}: ${lease.work_state}`);
+    if (lease.work_state_note !== undefined) out(`  note: ${lease.work_state_note}`);
   }
   return 0;
 }

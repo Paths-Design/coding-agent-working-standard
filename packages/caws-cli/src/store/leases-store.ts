@@ -405,6 +405,77 @@ export function applyLeasePatch(
     return ok({ wrote: true, diagnostics: [] });
   }
 
+  // update_lease_work_state (LEASE-WORK-STATE-001)
+  if (patch.kind === 'update_lease_work_state') {
+    // Narrow partial update of the visibility-only work-state annotation.
+    // The kernel has already enum/shape-validated; the store reads the prior
+    // lease, applies the work-state keys (or removes them on clear),
+    // refreshes last_active, and atomic-writes back. status, last_seen_reason,
+    // started_at, stopped_at, and all context fields are preserved from the
+    // prior lease. Same missing-file defensive refusal as update_lease_paths.
+    if (!fs.existsSync(filePath)) {
+      const warn = storeDiagnostic(
+        STORE_RULES.LEASE_STOP_NO_PRIOR_LEASE,
+        `update_lease_work_state: no existing lease file for session "${patch.session_id}" — nothing to update.`,
+        { severity: 'warning', subject: filePath, data: { session_id: patch.session_id } }
+      );
+      return ok({ wrote: false, diagnostics: [warn] });
+    }
+
+    let raw: string;
+    try {
+      raw = fs.readFileSync(filePath, 'utf8');
+    } catch (e) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LEASE_WRITE_FAILED,
+          `Failed to read existing lease for update_lease_work_state: ${(e as Error).message}`,
+          { subject: filePath }
+        )
+      );
+    }
+
+    let prior: AgentLease;
+    try {
+      prior = JSON.parse(raw) as AgentLease;
+    } catch (e) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LEASE_FILE_MALFORMED,
+          `Existing lease file is not valid JSON: ${(e as Error).message}`,
+          { subject: filePath }
+        )
+      );
+    }
+
+    // Build the merged lease. Spread prior first; on clear, strip the three
+    // work-state keys; otherwise overlay the patch keys. last_active is
+    // refreshed (declaring work state is liveness evidence); the note is
+    // replaced only when the patch carries one (undefined = leave existing).
+    const { work_state, work_state_note, work_state_updated_at, ...priorRest } = prior;
+    void work_state; void work_state_note; void work_state_updated_at;
+    const updated: AgentLease = {
+      ...priorRest,
+      ...(patch.clear
+        ? {}
+        : {
+            ...(patch.work_state !== undefined ? { work_state: patch.work_state } : {}),
+            ...(patch.work_state_note !== undefined
+              ? { work_state_note: patch.work_state_note }
+              : prior.work_state_note !== undefined
+                ? { work_state_note: prior.work_state_note }
+                : {}),
+            work_state_updated_at: patch.work_state_updated_at,
+          }),
+      last_active: patch.last_active_refreshed_at,
+    };
+
+    const contents = JSON.stringify(updated, null, 2) + '\n';
+    const w = writeFileAtomic(filePath, contents);
+    if (w.ok === false) return err(w.errors);
+    return ok({ wrote: true, diagnostics: [] });
+  }
+
   // delete_lease
   if (!fs.existsSync(filePath)) {
     // Idempotent: deleting an absent lease is a no-op success.

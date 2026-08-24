@@ -1492,7 +1492,7 @@ export const AGENTS_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'agents',
   description:
-    'Agent liveness substrate: register/heartbeat/stop/list/show/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.',
+    'Agent liveness substrate: register/heartbeat/stop/list/show/work-state/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.',
   subcommands: [
     {
       kind: 'leaf',
@@ -1566,6 +1566,23 @@ export const AGENTS_COMMAND_META: GroupCommandMeta = {
       argument: { name: 'id', required: true, description: 'Session id of the lease to show' },
       description: 'Show one lease by session id. Read-only.',
       options: [
+        { flag: '--json', description: 'Emit CAWS-native JSON to stdout' },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'work-state',
+      description:
+        'Visibility-only work-state annotation on this session\'s lease (LEASE-WORK-STATE-001). Bare form shows the current state. Answers "who is blocked on a human / ready for review / done?" in agents list, status, and message sender context. NEVER authority.',
+      options: [
+        {
+          flag: '--set <state>',
+          description: 'Set the state: working | blocked_awaiting_human | review_ready | done',
+        },
+        { flag: '--clear', description: 'Remove the work-state annotation entirely' },
+        { flag: '--note <text>', description: 'Optional bounded note (max 200 chars) accompanying --set' },
+        { flag: '--session-id <id>', description: 'Explicit session id (overrides resolveSession)' },
         { flag: '--json', description: 'Emit CAWS-native JSON to stdout' },
         DATA_OPTION,
       ],

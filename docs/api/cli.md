@@ -1260,6 +1260,22 @@ caws agents show <session-id> --json
 
 Show one lease by session id. Read-only.
 
+### `caws agents work-state`
+
+```bash
+caws agents work-state
+caws agents work-state --set blocked_awaiting_human --note "waiting on human review"
+caws agents work-state --clear
+caws agents work-state --json
+```
+
+Visibility-only work-state annotation on this session's lease
+(LEASE-WORK-STATE-001). Bare form shows the current state. The closed enum is
+`working | blocked_awaiting_human | review_ready | done`; `--note` is bounded
+(200 chars). The annotation surfaces in `agents list`, the status Agents
+panel, and message sender-context — it is never authority, never consulted by
+any gate, and never rescued from staleness.
+
 ### `caws agents prune`
 
 ```bash

@@ -172,6 +172,12 @@ function renderLeaseRow(lease: AgentLease, selfSessionId: string | null, now: Da
     lease.bound_worktree !== undefined
       ? `wt=${lease.bound_worktree}`
       : '';
+  // LEASE-WORK-STATE-001: visibility-only annotation; absent field renders
+  // nothing (no placeholder noise for leases that never declared state).
+  const stateTag =
+    lease.work_state !== undefined
+      ? `state=${lease.work_state}`
+      : '';
   const parts = [
     lease.session_id,
     lease.platform,
@@ -179,6 +185,7 @@ function renderLeaseRow(lease: AgentLease, selfSessionId: string | null, now: Da
     `branch=${branch}`,
     `spec=${spec}`,
     wtTag,
+    stateTag,
     `${age} ago`,
   ].filter((s) => s.length > 0);
   return parts.join('  ') + (isSelf ? '  ← self' : '');

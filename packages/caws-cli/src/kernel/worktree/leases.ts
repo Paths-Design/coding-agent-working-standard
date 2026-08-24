@@ -57,6 +57,9 @@ export const LEASE_RULES = {
   LEASE_PATH_EMPTY: 'kernel.lease.path_empty',
   LEASE_PATH_NULL_BYTE: 'kernel.lease.path_null_byte',
   LEASE_NOT_FOUND: 'kernel.lease.not_found',
+  // LEASE-WORK-STATE-001: work_state outside the closed enum, a --set/--clear
+  // combination error, or an invalid note (empty over cap, null byte).
+  LEASE_WORK_STATE_INVALID: 'kernel.lease.work_state_invalid',
 } as const;
 
 export type LeaseRule = (typeof LEASE_RULES)[keyof typeof LEASE_RULES];
@@ -75,6 +78,33 @@ export type LeaseReason =
   | 'status'
   | 'manual_register'
   | 'session_stop';
+
+/**
+ * Optional work-state dimension (LEASE-WORK-STATE-001).
+ *
+ * A VISIBILITY-ONLY annotation an agent sets on its own lease to answer
+ * "who is blocked on a human / ready for review / done?" — the sidebar-state
+ * question failure-lineage Entries 16 and 36 could not answer. It is NEVER
+ * authority: no scope admission, claim, merge/destroy/bind gate, gate run,
+ * or message-liveness decision may read it. It never influences the
+ * active/stale/stopped classification.
+ */
+export type LeaseWorkState =
+  | 'working'
+  | 'blocked_awaiting_human'
+  | 'review_ready'
+  | 'done';
+
+/** Closed enum source (mirrors the LeaseReason pattern). */
+export const LEASE_WORK_STATES = [
+  'working',
+  'blocked_awaiting_human',
+  'review_ready',
+  'done',
+] as const;
+
+/** Max retained characters in work_state_note. Longer notes are refused. */
+export const WORK_STATE_NOTE_MAX_CHARS = 200;
 
 /**
  * On-disk AgentLease record.
@@ -133,6 +163,17 @@ export interface AgentLease {
    * SESSION-OWNERSHIP-METADATA-001 A3.
    */
   readonly last_modified_paths?: readonly string[];
+  /**
+   * Visibility-only work-state annotation (LEASE-WORK-STATE-001). Absent by
+   * default ("no information"). Carried forward by register/heartbeat so a
+   * 15s-throttled heartbeat never wipes an explicit declaration; cleared only
+   * by an explicit update_lease_work_state patch with clear=true.
+   */
+  readonly work_state?: LeaseWorkState;
+  /** Free-form note accompanying work_state (bounded, non-empty when present). */
+  readonly work_state_note?: string;
+  /** When work_state was last set/cleared (ISO). */
+  readonly work_state_updated_at?: string;
 }
 
 /**
@@ -195,6 +236,21 @@ export type LeasePatch =
       readonly session_id: string;
       readonly claimed_paths?: readonly string[];
       readonly last_modified_paths?: readonly string[];
+    }
+  // LEASE-WORK-STATE-001: narrow partial update of the work-state annotation.
+  // Touches ONLY work_state/work_state_note/work_state_updated_at plus a
+  // last_active refresh (asserting work state is liveness evidence). It MUST
+  // NOT mutate status, last_seen_reason, started_at, stopped_at, or any
+  // context field. clear=true removes all three work-state keys; otherwise
+  // work_state is required and enum-validated.
+  | {
+      readonly kind: 'update_lease_work_state';
+      readonly session_id: string;
+      readonly clear: boolean;
+      readonly work_state?: LeaseWorkState;
+      readonly work_state_note?: string;
+      readonly work_state_updated_at: string;
+      readonly last_active_refreshed_at: string;
     };
 
 /**
@@ -283,6 +339,20 @@ export function registerAgentSession(
   const existing = leases[me.session_id];
   const startedAt = existing?.started_at ?? nowIso;
 
+  // LEASE-WORK-STATE-001: carry forward the optional metadata declarations
+  // (work-state annotation + SESSION-OWNERSHIP-METADATA-001 path arrays)
+  // from the existing record. write_lease replaces the whole file, so without
+  // this the 15s-throttled PreToolUse heartbeat would wipe every explicit
+  // declaration — a latent wipe the work-state slice closes for all three
+  // fields. Explicit declarations survive liveness refreshes by design.
+  const carryForward = existing !== undefined ? {
+    ...(existing.claimed_paths !== undefined ? { claimed_paths: existing.claimed_paths } : {}),
+    ...(existing.last_modified_paths !== undefined ? { last_modified_paths: existing.last_modified_paths } : {}),
+    ...(existing.work_state !== undefined ? { work_state: existing.work_state } : {}),
+    ...(existing.work_state_note !== undefined ? { work_state_note: existing.work_state_note } : {}),
+    ...(existing.work_state_updated_at !== undefined ? { work_state_updated_at: existing.work_state_updated_at } : {}),
+  } : {};
+
   const lease: AgentLease = {
     lease_version: 1,
     session_id: me.session_id,
@@ -301,6 +371,7 @@ export function registerAgentSession(
     ...(ctx.hostname !== undefined ? { hostname: ctx.hostname } : {}),
     ...(ctx.session_log_path !== undefined ? { session_log_path: ctx.session_log_path } : {}),
     ...(ctx.hook_pack_version !== undefined ? { hook_pack_version: ctx.hook_pack_version } : {}),
+    ...carryForward,
     last_seen_reason: reason,
   };
 
@@ -545,6 +616,109 @@ export function updateAgentLeasePaths(
       : {}),
   };
 
+  return ok(patch);
+}
+
+// ─── LEASE-WORK-STATE-001: work-state write path ─────────────────────────
+
+export interface SetAgentLeaseWorkStateOptions {
+  /** Remove the work-state annotation entirely (drops all three keys). */
+  readonly clear?: boolean;
+  /** The state to set. Required unless clear is true. */
+  readonly work_state?: LeaseWorkState;
+  /** Optional bounded note. Undefined = leave any existing note untouched (unless clearing). */
+  readonly work_state_note?: string;
+}
+
+/**
+ * Compute a partial-update patch for the visibility-only work-state
+ * annotation (LEASE-WORK-STATE-001).
+ *
+ * Validation:
+ *   - Exactly one of clear / work_state (both or neither is a usage error).
+ *   - work_state must be a member of the closed LEASE_WORK_STATES enum.
+ *   - work_state_note, when defined: non-empty string, no U+0000 byte,
+ *     at most WORK_STATE_NOTE_MAX_CHARS characters.
+ *
+ * Refuses if no existing lease is present for the session_id — same
+ * not-a-fabrication-route rule as updateAgentLeasePaths.
+ *
+ * The patch refreshes last_active (asserting work state is liveness
+ * evidence: an agent declaring blocked_awaiting_human is alive) and touches
+ * nothing else. Authority blindness is structural: nothing in this module's
+ * authority-relevant outputs reads work_state.
+ */
+export function setAgentLeaseWorkState(
+  leases: LeaseRegistry,
+  session: SessionIdentity,
+  opts: SetAgentLeaseWorkStateOptions,
+  now: Date
+): Result<LeasePatch> {
+  const sessionRes = validateSessionIdentity(session);
+  if (sessionRes.ok === false) return sessionRes;
+  const me = sessionRes.value;
+
+  const bad = (message: string, data?: Record<string, unknown>) =>
+    err(
+      diagnostic({
+        rule: LEASE_RULES.LEASE_WORK_STATE_INVALID,
+        authority: 'kernel/worktree',
+        severity: 'error',
+        message,
+        ...(data !== undefined ? { data } : {}),
+      })
+    );
+
+  const clear = opts.clear === true;
+  if (clear && opts.work_state !== undefined) {
+    return bad('Provide clear OR work_state, not both.');
+  }
+  if (!clear && opts.work_state === undefined) {
+    return bad('A work_state is required (or pass clear).');
+  }
+  if (opts.work_state !== undefined
+    && !(LEASE_WORK_STATES as readonly string[]).includes(opts.work_state)) {
+    return bad(
+      `work_state "${String(opts.work_state)}" is not in the closed enum {${LEASE_WORK_STATES.join(', ')}}.`,
+      { actual: String(opts.work_state) }
+    );
+  }
+  if (opts.work_state_note !== undefined) {
+    const note = opts.work_state_note;
+    if (typeof note !== 'string' || note.length === 0) {
+      return bad('work_state_note must be a non-empty string when provided.');
+    }
+    if (note.length > WORK_STATE_NOTE_MAX_CHARS) {
+      return bad(`work_state_note exceeds ${WORK_STATE_NOTE_MAX_CHARS} characters (got ${note.length}).`);
+    }
+    if (note.indexOf('\u0000') !== -1) {
+      return bad('work_state_note contains a null byte (U+0000).');
+    }
+  }
+
+  // Existence check — not a lease-fabrication route.
+  if (!Object.prototype.hasOwnProperty.call(leases, me.session_id)) {
+    return err(
+      diagnostic({
+        rule: LEASE_RULES.LEASE_NOT_FOUND,
+        authority: 'kernel/worktree',
+        severity: 'error',
+        message: `No existing lease for session "${me.session_id}". Register the session before declaring work state.`,
+        data: { session_id: me.session_id },
+      })
+    );
+  }
+
+  const nowIso = now.toISOString();
+  const patch: LeasePatch = {
+    kind: 'update_lease_work_state',
+    session_id: me.session_id,
+    clear,
+    ...(clear ? {} : { work_state: opts.work_state }),
+    ...(opts.work_state_note !== undefined ? { work_state_note: opts.work_state_note } : {}),
+    work_state_updated_at: nowIso,
+    last_active_refreshed_at: nowIso,
+  };
   return ok(patch);
 }
 
