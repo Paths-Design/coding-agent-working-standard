@@ -216,3 +216,7 @@ evidence:
     status: pass
     evidence_ref: "jest A3: bare foreign acquire refuses naming sess-a; --takeover rewrites to sess-b, prior_owners[0]=sess-a on the entry, bridge_claim_taken_over=1"
     recorded_at: "2026-08-24T22:30:48.761Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "jest A4: named release removes exactly BR-904 (claim_released=1, BR-905 intact); bare release frees the rest (=2); foreign release and release-of-nothing refuse"
+    recorded_at: "2026-08-24T22:30:49.123Z"
