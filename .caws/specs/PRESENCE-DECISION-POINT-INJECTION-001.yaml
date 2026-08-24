@@ -152,3 +152,7 @@ evidence:
     status: pass
     evidence_ref: "jest A6: 8 peers -> exactly 5 peer lines + '... and 3 more' agents-list handoff"
     recorded_at: "2026-08-24T19:30:50.703Z"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "tests/init/pack-fingerprint.test.js green with SHARED_PACK_VERSION 45 + recomputed 9ba692e9...; npm run docs:check green; full suite 2011/2011"
+    recorded_at: "2026-08-24T19:30:51.089Z"
