@@ -2,9 +2,10 @@ id: PRESENCE-DECISION-POINT-INJECTION-001
 title: 'Advisory peer-presence at authority decision points (activate/create/bind/merge/claim + SessionStart)'
 risk_tier: 3
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-presence
 created_at: '2026-08-24T18:48:30.678Z'
-updated_at: '2026-08-24T18:55:00.000Z'
+updated_at: '2026-08-24T19:13:13.282Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/specs.ts
