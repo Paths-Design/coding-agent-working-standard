@@ -144,3 +144,7 @@ evidence:
     status: pass
     evidence_ref: "jest A4 (mutation-negative): summarizeActiveAgents and describeRecipientLiveness produce identical classifications with annotation present, stripped, and altered"
     recorded_at: "2026-08-24T21:06:52.332Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "jest A5: message poll --json sender context carries workState=review_ready; degraded shape when absent"
+    recorded_at: "2026-08-24T21:06:52.702Z"
