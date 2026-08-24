@@ -1,0 +1,28 @@
+id: WORKTREE-ENSURE-AFFORDANCE-001
+title: 'caws worktree ensure --spec: create-or-admit affordance so unbound sessions get the door, not just the refusal'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-08-24T18:48:41.543Z'
+updated_at: '2026-08-24T18:48:41.543Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'worktree-ensure-command'
+    type: contract-test
+    path: 'packages/caws-cli/tests/shell/worktree-ensure.test.js'
