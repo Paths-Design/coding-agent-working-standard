@@ -136,3 +136,7 @@ evidence:
     status: pass
     evidence_ref: "jest A2: zero peers -> stdout exactly ['activated SPEC-002'] (byte-identical baseline)"
     recorded_at: "2026-08-24T19:30:49.137Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "jest A3: corrupt garbage.json lease -> activate succeeds with baseline output, no peer block, no refusal"
+    recorded_at: "2026-08-24T19:30:49.522Z"
