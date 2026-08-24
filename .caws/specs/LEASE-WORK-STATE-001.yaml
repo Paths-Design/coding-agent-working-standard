@@ -148,3 +148,7 @@ evidence:
     status: pass
     evidence_ref: "jest A5: message poll --json sender context carries workState=review_ready; degraded shape when absent"
     recorded_at: "2026-08-24T21:06:52.702Z"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "jest A6: re-register preserves work_state (heartbeat-wipe closed); stale classification ignores it; --clear drops all three keys"
+    recorded_at: "2026-08-24T21:06:53.075Z"
