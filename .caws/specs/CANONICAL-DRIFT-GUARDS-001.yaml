@@ -1,0 +1,31 @@
+id: CANONICAL-DRIFT-GUARDS-001
+title: 'Detect and govern canonical-checkout drift: mis-parked HEAD finding, lifecycle auto-commit target check, governed spec relocation'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-08-24T22:31:49.355Z'
+updated_at: '2026-08-24T22:31:49.355Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'canonical-drift-doctor-finding'
+    type: behavior
+    path: 'packages/caws-cli/src/kernel/doctor/inspect.ts'
+  - name: 'canonical-drift-command'
+    type: contract-test
+    path: 'packages/caws-cli/tests/shell/canonical-drift.test.js'
