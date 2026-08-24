@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-bridge
 created_at: '2026-05-18T00:00:00.000Z'
-updated_at: '2026-08-24T22:08:00.472Z'
+updated_at: '2026-08-24T22:15:37.381Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/kernel/schemas/events/claim_bridged.v1.json
@@ -44,6 +44,7 @@ scope:
     - packages/caws-cli/src/kernel/scope/evaluate.ts
     - packages/caws-cli/src/shell/render/decision.ts
     - packages/caws-cli/src/shell/commands/scope.ts
+    - packages/caws-cli/src/shell/commands/status.ts
   out:
     - .caws/policy.yaml
     - .caws/events.jsonl
