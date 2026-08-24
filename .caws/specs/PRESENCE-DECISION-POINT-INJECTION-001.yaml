@@ -13,7 +13,6 @@ blast_radius:
     - packages/caws-cli/src/shell/render/peer-presence.ts
     - packages/caws-cli/templates/hook-packs/shared/agent-register.sh
   data_migration: false
-  operational_rollback_slo: 5m
 scope:
   in:
     - packages/caws-cli/src/shell/commands/specs.ts

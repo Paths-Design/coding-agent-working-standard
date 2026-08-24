@@ -13,7 +13,6 @@ blast_radius:
     - packages/caws-cli/src/store/messages-store.ts
     - packages/caws-cli/src/shell/render/status.ts
   data_migration: false
-  operational_rollback_slo: 5m
 scope:
   in:
     - packages/caws-cli/src/kernel/worktree/leases.ts
