@@ -1418,10 +1418,20 @@ export function describeSessionSource(s: ResolvedSession): Diagnostic {
 //
 // Source order MIRRORS resolveSession (CLAUDE_SESSION_ID,
 // HOOK_SESSION_ID, capsules, CURSOR_TRACE_ID) but is EXHAUSTIVE — every
-// source is consulted, not first-match. Capsules contribute every
-// well-formed entry under .caws/sessions/*.json regardless of
-// worktree_root, eliminating the cwd-sensitivity that caused
-// CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001.
+// source is consulted, not first-match. Capsules contribute well-formed
+// entries under .caws/sessions/*.json regardless of worktree_root
+// (eliminating the cwd-sensitivity that caused
+// CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001), BUT — since
+// SESSION-CANDIDATE-RESOLUTION-HARDENING-001 — admission is
+// CORROBORATION-GATED when more than one capsule shares the directory:
+// a capsule admits only when the invoking process can legitimately speak
+// for its session (a matching env identity, or the fresh repo-matched
+// caller-session pointer naming it). A single capsule on disk admits
+// unchanged (the machine-and-repo evidence the destroy-from-canonical
+// path pins). Uncorroborated capsules in a multi-capsule repo are
+// rejected WITH REASON in the trace — fail closed: an under-admit
+// degrades to the refusal an explicit --takeover resolves; an over-admit
+// was the D3 breach (a foreign session destroying a peer's worktree).
 //
 // Why no mint: ownership comparison should never invent an identity
 // that didn't exist before the comparison started. Minting on a failed
@@ -1432,8 +1442,41 @@ export function describeSessionSource(s: ResolvedSession): Diagnostic {
 // command already issues, surfaced with the trace so the user sees
 // which sources were consulted.
 
+/**
+ * SESSION-CANDIDATE-RESOLUTION-HARDENING-001: the set of session ids the
+ * invoking process can CORROBORATE — explicit env identities plus the
+ * fresh, repo-matched caller-session pointer (the last-writer lineage on
+ * THIS machine for THIS repo). Best-effort and total: a missing/stale
+ * pointer contributes nothing.
+ */
+function capsuleCorroborationIds(
+  cawsDir: string,
+  env: NodeJS.ProcessEnv,
+  now: Date
+): Set<string> {
+  const ids = new Set<string>();
+  for (const key of ['CAWS_SESSION_ID', 'HOOK_SESSION_ID', 'CURSOR_TRACE_ID'] as const) {
+    const v = env[key];
+    if (typeof v === 'string' && v.length > 0 && v !== 'unknown') ids.add(v);
+  }
+  try {
+    const repoRoot = repoRootFromCawsDir(cawsDir);
+    const homes = sessionStateHomes(repoRoot);
+    const pointerId = readCallerSessionPointer({
+      repoRootReal: realpathSafe(repoRoot),
+      dirs: homes.all,
+      nowMs: now.getTime(),
+    });
+    if (pointerId !== null) ids.add(pointerId);
+  } catch {
+    // Corroboration is best-effort; absence narrows admission (fail closed).
+  }
+  return ids;
+}
+
 function readAllCapsules(
-  cawsDir: string
+  cawsDir: string,
+  corroboration?: { env: NodeJS.ProcessEnv; now: Date }
 ): {
   candidates: SessionCandidate[];
   trace: CandidateTraceEntry;
@@ -1459,6 +1502,11 @@ function readAllCapsules(
   entries.sort();
 
   const candidates: SessionCandidate[] = [];
+  const wellFormed: Array<{
+    name: string;
+    capsulePath: string;
+    parsed: { session_id: string; platform?: string };
+  }> = [];
   let rejectedCount = 0;
   let raceCount = 0;
   const rejectionReasons: string[] = [];
@@ -1501,14 +1549,52 @@ function readAllCapsules(
       rejectionReasons.push(`malformed: ${name}`);
       continue;
     }
-    candidates.push({
-      identity: {
-        session_id: parsed.session_id,
-        platform: parsed.platform,
-      },
-      source: 'capsule',
-      capsulePath,
-    });
+    wellFormed.push({ name, capsulePath, parsed });
+  }
+
+  // SESSION-CANDIDATE-RESOLUTION-HARDENING-001: partition the well-formed
+  // capsules. One capsule on disk admits (compat — the single-session
+  // machine-and-repo evidence CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001
+  // pinned). Two or more capsules sharing the dir means DISTINCT sessions
+  // have minted here; each must then be corroborated (env identity or the
+  // fresh caller pointer) before it speaks for the invoking process.
+  if (corroboration !== undefined && wellFormed.length >= 2) {
+    const ids = capsuleCorroborationIds(cawsDir, corroboration.env, corroboration.now);
+    const uncorroborated: typeof wellFormed = [];
+    for (const w of wellFormed) {
+      if (ids.has(w.parsed.session_id)) {
+        candidates.push({
+          identity: {
+            session_id: w.parsed.session_id,
+            ...(w.parsed.platform !== undefined ? { platform: w.parsed.platform } : {}),
+          },
+          source: 'capsule',
+          capsulePath: w.capsulePath,
+        });
+      } else {
+        uncorroborated.push(w);
+      }
+    }
+    if (uncorroborated.length > 0) {
+      rejectedCount += uncorroborated.length;
+      rejectionReasons.push(
+        ...uncorroborated.map(
+          (w) =>
+            `uncorroborated-capsule: ${w.name} (multi-capsule repo; no env identity, fresh caller pointer, or takeover lineage names this session — D3 over-match guard)`
+        )
+      );
+    }
+  } else {
+    for (const w of wellFormed) {
+      candidates.push({
+        identity: {
+          session_id: w.parsed.session_id,
+          ...(w.parsed.platform !== undefined ? { platform: w.parsed.platform } : {}),
+        },
+        source: 'capsule',
+        capsulePath: w.capsulePath,
+      });
+    }
   }
   if (candidates.length > 0) {
     // CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001 L2: record the
@@ -1522,6 +1608,9 @@ function readAllCapsules(
         outcome: 'admitted',
         count: candidates.length,
         admittedIds: candidates.map((c) => c.identity.session_id),
+        ...(rejectedCount > 0
+          ? { reason: `rejected alongside: ${rejectionReasons.join('; ')}` }
+          : {}),
       },
     };
   }
@@ -1820,8 +1909,13 @@ export function resolveSessionCandidates(
   }
 
   // 3. ALL capsules on disk (NOT cwd-keyed; that is the key distinction
-  //    from resolveSession's step-3 behavior)
-  const capsuleResult = readAllCapsules(opts.cawsDir);
+  //    from resolveSession's step-3 behavior), corroboration-gated when
+  //    multiple capsules share the dir (SESSION-CANDIDATE-RESOLUTION-
+  //    HARDENING-001).
+  const capsuleResult = readAllCapsules(opts.cawsDir, {
+    env,
+    now: opts.now ? opts.now() : new Date(),
+  });
   candidates.push(...capsuleResult.candidates);
   trace.push(capsuleResult.trace);
 
@@ -1897,6 +1991,13 @@ export function describeCandidateTrace(
           const display = id.length > 16 ? `${id.slice(0, 16)}…` : id;
           lines.push(`      candidate: ${display}`);
         }
+      }
+      // SESSION-CANDIDATE-RESOLUTION-HARDENING-001: a mixed admission
+      // (some capsules admitted, others rejected by the D3 guard) carries
+      // its rejections in `reason` — render it so nothing is silently
+      // dropped from the operator-visible trace.
+      if (entry.reason !== undefined) {
+        lines.push(`      note: ${entry.reason}`);
       }
     } else {
       const detail = entry.reason !== undefined ? ` — ${entry.reason}` : '';
