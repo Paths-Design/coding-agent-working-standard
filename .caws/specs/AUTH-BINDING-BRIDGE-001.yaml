@@ -220,3 +220,7 @@ evidence:
     status: pass
     evidence_ref: "jest A4: named release removes exactly BR-904 (claim_released=1, BR-905 intact); bare release frees the rest (=2); foreign release and release-of-nothing refuse"
     recorded_at: "2026-08-24T22:30:49.123Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "jest A5: closed-spec acquire refuses with reopen handoff; retired bridge => scope no_authority; prune dry-run lists BR-907 untouched, --apply removes, events unchanged (eventless hygiene). Store A4: candidates for missing/closed/archived"
+    recorded_at: "2026-08-24T22:30:49.489Z"
