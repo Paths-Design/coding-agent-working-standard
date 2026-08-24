@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-ensure
 created_at: '2026-08-24T18:48:41.543Z'
-updated_at: '2026-08-24T21:07:37.509Z'
+updated_at: '2026-08-24T21:07:49.542Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/worktree.ts
@@ -28,6 +28,7 @@ scope:
     - docs/command-reference.md
     - docs/api/cli.md
     - AGENTS.md
+    - packages/caws-cli/src/shell/index.ts
   out:
     - packages/caws-cli/src/kernel
     - .github/workflows
