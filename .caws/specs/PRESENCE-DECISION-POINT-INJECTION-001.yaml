@@ -127,3 +127,8 @@ acceptance:
       growth-doctrine header parses, and docs:check is green.
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "jest A1: two live leases -> activate stdout names both peers with worktree/spec/branch, block precedes 'activated' line, exit 0"
+    recorded_at: "2026-08-24T19:30:48.745Z"
