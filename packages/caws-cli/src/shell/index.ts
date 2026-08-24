@@ -272,6 +272,7 @@ export {
   runAgentsStopCommand,
   runAgentsListCommand,
   runAgentsShowCommand,
+  runAgentsWorkStateCommand,
   runAgentsPruneCommand,
 } from './commands/agents';
 export type {

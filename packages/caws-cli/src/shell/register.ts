@@ -46,6 +46,7 @@ import {
   runAgentsRegisterCommand,
   runAgentsShowCommand,
   runAgentsStopCommand,
+  runAgentsWorkStateCommand,
   runMessageSendCommand,
   runMessageReplyCommand,
   runMessagePollCommand,
@@ -1799,6 +1800,22 @@ export function registerShellCommands(
       });
       exit(code);
     });
+
+  // LEASE-WORK-STATE-001: visibility-only work-state annotation.
+  defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'work-state'))
+    .action(
+      (opts: { set?: string; clear?: boolean; note?: string; sessionId?: string; json?: boolean; data?: boolean }) => {
+        const code = runAgentsWorkStateCommand({
+          ...(opts.set !== undefined ? { set: opts.set } : {}),
+          ...(opts.clear === true ? { clear: true } : {}),
+          ...(opts.note !== undefined ? { note: opts.note } : {}),
+          ...(opts.sessionId !== undefined ? { sessionId: opts.sessionId } : {}),
+          json: opts.json === true,
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
 
   defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'prune'))
     .action(
