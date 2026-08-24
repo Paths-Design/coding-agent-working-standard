@@ -228,3 +228,7 @@ evidence:
     status: pass
     evidence_ref: "jest A6: status renders 'bridged → BR-910 (session sess-a via .caws/claims/bridge.json)'; exit 0, read-only"
     recorded_at: "2026-08-24T22:30:49.848Z"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "jest A7: three sequential same-session acquires — holder stays sess-a, acquired_at preserved, one claim_bridged each, never partial (transactional pairing; outcome-inspected)"
+    recorded_at: "2026-08-24T22:30:50.217Z"
