@@ -1,0 +1,31 @@
+id: LEASE-WORK-STATE-001
+title: 'Optional work_state on agent leases: a visibility-only working/blocked/review dimension'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-08-24T18:48:41.119Z'
+updated_at: '2026-08-24T18:48:41.119Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'lease-work-state-enum'
+    type: schema
+    path: 'packages/caws-cli/src/kernel/worktree/leases.ts'
+  - name: 'lease-work-state-command'
+    type: contract-test
+    path: 'packages/caws-cli/tests/shell/agents-work-state.test.js'
