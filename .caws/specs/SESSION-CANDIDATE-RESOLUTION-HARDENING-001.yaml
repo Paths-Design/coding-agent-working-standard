@@ -96,3 +96,8 @@ contracts:
       takeover-from-canonical path (no regression) and the audited-trace
       no-silent-fallback guarantee, and fails closed (under-admit -> refusal,
       never over-admit) when legitimacy cannot be proven.
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "jest A1/A1b/A1c: two capsules, no corroboration -> zero capsule candidates, admitsOwner(A-owned)=null; caller-pointer names B -> only B admits; env names A -> only A admits (D3 over-match closed)"
+    recorded_at: "2026-08-24T21:49:24.739Z"
