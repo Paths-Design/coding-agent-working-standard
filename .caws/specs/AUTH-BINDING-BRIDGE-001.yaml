@@ -212,3 +212,7 @@ evidence:
     status: pass
     evidence_ref: "jest A2: worktree-held spec refuses the bridge naming wt-held + owner-w; no bridge.json; zero events. Store A2: foreign-acquire rule store.claims.bridge_foreign_owner"
     recorded_at: "2026-08-24T22:30:48.391Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "jest A3: bare foreign acquire refuses naming sess-a; --takeover rewrites to sess-b, prior_owners[0]=sess-a on the entry, bridge_claim_taken_over=1"
+    recorded_at: "2026-08-24T22:30:48.761Z"
