@@ -459,6 +459,20 @@ Option A.
 | `caws claim --takeover` | Acquire ownership from a foreign session; writes `prior_owners` audit entry. |
 | `caws claim --paths <path>` | Declare working-tree path ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001). |
 
+**Decision-point peer presence (PRESENCE-DECISION-POINT-INJECTION-001).** The
+authority-mutating commands — `caws specs activate`, `caws worktree
+create/bind/merge`, and the mutating paths of `caws claim` — print an advisory
+peer block first when TTL-classified-live peer leases exist (bounded to five
+peer lines, then a `caws agents list` handoff; the acting session is never
+listed; zero peers leaves output byte-identical). The block is render-only and
+fail-open: leases are read exactly as `caws agents list` reads them, no
+authority decision consults it, and an unreadable registry degrades to today's
+output. The shared `agent-register.sh` SessionStart hook (pack v45) adds the
+matching affordance for the unbound case: when `caws scope show <cwd> --json`
+reports `no_authority` with authority candidates, the hook injects context
+naming the unbound state and the exact `caws worktree create <name> --spec
+<id>` command.
+
 ### Removed after the cutover: `caws prepush` (CAWS-REMOVE-PREPUSH-COMMAND-001)
 
 `caws prepush` shipped in v11.1 as the governed pre-push range check

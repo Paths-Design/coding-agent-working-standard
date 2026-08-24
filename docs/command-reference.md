@@ -49,7 +49,7 @@ Bootstrap the canonical vNext .caws/ project state (idempotent; refuses to overw
 - `--plan` — Preview the canonical state, gitignore, hook-pack, and settings changes without writing anything.
 - `--dry-run` — Compatibility alias for --plan; previews init changes without writing anything.
 - `--json` — Emit the read-only init plan as JSON with --plan or --dry-run.
-- `--agent-surface <name>` — Install a hook pack for an agent harness. When omitted, init attempts filesystem detection and skips hook install when ambiguous: claude-code | codex | opencode | zcode | kimi-code | qwen-code | cursor | windsurf | none
+- `--agent-surface <name>` — Install a hook pack for an agent harness. When omitted, init attempts filesystem detection and skips hook install when ambiguous: claude-code | codex | opencode | zcode | kimi-code | qwen-code | dsh | cursor | windsurf | none
 - `--overwrite [paths...]` — For hook-pack install: select drifted or unmanaged files at managed pack paths for replacement — every pack file when bare, or only the listed destination paths. Without --force this is a pure preview: NOTHING is written (not even version re-stamps); add --force to apply.
 - `--three-way <path>` — init diff only: decompose one pack path into LOCAL GROWTH (installed vs pristine baseline) and UPSTREAM (baseline vs template) hunks, so a hand-edited hook can be retrofitted without conflating your edits with the pack changes.
 - `--from <file>` — init port only: staging file OUTSIDE the protected hooks tree carrying the ported content (new template + local growth). init validates it, version-stamps it, lands it atomically, records the pristine baseline, and audit-commits — the agent never edits the protected hook path itself.

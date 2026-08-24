@@ -308,7 +308,13 @@ import type { HookPackV1 } from './types';
 // and lib/session-id.sh gains the DSH_SESSION_ID tier (mirroring
 // resolve-session.ts). No guard logic changes; bump re-propagates the two
 // shared-lib template changes to consumers.
-export const SHARED_PACK_VERSION = 44;
+// v45 (PRESENCE-DECISION-POINT-INJECTION-001): agent-register.sh gains the
+// unbound-session SessionStart advisory — when `caws scope show <cwd> --json`
+// reports no_authority with authorityCandidates, the hook injects context
+// naming the unbound state, the active spec ids (bounded), and the exact
+// `caws worktree create <name> --spec <id>` command. Advisory only, emits
+// nothing on bound checkouts or any failure.
+export const SHARED_PACK_VERSION = 45;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.
