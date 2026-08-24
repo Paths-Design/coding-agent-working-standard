@@ -136,3 +136,7 @@ evidence:
     status: pass
     evidence_ref: "jest A2: agents list renders 'review_ready' for declaring lease; non-declaring lease renders legacy shape with no placeholder"
     recorded_at: "2026-08-24T21:06:51.564Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "jest A3+A3b: invalid enum / --set+--clear / orphan --note all exit 1 with named diagnostics; no lease file written"
+    recorded_at: "2026-08-24T21:06:51.921Z"
