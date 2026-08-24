@@ -131,7 +131,6 @@ non_functional:
       Closes the Entry 37 detection gap at the fault, not just the recovery:
       governance commits mis-landing on a peer's feature branch become a
       doctor finding + a pre-write refusal instead of post-hoc forensics.
-  reliability:
 contracts:
   - name: 'canonical-drift-doctor-finding'
     type: 'behavior'
