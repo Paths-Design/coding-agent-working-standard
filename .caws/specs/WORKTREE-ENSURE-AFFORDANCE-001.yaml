@@ -2,10 +2,11 @@ id: WORKTREE-ENSURE-AFFORDANCE-001
 title: 'caws worktree ensure --spec: create-or-admit affordance so unbound sessions get the door, not just the refusal'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: wt-ensure
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-ensure at e578a5e7fc6026ef903943f5887735f5cc155782'
 created_at: '2026-08-24T18:48:41.543Z'
-updated_at: '2026-08-24T21:37:01.199Z'
+updated_at: '2026-08-24T21:37:02.044Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/worktree.ts
