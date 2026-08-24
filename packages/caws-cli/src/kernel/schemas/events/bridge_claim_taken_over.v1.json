@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/bridge_claim_taken_over.v1.json",
+  "title": "bridge_claim_taken_over event payload",
+  "$comment": "Class: REQUIRES_SPEC_ID. AUTH-BINDING-BRIDGE-001: --takeover of a bridge binding. Distinct from claim_taken_over (worktree-shaped, worktree_name required). Prior owner audit mirrors the worktree discipline: a stale heartbeat is NOT abandonment; takeover is explicit. The bridge entry also carries a durable prior_owners array.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["prior_owner", "new_owner"],
+  "properties": {
+    "prior_owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id"],
+      "properties": {
+        "session_id": { "type": "string", "minLength": 1 },
+        "platform": { "type": "string" },
+        "last_seen": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Null when the prior binding carried no last_seen."
+        }
+      }
+    },
+    "new_owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id"],
+      "properties": {
+        "session_id": { "type": "string", "minLength": 1 },
+        "platform": { "type": "string" }
+      }
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Mandatory takeover rationale (same discipline as worktree seizure)."
+    }
+  }
+}

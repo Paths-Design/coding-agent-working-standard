@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/claim_released.v1.json",
+  "title": "claim_released event payload",
+  "$comment": "Class: OPTIONAL_SPEC_ID. AUTH-BINDING-BRIDGE-001: explicit relinquishment of a bridge binding by the owning session (caws claim --release). Bare release names the spec it freed; one event per removed binding. Retire-by-spec-close does NOT emit this (the audit trail for that is spec_closed/spec_archived).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["session_id"],
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The session that released the binding (must be the owner)."
+    },
+    "platform": { "type": "string" },
+    "scope": {
+      "type": "string",
+      "enum": ["named", "bare"],
+      "description": "named = --release --spec <id> targeted one binding; bare = --release freed every binding the session owned (this event names the one freed)."
+    }
+  }
+}

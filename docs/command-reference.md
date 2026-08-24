@@ -28,7 +28,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws doctor`](#caws-doctor) — Run drift detection against the current .caws/ state
 - [`caws status`](#caws-status) — Read-only dashboard: project, current context, claim, and doctor findings
 - [`caws scope`](#caws-scope) — Evaluate file paths against the bound spec scope
-- [`caws claim`](#caws-claim) — Surface ownership of the current worktree; with --takeover, acquire ownership from a foreign session (writes prior_owners audit). With --paths, declare working-tree ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001).
+- [`caws claim`](#caws-claim) — Surface ownership of the current worktree; with --takeover, acquire ownership from a foreign session (writes prior_owners audit). With --paths, declare working-tree ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001). With --spec <id> / --release, acquire/release a BRIDGE binding — session↔spec authority for non-worktree contexts (AUTH-BINDING-BRIDGE-001).
 - [`caws gates`](#caws-gates) — Inspect and run quality gates against the current changes (list/explain/run; policy-driven)
 - [`caws evidence`](#caws-evidence) — Record, list, show, and describe typed evidence events in .caws/events.jsonl (record/list/show/schema)
 - [`caws events`](#caws-events) — Read and maintain .caws/events.jsonl (list/show/rotate/migrate/verify-archive)
@@ -133,10 +133,12 @@ Report which other active worktrees (same base branch) have a bound spec whose s
 
 ## `caws claim`
 
-Surface ownership of the current worktree; with --takeover, acquire ownership from a foreign session (writes prior_owners audit). With --paths, declare working-tree ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001).
+Surface ownership of the current worktree; with --takeover, acquire ownership from a foreign session (writes prior_owners audit). With --paths, declare working-tree ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001). With --spec <id> / --release, acquire/release a BRIDGE binding — session↔spec authority for non-worktree contexts (AUTH-BINDING-BRIDGE-001).
 
 **Options:**
 
+- `--spec <id>` — AUTH-BINDING-BRIDGE-001: bridge the session to an ACTIVE spec (no worktree needed). Same scope.in admission surface as a worktree binding; refuses a spec held by a worktree (subordination) or another session (use --takeover). Pair with --release to name the binding to release.
+- `--release` — AUTH-BINDING-BRIDGE-001: release bridge binding(s) owned by this session. With --spec <id>, releases exactly that binding; bare releases every owned binding.
 - `--takeover` — Forcibly take ownership of a foreign-owned worktree. Required when the current owner is a different session.
 - `--plan` — Preview claim ownership or takeover impact without mutating worktrees.json, leases, specs, events, or git state.
 - `--json` — Emit the read-only claim plan or release-paths result as JSON.

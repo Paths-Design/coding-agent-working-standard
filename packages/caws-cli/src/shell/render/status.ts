@@ -210,6 +210,8 @@ function describeBindingState(state: BindingState, _activeSpecCount: number): st
   switch (state.kind) {
     case 'bound':
       return `bound → ${state.spec.id} (worktree '${state.worktreeName}')`;
+    case 'bridged':
+      return `bridged → ${state.spec.id} (session '${state.session_id}' via .caws/claims/bridge.json)`;
     case 'one_sided':
       return 'one_sided (corrupt asymmetric binding — see doctor)';
     case 'unbound':

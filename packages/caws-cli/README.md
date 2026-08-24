@@ -18,7 +18,7 @@ store, and a thin shell. It replaces v10.x.
 | `caws doctor` | Drift detection over `.caws/` state. Exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure). |
 | `caws status` | Read-only dashboard: project, current context, claim, doctor findings. Always exits 0; never mutates governance state. |
 | `caws scope show / check / contention` | Explain scope, enforce scope, or report cross-worktree path contention. |
-| `caws claim [--takeover]` | Surface or take ownership of the current worktree. Writes a `prior_owners` audit on takeover. |
+| `caws claim [--takeover] [--spec <id>] [--release]` | Surface or take ownership of the current worktree. Writes a `prior_owners` audit on takeover. `--spec`/`--release` acquire/release a BRIDGE binding (AUTH-BINDING-BRIDGE-001): session↔spec authority for non-worktree contexts over `.caws/claims/bridge.json`, with the full seven-slot lifecycle (acquire/observe/refuse/takeover/release/retire/prune) and the same `scope.in` admission surface as a worktree binding. |
 | (all authority-mutating commands) | `specs activate`, `worktree create/bind/merge`, and mutating `claim` paths print an advisory peer-presence block first when live peer leases exist — render-only, fail-open, bounded (visibility, never authority). |
 | `caws gates run --spec <id>` | Run quality gates against current changes. Policy decides block/warn/skip. Appends one `gate_evaluated` event per policy-declared gate. |
 | `caws evidence record --type <kind> --spec <id> --data <json>` | Append a typed evidence event (`test`/`gate`/`ac`) to `.caws/events.jsonl`. |

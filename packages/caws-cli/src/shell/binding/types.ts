@@ -31,6 +31,16 @@ export interface ResolveBindingInput {
   /** Loaded `.caws/worktrees.json`. */
   readonly registry: WorktreeRegistry;
   /**
+   * AUTH-BINDING-BRIDGE-001: loaded `.caws/claims/bridge.json` + the acting
+   * session id. When worktree resolution fails, the resolver consults the
+   * session's bridge bindings: an ACTIVE spec held via bridge whose scope.in
+   * claims the target path produces a `bridged` binding (same admission
+   * surface as `bound`). Worktree bindings already won by this point
+   * (subordination); retired specs (closed/archived/missing) confer nothing.
+   */
+  readonly bridges?: import('../../store/bridge-store').BridgeRegistry;
+  readonly sessionId?: string;
+  /**
    * Loaded valid specs. The resolver looks up the spec referenced by the
    * registry entry's `specId`. If the spec is missing, the binding is
    * reported as `one_sided`.
@@ -130,6 +140,7 @@ export interface ResolvedBinding {
     | 'git_porcelain_match'
     | 'target_worktree_location'
     | 'target_scope_in_claim'
+    | 'bridge_claim'
     | 'explicit_spec'
     | 'none';
   /**

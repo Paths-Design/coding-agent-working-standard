@@ -35,7 +35,8 @@ import {
   type Spec,
 } from '../../kernel';
 
-import { composeStoreSnapshot, resolveRepoRoot } from '../../store';
+import { composeStoreSnapshot, loadBridges, resolveRepoRoot } from '../../store';
+import { resolveSession } from '../session/resolve-session';
 import type { StoreSnapshot } from '../../store/types';
 import { resolveBinding } from '../binding/resolve-binding';
 import type {
@@ -214,8 +215,29 @@ function withAuthorityContext(
   return { ...binding, authorityCandidates: candidates };
 }
 
+
+/**
+ * AUTH-BINDING-BRIDGE-001: best-effort bridge context for the bare (no
+ * --spec) binding resolution. The acting session's bridges are consulted
+ * only when both the claims file loads AND a session id resolves (no
+ * minting — a bridge never invents identity). Any failure omits the
+ * context, degrading to today's worktree-only resolution.
+ */
+function bridgeContext(
+  cawsDir: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv
+): { bridges?: import('../../store/bridge-store').BridgeRegistry; sessionId?: string } {
+  const loaded = loadBridges(cawsDir);
+  if (!loaded.ok || !loaded.value.present) return {};
+  const session = resolveSession({ cawsDir, worktreeRoot: cwd, env, allowMint: false });
+  if (!session.ok) return {};
+  return { bridges: loaded.value.bridges, sessionId: session.value.identity.session_id };
+}
+
 export function runScopeCommand(opts: ScopeCommandOptions): number {
   const cwd = opts.cwd ?? process.cwd();
+  const env: NodeJS.ProcessEnv = (opts as { env?: NodeJS.ProcessEnv }).env ?? process.env;
   const out = opts.out ?? ((s: string) => process.stdout.write(s + '\n'));
   const err = opts.err ?? ((s: string) => process.stderr.write(s + '\n'));
   const showData = opts.showData === true;
@@ -253,6 +275,7 @@ export function runScopeCommand(opts: ScopeCommandOptions): number {
   //    spec when cwd is the main checkout, so `caws scope check <path>` is
   //    cwd-independent and matches what the bound author sees.
   const authorityCandidates = buildAuthorityContextCandidates(snapshot.specs, opts.path);
+  const bctx = explicitSpec === undefined ? bridgeContext(cawsDir, cwd, env) : {};
   const bound = withAuthorityContext(
     explicitSpec?.binding ?? resolveBinding({
       repoRoot,
@@ -260,6 +283,8 @@ export function runScopeCommand(opts: ScopeCommandOptions): number {
       targetPath: opts.path,
       registry: snapshot.worktrees,
       specs: snapshot.specs,
+      ...(bctx.bridges !== undefined ? { bridges: bctx.bridges } : {}),
+      ...(bctx.sessionId !== undefined ? { sessionId: bctx.sessionId } : {}),
     }),
     authorityCandidates
   );
@@ -560,6 +585,7 @@ function ambiguousPlanPayload(targetPath: string, claimants: readonly {
 
 export function runScopePlanCommand(opts: ScopePlanOptions): number {
   const cwd = opts.cwd ?? process.cwd();
+  const env: NodeJS.ProcessEnv = (opts as { env?: NodeJS.ProcessEnv }).env ?? process.env;
   const out = opts.out ?? ((s: string) => process.stdout.write(s + '\n'));
   const err = opts.err ?? ((s: string) => process.stderr.write(s + '\n'));
   const showData = opts.showData === true;
@@ -602,6 +628,7 @@ export function runScopePlanCommand(opts: ScopePlanOptions): number {
       : undefined;
   if (explicitSpec === null) return 1;
 
+  const bctxPlan = explicitSpec === undefined ? bridgeContext(cawsDir, cwd, env) : {};
   const results: ScopePlanPathResult[] = [];
   for (const p of paths) {
     const bound = withAuthorityContext(
@@ -611,6 +638,8 @@ export function runScopePlanCommand(opts: ScopePlanOptions): number {
         targetPath: p,
         registry: snapshot.worktrees,
         specs: snapshot.specs,
+        ...(bctxPlan.bridges !== undefined ? { bridges: bctxPlan.bridges } : {}),
+        ...(bctxPlan.sessionId !== undefined ? { sessionId: bctxPlan.sessionId } : {}),
       }),
       buildAuthorityContextCandidates(snapshot.specs, p)
     );

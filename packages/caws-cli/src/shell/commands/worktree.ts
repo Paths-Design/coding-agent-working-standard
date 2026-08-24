@@ -55,6 +55,7 @@ import {
   untrackWorktree,
 } from '../../store/worktrees-writer';
 import { clearSpecBinding } from '../../store/specs-writer';
+import { pruneBridgeGhosts } from '../../store/bridge-store';
 import { buildActor } from '../session/actor';
 import { admitsOwner, resolveSession, resolveSessionCandidates } from '../session/resolve-session';
 import { renderDiagnostics } from '../render/diagnostic';
@@ -2216,6 +2217,27 @@ function renderWorktreePrunePlan(
   }
 }
 
+/**
+ * AUTH-BINDING-BRIDGE-001: render the bridge-ghost section of the prune
+ * plan (bindings whose spec is missing/closed/archived — retired bindings
+ * that already confer nothing read-side; disk hygiene only, NO events).
+ */
+function renderBridgeGhostSection(
+  plan: { candidates: ReadonlyArray<{ specId: string; holderSessionId: string; reason: string }>; removed: ReadonlyArray<string>; apply: boolean },
+  out: (line: string) => void
+): void {
+  if (plan.candidates.length === 0) return;
+  const mode = plan.apply ? 'applied' : 'dry-run';
+  out(`bridge ghosts (${mode}): ${plan.candidates.length} retired bridge binding(s)`);
+  for (const c of plan.candidates) {
+    const tag = plan.removed.includes(c.specId) ? 'REMOVED' : 'candidate';
+    out(`- ${tag} ${c.specId} (holder ${c.holderSessionId}; reason: ${c.reason})`);
+  }
+  if (!plan.apply) {
+    out('  (no events appended — retired-binding hygiene; the audit trail is spec_closed/spec_archived)');
+  }
+}
+
 function renderWorktreePruneApply(
   outcomes: readonly WorktreePruneApplyOutcome[],
   out: (line: string) => void
@@ -2357,6 +2379,11 @@ export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
       });
     }
 
+    // AUTH-BINDING-BRIDGE-001: --apply also removes retired bridge bindings
+    // (eventless hygiene — the retirement audit lives in spec_closed/
+    // spec_archived, not here). Single merged JSON emit.
+    const bridgePlan = bridgeGhostPlan(ctx.cawsDir, true);
+
     if (opts.json === true) {
       out(JSON.stringify({
         ok: !outcomes.some((item) => item.action !== 'applied'),
@@ -2364,6 +2391,9 @@ export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
         read_only: false,
         outcomes,
         counts: pruneApplyCounts(outcomes),
+        ...(bridgePlan.ok
+          ? { bridge_ghosts: bridgePlan.value.candidates, bridge_removed: bridgePlan.value.removed }
+          : {}),
         filters: {
           state: opts.state ?? [],
           include: opts.include ?? [],
@@ -2372,17 +2402,21 @@ export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
       }, null, 2));
     } else {
       renderWorktreePruneApply(outcomes, out);
+      if (bridgePlan.ok) renderBridgeGhostSection(bridgePlan.value, out);
     }
     return outcomes.some((item) => item.action !== 'applied') ? 1 : 0;
   }
 
   if (opts.json === true) {
+    // AUTH-BINDING-BRIDGE-001: bridge-ghost candidates ride along in JSON.
+    const bridgePlan = bridgeGhostPlan(ctx.cawsDir, false);
     out(JSON.stringify({
       ok: true,
       dry_run: true,
       read_only: true,
       candidates: plan.items,
       counts_by_state: countsByState(plan.items),
+      bridge_ghosts: bridgePlan.ok ? bridgePlan.value.candidates : [],
       filters: {
         state: opts.state ?? [],
         include: opts.include ?? [],
@@ -2393,7 +2427,30 @@ export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
   }
 
   renderWorktreePrunePlan(plan.items, out);
+  {
+    const bridgePlan = bridgeGhostPlan(ctx.cawsDir, false);
+    if (bridgePlan.ok) renderBridgeGhostSection(bridgePlan.value, out);
+  }
   return 0;
+}
+
+/**
+ * AUTH-BINDING-BRIDGE-001: compose the bridge-ghost prune plan — bindings
+ * whose spec is missing/closed/archived. Retired bindings already confer
+ * nothing read-side; removal is disk hygiene (no events). Spec states come
+ * from loadSpecs so the plan never guesses.
+ */
+function bridgeGhostPlan(
+  cawsDir: string,
+  apply: boolean
+): { ok: true; value: { candidates: ReadonlyArray<{ specId: string; holderSessionId: string; reason: string }>; removed: ReadonlyArray<string>; apply: boolean } } | { ok: false } {
+  const specs = loadSpecs(cawsDir);
+  const specStates: Record<string, string | undefined> = {};
+  for (const s of specs.specs) specStates[s.id] = s.lifecycle_state;
+  const activeIds = specs.specs.filter((s) => s.lifecycle_state === 'active').map((s) => s.id);
+  const r = pruneBridgeGhosts(cawsDir, { activeSpecIds: activeIds, specStates, apply });
+  if (!r.ok) return { ok: false };
+  return { ok: true, value: r.value };
 }
 
 export function runWorktreeRepairCommand(opts: WorktreeRepairOptions): number {

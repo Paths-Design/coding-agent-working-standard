@@ -35,6 +35,9 @@ import envelopeSchema from '../schemas/events.v1.json';
 
 import acRecordedSchema from '../schemas/events/ac_recorded.v1.json';
 import chainRotatedSchema from '../schemas/events/chain_rotated.v1.json';
+import claimBridgedSchema from '../schemas/events/claim_bridged.v1.json';
+import bridgeClaimTakenOverSchema from '../schemas/events/bridge_claim_taken_over.v1.json';
+import claimReleasedSchema from '../schemas/events/claim_released.v1.json';
 import claimTakenOverSchema from '../schemas/events/claim_taken_over.v1.json';
 import doctorCompletedSchema from '../schemas/events/doctor_completed.v1.json';
 import evidenceRecordedSchema from '../schemas/events/evidence_recorded.v1.json';
@@ -100,6 +103,9 @@ const payloadValidators = new Map<string, ValidateFunction | null>();
 const PAYLOAD_SCHEMAS: Readonly<Partial<Record<EventType, object>>> = {
   ac_recorded: acRecordedSchema,
   chain_rotated: chainRotatedSchema,
+  claim_bridged: claimBridgedSchema,
+  bridge_claim_taken_over: bridgeClaimTakenOverSchema,
+  claim_released: claimReleasedSchema,
   claim_taken_over: claimTakenOverSchema,
   doctor_completed: doctorCompletedSchema,
   evidence_recorded: evidenceRecordedSchema,
@@ -628,6 +634,9 @@ const KNOWN_EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   'worktree_untracked',
   'worktree_ownership_seized',
   'claim_taken_over',
+  'claim_bridged',
+  'bridge_claim_taken_over',
+  'claim_released',
   'evidence_recorded',
   'ac_recorded',
   'test_recorded',

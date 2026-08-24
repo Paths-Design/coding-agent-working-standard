@@ -233,7 +233,7 @@ Exit code: 0 (always).
 
 ## 5. `caws claim`
 
-Surface or take ownership of the current worktree; with `--paths`, declare working-tree ownership metadata on the current session's lease.
+Surface or take ownership of the current worktree; with `--paths`, declare working-tree ownership metadata on the current session's lease. With `--spec`/`--release`, acquire or release a BRIDGE binding (AUTH-BINDING-BRIDGE-001).
 
 ```bash
 caws claim                  # read-only inspection (default)
@@ -243,6 +243,10 @@ caws claim --takeover       # acquire ownership from a foreign session
 caws claim --paths src/foo  # declare path ownership on current session lease
 caws claim --release-paths  # preview clearing current session lease path claims
 caws claim --release-paths --apply
+caws claim --spec FEAT-1                # bridge the session to an active spec (no worktree)
+caws claim --spec FEAT-1 --takeover     # explicit bridge authority transition
+caws claim --release --spec FEAT-1      # release one owned bridge binding
+caws claim --release                    # release every owned bridge binding
 ```
 
 | Flag | Description |
@@ -253,6 +257,8 @@ caws claim --release-paths --apply
 | `--release-paths` | Clear the current session lease `claimed_paths`. Dry-run by default; pair with `--apply` to write the lease update. |
 | `--apply` | Apply `--release-paths`. Not used for normal claim or takeover, which keep their existing behavior. |
 | `--paths <path>` | Declare a path as claimed by the current session. Repeatable; order preserved; strings stored verbatim. Refused with no write if no lease exists for the current session. (SESSION-OWNERSHIP-METADATA-001) |
+| `--spec <id>` | AUTH-BINDING-BRIDGE-001: bridge the session to an ACTIVE spec — session↔spec authority with no worktree (`.caws/claims/bridge.json`; `claim_bridged` event). Same `scope.in` admission surface as a worktree binding (rejects out-of-scope paths). Refuses a spec held by a worktree (subordination) or another session (use `--takeover`); non-active specs refuse with their lifecycle handoffs. |
+| `--release` | AUTH-BINDING-BRIDGE-001: release bridge binding(s) owned by this session (`claim_released` event per binding). With `--spec <id>` releases exactly that binding; bare releases every owned binding. |
 | `--data` | Show structured data block on diagnostics. |
 
 Without `--takeover`: prints the current claim (`<sessionId>:<platform>`, last heartbeat age, any `tmp/<sessionId>/` session-log pointer) and exits non-zero when the worktree is owned by a different session. Modifies nothing.
