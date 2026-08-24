@@ -2502,3 +2502,143 @@ export function runWorktreeRepairCommand(opts: WorktreeRepairOptions): number {
   // a failure. dry-run is always exit 0 (it reports, never fails).
   return failed > 0 && !dryRun ? 1 : 0;
 }
+
+// ─── caws worktree ensure (WORKTREE-ENSURE-AFFORDANCE-001) ─────────────────
+
+export interface WorktreeEnsureOptions extends BaseCommandOptions {
+  readonly name: string;
+  readonly specId: string;
+  readonly actorKind?: 'human' | 'agent' | 'system' | 'automation';
+}
+
+/**
+ * `caws worktree ensure <name> --spec <id>` — create-or-admit affordance.
+ *
+ * The Entry 12/16/36/37 class: a session that needs a lane gets a refusal
+ * ("no bound spec, no authority") plus the create command in remediation
+ * text, but must retype it. ensure is COMPOSITION, not a new lifecycle verb:
+ *
+ *   - worktree absent              => delegates verbatim to runWorktreeCreate
+ *     (create emits worktree_created + worktree_bound, activates the draft,
+ *     links artifacts — every invariant of create applies unchanged).
+ *   - worktree bound to THIS spec,
+ *     owner admits self (or unowned),
+ *     branch unmoved off base      => ADMIT (exit 0, no new events, no file
+ *     mutation) and print the exact `cd <path>` entry command (idempotent).
+ *   - foreign live-owned           => refuse with the existing soft-block
+ *     guidance (read the owner's session log; claim --takeover is the single
+ *     authority-transfer surface — ensure itself accepts NO takeover flag).
+ *   - bound to a DIFFERENT spec    => refuse naming the binding, with
+ *     worktree list / unbind handoffs.
+ *   - spec closed/archived         => refuse with the reopen/recover handoff;
+ *     ensure never force-activates.
+ *   - branch MOVED off base        => refuse (the lane is in flight; ensure
+ *     admits only untouched fork-point states).
+ *
+ * Exit codes: 0 created-or-admitted, 1 domain refusal, 2 composition failure.
+ */
+export function runWorktreeEnsureCommand(opts: WorktreeEnsureOptions): number {
+  const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
+  const ctx = resolveCawsCtx(cwd, err, showData, 'ensure');
+  if (ctx === null) return 2;
+
+  if (typeof opts.name !== 'string' || opts.name.length === 0) {
+    err('caws worktree ensure: <name> is required.');
+    return 1;
+  }
+  if (typeof opts.specId !== 'string' || opts.specId.length === 0) {
+    err('caws worktree ensure: --spec <id> is required.');
+    return 1;
+  }
+
+  // Spec side: must exist and be lifecycled for binding (draft or active —
+  // create activates a draft; closed/archived refuse with their handoffs).
+  const specsRes = loadSpecs(ctx.cawsDir);
+  const spec = specsRes.specs.find((s) => s.id === opts.specId);
+  if (spec === undefined) {
+    err(`caws worktree ensure: no spec "${opts.specId}" — run \`caws specs list\` for the canonical ids.`);
+    return 1;
+  }
+  const state = specLifecycle(specsRes.specs, opts.specId);
+  if (state !== 'draft' && state !== 'active') {
+    err(`caws worktree ensure: spec "${opts.specId}" is ${state} — ensure never force-activates.`);
+    if (state === 'closed') {
+      err(`  To resume the work: caws specs reopen ${opts.specId}`);
+      err(`  To read the body:    caws specs show ${opts.specId}`);
+    } else {
+      err(`  Archived body: caws specs show ${opts.specId} --archived  |  recover: caws specs recover ${opts.specId}`);
+    }
+    return 1;
+  }
+
+  // Registry side: does the worktree already exist?
+  const listRes = listWorktreesPretty(ctx.cawsDir);
+  if (!listRes.ok) {
+    err('caws worktree ensure: failed to load the worktree registry.');
+    err(renderDiagnostics(listRes.errors, { showData }));
+    return 2;
+  }
+  const existing = listRes.value.entries.find((e) => e.name === opts.name);
+
+  if (existing === undefined) {
+    // Absent => create (full delegation; every create invariant applies).
+    out(`(no worktree "${opts.name}" — creating)`);
+    return runWorktreeCreateCommand({
+      cwd,
+      now: nowFn,
+      env,
+      out,
+      err,
+      showData,
+      name: opts.name,
+      specId: opts.specId,
+      ...(opts.actorKind !== undefined ? { actorKind: opts.actorKind } : {}),
+    });
+  }
+
+  // Exists => the admit path. Binding conflict first (cheap, unambiguous).
+  if (existing.specId !== opts.specId) {
+    err(`caws worktree ensure: worktree "${opts.name}" is already bound to spec "${existing.specId ?? '(unbound)'}", not "${opts.specId}".`);
+    err('  Inspect: caws worktree list');
+    if (existing.specId !== null) {
+      err(`  Rebind deliberately: caws worktree bind ${opts.name} --spec ${opts.specId}`);
+    }
+    return 1;
+  }
+
+  // Foreign-owner soft-block (same discipline as bind/merge/claim). A stale
+  // heartbeat is NOT authorization — surface the owner, let the human or the
+  // claim surface decide. ensure takes no takeover flag by design.
+  const ownerId = existing.owner?.session_id;
+  if (ownerId !== undefined) {
+    const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'ensure');
+    if (id === null) return 2;
+    const candidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env });
+    if (admitsOwner(candidates, ownerId) === null) {
+      err(`caws worktree ensure: worktree "${opts.name}" is owned by another session (${ownerId}).`);
+      err('  Read their context before deciding: .caws/sessions/ session logs, caws agents list');
+      err('  Authority transfer stays on the single surface: caws claim --takeover (requires user authorization).');
+      return 1;
+    }
+  }
+
+  // Branch unmoved off base => safe admit. A moved branch means in-flight
+  // work; ensure does not "adopt" a lane it did not verify.
+  const mergedRes = isMerged(ctx.repoRoot, existing.branch, existing.baseBranch);
+  if (!mergedRes.ok) {
+    err(`caws worktree ensure: could not verify branch state (${mergedRes.reason}).`);
+    return 2;
+  }
+  if (!mergedRes.merged) {
+    err(`caws worktree ensure: branch "${existing.branch}" has moved off base "${existing.baseBranch}" — the lane is in flight.`);
+    err(`  Enter it directly: cd ${path.relative(ctx.repoRoot, existing.path)}`);
+    err('  ensure admits only untouched fork-point states; it never adopts in-flight work.');
+    return 1;
+  }
+
+  // ADMIT: idempotent no-op. No events, no registry/spec/file mutation.
+  const rel = path.relative(ctx.repoRoot, existing.path);
+  out(`ensured ${opts.name} (already bound to spec ${opts.specId}; branch untouched at fork point)`);
+  out(`Next: cd ${rel} to start working in the bound worktree.`);
+  return 0;
+}

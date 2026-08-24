@@ -314,7 +314,10 @@ import type { HookPackV1 } from './types';
 // naming the unbound state, the active spec ids (bounded), and the exact
 // `caws worktree create <name> --spec <id>` command. Advisory only, emits
 // nothing on bound checkouts or any failure.
-export const SHARED_PACK_VERSION = 45;
+// v46 (WORKTREE-ENSURE-AFFORDANCE-001): agent-register.sh's unbound advisory
+// names `caws worktree ensure <name> --spec <id>` (the idempotent
+// create-or-admit verb) instead of bare create. Advisory-only change.
+export const SHARED_PACK_VERSION = 46;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.

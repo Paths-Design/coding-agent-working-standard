@@ -635,7 +635,7 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'worktree',
   description:
-    'Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.',
+    'Manage CAWS worktrees (create/list/ensure/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.',
   subcommands: [
     {
       kind: 'leaf',
@@ -658,6 +658,17 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
       name: 'list',
       description: 'List registered worktrees with branch, spec binding, and owner.',
       options: [DATA_OPTION],
+    },
+    {
+      kind: 'leaf',
+      name: 'ensure',
+      argument: { name: 'name', required: true, description: 'Worktree name' },
+      description:
+        'Create-or-admit affordance (WORKTREE-ENSURE-AFFORDANCE-001): absent worktree is created via the full create path (worktree_created + worktree_bound, draft activates on bind); an existing worktree bound to the SAME spec with an admitting owner and an untouched fork-point branch ADMITS idempotently (exit 0, no new events) and prints the cd entry command. Refuses: foreign-owned (soft-block; takeover stays on caws claim), different-spec binding (list/unbind handoffs), closed/archived spec (reopen/recover handoffs), moved branch (in-flight lane). ensure accepts no takeover flag by design.',
+      options: [
+        { flag: '--spec <id>', required: true, description: 'Spec id to bind (draft or active)' },
+        DATA_OPTION,
+      ],
     },
     {
       kind: 'leaf',

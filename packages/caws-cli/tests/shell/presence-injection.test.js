@@ -238,7 +238,7 @@ describe('A5: SessionStart unbound advisory (agent-register.sh)', () => {
     const stdout = runHook(root, stub);
     expect(stdout).toContain('NO write authority');
     expect(stdout).toContain('SPEC-101');
-    expect(stdout).toContain('caws worktree create <name> --spec SPEC-101');
+    expect(stdout).toContain('caws worktree ensure <name> --spec SPEC-101');
     expect(stdout).toContain('... and 1 more');
   });
 
