@@ -203,3 +203,8 @@ contracts:
   - name: claim-bridge-command-v1
     type: contract-test
     path: packages/caws-cli/tests/shell/claim-bridge.test.js
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "jest A1: claim --spec BR-901 records bridge.json + claim_bridged; scope show in-scope => admit/bridged/authoritative; out-of-scope => reject/bridged; foreign session => no_authority (identity-keyed)"
+    recorded_at: "2026-08-24T22:30:48.019Z"
