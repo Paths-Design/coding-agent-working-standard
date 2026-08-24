@@ -183,7 +183,7 @@ describe('scope authority-context handoff', () => {
     ]);
     // The command that resolves it must be the one that ALSO activates.
     const commands = result.json.remediation.commands.map((c) => c.command);
-    expect(commands).toContain('caws worktree create <name> --spec ZZZ-DRAFT-OWNER-002');
+    expect(commands).toContain('caws worktree ensure <name> --spec ZZZ-DRAFT-OWNER-002');
     // ...and it must not describe a draft as active, or say nothing claims it.
     const notes = result.json.remediation.notes.join('\n');
     expect(notes).not.toContain('No active spec claims this path');
@@ -345,8 +345,8 @@ describe('scope authority-context handoff', () => {
         mutates: false,
       },
       {
-        command: 'caws worktree create <name> --spec ACTIVE-UNBOUND-001',
-        description: 'Create a governed worktree for active spec ACTIVE-UNBOUND-001.',
+        command: 'caws worktree ensure <name> --spec ACTIVE-UNBOUND-001',
+        description: 'Create-or-admit a governed worktree for active spec ACTIVE-UNBOUND-001; an existing untouched lane admits idempotently.',
         mutates: true,
       },
     ]);
@@ -378,6 +378,6 @@ describe('scope authority-context handoff', () => {
       'caws scope show packages/no-owner/file.ts --spec ACTIVE-UNBOUND-002'
     );
     expect(result.out).toContain('caws worktree bind loose-wt --spec ACTIVE-UNBOUND-002');
-    expect(result.out).not.toContain('caws worktree create <name> --spec <spec-id>');
+    expect(result.out).not.toContain('caws worktree ensure <name> --spec <spec-id>');
   });
 });

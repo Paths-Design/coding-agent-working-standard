@@ -15,12 +15,13 @@
 #   everything else freely.
 #
 # SessionStart handler — registers the current session with the CAWS agent
-# registry (MULTI-AGENT-ACTIVITY-REGISTRY-001), then (v45,
+# registry (MULTI-AGENT-ACTIVITY-REGISTRY-001), then (v45+,
 # PRESENCE-DECISION-POINT-INJECTION-001) emits an advisory when the session
 # starts UNBOUND in a repo with active specs: names the no-authority state,
-# the active spec ids, and the exact `caws worktree create <name> --spec <id>`
-# command, composed from the existing read-only `caws scope show --json`
-# no-authority remediation.
+# the active spec ids, and the exact `caws worktree ensure <name> --spec <id>`
+# command (v46, WORKTREE-ENSURE-AFFORDANCE-001 — ensure is the idempotent
+# create-or-admit form), composed from the existing read-only `caws scope
+# show --json` no-authority remediation.
 
 set -uo pipefail
 
@@ -85,8 +86,8 @@ _UNBOUND_CTX="$(
         "CAWS: this session has NO write authority here (unbound — this checkout is not a spec-bound worktree; the kernel will refuse every governed edit).\n" +
         "Active spec(s) in this repo:\n" +
         "  " + shown.join("\n  ") + extra + "\n" +
-        "Create your isolated lane before editing (replace <name>):\n" +
-        "  caws worktree create <name> --spec " + first + "\n" +
+        "Create your isolated lane before editing (replace <name>) — idempotent: an existing untouched lane admits:\n" +
+        "  caws worktree ensure <name> --spec " + first + "\n" +
         "Read-only checks first if unsure: caws scope show <path> --spec " + first + " ; caws agents list ; caws status\n" +
         "Advisory only — authority is conferred by the worktree binding, not by this message.";
       process.stdout.write(ctx);

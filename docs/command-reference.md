@@ -35,7 +35,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws waiver`](#caws-waiver) — Manage CAWS waivers (bounded exception records that suppress matching gate violations)
 - [`caws reprieve`](#caws-reprieve) — Session-scoped guard reprieve: skip a PreToolUse guard for ONE session until a stated expiry. Use when a session legitimately needs to do what a guard blocks (e.g. editing a hook script) WITHOUT disabling it for every other session. Distinct from `caws waiver`: a reprieve skips a HOOK guard at dispatch time (operational cache, session-scoped, expiring); a waiver bypasses a GATE at policy-run time (governance state, kernel-adjudicated). Replaces the anti-pattern of commenting a guard out of the dispatcher HANDLERS array.
 - [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate)
-- [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.
+- [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/ensure/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.
 - [`caws agents`](#caws-agents) — Agent liveness substrate: register/heartbeat/stop/list/show/work-state/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.
 - [`caws message`](#caws-message) — Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/reply/poll/inbox/history/status/prune directed messages between running sessions, addressed by session id (or a wt:/spec: alias), over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
 
@@ -674,7 +674,7 @@ Validate a spec YAML FILE on disk using the CLI's own bundled parser and the ker
 
 ## `caws worktree`
 
-Manage CAWS worktrees (create/list/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.
+Manage CAWS worktrees (create/list/ensure/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.
 
 ### `caws worktree create <name>`
 
@@ -695,6 +695,17 @@ List registered worktrees with branch, spec binding, and owner.
 
 **Options:**
 
+- `--data` — Show structured data block on diagnostics
+
+### `caws worktree ensure <name>`
+
+Create-or-admit affordance (WORKTREE-ENSURE-AFFORDANCE-001): absent worktree is created via the full create path (worktree_created + worktree_bound, draft activates on bind); an existing worktree bound to the SAME spec with an admitting owner and an untouched fork-point branch ADMITS idempotently (exit 0, no new events) and prints the cd entry command. Refuses: foreign-owned (soft-block; takeover stays on caws claim), different-spec binding (list/unbind handoffs), closed/archived spec (reopen/recover handoffs), moved branch (in-flight lane). ensure accepts no takeover flag by design.
+
+**Argument:** `name` (required) — Worktree name
+
+**Options:**
+
+- `--spec <id>` (**required**) — Spec id to bind (draft or active)
 - `--data` — Show structured data block on diagnostics
 
 ### `caws worktree bind <name>`

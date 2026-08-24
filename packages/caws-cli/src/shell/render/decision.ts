@@ -271,11 +271,11 @@ function authorityCandidateCommands(
       }
     } else if (candidate.worktreeName === undefined) {
       commands.push({
-        command: `caws worktree create <name> --spec ${shellQuote(candidate.specId)}`,
+        command: `caws worktree ensure <name> --spec ${shellQuote(candidate.specId)}`,
         description:
           candidate.lifecycleState === 'draft'
-            ? `Create a governed worktree for draft spec ${candidate.specId} — creating it activates the draft.`
-            : `Create a governed worktree for active spec ${candidate.specId}.`,
+            ? `Create-or-admit a governed worktree for draft spec ${candidate.specId} — creating it activates the draft; an existing untouched lane admits idempotently.`
+            : `Create-or-admit a governed worktree for active spec ${candidate.specId}; an existing untouched lane admits idempotently.`,
         mutates: true,
       });
     } else {
@@ -491,8 +491,8 @@ export function buildScopeRemediation(
     ];
     if (candidates.length === 0) {
       commands.push({
-        command: 'caws worktree create <name> --spec <spec-id>',
-        description: 'Create a governed worktree for the active spec that should own the edit.',
+        command: 'caws worktree ensure <name> --spec <spec-id>',
+        description: 'Create-or-admit a governed worktree for the active spec that should own the edit.',
         mutates: true,
       });
     }

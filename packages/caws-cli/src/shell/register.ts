@@ -104,6 +104,7 @@ import {
   runWorktreeBindCommand,
   runWorktreeCreateCommand,
   runWorktreeDestroyCommand,
+  runWorktreeEnsureCommand,
   runWorktreeListCommand,
   runWorktreeMergeCommand,
   runWorktreeMigrateRegistryCommand,
@@ -1526,6 +1527,17 @@ export function registerShellCommands(
         exit(code);
       }
     );
+
+  // WORKTREE-ENSURE-AFFORDANCE-001: create-or-admit composition verb.
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'ensure'))
+    .action((name: string, opts: { spec: string; data?: boolean }) => {
+      const code = runWorktreeEnsureCommand({
+        name,
+        specId: opts.spec,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
 
   defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'list'))
     .action((opts: { data?: boolean }) => {

@@ -175,7 +175,7 @@ describe('caws scope check --json remediation behavior', () => {
     expect(code).toBe(1);
     expect(json.decision).toBe('no_authority');
     expect(json.remediation.commands.map((c) => c.command)).toContain(
-      'caws worktree create <name> --spec <spec-id>'
+      'caws worktree ensure <name> --spec <spec-id>'
     );
     expect(json.remediation.commands.map((c) => c.command)).toContain(
       'caws specs list --status active'

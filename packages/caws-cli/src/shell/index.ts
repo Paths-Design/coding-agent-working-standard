@@ -232,6 +232,7 @@ export {
   runWorktreeCreateCommand,
   runWorktreeListCommand,
   runWorktreeBindCommand,
+  runWorktreeEnsureCommand,
   runWorktreeDestroyCommand,
   runWorktreeUntrackCommand,
   runWorktreeMergeCommand,

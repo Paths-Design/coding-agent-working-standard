@@ -1036,8 +1036,28 @@ Creates a new git worktree under `.caws/worktrees/<name>` bound to an active spe
 
 If `--spec` names a draft spec, the command refuses without creating the worktree and prints the safe handoff `caws specs activate <id>`. Activation must pass its own spec preflight before create/bind is retried.
 
-### `caws worktree list`
+### `caws worktree ensure <name>`
 
+```bash
+caws worktree ensure my-feature --spec FEAT-1
+```
+
+| Flag | Description |
+|---|---|
+| `--spec <id>` | Spec id to bind (draft or active). |
+| `--data` | Show structured data block on diagnostics. |
+
+Create-or-admit affordance (WORKTREE-ENSURE-AFFORDANCE-001). Absent worktree:
+created via the full create path (`worktree_created` + `worktree_bound`,
+draft activates on bind, artifact linking). Existing worktree bound to the
+SAME spec with an admitting owner and an untouched fork-point branch: admits
+idempotently (exit 0, no new events, no mutation) and prints the `cd` entry
+command. Refuses with handoffs for: foreign-owned worktrees (soft-block;
+takeover stays on `caws claim`), different-spec bindings (`worktree list` /
+`bind`), closed/archived specs (`reopen` / `recover`), and moved branches
+(in-flight lanes). Accepts no takeover flag by design.
+
+### `caws worktree list`
 ```bash
 caws worktree list
 ```

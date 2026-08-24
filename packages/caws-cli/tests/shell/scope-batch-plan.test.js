@@ -87,8 +87,8 @@ describe('caws scope plan', () => {
         paths: ['packages/inline.ts', 'packages/a.ts', 'packages/b.ts'],
       },
       {
-        command: 'caws worktree create <name> --spec <spec-id>',
-        description: 'Create a governed worktree for the active spec that should own the edit.',
+        command: 'caws worktree ensure <name> --spec <spec-id>',
+        description: 'Create-or-admit a governed worktree for the active spec that should own the edit.',
         mutates: true,
         paths: ['packages/inline.ts', 'packages/a.ts', 'packages/b.ts'],
       },
