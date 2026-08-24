@@ -105,3 +105,7 @@ evidence:
     status: pass
     evidence_ref: claim-cwd-independent + claim-takeover-foreign-envelope + resolver-guard-divergence + resolver-platform-from-envelope all green (47/47 in session/); single-capsule compat rule preserves the takeover-from-canonical path; full suite 2030/2030
     recorded_at: "2026-08-24T21:49:25.114Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "jest A3/A3b: mixed admission renders 'note: rejected alongside: uncorroborated-capsule: session-a.json ... D3 over-match guard'; all-rejected case renders every capsule with a reason"
+    recorded_at: "2026-08-24T21:49:25.503Z"
