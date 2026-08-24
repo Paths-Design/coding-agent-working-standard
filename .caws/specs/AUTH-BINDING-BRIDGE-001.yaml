@@ -2,9 +2,10 @@ id: AUTH-BINDING-BRIDGE-001
 title: 'Bridge claims: session-to-spec authority binding for non-worktree contexts (the v11.2 authority line)'
 risk_tier: 2
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-bridge
 created_at: '2026-05-18T00:00:00.000Z'
-updated_at: '2026-08-24T00:00:00.000Z'
+updated_at: '2026-08-24T21:51:22.553Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/kernel/schemas/events/claim_bridged.v1.json
