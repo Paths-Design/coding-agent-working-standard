@@ -9,7 +9,6 @@ blast_radius:
   modules:
     - packages/caws-cli/src/shell/session/resolve-session.ts
   data_migration: false
-operational_rollback_slo: 5m
 scope:
   in:
     - packages/caws-cli/src/shell/session/resolve-session.ts
