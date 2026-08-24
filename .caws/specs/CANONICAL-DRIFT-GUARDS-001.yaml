@@ -4,28 +4,138 @@ risk_tier: 2
 mode: feature
 lifecycle_state: draft
 created_at: '2026-08-24T22:31:49.355Z'
-updated_at: '2026-08-24T22:31:49.355Z'
+updated_at: '2026-08-24T22:40:00.000Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/doctor-snapshot.ts
+    - packages/caws-cli/src/kernel/doctor/inspect.ts
+    - packages/caws-cli/src/kernel/doctor/rules.ts
+    - packages/caws-cli/src/kernel/doctor/types.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/store/specs-writer.ts
   data_migration: false
-operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/store/doctor-snapshot.ts
+    - packages/caws-cli/src/kernel/doctor/inspect.ts
+    - packages/caws-cli/src/kernel/doctor/rules.ts
+    - packages/caws-cli/src/kernel/doctor/types.ts
+    - packages/caws-cli/src/kernel/index.ts
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/store/specs-writer.ts
+    - packages/caws-cli/tests/shell/canonical-drift.test.js
+    - packages/caws-cli/tests/kernel/canonical-drift-doctor.test.js
+    - packages/caws-cli/README.md
+    - docs/architecture/caws-vnext-command-surface.md
+    - docs/command-reference.md
+    - docs/api/cli.md
+    - AGENTS.md
+  out:
+    - .caws/policy.yaml
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    DETECTION (Entry 37's missing piece): when at least one CAWS worktree is
+    registered/active AND the canonical checkout's current branch is NOT the
+    base branch of those worktrees (HEAD parked on a feature branch), doctor
+    emits a WARN finding naming the parked branch and warning that spec
+    lifecycle auto-commits land on it. The canonical branch comes from the
+    git-worktree porcelain observation the snapshot already collects (the
+    canonical entry's branch), NOT a new git invocation in the kernel —
+    doctor stays pure. Absence of observation (gitObservationFailure) or zero
+    active worktrees suppresses the finding (idle repos are not drift).
+  - >-
+    PREVENTION at the auto-commit boundary: spec-lifecycle commands that
+    auto-commit (create/amend-scope/close/activate — the surfaces whose
+    commits land on HEAD) check the commit target BEFORE writing: when the
+    target branch is neither the base branch nor a branch bound to a worktree
+    whose spec the caller is acting on, they REFUSE with an explicit
+    --allow-foreign-branch escape (a deliberate author-onto-feature-branch is
+    rare but legitimate — degrade to explicit-flag, never silent refusal).
+    The check runs pre-transaction; a refusal mutates nothing.
+  - >-
+    RECOVERY: `caws specs relocate <id> [--to-base]` moves a spec YAML (and
+    its audit commit) from a mis-parked branch to the base branch WITHOUT a
+    canonical checkout switch — object-database only (git show <sha>:<path>
+    read + lifecycle-transaction write on base via worktree-style plumbing),
+    the same never-touch-working-tree discipline as `worktree merge`. Default
+    is dry-run (prints the source branch, target branch, and the commit it
+    will author); --apply performs the relocation and appends a
+    spec_body_amended event noting the relocation.
+  - >-
+    Doctor finding + refusals carry the recovery handoff verbatim: name the
+    parked branch, the exact `caws specs relocate <id> --to-base` (or
+    un-park-by-peer) command, and the doctrine line (canonical is the base
+    branch's home).
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: >-
+      A repo with one active CAWS worktree based on `main`, and the canonical
+      checkout's HEAD parked on `feat/other` (observed via the porcelain
+      list).
+    when: >-
+      `caws doctor` runs.
+    then: >-
+      A WARN finding `doctor.canonical.mis_parked_head` fires naming
+      `feat/other` and `main`, stating lifecycle auto-commits will land on
+      the parked branch, with the relocate/un-park repair text.
+  - id: A2
+    given: >-
+      The same repo state, but zero active worktrees (all merged/destroyed).
+    when: >-
+      `caws doctor` runs.
+    then: >-
+      NO mis-parked finding fires (an idle repo parked anywhere is not
+      drift); the rest of the report is unchanged.
+  - id: A3
+    given: >-
+      Canonical HEAD parked on `feat/other`; an agent runs `caws specs
+      create` (an auto-commit lifecycle command).
+    when: >-
+      The command executes without --allow-foreign-branch.
+    then: >-
+      Refusal (exit 1) BEFORE any write: no spec YAML, no event, no commit;
+      the diagnostic names the parked branch and the escape flag.
+  - id: A4
+    given: >-
+      The same state.
+    when: >-
+      The command runs with --allow-foreign-branch.
+    then: >-
+      The lifecycle operation proceeds exactly as today (commit lands on the
+      parked branch — the operator explicitly chose it).
+  - id: A5
+    given: >-
+      A spec YAML committed on `feat/other` (not on base), canonical parked
+      on `feat/other`.
+    when: >-
+      `caws specs relocate <id>` (dry-run), then `--apply`.
+    then: >-
+      Dry-run prints source branch, base branch, and the planned commit
+      without mutating anything. --apply writes the spec content onto base
+      via object plumbing (canonical working tree untouched — the parked
+      checkout still shows the file, base now has it too), appends
+      spec_body_amended with relocation provenance, and the follow-up doctor
+      run reports the spec present on base.
+  - id: A6
+    given: >-
+      Canonical HEAD on the base branch (the normal state).
+    when: >-
+      Any lifecycle auto-commit command runs.
+    then: >-
+      Behavior is byte-identical to today (no extra prompt, no refusal) —
+      the guard is inert in the healthy state.
+non_functional:
+  reliability:
+    - >-
+      Closes the Entry 37 detection gap at the fault, not just the recovery:
+      governance commits mis-landing on a peer's feature branch become a
+      doctor finding + a pre-write refusal instead of post-hoc forensics.
+  reliability:
 contracts:
   - name: 'canonical-drift-doctor-finding'
-    type: behavior
+    type: 'behavior'
     path: 'packages/caws-cli/src/kernel/doctor/inspect.ts'
   - name: 'canonical-drift-command'
-    type: contract-test
+    type: 'contract-test'
     path: 'packages/caws-cli/tests/shell/canonical-drift.test.js'
