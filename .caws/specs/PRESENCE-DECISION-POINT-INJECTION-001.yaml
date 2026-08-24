@@ -144,3 +144,7 @@ evidence:
     status: pass
     evidence_ref: "jest A4: self+peer leases -> block lists only peer; self never rendered"
     recorded_at: "2026-08-24T19:30:49.907Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "jest A5 (real agent-register.sh via bash + stubbed CAWS_BIN): unbound fixture -> additionalContext names NO-write-authority, SPEC-101, exact 'caws worktree create <name> --spec SPEC-101', 'and 1 more'; bound fixture -> empty stdout"
+    recorded_at: "2026-08-24T19:30:50.309Z"
