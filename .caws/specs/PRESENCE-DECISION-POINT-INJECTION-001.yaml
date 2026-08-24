@@ -132,3 +132,7 @@ evidence:
     status: pass
     evidence_ref: "jest A1: two live leases -> activate stdout names both peers with worktree/spec/branch, block precedes 'activated' line, exit 0"
     recorded_at: "2026-08-24T19:30:48.745Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "jest A2: zero peers -> stdout exactly ['activated SPEC-002'] (byte-identical baseline)"
+    recorded_at: "2026-08-24T19:30:49.137Z"
