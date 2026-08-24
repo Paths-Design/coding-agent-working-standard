@@ -1,56 +1,195 @@
 id: AUTH-BINDING-BRIDGE-001
-title: 'Agent-session binding bridge for non-worktree contexts'
-risk_tier: 3
-mode: chore
+title: 'Bridge claims: session-to-spec authority binding for non-worktree contexts (the v11.2 authority line)'
+risk_tier: 2
+mode: feature
 lifecycle_state: draft
 created_at: '2026-05-18T00:00:00.000Z'
-updated_at: '2026-05-18T00:00:00.000Z'
+updated_at: '2026-08-24T00:00:00.000Z'
 blast_radius:
   modules:
-    - packages/caws-cli/src/store/claim-store.ts
+    - packages/caws-cli/src/kernel/schemas/events/claim_bridged.v1.json
+    - packages/caws-cli/src/kernel/schemas/events/bridge_claim_taken_over.v1.json
+    - packages/caws-cli/src/kernel/schemas/events/claim_released.v1.json
+    - packages/caws-cli/src/kernel/evidence/validate.ts
+    - packages/caws-cli/src/store/bridge-store.ts
     - packages/caws-cli/src/shell/commands/claim.ts
+    - packages/caws-cli/src/shell/binding/resolve-binding.ts
   data_migration: false
-operational_rollback_slo: 5m
 scope:
   in:
-    - packages/caws-cli/src/store/claim-store.ts
+    - packages/caws-cli/src/kernel/schemas/events/claim_bridged.v1.json
+    - packages/caws-cli/src/kernel/schemas/events/bridge_claim_taken_over.v1.json
+    - packages/caws-cli/src/kernel/schemas/events/claim_released.v1.json
+    - packages/caws-cli/src/kernel/evidence/validate.ts
+    - packages/caws-cli/src/store/bridge-store.ts
+    - packages/caws-cli/src/store/index.ts
     - packages/caws-cli/src/shell/commands/claim.ts
-    - packages/caws-cli/tests/shell/claim.test.js
-    - .caws/specs/AUTH-BINDING-BRIDGE-001.yaml
+    - packages/caws-cli/src/shell/binding/resolve-binding.ts
+    - packages/caws-cli/src/shell/render/status.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/index.ts
+    - packages/caws-cli/tests/shell/claim-bridge.test.js
+    - packages/caws-cli/tests/store/bridge-store.test.js
+    - packages/caws-cli/README.md
+    - docs/architecture/caws-vnext-command-surface.md
+    - docs/command-reference.md
+    - docs/api/cli.md
+    - AGENTS.md
   out:
     - .caws/policy.yaml
     - .caws/events.jsonl
     - packages/caws-cli/src/store/worktrees-writer.ts
-    - packages/caws-cli/src/store/specs-writer.ts
 invariants:
-  - 'The bridge does not invent identity. A non-worktree session still presents a session_id; the bridge connects that session_id to a spec without requiring a worktree binding.'
-  - 'Bridge bindings are subordinate to worktree bindings: if a worktree binding exists for the same spec, the worktree binding wins.'
-  - 'Bridge creation appends exactly one event through appendEvent inside a lifecycle transaction.'
+  - >-
+    Bridge is an AUTHORITY binding, not a scope expansion (doctrine invariant
+    12): a bridge confers the bound spec's scope.in as the session's admission
+    surface exactly as a worktree binding does — nothing wider. A governed
+    write outside scope.in still fails normally; a bridge to a non-active spec
+    confers nothing.
+  - >-
+    Worktree bindings WIN over bridge bindings (subordination): when the
+    cwd resolves inside a spec-bound worktree, that binding is authoritative
+    and the bridge is not consulted for scope admission. A bridge claim
+    against a spec that has a live worktree binding REFUSES (A2) with a typed
+    diagnostic naming the worktree owner — one authority holder per spec.
+  - >-
+    Bridge does not invent identity: the session_id comes from the same
+    resolveSession surface claim uses today (env tiers, capsules, mint with
+    allowMint on the acquire path). Foreign-owner semantics match worktree
+    claim: a bridge held by a different session refuses without --takeover;
+    --takeover writes a prior_owners audit on the bridge entry and appends
+    bridge_claim_taken_over inside the same lifecycle transaction.
+  - >-
+    State home is `.caws/claims/bridge.json` — a flat map keyed by spec id,
+    `{ [specId]: { session_id, platform, acquired_at, last_seen } }` — written
+    ONLY through the store's atomic writer inside a lifecycle transaction
+    paired with its audit event (claim_bridged on acquire, claim_released on
+    release, bridge_claim_taken_over on takeover). No hand edits; no lease
+    writes; no heartbeat events (doctrine invariants 1, 10).
+  - >-
+    Retire is read-side-then-prune: a bridge to a closed/archived/missing spec
+    confers NO authority (scope admission ignores it; claim --spec refuses
+    non-active specs with the reopen/recover handoffs), and `caws worktree
+    prune` gains a bridge-ghost candidate class (bindings whose spec is no
+    longer active) — dry-run default, --apply removes the dead entries. Disk
+    removal of a RETIRED binding is hygiene, not an authority transition, so
+    prune appends no event; the audit trail is the spec_closed/spec_archived
+    event that retired it.
+  - >-
+    Kernel schemas ship FIRST (additionalProperties: false payloads; the
+    CLAUDE.md lesson): claim_bridged {spec_id, session_id, platform?},
+    bridge_claim_taken_over {spec_id, prior_owner{session_id,platform?,last_seen?},
+    new_owner{session_id,platform?}, reason?}, claim_released {spec_id,
+    session_id}. claim_bridged and bridge_claim_taken_over are
+    REQUIRES_SPEC_ID class; claim_released is OPTIONAL_SPEC_ID.
 acceptance:
   - id: A1
-    given: 'A v11-initialized repo with an active spec FEAT-001 and no worktree.'
-    when: 'A session not running in a worktree claims FEAT-001 via the bridge command (exact surface TBD).'
-    then: 'The claim is recorded; caws status surfaces the session-id on the Spec panel; subsequent scope checks recognize the session.'
+    given: >-
+      A v11 repo with an ACTIVE spec BR-001, no worktree bound to it, and a
+      session (resolvable identity, not inside any worktree).
+    when: >-
+      The session runs `caws claim --spec BR-001`.
+    then: >-
+      bridge.json records the session↔spec binding; one claim_bridged event
+      appends in the same lifecycle transaction; the command prints the
+      binding and the handoff that scope admission now flows from it; a
+      subsequent `caws scope show <in-scope-path>` resolves mode
+      authoritative via the bridge (bindingState bridged) and ADMITs an
+      in-scope path / REFUSEs an out-of-scope path exactly as a worktree
+      binding would.
   - id: A2
-    given: 'A worktree binding for FEAT-001 exists with a different session_id.'
-    when: 'A non-worktree session attempts to bridge-claim FEAT-001.'
-    then: 'The command refuses with a typed diagnostic naming the worktree-binding owner; no event is appended.'
+    given: >-
+      A live worktree binding exists for spec BR-002 owned by session W.
+    when: >-
+      A different non-worktree session runs `caws claim --spec BR-002`.
+    then: >-
+      Refusal (exit 1) with a typed diagnostic naming the worktree binding
+      and owner W (subordination: one authority holder per spec); no
+      bridge.json entry; no event appended.
+  - id: A3
+    given: >-
+      A bridge binding for spec BR-003 held by session A (acquired per A1).
+    when: >-
+      A different session B runs `caws claim --spec BR-003` (no flags), then
+      `caws claim --spec BR-003 --takeover`.
+    then: >-
+      The bare attempt refuses with the foreign-owner soft-block (owner,
+      platform, acquired_at, and the session-log pointer discipline). The
+      --takeover attempt rewrites the binding to B, appends
+      bridge_claim_taken_over with prior_owner A in the same transaction, and
+      the bridge entry carries a prior_owners audit array.
+  - id: A4
+    given: >-
+      A bridge binding for spec BR-004 held by the acting session.
+    when: >-
+      The session runs `caws claim --release --spec BR-004`, and separately a
+      second bridge (BR-005) is released via bare `caws claim --release`.
+    then: >-
+      The named release removes exactly the BR-004 binding and appends
+      claim_released; the bare release removes every bridge the session owns
+      (BR-005) and appends one claim_released per removed binding; releasing
+      a binding the session does NOT own refuses.
+  - id: A5
+    given: >-
+      A bridge binding whose spec has since been closed (and a second whose
+      spec was archived).
+    when: >-
+      `caws scope show <in-scope-path>` runs for the bridged session, and
+      `caws worktree prune` (dry-run, then --apply).
+    then: >-
+      Scope does NOT treat the retired bridge as authority (no admission from
+      a dead spec); prune lists both as bridge-ghost candidates with the
+      retire reason; --apply removes them from bridge.json; prune appends no
+      events (retired-binding hygiene).
+  - id: A6
+    given: >-
+      A repo with one active bridge binding (per A1) and one worktree binding.
+    when: >-
+      `caws status` runs.
+    then: >-
+      The status surfaces the bridge binding (spec, session, acquired_at) in
+      the Current-context/claim surface alongside worktree ownership —
+      observe is side-effect-free (status byte-stability invariant holds).
+  - id: A7
+    given: >-
+      Any bridge mutation path.
+    when: >-
+      Two concurrent bridge mutations target the same spec.
+    then: >-
+      They serialize on the lifecycle lock (the store's withLifecycleLock
+      discipline); a partial write (bridge.json without the event, or the
+      event without the state) is never observable (transactional pairing).
 non_functional:
   reliability:
-    - 'Bridge create acquires the lifecycle lock; concurrent bridges to the same spec serialize.'
+    - >-
+      Closes the last v11.2 authority gap: sessions in worktree-impractical
+      contexts (read-only checkouts, certain CI, monorepo sub-projects) gain
+      governed authority without forking the ownership model. Fully
+      reversible: deleting bridge.json (or claim --release) returns the repo
+      to worktree-only authority with zero migration.
   security:
-    - 'Bridge does not relax foreign-claim semantics; --takeover (when added) writes the same prior_owners audit as worktree claim.'
-contracts: []
-# --- Triage (deferred from v11.1.0) -----------------------------------------
-# Pressure on this slice dropped once CLI-WORKTREE-001 restored canonical
-# worktree binding. Most CAWS agent sessions follow the worktree path; the
-# bridge is for environments where worktree creation is impractical
-# (read-only checkouts, certain CI contexts, sub-projects inside a monorepo).
-#
-# Open questions before implementation:
-#   - Is the bridge a `caws claim --no-worktree` flag, a separate `caws bind`
-#     command, or an extension of `caws claim --spec <id>`?
-#   - Does the bridge require any new event schema, or does it reuse
-#     claim_acquired with an additional bridge: true field?
-#   - How does scope check resolve when both a bridge binding and a worktree
-#     binding exist for different specs in the same cwd?
+    - >-
+      One authority holder per spec enforced at acquire (worktree binding
+      subordination + foreign-bridge refusal). Fail closed: an unreadable
+      bridge.json refuses bridge acquire/release rather than guessing. No
+      path widens scope beyond the bound spec's scope.in.
+contracts:
+  - name: bridge-binding-lifecycle-v1
+    type: behavior
+    path: packages/caws-cli/src/shell/commands/claim.ts
+    description: >-
+      The bridge binding satisfies the seven-slot lifecycle spine (doctrine
+      invariant 13): acquire (claim --spec + claim_bridged event), observe
+      (status, side-effect-free), refuse (worktree-binding subordination;
+      foreign owner without --takeover), takeover (claim --spec --takeover +
+      prior_owners audit + bridge_claim_taken_over), release (claim --release
+      named or bare + claim_released), retire (non-active spec confers
+      nothing read-side; worktree prune bridge-ghost class cleans disk),
+      prune (dry-run default, --apply, no event for retired entries).
+  - name: bridge-store-v1
+    type: contract-test
+    path: packages/caws-cli/tests/store/bridge-store.test.js
+  - name: claim-bridge-command-v1
+    type: contract-test
+    path: packages/caws-cli/tests/shell/claim-bridge.test.js
