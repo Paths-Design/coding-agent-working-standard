@@ -148,3 +148,7 @@ evidence:
     status: pass
     evidence_ref: "jest A5 (real agent-register.sh via bash + stubbed CAWS_BIN): unbound fixture -> additionalContext names NO-write-authority, SPEC-101, exact 'caws worktree create <name> --spec SPEC-101', 'and 1 more'; bound fixture -> empty stdout"
     recorded_at: "2026-08-24T19:30:50.309Z"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "jest A6: 8 peers -> exactly 5 peer lines + '... and 3 more' agents-list handoff"
+    recorded_at: "2026-08-24T19:30:50.703Z"
