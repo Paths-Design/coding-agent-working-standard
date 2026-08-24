@@ -4,22 +4,125 @@ risk_tier: 3
 mode: feature
 lifecycle_state: draft
 created_at: '2026-08-24T18:48:30.678Z'
-updated_at: '2026-08-24T18:48:30.678Z'
+updated_at: '2026-08-24T18:55:00.000Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/shell/commands/claim.ts
+    - packages/caws-cli/src/shell/render/peer-presence.ts
+    - packages/caws-cli/templates/hook-packs/shared/agent-register.sh
   data_migration: false
-operational_rollback_slo: 5m
+  operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/shell/commands/specs.ts
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/shell/commands/claim.ts
+    - packages/caws-cli/src/shell/render/peer-presence.ts
+    - packages/caws-cli/templates/hook-packs/shared/agent-register.sh
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/tests/shell/presence-injection.test.js
+    - packages/caws-cli/README.md
+    - docs/architecture/caws-vnext-command-surface.md
+    - docs/command-reference.md
+    - AGENTS.md
+  out:
+    - packages/caws-cli/src/kernel
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Presence injection is render-only and fail-open: the advisory peer block is
+    added to stdout of `caws specs activate`, `caws worktree
+    create/bind/merge`, and `caws claim` when TTL-classified-live peer leases
+    exist. Exit codes, authority decisions, and mutation behavior are
+    unchanged in every case; a missing, corrupt, or unreadable lease registry
+    degrades to exactly today's output with no new refusal.
+  - >-
+    Peer presence reads leases exactly as `caws agents list` does (30-minute
+    heartbeat TTL classification) and never for authority — doctrine
+    invariant 8 ("leases are visibility only; TTL never authorizes anything")
+    is untouched. The acting session's own lease is never listed as a peer.
+  - >-
+    Zero-peer output is byte-identical to the pre-change baseline: a solo
+    session sees no new lines on any decision-point command (no noise, no
+    placeholder text).
+  - >-
+    Output is bounded to prevent Entry-26-class context overflow: at most 5
+    peer lines, then "and N more" with the `caws agents list` handoff.
+  - >-
+    SessionStart context (agent-register.sh): when the session resolves
+    unbound in a repo whose canonical .caws state has active specs or
+    registered worktrees, the hook injects context naming the unbound state
+    and the exact `caws worktree create <name> --spec <id>` command. The hook
+    exits 0 regardless of CLI availability (lease writes and visibility never
+    block work).
+  - >-
+    Editing the shared hook template bumps SHARED_PACK_VERSION, recomputes
+    tests/init/pack-fingerprints.json, and preserves the growth-doctrine
+    managed header (edit_stance present, parseManagedHeader resolves).
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      Two fresh peer leases (within the TTL): one bound to worktree wt-x /
+      spec SPEC-X, one bound to wt-y / SPEC-Y; no lease for the acting
+      session.
+    when: >-
+      The acting session runs `caws worktree create wt-z --spec SPEC-Z`.
+    then: >-
+      Stdout includes an advisory peer block naming both peers with their
+      worktree/spec bindings, printed before the binding writes; the exit
+      code and every .caws/ mutation are identical to pre-change behavior.
+  - id: A2
+    given: >-
+      No live peer leases (empty, stale, or stopped-beyond-TTL registry).
+    when: >-
+      The same decision-point commands run (`specs activate`, `worktree
+      create/bind/merge`, `claim`).
+    then: >-
+      Output is byte-identical to the pre-change baseline for every command
+      (golden-output test).
+  - id: A3
+    given: >-
+      A corrupted or unreadable .caws/leases directory.
+    when: >-
+      A decision-point command runs.
+    then: >-
+      The command succeeds with today's output and no peer block — the
+      advisory fails open and introduces no new refusal class.
+  - id: A4
+    given: >-
+      The acting session's own fresh lease plus exactly one peer lease.
+    when: >-
+      A decision-point command runs.
+    then: >-
+      The peer block lists only the peer (self excluded).
+  - id: A5
+    given: >-
+      A SessionStart dispatch in the canonical checkout with active spec
+      SPEC-A registered and no binding for the starting session.
+    when: >-
+      agent-register.sh fires.
+    then: >-
+      The injected context names the unbound state, lists the active spec(s),
+      and names the exact `caws worktree create <name> --spec SPEC-A`
+      command; the hook exits 0 even when the CLI binary is unavailable.
+  - id: A6
+    given: >-
+      Eight live peer leases.
+    when: >-
+      A decision-point command runs.
+    then: >-
+      The peer block lists at most 5 peers plus an "and 3 more" line that
+      hands off to `caws agents list`.
+  - id: A7
+    given: >-
+      The edited agent-register.sh template and bumped SHARED_PACK_VERSION.
+    when: >-
+      Pack-fingerprint tests and `npm run docs:check` run.
+    then: >-
+      Fingerprints match the recomputed pack-fingerprints.json, the
+      growth-doctrine header parses, and docs:check is green.
 non_functional: {}
 contracts: []

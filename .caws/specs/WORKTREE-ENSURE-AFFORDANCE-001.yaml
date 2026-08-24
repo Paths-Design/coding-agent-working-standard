@@ -4,23 +4,120 @@ risk_tier: 2
 mode: feature
 lifecycle_state: draft
 created_at: '2026-08-24T18:48:41.543Z'
-updated_at: '2026-08-24T18:48:41.543Z'
+updated_at: '2026-08-24T18:55:00.000Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/shell/commands/scope.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/templates/hook-packs/shared/agent-register.sh
   data_migration: false
-operational_rollback_slo: 5m
+  operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/shell/commands/scope.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/templates/hook-packs/shared/agent-register.sh
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/tests/shell/worktree-ensure.test.js
+    - packages/caws-cli/README.md
+    - docs/architecture/caws-vnext-command-surface.md
+    - docs/command-reference.md
+    - docs/api/cli.md
+    - AGENTS.md
+  out:
+    - packages/caws-cli/src/kernel
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    ensure is composition, not a new lifecycle verb: it may only sequence the
+    existing create/bind machinery. Creating through ensure emits exactly the
+    events `worktree create --spec` emits (worktree_created + worktree_bound,
+    activation-on-bind included); no new kernel or store lifecycle path is
+    added.
+  - >-
+    Idempotence: when the worktree is absent, ensure creates and binds it;
+    when it already exists, is bound to the requested spec, and its branch has
+    not moved off the fork point, ensure admits (exit 0, no new events) and
+    prints the exact entry command. ensure never destroys, re-binds, or
+    force-activates anything.
+  - >-
+    Foreign ownership: a worktree owned by a different live session refuses
+    with the existing foreign-claim soft-block message. ensure does not accept
+    --takeover; takeover stays on `caws claim --takeover` (single surface for
+    authority transfer).
+  - >-
+    Conflict refusal: a worktree bound to a different spec refuses naming the
+    conflicting binding with the existing `worktree list` / unbind handoffs.
+    Closed or archived specs refuse with the existing lifecycle handoffs
+    (reopen / recover) — ensure never force-activates.
+  - >-
+    Remediation wiring: the unbound no-authority diagnostics (`scope
+    show/check/plan`, and the SessionStart unbound context from
+    PRESENCE-DECISION-POINT-INJECTION-001) gain `caws worktree ensure --spec
+    <id>` alongside the existing create/bind handoffs, in text and JSON, with
+    decisions and exit codes unchanged.
+  - >-
+    Output contract: success prints the bound spec id and the exact `cd
+    <worktree-path>` command; exit codes follow the uniform CAWS convention
+    (0 success, 1 domain refusal, 2 composition failure).
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      Draft spec SPEC-E and no worktree bound to it.
+    when: >-
+      `caws worktree ensure wt-e --spec SPEC-E` runs.
+    then: >-
+      The worktree exists and is bound, SPEC-E is active, worktree_created +
+      worktree_bound events are appended, and stdout names `cd
+      .caws/worktrees/wt-e` and the bound spec.
+  - id: A2
+    given: >-
+      The state produced by A1 (bound, branch unmoved off the fork point).
+    when: >-
+      `caws worktree ensure wt-e --spec SPEC-E` runs again.
+    then: >-
+      Exit 0, no new events, no file mutations, and stdout admits with the
+      same `cd` path (idempotence proof).
+  - id: A3
+    given: >-
+      Worktree wt-e bound to SPEC-E and owned by a foreign live session.
+    when: >-
+      Another session runs `caws worktree ensure wt-e --spec SPEC-E`.
+    then: >-
+      Refusal with the foreign-claim soft-block (owner, platform, last
+      heartbeat, session-log pointer); ensure rejects a --takeover flag as an
+      unknown option.
+  - id: A4
+    given: >-
+      Worktree wt-e bound to SPEC-F.
+    when: >-
+      `caws worktree ensure wt-e --spec SPEC-E` runs.
+    then: >-
+      Refusal naming the SPEC-F binding with `worktree list` / unbind
+      handoffs; no mutation of registry, specs, or events.
+  - id: A5
+    given: >-
+      A closed spec SPEC-C.
+    when: >-
+      `caws worktree ensure <name> --spec SPEC-C` runs.
+    then: >-
+      Refusal with the reopen handoff; SPEC-C is not activated and no
+      worktree is created.
+  - id: A6
+    given: >-
+      An unbound session receiving the no-authority refusal on a governed
+      path, with active spec SPEC-A available.
+    when: >-
+      `caws scope check <path>` renders (text and --json) and the SessionStart
+      unbound context fires.
+    then: >-
+      Both surfaces include `caws worktree ensure <name> --spec SPEC-A`
+      alongside the existing create/bind remediation, with exit codes
+      unchanged.
 non_functional: {}
 contracts:
   - name: 'worktree-ensure-command'
