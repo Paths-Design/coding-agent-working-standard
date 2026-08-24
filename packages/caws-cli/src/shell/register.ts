@@ -572,6 +572,8 @@ export function registerShellCommands(
         releasePaths?: boolean;
         apply?: boolean;
         paths?: readonly string[];
+        spec?: string;
+        release?: boolean;
         data?: boolean;
       }) => {
         const code = runClaimCommand({
@@ -582,6 +584,8 @@ export function registerShellCommands(
           apply: opts.apply === true,
           showData: opts.data === true,
           ...(opts.paths !== undefined ? { paths: opts.paths } : {}),
+          ...(opts.spec !== undefined ? { spec: opts.spec } : {}),
+          ...(opts.release === true ? { release: true } : {}),
         });
         exit(code);
       }

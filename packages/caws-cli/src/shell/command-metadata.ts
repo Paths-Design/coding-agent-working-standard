@@ -970,8 +970,18 @@ export const CLAIM_COMMAND_META: LeafCommandMeta = {
   kind: 'leaf',
   name: 'claim',
   description:
-    "Surface ownership of the current worktree; with --takeover, acquire ownership from a foreign session (writes prior_owners audit). With --paths, declare working-tree ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001).",
+    "Surface ownership of the current worktree; with --takeover, acquire ownership from a foreign session (writes prior_owners audit). With --paths, declare working-tree ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001). With --spec <id> / --release, acquire/release a BRIDGE binding — session↔spec authority for non-worktree contexts (AUTH-BINDING-BRIDGE-001).",
   options: [
+    {
+      flag: '--spec <id>',
+      description:
+        'AUTH-BINDING-BRIDGE-001: bridge the session to an ACTIVE spec (no worktree needed). Same scope.in admission surface as a worktree binding; refuses a spec held by a worktree (subordination) or another session (use --takeover). Pair with --release to name the binding to release.',
+    },
+    {
+      flag: '--release',
+      description:
+        'AUTH-BINDING-BRIDGE-001: release bridge binding(s) owned by this session. With --spec <id>, releases exactly that binding; bare releases every owned binding.',
+    },
     {
       flag: '--takeover',
       description:

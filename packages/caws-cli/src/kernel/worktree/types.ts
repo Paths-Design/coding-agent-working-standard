@@ -163,6 +163,17 @@ export type BindingState =
       readonly spec: Spec;
       readonly worktreeName: string;
     }
+  // AUTH-BINDING-BRIDGE-001: session↔spec authority WITHOUT a worktree
+  // (.caws/claims/bridge.json). Enforces the same scope surface as `bound`
+  // — the spec's scope.in is the admission surface, nothing wider (doctrine
+  // invariant 12). Worktree bindings WIN over bridges (subordination): the
+  // shell refuses to acquire a bridge for a spec with a live worktree
+  // binding, so the two variants never compete for one spec.
+  | {
+      readonly kind: 'bridged';
+      readonly spec: Spec;
+      readonly session_id: string;
+    }
   | {
       readonly kind: 'one_sided';
       readonly detail: {

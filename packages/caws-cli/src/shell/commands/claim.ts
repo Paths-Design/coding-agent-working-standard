@@ -63,9 +63,15 @@ import {
   applyLeasePatch,
   applyRegistryPatch,
   composeStoreSnapshot,
+  acquireBridge,
+  takeoverBridge,
+  releaseBridge,
   loadLeases,
   resolveRepoRoot,
 } from '../../store';
+import { loadSpecs } from '../../store/specs-store';
+import { loadWorktrees } from '../../store/worktrees-store';
+import { buildActor } from '../session/actor';
 // Imported from the writer directly rather than the store barrel, matching how
 // specs.ts reaches specs-writer. The takeover's registry write and its audit
 // append must be ONE transaction, so the composition lives in the store layer.
@@ -82,6 +88,15 @@ export interface ClaimCommandOptions {
   readonly json?: boolean;
   readonly releasePaths?: boolean;
   readonly apply?: boolean;
+  /**
+   * AUTH-BINDING-BRIDGE-001: bridge acquire/takeover target. With --release,
+   * names the binding to release; bare --release releases every owned
+   * binding. Without --release, acquires (or refreshes) the bridge for the
+   * active spec --spec names.
+   */
+  readonly spec?: string;
+  /** AUTH-BINDING-BRIDGE-001: release bridge binding(s) owned by this session. */
+  readonly release?: boolean;
   readonly cwd?: string;
   readonly now?: () => Date;
   readonly env?: NodeJS.ProcessEnv;
@@ -310,6 +325,15 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
   if (wantsReleasePaths && wantsTakeover) {
     err('caws claim: --release-paths cannot be combined with --takeover.');
     return 2;
+  }
+
+  // ─── AUTH-BINDING-BRIDGE-001: bridge dispatch ─────────────────────────
+  // --spec/--release route to the bridge store BEFORE any worktree logic —
+  // a bridge claim is session↔spec authority with no worktree in play.
+  if (opts.spec !== undefined || opts.release === true) {
+    return runClaimBridgeDispatch(opts, {
+      cwd, nowFn, env, out, err, showData, json: opts.json === true,
+    });
   }
 
   // 1. Repo root.
@@ -847,4 +871,179 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
     return 0;
   }
   return newRel === 'you' ? 0 : 1;
+}
+
+// ─── AUTH-BINDING-BRIDGE-001: bridge dispatch ──────────────────────────────
+
+interface BridgeDispatchCtx {
+  readonly cwd: string;
+  readonly nowFn: () => Date;
+  readonly env: NodeJS.ProcessEnv;
+  readonly out: (line: string) => void;
+  readonly err: (line: string) => void;
+  readonly showData: boolean;
+  readonly json: boolean;
+}
+
+/**
+ * `caws claim --spec <id>` (acquire/refresh), `caws claim --spec <id>
+ * --takeover` (explicit transition), `caws claim --release [--spec <id>]`
+ * (relinquish). Worktree bindings WIN over bridges (subordination):
+ * acquiring a bridge for a spec with a live worktree binding refuses naming
+ * the worktree owner. Non-active specs refuse with their lifecycle
+ * handoffs. Exit codes follow the uniform convention (0/1/2).
+ */
+function runClaimBridgeDispatch(
+  opts: ClaimCommandOptions,
+  ctx: BridgeDispatchCtx
+): number {
+  const { out, err, showData, json } = ctx;
+
+  if (opts.release === true && opts.takeover === true) {
+    err('caws claim: --release cannot be combined with --takeover.');
+    return 1;
+  }
+  if (opts.spec !== undefined && opts.spec.length === 0) {
+    err('caws claim: --spec <id> must be non-empty.');
+    return 1;
+  }
+
+  const repoRootResult = resolveRepoRoot(ctx.cwd);
+  if (!repoRootResult.ok) {
+    err('caws claim: failed to resolve repo root.');
+    err(renderDiagnostics(repoRootResult.errors, { showData }));
+    return 2;
+  }
+  const { cawsDir } = repoRootResult.value;
+
+  const sessionResult = resolveSession({
+    cawsDir,
+    worktreeRoot: ctx.cwd,
+    env: ctx.env,
+    now: ctx.nowFn,
+    allowMint: opts.release !== true, // release asserts an existing identity
+  });
+  if (!sessionResult.ok) {
+    err('caws claim: failed to resolve session identity.');
+    err(renderDiagnostics(sessionResult.errors, { showData }));
+    return 1;
+  }
+  const session = sessionResult.value.identity;
+  const actor = buildActor({
+    session: sessionResult.value,
+    kind: 'agent',
+  });
+
+  // ─── RELEASE ──────────────────────────────────────────────────────────
+  if (opts.release === true) {
+    const r = releaseBridge(cawsDir, {
+      ...(opts.spec !== undefined ? { specId: opts.spec } : {}),
+      session,
+      actor,
+      now: ctx.nowFn(),
+    });
+    if (!r.ok) {
+      err('caws claim --release: refused.');
+      err(renderDiagnostics(r.errors, { showData }));
+      return 1;
+    }
+    if (json) {
+      out(JSON.stringify({ ok: true, released: r.value.released, session_id: session.session_id }));
+    } else {
+      out(`released bridge binding(s): ${r.value.released.join(', ')}`);
+      out('  (scope admission from these bindings ends now; worktree authority is unaffected.)');
+    }
+    return 0;
+  }
+
+  // ─── ACQUIRE / TAKEOVER (opts.spec is defined here) ───────────────────
+  const specId = opts.spec as string;
+  const specsResult = loadSpecs(cawsDir);
+  const spec = specsResult.specs.find((s) => s.id === specId);
+  if (spec === undefined) {
+    err(`caws claim --spec: no spec "${specId}" — run \`caws specs list\` for the canonical ids.`);
+    return 1;
+  }
+  if (spec.lifecycle_state !== 'active') {
+    err(`caws claim --spec: spec "${specId}" is ${spec.lifecycle_state} — a bridge confers authority only for an ACTIVE spec.`);
+    if (spec.lifecycle_state === 'closed') {
+      err(`  Resume the work: caws specs reopen ${specId}`);
+    } else if (spec.lifecycle_state === 'archived') {
+      err(`  Archived body: caws specs show ${specId} --archived  |  recover: caws specs recover ${specId}`);
+    } else {
+      err(`  Activate it first: caws specs activate ${specId}  (or bind a worktree: caws worktree ensure <name> --spec ${specId}).`);
+    }
+    return 1;
+  }
+
+  // Subordination: one authority holder per spec. A live worktree binding
+  // for this spec WINS — refuse the bridge naming the worktree owner.
+  const registryResult = loadWorktrees(cawsDir);
+  if (!registryResult.ok) {
+    err('caws claim --spec: worktree registry unreadable (cannot check subordination).');
+    err(renderDiagnostics(registryResult.errors, { showData }));
+    return 2;
+  }
+  for (const [name, record] of Object.entries(registryResult.value)) {
+    if (record?.specId === specId) {
+      err(`caws claim --spec: spec "${specId}" is held by worktree "${name}" — worktree bindings WIN over bridges (one authority holder per spec).`);
+      err(`  Enter the lane instead: cd .caws/worktrees/${name}`);
+      const owner = record.owner?.session_id;
+      if (owner !== undefined) {
+        err(`  Worktree owner: ${owner} (read their session log before any takeover consideration).`);
+      }
+      return 1;
+    }
+  }
+
+  if (opts.takeover === true) {
+    const t = takeoverBridge(cawsDir, {
+      specId,
+      session,
+      actor,
+      now: ctx.nowFn(),
+      reason: 'operator-invoked bridge takeover (caws claim --spec --takeover)',
+    });
+    if (!t.ok) {
+      err('caws claim --spec --takeover: refused.');
+      err(renderDiagnostics(t.errors, { showData }));
+      return 1;
+    }
+    if (json) {
+      out(JSON.stringify({
+        ok: true, spec_id: specId,
+        prior_owner: t.value.priorOwnerSessionId, session_id: session.session_id,
+      }));
+    } else {
+      out(`bridge for ${specId} taken over from ${t.value.priorOwnerSessionId} (prior_owners audit appended; bridge_claim_taken_over event recorded).`);
+    }
+    return 0;
+  }
+
+  const a = acquireBridge(cawsDir, {
+    specId,
+    session,
+    actor,
+    now: ctx.nowFn(),
+    contextCwd: ctx.cwd,
+  });
+  if (!a.ok) {
+    err(`caws claim --spec: refused for "${specId}".`);
+    err(renderDiagnostics(a.errors, { showData }));
+    return 1;
+  }
+  if (json) {
+    out(JSON.stringify({
+      ok: true, spec_id: specId, session_id: session.session_id,
+      refreshed: a.value.refreshed,
+    }));
+  } else {
+    out(a.value.refreshed
+      ? `refreshed bridge for ${specId} (session ${session.session_id})`
+      : `bridged ${specId} to session ${session.session_id} (.caws/claims/bridge.json; claim_bridged event recorded).`);
+    out("  Scope admission now flows from this binding: the spec's scope.in is your write surface —");
+    out('  exactly as a worktree binding enforces it, nothing wider (bridge is authority, not scope expansion).');
+    out(`  Release with: caws claim --release --spec ${specId}`);
+  }
+  return 0;
 }

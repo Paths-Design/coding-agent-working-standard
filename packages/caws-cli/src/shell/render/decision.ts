@@ -121,7 +121,7 @@ export function buildScopeDecisionJson(
       ? 'spec_context'
       : boundContext?.source === 'target_scope_in_claim'
         ? 'union'
-      : decision.bindingState === 'bound'
+      : decision.bindingState === 'bound' || decision.bindingState === 'bridged'
         ? 'authoritative'
         : 'union';
 

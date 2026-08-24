@@ -25,7 +25,7 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { resolveGitBinary } from '../../store/git-binary';
 
-import { deriveBindingState } from '../../kernel';
+import { deriveBindingState, type Spec } from '../../kernel';
 
 import { realpathSafe } from '../../store/repo-root';
 
@@ -275,6 +275,55 @@ export function resolveBinding(input: ResolveBindingInput): ResolvedBinding {
     }
 
     if (candidate === null) {
+      // AUTH-BINDING-BRIDGE-001: no worktree resolution anywhere. Before
+      // the honest `unbound`, consult the acting session's bridge bindings.
+      // A bridge is SESSION-scoped authority (like cwd-in-worktree): ONE
+      // active bridge means that spec governs every path evaluation —
+      // in-scope paths ADMIT, out-of-scope paths REJECT, exactly as a
+      // worktree binding would. With MULTIPLE bridges, disambiguate by the
+      // target path's scope.in claim when exactly one claims it; otherwise
+      // keep the honest unbound shape (an ambiguous bridge set is not a
+      // guess CAWS will make). Worktree resolution already won above
+      // (subordination); retired specs (closed/archived/missing) confer
+      // nothing.
+      if (
+        input.bridges !== undefined &&
+        typeof input.sessionId === 'string' &&
+        input.sessionId.length > 0
+      ) {
+        const held: Spec[] = [];
+        for (const [specId, entry] of Object.entries(input.bridges)) {
+          if (entry.session_id !== input.sessionId) continue;
+          const spec = input.specs.find((s) => s.id === specId);
+          if (spec === undefined) continue;
+          if (spec.lifecycle_state !== 'active') continue;
+          held.push(spec);
+        }
+        let chosen: Spec | undefined = undefined;
+        if (held.length === 1) {
+          chosen = held[0];
+        } else if (
+          held.length > 1 &&
+          typeof input.targetPath === 'string' &&
+          input.targetPath.length > 0
+        ) {
+          const claiming = held.filter(
+            (s) =>
+              (s.scope?.in ?? []).some((e) => scopeEntryMatches(e, input.targetPath!))
+          );
+          if (claiming.length === 1) chosen = claiming[0];
+        }
+        if (chosen !== undefined) {
+          return {
+            binding: {
+              kind: 'bridged',
+              spec: chosen,
+              session_id: input.sessionId,
+            },
+            source: 'bridge_claim',
+          };
+        }
+      }
       return { binding: { kind: 'unbound' }, source: 'none' };
     }
   }

@@ -105,7 +105,9 @@ export function evaluatePath(path: string, binding: BindingState, policy: Policy
     };
   }
 
-  // From here on, binding.kind === 'bound'.
+  // From here on, binding.kind === 'bound' OR 'bridged'
+  // (AUTH-BINDING-BRIDGE-001): a bridge confers the same admission surface
+  // as a worktree binding — the spec's scope.in — with the same refusals.
   const spec = binding.spec;
 
   // 2. Infrastructure exemption — applies only after binding authority exists.
@@ -118,7 +120,7 @@ export function evaluatePath(path: string, binding: BindingState, policy: Policy
       path,
       normalizedPath: normPath,
       message: `Path is under infrastructure prefix "${infraMatch}" and is exempt from scope.`,
-      bindingState: 'bound',
+      bindingState: binding.kind,
       data: { matchedPrefix: infraMatch },
     };
   }
@@ -135,7 +137,7 @@ export function evaluatePath(path: string, binding: BindingState, policy: Policy
         path,
         normalizedPath: normPath,
         message: `Path matches policy.non_governed_zones pattern "${zoneMatch}".`,
-        bindingState: 'bound',
+        bindingState: binding.kind,
         data: { matchedPattern: zoneMatch },
       };
     }
@@ -154,7 +156,7 @@ export function evaluatePath(path: string, binding: BindingState, policy: Policy
         normalizedPath: normPath,
         message: `Path is excluded by spec ${spec.id} via scope.out entry "${outMatch}".`,
         narrowRepair: `Move the change outside "${outMatch}" or amend the spec.`,
-        bindingState: 'bound',
+        bindingState: binding.kind,
         data: { matchedPrefix: outMatch, specId: spec.id },
       };
     }
@@ -173,7 +175,7 @@ export function evaluatePath(path: string, binding: BindingState, policy: Policy
           path,
           normalizedPath: normPath,
           message: `Root-level file "${rootMatch}" is admitted by policy.root_passthrough.`,
-          bindingState: 'bound',
+          bindingState: binding.kind,
           data: { matchedName: rootMatch },
         };
       }
@@ -188,7 +190,7 @@ export function evaluatePath(path: string, binding: BindingState, policy: Policy
         path,
         normalizedPath: normPath,
         message: `Path is admitted by spec ${spec.id} scope.in entry "${scopeInRoot}".`,
-        bindingState: 'bound',
+        bindingState: binding.kind,
         data: { matchedPattern: scopeInRoot, specId: spec.id },
       };
     }
@@ -207,7 +209,7 @@ export function evaluatePath(path: string, binding: BindingState, policy: Policy
         path,
         normalizedPath: normPath,
         message: `Path is admitted by spec ${spec.id} scope.support entry "${scopeSupportRoot}" (editable, not worktree-claimed).`,
-        bindingState: 'bound',
+        bindingState: binding.kind,
         data: { matchedPattern: scopeSupportRoot, specId: spec.id },
       };
     }
@@ -220,7 +222,7 @@ export function evaluatePath(path: string, binding: BindingState, policy: Policy
       normalizedPath: normPath,
       message: `Root-level file "${normPath}" is not in policy.root_passthrough and not listed in spec ${spec.id} scope.in or scope.support.`,
       narrowRepair: `Add "${normPath}" to policy.root_passthrough, list it in spec scope.in, or add it to scope.support (editable, not worktree-claimed).`,
-      bindingState: 'bound',
+      bindingState: binding.kind,
       data: { specId: spec.id },
     };
   }
@@ -235,7 +237,7 @@ export function evaluatePath(path: string, binding: BindingState, policy: Policy
       path,
       normalizedPath: normPath,
       message: `Path is admitted by spec ${spec.id} scope.in entry "${scopeInMatch}".`,
-      bindingState: 'bound',
+      bindingState: binding.kind,
       data: { matchedPattern: scopeInMatch, specId: spec.id },
     };
   }
@@ -251,7 +253,7 @@ export function evaluatePath(path: string, binding: BindingState, policy: Policy
       path,
       normalizedPath: normPath,
       message: `Path is admitted by spec ${spec.id} scope.support entry "${scopeSupportMatch}" (editable, not worktree-claimed).`,
-      bindingState: 'bound',
+      bindingState: binding.kind,
       data: { matchedPattern: scopeSupportMatch, specId: spec.id },
     };
   }
@@ -264,7 +266,7 @@ export function evaluatePath(path: string, binding: BindingState, policy: Policy
     normalizedPath: normPath,
     message: `Path "${normPath}" does not match any entry in spec ${spec.id} scope.in or scope.support.`,
     narrowRepair: 'Add a covering entry to scope.in (worktree-claimed) or scope.support (editable, not claimed), or move the change to a covered path.',
-    bindingState: 'bound',
+    bindingState: binding.kind,
     data: { specId: spec.id },
   };
 }

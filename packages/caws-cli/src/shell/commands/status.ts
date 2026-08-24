@@ -55,6 +55,7 @@ import {
   readGitDirInfo,
   resolveRepoRoot,
   safeLeaseFilename,
+  loadBridges,
 } from '../../store';
 import { resolveBinding } from '../binding/resolve-binding';
 import { renderDiagnostics } from '../render/diagnostic';
@@ -213,12 +214,27 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
     return 2;
   }
 
-  // 4. Binding from cwd
+  // 4. Binding from cwd — including the acting session's BRIDGE bindings
+  //    (AUTH-BINDING-BRIDGE-001). Read-only composition: status never mints
+  //    an identity, so a bridge surfaces only when one already resolves.
+  const bridgesLoad = loadBridges(cawsDir);
+  const bridgeSession = resolveSession({
+    cawsDir,
+    worktreeRoot: cwd,
+    env,
+    allowMint: false,
+  });
   const binding = resolveBinding({
     repoRoot,
     cwd,
     registry: snapshot.worktrees,
     specs: snapshot.specs,
+    ...(bridgesLoad.ok && bridgeSession.ok
+      ? {
+          bridges: bridgesLoad.value.bridges,
+          sessionId: bridgeSession.value.identity.session_id,
+        }
+      : {}),
   });
 
   // 5. Session — READ-ONLY by default. Mint is only permitted when

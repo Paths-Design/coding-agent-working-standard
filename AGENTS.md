@@ -18,7 +18,7 @@ The v11 cutover is complete. `main` runs the v11 surface (kernel/store/shell arc
 | `caws doctor` | Drift detection over `.caws/` state. Exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure). |
 | `caws status` | Read-only dashboard: project, current context, claim, doctor findings. Never mutates `.caws/`. |
 | `caws scope show / check / contention` | Explain scope, enforce scope, or report cross-worktree path contention. |
-| `caws claim [--takeover]` | Surface or take ownership of the current worktree. Writes `prior_owners` audit on takeover. |
+| `caws claim [--takeover] [--spec <id>] [--release]` | Surface or take ownership of the current worktree. Writes `prior_owners` audit on takeover. `--spec`/`--release` manage BRIDGE bindings (AUTH-BINDING-BRIDGE-001): session↔spec authority for non-worktree contexts — `caws claim --spec <id>` bridges to an ACTIVE spec (same `scope.in` admission as a worktree binding; refuses worktree-held or foreign-held specs), `--takeover` transitions explicitly with audit, `--release` relinquishes. Retired (closed/archived) specs confer nothing; `worktree prune` cleans ghost bindings. |
 | `caws gates run --spec <id>` | Run policy-driven quality gates. Appends one `gate_evaluated` event per declared gate. |
 | `caws evidence record --type <kind> --spec <id> --data <json>` | Append a typed evidence event (`test` / `gate` / `ac`). |
 | `caws waiver create / list / show / revoke` | Manage waiver records. Singular surface — no plural alias. |
