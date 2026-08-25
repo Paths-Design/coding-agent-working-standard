@@ -255,6 +255,17 @@ export interface DoctorInput {
    * Undefined when git observation failed.
    */
   readonly gitWorktrees?: readonly GitWorktreeEntry[];
+  /**
+   * CANONICAL-DRIFT-GUARDS-001: the canonical checkout's current branch and
+   * the base branch the active worktrees share, observed by the store from
+   * the git-worktree porcelain listing (no new git call). Absent when
+   * observation failed — the kernel finding silently skips (missing !=
+   * malformed).
+   */
+  readonly canonicalBranchObservation?: {
+    readonly currentBranch: string;
+    readonly baseBranch: string;
+  };
 
   /**
    * Reason string when `git worktree list --porcelain` failed. Surfaced

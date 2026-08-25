@@ -386,6 +386,45 @@ export interface ComposeDoctorResult {
 export function composeDoctorSnapshot(options: ComposeDoctorOptions): ComposeDoctorResult {
   const snapshot = composeStoreSnapshot(options);
 
+  // CANONICAL-DRIFT-GUARDS-001: canonical branch observation. The porcelain
+  // listing the snapshot collects deliberately EXCLUDES the canonical entry
+  // (the H6 foreign-physical filter), so the current branch comes from one
+  // direct rev-parse here (store layer — the kernel stays pure). The base
+  // branch comes from the registry (a unique baseBranch). Absent on git
+  // failure or base ambiguity — the kernel finding silently skips
+  // (missing != malformed).
+  let canonicalBranchObservation:
+    | { currentBranch: string; baseBranch: string }
+    | undefined;
+  {
+    const baseBranches = new Set<string>();
+    for (const record of Object.values(snapshot.worktrees ?? {})) {
+      if (record && typeof record.baseBranch === 'string') {
+        baseBranches.add(record.baseBranch);
+      }
+    }
+    if (baseBranches.size === 1) {
+      try {
+        const head = spawnSync(
+          resolveGitBinary(),
+          ['-C', options.repoRoot, 'rev-parse', '--abbrev-ref', 'HEAD'],
+          { encoding: 'utf8' }
+        );
+        if (!head.error && head.status === 0) {
+          const currentBranch = String(head.stdout).trim();
+          if (currentBranch.length > 0 && currentBranch !== 'HEAD') {
+            canonicalBranchObservation = {
+              currentBranch,
+              baseBranch: Array.from(baseBranches)[0]!,
+            };
+          }
+        }
+      } catch {
+        // observation failure -> undefined -> kernel skips
+      }
+    }
+  }
+
   const doctorInput: DoctorInput = {
     specs: snapshot.specs,
     ...(snapshot.policy !== undefined ? { policy: snapshot.policy } : {}),
@@ -402,6 +441,9 @@ export function composeDoctorSnapshot(options: ComposeDoctorOptions): ComposeDoc
     registryDiagnostics: snapshot.registryDiagnostics,
     ...(snapshot.gitWorktrees !== undefined
       ? { gitWorktrees: snapshot.gitWorktrees }
+      : {}),
+    ...(canonicalBranchObservation !== undefined
+      ? { canonicalBranchObservation }
       : {}),
     ...(snapshot.gitObservationFailure !== undefined
       ? { gitObservationFailure: snapshot.gitObservationFailure }

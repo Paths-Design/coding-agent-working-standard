@@ -4778,3 +4778,219 @@ export type { EventBody };
 // Unused import elimination: surface appendEvent so future direct-event
 // flows (if any) compile against the same surface as evidence/waiver.
 void appendEvent;
+
+// ─── CANONICAL-DRIFT-GUARDS-001: relocateSpecToBase ────────────────────────
+
+export interface RelocateSpecInput {
+  readonly id: string;
+  readonly repoRoot: string;
+  readonly baseBranch: string;
+  readonly now: Date;
+  readonly apply: boolean;
+}
+
+export interface RelocateSpecOutcome {
+  readonly id: string;
+  readonly sourceBranch: string;
+  readonly baseBranch: string;
+  readonly applied: boolean;
+  readonly alreadyOnBase: boolean;
+  /** Present after a successful apply: the commit now carrying the spec on base. */
+  readonly relocatedCommit?: string;
+}
+
+/**
+ * Run git with an extra env (GIT_INDEX_FILE) and optional stdin. Object-db
+ * plumbing only — never touches any working tree.
+ */
+function runGitPlumb(
+  args: ReadonlyArray<string>,
+  repoRoot: string,
+  opts: { env?: Record<string, string>; input?: string } = {}
+): string | null {
+  try {
+    const output = execFileSync(resolveGitBinary(), [...args], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      ...(opts.env !== undefined ? { env: { ...process.env, ...opts.env } } : {}),
+      ...(opts.input !== undefined ? { input: opts.input } : {}),
+    }).toString();
+    return output.trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Entry 37 recovery: move a spec YAML (with an audit commit) from a
+ * mis-parked canonical branch onto the base branch WITHOUT touching any
+ * working tree — object-database only, the same discipline as
+ * `worktree merge`: read the parked HEAD's blob, graft it onto the base
+ * tree through a PRIVATE temp index under .git (never the checkout's
+ * index), commit-tree, and compare-and-swap the base ref (bounded retry,
+ * losing a race recomputes). The parked checkout still shows the file (its
+ * tree is untouched); base now carries it too.
+ *
+ * AUDIT: the durable provenance is the commit on base itself — the message
+ * names the spec and the relocation (the same git-side provenance class as
+ * worktree merge's lane_tip/base_before record). The spec BODY is
+ * unchanged, so no events.jsonl write: the events chain records governance
+ * facts about spec content, and this operation changes git topology, not
+ * content.
+ *
+ * Dry-run by default. alreadyOnBase is the healthy no-op.
+ */
+export function relocateSpecToBase(
+  cawsDir: string,
+  input: RelocateSpecInput
+): Result<RelocateSpecOutcome> {
+  void cawsDir;
+  const relPath = `.caws/specs/${input.id}.yaml`;
+  const sourceBranch =
+    runGitPlumb(['rev-parse', '--abbrev-ref', 'HEAD'], input.repoRoot) ?? 'unknown';
+
+  if (sourceBranch === input.baseBranch) {
+    return ok({
+      id: input.id,
+      sourceBranch,
+      baseBranch: input.baseBranch,
+      applied: false,
+      alreadyOnBase: true,
+    });
+  }
+
+  const blob = runGitPlumb(['show', `HEAD:${relPath}`], input.repoRoot, {});
+  if (blob === null) {
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${input.id}" not found on the parked HEAD (${relPath}). Relocation reads the parked branch's committed copy; commit it first.`,
+        { subject: input.id }
+      )
+    );
+  }
+
+  if (!input.apply) {
+    return ok({
+      id: input.id,
+      sourceBranch,
+      baseBranch: input.baseBranch,
+      applied: false,
+      alreadyOnBase: false,
+    });
+  }
+
+  // ── Apply: pure object plumbing. ─────────────────────────────────────
+  const CAS_ATTEMPTS = 5;
+  for (let attempt = 1; attempt <= CAS_ATTEMPTS; attempt++) {
+    const baseSha = runGitPlumb(['rev-parse', input.baseBranch], input.repoRoot);
+    if (baseSha === null) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Base branch "${input.baseBranch}" not found.`,
+          { subject: input.baseBranch }
+        )
+      );
+    }
+
+    // Hash the blob into the object db (stdin — no working-tree temp file).
+    const blobSha = runGitPlumb(
+      ['hash-object', '-w', '--stdin'],
+      input.repoRoot,
+      { input: blob }
+    );
+    if (blobSha === null) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_WRITE_FAILED,
+          'hash-object failed while writing the spec blob.',
+          { subject: input.id }
+        )
+      );
+    }
+
+    // Graft onto base's tree through a PRIVATE temp index under .git.
+    const tmpIndex = `.git/caws-relocate-${process.pid}-${attempt}.idx`;
+    const idxEnv = { GIT_INDEX_FILE: tmpIndex };
+    const readTree = runGitPlumb(['read-tree', baseSha], input.repoRoot, { env: idxEnv });
+    if (readTree === null && readTree !== '') {
+      // read-tree prints nothing on success; a null here means spawn failure.
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_WRITE_FAILED,
+          'read-tree into the private temp index failed.',
+          { subject: input.id }
+        )
+      );
+    }
+    const upd = runGitPlumb(
+      ['update-index', '--add', '--cacheinfo', `100644,${blobSha},${relPath}`],
+      input.repoRoot,
+      { env: idxEnv }
+    );
+    if (upd === null) {
+      try { fs.rmSync(path.join(input.repoRoot, tmpIndex), { force: true }); } catch { /* best-effort */ }
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_WRITE_FAILED,
+          'update-index (graft spec blob) failed.',
+          { subject: input.id }
+        )
+      );
+    }
+    const newTree = runGitPlumb(['write-tree'], input.repoRoot, { env: idxEnv });
+    try { fs.rmSync(path.join(input.repoRoot, tmpIndex), { force: true }); } catch { /* best-effort */ }
+    if (newTree === null) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_WRITE_FAILED,
+          'write-tree failed.',
+          { subject: input.id }
+        )
+      );
+    }
+
+    const msg = `chore(caws): relocate ${input.id} spec onto ${input.baseBranch} (CANONICAL-DRIFT-GUARDS-001)\n\nSource branch: ${sourceBranch}\nRelocated at: ${input.now.toISOString()}`;
+    const newCommit = runGitPlumb(
+      ['commit-tree', newTree, '-p', baseSha, '-m', msg],
+      input.repoRoot
+    );
+    if (newCommit === null) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_WRITE_FAILED,
+          'commit-tree failed.',
+          { subject: input.id }
+        )
+      );
+    }
+
+    // Atomic CAS. "is at X but expected Y" on a lost race → retry against
+    // the fresh base, same bounded discipline as worktree merge.
+    const cas = runGitPlumb(
+      ['update-ref', `refs/heads/${input.baseBranch}`, newCommit, baseSha],
+      input.repoRoot
+    );
+    if (cas !== null || cas === '') {
+      // update-ref prints nothing on success; our helper trims to ''.
+      return ok({
+        id: input.id,
+        sourceBranch,
+        baseBranch: input.baseBranch,
+        applied: true,
+        alreadyOnBase: false,
+        relocatedCommit: newCommit,
+      });
+    }
+    // CAS failed — either contention (retry) or genuine refusal (exhaust).
+  }
+  return err(
+    storeDiagnostic(
+      STORE_RULES.LIFECYCLE_LOCK_CONTENTION,
+      `Base branch "${input.baseBranch}" advanced during relocation (5 CAS attempts). Re-run; nothing partial was written.`,
+      { subject: input.baseBranch }
+    )
+  );
+}

@@ -1018,6 +1018,33 @@ minimal v11 YAML examples for common array-shaped fields. This is the
 authoritative hook/CI path; consumers should not shell out to their own
 `js-yaml` parser just to classify CAWS spec YAML.
 
+### `caws specs relocate <id>`
+
+```bash
+caws specs relocate FEAT-1            # dry-run plan
+caws specs relocate FEAT-1 --apply    # perform the relocation
+```
+
+| Flag | Description |
+|---|---|
+| `--to-base` | Accepted for explicitness; to-base is the only v1 target. |
+| `--apply` | Perform the relocation (default is a read-only dry-run plan). |
+
+CANONICAL-DRIFT-GUARDS-001 (Entry 37 recovery): move a spec YAML from a
+mis-parked canonical branch onto the base branch WITHOUT touching any working
+tree — object-db plumbing (read the parked copy, graft onto base via a private
+temp index, `commit-tree`, compare-and-swap the base ref with bounded retry).
+Dry-run names the source and target branches. The durable audit is the commit
+on base itself. Base branch resolves from the worktree registry (a unique
+`baseBranch` required; ambiguity refuses).
+
+Related: the lifecycle commands that auto-commit (`create`, `activate`,
+`amend-scope`, `close`) refuse with a pre-write diagnostic when the canonical
+HEAD is parked off-base while worktrees are active, and accept
+`--allow-foreign-branch` to deliberately author on the parked branch;
+`caws doctor` surfaces the state as a `doctor.canonical.mis_parked_head`
+warning.
+
 ---
 
 ## 12. `caws worktree`

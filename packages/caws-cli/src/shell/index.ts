@@ -209,6 +209,7 @@ export {
   runSpecsRetireDraftCommand,
   runSpecsPruneDraftsCommand,
   runSpecsMigrateCommand,
+  runSpecsRelocateCommand,
   runSpecsValidateCommand,
 } from './commands/specs';
 export type {

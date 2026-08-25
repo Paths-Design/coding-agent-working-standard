@@ -55,6 +55,10 @@ export const DOCTOR_RULES = {
    * reported as foreign.
    */
   WORKTREE_FOREIGN_PHYSICAL: 'doctor.worktree.foreign_physical',
+  // CANONICAL-DRIFT-GUARDS-001 (Entry 37): the canonical checkout's HEAD is
+  // parked on a non-base branch while CAWS worktrees are active — spec
+  // lifecycle auto-commits will land on the parked branch.
+  CANONICAL_MIS_PARKED_HEAD: 'doctor.canonical.mis_parked_head',
   /**
    * Event-backed governance-half-state: the event log contains a
    * `worktree_created` event for a worktree name, but `.caws/worktrees.json`

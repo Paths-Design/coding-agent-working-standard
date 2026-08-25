@@ -147,7 +147,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'specs',
   description:
-    'Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate)',
+    'Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate/relocate)',
   options: [
     {
       flag: '--status <status>',
@@ -171,6 +171,11 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
       // "(required)" in prose and keep them .option() — help states the
       // requirement; the handler enforces it.
       options: [
+        {
+          flag: '--allow-foreign-branch',
+          description:
+            'CANONICAL-DRIFT-GUARDS-001: deliberately author this lifecycle commit on a foreign (parked) branch. Without it, the command refuses when the canonical HEAD is off-base while worktrees are active.',
+        },
         { flag: '--id <id>', description: 'Alias for the positional spec id' },
         { flag: '--title <title>', description: 'Short spec title (required)' },
         {
@@ -394,7 +399,14 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
       argument: { name: 'id', required: true, description: 'Draft spec id to activate' },
       description:
         'Activate a pre-authored draft spec. Draft-only: patches lifecycle_state to active and appends spec_activated.',
-      options: [DATA_OPTION],
+      options: [
+        {
+          flag: '--allow-foreign-branch',
+          description:
+            'CANONICAL-DRIFT-GUARDS-001: deliberately author this lifecycle commit on a foreign (parked) branch. Without it, the command refuses when the canonical HEAD is off-base while worktrees are active.',
+        },
+        DATA_OPTION,
+      ],
     },
     {
       kind: 'leaf',
@@ -403,6 +415,12 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
       description:
         'Amend a spec\'s scope.in/scope.out/scope.support on the canonical control plane (active/draft only). The sanctioned way to add a path you need to edit — no git cherry-pick, no danger latch. Writes only canonical .caws/specs/<id>; scope check from a linked worktree admits the added path immediately. Comment-preserving; validate-before-write; appends spec_scope_amended.',
       options: [
+        {
+          flag: '--allow-foreign-branch',
+          description:
+            'CANONICAL-DRIFT-GUARDS-001: deliberately author this lifecycle commit on a foreign (parked) branch. Without it, the command refuses when the canonical HEAD is off-base while worktrees are active.',
+        },
+
         { flag: '--add <path>', description: 'Add a scope.in path — editable AND worktree-claimed (repeatable)', collect: true },
         { flag: '--remove <path>', description: 'Remove a matching scope.in path — file or directory, matched by logical value regardless of quoting (repeatable)', collect: true },
         { flag: '--add-out <path>', description: 'Add a scope.out path. NOTE: the no-glob rule is an ADD-time schema constraint (file or directory paths only); removal has no such restriction (repeatable)', collect: true },
@@ -420,6 +438,12 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
       description:
         'Close an active spec. Non-destructive raw-byte YAML patch; appends spec_closed event.',
       options: [
+        {
+          flag: '--allow-foreign-branch',
+          description:
+            'CANONICAL-DRIFT-GUARDS-001: deliberately author this lifecycle commit on a foreign (parked) branch. Without it, the command refuses when the canonical HEAD is off-base while worktrees are active.',
+        },
+
         {
           flag: '--resolution <r>',
           description: 'Resolution',
@@ -622,6 +646,18 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
       description:
         'Validate a spec YAML FILE on disk using the CLI\'s own bundled parser and the kernel parse->shape->semantics pipeline. Path-shaped (takes a file path, not a spec id); does NOT resolve .caws/, read canonical state, or mutate anything. Exits 0 when valid, non-zero with a rendered diagnostic when invalid or unreadable. Lets hooks/CI validate spec YAML without carrying their own parser dependency — works for any consumer project regardless of language.',
       options: [DATA_OPTION],
+    },
+    {
+      kind: 'leaf',
+      name: 'relocate',
+      argument: { name: 'id', required: true, description: 'Spec id whose YAML should move to base' },
+      description:
+        'CANONICAL-DRIFT-GUARDS-001 (Entry 37 recovery): move a spec YAML from a mis-parked canonical branch onto the base branch WITHOUT touching any working tree — object-db plumbing (read the parked copy, graft onto base via a private temp index, commit-tree, compare-and-swap the base ref; bounded retry on contention). Dry-run by default; --apply performs. The audit is the commit on base itself. Base branch resolves from the worktree registry (unique baseBranch required).',
+      options: [
+        { flag: '--to-base', description: 'Accepted for explicitness; to-base is the only v1 target.' },
+        { flag: '--apply', description: 'Perform the relocation (default is a read-only dry-run plan).' },
+        DATA_OPTION,
+      ],
     },
   ],
 };
