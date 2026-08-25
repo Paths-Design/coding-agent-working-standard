@@ -477,3 +477,7 @@ evidence:
     status: pass
     evidence_ref: jest tests/store/working-tree-overlap.test.js + tests/shell/working-tree-check.test.js (no-overlap permits; check exits 0)
     recorded_at: "2026-08-25T19:04:25.131Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: tests/shell/working-tree-check.test.js (ack appends prior_overlap_acks on target lease)
+    recorded_at: "2026-08-25T19:04:26.604Z"
