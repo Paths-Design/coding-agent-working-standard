@@ -154,3 +154,7 @@ evidence:
     status: pass
     evidence_ref: "kernel A2a/A2b/A2c: zero worktrees, on-base HEAD, and absent observation each suppress the finding (idle repo is not drift; missing != malformed)"
     recorded_at: "2026-08-25T00:45:04.250Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "shell A3: specs create on parked canonical refuses exit 1 pre-write naming feat/other + --allow-foreign-branch; no spec file, no events change, HEAD untouched"
+    recorded_at: "2026-08-25T00:45:04.709Z"
