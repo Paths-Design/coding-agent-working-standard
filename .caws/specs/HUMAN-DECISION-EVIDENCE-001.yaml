@@ -7,12 +7,15 @@ created_at: '2026-08-25T16:25:01.424Z'
 updated_at: '2026-08-25T16:25:27.554Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/kernel/evidence
+    - packages/caws-cli/src/kernel/schemas/events
+    - packages/caws-cli/src/shell/commands/evidence.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/kernel/schemas/events/human_decision_recorded.v1.json
     - packages/caws-cli/src/kernel/schemas/events.v1.json
     - packages/caws-cli/src/kernel/evidence/types.ts
@@ -32,13 +35,93 @@ scope:
     - .github/workflows
     - packages/caws-cli/src/kernel/scope
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    SCHEMA-FIRST, FIVE-SITE: the kernel payload schema
+    (human_decision_recorded.v1.json) is authored and validates BEFORE the
+    call site. The event envelope enum (events.v1.json), the EventType union
+    (kernel/evidence/types.ts), the REQUIRES_SPEC_ID set, and KNOWN_EVENT_TYPES
+    (kernel/evidence/validate.ts) are all amended in the SAME commit as the
+    payload schema, so append validation admits the new type atomically — a
+    call site that appends the event while any site still rejects it is a
+    release-blocking defect, not a doc gap.
+  - >-
+    PROVENANCE, NOT AUTHORITY: human_decision is an observability record of a
+    human judgment. It never confers scope authority, never bypasses a gate,
+    waiver, guard, or lifecycle refusal, and never changes ownership, claim, or
+    lifecycle state. No gate or guard may consult this evidence kind for
+    disposition; it is the audit trail of an operator decision, not a control
+    input.
+  - >-
+    STRUCTURED, NOT FREE-TEXT: every human_decision_recorded event carries a
+    non-empty `decision` plus a closed `decision_class` enum
+    (approval|rejection|authorization|direction|blocker_resolution). No catch-all
+    narrative field; human prose belongs in the bounded optional `rationale`.
+  - >-
+    BACKWARD-COMPATIBLE, ADDITIVE-ONLY: existing event types
+    (test_recorded, gate_evaluated, ac_recorded, ...) continue to validate
+    unchanged. Adding this type is additive; no existing event's validation
+    behavior changes, and existing hash-chained events remain chain-valid.
+  - >-
+    CLASS REQUIRES_SPEC_ID: human_decision_recorded is REQUIRES_SPEC_ID — a
+    human decision is always evidence about a spec's work, matching the existing
+    evidence kinds (test/gate/ac). The CLI requires --spec and the kernel fences
+    it, so a human-decision event is always attributable to a spec.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: >-
+      A spec is active and an operator decides to approve a proposed approach.
+    when: >-
+      `caws evidence record --type human_decision --spec <id> --data
+      '{"decision":"approve-approach","decision_class":"approval"}'` runs.
+    then: >-
+      Exit 0; a human_decision_recorded event is appended with the given data,
+      seq + event_hash printed; verify-chain still passes after the append; the
+      new event is REQUIRES_SPEC_ID (spec_id set).
+  - id: A2
+    given: >-
+      The human_decision kind is registered in the CLI kind map.
+    when: >-
+      `caws evidence schema --type human_decision` runs.
+    then: >-
+      The payload schema prints: required `decision`, `decision_class`; a closed
+      `decision_class` enum; a runnable example that the CLI would accept. The
+      schema is the authored human_decision_recorded.v1.json.
+  - id: A3
+    given: >-
+      A repo has a human_decision_recorded event plus a test_recorded event for
+      the same spec.
+    when: >-
+      `caws evidence list --spec <id> --type human_decision` runs.
+    then: >-
+      Only the human_decision event is returned; the test_recorded event is
+      excluded. An invalid --type is refused naming the full
+      `test|gate|ac|human_decision` set.
+  - id: A4
+    given: >-
+      The kernel validator is loaded with the amended envelope + payload schema.
+    when: >-
+      human_decision_recorded is validated against the schema, and a malformed
+      variant (missing `decision`, or a decision_class outside the enum, or an
+      unknown top-level field) is validated.
+    then: >-
+      The well-formed variant validates; each malformed variant is rejected
+      (required / enum / additionalProperties:false). Existing event types
+      continue to validate unchanged.
+  - id: A5
+    given: >-
+      The full suite runs.
+    when: >-
+      All pre-existing tests plus the new evidence-human-decision contract tests
+      run.
+    then: >-
+      All pass. No production change outside scope.in.
+non_functional:
+  reliability:
+    - >-
+      The new event rides the existing appendEvent + hash-chain surface; no
+      parallel store, no separate atomicity model. If the append is rejected by
+      the schema, nothing is written (no half-state), matching the existing
+      lifecycle invariant.
 contracts:
   - name: 'human-decision-evidence'
     type: contract-test
