@@ -121,3 +121,7 @@ evidence:
     status: pass
     evidence_ref: "jest tests/shell/worktree-review.test.js (A1: exact commits + provenance, out-of-scope flagged, zero mutation)"
     recorded_at: "2026-08-25T15:39:05.822Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "jest tests/shell/worktree-review.test.js (A2: spec-readiness pass + unchecked, close-gate consequence named)"
+    recorded_at: "2026-08-25T15:39:06.271Z"
