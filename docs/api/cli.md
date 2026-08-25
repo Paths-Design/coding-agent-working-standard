@@ -1169,6 +1169,33 @@ inventory, physical cleanup planning, branch divergence, and merge-tree checks.
 Mutating merge refusals and git checkout/merge failures include the same
 recovery handoff.
 
+### `caws worktree review <name>`
+
+```bash
+caws worktree review my-feature
+caws worktree review my-feature --json
+```
+
+| Flag | Description |
+|---|---|
+| `--json` | Emit the same review report as machine-readable JSON. |
+| `--data` | Show structured data block on diagnostics. |
+
+The read-only human-review gate (WORKTREE-REVIEW-SURFACE-001): renders exactly
+what `caws worktree merge <name>` would land, before the operator commits to
+it. It lists every commit in the `base..branch` lane range (short SHA + subject,
+never counts-only), a per-commit scope-provenance table that flags out-of-scope
+paths with the exact refusal merge raises, the lane diffstat, the bound spec's
+acceptance criteria with their recorded evidence status (the `evidence:` block
+the close gate reads — the closure authority), and the owner's lease
+`work_state` (LEASE-WORK-STATE-001, visibility only). A missing worktree exits
+1; a rendered report exits 0; a lane at base renders "(lane is empty — branch is
+at base)" honestly, without fabricated rows.
+
+Never mutates `.caws/`, never appends events, never touches git refs or any
+working tree — byte-stability discipline of `caws status` applies. Running
+`review` any number of times produces no state change.
+
 ### `caws worktree migrate-registry`
 
 ```bash
