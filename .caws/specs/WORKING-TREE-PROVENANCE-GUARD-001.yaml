@@ -497,3 +497,7 @@ evidence:
     status: pass
     evidence_ref: "tests/shell/working-tree-check.test.js (check JSON report, exit 1 on overlap)"
     recorded_at: "2026-08-25T19:04:30.677Z"
+  - criterion_id: A8
+    status: pass
+    evidence_ref: full suite 2081/2081 green; no production diff outside scope.in
+    recorded_at: "2026-08-25T19:09:59.526Z"
