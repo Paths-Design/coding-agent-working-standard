@@ -79,6 +79,7 @@
         "ac_recorded",
         "test_recorded",
         "gate_evaluated",
+        "human_decision_recorded",
         "waiver_applied",
         "waiver_revoked",
         "doctor_completed",
