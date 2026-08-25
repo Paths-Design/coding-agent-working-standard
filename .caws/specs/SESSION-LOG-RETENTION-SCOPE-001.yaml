@@ -127,3 +127,7 @@ evidence:
     status: pass
     evidence_ref: "jest tests/shell/session-log-retention.test.js (A1: dry-run lists stale candidate, not fresh; nothing deleted)"
     recorded_at: "2026-08-25T17:19:19.498Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "jest tests/shell/session-log-retention.test.js (A2: apply deletes only turn files, preserves capsule + meta)"
+    recorded_at: "2026-08-25T17:19:19.879Z"
