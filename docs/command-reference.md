@@ -39,6 +39,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws agents`](#caws-agents) — Agent liveness substrate: register/heartbeat/stop/list/show/work-state/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.
 - [`caws message`](#caws-message) — Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/reply/poll/inbox/history/status/prune directed messages between running sessions, addressed by session id (or a wt:/spec: alias), over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
 - [`caws session`](#caws-session) — Session-log retention (SESSION-LOG-RETENTION-SCOPE-001). The session LIFECYCLE (start/checkpoint/end) remains deferred; this group ships only `prune` — dry-run-default retention for stale per-session turn history under .caws/sessions/. Session logs are operational cache (gitignored; never events.jsonl, never read by the kernel for scope/ownership/claim decisions).
+- [`caws working-tree`](#caws-working-tree) — Working-tree overlap advisory surface (WORKING-TREE-PROVENANCE-GUARD-001): `check` reports whether another active session's claimed/modified paths overlap the current dirty tree (read-only, non-mutating); `ack` records the operator's explicit per-session, per-path acknowledgement that cleans up that overlap. Never authority — neither command changes scope, claim, ownership, or lifecycle state.
 
 ## `caws init`
 
@@ -1041,4 +1042,28 @@ Dry-run-default retention for .caws/sessions/: classify each session log dir by 
 - `--older-than-ms <ms>` — Retention window in milliseconds (default: 30 days)
 - `--apply` — Perform the prune instead of dry-running it
 - `--json` — Emit the plan or apply outcome as JSON.
+- `--data` — Show structured data block on diagnostics
+
+## `caws working-tree`
+
+Working-tree overlap advisory surface (WORKING-TREE-PROVENANCE-GUARD-001): `check` reports whether another active session's claimed/modified paths overlap the current dirty tree (read-only, non-mutating); `ack` records the operator's explicit per-session, per-path acknowledgement that cleans up that overlap. Never authority — neither command changes scope, claim, ownership, or lifecycle state.
+
+### `caws working-tree check`
+
+Report working-tree overlap with OTHER active sessions, read-only. Consumes the same predicate the PreToolUse guard uses. Exit 0 if no overlap, exit 1 if another session's claimed_paths / last_modified_paths overlap the dirty tree (scriptable precondition). Never mutates the tree or any .caws/ state.
+
+**Options:**
+
+- `--json` — Emit the overlap report as machine-readable JSON.
+- `--data` — Show structured data block on diagnostics
+
+### `caws working-tree ack`
+
+Record the operator's explicit acknowledgement that they are cleaning up work claimed by another session. Writes a durable prior_overlap_acks audit entry on the TARGET session's lease (operational cache — never authority). Only records the acknowledgement; the cleanup is the operator's own action.
+
+**Options:**
+
+- `--session <id>` (**required**) — The other session whose overlap is being cleaned up
+- `--paths <path>` (repeatable) — Overlapping path(s) being acknowledged (comma-separated or repeatable)
+- `--target <command>` — The cleanup command this ack covers (e.g. "git stash")
 - `--data` — Show structured data block on diagnostics

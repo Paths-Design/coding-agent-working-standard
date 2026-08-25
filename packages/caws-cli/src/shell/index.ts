@@ -298,6 +298,7 @@ export {
   runMessagePruneCommand,
 } from './commands/message';
 export { runSessionPruneCommand } from './commands/session';
+export { runWorkingTreeAckCommand, runWorkingTreeCheckCommand } from './commands/working-tree';
 export type {
   MessageSendCommandOptions,
   MessageReplyCommandOptions,

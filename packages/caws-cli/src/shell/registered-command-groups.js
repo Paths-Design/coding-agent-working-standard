@@ -43,6 +43,7 @@ const REGISTERED_COMMAND_GROUPS = Object.freeze([
   'message',
   'reprieve',
   'session',
+  'working-tree',
 ]);
 
 module.exports = {

@@ -1680,6 +1680,41 @@ export const AGENTS_COMMAND_META: GroupCommandMeta = {
   ],
 };
 
+export const WORKING_TREE_COMMAND_META: GroupCommandMeta = {
+  kind: 'group',
+  name: 'working-tree',
+  description:
+    'Working-tree overlap advisory surface (WORKING-TREE-PROVENANCE-GUARD-001): `check` reports whether another active session\'s claimed/modified paths overlap the current dirty tree (read-only, non-mutating); `ack` records the operator\'s explicit per-session, per-path acknowledgement that cleans up that overlap. Never authority — neither command changes scope, claim, ownership, or lifecycle state.',
+  subcommands: [
+    {
+      kind: 'leaf',
+      name: 'check',
+      description:
+        'Report working-tree overlap with OTHER active sessions, read-only. Consumes the same predicate the PreToolUse guard uses. Exit 0 if no overlap, exit 1 if another session\'s claimed_paths / last_modified_paths overlap the dirty tree (scriptable precondition). Never mutates the tree or any .caws/ state.',
+      options: [
+        { flag: '--json', description: 'Emit the overlap report as machine-readable JSON.' },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'ack',
+      description:
+        'Record the operator\'s explicit acknowledgement that they are cleaning up work claimed by another session. Writes a durable prior_overlap_acks audit entry on the TARGET session\'s lease (operational cache — never authority). Only records the acknowledgement; the cleanup is the operator\'s own action.',
+      options: [
+        { flag: '--session <id>', required: true, description: 'The other session whose overlap is being cleaned up' },
+        {
+          flag: '--paths <path>',
+          description: 'Overlapping path(s) being acknowledged (comma-separated or repeatable)',
+          collect: true,
+        },
+        { flag: '--target <command>', description: 'The cleanup command this ack covers (e.g. "git stash")' },
+        DATA_OPTION,
+      ],
+    },
+  ],
+};
+
 export const SESSION_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'session',
@@ -1859,4 +1894,5 @@ export const COMMAND_SURFACE_METADATA: readonly CommandMeta[] = Object.freeze([
   AGENTS_COMMAND_META,
   MESSAGE_COMMAND_META,
   SESSION_COMMAND_META,
+  WORKING_TREE_COMMAND_META,
 ]);

@@ -317,7 +317,7 @@ import type { HookPackV1 } from './types';
 // v46 (WORKTREE-ENSURE-AFFORDANCE-001): agent-register.sh's unbound advisory
 // names `caws worktree ensure <name> --spec <id>` (the idempotent
 // create-or-admit verb) instead of bare create. Advisory-only change.
-export const SHARED_PACK_VERSION = 46;
+export const SHARED_PACK_VERSION = 47;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.
@@ -511,6 +511,15 @@ export const SHARED_PACK: HookPackV1 = {
     {
       destPath: '.caws/hooks/worktree-guard.sh',
       sourcePath: 'worktree-guard.sh',
+      executable: true,
+      managed: true,
+    },
+    // WORKING-TREE-PROVENANCE-GUARD-001: shared-checkout multi-session overlap
+    // guard (refuses cleanup commands over another session's claimed/modified
+    // paths; acked per session+path via `caws working-tree ack`).
+    {
+      destPath: '.caws/hooks/working-tree-guard.sh',
+      sourcePath: 'working-tree-guard.sh',
       executable: true,
       managed: true,
     },

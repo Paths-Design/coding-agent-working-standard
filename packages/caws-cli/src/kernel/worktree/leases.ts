@@ -164,6 +164,19 @@ export interface AgentLease {
    */
   readonly last_modified_paths?: readonly string[];
   /**
+   * Append-only audit of another session acknowledging overlap with this
+   * session's claimed/modified paths (WORKING-TREE-PROVENANCE-GUARD-001).
+   * Each entry records who acked, when, which paths, and the target cleanup
+   * command. Operational cache — NEVER authority; append-only (never rewritten
+   * or removed by this slice). Absent by default.
+   */
+  readonly prior_overlap_acks?: readonly {
+    readonly acked_by_session: string;
+    readonly acked_at: string;
+    readonly paths: readonly string[];
+    readonly target_command?: string;
+  }[];
+  /**
    * Visibility-only work-state annotation (LEASE-WORK-STATE-001). Absent by
    * default ("no information"). Carried forward by register/heartbeat so a
    * 15s-throttled heartbeat never wipes an explicit declaration; cleared only
