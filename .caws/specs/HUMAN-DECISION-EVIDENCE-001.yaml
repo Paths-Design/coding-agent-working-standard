@@ -141,3 +141,7 @@ evidence:
     status: pass
     evidence_ref: "jest tests/shell/evidence-human-decision.test.js (A3: list filters to human_decision; invalid type names full set)"
     recorded_at: "2026-08-25T16:40:50.481Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "jest tests/shell/evidence-human-decision.test.js (A4: schema-first — malformed payloads rejected by append)"
+    recorded_at: "2026-08-25T16:40:50.870Z"
