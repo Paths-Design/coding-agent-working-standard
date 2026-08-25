@@ -473,3 +473,7 @@ evidence:
     status: pass
     evidence_ref: "jest tests/store/working-tree-overlap.test.js + tests/shell/working-tree-check.test.js (classify flags another session's claimed/modified overlap)"
     recorded_at: "2026-08-25T19:04:24.285Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: jest tests/store/working-tree-overlap.test.js + tests/shell/working-tree-check.test.js (no-overlap permits; check exits 0)
+    recorded_at: "2026-08-25T19:04:25.131Z"
