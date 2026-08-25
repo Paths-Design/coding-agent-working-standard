@@ -28,7 +28,7 @@ import {
   type Diagnostic,
 } from '../../kernel';
 
-import { resolveRepoRoot, runSpecsMigrateApply } from '../../store';
+import { composeDoctorSnapshot, loadWorktrees, resolveRepoRoot, runSpecsMigrateApply } from '../../store';
 import type {
   MigrationReport,
   SpecsMigrateApplyResult,
@@ -44,6 +44,7 @@ import {
   planCreateSpec,
   recoverArchivedSpec,
   recordSpecEvidence,
+  relocateSpecToBase,
   reopenSpec,
   deactivateSpec,
   restoreArchivedSpec,
@@ -203,6 +204,8 @@ function buildActorOrError(
 // ─── caws specs create ────────────────────────────────────────────────────
 
 export interface SpecsCreateOptions extends BaseCommandOptions {
+  /** CANONICAL-DRIFT-GUARDS-001: deliberately author the lifecycle commit on a foreign (parked) branch. */
+  readonly allowForeignBranch?: boolean;
   readonly id?: string;
   /** Alias for the positional id; useful when agents build command options uniformly. */
   readonly idOption?: string;
@@ -588,8 +591,60 @@ function diagnosticJson(
   }));
 }
 
+
+// ─── CANONICAL-DRIFT-GUARDS-001: lifecycle auto-commit target check ────────
+
+/**
+ * Entry 37 prevention: spec-lifecycle auto-commits land on HEAD. When the
+ * canonical HEAD is parked on a branch that is neither the worktrees' base
+ * nor a lane bound to the spec being acted on, REFUSE before any write —
+ * the operator must pass --allow-foreign-branch to deliberately author on
+ * the parked branch. Pure read (registry + snapshot observation); inert on
+ * the healthy base state. Returns true when the operation may proceed.
+ */
+function lifecycleCommitTargetAdmits(
+  ctx: { cawsDir: string; repoRoot: string },
+  opts: { allowForeignBranch?: boolean },
+  err: (line: string) => void
+): boolean {
+  if (opts.allowForeignBranch === true) return true;
+  const snapshot = composeDoctorSnapshot({ repoRoot: ctx.repoRoot, cawsDir: ctx.cawsDir, now: new Date() });
+  const cbo = snapshot.doctorInput.canonicalBranchObservation;
+  if (cbo === undefined) return true; // observation unavailable -> inert
+  if (cbo.currentBranch === cbo.baseBranch) return true; // healthy state
+  const registryResult = loadWorktrees(ctx.cawsDir) as {
+    ok: boolean;
+    value?: Record<string, { branch?: string }>;
+  };
+  if (registryResult.ok) {
+    for (const [, record] of Object.entries(registryResult.value ?? {})) {
+      if (record?.branch === cbo.currentBranch) {
+        // The parked branch IS a governed lane's branch; a lifecycle commit
+        // onto another lane is exactly the Entry 37 cross-contamination.
+        err(`caws specs: refusing — canonical HEAD is parked on "${cbo.currentBranch}" (base is "${cbo.baseBranch}"), and that branch belongs to a CAWS worktree lane.`);
+        err('  Spec lifecycle auto-commits would land on this lane, not the base branch.');
+        err('  Fix: un-park the checkout (owner merges/switches it back to base), or');
+        err('  pass --allow-foreign-branch to deliberately author on this branch.');
+        return false;
+      }
+    }
+  }
+  err(`caws specs: refusing — canonical HEAD is parked on "${cbo.currentBranch}" (base is "${cbo.baseBranch}"); lifecycle auto-commits would land there.`);
+  err('  Fix: un-park the checkout (switch it back to the base branch), or pass');
+  err('  --allow-foreign-branch to deliberately author on this branch.');
+  return false;
+}
+
 export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
+
+  // CANONICAL-DRIFT-GUARDS-001: commit-target check BEFORE any write.
+  {
+    const ctxProbe = resolveCawsCtx(cwd, err, showData, 'create');
+    if (ctxProbe !== null && !lifecycleCommitTargetAdmits(ctxProbe, opts, err)) {
+      return 1;
+    }
+  }
 
   if (opts.legacyType !== undefined) {
     err('caws specs create: --type is not supported in v11. Use --mode instead.');
@@ -1536,6 +1591,8 @@ export function runSpecsPruneDraftsCommand(opts: SpecsPruneDraftsOptions = {}): 
 // ─── caws specs activate ──────────────────────────────────────────────────
 
 export interface SpecsActivateOptions extends BaseCommandOptions {
+  /** CANONICAL-DRIFT-GUARDS-001: deliberately author the lifecycle commit on a foreign (parked) branch. */
+  readonly allowForeignBranch?: boolean;
   readonly id: string;
 }
 
@@ -1544,6 +1601,9 @@ export function runSpecsActivateCommand(opts: SpecsActivateOptions): number {
 
   const ctx = resolveCawsCtx(cwd, err, showData, 'activate');
   if (ctx === null) return 2;
+
+  // CANONICAL-DRIFT-GUARDS-001: commit-target check BEFORE any write.
+  if (!lifecycleCommitTargetAdmits(ctx, opts, err)) return 1;
 
   const actor = buildActorOrError(
     ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'activate'
@@ -1660,6 +1720,8 @@ export function runSpecsEvidenceCommand(opts: SpecsEvidenceOptions): number {
 // ─── caws specs amend-scope ──────────────────────────────────────────────
 
 export interface SpecsAmendScopeOptions extends BaseCommandOptions {
+  /** CANONICAL-DRIFT-GUARDS-001: deliberately author the lifecycle commit on a foreign (parked) branch. */
+  readonly allowForeignBranch?: boolean;
   readonly id: string;
   readonly addIn?: readonly string[];
   readonly removeIn?: readonly string[];
@@ -1675,6 +1737,9 @@ export function runSpecsAmendScopeCommand(opts: SpecsAmendScopeOptions): number 
 
   const ctx = resolveCawsCtx(cwd, err, showData, 'amend-scope');
   if (ctx === null) return 2;
+
+  // CANONICAL-DRIFT-GUARDS-001: commit-target check BEFORE any write.
+  if (!lifecycleCommitTargetAdmits(ctx, opts, err)) return 1;
 
   const actor = buildActorOrError(
     ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'amend-scope'
@@ -1718,6 +1783,8 @@ export function runSpecsAmendScopeCommand(opts: SpecsAmendScopeOptions): number 
 // ─── caws specs close ─────────────────────────────────────────────────────
 
 export interface SpecsCloseOptions extends BaseCommandOptions {
+  /** CANONICAL-DRIFT-GUARDS-001: deliberately author the lifecycle commit on a foreign (parked) branch. */
+  readonly allowForeignBranch?: boolean;
   readonly id: string;
   readonly resolution: string;
   readonly reason?: string;
@@ -1756,6 +1823,9 @@ export function runSpecsCloseCommand(opts: SpecsCloseOptions): number {
 
   const ctx = resolveCawsCtx(cwd, err, showData, 'close');
   if (ctx === null) return 2;
+
+  // CANONICAL-DRIFT-GUARDS-001: commit-target check BEFORE any write.
+  if (!lifecycleCommitTargetAdmits(ctx, opts, err)) return 1;
 
   // CAWS-GUARD-ALLOWLIST-SYNC-001 (Defect 2): a spec must not close without
   // closure notes. The store-layer closeSpec enforces the same contract
@@ -2571,5 +2641,87 @@ export function runSpecsValidateCommand(opts: SpecsValidateOptions): number {
   }
 
   out(`caws specs validate: ${filePath} is valid (${result.value.id}).`);
+  return 0;
+}
+
+// ─── caws specs relocate (CANONICAL-DRIFT-GUARDS-001) ──────────────────────
+
+export interface SpecsRelocateOptions extends BaseCommandOptions {
+  readonly id: string;
+  /** Accepted for explicitness; to-base is the only v1 target. */
+  readonly toBase?: boolean;
+  readonly apply?: boolean;
+}
+
+/**
+ * `caws specs relocate <id> [--to-base] [--apply]` — Entry 37 recovery.
+ * Moves a spec YAML (and an audit commit naming the relocation) from a
+ * mis-parked canonical branch onto the base branch WITHOUT touching any
+ * working tree (object-db plumbing + private temp index + CAS, the
+ * worktree-merge discipline). Dry-run by default: prints source/base
+ * branches and the planned commit. Base branch resolves from the worktree
+ * registry (a unique baseBranch); ambiguous or absent bases refuse.
+ * The durable audit is the commit on base itself (git-side provenance).
+ */
+export function runSpecsRelocateCommand(opts: SpecsRelocateOptions): number {
+  const { cwd, nowFn, out, err, showData } = setupIO(opts);
+  const ctx = resolveCawsCtx(cwd, err, showData, 'relocate');
+  if (ctx === null) return 2;
+
+  if (typeof opts.id !== 'string' || opts.id.length === 0) {
+    err('caws specs relocate: <id> is required.');
+    return 1;
+  }
+
+  // Base branch from the registry — a unique baseBranch; ambiguity refuses.
+  const registryResult = loadWorktrees(ctx.cawsDir);
+  if (!registryResult.ok) {
+    err('caws specs relocate: worktree registry unreadable (cannot resolve the base branch).');
+    err(renderDiagnostics(registryResult.errors, { showData }));
+    return 2;
+  }
+  const baseBranches = new Set<string>();
+  for (const record of Object.values(registryResult.value)) {
+    if (record && typeof record.baseBranch === 'string') baseBranches.add(record.baseBranch);
+  }
+  if (baseBranches.size === 0) {
+    err('caws specs relocate: no registered worktrees — cannot infer the base branch. Relocation targets base by definition.');
+    return 1;
+  }
+  if (baseBranches.size > 1) {
+    err(`caws specs relocate: worktrees declare multiple base branches (${Array.from(baseBranches).join(', ')}); CAWS will not guess.`);
+    return 1;
+  }
+  const baseBranch = Array.from(baseBranches)[0]!;
+
+  const result = relocateSpecToBase(ctx.cawsDir, {
+    id: opts.id,
+    repoRoot: ctx.repoRoot,
+    baseBranch,
+    now: nowFn(),
+    apply: opts.apply === true,
+  });
+  if (!result.ok) {
+    err(`caws specs relocate: refused for "${opts.id}".`);
+    err(renderDiagnostics(result.errors, { showData }));
+    return 1;
+  }
+  const o = result.value;
+
+  if (o.alreadyOnBase) {
+    out(`caws specs relocate: ${opts.id} — canonical HEAD already sits on the base branch "${o.baseBranch}"; nothing to relocate.`);
+    return 0;
+  }
+  if (!o.applied) {
+    out(`caws specs relocate: ${opts.id} (dry-run)`);
+    out(`  source branch: ${o.sourceBranch} (canonical HEAD is parked here)`);
+    out(`  target branch: ${o.baseBranch}`);
+    out('  planned: read the parked copy, graft it onto base, commit "chore(caws): relocate ...", CAS the base ref.');
+    out('  Working trees are never touched. Pass --apply to perform.');
+    return 0;
+  }
+  out(`caws specs relocate: ${opts.id} relocated onto ${o.baseBranch} (commit ${o.relocatedCommit}).`);
+  out(`  The parked checkout "${o.sourceBranch}" still shows the file (its tree is untouched); base now carries it too.`);
+  out('  Audit: the relocation commit on base names the spec, the source branch, and this slice.');
   return 0;
 }

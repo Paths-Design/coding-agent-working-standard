@@ -119,10 +119,39 @@ function quote(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
+/**
+ * One sequence entry as it lives on disk. Scalars round-trip through
+ * quote()/unquote(); folded entries (`- >-` + deeper-indented continuation
+ * lines) are preserved VERBATIM — the writer never re-flows prose it did
+ * not author. `entryLogical()` is the whitespace-collapsed text used for
+ * --remove matching and event payloads.
+ */
+interface SequenceEntry {
+  readonly scalar?: string;
+  readonly foldedLines?: readonly string[];
+}
+
+function foldedLogical(lines: readonly string[]): string {
+  // lines[0] is the `- >-` marker item line; the logical text is the
+  // continuation lines only, whitespace-collapsed.
+  return lines
+    .slice(1)
+    .map((l) => l.trim())
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function entryLogical(e: SequenceEntry): string {
+  if (e.scalar !== undefined) return e.scalar;
+  if (e.foldedLines !== undefined) return foldedLogical(e.foldedLines);
+  return '';
+}
+
 interface SequenceBlock {
   readonly keyIdx: number;
   readonly endIdx: number;
-  readonly items: string[];
+  readonly entries: readonly SequenceEntry[];
 }
 
 /**
@@ -154,9 +183,20 @@ function locateSequence(lines: readonly string[], site: SequenceSite): SequenceB
   if (keyIdx === -1) return null;
 
   const itemRe = new RegExp(`^ {${site.itemIndent}}- (.*)$`);
-  const items: string[] = [];
+  // A folded item's continuation lines are indented MORE than itemIndent.
+  const contRe = new RegExp(`^ {${site.itemIndent + 2},}\\S`);
+  // CANONICAL-DRIFT-GUARDS-001: `- >-` (and `>`, `|`, `|-`) opens a folded
+  // block whose continuation lines are part of the entry. The prior scanner
+  // treated the marker as a scalar item and stopped before the
+  // continuations, so any rewrite spliced rendered items mid-fold —
+  // "bad indentation of a sequence entry" — and silently DROPPED the folded
+  // prose. Folded entries are now captured verbatim and re-emitted
+  // unchanged; --remove matches their whitespace-collapsed logical text.
+  const foldedMarkerRe = /^(>-|>|\|-|\|)$/;
+  const entries: SequenceEntry[] = [];
   let endIdx = keyIdx + 1;
-  for (let i = keyIdx + 1; i < lines.length; i += 1) {
+  let i = keyIdx + 1;
+  while (i < lines.length) {
     const line = lines[i];
     if (line === undefined) break;
     if (/^\S/.test(line)) break;
@@ -164,10 +204,26 @@ function locateSequence(lines: readonly string[], site: SequenceSite): SequenceB
     if (new RegExp(`^ {0,${keyIndent}}\\S`).test(line)) break;
     const m = itemRe.exec(line);
     if (m === null) break;
-    if (m[1] !== undefined) items.push(unquote(m[1]));
+    const captured = (m[1] ?? '').trim();
+    if (foldedMarkerRe.test(captured)) {
+      const foldedLines: string[] = [line];
+      let j = i + 1;
+      while (j < lines.length) {
+        const cont = lines[j];
+        if (cont === undefined || !contRe.test(cont)) break;
+        foldedLines.push(cont);
+        j += 1;
+      }
+      entries.push({ foldedLines });
+      endIdx = j;
+      i = j;
+      continue;
+    }
+    entries.push({ scalar: unquote(m[1] ?? '') });
     endIdx = i + 1;
+    i += 1;
   }
-  return { keyIdx, endIdx, items };
+  return { keyIdx, endIdx, entries };
 }
 
 interface SequencePatch {
@@ -194,24 +250,41 @@ function patchSequence(
   if (block === null) return null;
 
   const removeSet = new Set(remove.map(unquote));
+  const firstLogical =
+    block.entries[0] !== undefined ? entryLogical(block.entries[0]) : undefined;
   const onlyScaffold =
-    block.items.length === 1 && block.items[0] !== undefined && block.items[0] === site.scaffold;
+    block.entries.length === 1 && firstLogical !== undefined && firstLogical === site.scaffold;
   const dischargedScaffold = onlyScaffold && add.length > 0;
 
-  const kept = block.items.filter((item) => {
-    if (removeSet.has(item)) return false;
+  const kept: SequenceEntry[] = [];
+  const removed: string[] = [];
+  for (const e of block.entries) {
+    const logical = entryLogical(e);
+    if (removeSet.has(logical)) {
+      removed.push(logical);
+      continue;
+    }
     // The scaffolded default is displaced by real content, never kept beside it.
-    if (dischargedScaffold && item === site.scaffold) return false;
-    return true;
-  });
-  const removed = block.items.filter((item) => removeSet.has(item));
+    if (dischargedScaffold && logical === site.scaffold) continue;
+    kept.push(e);
+  }
 
-  const existing = new Set(kept);
+  const existing = new Set(kept.map(entryLogical));
   const added = add.map(unquote).filter((v) => !existing.has(v));
-  const resulting = [...kept, ...added];
+  const resulting = [...kept.map(entryLogical), ...added];
 
   const pad = ' '.repeat(site.itemIndent);
-  const rendered = resulting.map((v) => `${pad}- ${quote(v)}`);
+  const rendered: string[] = [];
+  for (const e of kept) {
+    if (e.foldedLines !== undefined) {
+      rendered.push(...e.foldedLines); // verbatim — never re-flowed
+    } else if (e.scalar !== undefined) {
+      rendered.push(`${pad}- ${quote(e.scalar)}`);
+    }
+  }
+  for (const v of added) {
+    rendered.push(`${pad}- ${quote(v)}`);
+  }
   const next = [
     ...lines.slice(0, block.keyIdx + 1),
     ...rendered,

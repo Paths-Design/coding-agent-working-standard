@@ -587,6 +587,43 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   //     Skips silently when git observation is unavailable.
   // -------------------------------------------------------------------------
 
+  // -------------------------------------------------------------------------
+  // CANONICAL-DRIFT-GUARDS-001 (Entry 37): mis-parked canonical HEAD.
+  //
+  //     The canonical checkout is the base branch's home; feature work lives
+  //     in worktrees. When CAWS worktrees are active and the canonical HEAD
+  //     sits on a NON-base branch, spec lifecycle auto-commits (create /
+  //     amend-scope / close / activate) land on the parked branch — often a
+  //     peer's feature lane. Detection at the fault, not the recovery.
+  //
+  //     Pure kernel: reads only the store-observed canonicalBranchObservation
+  //     and the registry. Silent skip when observation is absent or zero
+  //     active worktrees (an idle repo parked anywhere is not drift).
+  // -------------------------------------------------------------------------
+  const activeWorktreeCount = Object.values(registry).filter(
+    (r) => r !== null && typeof r === 'object'
+  ).length;
+  const cbo = input.canonicalBranchObservation;
+  if (cbo !== undefined && activeWorktreeCount > 0 && cbo.currentBranch !== cbo.baseBranch) {
+    findings.push(
+      finding(
+        DOCTOR_RULES.CANONICAL_MIS_PARKED_HEAD,
+        'warning',
+        `Canonical checkout HEAD is parked on "${cbo.currentBranch}" (not the base branch "${cbo.baseBranch}") while ${activeWorktreeCount} CAWS worktree(s) are active — spec lifecycle auto-commits will land on the parked branch.`,
+        {
+          subject: cbo.currentBranch,
+          narrowRepair:
+            `Un-park before lifecycle writes: have the branch's owner merge/switch it back, or relocate an already-mis-landed spec with \`caws specs relocate <id> --to-base\`. To deliberately author on this branch, pass --allow-foreign-branch to the lifecycle command. The canonical checkout is the base branch's home; feature work lives in worktrees.`,
+          data: {
+            current_branch: cbo.currentBranch,
+            base_branch: cbo.baseBranch,
+            active_worktrees: activeWorktreeCount,
+          },
+        }
+      )
+    );
+  }
+
   if (gitWorktrees !== undefined) {
     const registryPaths = new Set<string>();
     for (const record of Object.values(registry)) {

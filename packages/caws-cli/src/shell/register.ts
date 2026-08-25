@@ -89,6 +89,7 @@ import {
   runSpecsCreateCommand,
   runSpecsListCommand,
   runSpecsMigrateCommand,
+  runSpecsRelocateCommand,
   runSpecsShowCommand,
   runSpecsValidateCommand,
   runStatusCommand,
@@ -1082,6 +1083,7 @@ export function registerShellCommands(
           plan?: boolean;
           json?: boolean;
           data?: boolean;
+          allowForeignBranch?: boolean;
         }
       ) => {
         const code = runSpecsCreateCommand({
@@ -1119,6 +1121,7 @@ export function registerShellCommands(
           plan: opts.plan === true,
           json: opts.json === true,
           showData: opts.data === true,
+          ...(opts.allowForeignBranch === true ? { allowForeignBranch: true } : {}),
         });
         exit(code);
       }
@@ -1224,10 +1227,11 @@ export function registerShellCommands(
     });
 
   defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'activate'))
-    .action((id: string, opts: { data?: boolean }) => {
+    .action((id: string, opts: { data?: boolean; allowForeignBranch?: boolean }) => {
       const code = runSpecsActivateCommand({
         id,
         showData: opts.data === true,
+        ...(opts.allowForeignBranch === true ? { allowForeignBranch: true } : {}),
       });
       exit(code);
     });
@@ -1245,6 +1249,7 @@ export function registerShellCommands(
           removeSupport?: string[];
           reason?: string;
           data?: boolean;
+          allowForeignBranch?: boolean;
         }
       ) => {
         const code = runSpecsAmendScopeCommand({
@@ -1257,6 +1262,7 @@ export function registerShellCommands(
           ...(opts.removeSupport !== undefined ? { removeSupport: opts.removeSupport } : {}),
           ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
           showData: opts.data === true,
+        ...(opts.allowForeignBranch === true ? { allowForeignBranch: true } : {}),
         });
         exit(code);
       }
@@ -1275,6 +1281,7 @@ export function registerShellCommands(
           mergeCommit?: string;
           supersededBy?: string;
           data?: boolean;
+          allowForeignBranch?: boolean;
         }
       ) => {
         const code = runSpecsCloseCommand({
@@ -1293,6 +1300,7 @@ export function registerShellCommands(
             ? { supersededBy: opts.supersededBy }
             : {}),
           showData: opts.data === true,
+          ...(opts.allowForeignBranch === true ? { allowForeignBranch: true } : {}),
         });
         exit(code);
       }
@@ -1494,6 +1502,18 @@ export function registerShellCommands(
     .action((file: string, opts: { data?: boolean }) => {
       const code = runSpecsValidateCommand({
         file,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  // CANONICAL-DRIFT-GUARDS-001: Entry 37 recovery verb.
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'relocate'))
+    .action((id: string, opts: { toBase?: boolean; apply?: boolean; data?: boolean }) => {
+      const code = runSpecsRelocateCommand({
+        id,
+        ...(opts.toBase === true ? { toBase: true } : {}),
+        ...(opts.apply === true ? { apply: true } : {}),
         showData: opts.data === true,
       });
       exit(code);

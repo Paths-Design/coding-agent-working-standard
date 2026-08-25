@@ -34,7 +34,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws events`](#caws-events) — Read and maintain .caws/events.jsonl (list/show/rotate/migrate/verify-archive)
 - [`caws waiver`](#caws-waiver) — Manage CAWS waivers (bounded exception records that suppress matching gate violations)
 - [`caws reprieve`](#caws-reprieve) — Session-scoped guard reprieve: skip a PreToolUse guard for ONE session until a stated expiry. Use when a session legitimately needs to do what a guard blocks (e.g. editing a hook script) WITHOUT disabling it for every other session. Distinct from `caws waiver`: a reprieve skips a HOOK guard at dispatch time (operational cache, session-scoped, expiring); a waiver bypasses a GATE at policy-run time (governance state, kernel-adjudicated). Replaces the anti-pattern of commenting a guard out of the dispatcher HANDLERS array.
-- [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate)
+- [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate/relocate)
 - [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/ensure/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.
 - [`caws agents`](#caws-agents) — Agent liveness substrate: register/heartbeat/stop/list/show/work-state/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.
 - [`caws message`](#caws-message) — Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/reply/poll/inbox/history/status/prune directed messages between running sessions, addressed by session id (or a wt:/spec: alias), over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
@@ -413,7 +413,7 @@ List active guard reprieves across sessions, with each one's handlers, expiry, a
 
 ## `caws specs`
 
-Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate)
+Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate/relocate)
 
 **Options:**
 
@@ -428,6 +428,7 @@ Create a new spec in lifecycle_state: draft. Binding a worktree (caws worktree c
 
 **Options:**
 
+- `--allow-foreign-branch` — CANONICAL-DRIFT-GUARDS-001: deliberately author this lifecycle commit on a foreign (parked) branch. Without it, the command refuses when the canonical HEAD is off-base while worktrees are active.
 - `--id <id>` — Alias for the positional spec id
 - `--title <title>` — Short spec title (required)
 - `--mode <mode>` — Spec mode (required): feature | refactor | fix | doc | chore
@@ -531,6 +532,7 @@ Activate a pre-authored draft spec. Draft-only: patches lifecycle_state to activ
 
 **Options:**
 
+- `--allow-foreign-branch` — CANONICAL-DRIFT-GUARDS-001: deliberately author this lifecycle commit on a foreign (parked) branch. Without it, the command refuses when the canonical HEAD is off-base while worktrees are active.
 - `--data` — Show structured data block on diagnostics
 
 ### `caws specs amend-scope <id>`
@@ -541,6 +543,7 @@ Amend a spec's scope.in/scope.out/scope.support on the canonical control plane (
 
 **Options:**
 
+- `--allow-foreign-branch` — CANONICAL-DRIFT-GUARDS-001: deliberately author this lifecycle commit on a foreign (parked) branch. Without it, the command refuses when the canonical HEAD is off-base while worktrees are active.
 - `--add <path>` (repeatable) — Add a scope.in path — editable AND worktree-claimed (repeatable)
 - `--remove <path>` (repeatable) — Remove a matching scope.in path — file or directory, matched by logical value regardless of quoting (repeatable)
 - `--add-out <path>` (repeatable) — Add a scope.out path. NOTE: the no-glob rule is an ADD-time schema constraint (file or directory paths only); removal has no such restriction (repeatable)
@@ -558,6 +561,7 @@ Close an active spec. Non-destructive raw-byte YAML patch; appends spec_closed e
 
 **Options:**
 
+- `--allow-foreign-branch` — CANONICAL-DRIFT-GUARDS-001: deliberately author this lifecycle commit on a foreign (parked) branch. Without it, the command refuses when the canonical HEAD is off-base while worktrees are active.
 - `--resolution <r>` (default: `completed`) — Resolution: completed | superseded | abandoned
 - `--reason <text>` — Closure notes recorded on the spec YAML and the spec_closed event
 - `--closure-notes <text>` — Alias for --reason; writes closure_notes on the closed spec
@@ -672,6 +676,18 @@ Validate a spec YAML FILE on disk using the CLI's own bundled parser and the ker
 
 **Options:**
 
+- `--data` — Show structured data block on diagnostics
+
+### `caws specs relocate <id>`
+
+CANONICAL-DRIFT-GUARDS-001 (Entry 37 recovery): move a spec YAML from a mis-parked canonical branch onto the base branch WITHOUT touching any working tree — object-db plumbing (read the parked copy, graft onto base via a private temp index, commit-tree, compare-and-swap the base ref; bounded retry on contention). Dry-run by default; --apply performs. The audit is the commit on base itself. Base branch resolves from the worktree registry (unique baseBranch required).
+
+**Argument:** `id` (required) — Spec id whose YAML should move to base
+
+**Options:**
+
+- `--to-base` — Accepted for explicitness; to-base is the only v1 target.
+- `--apply` — Perform the relocation (default is a read-only dry-run plan).
 - `--data` — Show structured data block on diagnostics
 
 ## `caws worktree`
