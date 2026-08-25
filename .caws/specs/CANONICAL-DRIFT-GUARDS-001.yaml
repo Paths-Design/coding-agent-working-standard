@@ -150,3 +150,7 @@ evidence:
     status: pass
     evidence_ref: "kernel A1 + shell A1/A2 e2e: parked HEAD + 1 worktree => WARN doctor.canonical.mis_parked_head naming feat/other+main with relocate/un-park repair text (store rev-parse observation; porcelain excludes canonical entry by design)"
     recorded_at: "2026-08-25T00:45:03.789Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "kernel A2a/A2b/A2c: zero worktrees, on-base HEAD, and absent observation each suppress the finding (idle repo is not drift; missing != malformed)"
+    recorded_at: "2026-08-25T00:45:04.250Z"
