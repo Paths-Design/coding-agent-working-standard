@@ -1481,6 +1481,41 @@ Dry-run by default: classifies each session log dir by last turn activity, repor
 
 ---
 
+## 16. `caws working-tree`
+
+Working-tree overlap advisory surface (WORKING-TREE-PROVENANCE-GUARD-001). Neither command changes scope, claim, ownership, or lifecycle state — they are advisory/refusal-only, never authority.
+
+### `caws working-tree check`
+
+```bash
+caws working-tree check
+caws working-tree check --json
+```
+
+| Flag | Description |
+|---|---|
+| `--json` | Emit the overlap report as machine-readable JSON. |
+| `--data` | Show structured data block on diagnostics. |
+
+Report working-tree overlap with OTHER active sessions, read-only. Consumes the same predicate the PreToolUse guard uses. Exit 0 if no overlap; exit 1 if another session's `claimed_paths` / `last_modified_paths` overlap the dirty tree (scriptable precondition). Never mutates the tree or any `.caws/` state.
+
+### `caws working-tree ack`
+
+```bash
+caws working-tree ack --session <id> --paths <path>[,<path>...] [--target <command>]
+```
+
+| Flag | Description |
+|---|---|
+| `--session <id>` | The other session whose overlap is being cleaned up (required). |
+| `--paths <path>` | Overlapping path(s) being acknowledged (comma-separated or repeatable; required). |
+| `--target <command>` | The cleanup command this ack covers (e.g. `git stash`). |
+| `--data` | Show structured data block on diagnostics. |
+
+Record the operator's explicit acknowledgement that they are cleaning up work claimed by another session. Writes a durable `prior_overlap_acks` audit entry on the TARGET session's lease (operational cache — never authority). Only records the acknowledgement; the cleanup is the operator's own action.
+
+---
+
 ## State files
 
 What v11 owns and writes:
