@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-candrift
 created_at: '2026-08-24T22:31:49.355Z'
-updated_at: '2026-08-25T00:16:10.979Z'
+updated_at: '2026-08-25T00:45:56.605Z'
 blast_radius:
   modules:
     - 'packages/caws-cli/src/store/doctor-snapshot.ts'
@@ -36,6 +36,7 @@ scope:
     - packages/caws-cli/src/shell/index.ts
     - packages/caws-cli/src/store/specs-body-writer.ts
     - packages/caws-cli/tests/store/specs-body-writer-folded.test.js
+    - packages/caws-cli/tests/kernel/unit/canonical-drift-doctor.test.ts
   out:
     - .caws/policy.yaml
     - .github/workflows
