@@ -166,3 +166,7 @@ evidence:
     status: pass
     evidence_ref: "shell A5/A5b: dry-run prints source/target without mutation; --apply grafts the parked blob onto base via private temp index + commit-tree + CAS (base advanced, base tree carries the spec, HEAD/working tree untouched, no temp-index residue); on-base is the healthy no-op"
     recorded_at: "2026-08-25T00:45:05.534Z"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "shell A6: lifecycle create on healthy on-base canonical exits 0 with no --allow-foreign-branch mention (byte-inert); full suite 2055/2055 incl. 4 kernel + 6 shell + 3 folded-writer regression tests"
+    recorded_at: "2026-08-25T00:45:05.929Z"
