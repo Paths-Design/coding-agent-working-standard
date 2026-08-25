@@ -297,6 +297,7 @@ export {
   runMessageStatusCommand,
   runMessagePruneCommand,
 } from './commands/message';
+export { runSessionPruneCommand } from './commands/session';
 export type {
   MessageSendCommandOptions,
   MessageReplyCommandOptions,

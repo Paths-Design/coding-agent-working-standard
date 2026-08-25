@@ -32,6 +32,7 @@ import {
   REPRIEVE_COMMAND_META,
   AGENTS_COMMAND_META,
   MESSAGE_COMMAND_META,
+  SESSION_COMMAND_META,
   SPECS_COMMAND_META,
   WORKTREE_COMMAND_META,
   type GroupCommandMeta,
@@ -102,6 +103,7 @@ import {
   runReprieveShowCommand,
   runReprieveRevokeCommand,
   runReprieveListCommand,
+  runSessionPruneCommand,
   runWorktreeBindCommand,
   runWorktreeCreateCommand,
   runWorktreeDestroyCommand,
@@ -2028,6 +2030,25 @@ export function registerShellCommands(
         ...(include !== undefined ? { include } : {}),
         ...(exclude !== undefined ? { exclude } : {}),
         ...(opts.apply === true ? { apply: true } : {}),
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  // ─── caws session (SESSION-LOG-RETENTION-SCOPE-001) ─────────────────────
+  // Session-log retention (operational cache). The session LIFECYCLE
+  // (start/checkpoint/end) remains deferred; this group ships only `prune`.
+  const sessionCmd = program.command(SESSION_COMMAND_META.name);
+  applyGroupMeta(sessionCmd, SESSION_COMMAND_META);
+
+  defineLeaf(sessionCmd, leafMeta(SESSION_COMMAND_META, 'prune'))
+    .action((opts: { olderThanMs?: string; apply?: boolean; json?: boolean; data?: boolean }) => {
+      const olderThanMs =
+        opts.olderThanMs !== undefined ? parseOptionalNonNegativeInteger(opts.olderThanMs) : undefined;
+      const code = runSessionPruneCommand({
+        ...(olderThanMs !== undefined ? { olderThanMs } : {}),
+        apply: opts.apply === true,
         json: opts.json === true,
         showData: opts.data === true,
       });
