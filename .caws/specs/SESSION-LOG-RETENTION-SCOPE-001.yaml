@@ -139,3 +139,7 @@ evidence:
     status: pass
     evidence_ref: "jest tests/shell/session-log-retention.test.js (A4: fresh dir is not a candidate and survives apply)"
     recorded_at: "2026-08-25T17:19:20.650Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "jest tests/shell/session-log-retention.test.js (A5: operational-cache-only — retention appends zero events)"
+    recorded_at: "2026-08-25T17:19:21.011Z"
