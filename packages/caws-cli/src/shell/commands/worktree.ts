@@ -27,15 +27,18 @@ import {
   type ActorKind,
   type DoctorFinding,
   DOCTOR_RULES,
+  type EvidenceRecord,
   inspectProjectState,
   isOk,
   type Spec,
   type WorktreeRecord,
 } from '../../kernel';
 
-import { loadSpecs, loadWorktrees, realpathSafe, resolveRepoRoot, runGit, writeFileAtomic } from '../../store';
+import { loadLeases, loadSpecs, loadWorktrees, realpathSafe, resolveRepoRoot, runGit, writeFileAtomic } from '../../store';
+import { isGovernedStatePath } from '../../store/git-autocommit';
 import { composeDoctorSnapshot } from '../../store/doctor-snapshot';
 import { configureWorktreeSparseCheckout } from '../../store/git-sparse-checkout';
+import { scopeEntryMatches } from '../binding/resolve-binding';
 import type {
   WorktreeArtifactLinkStatus,
   WorktreeArtifactLinkSummary,
@@ -53,6 +56,7 @@ import {
   mergeWorktree,
   pruneWorktree,
   untrackWorktree,
+  type WorktreeListEntry,
 } from '../../store/worktrees-writer';
 import { clearSpecBinding } from '../../store/specs-writer';
 import { pruneBridgeGhosts } from '../../store/bridge-store';
@@ -2697,5 +2701,407 @@ export function runWorktreeEnsureCommand(opts: WorktreeEnsureOptions): number {
   const rel = path.relative(ctx.repoRoot, existing.path);
   out(`ensured ${opts.name} (already bound to spec ${opts.specId}; branch untouched at fork point)`);
   out(`Next: cd ${rel} to start working in the bound worktree.`);
+  return 0;
+}
+
+// ─── caws worktree review (WORKTREE-REVIEW-SURFACE-001) ────────────────────
+//
+// The read-only human gate merge lacks. `caws worktree review <name>` is a
+// PREVIEW of the merge's provenance gate plus the slice's actual proof state,
+// all in one command that never mutates anything:
+//
+//   - exact commit list in the lane range base..branch (never counts-only)
+//   - per-commit scope-provenance table (in-scope / out-of-scope per path,
+//     flagging the exact refusal merge would raise)
+//   - diffstat for the lane
+//   - the bound spec's acceptance criteria with recorded evidence status
+//   - the owner's lease work_state (LEASE-WORK-STATE-001), visibility only
+//
+// READ-ONLY ALWAYS: no .caws/ writes, no events.jsonl append, no git ref or
+// working-tree mutation. Byte-stability discipline of `status`.
+
+export interface WorktreeReviewOptions extends BaseCommandOptions {
+  readonly name: string;
+  readonly json?: boolean;
+}
+
+interface ReviewCommit {
+  readonly sha: string;
+  readonly short: string;
+  readonly subject: string;
+  readonly paths: readonly ReviewPathVerdict[];
+  readonly outOfScopeCount: number;
+}
+
+interface ReviewPathVerdict {
+  readonly path: string;
+  readonly inScope: boolean;
+  /** The scope rule class merge's provenance gate would raise when out-of-scope. */
+  readonly mergeRefusal: string | null;
+}
+
+interface ReviewCriteriaStatus {
+  readonly id: string;
+  readonly status: string;
+  readonly evidenceRef?: string;
+}
+
+interface ReviewSpecReadiness {
+  readonly specId: string;
+  readonly lifecycleState: string;
+  readonly criteria: readonly ReviewCriteriaStatus[];
+  readonly uncheckedCount: number;
+}
+
+interface ReviewOwnerContext {
+  readonly sessionId: string;
+  readonly workState?: string;
+  readonly workStateNote?: string;
+  readonly workStateUpdatedAt?: string;
+  readonly lastActiveAgeMs: number | null;
+}
+
+interface ReviewReport {
+  readonly worktree: string;
+  readonly branch: string;
+  readonly baseBranch: string;
+  readonly specId: string | null;
+  readonly ownerSessionId: string | null;
+  readonly laneEmpty: boolean;
+  readonly commitCount: number;
+  readonly commits: readonly ReviewCommit[];
+  readonly truncated: boolean;
+  readonly truncatedCount: number;
+  readonly revListCommand: string;
+  readonly diffstatCommand: string;
+  readonly diffstat: string | null;
+  readonly specReadiness: ReviewSpecReadiness | null;
+  readonly ownerContext: ReviewOwnerContext | null;
+  readonly failure: string | null;
+}
+
+const REVIEW_COMMIT_RENDER_CAP = 30;
+
+/** Compute the lane's editable scope: scope.in ∪ scope.support (the union
+ *  merge's provenance gate admits, per CAWS-DEFECT-SCOPE-SUPPORT-UNMERGEABLE-01). */
+function laneScopeEntries(spec: Spec): readonly string[] {
+  return [...(spec.scope?.in ?? []), ...(spec.scope?.support ?? [])];
+}
+
+/** Reconcile a touched path against merge's provenance gate. A path is
+ *  in-lane iff it is governed operational state (bookkeeping commits ride the
+ *  lane branch) OR it matches the lane's editable scope (scope.in ∪ support).
+ *  Mirrors verifyLaneProvenance in worktrees-writer.ts so review reports the
+ *  exact verdict merge enforces. */
+function reviewPathInScope(path: string, spec: Spec | null): boolean {
+  if (isGovernedStatePath(path)) return true;
+  if (spec === null) return false;
+  return laneScopeEntries(spec).some((entry) => scopeEntryMatches(entry, path));
+}
+
+function lastActiveAgeMs(iso: string | undefined, now: number): number | null {
+  if (iso === undefined) return null;
+  const parsed = Date.parse(iso);
+  if (Number.isNaN(parsed)) return null;
+  return now - parsed;
+}
+
+function buildReviewReport(
+  ctx: { repoRoot: string; cawsDir: string },
+  entry: WorktreeListEntry,
+  now: number
+): ReviewReport {
+  // Resolve the bound spec (canonical authority). Absent/unbound degrades to
+  // null + "no bound spec" — never an error.
+  let spec: Spec | null = null;
+  if (entry.specId !== null) {
+    spec = loadSpecs(ctx.cawsDir).specs.find((s) => s.id === entry.specId) ?? null;
+  }
+
+  const revListCommand = `${entry.baseBranch}..${entry.branch}`;
+
+  // Exact lane commit list, oldest-first.
+  const logRes = runGit(
+    ['log', '--reverse', '--format=%H%x09%h%x09%s', revListCommand],
+    ctx.repoRoot
+  );
+  if (!logRes.ok) {
+    return {
+      worktree: entry.name,
+      branch: entry.branch,
+      baseBranch: entry.baseBranch,
+      specId: entry.specId,
+      ownerSessionId: entry.owner?.session_id ?? null,
+      laneEmpty: false,
+      commitCount: 0,
+      commits: [],
+      truncated: false,
+      truncatedCount: 0,
+      revListCommand,
+      diffstatCommand: `git diff --stat ${entry.baseBranch}...${entry.branch}`,
+      diffstat: null,
+      specReadiness: null,
+      ownerContext: null,
+      failure: `git log ${revListCommand} failed: ${logRes.reason}`,
+    };
+  }
+  const lines = logRes.stdout.split('\n').filter((l) => l.length > 0);
+  const commits: ReviewCommit[] = [];
+  for (const line of lines) {
+    const parts = line.split('\t');
+    const sha = parts[0] ?? '';
+    const short = parts[1] ?? '';
+    const subject = parts.slice(2).join('\t');
+    const filesRes = runGit(
+      ['diff-tree', '--no-commit-id', '--name-only', '-r', sha],
+      ctx.repoRoot
+    );
+    const paths: ReviewPathVerdict[] = [];
+    if (filesRes.ok) {
+      for (const p of filesRes.stdout.split('\n').map((s) => s.trim()).filter(Boolean)) {
+        const inScope = reviewPathInScope(p, spec);
+        paths.push({
+          path: p,
+          inScope,
+          mergeRefusal: inScope
+            ? null
+            : `lane branch contains commit ${sha.slice(0, 12)} outside spec scope: ${p}`,
+        });
+      }
+    }
+    commits.push({
+      sha,
+      short,
+      subject,
+      paths,
+      outOfScopeCount: paths.filter((p) => !p.inScope).length,
+    });
+  }
+
+  const laneEmpty = commits.length === 0;
+
+  // Diffstat for the lane.
+  const diffRes = runGit(['diff', '--stat', `${entry.baseBranch}...${entry.branch}`], ctx.repoRoot);
+  const diffstat = laneEmpty
+    ? '(lane is empty — branch is at base)'
+    : diffRes.ok && diffRes.stdout.trim().length > 0
+      ? diffRes.stdout.trim()
+      : diffRes.ok
+        ? '(no diff output)'
+        : null;
+
+  // Spec readiness: acceptance criteria matched against the spec's evidence
+  // block (the close-gate authority).
+  let specReadiness: ReviewSpecReadiness | null = null;
+  if (spec !== null) {
+    const evidenceByCriterion = new Map<string, EvidenceRecord>();
+    for (const rec of spec.evidence ?? []) {
+      evidenceByCriterion.set(rec.criterion_id, rec);
+    }
+    const criteria = spec.acceptance.map((ac) => {
+      const rec = evidenceByCriterion.get(ac.id);
+      if (rec === undefined) {
+        return { id: ac.id, status: 'unchecked' } satisfies ReviewCriteriaStatus;
+      }
+      return {
+        id: ac.id,
+        status: rec.status,
+        ...(rec.evidence_ref !== undefined ? { evidenceRef: rec.evidence_ref } : {}),
+      } satisfies ReviewCriteriaStatus;
+    });
+    specReadiness = {
+      specId: spec.id,
+      lifecycleState: spec.lifecycle_state,
+      criteria,
+      uncheckedCount: criteria.filter((c) => c.status === 'unchecked').length,
+    };
+  }
+
+  // Owner context: lease work_state (visible) + last-active age. Absent owner
+  // or lease degrades to null.
+  let ownerContext: ReviewOwnerContext | null = null;
+  if (entry.owner !== null) {
+    const leasesRes = loadLeases(ctx.cawsDir);
+    if (leasesRes.ok) {
+      const lease = leasesRes.value.leases[entry.owner.session_id];
+      if (lease !== undefined) {
+        ownerContext = {
+          sessionId: entry.owner.session_id,
+          ...(lease.work_state !== undefined ? { workState: lease.work_state } : {}),
+          ...(lease.work_state_note !== undefined ? { workStateNote: lease.work_state_note } : {}),
+          ...(lease.work_state_updated_at !== undefined
+            ? { workStateUpdatedAt: lease.work_state_updated_at }
+            : {}),
+          lastActiveAgeMs: lastActiveAgeMs(lease.last_active, now),
+        };
+      }
+    }
+  }
+
+  return {
+    worktree: entry.name,
+    branch: entry.branch,
+    baseBranch: entry.baseBranch,
+    specId: entry.specId,
+    ownerSessionId: entry.owner?.session_id ?? null,
+    laneEmpty,
+    commitCount: commits.length,
+    commits,
+    truncated: commits.length > REVIEW_COMMIT_RENDER_CAP,
+    truncatedCount: Math.max(0, commits.length - REVIEW_COMMIT_RENDER_CAP),
+    revListCommand,
+    diffstatCommand: `git diff --stat ${entry.baseBranch}...${entry.branch}`,
+    diffstat,
+    specReadiness,
+    ownerContext,
+    failure: null,
+  };
+}
+
+function renderReviewReport(report: ReviewReport, out: (s: string) => void): void {
+  out(`worktree review: ${report.worktree}`);
+  out(`  branch: ${report.branch}  →  base: ${report.baseBranch}`);
+  out(`  spec:   ${report.specId ?? '(unbound — no spec readiness or provenance)'}`);
+  if (report.ownerSessionId !== null) {
+    out(`  owner:  ${report.ownerSessionId}`);
+  }
+  out('');
+
+  if (report.failure !== null) {
+    out(`  review could not fully render: ${report.failure}`);
+    return;
+  }
+
+  if (report.laneEmpty) {
+    out('Lane commits: (lane is empty — branch is at base)');
+  } else {
+    out(`Lane commits (${report.commitCount}):`);
+    const rendered = report.commits.slice(0, REVIEW_COMMIT_RENDER_CAP);
+    for (const c of rendered) {
+      const flag = c.outOfScopeCount > 0 ? '  ← OUT OF SCOPE' : '';
+      out(`  ${c.short} ${c.subject}${flag}`);
+    }
+    if (report.truncated) {
+      out(`  …and ${report.truncatedCount} more (git log --reverse ${report.revListCommand})`);
+    }
+  }
+  out('');
+
+  out(`Scope provenance (per lane commit):`);
+  if (report.laneEmpty) {
+    out('  (no commits to verify)');
+  } else {
+    const rendered = report.commits.slice(0, REVIEW_COMMIT_RENDER_CAP);
+    for (const c of rendered) {
+      out(`  ${c.short} ${c.subject}`);
+      if (c.paths.length === 0) {
+        out(`    (no touched paths — e.g. a merge commit)`);
+        continue;
+      }
+      for (const p of c.paths) {
+        if (p.inScope) {
+          out(`    in-scope   ${p.path}`);
+        } else {
+          out(`    OUT-OF-SCOPE ${p.path}`);
+          if (p.mergeRefusal !== null) out(`      merge refuses: ${p.mergeRefusal}`);
+        }
+      }
+    }
+  }
+  out('');
+
+  // Diffstat.
+  out('Lane diffstat:');
+  out(`  ${report.diffstat ?? `(unavailable: ${report.diffstatCommand})`}`);
+  out('');
+
+  // Spec readiness.
+  if (report.specReadiness !== null) {
+    const sr = report.specReadiness;
+    out(`Spec readiness (${sr.specId}, ${sr.lifecycleState}):`);
+    for (const c of sr.criteria) {
+      if (c.status === 'pass') {
+        out(`  ${c.id} PASS${c.evidenceRef !== undefined ? `  (${c.evidenceRef})` : ''}`);
+      } else if (c.status === 'fail') {
+        out(`  ${c.id} FAIL${c.evidenceRef !== undefined ? `  (${c.evidenceRef})` : ''}`);
+      } else if (c.status === 'waived') {
+        out(`  ${c.id} WAIVED${c.evidenceRef !== undefined ? `  (${c.evidenceRef})` : ''}`);
+      } else {
+        out(`  ${c.id} UNCHECKED`);
+      }
+    }
+    if (sr.uncheckedCount > 0) {
+      out(`  ${sr.uncheckedCount} acceptance criterion/ia unchecked — does not satisfy closure.`);
+    }
+    out('');
+  }
+
+  // Owner context.
+  if (report.ownerContext !== null) {
+    const oc = report.ownerContext;
+    out(`Owner context (${oc.sessionId}):`);
+    if (oc.workState !== undefined) {
+      out(`  work_state: ${oc.workState}${oc.workStateNote !== undefined ? ` — ${oc.workStateNote}` : ''}`);
+    }
+    if (oc.lastActiveAgeMs !== null) {
+      out(`  last active: ${formatAge(oc.lastActiveAgeMs)} ago`);
+    }
+    out('');
+  }
+}
+
+function formatAge(ms: number): string {
+  const secs = Math.floor(ms / 1000);
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `${days}d`;
+}
+
+export function runWorktreeReviewCommand(opts: WorktreeReviewOptions): number {
+  const { cwd, nowFn, out, err, showData } = setupIO(opts);
+  const ctx = resolveCawsCtx(cwd, err, showData, 'review');
+  if (ctx === null) return 2;
+
+  if (typeof opts.name !== 'string' || opts.name.length === 0) {
+    err('caws worktree review: <name> is required.');
+    return 1;
+  }
+
+  const listRes = listWorktreesPretty(ctx.cawsDir);
+  if (!listRes.ok) {
+    err('caws worktree review: failed to load the worktree registry.');
+    err(renderDiagnostics(listRes.errors, { showData }));
+    return 2;
+  }
+  const entry = listRes.value.entries.find((e) => e.name === opts.name);
+  if (entry === undefined) {
+    err(`caws worktree review: no worktree "${opts.name}" is registered.`);
+    if (listRes.value.entries.length === 0) {
+      err('  Registered worktrees: (none)');
+    } else {
+      err('  Registered worktrees:');
+      for (const e of listRes.value.entries) err(`    ${e.name}`);
+    }
+    err('  (the destroy-not-found handoff: an unregistered name is refused, never fabricated.)');
+    return 1;
+  }
+
+  const report = buildReviewReport(ctx, entry, nowFn().getTime());
+  if (report.failure !== null) {
+    err(`caws worktree review: ${report.failure}`);
+    err('  The review could not be composed — nothing was written.');
+    return 2;
+  }
+
+  if (opts.json === true) {
+    out(JSON.stringify(report, null, 2));
+    return 0;
+  }
+
+  renderReviewReport(report, out);
   return 0;
 }

@@ -671,7 +671,7 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'worktree',
   description:
-    'Manage CAWS worktrees (create/list/ensure/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.',
+    'Manage CAWS worktrees (create/list/ensure/bind/destroy/untrack/merge/review/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.',
   subcommands: [
     {
       kind: 'leaf',
@@ -893,6 +893,17 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
             'Apply selected destroy-ready candidates only. Requires --state, --include, or --exclude. Refused classes still do not mutate.',
         },
         { flag: '--json', description: 'Emit the plan or apply outcome as JSON.' },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'review',
+      argument: { name: 'name', required: true, description: 'Registered worktree name to review' },
+      description:
+        'Read-only human-review gate (WORKTREE-REVIEW-SURFACE-001): renders exactly what `caws worktree merge <name>` would land — the exact commit list in base..branch (never counts-only), a per-commit scope-provenance table flagging out-of-scope paths with the refusal merge raises, the lane diffstat, the bound spec’s acceptance criteria with their recorded evidence status (the close-gate authority), and the owner’s lease work_state (visibility only). Never mutates .caws/, never appends events, never touches git refs or any working tree. A missing worktree exits 1; a rendered report exits 0; an empty lane renders honestly without fabricated rows.',
+      options: [
+        { flag: '--json', description: 'Emit the same review report as machine-readable JSON.' },
         DATA_OPTION,
       ],
     },
