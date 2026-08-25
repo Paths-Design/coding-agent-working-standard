@@ -137,3 +137,7 @@ evidence:
     status: pass
     evidence_ref: "jest tests/shell/evidence-human-decision.test.js (A2: evidence schema prints required fields, enum, runnable example)"
     recorded_at: "2026-08-25T16:40:50.079Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "jest tests/shell/evidence-human-decision.test.js (A3: list filters to human_decision; invalid type names full set)"
+    recorded_at: "2026-08-25T16:40:50.481Z"
