@@ -158,6 +158,10 @@ recovery ergonomics. The deliverables are:
 **Explicitly deferred to v11.3+:** `caws session start/checkpoint/end`
 and `caws parallel setup/status/merge/teardown`. The `caws worktree
 create` loop pattern replaces `parallel` for the multi-agent setup case.
+`caws session prune` (SESSION-LOG-RETENTION-SCOPE-001) ships AHEAD of the
+session lifecycle: it is dry-run-default retention for stale
+`.caws/sessions/` turn history — operational cache only, never an event,
+never authority. The lifecycle itself remains deferred.
 Session lifecycle re-introduction waits on evidence of need from real
 v11.2 usage.
 
@@ -469,6 +473,7 @@ Option A.
 | `caws events migrate/rotate/verify-archive` | Hash-chained audit-log maintenance over `.caws/events.jsonl`. |
 | `caws agents register/heartbeat/stop/list/show/work-state/prune` | Agent-liveness substrate + read-only inspector. Shipped ahead of the broader v11.2 multi-agent plan: `list/show` restore agent visibility removed in v11.0.0; `register/heartbeat/stop` back the hook pack; `prune` is operator cleanup. `work-state` (LEASE-WORK-STATE-001) is the visibility-only annotation (`working / blocked_awaiting_human / review_ready / done`) a session sets on its own lease — read by `agents list`, the status Agents panel, and message sender-context; never authority, never consulted by any gate, never rescued from staleness. |
 | `caws message send/reply/poll/inbox/history/status/prune` | Directed inter-agent messages over `.caws/messages.jsonl`. Separate from the audit chain and not authority. Delivery-UX posture (CAWS-MESSAGE-DELIVERY-UX-001): recipient liveness is heartbeat-age-based — no lease or stale heartbeat refuses the send with a not-sent verdict on stdout; an idle peer (stopped lease, fresh heartbeat — a session between turns) is deliverable at its next tool call; `--to` resolves `wt:`/`spec:` aliases; `reply` answers a message on its own channel; `status` observes queued-vs-delivered; poll carries registry-derived sender context (worktree/spec/branch) so senders never self-identify in the body. |
+| `caws session prune` | Dry-run-default retention for `.caws/sessions/` (SESSION-LOG-RETENTION-SCOPE-001). Operational cache only (gitignored; never events.jsonl, never read by the kernel for authority). Only per-session turn history (`turn-<NNN>.json`) is retention-eligible; `.session-envelope.json`, `.meta.json`, and top-level dotfiles are preserved (per-path exclusion). The current session and any session with a live lease are protected. `--apply` performs the prune; via `--older-than-ms` set the window (default 30 days). The session LIFECYCLE remains deferred (v11.3+). |
 | `caws claim --takeover` | Acquire ownership from a foreign session; writes `prior_owners` audit entry. |
 | `caws claim --paths <path>` | Declare working-tree path ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001). |
 

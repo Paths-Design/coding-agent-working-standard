@@ -32,6 +32,9 @@ const V11_REGISTERED_GROUPS = Object.freeze([
   'specs',
   'worktree',
   'agents',
+  'message',
+  'reprieve',
+  'session',
 ]);
 
 function entry(o) {

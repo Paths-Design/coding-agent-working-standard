@@ -1458,6 +1458,29 @@ Dry-run-first retention cleanup for non-authoritative chat logs. Only delivered 
 
 ---
 
+## 15. `caws session`
+
+Session-log retention (SESSION-LOG-RETENTION-SCOPE-001). The session LIFECYCLE (`start`/`checkpoint`/`end`) remains deferred; this group ships only `prune`. Session logs under `.caws/sessions/` are operational cache — never events.jsonl, never read by the kernel for scope/ownership/claim decisions.
+
+### `caws session prune`
+
+```bash
+caws session prune
+caws session prune --older-than-ms 2592000000
+caws session prune --older-than-ms 2592000000 --apply
+caws session prune --json
+```
+
+| Flag | Description |
+|---|---|
+| `--older-than-ms <ms>` | Retention window in milliseconds (default: 30 days). |
+| `--apply` | Perform the prune instead of dry-running it. |
+| `--json` | Emit the plan or apply outcome as JSON. |
+
+Dry-run by default: classifies each session log dir by last turn activity, reports what is older than the retention window, and deletes nothing unless `--apply` is passed. Only per-session turn history (`turn-<NNN>.json`) is retention-eligible; `.session-envelope.json`, `.meta.json`, and top-level dotfiles are preserved (per-path exclusion). The current session and any session with a live lease are protected and never pruned. Operational cache only — never appends an event, never touches governed state.
+
+---
+
 ## State files
 
 What v11 owns and writes:

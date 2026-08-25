@@ -1680,6 +1680,30 @@ export const AGENTS_COMMAND_META: GroupCommandMeta = {
   ],
 };
 
+export const SESSION_COMMAND_META: GroupCommandMeta = {
+  kind: 'group',
+  name: 'session',
+  description:
+    'Session-log retention (SESSION-LOG-RETENTION-SCOPE-001). The session LIFECYCLE (start/checkpoint/end) remains deferred; this group ships only `prune` — dry-run-default retention for stale per-session turn history under .caws/sessions/. Session logs are operational cache (gitignored; never events.jsonl, never read by the kernel for scope/ownership/claim decisions).',
+  subcommands: [
+    {
+      kind: 'leaf',
+      name: 'prune',
+      description:
+        'Dry-run-default retention for .caws/sessions/: classify each session log dir by last turn activity and report what is older than the retention window. Only per-session turn history (turn-<NNN>.json) is retention-eligible; the identity capsule (.session-envelope.json), .meta.json, and top-level dotfiles are preserved (per-path exclusion). The current session and any session with a live lease are protected and never pruned. --apply performs the prune; without it nothing is deleted. Operational cache only — never appends an event, never touches governed state.',
+      options: [
+        {
+          flag: '--older-than-ms <ms>',
+          description: 'Retention window in milliseconds (default: 30 days)',
+        },
+        { flag: '--apply', description: 'Perform the prune instead of dry-running it' },
+        { flag: '--json', description: 'Emit the plan or apply outcome as JSON.' },
+        DATA_OPTION,
+      ],
+    },
+  ],
+};
+
 export const MESSAGE_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'message',
@@ -1834,4 +1858,5 @@ export const COMMAND_SURFACE_METADATA: readonly CommandMeta[] = Object.freeze([
   WORKTREE_COMMAND_META,
   AGENTS_COMMAND_META,
   MESSAGE_COMMAND_META,
+  SESSION_COMMAND_META,
 ]);
