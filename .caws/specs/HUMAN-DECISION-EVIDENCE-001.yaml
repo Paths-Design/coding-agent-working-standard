@@ -2,10 +2,11 @@ id: HUMAN-DECISION-EVIDENCE-001
 title: 'human_decision evidence kind: schema-first typed record of a human judgment'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: wt-human-decision
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-human-decision at dd1042ee6bc0605001042b901cb3cf89a0fca766'
 created_at: '2026-08-25T16:25:01.424Z'
-updated_at: '2026-08-25T16:33:58.114Z'
+updated_at: '2026-08-25T16:41:00.520Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/kernel/evidence
