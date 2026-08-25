@@ -464,3 +464,8 @@ contracts: []
 # destroy another active session's in-flight work." Push-range
 # safety, handoff events, and ownership-metadata storage are
 # adjacent concerns owned by their own specs.
+evidence:
+  - criterion_id: A0
+    status: pass
+    evidence_ref: "SESSION-OWNERSHIP-METADATA-001 archived resolution: completed (lease claimed_paths/last_modified_paths shipped)"
+    recorded_at: "2026-08-25T19:04:22.653Z"
