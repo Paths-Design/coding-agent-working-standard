@@ -485,3 +485,7 @@ evidence:
     status: pass
     evidence_ref: jest tests/store/working-tree-overlap.test.js + tests/shell/working-tree-check.test.js (untracked-files=all fix enumerates dirty paths; 3-way overlap regression shape)
     recorded_at: "2026-08-25T19:04:26.987Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "hook ADD only: worktree-guard.sh retained (pack 47 fingerprint green, hook renders/installs)"
+    recorded_at: "2026-08-25T19:04:28.368Z"
