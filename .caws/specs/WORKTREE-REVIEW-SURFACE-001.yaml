@@ -2,10 +2,11 @@ id: WORKTREE-REVIEW-SURFACE-001
 title: 'Read-only caws worktree review <name>: the human gate merge lacks — exact commit list, diffstat, scope-provenance table, spec AC status, owner work_state'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: wt-review
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-review at 07f540c53f3566f1a5ac07b2f52983fa9e3432e0'
 created_at: '2026-08-25T00:50:57.572Z'
-updated_at: '2026-08-25T15:16:31.881Z'
+updated_at: '2026-08-25T15:39:31.432Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/worktree.ts
