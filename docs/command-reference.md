@@ -35,7 +35,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws waiver`](#caws-waiver) — Manage CAWS waivers (bounded exception records that suppress matching gate violations)
 - [`caws reprieve`](#caws-reprieve) — Session-scoped guard reprieve: skip a PreToolUse guard for ONE session until a stated expiry. Use when a session legitimately needs to do what a guard blocks (e.g. editing a hook script) WITHOUT disabling it for every other session. Distinct from `caws waiver`: a reprieve skips a HOOK guard at dispatch time (operational cache, session-scoped, expiring); a waiver bypasses a GATE at policy-run time (governance state, kernel-adjudicated). Replaces the anti-pattern of commenting a guard out of the dispatcher HANDLERS array.
 - [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate/relocate)
-- [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/ensure/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.
+- [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/ensure/bind/destroy/untrack/merge/review/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.
 - [`caws agents`](#caws-agents) — Agent liveness substrate: register/heartbeat/stop/list/show/work-state/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.
 - [`caws message`](#caws-message) — Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/reply/poll/inbox/history/status/prune directed messages between running sessions, addressed by session id (or a wt:/spec: alias), over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
 
@@ -692,7 +692,7 @@ CANONICAL-DRIFT-GUARDS-001 (Entry 37 recovery): move a spec YAML from a mis-park
 
 ## `caws worktree`
 
-Manage CAWS worktrees (create/list/ensure/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.
+Manage CAWS worktrees (create/list/ensure/bind/destroy/untrack/merge/review/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.
 
 ### `caws worktree create <name>`
 
@@ -836,6 +836,17 @@ Print a physical worktree cleanup plan. Dry-run by default. With --apply, requir
 - `--exclude <subjects>` — Comma-separated worktree names, spec ids, or paths to exclude.
 - `--apply` — Apply selected destroy-ready candidates only. Requires --state, --include, or --exclude. Refused classes still do not mutate.
 - `--json` — Emit the plan or apply outcome as JSON.
+- `--data` — Show structured data block on diagnostics
+
+### `caws worktree review <name>`
+
+Read-only human-review gate (WORKTREE-REVIEW-SURFACE-001): renders exactly what `caws worktree merge <name>` would land — the exact commit list in base..branch (never counts-only), a per-commit scope-provenance table flagging out-of-scope paths with the refusal merge raises, the lane diffstat, the bound spec’s acceptance criteria with their recorded evidence status (the close-gate authority), and the owner’s lease work_state (visibility only). Never mutates .caws/, never appends events, never touches git refs or any working tree. A missing worktree exits 1; a rendered report exits 0; an empty lane renders honestly without fabricated rows.
+
+**Argument:** `name` (required) — Registered worktree name to review
+
+**Options:**
+
+- `--json` — Emit the same review report as machine-readable JSON.
 - `--data` — Show structured data block on diagnostics
 
 ## `caws agents`

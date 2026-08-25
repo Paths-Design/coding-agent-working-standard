@@ -104,6 +104,17 @@ vNext spec lifecycle (`spec create/close/archive`) and worktree lifecycle
 commands in v11.1. Projects that need only the v11.0 governed core may
 still pin to `caws-cli@^11.0.x`.
 
+The read-only **`caws worktree review <name>`** surface
+(WORKTREE-REVIEW-SURFACE-001) ships alongside the worktree lifecycle as the
+human-review gate merge lacks: it renders the exact lane commit list
+(base..branch, never counts-only), a per-commit scope-provenance table that
+flags out-of-scope paths with the exact refusal merge raises, the lane
+diffstat, the bound spec's acceptance-criteria evidence status, and the
+owner's lease `work_state` — all read-only. It never mutates `.caws/`, never
+appends events, and never touches a git ref or any working tree, closing the
+gap between "a foreign lane exists" (doctor) and "this work ships now"
+(merge).
+
 ### v11.2 plan — multi-agent authority and observability
 
 v11.0 → v11.1 delivered the governed core and worktree lifecycle. v11.2

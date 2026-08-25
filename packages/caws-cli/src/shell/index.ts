@@ -242,6 +242,7 @@ export {
   runWorktreePruneCommand,
   runWorktreeRepairSparseCommand,
   runWorktreeRepairCommand,
+  runWorktreeReviewCommand,
   buildWorktreePhysicalCleanupPlan,
   buildWorktreePrunePlan,
   worktreePruneItemFromFinding,

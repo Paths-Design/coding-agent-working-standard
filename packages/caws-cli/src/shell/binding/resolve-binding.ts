@@ -142,7 +142,7 @@ function normalizeRel(p: string): string {
  * (prefix match on a path boundary) — mirroring how scope.in directory
  * entries admit files beneath them. No dependency on minimatch.
  */
-function scopeEntryMatches(entry: string, target: string): boolean {
+export function scopeEntryMatches(entry: string, target: string): boolean {
   const e = normalizeRel(entry);
   const t = normalizeRel(target);
   if (e === t) return true;

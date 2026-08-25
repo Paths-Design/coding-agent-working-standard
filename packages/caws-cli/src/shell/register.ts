@@ -113,6 +113,7 @@ import {
   runWorktreePruneCommand,
   runWorktreeRepairSparseCommand,
   runWorktreeRepairCommand,
+  runWorktreeReviewCommand,
   runWorktreeUntrackCommand,
   type EvidenceKind,
 } from './index';
@@ -1741,6 +1742,17 @@ export function registerShellCommands(
         exit(code);
       }
     );
+
+  // WORKTREE-REVIEW-SURFACE-001: read-only human-review gate.
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'review'))
+    .action((name: string, opts: { json?: boolean; data?: boolean }) => {
+      const code = runWorktreeReviewCommand({
+        name,
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
 
   // ─── caws agents (MULTI-AGENT-ACTIVITY-REGISTRY-001) ────────────────────
   const agentsCmd = program.command('agents');
