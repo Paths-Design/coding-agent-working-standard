@@ -131,3 +131,7 @@ evidence:
     status: pass
     evidence_ref: "jest tests/shell/session-log-retention.test.js (A2: apply deletes only turn files, preserves capsule + meta)"
     recorded_at: "2026-08-25T17:19:19.879Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "jest tests/shell/session-log-retention.test.js (A3: current + live-lease sessions protected even when stale)"
+    recorded_at: "2026-08-25T17:19:20.263Z"
