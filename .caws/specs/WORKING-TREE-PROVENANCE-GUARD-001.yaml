@@ -489,3 +489,7 @@ evidence:
     status: pass
     evidence_ref: "hook ADD only: worktree-guard.sh retained (pack 47 fingerprint green, hook renders/installs)"
     recorded_at: "2026-08-25T19:04:28.368Z"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: jest tests/store/working-tree-overlap.test.js + tests/shell/working-tree-check.test.js (metadataUnavailable + hook fallback-to-admit diagnostic)
+    recorded_at: "2026-08-25T19:04:29.668Z"
