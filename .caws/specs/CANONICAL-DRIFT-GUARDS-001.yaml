@@ -158,3 +158,7 @@ evidence:
     status: pass
     evidence_ref: "shell A3: specs create on parked canonical refuses exit 1 pre-write naming feat/other + --allow-foreign-branch; no spec file, no events change, HEAD untouched"
     recorded_at: "2026-08-25T00:45:04.709Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "shell A4: --allow-foreign-branch proceeds; ls-tree HEAD shows the spec landed on the parked branch (deliberate authoring)"
+    recorded_at: "2026-08-25T00:45:05.110Z"
