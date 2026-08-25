@@ -4,7 +4,7 @@ risk_tier: 2
 mode: feature
 lifecycle_state: draft
 created_at: '2026-08-25T16:25:01.424Z'
-updated_at: '2026-08-25T16:25:01.424Z'
+updated_at: '2026-08-25T16:25:27.554Z'
 blast_radius:
   modules:
     - 'TODO: list one or more modules this spec touches.'
@@ -13,7 +13,24 @@ operational_rollback_slo: 5m
 scope:
   in:
     - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/kernel/schemas/events/human_decision_recorded.v1.json
+    - packages/caws-cli/src/kernel/schemas/events.v1.json
+    - packages/caws-cli/src/kernel/evidence/types.ts
+    - packages/caws-cli/src/kernel/evidence/validate.ts
+    - packages/caws-cli/src/shell/commands/evidence.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/legacy-command-map.js
+    - packages/caws-cli/tests/shell/evidence-human-decision.test.js
+    - packages/caws-cli/README.md
+    - docs/architecture/caws-vnext-command-surface.md
+    - docs/command-reference.md
+    - docs/api/cli.md
+    - AGENTS.md
+  out:
+    - .caws/policy.yaml
+    - .github/workflows
+    - packages/caws-cli/src/kernel/scope
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'
 acceptance:
