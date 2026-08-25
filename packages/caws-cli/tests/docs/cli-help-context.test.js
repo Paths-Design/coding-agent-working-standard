@@ -152,6 +152,7 @@ describe('CLI help context metadata', () => {
       'evidence',
       'gates',
       'message',
+      'session',
       'specs',
       'worktree',
     ]);
