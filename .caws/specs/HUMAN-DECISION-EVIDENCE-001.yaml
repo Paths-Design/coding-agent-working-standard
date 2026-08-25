@@ -133,3 +133,7 @@ evidence:
     status: pass
     evidence_ref: "jest tests/shell/evidence-human-decision.test.js (A1: record human_decision appends chain-valid human_decision_recorded)"
     recorded_at: "2026-08-25T16:40:49.680Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "jest tests/shell/evidence-human-decision.test.js (A2: evidence schema prints required fields, enum, runnable example)"
+    recorded_at: "2026-08-25T16:40:50.079Z"
