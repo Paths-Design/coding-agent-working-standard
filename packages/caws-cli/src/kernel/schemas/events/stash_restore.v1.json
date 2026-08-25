@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/stash_restore.v1.json",
+  "title": "stash_restore event payload",
+  "$comment": "Class: OPTIONAL_SPEC_ID. MULTI-AGENT-HANDOFF-EVENT-001: agent A restored a stash authored by agent B. Provenance, never authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source_session", "receiving_session", "paths"],
+  "properties": {
+    "source_session": { "type": "string", "minLength": 1, "description": "The session that created the stash." },
+    "receiving_session": { "type": "string", "minLength": 1, "description": "The session restoring the stash." },
+    "paths": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Paths restored from the stash." },
+    "stash_ref": { "type": "string", "description": "Optional stash identifier (e.g. stash@{N} or the stash message)." }
+  }
+}

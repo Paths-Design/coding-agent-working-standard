@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/claim_transfer.v1.json",
+  "title": "claim_transfer event payload",
+  "$comment": "Class: OPTIONAL_SPEC_ID. MULTI-AGENT-HANDOFF-EVENT-001: agent A explicitly took over a claimed_paths set that previously belonged to agent B. Provenance, never authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source_session", "receiving_session", "paths"],
+  "properties": {
+    "source_session": { "type": "string", "minLength": 1, "description": "The session whose claim is being transferred away from." },
+    "receiving_session": { "type": "string", "minLength": 1, "description": "The session taking over the claim." },
+    "paths": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "The claimed_paths set being transferred." }
+  }
+}

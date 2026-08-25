@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/overlap_ack_proceed.v1.json",
+  "title": "overlap_ack_proceed event payload",
+  "$comment": "Class: OPTIONAL_SPEC_ID. MULTI-AGENT-HANDOFF-EVENT-001: agent A acknowledged overlap with agent B's claimed/modified paths and proceeded with a cleanup command. Provenance, never authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source_session", "receiving_session", "paths", "target_command"],
+  "properties": {
+    "source_session": { "type": "string", "minLength": 1, "description": "The session whose overlap was acknowledged." },
+    "receiving_session": { "type": "string", "minLength": 1, "description": "The session that acknowledged the overlap and proceeded." },
+    "paths": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "The overlapping paths acknowledged." },
+    "target_command": { "type": "string", "minLength": 1, "description": "The cleanup command that proceeded after the ack (e.g. git stash)." }
+  }
+}

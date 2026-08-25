@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/manual_pickup.v1.json",
+  "title": "manual_pickup event payload",
+  "$comment": "Class: OPTIONAL_SPEC_ID. MULTI-AGENT-HANDOFF-EVENT-001: an operator explicitly declared they are continuing another session's work. Provenance, never authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source_session", "receiving_session", "paths"],
+  "properties": {
+    "source_session": { "type": "string", "minLength": 1, "description": "The session whose work is being picked up." },
+    "receiving_session": { "type": "string", "minLength": 1, "description": "The session continuing the work." },
+    "paths": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "The paths being picked up." },
+    "reason": { "type": "string", "minLength": 1, "description": "Optional operator reason for the handoff." }
+  }
+}
