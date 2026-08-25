@@ -124,7 +124,7 @@ describe('caws evidence record --data parse guidance', () => {
     expect(result.status).toBe(1);
     expect(result.stdout).toBe('');
     expect(result.stderr).toContain('caws evidence record: invalid --data JSON');
-    expect(result.stderr).toContain('Run: caws evidence schema --type <test|gate|ac>');
+    expect(result.stderr).toContain('Run: caws evidence schema --type <test|gate|ac|human_decision>');
     expect(result.stderr).toContain(
       'Tip: wrap JSON in single quotes so the shell preserves double quotes.'
     );
