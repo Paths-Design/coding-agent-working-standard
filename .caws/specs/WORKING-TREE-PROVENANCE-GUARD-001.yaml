@@ -469,3 +469,7 @@ evidence:
     status: pass
     evidence_ref: "SESSION-OWNERSHIP-METADATA-001 archived resolution: completed (lease claimed_paths/last_modified_paths shipped)"
     recorded_at: "2026-08-25T19:04:22.653Z"
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "jest tests/store/working-tree-overlap.test.js + tests/shell/working-tree-check.test.js (classify flags another session's claimed/modified overlap)"
+    recorded_at: "2026-08-25T19:04:24.285Z"
