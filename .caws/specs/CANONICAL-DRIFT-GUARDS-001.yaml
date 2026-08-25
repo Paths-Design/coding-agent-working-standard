@@ -2,10 +2,11 @@ id: CANONICAL-DRIFT-GUARDS-001
 title: 'Detect and govern canonical-checkout drift: mis-parked HEAD finding, lifecycle auto-commit target check, governed spec relocation'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: wt-candrift
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-candrift at e575dd0f32f10e687fd4fc16f95367a718852c19'
 created_at: '2026-08-24T22:31:49.355Z'
-updated_at: '2026-08-25T00:45:56.605Z'
+updated_at: '2026-08-25T00:45:57.266Z'
 blast_radius:
   modules:
     - 'packages/caws-cli/src/store/doctor-snapshot.ts'
