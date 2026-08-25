@@ -125,3 +125,7 @@ evidence:
     status: pass
     evidence_ref: "jest tests/shell/worktree-review.test.js (A2: spec-readiness pass + unchecked, close-gate consequence named)"
     recorded_at: "2026-08-25T15:39:06.271Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "jest tests/shell/worktree-review.test.js (A3: owner work_state + note + age in text and JSON; absent degrades)"
+    recorded_at: "2026-08-25T15:39:06.662Z"
