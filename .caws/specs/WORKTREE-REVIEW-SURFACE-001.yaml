@@ -4,25 +4,113 @@ risk_tier: 2
 mode: feature
 lifecycle_state: draft
 created_at: '2026-08-25T00:50:57.572Z'
-updated_at: '2026-08-25T00:50:57.572Z'
+updated_at: '2026-08-25T00:55:00.000Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/commands/worktree.ts
   data_migration: false
-operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/shell/commands/worktree.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/index.ts
+    - packages/caws-cli/tests/shell/worktree-review.test.js
+    - packages/caws-cli/README.md
+    - docs/architecture/caws-vnext-command-surface.md
+    - docs/command-reference.md
+    - docs/api/cli.md
+    - AGENTS.md
+  out:
+    - .caws/policy.yaml
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    READ-ONLY, ALWAYS: review never mutates .caws/, never appends events,
+    never touches git refs or any working tree, and exits 0 for a rendered
+    report (missing worktree exits 1). Byte-stability discipline of `status`
+    applies — running review any number of times produces no state change.
+  - >-
+    EXACT COMMIT LIST, NEVER COUNTS-ONLY (the prepush doctrine: "Summary-only
+    output is the failure that allowed dd8841a to ship silently"): the
+    report lists every commit in the lane range base..branch with short SHA
+    + subject, so a foreign or unintended commit is visible at review time,
+    not after it lands. Bounded rendering (first 30 + "and N more" with the
+    rev-list command) prevents Entry-26-class context overflow.
+  - >-
+    SCOPE-PROVENANCE TABLE: for each lane commit, the touched paths are
+    matched against the bound spec's scope.in (the same matcher scope check
+    uses); each commit row reports in-scope/out-of-scope verdicts per path,
+    and any out-of-scope path is flagged with the exact refusal merge would
+    raise — review is the dry-run of merge's provenance gate, before the
+    operator commits to it.
+  - >-
+    SPEC READINESS: the bound spec's acceptance criteria render with their
+    recorded evidence status (pass/fail/waived/unchecked from the spec's
+    evidence block, the closure authority), so "is this slice actually
+    proven?" is answerable in the same view as "what would land?".
+  - >-
+    OWNER CONTEXT: when the worktree entry records an owner, the owner's
+    lease work_state (LEASE-WORK-STATE-001) and last-active age join the
+    report (visibility only); absent owner or lease renders without noise.
+    JSON mode (--json) emits the same data machine-readably for CI.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: >-
+      A registered worktree wt-demo (branch ahead of base by 2 commits: one
+      touching only in-scope paths, one touching an out-of-scope path).
+    when: >-
+      `caws worktree review wt-demo` runs.
+    then: >-
+      Exit 0; the report lists BOTH commits with short SHA + subject; the
+      scope-provenance table flags the out-of-scope path and names the
+      merge refusal class; no .caws/ byte changes; no events appended.
+  - id: A2
+    given: >-
+      The lane's bound spec has 2 acceptance criteria, one with recorded
+      pass evidence and one unchecked.
+    when: >-
+      `caws worktree review wt-demo` runs.
+    then: >-
+      The spec-readiness section renders A1 pass (with its evidence_ref)
+      and A2 unchecked, and names the close-gate consequence (unchecked ACs
+      do not satisfy closure).
+  - id: A3
+    given: >-
+      The worktree entry records owner session S, and S's lease carries
+      work_state review_ready with a note.
+    when: >-
+      `caws worktree review wt-demo` runs (text and --json).
+    then: >-
+      The owner-context section renders work_state review_ready + note +
+      last-active age; --json carries work_state and last_active_age_ms
+      fields; an absent owner or lease degrades to no section, never an
+      error.
+  - id: A4
+    given: >-
+      No worktree named wt-missing is registered.
+    when: >-
+      `caws worktree review wt-missing` runs.
+    then: >-
+      Exit 1 with the not-found refusal naming worktree list (the
+      destroy-not-found handoff discipline); nothing is written.
+  - id: A5
+    given: >-
+      A lane with an empty range (branch at base — e.g. post-merge state).
+    when: >-
+      `caws worktree review wt-demo` runs.
+    then: >-
+      Exit 0 with an honest "(lane is empty — branch is at base)" report;
+      no crash, no fabricated rows.
+non_functional:
+  reliability:
+    - >-
+      The human review gate merge never had: this closes the gap between
+      "a foreign lane exists" (doctor) and "this work ships now" (merge) —
+      the operator sees exactly what would land, whether merge would refuse
+      it, and whether the slice's acceptance is proven, in one read-only
+      command.
 contracts:
   - name: 'review-command'
-    type: contract-test
+    type: 'contract-test'
     path: 'packages/caws-cli/tests/shell/worktree-review.test.js'
