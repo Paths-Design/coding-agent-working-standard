@@ -1,0 +1,28 @@
+id: SESSION-LOG-RETENTION-SCOPE-001
+title: 'Dry-run-default session-log retention for .caws/sessions/ (operational cache)'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-08-25T16:50:48.919Z'
+updated_at: '2026-08-25T16:50:48.919Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'session-log-retention'
+    type: contract-test
+    path: 'tests/shell/session-log-retention.test.js'
