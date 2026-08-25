@@ -135,3 +135,7 @@ evidence:
     status: pass
     evidence_ref: "jest tests/shell/session-log-retention.test.js (A3: current + live-lease sessions protected even when stale)"
     recorded_at: "2026-08-25T17:19:20.263Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "jest tests/shell/session-log-retention.test.js (A4: fresh dir is not a candidate and survives apply)"
+    recorded_at: "2026-08-25T17:19:20.650Z"
