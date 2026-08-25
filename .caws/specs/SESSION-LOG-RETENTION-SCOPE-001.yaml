@@ -7,12 +7,15 @@ created_at: '2026-08-25T16:50:48.919Z'
 updated_at: '2026-08-25T16:50:59.321Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/session-log-retention.ts
+    - packages/caws-cli/src/shell/commands/session.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/registered-command-groups.js
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/shell/commands/session.ts
     - packages/caws-cli/src/store/session-log-retention.ts
     - packages/caws-cli/src/shell/register.ts
@@ -30,13 +33,85 @@ scope:
     - .github/workflows
     - packages/caws-cli/src/kernel/scope
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    OPERATIONAL-CACHE-ONLY, NEVER AUTHORITY: session logs under
+    .caws/sessions/ are operational cache (gitignored; never in events.jsonl,
+    never read by the kernel for scope/ownership/claim decisions). The
+    retention command READS and deletes only these files. It never touches
+    .caws/events.jsonl, .caws/specs/, .caws/policy.yaml, .caws/worktrees.json,
+    .caws/agents.json, or any git ref. Running retention any number of times
+    appends zero events.
+  - >-
+    DRY-RUN DEFAULT: retention plans by default and prints what it would
+    remove; nothing is deleted unless --apply is passed. This is the same
+    posture as caws worktree prune / cleanup-plan and caws agents prune.
+  - >-
+    PER-PATH EXCLUSIONS, PRESERVE IDENTITY: only per-session turn history
+    (turn-<NNN>.json) is retention-eligible. The identity capsule
+    (.session-envelope.json), .meta.json, and top-level dotfiles (.caller-
+    session.json, .agent-pid-reap-marker) are EXCLUDED and never removed.
+    A session's identity capsule is what resolve-session and the foreign-review
+    handoff read; dropping it would strand that session's context.
+  - >-
+    PROTECTED, NEVER STALE-PRUNED: the current session's log and any session
+    with a live lease (fresh heartbeat) are excluded from candidates in both
+    dry-run and apply. A stale turn file under a still-live session is not
+    touched.
+  - >-
+    SESSION LIFECYCLE REMAINS DEFERRED: this slice ships ONLY session-log
+    retention (`caws session prune`). The deferred lifecycle
+    (session start/checkpoint/end) is unchanged; no new lifecycle surface is
+    introduced here.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: >-
+      .caws/sessions/ has one stale session dir (last turn TTL-old) and one
+      fresh session dir.
+    when: >-
+      `caws session prune` runs (no --apply).
+    then: >-
+      Exit 0; the stale dir is listed as a candidate with its turn-file count,
+      the fresh dir is not; nothing is deleted (all turn files still present);
+      --json carries candidate paths + counts.
+  - id: A2
+    given: >-
+      A stale session dir with turn files + a .session-envelope.json + .meta.json.
+    when: >-
+      `caws session prune --apply` runs.
+    then: >-
+      The turn-*.json files in the candidate dir are deleted; the
+      .session-envelope.json and .meta.json remain (per-path exclusion); exit 0.
+  - id: A3
+    given: >-
+      The current session's dir and a dir with a live lease (fresh heartbeat).
+    when: >-
+      `caws session prune --apply` runs.
+    then: >-
+      Neither protected dir's turn files are deleted (excluded), even if their
+      last activity is TTL-old.
+  - id: A4
+    given: >-
+      A fresh (under TTL) session dir is present.
+    when: >-
+      `caws session prune --apply` runs.
+    then: >-
+      It is not a candidate; its turn files remain.
+  - id: A5
+    given: >-
+      The full suite runs after the implementation.
+    when: >-
+      All pre-existing tests plus the new session-log-retention contract tests
+      run.
+    then: >-
+      All pass; no production change outside scope.in; retention appended zero
+      events (events.jsonl bytes unchanged by a dry-run and by an apply).
+non_functional:
+  reliability:
+    - >-
+      Retention is deterministic over on-disk state: the same
+      .caws/sessions/ yields the same plan. Applied pruning keeps the
+      capsule/meta exclusion contract; a failed delete leaves the excluded
+      paths intact.
 contracts:
   - name: 'session-log-retention'
     type: contract-test
