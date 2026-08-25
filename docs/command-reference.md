@@ -191,11 +191,11 @@ Record, list, show, and describe typed evidence events in .caws/events.jsonl (re
 
 ### `caws evidence record`
 
-Append a typed evidence event (test|gate). Payload examples: test {"command":"npm test","exit_code":0}; gate {"gate_id":"budget_limit","mode":"block","result":"pass","violations":[]}. Use `caws evidence schema --type <kind>` for the full kernel schema. `--type ac` is REFUSED here: it would append an audit event without writing the spec evidence: block that the close gate reads — use `caws specs evidence <id> --ac <ac> --status <s>` instead (it dual-writes both).
+Append a typed evidence event (test|gate|human_decision). Payload examples: test {"command":"npm test","exit_code":0}; gate {"gate_id":"budget_limit","mode":"block","result":"pass","violations":[]}; human_decision {"decision":"approve-approach","decision_class":"approval"}. Use `caws evidence schema --type <kind>` for the full kernel schema. `--type ac` is REFUSED here: it would append an audit event without writing the spec evidence: block that the close gate reads — use `caws specs evidence <id> --ac <ac> --status <s>` instead (it dual-writes both).
 
 **Options:**
 
-- `--type <kind>` (**required**) — Evidence kind: test | gate (ac is refused — use `caws specs evidence`)
+- `--type <kind>` (**required**) — Evidence kind: test | gate | human_decision (ac is refused — use `caws specs evidence`)
 - `--spec <id>` (**required**) — Spec id this evidence is about
 - `--data <json>` (**required**) — Event payload as a JSON object string
 - `--actor-kind <kind>` (default: `agent`) — Actor kind: agent | human | system | automation
@@ -203,12 +203,12 @@ Append a typed evidence event (test|gate). Payload examples: test {"command":"np
 
 ### `caws evidence list`
 
-Read typed evidence events for a spec from the hash-chained events log. Read-only; verifies the event chain before listing. Filters to test|gate|ac evidence and can narrow by --type.
+Read typed evidence events for a spec from the hash-chained events log. Read-only; verifies the event chain before listing. Filters to test|gate|ac|human_decision evidence and can narrow by --type.
 
 **Options:**
 
 - `--spec <id>` (**required**) — Spec id whose evidence should be listed
-- `--type <kind>` — Optional evidence kind filter: test | gate | ac
+- `--type <kind>` — Optional evidence kind filter: test | gate | ac | human_decision
 - `--json` — Emit the evidence list as JSON.
 - `--data` — Show structured data block on diagnostics
 
@@ -225,11 +225,11 @@ Show one event from the hash-chained events log by sequence number, exact event 
 
 ### `caws evidence schema`
 
-Print the kernel-derived payload schema and a copy-pasteable example command for one evidence kind. Read-only; does not read or write .caws/events.jsonl. For test|gate the example is a `caws evidence record` call; for ac it is the `caws specs evidence` call that actually writes the closure authority.
+Print the kernel-derived payload schema and a copy-pasteable example command for one evidence kind. Read-only; does not read or write .caws/events.jsonl. For test|gate|human_decision the example is a `caws evidence record` call; for ac it is the `caws specs evidence` call that actually writes the closure authority.
 
 **Options:**
 
-- `--type <kind>` (**required**) — Evidence kind: test | gate | ac
+- `--type <kind>` (**required**) — Evidence kind: test | gate | ac | human_decision
 - `--json` — Emit schema, required fields, and example command as JSON.
 
 ## `caws events`

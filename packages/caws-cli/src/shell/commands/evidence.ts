@@ -40,18 +40,20 @@ import { resolveSession } from '../session/resolve-session';
 import { renderDiagnostics } from '../render/diagnostic';
 import { SHELL_RULES } from '../rules';
 
-export type EvidenceKind = 'test' | 'gate' | 'ac';
+export type EvidenceKind = 'test' | 'gate' | 'ac' | 'human_decision';
 
 const KIND_TO_EVENT_TYPE: Record<EvidenceKind, EventType> = {
   test: 'test_recorded',
   gate: 'gate_evaluated',
   ac: 'ac_recorded',
+  human_decision: 'human_decision_recorded',
 };
 
 const EVENT_TYPE_TO_KIND: Partial<Record<EventType, EvidenceKind>> = {
   test_recorded: 'test',
   gate_evaluated: 'gate',
   ac_recorded: 'ac',
+  human_decision_recorded: 'human_decision',
 };
 
 export interface EvidenceRecordOptions {
@@ -140,7 +142,7 @@ function rejectPreChainedFields(data: Record<string, unknown>): string | null {
 }
 
 function isEvidenceKind(value: unknown): value is EvidenceKind {
-  return value === 'test' || value === 'gate' || value === 'ac';
+  return value === 'test' || value === 'gate' || value === 'ac' || value === 'human_decision';
 }
 
 function evidenceKindForEvent(event: ChainedEvent): EvidenceKind | undefined {
@@ -170,6 +172,13 @@ function exampleDataForKind(kind: EvidenceKind): Record<string, unknown> {
       mode: 'block',
       result: 'pass',
       violations: [],
+    };
+  }
+  if (kind === 'human_decision') {
+    return {
+      decision: 'approve-approach',
+      decision_class: 'approval',
+      rationale: 'accepted by maintainer for the next release',
     };
   }
   return {
@@ -324,7 +333,7 @@ export function runEvidenceRecordCommand(opts: EvidenceRecordOptions): number {
   // may bypass that).
   if (!isEvidenceKind(opts.kind)) {
     err(
-      `caws evidence record: invalid --type. Got ${JSON.stringify(opts.kind)}; expected test|gate|ac.`
+      `caws evidence record: invalid --type. Got ${JSON.stringify(opts.kind)}; expected test|gate|ac|human_decision.`
     );
     err(
       `(rule: ${SHELL_RULES.COMMAND_INVALID_EVIDENCE_TYPE})`
@@ -465,7 +474,7 @@ export function runEvidenceListCommand(opts: EvidenceListOptions): number {
   }
   if (opts.kind !== undefined && !isEvidenceKind(opts.kind)) {
     err(
-      `caws evidence list: invalid --type. Got ${JSON.stringify(opts.kind)}; expected test|gate|ac.`
+      `caws evidence list: invalid --type. Got ${JSON.stringify(opts.kind)}; expected test|gate|ac|human_decision.`
     );
     err(`(rule: ${SHELL_RULES.COMMAND_INVALID_EVIDENCE_TYPE})`);
     return 1;
@@ -560,7 +569,7 @@ export function runEvidenceSchemaCommand(opts: EvidenceSchemaOptions): number {
 
   if (!isEvidenceKind(opts.kind)) {
     err(
-      `caws evidence schema: invalid --type. Got ${JSON.stringify(opts.kind)}; expected test|gate|ac.`
+      `caws evidence schema: invalid --type. Got ${JSON.stringify(opts.kind)}; expected test|gate|ac|human_decision.`
     );
     err(`(rule: ${SHELL_RULES.COMMAND_INVALID_EVIDENCE_TYPE})`);
     return 1;

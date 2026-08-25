@@ -87,6 +87,7 @@ export type EventType =
   | 'ac_recorded'
   | 'test_recorded'
   | 'gate_evaluated'
+  | 'human_decision_recorded'
   | 'waiver_applied'
   | 'waiver_revoked'
   | 'doctor_completed'
@@ -126,6 +127,9 @@ export const REQUIRES_SPEC_ID: ReadonlySet<EventType> = new Set<EventType>([
   'ac_recorded',
   'test_recorded',
   'gate_evaluated',
+  // HUMAN-DECISION-EVIDENCE-001: a human judgment is always evidence about a
+  // spec's work, so the event REQUIRES_SPEC_ID like the other evidence kinds.
+  'human_decision_recorded',
   'waiver_applied',
   'waiver_revoked',
   // AUTH-BINDING-BRIDGE-001: bridge acquire/takeover always name the spec.

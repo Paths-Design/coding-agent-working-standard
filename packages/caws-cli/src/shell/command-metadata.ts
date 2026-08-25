@@ -1220,12 +1220,12 @@ export const EVIDENCE_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'record',
       description:
-        'Append a typed evidence event (test|gate). Payload examples: test {"command":"npm test","exit_code":0}; gate {"gate_id":"budget_limit","mode":"block","result":"pass","violations":[]}. Use `caws evidence schema --type <kind>` for the full kernel schema. `--type ac` is REFUSED here: it would append an audit event without writing the spec evidence: block that the close gate reads — use `caws specs evidence <id> --ac <ac> --status <s>` instead (it dual-writes both).',
+        'Append a typed evidence event (test|gate|human_decision). Payload examples: test {"command":"npm test","exit_code":0}; gate {"gate_id":"budget_limit","mode":"block","result":"pass","violations":[]}; human_decision {"decision":"approve-approach","decision_class":"approval"}. Use `caws evidence schema --type <kind>` for the full kernel schema. `--type ac` is REFUSED here: it would append an audit event without writing the spec evidence: block that the close gate reads — use `caws specs evidence <id> --ac <ac> --status <s>` instead (it dual-writes both).',
       options: [
         {
           flag: '--type <kind>',
           required: true,
-          description: 'Evidence kind: test | gate (ac is refused — use `caws specs evidence`)',
+          description: 'Evidence kind: test | gate | human_decision (ac is refused — use `caws specs evidence`)',
         },
         { flag: '--spec <id>', required: true, description: 'Spec id this evidence is about' },
         { flag: '--data <json>', required: true, description: 'Event payload as a JSON object string' },
@@ -1241,10 +1241,10 @@ export const EVIDENCE_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'list',
       description:
-        'Read typed evidence events for a spec from the hash-chained events log. Read-only; verifies the event chain before listing. Filters to test|gate|ac evidence and can narrow by --type.',
+        'Read typed evidence events for a spec from the hash-chained events log. Read-only; verifies the event chain before listing. Filters to test|gate|ac|human_decision evidence and can narrow by --type.',
       options: [
         { flag: '--spec <id>', required: true, description: 'Spec id whose evidence should be listed' },
-        { flag: '--type <kind>', description: 'Optional evidence kind filter: test | gate | ac' },
+        { flag: '--type <kind>', description: 'Optional evidence kind filter: test | gate | ac | human_decision' },
         { flag: '--json', description: 'Emit the evidence list as JSON.' },
         DATA_OPTION,
       ],
@@ -1268,9 +1268,9 @@ export const EVIDENCE_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'schema',
       description:
-        'Print the kernel-derived payload schema and a copy-pasteable example command for one evidence kind. Read-only; does not read or write .caws/events.jsonl. For test|gate the example is a `caws evidence record` call; for ac it is the `caws specs evidence` call that actually writes the closure authority.',
+        'Print the kernel-derived payload schema and a copy-pasteable example command for one evidence kind. Read-only; does not read or write .caws/events.jsonl. For test|gate|human_decision the example is a `caws evidence record` call; for ac it is the `caws specs evidence` call that actually writes the closure authority.',
       options: [
-        { flag: '--type <kind>', required: true, description: 'Evidence kind: test | gate | ac' },
+        { flag: '--type <kind>', required: true, description: 'Evidence kind: test | gate | ac | human_decision' },
         { flag: '--json', description: 'Emit schema, required fields, and example command as JSON.' },
       ],
     },

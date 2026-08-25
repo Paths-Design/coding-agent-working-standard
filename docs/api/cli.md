@@ -353,11 +353,14 @@ caws evidence record \
 caws evidence record \
   --type ac --spec FEAT-1 \
   --data '{"criterion_id":"A1","status":"pass","evidence_ref":"npm test"}'
+caws evidence record \
+  --type human_decision --spec FEAT-1 \
+  --data '{"decision":"approve-approach","decision_class":"approval"}'
 ```
 
 | Flag | Description |
 |---|---|
-| `--type <kind>` | Evidence kind: `test`, `gate`, or `ac`. |
+| `--type <kind>` | Evidence kind: `test`, `gate`, `ac`, or `human_decision`. |
 | `--spec <id>` | Spec id this evidence is bound to. |
 | `--data <json>` | Inline JSON payload describing the evidence. Schema is per-`--type`; inspect it with `caws evidence schema --type <kind>`. |
 | `--actor-kind <kind>` | Actor kind: `agent`, `human`, `system`, or `automation` (default: `agent`). |
@@ -378,14 +381,15 @@ Exit codes: 0 (recorded), 1 (validation failure on `--data`), 2 (composition fai
 caws evidence schema --type test
 caws evidence schema --type gate --json
 caws evidence schema --type ac
+caws evidence schema --type human_decision --json
 ```
 
 | Flag | Description |
 |---|---|
-| `--type <kind>` | Evidence kind: `test`, `gate`, or `ac`. |
+| `--type <kind>` | Evidence kind: `test`, `gate`, `ac`, or `human_decision`. |
 | `--json` | Emit the kernel-derived payload schema, required fields, and example command as JSON. |
 
-Read-only schema discovery for `caws evidence record`. The command derives the payload contract from the same kernel schemas that validate `test_recorded`, `gate_evaluated`, and `ac_recorded` events. It does not read, append, rewrite, rotate, or lock `.caws/events.jsonl`.
+Read-only schema discovery for `caws evidence record`. The command derives the payload contract from the same kernel schemas that validate `test_recorded`, `gate_evaluated`, `ac_recorded`, and `human_decision_recorded` events. It does not read, append, rewrite, rotate, or lock `.caws/events.jsonl`.
 
 ### `caws evidence list`
 

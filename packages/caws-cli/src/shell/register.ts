@@ -137,7 +137,7 @@ function renderEvidenceDataParseGuidance(kind: string | undefined): string {
     ].join('\n');
   }
   return [
-    'Run: caws evidence schema --type <test|gate|ac>',
+    'Run: caws evidence schema --type <test|gate|ac|human_decision>',
     'Tip: wrap JSON in single quotes so the shell preserves double quotes.',
   ].join('\n');
 }
@@ -168,7 +168,7 @@ function parseDataOption(
 }
 
 function isEvidenceKind(value: unknown): value is EvidenceKind {
-  return value === 'test' || value === 'gate' || value === 'ac';
+  return value === 'test' || value === 'gate' || value === 'ac' || value === 'human_decision';
 }
 
 // ── Metadata-driven help wiring (CAWS-CLI-HELP-METADATA-AUTHORITY-001) ──────
@@ -668,7 +668,7 @@ export function registerShellCommands(
         }
         if (!isEvidenceKind(opts.type)) {
           process.stderr.write(
-            `caws evidence record: invalid --type ${JSON.stringify(opts.type)}; expected test|gate|ac.\n`
+            `caws evidence record: invalid --type ${JSON.stringify(opts.type)}; expected test|gate|ac|human_decision.\n`
           );
           exit(1);
           return;
@@ -691,7 +691,7 @@ export function registerShellCommands(
       (opts: { spec: string; type?: string; json?: boolean; data?: boolean }) => {
         if (opts.type !== undefined && !isEvidenceKind(opts.type)) {
           process.stderr.write(
-            `caws evidence list: invalid --type ${JSON.stringify(opts.type)}; expected test|gate|ac.\n`
+            `caws evidence list: invalid --type ${JSON.stringify(opts.type)}; expected test|gate|ac|human_decision.\n`
           );
           exit(1);
           return;

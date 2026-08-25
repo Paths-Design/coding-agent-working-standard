@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/events/human_decision_recorded.v1.json",
+  "title": "human_decision_recorded event payload",
+  "$comment": "Class: REQUIRES_SPEC_ID. Schema-first record of an operator/human judgment. HUMAN-DECISION-EVIDENCE-001: provenance, never authority — this event documents a human decision; it does not confer scope authority, bypass a gate/waiver/guard, or change ownership/lifecycle state.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decision", "decision_class"],
+  "properties": {
+    "decision": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Short machine-readable predicate of what the human decided (e.g. 'approve-approach', 'authorize-takeover', 'resolve-blocker')."
+    },
+    "decision_class": {
+      "type": "string",
+      "enum": ["approval", "rejection", "authorization", "direction", "blocker_resolution"],
+      "description": "Closed classification of the decision type."
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional human-written reason. Narrative goes here, never as an untyped catch-all field."
+    },
+    "record": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional reference to the related record: waiver id, spec id, ac id, reprieve id, or decision artifact."
+    },
+    "subject_paths": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Optional paths the decision concerns (e.g. for provenance/redaction surface)."
+    }
+  }
+}

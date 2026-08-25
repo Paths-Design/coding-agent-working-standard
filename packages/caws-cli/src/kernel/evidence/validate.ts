@@ -57,6 +57,8 @@ import worktreeUntrackedSchema from '../schemas/events/worktree_untracked.v1.jso
 import specClosedSchema from '../schemas/events/spec_closed.v1.json';
 import specCreatedSchema from '../schemas/events/spec_created.v1.json';
 import specValidatedSchema from '../schemas/events/spec_validated.v1.json';
+// HUMAN-DECISION-EVIDENCE-001
+import humanDecisionRecordedSchema from '../schemas/events/human_decision_recorded.v1.json';
 import testRecordedSchema from '../schemas/events/test_recorded.v1.json';
 import waiverAppliedSchema from '../schemas/events/waiver_applied.v1.json';
 import worktreeBoundSchema from '../schemas/events/worktree_bound.v1.json';
@@ -110,6 +112,7 @@ const PAYLOAD_SCHEMAS: Readonly<Partial<Record<EventType, object>>> = {
   doctor_completed: doctorCompletedSchema,
   evidence_recorded: evidenceRecordedSchema,
   gate_evaluated: gateEvaluatedSchema,
+  human_decision_recorded: humanDecisionRecordedSchema,
   spec_archived: specArchivedSchema,
   spec_archive_pruned: specArchivePrunedSchema,
   spec_activated: specActivatedSchema,
@@ -641,6 +644,7 @@ const KNOWN_EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   'ac_recorded',
   'test_recorded',
   'gate_evaluated',
+  'human_decision_recorded',
   'waiver_applied',
   'waiver_revoked',
   'doctor_completed',

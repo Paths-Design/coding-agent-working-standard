@@ -20,7 +20,7 @@ The v11 cutover is complete. `main` runs the v11 surface (kernel/store/shell arc
 | `caws scope show / check / contention` | Explain scope, enforce scope, or report cross-worktree path contention. |
 | `caws claim [--takeover] [--spec <id>] [--release]` | Surface or take ownership of the current worktree. Writes `prior_owners` audit on takeover. `--spec`/`--release` manage BRIDGE bindings (AUTH-BINDING-BRIDGE-001): session↔spec authority for non-worktree contexts — `caws claim --spec <id>` bridges to an ACTIVE spec (same `scope.in` admission as a worktree binding; refuses worktree-held or foreign-held specs), `--takeover` transitions explicitly with audit, `--release` relinquishes. Retired (closed/archived) specs confer nothing; `worktree prune` cleans ghost bindings. |
 | `caws gates run --spec <id>` | Run policy-driven quality gates. Appends one `gate_evaluated` event per declared gate. |
-| `caws evidence record --type <kind> --spec <id> --data <json>` | Append a typed evidence event (`test` / `gate` / `ac`). |
+| `caws evidence record --type <kind> --spec <id> --data <json>` | Append a typed evidence event (`test` / `gate` / `ac` / `human_decision`). `human_decision` (HUMAN-DECISION-EVIDENCE-001) is the schema-first record of a human judgment — always REQUIRES_SPEC_ID, provenance-only (never authority). |
 | `caws waiver create / list / show / revoke` | Manage waiver records. Singular surface — no plural alias. |
 | `caws reprieve grant / show / revoke / list` | Session-scoped guard reprieve: skip a PreToolUse guard for ONE session until expiry. Replaces commenting a guard out of the dispatcher HANDLERS array. See [Reprieves](#reprieves). |
 | `caws events migrate / rotate / verify-archive` | Maintenance for the hash-chained `.caws/events.jsonl`. |
@@ -104,7 +104,7 @@ caws evidence record --type test --spec FEAT-1 \
 caws specs evidence FEAT-1 --ac A1 --status pass --evidence-ref "npm test"
 # Payload shapes are closed (additionalProperties: false) and status is a closed
 # enum. Print the authoritative shape + a runnable example for any kind with:
-#   caws evidence schema --type <test|gate|ac>
+#   caws evidence schema --type <test|gate|ac|human_decision>
 
 # 5. Re-check
 caws doctor

@@ -155,7 +155,7 @@ const LEGACY_COMMAND_MAP = Object.freeze([
       kind: 'replaced',
       message:
         'caws provenance was replaced in v11 by caws evidence record + the hash-chained .caws/events.jsonl.',
-      use: ['caws evidence record --type <test|gate|ac> --spec <id> --data <json>'],
+      use: ['caws evidence record --type <test|gate|ac|human_decision> --spec <id> --data <json>'],
     },
   }),
   entry({
@@ -169,7 +169,7 @@ const LEGACY_COMMAND_MAP = Object.freeze([
     runtimeDiagnostic: {
       kind: 'replaced',
       message: 'caws provenance update was replaced by caws evidence record.',
-      use: ['caws evidence record --type <test|gate|ac> --spec <id> --data <json>'],
+      use: ['caws evidence record --type <test|gate|ac|human_decision> --spec <id> --data <json>'],
     },
   }),
   entry({
