@@ -145,3 +145,7 @@ evidence:
     status: pass
     evidence_ref: "jest tests/shell/evidence-human-decision.test.js (A4: schema-first — malformed payloads rejected by append)"
     recorded_at: "2026-08-25T16:40:50.870Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "jest tests/shell/evidence-human-decision.test.js (A5: existing test_recorded still appends)"
+    recorded_at: "2026-08-25T16:40:51.245Z"
