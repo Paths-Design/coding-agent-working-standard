@@ -128,3 +128,8 @@ contracts:
   - name: 'human-decision-evidence'
     type: contract-test
     path: 'tests/shell/evidence-human-decision.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "jest tests/shell/evidence-human-decision.test.js (A1: record human_decision appends chain-valid human_decision_recorded)"
+    recorded_at: "2026-08-25T16:40:49.680Z"
