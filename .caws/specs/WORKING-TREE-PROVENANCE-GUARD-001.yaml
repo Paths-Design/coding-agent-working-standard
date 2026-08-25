@@ -2,9 +2,10 @@ id: WORKING-TREE-PROVENANCE-GUARD-001
 title: 'Refuse cleanup commands (stash, restore, checkout --, broad clean) when another active session has dirty overlap in the working tree'
 risk_tier: 3
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-working-tree-guard
 created_at: '2026-05-22T23:35:00.000Z'
-updated_at: '2026-08-25T18:23:01.422Z'
+updated_at: '2026-08-25T18:23:20.007Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands
