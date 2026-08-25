@@ -144,15 +144,23 @@ export function loadOwnershipSessions(cawsDir: string): readonly {
 
 /** Read the current dirty-tree paths via `git status --porcelain`. */
 export function loadDirtyPaths(repoRoot: string): readonly string[] {
-  const res = runGit(['status', '--porcelain', '-z'], repoRoot);
+  // --untracked-files=all: enumerate individual untracked files instead of
+  // collapsing a whole untracked directory to "src/" (which would miss the
+  // specific paths a claim/overlap compares against).
+  const res = runGit(['status', '--porcelain', '-z', '--untracked-files=all'], repoRoot);
   if (!res.ok) return [];
   const records = res.stdout.split('\0').filter((r) => r.length > 0);
   const paths: string[] = [];
   for (const record of records) {
     // Porcelain -z: "<XY> <path>\0" (or "<XY> <renamed>\0<dest>\0" for renames).
     const secondSpace = record.indexOf(' ', 2);
-    const p = secondSpace >= 0 ? record.slice(secondSpace + 1) : record.slice(3);
-    if (p.length > 0 && p !== '.caws/specs/') paths.push(p);
+    let p = secondSpace >= 0 ? record.slice(secondSpace + 1) : record.slice(3);
+    // Operational .caws/ bookkeeping is not working-tree content being
+    // stashed/cleaned, and is gitignored in real repos; exclude it so it never
+    // registers as overlap.
+    if (p.startsWith('.caws/') || p === '.caws') continue;
+    p = normalizeRel(p);
+    if (p.length > 0) paths.push(p);
   }
   return paths;
 }

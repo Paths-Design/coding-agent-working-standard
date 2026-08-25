@@ -34,6 +34,7 @@ import {
   MESSAGE_COMMAND_META,
   SESSION_COMMAND_META,
   SPECS_COMMAND_META,
+  WORKING_TREE_COMMAND_META,
   WORKTREE_COMMAND_META,
   type GroupCommandMeta,
   type LeafCommandMeta,
@@ -104,6 +105,8 @@ import {
   runReprieveRevokeCommand,
   runReprieveListCommand,
   runSessionPruneCommand,
+  runWorkingTreeAckCommand,
+  runWorkingTreeCheckCommand,
   runWorktreeBindCommand,
   runWorktreeCreateCommand,
   runWorktreeDestroyCommand,
@@ -2054,4 +2057,35 @@ export function registerShellCommands(
       });
       exit(code);
     });
+
+  // ─── caws working-tree (WORKING-TREE-PROVENANCE-GUARD-001) ─────────────
+  const workingTreeCmd = program.command(WORKING_TREE_COMMAND_META.name);
+  applyGroupMeta(workingTreeCmd, WORKING_TREE_COMMAND_META);
+
+  defineLeaf(workingTreeCmd, leafMeta(WORKING_TREE_COMMAND_META, 'check'))
+    .action((opts: { json?: boolean; data?: boolean }) => {
+      const code = runWorkingTreeCheckCommand({
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  defineLeaf(workingTreeCmd, leafMeta(WORKING_TREE_COMMAND_META, 'ack'))
+    .action(
+      (opts: { session: string; paths?: string | string[]; target?: string; data?: boolean }) => {
+        const rawPaths = Array.isArray(opts.paths)
+          ? opts.paths
+          : typeof opts.paths === 'string'
+            ? opts.paths.split(',').map((s) => s.trim()).filter(Boolean)
+            : [];
+        const code = runWorkingTreeAckCommand({
+          sessionId: opts.session,
+          paths: rawPaths,
+          ...(opts.target !== undefined ? { target: opts.target } : {}),
+          showData: opts.data === true,
+        });
+        exit(code);
+      }
+    );
 }
