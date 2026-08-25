@@ -162,3 +162,7 @@ evidence:
     status: pass
     evidence_ref: "shell A4: --allow-foreign-branch proceeds; ls-tree HEAD shows the spec landed on the parked branch (deliberate authoring)"
     recorded_at: "2026-08-25T00:45:05.110Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "shell A5/A5b: dry-run prints source/target without mutation; --apply grafts the parked blob onto base via private temp index + commit-tree + CAS (base advanced, base tree carries the spec, HEAD/working tree untouched, no temp-index residue); on-base is the healthy no-op"
+    recorded_at: "2026-08-25T00:45:05.534Z"
