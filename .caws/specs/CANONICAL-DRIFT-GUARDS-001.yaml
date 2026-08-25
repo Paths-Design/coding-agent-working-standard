@@ -8,12 +8,12 @@ created_at: '2026-08-24T22:31:49.355Z'
 updated_at: '2026-08-25T00:16:10.979Z'
 blast_radius:
   modules:
-    - packages/caws-cli/src/store/doctor-snapshot.ts
-    - packages/caws-cli/src/kernel/doctor/inspect.ts
-    - packages/caws-cli/src/kernel/doctor/rules.ts
-    - packages/caws-cli/src/kernel/doctor/types.ts
-    - packages/caws-cli/src/shell/commands/specs.ts
-    - packages/caws-cli/src/store/specs-writer.ts
+    - 'packages/caws-cli/src/store/doctor-snapshot.ts'
+    - 'packages/caws-cli/src/kernel/doctor/inspect.ts'
+    - 'packages/caws-cli/src/kernel/doctor/rules.ts'
+    - 'packages/caws-cli/src/kernel/doctor/types.ts'
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/src/store/specs-writer.ts'
   data_migration: false
 scope:
   in:
@@ -73,6 +73,7 @@ invariants:
     parked branch, the exact `caws specs relocate <id> --to-base` (or
     un-park-by-peer) command, and the doctrine line (canonical is the base
     branch's home).
+  - 'RECOVERY: caws specs relocate <id> [--apply] moves a spec YAML from a mis-parked branch onto the base branch WITHOUT touching any working tree — object-db plumbing (read the parked copy, graft onto base via a private temp index, commit-tree, CAS the base ref with bounded retry). Dry-run by default. The durable audit is the COMMIT ON BASE itself (message names the spec, source branch, and slice): spec_body_amended''s schema is a content-amendment contract, so no events.jsonl write records a relocation that changed git topology, not spec content.'
 acceptance:
   - id: A1
     given: >-
