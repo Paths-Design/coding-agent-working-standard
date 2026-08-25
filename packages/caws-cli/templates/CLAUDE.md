@@ -30,7 +30,7 @@ The governed command groups are:
 
 <!-- command-groups:start -->
 ```
-init  doctor  status  scope  claim  gates  evidence  events  waiver  reprieve  specs  worktree  agents  message
+init  doctor  status  scope  claim  gates  evidence  events  waiver  reprieve  specs  worktree  agents  message  session
 ```
 <!-- command-groups:end -->
 
