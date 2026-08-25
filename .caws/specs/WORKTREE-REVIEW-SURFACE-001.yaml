@@ -133,3 +133,7 @@ evidence:
     status: pass
     evidence_ref: "jest tests/shell/worktree-review.test.js (A4: unregistered worktree exits 1 with handoff)"
     recorded_at: "2026-08-25T15:39:07.058Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "jest tests/shell/worktree-review.test.js (A5: empty lane renders honestly, no fabricated rows)"
+    recorded_at: "2026-08-25T15:39:07.461Z"
