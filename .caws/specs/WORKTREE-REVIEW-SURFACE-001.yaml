@@ -116,3 +116,8 @@ contracts:
   - name: 'review-command'
     type: 'contract-test'
     path: 'packages/caws-cli/tests/shell/worktree-review.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "jest tests/shell/worktree-review.test.js (A1: exact commits + provenance, out-of-scope flagged, zero mutation)"
+    recorded_at: "2026-08-25T15:39:05.822Z"
