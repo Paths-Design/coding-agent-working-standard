@@ -2,9 +2,10 @@ id: SESSION-LOG-RETENTION-SCOPE-001
 title: 'Dry-run-default session-log retention for .caws/sessions/ (operational cache)'
 risk_tier: 2
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-session-retention
 created_at: '2026-08-25T16:50:48.919Z'
-updated_at: '2026-08-25T16:50:59.321Z'
+updated_at: '2026-08-25T16:51:40.881Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/session-log-retention.ts
