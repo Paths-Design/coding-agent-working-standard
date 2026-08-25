@@ -122,3 +122,8 @@ contracts:
   - name: 'session-log-retention'
     type: contract-test
     path: 'tests/shell/session-log-retention.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "jest tests/shell/session-log-retention.test.js (A1: dry-run lists stale candidate, not fresh; nothing deleted)"
+    recorded_at: "2026-08-25T17:19:19.498Z"
