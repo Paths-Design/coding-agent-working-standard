@@ -104,6 +104,7 @@ import {
   runReprieveShowCommand,
   runReprieveRevokeCommand,
   runReprieveListCommand,
+  runSessionPickupCommand,
   runSessionPruneCommand,
   runWorkingTreeAckCommand,
   runWorkingTreeCheckCommand,
@@ -2053,6 +2054,23 @@ export function registerShellCommands(
         ...(olderThanMs !== undefined ? { olderThanMs } : {}),
         apply: opts.apply === true,
         json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  // MULTI-AGENT-HANDOFF-EVENT-001 A4: explicit manual handoff record.
+  defineLeaf(sessionCmd, leafMeta(SESSION_COMMAND_META, 'pickup'))
+    .action((opts: { from: string; paths?: string | string[]; reason?: string; data?: boolean }) => {
+      const rawPaths = Array.isArray(opts.paths)
+        ? opts.paths
+        : typeof opts.paths === 'string'
+          ? opts.paths.split(',').map((s) => s.trim()).filter(Boolean)
+          : [];
+      const code = runSessionPickupCommand({
+        fromSessionId: opts.from,
+        paths: rawPaths,
+        ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
         showData: opts.data === true,
       });
       exit(code);

@@ -1479,6 +1479,21 @@ caws session prune --json
 
 Dry-run by default: classifies each session log dir by last turn activity, reports what is older than the retention window, and deletes nothing unless `--apply` is passed. Only per-session turn history (`turn-<NNN>.json`) is retention-eligible; `.session-envelope.json`, `.meta.json`, and top-level dotfiles are preserved (per-path exclusion). The current session and any session with a live lease are protected and never pruned. Operational cache only — never appends an event, never touches governed state.
 
+### `caws session pickup`
+
+```bash
+caws session pickup --from <session-id> --paths "packages/baz/**" --reason "user-authorized handoff"
+```
+
+| Flag | Description |
+|---|---|
+| `--from <session-id>` | The session whose work is being picked up (required). |
+| `--paths <path>` | Path(s) being picked up (comma-separated or repeatable; required). |
+| `--reason <text>` | Operator reason recorded on the handoff event. |
+| `--data` | Show structured data block on diagnostics. |
+
+Record an explicit manual handoff (MULTI-AGENT-HANDOFF-EVENT-001): the operator declares "I am continuing session X's work". Appends exactly one `manual_pickup` event to the hash-chained audit log naming `source_session`, `receiving_session`, and the paths picked up. Use when no automated trigger (stash restore, overlap ack, claim takeover) fired but the handoff still deserves a durable record. Provenance, never authority: no lease, claim, scope, or lifecycle mutation.
+
 ---
 
 ## 16. `caws working-tree`

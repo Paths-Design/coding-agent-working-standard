@@ -106,6 +106,20 @@ describe('WORKING-TREE-PROVENANCE-GUARD-001 CLI', () => {
     expect(lease.prior_overlap_acks[0].acked_by_session).toBe('self-sess');
     expect(lease.prior_overlap_acks[0].target_command).toBe('git stash');
     expect(lease.prior_overlap_acks[0].paths).toEqual(['packages/foo/bar.ts']);
+
+    // MULTI-AGENT-HANDOFF-EVENT-001 A3: the ack appends an overlap_ack_proceed
+    // event to the hash-chained audit log (chain-valid, source/target correct).
+    const eventsPath = path.join(cawsDir, 'events.jsonl');
+    expect(fs.existsSync(eventsPath)).toBe(true);
+    const lines = fs.readFileSync(eventsPath, 'utf8').split('\n').filter(Boolean);
+    const ackEvents = lines
+      .map((l) => JSON.parse(l))
+      .filter((e) => e.event === 'overlap_ack_proceed');
+    expect(ackEvents).toHaveLength(1);
+    expect(ackEvents[0].data.source_session).toBe('other-sess');
+    expect(ackEvents[0].data.receiving_session).toBeTruthy();
+    expect(ackEvents[0].data.paths).toEqual(['packages/foo/bar.ts']);
+    expect(ackEvents[0].data.target_command).toBe('git stash');
   });
 
   test('A3: ack refuses a session with no lease', () => {

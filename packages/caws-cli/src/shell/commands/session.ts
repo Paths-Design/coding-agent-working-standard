@@ -20,6 +20,10 @@ import {
   planSessionLogRetention,
 } from '../../store/session-log-retention';
 import { renderDiagnostics } from '../render/diagnostic';
+import { appendEvent } from '../../store';
+import { buildActor } from '../session/actor';
+import { resolveSession } from '../session/resolve-session';
+import type { EventBody } from '../../kernel';
 
 const CALLER_SESSION_POINTER_FILENAME = '.caller-session.json';
 /** A lease is "live" when not stopped and last_active is within this window. */
@@ -134,5 +138,85 @@ export function runSessionPruneCommand(opts: SessionPruneOptions): number {
   if (plan.protectedIds.length > 0) {
     out(`  protected: ${plan.protectedIds.join(', ')}`);
   }
+  return 0;
+}
+
+// ─── caws session pickup (MULTI-AGENT-HANDOFF-EVENT-001 A4) ────────────────
+//
+// The operator explicitly declares "I am continuing session X's work". The ONLY
+// effect is appending a manual_pickup handoff event to the hash-chained audit
+// log — the durable record that a handoff happened even when no automated
+// trigger (stash restore, overlap ack, claim takeover) fired. Provenance,
+// never authority: no lease, claim, scope, or lifecycle mutation.
+
+export interface SessionPickupOptions {
+  /** The session whose work is being picked up. */
+  readonly fromSessionId: string;
+  readonly paths: readonly string[];
+  readonly reason?: string;
+  readonly cwd?: string;
+  readonly now?: () => Date;
+  readonly env?: NodeJS.ProcessEnv;
+  readonly out?: (line: string) => void;
+  readonly err?: (line: string) => void;
+  readonly showData?: boolean;
+}
+
+export function runSessionPickupCommand(opts: SessionPickupOptions): number {
+  const cwd = opts.cwd ?? process.cwd();
+  const nowFn = opts.now ?? (() => new Date());
+  const env = opts.env ?? process.env;
+  const out = opts.out ?? ((s: string) => process.stdout.write(s + '\n'));
+  const err = opts.err ?? ((s: string) => process.stderr.write(s + '\n'));
+  const showData = opts.showData === true;
+
+  if (typeof opts.fromSessionId !== 'string' || opts.fromSessionId.length === 0) {
+    err('caws session pickup: --from <session-id> is required.');
+    return 1;
+  }
+  if (opts.paths.length === 0) {
+    err('caws session pickup: at least one --paths <path> is required.');
+    return 1;
+  }
+
+  const rootRes = resolveRepoRoot(cwd);
+  if (!rootRes.ok) {
+    err('caws session pickup: failed to resolve repo root.');
+    err(renderDiagnostics(rootRes.errors, { showData }));
+    return 2;
+  }
+  const cawsDir = rootRes.value.cawsDir;
+
+  const sessionResult = resolveSession({ cawsDir, worktreeRoot: cwd, env, now: nowFn, allowMint: true });
+  if (!sessionResult.ok) {
+    err('caws session pickup: failed to resolve session identity.');
+    err(renderDiagnostics(sessionResult.errors, { showData }));
+    return 2;
+  }
+  const receivingSessionId = sessionResult.value.identity.session_id;
+  const actor = buildActor({ session: sessionResult.value, kind: 'agent' });
+
+  const body = {
+    event: 'manual_pickup',
+    ts: nowFn().toISOString(),
+    actor,
+    data: {
+      source_session: opts.fromSessionId,
+      receiving_session: receivingSessionId,
+      paths: [...opts.paths],
+      ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+    },
+  } as unknown as EventBody;
+
+  const appended = appendEvent(cawsDir, body);
+  if (!appended.ok) {
+    err('caws session pickup: the manual_pickup event could not be appended.');
+    err(renderDiagnostics(appended.errors, { showData }));
+    return 1;
+  }
+
+  const ev = appended.value;
+  out(`recorded manual_pickup seq=${ev.seq} hash=${ev.event_hash}`);
+  out(`  ${opts.fromSessionId} -> ${receivingSessionId} (${opts.paths.join(', ')})`);
   return 0;
 }

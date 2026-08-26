@@ -59,6 +59,11 @@ import specCreatedSchema from '../schemas/events/spec_created.v1.json';
 import specValidatedSchema from '../schemas/events/spec_validated.v1.json';
 // HUMAN-DECISION-EVIDENCE-001
 import humanDecisionRecordedSchema from '../schemas/events/human_decision_recorded.v1.json';
+// MULTI-AGENT-HANDOFF-EVENT-001
+import stashRestoreSchema from '../schemas/events/stash_restore.v1.json';
+import claimTransferSchema from '../schemas/events/claim_transfer.v1.json';
+import overlapAckProceedSchema from '../schemas/events/overlap_ack_proceed.v1.json';
+import manualPickupSchema from '../schemas/events/manual_pickup.v1.json';
 import testRecordedSchema from '../schemas/events/test_recorded.v1.json';
 import waiverAppliedSchema from '../schemas/events/waiver_applied.v1.json';
 import worktreeBoundSchema from '../schemas/events/worktree_bound.v1.json';
@@ -113,6 +118,10 @@ const PAYLOAD_SCHEMAS: Readonly<Partial<Record<EventType, object>>> = {
   evidence_recorded: evidenceRecordedSchema,
   gate_evaluated: gateEvaluatedSchema,
   human_decision_recorded: humanDecisionRecordedSchema,
+  stash_restore: stashRestoreSchema,
+  claim_transfer: claimTransferSchema,
+  overlap_ack_proceed: overlapAckProceedSchema,
+  manual_pickup: manualPickupSchema,
   spec_archived: specArchivedSchema,
   spec_archive_pruned: specArchivePrunedSchema,
   spec_activated: specActivatedSchema,
@@ -645,6 +654,10 @@ const KNOWN_EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   'test_recorded',
   'gate_evaluated',
   'human_decision_recorded',
+  'stash_restore',
+  'claim_transfer',
+  'overlap_ack_proceed',
+  'manual_pickup',
   'waiver_applied',
   'waiver_revoked',
   'doctor_completed',

@@ -88,6 +88,10 @@ export type EventType =
   | 'test_recorded'
   | 'gate_evaluated'
   | 'human_decision_recorded'
+  | 'stash_restore'
+  | 'claim_transfer'
+  | 'overlap_ack_proceed'
+  | 'manual_pickup'
   | 'waiver_applied'
   | 'waiver_revoked'
   | 'doctor_completed'
@@ -160,6 +164,12 @@ export const OPTIONAL_SPEC_ID: ReadonlySet<EventType> = new Set<EventType>([
   'claim_taken_over',
   'claim_released',
   'commit_made',
+  // MULTI-AGENT-HANDOFF-EVENT-001: a handoff is repo-level session coordination
+  // (source_session / receiving_session / paths), not necessarily spec-specific.
+  'stash_restore',
+  'claim_transfer',
+  'overlap_ack_proceed',
+  'manual_pickup',
 ]);
 
 /**

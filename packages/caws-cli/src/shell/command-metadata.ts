@@ -1719,7 +1719,7 @@ export const SESSION_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'session',
   description:
-    'Session-log retention (SESSION-LOG-RETENTION-SCOPE-001). The session LIFECYCLE (start/checkpoint/end) remains deferred; this group ships only `prune` — dry-run-default retention for stale per-session turn history under .caws/sessions/. Session logs are operational cache (gitignored; never events.jsonl, never read by the kernel for scope/ownership/claim decisions).',
+    'Session-log retention and manual handoff records. `prune` (SESSION-LOG-RETENTION-SCOPE-001) is dry-run-default retention for stale per-session turn history under .caws/sessions/ (operational cache). `pickup` (MULTI-AGENT-HANDOFF-EVENT-001) records an explicit operator handoff — "I am continuing session X\'s work" — as a manual_pickup event in the hash-chained audit log. The session LIFECYCLE (start/checkpoint/end) remains deferred.',
   subcommands: [
     {
       kind: 'leaf',
@@ -1733,6 +1733,22 @@ export const SESSION_COMMAND_META: GroupCommandMeta = {
         },
         { flag: '--apply', description: 'Perform the prune instead of dry-running it' },
         { flag: '--json', description: 'Emit the plan or apply outcome as JSON.' },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'pickup',
+      description:
+        'Record an explicit manual handoff (MULTI-AGENT-HANDOFF-EVENT-001): the operator declares "I am continuing session X\'s work". Appends one manual_pickup event to the hash-chained audit log naming source_session, receiving_session, and the paths picked up. Use when no automated trigger (stash restore, overlap ack, claim takeover) fired but the handoff still deserves a durable record. Provenance, never authority: no lease, claim, scope, or lifecycle mutation.',
+      options: [
+        { flag: '--from <session-id>', required: true, description: 'The session whose work is being picked up' },
+        {
+          flag: '--paths <path>',
+          description: 'Path(s) being picked up (comma-separated or repeatable)',
+          collect: true,
+        },
+        { flag: '--reason <text>', description: 'Operator reason recorded on the handoff event' },
         DATA_OPTION,
       ],
     },

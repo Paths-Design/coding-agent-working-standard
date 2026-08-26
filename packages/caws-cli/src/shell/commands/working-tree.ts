@@ -18,10 +18,12 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { isOk } from '../../kernel';
-import { loadLeases, resolveRepoRoot, writeFileAtomic } from '../../store';
+import { isOk, type EventBody } from '../../kernel';
+import { appendEvent, loadLeases, resolveRepoRoot, writeFileAtomic } from '../../store';
 import { checkWorkingTreeOverlap } from '../../store/working-tree-overlap';
 import { renderDiagnostics } from '../render/diagnostic';
+import { buildActor } from '../session/actor';
+import { resolveSession } from '../session/resolve-session';
 
 const CALLER_SESSION_POINTER_FILENAME = '.caller-session.json';
 
@@ -105,6 +107,7 @@ export interface WorkingTreeAckOptions {
   readonly target?: string;
   readonly cwd?: string;
   readonly now?: () => Date;
+  readonly env?: NodeJS.ProcessEnv;
   readonly out?: (line: string) => void;
   readonly err?: (line: string) => void;
   readonly showData?: boolean;
@@ -160,6 +163,34 @@ export function runWorkingTreeAckCommand(opts: WorkingTreeAckOptions): number {
     err('caws working-tree ack: failed to write the ack record.');
     err(renderDiagnostics(w.errors, { showData }));
     return 1;
+  }
+
+  // MULTI-AGENT-HANDOFF-EVENT-001 A3: the ack is the explicit handoff trigger.
+  // Append an overlap_ack_proceed event so the handoff is first-class in the
+  // audit chain (provenance, never authority). Failure to append is surfaced
+  // loudly but does NOT undo the ack — the lease record (operational cache)
+  // already carries it, and the two surfaces reconcile via the audit trail.
+  const env = opts.env ?? process.env;
+  const sessionResult = resolveSession({ cawsDir, worktreeRoot: cwd, env, now: nowFn, allowMint: true });
+  if (sessionResult.ok) {
+    const receivingSessionId = sessionResult.value.identity.session_id;
+    const actor = buildActor({ session: sessionResult.value, kind: 'agent' });
+    const body = {
+      event: 'overlap_ack_proceed',
+      ts: nowFn().toISOString(),
+      actor,
+      data: {
+        source_session: opts.sessionId,
+        receiving_session: receivingSessionId,
+        paths: [...opts.paths],
+        target_command: opts.target ?? 'unrecorded-cleanup',
+      },
+    } as unknown as EventBody;
+    const appended = appendEvent(cawsDir, body);
+    if (!appended.ok) {
+      err('caws working-tree ack: the ack was recorded but the overlap_ack_proceed event could not be appended.');
+      err(renderDiagnostics(appended.errors, { showData }));
+    }
   }
 
   out(`acked overlap for session ${opts.sessionId}: ${opts.paths.join(', ')}`);
