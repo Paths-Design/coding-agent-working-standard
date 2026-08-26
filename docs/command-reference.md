@@ -37,6 +37,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate/relocate)
 - [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/ensure/bind/destroy/untrack/merge/review/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.
 - [`caws agents`](#caws-agents) — Agent liveness substrate: register/heartbeat/stop/list/show/work-state/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.
+- [`caws handoff`](#caws-handoff) — Portable handoff briefs (HANDOFF-EXPORT-IMPORT-001): `export` builds the metadata-only brief for a session (self by default; `--session <id>` for a peer, consent-gated with the operator recorded as the exporting authority) and writes it under .caws/handoffs/ — never user tmp/, never package-shipped. `import` reads a brief, surfaces its context, and appends exactly one manual_pickup handoff event. Briefs carry ONLY structured metadata (identity, work_state, claimed_paths, prior handoff events); file contents and turn transcripts are never read or exported, and secret-bearing paths are redacted to name-only.
 - [`caws message`](#caws-message) — Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/reply/poll/inbox/history/status/prune directed messages between running sessions, addressed by session id (or a wt:/spec: alias), over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
 - [`caws session`](#caws-session) — Session-log retention and manual handoff records. `prune` (SESSION-LOG-RETENTION-SCOPE-001) is dry-run-default retention for stale per-session turn history under .caws/sessions/ (operational cache). `pickup` (MULTI-AGENT-HANDOFF-EVENT-001) records an explicit operator handoff — "I am continuing session X's work" — as a manual_pickup event in the hash-chained audit log. The session LIFECYCLE (start/checkpoint/end) remains deferred.
 - [`caws working-tree`](#caws-working-tree) — Working-tree overlap advisory surface (WORKING-TREE-PROVENANCE-GUARD-001): `check` reports whether another active session's claimed/modified paths overlap the current dirty tree (read-only, non-mutating); `ack` records the operator's explicit per-session, per-path acknowledgement that cleans up that overlap. Never authority — neither command changes scope, claim, ownership, or lifecycle state.
@@ -942,6 +943,29 @@ Operator-invoked cleanup. Defaults to dry-run; pass --apply to actually delete. 
 - `--stale-ttl-ms <ms>` — TTL for stale classification (used with --status stale; default 30m)
 - `--apply` — Actually delete (default: dry-run)
 - `--json` — Emit CAWS-native JSON to stdout
+- `--data` — Show structured data block on diagnostics
+
+## `caws handoff`
+
+Portable handoff briefs (HANDOFF-EXPORT-IMPORT-001): `export` builds the metadata-only brief for a session (self by default; `--session <id>` for a peer, consent-gated with the operator recorded as the exporting authority) and writes it under .caws/handoffs/ — never user tmp/, never package-shipped. `import` reads a brief, surfaces its context, and appends exactly one manual_pickup handoff event. Briefs carry ONLY structured metadata (identity, work_state, claimed_paths, prior handoff events); file contents and turn transcripts are never read or exported, and secret-bearing paths are redacted to name-only.
+
+### `caws handoff export`
+
+Build and write the metadata-only handoff brief for a session. The brief carries session identity, lease work_state, claimed_paths (secret-bearing paths redacted to name-only per the scan-secrets pattern class), the worktree/spec binding, and prior handoff events from the audit chain — never file contents or turn transcripts. Written to .caws/handoffs/<id>.json (content-hashed snapshot). Self-export by default; `--session <id>` exports a PEER's brief and records the operator as the exporting authority.
+
+**Options:**
+
+- `--session <id>` — Export a PEER session's brief (consent-gated: the operator is recorded as the exporting authority)
+- `--data` — Show structured data block on diagnostics
+
+### `caws handoff import <file>`
+
+Read and shape-validate a handoff brief, surface its context (source session, work_state, claimed_paths, prior handoffs), and append exactly ONE manual_pickup event binding the brief's source session to the importing session. Import never mutates claims, leases, scope, or lifecycle state — provenance, never authority. A malformed brief is refused with nothing appended.
+
+**Argument:** `file` (required) — Brief file path (absolute or .caws/handoffs/<name> shorthand)
+
+**Options:**
+
 - `--data` — Show structured data block on diagnostics
 
 ## `caws message`
