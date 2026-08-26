@@ -299,6 +299,7 @@ export {
 } from './commands/message';
 export { runSessionPickupCommand, runSessionPruneCommand } from './commands/session';
 export { runWorkingTreeAckCommand, runWorkingTreeCheckCommand } from './commands/working-tree';
+export { runHandoffExportCommand, runHandoffImportCommand } from './commands/handoff';
 export type {
   MessageSendCommandOptions,
   MessageReplyCommandOptions,
