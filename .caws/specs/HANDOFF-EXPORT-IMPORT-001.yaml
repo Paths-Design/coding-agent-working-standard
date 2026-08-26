@@ -129,3 +129,8 @@ contracts:
   - name: 'handoff-export-import'
     type: contract-test
     path: 'tests/shell/handoff-export-import.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "jest tests/shell/handoff-export-import.test.js (A1: metadata-only brief under .caws/handoffs/, no content/transcript keys)"
+    recorded_at: "2026-08-26T05:06:26.236Z"
