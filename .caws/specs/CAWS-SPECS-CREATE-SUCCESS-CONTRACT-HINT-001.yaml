@@ -1,0 +1,44 @@
+id: CAWS-SPECS-CREATE-SUCCESS-CONTRACT-HINT-001
+title: 'specs create prints a false tier-1/2 contract requirement as the final line of every successful create'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-08-26T02:54:44.150Z'
+updated_at: '2026-08-26T02:54:44.150Z'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/tests/shell/specs-create-success-contract-hint.test.js'
+  out: []
+invariants:
+  - 'A successful specs create never states an unmet requirement that is in fact satisfied or inapplicable.'
+  - 'The final stdout line of a successful specs create is an actionable next step, not a caveat.'
+acceptance:
+  - id: A1
+    given: 'a tier-1 or tier-2 create that supplies --contract'
+    when: 'the create succeeds'
+    then: 'no line claiming tier-1/2 specs require at least one contract is printed'
+  - id: A2
+    given: 'a tier-3 create'
+    when: 'the create succeeds'
+    then: 'no tier-1/2 contract requirement line is printed'
+  - id: A3
+    given: 'a tier-1 mode-chore create that writes contracts: []'
+    when: 'the create succeeds'
+    then: 'a factual note says chore mode waives the contract requirement and is not the final stdout line'
+observability:
+  - 'specs create success output is asserted line-by-line by a dist-spawning test, including the final stdout line.'
+rollback:
+  - 'Revert the specs.ts commit; the emit site is a single out() call with no persisted state.'
+non_functional:
+  security:
+    - 'Output-only change; no secret material is logged, persisted, or exposed.'
+contracts:
+  - name: 'specs-create-success-output'
+    type: behavior
+    path: 'packages/caws-cli/tests/shell/specs-create-success-contract-hint.test.js'
