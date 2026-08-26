@@ -2,9 +2,11 @@ id: CAWS-SPECS-CREATE-SUCCESS-CONTRACT-HINT-001
 title: 'specs create prints a false tier-1/2 contract requirement as the final line of every successful create'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Removed the unconditional tier-1/2 contract-requirement line from the specs create success path; it was false in every reachable success state and, as the final stdout line, read as a verdict to any tail-N reader. Replaced with a mode-scoped waiver note emitted before the Next block. Refusal-path remediation unchanged. 9 new tests; full CLI suite 2089/2090 (the one failure, tests/shell/session/claim-cwd-independent.test.js A1, reproduces on unmodified main and is unrelated).'
 created_at: '2026-08-26T02:54:44.150Z'
-updated_at: '2026-08-26T03:05:27.719Z'
+updated_at: '2026-08-26T03:05:46.692Z'
 blast_radius:
   modules:
     - 'packages/caws-cli/src/shell/commands/specs.ts'
