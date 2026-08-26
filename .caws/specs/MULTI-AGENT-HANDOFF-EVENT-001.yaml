@@ -479,3 +479,8 @@ contracts: []
 # substrate; classification (point 3) is push-time. This slice
 # closes the observability loop so future sessions inherit a
 # readable history of cross-session inheritance.
+evidence:
+  - criterion_id: A0
+    status: pass
+    evidence_ref: SESSION-OWNERSHIP-METADATA-001 archived completed; WORKING-TREE-PROVENANCE-GUARD-001 closed completed (8ae6bab3)
+    recorded_at: "2026-08-26T04:48:04.848Z"
