@@ -47,3 +47,7 @@ evidence:
     status: pass
     evidence_ref: "npx jest tests/shell/specs-create-success-contract-hint.test.js — 'tier-2 create that supplied --contract is not told it needs a contract', 'tier-1 create that supplied --contract...', and the spawned-dist case; live dist run created FIXED-TIER2-001 with zero contract lines"
     recorded_at: "2026-08-26T03:05:38.086Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "npx jest tests/shell/specs-create-success-contract-hint.test.js — 'tier-3 create is not told about a tier-1/2 rule that cannot apply to it'; live dist run of FIXED-TIER3-002 matched 0 lines containing 'contract'"
+    recorded_at: "2026-08-26T03:05:38.496Z"
