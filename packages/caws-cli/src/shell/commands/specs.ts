@@ -1020,6 +1020,26 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
         `write a value. Supply them at creation next time — both flags are repeatable.`
     );
   }
+  // CAWS-SPECS-CREATE-SUCCESS-CONTRACT-HINT-001: the contract orientation is
+  // inlined here (docs/guides/caws-contracts.md is NOT shipped in the published
+  // package, so pointing at it dangles in a consumer install — FIX-SPECS-
+  // CONTRACT-ORIENTATION-001 A3), but it is emitted only where it is TRUE.
+  // A non-chore tier-1/2 create is refused without contracts, so on the success
+  // path they are already present; tier 3 is not governed by the rule at all.
+  // That leaves one reachable success state with `contracts: []` on a tier-1/2
+  // spec — mode: chore — and that spec is EXEMPT, not deficient. It also must
+  // not be the last line: whatever prints last is the whole result to a reader
+  // piping through `tail`, and a caveat there reads as a verdict.
+  if (
+    (riskTier === 1 || riskTier === 2) &&
+    (parsedContracts === undefined || parsedContracts.length === 0)
+  ) {
+    out(
+      `  Note: this spec has no contracts. mode: ${mode} waives the tier-1/2 contract ` +
+        `requirement; a tier-${riskTier} spec in any other mode is refused without one. ` +
+        `Supply one at create time — ${CONTRACT_EXAMPLE_HINT}.`
+    );
+  }
   out('');
   // CAWS-SPECS-CREATE-COMMIT-BEFORE-WORKTREE-GUIDANCE-001: both branches must
   // tell the first-timer to COMMIT the spec (after filling in the body) BEFORE
@@ -1062,13 +1082,6 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     );
     out('  governed by the worktree-write-guard, not scope.in.)');
   }
-  // FIX-SPECS-CONTRACT-ORIENTATION-001 (A3): inline the contract orientation
-  // instead of pointing at docs/guides/caws-contracts.md, which is NOT shipped
-  // in the published package (files-field ships only dist/README/templates) —
-  // a dangling repo-internal pointer in a consumer install. No external lookup.
-  out(
-    '  Tier 1/2 specs require at least one contract. ' + CONTRACT_SHAPE_HINT
-  );
   surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
 }
