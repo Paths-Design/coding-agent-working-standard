@@ -2,10 +2,11 @@ id: MULTI-AGENT-HANDOFF-EVENT-001
 title: 'Typed handoff events when one agent picks up, restores, or transfers another agent''s in-flight work'
 risk_tier: 3
 mode: feature
-lifecycle_state: active
-worktree: wt-handoff
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Handoff is first-class: 4 typed handoff events (stash_restore, claim_transfer, overlap_ack_proceed, manual_pickup) shipped across all five vocabulary sites (payload schemas, envelope enum, EventType, OPTIONAL_SPEC_ID, KNOWN_EVENT_TYPES/PAYLOAD_SCHEMAS). Live triggers: overlap_ack_proceed fires from caws working-tree ack; manual_pickup via caws session pickup. DORMANT variants (recorded unchecked, per this spec''s own invariant that a variant without its mechanical source is dormant): stash_restore pending the stash-marker ADR (Q1: message convention vs sidecar) and a stash-restore wrapper; claim_transfer pending the cross-session claimed_paths transfer surface (--takeover-from, marked TBD by the activator); A7''s 3-stash restore regression is tied to stash_restore. Events are OPTIONAL_SPEC_ID (repo-level session coordination), hash-chained via appendEvent, queryable via caws events list --json.'
 created_at: '2026-05-22T23:40:00.000Z'
-updated_at: '2026-08-26T04:35:11.063Z'
+updated_at: '2026-08-26T04:53:49.334Z'
 blast_radius:
   modules:
     - packages/caws-kernel/src/schemas/events
