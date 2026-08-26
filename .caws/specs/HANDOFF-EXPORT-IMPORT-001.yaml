@@ -138,3 +138,7 @@ evidence:
     status: pass
     evidence_ref: "jest tests/shell/handoff-export-import.test.js (A2: .env.production redacted to NAME ONLY; non-secret path untouched; no secret values in brief)"
     recorded_at: "2026-08-26T05:06:27.242Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "jest tests/shell/handoff-export-import.test.js (A3: import appends exactly ONE manual_pickup; lease byte-identical; malformed refused, nothing appended)"
+    recorded_at: "2026-08-26T05:06:28.105Z"
