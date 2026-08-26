@@ -496,3 +496,7 @@ evidence:
     status: pass
     evidence_ref: "caws events list --json: chain-verified, events carry type + source/receiving_session (joinable); consumers filter by event type"
     recorded_at: "2026-08-26T04:48:08.734Z"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: tests/kernel/unit/handoff-schema.test.ts (4 variants validate; malformed rejected; existing types unchanged)
+    recorded_at: "2026-08-26T04:48:10.017Z"
