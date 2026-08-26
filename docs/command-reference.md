@@ -38,7 +38,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/ensure/bind/destroy/untrack/merge/review/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.
 - [`caws agents`](#caws-agents) — Agent liveness substrate: register/heartbeat/stop/list/show/work-state/prune. Operational cache only — NEVER authority. CAWS-native JSON; never Claude Code hook envelope.
 - [`caws message`](#caws-message) — Inter-agent message channel (AGENT-MESSAGE-CHANNEL-001): send/reply/poll/inbox/history/status/prune directed messages between running sessions, addressed by session id (or a wt:/spec: alias), over .caws/messages.jsonl. Separate from the events audit chain; not authority — a message body is an unverified claim.
-- [`caws session`](#caws-session) — Session-log retention (SESSION-LOG-RETENTION-SCOPE-001). The session LIFECYCLE (start/checkpoint/end) remains deferred; this group ships only `prune` — dry-run-default retention for stale per-session turn history under .caws/sessions/. Session logs are operational cache (gitignored; never events.jsonl, never read by the kernel for scope/ownership/claim decisions).
+- [`caws session`](#caws-session) — Session-log retention and manual handoff records. `prune` (SESSION-LOG-RETENTION-SCOPE-001) is dry-run-default retention for stale per-session turn history under .caws/sessions/ (operational cache). `pickup` (MULTI-AGENT-HANDOFF-EVENT-001) records an explicit operator handoff — "I am continuing session X's work" — as a manual_pickup event in the hash-chained audit log. The session LIFECYCLE (start/checkpoint/end) remains deferred.
 - [`caws working-tree`](#caws-working-tree) — Working-tree overlap advisory surface (WORKING-TREE-PROVENANCE-GUARD-001): `check` reports whether another active session's claimed/modified paths overlap the current dirty tree (read-only, non-mutating); `ack` records the operator's explicit per-session, per-path acknowledgement that cleans up that overlap. Never authority — neither command changes scope, claim, ownership, or lifecycle state.
 
 ## `caws init`
@@ -1031,7 +1031,7 @@ Plan or apply retention cleanup for delivered non-authoritative chat messages. D
 
 ## `caws session`
 
-Session-log retention (SESSION-LOG-RETENTION-SCOPE-001). The session LIFECYCLE (start/checkpoint/end) remains deferred; this group ships only `prune` — dry-run-default retention for stale per-session turn history under .caws/sessions/. Session logs are operational cache (gitignored; never events.jsonl, never read by the kernel for scope/ownership/claim decisions).
+Session-log retention and manual handoff records. `prune` (SESSION-LOG-RETENTION-SCOPE-001) is dry-run-default retention for stale per-session turn history under .caws/sessions/ (operational cache). `pickup` (MULTI-AGENT-HANDOFF-EVENT-001) records an explicit operator handoff — "I am continuing session X's work" — as a manual_pickup event in the hash-chained audit log. The session LIFECYCLE (start/checkpoint/end) remains deferred.
 
 ### `caws session prune`
 
@@ -1042,6 +1042,17 @@ Dry-run-default retention for .caws/sessions/: classify each session log dir by 
 - `--older-than-ms <ms>` — Retention window in milliseconds (default: 30 days)
 - `--apply` — Perform the prune instead of dry-running it
 - `--json` — Emit the plan or apply outcome as JSON.
+- `--data` — Show structured data block on diagnostics
+
+### `caws session pickup`
+
+Record an explicit manual handoff (MULTI-AGENT-HANDOFF-EVENT-001): the operator declares "I am continuing session X's work". Appends one manual_pickup event to the hash-chained audit log naming source_session, receiving_session, and the paths picked up. Use when no automated trigger (stash restore, overlap ack, claim takeover) fired but the handoff still deserves a durable record. Provenance, never authority: no lease, claim, scope, or lifecycle mutation.
+
+**Options:**
+
+- `--from <session-id>` (**required**) — The session whose work is being picked up
+- `--paths <path>` (repeatable) — Path(s) being picked up (comma-separated or repeatable)
+- `--reason <text>` — Operator reason recorded on the handoff event
 - `--data` — Show structured data block on diagnostics
 
 ## `caws working-tree`
