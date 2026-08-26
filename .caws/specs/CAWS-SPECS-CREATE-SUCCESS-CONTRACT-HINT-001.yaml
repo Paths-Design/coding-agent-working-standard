@@ -42,3 +42,8 @@ contracts:
   - name: 'specs-create-success-output'
     type: behavior
     path: 'packages/caws-cli/tests/shell/specs-create-success-contract-hint.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "npx jest tests/shell/specs-create-success-contract-hint.test.js — 'tier-2 create that supplied --contract is not told it needs a contract', 'tier-1 create that supplied --contract...', and the spawned-dist case; live dist run created FIXED-TIER2-001 with zero contract lines"
+    recorded_at: "2026-08-26T03:05:38.086Z"
