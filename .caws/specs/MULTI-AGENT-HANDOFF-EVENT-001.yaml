@@ -504,3 +504,7 @@ evidence:
     status: unchecked
     evidence_ref: "DORMANT per spec Q1: stash-marker ADR (message convention vs sidecar) undecided; no stash-restore wrapper surface yet — taxonomy shipped, trigger pending"
     recorded_at: "2026-08-26T04:48:11.009Z"
+  - criterion_id: A2
+    status: unchecked
+    evidence_ref: "DORMANT: cross-session claimed_paths transfer surface (--takeover-from, spec marks TBD by activator) not yet built — taxonomy shipped, trigger pending"
+    recorded_at: "2026-08-26T04:48:12.048Z"
