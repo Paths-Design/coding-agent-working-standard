@@ -2,10 +2,11 @@ id: CAWS-SPECS-CREATE-SUCCESS-CONTRACT-HINT-001
 title: 'specs create prints a false tier-1/2 contract requirement as the final line of every successful create'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-create-hint
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-create-hint at aefdd28531b71e46a9d3bea6d916da37ef69c14f'
 created_at: '2026-08-26T02:54:44.150Z'
-updated_at: '2026-08-26T02:54:51.644Z'
+updated_at: '2026-08-26T03:05:18.418Z'
 blast_radius:
   modules:
     - 'packages/caws-cli/src/shell/commands/specs.ts'
