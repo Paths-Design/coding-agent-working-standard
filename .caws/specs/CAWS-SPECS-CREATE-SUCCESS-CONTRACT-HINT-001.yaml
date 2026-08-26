@@ -51,3 +51,7 @@ evidence:
     status: pass
     evidence_ref: "npx jest tests/shell/specs-create-success-contract-hint.test.js — 'tier-3 create is not told about a tier-1/2 rule that cannot apply to it'; live dist run of FIXED-TIER3-002 matched 0 lines containing 'contract'"
     recorded_at: "2026-08-26T03:05:38.496Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "npx jest tests/shell/specs-create-success-contract-hint.test.js — 'tier-1 chore create is told the mode waives contracts, not that one is missing' plus the final-stdout-line test.each; live dist run of FIXED-T1CHORE-003 emitted the waiver note at line 4 of 8, tail -1 was the scope-authority line"
+    recorded_at: "2026-08-26T03:05:38.891Z"
