@@ -142,3 +142,7 @@ evidence:
     status: pass
     evidence_ref: "jest tests/shell/handoff-export-import.test.js (A3: import appends exactly ONE manual_pickup; lease byte-identical; malformed refused, nothing appended)"
     recorded_at: "2026-08-26T05:06:28.105Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "jest tests/shell/handoff-export-import.test.js (A4: peer export records operator as exported_by; self-export default)"
+    recorded_at: "2026-08-26T05:06:28.897Z"
