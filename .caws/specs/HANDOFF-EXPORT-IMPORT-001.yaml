@@ -7,12 +7,13 @@ created_at: '2026-08-26T04:55:13.771Z'
 updated_at: '2026-08-26T04:55:24.274Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/handoff-brief.ts
+    - packages/caws-cli/src/shell/commands/handoff.ts
+    - packages/caws-cli/src/shell/commands/session.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/store/handoff-brief.ts
     - packages/caws-cli/src/shell/commands/handoff.ts
     - packages/caws-cli/src/shell/register.ts
@@ -34,13 +35,95 @@ scope:
     - .github/workflows
     - packages/caws-cli/src/kernel/scope
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    METADATA-ONLY, NEVER CONTENT (failure-lineage Entry 24 binds): the exported
+    brief carries ONLY structured metadata — session identity, claim, lease
+    work_state, claimed_paths, and the handoff events already in the audit
+    chain. NO file contents, NO transcript turns, NO command history are
+    exported. Secret-bearing paths (.env*, *.pem, *.key, id_rsa, .ssh/, .aws/,
+    .gcloud/ and the scan-secrets pattern class) are REDACTED to their path
+    name only, and content leakage is impossible by construction because
+    content is never read.
+  - >-
+    .caws-SCOPED STORAGE, NEVER USER tmp/, NEVER PACKAGE-SHIPPED (failure-
+    lineage Entry 33 binds): exported briefs live under
+    .caws/handoffs/<id>.json — provenance-adjacent, gitignored by construction,
+    and never under a user-owned tmp/ directory nor any path matched by the
+    package files glob. An npm pack of caws-cli ships ZERO handoff briefs.
+  - >-
+    CONSENT-GATED EXPORT: exporting the CURRENT session's own brief is the
+    default. Exporting ANOTHER session's brief requires an explicit --session
+    <id>, which records the operator (not the source session) as the exporting
+    authority on the brief's provenance block — the exporting session never
+    silently packages a peer's context.
+  - >-
+    IMPORT RECORDS THE HANDOFF, IT DOES NOT CONFERS AUTHORITY: `caws handoff
+    import <file>` reads the brief, surfaces its context to the importing
+    session, and appends exactly ONE manual_pickup event (binding to the
+    MULTI-AGENT-HANDOFF-EVENT-001 taxonomy: source_session from the brief,
+    receiving_session = the importer). Import never mutates claims, leases,
+    scope, or lifecycle state — the same provenance-not-authority contract as
+    the handoff events themselves.
+  - >-
+    THE BRIEF IS A SNAPSHOT, NOT A LIVE VIEW: export captures the state at
+    export time (timestamped, content-hashed). A stale brief is detected on
+    import (exported_at + source fields) and surfaced, never silently
+    reconciled. Operators re-export for a fresh snapshot.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: >-
+      A session has a lease (work_state review_ready, claimed_paths
+      ["packages/foo"]) and two prior handoff events in the audit chain.
+    when: >-
+      `caws handoff export` runs (no --session).
+    then: >-
+      Exit 0; a brief JSON is written under .caws/handoffs/ carrying session
+      identity, work_state, claimed_paths, and the prior handoff events —
+      and NO file contents or turn transcripts. The printed path is
+      .caws-relative.
+  - id: A2
+    given: >-
+      The brief would reference a secret-bearing path (e.g. .env.production
+      under a claim).
+    when: >-
+      `caws handoff export` runs.
+    then: >-
+      The path appears by NAME ONLY (redaction marker), with no content, no
+      env var values, and no transcript text anywhere in the brief (Entry 24).
+  - id: A3
+    given: >-
+      A brief exported for session A exists at .caws/handoffs/<id>.json.
+    when: >-
+      Session B runs `caws handoff import <path>`.
+    then: >-
+      Exit 0; the brief's context (source session, work_state, claimed_paths,
+      prior handoffs) is surfaced; exactly ONE manual_pickup event is appended
+      with source_session = A and receiving_session = B; no claim/lease/scope
+      state is mutated.
+  - id: A4
+    given: >-
+      No --session is passed and the target is a DIFFERENT session.
+    when: >-
+      `caws handoff export --session <other-id>` runs.
+    then: >-
+      The brief's provenance block records the OPERATOR session as the
+      exporting authority (not the source session); exporting a peer's context
+      without the explicit flag is refused.
+  - id: A5
+    given: >-
+      The full suite runs after implementation.
+    when: >-
+      All pre-existing tests plus the new handoff-export-import contract tests
+      run.
+    then: >-
+      All pass; no production diff outside scope.in; an npm pack check (or
+      equivalent files-glob assertion) proves zero handoff briefs ship.
+non_functional:
+  reliability:
+    - >-
+      Export is deterministic over on-disk state: the same session + chain
+      state yields the same brief (content-hashed). Import validates the brief
+      shape before acting; a malformed brief is refused with nothing appended.
 contracts:
   - name: 'handoff-export-import'
     type: contract-test
