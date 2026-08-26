@@ -484,3 +484,7 @@ evidence:
     status: pass
     evidence_ref: SESSION-OWNERSHIP-METADATA-001 archived completed; WORKING-TREE-PROVENANCE-GUARD-001 closed completed (8ae6bab3)
     recorded_at: "2026-08-26T04:48:04.848Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: tests/shell/working-tree-check.test.js (ack appends chain-valid overlap_ack_proceed with source/receiving/paths/target_command)
+    recorded_at: "2026-08-26T04:48:06.160Z"
