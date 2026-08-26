@@ -146,3 +146,7 @@ evidence:
     status: pass
     evidence_ref: "jest tests/shell/handoff-export-import.test.js (A4: peer export records operator as exported_by; self-export default)"
     recorded_at: "2026-08-26T05:06:28.897Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "jest tests/shell/handoff-export-import.test.js (A5: brief path .caws/handoffs/, never tmp/, never matching the package files glob)"
+    recorded_at: "2026-08-26T05:06:29.462Z"
