@@ -492,3 +492,7 @@ evidence:
     status: pass
     evidence_ref: tests/shell/handoff-event.test.js (session pickup appends exactly one manual_pickup; refusals append nothing)
     recorded_at: "2026-08-26T04:48:07.540Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "caws events list --json: chain-verified, events carry type + source/receiving_session (joinable); consumers filter by event type"
+    recorded_at: "2026-08-26T04:48:08.734Z"
