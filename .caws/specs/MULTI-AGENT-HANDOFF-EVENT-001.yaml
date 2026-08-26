@@ -500,3 +500,7 @@ evidence:
     status: pass
     evidence_ref: tests/kernel/unit/handoff-schema.test.ts (4 variants validate; malformed rejected; existing types unchanged)
     recorded_at: "2026-08-26T04:48:10.017Z"
+  - criterion_id: A1
+    status: unchecked
+    evidence_ref: "DORMANT per spec Q1: stash-marker ADR (message convention vs sidecar) undecided; no stash-restore wrapper surface yet — taxonomy shipped, trigger pending"
+    recorded_at: "2026-08-26T04:48:11.009Z"
