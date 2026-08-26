@@ -1531,6 +1531,39 @@ Record the operator's explicit acknowledgement that they are cleaning up work cl
 
 ---
 
+## 17. `caws handoff`
+
+Portable handoff briefs (HANDOFF-EXPORT-IMPORT-001). The brief is **metadata-only** (session identity, lease work_state, claimed_paths, prior handoff events from the audit chain); file contents and turn transcripts are never read or exported, and secret-bearing paths are redacted to name-only (failure-lineage Entry 24). Briefs live under `.caws/handoffs/` — never user `tmp/`, never package-shipped (Entry 33).
+
+### `caws handoff export`
+
+```bash
+caws handoff export
+caws handoff export --session <peer-session-id>
+```
+
+| Flag | Description |
+|---|---|
+| `--session <id>` | Export a PEER session's brief (consent-gated: the operator is recorded as the exporting authority). |
+| `--data` | Show structured data block on diagnostics. |
+
+Build and write the metadata-only handoff brief for a session. Self-export by default; `--session <id>` exports a peer's brief and records the operator as the exporting authority. Written to `.caws/handoffs/<id>.json` (content-hashed snapshot, deterministic over on-disk state).
+
+### `caws handoff import <file>`
+
+```bash
+caws handoff import .caws/handoffs/brief-author-sess-2026-08-26T05-00-00-000Z.json
+```
+
+| Argument | Description |
+|---|---|
+| `file` | Brief file path (absolute or `.caws/handoffs/<name>` shorthand). |
+| `--data` | Show structured data block on diagnostics. |
+
+Read and shape-validate a handoff brief, surface its context (source session, work_state, claimed_paths, prior handoffs), and append exactly ONE `manual_pickup` event binding the brief's source session to the importing session. Import never mutates claims, leases, scope, or lifecycle state — provenance, never authority. A malformed brief is refused with nothing appended.
+
+---
+
 ## State files
 
 What v11 owns and writes:

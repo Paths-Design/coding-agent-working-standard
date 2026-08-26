@@ -1715,6 +1715,36 @@ export const WORKING_TREE_COMMAND_META: GroupCommandMeta = {
   ],
 };
 
+export const HANDOFF_COMMAND_META: GroupCommandMeta = {
+  kind: 'group',
+  name: 'handoff',
+  description:
+    'Portable handoff briefs (HANDOFF-EXPORT-IMPORT-001): `export` builds the metadata-only brief for a session (self by default; `--session <id>` for a peer, consent-gated with the operator recorded as the exporting authority) and writes it under .caws/handoffs/ — never user tmp/, never package-shipped. `import` reads a brief, surfaces its context, and appends exactly one manual_pickup handoff event. Briefs carry ONLY structured metadata (identity, work_state, claimed_paths, prior handoff events); file contents and turn transcripts are never read or exported, and secret-bearing paths are redacted to name-only.',
+  subcommands: [
+    {
+      kind: 'leaf',
+      name: 'export',
+      description:
+        'Build and write the metadata-only handoff brief for a session. The brief carries session identity, lease work_state, claimed_paths (secret-bearing paths redacted to name-only per the scan-secrets pattern class), the worktree/spec binding, and prior handoff events from the audit chain — never file contents or turn transcripts. Written to .caws/handoffs/<id>.json (content-hashed snapshot). Self-export by default; `--session <id>` exports a PEER\'s brief and records the operator as the exporting authority.',
+      options: [
+        {
+          flag: '--session <id>',
+          description: 'Export a PEER session\'s brief (consent-gated: the operator is recorded as the exporting authority)',
+        },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'import',
+      argument: { name: 'file', required: true, description: 'Brief file path (absolute or .caws/handoffs/<name> shorthand)' },
+      description:
+        'Read and shape-validate a handoff brief, surface its context (source session, work_state, claimed_paths, prior handoffs), and append exactly ONE manual_pickup event binding the brief\'s source session to the importing session. Import never mutates claims, leases, scope, or lifecycle state — provenance, never authority. A malformed brief is refused with nothing appended.',
+      options: [DATA_OPTION],
+    },
+  ],
+};
+
 export const SESSION_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'session',
@@ -1908,6 +1938,7 @@ export const COMMAND_SURFACE_METADATA: readonly CommandMeta[] = Object.freeze([
   SPECS_COMMAND_META,
   WORKTREE_COMMAND_META,
   AGENTS_COMMAND_META,
+  HANDOFF_COMMAND_META,
   MESSAGE_COMMAND_META,
   SESSION_COMMAND_META,
   WORKING_TREE_COMMAND_META,

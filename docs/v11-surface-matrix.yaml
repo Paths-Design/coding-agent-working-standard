@@ -51,6 +51,7 @@ v11_registered_groups:
   - reprieve
   - session
   - working-tree
+  - handoff
 
 # Multi-token legacy commands appear with the full string in `command`
 # (e.g., "sidecar gaps"). The longest-prefix classifier lands in Slice 2;

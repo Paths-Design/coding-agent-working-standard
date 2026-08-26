@@ -32,6 +32,7 @@ import {
   REPRIEVE_COMMAND_META,
   AGENTS_COMMAND_META,
   MESSAGE_COMMAND_META,
+  HANDOFF_COMMAND_META,
   SESSION_COMMAND_META,
   SPECS_COMMAND_META,
   WORKING_TREE_COMMAND_META,
@@ -104,6 +105,8 @@ import {
   runReprieveShowCommand,
   runReprieveRevokeCommand,
   runReprieveListCommand,
+  runHandoffExportCommand,
+  runHandoffImportCommand,
   runSessionPickupCommand,
   runSessionPruneCommand,
   runWorkingTreeAckCommand,
@@ -2106,4 +2109,26 @@ export function registerShellCommands(
         exit(code);
       }
     );
+
+  // ─── caws handoff (HANDOFF-EXPORT-IMPORT-001) ──────────────────────────
+  const handoffCmd = program.command(HANDOFF_COMMAND_META.name);
+  applyGroupMeta(handoffCmd, HANDOFF_COMMAND_META);
+
+  defineLeaf(handoffCmd, leafMeta(HANDOFF_COMMAND_META, 'export'))
+    .action((opts: { session?: string; data?: boolean }) => {
+      const code = runHandoffExportCommand({
+        ...(opts.session !== undefined ? { session: opts.session } : {}),
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
+
+  defineLeaf(handoffCmd, leafMeta(HANDOFF_COMMAND_META, 'import'))
+    .action((opts: { file: string; data?: boolean }) => {
+      const code = runHandoffImportCommand({
+        file: opts.file,
+        showData: opts.data === true,
+      });
+      exit(code);
+    });
 }

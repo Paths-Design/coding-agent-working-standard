@@ -33,7 +33,7 @@ The governed command groups are:
 
 <!-- command-groups:start -->
 ```
-init  doctor  status  scope  claim  gates  evidence  events  waiver  reprieve  specs  worktree  agents  message  session  working-tree
+init  doctor  status  scope  claim  gates  evidence  events  waiver  reprieve  specs  worktree  agents  handoff  message  session  working-tree
 ```
 <!-- command-groups:end -->
 

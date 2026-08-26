@@ -36,6 +36,7 @@ const V11_REGISTERED_GROUPS = Object.freeze([
   'reprieve',
   'session',
   'working-tree',
+  'handoff',
 ]);
 
 function entry(o) {
