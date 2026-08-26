@@ -488,3 +488,7 @@ evidence:
     status: pass
     evidence_ref: tests/shell/working-tree-check.test.js (ack appends chain-valid overlap_ack_proceed with source/receiving/paths/target_command)
     recorded_at: "2026-08-26T04:48:06.160Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: tests/shell/handoff-event.test.js (session pickup appends exactly one manual_pickup; refusals append nothing)
+    recorded_at: "2026-08-26T04:48:07.540Z"
