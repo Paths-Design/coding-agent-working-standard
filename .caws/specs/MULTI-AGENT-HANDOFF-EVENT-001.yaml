@@ -508,3 +508,7 @@ evidence:
     status: unchecked
     evidence_ref: "DORMANT: cross-session claimed_paths transfer surface (--takeover-from, spec marks TBD by activator) not yet built — taxonomy shipped, trigger pending"
     recorded_at: "2026-08-26T04:48:12.048Z"
+  - criterion_id: A7
+    status: unchecked
+    evidence_ref: "Tied to dormant stash_restore variant (A1); the 3-session overlap shape is covered by the predicate tests, the 3-stash restore regression is not"
+    recorded_at: "2026-08-26T04:48:13.497Z"
