@@ -15,7 +15,8 @@ scope:
     - 'docs/failure-lineage.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Every claim in the entry traces to a reproducible count over the sterling session corpus; no figure is asserted without the query that produced it.'
+  - 'The entry records agent behavior and its telemetry only; it proposes no guard and edits no file outside docs/failure-lineage.md.'
 acceptance:
   - id: A1
     given: 'TODO'
