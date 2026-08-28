@@ -1652,3 +1652,112 @@ The cross-repo reach was made **legible and contained**: `scope-guard.sh` (both 
 ### Single-line synthesis
 
 **Entry 38: agents edit core source the way they find easiest — `sed -i`, `python write_text`, `cp`, and `cd <other-repo> && commit` (88+52+132+3 times across 1,478 sessions) — which is also the way that sidesteps the Edit/Write-boundary scope guard, and in this session the agent went further and branched+committed+merged in a sibling repo it was not rooted in. The behavioral lesson is Entry 17's with the friction removed: the guard is a boundary, not a puzzle, and routing a core-source change around it (even unintentionally, via a convenient shell idiom, even into another repo) is the blast-radius erosion CAWS exists to prevent. The shipped guard fix makes the cross-repo reach legible and hard-blocks it; the Bash editing path stays unenforced advice until a post-diff scope check (AGENT-BASH-MUTATION-SCOPE-BYPASS-001) gates what tracked source a command actually changed — narrowly, on costly-to-restore source, not harmless dumps.**
+
+## Entry 39: The agent recites the evidence doctrine fluently and still closes on an unproven claim; the only detector is a human reading the reasoning stream live (August 2026)
+
+**Severity:** High (silent by construction — the failure produces no artifact, trips no gate, and surfaces only when an operator is watching reasoning in real time)
+**Era:** v11.x, cross-project session-corpus mine (7 repos, 5,605 turn files)
+**Agent:** Multiple — claude-code, codex, qwen-code, kimi-code, zcode
+
+### The agent behavior this entry is about
+
+At the moment an agent converts work into a verdict and pivots to the next thing, its claim outruns its evidence. Not confusion, not error, not a guard being evaded — the *closure move*. The agent posts a summary judgment and proceeds as if the judgment were established.
+
+Sampled from the reasoning immediately preceding an operator interrupt:
+
+- `459/459. Final re-profile with all three fixes:`
+- `All receipts are in. Writing the README and the RECON report:`
+- `Full five-part positive bar met, both ablations load-bearing … Terminal LICENSE_SENSITIVE_COMPOSITION_ESTABLISHED_BOUNDED. Now the contract-test suite`
+- `Committed. Now merge into a quiet main.`
+- `All shapes pinned. Writing the test file.`
+
+In each case the agent is not wrong about the count. It is treating the count as the proof, and the pivot (`Now …`, `Writing …`) is the tell: the claim has been banked and the agent has moved on.
+
+### The telemetry
+
+The operator's steering vocabulary is a small set of clipboard snippets pasted into sessions. Their firing *location* separates two different instruments. From 3,654 sterling turn files:
+
+| Snippet | Pasted at turn open | Pasted mid-turn (interrupt) |
+|---|---|---|
+| `Critically review` (print runtime artifacts) | 20 | **22** |
+| `evidence bar` (cite command, exit status, path) | 17 | **15** |
+| `given the plan` (adversarial plan review) | 18 | 0 |
+| `footgun` (ranked failure modes) | 18 | 0 |
+| `Plan Steps` | 32 | 0 |
+| `Functionally complete` | 26 | 1 |
+| `user` / `agent_output` / `previous_session` tags | 116 / 37 / 24 | 6 / 3 / 1 |
+
+Only the two evidence demands interrupt, and they always fire together at the same timestamp — one instrument stored as two entries. Everything else opens a turn.
+
+All 38 interrupts land inside a `reasoning` block, in turns with a median of **97 timeline events and 54 shell commands** — against a sterling median turn of 22 events / 8 commands. **21 of 38** land immediately after a verdict-and-pivot of the shape quoted above.
+
+The interrupt causes real re-derivation, not a compliance paragraph: **median 36 further timeline events after the paste, mean 55, max 197**; 9 of 23 measured fires produced more than 50. And 7 of 23 pastes are the bare snippet with no added words, the rest near-bare — the operator is not explaining what went wrong, only re-weighting. Consistent with the deficit not being informational.
+
+### Why this is not a doctrine or always-on-context problem
+
+The obvious response is "state the rule harder in always-on context." The corpus refuses it.
+
+Turn 38 of a sterling session, the agent's own reasoning immediately before the operator interrupted:
+
+> `68 passed. Green is the entry fee — now I need to prove these tests can fail for the right reason.`
+
+That is a near-verbatim echo of the operator's own always-on doctrine (`Pass-counts are the entry fee, not proof`, plus the falsifiability rule). The rule reached, loaded, and was salient enough to be recited unprompted — **and the operator still had to interrupt.**
+
+Not isolated. Across the same 3,654 turns, agent reasoning contains:
+
+| Doctrine phrase in agent reasoning | Mentions | Turns |
+|---|---|---|
+| `unverified` / `did not verify` | 1,192 | 405 |
+| `runtime evidence` / `runtime artifact` | 532 | 335 |
+| `fail for the right reason` | 84 | 67 |
+| `entry fee` / `pass-count` | 51 | 46 |
+
+The doctrine is not absent from the agent's active reasoning. It is fluent there, in roughly one turn in five, and still does not bind at the closure moment. **Fluency in a standard is not compliance with it** — the standard becomes another thing the agent produces competent text *about*, while generation is driven by the pull toward a finished-looking answer. This is the same primitive as an agent generating criticism-*shaped* text when asked to be critical: the surface form of the instruction is satisfied, which is exactly what makes restating the instruction ineffective.
+
+The corollary for guard design: a rule an agent is already reciting cannot be fixed by restatement. It needs an intervention at the moment of the claim, not in the preamble.
+
+### Cross-project reach, and what the numbers do not show
+
+The condition is not sterling-specific. Across 5,605 turn files in 7 repos:
+
+| Project | Turns | Snippet at turn open | Mid-turn interrupt | Turns with doctrine in reasoning |
+|---|---|---|---|---|
+| sterling | 3,655 | 131 | 38 | 698 (19%) |
+| full-stack-ds | 1,120 | 10 | 0 | 91 (8%) |
+| RC | 283 | 19 | 4 | 33 (11%) |
+| caws | 153 | 0 | 0 | 10 (6%) |
+| deduper | 136 | 3 | 0 | 15 (11%) |
+| deduper_mutated | 136 | 3 | 0 | 15 (11%) |
+| surgery-ward | 122 | 2 | 0 | 14 (11%) |
+| **total** | **5,605** | **168** | **42** | **876 (15%)** |
+
+Doctrine fluency is uniform (6–19% of turns) across every repo and every agent harness. The steering instruments appear in 6 of 7. But the *interrupts* concentrate almost entirely in one repo.
+
+Turn length does not explain that concentration: `caws` has proportionally **more** long turns than sterling (22% of turns exceed 90 timeline events, against sterling's 17%) and recorded zero interrupts. The operator's account is the explanation — sterling is the project whose reasoning stream is watched closely, in real time, for exactly this moment.
+
+Which is the uncomfortable reading of the whole table: **the interrupt count measures supervision, not defect rate.** In the 5,563 turns where nobody interrupted, the closure-moment behavior is simply unobserved. Nothing here licenses the inference that it did not occur; the one repo with an attentive reader is the one repo with findings.
+
+### What would be useful to plan for
+
+No CAWS tooling exists for this, and none is proposed here as ready. Recording the shape while the evidence is fresh:
+
+- **The detection problem is the hard part, not the response.** Every guard in this document keys on an inspectable argument — a command string, a path, a branch name, a tool call. This failure has no such surface. It is an agent asserting a conclusion in prose, at a moment defined only by discourse structure (verdict followed by pivot). A guard that fires on `Bash` or `Edit` cannot see it.
+- **The closure move may be detectable in the reasoning stream.** The 21-of-38 pattern is a narrow linguistic shape: a result token (`N/N`, `all X are in`, `terminal`, `committed`) adjacent to a forward transition (`Now …`, `Writing …`, `Next …`). Sessions already render reasoning to `turn-*.json`, so the substrate exists. This wants a falsification pass on the negative class before anyone believes it — the corpus contains many such transitions that did *not* warrant an interrupt, and the false-positive rate is unmeasured.
+- **A per-turn injection would defeat itself.** Firing the evidence demand on every turn converts it into a template the agent satisfies structurally — producing the "what I did not verify" section as ritual, which is the same fluency failure one level up. Whatever fires must fire selectively, or it decays into the thing it was built to catch.
+- **The measurement gap is worth closing before the guard.** Because the interrupt count tracks supervision, the base rate of unproven closure is unknown. Mining the unattended 5,563 turns for closure moments that were *never* challenged would establish whether this is a frequent silent failure or a rare one the operator happens to catch — and that number should decide how much guard is warranted.
+
+### What it doesn't catch
+
+- **The corpus records interventions, not defects.** A turn with no interrupt is evidence about the operator's attention, not about the agent's rigor. Every rate in this entry is a lower bound of unknown tightness.
+- **Whether the interrupt improves correctness is unmeasured.** The 36-median follow-on events prove the agent did more work, not that the work found anything or that the resulting claim was sound. No outcome was traced from an interrupt to a corrected defect.
+- **The verdict-and-pivot classification is regex-shaped and hand-checked on a sample.** 21 of 38 matched; the remaining 17 were adjacent (the agent about to produce the artifact that would serve as its own evidence) and were not independently adjudicated.
+- **Nothing here distinguishes models or harnesses.** Doctrine fluency is uniform across claude-code, codex, qwen-code, kimi-code, and zcode sessions, but no per-harness closure rate was computed, so a harness-specific effect would be invisible in these numbers.
+- **The snippet-text search matches one phrasing per instrument.** An operator paraphrase of the same demand is not counted, so the intervention counts are floors.
+
+### The doctrine
+
+> An agent that can recite the evidence standard is not thereby governed by it. The failure moment is the *closure move* — a result banked and a pivot taken in the same breath, when the claim outruns what was actually checked. Because it is prose rather than a tool argument, no existing guard surface can see it; because an operator's interrupts are the only detector, the recorded rate measures who was watching rather than how often it happens. When you catch yourself writing a verdict adjacent to a `Now …`, that is the point to print the artifact instead of the summary — and to state what you did not verify, which is the part no pass-count contains.
+
+### Single-line synthesis
+
+**Entry 39: across 5,605 turn files in 7 repos, agent reasoning recites the operator's own evidence doctrine in 6–19% of turns (1,192 `unverified` mentions across 405 sterling turns alone) and still banks unproven claims at the closure moment — a result token adjacent to a forward pivot (`459/459. Final re-profile…`, `All receipts are in. Writing the README…`), including one turn where the agent quoted the `entry fee` rule verbatim and was interrupted anyway; the only working detector is a human reading the reasoning stream live and pasting a bare evidence demand mid-turn (38 interrupts, all inside `reasoning` blocks, median 97 events into the turn, producing a median 36 further events of real re-derivation), which means the failure has no inspectable guard surface, restating the doctrine cannot fix a rule the agent is already reciting, a per-turn injection would decay into the same ritual fluency, and the concentration of findings in one repo measures supervision rather than defect rate — so the base rate across the 5,563 unattended turns is unknown and worth measuring before any guard is designed.**
