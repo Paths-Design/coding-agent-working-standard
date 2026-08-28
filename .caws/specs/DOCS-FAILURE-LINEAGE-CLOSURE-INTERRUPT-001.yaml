@@ -1,0 +1,25 @@
+id: DOCS-FAILURE-LINEAGE-CLOSURE-INTERRUPT-001
+title: 'Entry 39: the closure-moment interrupt — steering telemetry from the sterling corpus'
+risk_tier: 3
+mode: doc
+lifecycle_state: draft
+created_at: '2026-08-28T02:49:23.913Z'
+updated_at: '2026-08-28T02:49:23.913Z'
+blast_radius:
+  modules:
+    - 'docs'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/failure-lineage.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
