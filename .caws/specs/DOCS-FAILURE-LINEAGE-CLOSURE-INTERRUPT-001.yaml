@@ -2,9 +2,11 @@ id: DOCS-FAILURE-LINEAGE-CLOSURE-INTERRUPT-001
 title: 'Entry 39: the closure-moment interrupt — steering telemetry from the sterling corpus'
 risk_tier: 3
 mode: doc
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Entry 39 added to docs/failure-lineage.md (merge dc2a9ab). Acceptance A1 ships holding its scaffolded TODO: no sanctioned path exists to fill it. specs create has no --acceptance flag, specs amend covers only modules/invariants, canonical returns NO AUTHORITY (unbound), and the bound worktree sparse-excludes .caws/specs by design. Not hand-edited. Gap filed separately.'
 created_at: '2026-08-28T02:49:23.913Z'
-updated_at: '2026-08-28T02:49:46.294Z'
+updated_at: '2026-08-28T02:54:18.412Z'
 blast_radius:
   modules:
     - 'docs'
