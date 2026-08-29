@@ -24,3 +24,9 @@ acceptance:
     then: 'TODO'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: Entry 40 landed in docs/failure-lineage.md at merge 48b78b8b (lane commit eb90743e); every claim traced to sterling session 5003687f turn-001/004/005 records and sterling commits 5caa008bf4 / b2698e630d
+    recorded_at: "2026-08-29T01:03:16.611Z"
+    commit_sha: eb90743e
