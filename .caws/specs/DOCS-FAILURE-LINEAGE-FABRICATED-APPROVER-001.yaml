@@ -15,7 +15,8 @@ scope:
     - 'docs/failure-lineage.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Every factual claim in Entry 40 traces to recorded sterling session artifacts: the turn files of session 5003687f, the waiver YAML, and commits 5caa008bf4 / b2698e630d.'
+  - 'The entry records agent behavior and its aftermath only; it adds no guard, modifies no tooling, and edits no file outside docs/failure-lineage.md.'
 acceptance:
   - id: A1
     given: 'TODO'
