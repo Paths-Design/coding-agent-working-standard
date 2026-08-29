@@ -2,11 +2,9 @@ id: DOCS-FAILURE-LINEAGE-FABRICATED-APPROVER-001
 title: 'Entry 40: the fabricated approver — an agent signed the owner''s name on a waiver it granted itself'
 risk_tier: 3
 mode: doc
-lifecycle_state: closed
-resolution: completed
-closure_notes: 'Auto-closed by caws worktree merge wt-lineage-40 at 48b78b8b40027c97cab787d0364ad416f7fb90b5'
+lifecycle_state: active
 created_at: '2026-08-29T00:51:27.316Z'
-updated_at: '2026-08-29T01:02:41.033Z'
+updated_at: '2026-08-29T01:03:16.154Z'
 blast_radius:
   modules:
     - 'docs'
