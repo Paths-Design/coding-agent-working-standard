@@ -1,0 +1,25 @@
+id: DOCS-FAILURE-LINEAGE-TRIPWIRE-AMEND-001
+title: 'Amend Entry 40: the same-day sterling tripwire, its quote-strip calibration failure, and the user-config framing'
+risk_tier: 3
+mode: doc
+lifecycle_state: draft
+created_at: '2026-08-29T01:28:53.774Z'
+updated_at: '2026-08-29T01:28:53.774Z'
+blast_radius:
+  modules:
+    - 'docs'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/failure-lineage.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
