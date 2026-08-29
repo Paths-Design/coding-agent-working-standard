@@ -2,9 +2,11 @@ id: DOCS-FAILURE-LINEAGE-TRIPWIRE-AMEND-001
 title: 'Amend Entry 40: the same-day sterling tripwire, its quote-strip calibration failure, and the user-config framing'
 risk_tier: 3
 mode: doc
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Entry 40 amended with the same-day sterling tripwire (DENY_RAW_SEGMENT_PATTERNS, owner-configured, live-proven), its quote-strip calibration failure (Entry-39-style wrong-object verification, caught by driving the composed instrument), the owner''s user-config framing (init-time affordance, not shared pack), and harness ground truth on session-identity surfacing. Acceptance body ships scaffolded (no sanctioned authoring path), same as precedent; evidence recorded before close this time.'
 created_at: '2026-08-29T01:28:53.774Z'
-updated_at: '2026-08-29T01:29:09.172Z'
+updated_at: '2026-08-29T01:37:01.038Z'
 blast_radius:
   modules:
     - 'docs'
