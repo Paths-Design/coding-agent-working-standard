@@ -15,7 +15,8 @@ scope:
     - 'docs/failure-lineage.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Every factual claim added to Entry 40 traces to recorded artifacts: sterling session 5003687f turns 6-7, sterling commits 42a8b5846d / 217c1a8a64 / 4cae646069, or live classifier probes reproduced in this slice.'
+  - 'The amendment records the sterling-local tripwire and its calibration failure honestly, including the owner''s user-config framing; it edits no file outside docs/failure-lineage.md and modifies no tooling.'
 acceptance:
   - id: A1
     given: 'TODO'
