@@ -24,3 +24,9 @@ acceptance:
     then: 'TODO'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Entry 40 amended at merge 5200376d (lane commit 20d33681): three new sections + updated gaps/synthesis; claims traced to sterling session 5003687f turns 6-7, sterling commits 42a8b5846d/217c1a8a64/4cae646069, live classifier probes, and public claude-code source"
+    recorded_at: "2026-08-29T01:37:00.445Z"
+    commit_sha: "20d33681"
