@@ -135,6 +135,8 @@ export {
   inboxCount,
   inboxMessages,
   inboxAllMessages,
+  mineQueued,
+  platformEngagement,
   channelHistory,
   pruneMessages,
   isRecipientLive,
@@ -161,6 +163,9 @@ export type {
   ResolvedRecipient,
   InboxAllEntry,
   MessageInboxAllResult,
+  MineQueuedEntry,
+  MineQueuedResult,
+  PlatformEngagement,
   RefusalRecord,
   RefusalClass,
 } from './messages-store';
