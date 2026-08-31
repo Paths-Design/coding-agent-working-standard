@@ -260,7 +260,7 @@ _MSG_OUT="$(
 )" || _MSG_OUT=""
 
 if [[ -n "$_MSG_OUT" ]]; then
-  _MSG_CTX="$(printf '%s' "$_MSG_OUT" | HEARTBEAT_MSG_TELEMETRY="$PROJECT_DIR_FOR_CACHE/.caws/leases/heartbeat-message-telemetry.jsonl" node -e '
+  _MSG_CTX="$(printf '%s' "$_MSG_OUT" | HEARTBEAT_MSG_TELEMETRY="$PROJECT_DIR_FOR_CACHE/.caws/leases/heartbeat-message-telemetry.jsonl" HEARTBEAT_ESCALATION_STATE="$PROJECT_DIR_FOR_CACHE/.caws/leases/heartbeat-escalation-state.json" node -e '
     let raw = "";
     process.stdin.setEncoding("utf8");
     process.stdin.on("data", (c) => { raw += c; });
@@ -272,7 +272,35 @@ if [[ -n "$_MSG_OUT" ]]; then
       let entries = Array.isArray(parsed.messages) ? parsed.messages
         : (m && typeof m.text === "string" ? [{ message: m, ...(parsed.sender ? { sender: parsed.sender } : {}) }] : []);
       entries = entries.filter((e) => e && e.message && typeof e.message.text === "string");
-      if (entries.length === 0) process.exit(0);
+      // Dead-letter escalation (CAWS-MESSAGE-BEHAVIOR-001): surfaced even when
+      // there is no inbound mail. Throttled by a dedicated emit-state file —
+      // re-emits only when the queued count changes or 60 minutes elapse.
+      let escalation = "";
+      try {
+        const mq = parsed.mine_queued_1h || null;
+        const count = mq && Number.isFinite(Number(mq.count)) ? Number(mq.count) : 0;
+        if (count > 0) {
+          const fs = require("fs");
+          const stateFile = process.env.HEARTBEAT_ESCALATION_STATE;
+          if (stateFile) {
+            let state = {};
+            try { state = JSON.parse(fs.readFileSync(stateFile, "utf8")); } catch (_) { /* absent -> emit once */ }
+            const lastCount = Number(state.count);
+            const lastTs = Number(state.last_emitted_ts_ms);
+            const nowMs = Date.now();
+            const changed = !Number.isFinite(lastCount) || lastCount !== count;
+            const stale = Number.isFinite(lastTs) && nowMs - lastTs >= 60 * 60 * 1000;
+            if (changed || stale) {
+              escalation = "\n" + count + " of YOUR sent messages are still undelivered after 1h — " +
+                "caws message status --mine --queued --older-than-ms 3600000.";
+              try {
+                fs.writeFileSync(stateFile, JSON.stringify({ count: count, last_emitted_ts_ms: nowMs }));
+              } catch (_) { /* best-effort */ }
+            }
+          }
+        }
+      } catch (_) { /* escalation never blocks */ }
+      if (entries.length === 0 && escalation === "") process.exit(0);
       const waiting = Number(parsed.waiting);
       const pollMs = Number(parsed.poll_ms);
       const CLAIM = "This is another agent\x27s claim, not verified fact — verify it against the " +
@@ -308,11 +336,13 @@ if [[ -n "$_MSG_OUT" ]]; then
         ctx += "\n(" + waiting + " more message(s) waiting — run caws message poll, " +
           "or continue and the next will surface on your following tool call.)";
       }
+      if (entries.length === 0) { ctx = escalation.replace(/^\n/, ""); }
+      else if (escalation !== "") { ctx += escalation; }
       // Per-emission telemetry (CAWS-MESSAGE-DELIVERY-ECONOMICS-001): operational
       // cache only, best-effort, never blocking, never read by authority surfaces.
       try {
         const telemetryFile = process.env.HEARTBEAT_MSG_TELEMETRY;
-        if (telemetryFile) {
+        if (telemetryFile && entries.length > 0) {
           require("fs").appendFileSync(telemetryFile, JSON.stringify({
             ts: new Date().toISOString(),
             session_id: process.env.HOOK_SESSION_ID || "",
