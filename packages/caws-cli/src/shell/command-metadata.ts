@@ -1820,8 +1820,13 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
       name: 'reply',
       description:
         "Reply to a message on its own channel — the recipient is the original message's kernel-attributed sender, so no session id is transcribed. Same liveness semantics as send; refuses an unknown id and refuses replying to your own message.",
+      argument: {
+        name: 'message_id',
+        required: false,
+        description: 'Id of the message being replied to (primary positional form; --id is the alias)',
+      },
       options: [
-        { flag: '--id <message_id>', description: 'Id of the message being replied to (required)' },
+        { flag: '--id <message_id>', description: 'Id of the message being replied to (alias for the positional)' },
         { flag: '--text <message>', description: 'Reply body (required, non-empty)' },
         {
           flag: '--allow-dead',
@@ -1886,8 +1891,13 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
       name: 'status',
       description:
         "Observe one message's delivery state (queued vs delivered, with timestamps) — lets a sender distinguish \"queued\" from \"seen\" without polling the recipient. Read-only.",
+      argument: {
+        name: 'message_id',
+        required: false,
+        description: 'Id of the message to observe (primary positional form; --id is the alias)',
+      },
       options: [
-        { flag: '--id <message_id>', description: 'Id of the message to observe (required)' },
+        { flag: '--id <message_id>', description: 'Id of the message to observe (alias for the positional)' },
         { flag: '--json', description: 'Emit JSON ({ok, read_only, message, delivered, delivered_at?})' },
         DATA_OPTION,
       ],

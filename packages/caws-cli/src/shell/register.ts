@@ -1961,9 +1961,10 @@ export function registerShellCommands(
     });
 
   defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'reply'))
-    .action((opts: { id?: string; text?: string; allowDead?: boolean; data?: boolean }) => {
+    .action((messageId: string | undefined, opts: { id?: string; text?: string; allowDead?: boolean; data?: boolean }) => {
       const code = runMessageReplyCommand({
         id: opts.id ?? '',
+        ...(typeof messageId === 'string' && messageId.length > 0 ? { positionalId: messageId } : {}),
         text: opts.text ?? '',
         ...(opts.allowDead === true ? { allowDead: true } : {}),
         showData: opts.data === true,
@@ -2019,9 +2020,10 @@ export function registerShellCommands(
     });
 
   defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'status'))
-    .action((opts: { id?: string; json?: boolean; data?: boolean }) => {
+    .action((messageId: string | undefined, opts: { id?: string; json?: boolean; data?: boolean }) => {
       const code = runMessageStatusCommand({
         id: opts.id ?? '',
+        ...(typeof messageId === 'string' && messageId.length > 0 ? { positionalId: messageId } : {}),
         json: opts.json === true,
         showData: opts.data === true,
       });
