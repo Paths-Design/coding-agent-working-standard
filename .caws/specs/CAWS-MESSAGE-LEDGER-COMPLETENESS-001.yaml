@@ -7,20 +7,163 @@ created_at: '2026-08-31T02:28:10.652Z'
 updated_at: '2026-08-31T02:28:10.652Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/messages-store.ts
+    - packages/caws-cli/src/shell/commands/message.ts
+    - packages/caws-cli/src/shell/commands/status.ts
+    - packages/caws-cli/src/kernel/schemas/messages.v1.json
+    - packages/caws-cli/src/store/rules.ts
+    - packages/caws-cli/templates/hook-packs/shared/agent-heartbeat.sh
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/src/store/messages-store.ts
+    - packages/caws-cli/src/store/rules.ts
+    - packages/caws-cli/src/store/index.ts
+    - packages/caws-cli/src/shell/commands/message.ts
+    - packages/caws-cli/src/shell/commands/status.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/kernel/schemas/messages.v1.json
+    - packages/caws-cli/templates/hook-packs/shared/agent-heartbeat.sh
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/tests/store/messages-store.test.js
+    - packages/caws-cli/tests/store/message-log-readback.test.js
+    - packages/caws-cli/tests/store/message-retention-prune.test.js
+    - packages/caws-cli/tests/shell/message-command.test.js
+    - .caws/hooks/agent-heartbeat.sh
+    - packages/caws-cli/README.md
+    - docs/command-reference.md
+    - docs/api/cli.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Telemetry over 64 days of sterling's messages.jsonl (588 sends, 562
+    deliveries, agent-config/aim-telemetry/REPORT.md) motivates this spec:
+    refusals unrecorded (~13.5% observed rate, mostly recipient_not_live),
+    no reply linkage, delivery records silent on consumption path, no
+    repo-wide undelivered view (26 never consumed incl. a destructive
+    worktree STOP warning), and prune deletes instead of archiving (~5%
+    observed attrition).
+  - >-
+    A refused send or reply appends a best-effort refusal record
+    {record: 'refusal', id, class, to, reason, ts} to messages.jsonl BEFORE
+    the command exits with its refusal verdict. class is one of the existing
+    refusal classes (recipient_not_live, recipient_invalid,
+    alias_unresolved, reply_to_self, identity-ambiguous). A failure to append
+    the refusal record never changes the command's exit code or stdout
+    verdict — refusal recording is best-effort telemetry, not delivery. The
+    successful-send stdout line ("sent to <id> (id …, channel …)") and the
+    refusal verdict line ("not sent — <class>") remain byte-stable.
+  - >-
+    `caws message reply <message-id>` writes reply_to: <message-id> on the
+    new message record. `caws message send` gains an optional
+    --reply-to <message-id> that (a) requires the referenced message to exist
+    and to be addressed to the caller, and (b) writes reply_to on the record;
+    the channel remains channelId(sender, recipient) in both cases. Records
+    without reply_to (plain sends, and all pre-existing records) parse
+    unchanged — reply_to is optional and read-backward-compatible.
+  - >-
+    Delivery records gain an optional mode field: 'auto' when the consuming
+    poll was the heartbeat hook's auto-delivery path, 'poll' for an explicit
+    poll. The hook template passes --receipt auto on its
+    `caws message poll` invocation; an explicit poll without the flag records
+    mode 'poll'; absent mode on old records means unknown (rendered as no
+    mode, never guessed). Editing the shared hook template bumps
+    SHARED_PACK_VERSION and recomputes pack-fingerprints.json; the repo's
+    installed .caws/hooks/agent-heartbeat.sh is updated to match.
+  - >-
+    `caws message inbox --all` lists every undelivered message in the repo
+    (all recipients), oldest-first, annotated with recipient, sender, age,
+    and channel — read-only, consumes nothing. `caws status` gains one
+    summary line when undelivered mail exists:
+    "messages: N undelivered (oldest <age>)" and prints nothing extra when
+    zero — a sender or operator can see queued mail without polling a
+    specific mailbox.
+  - >-
+    `caws message prune --apply` moves pruned message and delivery records
+    into .caws/messages.jsonl.archive (append, same record shapes, prefixed
+    with one {record: 'prune', ids, ts} marker line) instead of deleting
+    them; messages.jsonl keeps only non-pruned lines. Undelivered messages
+    remain non-prunable (unchanged). The archive is telemetry, not
+    authority: no command reads it for delivery state.
+  - >-
+    Read-time derivation is unchanged: history/status/inbox derive delivered
+    state by joining message records against delivery records in
+    messages.jsonl; refusal records are ignored by every delivery-state
+    derivation and by poll/inbox (they are not messages). messages.v1.json
+    gains the refusal record, reply_to, delivery mode, and prune marker
+    shapes; existing message/delivery records remain valid against the
+    updated schema.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      Session S sends to a recipient with a stale heartbeat (refused) and to
+      an invalid recipient string (refused).
+    when: 'Each refusal completes.'
+    then: >-
+      messages.jsonl contains two refusal records with class
+      recipient_not_live and recipient_invalid respectively, each carrying
+      to, reason, ts; both commands still exit 1 with the existing stdout
+      verdict lines unchanged.
+  - id: A2
+    given: >-
+      A message M sent by session B, addressed to the caller.
+    when: 'The caller runs `caws message reply <M.id> --text "..."`.'
+    then: >-
+      The new message record has reply_to = M.id and channel =
+      channelId(B, caller); the reply flow is otherwise unchanged.
+  - id: A3
+    given: >-
+      A message M sent by session B, addressed to caller S; S sends a plain
+      `caws message send --to B --reply-to <M.id> --text "..."`.
+    when: 'The send completes.'
+    then: >-
+      The new record has reply_to = M.id; the same command with a
+      nonexistent message id (or a message not addressed to S) is refused
+      with a diagnostic naming the message id and no record appended.
+  - id: A4
+    given: 'An installed heartbeat hook (template + repo copy) whose poll passes --receipt auto.'
+    when: 'Auto-delivery consumes a message; a separate explicit `caws message poll` consumes another.'
+    then: >-
+      The first delivery record has mode 'auto' and the second mode 'poll';
+      old records without mode still parse and render without a mode.
+  - id: A5
+    given: >-
+      Two queued messages addressed to two different recipients, one sent 2
+      minutes ago and one sent 90 minutes ago.
+    when: 'The operator runs `caws message inbox --all`.'
+    then: >-
+      Both messages are listed oldest-first with recipient, sender, and age;
+      no delivery record is appended (mailbox depths unchanged); the JSON
+      form carries the same fields.
+  - id: A6
+    given: 'One or more undelivered messages exist in the repo.'
+    when: 'The operator runs `caws status`.'
+    then: >-
+      The status output includes a "messages: N undelivered (oldest <age>)"
+      line; with zero undelivered messages that line is absent.
+  - id: A7
+    given: >-
+      A messages.jsonl containing delivered messages selected by
+      `caws message prune --older-than-ms`.
+    when: 'The operator runs `caws message prune --apply`.'
+    then: >-
+      The pruned message and delivery lines appear in
+      messages.jsonl.archive preceded by a prune marker line naming the
+      pruned ids; messages.jsonl contains only non-pruned lines; undelivered
+      messages are never pruned; a second prune of the same selector finds
+      no candidates.
+  - id: A8
+    given: >-
+      The updated messages.v1.json schema and a messages.jsonl containing
+      pre-existing message and delivery records (no new fields).
+    when: 'The store reads the file (poll, inbox, history, status) and the schema test runs.'
+    then: >-
+      All reads succeed with zero malformed-line diagnostics; the legacy
+      records validate against the updated schema; refusal records are
+      invisible to poll/inbox/history.
 non_functional: {}
 contracts:
   - name: 'messages-ledger-records'
