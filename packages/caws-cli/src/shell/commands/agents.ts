@@ -201,7 +201,7 @@ function buildLeaseContext(
     ...(gitInfo.branch !== undefined ? { branch: gitInfo.branch } : {}),
     ...(bound?.worktree !== undefined ? { bound_worktree: bound.worktree } : {}),
     ...(bound?.spec_id !== undefined ? { bound_spec_id: bound.spec_id } : {}),
-    pid: process.pid,
+    hook_pid: process.pid,
     hostname: os.hostname(),
     ...(sessionLogPath !== undefined ? { session_log_path: sessionLogPath } : {}),
     // hook_pack_version is omitted here — caws init's hook pack version is
@@ -344,6 +344,10 @@ export interface HeartbeatOpts extends BaseAgentsOpts {
   readonly reason?: LeaseReason;
   readonly throttleMs?: number;
   readonly includeActiveSummary?: boolean;
+  /** Harness session kind for the lease (CAWS-AGENTS-FORK-IDENTITY-001). */
+  readonly sessionKind?: 'main' | 'fork' | 'subagent';
+  /** Parent session id — only meaningful with sessionKind=fork. */
+  readonly forkedFrom?: string;
 }
 
 export function runAgentsHeartbeatCommand(opts: HeartbeatOpts = {}): number {
@@ -370,6 +374,35 @@ export function runAgentsHeartbeatCommand(opts: HeartbeatOpts = {}): number {
     err('caws agents heartbeat: failed to read git_common_dir/git_dir.');
     return 2;
   }
+
+  // Fork identity (CAWS-AGENTS-FORK-IDENTITY-001): explicit flags win, then
+  // the hook's CAWS_SESSION_KIND / CAWS_FORKED_FROM env passthrough.
+  const envKind =
+    env['CAWS_SESSION_KIND'] === 'main' ||
+    env['CAWS_SESSION_KIND'] === 'fork' ||
+    env['CAWS_SESSION_KIND'] === 'subagent'
+      ? (env['CAWS_SESSION_KIND'] as 'main' | 'fork' | 'subagent')
+      : undefined;
+  const kind = opts.sessionKind ?? envKind;
+  const forkedFrom =
+    typeof opts.forkedFrom === 'string' && opts.forkedFrom.length > 0
+      ? opts.forkedFrom
+      : typeof env['CAWS_FORKED_FROM'] === 'string' && env['CAWS_FORKED_FROM'].length > 0
+        ? env['CAWS_FORKED_FROM']
+        : undefined;
+  if (kind !== undefined && kind !== 'main' && kind !== 'fork' && kind !== 'subagent') {
+    err("caws agents heartbeat: --session-kind accepts exactly 'main', 'fork', or 'subagent'.");
+    return 1;
+  }
+  if (forkedFrom !== undefined && kind !== 'fork') {
+    err('caws agents heartbeat: --forked-from is only meaningful with --session-kind fork.');
+    return 1;
+  }
+  const forkedContext: LeaseContext = {
+    ...context,
+    ...(kind !== undefined ? { harness_session_kind: kind } : {}),
+    ...(forkedFrom !== undefined ? { forked_from: forkedFrom } : {}),
+  };
 
   const now = nowFn();
   const reason: LeaseReason = opts.reason ?? 'pre_tool_use';
@@ -399,7 +432,7 @@ export function runAgentsHeartbeatCommand(opts: HeartbeatOpts = {}): number {
   }
 
   if (!throttled) {
-    const patchRes = heartbeatAgentSession(leases, idRes.identity, context, now, reason);
+    const patchRes = heartbeatAgentSession(leases, idRes.identity, forkedContext, now, reason);
     if (!isOk(patchRes)) {
       err('caws agents heartbeat: kernel refused.');
       err(renderDiagnostics(patchRes.errors, { showData }));
@@ -510,6 +543,39 @@ export interface ListOpts extends BaseAgentsOpts {
   readonly staleTtlMs?: number;
 }
 
+/** Conjoined-session advisory (CAWS-AGENTS-FORK-IDENTITY-001): pairs of leases
+ * with overlapping [started_at, last_active] activity windows (or windows
+ * starting within the proximity threshold — two sessions created seconds
+ * apart have zero-length windows that never overlap) on the same host and
+ * repo. Display-only — never authority, never a write, never a refusal.
+ */
+const CONJOINED_START_PROXIMITY_MS = 60_000;
+
+function conjoinedLeasePairs(leases: LeaseRegistry): ReadonlyArray<{ a: string; b: string }> {
+  const ids = Object.keys(leases);
+  const pairs: { a: string; b: string }[] = [];
+  for (let i = 0; i < ids.length; i++) {
+    const aId = ids[i] as string;
+    for (let j = i + 1; j < ids.length; j++) {
+      const bId = ids[j] as string;
+      const x = leases[aId];
+      const y = leases[bId];
+      if (x === undefined || y === undefined) continue;
+      if (x.hostname === undefined || y.hostname === undefined || x.hostname !== y.hostname) continue;
+      if (x.repo_root !== y.repo_root) continue;
+      const xs = Date.parse(x.started_at);
+      const xe = Date.parse(x.last_active);
+      const ys = Date.parse(y.started_at);
+      const ye = Date.parse(y.last_active);
+      if (!Number.isFinite(xs) || !Number.isFinite(xe) || !Number.isFinite(ys) || !Number.isFinite(ye)) continue;
+      const windowsOverlap = xs <= ye && ys <= xe;
+      const startsProximate = Math.abs(xs - ys) <= CONJOINED_START_PROXIMITY_MS;
+      if (windowsOverlap || startsProximate) pairs.push({ a: aId, b: bId });
+    }
+  }
+  return pairs;
+}
+
 export function runAgentsListCommand(opts: ListOpts = {}): number {
   const { cwd, nowFn, out, err, showData, json } = setupIO(opts);
 
@@ -560,6 +626,7 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
         stopped: summary.stopped.length,
         total: summary.total,
       },
+      conjoined_pairs: conjoinedLeasePairs(loadRes.value.leases),
     });
   } else {
     out(`active: ${summary.active.length}`);
@@ -576,6 +643,9 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
     if (wantsStopped) {
       out(`stopped: ${summary.stopped.length}`);
       for (const l of summary.stopped) out(`  ${l.session_id}`);
+    }
+    for (const pair of conjoinedLeasePairs(loadRes.value.leases)) {
+      out(`conjoined-hint: ${pair.a} <=> ${pair.b} (overlapping lease windows; display-only advisory)`);
     }
   }
   if (loadRes.value.diagnostics.length > 0 && showData) {

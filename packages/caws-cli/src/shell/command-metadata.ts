@@ -1592,6 +1592,16 @@ export const AGENTS_COMMAND_META: GroupCommandMeta = {
         { flag: '--platform <p>', description: 'Platform tag' },
         { flag: '--reason <r>', description: 'pre_tool_use | claim | status | manual_register' },
         {
+          flag: '--session-kind <main|fork|subagent>',
+          description:
+            'Harness session kind for the lease (display + coordination aid, never authority). The hook passes CAWS_SESSION_KIND through when set (CAWS-AGENTS-FORK-IDENTITY-001).',
+        },
+        {
+          flag: '--forked-from <session_id>',
+          description:
+            "Parent session id — only meaningful with --session-kind fork; refused otherwise (CAWS-AGENTS-FORK-IDENTITY-001).",
+        },
+        {
           flag: '--throttle <ms>',
           description: 'Skip write if last_active within this many ms (default: 0 — no throttle)',
         },
