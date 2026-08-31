@@ -504,7 +504,7 @@ Exit codes: 0 (verified / dry-run), 1 (digest mismatch or missing archive), 2 (c
 
 ## 9. `caws waiver`
 
-Manage waiver records that filter matching gate violations.
+Manage waiver records that filter matching gate violations — GATE-RUN-ONLY, legacy pre-v11 surface. A waiver suppresses matching violations in `caws gates run` and NEVER lifts a hook guard; hook blocks are governed by reprieves (`caws reprieve grant`), which is the system hooks actually consult (CAWS-DEFECT-WAIVER-SURFACE-UNCONSULTED-01). A successful `create` prints a byte-stable notice stating this boundary.
 
 **Singular surface only — `caws waivers` (plural) is removed.**
 
