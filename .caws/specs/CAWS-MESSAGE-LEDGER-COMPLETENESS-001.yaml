@@ -2,10 +2,11 @@ id: CAWS-MESSAGE-LEDGER-COMPLETENESS-001
 title: 'Message ledger completeness: refusal records, reply linkage, receipt mode, repo-wide undelivered view, prune-to-archive'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: wt-msg-ledger-completeness
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-msg-ledger-completeness at ae768884e0cf265d48e1069fa823e04370f5b827'
 created_at: '2026-08-31T02:28:10.652Z'
-updated_at: '2026-08-31T02:53:06.609Z'
+updated_at: '2026-08-31T02:54:04.791Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/messages-store.ts
