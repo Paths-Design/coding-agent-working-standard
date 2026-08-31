@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-message-behavior
 created_at: '2026-08-31T04:58:05.844Z'
-updated_at: '2026-08-31T04:58:38.237Z'
+updated_at: '2026-08-31T05:06:50.764Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/messages-store.ts
@@ -29,6 +29,8 @@ scope:
     - packages/caws-cli/README.md
     - docs/command-reference.md
     - docs/api/cli.md
+    - packages/caws-cli/src/store/index.ts
+    - packages/caws-cli/tests/shell/message-delivery-economics.test.js
   out: []
 invariants:
   - >-
