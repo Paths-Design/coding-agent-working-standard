@@ -7,19 +7,84 @@ created_at: '2026-08-31T03:01:05.672Z'
 updated_at: '2026-08-31T03:01:05.672Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/register.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/tests/shell/message-positionals.test.js
+    - docs/command-reference.md
+    - docs/api/cli.md
+    - packages/caws-cli/README.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    `caws message reply <message_id> --text ...` (positional) works exactly
+    like `reply --id <message_id> --text ...`: same liveness semantics, same
+    reply_to linkage, same stdout line ("replied to <to> (reply to <id>,
+    id ..., channel ...)"). The message_id leaf declares ONE optional
+    positional; the excess-args guard still refuses a second positional with
+    the existing nothing-was-applied diagnostic.
+  - >-
+    `caws message status <message_id>` (positional) works exactly like
+    `status --id <message_id>`: same read-only output (text and JSON),
+    same not-found behavior.
+  - >-
+    When BOTH the positional and --id are supplied and they differ, the
+    command refuses with a diagnostic naming the conflict and nothing is
+    written or read-mutated; when they agree, the command proceeds. When
+    neither is supplied, the existing required-id refusal is unchanged
+    (exit 1, "is required").
+  - >-
+    The positional form is the documented primary: the leaf help shows
+    `reply [message_id]` / `status [message_id]`, and docs teach the
+    positional form first with --id as the alias. The heartbeat hook's
+    taught `caws message reply <message_id> --text "..."` line, which this
+    defect left broken, becomes correct with no hook change.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      A scratch repo with two live leases (sender and recipient) and one
+      message M sent by the recipient to the caller.
+    when: 'The caller runs `caws message reply <M.id> --text "answer"` via the built CLI.'
+    then: >-
+      Exit 0, stdout carries "replied to" with "reply to <M.id>", and the
+      new message record in messages.jsonl has reply_to = M.id.
+  - id: A2
+    given: 'The same scratch state as A1.'
+    when: 'The caller runs `caws message reply --id <M.id> --text "answer"` via the built CLI.'
+    then: >-
+      Exit 0 and the same record shape as A1 (backward compatibility with
+      the --id form).
+  - id: A3
+    given: >-
+      A message M addressed to the caller, and a different message N also
+      addressed to the caller.
+    when: 'The caller runs `caws message reply N.id --id M.id --text "x"` (differing).'
+    then: >-
+      Exit 1 with a diagnostic naming the conflict; no message record is
+      appended. Running the same command with N.id == M.id proceeds like A1.
+  - id: A4
+    given: 'A message M in the ledger.'
+    when: 'The operator runs `caws message status <M.id>` and `caws message status --id <M.id>`.'
+    then: >-
+      Both produce the identical status output (text and --json), exit 0;
+      `caws message status` with neither form still exits 1 with the
+      required-id message.
+  - id: A5
+    given: 'A live recipient and a caller session.'
+    when: 'The caller runs `caws message reply <M.id> --text x extra-token` (two positionals).'
+    then: >-
+      Exit 1 with the excess-arguments diagnostic ("takes at most 1
+      positional argument") and nothing applied — no message record appended.
+  - id: A6
+    given: 'The built CLI.'
+    when: 'The operator runs `caws message reply --help` and `caws message status --help`.'
+    then: >-
+      Both help texts show the optional positional ([message_id]) alongside
+      --id, with the positional documented as the primary form.
 non_functional: {}
 contracts: []
