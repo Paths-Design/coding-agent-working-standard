@@ -1949,11 +1949,12 @@ export function registerShellCommands(
   applyGroupMeta(messageCmd, MESSAGE_COMMAND_META);
 
   defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'send'))
-    .action((opts: { to?: string; text?: string; allowDead?: boolean; data?: boolean }) => {
+    .action((opts: { to?: string; text?: string; allowDead?: boolean; replyTo?: string; data?: boolean }) => {
       const code = runMessageSendCommand({
         to: opts.to ?? '',
         text: opts.text ?? '',
         ...(opts.allowDead === true ? { allowDead: true } : {}),
+        ...(typeof opts.replyTo === 'string' && opts.replyTo.length > 0 ? { replyTo: opts.replyTo } : {}),
         showData: opts.data === true,
       });
       exit(code);
@@ -1971,12 +1972,20 @@ export function registerShellCommands(
     });
 
   defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'poll'))
-    .action((opts: { me?: string; wait?: string; peek?: boolean; json?: boolean; data?: boolean }) => {
+    .action((opts: {
+      me?: string;
+      wait?: string;
+      peek?: boolean;
+      receipt?: string;
+      json?: boolean;
+      data?: boolean;
+    }) => {
       const waitMs = opts.wait !== undefined ? Number(opts.wait) : undefined;
       const code = runMessagePollCommand({
         ...(opts.me !== undefined ? { me: opts.me } : {}),
         ...(waitMs !== undefined && Number.isFinite(waitMs) ? { waitMs } : {}),
         ...(opts.peek === true ? { peek: true } : {}),
+        ...(opts.receipt === 'auto' ? { receipt: 'auto' as const } : {}),
         json: opts.json === true,
         showData: opts.data === true,
       });
@@ -1984,11 +1993,12 @@ export function registerShellCommands(
     });
 
   defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'inbox'))
-    .action((opts: { me?: string; limit?: string; json?: boolean; data?: boolean }) => {
+    .action((opts: { me?: string; limit?: string; json?: boolean; all?: boolean; data?: boolean }) => {
       const limit = opts.limit !== undefined ? Number(opts.limit) : undefined;
       const code = runMessageInboxCommand({
         ...(opts.me !== undefined ? { me: opts.me } : {}),
         ...(limit !== undefined && Number.isFinite(limit) ? { limit } : {}),
+        ...(opts.all === true ? { all: true } : {}),
         json: opts.json === true,
         showData: opts.data === true,
       });

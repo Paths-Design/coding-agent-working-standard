@@ -1804,6 +1804,11 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
         },
         { flag: '--text <message>', description: 'Message body (required, non-empty)' },
         {
+          flag: '--reply-to <message_id>',
+          description:
+            'Thread linkage: the message id this send replies to. Must exist and be addressed to you (CAWS-MESSAGE-LEDGER-COMPLETENESS-001).',
+        },
+        {
           flag: '--allow-dead',
           description: 'Send even if the recipient is not live in the registry (escape hatch; default off)',
         },
@@ -1837,6 +1842,11 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
           description: 'Block up to <ms> for a message before returning (long-poll; capped at 60000)',
         },
         { flag: '--peek', description: 'Show the next message without consuming it (no delivery record)' },
+        {
+          flag: '--receipt <auto|poll>',
+          description:
+            "Receipt mode recorded on the delivery record: 'auto' for the heartbeat hook's auto-delivery path, 'poll' (default) for an explicit poll (CAWS-MESSAGE-LEDGER-COMPLETENESS-001).",
+        },
         { flag: '--json', description: 'Emit JSON ({message, sender?, waiting}) instead of human text' },
         DATA_OPTION,
       ],
@@ -1847,8 +1857,13 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
       description:
         'List undelivered messages addressed to you without consuming them. Read-only; poll remains the delivery-consuming command.',
       options: [
-        { flag: '--me <session_id>', description: 'Endpoint inbox to list (default: this session id)' },
+        { flag: '--me <session_id>', description: 'Endpoint inbox to list (default: this session id; ignored with --all)' },
         { flag: '--limit <n>', description: 'Maximum messages to print from the waiting queue' },
+        {
+          flag: '--all',
+          description:
+            'List every undelivered message in the repo (all recipients), oldest-first, annotated with recipient and age. Read-only (CAWS-MESSAGE-LEDGER-COMPLETENESS-001).',
+        },
         { flag: '--json', description: 'Emit JSON ({ok, read_only, me, waiting, messages})' },
         DATA_OPTION,
       ],
