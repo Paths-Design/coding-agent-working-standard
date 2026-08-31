@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-agents-fork-identity
 created_at: '2026-08-31T04:25:15.533Z'
-updated_at: '2026-08-31T04:25:50.823Z'
+updated_at: '2026-08-31T04:37:46.426Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/kernel/worktree/leases.ts
@@ -29,6 +29,7 @@ scope:
     - packages/caws-cli/README.md
     - docs/command-reference.md
     - docs/api/cli.md
+    - packages/caws-cli/src/shell/register.ts
   out: []
 invariants:
   - >-
