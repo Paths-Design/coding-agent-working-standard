@@ -69,6 +69,11 @@
       "minLength": 1,
       "description": "On 'message' records: the id of the message this one replies to (thread linkage). Written by `caws message reply` and by `send --reply-to`. Optional — absent on plain sends and on pre-existing records (CAWS-MESSAGE-LEDGER-COMPLETENESS-001)."
     },
+    "urgency": {
+      "type": "string",
+      "enum": ["critical", "normal"],
+      "description": "On 'message' records: delivery-ordering signal, NOT authority — a critical message polls before normal traffic regardless of age. Absent means normal; pre-existing records remain valid (CAWS-MESSAGE-DELIVERY-ECONOMICS-001)."
+    },
     "deliver_id": {
       "type": "string",
       "minLength": 1,
@@ -88,7 +93,8 @@
         "reply_to_self",
         "message_not_found",
         "reply_target_invalid",
-        "identity_ambiguous"
+        "identity_ambiguous",
+        "urgency_invalid"
       ],
       "description": "On 'refusal' records: the refusal class (CAWS-MESSAGE-LEDGER-COMPLETENESS-001)."
     },

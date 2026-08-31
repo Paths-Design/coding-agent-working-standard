@@ -1811,6 +1811,11 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
             'Thread linkage: the message id this send replies to. Must exist and be addressed to you (CAWS-MESSAGE-LEDGER-COMPLETENESS-001).',
         },
         {
+          flag: '--urgency <critical|normal>',
+          description:
+            'Delivery-ordering signal (default normal): a critical message polls before normal traffic regardless of age — ordering, NOT authority (CAWS-MESSAGE-DELIVERY-ECONOMICS-001).',
+        },
+        {
           flag: '--allow-dead',
           description: 'Send even if the recipient is not live in the registry (escape hatch; default off)',
         },
@@ -1854,7 +1859,12 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
           description:
             "Receipt mode recorded on the delivery record: 'auto' for the heartbeat hook's auto-delivery path, 'poll' (default) for an explicit poll (CAWS-MESSAGE-LEDGER-COMPLETENESS-001).",
         },
-        { flag: '--json', description: 'Emit JSON ({message, sender?, waiting}) instead of human text' },
+        {
+          flag: '--drain <n>',
+          description:
+            'Consume up to n messages in one poll (1..10, default 1), critical-first then oldest-first — backlog coalescing for the auto-delivery hook (CAWS-MESSAGE-DELIVERY-ECONOMICS-001).',
+        },
+        { flag: '--json', description: 'Emit JSON ({message, messages, sender?, waiting, poll_ms}) instead of human text' },
         DATA_OPTION,
       ],
     },

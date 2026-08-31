@@ -64,6 +64,9 @@ export interface MessageSendCommandOptions extends BaseCommandOptions {
   /** Message id this send replies to (thread linkage). Must exist and be
    *  addressed to the caller (CAWS-MESSAGE-LEDGER-COMPLETENESS-001). */
   readonly replyTo?: string;
+  /** Delivery-ordering signal: 'critical' polls before 'normal' regardless of
+   *  age; default normal (CAWS-MESSAGE-DELIVERY-ECONOMICS-001). */
+  readonly urgency?: 'critical' | 'normal';
 }
 
 /** Maps a refusal's first store rule to a short class name for the stdout verdict. */
@@ -170,12 +173,32 @@ export function runMessageSendCommand(opts: MessageSendCommandOptions): number {
     }
   }
 
+  // --urgency validation (CAWS-MESSAGE-DELIVERY-ECONOMICS-001): 'critical' is
+  // the only non-default value; anything else is refused and ledgered.
+  if (
+    opts.urgency !== undefined &&
+    opts.urgency !== 'critical' &&
+    opts.urgency !== 'normal'
+  ) {
+    const invalidReason = `--urgency accepts exactly "critical" or "normal"; got "${String(opts.urgency)}".`;
+    recordRefusal(cawsDir, {
+      class: 'urgency_invalid',
+      to: recipient.value.sessionId,
+      reason: invalidReason,
+    });
+    out('caws message send: not sent — invalid urgency (details on stderr).');
+    err('caws message send: not sent.');
+    err(storeDiagnostic(STORE_RULES.MESSAGES_RECIPIENT_INVALID, invalidReason).message);
+    return 1;
+  }
+
   const sent = sendMessage(cawsDir, {
     actor,
     to: recipient.value.sessionId,
     text: opts.text,
     ...(opts.allowDead === true ? { requireLive: false } : {}),
     ...(opts.replyTo !== undefined && opts.replyTo.length > 0 ? { replyTo: opts.replyTo } : {}),
+    ...(opts.urgency === 'critical' ? { urgency: 'critical' as const } : {}),
   });
   if (!sent.ok) {
     out(`caws message send: not sent — ${refusalClass(sent.errors)} (details on stderr).`);
@@ -412,6 +435,9 @@ export interface MessagePollCommandOptions extends BaseCommandOptions {
    *  hook's auto-delivery path, 'poll' (default) for an explicit poll
    *  (CAWS-MESSAGE-LEDGER-COMPLETENESS-001). */
   readonly receipt?: 'auto' | 'poll';
+  /** Consume up to this many messages in one poll (1..10, default 1),
+   *  critical-first then oldest-first (CAWS-MESSAGE-DELIVERY-ECONOMICS-001). */
+  readonly drain?: number;
 }
 
 /**
@@ -447,18 +473,23 @@ export function runMessagePollCommand(opts: MessagePollCommandOptions): number {
     }
   }
 
-  const pollOpts: { waitMs?: number; peek?: boolean; receipt?: 'auto' | 'poll' } = {};
+  const pollOpts: { waitMs?: number; peek?: boolean; receipt?: 'auto' | 'poll'; drain?: number } = {};
   if (typeof opts.waitMs === 'number' && opts.waitMs > 0) pollOpts.waitMs = opts.waitMs;
   if (opts.peek === true) pollOpts.peek = true;
   if (opts.receipt === 'auto') pollOpts.receipt = 'auto';
+  if (typeof opts.drain === 'number' && Number.isFinite(opts.drain) && opts.drain > 0) {
+    pollOpts.drain = Math.floor(opts.drain);
+  }
 
+  const pollStartMs = Date.now();
   const polled = pollMessage(cawsDir, me, pollOpts);
+  const pollMs = Date.now() - pollStartMs;
   if (!polled.ok) {
     err('caws message poll: failed to read the message log.');
     err(renderDiagnostics(polled.errors, { showData }));
     return 2;
   }
-  const { message, sender } = polled.value;
+  const { message, sender, messages } = polled.value;
 
   // Mailbox depth for triage. On a peek/empty result this tells the agent how
   // many more are waiting; best-effort (a count failure does not fail the poll).
@@ -466,26 +497,43 @@ export function runMessagePollCommand(opts: MessagePollCommandOptions): number {
   const waiting = countResult.ok ? countResult.value : null;
 
   if (opts.json === true) {
-    out(JSON.stringify({ message, ...(sender !== undefined ? { sender } : {}), waiting }));
+    out(
+      JSON.stringify({
+        message,
+        ...(sender !== undefined ? { sender } : {}),
+        messages: messages.map((entry) => ({
+          message: entry.message,
+          ...(entry.sender !== undefined ? { sender: entry.sender } : {}),
+        })),
+        waiting,
+        poll_ms: pollMs,
+      })
+    );
     return 0;
   }
-  if (!message) {
+  if (messages.length === 0) {
     out('(no messages)');
     return 0;
   }
   const peekTag = opts.peek === true ? ' (peek — not consumed)' : '';
-  const senderBits: string[] = [];
-  if (sender?.worktree !== undefined) senderBits.push(`worktree ${sender.worktree}`);
-  if (sender?.specId !== undefined) senderBits.push(`spec ${sender.specId}`);
-  if (sender?.branch !== undefined) senderBits.push(`branch ${sender.branch}`);
-  const senderTag = senderBits.length > 0 ? ` (${senderBits.join(', ')})` : '';
-  out(`from ${message.actor.session_id ?? message.actor.id}${senderTag}${peekTag}:`);
-  out(message.text);
+  for (const entry of messages) {
+    const senderBits: string[] = [];
+    if (entry.sender?.worktree !== undefined) senderBits.push(`worktree ${entry.sender.worktree}`);
+    if (entry.sender?.specId !== undefined) senderBits.push(`spec ${entry.sender.specId}`);
+    if (entry.sender?.branch !== undefined) senderBits.push(`branch ${entry.sender.branch}`);
+    const senderTag = senderBits.length > 0 ? ` (${senderBits.join(', ')})` : '';
+    const urgentTag = entry.message.urgency === 'critical' ? ' [CRITICAL]' : '';
+    out(
+      `from ${entry.message.actor.session_id ?? entry.message.actor.id}${urgentTag}${senderTag}${peekTag}:`
+    );
+    out(entry.message.text);
+  }
   // `waiting` is computed AFTER this poll: on a consume it's the post-delivery
-  // remainder; on a peek it still includes the message just shown. Report how many
-  // others remain, so the threshold differs by one between the two modes.
+  // remainder; on a peek it still includes the messages just shown. Report how
+  // many others remain, so the threshold differs by the shown count between
+  // the two modes.
   if (typeof waiting === 'number') {
-    const others = opts.peek === true ? waiting - 1 : waiting;
+    const others = opts.peek === true ? waiting - messages.length : waiting;
     if (others > 0) out(`(${others} more message(s) waiting)`);
   }
   return 0;

@@ -1949,12 +1949,23 @@ export function registerShellCommands(
   applyGroupMeta(messageCmd, MESSAGE_COMMAND_META);
 
   defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'send'))
-    .action((opts: { to?: string; text?: string; allowDead?: boolean; replyTo?: string; data?: boolean }) => {
+    .action((opts: {
+      to?: string;
+      text?: string;
+      allowDead?: boolean;
+      replyTo?: string;
+      urgency?: string;
+      data?: boolean;
+    }) => {
       const code = runMessageSendCommand({
         to: opts.to ?? '',
         text: opts.text ?? '',
         ...(opts.allowDead === true ? { allowDead: true } : {}),
         ...(typeof opts.replyTo === 'string' && opts.replyTo.length > 0 ? { replyTo: opts.replyTo } : {}),
+        // The command validates the value; pass any provided string through.
+        ...(typeof opts.urgency === 'string' && opts.urgency.length > 0
+          ? { urgency: opts.urgency as 'critical' | 'normal' }
+          : {}),
         showData: opts.data === true,
       });
       exit(code);
@@ -1978,15 +1989,18 @@ export function registerShellCommands(
       wait?: string;
       peek?: boolean;
       receipt?: string;
+      drain?: string;
       json?: boolean;
       data?: boolean;
     }) => {
       const waitMs = opts.wait !== undefined ? Number(opts.wait) : undefined;
+      const drain = opts.drain !== undefined ? Number(opts.drain) : undefined;
       const code = runMessagePollCommand({
         ...(opts.me !== undefined ? { me: opts.me } : {}),
         ...(waitMs !== undefined && Number.isFinite(waitMs) ? { waitMs } : {}),
         ...(opts.peek === true ? { peek: true } : {}),
         ...(opts.receipt === 'auto' ? { receipt: 'auto' as const } : {}),
+        ...(drain !== undefined && Number.isFinite(drain) && drain > 0 ? { drain } : {}),
         json: opts.json === true,
         showData: opts.data === true,
       });
