@@ -142,3 +142,7 @@ evidence:
     status: pass
     evidence_ref: npx jest message suites (8 suites / 107 tests) + full suite + live e2e critical-first drain probe
     recorded_at: "2026-08-31T04:21:50.811Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: npx jest message suites (8 suites / 107 tests) + full suite + live e2e critical-first drain probe
+    recorded_at: "2026-08-31T04:21:51.582Z"
