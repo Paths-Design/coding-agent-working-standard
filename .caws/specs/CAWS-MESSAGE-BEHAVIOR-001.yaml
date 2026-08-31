@@ -1,0 +1,31 @@
+id: CAWS-MESSAGE-BEHAVIOR-001
+title: 'Behavior surface: silent-platform engagement badges, sender-side queued view, dead-letter escalation in the heartbeat hook'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-08-31T04:58:05.844Z'
+updated_at: '2026-08-31T04:58:05.844Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'messages-store'
+    type: behavior
+    path: 'packages/caws-cli/src/store/messages-store.ts'
+  - name: 'agents-list-cli'
+    type: behavior
+    path: 'packages/caws-cli/src/shell/commands/agents.ts'
