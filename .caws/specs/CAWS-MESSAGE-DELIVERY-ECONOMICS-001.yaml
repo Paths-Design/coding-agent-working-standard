@@ -7,20 +7,119 @@ created_at: '2026-08-31T04:09:46.075Z'
 updated_at: '2026-08-31T04:09:46.075Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/messages-store.ts
+    - packages/caws-cli/src/kernel/schemas/messages.v1.json
+    - packages/caws-cli/src/shell/commands/message.ts
+    - packages/caws-cli/templates/hook-packs/shared/agent-heartbeat.sh
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/src/store/messages-store.ts
+    - packages/caws-cli/src/kernel/schemas/messages.v1.json
+    - packages/caws-cli/src/shell/commands/message.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/templates/hook-packs/shared/agent-heartbeat.sh
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/tests/store/messages-store.test.js
+    - packages/caws-cli/tests/shell/message-command.test.js
+    - packages/caws-cli/tests/shell/message-delivery-economics.test.js
+    - .caws/hooks/agent-heartbeat.sh
+    - packages/caws-cli/README.md
+    - docs/command-reference.md
+    - docs/api/cli.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Message records gain an optional urgency field ('critical' | 'normal');
+    absent means normal and all pre-existing records remain valid. A critical
+    message is delivery-ordering signal, NOT authority: it does not change
+    liveness rules, refusal classes, or the unverified-claim footer. Telemetry
+    motive (agent-config/aim-telemetry/REPORT.md): the "STOP before destroying
+    worktree" warning was never consumed while status broadcasts were — a
+    critical message must never queue behind normal traffic.
+  - >-
+    pollMessage picks the OLDEST CRITICAL undelivered message first; normals
+    follow in age order. `poll --drain <n>` (store: drain option, 1..10,
+    default 1) consumes up to n undelivered messages in ONE lock hold —
+    critical-first, then oldest-first — appending one delivery record per
+    consumed message (deliver-once preserved). The poll JSON always carries
+    `messages` (array of the consumed records, each with its sender context
+    when the lease resolves) and `waiting` (post-consumption remainder);
+    the single-message `message` field is retained for backward
+    compatibility.
+  - >-
+    The heartbeat hook polls with `--receipt auto --drain 5` (one CLI spawn
+    per tool call). One message renders exactly like today plus a
+    "CRITICAL MESSAGE from" prefix when urgent. Two or more render as ONE
+    digest block: "N messages received (oldest first):" then per message
+    "<id> [CRITICAL] from <sender>: <first line, 120 chars>" and a footer
+    "full text: caws message status <id> (or history)". The unverified-claim
+    warning is preserved verbatim in both renderings. A backlog drains in
+    one call instead of one-per-tool-call.
+  - >-
+    The hook appends per-emission telemetry to
+    .caws/leases/heartbeat-message-telemetry.jsonl: {ts, session_id,
+    injected_count, bytes, waiting, poll_ms} — operational cache, best-effort,
+    never blocking, never read by authority surfaces. This is the measurement
+    Track 4 consumes.
+  - >-
+    Editing the shared hook template bumps SHARED_PACK_VERSION and recomputes
+    tests/init/pack-fingerprints.json; the repo's installed
+    .caws/hooks/agent-heartbeat.sh is updated to match.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      A queue with one critical message sent AFTER two normal messages (all
+      undelivered), addressed to R.
+    when: 'R polls once.'
+    then: >-
+      The critical message is delivered first (its delivery record precedes
+      the normals'); the ledger shows exactly one new delivery record; the
+      record carries mode 'poll'.
+  - id: A2
+    given: 'A queue of three undelivered normals plus one critical, addressed to R.'
+    when: 'R runs `caws message poll --drain 3`.'
+    then: >-
+      Exactly three delivery records are appended (critical + the two oldest
+      normals); the poll JSON messages array has length 3 ordered
+      critical-first then oldest-first; waiting reflects the post-consumption
+      remainder; the single-message `message` field equals messages[0].
+  - id: A3
+    given: 'A message record with urgency critical and one normal, both sent.'
+    when: 'The operator runs `caws message history --with <sender> --json`.'
+    then: >-
+      Both records carry their urgency field verbatim; a pre-existing record
+      without urgency parses with urgency absent (no synthetic value).
+  - id: A4
+    given: 'The built CLI and a live recipient.'
+    when: 'The operator runs `caws message send --urgency critical --to R --text "STOP ..."` and `caws message send --urgency bogus --to R --text x`.'
+    then: >-
+      The critical send exits 0 and its record carries urgency critical; the
+      bogus value is refused with a diagnostic naming the allowed values and
+      a refusal record is ledgered; `--urgency` omitted writes no urgency
+      field (normal).
+  - id: A5
+    given: >-
+      The heartbeat hook template and repo-installed copy, polled with
+      --drain 5, receiving one critical message followed (next call) by two
+      normals.
+    when: 'Each PreToolUse fires.'
+    then: >-
+      The first injection renders "CRITICAL MESSAGE from" with the
+      unverified-claim footer; the second renders one digest block naming
+      both messages with ids and the status/history footer, and appends two
+      telemetry lines to .caws/leases/heartbeat-message-telemetry.jsonl with
+      injected_count 1 and 2.
+  - id: A6
+    given: 'The updated schema and a legacy messages.jsonl (no urgency fields).'
+    when: 'The store reads the file and the schema test runs.'
+    then: >-
+      Reads succeed with zero malformed-line diagnostics; legacy records
+      validate against the updated schema; urgency is absent on legacy
+      records.
 non_functional: {}
 contracts:
   - name: 'messages-ledger-records'
