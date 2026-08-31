@@ -2,10 +2,11 @@ id: CAWS-AGENTS-FORK-IDENTITY-001
 title: 'Fork-aware lease identity: harness_session_kind and forked_from on leases, hook_pid relabel, conjoined-session flags in agents list, namespace boundary in the hook notice'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: wt-agents-fork-identity
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-agents-fork-identity at 27ffc50b15cd4525bed180da2262dbc9217e28bf'
 created_at: '2026-08-31T04:25:15.533Z'
-updated_at: '2026-08-31T04:37:46.426Z'
+updated_at: '2026-08-31T04:37:48.792Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/kernel/worktree/leases.ts
