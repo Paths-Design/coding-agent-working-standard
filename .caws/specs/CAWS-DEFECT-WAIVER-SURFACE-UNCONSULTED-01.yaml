@@ -67,8 +67,10 @@ acceptance:
     given: 'A scratch repo whose policy declares NO gates.'
     when: 'The operator runs `caws waiver create WV-1 --gate scope_boundary --spec SPEC-X --title t --reason r`.'
     then: >-
-      Behavior is exactly the pre-slice behavior (kernel-validated refusal
-      or acceptance as before) — the surface change never alters
+      Behavior is exactly the pre-slice behavior: the kernel validates shape
+      and duplicate state only (gate applicability is derived at gates-run
+      time), so create ACCEPTS and writes the file; the new notice appears
+      regardless of the gate list contents. The surface change never alters
       applicability.
   - id: A4
     given: 'The updated docs.'
