@@ -115,3 +115,8 @@ contracts:
   - name: 'agents-heartbeat-cli'
     type: behavior
     path: 'packages/caws-cli/src/shell/commands/agents.ts'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: npx jest agents suites (7 suites / 36 tests) + full suite + live e2e fork-identity + conjoined hint probes
+    recorded_at: "2026-08-31T04:37:18.097Z"
