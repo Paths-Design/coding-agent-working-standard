@@ -9,13 +9,16 @@
 // lighter: line order is authoritative, no hash chain — losing or reordering a
 // chat message is not an audit-integrity failure.
 //
-// Two record kinds share the file (see messages.v1.json):
-//   - { record: 'message', id, actor, to, channel, text, ts }  — a directed send
-//   - { record: 'delivery', deliver_id, ts }                    — marks consumed
+// Three record kinds share the file (see messages.v1.json):
+//   - { record: 'message', id, actor, to, channel, text, ts, reply_to? } — a directed send
+//   - { record: 'delivery', deliver_id, ts, mode? }               — marks consumed
+//   - { record: 'refusal', id, class, to, reason, ts }            — a refused send/reply
 //
 // Delivery semantics: a message is delivered at most once (a delivery record is
 // appended when a recipient polls it) but retained in channel history forever.
 // Replay rebuilds per-recipient mailboxes excluding delivered ids — O(n).
+// Refusal records are telemetry only: best-effort, never read back for
+// delivery state, and invisible to poll/inbox/history.
 
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
@@ -30,6 +33,7 @@ import { sleepSyncMs, storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
 
 const MESSAGES_FILENAME = 'messages.jsonl';
+const MESSAGES_ARCHIVE_FILENAME = 'messages.jsonl.archive';
 /** A recipient lease older than this (no heartbeat) is not considered live. */
 const LIVENESS_TTL_MS = 30 * 60 * 1000; // 30m, matching the leases-store stale default
 
@@ -44,6 +48,10 @@ export interface MessageRecord {
   readonly channel: string;
   readonly text: string;
   readonly ts: string;
+  /** The message id this message replies to (thread linkage). Written by
+   *  `caws message reply` and by `send --reply-to`. Absent on plain sends and
+   *  on all pre-existing records — optional and read-backward-compatible. */
+  readonly reply_to?: string;
 }
 export interface MessageActor {
   readonly kind: 'human' | 'agent' | 'system' | 'automation';
@@ -54,6 +62,30 @@ export interface MessageActor {
 interface DeliveryRecord {
   readonly record: 'delivery';
   readonly deliver_id: string;
+  readonly ts: string;
+  /** How the message was consumed: 'auto' (heartbeat hook auto-delivery) or
+   *  'poll' (explicit poll). Absent on pre-existing records (unknown). */
+  readonly mode?: 'auto' | 'poll';
+}
+
+/** Refusal classes recorded on a refusal record (CAWS-MESSAGE-LEDGER-COMPLETENESS-001). */
+export type RefusalClass =
+  | 'recipient_not_live'
+  | 'recipient_invalid'
+  | 'alias_unresolved'
+  | 'reply_to_self'
+  | 'message_not_found'
+  | 'reply_target_invalid'
+  | 'identity_ambiguous';
+
+export interface RefusalRecord {
+  readonly record: 'refusal';
+  readonly id: string;
+  readonly class: RefusalClass;
+  /** The attempted addressing target: recipient id when known, else the
+   *  message id being replied to (message_not_found / reply_to_self). */
+  readonly to: string;
+  readonly reason: string;
   readonly ts: string;
 }
 
@@ -163,7 +195,7 @@ function describeNotLiveReason(liveness: RecipientLiveness): string {
   }
 }
 
-function appendLine(cawsDir: string, record: MessageRecord | DeliveryRecord): Result<void> {
+function appendLine(cawsDir: string, record: MessageRecord | DeliveryRecord | RefusalRecord): Result<void> {
   try {
     fs.mkdirSync(cawsDir, { recursive: true });
     fs.appendFileSync(messagesPath(cawsDir), JSON.stringify(record) + '\n');
@@ -175,6 +207,30 @@ function appendLine(cawsDir: string, record: MessageRecord | DeliveryRecord): Re
         `Failed to append to ${MESSAGES_FILENAME}: ${(e as Error).message}`
       )
     );
+  }
+}
+
+/**
+ * Best-effort refusal telemetry (CAWS-MESSAGE-LEDGER-COMPLETENESS-001): append
+ * a refusal record so attempt-level success is measurable from the ledger.
+ * NEVER fails the caller and NEVER changes a verdict — a failed append is
+ * silently dropped (the refusal itself is still reported on stdout/stderr).
+ */
+export function recordRefusal(
+  cawsDir: string,
+  params: { class: RefusalClass; to: string; reason: string }
+): void {
+  try {
+    appendLine(cawsDir, {
+      record: 'refusal',
+      id: crypto.randomUUID(),
+      class: params.class,
+      to: params.to,
+      reason: params.reason,
+      ts: new Date().toISOString(),
+    });
+  } catch {
+    /* best-effort telemetry — refusal recording never fails the command */
   }
 }
 
@@ -198,14 +254,28 @@ export interface MessageSendOutcome {
  *   - `requireLive` is set and the recipient has no lease, or its heartbeat
  *     is older than the TTL (a stopped lease with a FRESH heartbeat is
  *     deliverable — see {@link describeRecipientLiveness})
- * On success, persists a 'message' record and returns it.
+ * On success, persists a 'message' record (with reply_to when `replyTo` is
+ * given) and returns it. Every refusal is mirrored by a best-effort refusal
+ * record (CAWS-MESSAGE-LEDGER-COMPLETENESS-001).
  */
 export function sendMessage(
   cawsDir: string,
-  params: { actor: MessageActor; to: string; text: string; requireLive?: boolean }
+  params: {
+    actor: MessageActor;
+    to: string;
+    text: string;
+    requireLive?: boolean;
+    /** Message id this send replies to (thread linkage). Written verbatim. */
+    replyTo?: string;
+  }
 ): Result<MessageSendOutcome> {
   const { actor, to, text } = params;
   if (typeof to !== 'string' || to.length === 0 || !ENDPOINT_RE.test(to)) {
+    recordRefusal(cawsDir, {
+      class: 'recipient_invalid',
+      to: String(to),
+      reason: `Recipient "${to}" is empty or contains characters outside ${ENDPOINT_RE}.`,
+    });
     return err(
       storeDiagnostic(
         STORE_RULES.MESSAGES_RECIPIENT_INVALID,
@@ -218,10 +288,12 @@ export function sendMessage(
     const liveness = describeRecipientLiveness(cawsDir, to);
     if (!liveness.ok) return err(liveness.errors);
     if (!liveness.value.live) {
+      const reason = describeNotLiveReason(liveness.value);
+      recordRefusal(cawsDir, { class: 'recipient_not_live', to, reason });
       return err(
         storeDiagnostic(
           STORE_RULES.MESSAGES_RECIPIENT_NOT_LIVE,
-          `Recipient session "${to}" is not live (reason: ${describeNotLiveReason(liveness.value)}). ` +
+          `Recipient session "${to}" is not live (reason: ${reason}). ` +
             `The message was NOT sent — a send to a dead session would queue into a void and ` +
             `look identical to silence. Run \`caws agents list\` to confirm the recipient's status, ` +
             `or re-send with \`caws message send --allow-dead\` to deliver anyway.`
@@ -239,6 +311,7 @@ export function sendMessage(
     channel: channelId(from, to),
     text,
     ts: new Date().toISOString(),
+    ...(params.replyTo !== undefined && params.replyTo.length > 0 ? { reply_to: params.replyTo } : {}),
   };
   const appended = appendLine(cawsDir, record);
   if (!appended.ok) return err(appended.errors);
@@ -424,6 +497,10 @@ export interface PollOptions {
   readonly waitMs?: number;
   /** Read the next message WITHOUT consuming it (no delivery record appended). */
   readonly peek?: boolean;
+  /** Receipt mode recorded on the delivery record: 'auto' when this poll is
+   *  the heartbeat hook's auto-delivery path, 'poll' for an explicit poll.
+   *  Defaults to 'poll' (CAWS-MESSAGE-LEDGER-COMPLETENESS-001). */
+  readonly receipt?: 'auto' | 'poll';
 }
 
 /** Server-side cap on --wait so a caller can't hold a poll open indefinitely. */
@@ -433,7 +510,7 @@ const POLL_RETRY_MS = 150;
 
 interface ParsedMessageLine {
   readonly raw: string;
-  readonly parsed: MessageRecord | DeliveryRecord | null;
+  readonly parsed: MessageRecord | DeliveryRecord | RefusalRecord | null;
 }
 
 function readMessageLines(cawsDir: string): Result<{ readonly lines: ParsedMessageLine[]; readonly diagnostics: Diagnostic[] }> {
@@ -472,8 +549,8 @@ function readMessageLines(cawsDir: string): Result<{ readonly lines: ParsedMessa
       continue;
     }
     const rec = parsed as { record?: string };
-    if (rec.record === 'message' || rec.record === 'delivery') {
-      lines.push({ raw: line, parsed: parsed as MessageRecord | DeliveryRecord });
+    if (rec.record === 'message' || rec.record === 'delivery' || rec.record === 'refusal') {
+      lines.push({ raw: line, parsed: parsed as MessageRecord | DeliveryRecord | RefusalRecord });
     } else {
       lines.push({ raw: line, parsed: null });
     }
@@ -593,15 +670,43 @@ export function pruneMessages(cawsDir: string, opts: MessagePruneOptions): Resul
     const candidateIds = new Set(plan.candidates.map((candidate) => candidate.id));
     let prunedDeliveryRecords = 0;
     const keptLines: string[] = [];
+    const archivedLines: string[] = [];
     for (const entry of lines) {
       if (entry.parsed?.record === 'message' && candidateIds.has(entry.parsed.id)) {
+        archivedLines.push(entry.raw);
         continue;
       }
       if (entry.parsed?.record === 'delivery' && candidateIds.has(entry.parsed.deliver_id)) {
         prunedDeliveryRecords++;
+        archivedLines.push(entry.raw);
         continue;
       }
       keptLines.push(entry.raw);
+    }
+
+    // Archive-first (CAWS-MESSAGE-LEDGER-COMPLETENESS-001): append the pruned
+    // records plus one {record: 'prune', ids, ts} marker to the archive BEFORE
+    // rewriting the live ledger, so pruned history is never silently dropped.
+    // The archive is telemetry, not authority — no command reads it for
+    // delivery state. A retried prune re-appends (append-only log semantics).
+    const marker = JSON.stringify({
+      record: 'prune',
+      ids: plan.candidates.map((candidate) => candidate.id),
+      ts: new Date().toISOString(),
+    });
+    try {
+      fs.appendFileSync(
+        path.join(cawsDir, MESSAGES_ARCHIVE_FILENAME),
+        [marker, ...archivedLines].join('\n') + '\n'
+      );
+    } catch (e) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.MESSAGES_ARCHIVE_APPEND_FAILED,
+          `Failed to append pruned records to ${MESSAGES_ARCHIVE_FILENAME}: ${(e as Error).message}. ` +
+            `The live ledger was NOT modified.`
+        )
+      );
     }
 
     const file = messagesPath(cawsDir);
@@ -640,8 +745,9 @@ export function pruneMessages(cawsDir: string, opts: MessagePruneOptions): Resul
 export function pollMessage(cawsDir: string, me: string, options: PollOptions = {}): Result<PollResult> {
   const waitMs = Math.min(Math.max(0, options.waitMs ?? 0), MAX_WAIT_MS);
   const deadline = Date.now() + waitMs;
+  const receipt = options.receipt === 'auto' ? 'auto' : 'poll';
   const attempt = () =>
-    withLifecycleLock(cawsDir, () => pollMessageLocked(cawsDir, me, options.peek === true), {
+    withLifecycleLock(cawsDir, () => pollMessageLocked(cawsDir, me, options.peek === true, receipt), {
       lockPath: path.join(cawsDir, MESSAGES_FILENAME + '.lock'),
     });
 
@@ -655,7 +761,7 @@ export function pollMessage(cawsDir: string, me: string, options: PollOptions = 
   }
 }
 
-function pollMessageLocked(cawsDir: string, me: string, peek: boolean): Result<PollResult> {
+function pollMessageLocked(cawsDir: string, me: string, peek: boolean, receipt: 'auto' | 'poll'): Result<PollResult> {
   const file = messagesPath(cawsDir);
   if (!fs.existsSync(file)) return ok({ message: null, diagnostics: [] });
 
@@ -714,6 +820,7 @@ function pollMessageLocked(cawsDir: string, me: string, peek: boolean): Result<P
     record: 'delivery',
     deliver_id: next.id,
     ts: new Date().toISOString(),
+    mode: receipt,
   });
   if (!deliveryAppend.ok) return err(deliveryAppend.errors);
   return ok({ message: next, ...withSender, diagnostics });
@@ -816,6 +923,58 @@ export function inboxMessages(
     messages: waitingMessages.slice(0, limit),
     waiting: waitingMessages.length,
     diagnostics,
+  });
+}
+
+/** One undelivered message anywhere in the repo, with its recipient and age. */
+export interface InboxAllEntry {
+  readonly message: MessageRecord;
+  readonly recipient: string;
+  readonly ageMs: number;
+}
+
+export interface MessageInboxAllResult {
+  readonly messages: readonly InboxAllEntry[];
+  readonly count: number;
+  readonly oldestAgeMs: number | null;
+  readonly diagnostics: ReadonlyArray<Diagnostic>;
+}
+
+/**
+ * Repo-wide undelivered view (CAWS-MESSAGE-LEDGER-COMPLETENESS-001): every
+ * message with no delivery record, oldest-first, annotated with recipient and
+ * age. Read-only — consumes nothing. Lets a sender or operator see queued
+ * mail without polling a specific mailbox.
+ */
+export function inboxAllMessages(cawsDir: string): Result<MessageInboxAllResult> {
+  const loaded = readMessageLines(cawsDir);
+  if (!loaded.ok) return err(loaded.errors);
+  const delivered = new Set<string>();
+  const messages: MessageRecord[] = [];
+  for (const entry of loaded.value.lines) {
+    if (entry.parsed?.record === 'delivery' && typeof entry.parsed.deliver_id === 'string') {
+      delivered.add(entry.parsed.deliver_id);
+    } else if (entry.parsed?.record === 'message') {
+      messages.push(entry.parsed);
+    }
+  }
+  const now = Date.now();
+  const undelivered = messages
+    .filter((m) => !delivered.has(m.id))
+    .sort((a, b) => a.ts.localeCompare(b.ts))
+    .map((message) => {
+      const ts = Date.parse(message.ts);
+      return {
+        message,
+        recipient: message.to,
+        ageMs: Number.isFinite(ts) ? Math.max(0, now - ts) : 0,
+      };
+    });
+  return ok({
+    messages: undelivered,
+    count: undelivered.length,
+    oldestAgeMs: undelivered[0]?.ageMs ?? null,
+    diagnostics: loaded.value.diagnostics,
   });
 }
 

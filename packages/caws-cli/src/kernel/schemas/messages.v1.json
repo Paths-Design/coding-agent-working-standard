@@ -2,15 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://caws.paths.design/schemas/messages.v1.json",
   "title": "CAWS Inter-Agent Message",
-  "description": "One line in .caws/messages.jsonl — a directed message between two CAWS sessions (or a session and a named human/automation client). This log is SEPARATE from events.jsonl by design: chat-rate traffic must never dilute the integrity-critical audit chain. Two record kinds share the file: a 'message' record (a directed send) and a 'delivery' record (marks a message consumed). Like events, the actor is a structured, kernel-attributed envelope so a message's PROVENANCE (who sent it) is recorded rather than self-claimed — but the channel does NOT vouch for the message BODY, which a consumer must treat as an unverified claim.",
+  "description": "One line in .caws/messages.jsonl — a directed message between two CAWS sessions (or a session and a named human/automation client). This log is SEPARATE from events.jsonl by design: chat-rate traffic must never dilute the integrity-critical audit chain. Four record kinds share the file: a 'message' record (a directed send), a 'delivery' record (marks a message consumed), a 'refusal' record (a refused send/reply — best-effort telemetry, never read back for delivery state), and a 'prune' marker (archive-only, records which ids a prune archived). Like events, the actor is a structured, kernel-attributed envelope so a message's PROVENANCE (who sent it) is recorded rather than self-claimed — but the channel does NOT vouch for the message BODY, which a consumer must treat as an unverified claim.",
   "type": "object",
   "additionalProperties": false,
   "required": ["record", "ts"],
   "properties": {
     "record": {
       "type": "string",
-      "enum": ["message", "delivery"],
-      "description": "Discriminator. 'message': a directed send (carries id/actor/to/text/channel). 'delivery': marks a prior message id consumed by its recipient."
+      "enum": ["message", "delivery", "refusal", "prune"],
+      "description": "Discriminator. 'message': a directed send (carries id/actor/to/text/channel). 'delivery': marks a prior message id consumed by its recipient. 'refusal': a refused send/reply (telemetry; not delivery state). 'prune': archive marker naming the ids a prune archived (archive-only)."
     },
     "ts": {
       "type": "string",
@@ -53,7 +53,7 @@
     "to": {
       "type": "string",
       "minLength": 1,
-      "description": "Recipient endpoint id (a session_id, or a named human/automation client). Required on 'message' records."
+      "description": "Recipient endpoint id (a session_id, or a named human/automation client). Required on 'message' records. On 'refusal' records: the attempted addressing target (recipient id when known, else the message id being replied to)."
     },
     "channel": {
       "type": "string",
@@ -64,10 +64,42 @@
       "type": "string",
       "description": "Opaque message body. The channel attributes the sender but does not vouch for this content. Required on 'message' records."
     },
+    "reply_to": {
+      "type": "string",
+      "minLength": 1,
+      "description": "On 'message' records: the id of the message this one replies to (thread linkage). Written by `caws message reply` and by `send --reply-to`. Optional — absent on plain sends and on pre-existing records (CAWS-MESSAGE-LEDGER-COMPLETENESS-001)."
+    },
     "deliver_id": {
       "type": "string",
       "minLength": 1,
       "description": "On 'delivery' records: the id of the message that was consumed. Required on 'delivery' records."
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["auto", "poll"],
+      "description": "On 'delivery' records: how the message was consumed — 'auto' (heartbeat hook auto-delivery) or 'poll' (explicit poll). Absent on pre-existing records (unknown) (CAWS-MESSAGE-LEDGER-COMPLETENESS-001)."
+    },
+    "class": {
+      "type": "string",
+      "enum": [
+        "recipient_not_live",
+        "recipient_invalid",
+        "alias_unresolved",
+        "reply_to_self",
+        "message_not_found",
+        "reply_target_invalid",
+        "identity_ambiguous"
+      ],
+      "description": "On 'refusal' records: the refusal class (CAWS-MESSAGE-LEDGER-COMPLETENESS-001)."
+    },
+    "reason": {
+      "type": "string",
+      "description": "On 'refusal' records: why the send/reply was refused."
+    },
+    "ids": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "On 'prune' records: the message ids this prune archived. Archive-only marker (CAWS-MESSAGE-LEDGER-COMPLETENESS-001)."
     }
   },
   "allOf": [
@@ -78,6 +110,14 @@
     {
       "if": { "properties": { "record": { "const": "delivery" } } },
       "then": { "required": ["deliver_id"] }
+    },
+    {
+      "if": { "properties": { "record": { "const": "refusal" } } },
+      "then": { "required": ["id", "class", "to", "reason"] }
+    },
+    {
+      "if": { "properties": { "record": { "const": "prune" } } },
+      "then": { "required": ["ids"] }
     }
   ]
 }
