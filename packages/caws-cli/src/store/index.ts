@@ -134,12 +134,16 @@ export {
   pollMessage,
   inboxCount,
   inboxMessages,
+  inboxAllMessages,
   channelHistory,
   pruneMessages,
   isRecipientLive,
   resolveRecipient,
   getMessageDeliveryState,
   channelId,
+  recordRefusal,
+  describeRecipientLiveness,
+  formatAge,
 } from './messages-store';
 export type {
   MessageRecord,
@@ -155,4 +159,8 @@ export type {
   MessagePrunePlan,
   MessagePruneResult,
   ResolvedRecipient,
+  InboxAllEntry,
+  MessageInboxAllResult,
+  RefusalRecord,
+  RefusalClass,
 } from './messages-store';

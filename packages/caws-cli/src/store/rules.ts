@@ -197,6 +197,14 @@ export const STORE_RULES = {
    *  session with a fresh heartbeat. The alias names a binding, not an
    *  address — resolution is refused rather than guessed. */
   MESSAGES_ALIAS_UNRESOLVED: 'store.messages.alias_unresolved',
+  /** `caws message send --reply-to` referenced a message id that does not
+   *  exist in messages.jsonl, or one not addressed to the caller. Refused —
+   *  a fabricated linkage would corrupt thread telemetry. */
+  MESSAGES_REPLY_TARGET_INVALID: 'store.messages.reply_target_invalid',
+  /** Appending pruned records to messages.jsonl.archive failed. The prune is
+   *  aborted BEFORE the live ledger is rewritten so pruned history is never
+   *  silently dropped. */
+  MESSAGES_ARCHIVE_APPEND_FAILED: 'store.messages.archive_append_failed',
   // AUTH-BINDING-BRIDGE-001: bridge-binding refusals.
   BRIDGE_FOREIGN_OWNER: 'store.claims.bridge_foreign_owner',
   BRIDGE_FILE_INVALID: 'store.claims.bridge_file_invalid',

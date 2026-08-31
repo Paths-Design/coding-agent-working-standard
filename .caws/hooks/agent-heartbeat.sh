@@ -244,6 +244,7 @@ _HEARTBEAT_CTX="$(printf '%s' "$CLI_OUT" | EMIT_STATE_FILE="$EMIT_STATE_FILE" no
 _MSG_OUT="$(
   caws_run_cli message poll \
     --me "$HOOK_SESSION_ID" \
+    --receipt auto \
     --json \
   2>/dev/null
 )" || _MSG_OUT=""

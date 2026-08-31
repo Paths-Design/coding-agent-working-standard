@@ -20,6 +20,7 @@ const { execFileSync } = require('child_process');
 const {
   runMessageSendCommand,
   runMessagePollCommand,
+  runMessageInboxCommand,
 } = require('../../dist/shell/commands/message');
 const { initProject } = require('../../dist/store/init-store');
 
@@ -87,13 +88,23 @@ test('send to a live recipient returns exit 0 and reports the channel', () => {
   expect(out.join('\n')).toMatch(/sent to bob/);
 });
 
-test('send to a non-live recipient returns exit 1 and does not write the log', () => {
+test('send to a non-live recipient returns exit 1 and does not write a message record', () => {
   const root = mkRepo();
   const { err, opts } = io(root, 'alice');
   const code = runMessageSendCommand({ ...opts, to: 'ghost', text: 'anyone?' });
   expect(code).toBe(1);
   expect(err.join('\n')).toMatch(/not live|not sent/i);
-  expect(fs.existsSync(path.join(root, '.caws', 'messages.jsonl'))).toBe(false);
+  // CAWS-MESSAGE-LEDGER-COMPLETENESS-001: refusal record only, no message record.
+  const lines = fs
+    .readFileSync(path.join(root, '.caws', 'messages.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  expect(lines).toHaveLength(1);
+  expect(lines[0].record).toBe('refusal');
+  expect(lines[0].class).toBe('recipient_not_live');
+  expect(lines[0].to).toBe('ghost');
+  expect(lines.some((l) => l.record === 'message')).toBe(false);
 });
 
 test('send with --allow-dead bypasses the liveness check and returns exit 0', () => {
@@ -292,8 +303,16 @@ test('UX A3: a refused send is observable on stdout even with stderr discarded',
   expect(code).toBe(1);
   const stdout = out.join('\n');
   expect(stdout).toMatch(/not sent — recipient not live/);
-  // and still nothing was written
-  expect(fs.existsSync(path.join(root, '.caws', 'messages.jsonl'))).toBe(false);
+  // CAWS-MESSAGE-LEDGER-COMPLETENESS-001: no message record — the refusal is
+  // ledgered as a refusal record (attempt telemetry), not as a send.
+  const lines = fs
+    .readFileSync(path.join(root, '.caws', 'messages.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  expect(lines).toHaveLength(1);
+  expect(lines[0].record).toBe('refusal');
+  expect(lines[0].class).toBe('recipient_not_live');
 });
 
 test('UX A4: reply sends to the original sender on the same channel', () => {
@@ -395,4 +414,130 @@ test('UX A7: poll renders registry-derived sender context (worktree + spec)', ()
   const bobIo = io(root, 'bob');
   expect(runMessagePollCommand({ ...bobIo.opts })).toBe(0);
   expect(bobIo.out.join('\n')).toMatch(/from alice \(worktree wt-alice, spec SPEC-A\):/);
+});
+
+// ─── CAWS-MESSAGE-LEDGER-COMPLETENESS-001 ─────────────────────────────────────
+
+test('LEDGER A3: send --reply-to to an unknown id is refused and ledgered', () => {
+  const root = mkRepo();
+  makeLive(root, 'bob');
+  const { out, opts } = io(root, 'alice');
+  const code = runMessageSendCommand({ ...opts, to: 'bob', text: 'hi', replyTo: 'nope-1' });
+  expect(code).toBe(1);
+  expect(out.join('\n')).toMatch(/not sent — reply target invalid/);
+  const lines = fs
+    .readFileSync(path.join(root, '.caws', 'messages.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  expect(lines).toHaveLength(1);
+  expect(lines[0].record).toBe('refusal');
+  expect(lines[0].class).toBe('reply_target_invalid');
+  expect(lines[0].to).toBe('nope-1');
+});
+
+test('LEDGER A3: send --reply-to to a message not addressed to the caller is refused', () => {
+  const root = mkRepo();
+  makeLive(root, 'alice');
+  makeLive(root, 'bob');
+  // bob sends to alice first
+  const { opts: bobOpts } = io(root, 'bob');
+  expect(runMessageSendCommand({ ...bobOpts, to: 'alice', text: 'for alice' })).toBe(0);
+  const linesBefore = fs
+    .readFileSync(path.join(root, '.caws', 'messages.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  const msgId = linesBefore.find((l) => l.record === 'message').id;
+  // bob tries to attach that message (addressed to alice) to a NEW send — but the
+  // reply target must be addressed to the CALLER (bob), so this is refused.
+  const code = runMessageSendCommand({ ...bobOpts, to: 'alice', text: 'thread?', replyTo: msgId });
+  expect(code).toBe(1);
+  const { out } = io(root, 'bob');
+  const code2 = runMessageSendCommand({ ...{ cwd: root, env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'bob' }, out: (s) => out.push(s), err: () => {} }, to: 'alice', text: 'thread?', replyTo: msgId });
+  expect(code2).toBe(1);
+  expect(out.join('\n')).toMatch(/not sent — reply target invalid/);
+});
+
+test('LEDGER A2: a valid send --reply-to writes reply_to on the record', () => {
+  const root = mkRepo();
+  makeLive(root, 'alice');
+  makeLive(root, 'bob');
+  const { opts: bobOpts } = io(root, 'bob');
+  expect(runMessageSendCommand({ ...bobOpts, to: 'alice', text: 'first' })).toBe(0);
+  const msgId = JSON.parse(
+    fs
+      .readFileSync(path.join(root, '.caws', 'messages.jsonl'), 'utf8')
+      .trim()
+      .split('\n')[0]
+  ).id;
+  const { opts: aliceOpts } = io(root, 'alice');
+  const code = runMessageSendCommand({ ...aliceOpts, to: 'bob', text: 'linked reply', replyTo: msgId });
+  expect(code).toBe(0);
+  const lines = fs
+    .readFileSync(path.join(root, '.caws', 'messages.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  const linked = lines.find((l) => l.record === 'message' && l.text === 'linked reply');
+  expect(linked.reply_to).toBe(msgId);
+});
+
+test('LEDGER A2: reply writes reply_to on the new record', () => {
+  const root = mkRepo();
+  makeLive(root, 'alice');
+  makeLive(root, 'bob');
+  const { opts: bobOpts } = io(root, 'bob');
+  expect(runMessageSendCommand({ ...bobOpts, to: 'alice', text: 'question' })).toBe(0);
+  const msgId = JSON.parse(
+    fs
+      .readFileSync(path.join(root, '.caws', 'messages.jsonl'), 'utf8')
+      .trim()
+      .split('\n')[0]
+  ).id;
+  const { opts: aliceOpts } = io(root, 'alice');
+  expect(runMessageReplyCommand({ ...aliceOpts, id: msgId, text: 'answer' })).toBe(0);
+  const lines = fs
+    .readFileSync(path.join(root, '.caws', 'messages.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  const answer = lines.find((l) => l.record === 'message' && l.text === 'answer');
+  expect(answer.reply_to).toBe(msgId);
+});
+
+test('LEDGER A4: poll --receipt auto marks the delivery record mode=auto', () => {
+  const root = mkRepo();
+  makeLive(root, 'alice');
+  makeLive(root, 'bob');
+  const { opts: bobOpts } = io(root, 'bob');
+  expect(runMessageSendCommand({ ...bobOpts, to: 'alice', text: 'auto me' })).toBe(0);
+  const { opts: aliceOpts } = io(root, 'alice');
+  expect(runMessagePollCommand({ ...aliceOpts, receipt: 'auto' })).toBe(0);
+  const lines = fs
+    .readFileSync(path.join(root, '.caws', 'messages.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  expect(lines.find((l) => l.record === 'delivery').mode).toBe('auto');
+});
+
+test('LEDGER A5: inbox --all lists repo-wide undelivered mail without consuming', () => {
+  const root = mkRepo();
+  makeLive(root, 'alice');
+  makeLive(root, 'bob');
+  const { opts: bobOpts } = io(root, 'bob');
+  expect(runMessageSendCommand({ ...bobOpts, to: 'alice', text: 'queued one' })).toBe(0);
+  const { out, opts: aliceOpts } = io(root, 'alice');
+  expect(runMessageInboxCommand({ ...aliceOpts, all: true })).toBe(0);
+  const stdout = out.join('\n');
+  expect(stdout).toMatch(/Repo-wide inbox: 1 undelivered message/);
+  expect(stdout).toMatch(/queued one/);
+  // read-only: still one undelivered after the --all listing
+  const after = fs
+    .readFileSync(path.join(root, '.caws', 'messages.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  expect(after.filter((l) => l.record === 'delivery')).toHaveLength(0);
 });

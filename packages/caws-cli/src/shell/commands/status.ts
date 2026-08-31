@@ -56,6 +56,8 @@ import {
   resolveRepoRoot,
   safeLeaseFilename,
   loadBridges,
+  inboxAllMessages,
+  formatAge,
 } from '../../store';
 import { resolveBinding } from '../binding/resolve-binding';
 import { renderDiagnostics } from '../render/diagnostic';
@@ -338,6 +340,17 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
   const chainBroken = report.findings.some(
     (f) => f.rule === 'doctor.event.chain_invalid' && f.severity === 'error'
   );
+
+  // 8b. Undelivered mail summary (CAWS-MESSAGE-LEDGER-COMPLETENESS-001):
+  // read-only, and a message-log failure never blocks status.
+  let mailSummary: { count: number; oldestAgeMs: number | null } = { count: 0, oldestAgeMs: null };
+  try {
+    const mail = inboxAllMessages(cawsDir);
+    if (mail.ok) mailSummary = { count: mail.value.count, oldestAgeMs: mail.value.oldestAgeMs };
+  } catch {
+    /* non-blocking */
+  }
+
   const panels = selectedPanels(opts);
   const effectiveLeaseSummary = wantsHeartbeat
     ? (callSummarizeActiveAgentsSafe(leases, now, leaseTtl) ?? EMPTY_ACTIVITY_SUMMARY)
@@ -410,11 +423,25 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
         findings: report.findings,
       };
     }
+    if (mailSummary.count > 0) {
+      payload.messages = {
+        undelivered: mailSummary.count,
+        ...(mailSummary.oldestAgeMs !== null ? { oldest_age_ms: mailSummary.oldestAgeMs } : {}),
+      };
+    }
     out(JSON.stringify(payload, null, 2));
     return 0;
   }
 
   out(opts.short === true ? renderShortStatus(renderInput) : renderStatus(renderInput));
+
+  if (mailSummary.count > 0) {
+    out(
+      `messages: ${mailSummary.count} undelivered (oldest ${
+        mailSummary.oldestAgeMs !== null ? formatAge(mailSummary.oldestAgeMs) : 'unknown'
+      })`
+    );
+  }
 
   // Surface lease-load diagnostics in showData mode (non-blocking).
   if (showData && Array.isArray(leasesDiagnostics) && leasesDiagnostics.length > 0) {

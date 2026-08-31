@@ -23,6 +23,8 @@ const {
   sendMessage,
   pollMessage,
   inboxCount,
+  inboxAllMessages,
+  pruneMessages,
   channelHistory,
   isRecipientLive,
   channelId,
@@ -104,8 +106,17 @@ test('A2: a send to a recipient with no lease is refused and writes no record', 
   const sent = sendMessage(caws, { actor: sender, to: 'ghost', text: 'anyone there?' });
   expect(sent.ok).toBe(false);
   expect(sent.errors[0].rule).toBe(NOT_LIVE);
-  // no message file written at all
-  expect(fs.existsSync(path.join(caws, 'messages.jsonl'))).toBe(false);
+  // CAWS-MESSAGE-LEDGER-COMPLETENESS-001: no MESSAGE record, but a best-effort
+  // refusal record is appended so attempt-level success is measurable.
+  const lines = fs
+    .readFileSync(path.join(caws, 'messages.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  expect(lines).toHaveLength(1);
+  expect(lines[0].record).toBe('refusal');
+  expect(lines[0].class).toBe('recipient_not_live');
+  expect(lines[0].to).toBe('ghost');
 });
 
 // ─── A2 (DEFECT-01-msg): enriched "not live" reason + recovery hints ─────────
@@ -337,8 +348,16 @@ test('an empty recipient string is refused (distinct from a regex-fail)', () => 
   const sent = sendMessage(caws, { actor: sender, to: '', text: 'x' });
   expect(sent.ok).toBe(false);
   expect(sent.errors[0].rule).toBe(RECIPIENT_INVALID);
-  // and nothing was written
-  expect(fs.existsSync(path.join(caws, 'messages.jsonl'))).toBe(false);
+  // CAWS-MESSAGE-LEDGER-COMPLETENESS-001: refusal record only, no message record.
+  const lines = fs
+    .readFileSync(path.join(caws, 'messages.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  expect(lines).toHaveLength(1);
+  expect(lines[0].record).toBe('refusal');
+  expect(lines[0].class).toBe('recipient_invalid');
+  expect(lines[0].to).toBe('');
 });
 
 // ─── sender attribution falls back to actor.id when no session_id ────────────
@@ -636,4 +655,134 @@ test('UX A1: an idle (stopped, fresh-heartbeat) recipient is live per isRecipien
   const caws = cawsDir();
   makeBound(caws, 'idle-1', { status: 'stopped', ageMs: 2 * 60 * 1000 });
   expect(isRecipientLive(caws, 'idle-1')).toEqual({ ok: true, value: true });
+});
+
+// ─── CAWS-MESSAGE-LEDGER-COMPLETENESS-001 ─────────────────────────────────────
+
+test('LEDGER A2: replyTo is written verbatim; plain sends carry no reply_to', () => {
+  const caws = cawsDir();
+  makeLive(caws, 'recip-1');
+  const plain = sendMessage(caws, { actor: sender, to: 'recip-1', text: 'hello' });
+  expect(plain.ok).toBe(true);
+  const linked = sendMessage(caws, {
+    actor: sender,
+    to: 'recip-1',
+    text: 'again',
+    replyTo: plain.value.message.id,
+  });
+  expect(linked.ok).toBe(true);
+  const lines = fs
+    .readFileSync(path.join(caws, 'messages.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  expect(lines[0].reply_to).toBeUndefined();
+  expect(lines[1].reply_to).toBe(plain.value.message.id);
+});
+
+test('LEDGER A4: delivery records carry mode auto for hook polls, poll for explicit polls', () => {
+  const caws = cawsDir();
+  makeLive(caws, 'recip-1');
+  sendMessage(caws, { actor: sender, to: 'recip-1', text: 'one' });
+  sendMessage(caws, { actor: sender, to: 'recip-1', text: 'two' });
+  const auto = pollMessage(caws, 'recip-1', { receipt: 'auto' });
+  expect(auto.ok).toBe(true);
+  const manual = pollMessage(caws, 'recip-1');
+  expect(manual.ok).toBe(true);
+  const deliveries = fs
+    .readFileSync(path.join(caws, 'messages.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l))
+    .filter((l) => l.record === 'delivery');
+  expect(deliveries).toHaveLength(2);
+  expect(deliveries[0].mode).toBe('auto');
+  expect(deliveries[1].mode).toBe('poll');
+});
+
+test('LEDGER A5: inboxAllMessages lists every undelivered message oldest-first and consumes nothing', () => {
+  const caws = cawsDir();
+  makeLive(caws, 'r1');
+  makeLive(caws, 'r2');
+  sendMessage(caws, { actor: sender, to: 'r1', text: 'first' });
+  sendMessage(caws, { actor: sender, to: 'r2', text: 'second' });
+  const before = inboxCount(caws, 'r1');
+  const all = inboxAllMessages(caws);
+  expect(all.ok).toBe(true);
+  expect(all.value.count).toBe(2);
+  expect(all.value.messages.map((e) => e.recipient)).toEqual(['r1', 'r2']);
+  expect(all.value.oldestAgeMs).not.toBeNull();
+  // read-only: mailbox depths unchanged
+  expect(inboxCount(caws, 'r1')).toEqual(before);
+  expect(inboxCount(caws, 'r2').value).toBe(1);
+});
+
+test('LEDGER A7: prune --apply archives pruned records with a marker; undelivered preserved', () => {
+  const caws = cawsDir();
+  makeLive(caws, 'r1');
+  sendMessage(caws, { actor: sender, to: 'r1', text: 'delivered one' });
+  pollMessage(caws, 'r1'); // consume it
+  sendMessage(caws, { actor: sender, to: 'r1', text: 'still queued' });
+  const pruned = pruneMessages(caws, { status: 'delivered', olderThanMs: 0, apply: true });
+  expect(pruned.ok).toBe(true);
+  expect(pruned.value.pruned_messages).toBe(1);
+  expect(pruned.value.pruned_delivery_records).toBe(1);
+  const archive = fs
+    .readFileSync(path.join(caws, 'messages.jsonl.archive'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  expect(archive[0].record).toBe('prune');
+  expect(archive[0].ids).toEqual([pruned.value.candidates[0].id]);
+  expect(archive.some((l) => l.record === 'message' && l.text === 'delivered one')).toBe(true);
+  expect(archive.some((l) => l.record === 'delivery')).toBe(true);
+  const live = fs
+    .readFileSync(path.join(caws, 'messages.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  expect(live.some((l) => l.record === 'message' && l.text === 'delivered one')).toBe(false);
+  expect(live.some((l) => l.record === 'message' && l.text === 'still queued')).toBe(true);
+  // a second prune finds no candidates while the queued message stays undelivered
+  const again = pruneMessages(caws, { status: 'delivered', olderThanMs: 0, apply: true });
+  expect(again.ok).toBe(true);
+  expect(again.value.candidates).toHaveLength(0);
+  // the undelivered message is still deliverable after the prune
+  const polled = pollMessage(caws, 'r1');
+  expect(polled.value.message.text).toBe('still queued');
+});
+
+test('LEDGER: refusal records are invisible to poll, inbox, and inboxAll', () => {
+  const caws = cawsDir();
+  // refusal record only — no message records at all
+  sendMessage(caws, { actor: sender, to: 'ghost', text: 'no lease' });
+  expect(pollMessage(caws, 'ghost').value.message).toBeNull();
+  expect(inboxCount(caws, 'ghost').value).toBe(0);
+  expect(inboxAllMessages(caws).value.count).toBe(0);
+});
+
+test('LEDGER A8: legacy records without reply_to/mode parse with zero diagnostics', () => {
+  const caws = cawsDir();
+  const legacy = [
+    {
+      record: 'message',
+      id: 'legacy-1',
+      actor: { kind: 'agent', id: 'a' },
+      to: 'b',
+      channel: 'a::b',
+      text: 'old shape',
+      ts: new Date().toISOString(),
+    },
+    { record: 'delivery', deliver_id: 'legacy-1', ts: new Date().toISOString() },
+    { record: 'refusal', id: 'r-1', class: 'recipient_not_live', to: 'x', reason: 'test', ts: new Date().toISOString() },
+  ];
+  fs.writeFileSync(path.join(caws, 'messages.jsonl'), legacy.map((l) => JSON.stringify(l)).join('\n') + '\n');
+  const hist = channelHistory(caws, 'a', 'b');
+  expect(hist.ok).toBe(true);
+  expect(hist.value).toHaveLength(1);
+  expect(hist.value[0].delivered).toBe(true);
+  const all = inboxAllMessages(caws);
+  expect(all.ok).toBe(true);
+  expect(all.value.diagnostics).toHaveLength(0);
+  expect(all.value.count).toBe(0);
 });

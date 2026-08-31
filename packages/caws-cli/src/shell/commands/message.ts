@@ -24,8 +24,11 @@ import {
   getMessageDeliveryState,
   inboxCount,
   inboxMessages,
+  inboxAllMessages,
   channelHistory,
   pruneMessages,
+  recordRefusal,
+  formatAge,
   storeDiagnostic,
   STORE_RULES,
   type MessageActor,
@@ -58,6 +61,9 @@ export interface MessageSendCommandOptions extends BaseCommandOptions {
   readonly text: string;
   /** Skip the recipient-liveness check (escape hatch; default false). */
   readonly allowDead?: boolean;
+  /** Message id this send replies to (thread linkage). Must exist and be
+   *  addressed to the caller (CAWS-MESSAGE-LEDGER-COMPLETENESS-001). */
+  readonly replyTo?: string;
 }
 
 /** Maps a refusal's first store rule to a short class name for the stdout verdict. */
@@ -74,6 +80,8 @@ function refusalClass(errors: ReadonlyArray<{ rule?: string }>): string {
       return 'message not found';
     case STORE_RULES.MESSAGES_REPLY_TO_SELF:
       return 'reply-to-self refused';
+    case STORE_RULES.MESSAGES_REPLY_TARGET_INVALID:
+      return 'reply target invalid';
     default:
       return 'refused';
   }
@@ -105,15 +113,26 @@ export function runMessageSendCommand(opts: MessageSendCommandOptions): number {
 
   const sessionResult = resolveSession({ cawsDir, worktreeRoot: cwd, env, allowMint: true });
   if (!sessionResult.ok) {
+    recordRefusal(cawsDir, {
+      class: 'identity_ambiguous',
+      to: opts.to,
+      reason: 'could not resolve your session identity (who is sending)',
+    });
     err('caws message send: could not resolve your session identity (who is sending).');
     err(renderDiagnostics(sessionResult.errors, { showData }));
     return 1;
   }
   const actor = buildActor({ session: sessionResult.value, kind: 'agent' }) as MessageActor;
+  const me = actor.session_id ?? actor.id;
 
   // Resolve wt:/spec: aliases to a session id; raw session ids pass through.
   const recipient = resolveRecipient(cawsDir, opts.to);
   if (!recipient.ok) {
+    recordRefusal(cawsDir, {
+      class: 'alias_unresolved',
+      to: opts.to,
+      reason: recipient.errors.map((e) => e.message).join('; '),
+    });
     out(`caws message send: not sent — ${refusalClass(recipient.errors)} (details on stderr).`);
     err('caws message send: not sent.');
     err(renderDiagnostics(recipient.errors, { showData }));
@@ -123,11 +142,40 @@ export function runMessageSendCommand(opts: MessageSendCommandOptions): number {
     out(`(alias ${recipient.value.alias} -> session ${recipient.value.sessionId})`);
   }
 
+  // --reply-to validation: the referenced message must exist and be addressed
+  // to the caller, else the thread linkage would be fabricated
+  // (CAWS-MESSAGE-LEDGER-COMPLETENESS-001).
+  if (typeof opts.replyTo === 'string' && opts.replyTo.length > 0) {
+    const target = getMessageDeliveryState(cawsDir, opts.replyTo);
+    if (!target.ok) {
+      err('caws message send: failed to read the message log.');
+      err(renderDiagnostics(target.errors, { showData }));
+      return 2;
+    }
+    if (target.value === null || target.value.message.to !== me) {
+      const invalidReason =
+        target.value === null
+          ? `No message with id "${opts.replyTo}" in this repo's message log — reply_to would fabricate a thread link.`
+          : `Message "${opts.replyTo}" is addressed to "${target.value.message.to}", not to you (${me}) — reply_to would fabricate a thread link.`;
+      const invalid = [storeDiagnostic(STORE_RULES.MESSAGES_REPLY_TARGET_INVALID, invalidReason)];
+      recordRefusal(cawsDir, {
+        class: 'reply_target_invalid',
+        to: opts.replyTo,
+        reason: invalidReason,
+      });
+      out(`caws message send: not sent — ${refusalClass(invalid)} (details on stderr).`);
+      err('caws message send: not sent.');
+      err(renderDiagnostics(invalid, { showData }));
+      return 1;
+    }
+  }
+
   const sent = sendMessage(cawsDir, {
     actor,
     to: recipient.value.sessionId,
     text: opts.text,
     ...(opts.allowDead === true ? { requireLive: false } : {}),
+    ...(opts.replyTo !== undefined && opts.replyTo.length > 0 ? { replyTo: opts.replyTo } : {}),
   });
   if (!sent.ok) {
     out(`caws message send: not sent — ${refusalClass(sent.errors)} (details on stderr).`);
@@ -181,6 +229,11 @@ export function runMessageReplyCommand(opts: MessageReplyCommandOptions): number
 
   const sessionResult = resolveSession({ cawsDir, worktreeRoot: cwd, env, allowMint: true });
   if (!sessionResult.ok) {
+    recordRefusal(cawsDir, {
+      class: 'identity_ambiguous',
+      to: opts.id,
+      reason: 'could not resolve your session identity (who is sending)',
+    });
     err('caws message reply: could not resolve your session identity (who is sending).');
     err(renderDiagnostics(sessionResult.errors, { showData }));
     return 1;
@@ -195,12 +248,13 @@ export function runMessageReplyCommand(opts: MessageReplyCommandOptions): number
     return 2;
   }
   if (target.value === null) {
-    const notFound = [
-      storeDiagnostic(
-        STORE_RULES.MESSAGES_MESSAGE_NOT_FOUND,
-        `No message with id "${opts.id}" in this repo's message log — a reply to an unknown id would fabricate a recipient.`
-      ),
-    ];
+    const notFoundReason = `No message with id "${opts.id}" in this repo's message log — a reply to an unknown id would fabricate a recipient.`;
+    const notFound = [storeDiagnostic(STORE_RULES.MESSAGES_MESSAGE_NOT_FOUND, notFoundReason)];
+    recordRefusal(cawsDir, {
+      class: 'message_not_found',
+      to: opts.id,
+      reason: notFoundReason,
+    });
     out(`caws message reply: not sent — ${refusalClass(notFound)} (details on stderr).`);
     err('caws message reply: not sent.');
     err(renderDiagnostics(notFound, { showData }));
@@ -208,12 +262,13 @@ export function runMessageReplyCommand(opts: MessageReplyCommandOptions): number
   }
   const origSender = target.value.message.actor.session_id ?? target.value.message.actor.id;
   if (origSender === me) {
-    const selfReply = [
-      storeDiagnostic(
-        STORE_RULES.MESSAGES_REPLY_TO_SELF,
-        `Message "${opts.id}" was sent by you (${me}) — a self-reply is a routing error, not a conversation.`
-      ),
-    ];
+    const selfReplyReason = `Message "${opts.id}" was sent by you (${me}) — a self-reply is a routing error, not a conversation.`;
+    const selfReply = [storeDiagnostic(STORE_RULES.MESSAGES_REPLY_TO_SELF, selfReplyReason)];
+    recordRefusal(cawsDir, {
+      class: 'reply_to_self',
+      to: me,
+      reason: selfReplyReason,
+    });
     out(`caws message reply: not sent — ${refusalClass(selfReply)} (details on stderr).`);
     err('caws message reply: not sent.');
     err(renderDiagnostics(selfReply, { showData }));
@@ -224,6 +279,7 @@ export function runMessageReplyCommand(opts: MessageReplyCommandOptions): number
     actor,
     to: origSender,
     text: opts.text,
+    replyTo: opts.id,
     ...(opts.allowDead === true ? { requireLive: false } : {}),
   });
   if (!sent.ok) {
@@ -324,6 +380,10 @@ export interface MessagePollCommandOptions extends BaseCommandOptions {
   readonly waitMs?: number;
   /** Show the next message without consuming it (no delivery record). */
   readonly peek?: boolean;
+  /** Receipt mode recorded on the delivery record: 'auto' for the heartbeat
+   *  hook's auto-delivery path, 'poll' (default) for an explicit poll
+   *  (CAWS-MESSAGE-LEDGER-COMPLETENESS-001). */
+  readonly receipt?: 'auto' | 'poll';
 }
 
 /**
@@ -359,9 +419,10 @@ export function runMessagePollCommand(opts: MessagePollCommandOptions): number {
     }
   }
 
-  const pollOpts: { waitMs?: number; peek?: boolean } = {};
+  const pollOpts: { waitMs?: number; peek?: boolean; receipt?: 'auto' | 'poll' } = {};
   if (typeof opts.waitMs === 'number' && opts.waitMs > 0) pollOpts.waitMs = opts.waitMs;
   if (opts.peek === true) pollOpts.peek = true;
+  if (opts.receipt === 'auto') pollOpts.receipt = 'auto';
 
   const polled = pollMessage(cawsDir, me, pollOpts);
   if (!polled.ok) {
@@ -403,10 +464,13 @@ export function runMessagePollCommand(opts: MessagePollCommandOptions): number {
 }
 
 export interface MessageInboxCommandOptions extends BaseCommandOptions {
-  /** Endpoint to list. Defaults to the resolved session id. */
+  /** Endpoint to list. Defaults to the resolved session id (ignored with --all). */
   readonly me?: string;
   readonly limit?: number;
   readonly json?: boolean;
+  /** List every undelivered message in the repo (all recipients), read-only
+   *  (CAWS-MESSAGE-LEDGER-COMPLETENESS-001). */
+  readonly all?: boolean;
 }
 
 export interface MessageHistoryCommandOptions extends BaseCommandOptions {
@@ -486,6 +550,44 @@ export function runMessageInboxCommand(opts: MessageInboxCommandOptions = {}): n
     return 2;
   }
   const { cawsDir } = rootResult.value;
+
+  if (opts.all === true) {
+    const all = inboxAllMessages(cawsDir);
+    if (!all.ok) {
+      err('caws message inbox: failed to read the message log.');
+      err(renderDiagnostics(all.errors, { showData }));
+      return 2;
+    }
+    if (opts.json === true) {
+      out(JSON.stringify({
+        ok: true,
+        read_only: true,
+        repo_wide: true,
+        count: all.value.count,
+        oldest_age_ms: all.value.oldestAgeMs,
+        messages: all.value.messages.map((entry) => ({
+          ...entry.message,
+          recipient: entry.recipient,
+          age_ms: entry.ageMs,
+        })),
+        diagnostics: all.value.diagnostics,
+      }));
+      return 0;
+    }
+    const oldest =
+      all.value.oldestAgeMs !== null ? ` (oldest ${formatAge(all.value.oldestAgeMs)})` : '';
+    out(`Repo-wide inbox: ${all.value.count} undelivered message(s)${oldest}`);
+    if (all.value.count === 0) {
+      out('(no messages)');
+      return 0;
+    }
+    for (const entry of all.value.messages) {
+      const from = entry.message.actor.session_id ?? entry.message.actor.id;
+      out(`${entry.message.ts} ${from} -> ${entry.recipient} [queued ${formatAge(entry.ageMs)}]: ${entry.message.text}`);
+    }
+    return 0;
+  }
+
   const me = resolveMe('inbox', cawsDir, cwd, env, opts.me, err, showData);
   if (me === null) return 1;
 
@@ -615,7 +717,10 @@ export function runMessagePruneCommand(opts: MessagePruneCommandOptions = {}): n
   const mode = opts.apply === true ? 'applied' : 'dry-run';
   out(`Message prune (${mode}, status=delivered): ${result.value.candidates.length} candidate(s), ${result.value.skipped.length} skipped`);
   if (opts.apply === true) {
-    out(`Pruned ${result.value.pruned_messages} delivered message(s); removed ${result.value.pruned_delivery_records} delivery marker(s).`);
+    out(
+      `Pruned ${result.value.pruned_messages} delivered message(s); removed ${result.value.pruned_delivery_records} delivery marker(s). ` +
+        `Archived to .caws/messages.jsonl.archive (telemetry; not read for delivery state).`
+    );
   } else {
     out('No changes written. Pass --apply with --older-than-ms or --include to prune selected delivered chat records.');
   }

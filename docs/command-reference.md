@@ -980,8 +980,11 @@ Send a message to another session. Attributes the sender via this session's iden
 
 - `--to <endpoint>` — Recipient endpoint (required): a session id, or an alias wt:<worktree-name> / spec:<spec-id> resolving to the freshest bound session
 - `--text <message>` — Message body (required, non-empty)
+- `--reply-to <message_id>` — Thread linkage: the message id this send replies to. Must exist and be addressed to you (CAWS-MESSAGE-LEDGER-COMPLETENESS-001)
 - `--allow-dead` — Send even if the recipient is not live in the registry (escape hatch; default off)
 - `--data` — Show structured data block on diagnostics
+
+Refused sends are ledgered as `refusal` records in messages.jsonl (best-effort telemetry; never read back for delivery state) so attempt-level success is measurable. Refusal classes: recipient_not_live, recipient_invalid, alias_unresolved, reply_to_self, message_not_found, reply_target_invalid, identity_ambiguous.
 
 ### `caws message reply`
 
@@ -1003,6 +1006,7 @@ Pull the next undelivered message addressed to you. Deliver-once. The result car
 - `--me <session_id>` — Endpoint to poll for (default: this session id)
 - `--wait <ms>` — Block up to <ms> for a message before returning (long-poll; capped at 60000)
 - `--peek` — Show the next message without consuming it (no delivery record)
+- `--receipt <auto|poll>` — Receipt mode recorded on the delivery record: auto for the heartbeat hook's auto-delivery path, poll (default) for an explicit poll (CAWS-MESSAGE-LEDGER-COMPLETENESS-001)
 - `--json` — Emit JSON ({message, sender?, waiting}) instead of human text
 - `--data` — Show structured data block on diagnostics
 
@@ -1012,8 +1016,9 @@ List undelivered messages addressed to you without consuming them. Read-only; po
 
 **Options:**
 
-- `--me <session_id>` — Endpoint inbox to list (default: this session id)
+- `--me <session_id>` — Endpoint inbox to list (default: this session id; ignored with --all)
 - `--limit <n>` — Maximum messages to print from the waiting queue
+- `--all` — List every undelivered message in the repo (all recipients), oldest-first, annotated with recipient and age. Read-only (CAWS-MESSAGE-LEDGER-COMPLETENESS-001)
 - `--json` — Emit JSON ({ok, read_only, me, waiting, messages})
 - `--data` — Show structured data block on diagnostics
 
@@ -1049,7 +1054,7 @@ Plan or apply retention cleanup for delivered non-authoritative chat messages. D
 - `--older-than-ms <ms>` — Select delivered messages older than this many milliseconds
 - `--include <ids>` — Comma-separated message ids to include
 - `--exclude <ids>` — Comma-separated message ids to exclude
-- `--apply` — Rewrite .caws/messages.jsonl to remove selected delivered messages and their delivery markers
+- `--apply` — Move selected delivered messages and their delivery markers from .caws/messages.jsonl into .caws/messages.jsonl.archive (prefixed with a prune marker naming the archived ids). The archive is telemetry, not authority (CAWS-MESSAGE-LEDGER-COMPLETENESS-001)
 - `--json` — Emit JSON prune plan/result
 - `--data` — Show structured data block on diagnostics
 
