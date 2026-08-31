@@ -1,3 +1,82 @@
+## [Unreleased]
+
+### Features
+
+- **Inter-agent message channel: ledger completeness, delivery economics,
+  fork-aware identity, and behavior surface** (grouped entry for six merged
+  specs — `CAWS-MESSAGE-LEDGER-COMPLETENESS-001`,
+  `CAWS-MESSAGE-DELIVERY-ECONOMICS-001`, `CAWS-AGENTS-FORK-IDENTITY-001`,
+  `CAWS-MESSAGE-BEHAVIOR-001`, plus defects
+  `CAWS-DEFECT-MSG-REPLY-POSITIONAL-01` and
+  `CAWS-DEFECT-WAIVER-SURFACE-UNCONSULTED-01`; merged `ae768884`, `d559674b`,
+  `27ffc50b`, `780692ed`, `e5afd591`, `9ef53227`).
+
+  - **Ledger completeness.** Refused sends are now ledgered as `refusal`
+    records (classes `recipient_not_live`, `recipient_invalid`,
+    `alias_unresolved`, `reply_to_self`, `message_not_found`,
+    `reply_target_invalid`, `identity_ambiguous`, `urgency_invalid`), so
+    attempt-level success is measurable from `.caws/messages.jsonl`.
+    `caws message reply <id>` (positional and `--id` alias; also
+    `status <id>`) writes `reply_to` linkage; `send --reply-to <id>`
+    validates the target is addressed to the caller. Delivery records carry
+    a receipt `mode` (`auto` for the heartbeat hook's `--receipt auto`,
+    `poll` otherwise). `caws message inbox --all` lists every undelivered
+    message repo-wide; `caws status` prints a `messages: N undelivered`
+    summary line. `caws message prune --apply` archives pruned records to
+    `.caws/messages.jsonl.archive` (with a `prune` marker) instead of
+    deleting them.
+
+  - **Delivery economics.** Message records carry an optional `urgency`
+    (`caws message send --urgency critical`); polling is critical-first
+    regardless of age, so a STOP-class warning cannot queue behind status
+    broadcasts. `caws message poll --drain 1..10` consumes a backlog in one
+    lock hold (deliver-once preserved); the heartbeat hook polls with
+    `--drain 5`, renders single messages with a `CRITICAL MESSAGE` prefix,
+    coalesces a backlog into one digest block, and appends per-emission
+    telemetry to `.caws/leases/heartbeat-message-telemetry.jsonl`. Poll JSON
+    gains `messages[]`, `waiting`, and `poll_ms` (timed inside the CLI).
+
+  - **Fork-aware identity.** Leases carry `harness_session_kind`
+    (`main`/`fork`/`subagent`) and `forked_from`, carried forward across
+    throttled heartbeats; fresh writes emit `hook_pid` instead of the legacy
+    `pid` field (kept as a read-only fallback and never session identity).
+    `caws agents heartbeat --session-kind` / `--forked-from` (hook
+    passthrough via `CAWS_SESSION_KIND`/`CAWS_FORKED_FROM`). `caws agents
+    list` annotates same-host leases with overlapping activity windows (or
+    starts within 60 s) as a possible conjoined pair, and derives
+    silent-platform engagement badges (>=5 inbound messages and
+    outbound/inbound <= 0.2) — both display-only. The hook notice teaches
+    the lease-id namespace boundary.
+
+  - **Behavior surface.** `caws message status --mine --queued
+    --older-than-ms <ms>` lists the caller's dead letters; poll JSON carries
+    `mine_queued_1h`; the heartbeat hook escalates aged undelivered sends
+    with a throttled one-line notice (`.caws/leases/
+    heartbeat-escalation-state.json`), even when there is no inbound mail.
+
+  - **Waiver surface delineated.** Verified no hook consults waivers
+    (reprieves are the hook-consulted system; waivers only filter the
+    on-demand `caws gates run` path). `caws waiver create` prints a
+    byte-stable gate-run-only notice naming `caws reprieve grant` as the
+    hook-block path; help and docs state the boundary.
+
+### Fixed
+
+- **`caws message reply <message_id>` and `caws message status
+  <message_id>` positional forms are accepted again.** The hook injection
+  text and the predecessor spec teach the positional form, but the message
+  leaves declared options only, so `guardExcessArguments` refused every
+  positional invocation ("unexpected extra argument(s)") while the docs kept
+  teaching it. Both leaves now declare one optional positional
+  (`[message_id]`) with `--id` as the alias; supplying both with differing
+  ids is refused, and a second positional still trips the excess-args guard
+  (`CAWS-DEFECT-MSG-REPLY-POSITIONAL-01`).
+
+- **Hook packs 48→51.** The shared heartbeat hook gained `--receipt auto`
+  (v48), `--drain 5` digest injection + telemetry (v49), fork-identity
+  passthrough + the namespace-boundary notice (v50), and the throttled
+  dead-letter escalation (v51). Pack fingerprints recomputed each bump.
+
 ## [12.1.0] (2026-08-23)
 
 ### Features
