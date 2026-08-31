@@ -110,3 +110,7 @@ evidence:
     status: pass
     evidence_ref: "npx jest message-positionals (6/6 CLI parse-path tests); full suite 170 suites / 2121 tests pass; live CLI: reply <id> + status <id> positional forms verified"
     recorded_at: "2026-08-31T03:08:40.919Z"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "npx jest message-positionals (6/6 CLI parse-path tests); full suite 170 suites / 2121 tests pass; live CLI: reply <id> + status <id> positional forms verified"
+    recorded_at: "2026-08-31T03:08:41.417Z"
