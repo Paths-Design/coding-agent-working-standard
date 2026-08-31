@@ -7,20 +7,104 @@ created_at: '2026-08-31T04:58:05.844Z'
 updated_at: '2026-08-31T04:58:05.844Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/store/messages-store.ts
+    - packages/caws-cli/src/shell/commands/message.ts
+    - packages/caws-cli/src/shell/commands/agents.ts
+    - packages/caws-cli/templates/hook-packs/shared/agent-heartbeat.sh
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/src/store/messages-store.ts
+    - packages/caws-cli/src/shell/commands/message.ts
+    - packages/caws-cli/src/shell/commands/agents.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/register.ts
+    - packages/caws-cli/templates/hook-packs/shared/agent-heartbeat.sh
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/tests/shell/message-behavior.test.js
+    - .caws/hooks/agent-heartbeat.sh
+    - packages/caws-cli/README.md
+    - docs/command-reference.md
+    - docs/api/cli.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Platform engagement badges are DERIVED, display-only: from messages.jsonl
+    and leases, per platform, count of messages sent TO its sessions and
+    messages sent BY its sessions; a platform with at least 5 inbound messages
+    and an outbound/inbound ratio at or below 0.2 is badged
+    "silent-platform: <platform> (<inbound> to, <outbound> from)" in
+    `caws agents list` (text) and `silent_platforms` (JSON). Never authority,
+    never a write, never a refusal; platforms with unknown recipient leases
+    are counted as their own bucket.
+  - >-
+    `caws message status --mine --queued --older-than-ms <ms>` lists the
+    CALLER's sent messages that remain undelivered past the age threshold
+    (default 3600000), oldest-first with recipient, age, and text preview.
+    Read-only. JSON form mirrors the text form.
+  - >-
+    `caws message poll --json` gains mine_queued_1h: {count, oldest_age_ms}
+    — the caller's sent-but-undelivered messages older than 1 hour, computed
+    from the same ledger read (no extra authority, best-effort). A sender
+    now sees its dead letters without polling each recipient.
+  - >-
+    The heartbeat hook escalates dead letters: when mine_queued_1h.count > 0,
+    the injection block gains one line "N of YOUR sent messages are still
+    undelivered after 1h — caws message status --mine --queued". The
+    escalation is THROTTLED by a dedicated emit-state file
+    (.caws/leases/heartbeat-escalation-state.json): it re-emits only when the
+    queued count changes or 60 minutes elapse since the last emission —
+    mirroring the peer-notice throttle, never per-tool-call noise. It fires
+    even when the poll returned no inbound messages.
+  - >-
+    Editing the shared hook template bumps SHARED_PACK_VERSION and recomputes
+    pack-fingerprints.json; the repo's installed .caws/hooks/agent-heartbeat.sh
+    is updated to match.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      A repo whose ledger holds 6 messages sent to sessions of platform
+      'zcode' and 1 message sent by a zcode session, plus 4 to 'claude-code'
+      and 4 from claude-code sessions.
+    when: '`caws agents list` runs (text and --json).'
+    then: >-
+      Text carries a "silent-platform: zcode (6 to, 1 from)" line;
+      claude-code is not badged; JSON carries silent_platforms with the same
+      numbers; no lease or ledger record was modified.
+  - id: A2
+    given: >-
+      A repo whose ledger holds one message the caller sent to a recipient
+      that never polled, aged beyond the threshold, and one younger message.
+    when: >-
+      `caws message status --mine --queued --older-than-ms 3600000` runs
+      (text and --json).
+    then: >-
+      The aged message is listed oldest-first with recipient, age, and text
+      preview; the younger one is absent; exit 0; nothing consumed.
+  - id: A3
+    given: 'The same aged-message state as A2.'
+    when: 'The caller runs `caws message poll --json`.'
+    then: >-
+      The JSON carries mine_queued_1h = {count: 1, oldest_age_ms: number}
+      without consuming the queued message.
+  - id: A4
+    given: >-
+      The heartbeat hook renderer, fed poll JSON with mine_queued_1h
+      {count: 2}, and no inbound messages; escalation state file absent.
+    when: 'The PreToolUse hook fires twice within one minute.'
+    then: >-
+      The first call emits the escalation line ("2 of YOUR sent messages are
+      still undelivered after 1h..."); the second call within the throttle
+      window emits nothing (state file throttles); after the count changes to
+      1, the next call re-emits with the new count.
+  - id: A5
+    given: 'The built CLI and a ledger with aged undelivered sends.'
+    when: 'The operator runs `caws message status --mine --queued --help` and the docs are read.'
+    then: >-
+      Help names --older-than-ms and the read-only contract; docs state the
+      same plus the agents-list badge and the hook escalation line.
 non_functional: {}
 contracts:
   - name: 'messages-store'
