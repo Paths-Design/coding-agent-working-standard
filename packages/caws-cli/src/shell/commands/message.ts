@@ -196,6 +196,8 @@ export function runMessageSendCommand(opts: MessageSendCommandOptions): number {
 export interface MessageReplyCommandOptions extends BaseCommandOptions {
   /** The message id being replied to (its sender becomes the recipient). */
   readonly id: string;
+  /** Positional <message_id> (primary form); conflicts with --id when both differ. */
+  readonly positionalId?: string;
   readonly text: string;
   /** Skip the recipient-liveness check (escape hatch; default false). */
   readonly allowDead?: boolean;
@@ -210,7 +212,19 @@ export interface MessageReplyCommandOptions extends BaseCommandOptions {
 export function runMessageReplyCommand(opts: MessageReplyCommandOptions): number {
   const { cwd, env, out, err, showData } = defaults(opts);
 
-  if (typeof opts.id !== 'string' || opts.id.length === 0) {
+  const positional =
+    typeof opts.positionalId === 'string' && opts.positionalId.length > 0
+      ? opts.positionalId
+      : undefined;
+  const flagId = typeof opts.id === 'string' && opts.id.length > 0 ? opts.id : undefined;
+  if (positional !== undefined && flagId !== undefined && positional !== flagId) {
+    err(
+      'caws message reply: conflicting message ids — positional <message_id> and --id disagree. Supply exactly one.'
+    );
+    return 1;
+  }
+  const id = positional ?? flagId ?? '';
+  if (id.length === 0) {
     err('caws message reply: <message_id> is required.');
     return 1;
   }
@@ -231,7 +245,7 @@ export function runMessageReplyCommand(opts: MessageReplyCommandOptions): number
   if (!sessionResult.ok) {
     recordRefusal(cawsDir, {
       class: 'identity_ambiguous',
-      to: opts.id,
+      to: id,
       reason: 'could not resolve your session identity (who is sending)',
     });
     err('caws message reply: could not resolve your session identity (who is sending).');
@@ -241,18 +255,18 @@ export function runMessageReplyCommand(opts: MessageReplyCommandOptions): number
   const actor = buildActor({ session: sessionResult.value, kind: 'agent' }) as MessageActor;
   const me = actor.session_id ?? actor.id;
 
-  const target = getMessageDeliveryState(cawsDir, opts.id);
+  const target = getMessageDeliveryState(cawsDir, id);
   if (!target.ok) {
     err('caws message reply: failed to read the message log.');
     err(renderDiagnostics(target.errors, { showData }));
     return 2;
   }
   if (target.value === null) {
-    const notFoundReason = `No message with id "${opts.id}" in this repo's message log — a reply to an unknown id would fabricate a recipient.`;
+    const notFoundReason = `No message with id "${id}" in this repo's message log — a reply to an unknown id would fabricate a recipient.`;
     const notFound = [storeDiagnostic(STORE_RULES.MESSAGES_MESSAGE_NOT_FOUND, notFoundReason)];
     recordRefusal(cawsDir, {
       class: 'message_not_found',
-      to: opts.id,
+      to: id,
       reason: notFoundReason,
     });
     out(`caws message reply: not sent — ${refusalClass(notFound)} (details on stderr).`);
@@ -262,7 +276,7 @@ export function runMessageReplyCommand(opts: MessageReplyCommandOptions): number
   }
   const origSender = target.value.message.actor.session_id ?? target.value.message.actor.id;
   if (origSender === me) {
-    const selfReplyReason = `Message "${opts.id}" was sent by you (${me}) — a self-reply is a routing error, not a conversation.`;
+    const selfReplyReason = `Message "${id}" was sent by you (${me}) — a self-reply is a routing error, not a conversation.`;
     const selfReply = [storeDiagnostic(STORE_RULES.MESSAGES_REPLY_TO_SELF, selfReplyReason)];
     recordRefusal(cawsDir, {
       class: 'reply_to_self',
@@ -279,7 +293,7 @@ export function runMessageReplyCommand(opts: MessageReplyCommandOptions): number
     actor,
     to: origSender,
     text: opts.text,
-    replyTo: opts.id,
+    replyTo: id,
     ...(opts.allowDead === true ? { requireLive: false } : {}),
   });
   if (!sent.ok) {
@@ -289,7 +303,7 @@ export function runMessageReplyCommand(opts: MessageReplyCommandOptions): number
     return 1;
   }
   out(
-    `replied to ${sent.value.message.to} (reply to ${opts.id}, id ${sent.value.message.id}, channel ${sent.value.message.channel})`
+    `replied to ${sent.value.message.to} (reply to ${id}, id ${sent.value.message.id}, channel ${sent.value.message.channel})`
   );
   if (sent.value.recipientIdle) {
     out(
@@ -302,6 +316,8 @@ export function runMessageReplyCommand(opts: MessageReplyCommandOptions): number
 
 export interface MessageStatusCommandOptions extends BaseCommandOptions {
   readonly id: string;
+  /** Positional <message_id> (primary form); conflicts with --id when both differ. */
+  readonly positionalId?: string;
   readonly json?: boolean;
 }
 
@@ -314,7 +330,19 @@ export interface MessageStatusCommandOptions extends BaseCommandOptions {
 export function runMessageStatusCommand(opts: MessageStatusCommandOptions): number {
   const { cwd, out, err, showData } = defaults(opts);
 
-  if (typeof opts.id !== 'string' || opts.id.length === 0) {
+  const positional =
+    typeof opts.positionalId === 'string' && opts.positionalId.length > 0
+      ? opts.positionalId
+      : undefined;
+  const flagId = typeof opts.id === 'string' && opts.id.length > 0 ? opts.id : undefined;
+  if (positional !== undefined && flagId !== undefined && positional !== flagId) {
+    err(
+      'caws message status: conflicting message ids — positional <message_id> and --id disagree. Supply exactly one.'
+    );
+    return 1;
+  }
+  const id = positional ?? flagId ?? '';
+  if (id.length === 0) {
     err('caws message status: <message_id> is required.');
     return 1;
   }
@@ -327,7 +355,7 @@ export function runMessageStatusCommand(opts: MessageStatusCommandOptions): numb
   }
   const { cawsDir } = rootResult.value;
 
-  const target = getMessageDeliveryState(cawsDir, opts.id);
+  const target = getMessageDeliveryState(cawsDir, id);
   if (!target.ok) {
     err('caws message status: failed to read the message log.');
     err(renderDiagnostics(target.errors, { showData }));
@@ -337,7 +365,7 @@ export function runMessageStatusCommand(opts: MessageStatusCommandOptions): numb
     const notFound = [
       storeDiagnostic(
         STORE_RULES.MESSAGES_MESSAGE_NOT_FOUND,
-        `No message with id "${opts.id}" in this repo's message log.`
+        `No message with id "${id}" in this repo's message log.`
       ),
     ];
     err('caws message status: not found.');
