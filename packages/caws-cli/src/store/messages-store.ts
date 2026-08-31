@@ -52,6 +52,10 @@ export interface MessageRecord {
    *  `caws message reply` and by `send --reply-to`. Absent on plain sends and
    *  on all pre-existing records — optional and read-backward-compatible. */
   readonly reply_to?: string;
+  /** Delivery-ordering signal, not authority (CAWS-MESSAGE-DELIVERY-ECONOMICS-001):
+   *  'critical' messages are polled before 'normal' ones regardless of age.
+   *  Absent means normal; all pre-existing records remain valid. */
+  readonly urgency?: 'critical' | 'normal';
 }
 export interface MessageActor {
   readonly kind: 'human' | 'agent' | 'system' | 'automation';
@@ -76,7 +80,8 @@ export type RefusalClass =
   | 'reply_to_self'
   | 'message_not_found'
   | 'reply_target_invalid'
-  | 'identity_ambiguous';
+  | 'identity_ambiguous'
+  | 'urgency_invalid';
 
 export interface RefusalRecord {
   readonly record: 'refusal';
@@ -267,6 +272,9 @@ export function sendMessage(
     requireLive?: boolean;
     /** Message id this send replies to (thread linkage). Written verbatim. */
     replyTo?: string;
+    /** Delivery-ordering signal (CAWS-MESSAGE-DELIVERY-ECONOMICS-001);
+     *  'critical' is written verbatim, anything else is omitted (normal). */
+    urgency?: 'critical' | 'normal';
   }
 ): Result<MessageSendOutcome> {
   const { actor, to, text } = params;
@@ -312,6 +320,7 @@ export function sendMessage(
     text,
     ts: new Date().toISOString(),
     ...(params.replyTo !== undefined && params.replyTo.length > 0 ? { reply_to: params.replyTo } : {}),
+    ...(params.urgency === 'critical' ? { urgency: 'critical' as const } : {}),
   };
   const appended = appendLine(cawsDir, record);
   if (!appended.ok) return err(appended.errors);
@@ -408,16 +417,27 @@ export function resolveRecipient(cawsDir: string, to: string): Result<ResolvedRe
   return ok({ sessionId: best.sessionId, alias: to });
 }
 
+/** One polled message plus its registry-derived sender context. */
+export interface PolledMessage {
+  readonly message: MessageRecord;
+  /** Present only when the sender's lease resolves. */
+  readonly sender?: MessageSenderContext;
+}
+
 export interface PollResult {
-  /** The next undelivered message addressed to `me`, or null if none. */
+  /** The next undelivered message addressed to `me`, or null if none.
+   *  Backward-compatible alias for messages[0].message (CAWS-MESSAGE-DELIVERY-ECONOMICS-001). */
   readonly message: MessageRecord | null;
   /**
    * Sender context joined from the lease registry at read time (worktree /
    * spec / branch — each present only when the sender's lease records it), so
    * a recipient never depends on the sender self-identifying in the body.
    * Absent when the message is null or the sender has no lease.
+   * Backward-compatible alias for messages[0].sender.
    */
   readonly sender?: MessageSenderContext;
+  /** All consumed messages this poll (1..drain), critical-first then oldest-first. */
+  readonly messages: readonly PolledMessage[];
   readonly diagnostics: ReadonlyArray<Diagnostic>;
 }
 
@@ -501,10 +521,16 @@ export interface PollOptions {
    *  the heartbeat hook's auto-delivery path, 'poll' for an explicit poll.
    *  Defaults to 'poll' (CAWS-MESSAGE-LEDGER-COMPLETENESS-001). */
   readonly receipt?: 'auto' | 'poll';
+  /** Consume up to this many undelivered messages in one lock hold
+   *  (critical-first, then oldest-first), 1..10, default 1
+   *  (CAWS-MESSAGE-DELIVERY-ECONOMICS-001). */
+  readonly drain?: number;
 }
 
 /** Server-side cap on --wait so a caller can't hold a poll open indefinitely. */
 const MAX_WAIT_MS = 60_000;
+/** Server-side cap on --drain so one poll can't consume the whole ledger into context. */
+const MAX_DRAIN = 10;
 /** Sleep between poll attempts while waiting. Lock is RELEASED during the sleep. */
 const POLL_RETRY_MS = 150;
 
@@ -746,8 +772,9 @@ export function pollMessage(cawsDir: string, me: string, options: PollOptions = 
   const waitMs = Math.min(Math.max(0, options.waitMs ?? 0), MAX_WAIT_MS);
   const deadline = Date.now() + waitMs;
   const receipt = options.receipt === 'auto' ? 'auto' : 'poll';
+  const drain = Math.min(Math.max(1, Math.floor(options.drain ?? 1)), MAX_DRAIN);
   const attempt = () =>
-    withLifecycleLock(cawsDir, () => pollMessageLocked(cawsDir, me, options.peek === true, receipt), {
+    withLifecycleLock(cawsDir, () => pollMessageLocked(cawsDir, me, options.peek === true, receipt, drain), {
       lockPath: path.join(cawsDir, MESSAGES_FILENAME + '.lock'),
     });
 
@@ -761,9 +788,15 @@ export function pollMessage(cawsDir: string, me: string, options: PollOptions = 
   }
 }
 
-function pollMessageLocked(cawsDir: string, me: string, peek: boolean, receipt: 'auto' | 'poll'): Result<PollResult> {
+function pollMessageLocked(
+  cawsDir: string,
+  me: string,
+  peek: boolean,
+  receipt: 'auto' | 'poll',
+  drain: number
+): Result<PollResult> {
   const file = messagesPath(cawsDir);
-  if (!fs.existsSync(file)) return ok({ message: null, diagnostics: [] });
+  if (!fs.existsSync(file)) return ok({ message: null, messages: [], diagnostics: [] });
 
   let raw: string;
   try {
@@ -805,25 +838,50 @@ function pollMessageLocked(cawsDir: string, me: string, peek: boolean, receipt: 
     }
   }
 
-  const next = messages.find((m) => m.to === me && !delivered.has(m.id));
-  if (!next) return ok({ message: null, diagnostics });
-  const sender = senderContextFor(cawsDir, next.actor.session_id ?? next.actor.id);
-  const withSender = { ...(sender !== undefined ? { sender } : {}) };
+  const undelivered = messages
+    .filter((m) => m.to === me && !delivered.has(m.id))
+    .sort((a, b) => {
+      // Critical-first, then oldest-first (CAWS-MESSAGE-DELIVERY-ECONOMICS-001).
+      const aCrit = a.urgency === 'critical' ? 0 : 1;
+      const bCrit = b.urgency === 'critical' ? 0 : 1;
+      if (aCrit !== bCrit) return aCrit - bCrit;
+      return a.ts.localeCompare(b.ts);
+    });
+  const picked = undelivered.slice(0, drain);
+  if (picked.length === 0) return ok({ message: null, messages: [], diagnostics });
 
-  // Peek: return the message but do NOT consume it — no delivery record, so a
-  // subsequent normal poll still delivers it.
+  const polled: PolledMessage[] = picked.map((m) => {
+    const sender = senderContextFor(cawsDir, m.actor.session_id ?? m.actor.id);
+    return { message: m, ...(sender !== undefined ? { sender } : {}) };
+  });
+  const head = polled[0] as PolledMessage;
+
+  // Peek: return the picked messages but do NOT consume them — no delivery
+  // records, so a subsequent normal poll still delivers them.
   if (peek) {
-    return ok({ message: next, ...withSender, diagnostics });
+    return ok({
+      message: head.message,
+      ...(head.sender !== undefined ? { sender: head.sender } : {}),
+      messages: polled,
+      diagnostics,
+    });
   }
 
-  const deliveryAppend = appendLine(cawsDir, {
-    record: 'delivery',
-    deliver_id: next.id,
-    ts: new Date().toISOString(),
-    mode: receipt,
+  for (const entry of polled) {
+    const deliveryAppend = appendLine(cawsDir, {
+      record: 'delivery',
+      deliver_id: entry.message.id,
+      ts: new Date().toISOString(),
+      mode: receipt,
+    });
+    if (!deliveryAppend.ok) return err(deliveryAppend.errors);
+  }
+  return ok({
+    message: head.message,
+    ...(head.sender !== undefined ? { sender: head.sender } : {}),
+    messages: polled,
+    diagnostics,
   });
-  if (!deliveryAppend.ok) return err(deliveryAppend.errors);
-  return ok({ message: next, ...withSender, diagnostics });
 }
 
 /**
