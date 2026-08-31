@@ -2,9 +2,10 @@ id: CAWS-DEFECT-WAIVER-SURFACE-UNCONSULTED-01
 title: 'The waiver surface survives as a pre-v11 cutover: hooks consult only reprieves; waivers are gate-run-only and misled a real operator'
 risk_tier: 3
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-waiver-surface-legacy
 created_at: '2026-08-31T04:04:17.198Z'
-updated_at: '2026-08-31T04:04:17.198Z'
+updated_at: '2026-08-31T04:04:45.920Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/commands/waiver.ts
