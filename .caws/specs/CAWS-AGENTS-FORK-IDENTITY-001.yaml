@@ -7,20 +7,102 @@ created_at: '2026-08-31T04:25:15.533Z'
 updated_at: '2026-08-31T04:25:15.533Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/kernel/worktree/leases.ts
+    - packages/caws-cli/src/shell/commands/agents.ts
+    - packages/caws-cli/src/store/leases-store.ts
+    - packages/caws-cli/templates/hook-packs/shared/agent-heartbeat.sh
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/src/kernel/worktree/leases.ts
+    - packages/caws-cli/src/shell/commands/agents.ts
+    - packages/caws-cli/src/shell/commands/status.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/store/leases-store.ts
+    - packages/caws-cli/templates/hook-packs/shared/agent-heartbeat.sh
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/tests/shell/agents-fork-identity.test.js
+    - .caws/hooks/agent-heartbeat.sh
+    - packages/caws-cli/README.md
+    - docs/command-reference.md
+    - docs/api/cli.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    AgentLease gains harness_session_kind ('main' | 'fork' | 'subagent';
+    absent = legacy/unknown) and forked_from (parent session id; present only
+    when kind is fork). Both are carried FORWARD by throttled heartbeats like
+    work_state: a heartbeat whose context omits them must not wipe an
+    existing declaration — the fork annotation survives liveness refreshes
+    written by a hook that cannot re-detect the fork.
+  - >-
+    New lease writes emit hook_pid (the heartbeat-writing hook process's pid)
+    instead of the legacy pid field; legacy pid remains READ-only for
+    backward compatibility and every pid consumer reads hook_pid first, then
+    pid. The pid field is never treated as session identity anywhere —
+    readers already use it only as an advisory liveness hint on stale leases
+    (AGENT-LIVENESS-DOCTOR-001 D4), and that doctrine is unchanged.
+  - >-
+    `caws agents heartbeat` accepts --session-kind <main|fork|subagent> and
+    --forked-from <session_id> (validated: kind enum; forked_from non-empty
+    endpoint shape, only meaningful with kind=fork — refused otherwise). The
+    heartbeat hook passes CAWS_SESSION_KIND / CAWS_FORKED_FROM env vars
+    through when set, defaulting to main/absent.
+  - >-
+    `caws agents list` flags possible conjoined sessions: two leases with
+    overlapping [started_at, last_active] activity windows on the same host
+    and repo are annotated "possible conjoined pair: <id> <=> <id>" — a
+    DISPLAY-ONLY advisory, never authority, never a write, never a refusal.
+    JSON output carries the same annotation.
+  - >-
+    The hook notice teaches the namespace boundary in one sentence: harness
+    display names (ListAgents and similar) are NOT CAWS addresses — address
+    sessions by the lease ids above; a forked session gets its own lease id
+    once it runs its first tool call. Nothing else in the notice changes.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      A lease write with harness_session_kind=fork and forked_from=P, then a
+      follow-up heartbeat whose context omits both fields.
+    when: 'Both writes land.'
+    then: >-
+      The lease file carries harness_session_kind=fork and forked_from=P
+      after BOTH writes (carry-forward); hook_pid is present and the legacy
+      pid field is absent on fresh writes.
+  - id: A2
+    given: 'A legacy lease file with only the pid field, now stale.'
+    when: 'The agents-prune dead-oracle path evaluates it.'
+    then: >-
+      The pid fallback still applies (hook_pid absent -> legacy pid read),
+      preserving the existing prune behavior for pre-slice leases.
+  - id: A3
+    given: 'The built CLI and a scratch repo.'
+    when: >-
+      `caws agents heartbeat --session-kind fork --forked-from P` runs, then
+      `caws agents heartbeat --session-kind bogus` runs.
+    then: >-
+      The first writes a lease with harness_session_kind=fork and
+      forked_from=P (exit 0); the second is refused (exit 1) with a
+      diagnostic naming the allowed kinds; --forked-from without
+      --session-kind fork is refused.
+  - id: A4
+    given: >-
+      A repo with two lease files whose [started_at, last_active] windows
+      overlap, same hostname and repo_root.
+    when: '`caws agents list` runs (text and --json).'
+    then: >-
+      Both renderings carry the "possible conjoined pair" annotation naming
+      both session ids; the annotation never changes status classification.
+  - id: A5
+    given: 'The hook template and repo-installed copy.'
+    when: 'Searched for the notice text and the session-kind passthrough.'
+    then: >-
+      The notice contains the one-sentence namespace boundary; the heartbeat
+      invocation passes --session-kind and --forked-from from the
+      CAWS_SESSION_KIND / CAWS_FORKED_FROM env vars (defaulting main/absent);
+      SHARED_PACK_VERSION is bumped and pack fingerprints recomputed.
 non_functional: {}
 contracts:
   - name: 'agents-lease-kernel'
