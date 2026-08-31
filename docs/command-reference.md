@@ -1049,8 +1049,13 @@ Observe one message's delivery state (queued vs delivered, with timestamps) — 
 
 - `<message_id>` — Id of the message to observe (positional; primary form)
 - `--id <message_id>` — Id of the message to observe (alias for the positional)
+- `--mine` — Dead-letter view: list YOUR sent messages that are still undelivered instead of observing one id (CAWS-MESSAGE-BEHAVIOR-001)
+- `--queued` — With --mine: restrict to still-undelivered sends (required pairing for the dead-letter view)
+- `--older-than-ms <ms>` — With --mine --queued: only list sends queued at least this long (default 3600000 = 1h)
 - `--json` — Emit JSON ({ok, read_only, message, delivered, delivered_at?})
 - `--data` — Show structured data block on diagnostics
+
+`caws message poll --json` also carries `mine_queued_1h` ({count, oldest_age_ms}) so the heartbeat hook can escalate dead letters without an extra CLI spawn; the escalation line is throttled by .caws/leases/heartbeat-escalation-state.json. `caws agents list` derives silent-platform badges from the ledger (>=5 inbound messages, outbound/inbound <= 0.2) — display-only (CAWS-MESSAGE-BEHAVIOR-001).
 
 ### `caws message prune`
 

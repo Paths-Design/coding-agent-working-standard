@@ -1450,6 +1450,7 @@ Read-only channel history between two endpoints. History includes both direction
 caws message status <message-id>
 caws message status <message-id> --json
 caws message status --id <message-id>
+caws message status --mine --queued --older-than-ms 3600000
 ```
 
 Read-only delivery observation for one message — reports queued vs delivered (with the delivery timestamp). Lets a sender check whether their message was consumed without polling the recipient's mailbox. The positional `<message-id>` is the primary form and `--id` is its alias; supplying both with different ids is refused (CAWS-DEFECT-MSG-REPLY-POSITIONAL-01). JSON output includes `read_only: true`, the `message` record, `delivered`, and `delivered_at` when delivered.
