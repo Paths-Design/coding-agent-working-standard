@@ -1305,9 +1305,10 @@ Register this session in `.caws/leases/`. Hook-invoked at `SessionStart`.
 
 ```bash
 caws agents heartbeat
+caws agents heartbeat --session-kind fork --forked-from <parent-session-id>
 ```
 
-Refresh this session's lease. Hook-invoked at `PreToolUse`. Throttle-aware.
+Refresh this session's lease. Hook-invoked at `PreToolUse`. Throttle-aware. `--session-kind` (main|fork|subagent) and `--forked-from` record harness fork identity on the lease — display and coordination aid, never authority; both survive throttled heartbeats that omit them, and `--forked-from` is refused without `--session-kind fork` (CAWS-AGENTS-FORK-IDENTITY-001). Fresh writes stamp `hook_pid` (the hook process's pid) instead of the legacy `pid` field, which remains a read-only fallback and is never session identity. `caws agents list` annotates same-host leases with overlapping activity windows as a possible conjoined pair (display-only).
 
 ### `caws agents stop`
 
