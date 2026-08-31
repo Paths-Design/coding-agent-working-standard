@@ -1393,11 +1393,12 @@ Directed inter-agent messages over `.caws/messages.jsonl`. Messages are not auth
 caws message send --to <session-id> --text "Please inspect DOC-1"
 caws message send --to <session-id> --text "Please inspect DOC-1" --allow-dead
 caws message send --to <session-id> --text "answer" --reply-to <message-id>
+caws message send --urgency critical --to <session-id> --text "STOP before destroying worktree X"
 caws message send --to wt:<worktree-name> --text "eta on the sweep?"
 caws message send --to spec:<spec-id> --text "eta on the sweep?"
 ```
 
-Send a message to another session. `--to` accepts a raw session id, or an alias — `wt:<worktree-name>` / `spec:<spec-id>` — resolving to the freshest session bound to that worktree or spec. Recipient liveness is heartbeat-age-based: a recipient with no lease or a stale heartbeat (>30m) is refused with a not-sent verdict printed to stdout (details on stderr), while an idle peer — a stopped lease with a fresh heartbeat, e.g. a session that ended its turn while background work runs — is deliverable and receives the message at its next tool call. `--reply-to` records thread linkage (the referenced message must exist and be addressed to the caller). Refused sends are ledgered as `refusal` records (best-effort telemetry; CAWS-MESSAGE-LEDGER-COMPLETENESS-001).
+Send a message to another session. `--to` accepts a raw session id, or an alias — `wt:<worktree-name>` / `spec:<spec-id>` — resolving to the freshest session bound to that worktree or spec. Recipient liveness is heartbeat-age-based: a recipient with no lease or a stale heartbeat (>30m) is refused with a not-sent verdict printed to stdout (details on stderr), while an idle peer — a stopped lease with a fresh heartbeat, e.g. a session that ended its turn while background work runs — is deliverable and receives the message at its next tool call. `--reply-to` records thread linkage (the referenced message must exist and be addressed to the caller). `--urgency critical` is a delivery-ordering signal, NOT authority: it polls before normal traffic regardless of age (CAWS-MESSAGE-DELIVERY-ECONOMICS-001). Refused sends are ledgered as `refusal` records (best-effort telemetry; CAWS-MESSAGE-LEDGER-COMPLETENESS-001).
 
 ### `caws message reply`
 
@@ -1416,9 +1417,10 @@ caws message poll
 caws message poll --me <session-id> --wait 60000
 caws message poll --peek --json
 caws message poll --receipt auto
+caws message poll --drain 5 --json
 ```
 
-Pull the next undelivered message addressed to the current session, or to `--me`. Default behavior is deliver-once; `--peek` observes without consuming. The result carries registry-derived sender context (worktree/spec/branch, when the sender's lease records it) so a recipient never depends on a sender self-identifying in the message body. The delivery record records a receipt mode: `auto` for the heartbeat hook's auto-delivery path (`--receipt auto`), `poll` for an explicit poll (CAWS-MESSAGE-LEDGER-COMPLETENESS-001).
+Pull the next undelivered message addressed to the current session, or to `--me`. Default behavior is deliver-once; `--peek` observes without consuming. `--drain n` consumes up to n messages in one poll (1..10), critical-first then oldest-first — the auto-delivery hook polls with `--drain 5` so a backlog drains in one tool call (CAWS-MESSAGE-DELIVERY-ECONOMICS-001). The result carries registry-derived sender context (worktree/spec/branch, when the sender's lease records it) so a recipient never depends on a sender self-identifying in the message body. The delivery record records a receipt mode: `auto` for the heartbeat hook's auto-delivery path (`--receipt auto`), `poll` for an explicit poll (CAWS-MESSAGE-LEDGER-COMPLETENESS-001). JSON carries `message` (first), `messages` (all consumed, each with sender context), `waiting` (post-consumption remainder), and `poll_ms`.
 
 ### `caws message inbox`
 

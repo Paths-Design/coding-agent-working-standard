@@ -981,10 +981,11 @@ Send a message to another session. Attributes the sender via this session's iden
 - `--to <endpoint>` — Recipient endpoint (required): a session id, or an alias wt:<worktree-name> / spec:<spec-id> resolving to the freshest bound session
 - `--text <message>` — Message body (required, non-empty)
 - `--reply-to <message_id>` — Thread linkage: the message id this send replies to. Must exist and be addressed to you (CAWS-MESSAGE-LEDGER-COMPLETENESS-001)
+- `--urgency <critical|normal>` — Delivery-ordering signal (default normal): a critical message polls before normal traffic regardless of age — ordering, NOT authority (CAWS-MESSAGE-DELIVERY-ECONOMICS-001)
 - `--allow-dead` — Send even if the recipient is not live in the registry (escape hatch; default off)
 - `--data` — Show structured data block on diagnostics
 
-Refused sends are ledgered as `refusal` records in messages.jsonl (best-effort telemetry; never read back for delivery state) so attempt-level success is measurable. Refusal classes: recipient_not_live, recipient_invalid, alias_unresolved, reply_to_self, message_not_found, reply_target_invalid, identity_ambiguous.
+Refused sends are ledgered as `refusal` records in messages.jsonl (best-effort telemetry; never read back for delivery state) so attempt-level success is measurable. Refusal classes: recipient_not_live, recipient_invalid, alias_unresolved, reply_to_self, message_not_found, reply_target_invalid, identity_ambiguous, urgency_invalid.
 
 ### `caws message reply`
 
@@ -1008,7 +1009,8 @@ Pull the next undelivered message addressed to you. Deliver-once. The result car
 - `--wait <ms>` — Block up to <ms> for a message before returning (long-poll; capped at 60000)
 - `--peek` — Show the next message without consuming it (no delivery record)
 - `--receipt <auto|poll>` — Receipt mode recorded on the delivery record: auto for the heartbeat hook's auto-delivery path, poll (default) for an explicit poll (CAWS-MESSAGE-LEDGER-COMPLETENESS-001)
-- `--json` — Emit JSON ({message, sender?, waiting}) instead of human text
+- `--drain <n>` — Consume up to n messages in one poll (1..10, default 1), critical-first then oldest-first — backlog coalescing for the auto-delivery hook (CAWS-MESSAGE-DELIVERY-ECONOMICS-001)
+- `--json` — Emit JSON ({message, messages, sender?, waiting, poll_ms}) instead of human text
 - `--data` — Show structured data block on diagnostics
 
 ### `caws message inbox`
