@@ -292,11 +292,11 @@ Verify that the archive file named in the most recent chain_rotated event byte-m
 
 ## `caws waiver`
 
-Manage CAWS waivers (bounded exception records that suppress matching gate violations)
+Manage CAWS waivers — GATE-RUN-ONLY, legacy pre-v11 surface. A waiver suppresses matching violations in `caws gates run` and NEVER lifts a hook guard; hook blocks are governed by reprieves (`caws reprieve grant`), which is the system hooks actually consult (CAWS-DEFECT-WAIVER-SURFACE-UNCONSULTED-01).
 
 ### `caws waiver create <id>`
 
-Create a new active waiver. Validates against the kernel before writing; --dry-run validates shape and duplicate id state without creating a file.
+Create a new active waiver. Gate-run-only: a successful create prints a byte-stable notice naming `caws reprieve grant` as the hook-block path. Validates against the kernel before writing; --dry-run validates shape and duplicate id state without creating a file.
 
 **Argument:** `id` (required) — Waiver id to create
 
