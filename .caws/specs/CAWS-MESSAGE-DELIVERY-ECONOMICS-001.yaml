@@ -2,9 +2,10 @@ id: CAWS-MESSAGE-DELIVERY-ECONOMICS-001
 title: 'Delivery economics: message urgency with critical-first delivery, poll --drain backlog coalescing, hook digest injection, heartbeat message telemetry'
 risk_tier: 2
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-msg-delivery-economics
 created_at: '2026-08-31T04:09:46.075Z'
-updated_at: '2026-08-31T04:09:46.075Z'
+updated_at: '2026-08-31T04:10:22.117Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/messages-store.ts
