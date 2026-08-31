@@ -94,3 +94,7 @@ evidence:
     status: pass
     evidence_ref: npx jest waiver-surface-legacy (3/3 CLI tests); full suite 171 suites / 2124 tests pass; live CLI create prints byte-stable notice
     recorded_at: "2026-08-31T04:09:02.431Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: npx jest waiver-surface-legacy (3/3 CLI tests); full suite 171 suites / 2124 tests pass; live CLI create prints byte-stable notice
+    recorded_at: "2026-08-31T04:09:02.849Z"
