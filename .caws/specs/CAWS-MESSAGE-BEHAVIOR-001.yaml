@@ -114,3 +114,8 @@ contracts:
   - name: 'agents-list-cli'
     type: behavior
     path: 'packages/caws-cli/src/shell/commands/agents.ts'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: npx jest message suites (5 suites / 97 tests incl. renderer throttle) + full suite 174/2146 + live e2e
+    recorded_at: "2026-08-31T05:06:26.812Z"
