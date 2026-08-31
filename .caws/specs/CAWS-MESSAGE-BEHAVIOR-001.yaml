@@ -131,3 +131,7 @@ evidence:
     status: pass
     evidence_ref: npx jest message suites (5 suites / 97 tests incl. renderer throttle) + full suite 174/2146 + live e2e
     recorded_at: "2026-08-31T05:06:28.200Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: npx jest message suites (5 suites / 97 tests incl. renderer throttle) + full suite 174/2146 + live e2e
+    recorded_at: "2026-08-31T05:06:28.699Z"
