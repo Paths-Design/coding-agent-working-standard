@@ -1,0 +1,31 @@
+id: CAWS-AGENTS-FORK-IDENTITY-001
+title: 'Fork-aware lease identity: harness_session_kind and forked_from on leases, hook_pid relabel, conjoined-session flags in agents list, namespace boundary in the hook notice'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-08-31T04:25:15.533Z'
+updated_at: '2026-08-31T04:25:15.533Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'agents-lease-kernel'
+    type: behavior
+    path: 'packages/caws-cli/src/kernel/worktree/leases.ts'
+  - name: 'agents-heartbeat-cli'
+    type: behavior
+    path: 'packages/caws-cli/src/shell/commands/agents.ts'
