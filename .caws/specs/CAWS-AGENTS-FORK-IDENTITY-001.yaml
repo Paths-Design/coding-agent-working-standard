@@ -120,3 +120,7 @@ evidence:
     status: pass
     evidence_ref: npx jest agents suites (7 suites / 36 tests) + full suite + live e2e fork-identity + conjoined hint probes
     recorded_at: "2026-08-31T04:37:18.097Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: npx jest agents suites (7 suites / 36 tests) + full suite + live e2e fork-identity + conjoined hint probes
+    recorded_at: "2026-08-31T04:37:19.147Z"
