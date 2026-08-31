@@ -541,3 +541,56 @@ test('LEDGER A5: inbox --all lists repo-wide undelivered mail without consuming'
     .map((l) => JSON.parse(l));
   expect(after.filter((l) => l.record === 'delivery')).toHaveLength(0);
 });
+
+// ─── CAWS-MESSAGE-DELIVERY-ECONOMICS-001 ──────────────────────────────────────
+
+test('ECON A4: send --urgency critical writes the field; bogus urgency is refused and ledgered', () => {
+  const root = mkRepo();
+  makeLive(root, 'bob');
+  const { out, opts } = io(root, 'alice');
+  expect(runMessageSendCommand({ ...opts, to: 'bob', text: 'stop!', urgency: 'critical' })).toBe(0);
+  const lines = fs
+    .readFileSync(path.join(root, '.caws', 'messages.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  expect(lines.find((l) => l.record === 'message').urgency).toBe('critical');
+  // bogus value
+  const bogusOut = [];
+  const code = runMessageSendCommand({
+    ...{ cwd: root, env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'alice' }, out: (s) => bogusOut.push(s), err: () => {} },
+    to: 'bob', text: 'x', urgency: 'bogus',
+  });
+  expect(code).toBe(1);
+  expect(bogusOut.join('\n')).toMatch(/not sent — invalid urgency/);
+  const after = fs
+    .readFileSync(path.join(root, '.caws', 'messages.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  const refusal = after.filter((l) => l.record === 'refusal');
+  expect(refusal).toHaveLength(1);
+  expect(refusal[0].class).toBe('urgency_invalid');
+  expect(after.filter((l) => l.record === 'message')).toHaveLength(1);
+});
+
+test('ECON A2: poll --drain JSON carries messages[], message alias, waiting, and poll_ms', () => {
+  const root = mkRepo();
+  makeLive(root, 'alice');
+  makeLive(root, 'bob');
+  const { opts: bobOpts } = io(root, 'bob');
+  expect(runMessageSendCommand({ ...bobOpts, to: 'alice', text: 'one' })).toBe(0);
+  expect(runMessageSendCommand({ ...bobOpts, to: 'alice', text: 'two' })).toBe(0);
+  const jsonOut = [];
+  const code = runMessagePollCommand({
+    ...{ cwd: root, env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'alice' }, out: (s) => jsonOut.push(s), err: () => {} },
+    json: true, drain: 5,
+  });
+  expect(code).toBe(0);
+  const parsed = JSON.parse(jsonOut.join('\n'));
+  expect(parsed.messages).toHaveLength(2);
+  expect(parsed.messages.map((e) => e.message.text)).toEqual(['one', 'two']);
+  expect(parsed.message.text).toBe('one');
+  expect(parsed.waiting).toBe(0);
+  expect(typeof parsed.poll_ms).toBe('number');
+});

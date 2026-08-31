@@ -786,3 +786,91 @@ test('LEDGER A8: legacy records without reply_to/mode parse with zero diagnostic
   expect(all.value.diagnostics).toHaveLength(0);
   expect(all.value.count).toBe(0);
 });
+
+// ─── CAWS-MESSAGE-DELIVERY-ECONOMICS-001 ──────────────────────────────────────
+
+test('ECON A4: urgency critical is written verbatim; omitted otherwise', () => {
+  const caws = cawsDir();
+  makeLive(caws, 'r1');
+  sendMessage(caws, { actor: sender, to: 'r1', text: 'plain' });
+  sendMessage(caws, { actor: sender, to: 'r1', text: 'urgent', urgency: 'critical' });
+  sendMessage(caws, { actor: sender, to: 'r1', text: 'normal', urgency: 'normal' });
+  const lines = fs
+    .readFileSync(path.join(caws, 'messages.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  expect(lines.find((l) => l.text === 'plain').urgency).toBeUndefined();
+  expect(lines.find((l) => l.text === 'urgent').urgency).toBe('critical');
+  expect(lines.find((l) => l.text === 'normal').urgency).toBeUndefined();
+});
+
+test('ECON A1: the oldest CRITICAL message polls before older normals', () => {
+  const caws = cawsDir();
+  makeLive(caws, 'r1');
+  sendMessage(caws, { actor: sender, to: 'r1', text: 'normal-old' });
+  sendMessage(caws, { actor: sender, to: 'r1', text: 'normal-new' });
+  sendMessage(caws, { actor: sender, to: 'r1', text: 'stop-warning', urgency: 'critical' });
+  const polled = pollMessage(caws, 'r1');
+  expect(polled.value.message.text).toBe('stop-warning');
+  expect(polled.value.messages).toHaveLength(1);
+  // one delivery record only, and it is for the critical message
+  const deliveries = fs
+    .readFileSync(path.join(caws, 'messages.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l))
+    .filter((l) => l.record === 'delivery');
+  expect(deliveries).toHaveLength(1);
+  expect(deliveries[0].deliver_id).toBe(polled.value.message.id);
+});
+
+test('ECON A2: --drain consumes up to N critical-first with one delivery per message', () => {
+  const caws = cawsDir();
+  makeLive(caws, 'r1');
+  sendMessage(caws, { actor: sender, to: 'r1', text: 'n1' });
+  sendMessage(caws, { actor: sender, to: 'r1', text: 'n2' });
+  sendMessage(caws, { actor: sender, to: 'r1', text: 'n3' });
+  sendMessage(caws, { actor: sender, to: 'r1', text: 'stop', urgency: 'critical' });
+  const polled = pollMessage(caws, 'r1', { drain: 3 });
+  expect(polled.ok).toBe(true);
+  expect(polled.value.messages.map((e) => e.message.text)).toEqual(['stop', 'n1', 'n2']);
+  expect(polled.value.message.text).toBe('stop');
+  // deliver-once preserved: exactly 3 new delivery records, one per consumed id
+  const deliveries = fs
+    .readFileSync(path.join(caws, 'messages.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l))
+    .filter((l) => l.record === 'delivery');
+  expect(deliveries).toHaveLength(3);
+  expect(new Set(deliveries.map((d) => d.deliver_id))).toEqual(
+    new Set(polled.value.messages.map((e) => e.message.id))
+  );
+  // the remainder is still deliverable
+  const next = pollMessage(caws, 'r1');
+  expect(next.value.message.text).toBe('n3');
+});
+
+test('ECON A6: legacy records without urgency parse with zero diagnostics', () => {
+  const caws = cawsDir();
+  const legacy = [
+    {
+      record: 'message',
+      id: 'legacy-econ',
+      actor: { kind: 'agent', id: 'a' },
+      to: 'b',
+      channel: 'a::b',
+      text: 'old shape',
+      ts: new Date().toISOString(),
+    },
+    { record: 'delivery', deliver_id: 'legacy-econ', ts: new Date().toISOString() },
+  ];
+  fs.writeFileSync(path.join(caws, 'messages.jsonl'), legacy.map((l) => JSON.stringify(l)).join('\n') + '\n');
+  const hist = channelHistory(caws, 'a', 'b');
+  expect(hist.ok).toBe(true);
+  expect(hist.value).toHaveLength(1);
+  expect(hist.value[0].urgency).toBeUndefined();
+  const all = inboxAllMessages(caws);
+  expect(all.value.diagnostics).toHaveLength(0);
+});
