@@ -2,10 +2,11 @@ id: CAWS-DEFECT-MSG-REPLY-POSITIONAL-01
 title: 'message reply and status teach the positional <message_id> form but the excess-args guard rejects it'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: wt-msg-reply-positional
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-msg-reply-positional at e5afd591f0ed26df43106e38594bb9cb94bbea51'
 created_at: '2026-08-31T03:01:05.672Z'
-updated_at: '2026-08-31T03:08:56.106Z'
+updated_at: '2026-08-31T03:09:01.755Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/command-metadata.ts
