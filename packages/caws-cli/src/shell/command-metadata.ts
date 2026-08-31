@@ -1384,14 +1384,14 @@ export const WAIVER_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'waiver',
   description:
-    'Manage CAWS waivers (bounded exception records that suppress matching gate violations)',
+    'Manage CAWS waivers — GATE-RUN-ONLY, legacy pre-v11 surface. A waiver suppresses matching violations in `caws gates run` and NEVER lifts a hook guard; hook blocks are governed by reprieves (`caws reprieve grant`), which is the system hooks actually consult.',
   subcommands: [
     {
       kind: 'leaf',
       name: 'create',
       argument: { name: 'id', required: true, description: 'Waiver id to create' },
       description:
-        'Create a new active waiver. Validates against the kernel before writing; --dry-run validates shape and duplicate id state without creating a file.',
+        'Create a new active waiver. Gate-run-only: it suppresses matching violations in `caws gates run` and never lifts a hook guard (use `caws reprieve grant` for hook blocks). Validates against the kernel before writing; --dry-run validates shape and duplicate id state without creating a file.',
       options: [
         { flag: '--title <title>', required: true, description: 'Short waiver title (≥5 chars)' },
         {
@@ -1422,7 +1422,8 @@ export const WAIVER_COMMAND_META: GroupCommandMeta = {
     {
       kind: 'leaf',
       name: 'list',
-      description: 'List waivers. By default excludes revoked and expired records.',
+      description:
+        'List waivers (gate-run-only; hooks consult reprieves, not waivers). By default excludes revoked and expired records.',
       options: [
         { flag: '--include-revoked', description: 'Include revoked waivers' },
         { flag: '--include-expired', description: 'Include expired waivers' },
@@ -1440,7 +1441,8 @@ export const WAIVER_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'revoke',
       argument: { name: 'id', required: true, description: 'Waiver id to revoke' },
-      description: 'Revoke a waiver. Writes a revocation record; refuses double-revoke.',
+      description:
+        'Revoke a waiver (gate-run-only; hooks consult reprieves, not waivers). Writes a revocation record; refuses double-revoke.',
       options: [
         { flag: '--revoked-by <id>', description: 'Identity recorded in revocation.revoked_by' },
         {

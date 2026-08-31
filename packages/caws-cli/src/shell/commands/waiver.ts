@@ -248,6 +248,14 @@ export function runWaiverCreateCommand(opts: WaiverCreateOptions): number {
       now,
     })
   );
+  // Gate-run-only boundary notice (CAWS-DEFECT-WAIVER-SURFACE-UNCONSULTED-01):
+  // byte-stable so agents can pattern-match it, mirroring the idle-recipient
+  // note pattern on message send.
+  out(
+    `(note: waivers suppress matching violations in \`caws gates run\` ONLY — ` +
+      `they never lift a hook guard; for a hook block use ` +
+      `\`caws reprieve grant --current --handlers <guard> --reason "..." --approved-by "..." --expires-at "<iso>"\`.)`
+  );
   return 0;
 }
 
