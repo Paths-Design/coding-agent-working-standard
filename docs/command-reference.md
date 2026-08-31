@@ -878,10 +878,14 @@ Refresh this session's lease. Hook-invoked at PreToolUse. Throttle-aware.
 - `--session-id <id>` — Explicit session id (required for hook-invoked usage)
 - `--platform <p>` — Platform tag
 - `--reason <r>` — pre_tool_use | claim | status | manual_register
+- `--session-kind <main|fork|subagent>` — Harness session kind for the lease (display + coordination aid, never authority). The hook passes CAWS_SESSION_KIND through when set (CAWS-AGENTS-FORK-IDENTITY-001)
+- `--forked-from <session_id>` — Parent session id — only meaningful with --session-kind fork; refused otherwise
 - `--throttle <ms>` — Skip write if last_active within this many ms (default: 0 — no throttle)
 - `--json` — Emit CAWS-native JSON to stdout
 - `--include-active-summary` — Include active_agent_count + active_agents in JSON output
 - `--data` — Show structured data block on diagnostics
+
+Leases carry `harness_session_kind` / `forked_from` (carried forward across throttled heartbeats) and `hook_pid` (the heartbeat-writing hook process's pid, replacing the legacy `pid` field on fresh writes; legacy `pid` remains read-only fallback and is never session identity). `caws agents list` annotates same-host leases with overlapping activity windows as a possible conjoined pair — display-only advisory (CAWS-AGENTS-FORK-IDENTITY-001).
 
 ### `caws agents stop`
 

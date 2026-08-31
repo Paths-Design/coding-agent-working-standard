@@ -762,7 +762,12 @@ export function pruneDeadLeases(
     // now does pid liveness decide. No pid recorded → cannot verify; treat as
     // dead (a running session stamps its pid via the heartbeat writer, and the
     // lease is already stale).
-    const pid = typeof lease.pid === 'number' ? lease.pid : NaN;
+    const pid =
+      typeof lease.hook_pid === 'number'
+        ? lease.hook_pid
+        : typeof lease.pid === 'number'
+          ? lease.pid
+          : NaN;
     if (!Number.isInteger(pid) || pid <= 0) {
       candidates.push(lease.session_id);
       continue;

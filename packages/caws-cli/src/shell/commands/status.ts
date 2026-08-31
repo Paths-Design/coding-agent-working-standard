@@ -316,7 +316,7 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
           ...(gitInfo.branch !== undefined ? { branch: gitInfo.branch } : {}),
           ...(binding.worktreeName !== undefined ? { bound_worktree: binding.worktreeName } : {}),
           ...(binding.binding.kind === 'bound' ? { bound_spec_id: binding.binding.spec.id } : {}),
-          pid: process.pid,
+          hook_pid: process.pid,
           hostname: os.hostname(),
         };
         const patchRes = heartbeatAgentSession(leases, sessionIdentity, context, now, 'status');

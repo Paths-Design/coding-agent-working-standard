@@ -138,6 +138,16 @@ export interface AgentLease {
   readonly bound_worktree?: string;
   readonly bound_spec_id?: string;
   readonly pid?: number;
+  /** NEW (CAWS-AGENTS-FORK-IDENTITY-001): the heartbeat-writing hook process's
+   *  pid. Writers emit hook_pid instead of the legacy pid field; readers
+   *  prefer hook_pid and fall back to pid. Never session identity — advisory
+   *  liveness hint only (AGENT-LIVENESS-DOCTOR-001 D4). */
+  readonly hook_pid?: number;
+  /** Harness session kind (main/fork/subagent). Absent = legacy/unknown.
+   *  Display + coordination aid, never authority (CAWS-AGENTS-FORK-IDENTITY-001). */
+  readonly harness_session_kind?: 'main' | 'fork' | 'subagent';
+  /** Parent session id, present only when harness_session_kind is 'fork'. */
+  readonly forked_from?: string;
   readonly hostname?: string;
   readonly session_log_path?: string;
   readonly hook_pack_version?: number;
@@ -214,6 +224,9 @@ export interface LeaseContext {
   readonly bound_worktree?: string;
   readonly bound_spec_id?: string;
   readonly pid?: number;
+  readonly hook_pid?: number;
+  readonly harness_session_kind?: 'main' | 'fork' | 'subagent';
+  readonly forked_from?: string;
   readonly hostname?: string;
   readonly session_log_path?: string;
   readonly hook_pack_version?: number;
@@ -318,6 +331,42 @@ function validateContext(context: LeaseContext): Result<LeaseContext> {
       )
     );
   }
+  if (
+    context.harness_session_kind !== undefined &&
+    context.harness_session_kind !== 'main' &&
+    context.harness_session_kind !== 'fork' &&
+    context.harness_session_kind !== 'subagent'
+  ) {
+    return err(
+      diag(
+        LEASE_RULES.CONTEXT_INVALID,
+        "LeaseContext.harness_session_kind must be 'main', 'fork', or 'subagent'."
+      )
+    );
+  }
+  if (context.forked_from !== undefined) {
+    if (typeof context.forked_from !== 'string' || context.forked_from.length === 0) {
+      return err(
+        diag(LEASE_RULES.CONTEXT_INVALID, 'LeaseContext.forked_from must be a non-empty session id.')
+      );
+    }
+    if (context.harness_session_kind !== 'fork') {
+      return err(
+        diag(
+          LEASE_RULES.CONTEXT_INVALID,
+          "LeaseContext.forked_from is only meaningful when harness_session_kind is 'fork'."
+        )
+      );
+    }
+  }
+  if (
+    context.hook_pid !== undefined &&
+    (!Number.isInteger(context.hook_pid) || (context.hook_pid as number) <= 0)
+  ) {
+    return err(
+      diag(LEASE_RULES.CONTEXT_INVALID, 'LeaseContext.hook_pid must be a positive integer.')
+    );
+  }
   return ok(context);
 }
 
@@ -364,6 +413,12 @@ export function registerAgentSession(
     ...(existing.work_state !== undefined ? { work_state: existing.work_state } : {}),
     ...(existing.work_state_note !== undefined ? { work_state_note: existing.work_state_note } : {}),
     ...(existing.work_state_updated_at !== undefined ? { work_state_updated_at: existing.work_state_updated_at } : {}),
+    // CAWS-AGENTS-FORK-IDENTITY-001: the fork annotation must survive
+    // throttled heartbeats whose context cannot re-detect the fork.
+    ...(existing.harness_session_kind !== undefined
+      ? { harness_session_kind: existing.harness_session_kind }
+      : {}),
+    ...(existing.forked_from !== undefined ? { forked_from: existing.forked_from } : {}),
   } : {};
 
   const lease: AgentLease = {
@@ -380,7 +435,11 @@ export function registerAgentSession(
     ...(ctx.branch !== undefined ? { branch: ctx.branch } : {}),
     ...(ctx.bound_worktree !== undefined ? { bound_worktree: ctx.bound_worktree } : {}),
     ...(ctx.bound_spec_id !== undefined ? { bound_spec_id: ctx.bound_spec_id } : {}),
-    ...(ctx.pid !== undefined ? { pid: ctx.pid } : {}),
+    ...(ctx.hook_pid !== undefined ? { hook_pid: ctx.hook_pid } : {}),
+    ...(ctx.harness_session_kind !== undefined
+      ? { harness_session_kind: ctx.harness_session_kind }
+      : {}),
+    ...(ctx.forked_from !== undefined ? { forked_from: ctx.forked_from } : {}),
     ...(ctx.hostname !== undefined ? { hostname: ctx.hostname } : {}),
     ...(ctx.session_log_path !== undefined ? { session_log_path: ctx.session_log_path } : {}),
     ...(ctx.hook_pack_version !== undefined ? { hook_pack_version: ctx.hook_pack_version } : {}),

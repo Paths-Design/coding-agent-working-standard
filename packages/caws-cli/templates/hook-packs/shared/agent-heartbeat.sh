@@ -69,6 +69,9 @@ fi
 
 # Capture both stdout (JSON) and stderr (diagnostics). On any CLI error,
 # fall through to silent exit.
+# Fork identity passthrough (CAWS-AGENTS-FORK-IDENTITY-001): harnesses that
+# know their session kind set CAWS_SESSION_KIND / CAWS_FORKED_FROM; defaults
+# main/absent so the annotation survives without harness cooperation.
 CLI_OUT="$(
   caws_run_cli agents heartbeat \
     --session-id "$HOOK_SESSION_ID" \
@@ -77,6 +80,8 @@ CLI_OUT="$(
     --reason pre_tool_use \
     --json \
     --include-active-summary \
+    ${CAWS_SESSION_KIND:+--session-kind "$CAWS_SESSION_KIND"} \
+    ${CAWS_FORKED_FROM:+--forked-from "$CAWS_FORKED_FROM"} \
   2>/dev/null
 )" || exit 0
 
@@ -207,6 +212,9 @@ _HEARTBEAT_CTX="$(printf '%s' "$CLI_OUT" | EMIT_STATE_FILE="$EMIT_STATE_FILE" no
         "Aliases also resolve: --to wt:<worktree-name> or --to spec:<spec-id>. " +
         "When a message arrives it shows the exact reply command (caws message " +
         "reply <message_id>).\n" +
+        "Harness display names (ListAgents and similar) are NOT CAWS addresses — " +
+        "address sessions by the lease ids above; a forked session gets its own " +
+        "lease id once it runs its first tool call.\n" +
         "Their reply (and any message to you) surfaces in YOUR context automatically " +
         "at your next tool call — you do not need to poll. To check immediately: " +
         "caws message poll [--wait <ms>].\n" +

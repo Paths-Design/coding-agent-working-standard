@@ -1798,6 +1798,8 @@ export function registerShellCommands(
         throttle?: string;
         json?: boolean;
         includeActiveSummary?: boolean;
+        sessionKind?: string;
+        forkedFrom?: string;
         data?: boolean;
       }) => {
         const throttleMs = opts.throttle !== undefined ? Number(opts.throttle) : 0;
@@ -1805,6 +1807,12 @@ export function registerShellCommands(
           ...(opts.sessionId !== undefined ? { sessionId: opts.sessionId } : {}),
           ...(opts.platform !== undefined ? { platform: opts.platform } : {}),
           ...(opts.reason !== undefined ? { reason: opts.reason as LeaseReason } : {}),
+          ...(typeof opts.sessionKind === 'string' && opts.sessionKind.length > 0
+            ? { sessionKind: opts.sessionKind as 'main' | 'fork' | 'subagent' }
+            : {}),
+          ...(typeof opts.forkedFrom === 'string' && opts.forkedFrom.length > 0
+            ? { forkedFrom: opts.forkedFrom }
+            : {}),
           throttleMs: Number.isFinite(throttleMs) && throttleMs > 0 ? throttleMs : 0,
           json: opts.json === true,
           includeActiveSummary: opts.includeActiveSummary === true,
