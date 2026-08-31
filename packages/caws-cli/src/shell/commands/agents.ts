@@ -52,6 +52,7 @@ import {
 import {
   applyLeasePatch,
   loadLeases,
+  platformEngagement,
   pruneDeadLeases,
   pruneLeasesByStatus,
   readGitDirInfo,
@@ -576,6 +577,24 @@ function conjoinedLeasePairs(leases: LeaseRegistry): ReadonlyArray<{ a: string; 
   return pairs;
 }
 
+/** Silent-platform badge (CAWS-MESSAGE-BEHAVIOR-001): platforms with at
+ * least 5 inbound messages and an outbound/inbound ratio at or below 0.2 —
+ * sessions of that platform receive mail but historically do not answer.
+ * Derived from the ledger + leases; display-only, never authority.
+ */
+const SILENT_MIN_INBOUND = 5;
+const SILENT_MAX_RATIO = 0.2;
+
+function silentPlatforms(engagement: Record<string, { to: number; from: number; ratio: number | null }>) {
+  const out: { platform: string; to: number; from: number }[] = [];
+  for (const [platform, e] of Object.entries(engagement)) {
+    if (e.to >= SILENT_MIN_INBOUND && e.ratio !== null && e.ratio <= SILENT_MAX_RATIO) {
+      out.push({ platform, to: e.to, from: e.from });
+    }
+  }
+  return out.sort((a, b) => b.to - a.to);
+}
+
 export function runAgentsListCommand(opts: ListOpts = {}): number {
   const { cwd, nowFn, out, err, showData, json } = setupIO(opts);
 
@@ -606,6 +625,10 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
   }
   const summary = summaryRes ?? EMPTY_ACTIVITY_SUMMARY;
 
+  // Silent-platform badges (CAWS-MESSAGE-BEHAVIOR-001): derived, display-only.
+  const engagementRes = platformEngagement(cawsDir);
+  const silent = engagementRes.ok ? silentPlatforms(engagementRes.value) : [];
+
   // --active means TTL-classified active, NOT raw status field.
   // Default surfacing rules: active is always shown; stale + stopped are
   // gated by their flags. --active means active-only (overrides flags).
@@ -627,6 +650,7 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
         total: summary.total,
       },
       conjoined_pairs: conjoinedLeasePairs(loadRes.value.leases),
+      silent_platforms: silent,
     });
   } else {
     out(`active: ${summary.active.length}`);
@@ -646,6 +670,9 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
     }
     for (const pair of conjoinedLeasePairs(loadRes.value.leases)) {
       out(`conjoined-hint: ${pair.a} <=> ${pair.b} (overlapping lease windows; display-only advisory)`);
+    }
+    for (const s of silent) {
+      out(`silent-platform: ${s.platform} (${s.to} to, ${s.from} from)`);
     }
   }
   if (loadRes.value.diagnostics.length > 0 && showData) {

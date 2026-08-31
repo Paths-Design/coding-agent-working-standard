@@ -1920,6 +1920,19 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
       },
       options: [
         { flag: '--id <message_id>', description: 'Id of the message to observe (alias for the positional)' },
+        {
+          flag: '--mine',
+          description:
+            'Dead-letter view: list YOUR sent messages that are still undelivered instead of observing one id (CAWS-MESSAGE-BEHAVIOR-001).',
+        },
+        {
+          flag: '--queued',
+          description: 'With --mine: restrict to still-undelivered sends (required pairing for the dead-letter view).',
+        },
+        {
+          flag: '--older-than-ms <ms>',
+          description: 'With --mine --queued: only list sends queued at least this long (default 3600000 = 1h).',
+        },
         { flag: '--json', description: 'Emit JSON ({ok, read_only, message, delivered, delivered_at?})' },
         DATA_OPTION,
       ],

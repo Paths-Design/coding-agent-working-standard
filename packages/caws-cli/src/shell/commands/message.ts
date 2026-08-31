@@ -25,6 +25,7 @@ import {
   inboxCount,
   inboxMessages,
   inboxAllMessages,
+  mineQueued,
   channelHistory,
   pruneMessages,
   recordRefusal,
@@ -342,6 +343,11 @@ export interface MessageStatusCommandOptions extends BaseCommandOptions {
   /** Positional <message_id> (primary form); conflicts with --id when both differ. */
   readonly positionalId?: string;
   readonly json?: boolean;
+  /** Dead-letter view (CAWS-MESSAGE-BEHAVIOR-001): list MY sent messages that
+   *  are still undelivered, instead of observing one message by id. */
+  readonly mine?: boolean;
+  /** With --mine: require the queued messages to be this old (ms). */
+  readonly olderThanMs?: number;
 }
 
 /**
@@ -349,9 +355,72 @@ export interface MessageStatusCommandOptions extends BaseCommandOptions {
  * Read-only. Lets a SENDER distinguish "queued" from "seen" without polling
  * the recipient's mailbox. Exit codes: 0 found, 1 (unknown id / no session),
  * 2 repo error.
+ *
+ * `caws message status --mine --queued [--older-than-ms <ms>]` — the
+ * caller's dead letters (CAWS-MESSAGE-BEHAVIOR-001): sent messages that are
+ * still undelivered past the age threshold (default 1 h), oldest-first.
  */
 export function runMessageStatusCommand(opts: MessageStatusCommandOptions): number {
-  const { cwd, out, err, showData } = defaults(opts);
+  const { cwd, env, out, err, showData } = defaults(opts);
+
+  // ── dead-letter view (--mine --queued) ──
+  if (opts.mine === true) {
+    const rootResult = resolveRepoRoot(cwd);
+    if (!rootResult.ok) {
+      err('caws message status: failed to resolve repo root.');
+      err(renderDiagnostics(rootResult.errors, { showData }));
+      return 2;
+    }
+    const { cawsDir } = rootResult.value;
+    const sessionResult = resolveSession({ cawsDir, worktreeRoot: cwd, env, allowMint: false });
+    if (!sessionResult.ok) {
+      err('caws message status: could not resolve your session identity.');
+      err(renderDiagnostics(sessionResult.errors, { showData }));
+      return 1;
+    }
+    const me = buildActor({ session: sessionResult.value, kind: 'agent' }).session_id ?? '';
+    if (me.length === 0) {
+      err('caws message status: resolved session has no session_id.');
+      return 1;
+    }
+    const olderThanMs =
+      typeof opts.olderThanMs === 'number' && Number.isFinite(opts.olderThanMs)
+        ? Math.max(0, Math.floor(opts.olderThanMs))
+        : 3_600_000;
+    const queued = mineQueued(cawsDir, me, olderThanMs);
+    if (!queued.ok) {
+      err('caws message status: failed to read the message log.');
+      err(renderDiagnostics(queued.errors, { showData }));
+      return 2;
+    }
+    if (opts.json === true) {
+      out(JSON.stringify({
+        ok: true,
+        read_only: true,
+        me,
+        older_than_ms: olderThanMs,
+        count: queued.value.count,
+        oldest_age_ms: queued.value.oldestAgeMs,
+        messages: queued.value.messages.map((entry) => ({
+          message: entry.message,
+          age_ms: entry.ageMs,
+        })),
+      }));
+      return 0;
+    }
+    const oldest =
+      queued.value.oldestAgeMs !== null ? ` (oldest ${formatAge(queued.value.oldestAgeMs)})` : '';
+    out(`Your undelivered sent messages (older than ${formatAge(olderThanMs)}): ${queued.value.count}${oldest}`);
+    if (queued.value.count === 0) {
+      out('(none)');
+      return 0;
+    }
+    for (const entry of queued.value.messages) {
+      const to = entry.message.to;
+      out(`${entry.message.ts} -> ${to} [queued ${formatAge(entry.ageMs)}]: ${entry.message.text}`);
+    }
+    return 0;
+  }
 
   const positional =
     typeof opts.positionalId === 'string' && opts.positionalId.length > 0
@@ -496,6 +565,14 @@ export function runMessagePollCommand(opts: MessagePollCommandOptions): number {
   const countResult = inboxCount(cawsDir, me);
   const waiting = countResult.ok ? countResult.value : null;
 
+  // Dead-letter signal for the caller (CAWS-MESSAGE-BEHAVIOR-001): my own
+  // sent-but-undelivered messages older than 1h. Best-effort; the hook uses
+  // this to escalate without any extra CLI spawn.
+  const mineRes = mineQueued(cawsDir, me, 3_600_000);
+  const mineQueued1h = mineRes.ok
+    ? { count: mineRes.value.count, oldest_age_ms: mineRes.value.oldestAgeMs }
+    : { count: 0, oldest_age_ms: null };
+
   if (opts.json === true) {
     out(
       JSON.stringify({
@@ -507,6 +584,7 @@ export function runMessagePollCommand(opts: MessagePollCommandOptions): number {
         })),
         waiting,
         poll_ms: pollMs,
+        mine_queued_1h: mineQueued1h,
       })
     );
     return 0;

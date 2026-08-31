@@ -1004,6 +1004,101 @@ export interface MessageInboxAllResult {
  * age. Read-only — consumes nothing. Lets a sender or operator see queued
  * mail without polling a specific mailbox.
  */
+/** One of the caller's sent-but-undelivered messages with its age. */
+export interface MineQueuedEntry {
+  readonly message: MessageRecord;
+  readonly ageMs: number;
+}
+
+export interface MineQueuedResult {
+  readonly messages: readonly MineQueuedEntry[];
+  readonly count: number;
+  readonly oldestAgeMs: number | null;
+  readonly diagnostics: ReadonlyArray<Diagnostic>;
+}
+
+/**
+ * The caller's dead letters (CAWS-MESSAGE-BEHAVIOR-001): messages SENT by
+ * `me` that still have no delivery record and are older than `olderThanMs`,
+ * oldest-first. Read-only — consumes nothing. Lets a sender see its own
+ * queued mail without polling each recipient.
+ */
+export function mineQueued(
+  cawsDir: string,
+  me: string,
+  olderThanMs: number
+): Result<MineQueuedResult> {
+  const loaded = readMessageLines(cawsDir);
+  if (!loaded.ok) return err(loaded.errors);
+  const delivered = new Set<string>();
+  const mine: MessageRecord[] = [];
+  for (const entry of loaded.value.lines) {
+    if (entry.parsed?.record === 'delivery' && typeof entry.parsed.deliver_id === 'string') {
+      delivered.add(entry.parsed.deliver_id);
+    } else if (entry.parsed?.record === 'message') {
+      const from = entry.parsed.actor.session_id ?? entry.parsed.actor.id;
+      if (from === me) mine.push(entry.parsed);
+    }
+  }
+  const now = Date.now();
+  const aged = mine
+    .filter((m) => !delivered.has(m.id))
+    .map((message) => {
+      const ts = Date.parse(message.ts);
+      return { message, ageMs: Number.isFinite(ts) ? Math.max(0, now - ts) : 0 };
+    })
+    .filter((entry) => entry.ageMs >= Math.max(0, olderThanMs))
+    .sort((a, b) => a.message.ts.localeCompare(b.message.ts));
+  return ok({
+    messages: aged,
+    count: aged.length,
+    oldestAgeMs: aged.length > 0 ? aged[0]?.ageMs ?? null : null,
+    diagnostics: loaded.value.diagnostics,
+  });
+}
+
+/** Per-platform engagement derived from the ledger and leases (display-only). */
+export interface PlatformEngagement {
+  readonly to: number;
+  readonly from: number;
+  readonly ratio: number | null;
+}
+
+/**
+ * Platform engagement (CAWS-MESSAGE-BEHAVIOR-001): for every platform,
+ * inbound message count (sent TO its sessions) and outbound count (sent BY
+ * its sessions). Recipient platforms come from leases; senders without a
+ * lease fall back to the record's actor.platform, then 'unknown'. Derived,
+ * display-only — never authority.
+ */
+export function platformEngagement(cawsDir: string): Result<Record<string, PlatformEngagement>> {
+  const loaded = readMessageLines(cawsDir);
+  if (!loaded.ok) return err(loaded.errors);
+  const leasesResult = loadLeases(cawsDir);
+  const leases = leasesResult.ok ? leasesResult.value.leases : {};
+  const buckets: Record<string, { to: number; from: number }> = {};
+  const bump = (platform: string, key: 'to' | 'from') => {
+    const b = (buckets[platform] ??= { to: 0, from: 0 });
+    b[key] += 1;
+  };
+  for (const entry of loaded.value.lines) {
+    if (entry.parsed?.record !== 'message') continue;
+    const m = entry.parsed;
+    const toLease = leases[m.to] as { platform?: string } | undefined;
+    const toPlatform = toLease?.platform ?? 'unknown';
+    bump(toPlatform, 'to');
+    const fromId = m.actor.session_id ?? m.actor.id;
+    const fromLease = leases[fromId] as { platform?: string } | undefined;
+    const fromPlatform = fromLease?.platform ?? m.actor.platform ?? 'unknown';
+    bump(fromPlatform, 'from');
+  }
+  const out: Record<string, PlatformEngagement> = {};
+  for (const [platform, b] of Object.entries(buckets)) {
+    out[platform] = { to: b.to, from: b.from, ratio: b.to > 0 ? b.from / b.to : null };
+  }
+  return ok(out);
+}
+
 export function inboxAllMessages(cawsDir: string): Result<MessageInboxAllResult> {
   const loaded = readMessageLines(cawsDir);
   if (!loaded.ok) return err(loaded.errors);

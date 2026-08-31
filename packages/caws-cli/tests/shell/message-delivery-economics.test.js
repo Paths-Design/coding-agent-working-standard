@@ -79,11 +79,15 @@ function ledger(root) {
 function extractRenderer() {
   const src = fs.readFileSync(HOOK_TEMPLATE, 'utf8');
   // The template has TWO node -e blocks; anchor at the message-renderer's
-  // telemetry env assignment, which only the message block uses.
-  const anchor = 'HEARTBEAT_MSG_TELEMETRY="$PROJECT_DIR_FOR_CACHE/.caws/leases/heartbeat-message-telemetry.jsonl" node -e \'';
-  const start = src.indexOf(anchor);
-  if (start === -1) throw new Error('message renderer anchor not found in template');
-  const body = src.slice(start + anchor.length);
+  // telemetry env assignment, which only the message block uses (it may be
+  // followed by the escalation-state env added in CAWS-MESSAGE-BEHAVIOR-001).
+  const envAnchor = 'HEARTBEAT_MSG_TELEMETRY="$PROJECT_DIR_FOR_CACHE/.caws/leases/heartbeat-message-telemetry.jsonl"';
+  const envStart = src.indexOf(envAnchor);
+  if (envStart === -1) throw new Error('message renderer anchor not found in template');
+  const marker = "node -e '";
+  const start = src.indexOf(marker, envStart);
+  if (start === -1) throw new Error('message renderer marker not found after env anchor');
+  const body = src.slice(start + marker.length);
   const end = body.indexOf("' 2>/dev/null)");
   if (end === -1) throw new Error('renderer terminator not found in template');
   return body.slice(0, end);

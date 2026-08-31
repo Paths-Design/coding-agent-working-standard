@@ -2042,10 +2042,21 @@ export function registerShellCommands(
     });
 
   defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'status'))
-    .action((messageId: string | undefined, opts: { id?: string; json?: boolean; data?: boolean }) => {
+    .action((messageId: string | undefined, opts: {
+      id?: string;
+      json?: boolean;
+      mine?: boolean;
+      queued?: boolean;
+      olderThanMs?: string;
+      data?: boolean;
+    }) => {
+      const olderThanMs = opts.olderThanMs !== undefined ? Number(opts.olderThanMs) : undefined;
       const code = runMessageStatusCommand({
         id: opts.id ?? '',
         ...(typeof messageId === 'string' && messageId.length > 0 ? { positionalId: messageId } : {}),
+        ...(opts.mine === true ? { mine: true } : {}),
+        ...(opts.queued === true ? { queued: true } : {}),
+        ...(olderThanMs !== undefined && Number.isFinite(olderThanMs) ? { olderThanMs } : {}),
         json: opts.json === true,
         showData: opts.data === true,
       });
