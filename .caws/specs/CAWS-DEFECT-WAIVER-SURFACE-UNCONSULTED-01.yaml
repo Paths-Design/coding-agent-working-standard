@@ -7,19 +7,74 @@ created_at: '2026-08-31T04:04:17.198Z'
 updated_at: '2026-08-31T04:04:17.198Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/shell/commands/waiver.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/src/shell/commands/waiver.ts
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/tests/shell/waiver-surface-legacy.test.js
+    - packages/caws-cli/README.md
+    - docs/command-reference.md
+    - docs/api/cli.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    Verified consultation surface (evidence, not claim): NO hook reads
+    .caws/waivers/ or waivers.yml — hook guards consult only reprieves
+    (lib/reprieve.sh, CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001); the sole
+    waiver consumer is the on-demand `caws gates run` filter
+    (shell/gates/waiver-filter.ts -> effectiveWaiversForGate). The waiver
+    CLI must state exactly that and never imply a hook guard can be lifted
+    by a waiver.
+  - >-
+    `caws waiver create` prints a mandatory one-line stdout notice after a
+    successful create: "waivers suppress matching violations in `caws gates
+    run` ONLY — they never lift a hook guard; for a hook block use
+    `caws reprieve grant --current --handlers <guard> ...`". The notice is
+    byte-stable so agents can pattern-match it, mirroring the idle-recipient
+    note pattern.
+  - >-
+    The waiver group help and the create/list/revoke leaf descriptions say
+    "gate-run-only (legacy pre-v11 surface)" and name reprieves as the
+    hook-consulted system. The kernel validation and the gates-run filter
+    behavior are UNCHANGED — this slice delineates and demotes the surface,
+    it does not migrate or remove the gate filter.
+  - >-
+    A waiver create whose gates list contains a gate id that policy does not
+    declare still validates exactly as before (kernel is the single source
+    of truth for applicability); the new notice appears regardless of the
+    gate list contents.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'A scratch repo with a policy declaring gate scope_boundary.'
+    when: 'The operator runs `caws waiver create WV-1 --gate scope_boundary --spec SPEC-X --title t --reason r` without --dry-run.'
+    then: >-
+      Exit 0, the waiver file is written, and stdout carries the byte-stable
+      gate-run-only notice naming `caws reprieve grant` as the hook-block
+      path.
+  - id: A2
+    given: 'The built CLI.'
+    when: 'The operator runs `caws waiver --help`.'
+    then: >-
+      The group description states gate-run-only scope and names reprieves
+      as the hook-consulted system; create/list/revoke leaf descriptions
+      carry the same boundary.
+  - id: A3
+    given: 'A scratch repo whose policy declares NO gates.'
+    when: 'The operator runs `caws waiver create WV-1 --gate scope_boundary --spec SPEC-X --title t --reason r`.'
+    then: >-
+      Behavior is exactly the pre-slice behavior (kernel-validated refusal
+      or acceptance as before) — the surface change never alters
+      applicability.
+  - id: A4
+    given: 'The updated docs.'
+    when: 'A reader opens docs/command-reference.md or docs/api/cli.md at the waiver section.'
+    then: >-
+      Both documents state that waivers suppress matching violations in
+      `caws gates run` only, that hooks consult reprieves, and that the
+      waiver surface is the legacy pre-v11 cutover.
 non_functional: {}
 contracts: []
