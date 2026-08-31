@@ -53,10 +53,13 @@ invariants:
     through when set, defaulting to main/absent.
   - >-
     `caws agents list` flags possible conjoined sessions: two leases with
-    overlapping [started_at, last_active] activity windows on the same host
-    and repo are annotated "possible conjoined pair: <id> <=> <id>" — a
-    DISPLAY-ONLY advisory, never authority, never a write, never a refusal.
-    JSON output carries the same annotation.
+    overlapping [started_at, last_active] activity windows (or windows
+    starting within 60s — two sessions created seconds apart have
+    zero-length windows that never overlap) on the same host and repo are
+    annotated "conjoined-hint: <id> <=> <id> (overlapping lease windows;
+    display-only advisory)" — DISPLAY-ONLY, never authority, never a write,
+    never a refusal. JSON output carries the same annotation as
+    conjoined_pairs.
   - >-
     The hook notice teaches the namespace boundary in one sentence: harness
     display names (ListAgents and similar) are NOT CAWS addresses — address
