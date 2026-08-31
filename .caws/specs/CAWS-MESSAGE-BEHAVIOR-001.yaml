@@ -2,10 +2,11 @@ id: CAWS-MESSAGE-BEHAVIOR-001
 title: 'Behavior surface: silent-platform engagement badges, sender-side queued view, dead-letter escalation in the heartbeat hook'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: wt-message-behavior
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-message-behavior at 780692ed64bbd615c7b4306af8aca2a1f949be9c'
 created_at: '2026-08-31T04:58:05.844Z'
-updated_at: '2026-08-31T05:06:50.764Z'
+updated_at: '2026-08-31T05:06:52.057Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/messages-store.ts
