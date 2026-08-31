@@ -1392,11 +1392,12 @@ Directed inter-agent messages over `.caws/messages.jsonl`. Messages are not auth
 ```bash
 caws message send --to <session-id> --text "Please inspect DOC-1"
 caws message send --to <session-id> --text "Please inspect DOC-1" --allow-dead
+caws message send --to <session-id> --text "answer" --reply-to <message-id>
 caws message send --to wt:<worktree-name> --text "eta on the sweep?"
 caws message send --to spec:<spec-id> --text "eta on the sweep?"
 ```
 
-Send a message to another session. `--to` accepts a raw session id, or an alias — `wt:<worktree-name>` / `spec:<spec-id>` — resolving to the freshest session bound to that worktree or spec. Recipient liveness is heartbeat-age-based: a recipient with no lease or a stale heartbeat (>30m) is refused with a not-sent verdict printed to stdout (details on stderr), while an idle peer — a stopped lease with a fresh heartbeat, e.g. a session that ended its turn while background work runs — is deliverable and receives the message at its next tool call.
+Send a message to another session. `--to` accepts a raw session id, or an alias — `wt:<worktree-name>` / `spec:<spec-id>` — resolving to the freshest session bound to that worktree or spec. Recipient liveness is heartbeat-age-based: a recipient with no lease or a stale heartbeat (>30m) is refused with a not-sent verdict printed to stdout (details on stderr), while an idle peer — a stopped lease with a fresh heartbeat, e.g. a session that ended its turn while background work runs — is deliverable and receives the message at its next tool call. `--reply-to` records thread linkage (the referenced message must exist and be addressed to the caller). Refused sends are ledgered as `refusal` records (best-effort telemetry; CAWS-MESSAGE-LEDGER-COMPLETENESS-001).
 
 ### `caws message reply`
 
@@ -1413,19 +1414,21 @@ Reply to a message on its own channel — the recipient is the original message'
 caws message poll
 caws message poll --me <session-id> --wait 60000
 caws message poll --peek --json
+caws message poll --receipt auto
 ```
 
-Pull the next undelivered message addressed to the current session, or to `--me`. Default behavior is deliver-once; `--peek` observes without consuming. The result carries registry-derived sender context (worktree/spec/branch, when the sender's lease records it) so a recipient never depends on a sender self-identifying in the message body.
+Pull the next undelivered message addressed to the current session, or to `--me`. Default behavior is deliver-once; `--peek` observes without consuming. The result carries registry-derived sender context (worktree/spec/branch, when the sender's lease records it) so a recipient never depends on a sender self-identifying in the message body. The delivery record records a receipt mode: `auto` for the heartbeat hook's auto-delivery path (`--receipt auto`), `poll` for an explicit poll (CAWS-MESSAGE-LEDGER-COMPLETENESS-001).
 
 ### `caws message inbox`
 
 ```bash
 caws message inbox
 caws message inbox --me <session-id> --limit 20
+caws message inbox --all
 caws message inbox --json
 ```
 
-Read-only inbox listing for undelivered messages. Unlike `poll`, this command never appends delivery records and never consumes messages. JSON output includes `read_only: true`, `waiting`, and the returned `messages`.
+Read-only inbox listing for undelivered messages. Unlike `poll`, this command never appends delivery records and never consumes messages. `--all` lists every undelivered message in the repo (all recipients), oldest-first, annotated with recipient and age (CAWS-MESSAGE-LEDGER-COMPLETENESS-001). JSON output includes `read_only: true`, `waiting`, and the returned `messages`.
 
 ### `caws message history`
 
@@ -1454,7 +1457,7 @@ caws message prune --status delivered --older-than-ms 604800000 --apply
 caws message prune --status delivered --include <message-id>,<message-id> --exclude <message-id> --json
 ```
 
-Dry-run-first retention cleanup for non-authoritative chat logs. Only delivered message records are candidates; undelivered inbox messages are preserved and reported as skipped. `--apply` rewrites `.caws/messages.jsonl` only when paired with an explicit retention selector such as `--older-than-ms` or `--include`, and removes selected delivered messages plus their delivery markers.
+Dry-run-first retention cleanup for non-authoritative chat logs. Only delivered message records are candidates; undelivered inbox messages are preserved and reported as skipped. `--apply` rewrites `.caws/messages.jsonl` only when paired with an explicit retention selector such as `--older-than-ms` or `--include`, and moves selected delivered messages plus their delivery markers into `.caws/messages.jsonl.archive` (prefixed with a prune marker naming the archived ids). The archive is telemetry, not authority (CAWS-MESSAGE-LEDGER-COMPLETENESS-001).
 
 ---
 
