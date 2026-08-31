@@ -988,11 +988,12 @@ Refused sends are ledgered as `refusal` records in messages.jsonl (best-effort t
 
 ### `caws message reply`
 
-Reply to a message on its own channel — the recipient is the original message's kernel-attributed sender, so no session id is transcribed. Same liveness semantics as send; refuses an unknown id and refuses replying to your own message.
+Reply to a message on its own channel — the recipient is the original message's kernel-attributed sender, so no session id is transcribed. Same liveness semantics as send; refuses an unknown id and refuses replying to your own message. The message id takes the positional form (`reply <message_id>`) or the `--id` alias (CAWS-DEFECT-MSG-REPLY-POSITIONAL-01).
 
 **Options:**
 
-- `--id <message_id>` — Id of the message being replied to (required)
+- `<message_id>` — Id of the message being replied to (positional; primary form)
+- `--id <message_id>` — Id of the message being replied to (alias for the positional)
 - `--text <message>` — Reply body (required, non-empty)
 - `--allow-dead` — Send even if the recipient is not live in the registry (escape hatch; default off)
 - `--data` — Show structured data block on diagnostics
@@ -1036,11 +1037,12 @@ Show retained channel history between this session and another endpoint, each me
 
 ### `caws message status`
 
-Observe one message's delivery state (queued vs delivered, with timestamps) — lets a sender distinguish "queued" from "seen" without polling the recipient. Read-only.
+Observe one message's delivery state (queued vs delivered, with timestamps) — lets a sender distinguish "queued" from "seen" without polling the recipient. Read-only. The message id takes the positional form (`status <message_id>`) or the `--id` alias (CAWS-DEFECT-MSG-REPLY-POSITIONAL-01).
 
 **Options:**
 
-- `--id <message_id>` — Id of the message to observe (required)
+- `<message_id>` — Id of the message to observe (positional; primary form)
+- `--id <message_id>` — Id of the message to observe (alias for the positional)
 - `--json` — Emit JSON ({ok, read_only, message, delivered, delivered_at?})
 - `--data` — Show structured data block on diagnostics
 
