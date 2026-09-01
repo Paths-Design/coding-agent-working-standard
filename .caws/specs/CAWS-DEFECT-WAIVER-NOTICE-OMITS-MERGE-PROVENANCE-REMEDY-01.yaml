@@ -9,6 +9,7 @@ blast_radius:
   modules:
     - 'packages/caws-cli/src/shell/commands/waiver.ts'
     - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/store/worktrees-writer.ts'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
