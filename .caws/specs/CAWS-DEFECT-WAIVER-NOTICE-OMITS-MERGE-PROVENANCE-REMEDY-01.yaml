@@ -4,7 +4,7 @@ risk_tier: 3
 mode: fix
 lifecycle_state: draft
 created_at: '2026-09-01T22:19:12.252Z'
-updated_at: '2026-09-01T22:19:12.252Z'
+updated_at: '2026-09-01T23:03:24.497Z'
 blast_radius:
   modules:
     - 'packages/caws-cli/src/shell/commands/waiver.ts'
@@ -20,6 +20,7 @@ scope:
     - 'packages/caws-cli/README.md'
     - 'docs/command-reference.md'
     - 'docs/api/cli.md'
+    - packages/caws-cli/src/store/worktrees-writer.ts
   out: []
 invariants:
   - 'NOT a waiver-plumbing change. The sole waiver consumer remains the caws gates run filter, and verifyLaneProvenance continues to ignore waivers, exactly as CAWS-DEFECT-WAIVER-SURFACE-UNCONSULTED-01 adjudicated. This slice repairs OPERATOR ROUTING only - what the copy tells a blocked operator to do - and changes no enforcement behavior.'
