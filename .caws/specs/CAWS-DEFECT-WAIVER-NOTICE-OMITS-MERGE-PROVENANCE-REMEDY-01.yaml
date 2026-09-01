@@ -1,0 +1,56 @@
+id: CAWS-DEFECT-WAIVER-NOTICE-OMITS-MERGE-PROVENANCE-REMEDY-01
+title: 'Waiver create notice and waiver/reprieve help route every non-gates-run block to reprieve, omitting the merge-time lane-provenance surface whose remedy is --add-support'
+risk_tier: 3
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-01T22:19:12.252Z'
+updated_at: '2026-09-01T22:19:12.252Z'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/src/shell/commands/waiver.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/waiver.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/tests/shell/waiver-notice-merge-provenance.test.js'
+    - 'packages/caws-cli/tests/store/scope-support-lifecycle.test.js'
+    - 'packages/caws-cli/README.md'
+    - 'docs/command-reference.md'
+    - 'docs/api/cli.md'
+  out: []
+invariants:
+  - 'NOT a waiver-plumbing change. The sole waiver consumer remains the caws gates run filter, and verifyLaneProvenance continues to ignore waivers, exactly as CAWS-DEFECT-WAIVER-SURFACE-UNCONSULTED-01 adjudicated. This slice repairs OPERATOR ROUTING only - what the copy tells a blocked operator to do - and changes no enforcement behavior.'
+  - 'The operator-facing copy must not present the enforcement surfaces as an exhaustive taxonomy of any size. What the shipped copy currently ships is not a missing exception but an ONTOLOGY delivered through help text: hook-dispatch-time exception maps to reprieve, gate-policy-run-time exception maps to waiver, presented as a clean partition. verifyLaneProvenance falsifies it, because enforcement mechanism, lifecycle point, and remediation authority are at least partially INDEPENDENT coordinates - it is neither the gates-run waiver consumer nor a PreToolUse hook, and its remedy changes lane support standing rather than suppressing an evaluator. Replacing a two-term claim with a three-term claim would recreate the same closed-world error one level later.'
+  - 'The remedy named for a merge-time lane-provenance refusal is caws specs amend-scope <spec> --add-support <path>. A waiver and a reprieve both leave that refusal unchanged, so the copy must not route the operator to either for this class.'
+  - 'Authority boundaries stay separate. Adding a scope.support entry must not lift a PreToolUse hook refusal, and granting a reprieve must not change merge readiness. The repair must not blur the distinctions CAWS-DEFECT-WAIVER-SURFACE-UNCONSULTED-01 was written to draw.'
+  - 'CUSTODY, carried for the implementer: every premise in this spec was established against LOCAL caws state. At filing, local main measured 91 commits ahead of upstream tip 172e477d with 0 behind, and the predecessor spec, the verifyLaneProvenance line coordinates, and the 13-site census all live inside that unpublished chain. An implementer working from upstream cannot falsify these premises or execute A4 against the same CAWS semantics. Re-establish the premises against whatever state you actually hold before starting; do not inherit them.'
+acceptance:
+  - id: A1
+    given: 'a scratch repo whose policy declares gate scope_boundary and whose caws gates run reports a scope_boundary violation'
+    when: 'the operator follows the routing the shipped copy names for a gate-run violation and creates a matching waiver'
+    then: 'the waiver is created AND the caws gates run disposition actually changes for that violation, proving the existing gates-run routing is still live rather than merely still documented'
+  - id: A2
+    given: 'a session blocked by a real PreToolUse hook guard'
+    when: 'the operator follows the routing the copy names for a hook block and runs caws reprieve grant'
+    then: 'that hook guard is actually skipped for that session, proving the existing reprieve routing is still live at the hook rather than merely still documented'
+  - id: A3
+    given: 'a worktree whose branch history carries a commit touching a path outside laneScope, so caws worktree merge --dry-run refuses on lane provenance'
+    when: 'the operator reads the refusal together with the waiver and reprieve operator copy'
+    then: 'the routing they are given is caws specs amend-scope <spec> --add-support <path>, and neither the refusal nor the copy points them at caws reprieve or caws waiver for this class'
+  - id: A4
+    given: 'ONE fixture built once and reset to a common checkpoint between treatments, so only the governance artifact varies across arms'
+    when: 'merge readiness is evaluated three times - after creating a matching waiver, after granting a reprieve, and after caws specs amend-scope --add-support for the offending path'
+    then: 'the waiver leaves readiness unchanged, the reprieve leaves readiness unchanged, and only --add-support flips it to ready. EVIDENCE BUNDLE required per arm, because otherwise a hidden coordinate can move between treatments and the fixture passes for the wrong reason: branch and base SHAs, the offending commit SHA, git merge-base, explicit proof the offending commit is STILL present in base..branch (including in the third arm, so the flip is attributed to scope.support and not to the commit leaving the range), the exact lane scope.in and scope.support state, and the complete worktree merge --dry-run disposition'
+  - id: A5
+    given: 'the 13-site operator-copy census across 5 files - waiver.ts 256-257 as one concatenated notice; command-metadata.ts 1387, 1394, 1426, 1445, 1489; README.md 26; docs/command-reference.md 36, 295, 299, 362; docs/api/cli.md 507, 603'
+    when: 'the change is graded'
+    then: 'TWO independent checks must both pass. LEXICAL - every site carries the merge-provenance route, with the census query and its positive control recorded so a later reader re-runs rather than trusts a count. SEMANTIC - the RENDERED surfaces are inspected, not the source lines, because a repair can delete every phrase this census matches and reinstate an equally closed formulation in new vocabulary, which the lexical arm would score as clean. Required runtime artifacts: actual captured output of caws waiver --help, caws waiver create --help, caws reprieve --help, and the LIVE post-create notice. The notice is built by template-literal concatenation, so its shipped bytes are not established by reading source at all'
+  - id: A6
+    given: 'the repaired copy and a session blocked by a genuine PreToolUse hook refusal'
+    when: 'the operator adds the blocked path to a spec scope.support'
+    then: 'the hook refusal is UNCHANGED, because scope.support does not lift a hook guard. This is a NON-INTERFERENCE control, not a remediation test: if scope.support ever became consulted by hook machinery, A4 could stay green while the authority boundaries had silently fused, which is the successful-but-architecturally-wrong repair this criterion exists to catch'
+non_functional: {}
+contracts: []
