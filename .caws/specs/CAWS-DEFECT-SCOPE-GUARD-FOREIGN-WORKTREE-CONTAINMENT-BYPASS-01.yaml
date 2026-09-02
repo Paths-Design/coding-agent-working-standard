@@ -46,3 +46,7 @@ evidence:
     status: pass
     evidence_ref: "packages/caws-cli: bats tests/hooks/bats/scope-guard.bats — test 9 'a write into THIS repository's own linked worktree stays worktree-relative (not foreign)': refusal names for 'src/f.ts', no DIFFERENT-repository block, with a REFUSING caws stub. Green on worktree dist and on rebuilt canonical dist."
     recorded_at: "2026-09-02T00:02:27.087Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "packages/caws-cli: npx jest tests/init/pack-fingerprint.test.js → 10/10 at SHARED_PACK_VERSION 52 with shared fingerprint c2f31584…5f66 (rebuilt canonical dist); npx jest tests/init → 156/156; bats tests/hooks/bats → 154 ok / 0 not ok (worktree dist)."
+    recorded_at: "2026-09-02T00:02:27.530Z"
