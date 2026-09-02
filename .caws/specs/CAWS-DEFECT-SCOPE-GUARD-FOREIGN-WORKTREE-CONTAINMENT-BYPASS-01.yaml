@@ -2,10 +2,11 @@ id: CAWS-DEFECT-SCOPE-GUARD-FOREIGN-WORKTREE-CONTAINMENT-BYPASS-01
 title: 'scope-guard foreign-repo containment is bypassed when the target is inside another repository''s linked worktree'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: wt-scope-guard-foreign-wt
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-scope-guard-foreign-wt at 9ca0e66e24cd8dd7d1d9948aee990728fb4c1691'
 created_at: '2026-09-01T23:48:51.265Z'
-updated_at: '2026-09-01T23:49:03.562Z'
+updated_at: '2026-09-02T00:01:32.716Z'
 blast_radius:
   modules:
     - 'packages/caws-cli/templates/hook-packs/shared/scope-guard.sh'
