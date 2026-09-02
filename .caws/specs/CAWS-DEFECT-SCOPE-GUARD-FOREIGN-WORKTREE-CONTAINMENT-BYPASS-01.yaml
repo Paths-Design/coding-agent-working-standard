@@ -42,3 +42,7 @@ evidence:
     status: pass
     evidence_ref: "packages/caws-cli: bats tests/hooks/bats/scope-guard.bats — test 8 'a write into ANOTHER repository's linked worktree is hard-blocked as foreign (no strike ramp)': exit 2, decision block, names 'DIFFERENT repository' and 'linked worktree of <foreign root>', no strike text, with an ADMITting caws stub. Mechanism trace (bash -x, pre-fix v43 hook vs fixed template, same envelope): old adopts foreign root → REL_PATH=src/f.ts, FOREIGN_REPO=0; new FILE_WORKTREE_ROOT empty → FOREIGN_REPO=1 → exit 2. Green on worktree dist and on rebuilt canonical dist."
     recorded_at: "2026-09-02T00:02:26.647Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "packages/caws-cli: bats tests/hooks/bats/scope-guard.bats — test 9 'a write into THIS repository's own linked worktree stays worktree-relative (not foreign)': refusal names for 'src/f.ts', no DIFFERENT-repository block, with a REFUSING caws stub. Green on worktree dist and on rebuilt canonical dist."
+    recorded_at: "2026-09-02T00:02:27.087Z"
