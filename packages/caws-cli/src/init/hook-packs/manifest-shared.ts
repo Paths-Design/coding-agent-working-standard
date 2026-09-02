@@ -317,7 +317,14 @@ import type { HookPackV1 } from './types';
 // v46 (WORKTREE-ENSURE-AFFORDANCE-001): agent-register.sh's unbound advisory
 // names `caws worktree ensure <name> --spec <id>` (the idempotent
 // create-or-admit verb) instead of bare create. Advisory-only change.
-export const SHARED_PACK_VERSION = 51;
+// v52 (CAWS-DEFECT-SCOPE-GUARD-FOREIGN-WORKTREE-CONTAINMENT-BYPASS-01):
+// scope-guard.sh only adopts a `/.caws/worktrees/<name>` root as WORK_DIR when
+// it is a linked worktree of the repository this session governs. A write into
+// ANOTHER repository's worktree previously slipped past the foreign-repo
+// containment block onto the strike ramp (and wrote strike state into the
+// foreign gitdir); it now takes the containment block on the first attempt,
+// naming the foreign repository.
+export const SHARED_PACK_VERSION = 52;
 
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.

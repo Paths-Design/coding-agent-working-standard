@@ -105,3 +105,46 @@ STUB
   assert_output --partial '"decision": "block"'
   assert_output --partial 'could not render the structured diagnostic'
 }
+
+# CAWS-DEFECT-SCOPE-GUARD-FOREIGN-WORKTREE-CONTAINMENT-BYPASS-01. A write into
+# ANOTHER repository's linked worktree must take the foreign-repo containment
+# block on the first attempt. resolve_worktree_root is a path-shape match, so
+# before the fix the foreign worktree was adopted as WORK_DIR, the path went
+# worktree-relative, and the guard ran THIS repo's scope evaluation on the OTHER
+# repo's file — the strike ramp instead of the hard block. The stub ADMITs on
+# purpose: if the containment branch is skipped, the guard exits 0 silently, so
+# a silent pass here IS the defect, not a success.
+@test "scope-guard: a write into ANOTHER repository's linked worktree is hard-blocked as foreign (no strike ramp)" {
+  # Harness file paths are normalized; mktemp under a trailing-slash TMPDIR
+  # (macOS) yields `T//caws-…`, which would trip the foreign block on the
+  # double slash alone and make this test pass for the wrong reason.
+  local foreign
+  foreign="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-foreign-XXXXXX")" && pwd)"
+  mkdir -p "$foreign/.caws/worktrees/wt-x/src"
+  printf 'export const x = 1;\n' > "$foreign/.caws/worktrees/wt-x/src/f.ts"
+  _run_scope_guard_with_stub "$foreign/.caws/worktrees/wt-x/src/f.ts" 0 ""
+  rm -rf "$foreign"
+  assert_equal "$status" 2
+  assert_output --partial '"decision": "block"'
+  assert_output --partial 'DIFFERENT repository'
+  # The block names the foreign repository the worktree belongs to.
+  assert_output --partial "linked worktree of $foreign"
+  # No strike ramp: the containment block exits before the strike counter.
+  refute_output --partial 'strike 1 of 3'
+}
+
+# Positive control for the ownership check: a write into one of THIS
+# repository's own linked worktrees must still adopt that worktree as WORK_DIR
+# and be evaluated worktree-relative. The refusal names `src/f.ts` — not the
+# `.caws/worktrees/...` path (which the `.caws/` allow-prefix would silently
+# admit) and not a foreign-repository block.
+@test "scope-guard: a write into THIS repository's own linked worktree stays worktree-relative (not foreign)" {
+  local json='{"decision":"reject","rule":"scope.reject.root_not_allowed","path":"src/f.ts","bindingState":"bound","mode":"authoritative","boundSpecId":"FIX-1"}'
+  local own
+  own="$(cd "$CAWS_TEST_REPO" && pwd)"
+  mkdir -p "$own/.caws/worktrees/wt-own/src"
+  printf 'export const x = 1;\n' > "$own/.caws/worktrees/wt-own/src/f.ts"
+  _run_scope_guard_with_stub "$own/.caws/worktrees/wt-own/src/f.ts" 1 "$json"
+  refute_output --partial 'DIFFERENT repository'
+  assert_output --partial "for 'src/f.ts'"
+}
