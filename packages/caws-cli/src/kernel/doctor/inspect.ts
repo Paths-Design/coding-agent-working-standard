@@ -1203,6 +1203,39 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     );
   }
 
+  // CAWS-HARNESS-TELEMETRY-ADAPTER-001: vendored telemetry rows left on disk
+  // for an adapter-covered surface are stale dual-writers over the same
+  // .caws/sessions/ + .caws/leases/ state the surface's telemetry adapter
+  // owns. Both observations must be present and non-empty: rows without an
+  // installed adapter pack are the LEGITIMATE non-covered install (silent);
+  // no rows is absence, never staleness (silent); either field undefined is
+  // "unobserved" (silent) — matching the hookPackInstalled convention.
+  const staleTelemetryRows = input.filesystem?.managedTelemetryRowPaths;
+  const adapterSurfaces = input.filesystem?.adapterPackSurfaceMarkers;
+  if (
+    staleTelemetryRows !== undefined &&
+    staleTelemetryRows.length > 0 &&
+    adapterSurfaces !== undefined &&
+    adapterSurfaces.length > 0
+  ) {
+    findings.push(
+      finding(
+        DOCTOR_RULES.HOOKS_STALE_TELEMETRY_PACK,
+        'warning',
+        `Vendored CAWS telemetry rows (${staleTelemetryRows.join(', ')}) are still installed under .caws/hooks/ while an adapter-covered agent surface pack (${adapterSurfaces.join(', ')}) is also installed. The telemetry plane for that surface (turn logs under .caws/sessions/, agent leases under .caws/leases/) is owned by its harness adapter; the vendored rows are stale dual-writers over the same state.`,
+        {
+          subject: '.caws/hooks',
+          narrowRepair:
+            'Re-run `caws init` with the covered surface selected (e.g. `caws init --agent-surface dsh`): init for an adapter-covered surface omits these rows from the install set and retires managed stale copies. Unmanaged files at those paths are never touched.',
+          data: {
+            stale_rows: [...staleTelemetryRows],
+            adapter_surfaces: [...adapterSurfaces],
+          },
+        }
+      )
+    );
+  }
+
   if (input.initResidue !== undefined) {
     if (input.initResidue.workingSpecYaml) {
       findings.push(

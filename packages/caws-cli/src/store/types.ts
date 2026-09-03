@@ -156,6 +156,23 @@ export interface StoreSnapshot {
      * INIT_HOOKS_PRESENT_CAWS_ABSENT.
      */
     readonly hookPackInstalled: boolean;
+    /**
+     * CAWS-HARNESS-TELEMETRY-ADAPTER-001: vendored telemetry rows present
+     * under .caws/hooks/ with a `hook_pack: shared` CAWS-MANAGED-HOOK
+     * header (observed via parseManagedHeader — the same parser init uses).
+     * Unmanaged files at those paths are never reported. Combined with a
+     * non-empty `adapterPackSurfaceMarkers`, doctor fires
+     * doctor.hooks.stale_telemetry_pack. Optional so older snapshot
+     * consumers stay valid.
+     */
+    readonly managedTelemetryRowPaths?: readonly string[];
+    /**
+     * CAWS-HARNESS-TELEMETRY-ADAPTER-001: adapter-covered surfaces whose
+     * harness-pack marker is installed (e.g. `['dsh']` for a `.dsh/AGENTS.md`
+     * with a `hook_pack: dsh` managed header). No persisted surface receipt
+     * exists, so doctor infers adapter coverage from this marker. Optional.
+     */
+    readonly adapterPackSurfaceMarkers?: readonly string[];
     readonly worktreeDirByName: Readonly<Record<string, boolean>>;
     readonly specClaimedWorktreeDirByName: Readonly<Record<string, boolean>>;
     /**
