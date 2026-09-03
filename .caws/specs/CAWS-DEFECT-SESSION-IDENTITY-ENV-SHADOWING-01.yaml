@@ -106,3 +106,7 @@ evidence:
     status: pass
     evidence_ref: "bats session-id-agent-pid anchor test + session-id-canonical A3 test: live start-time-guarded record beats env disagreement, stderr names both ids (env-says-id vs pid-record-id)"
     recorded_at: "2026-09-03T22:25:12.531Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "jest resolver-canonical-env tier-0b describe + bats normalize tests: CAWS_SESSION_ID read before chain, platform from CAWS_PLATFORM_FLAG/pin/none, unknown refused, caws_normalize_session_env exports (direct call)"
+    recorded_at: "2026-09-03T22:25:12.930Z"
