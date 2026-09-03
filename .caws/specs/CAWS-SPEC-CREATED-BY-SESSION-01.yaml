@@ -1,0 +1,51 @@
+id: CAWS-SPEC-CREATED-BY-SESSION-01
+title: 'Stamp created_by_session provenance when caws specs create writes a spec'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-09-03T17:23:49.106Z'
+updated_at: '2026-09-03T17:23:49.106Z'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/src/kernel/schemas/spec.v1.json'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/kernel/schemas/spec.v1.json'
+    - 'packages/caws-cli/src/kernel/spec/types.ts'
+    - 'packages/caws-cli/src/store/specs-writer.ts'
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/tests/shell/'
+    - 'packages/caws-cli/tests/kernel/unit/spec-validation.test.ts'
+    - '.caws/specs/CAWS-SPEC-CREATED-BY-SESSION-01.yaml'
+    - 'CHANGELOG.md'
+  out: []
+invariants:
+  - 'The spec schema stays strict: a top-level field not declared in spec.v1.json is still rejected, so provenance can never be smuggled in as arbitrary keys.'
+  - 'The field is optional end to end: a spec authored without created_by_session (every spec that predates this change, and hand-written YAML) validates unchanged, and the create renderer output without a session id stays byte-identical to before.'
+acceptance:
+  - id: A1
+    given: 'an agent session with a resolvable session id runs caws specs create'
+    when: 'the spec YAML is written to .caws/specs/'
+    then: 'the body carries created_by_session set to that session id, so the creator is answerable from the spec alone'
+  - id: A2
+    given: 'a spec YAML without a created_by_session field (pre-existing or hand-authored)'
+    when: 'the kernel parse+validate pipeline reads it'
+    then: 'it validates — the field is optional and confers no authority'
+  - id: A3
+    given: 'a spec YAML with an unknown top-level field'
+    when: 'the shape validator runs'
+    then: 'it is still rejected with SCHEMA_VIOLATION — adding the provenance field did not loosen strictness'
+  - id: A4
+    given: 'a spec created with created_by_session is later activated or closed'
+    when: 'the lifecycle write patches the YAML'
+    then: 'the created_by_session bytes are preserved verbatim'
+  - id: A5
+    given: 'caws specs create --plan (dry run) with a resolvable session'
+    when: 'the plan renders the candidate YAML'
+    then: 'it includes the same created_by_session line the real write would produce'
+non_functional: {}
+contracts:
+  - name: 'spec-schema'
+    type: behavior
