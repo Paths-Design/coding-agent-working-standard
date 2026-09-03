@@ -62,6 +62,7 @@ import {
 import { resolveBinding } from '../binding/resolve-binding';
 import { renderDiagnostics } from '../render/diagnostic';
 import { renderShortStatus, renderStatus, type StatusPanel } from '../render/status';
+import { emitStaleTelemetryAdvisory } from '../render/stale-telemetry-advisory';
 import { resolveSession } from '../session/resolve-session';
 
 const DEFAULT_LEASE_STALE_TTL_MS = 30 * 60 * 1000; // 30m
@@ -434,6 +435,12 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
   }
 
   out(opts.short === true ? renderShortStatus(renderInput) : renderStatus(renderInput));
+
+  // CAWS-HARNESS-TELEMETRY-ADAPTER-001: render-only advisory when doctor
+  // observed stale vendored telemetry rows on an adapter-covered surface.
+  // Empty finding list => no output => byte-identical baseline. Never an
+  // authority input; status stays read-only.
+  emitStaleTelemetryAdvisory(report.findings, out);
 
   if (mailSummary.count > 0) {
     out(
