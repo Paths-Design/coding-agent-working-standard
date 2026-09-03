@@ -156,3 +156,7 @@ evidence:
     status: pass
     evidence_ref: "npx jest tests/kernel/unit/doctor-stale-telemetry-pack.test.ts (7 pass) + e2e: doctor emits stale_telemetry_pack with rows+dsh marker, 0 findings without marker; canonical-repo silence confirmed; 0E/11W/6I identical to installed CLI"
     recorded_at: "2026-09-03T03:17:06.178Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "npx jest tests/kernel/telemetry-turn-log-schema.test.ts (20 pass) pin turn-log.v2.json producer contract: 9-key required intersection, schema_version const 2, status enum, timelineItem kind/ts/provenance, additionalProperties false root"
+    recorded_at: "2026-09-03T03:17:06.559Z"
