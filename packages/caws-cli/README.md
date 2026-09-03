@@ -102,6 +102,20 @@ Codex installs project-local `.codex/hooks.json` plus `.codex/hooks/*`.
 After install, restart/reopen Codex and review or trust changed project
 hooks with `/hooks`.
 
+The shared pack is surface-conditional in one dimension: the telemetry
+plane. For `dsh`, init installs the policy plane only — scope guards,
+audit, registration, dispatch — and omits the four telemetry rows
+(`session-log.sh`, `session_log_renderer.py`, `agent-heartbeat.sh`,
+`agent-stop.sh`), because the dsh harness adapter owns turn logs
+(`.caws/sessions/`) and agent leases (`.caws/leases/`) for that surface.
+Re-running `caws init --agent-surface dsh` also retires stale
+shared-managed copies of those rows from an earlier install (managed
+files only — unmanaged local growth is never touched; absent files are
+not an error). `caws doctor` warns `doctor.hooks.stale_telemetry_pack`
+when managed rows persist alongside an installed dsh pack, and `caws
+status` renders the matching repair advisory. For every other surface
+the shared pack installs unchanged, telemetry rows included.
+
 `caws init` creates the canonical vNext layout:
 
 ```
