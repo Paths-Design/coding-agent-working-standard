@@ -2,9 +2,10 @@ id: CAWS-SPEC-CREATED-BY-SESSION-01
 title: 'Stamp created_by_session provenance when caws specs create writes a spec'
 risk_tier: 2
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-spec-created-by
 created_at: '2026-09-03T17:23:49.106Z'
-updated_at: '2026-09-03T17:23:49.106Z'
+updated_at: '2026-09-03T17:23:58.381Z'
 blast_radius:
   modules:
     - 'packages/caws-cli/src/kernel/schemas/spec.v1.json'
