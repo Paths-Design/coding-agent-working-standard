@@ -4,7 +4,7 @@ risk_tier: 2
 mode: fix
 lifecycle_state: active
 worktree: wt-session-identity
-updated_at: '2026-09-03T22:13:51.246Z'
+updated_at: '2026-09-03T22:23:29.916Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/shared/lib/session-id.sh
@@ -23,6 +23,8 @@ scope:
     - packages/caws-cli/tests/shell/session/resolver-canonical-env.test.js
     - packages/caws-cli/templates/hook-packs/shared/lib/run-handlers.sh
     - packages/caws-cli/src/shell/session/types.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/tests/shell/session/resolver-guard-divergence.test.js
   out:
     - .caws/policy.yaml
     - .github/workflows
