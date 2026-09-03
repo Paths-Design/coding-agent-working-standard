@@ -7,12 +7,19 @@ created_at: '2026-09-03T00:54:21.000Z'
 updated_at: '2026-09-03T00:55:22.716Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/init/hook-packs/types.ts
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/src/init/hook-packs/manifest-dsh.ts
+    - packages/caws-cli/src/init/hook-packs/register.ts
+    - packages/caws-cli/src/init/hook-install.ts
+    - packages/caws-cli/src/kernel/schemas/telemetry/turn-log.v2.json
+    - packages/caws-cli/src/kernel/doctor/rules.ts
+    - packages/caws-cli/src/kernel/doctor/inspect.ts
+    - packages/caws-cli/src/shell/render/stale-telemetry-advisory.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/kernel/schemas/telemetry
     - packages/caws-cli/src/kernel/doctor/rules.ts
     - packages/caws-cli/src/kernel/doctor/inspect.ts
@@ -28,15 +35,96 @@ scope:
     - packages/caws-cli/tests/init/hook-pack-register.test.js
     - packages/caws-cli/README.md
     - docs/architecture/caws-vnext-command-surface.md
-  out: []
+  out:
+    - packages/caws-cli/templates
+    - .caws/policy.yaml
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    POLICY PLANE UNTOUCHED: only telemetry rows (session-log.sh,
+    session_log_renderer.py, agent-heartbeat.sh, agent-stop.sh) become
+    surface-conditional. Guard dispatchers (scope-guard, write guards,
+    danger latch, stop, audit, and the rest of the shared policy core) install
+    for every surface exactly as before this slice.
+  - >-
+    CACHE-NOT-AUTHORITY: the turn-log schema is a producer contract over
+    operational cache (.caws/sessions/ is gitignored cache, never authority).
+    No kernel authority path reads turn logs; the schema validates payloads,
+    it never enforces anything.
+  - >-
+    READ-ONLY ADVISORY AND DOCTOR: the stale-writer advisory and the doctor
+    finding never mutate .caws/ and append zero events. When the condition is
+    absent, host-command output and exit codes are unchanged (fail-open,
+    render-only — same contract class as PRESENCE-DECISION-POINT-INJECTION-001).
+  - >-
+    MISSING IS NOT STALE: absent telemetry rows produce no advisory and no
+    finding. Only present managed telemetry rows under an adapter-covered
+    active surface warn. The doctor finding is warning-severity and does not
+    change doctor exit-code semantics.
+  - >-
+    ADDITIVE-ONLY FROM V2: turn-log schema v2 is the floor of the telemetry
+    contract. Unknown schema_version values are rejected with a typed reason,
+    never coerced; additionalProperties is false throughout.
+  - >-
+    NON-COVERED SURFACES UNCHANGED: claude-code, codex, opencode, zcode,
+    kimi-code, and qwen-code packs continue to vendor the telemetry rows
+    byte-identically to the pre-cut manifest. The cut applies only to
+    surfaces declared adapter-covered (initially: dsh).
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: >-
+      The dsh pack is marked adapter-covered.
+    when: >-
+      `caws init --agent-surface dsh` renders its install plan for a fresh repo.
+    then: >-
+      installedFiles contains none of session-log.sh, session_log_renderer.py,
+      agent-heartbeat.sh, agent-stop.sh; the guard dispatchers and audit.sh are
+      present; the installed .caws/hooks/ tree lacks the telemetry rows.
+  - id: A2
+    given: >-
+      The claude-code pack (not adapter-covered).
+    when: >-
+      Init renders its install plan.
+    then: >-
+      All telemetry rows are still installed, byte-identical to the pre-cut
+      manifest (control: no regression for non-covered surfaces).
+  - id: A3
+    given: >-
+      A repo with managed telemetry rows on disk and an adapter-covered active
+      surface.
+    when: >-
+      The session-start advisory path renders.
+    then: >-
+      The advisory names the stale rows and the repair (re-run `caws init`),
+      exits 0, appends zero events, and writes nothing under .caws/; when the
+      rows are absent, host output is byte-identical to baseline.
+  - id: A4
+    given: >-
+      The same repo state as A3.
+    when: >-
+      `caws doctor` runs.
+    then: >-
+      A warning-severity finding with stable id doctor.hooks.stale_telemetry_pack
+      lists the stale rows and the repair; when the rows are absent the finding
+      is absent (missing is not stale).
+  - id: A5
+    given: >-
+      The kernel schema at src/kernel/schemas/telemetry/turn-log.v2.json.
+    when: >-
+      The conformance test validates a conformant v2 turn payload, then a
+      payload with schema_version "1", an unknown version, and a payload with
+      an additional property.
+    then: >-
+      The conformant payload passes; each non-conformant payload is rejected
+      with a typed reason; and the conformance test fails when the schema is
+      mutated to accept any of the non-conformant shapes.
+non_functional:
+  reliability:
+    - >-
+      Init remains idempotent and deterministic per surface: the same surface
+      always yields the same install plan, and re-running init in a repo that
+      carries stale managed telemetry rows for an adapter-covered surface does
+      not silently resurrect them.
 contracts:
   - name: 'turn-log-telemetry-schema'
     type: schema
