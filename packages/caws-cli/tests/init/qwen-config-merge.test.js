@@ -29,6 +29,19 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
+// CAWS-GATED-SURFACE-SCOPE-GUARD-001: the merge now consults the machine's
+// USER-scope qwen wiring and skips project-scope entries when it exists.
+// These tests exercise the no-hazard path, so the home dir is pinned to an
+// empty temp dir for the whole suite — hermetic against whatever the dev
+// machine's real ~/.qwen happens to contain.
+const EMPTY_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'qwen-merge-home-'));
+const realHomedir = os.homedir;
+os.homedir = () => EMPTY_HOME;
+afterAll(() => {
+  os.homedir = realHomedir;
+  fs.rmSync(EMPTY_HOME, { recursive: true, force: true });
+});
+
 const {
   mergeQwenSettings,
   planQwenSettingsMerge,

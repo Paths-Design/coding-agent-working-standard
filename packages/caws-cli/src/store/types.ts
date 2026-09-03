@@ -173,6 +173,14 @@ export interface StoreSnapshot {
      * exists, so doctor infers adapter coverage from this marker. Optional.
      */
     readonly adapterPackSurfaceMarkers?: readonly string[];
+    /**
+     * CAWS-GATED-SURFACE-SCOPE-GUARD-001: gated surfaces with user-scope
+     * CAWS wiring / project-scope CAWS hook entries (observed via the
+     * user-scope-wiring leaf). Optional; combined they feed
+     * doctor.hooks.user_scope_dual_wiring.
+     */
+    readonly userScopeCawsWiringBySurface?: readonly string[];
+    readonly gatedProjectHookEntriesBySurface?: readonly string[];
     readonly worktreeDirByName: Readonly<Record<string, boolean>>;
     readonly specClaimedWorktreeDirByName: Readonly<Record<string, boolean>>;
     /**
