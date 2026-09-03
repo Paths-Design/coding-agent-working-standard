@@ -62,7 +62,7 @@ import {
 import { resolveBinding } from '../binding/resolve-binding';
 import { renderDiagnostics } from '../render/diagnostic';
 import { renderShortStatus, renderStatus, type StatusPanel } from '../render/status';
-import { emitStaleTelemetryAdvisory } from '../render/stale-telemetry-advisory';
+import { emitStaleTelemetryAdvisory, renderStaleTelemetryAdvisory } from '../render/stale-telemetry-advisory';
 import { resolveSession } from '../session/resolve-session';
 
 const DEFAULT_LEASE_STALE_TTL_MS = 30 * 60 * 1000; // 30m
@@ -423,6 +423,14 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
         counts: countDoctorFindings(report.findings),
         findings: report.findings,
       };
+    }
+    // CAWS-TELEMETRY-REPAIR-RESILIENCE-001: JSON consumers get the same
+    // advisory the human path renders, as plain text under a stable field —
+    // additive-only: the field appears exactly when a stale-telemetry
+    // advisory exists, so the payload is byte-identical otherwise.
+    const advisoryBlock = renderStaleTelemetryAdvisory(report.findings);
+    if (advisoryBlock.length > 0) {
+      payload.stale_telemetry_advisory = advisoryBlock;
     }
     if (mailSummary.count > 0) {
       payload.messages = {
