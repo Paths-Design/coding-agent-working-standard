@@ -23,6 +23,7 @@
 import type { SessionIdentity } from '../../kernel';
 
 export type SessionSource =
+  | 'surface_pinned_env'
   | 'claude_env'
   | 'claude_code_env'
   | 'codex_thread_env'

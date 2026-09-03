@@ -1,11 +1,14 @@
 #!/usr/bin/env bats
-# lib/session-id.sh — resolve_caws_session_id capsule tier
-# (CAWS-SESSION-SHELL-RESOLVER-CAPSULE-001).
+# lib/session-id.sh — the REMOVED capsule tier
+# (CAWS-DEFECT-SESSION-IDENTITY-ENV-SHADOWING-01).
 #
-# The shell resolver was env-only and returned "unknown" in any subshell with no
-# identity env var, so the write-guards treated the owner's own edits as foreign.
-# It now reads the durable capsule (the TS resolver's tier-3 mirror, and the file
-# caws worktree create records as owner) when the env chain misses.
+# Doctrine shift: the shell resolver's capsule-glob fallback tier (added by
+# CAWS-SESSION-SHELL-RESOLVER-CAPSULE-001) is REMOVED. A first-match glob
+# manufactured identity with no process correlation. The TS resolver keeps
+# its caller-pointer-correlated capsule tier for the interactive owner; the
+# shell resolver now refuses to guess: env chain or the live agent-PID
+# record, else "unknown" (verbs fail loudly on unknown). These tests pin the
+# REMOVAL — a capsule alone must never resolve identity.
 
 load helpers
 
@@ -25,7 +28,7 @@ resolve_under() {
     bash -c "source '$SID' >/dev/null 2>&1; printf '%s\n' \"\$(resolve_caws_session_id)\""
 }
 
-@test "session-id: no env vars + a capsule -> reads the capsule session_id (A1)" {
+@test "session-id: no env vars + a capsule -> UNKNOWN (tier removed; a glob must not manufacture identity)" {
   # Plant a capsule (the file caws worktree create records as owner).
   local sess_dir="$CAWS_TEST_REPO/.caws/sessions"
   mkdir -p "$sess_dir"
@@ -34,10 +37,10 @@ resolve_under() {
 
   resolve_under "$CAWS_TEST_REPO"
   assert_success
-  assert_output "caws-cap-aaa"
+  assert_output "unknown"
 }
 
-@test "session-id: an env identity var wins over the capsule (A2, precedence)" {
+@test "session-id: an env identity var still resolves with capsules present (A2)" {
   local sess_dir="$CAWS_TEST_REPO/.caws/sessions"
   mkdir -p "$sess_dir"
   printf '{"session_id":"caws-cap-bbb","platform":"zcode","minted_at":"2026-07-31T00:00:00Z","worktree_root":"%s"}\n' "$CAWS_TEST_REPO" \

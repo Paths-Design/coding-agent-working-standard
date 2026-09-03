@@ -963,6 +963,47 @@ export function resolveSession(
   const platform = opts.platform ?? process.platform;
   const allowMint = opts.allowMint === true;
 
+  // 0a. Surface-pinned precedence (CAWS-DEFECT-SESSION-IDENTITY-ENV-SHADOWING-01):
+  //     when CAWS_AGENT_SURFACE names the dispatching platform, that surface's
+  //     own env var wins and foreign vars cannot shadow it (a stray
+  //     CLAUDE_SESSION_ID in a dsh process no longer rewrites self).
+  const surfacePin = env['CAWS_AGENT_SURFACE'];
+  const pinnedVarBySurface: Record<string, string> = {
+    'claude-code': 'CLAUDE_SESSION_ID',
+    codex: 'CODEX_THREAD_ID',
+    'qwen-code': 'QWEN_CODE_SESSION_ID',
+    dsh: 'DSH_SESSION_ID',
+  };
+  if (typeof surfacePin === 'string' && pinnedVarBySurface[surfacePin]) {
+    const pinned = env[pinnedVarBySurface[surfacePin]];
+    if (typeof pinned === 'string' && pinned.length > 0 && pinned !== 'unknown') {
+      return ok({
+        identity: { session_id: pinned, platform: surfacePin as never },
+        source: 'surface_pinned_env',
+      });
+    }
+  }
+
+  // 0b. The canonical var (CAWS_SESSION_ID): normalized upstream by the
+  //     dispatch layer (caws_normalize_session_env) or operator-set. Read
+  //     BEFORE the per-surface chain so normalization is authoritative.
+  //     Platform derives from CAWS_PLATFORM_FLAG when valid, else the
+  //     surface pin, else 'none' (a generic id names no harness).
+  const canonicalId = env['CAWS_SESSION_ID'];
+  if (typeof canonicalId === 'string' && canonicalId.length > 0 && canonicalId !== 'unknown') {
+    const flag = env['CAWS_PLATFORM_FLAG'];
+    const canonicalPlatform =
+      typeof flag === 'string' && isAgentSurface(flag)
+        ? flag
+        : typeof surfacePin === 'string' && isAgentSurface(surfacePin)
+          ? surfacePin
+          : 'none';
+    return ok({
+      identity: { session_id: canonicalId, platform: canonicalPlatform },
+      source: 'caws_env',
+    });
+  }
+
   // 1. CLAUDE_SESSION_ID env (authority source #1 — operator override)
   const claudeId = env['CLAUDE_SESSION_ID'];
   if (typeof claudeId === 'string' && claudeId.length > 0) {
@@ -1347,6 +1388,11 @@ export function resolveSession(
 // render alongside resolved-from-capsule results.
 export function describeSessionSource(s: ResolvedSession): Diagnostic {
   switch (s.source) {
+    case 'surface_pinned_env':
+      return infoDiag(
+        SHELL_RULES.SESSION_RESOLVED_FROM_CLAUDE_ENV,
+        `Session identity from the surface-pinned env var (CAWS_AGENT_SURFACE=${s.identity.platform}): ${s.identity.session_id}`
+      );
     case 'claude_env':
       return infoDiag(
         SHELL_RULES.SESSION_RESOLVED_FROM_CLAUDE_ENV,

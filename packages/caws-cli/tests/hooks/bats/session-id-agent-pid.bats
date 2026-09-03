@@ -100,21 +100,28 @@ resolve_under() {
   assert_output "unknown"
 }
 
-@test "session-id: an env var wins over the agent-PID record (precedence)" {
+@test "session-id: a live agent-PID record OUTRANKS env disagreement (PID anchor, ENV-SHADOWING-01)" {
   local anchor_pid
   anchor_pid="$(stable_ancestor_pid)"
   [[ -n "$anchor_pid" ]] || skip "no '$STABLE_ANCESTOR' ancestor found"
 
   local sess_dir="$CAWS_TEST_REPO/.caws/sessions"
   mkdir -p "$sess_dir"
-  printf '{"agent_pid":%s,"session_id":"sess-via-pid","last_seen_at":"%s","started_at":null}\n' \
-    "$anchor_pid" "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$sess_dir/agent-pid-${anchor_pid}.json"
+  local now start_epoch
+  now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  start_epoch=$(ps -o lstart= -p "$anchor_pid" 2>/dev/null | { read -r a b c d e; date -d "$a $b $c $d $e" +%s 2>/dev/null || date -jf '%a %b %d %T %Y' "$a $b $c $d $e" +%s 2>/dev/null || echo ""; } || echo "")
+  printf '{"agent_pid":%s,"session_id":"sess-via-pid","last_seen_at":"%s","started_at":%s}\n' \
+    "$anchor_pid" "$now" "${start_epoch:-null}" > "$sess_dir/agent-pid-${anchor_pid}.json"
 
-  # CAWS_SESSION_ID is set -> it wins at tier 1.7, the agent-PID tier (2.4)
-  # never fires.
+  # CAWS_SESSION_ID disagrees with the LIVE record; the record is the
+  # trust anchor, so it wins and a stderr warning names both ids.
   run env -i PATH="$PATH" HOME="$HOME" CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
     CAWS_AGENT_PROCESS_NAMES="$STABLE_ANCESTOR" CAWS_SESSION_ID=env-wins \
     bash -c "source '$APID' >/dev/null 2>&1; source '$SID' >/dev/null 2>&1; printf '%s\n' \"\$(resolve_caws_session_id)\""
   assert_success
-  assert_output "env-wins"
+  # The PID record wins AND the warning names both ids (stderr rides
+  # the combined capture inside the command substitution).
+  assert_output --partial 'sess-via-pid'
+  assert_output --partial 'Warning: session identity disagreement'
+  assert_output --partial 'env-wins'
 }
