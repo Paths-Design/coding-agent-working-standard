@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-telemetry-repair-resilience
 created_at: '2026-09-03T14:58:53.702Z'
-updated_at: '2026-09-03T14:59:32.043Z'
+updated_at: '2026-09-03T15:04:26.790Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/init/hook-install.ts
@@ -23,6 +23,7 @@ scope:
     - packages/caws-cli/tests/init/adapter-covered-telemetry-cut.test.js
     - packages/caws-cli/tests/init/init-hook-pack-render.test.js
     - packages/caws-cli/tests/shell/status-filters.test.js
+    - packages/caws-cli/src/shell/commands/init.ts
   out:
     - packages/caws-cli/templates
     - .caws/policy.yaml
