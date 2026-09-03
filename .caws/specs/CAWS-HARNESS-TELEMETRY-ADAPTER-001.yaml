@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-telemetry-adapter-cut
 created_at: '2026-09-03T00:54:21.000Z'
-updated_at: '2026-09-03T02:34:57.429Z'
+updated_at: '2026-09-03T02:40:32.107Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/init/hook-packs/types.ts
@@ -31,13 +31,13 @@ scope:
     - packages/caws-cli/src/init/hook-install.ts
     - packages/caws-cli/src/shell/render
     - packages/caws-cli/tests/init/adapter-covered-telemetry-cut.test.js
-    - packages/caws-cli/tests/kernel/telemetry-turn-log-schema.test.js
     - packages/caws-cli/tests/shell/stale-telemetry-advisory.test.js
     - packages/caws-cli/tests/init/hook-pack-register.test.js
     - packages/caws-cli/README.md
     - docs/architecture/caws-vnext-command-surface.md
     - packages/caws-cli/src/shell/commands/init.ts
     - packages/caws-cli/src/shell/commands/status.ts
+    - packages/caws-cli/tests/kernel/telemetry-turn-log-schema.test.ts
   out:
     - packages/caws-cli/templates
     - .caws/policy.yaml
