@@ -83,3 +83,7 @@ evidence:
     status: pass
     evidence_ref: "npx jest tests/init/adapter-covered-telemetry-cut.test.js (9 pass incl. read-only-dir unlink-failure test: failed reported, disjoint outcomes, no throw) + init.ts stderr warning path"
     recorded_at: "2026-09-03T15:19:04.595Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "npx jest tests/init/init-hook-pack-render.test.js unchanged + full suite 2192 pass; doctor-snapshot imports init/hook-packs/managed-header (grep: 0 refs to hook-install); leaf imports only hook-packs/types"
+    recorded_at: "2026-09-03T15:19:05.049Z"
