@@ -106,3 +106,7 @@ evidence:
     status: pass
     evidence_ref: "same suite — zcode merge: skipped_dual_scope, no config.json created, stderr warning; detection test covers the hooks.events nesting"
     recorded_at: "2026-09-03T18:03:26.664Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "same suite — inertness describe: empty home => mergeQwenSettings/mergeZcodeConfig return created with the canonical wiring and empty stderr; full suite 2221 pass incl. the hermetized qwen-config-merge (46 tests)"
+    recorded_at: "2026-09-03T18:03:27.169Z"
