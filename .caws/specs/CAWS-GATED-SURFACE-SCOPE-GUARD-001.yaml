@@ -110,3 +110,7 @@ evidence:
     status: pass
     evidence_ref: "same suite — inertness describe: empty home => mergeQwenSettings/mergeZcodeConfig return created with the canonical wiring and empty stderr; full suite 2221 pass incl. the hermetized qwen-config-merge (46 tests)"
     recorded_at: "2026-09-03T18:03:27.169Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "npx jest tests/kernel/unit/doctor-user-scope-dual-wiring.test.ts (6 pass) + e2e: throwaway repo with project-side qwen wiring + this machine's real user scope => doctor emits user_scope_dual_wiring; caws repo itself (no project-side config) stays silent"
+    recorded_at: "2026-09-03T18:03:27.606Z"
