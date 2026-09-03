@@ -2,7 +2,9 @@ id: CAWS-HOTFIX-SESSION-IDENTITY-REVIEW-FINDINGS-001
 title: 'Review findings on the identity lane: honest platform cast, dedicated pinned-source rule id, shell template lint gate'
 risk_tier: 3
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-identity-review-findings
+updated_at: '2026-09-03T22:51:33.226Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/session/resolve-session.ts
