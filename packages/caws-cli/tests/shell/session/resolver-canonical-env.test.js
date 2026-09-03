@@ -64,6 +64,19 @@ describe('tier 0a: surface-pinned precedence (the shadowing fix)', () => {
     }
   });
 
+  test('the pinned platform is always a real surface member (the cast cannot lie)', () => {
+    // CAWS-HOTFIX-SESSION-IDENTITY-REVIEW-FINDINGS-001: the merged lane
+    // type-checked via `as never` (the bottom type). This pins the runtime
+    // contract: whatever the pin resolves, its platform is a valid surface.
+    const AGENT_SURFACES = ['claude-code', 'codex', 'opencode', 'zcode', 'kimi-code', 'qwen-code', 'dsh', 'cursor', 'windsurf', 'none'];
+    for (const surface of ['claude-code', 'codex', 'qwen-code', 'dsh']) {
+      const envVar = { 'claude-code': 'CLAUDE_SESSION_ID', codex: 'CODEX_THREAD_ID', 'qwen-code': 'QWEN_CODE_SESSION_ID', dsh: 'DSH_SESSION_ID' }[surface];
+      const result = resolveWith({ CAWS_AGENT_SURFACE: surface, [envVar]: `${surface}-id` });
+      expect(AGENT_SURFACES).toContain(result.value.identity.platform);
+      expect(result.value.identity.platform).toBe(surface);
+    }
+  });
+
   test('a pin whose own var is absent falls through (no invented identity)', () => {
     const result = resolveWith({
       CAWS_AGENT_SURFACE: 'dsh',
