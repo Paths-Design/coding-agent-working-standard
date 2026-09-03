@@ -144,3 +144,7 @@ evidence:
     status: pass
     evidence_ref: "npx jest tests/init/adapter-covered-telemetry-cut.test.js (12 pass) + e2e: init --plan --agent-surface dsh lists 0 telemetry rows / keeps agent-register+scope-guard; real init retires planted stale managed row (labeled line + file gone)"
     recorded_at: "2026-09-03T03:17:05.027Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "npx jest tests/init/hook-pack-register.test.js (5 pass) + e2e: init --plan --agent-surface claude-code lists all 4 telemetry rows + policy plane; sharedPackForSurface returns SHARED_PACK identically for 9 non-covered surfaces"
+    recorded_at: "2026-09-03T03:17:05.412Z"
