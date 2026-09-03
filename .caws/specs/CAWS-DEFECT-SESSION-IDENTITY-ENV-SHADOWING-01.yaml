@@ -93,3 +93,8 @@ contracts:
       downstream reads are canonical-only; surface pinning defeats
       cross-surface shadowing; PID-record disagreement resolves to the
       record with a loud stderr note.
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "bats session-id-canonical (pin defeats shadow) + jest resolver-canonical-env (9 pass) + live probe: CLAUDE_SESSION_ID=xxxx CAWS_AGENT_SURFACE=dsh DSH_SESSION_ID=dsh-real -> dsh-real (source: surface_pinned_env)"
+    recorded_at: "2026-09-03T22:25:11.701Z"
