@@ -3,26 +3,80 @@ title: 'Session identity: canonical CAWS_SESSION_ID normalization, surface-pinne
 risk_tier: 2
 mode: fix
 lifecycle_state: draft
-created_at: '2026-09-03T22:09:46.344Z'
-updated_at: '2026-09-03T22:09:46.344Z'
-created_by_session: 'session-c5c6ac1b-ed94-4c10-b9e2-3552e8ab3309'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/templates/hook-packs/shared/lib/session-id.sh
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/templates/hook-packs/shared/lib/session-id.sh
+    - packages/caws-cli/src/shell/session/resolve-session.ts
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/hooks/bats/session-id-capsule.bats
+    - packages/caws-cli/tests/hooks/bats/session-id-agent-pid.bats
+    - packages/caws-cli/tests/hooks/bats/session-id-canonical.bats
+    - packages/caws-cli/tests/shell/session/resolver-canonical-env.test.js
+  out:
+    - .caws/policy.yaml
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    CANONICAL NORMALIZATION: presence of any surface session-id env var sets
+    CAWS_SESSION_ID once at resolution; every downstream consumer (dispatch
+    scripts, CLI verbs) reads only the canonical var. An operator may set
+    CAWS_SESSION_ID (or any surface var) to any value — forgery of the STRING
+    is accepted by design; correctness is anchored by the PID record, not by
+    secrecy of the id.
+  - >-
+    SURFACE-PINNED PRECEDENCE: when CAWS_AGENT_SURFACE names the dispatching
+    platform, that surface's own env var wins and foreign vars cannot shadow
+    it (a stray CLAUDE_SESSION_ID in a dsh process no longer rewrites self).
+    Without the pin, CLAUDE_SESSION_ID remains the documented operator
+    override, then the per-surface chain as today.
+  - >-
+    NO INVENTED IDENTITY (shell resolver): the tier-3 capsule-glob fallback
+    is REMOVED from session-id.sh — env chain or the live agent-PID record,
+    else "unknown", and verbs fail loudly on unknown instead of guessing.
+    This is a deliberate doctrine shift from
+    CAWS-SESSION-SHELL-RESOLVER-CAPSULE-001; the TS capsule tier (owner
+    record, caller-pointer correlated, minted only via allowMint) is
+    unchanged.
+  - >-
+    PID IS THE ANCHOR: when the env tier resolves X but the LIVE agent-PID
+    record for this process says Y, Y wins — the record was written under
+    this process and cannot be spoofed without owning the PID (kill the PID
+    and the agent dies) — and the disagreement is surfaced on stderr naming
+    both ids. Start-time mismatch (PID reuse) invalidates the record as
+    today.
+  - >-
+    TEMPLATE VERSION BUMP: session-id.sh is a shared-pack template file, so
+    this change bumps SHARED_PACK_VERSION exactly once (52 -> 53); existing
+    consumers see managed_drift on next init until they refresh.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'a process with both DSH_SESSION_ID and CLAUDE_SESSION_ID set and CAWS_AGENT_SURFACE=dsh'
+    when: 'session identity resolves (shell resolver or TS resolver)'
+    then: 'the dsh var wins, the resolved value is normalized into CAWS_SESSION_ID for downstream reads, and the shadowing var does not rewrite self'
+  - id: A2
+    given: 'a shell resolver invocation with no session-id env vars and no live agent-PID record'
+    when: 'resolution runs'
+    then: 'it prints "unknown" (no capsule glob); bats coverage pins the removed tier and the unknown exit'
+  - id: A3
+    given: 'env resolution yields X while the live agent-PID record for this process yields Y'
+    when: 'the shell resolver runs'
+    then: 'Y is the resolved identity, and a stderr line names both ids and states the PID record won'
+  - id: A4
+    given: 'CAWS_SESSION_ID already set (normalized upstream by the dispatch layer)'
+    when: 'the TS resolver runs'
+    then: 'it prefers the canonical var before the per-surface chain and reports platform from CAWS_PLATFORM_FLAG when present'
 contracts:
   - name: 'canonical-session-id'
     type: behavior
+    description: >-
+      Resolution normalizes the winning env value into CAWS_SESSION_ID;
+      downstream reads are canonical-only; surface pinning defeats
+      cross-surface shadowing; PID-record disagreement resolves to the
+      record with a loud stderr note.
