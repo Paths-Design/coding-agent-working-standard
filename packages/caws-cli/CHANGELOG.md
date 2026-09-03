@@ -2,6 +2,19 @@
 
 ### Features
 
+- **Spec creation provenance: `created_by_session`** (`CAWS-SPEC-CREATED-BY-SESSION-01`).
+  `caws specs create` now stamps the resolving session's id into the spec body
+  as an optional `created_by_session` field (provenance only, never authority),
+  so "which session created this spec" is answerable from the spec alone —
+  including for active-but-unbound specs that never produced a worktree/lane
+  trail. `spec.v1.json` admits the field as an optional string (strict schema
+  otherwise unchanged: a near-miss field name is still a schema violation);
+  specs authored before the field, or by hand, validate unchanged; the create
+  renderer omits the line when no session id resolves; lifecycle writes
+  (activate/close/amend) preserve it byte-for-byte; `--plan` renders the same
+  line the real write would. The `spec_created` event's actor envelope remains
+  the durable audit record.
+
 - **Inter-agent message channel: ledger completeness, delivery economics,
   fork-aware identity, and behavior surface** (grouped entry for six merged
   specs — `CAWS-MESSAGE-LEDGER-COMPLETENESS-001`,

@@ -3032,3 +3032,30 @@ describe('semantic layer: evidence rules (CAWS-SPEC-AC-EVIDENCE-AUTHORITY-01)', 
     expect(isOk(r)).toBe(true);
   });
 });
+
+describe('shape layer: created_by_session provenance field (SPEC-CREATED-BY-SESSION-001)', () => {
+  test('admitted: a non-empty created_by_session passes the strict schema and round-trips', () => {
+    const r = parseAndValidateSpec(VALID_TIER3 + "\ncreated_by_session: sess_abc123\n");
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      expect(r.value.created_by_session).toBe('sess_abc123');
+    }
+  });
+
+  test('optional: the identical body WITHOUT the field validates (every pre-existing spec)', () => {
+    // VALID_TIER3 itself carries no created_by_session; if the field were
+    // accidentally required, the entire back catalog would fail every read.
+    expect(isOk(parseAndValidateSpec(VALID_TIER3))).toBe(true);
+  });
+
+  test('strictness preserved: a near-miss provenance field name is still SCHEMA_VIOLATION', () => {
+    const r = parseAndValidateSpec(VALID_TIER3 + '\ncreated_by_sessio: sess_typo');
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) {
+      const d = r.errors.find(
+        (e) => e.rule === SPEC_RULES.SCHEMA_VIOLATION && e.message?.includes('created_by_sessio')
+      );
+      expect(d).toBeDefined();
+    }
+  });
+});

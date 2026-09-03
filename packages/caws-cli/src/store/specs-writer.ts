@@ -128,6 +128,15 @@ export interface CreateSpecInput {
    */
   readonly modules?: readonly string[];
   readonly invariants?: readonly string[];
+  /**
+   * SPEC-CREATED-BY-SESSION-001: provenance-only. The session id that ran
+   * `caws specs create`, rendered as the optional `created_by_session` YAML
+   * field so "which session created this spec" is answerable from the spec
+   * body without replaying events.jsonl. Optional: when the caller cannot
+   * resolve a session the line is not rendered and the output is
+   * byte-identical to before the field existed.
+   */
+  readonly createdBySession?: string;
   /** Override the timestamp used for created_at + the event ts. Tests inject. */
   readonly now?: () => Date;
   /** The EventBody actor envelope (built by the shell layer). */
@@ -1005,6 +1014,12 @@ function renderInitialSpecYaml(input: CreateSpecInput): string {
     `lifecycle_state: ${state}`,
     `created_at: '${now}'`,
     `updated_at: '${now}'`,
+    // SPEC-CREATED-BY-SESSION-001: creation provenance sits with the creation
+    // timestamps. Omitted entirely when no session id was supplied, so
+    // existing callers stay byte-identical.
+    ...(input.createdBySession !== undefined && input.createdBySession.length > 0
+      ? [`created_by_session: ${sq(input.createdBySession)}`]
+      : []),
     `blast_radius:`,
     `  modules:`,
     ...moduleLines,
