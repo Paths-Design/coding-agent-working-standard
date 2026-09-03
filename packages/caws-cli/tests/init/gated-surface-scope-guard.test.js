@@ -35,7 +35,7 @@ function makeTempDir(prefix) {
 }
 
 /** Install a fake user-scope config and point os.homedir at its root. */
-function withFakeHome(t) {
+function withFakeHome() {
   const home = makeTempDir('gsg-home-');
   const realHomedir = os.homedir;
   os.homedir = () => home;
