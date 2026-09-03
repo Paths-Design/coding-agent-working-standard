@@ -1,0 +1,31 @@
+id: CAWS-HARNESS-TELEMETRY-ADAPTER-001
+title: 'Per-harness telemetry adapters: kernel turn-log contract, adapter-covered surface cut, stale-writer advisory'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-03T00:54:21.000Z'
+updated_at: '2026-09-03T00:54:21.000Z'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'turn-log-telemetry-schema'
+    type: schema
+    path: 'src/kernel/schemas/telemetry/turn-log.v2.json'
+  - name: 'adapter-covered-telemetry-cut'
+    type: contract-test
+    path: 'tests/init/adapter-covered-telemetry-cut.test.js'
