@@ -157,6 +157,8 @@ export interface Spec {
   experimental_mode?: ExperimentalMode;
   created_at?: string;
   updated_at?: string;
+  /** Provenance only, never authority: session id whose `caws specs create` run wrote the spec. Optional — pre-existing and hand-authored specs omit it. */
+  created_by_session?: string;
   owner?: string;
   closure_notes?: string;
   evidence?: EvidenceRecord[];

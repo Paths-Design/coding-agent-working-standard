@@ -744,6 +744,12 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     riskTier: riskTier as 1 | 2 | 3,
     now: nowFn,
     actor,
+    // SPEC-CREATED-BY-SESSION-001: the actor's session id is already resolved
+    // for the event envelope; mirror it into the spec body as provenance so
+    // the creator is answerable from the spec alone.
+    ...(actor.session_id !== undefined && actor.session_id.length > 0
+      ? { createdBySession: actor.session_id }
+      : {}),
     ...(scopeIn !== undefined && scopeIn.length > 0
       ? { scopeIn }
       : {}),

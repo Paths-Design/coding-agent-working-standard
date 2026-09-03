@@ -230,6 +230,11 @@
     },
     "created_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" },
+    "created_by_session": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Provenance only, never authority: the session id of the agent or operator whose `caws specs create` run wrote this spec (stamped by that command automatically). Optional — specs authored before the field shipped, or by hand, carry no value and validate unchanged. Answers 'which session created this spec' from the body alone; the spec_created event's actor envelope remains the durable audit record."
+    },
     "owner": { "type": "string" },
     "closure_notes": { "type": "string" },
     "evidence": {
