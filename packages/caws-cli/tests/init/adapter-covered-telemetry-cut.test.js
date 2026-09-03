@@ -187,6 +187,43 @@ describe('telemetry cut: re-init retires stale managed rows (repair path)', () =
     }
   });
 
+  test('a failed unlink is reported as failed, never thrown (CAWS-TELEMETRY-REPAIR-RESILIENCE-001)', () => {
+    const repoRoot = makeTempDir();
+    const hooksDir = path.join(repoRoot, '.caws', 'hooks');
+    try {
+      fs.mkdirSync(hooksDir, { recursive: true });
+      // Two managed rows; the read-only directory will make both unlinks
+      // fail AFTER both reads succeed — exactly the guard's scenario.
+      fs.writeFileSync(
+        path.join(repoRoot, '.caws/hooks/session-log.sh'),
+        managedScriptBody()
+      );
+      fs.writeFileSync(
+        path.join(repoRoot, '.caws/hooks/agent-stop.sh'),
+        managedScriptBody()
+      );
+      fs.chmodSync(hooksDir, 0o500); // readable, not writable → unlink EPERM
+
+      const retire = retireStaleTelemetryRows(repoRoot);
+      expect([...retire.failed].sort()).toEqual(
+        ['.caws/hooks/agent-stop.sh', '.caws/hooks/session-log.sh'].sort()
+      );
+      // Disjoint outcomes: the two unwritten rows are absent (correct),
+      // nothing silently counted as retired or unmanaged.
+      expect(retire.retired).toEqual([]);
+      expect([...retire.absent].sort()).toEqual(
+        ['.caws/hooks/agent-heartbeat.sh', '.caws/hooks/session_log_renderer.py'].sort()
+      );
+      expect(retire.unmanaged).toEqual([]);
+      // The row stays on disk for the next run to retry.
+      expect(fs.existsSync(path.join(repoRoot, '.caws/hooks/session-log.sh'))).toBe(true);
+    } finally {
+      // Restore writability so the cleanup rm can recurse.
+      fs.chmodSync(hooksDir, 0o700);
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   test('a dsh-pack install never resurrects the telemetry rows', () => {
     const repoRoot = makeTempDir();
     try {

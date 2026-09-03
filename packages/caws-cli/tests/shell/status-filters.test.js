@@ -125,3 +125,34 @@ describe('caws status focused filters', () => {
     expect(fs.existsSync(path.join(caws, 'events.jsonl'))).toBe(beforeEvents);
   });
 });
+
+describe('status --json stale-telemetry advisory parity (CAWS-TELEMETRY-REPAIR-RESILIENCE-001)', () => {
+  const MANAGED_ROW =
+    '#!/usr/bin/env bash\n# CAWS-MANAGED-HOOK\n# hook_pack: shared\n# hook_pack_version: 52\n# caws_min_major: 11\n# lineage_refs: 1\necho telemetry\n';
+  const DSH_MARKER =
+    '<!-- CAWS-MANAGED-HOOK\n# hook_pack: dsh\n# hook_pack_version: 1\n# caws_min_major: 11\n-->\n# notes\n';
+
+  test('payload carries the advisory text when doctor observed stale rows + a dsh pack', () => {
+    const { root } = mkRepo();
+    fs.mkdirSync(path.join(root, '.caws', 'hooks'), { recursive: true });
+    fs.writeFileSync(path.join(root, '.caws/hooks/session-log.sh'), MANAGED_ROW);
+    fs.mkdirSync(path.join(root, '.dsh'), { recursive: true });
+    fs.writeFileSync(path.join(root, '.dsh/AGENTS.md'), DSH_MARKER);
+
+    const result = runStatus(root, { specs: true, doctor: true, json: true });
+    expect(result.code).toBe(0);
+    const payload = JSON.parse(result.out);
+    expect(typeof payload.stale_telemetry_advisory).toBe('string');
+    expect(payload.stale_telemetry_advisory).toContain('.caws/hooks/session-log.sh');
+    expect(payload.stale_telemetry_advisory).toContain('caws init');
+  });
+
+  test('payload omits the advisory field entirely without the drift (byte-identical baseline)', () => {
+    const { root, caws } = mkRepo();
+    writeSpec(caws, 'STATUS-ADVISORY-BASE-001', 'active');
+    const result = runStatus(root, { specs: true, doctor: true, json: true });
+    expect(result.code).toBe(0);
+    const payload = JSON.parse(result.out);
+    expect(payload).not.toHaveProperty('stale_telemetry_advisory');
+  });
+});
