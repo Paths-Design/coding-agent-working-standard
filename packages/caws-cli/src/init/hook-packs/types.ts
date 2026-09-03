@@ -28,6 +28,24 @@
 /** Supported agent harnesses. Implemented packs: claude-code, codex, opencode, zcode, kimi-code, qwen-code. */
 export type AgentSurface = 'claude-code' | 'codex' | 'opencode' | 'zcode' | 'kimi-code' | 'qwen-code' | 'dsh' | 'cursor' | 'windsurf' | 'none';
 
+/**
+ * Surfaces whose turn telemetry — the session-log fold under
+ * `.caws/sessions/` and the agent lease lifecycle under `.caws/leases/` — is
+ * owned by a per-harness telemetry ADAPTER writing through the governed CLI,
+ * not by the vendored shared-pack rows. For these surfaces the shared core
+ * omits its telemetry rows (`sharedPackForSurface`), and re-running
+ * `caws init` for the surface retires stale managed copies. Vendoring a
+ * second writer onto the same session/lease state is a dual-writer defect.
+ * (CAWS-HARNESS-TELEMETRY-ADAPTER-001.)
+ */
+export const ADAPTER_COVERED_SURFACES: readonly AgentSurface[] = ['dsh'];
+
+/** Whether a surface's turn telemetry belongs to a per-harness adapter
+ *  rather than the vendored shared-pack rows. */
+export function isAdapterCoveredSurface(surface: AgentSurface): boolean {
+  return (ADAPTER_COVERED_SURFACES as readonly string[]).includes(surface);
+}
+
 /** Lifecycle interception points a pack may register on a harness. */
 export type LifecycleEvent =
   | 'pre_bash'

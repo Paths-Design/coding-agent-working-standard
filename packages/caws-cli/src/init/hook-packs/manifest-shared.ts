@@ -20,7 +20,8 @@
 // for all shared hook logic. A change to a shared file requires exactly
 // one version bump here, not parallel bumps in two vendor trees.
 
-import type { HookPackV1 } from './types';
+import type { AgentSurface, HookPackFile, HookPackV1 } from './types';
+import { isAdapterCoveredSurface } from './types';
 
 // v2 (WORKTREE-REPAIR-INSTALLED-SMOKE-001): agent-stop.sh corrected from the
 // nonexistent `caws agents deregister` to `caws agents stop` (the Stop hook was
@@ -326,6 +327,52 @@ import type { HookPackV1 } from './types';
 // naming the foreign repository.
 export const SHARED_PACK_VERSION = 52;
 
+/**
+ * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
+ * session_log_renderer.py writing .caws/sessions/) and the agent lease
+ * lifecycle hooks (agent-heartbeat.sh, agent-stop.sh writing .caws/leases/).
+ *
+ * CAWS-HARNESS-TELEMETRY-ADAPTER-001: for adapter-covered surfaces
+ * (ADAPTER_COVERED_SURFACES — see isAdapterCoveredSurface) a per-harness
+ * telemetry adapter owns this plane, so `sharedPackForSurface` omits these
+ * rows from the install set and re-running `caws init` retires stale managed
+ * copies (retireStaleTelemetryRows). The POLICY plane rows — guards, audit,
+ * registration, dispatch — are installed unchanged for every surface.
+ */
+export const TELEMETRY_ROW_DEST_PATHS: readonly string[] = [
+  '.caws/hooks/agent-heartbeat.sh',
+  '.caws/hooks/agent-stop.sh',
+  '.caws/hooks/session-log.sh',
+  '.caws/hooks/session_log_renderer.py',
+];
+
+const TELEMETRY_INSTALLED_FILES: readonly HookPackFile[] = [
+  {
+    destPath: '.caws/hooks/agent-heartbeat.sh',
+    sourcePath: 'agent-heartbeat.sh',
+    executable: true,
+    managed: true,
+  },
+  {
+    destPath: '.caws/hooks/agent-stop.sh',
+    sourcePath: 'agent-stop.sh',
+    executable: true,
+    managed: true,
+  },
+  {
+    destPath: '.caws/hooks/session-log.sh',
+    sourcePath: 'session-log.sh',
+    executable: true,
+    managed: true,
+  },
+  {
+    destPath: '.caws/hooks/session_log_renderer.py',
+    sourcePath: 'session_log_renderer.py',
+    executable: false,
+    managed: true,
+  },
+];
+
 export const SHARED_PACK: HookPackV1 = {
   // 'shared' is the canonical pack identity for the shared hook core.
   id: 'shared',
@@ -592,30 +639,9 @@ export const SHARED_PACK: HookPackV1 = {
       executable: true,
       managed: true,
     },
-    {
-      destPath: '.caws/hooks/agent-heartbeat.sh',
-      sourcePath: 'agent-heartbeat.sh',
-      executable: true,
-      managed: true,
-    },
-    {
-      destPath: '.caws/hooks/agent-stop.sh',
-      sourcePath: 'agent-stop.sh',
-      executable: true,
-      managed: true,
-    },
-    {
-      destPath: '.caws/hooks/session-log.sh',
-      sourcePath: 'session-log.sh',
-      executable: true,
-      managed: true,
-    },
-    {
-      destPath: '.caws/hooks/session_log_renderer.py',
-      sourcePath: 'session_log_renderer.py',
-      executable: false,
-      managed: true,
-    },
+    // Telemetry plane (CAWS-HARNESS-TELEMETRY-ADAPTER-001): adapter-covered
+    // surfaces get this slice filtered out via sharedPackForSurface.
+    ...TELEMETRY_INSTALLED_FILES,
     {
       destPath: '.caws/hooks/audit.sh',
       sourcePath: 'audit.sh',
@@ -712,3 +738,25 @@ export const SHARED_PACK: HookPackV1 = {
     },
   ],
 };
+
+/**
+ * The shared core as it installs for `surface`. Non-covered surfaces get
+ * SHARED_PACK itself — the identical rows in the identical order, byte for
+ * byte (NON-COVERED-SURFACES-UNCHANGED). Adapter-covered surfaces get the
+ * pack with the telemetry rows omitted: the turn-log fold and the lease
+ * lifecycle belong to the surface's telemetry adapter, and vendoring a
+ * second writer onto the same .caws/sessions/ + .caws/leases/ state is the
+ * dual-writer defect CAWS-HARNESS-TELEMETRY-ADAPTER-001 removes. Pack
+ * identity (`id: 'shared'`, version, headers) is unchanged — the cut is
+ * manifest shape, not a new pack.
+ */
+export function sharedPackForSurface(surface: AgentSurface): HookPackV1 {
+  if (!isAdapterCoveredSurface(surface)) return SHARED_PACK;
+  const covered = new Set<string>(TELEMETRY_ROW_DEST_PATHS);
+  return {
+    ...SHARED_PACK,
+    installedFiles: SHARED_PACK.installedFiles.filter(
+      (f) => !covered.has(f.destPath)
+    ),
+  };
+}
