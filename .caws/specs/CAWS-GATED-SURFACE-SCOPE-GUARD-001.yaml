@@ -8,23 +8,89 @@ updated_at: '2026-09-03T17:44:05.527Z'
 created_by_session: 'session-c5c6ac1b-ed94-4c10-b9e2-3552e8ab3309'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/init/hook-install.ts
+    - packages/caws-cli/src/kernel/doctor/rules.ts
+    - packages/caws-cli/src/kernel/doctor/inspect.ts
+    - packages/caws-cli/src/kernel/doctor/types.ts
+    - packages/caws-cli/src/store/types.ts
+    - packages/caws-cli/src/store/doctor-snapshot.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/init/hook-install.ts
+    - packages/caws-cli/src/init/hook-packs
+    - packages/caws-cli/src/kernel/doctor/rules.ts
+    - packages/caws-cli/src/kernel/doctor/inspect.ts
+    - packages/caws-cli/src/kernel/doctor/types.ts
+    - packages/caws-cli/src/store/types.ts
+    - packages/caws-cli/src/store/doctor-snapshot.ts
+    - packages/caws-cli/tests/init/gated-surface-scope-guard.test.js
+    - packages/caws-cli/tests/kernel/unit/doctor-user-scope-dual-wiring.test.ts
+  out:
+    - packages/caws-cli/templates
+    - .caws/policy.yaml
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    NEVER SILENT ON SKIP: when init detects user-scope CAWS wiring for a
+    trust-gated surface (qwen-code: ~/.qwen/settings.json hooks key invoking
+    CAWS shims; zcode: ~/.zcode/cli/config.json hook entries) it does NOT
+    install project-scope hook entries for that surface, prints a loud
+    warning naming the double-fire hazard (proven 2026-08-13: doubled
+    dispatchers, SessionStart hang), and records what was skipped. A skip
+    the user cannot see is the "reports success while doing nothing" defect
+    class; a skip the user CAN see is the repair.
+  - >-
+    NON-HOOK SETTINGS STILL MERGE: the guard suppresses only the hook
+    entries of the gated surface's project-scope wiring; every other
+    settings/config merge the pack performs is unchanged.
+  - >-
+    DOCTOR STAYS OBSERVATIONAL: the dual-wiring doctor rule reads snapshot
+    observations (user-scope wiring present + project-scope hook entries
+    present for the same gated surface) and warns with the one-scope
+    remediation; it never mutates user files and treats each missing
+    observation as unobserved (silent), matching the hookPackInstalled
+    convention.
+  - >-
+    TRUST-GATED SURFACES ONLY: the guard set is exactly qwen-code and zcode
+    (live-verified: qwen >=0.21.10 workspace-trust gate zeroes project
+    settings; zcode >=3.3.6 unconditionally strips project hooks). claude-code,
+    codex, opencode, kimi-code project-scope wiring is unaffected.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'a machine with user-scope CAWS wiring for qwen-code (~/.qwen/settings.json hooks entries invoking CAWS shims)'
+    when: 'caws init --agent-surface qwen-code runs in a project'
+    then: 'no project-scope .qwen/settings.json hook entries are installed, a warning names the double-fire hazard and the kept single source of wiring, and non-hook settings still merge'
+  - id: A2
+    given: 'a machine with user-scope CAWS wiring for zcode (~/.zcode/cli/config.json hook entries)'
+    when: 'caws init --agent-surface zcode runs in a project'
+    then: 'the project-scope .zcode/config.json hook entries are suppressed with the same loud warning; non-hook config merges are unchanged'
+  - id: A3
+    given: 'a machine with NO user-scope CAWS wiring for the gated surface'
+    when: 'caws init --agent-surface qwen-code (or zcode) runs'
+    then: 'installation is byte-identical to the pre-change behavior (guard is inert without the hazard)'
+  - id: A4
+    given: 'a repo whose project-scope wiring for a gated surface coexists with user-scope CAWS wiring on the machine'
+    when: 'caws doctor runs'
+    then: 'doctor.hooks.user_scope_dual_wiring fires (warning) naming the surface and the one-scope remediation; with either side absent or unobserved it stays silent'
+non_functional:
+  reliability:
+    - >-
+      Removes the two proven silent-failure classes for gated surfaces:
+      dual-scope double-fire (duplicated audit events, SessionStart hangs)
+      and the silent zeroing of project hooks that strands telemetry with no
+      error anywhere.
 contracts:
   - name: 'user-scope-detection'
     type: behavior
+    description: >-
+      init-time detection of user-scope CAWS wiring for gated surfaces
+      (path + pattern per surface, test-injected home dir) that suppresses
+      project-scope hook entries with a loud, test-pinned warning.
   - name: 'doctor-dual-wiring'
     type: behavior
+    description: >-
+      Snapshot observations (userScopeWiringBySurface, gated project hook
+      entries by surface) consumed by a pure kernel rule that warns exactly
+      when both sides are present.
