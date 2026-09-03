@@ -152,3 +152,7 @@ evidence:
     status: pass
     evidence_ref: "npx jest tests/shell/stale-telemetry-advisory.test.js (5 pass) + e2e: status renders advisory under drift, 0 advisory lines after init repair, git status clean throughout (read-only)"
     recorded_at: "2026-09-03T03:17:05.791Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "npx jest tests/kernel/unit/doctor-stale-telemetry-pack.test.ts (7 pass) + e2e: doctor emits stale_telemetry_pack with rows+dsh marker, 0 findings without marker; canonical-repo silence confirmed; 0E/11W/6I identical to installed CLI"
+    recorded_at: "2026-09-03T03:17:06.178Z"
