@@ -2,9 +2,10 @@ id: CAWS-TELEMETRY-REPAIR-RESILIENCE-001
 title: 'Post-review hardening: retire-path unlink resilience, managed-header leaf module, status JSON advisory parity'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-telemetry-repair-resilience
 created_at: '2026-09-03T14:58:53.702Z'
-updated_at: '2026-09-03T14:58:53.702Z'
+updated_at: '2026-09-03T14:59:32.043Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/init/hook-install.ts
