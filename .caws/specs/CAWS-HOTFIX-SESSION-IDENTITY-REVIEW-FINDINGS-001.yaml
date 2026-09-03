@@ -75,3 +75,7 @@ evidence:
     status: pass
     evidence_ref: resolve-session.ts casts through AgentSurface; resolver-canonical-env platform-membership test (4 surfaces asserted in-set); full suite 2231 pass
     recorded_at: "2026-09-03T23:01:41.765Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: rules.ts shell.session.resolved_from_surface_pinned_env; describeSessionSource case uses it (never claude_env id); resolver suite pins source string
+    recorded_at: "2026-09-03T23:01:42.162Z"
