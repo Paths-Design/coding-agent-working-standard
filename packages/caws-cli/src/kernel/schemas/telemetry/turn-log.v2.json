@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caws.paths.design/schemas/telemetry/turn-log.v2.json",
+  "title": "CAWS turn log (turn-NNN.json) payload, schema_version 2",
+  "$comment": "Governing spec: CAWS-HARNESS-TELEMETRY-ADAPTER-001. Producer contract for the operational cache at .caws/sessions/<session-id>/turn-NNN.json: it validates what telemetry producers (vendored renderers and per-harness adapters) write; no kernel authority path reads turn logs (cache-not-authority). ADDITIVE-ONLY FROM V2: optional fields may be added by a producing renderer; required fields, the status enum, and existing field shapes may only change through a new schema_version document, and unknown schema_version values are rejected, never coerced. Timeline items are polymorphic per 'kind' — this contract pins the structural core (kind, ts, provenance) and leaves per-kind detail to the producing renderer so the contract does not churn with every renderer revision. Required top-level keys are the intersection observed across real v2 files: some producers omit 'context' (and with it 'ended_by'/'hook_contexts') for degraded turns.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "turn",
+    "ts_start",
+    "ts_end",
+    "user",
+    "user_ts",
+    "turn_summary",
+    "status",
+    "timeline"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 2,
+      "description": "Wire-format version. Unknown versions are rejected with a typed reason, never coerced."
+    },
+    "turn": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "1-based turn number within the session."
+    },
+    "context": {
+      "$ref": "#/$defs/turnContext",
+      "description": "Session/identity context captured at turn start. Optional: degraded turns may omit it entirely."
+    },
+    "ts_start": { "type": "string", "format": "date-time" },
+    "ts_end": { "type": "string", "format": "date-time" },
+    "user": { "type": "string" },
+    "user_ts": { "type": "string" },
+    "turn_summary": { "type": "string" },
+    "status": {
+      "enum": ["ok", "error", "blocked"],
+      "description": "ok = normal completion; error = the turn ended in an error state; blocked = a blocking_issue stopped the turn (renderer: session_log_renderer.py line ~886)."
+    },
+    "ended_by": {
+      "type": ["string", "null"],
+      "description": "What ended the turn, when known (e.g. the lifecycle event name). Open vocabulary; null when the producer cannot attribute it."
+    },
+    "decisions": {
+      "type": "array",
+      "description": "Deferred detail (CAWS-HARNESS-TELEMETRY-ADAPTER-001): the vendored renderer may populate it; adapter folds leave it absent for this slice. Shape is renderer-owned."
+    },
+    "next_action": {
+      "type": ["string", "null"],
+      "description": "Deferred detail: renderer-populated; adapter folds leave it absent for this slice."
+    },
+    "blocking_issue": {
+      "type": ["string", "null"],
+      "description": "Deferred detail: renderer-populated; a non-null value pairs with status 'blocked'."
+    },
+    "refs": {
+      "type": "object",
+      "description": "Deferred detail: file/search/command/agent/artifact references. Structure is renderer-owned."
+    },
+    "hook_contexts": { "type": "array" },
+    "interjections": { "type": "array" },
+    "timeline": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/timelineItem" }
+    }
+  },
+  "$defs": {
+    "turnContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "project",
+        "cwd",
+        "model",
+        "session_started_at",
+        "branch",
+        "head_sha",
+        "start_sha",
+        "dirty_files"
+      ],
+      "properties": {
+        "session_id": { "type": "string", "minLength": 1 },
+        "project": { "type": "string" },
+        "cwd": { "type": "string" },
+        "model": { "type": "string" },
+        "session_started_at": { "type": "string" },
+        "branch": { "type": "string" },
+        "head_sha": { "type": "string" },
+        "start_sha": { "type": "string" },
+        "dirty_files": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "timelineItem": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["kind", "ts", "provenance"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Entry class, e.g. 'tool_call' or 'reasoning'. Per-kind payload fields (output, command, file, text, ...) are renderer-owned and intentionally unpinned here."
+        },
+        "ts": { "type": "string" },
+        "provenance": { "type": "string" }
+      }
+    }
+  }
+}
