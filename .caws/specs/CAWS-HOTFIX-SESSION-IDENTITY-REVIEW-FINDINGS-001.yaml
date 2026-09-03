@@ -79,3 +79,7 @@ evidence:
     status: pass
     evidence_ref: rules.ts shell.session.resolved_from_surface_pinned_env; describeSessionSource case uses it (never claude_env id); resolver suite pins source string
     recorded_at: "2026-09-03T23:01:42.162Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "scripts/lint-shell.sh: bash -n over all 55 template scripts, exit 0; npm run lint chain green (eslint + gate); broken-continuation class caught by construction (bash -n fails on syntax)"
+    recorded_at: "2026-09-03T23:01:42.547Z"
