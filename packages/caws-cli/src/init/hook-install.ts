@@ -786,7 +786,9 @@ export function installHookPack(
 
 /** Outcome of retiring the vendored telemetry rows for an adapter-covered
  *  surface. Absence is reported, never treated as staleness; local growth is
- *  never touched. */
+ *  never touched; a failed deletion is reported and never thrown. The four
+ *  lists are disjoint per-path outcomes covering every TELEMETRY_ROW_DEST_PATHS
+ *  entry exactly once. */
 export interface TelemetryRetireResult {
   /** Managed `hook_pack: shared` rows removed from disk. */
   readonly retired: readonly string[];
@@ -795,6 +797,10 @@ export interface TelemetryRetireResult {
   /** Files present at a telemetry dest path WITHOUT a shared-pack managed
    *  header — local growth or foreign files; retirement refuses these. */
   readonly unmanaged: readonly string[];
+  /** Managed rows whose deletion failed (readable but not removable —
+   * EPERM, a locked file, exotic perms). The row stays on disk; retirement
+   * reports it loudly instead of aborting init. */
+  readonly failed: readonly string[];
 }
 
 /**
@@ -805,15 +811,19 @@ export interface TelemetryRetireResult {
  * disk by an earlier init are stale dual-writers over state the surface's
  * telemetry adapter now owns.
  *
- * Non-destructive by construction: absent files are reported, not errors;
- * files without a `hook_pack: shared` managed header are never touched.
- * The deletion is reversible — re-running init for a non-covered surface
- * reinstalls the rows, because for that surface they are still in the pack.
+ * Non-destructive by construction and NEVER THROWS: absent files are
+ * reported, not errors; files without a `hook_pack: shared` managed header
+ * are never touched; a failed unlink (permissions, lock) is reported per
+ * path in `failed` so the caller can surface it without aborting the
+ * install that just completed. The deletion is reversible — re-running init
+ * for a non-covered surface reinstalls the rows, because for that surface
+ * they are still in the pack.
  */
 export function retireStaleTelemetryRows(repoRoot: string): TelemetryRetireResult {
   const retired: string[] = [];
   const absent: string[] = [];
   const unmanaged: string[] = [];
+  const failed: string[] = [];
   for (const relPath of TELEMETRY_ROW_DEST_PATHS) {
     const abs = path.join(repoRoot, relPath);
     let content: string;
@@ -829,10 +839,16 @@ export function retireStaleTelemetryRows(repoRoot: string): TelemetryRetireResul
       unmanaged.push(relPath);
       continue;
     }
-    fs.unlinkSync(abs);
-    retired.push(relPath);
+    try {
+      fs.unlinkSync(abs);
+      retired.push(relPath);
+    } catch {
+      // The row is provably ours but the platform refuses the delete.
+      // Degrade loudly per-path: report, keep going, never abort init.
+      failed.push(relPath);
+    }
   }
-  return { retired, absent, unmanaged };
+  return { retired, absent, unmanaged, failed };
 }
 
 /** Read-only hook-pack preview. Uses the same file-state evaluator as install

@@ -315,6 +315,16 @@ function performHookPackStep(
         '\n'
     );
   }
+  // A failed unlink is a loud per-path degradation, never an abort: init
+  // finished its installs; the row stays managed on disk and the next run
+  // (or a permission fix) retries it. Doctor keeps flagging the drift.
+  if (telemetryRetire && telemetryRetire.failed.length > 0) {
+    process.stderr.write(
+      'Warning: could not remove stale telemetry rows (check file permissions, then re-run `caws init`): ' +
+        telemetryRetire.failed.join(', ') +
+        '\n'
+    );
+  }
 
   return mergeHookPackResults(sharedResult, vendorResult);
 }
