@@ -37,7 +37,9 @@ import { loadPolicy } from './policy-store';
 import { loadSpecs } from './specs-store';
 import type { StoreSnapshot } from './types';
 import { loadWaivers } from './waivers-store';
-import { parseManagedHeader } from '../init/hook-install';
+// CAWS-TELEMETRY-REPAIR-RESILIENCE-001: import the parser from the leaf
+// module — snapshot composition must not depend on the install machinery.
+import { parseManagedHeader } from '../init/hook-packs/managed-header';
 import { TELEMETRY_ROW_DEST_PATHS } from '../init/hook-packs/manifest-shared';
 import { ADAPTER_COVERED_SURFACES } from '../init/hook-packs/types';
 import { loadWorktrees } from './worktrees-store';
