@@ -87,3 +87,7 @@ evidence:
     status: pass
     evidence_ref: "npx jest tests/init/init-hook-pack-render.test.js unchanged + full suite 2192 pass; doctor-snapshot imports init/hook-packs/managed-header (grep: 0 refs to hook-install); leaf imports only hook-packs/types"
     recorded_at: "2026-09-03T15:19:05.049Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "npx jest tests/shell/status-filters.test.js (4 pass): payload.stale_telemetry_advisory present with drift, property absent without"
+    recorded_at: "2026-09-03T15:19:05.546Z"
