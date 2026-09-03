@@ -4,7 +4,7 @@ risk_tier: 2
 mode: fix
 lifecycle_state: active
 worktree: wt-session-identity
-updated_at: '2026-09-03T22:10:36.788Z'
+updated_at: '2026-09-03T22:11:56.737Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/shared/lib/session-id.sh
@@ -21,6 +21,7 @@ scope:
     - packages/caws-cli/tests/hooks/bats/session-id-agent-pid.bats
     - packages/caws-cli/tests/hooks/bats/session-id-canonical.bats
     - packages/caws-cli/tests/shell/session/resolver-canonical-env.test.js
+    - packages/caws-cli/templates/hook-packs/shared/lib/run-handlers.sh
   out:
     - .caws/policy.yaml
     - .github/workflows
