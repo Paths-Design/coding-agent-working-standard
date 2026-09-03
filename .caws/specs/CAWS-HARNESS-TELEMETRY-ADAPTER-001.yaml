@@ -2,9 +2,10 @@ id: CAWS-HARNESS-TELEMETRY-ADAPTER-001
 title: 'Per-harness telemetry adapters: kernel turn-log contract, adapter-covered surface cut, stale-writer advisory'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-telemetry-adapter-cut
 created_at: '2026-09-03T00:54:21.000Z'
-updated_at: '2026-09-03T00:55:22.716Z'
+updated_at: '2026-09-03T02:24:05.044Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/init/hook-packs/types.ts
