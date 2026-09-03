@@ -97,3 +97,8 @@ contracts:
       Snapshot observations (userScopeWiringBySurface, gated project hook
       entries by surface) consumed by a pure kernel rule that warns exactly
       when both sides are present.
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "npx jest tests/init/gated-surface-scope-guard.test.js — qwen merge returns skipped_dual_scope with user-scope wiring: no file written / existing file byte-identical, one loud stderr warning, plan mirrors; e2e: worktree dist init warned against this machine's real ~/.qwen wiring"
+    recorded_at: "2026-09-03T18:03:26.222Z"
