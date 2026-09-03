@@ -213,6 +213,14 @@ export function renderZcodeSettingsWiring(
       lines.push('  OK — .zcode/config.json already wires all four CAWS bridge');
       lines.push('  entrypoints. No change.');
       break;
+    case 'skipped_dual_scope':
+      lines.push('  SKIPPED — user-scope CAWS wiring for zcode detected at');
+      lines.push(`  ${mergeResult.userScopePath}. Project-scope hook entries were NOT`);
+      lines.push('  installed: zcode >=3.3.6 strips project-scope hooks anyway, and');
+      lines.push('  wiring both scopes fires every dispatcher twice. Keep the');
+      lines.push('  user-scope wiring as the single source; remove any project-scope');
+      lines.push('  hook entries if a previous init added them.');
+      break;
     case 'invalid':
       lines.push(`  ERROR — .zcode/config.json could not be parsed: ${mergeResult.error}`);
       lines.push('  init did NOT modify the file. Repair the JSON, then re-run init or');
@@ -332,6 +340,14 @@ export function renderQwenSettingsWiring(
     case 'unchanged':
       lines.push('  OK — .qwen/settings.json already wires all five CAWS shim');
       lines.push('  entrypoints. No change.');
+      break;
+    case 'skipped_dual_scope':
+      lines.push('  SKIPPED — user-scope CAWS wiring for qwen-code detected at');
+      lines.push(`  ${mergeResult.userScopePath}. Project-scope hook entries were NOT`);
+      lines.push('  installed: wiring both scopes fires every dispatcher twice');
+      lines.push('  (doubled audit events, SessionStart hangs). Keep the user-scope');
+      lines.push('  wiring as the single source; remove any project-scope hook');
+      lines.push('  entries if a previous init added them.');
       break;
     case 'invalid':
       lines.push(`  ERROR — .qwen/settings.json could not be parsed: ${mergeResult.error}`);
