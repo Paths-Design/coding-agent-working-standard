@@ -234,6 +234,19 @@ export const DOCTOR_RULES = {
    */
   HOOKS_STALE_TELEMETRY_PACK: 'doctor.hooks.stale_telemetry_pack',
 
+  /**
+   * CAWS-GATED-SURFACE-SCOPE-GUARD-001: a trust-gated surface (qwen-code,
+   * zcode) carries CAWS hook wiring at BOTH user scope and project scope on
+   * this machine. The harness merges the two additively, so every CAWS
+   * dispatcher double-fires (doubled audit events, SessionStart hangs —
+   * proven live 2026-08-13). Severity: warning (render-only; wiring still
+   * works, twice). Repair: keep ONE scope — the user-scope wiring (immune
+   * to the qwen trust gate and the zcode project-hook strip); remove the
+   * project-scope hook entries. `caws init` for a gated surface now refuses
+   * to add them, but entries from a pre-guard init must be removed by hand.
+   */
+  HOOKS_USER_SCOPE_DUAL_WIRING: 'doctor.hooks.user_scope_dual_wiring',
+
   // ---- registry hygiene (slice 7c.2) -------------------------------------
   /**
    * worktrees.json or agents.json parsed as something other than a plain

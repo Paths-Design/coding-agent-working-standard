@@ -234,6 +234,23 @@ export interface DoctorInput {
      * when undefined the rule is skipped (unobserved, not absent).
      */
     readonly adapterPackSurfaceMarkers?: readonly string[];
+    /**
+     * CAWS-GATED-SURFACE-SCOPE-GUARD-001: the trust-gated surfaces
+     * (qwen-code, zcode) with USER-scope CAWS hook wiring on this machine
+     * (observed from the user-scope configs; missing/unparseable = not
+     * present). Combined with the same surface appearing in
+     * `gatedProjectHookEntriesBySurface`, doctor fires
+     * `HOOKS_USER_SCOPE_DUAL_WIRING`. Optional; undefined = unobserved
+     * (silent), matching the hookPackInstalled convention.
+     */
+    readonly userScopeCawsWiringBySurface?: readonly string[];
+    /**
+     * CAWS-GATED-SURFACE-SCOPE-GUARD-001: the trust-gated surfaces with
+     * CAWS hook entries in the PROJECT-scope config
+     * (.qwen/settings.json / .zcode/config.json). Optional; undefined =
+     * unobserved (silent).
+     */
+    readonly gatedProjectHookEntriesBySurface?: readonly string[];
     readonly worktreeDirByName?: Readonly<Record<string, boolean>>;
     readonly specClaimedWorktreeDirByName?: Readonly<Record<string, boolean>>;
     /**

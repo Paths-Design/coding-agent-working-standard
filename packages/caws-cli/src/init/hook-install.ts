@@ -1189,7 +1189,13 @@ export type SettingsMergeResult =
   /** settings.json already wired all four entries; nothing written. */
   | { readonly kind: 'unchanged'; readonly path: string }
   /** settings.json existed but could not be parsed; left untouched. */
-  | { readonly kind: 'invalid'; readonly path: string; readonly error: string };
+  | { readonly kind: 'invalid'; readonly path: string; readonly error: string }
+  /** CAWS-GATED-SURFACE-SCOPE-GUARD-001: user-scope CAWS wiring for this
+   *  trust-gated surface exists on this machine, so the project-scope hook
+   *  entries were NOT installed (dual-scope wiring double-fires every
+   *  dispatcher — proven live 2026-08-13). Nothing was written; the
+   *  warning names the kept single source of wiring. */
+  | { readonly kind: 'skipped_dual_scope'; readonly path: string; readonly userScopePath: string };
 
 export type SettingsMergePlanResult = SettingsMergeResult & {
   readonly readOnly: true;
@@ -1397,6 +1403,33 @@ export function planSettingsExample(repoRoot: string): SettingsExamplePlanResult
   };
 }
 
+// ─── Trust-gated surface scope guard (CAWS-GATED-SURFACE-SCOPE-GUARD-001) ────────────────────────────────────────
+
+// Detection lives in the leaf ./hook-packs/user-scope-wiring.ts (imports only
+// node builtins) so the store's doctor snapshot can observe user-scope wiring
+// without depending on the install machinery. Re-exported for existing callers.
+export { detectUserScopeCawsWiring } from './hook-packs/user-scope-wiring';
+import { detectUserScopeCawsWiring } from './hook-packs/user-scope-wiring';
+
+/** The guard shared by the gated surfaces' merge/plan entry points: if
+ *  user-scope CAWS wiring is present, project-scope hook entries are
+ *  suppressed with ONE loud warning (never a silent skip) and the caller
+ *  returns a skipped_dual_scope result. */
+function guardGatedSurfaceScope(
+  surface: 'qwen-code' | 'zcode',
+  homeDir?: string
+): { readonly skipped: boolean; readonly userScopePath: string } {
+  const detection = detectUserScopeCawsWiring(surface, homeDir);
+  if (!detection.present) return { skipped: false, userScopePath: detection.sourcePath };
+  process.stderr.write(
+    `Warning: user-scope CAWS wiring for ${surface} detected at ${detection.sourcePath}. ` +
+      'Project-scope hook entries were NOT installed: wiring both scopes fires every dispatcher twice ' +
+      '(doubled audit events, SessionStart hangs). Keep the user-scope wiring as the single source; ' +
+      'remove any project-scope hook entries if a previous init added them.\n'
+  );
+  return { skipped: true, userScopePath: detection.sourcePath };
+}
+
 // ─── .zcode/config.json wiring (ZCode vendor surface) ────────────────────
 //
 // ZCode reads hook registration from .zcode/config.json at session start, in
@@ -1534,8 +1567,19 @@ function arrayHasCawsZcodeEntry(entryArray: unknown): boolean {
  * Never overwrites an unparseable file. Idempotent: a second run on a
  * fully-wired config.json is a no-op and leaves the file byte-identical.
  */
-export function mergeZcodeConfig(repoRoot: string): SettingsMergeResult {
+export function mergeZcodeConfig(repoRoot: string, homeDir?: string): SettingsMergeResult {
   const configPath = path.join(repoRoot, '.zcode', 'config.json');
+
+  // CAWS-GATED-SURFACE-SCOPE-GUARD-001: suppress hook entries when the
+  // machine carries user-scope CAWS wiring for this surface.
+  const gate = guardGatedSurfaceScope('zcode', homeDir);
+  if (gate.skipped) {
+    return {
+      kind: 'skipped_dual_scope',
+      path: configPath,
+      userScopePath: gate.userScopePath,
+    };
+  }
 
   if (!fs.existsSync(configPath)) {
     ensureDir(path.dirname(configPath));
@@ -1614,9 +1658,22 @@ export function mergeZcodeConfig(repoRoot: string): SettingsMergeResult {
 /** Read-only counterpart to mergeZcodeConfig. Computes the same created /
  *  merged / unchanged / invalid outcome without writing config.json. */
 export function planZcodeConfigMerge(
-  repoRoot: string
+  repoRoot: string,
+  homeDir?: string
 ): SettingsMergePlanResult {
   const configPath = path.join(repoRoot, '.zcode', 'config.json');
+
+  // CAWS-GATED-SURFACE-SCOPE-GUARD-001: plan reports the skip the perform
+  // path would take — never a plan that promises entries the guard holds back.
+  const gate = guardGatedSurfaceScope('zcode', homeDir);
+  if (gate.skipped) {
+    return {
+      kind: 'skipped_dual_scope',
+      path: configPath,
+      userScopePath: gate.userScopePath,
+      readOnly: true,
+    };
+  }
 
   if (!fs.existsSync(configPath)) {
     return { kind: 'created', path: configPath, readOnly: true };
@@ -2202,8 +2259,19 @@ function isCawsQwenBlock(block: unknown): boolean {
  * Never overwrites an unparseable file. Idempotent: a second run on a
  * fully-wired settings.json is a no-op and leaves the file byte-identical.
  */
-export function mergeQwenSettings(repoRoot: string): SettingsMergeResult {
+export function mergeQwenSettings(repoRoot: string, homeDir?: string): SettingsMergeResult {
   const settingsPath = path.join(repoRoot, '.qwen', 'settings.json');
+
+  // CAWS-GATED-SURFACE-SCOPE-GUARD-001: suppress hook entries when the
+  // machine carries user-scope CAWS wiring for this surface.
+  const gate = guardGatedSurfaceScope('qwen-code', homeDir);
+  if (gate.skipped) {
+    return {
+      kind: 'skipped_dual_scope',
+      path: settingsPath,
+      userScopePath: gate.userScopePath,
+    };
+  }
 
   if (!fs.existsSync(settingsPath)) {
     ensureDir(path.dirname(settingsPath));
@@ -2281,9 +2349,22 @@ export function mergeQwenSettings(repoRoot: string): SettingsMergeResult {
 /** Read-only counterpart to mergeQwenSettings. Computes the same created /
  * merged / unchanged / invalid outcome without writing settings.json. */
 export function planQwenSettingsMerge(
-  repoRoot: string
+  repoRoot: string,
+  homeDir?: string
 ): SettingsMergePlanResult {
   const settingsPath = path.join(repoRoot, '.qwen', 'settings.json');
+
+  // CAWS-GATED-SURFACE-SCOPE-GUARD-001: plan reports the skip the perform
+  // path would take — never a plan that promises entries the guard holds back.
+  const gate = guardGatedSurfaceScope('qwen-code', homeDir);
+  if (gate.skipped) {
+    return {
+      kind: 'skipped_dual_scope',
+      path: settingsPath,
+      userScopePath: gate.userScopePath,
+      readOnly: true,
+    };
+  }
 
   if (!fs.existsSync(settingsPath)) {
     return { kind: 'created', path: settingsPath, readOnly: true };

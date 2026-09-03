@@ -42,6 +42,7 @@ import { loadWaivers } from './waivers-store';
 import { parseManagedHeader } from '../init/hook-packs/managed-header';
 import { TELEMETRY_ROW_DEST_PATHS } from '../init/hook-packs/manifest-shared';
 import { ADAPTER_COVERED_SURFACES } from '../init/hook-packs/types';
+import { observeGatedSurfaceWiring } from '../init/hook-packs/user-scope-wiring';
 import { loadWorktrees } from './worktrees-store';
 
 // ----------------------------------------------------------------------------
@@ -282,6 +283,15 @@ function observeFilesystem(
     // installed adapter-pack surfaces so doctor can flag stale dual-writers.
     managedTelemetryRowPaths: observeManagedTelemetryRows(repoRoot),
     adapterPackSurfaceMarkers: observeAdapterPackSurfaceMarkers(repoRoot),
+    // CAWS-GATED-SURFACE-SCOPE-GUARD-001: both sides of the dual-wiring
+    // hazard, observed read-only (user home + project configs).
+    ...((): { userScopeCawsWiringBySurface: readonly string[]; gatedProjectHookEntriesBySurface: readonly string[] } => {
+      const observed = observeGatedSurfaceWiring(repoRoot);
+      return {
+        userScopeCawsWiringBySurface: observed.userScope,
+        gatedProjectHookEntriesBySurface: observed.projectScope,
+      };
+    })(),
     worktreeDirByName,
     specClaimedWorktreeDirByName,
     legacyArchiveBodyCount: countArchiveBodies(cawsDir),

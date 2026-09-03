@@ -1236,6 +1236,36 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     );
   }
 
+  // CAWS-GATED-SURFACE-SCOPE-GUARD-001: a trust-gated surface wired at BOTH
+  // scopes double-fires every dispatcher. Both observations must be present;
+  // the rule fires per surface that appears in BOTH lists. Either list
+  // undefined is unobserved (silent) — one-sided wiring is the CORRECT state
+  // for gated surfaces, never a finding.
+  const userScopeWiring = input.filesystem?.userScopeCawsWiringBySurface;
+  const gatedProjectEntries = input.filesystem?.gatedProjectHookEntriesBySurface;
+  if (userScopeWiring !== undefined && gatedProjectEntries !== undefined) {
+    const dual = userScopeWiring.filter((s) => gatedProjectEntries.includes(s));
+    if (dual.length > 0) {
+      findings.push(
+        finding(
+          DOCTOR_RULES.HOOKS_USER_SCOPE_DUAL_WIRING,
+          'warning',
+          `Trust-gated agent surface(s) ${dual.join(', ')} carry CAWS hook wiring at BOTH user scope and project scope. The harness runs both additively, so every CAWS dispatcher fires twice (doubled audit events, SessionStart hangs).`,
+          {
+            subject: '.qwen/.zcode',
+            narrowRepair:
+              'Keep ONE scope: preserve the user-scope wiring (immune to the qwen workspace-trust gate and the zcode project-hook strip) and remove the CAWS hook entries from the project-scope settings/config. `caws init` for these surfaces no longer adds them; entries from a pre-guard init need manual removal.',
+            data: {
+              dual_wired_surfaces: [...dual],
+              user_scope_surfaces: [...userScopeWiring],
+              project_scope_surfaces: [...gatedProjectEntries],
+            },
+          }
+        )
+      );
+    }
+  }
+
   if (input.initResidue !== undefined) {
     if (input.initResidue.workingSpecYaml) {
       findings.push(
