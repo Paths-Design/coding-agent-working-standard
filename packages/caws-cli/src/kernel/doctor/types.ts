@@ -211,6 +211,29 @@ export interface DoctorInput {
      * skipped (treated as "unobserved", not "absent").
      */
     readonly hookPackInstalled?: boolean;
+    /**
+     * CAWS-HARNESS-TELEMETRY-ADAPTER-001: the vendored telemetry rows
+     * (TELEMETRY_ROW_DEST_PATHS — agent-heartbeat.sh, agent-stop.sh,
+     * session-log.sh, session_log_renderer.py under .caws/hooks/) that are
+     * present on disk AND carry a `hook_pack: shared` CAWS-MANAGED-HOOK
+     * header, i.e. files CAWS itself installed. The store observes this;
+     * doctor only judges. Unmanaged files at those paths are NOT reported
+     * here (local growth is never a doctor target). Combined with a
+     * non-empty `adapterPackSurfaceMarkers`, doctor fires
+     * `HOOKS_STALE_TELEMETRY_PACK`. Optional; when undefined the rule is
+     * skipped (unobserved, not absent).
+     */
+    readonly managedTelemetryRowPaths?: readonly string[];
+    /**
+     * CAWS-HARNESS-TELEMETRY-ADAPTER-001: the adapter-covered surfaces
+     * (ADAPTER_COVERED_SURFACES) whose harness-pack marker is installed in
+     * this project (e.g. `['dsh']` when `.dsh/AGENTS.md` carries a
+     * `hook_pack: dsh` CAWS-MANAGED-HOOK header). There is no persisted
+     * surface receipt, so this marker observation is how doctor infers that
+     * a surface's telemetry adapter owns the telemetry plane. Optional;
+     * when undefined the rule is skipped (unobserved, not absent).
+     */
+    readonly adapterPackSurfaceMarkers?: readonly string[];
     readonly worktreeDirByName?: Readonly<Record<string, boolean>>;
     readonly specClaimedWorktreeDirByName?: Readonly<Record<string, boolean>>;
     /**

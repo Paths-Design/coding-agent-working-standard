@@ -934,6 +934,24 @@ fix or an explicit doctrine shift requiring an update to this document.
     direction it names; ambiguous/forbidden classes (H2, H3-active, H5,
     H6, the event orphan) carry a doctrine pointer, not a command.
 
+17. **The telemetry plane is owned per harness for adapter-covered
+    surfaces.** The vendored shared pack installs two distinct planes: the
+    **policy plane** (guards, audit, registration, dispatch) installs
+    identically for every surface; the **telemetry plane** — the turn-log
+    fold (`session-log.sh`, `session_log_renderer.py` writing
+    `.caws/sessions/`) and the agent lease lifecycle hooks
+    (`agent-heartbeat.sh`, `agent-stop.sh` writing `.caws/leases/`) —
+    installs only for surfaces without a telemetry adapter
+    (`ADAPTER_COVERED_SURFACES`, currently `dsh`). For an adapter-covered
+    surface the harness adapter is the single writer of `.caws/sessions/`
+    and `.caws/leases/`: `caws init` omits the rows from that surface's
+    install set and retires stale shared-managed copies (managed files
+    only; absent is not stale; unmanaged local growth is never touched),
+    doctor fires `doctor.hooks.stale_telemetry_pack` when managed rows
+    persist alongside an installed adapter pack, and `caws status` renders
+    the repair advisory. No governed behavior of this CLI requires the
+    vendored rows on an adapter-covered surface.
+
 ---
 
 ## 7. Migration guidance for legacy users

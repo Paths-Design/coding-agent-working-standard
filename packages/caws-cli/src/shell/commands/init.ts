@@ -59,6 +59,7 @@ import {
   writeQwenSettingsExample,
   writeSettingsExample,
   writeZcodeConfigExample,
+  retireStaleTelemetryRows,
 } from '../../init/hook-install';
 import {
   IMPLEMENTED_SURFACES,
@@ -66,12 +67,16 @@ import {
   isKnownSurface,
   resolveHookPack,
 } from '../../init/hook-packs/register';
-import { SHARED_PACK } from '../../init/hook-packs/manifest-shared';
+import {
+  SHARED_PACK,
+  sharedPackForSurface,
+} from '../../init/hook-packs/manifest-shared';
 import type {
   AgentSurface,
   HookPackInstallResult,
   HookPackV1,
 } from '../../init/hook-packs/types';
+import { isAdapterCoveredSurface } from '../../init/hook-packs/types';
 import { autoCommit } from '../../store/git-autocommit';
 import {
   manageGitignore,
@@ -212,7 +217,7 @@ function checkOverwriteTargets(
   targets: readonly string[] | undefined
 ): { readonly unknown: readonly string[]; readonly valid: readonly string[] } {
   const valid = new Set<string>(
-    SHARED_PACK.installedFiles.map((f) => f.destPath)
+    sharedPackForSurface(surface ?? 'none').installedFiles.map((f) => f.destPath)
   );
   if (surface !== null && surface !== 'none') {
     const resolution = resolveHookPack(surface);
@@ -290,8 +295,26 @@ function performHookPackStep(
     ...hookPackPolicyOptions(options),
   };
 
-  const sharedResult = installHookPack(SHARED_PACK, installOpts);
+  const sharedResult = installHookPack(sharedPackForSurface(surface), installOpts);
   const vendorResult = installHookPack(resolution.pack, installOpts);
+
+  // CAWS-HARNESS-TELEMETRY-ADAPTER-001: on adapter-covered surfaces the
+  // telemetry rows are no longer in the install set, so managed copies left
+  // on disk by an earlier init are stale dual-writers over state the
+  // surface's telemetry adapter now owns. Retire them (managed files only —
+  // unmanaged local growth is never touched) right after install, so the
+  // "re-run caws init" remediation named by the advisory and doctor finding
+  // actually performs the repair. Quiet when there is nothing to retire.
+  const telemetryRetire = isAdapterCoveredSurface(surface)
+    ? retireStaleTelemetryRows(repoRoot)
+    : null;
+  if (telemetryRetire && telemetryRetire.retired.length > 0) {
+    process.stdout.write(
+      'Retired stale telemetry rows (CAWS-HARNESS-TELEMETRY-ADAPTER-001): ' +
+        telemetryRetire.retired.join(', ') +
+        '\n'
+    );
+  }
 
   return mergeHookPackResults(sharedResult, vendorResult);
 }
@@ -372,7 +395,7 @@ function planHookPackStep(
     ...hookPackPolicyOptions(options),
   };
 
-  const sharedResult = planHookPackInstall(SHARED_PACK, planOpts);
+  const sharedResult = planHookPackInstall(sharedPackForSurface(surface), planOpts);
   const vendorResult = planHookPackInstall(resolution.pack, planOpts);
   return mergeHookPackResults(sharedResult, vendorResult);
 }
@@ -457,7 +480,10 @@ function resolveDiffPacks(
   if (resolution.kind !== 'pack') {
     return { packs: [SHARED_PACK], surface: null };
   }
-  return { packs: [SHARED_PACK, resolution.pack], surface: chosen.surface };
+  return {
+    packs: [sharedPackForSurface(chosen.surface), resolution.pack],
+    surface: chosen.surface,
+  };
 }
 
 function indentBlock(text: string, pad: string): string[] {

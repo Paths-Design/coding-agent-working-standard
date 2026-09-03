@@ -37,6 +37,9 @@ import { loadPolicy } from './policy-store';
 import { loadSpecs } from './specs-store';
 import type { StoreSnapshot } from './types';
 import { loadWaivers } from './waivers-store';
+import { parseManagedHeader } from '../init/hook-install';
+import { TELEMETRY_ROW_DEST_PATHS } from '../init/hook-packs/manifest-shared';
+import { ADAPTER_COVERED_SURFACES } from '../init/hook-packs/types';
 import { loadWorktrees } from './worktrees-store';
 
 // ----------------------------------------------------------------------------
@@ -166,6 +169,69 @@ function observeHookPackInstalled(repoRoot: string): boolean {
   return false;
 }
 
+/**
+ * CAWS-HARNESS-TELEMETRY-ADAPTER-001: the vendored telemetry rows this CLI
+ * installs for NON-covered surfaces. Imported from the manifest so the
+ * doctor observation and the init install set can never drift apart.
+ */
+const OBSERVED_TELEMETRY_ROWS = TELEMETRY_ROW_DEST_PATHS;
+
+/** Marker file name per adapter-covered surface that identifies that
+ *  surface's harness pack as installed (`.dsh/AGENTS.md` for dsh — the
+ *  marker contract the bundle-side adapter spec pins). */
+const ADAPTER_SURFACE_MARKER_FILE: Record<string, string> = {
+  dsh: 'AGENTS.md',
+};
+
+/**
+ * CAWS-HARNESS-TELEMETRY-ADAPTER-001: which of the vendored telemetry rows
+ * are present on disk as SHARED-PACK-MANAGED files (parsed with the same
+ * parseManagedHeader the installer writes). Absent files and unmanaged
+ * files are both omitted — doctor treats "no rows reported" as either
+ * absent or not-ours, and neither is staleness.
+ */
+function observeManagedTelemetryRows(repoRoot: string): string[] {
+  const observed: string[] = [];
+  for (const relPath of OBSERVED_TELEMETRY_ROWS) {
+    let content: string;
+    try {
+      content = fs.readFileSync(path.join(repoRoot, relPath), 'utf8');
+    } catch {
+      continue; // absent — never staleness
+    }
+    const header = parseManagedHeader(content);
+    if (header && header.hookPack === 'shared') observed.push(relPath);
+  }
+  return observed;
+}
+
+/**
+ * CAWS-HARNESS-TELEMETRY-ADAPTER-001: which adapter-covered surfaces have
+ * their harness pack installed in this project. There is no persisted
+ * surface receipt, so doctor infers adapter coverage from the surface's
+ * marker file carrying that surface's managed header (e.g. `.dsh/AGENTS.md`
+ * with `hook_pack: dsh`).
+ */
+function observeAdapterPackSurfaceMarkers(repoRoot: string): string[] {
+  const observed: string[] = [];
+  for (const surface of ADAPTER_COVERED_SURFACES) {
+    const markerFile = ADAPTER_SURFACE_MARKER_FILE[surface];
+    if (markerFile === undefined) continue;
+    let content: string;
+    try {
+      content = fs.readFileSync(
+        path.join(repoRoot, `.${surface}`, markerFile),
+        'utf8'
+      );
+    } catch {
+      continue; // marker absent — surface pack not installed here
+    }
+    const header = parseManagedHeader(content);
+    if (header && header.hookPack === surface) observed.push(surface);
+  }
+  return observed;
+}
+
 function observeFilesystem(
   repoRoot: string,
   cawsDir: string,
@@ -210,6 +276,10 @@ function observeFilesystem(
     // CAWS-DOCTOR-HOOKS-NO-CAWS-DRIFT-001: observe the hook pack so doctor
     // can flag the hooks-present/substrate-absent split-brain.
     hookPackInstalled: observeHookPackInstalled(repoRoot),
+    // CAWS-HARNESS-TELEMETRY-ADAPTER-001: observe managed telemetry rows and
+    // installed adapter-pack surfaces so doctor can flag stale dual-writers.
+    managedTelemetryRowPaths: observeManagedTelemetryRows(repoRoot),
+    adapterPackSurfaceMarkers: observeAdapterPackSurfaceMarkers(repoRoot),
     worktreeDirByName,
     specClaimedWorktreeDirByName,
     legacyArchiveBodyCount: countArchiveBodies(cawsDir),

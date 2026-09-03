@@ -44,6 +44,7 @@ import type {
   InstallFileState,
   ManagedHeader,
 } from './hook-packs/types';
+import { TELEMETRY_ROW_DEST_PATHS } from './hook-packs/manifest-shared';
 
 /** Location of the pack templates relative to the caws-cli package root.
  *  Resolved at runtime from __dirname so it works both in dev (running
@@ -779,6 +780,59 @@ export function installHookPack(
     actions,
     activation: pack.activation,
   };
+}
+
+// ─── Telemetry row retirement (CAWS-HARNESS-TELEMETRY-ADAPTER-001) ────────
+
+/** Outcome of retiring the vendored telemetry rows for an adapter-covered
+ *  surface. Absence is reported, never treated as staleness; local growth is
+ *  never touched. */
+export interface TelemetryRetireResult {
+  /** Managed `hook_pack: shared` rows removed from disk. */
+  readonly retired: readonly string[];
+  /** Dest paths that did not exist. */
+  readonly absent: readonly string[];
+  /** Files present at a telemetry dest path WITHOUT a shared-pack managed
+   *  header — local growth or foreign files; retirement refuses these. */
+  readonly unmanaged: readonly string[];
+}
+
+/**
+ * Remove the vendored telemetry rows (TELEMETRY_ROW_DEST_PATHS) when they are
+ * CAWS-managed installs of the shared pack. `caws init` calls this AFTER the
+ * shared install for an adapter-covered surface: those rows are no longer in
+ * the surface's install set (sharedPackForSurface), so managed copies left on
+ * disk by an earlier init are stale dual-writers over state the surface's
+ * telemetry adapter now owns.
+ *
+ * Non-destructive by construction: absent files are reported, not errors;
+ * files without a `hook_pack: shared` managed header are never touched.
+ * The deletion is reversible — re-running init for a non-covered surface
+ * reinstalls the rows, because for that surface they are still in the pack.
+ */
+export function retireStaleTelemetryRows(repoRoot: string): TelemetryRetireResult {
+  const retired: string[] = [];
+  const absent: string[] = [];
+  const unmanaged: string[] = [];
+  for (const relPath of TELEMETRY_ROW_DEST_PATHS) {
+    const abs = path.join(repoRoot, relPath);
+    let content: string;
+    try {
+      content = fs.readFileSync(abs, 'utf8');
+    } catch {
+      // Missing ≠ stale (MISSING-NOT-STALE invariant): nothing to retire.
+      absent.push(relPath);
+      continue;
+    }
+    const header = parseManagedHeader(content);
+    if (!header || header.hookPack !== 'shared') {
+      unmanaged.push(relPath);
+      continue;
+    }
+    fs.unlinkSync(abs);
+    retired.push(relPath);
+  }
+  return { retired, absent, unmanaged };
 }
 
 /** Read-only hook-pack preview. Uses the same file-state evaluator as install

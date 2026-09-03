@@ -217,6 +217,23 @@ export const DOCTOR_RULES = {
    */
   INIT_HOOKS_PRESENT_CAWS_ABSENT: 'doctor.init.hooks_present_caws_absent',
 
+  /**
+   * CAWS-HARNESS-TELEMETRY-ADAPTER-001: the vendored telemetry rows
+   * (agent-heartbeat.sh, agent-stop.sh, session-log.sh,
+   * session_log_renderer.py under .caws/hooks/) are still installed as
+   * shared-pack managed files while an adapter-covered surface pack (dsh)
+   * is ALSO installed. The telemetry plane for an adapter-covered surface
+   * is owned by that surface's harness adapter, so the vendored rows are
+   * stale dual-writers over the same .caws/sessions/ and .caws/leases/
+   * state. Absence is never staleness: no rows present, or rows without an
+   * installed adapter pack, stays silent. Severity: warning (render-only;
+   * the vendored rows still work). Repair: re-run `caws init` — for an
+   * adapter-covered surface init omits the rows from the install set and
+   * retires managed stale copies (retireStaleTelemetryRows); unmanaged
+   * local growth is never touched.
+   */
+  HOOKS_STALE_TELEMETRY_PACK: 'doctor.hooks.stale_telemetry_pack',
+
   // ---- registry hygiene (slice 7c.2) -------------------------------------
   /**
    * worktrees.json or agents.json parsed as something other than a plain

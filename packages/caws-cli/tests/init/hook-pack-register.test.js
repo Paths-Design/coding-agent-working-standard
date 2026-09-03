@@ -71,3 +71,44 @@ describe('hook-pack registration: the surface arrays are mutually consistent', (
     );
   });
 });
+
+describe('hook-pack registration: the telemetry cut is surface-conditional (CAWS-HARNESS-TELEMETRY-ADAPTER-001)', () => {
+  const {
+    SHARED_PACK,
+    sharedPackForSurface,
+    TELEMETRY_ROW_DEST_PATHS,
+  } = require('../../dist/init/hook-packs/manifest-shared');
+  const {
+    isAdapterCoveredSurface,
+    ADAPTER_COVERED_SURFACES,
+  } = require('../../dist/init/hook-packs/types');
+
+  test('every declared adapter-covered surface is a KNOWN surface', () => {
+    // A coverage list naming an unknown surface would silently stop cutting.
+    for (const s of ADAPTER_COVERED_SURFACES) {
+      expect(KNOWN_SURFACES).toContain(s);
+    }
+  });
+
+  test('adapter-covered surfaces get the shared core WITHOUT the telemetry rows', () => {
+    for (const surface of ADAPTER_COVERED_SURFACES) {
+      const pack = sharedPackForSurface(surface);
+      expect(pack.id).toBe('shared');
+      const dests = pack.installedFiles.map((f) => f.destPath);
+      for (const dest of TELEMETRY_ROW_DEST_PATHS) {
+        expect(dests).not.toContain(dest);
+      }
+      // The POLICY plane stays: registration, session status, audit.
+      expect(dests).toContain('.caws/hooks/agent-register.sh');
+      expect(dests).toContain('.caws/hooks/session-caws-status.sh');
+      expect(dests).toContain('.caws/hooks/audit.sh');
+    }
+  });
+
+  test('non-covered surfaces get SHARED_PACK unchanged', () => {
+    for (const surface of IMPLEMENTED_SURFACES) {
+      if (isAdapterCoveredSurface(surface)) continue;
+      expect(sharedPackForSurface(surface)).toBe(SHARED_PACK);
+    }
+  });
+});
