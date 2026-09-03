@@ -7,23 +7,72 @@ created_at: '2026-09-03T14:58:53.702Z'
 updated_at: '2026-09-03T14:58:53.702Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/init/hook-install.ts
+    - packages/caws-cli/src/init/hook-packs/managed-header.ts
+    - packages/caws-cli/src/store/doctor-snapshot.ts
+    - packages/caws-cli/src/shell/commands/status.ts
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/init/hook-install.ts
+    - packages/caws-cli/src/init/hook-packs/managed-header.ts
+    - packages/caws-cli/src/store/doctor-snapshot.ts
+    - packages/caws-cli/src/shell/commands/status.ts
+    - packages/caws-cli/tests/init/adapter-covered-telemetry-cut.test.js
+    - packages/caws-cli/tests/init/init-hook-pack-render.test.js
+    - packages/caws-cli/tests/shell/status-filters.test.js
+  out:
+    - packages/caws-cli/templates
+    - .caws/policy.yaml
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    RETIRE NEVER ABORTS INIT: retireStaleTelemetryRows reports per-path
+    outcomes (retired / absent / unmanaged / failed) and never throws;
+    a failed unlink (EPERM, locked file, exotic perms) leaves the row on
+    disk, surfaces on stderr with a named follow-up, and init completes
+    its remaining work with an unchanged exit code.
+  - >-
+    ONE PARSER: managed-header parsing lives in a single leaf module
+    (init/hook-packs/managed-header.ts) with no imports beyond
+    hook-packs/types; hook-install re-exports it so existing importers
+    (tests, doctor-snapshot) are unchanged in behavior, and the store
+    imports the leaf so snapshot composition no longer depends on the
+    install machinery.
+  - >-
+    JSON PARITY IS ADDITIVE-ONLY: the status JSON payload gains an
+    advisory field only when a stale-telemetry advisory exists; with no
+    advisory the JSON output is byte-identical to the pre-change payload
+    (existing toMatchObject consumers unaffected).
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: a managed telemetry row whose unlink fails after a successful read
+    when: retireStaleTelemetryRows runs during caws init for an adapter-covered surface
+    then: the row is reported as failed (not retired, not unmanaged), a stderr line names the path and the manual follow-up, init completes without throwing, and the TelemetryRetireResult contract carries the failed path
+  - id: A2
+    given: the extracted managed-header leaf module at src/init/hook-packs/managed-header.ts
+    when: parseManagedHeader is imported by hook-install (re-export) and by store/doctor-snapshot (leaf import)
+    then: both resolve to the same parser, all existing parseManagedHeader tests pass unchanged, and doctor-snapshot no longer imports from init/hook-install
+  - id: A3
+    given: a repo whose doctor findings include doctor.hooks.stale_telemetry_pack
+    when: caws status --json runs
+    then: the payload carries the advisory text under a stable field, and with no such finding the JSON payload is byte-identical to the pre-change baseline
+non_functional:
+  reliability:
+    - >-
+      The remediation path named by the doctor finding and status advisory
+      (re-run caws init) degrades loudly per-path instead of crashing; no
+      repair command in this slice can abort mid-install.
 contracts:
   - name: 'retire-outcome'
     type: behavior
+    description: >-
+      TelemetryRetireResult reports retired/absent/unmanaged/failed as
+      disjoint per-path outcomes and never throws for any single path.
   - name: 'managed-header-parser'
     type: api
+    description: >-
+      parseManagedHeader(content): ManagedHeader | null exported from
+      src/init/hook-packs/managed-header.ts (leaf: imports only
+      hook-packs/types) and re-exported by src/init/hook-install.ts.
