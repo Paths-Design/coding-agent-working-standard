@@ -98,3 +98,7 @@ evidence:
     status: pass
     evidence_ref: "bats session-id-canonical (pin defeats shadow) + jest resolver-canonical-env (9 pass) + live probe: CLAUDE_SESSION_ID=xxxx CAWS_AGENT_SURFACE=dsh DSH_SESSION_ID=dsh-real -> dsh-real (source: surface_pinned_env)"
     recorded_at: "2026-09-03T22:25:11.701Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "bats session-id-capsule retargeted to the removal: capsule alone -> unknown (4 pass); no-capsule and malformed cases unchanged"
+    recorded_at: "2026-09-03T22:25:12.112Z"
