@@ -2,7 +2,9 @@ id: CAWS-DEFECT-SESSION-IDENTITY-ENV-SHADOWING-01
 title: 'Session identity: canonical CAWS_SESSION_ID normalization, surface-pinned precedence, no invented identity, PID-record anchor'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-session-identity
+updated_at: '2026-09-03T22:10:36.788Z'
 blast_radius:
   modules:
     - packages/caws-cli/templates/hook-packs/shared/lib/session-id.sh
