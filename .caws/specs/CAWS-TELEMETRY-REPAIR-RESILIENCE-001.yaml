@@ -78,3 +78,8 @@ contracts:
       parseManagedHeader(content): ManagedHeader | null exported from
       src/init/hook-packs/managed-header.ts (leaf: imports only
       hook-packs/types) and re-exported by src/init/hook-install.ts.
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "npx jest tests/init/adapter-covered-telemetry-cut.test.js (9 pass incl. read-only-dir unlink-failure test: failed reported, disjoint outcomes, no throw) + init.ts stderr warning path"
+    recorded_at: "2026-09-03T15:19:04.595Z"
