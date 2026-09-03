@@ -102,3 +102,7 @@ evidence:
     status: pass
     evidence_ref: "npx jest tests/init/gated-surface-scope-guard.test.js — qwen merge returns skipped_dual_scope with user-scope wiring: no file written / existing file byte-identical, one loud stderr warning, plan mirrors; e2e: worktree dist init warned against this machine's real ~/.qwen wiring"
     recorded_at: "2026-09-03T18:03:26.222Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "same suite — zcode merge: skipped_dual_scope, no config.json created, stderr warning; detection test covers the hooks.events nesting"
+    recorded_at: "2026-09-03T18:03:26.664Z"
