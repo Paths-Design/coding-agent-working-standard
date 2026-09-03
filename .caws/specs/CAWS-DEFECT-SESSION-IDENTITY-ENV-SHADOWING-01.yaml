@@ -102,3 +102,7 @@ evidence:
     status: pass
     evidence_ref: "bats session-id-capsule retargeted to the removal: capsule alone -> unknown (4 pass); no-capsule and malformed cases unchanged"
     recorded_at: "2026-09-03T22:25:12.112Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "bats session-id-agent-pid anchor test + session-id-canonical A3 test: live start-time-guarded record beats env disagreement, stderr names both ids (env-says-id vs pid-record-id)"
+    recorded_at: "2026-09-03T22:25:12.531Z"
