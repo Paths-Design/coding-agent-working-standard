@@ -4,7 +4,7 @@ risk_tier: 3
 mode: fix
 lifecycle_state: active
 worktree: wt-identity-review-findings
-updated_at: '2026-09-03T22:51:33.226Z'
+updated_at: '2026-09-03T22:55:56.616Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/shell/session/resolve-session.ts
@@ -20,6 +20,10 @@ scope:
     - packages/caws-cli/tests/shell/session/resolver-canonical-env.test.js
     - packages/caws-cli/scripts/lint-shell.sh
     - packages/caws-cli/package.json
+    - packages/caws-cli/tests/shell/canonical-drift.test.js
+    - packages/caws-cli/tests/shell/message-command.test.js
+    - packages/caws-cli/tests/shell/specs-create-session-provenance.test.js
+    - packages/caws-cli/tests/store/bridge-store.test.js
   out:
     - .caws/policy.yaml
     - .github/workflows
