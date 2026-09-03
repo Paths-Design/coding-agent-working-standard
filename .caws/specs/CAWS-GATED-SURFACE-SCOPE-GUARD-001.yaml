@@ -2,10 +2,11 @@ id: CAWS-GATED-SURFACE-SCOPE-GUARD-001
 title: 'Guard scope placement for trust-gated surfaces (qwen-code, zcode): refuse dual wiring, detect silent hook disablement'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-gated-scope-guard
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-gated-scope-guard at e1ad4da9f9125c64b001755938131be9c03094f8'
 created_at: '2026-09-03T17:44:05.527Z'
-updated_at: '2026-09-03T18:01:22.682Z'
+updated_at: '2026-09-03T18:03:48.676Z'
 created_by_session: 'session-c5c6ac1b-ed94-4c10-b9e2-3552e8ab3309'
 blast_radius:
   modules:
