@@ -55,6 +55,13 @@ invariants:
     TEMPLATE VERSION BUMP: session-id.sh is a shared-pack template file, so
     this change bumps SHARED_PACK_VERSION exactly once (52 -> 53); existing
     consumers see managed_drift on next init until they refresh.
+non_functional:
+  reliability:
+    - >-
+      Identity forgery of the session-id STRING is accepted by design and
+      anchored by the PID record (liveness-probed, start-time guarded);
+      removing the shell capsule glob eliminates the one tier that
+      manufactured identity with no process correlation at all.
 acceptance:
   - id: A1
     given: 'a process with both DSH_SESSION_ID and CLAUDE_SESSION_ID set and CAWS_AGENT_SURFACE=dsh'
