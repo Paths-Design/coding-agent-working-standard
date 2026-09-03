@@ -105,8 +105,8 @@ describe('CANONICAL-DRIFT-GUARDS-001 command surface', () => {
   });
 
   test('A4: --allow-foreign-branch proceeds (operator deliberately authors on the parked branch)', () => {
-    const { root } = mkRepo();
-    parkCanonical(root, '.caws' ? path.join(root, '.caws') : root);
+    const { root, cawsDir } = mkRepo();
+    parkCanonical(root, cawsDir);
     const r = create(root, { allowForeignBranch: true });
     expect(r.code).toBe(0);
     // The spec landed on the parked branch.

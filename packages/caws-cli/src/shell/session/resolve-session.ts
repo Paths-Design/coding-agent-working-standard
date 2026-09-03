@@ -968,6 +968,9 @@ export function resolveSession(
   //     own env var wins and foreign vars cannot shadow it (a stray
   //     CLAUDE_SESSION_ID in a dsh process no longer rewrites self).
   const surfacePin = env['CAWS_AGENT_SURFACE'];
+  // Deliberately absent: opencode, kimi-code, cursor, windsurf. Those
+  // surfaces export no per-session identity env var (their identity reaches
+  // CAWS via the hook payload / HOOK_SESSION_ID), so there is no var to pin.
   const pinnedVarBySurface: Record<string, string> = {
     'claude-code': 'CLAUDE_SESSION_ID',
     codex: 'CODEX_THREAD_ID',
@@ -1390,7 +1393,7 @@ export function describeSessionSource(s: ResolvedSession): Diagnostic {
   switch (s.source) {
     case 'surface_pinned_env':
       return infoDiag(
-        SHELL_RULES.SESSION_RESOLVED_FROM_CLAUDE_ENV,
+        SHELL_RULES.SESSION_RESOLVED_FROM_SURFACE_PINNED_ENV,
         `Session identity from the surface-pinned env var (CAWS_AGENT_SURFACE=${s.identity.platform}): ${s.identity.session_id}`
       );
     case 'claude_env':

@@ -547,7 +547,7 @@ test('LEDGER A5: inbox --all lists repo-wide undelivered mail without consuming'
 test('ECON A4: send --urgency critical writes the field; bogus urgency is refused and ledgered', () => {
   const root = mkRepo();
   makeLive(root, 'bob');
-  const { out, opts } = io(root, 'alice');
+  const { opts } = io(root, 'alice');
   expect(runMessageSendCommand({ ...opts, to: 'bob', text: 'stop!', urgency: 'critical' })).toBe(0);
   const lines = fs
     .readFileSync(path.join(root, '.caws', 'messages.jsonl'), 'utf8')

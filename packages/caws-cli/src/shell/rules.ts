@@ -17,6 +17,12 @@ export const SHELL_RULE_PREFIXES = {
 export const SHELL_RULES = {
   // Session identity resolution.
   SESSION_RESOLVED_FROM_CLAUDE_ENV: 'shell.session.resolved_from_claude_env',
+  // CAWS-DEFECT-SESSION-IDENTITY-ENV-SHADOWING-01: the surface-pinned tier
+  // resolved identity from the dispatching surface's own env var (defeats
+  // cross-surface shadowing). Distinct id from the claude_env rule — the
+  // mechanism, not the platform, is what the diagnostic names.
+  SESSION_RESOLVED_FROM_SURFACE_PINNED_ENV:
+    'shell.session.resolved_from_surface_pinned_env',
   // CAWS-SESSION-ID-AGENT-BASH-PROPAGATION-001: CLAUDE_CODE_SESSION_ID is the
   // harness session UUID exported by Claude Code into EVERY tool subprocess
   // (including agent-Bash), so it resolves the agent-Bash write path

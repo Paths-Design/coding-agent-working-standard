@@ -141,7 +141,7 @@ describe('specs create stamps created_by_session', () => {
 
 describe('the field is optional and strictness is unchanged', () => {
   test('a writer-level create without createdBySession renders no line and validates', () => {
-    const { root, cawsDir } = setupRepo();
+    const { cawsDir } = setupRepo();
 
     const result = createSpec(cawsDir, {
       id: 'PROV-ABSENT-005',
