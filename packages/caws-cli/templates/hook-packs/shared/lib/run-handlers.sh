@@ -125,6 +125,12 @@ run_handlers() {
     if declare -F resolve_caws_session_id_with_payload >/dev/null 2>&1; then
       _rh_session_id="$(resolve_caws_session_id_with_payload "${HOOK_SESSION_ID:-}")"
     fi
+    # CAWS-DEFECT-SESSION-IDENTITY-ENV-SHADOWING-01: normalize the resolved
+    # id into the canonical env var, called DIRECTLY (not in a subshell) so
+    # the export survives and every handler + child process reads ONE var.
+    if declare -F caws_normalize_session_env >/dev/null 2>&1; then
+      caws_normalize_session_env "${_rh_session_id}" >/dev/null 2>&1 || true
+    fi
   fi
   # Best-effort source the reprieve lib so the loop check is available.
   [[ -f "${HOOKS_DIR}/lib/reprieve.sh" ]] && source "${HOOKS_DIR}/lib/reprieve.sh" 2>/dev/null || true

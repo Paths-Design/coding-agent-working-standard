@@ -325,7 +325,13 @@ import { isAdapterCoveredSurface } from './types';
 // containment block onto the strike ramp (and wrote strike state into the
 // foreign gitdir); it now takes the containment block on the first attempt,
 // naming the foreign repository.
-export const SHARED_PACK_VERSION = 52;
+// v53 (CAWS-DEFECT-SESSION-IDENTITY-ENV-SHADOWING-01): session-id.sh gained
+// surface-pinned precedence, the canonical CAWS_SESSION_ID normalization
+// (caws_normalize_session_env, wired into run-handlers.sh), and the PID-record
+// trust anchor; the capsule-glob fallback tier was REMOVED (unknown stays
+// unknown). Existing consumers' next `caws init` reports session-id.sh +
+// run-handlers.sh as managed_drift until they refresh.
+export const SHARED_PACK_VERSION = 53;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

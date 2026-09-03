@@ -674,14 +674,20 @@ describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A6: precedence consolid
   test('the shared helper resolves the canonical precedence', () => {
     // Source the helper and exercise the precedence directly. Each source wins
     // in order; 'unknown' is rejected and the next source is consulted.
+    // CAWS-DEFECT-SESSION-IDENTITY-ENV-SHADOWING-01: canonical + pinned tiers.
+    // New order: surface pin (CAWS_AGENT_SURFACE) > canonical CAWS_SESSION_ID >
+    // CLAUDE_SESSION_ID > CLAUDE_CODE > CODEX > QWEN > DSH > HOOK > CURSOR >
+    // unknown. The pin/canonical cases pin the shadowing fix; the rest keep
+    // the legacy chain for unpinned contexts.
     const cases = [
+      { env: { CAWS_AGENT_SURFACE: 'dsh', DSH_SESSION_ID: 'x', CLAUDE_SESSION_ID: 'a' }, want: 'x' },
+      { env: { CAWS_AGENT_SURFACE: 'codex', CODEX_THREAD_ID: 'c', CLAUDE_SESSION_ID: 'a' }, want: 'c' },
+      { env: { CAWS_SESSION_ID: 'd', CLAUDE_SESSION_ID: 'a', DSH_SESSION_ID: 'x' }, want: 'd' },
       { env: { CLAUDE_SESSION_ID: 'a', CLAUDE_CODE_SESSION_ID: 'b', CODEX_THREAD_ID: 'c' }, want: 'a' },
-      { env: { CLAUDE_CODE_SESSION_ID: 'b', CODEX_THREAD_ID: 'c', CAWS_SESSION_ID: 'd' }, want: 'b' },
-      { env: { CODEX_THREAD_ID: 'c', QWEN_CODE_SESSION_ID: 'q', CAWS_SESSION_ID: 'd' }, want: 'c' },
-      { env: { QWEN_CODE_SESSION_ID: 'q', CAWS_SESSION_ID: 'd', HOOK_SESSION_ID: 'e' }, want: 'q' },
-      { env: { QWEN_CODE_SESSION_ID: 'q', DSH_SESSION_ID: 'x', CAWS_SESSION_ID: 'd' }, want: 'q' },
-      { env: { DSH_SESSION_ID: 'x', CAWS_SESSION_ID: 'd', HOOK_SESSION_ID: 'e' }, want: 'x' },
-      { env: { CAWS_SESSION_ID: 'd', HOOK_SESSION_ID: 'e' }, want: 'd' },
+      { env: { CLAUDE_CODE_SESSION_ID: 'b', CODEX_THREAD_ID: 'c' }, want: 'b' },
+      { env: { CODEX_THREAD_ID: 'c', QWEN_CODE_SESSION_ID: 'q' }, want: 'c' },
+      { env: { QWEN_CODE_SESSION_ID: 'q', DSH_SESSION_ID: 'x' }, want: 'q' },
+      { env: { DSH_SESSION_ID: 'x', HOOK_SESSION_ID: 'e' }, want: 'x' },
       { env: { HOOK_SESSION_ID: 'e', CURSOR_TRACE_ID: 'f' }, want: 'e' },
       { env: { CURSOR_TRACE_ID: 'f' }, want: 'f' },
       { env: { CLAUDE_CODE_SESSION_ID: 'unknown', CODEX_THREAD_ID: 'real' }, want: 'real' },
