@@ -70,3 +70,8 @@ contracts:
       lint-shell.sh exits non-zero on any bash -n failure across
       templates/**/*.sh and runs shellcheck (when installed) without
       failing the gate.
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: resolve-session.ts casts through AgentSurface; resolver-canonical-env platform-membership test (4 surfaces asserted in-set); full suite 2231 pass
+    recorded_at: "2026-09-03T23:01:41.765Z"
