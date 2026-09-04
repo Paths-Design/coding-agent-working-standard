@@ -2,9 +2,10 @@ id: CAWS-DEFECT-STALE-INSTALLED-GUARD-PLANE-01
 title: 'Installed hook pack 10 versions behind templates; add doctor version-lag rule and refresh the caws repo guard plane'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-stale-guard-plane
-updated_at: '2026-09-04T00:19:55.525Z'
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-stale-guard-plane at 3a7b13278fec40060343fcda4ca16096d597fc9e'
+updated_at: '2026-09-04T00:21:41.601Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/kernel/doctor/rules.ts
