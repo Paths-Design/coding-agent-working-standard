@@ -163,3 +163,7 @@ evidence:
     status: pass
     evidence_ref: "npx jest tests/init/surface-registry-conformance.test.js (7 pass); build chain generate->check->build-cli exit 0; drift fails the build by construction (check exits 1 on byte mismatch); commit 574976cc"
     recorded_at: "2026-09-04T02:39:19.796Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "npx bats tests/hooks/bats/session-id-user-tier.bats (4 pass): user tier overrides shared, inert when absent, repo override beats user tier, registry vendor dir for dsh"
+    recorded_at: "2026-09-04T03:09:49.338Z"
