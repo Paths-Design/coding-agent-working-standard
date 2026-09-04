@@ -339,7 +339,11 @@ import { isAdapterCoveredSurface } from './types';
 // classify_command.py admits leading-pathspec commit forms. Existing
 // consumers' next `caws init` reports the changed rows as managed_drift
 // until they refresh.
-export const SHARED_PACK_VERSION = 54;
+// v55 (CAWS-CODEX-HOOK-RUNTIME-CONTRACT-001): quiet-merge.sh retains only its
+// lifecycle-command CWD reroot and no longer pipelines, suppresses, or follows
+// a governed command with a successful command; scan-secrets.sh emits the
+// PreToolUse event it actually runs under.
+export const SHARED_PACK_VERSION = 55;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
