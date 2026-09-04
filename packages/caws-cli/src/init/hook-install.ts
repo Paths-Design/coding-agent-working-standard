@@ -117,6 +117,41 @@ function stripPackVersion(content: string): string {
     .replace(/(hook_pack_version=)\d+/, '$1#');
 }
 
+const GENERATED_SURFACES_REGISTRY_DEST =
+  '.caws/hooks/lib/surfaces-registry.sh';
+const GENERATED_PROJECTION_SENTINEL = '# @generated — DO NOT EDIT.';
+
+/**
+ * Recognize the one legacy generated projection that shipped as `managed: true`
+ * without a CAWS managed header. The legacy file must start at the generated
+ * sentinel and match the current generated body byte-for-byte; arbitrary
+ * prefixes, stale projections, and locally edited projections remain unmanaged
+ * collisions. This is deliberately path-specific rather than a general
+ * headerless-file adoption rule.
+ */
+function isExactLegacyGeneratedProjection(
+  packId: string,
+  file: HookPackFile,
+  localContent: string,
+  incomingContent: string
+): boolean {
+  if (
+    packId !== 'shared' ||
+    file.destPath !== GENERATED_SURFACES_REGISTRY_DEST ||
+    !localContent.startsWith(GENERATED_PROJECTION_SENTINEL)
+  ) {
+    return false;
+  }
+
+  const incomingBodyOffset = incomingContent.indexOf(
+    GENERATED_PROJECTION_SENTINEL
+  );
+  return (
+    incomingBodyOffset >= 0 &&
+    localContent === incomingContent.slice(incomingBodyOffset)
+  );
+}
+
 const CODEX_EVENT_DISPATCHERS: Record<string, string> = {
   SessionStart: 'session_start.sh',
   PreToolUse: 'pre_tool_use.sh',
@@ -285,7 +320,44 @@ function evaluateFileState(
   if (!header && packId === 'codex' && file.destPath === '.codex/hooks.json') {
     header = parseCodexHooksJsonManagedHeader(localContent);
   }
-  if (!header) return { kind: 'unmanaged_collision' };
+
+  const sourceAbs = path.join(packRoot, file.sourcePath);
+  const rawSourceBytes = readBytes(sourceAbs);
+
+  if (!header) {
+    if (rawSourceBytes !== null) {
+      const sourceBytes = renderPackFileBytes(
+        rawSourceBytes,
+        repoRoot,
+        file,
+        packVersion
+      );
+      if (
+        isExactLegacyGeneratedProjection(
+          packId,
+          file,
+          localContent,
+          sourceBytes.toString('utf8')
+        )
+      ) {
+        // Version zero is an internal migration sentinel: the legacy generated
+        // projection predates managed headers, while exact body equality proves
+        // that replacing it only adds current ownership metadata.
+        const legacyHeader: ManagedHeader = {
+          hookPack: packId,
+          hookPackVersion: 0,
+          cawsMinMajor: 11,
+          lineageRefs: [],
+        };
+        return {
+          kind: 'managed_old_version',
+          header: legacyHeader,
+          currentVersion: 0,
+        };
+      }
+    }
+    return { kind: 'unmanaged_collision' };
+  }
 
   if (header.hookPack !== packId) {
     // A managed file from a different pack at our destPath. Treat as
@@ -293,8 +365,6 @@ function evaluateFileState(
     return { kind: 'unmanaged_collision' };
   }
 
-  const sourceAbs = path.join(packRoot, file.sourcePath);
-  const rawSourceBytes = readBytes(sourceAbs);
   if (rawSourceBytes === null) {
     // Source template missing — this is a bug in the install, not a
     // collision. Surface as drift so we don't silently no-op.

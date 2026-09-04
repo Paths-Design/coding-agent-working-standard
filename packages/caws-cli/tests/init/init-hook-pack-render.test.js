@@ -138,6 +138,21 @@ describe('A2: parseManagedHeader still recognizes a rewritten header as managed'
     expect(unparsable).toEqual([]);
   });
 
+  test('the generated surfaces registry carries a parseable generated-authority header', () => {
+    const content = fs.readFileSync(
+      path.join(PACKS_ROOT, 'shared', 'lib', 'surfaces-registry.sh'),
+      'utf8'
+    );
+    const header = parseManagedHeader(content);
+
+    expect(header).not.toBeNull();
+    expect(header.hookPack).toBe('shared');
+    expect(header.hookPackVersion).toBeGreaterThan(0);
+    expect(header.cawsMinMajor).toBe(11);
+    expect(content).toMatch(/edit_stance: GENERATED PROJECTION/);
+    expect(content).toContain('packages/caws-cli/surfaces/registry.json');
+  });
+
   test('the multi-line edit_stance block does not swallow or corrupt a marker key', () => {
     // Construct a header in the exact shape we ship: marker keys first, then the
     // 9-line invitation-first edit_stance block. The continuation lines (no
@@ -261,6 +276,8 @@ describe('A4: caws init preserves a grown hook and never silently clobbers it', 
   // A representative shared hook with a multi-line body, so a real edit is
   // unambiguous.
   const REL = '.caws/hooks/scope-guard.sh';
+  const GENERATED_REL = '.caws/hooks/lib/surfaces-registry.sh';
+  const GENERATED_SENTINEL = '# @generated — DO NOT EDIT.';
 
   beforeEach(() => {
     repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-growth-'));
@@ -293,6 +310,70 @@ describe('A4: caws init preserves a grown hook and never silently clobbers it', 
     const a = r.actions.find((x) => x.destPath === REL);
     expect(a.action).toBe('unchanged');
     expect(fs.readFileSync(abs(REL)).equals(before)).toBe(true);
+  });
+
+  test('a second shared install is byte-identical and unchanged for every manifest destination', () => {
+    const before = new Map(
+      SHARED_PACK.installedFiles.map(({ destPath }) => [
+        destPath,
+        fs.readFileSync(abs(destPath)),
+      ])
+    );
+
+    const r = installHookPack(SHARED_PACK, { repoRoot });
+
+    expect(r.actions).toEqual(
+      SHARED_PACK.installedFiles.map(({ destPath }) => ({
+        destPath,
+        action: 'unchanged',
+      }))
+    );
+    for (const { destPath } of SHARED_PACK.installedFiles) {
+      expect(fs.readFileSync(abs(destPath)).equals(before.get(destPath))).toBe(true);
+    }
+  });
+
+  test('an exact legacy headerless generated registry migrates to the managed projection', () => {
+    const installed = fs.readFileSync(abs(GENERATED_REL), 'utf8');
+    const sentinelIndex = installed.indexOf(GENERATED_SENTINEL);
+    expect(sentinelIndex).toBeGreaterThanOrEqual(0);
+    const legacy = installed.slice(sentinelIndex);
+    fs.writeFileSync(abs(GENERATED_REL), legacy);
+
+    const r = installHookPack(SHARED_PACK, { repoRoot });
+    const a = r.actions.find((x) => x.destPath === GENERATED_REL);
+    const migrated = fs.readFileSync(abs(GENERATED_REL), 'utf8');
+
+    expect(a).toEqual({
+      destPath: GENERATED_REL,
+      action: 'updated',
+      restampOnly: true,
+    });
+    expect(parseManagedHeader(migrated)).toMatchObject({
+      hookPack: 'shared',
+      hookPackVersion: SHARED_PACK.packVersion,
+      cawsMinMajor: 11,
+    });
+    expect(migrated.slice(migrated.indexOf(GENERATED_SENTINEL))).toBe(legacy);
+  });
+
+  test('a modified legacy headerless generated registry remains refused and byte-preserved', () => {
+    const installed = fs.readFileSync(abs(GENERATED_REL), 'utf8');
+    const sentinelIndex = installed.indexOf(GENERATED_SENTINEL);
+    expect(sentinelIndex).toBeGreaterThanOrEqual(0);
+    const modifiedLegacy =
+      installed.slice(sentinelIndex) + '\n# repo-specific generated projection edit\n';
+    fs.writeFileSync(abs(GENERATED_REL), modifiedLegacy);
+
+    const r = installHookPack(SHARED_PACK, { repoRoot });
+    const a = r.actions.find((x) => x.destPath === GENERATED_REL);
+
+    expect(a).toEqual({
+      destPath: GENERATED_REL,
+      action: 'refused',
+      refusalReason: 'unmanaged_collision',
+    });
+    expect(fs.readFileSync(abs(GENERATED_REL), 'utf8')).toBe(modifiedLegacy);
   });
 
   test('re-init of a GROWN (edited) hook is REFUSED as drift and the edit SURVIVES', () => {
