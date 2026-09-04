@@ -2,10 +2,8 @@ id: CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001
 title: 'Design: global per-harness identity home (~/.caws), surface registry, guard-plane boundary'
 risk_tier: 3
 mode: doc
-lifecycle_state: closed
-resolution: completed
-closure_notes: 'Auto-closed by caws worktree merge wt-global-home at cca75022b17dcf8ca2a5a448ced45217ae206dc3'
-updated_at: '2026-09-04T02:39:29.905Z'
+lifecycle_state: active
+updated_at: '2026-09-04T02:40:12.178Z'
 blast_radius:
   modules:
     - docs/architecture/caws-vnext-command-surface.md
