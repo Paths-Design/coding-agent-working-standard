@@ -1,28 +1,75 @@
 id: CAWS-DEFECT-STALE-INSTALLED-GUARD-PLANE-01
-title: 'Installed hook pack 10 versions behind templates; add doctor version-lag rule and refresh the caws repo''s guard plane'
+title: 'Installed hook pack 10 versions behind templates; add doctor version-lag rule and refresh the caws repo guard plane'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
-created_at: '2026-09-04T00:13:10.356Z'
-updated_at: '2026-09-04T00:13:10.356Z'
-created_by_session: 'session-c5c6ac1b-ed94-4c10-b9e2-3552e8ab3309'
+lifecycle_state: active
+worktree: wt-stale-guard-plane
+updated_at: '2026-09-04T00:13:31.949Z'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli/src/kernel/doctor/rules.ts
+    - packages/caws-cli/src/kernel/doctor/inspect.ts
+    - packages/caws-cli/src/store/doctor-snapshot.ts
+    - .caws/hooks
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/kernel/doctor/rules.ts
+    - packages/caws-cli/src/kernel/doctor/inspect.ts
+    - packages/caws-cli/src/store/doctor-snapshot.ts
+    - packages/caws-cli/src/kernel/doctor/types.ts
+    - packages/caws-cli/src/store/types.ts
+    - packages/caws-cli/tests/kernel/unit/doctor-installed-pack-lag.test.ts
+    - .caws/hooks
+  out:
+    - packages/caws-cli/templates
+    - .caws/policy.yaml
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    ENFORCEMENT MUST MATCH THE CODE IT SHIPS WITH: the hooks that enforce
+    governance in a repo are the CLI's runtime, and a repo whose installed
+    pack lags the shipping templates is enforcing with code that no longer
+    exists in the repo that owns it (v43 installed vs v53 templates —
+    including a pre-PID-anchor session-id.sh whose removed capsule-glob
+    tier is still LIVE in this repo). This is the same class as shipping
+    buggy runtime code: the guard plane must never silently run stale.
+  - >-
+    LAG IS A DIAGNOSIS, NOT A THEORY: doctor gains a rule that compares
+    the installed pack's hook_pack_version header against the shipping
+    SHARED_PACK_VERSION and warns on any lag, naming the remediations
+    (caws init diff to inspect; --overwrite --force to refresh; --adopt
+    to keep local growth). Absent or unreadable headers are unobserved
+    (silent), matching the house convention.
+  - >-
+    REFRESH IS THE SANCTIONED PATH, NOT A HAND-EDIT: the caws repo's own
+    guard plane is refreshed through caws init (drift classified per file
+    first via init diff), never by hand-editing installed hooks.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'a repo whose installed .caws/hooks files carry hook_pack_version 43 while SHARED_PACK_VERSION is 53'
+    when: 'caws doctor runs'
+    then: 'doctor.hooks.installed_pack_version_lag fires (warning) naming the installed vs shipping versions and the refresh remediation; a repo whose versions match stays silent'
+  - id: A2
+    given: 'the caws repo with the v43 installed pack'
+    when: 'the refresh slice runs caws init diff then caws init --overwrite --force'
+    then: 'the installed rows carry hook_pack_version 53, init diff reports no managed drift, and the pre-anchor session-id.sh capsule tier is gone from the installed copy'
+  - id: A3
+    given: 'the refreshed guard plane'
+    when: 'a canonical unbound checkout commits .caws/specs/*.yaml'
+    then: 'the behavior is re-tested and recorded (the opaque refusal that surfaced this defect is explained or resolved by the refresh)'
+non_functional:
+  reliability:
+    - >-
+      The guard plane stops being the one runtime surface whose staleness
+      is invisible: every repo with an installed pack is continuously
+      checked against the shipping version, so no agent runs enforcement
+      code its own repo no longer contains.
 contracts:
   - name: 'installed-pack-version-lag'
     type: behavior
+    description: >-
+      doctor.hooks.installed_pack_version_lag warns when the installed
+      shared pack header version is below SHARED_PACK_VERSION; matching
+      or unobserved versions are silent.

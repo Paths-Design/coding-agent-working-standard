@@ -3,24 +3,98 @@ title: 'Design: global per-harness identity home (~/.caws), surface registry, gu
 risk_tier: 3
 mode: doc
 lifecycle_state: draft
-created_at: '2026-09-04T00:08:32.514Z'
-updated_at: '2026-09-04T00:08:32.514Z'
-created_by_session: 'session-c5c6ac1b-ed94-4c10-b9e2-3552e8ab3309'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
-  data_migration: false
+    - docs/architecture/caws-vnext-command-surface.md
+  data_migration: true
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - docs/architecture/caws-vnext-command-surface.md
+  out:
+    - packages
+    - .github/workflows
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    ADAPTER DOCTRINE: a harness interfaces with CAWS by writing its own
+    adapter that forwards its content into the CAWS shape. CAWS never
+    carries per-harness shapes. The caws dispatch plane is the single
+    shell-script home for the hooks that run; harness adapters translate
+    their lifecycle/tool events into that shape (the hooks-caws and
+    agents-lifecycle-caws plugins are the reference implementation for dsh).
+  - >-
+    GLOBAL = IDENTITY + SESSION MACHINERY PER HARNESS: session-id
+    resolution and the agent-PID correlation store move to a governed
+    per-harness global home (~/.caws/surfaces/<surface>/lib/ and
+    ~/.caws/state/). PID correlation is machine-global by nature (PIDs
+    are per-machine); identity resolution is machine/user state that
+    caws init must never rewrite. A harness update with no CAWS fix is
+    patched ONCE in the machine's own home by the agent who needs to
+    unblock — no repo commit, no per-repo migration.
+  - >-
+    REPO-LOCAL STAYS REPO-LOCAL: specs, policy, worktrees.json,
+    events.jsonl, sessions/ (turn logs — project-specific), leases/
+    (per-project liveness), and the .caws/hooks dispatch + guard rows
+    all remain repo-local. Dispatch is what lets a repo add or update
+    its own hooks; the guard rows keep their per-repo enforcement
+    posture.
+  - >-
+    GUARDS KEEP THEIR TEETH: the worktree guards and scope guards remain
+    repo-local authority enforcement and are fed BY the global identity
+    plane, never bypassed BY it. Cross-worktree takeover and
+    cross-repo writes still require the governed mutators: caws claim
+    --takeover (with prior_owners audit) and caws reprieve on hooks.
+    Global identity never relaxes a refusal.
+  - >-
+    OVERRIDE TIERS: caws_source_lib gains a USER tier between the
+    repo-local vendor override and the shared fallback:
+    repo override -> ~/.caws/surfaces/<surface>/lib -> vendored shared
+    default. The user tier is inert-by-default (absent until the machine
+    owner creates it); removing the override restores true-to-caws
+    behavior. Repo overrides keep winning (today's behavior preserved).
+  - >-
+    SURFACE REGISTRY SINGLE SOURCE: one registry (surfaces.json: id,
+    per-session env var, hook mechanism, trust-gated flag, pin-map
+    membership) generated into the TS union and shell case blocks at
+    build time — the surface-type duplication drift becomes
+    impossible-by-construction. The registry is part of the global home,
+    not the repo.
+  - >-
+    GLOBAL HOME IS GOVERNED: ~/.caws carries managed-header-stamped lib
+    files (the existing parser), a version stamp, and doctor coverage
+    (global drift sweep). Machine-patched lib files are sanctioned
+    growth (the repo --adopt doctrine, applied to the machine), never
+    corruption. The PID record remains the trust ANCHOR above any
+    hand-edited script: spoofing it still requires owning the PID.
+  - >-
+    LEGACY PURGE IS ARCHIVE-FIRST: the v10-era ~/.caws residue observed
+    on this machine (working-spec.yaml, orphan events.jsonl, sessions/,
+    specs/, state/) is archived (moved aside, recorded) — never
+    blind-deleted — before the new home is stamped, so nothing from the
+    pre-v11 era is silently lost.
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'the v10-era ~/.caws residue on this machine'
+    when: 'the migration slice runs'
+    then: 'every pre-existing entry is archived with a recorded manifest of what existed and where it moved, and the new governed ~/.caws structure (surfaces/<surface>/lib, state/, registry) is stamped in its place'
+  - id: A2
+    given: 'the surface registry (surfaces.json)'
+    when: 'the CLI builds'
+    then: 'the TS AgentSurface union and the shell pin/case blocks derive from the registry — adding a surface is one registry edit, and the duplication drift class cannot recur'
+  - id: A3
+    given: 'a per-harness global lib tier in caws_source_lib'
+    when: 'a harness updates its event shape before CAWS has a fix'
+    then: 'the machine owner patches ~/.caws/surfaces/<surface>/lib once, guards keep enforcing through the governed mutators (--takeover, reprieve), and repo overrides still win over the user tier'
+  - id: A4
+    given: 'the global home'
+    when: 'caws doctor runs'
+    then: 'global drift findings fire for unmanaged/unstamped ~/.caws state, machine-patched managed files are reported as sanctioned growth, and absent user tiers are silent'
+non_functional:
+  reliability:
+    - >-
+      The identity and session machinery that has produced every
+      post-merge defect this cycle (env shadowing, the type-lie, capsule
+      invention, orphaned lease tmp, silent trust-gate stripping) gains
+      the same rigor as the governed repo-local core: managed headers,
+      version stamps, doctor coverage, and inert-by-default overrides.
 contracts: []
