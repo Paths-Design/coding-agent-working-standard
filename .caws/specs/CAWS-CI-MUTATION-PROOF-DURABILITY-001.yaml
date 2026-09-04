@@ -2,9 +2,10 @@ id: CAWS-CI-MUTATION-PROOF-DURABILITY-001
 title: 'Make CLI mutation and governance CI fail closed against topology drift'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-ci-mutation-proof
 created_at: '2026-09-04T17:01:39.493Z'
-updated_at: '2026-09-04T17:01:39.493Z'
+updated_at: '2026-09-04T17:02:02.442Z'
 created_by_session: '01a06d4f-d5c4-7953-82b0-797ddb08bea4'
 blast_radius:
   modules:
