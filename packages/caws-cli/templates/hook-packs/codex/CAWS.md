@@ -17,10 +17,16 @@
 
 # CAWS Codex Hook Pack
 
-This directory is the **codex vendor adapter** for the CAWS hook pack. It contains
-only the Codex-specific wiring, surface documentation, and override lib files.
-All shared hook logic lives in the CAWS shared core, installed at `.caws/hooks/`
-in the consumer repo.
+This file is the detailed **codex vendor adapter reference** for the CAWS hook
+pack. It is not a repository-wide Codex instruction source. Codex discovers
+project instructions from `AGENTS.override.md` / `AGENTS.md` along the project
+root-to-working-directory path, so `caws init --agent-surface codex` maintains a
+concise CAWS block in the active root instruction file. See the official
+[Codex AGENTS.md discovery contract](https://learn.chatgpt.com/docs/agent-configuration/agents-md).
+
+The `.codex/` directory contains only Codex-specific wiring, this reference,
+and override lib files. All shared hook logic lives in the CAWS shared core,
+installed at `.caws/hooks/` in the consumer repo.
 
 Codex loads this project-local `.codex/hooks.json` only after the project
 `.codex/` layer is trusted. New or changed non-managed command hooks must be
@@ -36,12 +42,18 @@ reviewed and trusted through `/hooks` before they run.
 
 .codex/                 # codex adapter (this directory when installed)
   hooks.json            # wiring -> .caws/hooks/dispatch/<event>.sh
-  AGENTS.md             # this file
+  CAWS.md               # this detailed reference (not auto-loaded)
   hooks/lib/            # codex override lib files (sourced in preference to shared lib)
     emit.sh             # ask->deny; emit_updated_input for apply_patch rewrites
     parse-input.sh      # apply_patch normalization + HOOK_FILE_PATHS / HOOK_ORIGINAL_TOOL_NAME
     run-handlers.sh     # deny exit-code arm in _rh_stdout_priority + CODEX_HOOK_DRY_RUN
 ```
+
+At the repository root, `caws init` prepends a bounded managed block to the
+non-empty `AGENTS.override.md` when present, otherwise to `AGENTS.md` (creating
+`AGENTS.md` if needed). Everything outside that block remains repository-owned
+and byte-preserved. Codex builds the instruction chain when a session starts,
+so restart the session after installing or updating the integration.
 
 The session log renderer is NOT a codex override: `shared/session-log.sh`
 resolves it from the shared core (`.caws/hooks/session_log_renderer.py`), so

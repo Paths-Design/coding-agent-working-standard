@@ -347,7 +347,11 @@ import { isAdapterCoveredSurface } from './types';
 // registry projection now carries a managed generated-authority header, and the
 // installer migrates only the byte-exact legacy headerless projection. Local or
 // unrelated headerless content remains preserved as an unmanaged collision.
-export const SHARED_PACK_VERSION = 56;
+// v57 (CAWS-CODEX-INSTRUCTION-REACH-002): the codex instruction allowlist
+// includes AGENTS.override.md before AGENTS.md, mirroring the harness's root
+// discovery precedence and admitting the file init may select for its managed
+// working-contract block.
+export const SHARED_PACK_VERSION = 57;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

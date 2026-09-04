@@ -2587,6 +2587,266 @@ export function planQwenSettingsExample(
   };
 }
 
+// ─── codex: root project-instruction merge ───
+//
+// Codex discovers one instruction file per directory, preferring a non-empty
+// AGENTS.override.md over AGENTS.md. A vendor-local .codex/AGENTS.md is not in
+// the instruction chain for ordinary repository work. Keep the always-on CAWS
+// contract concise, merge it only inside bounded markers, and leave the full
+// adapter reference at .codex/CAWS.md.
+
+export const CODEX_INSTRUCTION_BLOCK_VERSION = 1;
+export const CODEX_INSTRUCTION_BEGIN_MARKER =
+  `<!-- >>> caws codex instructions (managed, v${CODEX_INSTRUCTION_BLOCK_VERSION}) >>> -->`;
+export const CODEX_INSTRUCTION_END_MARKER = '<!-- <<< caws codex instructions <<< -->';
+const CODEX_INSTRUCTION_BEGIN_PREFIX = '<!-- >>> caws codex instructions';
+
+export const CODEX_INSTRUCTION_BLOCK = [
+  CODEX_INSTRUCTION_BEGIN_MARKER,
+  '## CAWS working contract',
+  '',
+  'This repository uses the Coding Agent Working Standard (CAWS). Treat the',
+  '`caws` CLI and `.caws/specs/<id>.yaml` as workflow authority.',
+  '',
+  '- Before changing tracked files, run `caws status` and `caws claim`.',
+  '- Every work unit needs one spec and one bound CAWS worktree. Create or admit',
+  '  the lane with `caws worktree ensure <name> --spec <id>`.',
+  '- Never take over a foreign claim without explicit user authorization.',
+  '- Check each target with `caws scope check <path>`; do not hand-edit governed',
+  '  `.caws/` state when a CLI mutation exists.',
+  '- Implement and verify inside the bound lane. Commit each logical source',
+  '  change; do not commit generated artifacts.',
+  '- Before completion, run `caws doctor` and `caws gates run --spec <id>`,',
+  '  record acceptance evidence, then use `caws worktree review` and the',
+  '  governed merge surface.',
+  '- Preserve unrelated dirty state. A foreign or inherited doctor finding is',
+  '  evidence to report, not authority to rewrite another owner\'s work.',
+  '- If a dangerous-command guard blocks or asks, stop at the human boundary;',
+  '  do not rephrase the command to bypass it.',
+  '',
+  'Detailed Codex hook and recovery reference: `.codex/CAWS.md`.',
+  'Codex builds its instruction chain at session start; restart after init.',
+  CODEX_INSTRUCTION_END_MARKER,
+].join('\n');
+
+export type CodexInstructionTarget = 'AGENTS.md' | 'AGENTS.override.md';
+export type CodexInstructionRefusalReason =
+  | 'malformed_managed_block'
+  | 'duplicate_managed_block'
+  | 'instruction_file_unreadable'
+  | 'instruction_file_write_failed';
+
+export type CodexInstructionMergeResult =
+  | {
+      readonly kind: 'created' | 'merged' | 'updated' | 'unchanged';
+      readonly path: string;
+      readonly target: CodexInstructionTarget;
+    }
+  | {
+      readonly kind: 'refused';
+      readonly path: string;
+      readonly target: CodexInstructionTarget;
+      readonly reason: CodexInstructionRefusalReason;
+      readonly error?: string;
+    };
+
+export type CodexInstructionPlanResult = CodexInstructionMergeResult & {
+  readonly readOnly: true;
+};
+
+type InstructionRead =
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'readable'; readonly content: string }
+  | { readonly kind: 'unreadable'; readonly error: string };
+
+function readInstructionFile(filePath: string): InstructionRead {
+  if (!fs.existsSync(filePath)) return { kind: 'missing' };
+  try {
+    if (fs.lstatSync(filePath).isSymbolicLink()) {
+      return { kind: 'unreadable', error: 'refusing to write through a symbolic link' };
+    }
+    return { kind: 'readable', content: fs.readFileSync(filePath, 'utf8') };
+  } catch (e) {
+    return { kind: 'unreadable', error: (e as Error).message };
+  }
+}
+
+function countOccurrences(content: string, token: string): number {
+  return content.split(token).length - 1;
+}
+
+function selectCodexInstructionFile(repoRoot: string):
+  | {
+      readonly kind: 'selected';
+      readonly path: string;
+      readonly target: CodexInstructionTarget;
+      readonly existing: string | null;
+    }
+  | Extract<CodexInstructionMergeResult, { kind: 'refused' }> {
+  const overridePath = path.join(repoRoot, 'AGENTS.override.md');
+  const override = readInstructionFile(overridePath);
+  if (override.kind === 'unreadable') {
+    return {
+      kind: 'refused',
+      path: overridePath,
+      target: 'AGENTS.override.md',
+      reason: 'instruction_file_unreadable',
+      error: override.error,
+    };
+  }
+  if (override.kind === 'readable' && override.content.trim().length > 0) {
+    return {
+      kind: 'selected',
+      path: overridePath,
+      target: 'AGENTS.override.md',
+      existing: override.content,
+    };
+  }
+
+  const agentsPath = path.join(repoRoot, 'AGENTS.md');
+  const agents = readInstructionFile(agentsPath);
+  if (agents.kind === 'unreadable') {
+    return {
+      kind: 'refused',
+      path: agentsPath,
+      target: 'AGENTS.md',
+      reason: 'instruction_file_unreadable',
+      error: agents.error,
+    };
+  }
+  return {
+    kind: 'selected',
+    path: agentsPath,
+    target: 'AGENTS.md',
+    existing: agents.kind === 'readable' ? agents.content : null,
+  };
+}
+
+function computeCodexInstructionMerge(existing: string | null):
+  | {
+      readonly kind: 'created' | 'merged' | 'updated' | 'unchanged';
+      readonly content: string;
+    }
+  | {
+      readonly kind: 'refused';
+      readonly reason:
+        | 'malformed_managed_block'
+        | 'duplicate_managed_block';
+    } {
+  if (existing === null) {
+    return { kind: 'created', content: `${CODEX_INSTRUCTION_BLOCK}\n` };
+  }
+
+  const beginCount = countOccurrences(
+    existing,
+    CODEX_INSTRUCTION_BEGIN_PREFIX
+  );
+  const endCount = countOccurrences(existing, CODEX_INSTRUCTION_END_MARKER);
+  if (beginCount > 1 || endCount > 1) {
+    return { kind: 'refused', reason: 'duplicate_managed_block' };
+  }
+  if (beginCount !== endCount) {
+    return { kind: 'refused', reason: 'malformed_managed_block' };
+  }
+
+  const newline = existing.includes('\r\n') ? '\r\n' : '\n';
+  const block = CODEX_INSTRUCTION_BLOCK.replace(/\n/g, newline);
+  if (beginCount === 0) {
+    const separator = existing.length > 0 ? `${newline}${newline}` : newline;
+    return { kind: 'merged', content: `${block}${separator}${existing}` };
+  }
+
+  const begin = existing.indexOf(CODEX_INSTRUCTION_BEGIN_PREFIX);
+  const beginLineEnd = existing.indexOf(newline, begin);
+  const beginLine = existing.slice(
+    begin,
+    beginLineEnd === -1 ? existing.length : beginLineEnd
+  );
+  if (
+    (begin > 0 && existing[begin - 1] !== '\n') ||
+    !/^<!-- >>> caws codex instructions \(managed, v\d+\) >>> -->$/.test(beginLine)
+  ) {
+    return { kind: 'refused', reason: 'malformed_managed_block' };
+  }
+
+  const end = existing.indexOf(CODEX_INSTRUCTION_END_MARKER, begin);
+  const endExclusive = end + CODEX_INSTRUCTION_END_MARKER.length;
+  const afterEnd = existing[endExclusive];
+  if (
+    end < begin ||
+    (end > 0 && existing[end - 1] !== '\n') ||
+    (afterEnd !== undefined && afterEnd !== '\n' && afterEnd !== '\r')
+  ) {
+    return { kind: 'refused', reason: 'malformed_managed_block' };
+  }
+  if (existing.slice(begin, endExclusive) === block) {
+    return { kind: 'unchanged', content: existing };
+  }
+  return {
+    kind: 'updated',
+    content: `${existing.slice(0, begin)}${block}${existing.slice(endExclusive)}`,
+  };
+}
+
+function inspectCodexProjectInstructions(
+  repoRoot: string
+): { result: CodexInstructionMergeResult; content: string | null } {
+  const selected = selectCodexInstructionFile(repoRoot);
+  if (selected.kind === 'refused') {
+    return { result: selected, content: null };
+  }
+  const computed = computeCodexInstructionMerge(selected.existing);
+  if (computed.kind === 'refused') {
+    return {
+      result: {
+        kind: 'refused',
+        path: selected.path,
+        target: selected.target,
+        reason: computed.reason,
+      },
+      content: null,
+    };
+  }
+  return {
+    result: {
+      kind: computed.kind,
+      path: selected.path,
+      target: selected.target,
+    },
+    content: computed.content,
+  };
+}
+
+/** Preview the active root instruction merge without writing any file. */
+export function planCodexProjectInstructions(
+  repoRoot: string
+): CodexInstructionPlanResult {
+  const { result } = inspectCodexProjectInstructions(repoRoot);
+  return { ...result, readOnly: true };
+}
+
+/** Merge the bounded CAWS block into the root instruction file Codex selects. */
+export function mergeCodexProjectInstructions(
+  repoRoot: string
+): CodexInstructionMergeResult {
+  const inspected = inspectCodexProjectInstructions(repoRoot);
+  if (inspected.result.kind === 'refused' || inspected.result.kind === 'unchanged') {
+    return inspected.result;
+  }
+  try {
+    fs.writeFileSync(inspected.result.path, inspected.content!, 'utf8');
+    return inspected.result;
+  } catch (e) {
+    return {
+      kind: 'refused',
+      path: inspected.result.path,
+      target: inspected.result.target,
+      reason: 'instruction_file_write_failed',
+      error: (e as Error).message,
+    };
+  }
+}
+
 // ─── qwen-code: root QWEN.md doctrine import ───
 //
 // Qwen Code auto-loads the root QWEN.md (and ~/.qwen/QWEN.md,

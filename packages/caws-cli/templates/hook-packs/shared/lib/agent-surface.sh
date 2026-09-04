@@ -44,7 +44,8 @@
 #                         passes the command through unrewritten).
 #   CAWS_INSTRUCTION_FILES — space-separated root instruction filenames the
 #                         harness reads at the repo root (e.g. "CLAUDE.md" for
-#                         claude-code, "AGENTS.md" for codex/opencode/zcode).
+#                         claude-code, "AGENTS.override.md AGENTS.md" for codex,
+#                         and "AGENTS.md" for opencode/zcode).
 #                         Used by worktree-write-guard.sh's allowlist so a
 #                         session editing its harness's doctrine file does not
 #                         trip the base-branch write guard. The unknown-surface
@@ -201,7 +202,7 @@ case "$CAWS_AGENT_SURFACE" in
     CAWS_PLATFORM_FLAG="codex"
     # Codex has no PreToolUse "ask" decision; map ask -> deny.
     CAWS_PERMISSION_VOCAB="deny"
-    CAWS_INSTRUCTION_FILES="AGENTS.md"
+    CAWS_INSTRUCTION_FILES="AGENTS.override.md AGENTS.md"
     CAWS_AGENT_PROCESS_NAMES="codex"
     ;;
   cursor)
