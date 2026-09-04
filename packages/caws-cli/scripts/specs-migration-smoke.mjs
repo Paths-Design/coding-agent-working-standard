@@ -97,7 +97,7 @@ const cleanupPaths = new Set();
 function registerCleanup(path) { cleanupPaths.add(path); }
 function cleanup() {
   for (const path of cleanupPaths) {
-    try { rmSync(path, { recursive: true, force: true }); } catch {}
+    try { rmSync(path, { recursive: true, force: true }); } catch { /* best-effort: nothing to clean up */ }
   }
 }
 process.on('exit', cleanup);
