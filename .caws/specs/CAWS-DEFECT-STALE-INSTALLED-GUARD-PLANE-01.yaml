@@ -83,3 +83,7 @@ evidence:
     status: pass
     evidence_ref: "caws init diff -> caws init --overwrite --force: installed rows v53, session-id.sh byte-identical to template except the init-stamped header; finding cleared; canonical templates+dist materialized from HEAD first (stale canonical working tree)"
     recorded_at: "2026-09-04T00:21:31.989Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Recorded sequence: unbound canonical spec commit refused while session-id unresolved + v43 guard plane live; after CAWS_SESSION_ID resolution and the v53 refresh, canonical commits land (e10bbc99, b0735964). No guard bypass used; the self-reprieve was refused as designed."
+    recorded_at: "2026-09-04T00:21:32.454Z"
