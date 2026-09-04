@@ -159,8 +159,8 @@ interface Decision {
 // The dispatcher's stdout contains one JSON object per handler, and jq-emitted
 // objects (additionalContext) are pretty-printed across multiple lines — so a
 // naive line-by-line parse misses them. This scans for balanced objects.
-function extractJsonObjects(s: string): Record<string, any>[] {
-  const objs: Record<string, any>[] = [];
+function extractJsonObjects(s: string): Record<string, unknown>[] {
+  const objs: Record<string, unknown>[] = [];
   let i = 0;
   while (i < s.length) {
     const start = s.indexOf('{', i);
@@ -206,14 +206,16 @@ function readDecision(stdout: string, exitCode: number): Decision {
   const empty: Decision = { block: false, reason: '', warn: '', context: '', updatedInput: null };
   for (const obj of extractJsonObjects(stdout)) {
     const decision = obj.decision;
-    const hso = obj.hookSpecificOutput;
+    const hso = asRecord(obj.hookSpecificOutput);
     const perm = hso?.permissionDecision;
     const reason =
-      obj.reason || hso?.permissionDecisionReason || 'CAWS guard blocked this operation.';
+      firstString(obj.reason, hso?.permissionDecisionReason) ||
+      'CAWS guard blocked this operation.';
     if (decision === 'block') return { block: true, reason, warn: '', context: '', updatedInput: null };
     if (perm === 'ask' || perm === 'deny') return { block: true, reason, warn: '', context: '', updatedInput: null };
-    if (decision === 'warn' || (typeof obj.advisory === 'string' && obj.advisory)) {
-      empty.warn = obj.advisory || reason;
+    const advisory = typeof obj.advisory === 'string' ? obj.advisory : '';
+    if (decision === 'warn' || advisory) {
+      empty.warn = advisory || reason;
     }
     const ac = hso?.additionalContext;
     if (typeof ac === 'string' && ac) {
@@ -254,9 +256,33 @@ interface CawsClient {
   };
 }
 
-function extractSessionId(obj: any): string | null {
-  if (!obj || typeof obj !== 'object') return null;
-  const candidates = [obj.sessionID, obj.id, obj.sessionId, obj.session?.id, obj.properties?.id, obj.properties?.session?.id];
+// Narrow an unknown (parsed-JSON / vendor-callback) value to a plain object,
+// or null. Session ids and dispatcher payloads arrive from untyped surfaces.
+function asRecord(v: unknown): Record<string, unknown> | null {
+  return v !== null && typeof v === 'object' ? (v as Record<string, unknown>) : null;
+}
+
+// First value that is a non-empty string, in order.
+function firstString(...values: unknown[]): string {
+  for (const v of values) {
+    if (typeof v === 'string' && v) return v;
+  }
+  return '';
+}
+
+function extractSessionId(obj: unknown): string | null {
+  const rec = asRecord(obj);
+  if (!rec) return null;
+  const session = asRecord(rec.session);
+  const properties = asRecord(rec.properties);
+  const candidates = [
+    rec.sessionID,
+    rec.id,
+    rec.sessionId,
+    session?.id,
+    properties?.id,
+    asRecord(properties?.session)?.id,
+  ];
   for (const c of candidates) {
     if (typeof c === 'string' && c.length > 0 && c !== 'unknown') return c;
   }
@@ -362,12 +388,12 @@ export const CawsPlugin = async (ctx: CawsPluginCtx) => {
       }
     },
 
-    event: async (ev: { event?: { type?: string; properties?: any } } | undefined) => {
+    event: async (ev: { event?: { type?: string; properties?: unknown } } | undefined) => {
       try {
         const type = ev?.event?.type;
         const props = ev?.event?.properties;
         if (type && String(type).startsWith('session.')) {
-          const sid = extractSessionId(props) || extractSessionId(props?.session);
+          const sid = extractSessionId(props) || extractSessionId(asRecord(props)?.session);
           if (sid) currentSessionId = sid;
         }
         if (!type) return;
