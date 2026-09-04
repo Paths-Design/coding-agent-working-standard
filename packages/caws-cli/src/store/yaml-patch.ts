@@ -70,6 +70,37 @@ function findTopLevelKeyLines(
   return hits;
 }
 
+/** Last line of a quoted scalar, or undefined for an incomplete/ambiguous
+ * span. This scans delimiters only, never reserializes YAML. Continuations
+ * must remain indented so an unclosed quote cannot consume the next key. */
+function quotedScalarEnd(lines: readonly string[], start: number): number | undefined {
+  const first = lines[start];
+  if (first === undefined) return undefined;
+  const valueStart = first.indexOf(':') + 1;
+  const quoteStart = valueStart + first.slice(valueStart).search(/\S/);
+  const quote = first[quoteStart];
+  if (quote !== "'" && quote !== '"') return undefined;
+  for (let row = start; row < lines.length; row++) {
+    const line = lines[row];
+    if (line === undefined) return undefined;
+    if (row > start && line.trim() !== '' && !line.startsWith(' ')) return undefined;
+    for (let col = row === start ? quoteStart + 1 : 0; col < line.length; col++) {
+      const char = line[col];
+      if (quote === '"' && char === '\\') {
+        col++; // escaped quote/backslash, or a YAML escaped line break
+      } else if (char === quote) {
+        if (quote === "'" && line[col + 1] === "'") {
+          col++;
+        } else {
+          const suffix = line.slice(col + 1);
+          return /^(?:[ \t]*|[ \t]+#.*)$/.test(suffix) ? row : undefined;
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
 /** Detect whether the line's value continues onto subsequent lines:
  *  - bare `key:` with nothing after the colon, followed by an indented
  *    block (mapping/sequence/block scalar)
@@ -88,6 +119,10 @@ function valueSpansMultipleLines(
   const colonIdx = line.indexOf(':');
   if (colonIdx < 0) return true;
   const after = line.slice(colonIdx + 1).trim();
+
+  if (after.startsWith("'") || after.startsWith('"')) {
+    return quotedScalarEnd(lines, keyLineIdx) !== keyLineIdx;
+  }
 
   // Block scalar markers.
   if (after === '|' || after === '>' || after.startsWith('|') || after.startsWith('>')) {
@@ -332,19 +367,21 @@ export function insertTopLevelScalarAfter(
   return ok(joinLines(newLines, sep, trailing));
 }
 
-/** Remove a top-level scalar key's line entirely.
+/** Remove a top-level scalar key's complete span.
  *
  *  Semantics (per WORKTREE-MERGE-CLEARS-SPEC-BINDING-001 A6):
  *    - if the key does NOT exist at top level: NO-OP, returns the source
  *      unchanged. Backward-compatible with specs that never had the field.
  *    - if the key exists exactly once at top level with a scalar value:
- *      removes the entire line. Trailing inline comments are removed
+ *      removes the entire span, including multiline quoted scalars.
+ *      Trailing inline comments are removed
  *      with the line (they belonged to the field, not to surrounding
  *      context).
  *    - if the key appears more than once at top level: AMBIGUOUS, refuse.
  *    - if the key's value spans multiple lines (block scalar, nested
  *      mapping, unclosed flow): AMBIGUOUS, refuse — surgical scalar
- *      removal only.
+ *      removal only. Quoted spans are bounded by their unescaped closing
+ *      delimiter; incomplete or ambiguous spans refuse without a patch.
  *    - if the key appears only nested (with leading whitespace): NO-OP
  *      at top level (does not match).
  *
@@ -382,11 +419,15 @@ export function removeTopLevelScalar(
     return ok(source);
   }
 
-  if (valueSpansMultipleLines(lines, keyLineIdx)) {
+  const keyLine = lines[keyLineIdx] ?? '';
+  const value = keyLine.slice(keyLine.indexOf(':') + 1).trimStart();
+  const quoted = value.startsWith("'") || value.startsWith('"');
+  const endLine = quoted ? quotedScalarEnd(lines, keyLineIdx) : keyLineIdx;
+  if (endLine === undefined || (!quoted && valueSpansMultipleLines(lines, keyLineIdx))) {
     return err(
       storeDiagnostic(
         STORE_RULES.YAML_PATCH_AMBIGUOUS,
-        `Top-level key "${key}" has a multi-line value (block scalar, nested mapping, or unclosed flow); refusing scalar removal.`,
+        `Top-level key "${key}" has a multi-line value (block scalar, nested mapping, or unclosed flow), or an ambiguous quoted span; refusing scalar removal.`,
         { subject: key }
       )
     );
@@ -394,7 +435,7 @@ export function removeTopLevelScalar(
 
   const newLines = [
     ...lines.slice(0, keyLineIdx),
-    ...lines.slice(keyLineIdx + 1),
+    ...lines.slice(endLine + 1),
   ];
   return ok(joinLines(newLines, sep, trailing));
 }
