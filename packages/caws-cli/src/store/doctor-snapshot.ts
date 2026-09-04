@@ -40,7 +40,7 @@ import { loadWaivers } from './waivers-store';
 // CAWS-TELEMETRY-REPAIR-RESILIENCE-001: import the parser from the leaf
 // module — snapshot composition must not depend on the install machinery.
 import { parseManagedHeader } from '../init/hook-packs/managed-header';
-import { TELEMETRY_ROW_DEST_PATHS } from '../init/hook-packs/manifest-shared';
+import { SHARED_PACK_VERSION, TELEMETRY_ROW_DEST_PATHS } from '../init/hook-packs/manifest-shared';
 import { ADAPTER_COVERED_SURFACES } from '../init/hook-packs/types';
 import { observeGatedSurfaceWiring } from '../init/hook-packs/user-scope-wiring';
 import { loadWorktrees } from './worktrees-store';
@@ -193,6 +193,25 @@ const ADAPTER_SURFACE_MARKER_FILE: Record<string, string> = {
  * files are both omitted — doctor treats "no rows reported" as either
  * absent or not-ours, and neither is staleness.
  */
+/** CAWS-DEFECT-STALE-INSTALLED-GUARD-PLANE-01: the INSTALLED shared pack
+ *  version, read from a load-bearing installed row's managed header.
+ *  Absent/unparseable = unobserved (undefined), never an error. */
+function observeInstalledSharedPackVersion(repoRoot: string): number | undefined {
+  for (const marker of ['scope-guard.sh', 'worktree-write-guard.sh', 'audit.sh']) {
+    let content: string;
+    try {
+      content = fs.readFileSync(path.join(repoRoot, '.caws', 'hooks', marker), 'utf8');
+    } catch {
+      continue;
+    }
+    const header = parseManagedHeader(content);
+    if (header && header.hookPack === 'shared' && header.hookPackVersion > 0) {
+      return header.hookPackVersion;
+    }
+  }
+  return undefined;
+}
+
 function observeManagedTelemetryRows(repoRoot: string): string[] {
   const observed: string[] = [];
   for (const relPath of OBSERVED_TELEMETRY_ROWS) {
@@ -283,6 +302,18 @@ function observeFilesystem(
     // installed adapter-pack surfaces so doctor can flag stale dual-writers.
     managedTelemetryRowPaths: observeManagedTelemetryRows(repoRoot),
     adapterPackSurfaceMarkers: observeAdapterPackSurfaceMarkers(repoRoot),
+    // CAWS-DEFECT-STALE-INSTALLED-GUARD-PLANE-01: installed vs shipping pack
+    // versions, observed from the installed rows' managed headers.
+    ...((): {
+      installedSharedPackVersion?: number;
+      shippingSharedPackVersion: number;
+    } => {
+      const installed = observeInstalledSharedPackVersion(repoRoot);
+      return {
+        ...(installed !== undefined ? { installedSharedPackVersion: installed } : {}),
+        shippingSharedPackVersion: SHARED_PACK_VERSION,
+      };
+    })(),
     // CAWS-GATED-SURFACE-SCOPE-GUARD-001: both sides of the dual-wiring
     // hazard, observed read-only (user home + project configs).
     ...((): { userScopeCawsWiringBySurface: readonly string[]; gatedProjectHookEntriesBySurface: readonly string[] } => {

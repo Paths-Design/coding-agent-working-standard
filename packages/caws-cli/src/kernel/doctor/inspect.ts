@@ -1266,6 +1266,32 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     }
   }
 
+  // CAWS-DEFECT-STALE-INSTALLED-GUARD-PLANE-01: a repo enforcing with a
+  // pack older than the code that ships is running guard code its own repo
+  // no longer contains. Both observations must be present; matching or
+  // newer-installed versions are silent.
+  const installedPack = input.filesystem?.installedSharedPackVersion;
+  const shippingPack = input.filesystem?.shippingSharedPackVersion;
+  if (
+    installedPack !== undefined &&
+    shippingPack !== undefined &&
+    installedPack < shippingPack
+  ) {
+    findings.push(
+      finding(
+        DOCTOR_RULES.HOOKS_INSTALLED_PACK_VERSION_LAG,
+        'warning',
+        `The installed CAWS shared hook pack is version ${installedPack} while the CLI ships version ${shippingPack}. The hooks enforcing this repo are runtime code the repo no longer contains — the guard plane must never silently run stale.`,
+        {
+          subject: '.caws/hooks',
+          narrowRepair:
+            'Run `caws init diff` to inspect per-file drift, then `caws init --overwrite --force` to refresh to the shipping baseline (or `--adopt` to keep local growth on specific files).',
+          data: { installed_version: installedPack, shipping_version: shippingPack },
+        }
+      )
+    );
+  }
+
   if (input.initResidue !== undefined) {
     if (input.initResidue.workingSpecYaml) {
       findings.push(

@@ -181,6 +181,13 @@ export interface StoreSnapshot {
      */
     readonly userScopeCawsWiringBySurface?: readonly string[];
     readonly gatedProjectHookEntriesBySurface?: readonly string[];
+    /**
+     * CAWS-DEFECT-STALE-INSTALLED-GUARD-PLANE-01: installed vs shipping
+     * shared pack versions (observed from an installed row's managed
+     * header vs the store's own SHARED_PACK_VERSION).
+     */
+    readonly installedSharedPackVersion?: number;
+    readonly shippingSharedPackVersion?: number;
     readonly worktreeDirByName: Readonly<Record<string, boolean>>;
     readonly specClaimedWorktreeDirByName: Readonly<Record<string, boolean>>;
     /**
