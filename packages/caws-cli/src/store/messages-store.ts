@@ -34,6 +34,7 @@ import { STORE_RULES } from './rules';
 
 const MESSAGES_FILENAME = 'messages.jsonl';
 const MESSAGES_ARCHIVE_FILENAME = 'messages.jsonl.archive';
+const MESSAGES_LOCK_FILENAME = 'messages.lock';
 /** A recipient lease older than this (no heartbeat) is not considered live. */
 const LIVENESS_TTL_MS = 30 * 60 * 1000; // 30m, matching the leases-store stale default
 
@@ -746,7 +747,7 @@ export function pruneMessages(cawsDir: string, opts: MessagePruneOptions): Resul
       pruned_delivery_records: prunedDeliveryRecords,
     });
   }, {
-    lockPath: path.join(cawsDir, MESSAGES_FILENAME + '.lock'),
+    lockPath: path.join(cawsDir, MESSAGES_LOCK_FILENAME),
   });
 }
 
@@ -775,7 +776,7 @@ export function pollMessage(cawsDir: string, me: string, options: PollOptions = 
   const drain = Math.min(Math.max(1, Math.floor(options.drain ?? 1)), MAX_DRAIN);
   const attempt = () =>
     withLifecycleLock(cawsDir, () => pollMessageLocked(cawsDir, me, options.peek === true, receipt, drain), {
-      lockPath: path.join(cawsDir, MESSAGES_FILENAME + '.lock'),
+      lockPath: path.join(cawsDir, MESSAGES_LOCK_FILENAME),
     });
 
   // First attempt is always made. If waiting and empty, retry until the deadline,

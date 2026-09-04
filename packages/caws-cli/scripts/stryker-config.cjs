@@ -61,8 +61,10 @@ function createStrykerConfig(surfaceId) {
     concurrency: 2,
     timeoutMS: surfaceId === 'kernel' ? 60000 : 120000,
     dryRunTimeoutMinutes: 15,
-    incremental: true,
-    incrementalFile: `${surface.reportDir}/incremental.json`,
+    // Authoritative mutation evidence must be recomputed from the declared
+    // topology. Stryker incremental reports retain removed test metadata and
+    // can otherwise make a local report look current after policy drift.
+    incremental: false,
     // The per-file report assertion owns the build verdict. An aggregate
     // break threshold could let one strong file hide a weak file.
     thresholds: {

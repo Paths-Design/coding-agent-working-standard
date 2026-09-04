@@ -91,6 +91,23 @@ export function assertMutationReport({ policy, surfaceId, report }) {
     return { errors: ['mutation report has no files object'], verdicts };
   }
 
+  if (Array.isArray(surface.tests)) {
+    if (!report.testFiles || typeof report.testFiles !== 'object') {
+      errors.push('mutation report has no testFiles object');
+    } else {
+      const expectedTests = new Set(surface.tests.map((file) => file.replace(/^\.\//, '')));
+      const reportTests = new Set(
+        Object.keys(report.testFiles).map((file) => normalizeReportPath(file, report))
+      );
+      for (const file of expectedTests) {
+        if (!reportTests.has(file)) errors.push(`missing report test file ${file}`);
+      }
+      for (const file of reportTests) {
+        if (!expectedTests.has(file)) errors.push(`undeclared test file in mutation report: ${file}`);
+      }
+    }
+  }
+
   const reportFiles = new Map(
     Object.entries(report.files).map(([file, result]) => [normalizeReportPath(file, report), result])
   );

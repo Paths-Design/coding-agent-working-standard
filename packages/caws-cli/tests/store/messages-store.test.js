@@ -62,6 +62,31 @@ function makeLive(caws, sessionId) {
 
 const sender = { kind: 'agent', id: 'sender-1', session_id: 'sender-1', platform: 'test' };
 
+test('poll and prune acquire a dedicated messages.lock sibling', () => {
+  const caws = cawsDir();
+  const openedLocks = [];
+  const realOpen = fs.openSync;
+  const openSpy = jest.spyOn(fs, 'openSync').mockImplementation((target, flags, ...rest) => {
+    if (flags === 'wx') openedLocks.push(String(target));
+    return realOpen.call(fs, target, flags, ...rest);
+  });
+  let polled;
+  let pruned;
+  try {
+    polled = pollMessage(caws, 'recip-1', { peek: true });
+    pruned = pruneMessages(caws, { status: 'delivered' });
+  } finally {
+    openSpy.mockRestore();
+  }
+
+  expect(polled.ok).toBe(true);
+  expect(pruned.ok).toBe(true);
+  expect(openedLocks).toEqual([
+    path.join(caws, 'messages.lock'),
+    path.join(caws, 'messages.lock'),
+  ]);
+});
+
 // ─── A1: round-trip + deliver-once ──────────────────────────────────────────
 
 test('A1: send then poll returns the exact text with sender attribution', () => {

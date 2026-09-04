@@ -213,12 +213,13 @@
         { "source": "src/store/events-store.ts" },
         { "source": "src/store/messages-store.ts" },
         { "source": "src/store/yaml-patch.ts" }
-      ],
-      "tests": [
-        "tests/store/apply-patch.test.js",
+    ],
+    "tests": [
+      "tests/store/apply-patch.test.js",
         "tests/store/atomic-write-sweep.test.js",
         "tests/store/atomic-write.test.js",
         "tests/store/events-store.test.js",
+        "tests/store/messages-behavior-store.test.js",
         "tests/store/messages-store.test.js",
         "tests/store/yaml-patch.test.js"
       ]

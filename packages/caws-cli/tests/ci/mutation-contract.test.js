@@ -23,6 +23,7 @@ const REPO_ROOT = path.resolve(PACKAGE_ROOT, '../..');
 const POLICY = path.join(PACKAGE_ROOT, 'mutation-policy.json');
 const VALIDATOR = path.join(PACKAGE_ROOT, 'scripts/validate-mutation-policy.mjs');
 const REPORT_ASSERTION = path.join(PACKAGE_ROOT, 'scripts/assert-mutation-report.mjs');
+const { createStrykerConfig } = require(path.join(PACKAGE_ROOT, 'scripts/stryker-config.cjs'));
 
 const tempDirs = [];
 
@@ -178,6 +179,15 @@ describe('mutation policy topology contract', () => {
     expect(result.stderr).toContain('missing mutation source: src/kernel/does-not-exist.ts');
     expect(result.stderr).toContain('missing mutation test: tests/kernel/unit/does-not-exist.test.ts');
   });
+
+  test('store mutation recomputes evidence using only in-process store contracts', () => {
+    const config = createStrykerConfig('store');
+
+    expect(config.incremental).toBe(false);
+    expect(config.testFiles).not.toHaveLength(0);
+    expect(config.testFiles.every((file) => file.startsWith('tests/store/'))).toBe(true);
+    expect(config.testFiles).toContain('tests/store/messages-behavior-store.test.js');
+  });
 });
 
 describe('per-file mutation report contract', () => {
@@ -209,6 +219,23 @@ describe('per-file mutation report contract', () => {
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('FAIL missing report entry for dist/a.js');
+  });
+
+  test('a report with stale or missing test topology fails', () => {
+    const policy = mutationPolicy(['dist/a.js']);
+    policy.surfaces.fixture.tests = ['tests/current.test.js'];
+    const mutationReport = report({ 'dist/a.js': ['Killed'] });
+    mutationReport.testFiles = {
+      'tests/stale.test.js': { tests: [] },
+    };
+
+    const result = runReportAssertion(policy, mutationReport);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('FAIL missing report test file tests/current.test.js');
+    expect(result.stderr).toContain(
+      'FAIL undeclared test file in mutation report: tests/stale.test.js'
+    );
   });
 
   test('a weak file fails even when a large strong file makes the aggregate exceed 80', () => {
