@@ -1292,6 +1292,27 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     );
   }
 
+  // CAWS-DEFECT-LEASE-TMP-STRANDING-01: a lease write crashed mid-rename and
+  // left its sibling tmp behind. Visible-but-inert litter; the next write
+  // self-heals. Undefined observation = silent (house convention).
+  const strandedTmp = input.filesystem?.strandedLeaseTmpFiles;
+  if (strandedTmp !== undefined && strandedTmp.length > 0) {
+    const names = strandedTmp.map((f) => f.name).join(', ');
+    findings.push(
+      finding(
+        DOCTOR_RULES.LEASES_STRANDED_TMP,
+        'warning',
+        `Stranded atomic-write tmp file(s) in .caws/leases/ from an interrupted lease write: ${names}. The loader ignores them; the next lease write sweeps them automatically.`,
+        {
+          subject: '.caws/leases',
+          narrowRepair:
+            'No action needed for correctness — the next lease write removes dead-owner or hard-aged tmps. To clean now, delete only files matching <lease>.tmp.<pid>.<counter>.',
+          data: { stranded: strandedTmp.map((f) => ({ name: f.name, age_ms: f.ageMs })) },
+        }
+      )
+    );
+  }
+
   if (input.initResidue !== undefined) {
     if (input.initResidue.workingSpecYaml) {
       findings.push(

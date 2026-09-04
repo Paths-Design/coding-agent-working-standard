@@ -188,6 +188,11 @@ export interface StoreSnapshot {
      */
     readonly installedSharedPackVersion?: number;
     readonly shippingSharedPackVersion?: number;
+    /** CAWS-DEFECT-LEASE-TMP-STRANDING-01: stranded lease tmp files. */
+    readonly strandedLeaseTmpFiles?: readonly {
+      readonly name: string;
+      readonly ageMs: number;
+    }[];
     readonly worktreeDirByName: Readonly<Record<string, boolean>>;
     readonly specClaimedWorktreeDirByName: Readonly<Record<string, boolean>>;
     /**
