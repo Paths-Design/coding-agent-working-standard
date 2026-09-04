@@ -1,0 +1,50 @@
+id: CAWS-HOOK-GENERATED-FILE-IDEMPOTENCE-001
+title: 'Make generated hook-pack projections safely reinstallable'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-04T17:52:12.877Z'
+updated_at: '2026-09-04T17:52:12.877Z'
+created_by_session: '01a06d5b-3024-73b3-8ae2-67a4e79017b1'
+blast_radius:
+  modules:
+    - 'caws-cli hook-pack generator and installer ownership classification'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/scripts/generate-surface-registry.mjs'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/surfaces-registry.sh'
+    - 'packages/caws-cli/src/init/hook-install.ts'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/init-hook-pack-render.test.js'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+  out: []
+invariants:
+  - 'Every file declared managed by a hook-pack manifest is either parseably managed or admitted by a path-specific structural migration contract.'
+  - 'A legacy generated projection is auto-migrated only when its normalized body exactly equals the canonical incoming projection.'
+  - 'A modified or unrelated headerless file at the generated destination remains refused and byte-preserved.'
+acceptance:
+  - id: A1
+    given: 'the legacy headerless surfaces-registry projection installed by CAWS'
+    when: 'init plans or applies the current shared pack'
+    then: 'it is classified as a safe generated migration and updated to a current parseable managed header rather than refused as an unmanaged collision'
+  - id: A2
+    given: 'a fresh shared-pack installation'
+    when: 'the same pack is installed a second time'
+    then: 'every manifest destination reports unchanged and no managed file reports drift or collision'
+  - id: A3
+    given: 'surfaces-registry is regenerated from registry.json'
+    when: 'pack integrity tests run'
+    then: 'the generated shell projection carries its generated-authority managed header and the shared pack version and fingerprint advance together'
+observability:
+  - 'Installer tests enumerate every SHARED_PACK manifest destination and assert exact second-install actions.'
+rollback:
+  - 'Revert the migration and generator commit; existing files remain preserved because default collision handling is fail-closed.'
+non_functional:
+  security:
+    - 'Legacy recognition is path-specific and exact-body normalized; altered headerless content is never auto-overwritten.'
+contracts:
+  - name: 'generated-projection-reinstall'
+    type: contract-test
+    path: 'packages/caws-cli/tests/init/init-hook-pack-render.test.js'
