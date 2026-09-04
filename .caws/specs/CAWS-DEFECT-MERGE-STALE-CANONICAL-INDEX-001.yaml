@@ -46,3 +46,12 @@ non_functional:
 contracts:
   - name: 'merge-leaves-canonical-consistent'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Jest real-repo canonical consistency: clean merge materializes payload and leaves no staged rollback; focused merge group 28/28 pass"
+    recorded_at: "2026-09-04T07:26:34.540Z"
+    test_nodeid: tests/store/worktree-merge-canonical-consistency.test.js A1/A3
+    command: npx jest --runInBand tests/store/worktree-merge-canonical-consistency.test.js tests/shell/worktree-merge-canonical-consistency.test.js tests/store/worktree-merge-concurrency.test.js tests/store/worktree-merge-branch-delete.test.js tests/shell/worktree-merge.test.js
+    exit_code: 0
+    commit_sha: "14ee2265"
