@@ -93,16 +93,15 @@ done
 
 mkdir -p "$(dirname "$LOG_FILE")"
 
-# Collect strike files from every location guard-strikes.sh may write to:
-#   - the canonical main-repo vendor log dir (${CAWS_VENDOR_DIR}/logs)
-#   - the current out-of-tree per-worktree location under each linked
-#     worktree's gitdir (.git/worktrees/<name>/caws-guard-strikes/) — where
-#     guard-strikes.sh writes since CAWS-GUARD-STRIKE-FILE-OUT-OF-TREE-001, so
-#     strike state never lands in a worktree working tree
-#   - the legacy in-tree location (.caws/worktrees/<name>/tmp/) for any strike
-#     files written by a pre-relocation hook still on disk
+# Collect strike state (CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A6):
+#   - the SESSION-GLOBAL store (~/.caws/state/sessions/<sid>/strikes.json) is
+#     the live source — resets target it;
+#   - legacy repo-local files (vendor logs, worktree gitdirs, pre-relocation
+#     in-tree) are collected READ-ONLY for listing continuity; guard-strikes
+#     never writes them again.
 collect_strike_files() {
   {
+    find "${HOME:-/tmp}/.caws/state/sessions" -maxdepth 2 -name 'strikes.json' 2>/dev/null || true
     find "$PROJECT_DIR/${CAWS_VENDOR_DIR}/logs" -maxdepth 1 -name 'guard-strikes-*.json' 2>/dev/null || true
     find "$PROJECT_DIR/.git/worktrees" -maxdepth 3 -name 'guard-strikes-*.json' 2>/dev/null || true
     find "$PROJECT_DIR/.caws/worktrees" -maxdepth 3 -name 'guard-strikes-*.json' 2>/dev/null || true

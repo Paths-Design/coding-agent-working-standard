@@ -98,15 +98,21 @@ _caws_env_or_payload_id() {
     return 0
   fi
   # Surface-pinned precedence: the dispatcher knows the true platform; a
-  # foreign surface's var must not shadow it.
+  # foreign surface's var must not shadow it. The pin map derives from the
+  # registry via the generated snippet (A5); the local case is the fallback
+  # for environments that predate the snippet.
   local pinned_var=""
-  case "${CAWS_AGENT_SURFACE:-}" in
-    claude-code) pinned_var="CLAUDE_SESSION_ID" ;;
-    codex) pinned_var="CODEX_THREAD_ID" ;;
-    qwen-code) pinned_var="QWEN_CODE_SESSION_ID" ;;
-    dsh) pinned_var="DSH_SESSION_ID" ;;
-    *) pinned_var="" ;;
-  esac
+  if declare -F _caws_surface_pin_var >/dev/null 2>&1; then
+    pinned_var="$(_caws_surface_pin_var "${CAWS_AGENT_SURFACE:-}")" || pinned_var=""
+  else
+    case "${CAWS_AGENT_SURFACE:-}" in
+      claude-code) pinned_var="CLAUDE_SESSION_ID" ;;
+      codex) pinned_var="CODEX_THREAD_ID" ;;
+      qwen-code) pinned_var="QWEN_CODE_SESSION_ID" ;;
+      dsh) pinned_var="DSH_SESSION_ID" ;;
+      *) pinned_var="" ;;
+    esac
+  fi
   if [[ -n "$pinned_var" ]]; then
     local pinned_val
     pinned_val="$(printf '%s' "${!pinned_var:-}")"
