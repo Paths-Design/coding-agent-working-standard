@@ -97,9 +97,13 @@ acceptance:
     when: 'the migration slice runs'
     then: 'every pre-existing entry is archived with a recorded manifest of what existed and where it moved, and the new governed ~/.caws structure (surfaces/<surface>/lib, state/, registry) is stamped in its place'
   - id: A2
-    given: 'the surface registry (surfaces.json)'
+    given: 'the surface registry (packages/caws-cli/surfaces/registry.json)'
     when: 'the CLI builds'
-    then: 'the TS AgentSurface union and the shell pin/case blocks derive from the registry — adding a surface is one registry edit, and the duplication drift class cannot recur'
+    then: 'the TS AgentSurface union and the surface env/pin/trust-gated maps derive from the registry via the generator, the build fails when the committed generated file and the registry disagree, and a conformance suite pins the registry against the live manifests'
+  - id: A2b
+    given: 'the registry generator'
+    when: 'the shell resolver surface'
+    then: 'the shell pin/case blocks derive from a generated shell snippet sourced by session-id.sh and agent-surface.sh (pack version bump + installed refresh follow) — the follow-on slice after A2'
   - id: A3
     given: 'a per-harness global lib tier in caws_source_lib'
     when: 'a harness updates its event shape before CAWS has a fix'
