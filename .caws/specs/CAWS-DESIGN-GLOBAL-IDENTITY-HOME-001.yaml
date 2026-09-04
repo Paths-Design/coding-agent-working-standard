@@ -140,3 +140,7 @@ evidence:
     status: pass
     evidence_ref: "Archive-first migration executed: 6 legacy entries (working-spec.yaml, events.jsonl, sessions/ 2.4MB, specs/, state/, .DS_Store) moved to ~/.caws.legacy-v10-2026-09-03/ with MIGRATION-MANIFEST.json recording every path, kind, and byte count; new ~/.caws stamped with state/global-home.json (managed header hook_pack=global-home v1, verified parseable), surfaces/, lib/ scaffolded"
     recorded_at: "2026-09-04T01:10:52.102Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "npx jest tests/init/surface-registry-conformance.test.js (7 pass); build chain generate->check->build-cli exit 0; drift fails the build by construction (check exits 1 on byte mismatch); commit 574976cc"
+    recorded_at: "2026-09-04T02:39:19.796Z"
