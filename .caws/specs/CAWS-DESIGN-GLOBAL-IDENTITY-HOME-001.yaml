@@ -4,7 +4,7 @@ risk_tier: 3
 mode: doc
 lifecycle_state: active
 worktree: wt-global-home
-updated_at: '2026-09-04T01:10:08.733Z'
+updated_at: '2026-09-04T01:54:01.474Z'
 blast_radius:
   modules:
     - docs/architecture/caws-vnext-command-surface.md
@@ -13,8 +13,14 @@ operational_rollback_slo: 5m
 scope:
   in:
     - docs/architecture/caws-vnext-command-surface.md
+    - packages/caws-cli/surfaces/registry.json
+    - packages/caws-cli/scripts/generate-surface-registry.mjs
+    - packages/caws-cli/scripts/check-surface-registry.mjs
+    - packages/caws-cli/src/init/hook-packs/surfaces.generated.ts
+    - packages/caws-cli/src/init/hook-packs/types.ts
+    - packages/caws-cli/tests/init/surface-registry-conformance.test.js
+    - packages/caws-cli/package.json
   out:
-    - packages
     - .github/workflows
 invariants:
   - >-
