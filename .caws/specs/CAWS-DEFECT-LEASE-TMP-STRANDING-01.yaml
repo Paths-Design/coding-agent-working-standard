@@ -79,3 +79,7 @@ evidence:
     status: pass
     evidence_ref: "npx jest tests/store/atomic-write-sweep.test.js (7 pass): dead-owner old tmp swept by next write; live-owner young tmp untouched; hard-aged survives PID-reuse; foreign files never listed/swept; sweep failure never blocks the write"
     recorded_at: "2026-09-04T01:02:20.609Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "npx jest tests/kernel/unit/doctor-stranded-lease-tmp.test.ts (4 pass): fires with names+ages, empty/unobserved silent"
+    recorded_at: "2026-09-04T01:02:21.094Z"
