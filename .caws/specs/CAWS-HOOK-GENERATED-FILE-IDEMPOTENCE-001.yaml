@@ -2,10 +2,11 @@ id: CAWS-HOOK-GENERATED-FILE-IDEMPOTENCE-001
 title: 'Make generated hook-pack projections safely reinstallable'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-hook-generated-idempotence
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Generated surface registry now carries managed generated-authority metadata; exact legacy headerless projections migrate safely, modified files remain refused, and all init suites pass.'
 created_at: '2026-09-04T17:52:12.877Z'
-updated_at: '2026-09-04T17:52:41.691Z'
+updated_at: '2026-09-04T17:58:59.401Z'
 created_by_session: '01a06d5b-3024-73b3-8ae2-67a4e79017b1'
 blast_radius:
   modules:
