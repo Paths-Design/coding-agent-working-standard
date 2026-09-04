@@ -74,3 +74,8 @@ contracts:
       doctor.hooks.installed_pack_version_lag warns when the installed
       shared pack header version is below SHARED_PACK_VERSION; matching
       or unobserved versions are silent.
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "npx jest tests/kernel/unit/doctor-installed-pack-lag.test.ts (6 pass) + e2e: worktree dist doctor fired installed_pack_version_lag against this repo (43 vs 53) before the refresh; silent after"
+    recorded_at: "2026-09-04T00:21:31.494Z"
