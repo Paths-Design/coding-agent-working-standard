@@ -261,6 +261,12 @@ export interface DoctorInput {
      */
     readonly installedSharedPackVersion?: number;
     readonly shippingSharedPackVersion?: number;
+    /**
+     * CAWS-DEFECT-LEASE-TMP-STRANDING-01: stranded atomic-write tmp files in
+     * .caws/leases/ (names + ages, observed via the atomic-write lister).
+     * Optional; undefined = unobserved (silent).
+     */
+    readonly strandedLeaseTmpFiles?: readonly { readonly name: string; readonly ageMs: number }[];
     readonly worktreeDirByName?: Readonly<Record<string, boolean>>;
     readonly specClaimedWorktreeDirByName?: Readonly<Record<string, boolean>>;
     /**

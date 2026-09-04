@@ -249,6 +249,16 @@ export const DOCTOR_RULES = {
   HOOKS_INSTALLED_PACK_VERSION_LAG: 'doctor.hooks.installed_pack_version_lag',
 
   /**
+   * CAWS-DEFECT-LEASE-TMP-STRANDING-01: stranded atomic-write tmp files in
+   * .caws/leases/ — a lease write crashed between tmp creation and rename,
+   * littering the directory invisibly (the loader already ignores non-.json
+   * names). Severity: warning. Repair: automatic (the next lease write
+   * sweeps dead-owner/hard-aged tmps) or manual removal. Foreign files are
+   * never named.
+   */
+  LEASES_STRANDED_TMP: 'doctor.leases.stranded_tmp',
+
+  /**
    * CAWS-GATED-SURFACE-SCOPE-GUARD-001: a trust-gated surface (qwen-code,
    * zcode) carries CAWS hook wiring at BOTH user scope and project scope on
    * this machine. The harness merges the two additively, so every CAWS

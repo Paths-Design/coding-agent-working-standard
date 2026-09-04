@@ -54,11 +54,91 @@ export interface WriteFileAtomicOptions {
  * new bytes. When `options.preserveMode` is true and the target exists,
  * the new file has the same mode bits as the prior file.
  */
+/** CAWS-DEFECT-LEASE-TMP-STRANDING-01: the EXACT sibling tmp pattern this
+ *  writer produces — `<basename>.tmp.<pid>.<counter>`. Everything else in the
+ *  directory is foreign and is never touched or named. */
+const TMP_SIBLING_RE = /^(.*)\.tmp\.(\d+)\.(\d+)$/;
+
+/** A stranded tmp sibling, with the age used by both the sweep and the
+ *  doctor observer. */
+export interface StrandedTmpSibling {
+  readonly path: string;
+  readonly ageMs: number;
+  readonly ownerPid: number;
+}
+
+/** PID liveness via the no-signal probe (EPERM/ESRCH = not-alive for our
+ *  purposes, the same semantic the lease liveness probe uses). */
+function pidAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** List stranded tmp siblings of `targetPath` matching OUR pattern exactly.
+ *  "Stranded" = older than the soft TTL AND owner PID dead, or older than the
+ *  hard age bound (PID reuse can make a dead owner look alive; the bound
+ *  covers that). Pure and side-effect-free. */
+export function listStrandedTmpSiblings(
+  targetPath: string,
+  now: number = Date.now(),
+  opts: { readonly softTtlMs?: number; readonly hardAgeMs?: number } = {}
+): StrandedTmpSibling[] {
+  const softTtlMs = opts.softTtlMs ?? 5 * 60 * 1000;
+  const hardAgeMs = opts.hardAgeMs ?? 24 * 60 * 60 * 1000;
+  const dir = path.dirname(targetPath);
+  const base = path.basename(targetPath);
+  const out: StrandedTmpSibling[] = [];
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(dir);
+  } catch {
+    return [];
+  }
+  for (const entry of entries) {
+    const m = TMP_SIBLING_RE.exec(entry);
+    if (!m || m[1] !== base) continue;
+    const ownerPid = Number.parseInt(m[2] ?? '0', 10);
+    const full = path.join(dir, entry);
+    let ageMs = 0;
+    try {
+      ageMs = now - fs.statSync(full).mtimeMs;
+    } catch {
+      continue; // vanished between readdir and stat: not ours to judge
+    }
+    if (ageMs >= hardAgeMs || (ageMs >= softTtlMs && !pidAlive(ownerPid))) {
+      out.push({ path: full, ageMs, ownerPid });
+    }
+  }
+  return out;
+}
+
+/** Best-effort sweep of OUR stranded tmp siblings before a write. Failures
+ *  are silent by design: a sweep that cannot run must never block the
+ *  content-atomicity the write is about to provide. */
+function sweepStaleTmpSiblings(targetPath: string): void {
+  for (const stranded of listStrandedTmpSiblings(targetPath)) {
+    try {
+      fs.unlinkSync(stranded.path);
+    } catch {
+      // silent best-effort
+    }
+  }
+}
+
 export function writeFileAtomic(
   targetPath: string,
   contents: string | Buffer,
   options: WriteFileAtomicOptions = {}
 ): Result<true> {
+  // CAWS-DEFECT-LEASE-TMP-STRANDING-01: self-heal — remove OUR OWN stranded
+  // tmp siblings (dead-owner or hard-aged) before writing; never foreign
+  // files, never a block on failure.
+  sweepStaleTmpSiblings(targetPath);
   const tmpPath = nextTempName(targetPath);
   let fd: number | undefined;
 

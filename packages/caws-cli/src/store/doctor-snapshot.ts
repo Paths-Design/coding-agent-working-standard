@@ -41,6 +41,7 @@ import { loadWaivers } from './waivers-store';
 // module — snapshot composition must not depend on the install machinery.
 import { parseManagedHeader } from '../init/hook-packs/managed-header';
 import { SHARED_PACK_VERSION, TELEMETRY_ROW_DEST_PATHS } from '../init/hook-packs/manifest-shared';
+import { listStrandedTmpSiblings } from './atomic-write';
 import { ADAPTER_COVERED_SURFACES } from '../init/hook-packs/types';
 import { observeGatedSurfaceWiring } from '../init/hook-packs/user-scope-wiring';
 import { loadWorktrees } from './worktrees-store';
@@ -302,6 +303,19 @@ function observeFilesystem(
     // installed adapter-pack surfaces so doctor can flag stale dual-writers.
     managedTelemetryRowPaths: observeManagedTelemetryRows(repoRoot),
     adapterPackSurfaceMarkers: observeAdapterPackSurfaceMarkers(repoRoot),
+    // CAWS-DEFECT-LEASE-TMP-STRANDING-01: stranded atomic-write tmps in the
+    // leases dir, observed through the atomic-write lister itself (the same
+    // pattern the sweep uses — one source of truth for what counts as ours).
+    ...((): { strandedLeaseTmpFiles?: readonly { name: string; ageMs: number }[] } => {
+      const stranded = listStrandedTmpSiblings(path.join(cawsDir, 'leases', 'lease.json'));
+      if (stranded.length === 0) return {};
+      return {
+        strandedLeaseTmpFiles: stranded.map((f) => ({
+          name: path.basename(f.path),
+          ageMs: Math.round(f.ageMs),
+        })),
+      };
+    })(),
     // CAWS-DEFECT-STALE-INSTALLED-GUARD-PLANE-01: installed vs shipping pack
     // versions, observed from the installed rows' managed headers.
     ...((): {
