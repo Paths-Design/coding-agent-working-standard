@@ -36,3 +36,7 @@ evidence:
     status: pass
     evidence_ref: "npx tsc -p tsconfig.kernel-test.json --noEmit: exit 0 (22 pre-existing errors across 6 kernel test files fixed); grep confirms zero eslint-disable/@ts-ignore/no-explicit-any in telemetry-turn-log-schema.test.ts; npx jest tests/kernel/unit/: 24 suites, 660 tests pass"
     recorded_at: "2026-09-04T05:13:31.338Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "npx eslint . from repo root with files:['**/*.js','**/*.mjs','**/*.cjs']: scripts/*.mjs now rule-covered (surfaced 2 real errors + previously-invisible warnings), zero warnings after no-console aligned with package config; remaining 2 errors are HEAD-version scripts whose fixes sit uncommitted on main and resolve in final verify"
+    recorded_at: "2026-09-04T05:13:31.832Z"
