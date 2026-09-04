@@ -55,3 +55,7 @@ evidence:
     status: pass
     evidence_ref: "tests/shell/specs-restore.test.js: both multiline quoting styles follow actual archive -> restore dry-run -> restore apply shell/store transactions, dry-run leaves events and canonical absence unchanged, restored bytes differ only in lifecycle fields, archived bytes remain equal, spec_restored event proves active disposition."
     recorded_at: "2026-09-04T21:29:34.498Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Attribution anchor e299f5b416ad4ff33fb5724b182569dce02b975d; source bf1a4580923981e6ff1995e1f1f56305b0fc20f0. npm test fourfiles94pass exit0; npm run typecheck exit0; scoped eslint exit0; five CAWS gates PASS. Doctor unchanged baseline1E/13W/6I, no load errors: unrelated old foreign cwd_gone, registry residues, inactive peer leases and hook lag; own lease registered. Jest inherited verbose config warning."
+    recorded_at: "2026-09-04T21:29:35.227Z"
