@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-ci-mutation-proof
 created_at: '2026-09-04T17:01:39.493Z'
-updated_at: '2026-09-04T17:25:14.144Z'
+updated_at: '2026-09-04T17:42:51.592Z'
 created_by_session: '01a06d4f-d5c4-7953-82b0-797ddb08bea4'
 blast_radius:
   modules:
@@ -31,6 +31,8 @@ scope:
     - packages/caws-cli/tests/shell/binding-bridge-resolve.test.js
     - packages/caws-cli/tests/kernel/unit/spec-successors.test.ts
     - packages/caws-cli/tests/kernel/unit/worktree-transitions-freshness.test.ts
+    - packages/caws-cli/tests/store/atomic-write-sweep.test.js
+    - packages/caws-cli/tests/store/messages-behavior-store.test.js
   out: []
 invariants:
   - 'A CI success cannot result from a missing workspace, target, test selection, report, or mutant population.'
