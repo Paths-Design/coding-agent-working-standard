@@ -16,7 +16,7 @@
     "docs/**"
   ],
   "scripts": {
-    "build": "node scripts/build-cli.js",
+    "build": "node scripts/generate-surface-registry.mjs && node scripts/check-surface-registry.mjs && node scripts/build-cli.js",
     "docs:generate": "node scripts/generate-command-reference.mjs",
     "docs:populate": "node scripts/populate-doc-markers.mjs",
     "docs:check": "node scripts/generate-command-reference.mjs --check && node scripts/populate-doc-markers.mjs --check",
