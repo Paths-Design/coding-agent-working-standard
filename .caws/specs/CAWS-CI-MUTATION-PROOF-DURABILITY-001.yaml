@@ -1,0 +1,60 @@
+id: CAWS-CI-MUTATION-PROOF-DURABILITY-001
+title: 'Make CLI mutation and governance CI fail closed against topology drift'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-04T17:01:39.493Z'
+updated_at: '2026-09-04T17:01:39.493Z'
+created_by_session: '01a06d4f-d5c4-7953-82b0-797ddb08bea4'
+blast_radius:
+  modules:
+    - 'GitHub Actions quality gates'
+    - 'caws-cli mutation harness'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - '.github/workflows/mutation.yml'
+    - '.github/workflows/caws-guards.yml'
+    - '.github/workflows/pr-checks.yml'
+    - 'packages/caws-cli/package.json'
+    - 'packages/caws-cli/stryker.conf.js'
+    - 'packages/caws-cli/stryker.shell.conf.js'
+    - 'packages/caws-cli/stryker.kernel.conf.js'
+    - 'packages/caws-cli/mutation-policy.json'
+    - 'packages/caws-cli/scripts/stryker-config.cjs'
+    - 'packages/caws-cli/scripts/run-mutation.mjs'
+    - 'packages/caws-cli/scripts/validate-mutation-policy.mjs'
+    - 'packages/caws-cli/scripts/assert-mutation-report.mjs'
+    - 'packages/caws-cli/tests/ci/mutation-contract.test.js'
+  out: []
+invariants:
+  - 'A CI success cannot result from a missing workspace, target, test selection, report, or mutant population.'
+  - 'Every mutation-target file is subject to an explicit per-file floor; aggregate scores cannot mask a weak target.'
+  - 'Active governance workflows consume only the v11 per-feature spec authority.'
+acceptance:
+  - id: A1
+    given: 'the current kernel/store/shell topology'
+    when: 'the mutation policy validator runs'
+    then: 'every production source file is accounted for exactly once and every declared target/config/test/report path exists'
+  - id: A2
+    given: 'a fresh checkout with installed dependencies'
+    when: 'each kernel/store/shell mutation surface runs in dry-run-only mode'
+    then: 'its tests complete successfully and Stryker discovers a non-zero mutant population'
+  - id: A3
+    given: 'a Stryker JSON report'
+    when: 'the report assertion runs'
+    then: 'zero-mutant, missing-target, and any below-floor per-file result fail while conforming per-file results pass'
+  - id: A4
+    given: 'a scheduled, labeled, or manually dispatched mutation run'
+    when: 'CI executes it'
+    then: 'all three current caws-cli surfaces run through one topology-aware matrix and retain JSON/HTML reports plus a step summary bound to the tested SHA'
+  - id: A5
+    given: 'active PR and push workflows'
+    when: 'their definitions are inspected by the contract test'
+    then: 'none references the removed caws-kernel workspace or treats .caws/working-spec.yaml as current authority, and duplicate vacuous v10 guards are retired'
+non_functional: {}
+contracts:
+  - name: 'mutation-ci-integrity'
+    type: contract-test
+    path: 'packages/caws-cli/tests/ci/mutation-contract.test.js'
