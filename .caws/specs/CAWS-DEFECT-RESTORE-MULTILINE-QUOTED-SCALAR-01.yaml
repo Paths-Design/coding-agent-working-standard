@@ -42,3 +42,8 @@ contracts:
   - name: 'comment-preserving-lifecycle'
     type: behavior
     path: 'packages/caws-cli/src/store/yaml-patch.ts'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "bf1a4580923981e6ff1995e1f1f56305b0fc20f0: yaml-patch controls exercise single/double quoted multiline values, blank lines, escaped quotes and escaped line breaks across LF/CRLF and trailing newline combinations; exact untouched neighboring bytes asserted. Ten added controls failed before repair; all94 patcher/restore/reopen/archive tests pass after."
+    recorded_at: "2026-09-04T21:29:33.125Z"
