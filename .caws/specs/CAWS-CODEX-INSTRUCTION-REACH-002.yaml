@@ -67,3 +67,7 @@ evidence:
     status: pass
     evidence_ref: "codex-instruction-merge.test.js override, CRLF preservation, upgrade, and byte-idempotence cases passed"
     recorded_at: "2026-09-04T18:19:29.995Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "codex-instruction-merge.test.js malformed, duplicate, orphan-marker, symlink, and CLI nonzero refusal cases passed"
+    recorded_at: "2026-09-04T18:19:34.746Z"
