@@ -1,6 +1,23 @@
 const js = require('@eslint/js');
 const tseslint = require('typescript-eslint');
-// const nodePlugin = require('eslint-plugin-node');
+
+// TS-family globs shared by the tseslint blocks below. templates/ is included:
+// hook-pack templates are shipped consumer code, not docs.
+const TS_GLOBS = ['src/**/*.ts', 'tests/**/*.ts', 'templates/**/*.ts'];
+// The runtime Node globals both blocks need. (eslint-plugin-node is gone; its
+// env presets died with .eslintrc.js.)
+const NODE_GLOBALS = {
+  console: 'readonly',
+  process: 'readonly',
+  __dirname: 'readonly',
+  __filename: 'readonly',
+  require: 'readonly',
+  module: 'readonly',
+  exports: 'writable',
+  Buffer: 'readonly',
+  setImmediate: 'readonly',
+  clearImmediate: 'readonly',
+};
 
 module.exports = [
   // Ignore patterns
@@ -8,24 +25,16 @@ module.exports = [
     ignores: ['node_modules/**', 'dist/**', 'build/**', 'coverage/**', 'test-*/**', '**/.venv/**'],
   },
 
-  // Base configuration (JS)
+  // Base configuration (JS family). `eslint .` lints every file some block
+  // matches, so *.mjs/*.cjs MUST be listed explicitly — an unmatched file is
+  // silently linted with zero rules (verified: a planted no-unused-vars +
+  // no-constant-condition violation in scripts/*.mjs passed before this).
   {
-    files: ['**/*.js'],
+    files: ['**/*.js', '**/*.mjs', '**/*.cjs'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
-      globals: {
-        console: 'readonly',
-        process: 'readonly',
-        __dirname: 'readonly',
-        __filename: 'readonly',
-        require: 'readonly',
-        module: 'readonly',
-        exports: 'writable',
-        Buffer: 'readonly',
-        setImmediate: 'readonly',
-        clearImmediate: 'readonly',
-      },
+      globals: NODE_GLOBALS,
     },
     rules: {
       ...js.configs.recommended.rules,
@@ -35,30 +44,19 @@ module.exports = [
     },
   },
 
-  // TypeScript configuration (vNext shell + store)
+  // TypeScript configuration (vNext shell + store, kernel tests, templates)
   // Slice 8a1: TS lint coverage for the new shell/store TS code that
   // was previously typechecked but never linted. Recommended config
   // only — no type-aware rules, so this stays fast and doesn't need a
   // tsconfig path resolved here.
   ...tseslint.configs.recommended.map((cfg) => ({
     ...cfg,
-    files: ['src/**/*.ts', 'tests/**/*.ts'],
+    files: TS_GLOBS,
   })),
   {
-    files: ['src/**/*.ts', 'tests/**/*.ts'],
+    files: TS_GLOBS,
     languageOptions: {
-      globals: {
-        console: 'readonly',
-        process: 'readonly',
-        __dirname: 'readonly',
-        __filename: 'readonly',
-        require: 'readonly',
-        module: 'readonly',
-        exports: 'writable',
-        Buffer: 'readonly',
-        setImmediate: 'readonly',
-        clearImmediate: 'readonly',
-      },
+      globals: NODE_GLOBALS,
     },
     rules: {
       'no-console': 'off',
