@@ -4,7 +4,7 @@ risk_tier: 2
 mode: fix
 lifecycle_state: active
 worktree: wt-stale-guard-plane
-updated_at: '2026-09-04T00:13:31.949Z'
+updated_at: '2026-09-04T00:19:55.525Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/kernel/doctor/rules.ts
@@ -21,11 +21,12 @@ scope:
     - packages/caws-cli/src/kernel/doctor/types.ts
     - packages/caws-cli/src/store/types.ts
     - packages/caws-cli/tests/kernel/unit/doctor-installed-pack-lag.test.ts
-    - .caws/hooks
   out:
     - packages/caws-cli/templates
     - .caws/policy.yaml
     - .github/workflows
+  support:
+    - .caws/hooks
 invariants:
   - >-
     ENFORCEMENT MUST MATCH THE CODE IT SHIPS WITH: the hooks that enforce
