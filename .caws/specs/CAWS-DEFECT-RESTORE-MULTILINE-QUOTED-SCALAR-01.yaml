@@ -45,8 +45,8 @@ contracts:
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "bf1a4580923981e6ff1995e1f1f56305b0fc20f0: yaml-patch controls exercise single/double quoted multiline values, blank lines, escaped quotes and escaped line breaks across LF/CRLF and trailing newline combinations; exact untouched neighboring bytes asserted. Ten added controls failed before repair; all94 patcher/restore/reopen/archive tests pass after."
-    recorded_at: "2026-09-04T21:29:33.125Z"
+    evidence_ref: "Updated controls97 pass including valid column-zero paragraphs, escaped quotes, blank lines and LF/CRLF byte preservation. Initial committed repair bf1a4580 refused unindented continuations in the real Sterling archive; two new controls reproduced that refusal and follow-up857a7617 removes the incorrect indentation delimiter. Source owns quote-delimited spans, not indentation."
+    recorded_at: "2026-09-04T21:38:19.910Z"
   - criterion_id: A2
     status: pass
     evidence_ref: "Same focused94: unclosed quotes and closing quote followed by garbage return ambiguous, never partial success; set refuses multiline quoted replacement; existing block/nested/flow/duplicate refusal controls preserved."
