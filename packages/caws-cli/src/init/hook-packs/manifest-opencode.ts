@@ -60,7 +60,12 @@ import type { HookPackV1 } from './types';
 // message → heartbeat poll → additionalContext → stash → system.transform
 // INJECTED → model perceives it. Builds on v3 (updatedInput/quiet-merge) and
 // v2 (session-id in the dispatcher payload).
-export const OPENCODE_PACK_VERSION = 6;
+// Version 7: lint-hygiene pass over plugin.ts — dispatcher stdout and vendor
+// event payloads narrowed from `any` to `unknown` (asRecord/firstString).
+// Behavior-identical (same fields, same truthiness, same precedence); the pack
+// fingerprint changed, so the version bumps per the pack-fingerprint guard
+// (CAWS-CHORE-LINT-COVERAGE-HYGIENE-01).
+export const OPENCODE_PACK_VERSION = 7;
 
 export const OPENCODE_PACK: HookPackV1 = {
   id: 'opencode',
