@@ -259,6 +259,22 @@ export const DOCTOR_RULES = {
   LEASES_STRANDED_TMP: 'doctor.leases.stranded_tmp',
 
   /**
+   * CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A4: the machine's ~/.caws global
+   * home exists but carries entries outside the known structure (state/,
+   * surfaces/, lib/) — unmanaged global state is the pre-v11 residue class
+   * (observed live: working-spec.yaml + orphan events.jsonl). Severity:
+   * warning. Repair: archive the foreign entries with a manifest (the A1
+   * migration pattern), never blind-delete.
+   */
+  GLOBAL_HOME_UNMANAGED_STATE: 'doctor.global_home.unmanaged_state',
+  /**
+   * CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A4: ~/.caws exists but lacks the
+   * stamped state/global-home.json (either never migrated, or the stamp
+   * was removed). Severity: info. Repair: run the A1 migration slice.
+   */
+  GLOBAL_HOME_STAMP_MISSING: 'doctor.global_home.stamp_missing',
+
+  /**
    * CAWS-GATED-SURFACE-SCOPE-GUARD-001: a trust-gated surface (qwen-code,
    * zcode) carries CAWS hook wiring at BOTH user scope and project scope on
    * this machine. The harness merges the two additively, so every CAWS

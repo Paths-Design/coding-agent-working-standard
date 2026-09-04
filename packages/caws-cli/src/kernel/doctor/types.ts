@@ -267,6 +267,16 @@ export interface DoctorInput {
      * Optional; undefined = unobserved (silent).
      */
     readonly strandedLeaseTmpFiles?: readonly { readonly name: string; readonly ageMs: number }[];
+    /**
+     * CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A4: the machine's global home
+     * (~/.caws) observation — whether the stamped state/global-home.json
+     * exists and the top-level entry names. Optional; undefined =
+     * unobserved (silent).
+     */
+    readonly globalHomeObservation?: {
+      readonly stampPresent: boolean;
+      readonly entries: readonly string[];
+    };
     readonly worktreeDirByName?: Readonly<Record<string, boolean>>;
     readonly specClaimedWorktreeDirByName?: Readonly<Record<string, boolean>>;
     /**

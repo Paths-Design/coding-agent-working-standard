@@ -142,6 +142,17 @@ _caws_to_git_root() {
 }
 
 if [[ -z "${CAWS_PROJECT_DIR:-}" ]]; then
+  # A5: prefer the registry-derived vendor dir (generated snippet); the
+  # env-var heuristic below is the fallback for dispatches that predate the
+  # snippet.
+  if declare -F _caws_surface_vendor_dir >/dev/null 2>&1; then
+    local _registry_vendor_dir
+    _registry_vendor_dir="$(_caws_surface_vendor_dir "${CAWS_AGENT_SURFACE:-}")" || _registry_vendor_dir=""
+    if [[ -n "$_registry_vendor_dir" && "$_registry_vendor_dir" != ".caws" ]]; then
+      _CAWS_VENDOR_DIR="${_registry_vendor_dir}"
+      return 0
+    fi
+  fi
   _CAWS_VENDOR_DIR_CANDIDATE=""
   if [[ -n "${CLAUDE_PROJECT_DIR:-}" ]]; then
     _CAWS_VENDOR_DIR_CANDIDATE="$CLAUDE_PROJECT_DIR"
@@ -415,6 +426,19 @@ caws_source_lib() {
     # shellcheck disable=SC1090
     source "$_vendor_override"
     return $?
+  fi
+
+  # 1.5. USER tier (CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A3): the machine
+  # owner's per-harness override in the global home. Inert by default —
+  # absent until the owner creates it; removing the file restores the
+  # true-to-caws shared fallback. Repo overrides keep winning over it.
+  if [[ -n "${CAWS_AGENT_SURFACE:-}" && -n "${HOME:-}" ]]; then
+    local _user_override="${HOME}/.caws/surfaces/${CAWS_AGENT_SURFACE}/lib/${basename}"
+    if [[ -f "$_user_override" ]]; then
+      # shellcheck disable=SC1090
+      source "$_user_override"
+      return $?
+    fi
   fi
 
   # 2. Shared fallback

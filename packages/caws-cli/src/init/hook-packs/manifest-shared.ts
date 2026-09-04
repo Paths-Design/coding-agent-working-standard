@@ -331,7 +331,15 @@ import { isAdapterCoveredSurface } from './types';
 // trust anchor; the capsule-glob fallback tier was REMOVED (unknown stays
 // unknown). Existing consumers' next `caws init` reports session-id.sh +
 // run-handlers.sh as managed_drift until they refresh.
-export const SHARED_PACK_VERSION = 53;
+// v54 (CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A3/A5/A6): session-id.sh pin map
+// derives from the generated surfaces-registry.sh snippet; agent-surface.sh
+// gains the ~/.caws/surfaces/<surface>/lib user tier and registry-derived
+// vendor dirs; guard strike/reprieve state moves to the SESSION-GLOBAL home
+// (~/.caws/state/sessions/<sid>/), legacy repo-local files read-only;
+// classify_command.py admits leading-pathspec commit forms. Existing
+// consumers' next `caws init` reports the changed rows as managed_drift
+// until they refresh.
+export const SHARED_PACK_VERSION = 54;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
@@ -510,6 +518,15 @@ export const SHARED_PACK: HookPackV1 = {
       // session" through ONE env-var chain that mirrors the TS resolver.
       destPath: '.caws/hooks/lib/session-id.sh',
       sourcePath: 'lib/session-id.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      // CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A5: generated from the surface
+      // registry — the vendor-dir/pin/env maps the resolver and guard plane
+      // source through caws_source_lib.
+      destPath: '.caws/hooks/lib/surfaces-registry.sh',
+      sourcePath: 'lib/surfaces-registry.sh',
       executable: false,
       managed: true,
     },
