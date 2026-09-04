@@ -235,7 +235,9 @@
         { "source": "src/shell/gates/waiver-filter.ts" }
       ],
       "tests": [
+        "tests/shell/binding-bridge-resolve.test.js",
         "tests/shell/binding-resolve.test.js",
+        "tests/shell/claim-bridge.test.js",
         "tests/shell/gates-disposition.test.js",
         "tests/shell/gates-waiver-filter.test.js"
       ]
