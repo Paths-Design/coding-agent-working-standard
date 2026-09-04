@@ -22,7 +22,10 @@ import {
 const actor: Actor = { kind: 'agent', id: 'a1', session_id: 's1', platform: 'test' };
 
 /** A not-yet-hashed event (EventBody + seq + prev_hash), the prepareAppend input shape. */
-const baseEvent: HashableEvent = {
+// `satisfies` (not `:`) keeps the literal's inferred property types — notably
+// spec_id: string — so the ChainedEvent literals below typecheck under
+// exactOptionalPropertyTypes without weakening the HashableEvent check.
+const baseEvent = {
   event: 'test_recorded',
   ts: '2026-06-13T00:00:00.000Z',
   actor,
@@ -30,7 +33,7 @@ const baseEvent: HashableEvent = {
   data: { command: 'jest', exit_code: 0 },
   seq: 1,
   prev_hash: null,
-};
+} satisfies HashableEvent;
 
 /** Independent re-implementation of the documented recipe, for cross-check. */
 function expectedHash(ev: HashableEvent): string {
@@ -54,8 +57,9 @@ describe('computeEventHash: format + recipe', () => {
   });
 
   test('the domain separator is load-bearing (hash differs from a no-separator hash)', () => {
-    const { event_hash: _d, ...rest } = baseEvent as ChainedEvent;
-    void _d;
+    // baseEvent is unchained — there is no event_hash to strip — so the
+    // recipe input is the whole event body.
+    const rest: Record<string, unknown> = { ...baseEvent };
     const withoutSeparator = `sha256:${createHash('sha256')
       .update(canonicalJson(rest), 'utf8')
       .digest('hex')}`;

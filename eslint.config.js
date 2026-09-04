@@ -15,9 +15,10 @@ module.exports = [
     ],
   },
 
-  // Base configuration for all JS files
+  // Base configuration for all JS-family files. *.mjs/*.cjs MUST be listed:
+  // a file matched by no block is linted with zero rules (vacuously clean).
   {
-    files: ['**/*.js'],
+    files: ['**/*.js', '**/*.mjs', '**/*.cjs'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
@@ -36,7 +37,10 @@ module.exports = [
     },
     rules: {
       ...js.configs.recommended.rules,
-      'no-console': 'warn',
+      // Repo-root JS is CLI/build tooling; console output is the product, not
+      // a smell. (Mirrors the package config, which sets this off for the same
+      // reason — a 'warn' here spams 100+ warnings on scripts/*.mjs alone.)
+      'no-console': 'off',
       'no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrors: 'none' }],
     },
   },

@@ -21,10 +21,7 @@
 import Ajv2020 from 'ajv/dist/2020';
 import addFormats from 'ajv-formats';
 import type { ErrorObject, ValidateFunction } from 'ajv';
-import turnLogSchemaJson from '../../src/kernel/schemas/telemetry/turn-log.v2.json';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- schema assertions read arbitrary keywords
-const turnLogSchema = turnLogSchemaJson as any;
+import turnLogSchema from '../../src/kernel/schemas/telemetry/turn-log.v2.json';
 
 function compile(schema: object): ValidateFunction {
   const ajv = new Ajv2020({ allErrors: true, strict: true });
@@ -36,8 +33,7 @@ function compile(schema: object): ValidateFunction {
  *  list must contain an error at `instancePath` with ajv keyword `keyword`. */
 function expectRejected(
   validate: ValidateFunction,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  payload: any,
+  payload: unknown,
   instancePath: string,
   keyword: string
 ): void {
@@ -57,9 +53,13 @@ function expectRejected(
 
 // --- fixtures ---------------------------------------------------------------
 
+// Fixtures deliberately exercise invalid shapes too (wrong-typed status,
+// out-of-range turn, unknown keys), so every field stays `unknown` and the
+// negative tests assign through the loose index signature. `context` is
+// pinned narrower because two fixtures spread-and-mutate it.
 interface TurnLogFixture {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fixtures deliberately exercise invalid shapes too
-  [key: string]: any;
+  [key: string]: unknown;
+  context?: Record<string, unknown>;
 }
 
 /** Mirrors a real vendored-renderer payload (session_log_renderer.py v2 fold),

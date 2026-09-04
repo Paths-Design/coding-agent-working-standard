@@ -129,8 +129,12 @@ describe('SESSION-CAPSULE-WORKTREE-CWD-001 — assertOwnership candidate admissi
       const patch = result.value;
       expect(patch).not.toBeNull();
       expect(patch?.kind).toBe('takeover_claim');
-      expect(patch?.prior_owner.session_id).toBe('caws-owner');
-      expect(patch?.owner.session_id).toBe('caws-freshmint');
+      // Narrowing if, not a silent skip: the kind expect above throws on a
+      // regressed kind, so the guarded asserts stay falsifiable.
+      if (patch && patch.kind === 'takeover_claim') {
+        expect(patch.prior_owner.session_id).toBe('caws-owner');
+        expect(patch.owner.session_id).toBe('caws-freshmint');
+      }
     }
   });
 

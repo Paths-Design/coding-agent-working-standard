@@ -344,7 +344,7 @@ describe('evaluatePath: no_authority.one_sided — message + data fields (L88-10
   });
 
   test('one_sided data includes specWorktree when present (L101 spread — kills ObjectLiteral+conditional mutants)', () => {
-    const binding: import('../../src/worktree/types').BindingState = {
+    const binding: import('../../../src/kernel/worktree/types').BindingState = {
       kind: 'one_sided',
       detail: {
         specHasWorktree: true,
@@ -357,7 +357,7 @@ describe('evaluatePath: no_authority.one_sided — message + data fields (L88-10
   });
 
   test('one_sided data includes registrySpecId when present (L102 conditional spread)', () => {
-    const binding: import('../../src/worktree/types').BindingState = {
+    const binding: import('../../../src/kernel/worktree/types').BindingState = {
       kind: 'one_sided',
       detail: {
         specHasWorktree: false,
@@ -375,7 +375,7 @@ describe('evaluatePath: no_authority.one_sided — message + data fields (L88-10
   });
 
   test('one_sided data includes worktreeName when present (L103 conditional spread)', () => {
-    const binding: import('../../src/worktree/types').BindingState = {
+    const binding: import('../../../src/kernel/worktree/types').BindingState = {
       kind: 'one_sided',
       detail: {
         specHasWorktree: false,
@@ -393,7 +393,7 @@ describe('evaluatePath: no_authority.one_sided — message + data fields (L88-10
   });
 
   test('one_sided — all three optional fields present simultaneously', () => {
-    const binding: import('../../src/worktree/types').BindingState = {
+    const binding: import('../../../src/kernel/worktree/types').BindingState = {
       kind: 'one_sided',
       detail: {
         specHasWorktree: true,

@@ -37,7 +37,6 @@ function runTestCodemod(dryRun = true) {
     for (const call of consoleLogCalls) {
       // Add a comment above console.log statements
       const comment = `// TODO: Remove debug logging before production`;
-      const callText = call.getText();
 
       // Insert comment before the call
       const fullText = sourceFile.getFullText();

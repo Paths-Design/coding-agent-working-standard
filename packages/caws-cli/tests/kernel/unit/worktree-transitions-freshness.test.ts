@@ -152,9 +152,13 @@ describe('refreshAgentClaim: valid session -> refresh_agent patch', () => {
     if (isOk(r)) {
       // kills L40 ObjectLiteral ({}) — the patch object must carry these fields.
       expect(r.value.kind).toBe('refresh_agent');
-      expect(r.value.session).toEqual(session);
-      // kills L41 StringLiteral — last_active is now.toISOString(), not "".
-      expect(r.value.last_active).toBe('2026-06-13T12:00:00.000Z');
+      // Narrowing if for the union member; the kind expect above throws on a
+      // regressed kind, so the guarded asserts stay falsifiable.
+      if (r.value.kind === 'refresh_agent') {
+        expect(r.value.session).toEqual(session);
+        // kills L41 StringLiteral — last_active is now.toISOString(), not "".
+        expect(r.value.last_active).toBe('2026-06-13T12:00:00.000Z');
+      }
     }
   });
 
@@ -176,9 +180,12 @@ describe('refreshAgentClaim: valid session -> refresh_agent patch', () => {
     const r = refreshAgentClaim(NO_AGENTS, session, NOW, { bound_worktree: 'wt-x' });
     expect(isOk(r)).toBe(true);
     if (isOk(r)) {
-      expect(r.value.bound_worktree).toBe('wt-x');
-      // the false arm: bound_spec_id NOT provided -> absent
-      expect(r.value).not.toHaveProperty('bound_spec_id');
+      expect(r.value.kind).toBe('refresh_agent');
+      if (r.value.kind === 'refresh_agent') {
+        expect(r.value.bound_worktree).toBe('wt-x');
+        // the false arm: bound_spec_id NOT provided -> absent
+        expect(r.value).not.toHaveProperty('bound_spec_id');
+      }
     }
   });
 
@@ -187,8 +194,11 @@ describe('refreshAgentClaim: valid session -> refresh_agent patch', () => {
     const r = refreshAgentClaim(NO_AGENTS, session, NOW, { bound_spec_id: 'SPEC-9' });
     expect(isOk(r)).toBe(true);
     if (isOk(r)) {
-      expect(r.value.bound_spec_id).toBe('SPEC-9');
-      expect(r.value).not.toHaveProperty('bound_worktree');
+      expect(r.value.kind).toBe('refresh_agent');
+      if (r.value.kind === 'refresh_agent') {
+        expect(r.value.bound_spec_id).toBe('SPEC-9');
+        expect(r.value).not.toHaveProperty('bound_worktree');
+      }
     }
   });
 
@@ -200,8 +210,11 @@ describe('refreshAgentClaim: valid session -> refresh_agent patch', () => {
     });
     expect(isOk(r)).toBe(true);
     if (isOk(r)) {
-      expect(r.value.bound_worktree).toBe('wt-x');
-      expect(r.value.bound_spec_id).toBe('SPEC-9');
+      expect(r.value.kind).toBe('refresh_agent');
+      if (r.value.kind === 'refresh_agent') {
+        expect(r.value.bound_worktree).toBe('wt-x');
+        expect(r.value.bound_spec_id).toBe('SPEC-9');
+      }
     }
   });
 
