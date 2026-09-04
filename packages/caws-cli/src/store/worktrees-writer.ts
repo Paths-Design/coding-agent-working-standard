@@ -2147,7 +2147,15 @@ function verifyLaneProvenance(
 const MERGE_CAS_MAX_ATTEMPTS = 5;
 
 type MergeCasOutcome =
-  | { ok: true; mergeCommit: string; baseBefore: string; attempts: number }
+  | {
+      ok: true;
+      mergeCommit: string;
+      baseBefore: string;
+      attempts: number;
+      canonicalCheckoutState: 'in_sync' | 'stale';
+      canonicalCheckoutSyncError?: string;
+      canonicalCheckoutRepairCommand?: string;
+    }
   | {
       ok: false;
       message: string;
@@ -2261,10 +2269,35 @@ function mergeViaCompareAndSwap(
       // Worktrees with a different branch checked out are unaffected, which
       // is the entire point of computing the merge in the object database.
       const headRef = runGit(['symbolic-ref', '--quiet', 'HEAD'], repoRoot);
+      let canonicalCheckoutState: 'in_sync' | 'stale' = 'in_sync';
+      let canonicalCheckoutSyncError: string | undefined;
+      let canonicalCheckoutRepairCommand: string | undefined;
       if (headRef.ok && headRef.stdout.trim() === ref) {
-        runGit(['read-tree', '-u', '-m', 'HEAD'], repoRoot);
+        // Name both trees explicitly. HEAD already resolves to mergeCommit
+        // after update-ref; the two-tree form tells Git which transition to
+        // materialize and preserves unrelated local changes. When an edit
+        // overlaps the merged paths, Git refuses instead of overwriting it.
+        const syncArgs = ['read-tree', '-u', '-m', baseBefore, mergeCommit];
+        const syncResult = runGit(syncArgs, repoRoot);
+        if (!syncResult.ok) {
+          canonicalCheckoutState = 'stale';
+          canonicalCheckoutSyncError = syncResult.reason;
+          canonicalCheckoutRepairCommand = `git ${syncArgs.join(' ')}`;
+        }
       }
-      return { ok: true, mergeCommit, baseBefore, attempts: attempt };
+      return {
+        ok: true,
+        mergeCommit,
+        baseBefore,
+        attempts: attempt,
+        canonicalCheckoutState,
+        ...(canonicalCheckoutSyncError !== undefined
+          ? { canonicalCheckoutSyncError }
+          : {}),
+        ...(canonicalCheckoutRepairCommand !== undefined
+          ? { canonicalCheckoutRepairCommand }
+          : {}),
+      };
     }
 
     // Lost the race. The objects we just wrote are unreferenced and will be
@@ -2708,6 +2741,17 @@ export function mergeWorktree(
       // itself already succeeded; the range remains parent-derivable).
       ...(laneTip !== undefined ? { lane_tip: laneTip } : {}),
       base_before: casOutcome.baseBefore,
+      // CAWS-DEFECT-MERGE-STALE-CANONICAL-INDEX-001: the ref advance and
+      // checkout refresh are separate operations. Record whether the latter
+      // landed so a successful merge cannot silently leave a rollback staged
+      // in the canonical index.
+      canonical_checkout_state: casOutcome.canonicalCheckoutState,
+      ...(casOutcome.canonicalCheckoutSyncError !== undefined
+        ? { canonical_checkout_sync_error: casOutcome.canonicalCheckoutSyncError }
+        : {}),
+      ...(casOutcome.canonicalCheckoutRepairCommand !== undefined
+        ? { canonical_checkout_repair_command: casOutcome.canonicalCheckoutRepairCommand }
+        : {}),
       // False only under --no-close (A3): the spec is deliberately left active
       // so AC evidence can be recorded before an explicit close.
       auto_closed_spec: !specLeftOpen,
@@ -2868,6 +2912,13 @@ export function mergeWorktree(
     data: {
       merge_commit: mergeCommit,
       spec_id: specId,
+      canonical_checkout_state: casOutcome.canonicalCheckoutState,
+      ...(casOutcome.canonicalCheckoutSyncError !== undefined
+        ? { canonical_checkout_sync_error: casOutcome.canonicalCheckoutSyncError }
+        : {}),
+      ...(casOutcome.canonicalCheckoutRepairCommand !== undefined
+        ? { canonical_checkout_repair_command: casOutcome.canonicalCheckoutRepairCommand }
+        : {}),
       auto_closed_spec: !specLeftOpen,
       spec_already_closed: specWasAlreadyClosed,
       // CAWS-DEFECT-AC-EVIDENCE-WINDOW-01 (A3): present only under --no-close,
