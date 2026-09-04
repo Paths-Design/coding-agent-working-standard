@@ -8,20 +8,20 @@ updated_at: '2026-09-04T05:18:39.484Z'
 created_by_session: 'sess_c8430a4f-4c06-461c-9769-c3bcd6ca83a6'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli/scripts/validate-docs.mjs'
+    - 'packages/caws-cli/scripts/specs-migration-smoke.mjs'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/scripts/**
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Both script fixes are behavior-identical: the BOM-stripping regex matches the same character written as an escape instead of a raw code point; the best-effort cleanup catch keeps swallowing exactly the same errors.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'the package eslint config now covers scripts/*.mjs with real rules'
+    when: 'npx eslint . runs from packages/caws-cli'
+    then: 'validate-docs.mjs and specs-migration-smoke.mjs report zero errors (no-irregular-whitespace, no-empty) without any eslint-disable comment'
 non_functional: {}
 contracts: []
