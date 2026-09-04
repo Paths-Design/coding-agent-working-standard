@@ -55,3 +55,11 @@ evidence:
     command: npx jest --runInBand tests/store/worktree-merge-canonical-consistency.test.js tests/shell/worktree-merge-canonical-consistency.test.js tests/store/worktree-merge-concurrency.test.js tests/store/worktree-merge-branch-delete.test.js tests/shell/worktree-merge.test.js
     exit_code: 0
     commit_sha: "14ee2265"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Jest real-repo dirty canonical case preserves local bytes, records stale in outcome/event, and prints Git error plus exact two-tree refresh command; 3/3 focused cases pass"
+    recorded_at: "2026-09-04T07:26:38.236Z"
+    test_nodeid: tests/store/worktree-merge-canonical-consistency.test.js A2
+    command: npx jest --runInBand tests/store/worktree-merge-canonical-consistency.test.js tests/shell/worktree-merge-canonical-consistency.test.js
+    exit_code: 0
+    commit_sha: "14ee2265"
