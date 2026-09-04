@@ -4,7 +4,7 @@ risk_tier: 3
 mode: doc
 lifecycle_state: active
 worktree: wt-global-home
-updated_at: '2026-09-04T02:40:12.178Z'
+updated_at: '2026-09-04T02:52:32.856Z'
 blast_radius:
   modules:
     - docs/architecture/caws-vnext-command-surface.md
@@ -20,8 +20,27 @@ scope:
     - packages/caws-cli/src/init/hook-packs/types.ts
     - packages/caws-cli/tests/init/surface-registry-conformance.test.js
     - packages/caws-cli/package.json
+    - packages/caws-cli/templates/hook-packs/shared/lib/session-id.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/guard-strikes.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/reprieve.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/surfaces-registry.sh
+    - packages/caws-cli/templates/hook-packs/shared/classify_command.py
+    - packages/caws-cli/templates/hook-packs/shared/reset-strikes.sh
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+    - packages/caws-cli/src/kernel/doctor/rules.ts
+    - packages/caws-cli/src/kernel/doctor/inspect.ts
+    - packages/caws-cli/src/kernel/doctor/types.ts
+    - packages/caws-cli/src/store/types.ts
+    - packages/caws-cli/src/store/doctor-snapshot.ts
+    - packages/caws-cli/tests/kernel/unit/doctor-global-home.test.ts
+    - packages/caws-cli/tests/hooks/bats/session-id-user-tier.bats
+    - packages/caws-cli/tests/hooks/pytest/test_classify_command.py
   out:
     - .github/workflows
+  support:
+    - .caws/hooks
 invariants:
   - >-
     ADAPTER DOCTRINE: a harness interfaces with CAWS by writing its own
