@@ -2,9 +2,11 @@ id: CAWS-CHORE-LINT-COVERAGE-HYGIENE-02
 title: 'Lint hygiene part 2: de-any kernel telemetry schema test; root eslint mjs/cjs coverage'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'telemetry de-any + kernel typecheck gate + root mjs/cjs coverage landed via wt-lint-hygiene-2 (557d419e)'
 created_at: '2026-09-04T05:01:07.988Z'
-updated_at: '2026-09-04T05:13:30.894Z'
+updated_at: '2026-09-04T05:13:32.479Z'
 created_by_session: 'sess_c8430a4f-4c06-461c-9769-c3bcd6ca83a6'
 blast_radius:
   modules:
