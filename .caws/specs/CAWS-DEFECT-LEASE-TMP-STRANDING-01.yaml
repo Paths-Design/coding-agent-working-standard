@@ -74,3 +74,8 @@ contracts:
       writeFileAtomic sweeps stale sibling tmp files matching its own
       exact naming pattern before writing; dead-PID or hard-aged files
       only; failures are silent and never block the write.
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "npx jest tests/store/atomic-write-sweep.test.js (7 pass): dead-owner old tmp swept by next write; live-owner young tmp untouched; hard-aged survives PID-reuse; foreign files never listed/swept; sweep failure never blocks the write"
+    recorded_at: "2026-09-04T01:02:20.609Z"
