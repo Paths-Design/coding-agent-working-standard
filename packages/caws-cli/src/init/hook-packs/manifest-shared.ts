@@ -343,7 +343,11 @@ import { isAdapterCoveredSurface } from './types';
 // lifecycle-command CWD reroot and no longer pipelines, suppresses, or follows
 // a governed command with a successful command; scan-secrets.sh emits the
 // PreToolUse event it actually runs under.
-export const SHARED_PACK_VERSION = 55;
+// v56 (CAWS-HOOK-GENERATED-FILE-IDEMPOTENCE-001): the generated surface
+// registry projection now carries a managed generated-authority header, and the
+// installer migrates only the byte-exact legacy headerless projection. Local or
+// unrelated headerless content remains preserved as an unmanaged collision.
+export const SHARED_PACK_VERSION = 56;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
