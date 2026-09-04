@@ -45,6 +45,13 @@ invariants:
     files in .caws/leases/ (age-named, repair = automatic next-write
     sweep or manual removal), so the class is observable in every repo
     instead of discovered by inspection.
+non_functional:
+  reliability:
+    - >-
+      The lease plane, already load-ignoring for tmp files, gains
+      self-healing (sweep on next write) and observability (doctor
+      finding) so a crash mid-rename degrades to a stale-file warning
+      instead of permanent litter.
 acceptance:
   - id: A1
     given: 'a leases directory containing a stranded <lease>.tmp.<pid>.<counter> file from a dead PID'
