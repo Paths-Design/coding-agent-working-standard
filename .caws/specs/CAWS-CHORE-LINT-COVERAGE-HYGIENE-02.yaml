@@ -8,21 +8,25 @@ updated_at: '2026-09-04T05:01:08.584Z'
 created_by_session: 'sess_c8430a4f-4c06-461c-9769-c3bcd6ca83a6'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli/tests/kernel/telemetry-turn-log-schema.test.ts'
+    - 'eslint.config.js (repo root)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/tests/kernel/**
     - eslint.config.js
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The kernel turn-log schema contract test asserts the same pins and fixtures with zero eslint-disable/@ts-ignore suppressions and zero explicit any; fixture mutation semantics (delete context.session_id, wrong-typed status/turn/schema_version) still compile under tsconfig.kernel-test.json strictness.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'telemetry-turn-log-schema.test.ts with the fixture interface widened to unknown and payload typed unknown'
+    when: 'npx tsc -p tsconfig.kernel-test.json and npx eslint over tests/kernel run'
+    then: 'both pass with no @typescript-eslint/no-explicit-any disable comments remaining in the file'
+  - id: A2
+    given: 'the repo-root eslint.config.js matches *.mjs and *.cjs files'
+    when: 'npx eslint . runs from the repo root'
+    then: 'root-level scripts/*.mjs tooling is actually rule-covered (not vacuously skipped) and reports zero errors'
 non_functional: {}
 contracts: []
