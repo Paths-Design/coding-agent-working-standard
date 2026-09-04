@@ -50,3 +50,25 @@ contracts:
   - name: 'codex-pretool-runtime'
     type: contract-test
     path: 'packages/caws-cli/tests/hooks/bats/quiet-merge.bats'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: quiet-merge BATS executes merge and destroy rewrites against exit 23 and preserves both streams
+    recorded_at: "2026-09-04T17:43:41.772Z"
+    command: npx bats tests/hooks/bats/quiet-merge.bats
+    exit_code: 0
+    commit_sha: "4370b303dcf30c24dd0ba1be29ea0ee3e432de87"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Codex secret-scan fixture parses hookSpecificOutput, asserts PreToolUse, and rejects secret-value echo"
+    recorded_at: "2026-09-04T17:43:54.717Z"
+    command: npx bats tests/hooks/bats/scan-secrets.bats
+    exit_code: 0
+    commit_sha: "4370b303dcf30c24dd0ba1be29ea0ee3e432de87"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: shared pack version 55 fingerprint and focused render integrity suites pass
+    recorded_at: "2026-09-04T17:43:55.278Z"
+    command: npx jest tests/init/pack-fingerprint.test.js tests/init/init-hook-pack-render.test.js --runInBand
+    exit_code: 0
+    commit_sha: "4370b303dcf30c24dd0ba1be29ea0ee3e432de87"
