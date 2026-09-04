@@ -49,3 +49,16 @@ contracts:
   - name: 'generated-projection-reinstall'
     type: contract-test
     path: 'packages/caws-cli/tests/init/init-hook-pack-render.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "29f988af; exact legacy migration test plus canonical read-only init plan reports surfaces-registry.sh updated/restampOnly"
+    recorded_at: "2026-09-04T17:58:30.995Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "29f988af; init test enumerates all SHARED_PACK destinations and proves byte-identical unchanged reinstall"
+    recorded_at: "2026-09-04T17:58:31.545Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "29f988af; generated header parse test plus shared pack v56 fingerprint guard; 190 init assertions pass"
+    recorded_at: "2026-09-04T17:58:31.955Z"
