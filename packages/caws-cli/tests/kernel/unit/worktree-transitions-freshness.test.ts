@@ -34,7 +34,9 @@ function transitionDecision(registryValue: WorktreeRegistry, transition: SpecTra
   // inside the active test so mutations to that initializer are observable;
   // a top-level import leaves those mutants outside Jest's test lifecycle.
   jest.resetModules();
-  const transitions = require('../../../src/kernel/worktree/transitions') as typeof import('../../../src/kernel/worktree/transitions');
+  const transitions = jest.requireActual<typeof import('../../../src/kernel/worktree/transitions')>(
+    '../../../src/kernel/worktree/transitions'
+  );
   return transitions.canTransitionSpecWithWorktree(spec, registryValue, transition);
 }
 
