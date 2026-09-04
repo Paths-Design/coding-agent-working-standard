@@ -36,6 +36,21 @@
       "type": "string",
       "pattern": "^[0-9a-f]{40}$",
       "description": "Base branch tip before the merge advanced it (the first parent of merge_commit). Optional; absent on events written before CAWS-PREPUSH-PROVENANCE-REWORK-001."
+    },
+    "canonical_checkout_state": {
+      "type": "string",
+      "enum": ["in_sync", "stale"],
+      "description": "Whether the canonical checkout's index and working tree were safely advanced after the base ref moved. Optional for events written before CAWS-DEFECT-MERGE-STALE-CANONICAL-INDEX-001."
+    },
+    "canonical_checkout_sync_error": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Git's refusal when the safe canonical checkout refresh could not be applied. Present only when canonical_checkout_state is stale."
+    },
+    "canonical_checkout_repair_command": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The exact two-tree read-tree command that retries the refused canonical checkout transition after local changes are preserved."
     }
   }
 }

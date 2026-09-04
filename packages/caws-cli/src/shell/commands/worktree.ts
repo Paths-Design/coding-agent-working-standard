@@ -755,6 +755,19 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
         `  If that range is empty the branch is safe to delete: git branch -d ${branchName}`
     );
   }
+  // CAWS-DEFECT-MERGE-STALE-CANONICAL-INDEX-001: advancing the base ref is
+  // durable even when Git refuses to refresh a dirty canonical checkout. The
+  // merge still exits 0, but the split state must be loud and actionable so a
+  // later commit cannot unknowingly record the old index as a rollback.
+  if (outcome.data?.canonical_checkout_state === 'stale') {
+    err(
+      `warning: merge completed but the canonical checkout is STALE.\n` +
+        `  Git refused the safe refresh: ${String(outcome.data?.canonical_checkout_sync_error)}\n` +
+        `  Preserve or commit the local changes first, then refresh the exact merged transition:\n` +
+        `    ${String(outcome.data?.canonical_checkout_repair_command)}\n` +
+        `  Do not commit from the canonical checkout until git status no longer shows merged paths as staged reversions.`
+    );
+  }
   // CAWS-FEAT-WORKTREE-MERGE-CLOSURE-NOTES-FLAG-01: when --closure-notes was
   // supplied but the bound spec was ALREADY closed (pre-closed via
   // `caws specs close`), the merge's already-closed fast path skipped closeSpec
