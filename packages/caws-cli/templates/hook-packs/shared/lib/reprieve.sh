@@ -59,6 +59,22 @@ _CAWS_REPRIEVE_SH_LOADED=1
 # Creates the dir if missing (mkdir -p is idempotent; a read consult that has to
 # create the dir is harmless — the file simply won't exist in it).
 caws_reprieve_state_dir() {
+  # CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A6: reprieve state is SESSION-GLOBAL
+  # in the global home. Legacy repo-local reprieve files are read for
+  # continuity by the session-keyed fallback below, never written again.
+  local _sid="${CAWS_SESSION_ID:-${HOOK_SESSION_ID:-}}"
+  if [[ -n "$_sid" && "$_sid" != "unknown" ]]; then
+    local _safe_sid
+    _safe_sid=$(printf '%s' "$_sid" | tr -c 'A-Za-z0-9._-' '_')
+    mkdir -p "${HOME:-/tmp}/.caws/state/sessions/${_safe_sid}"
+    printf '%s/.caws/state/sessions/%s\n' "${HOME:-/tmp}" "$_safe_sid"
+    return 0
+  fi
+  # Unresolved session: fall through to the legacy repo-local resolution.
+  _caws_legacy_reprieve_state_dir
+}
+
+_caws_legacy_reprieve_state_dir() {
   # CAWS-LATCH-CANONICAL-STATE-DIR-001: delegate to the shared canonical-root
   # walk in lib/caws-state.sh (caws_canonical_state_dir) instead of inlining an
   # equivalent walk here. The helper reproduces this function's exact semantics

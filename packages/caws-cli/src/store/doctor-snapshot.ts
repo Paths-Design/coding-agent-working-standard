@@ -20,6 +20,7 @@
 
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { resolveGitBinary } from './git-binary';
 
@@ -302,6 +303,24 @@ function observeFilesystem(
     // CAWS-HARNESS-TELEMETRY-ADAPTER-001: observe managed telemetry rows and
     // installed adapter-pack surfaces so doctor can flag stale dual-writers.
     managedTelemetryRowPaths: observeManagedTelemetryRows(repoRoot),
+    // CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A4: the machine global home.
+    globalHomeObservation: ((): {
+      stampPresent: boolean;
+      entries: readonly string[];
+    } => {
+      const home = os.homedir();
+      const root = path.join(home, '.caws');
+      let entries: string[] = [];
+      try {
+        entries = fs.readdirSync(root);
+      } catch {
+        return { stampPresent: false, entries: [] };
+      }
+      return {
+        stampPresent: fs.existsSync(path.join(root, 'state', 'global-home.json')),
+        entries,
+      };
+    })(),
     adapterPackSurfaceMarkers: observeAdapterPackSurfaceMarkers(repoRoot),
     // CAWS-DEFECT-LEASE-TMP-STRANDING-01: stranded atomic-write tmps in the
     // leases dir, observed through the atomic-write lister itself (the same

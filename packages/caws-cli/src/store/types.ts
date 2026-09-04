@@ -189,6 +189,11 @@ export interface StoreSnapshot {
     readonly installedSharedPackVersion?: number;
     readonly shippingSharedPackVersion?: number;
     /** CAWS-DEFECT-LEASE-TMP-STRANDING-01: stranded lease tmp files. */
+    /** CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A4: global home observation. */
+    readonly globalHomeObservation?: {
+      readonly stampPresent: boolean;
+      readonly entries: readonly string[];
+    };
     readonly strandedLeaseTmpFiles?: readonly {
       readonly name: string;
       readonly ageMs: number;

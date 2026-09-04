@@ -7,12 +7,18 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const target = join(here, '..', 'src', 'init', 'hook-packs', 'surfaces.generated.ts');
-const before = readFileSync(target, 'utf8');
+const targets = [
+  join(here, '..', 'src', 'init', 'hook-packs', 'surfaces.generated.ts'),
+  join(here, '..', 'templates', 'hook-packs', 'shared', 'lib', 'surfaces-registry.sh'),
+];
+const before = targets.map((t) => readFileSync(t, 'utf8'));
 execFileSync(process.execPath, [join(here, 'generate-surface-registry.mjs')], { stdio: 'pipe' });
-const after = readFileSync(target, 'utf8');
-if (before !== after) {
-  console.error('surface-registry drift: src/init/hook-packs/surfaces.generated.ts does not match surfaces/registry.json. Run: node scripts/generate-surface-registry.mjs');
-  process.exit(1);
+let drift = false;
+for (let i = 0; i < targets.length; i++) {
+  if (readFileSync(targets[i], 'utf8') !== before[i]) {
+    console.error(`surface-registry drift: ${targets[i]} does not match surfaces/registry.json. Run: node scripts/generate-surface-registry.mjs`);
+    drift = true;
+  }
 }
-console.log('surface registry in sync');
+if (drift) process.exit(1);
+console.log('surface registry in sync (TS + shell)');

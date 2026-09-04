@@ -1329,6 +1329,15 @@ def classify_commit_deletions(segment: str, cwd: Path | None) -> tuple[str, str]
         return None
     if "--" in commit_args and commit_args.index("--") < len(commit_args) - 1:
         return None  # explicitly path-scoped: the author named their paths
+    # CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A6: a LEADING positional token is a
+    # pathspec too — `git commit <path> -m <msg>` is path-scoped exactly like
+    # the trailing `-- <path>` form. The first token starting with '-' ends
+    # the positional region; any positional token before it means the author
+    # named their paths (git validates them; a bad path fails loudly in git,
+    # not here).
+    first_flag = next((i for i, t in enumerate(commit_args) if t.startswith('-')), len(commit_args))
+    if first_flag > 0:
+        return None  # leading pathspec(s) present: path-scoped commit
 
     remediation = (
         "inspect the staged set first (git status; git diff --cached --stat), "
