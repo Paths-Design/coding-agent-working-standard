@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 43
+# hook_pack_version: 53
 # caws_min_major: 11
 # lineage_refs: 8,11,12,16
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -188,10 +188,43 @@ fi
 
 WORK_DIR="${HOOK_CWD:-${CAWS_PROJECT_DIR:-.}}"
 PROJECT_DIR="${CAWS_PROJECT_DIR:-.}"
+PROJECT_DIR="$(cd "$PROJECT_DIR" 2>/dev/null && pwd || printf '%s\n' "$PROJECT_DIR")"
 
-FILE_WORKTREE_ROOT="$(resolve_worktree_root "$FILE_PATH" || true)"
-CWD_WORKTREE_ROOT="$(resolve_worktree_root "$HOOK_CWD" || true)"
 PROJECT_WORKTREE_ROOT="$(resolve_worktree_root "$PROJECT_DIR" || true)"
+
+# CAWS-DEFECT-SCOPE-GUARD-FOREIGN-WORKTREE-CONTAINMENT-BYPASS-01: the repository
+# this session governs is the canonical checkout — also when the session is
+# rooted inside one of that checkout's linked worktrees.
+SESSION_REPO_ROOT="$PROJECT_DIR"
+if [[ -n "$PROJECT_WORKTREE_ROOT" ]]; then
+  SESSION_REPO_ROOT="${PROJECT_WORKTREE_ROOT%/.caws/worktrees/*}"
+fi
+
+# A worktree root inferred from the target path or the hook cwd confers
+# WORK_DIR ONLY when it is a linked worktree of the repository this session
+# governs. resolve_worktree_root is a path-shape match (`/.caws/worktrees/<name>`
+# in ANY repository), so without this ownership check a write into a sibling
+# repository's worktree adopted that foreign worktree as WORK_DIR: the path went
+# worktree-relative, FOREIGN_REPO never tripped, and the guard ran THIS repo's
+# union scope evaluation against the OTHER repo's file — two cross-repo writes
+# landed on the strike ramp, the strike-3 remediation told the agent to create a
+# worktree it had already created in the right repo, and strike state was
+# written into the foreign repo's gitdir. A worktree of another repository is a
+# foreign write and takes the containment block below on the first attempt.
+owned_worktree_root() {
+  local root="${1:-}"
+  [[ -n "$root" ]] || return 0
+  # Compare like with like: PROJECT_DIR above is `cd && pwd`-normalized, so
+  # normalize the candidate the same way (falling back to the raw string when
+  # the directory does not exist) rather than string-matching a raw path.
+  root="$(cd "$root" 2>/dev/null && pwd || printf '%s\n' "$root")"
+  if [[ "$root" == "$SESSION_REPO_ROOT/.caws/worktrees/"* ]]; then
+    printf '%s\n' "$root"
+  fi
+  return 0
+}
+FILE_WORKTREE_ROOT="$(owned_worktree_root "$(resolve_worktree_root "$FILE_PATH" || true)")"
+CWD_WORKTREE_ROOT="$(owned_worktree_root "$(resolve_worktree_root "$HOOK_CWD" || true)")"
 
 if [[ -n "$FILE_WORKTREE_ROOT" ]]; then
   WORK_DIR="$FILE_WORKTREE_ROOT"
@@ -201,7 +234,6 @@ elif [[ -n "$PROJECT_WORKTREE_ROOT" ]]; then
   WORK_DIR="$PROJECT_WORKTREE_ROOT"
 fi
 
-PROJECT_DIR="$(cd "$PROJECT_DIR" 2>/dev/null && pwd || printf '%s\n' "$PROJECT_DIR")"
 WORK_DIR="$(cd "$WORK_DIR" 2>/dev/null && pwd || printf '%s\n' "$WORK_DIR")"
 WORKTREE_NAME=""
 if [[ "$WORK_DIR" =~ \/\.caws\/worktrees\/([^/]+)$ ]]; then
@@ -252,7 +284,16 @@ if [[ "$FOREIGN_REPO" == "1" ]]; then
   command -v guard_identity >/dev/null 2>&1 && _id="$(guard_identity scope-guard)"
   _note="This is a CAWS governance decision, not a harness prompt."
   command -v guard_not_harness_note >/dev/null 2>&1 && _note="$(guard_not_harness_note)"
-  emit_block "$_id: BLOCKED — '$FILE_PATH' is in a DIFFERENT repository than this session's project ($PROJECT_DIR). $_note This guard governs edits within the current repo; a session may READ sibling repos freely but must NOT WRITE into another repo from here, so it cannot silently mutate files (especially executables) outside its governing repo. There is no in-band override. To make this change: write an explicit HANDOFF for an agent rooted in that repo — state WHAT to change, WHY, and HOW (the exact edit), then have that repo's own session (or the user) apply it. Do NOT route around this via Bash (sed -i / cp / output redirect / node -e / python write) — those hit the same boundary and are a guard bypass."
+  # When the target sits inside another repository's linked worktree, say so:
+  # the agent that hits this typically CREATED that worktree (via the other
+  # repo's caws) and reads the block as a scope error to widen, not a
+  # repository boundary.
+  _foreign_wt_root="$(resolve_worktree_root "$FILE_PATH" || true)"
+  _foreign_note=""
+  if [[ -n "$_foreign_wt_root" ]]; then
+    _foreign_note=" The target is inside a linked worktree of ${_foreign_wt_root%/.caws/worktrees/*}; the session rooted in THAT repository holds write authority there, even if this session created or owns the worktree."
+  fi
+  emit_block "$_id: BLOCKED — '$FILE_PATH' is in a DIFFERENT repository than this session's project ($PROJECT_DIR).${_foreign_note} $_note This guard governs edits within the current repo; a session may READ sibling repos freely but must NOT WRITE into another repo from here, so it cannot silently mutate files (especially executables) outside its governing repo. There is no in-band override. To make this change: write an explicit HANDOFF for an agent rooted in that repo — state WHAT to change, WHY, and HOW (the exact edit), then have that repo's own session (or the user) apply it. Do NOT route around this via Bash (sed -i / cp / output redirect / node -e / python write) — those hit the same boundary and are a guard bypass."
   exit 2
 fi
 

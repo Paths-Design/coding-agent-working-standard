@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 43
+# hook_pack_version: 53
 # caws_min_major: 11
 # lineage_refs: 19
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -69,6 +69,9 @@ fi
 
 # Capture both stdout (JSON) and stderr (diagnostics). On any CLI error,
 # fall through to silent exit.
+# Fork identity passthrough (CAWS-AGENTS-FORK-IDENTITY-001): harnesses that
+# know their session kind set CAWS_SESSION_KIND / CAWS_FORKED_FROM; defaults
+# main/absent so the annotation survives without harness cooperation.
 CLI_OUT="$(
   caws_run_cli agents heartbeat \
     --session-id "$HOOK_SESSION_ID" \

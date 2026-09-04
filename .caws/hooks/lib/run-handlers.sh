@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 43
+# hook_pack_version: 53
 # caws_min_major: 11
 # lineage_refs: 8,16
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -124,6 +124,12 @@ run_handlers() {
     source "${HOOKS_DIR}/lib/session-id.sh" 2>/dev/null || true
     if declare -F resolve_caws_session_id_with_payload >/dev/null 2>&1; then
       _rh_session_id="$(resolve_caws_session_id_with_payload "${HOOK_SESSION_ID:-}")"
+    fi
+    # CAWS-DEFECT-SESSION-IDENTITY-ENV-SHADOWING-01: normalize the resolved
+    # id into the canonical env var, called DIRECTLY (not in a subshell) so
+    # the export survives and every handler + child process reads ONE var.
+    if declare -F caws_normalize_session_env >/dev/null 2>&1; then
+      caws_normalize_session_env "${_rh_session_id}" >/dev/null 2>&1 || true
     fi
   fi
   # Best-effort source the reprieve lib so the loop check is available.
