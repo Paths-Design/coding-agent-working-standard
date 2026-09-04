@@ -49,7 +49,7 @@ acceptance:
   - id: A1
     given: 'a leases directory containing a stranded <lease>.tmp.<pid>.<counter> file from a dead PID'
     when: 'the next lease write runs'
-    then: 'the stranded tmp is removed and the write completes atomically as before; a LIVE pid\'s tmp (young file, live owner) is left untouched'
+    then: 'the stranded tmp is removed and the write completes atomically as before; a live-owner tmp (young file, live PID) is left untouched'
   - id: A2
     given: 'a leases directory containing a stranded tmp'
     when: 'caws doctor runs'
