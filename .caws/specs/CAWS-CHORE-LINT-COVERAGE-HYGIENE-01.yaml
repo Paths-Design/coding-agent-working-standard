@@ -34,3 +34,8 @@ evidence:
     status: pass
     evidence_ref: "cd .caws/worktrees/wt-lint-coverage/packages/caws-cli && npx eslint . --config packages/caws-cli/eslint.config.js (broadened config incl. templates/**.ts): 2 problems, both pre-existing scripts/*.{mjs} issues pending on main; plugin.ts zero no-explicit-any, zero suppressions"
     recorded_at: "2026-09-04T03:04:54.675Z"
+  - criterion_id: A2
+    status: waived
+    evidence_ref: "No runtime test harness exists for the shipped opencode template (not compiled by any tsconfig; executed by consumer harnesses only). Behavior equivalence ensured by type-level narrowing only: same fields read, same truthiness, same precedence (obj.reason -> permissionDecisionReason -> default; advisory string check; session-id candidate order preserved)."
+    waiver_reason: "No runtime test harness exists for the shipped opencode template (not compiled by any tsconfig; executed by consumer harnesses only). Behavior equivalence ensured by type-level narrowing only: same fields read, same truthiness, same precedence (obj.reason -> permissionDecisionReason -> default; advisory string check; session-id candidate order preserved)."
+    recorded_at: "2026-09-04T03:04:55.153Z"
