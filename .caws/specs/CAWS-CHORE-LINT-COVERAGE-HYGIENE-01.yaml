@@ -29,3 +29,8 @@ acceptance:
     then: 'readDecision/extractSessionId behavior is unchanged (same fields read, same truthiness, same precedence) — verified by eslint clean pass and node --check-level syntax/type gates'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "cd .caws/worktrees/wt-lint-coverage/packages/caws-cli && npx eslint . --config packages/caws-cli/eslint.config.js (broadened config incl. templates/**.ts): 2 problems, both pre-existing scripts/*.{mjs} issues pending on main; plugin.ts zero no-explicit-any, zero suppressions"
+    recorded_at: "2026-09-04T03:04:54.675Z"
