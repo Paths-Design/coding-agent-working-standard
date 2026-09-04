@@ -67,6 +67,17 @@ invariants:
     corruption. The PID record remains the trust ANCHOR above any
     hand-edited script: spoofing it still requires owning the PID.
   - >-
+    CANONICAL MATERIALIZATION IS A GOVERNED CONCERN: governed merges
+    advance the base through the object database and never touch the
+    shared working tree, so the canonical checkout predictably lags HEAD
+    (observed twice this cycle: stale templates served a v43 pack, and
+    stale sources rebuilt the canonical dist). The global home does not
+    have this problem (no shared working tree), but the CLI gains a
+    doctor rule (doctor.canonical.working_tree_behind_head) and the
+    global-home slices must never re-derive state from a possibly-stale
+    working tree — read installed packs and templates from the built
+    dist/registry, not the checkout.
+  - >-
     LEGACY PURGE IS ARCHIVE-FIRST: the v10-era ~/.caws residue observed
     on this machine (working-spec.yaml, orphan events.jsonl, sessions/,
     specs/, state/) is archived (moved aside, recorded) — never
