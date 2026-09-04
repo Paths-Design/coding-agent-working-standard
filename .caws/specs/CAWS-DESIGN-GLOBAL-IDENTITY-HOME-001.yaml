@@ -3,6 +3,7 @@ title: 'Design: global per-harness identity home (~/.caws), surface registry, gu
 risk_tier: 3
 mode: doc
 lifecycle_state: active
+worktree: wt-global-home
 updated_at: '2026-09-04T02:40:12.178Z'
 blast_radius:
   modules:
