@@ -37,7 +37,15 @@ function policy(overrides: Partial<Policy> = {}): Policy {
 }
 
 /** A budget-raising, active, approved waiver by default; override to break each rule. */
-function waiver(overrides: Partial<Waiver> = {}): Waiver {
+// Merge-patch rather than Partial<Waiver>: the optional-chaining tests nuke a
+// default field with an explicit `undefined` (which the spread must keep
+// applying), and exactOptionalPropertyTypes omits undefined from Partial.
+type WaiverPatch = { [K in keyof Waiver]?: Waiver[K] | undefined };
+
+function waiver(overrides: WaiverPatch = {}): Waiver {
+  // The optional-chaining fixtures deliberately omit required fields (explicit
+  // `undefined` through the spread). The boundary cast records that this
+  // fixture intentionally builds non-conformant waivers the SUT must survive.
   return {
     waiver_id: 'W-1',
     status: 'active',
@@ -46,7 +54,7 @@ function waiver(overrides: Partial<Waiver> = {}): Waiver {
     expires_at: '2026-12-31T00:00:00.000Z',
     approvers: [{ name: 'reviewer' }],
     ...overrides,
-  };
+  } as Waiver;
 }
 
 describe('deriveBudget: baseline selection by tier', () => {

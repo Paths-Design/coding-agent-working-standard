@@ -61,7 +61,12 @@ function lease(
   };
 }
 
-function report(input: Partial<DoctorInput> = {}) {
+// Merge-patch rather than Partial<DoctorInput>: exactOptionalPropertyTypes
+// makes Partial reject explicitly-undefined fields, which the spread below
+// must keep applying.
+type DoctorInputPatch = { [K in keyof DoctorInput]?: DoctorInput[K] | undefined };
+
+function report(input: DoctorInputPatch = {}) {
   return inspectProjectState({
     now: NOW,
     worktrees: {},
