@@ -13,7 +13,6 @@ blast_radius:
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/src/init/hook-install.ts
     - packages/caws-cli/src/shell/commands/init.ts
     - packages/caws-cli/src/shell/render/init-hook-pack.ts
@@ -32,9 +31,21 @@ invariants:
   - 'The always-on block remains concise and self-contained; the full adapter reference is installed as .codex/CAWS.md and is not falsely described as auto-loaded.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a repository with no Codex project instruction file'
+    when: 'the Codex hook pack is planned or installed'
+    then: 'init reports and creates a root AGENTS.md carrying the concise CAWS block while the full reference lands at .codex/CAWS.md and no .codex/AGENTS.md is installed'
+  - id: A2
+    given: 'a repository with existing AGENTS.md content or a non-empty AGENTS.override.md'
+    when: 'the instruction merge runs repeatedly or upgrades its managed block'
+    then: 'it targets the file Codex actually selects, preserves every byte outside the block, and the second current-version run is byte-identical'
+  - id: A3
+    given: 'a root instruction file with malformed or duplicate CAWS block markers'
+    when: 'init plans or applies the Codex integration'
+    then: 'it returns a visible refusal and non-zero status without changing either instruction file'
+  - id: A4
+    given: 'a disposable project initialized with the Codex hook pack'
+    when: 'a fresh Codex session is launched from that project without being told where CAWS instructions live'
+    then: 'the session identifies the installed CAWS working contract from the active root instruction chain'
 observability:
   - 'Init plan and apply report the active instruction target and merge outcome.'
 rollback:
