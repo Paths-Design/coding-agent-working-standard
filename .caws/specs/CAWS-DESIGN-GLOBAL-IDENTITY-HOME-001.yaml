@@ -75,6 +75,16 @@ invariants:
     corruption. The PID record remains the trust ANCHOR above any
     hand-edited script: spoofing it still requires owning the PID.
   - >-
+    GUARD WEDGE STATE IS SESSION-GLOBAL: guard strike/reprieve state keys
+    by the RESOLVED session id and lives in the global home
+    (~/.caws/state/sessions/<session-id>/), never in repo-local vendor
+    dirs. A session wedged in one repo stays wedged in every repo — the
+    sidechain route-around (blocked in repo A, edit repo B instead) does
+    not exist. Legacy repo-local strike files are read for continuity
+    and never written again. The vendor-dir derivation (and therefore
+    the .claude-vs-.dsh state confusion this session hit) derives from
+    the surface registry, not from dispatch-time guesswork.
+  - >-
     CANONICAL MATERIALIZATION IS A GOVERNED CONCERN: governed merges
     advance the base through the object database and never touch the
     shared working tree, so the canonical checkout predictably lags HEAD
@@ -100,7 +110,11 @@ acceptance:
     given: 'the surface registry (packages/caws-cli/surfaces/registry.json)'
     when: 'the CLI builds'
     then: 'the TS AgentSurface union and the surface env/pin/trust-gated maps derive from the registry via the generator, the build fails when the committed generated file and the registry disagree, and a conformance suite pins the registry against the live manifests'
-  - id: A2b
+  - id: A6
+    given: 'a session with guard strikes recorded in one repo'
+    when: 'it attempts a blocked-class operation in a different repo on the same machine'
+    then: 'the wedge follows the session (global state), the dsh dispatch never writes .claude/logs state, and the command-safety guard accepts leading-pathspec commit forms (git commit <path> -m <msg>) without false bare-commit refusals'
+  - id: A5
     given: 'the registry generator'
     when: 'the shell resolver surface'
     then: 'the shell pin/case blocks derive from a generated shell snippet sourced by session-id.sh and agent-surface.sh (pack version bump + installed refresh follow) — the follow-on slice after A2'
