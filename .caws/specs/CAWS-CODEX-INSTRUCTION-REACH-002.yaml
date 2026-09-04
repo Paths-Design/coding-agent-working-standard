@@ -71,3 +71,7 @@ evidence:
     status: pass
     evidence_ref: "codex-instruction-merge.test.js malformed, duplicate, orphan-marker, symlink, and CLI nonzero refusal cases passed"
     recorded_at: "2026-09-04T18:19:34.746Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: fresh Codex sessions 01a06da4-64e5-7353-afb7-fac2da5f1f15 and 01a06da4-ae2e-7181-8a6e-fe9748b8263a recalled the blind CAWS contract; SessionStart audit names project AGENTS.md
+    recorded_at: "2026-09-04T18:19:39.711Z"
