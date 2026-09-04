@@ -79,3 +79,7 @@ evidence:
     status: pass
     evidence_ref: "npx jest tests/kernel/unit/doctor-installed-pack-lag.test.ts (6 pass) + e2e: worktree dist doctor fired installed_pack_version_lag against this repo (43 vs 53) before the refresh; silent after"
     recorded_at: "2026-09-04T00:21:31.494Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "caws init diff -> caws init --overwrite --force: installed rows v53, session-id.sh byte-identical to template except the init-stamped header; finding cleared; canonical templates+dist materialized from HEAD first (stale canonical working tree)"
+    recorded_at: "2026-09-04T00:21:31.989Z"
