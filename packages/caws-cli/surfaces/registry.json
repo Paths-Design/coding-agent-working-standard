@@ -1,0 +1,16 @@
+{
+  "$comment": "CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A2: the single source of truth for agent surfaces. The TS union and the surface maps in src/init/hook-packs/surfaces.generated.ts derive from this file via scripts/generate-surface-registry.mjs; the build fails when the committed generated file and this registry disagree. Adding a surface is ONE edit here. The shell pin/case derivation is the A5 follow-on. trustGated: qwen >=0.21.10 workspace-trust gate zeroes untrusted project settings; zcode >=3.3.6 strips project hooks unconditionally.",
+  "version": 1,
+  "surfaces": {
+    "claude-code": { "envVars": ["CLAUDE_SESSION_ID", "CLAUDE_CODE_SESSION_ID"], "pinVar": "CLAUDE_SESSION_ID", "trustGated": false, "hookMechanism": "shell-hooks" },
+    "codex": { "envVars": ["CODEX_THREAD_ID"], "pinVar": "CODEX_THREAD_ID", "trustGated": false, "hookMechanism": "shell-hooks" },
+    "opencode": { "envVars": [], "pinVar": null, "trustGated": false, "hookMechanism": "js-plugin" },
+    "zcode": { "envVars": [], "pinVar": null, "trustGated": true, "hookMechanism": "shell-hooks" },
+    "kimi-code": { "envVars": [], "pinVar": null, "trustGated": false, "hookMechanism": "user-toml" },
+    "qwen-code": { "envVars": ["QWEN_CODE_SESSION_ID"], "pinVar": "QWEN_CODE_SESSION_ID", "trustGated": true, "hookMechanism": "shell-hooks" },
+    "dsh": { "envVars": ["DSH_SESSION_ID"], "pinVar": "DSH_SESSION_ID", "trustGated": false, "hookMechanism": "harness-plugin" },
+    "cursor": { "envVars": ["CURSOR_TRACE_ID"], "pinVar": null, "trustGated": false, "hookMechanism": "shell-hooks" },
+    "windsurf": { "envVars": [], "pinVar": null, "trustGated": false, "hookMechanism": "shell-hooks" },
+    "none": { "envVars": [], "pinVar": null, "trustGated": false, "hookMechanism": "none", "sentinel": true }
+  }
+}

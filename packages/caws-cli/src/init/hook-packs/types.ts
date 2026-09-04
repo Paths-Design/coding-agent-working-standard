@@ -25,8 +25,22 @@
 // a pack file requires naming the entry and identifying the replacement
 // mechanism.
 
-/** Supported agent harnesses. Implemented packs: claude-code, codex, opencode, zcode, kimi-code, qwen-code. */
-export type AgentSurface = 'claude-code' | 'codex' | 'opencode' | 'zcode' | 'kimi-code' | 'qwen-code' | 'dsh' | 'cursor' | 'windsurf' | 'none';
+/**
+ * Supported agent harnesses. The union AND the surface maps derive from
+ * packages/caws-cli/surfaces/registry.json via the generator — adding a
+ * surface is one registry edit, and the build fails when this file drifts
+ * (CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A2).
+ */
+export type { AgentSurface } from './surfaces.generated';
+export {
+  AGENT_SURFACES,
+  SENTINEL_SURFACE,
+  SURFACE_ENV_VARS,
+  SURFACE_HOOK_MECHANISMS,
+  SURFACE_PIN_VARS,
+  TRUST_GATED_SURFACES,
+} from './surfaces.generated';
+import type { AgentSurface } from './surfaces.generated';
 
 /**
  * Surfaces whose turn telemetry — the session-log fold under
