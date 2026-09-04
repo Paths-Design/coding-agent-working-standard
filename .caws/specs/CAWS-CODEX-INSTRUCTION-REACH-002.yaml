@@ -58,3 +58,8 @@ contracts:
   - name: 'codex-instruction-reach'
     type: contract-test
     path: 'packages/caws-cli/tests/init/codex-instruction-merge.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: codex-instruction-merge.test.js fresh plan/install cases passed; full 234-test selected suite passed
+    recorded_at: "2026-09-04T18:19:06.099Z"
