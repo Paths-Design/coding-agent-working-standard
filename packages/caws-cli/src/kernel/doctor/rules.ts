@@ -235,6 +235,20 @@ export const DOCTOR_RULES = {
   HOOKS_STALE_TELEMETRY_PACK: 'doctor.hooks.stale_telemetry_pack',
 
   /**
+   * CAWS-DEFECT-STALE-INSTALLED-GUARD-PLANE-01: the repo's INSTALLED shared
+   * hook pack (.caws/hooks rows, stamped hook_pack_version header) lags the
+   * SHIPPING SHARED_PACK_VERSION. The hooks that enforce governance are the
+   * CLI's runtime; running a pack the shipping code no longer contains is
+   * the guard-plane equivalent of shipping stale runtime (observed live:
+   * v43 installed vs v53 shipped — including a pre-PID-anchor session-id.sh
+   * whose removed capsule tier was still enforcing). Severity: warning.
+   * Repair: `caws init diff` to inspect per-file drift, then
+   * `caws init --overwrite --force` to refresh, or `--adopt` to keep local
+   * growth. Absent/unreadable headers are unobserved (silent).
+   */
+  HOOKS_INSTALLED_PACK_VERSION_LAG: 'doctor.hooks.installed_pack_version_lag',
+
+  /**
    * CAWS-GATED-SURFACE-SCOPE-GUARD-001: a trust-gated surface (qwen-code,
    * zcode) carries CAWS hook wiring at BOTH user scope and project scope on
    * this machine. The harness merges the two additively, so every CAWS

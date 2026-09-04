@@ -251,6 +251,16 @@ export interface DoctorInput {
      * unobserved (silent).
      */
     readonly gatedProjectHookEntriesBySurface?: readonly string[];
+    /**
+     * CAWS-DEFECT-STALE-INSTALLED-GUARD-PLANE-01: the INSTALLED shared pack
+     * version (hook_pack_version header of an installed .caws/hooks row)
+     * and the SHIPPING SHARED_PACK_VERSION the store was built with. When
+     * both are present and installed < shipping, doctor fires
+     * HOOKS_INSTALLED_PACK_VERSION_LAG. Optional; either undefined =
+     * unobserved (silent).
+     */
+    readonly installedSharedPackVersion?: number;
+    readonly shippingSharedPackVersion?: number;
     readonly worktreeDirByName?: Readonly<Record<string, boolean>>;
     readonly specClaimedWorktreeDirByName?: Readonly<Record<string, boolean>>;
     /**
