@@ -25,6 +25,30 @@ const {
 const AMBIGUOUS = 'store.yaml_patch.ambiguous';
 const KEY_NOT_FOUND = 'store.yaml_patch.key_not_found';
 
+describe('quoted multiline scalar removal', () => {
+  test.each([
+    "'first\n\n  remaining: note'",
+    "'author''s first\n  final ''quote''' # owned comment",
+    '"first \\"quote\\"\n\n  final"',
+    '"first\\\n  continued"',
+  ])('removes the full value %s without reserializing neighbors', (value) => {
+    for (const sep of ['\n', '\r\n']) {
+      for (const trailing of ['', sep]) {
+        const prefix = '# preserved  ' + sep + 'id: SPEC-1' + sep;
+        const suffix = '# neighbor' + sep + 'next: kept  # exact' + trailing;
+        const source = prefix + 'closure_notes: ' + value.replace(/\n/g, sep) + sep + suffix;
+        expect(expectOk(removeTopLevelScalar(source, 'closure_notes'))).toBe(prefix + suffix);
+        expect(expectErr(setTopLevelScalar(source, 'closure_notes', 'new')).rule).toBe(AMBIGUOUS);
+      }
+    }
+  });
+
+  test.each(["'unclosed\n  more", '"unclosed\\"\n  more', "'closed' garbage", '"closed"garbage'])('refuses incomplete or ambiguous quoted value %s', (value) => {
+    const source = 'closure_notes: ' + value + '\nnext: kept\n';
+    expect(expectErr(removeTopLevelScalar(source, 'closure_notes')).rule).toBe(AMBIGUOUS);
+  });
+});
+
 /** A representative spec-like doc: comments, ordering, a block scalar, nesting. */
 const DOC = `# leading comment
 id: SPEC-1
