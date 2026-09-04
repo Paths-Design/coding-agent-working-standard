@@ -31,3 +31,8 @@ acceptance:
     then: 'root-level scripts/*.mjs tooling is actually rule-covered (not vacuously skipped) and reports zero errors'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "npx tsc -p tsconfig.kernel-test.json --noEmit: exit 0 (22 pre-existing errors across 6 kernel test files fixed); grep confirms zero eslint-disable/@ts-ignore/no-explicit-any in telemetry-turn-log-schema.test.ts; npx jest tests/kernel/unit/: 24 suites, 660 tests pass"
+    recorded_at: "2026-09-04T05:13:31.338Z"
