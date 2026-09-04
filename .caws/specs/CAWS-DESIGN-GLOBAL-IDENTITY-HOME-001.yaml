@@ -111,3 +111,8 @@ non_functional:
       the same rigor as the governed repo-local core: managed headers,
       version stamps, doctor coverage, and inert-by-default overrides.
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Archive-first migration executed: 6 legacy entries (working-spec.yaml, events.jsonl, sessions/ 2.4MB, specs/, state/, .DS_Store) moved to ~/.caws.legacy-v10-2026-09-03/ with MIGRATION-MANIFEST.json recording every path, kind, and byte count; new ~/.caws stamped with state/global-home.json (managed header hook_pack=global-home v1, verified parseable), surfaces/, lib/ scaffolded"
+    recorded_at: "2026-09-04T01:10:52.102Z"
