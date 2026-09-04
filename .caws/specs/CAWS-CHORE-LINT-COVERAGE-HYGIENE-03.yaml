@@ -25,3 +25,8 @@ acceptance:
     then: 'validate-docs.mjs and specs-migration-smoke.mjs report zero errors (no-irregular-whitespace, no-empty) without any eslint-disable comment'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "npx eslint . from wt-lint-hygiene-3/packages/caws-cli (full-coverage config): exit 0, 0 errors 0 warnings — both files clean via source fix (\\uFEFF escape; commented catch), no suppressions"
+    recorded_at: "2026-09-04T05:20:41.724Z"
