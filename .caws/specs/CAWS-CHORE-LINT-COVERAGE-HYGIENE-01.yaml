@@ -4,7 +4,7 @@ risk_tier: 3
 mode: chore
 lifecycle_state: active
 created_at: '2026-09-04T02:59:49.413Z'
-updated_at: '2026-09-04T05:28:18.395Z'
+updated_at: '2026-09-04T05:28:19.103Z'
 created_by_session: 'sess_c8430a4f-4c06-461c-9769-c3bcd6ca83a6'
 blast_radius:
   modules:
@@ -15,6 +15,7 @@ operational_rollback_slo: 5m
 scope:
   in:
     - packages/caws-cli/templates/hook-packs/**
+    - packages/caws-cli/tests/init/**
   out: []
 invariants:
   - 'Shipped template code (templates/hook-packs/**) lints clean under the package ESLint config with zero suppression comments; plugin.ts stays behavior-identical (same block/warn/context/updatedInput semantics).'
