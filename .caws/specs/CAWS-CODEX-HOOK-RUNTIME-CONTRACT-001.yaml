@@ -1,0 +1,51 @@
+id: CAWS-CODEX-HOOK-RUNTIME-CONTRACT-001
+title: 'Preserve governed hook outcomes and emit event-correct Codex context'
+risk_tier: 1
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-04T17:35:10.894Z'
+updated_at: '2026-09-04T17:35:10.894Z'
+created_by_session: '01a06d5b-3024-73b3-8ae2-67a4e79017b1'
+blast_radius:
+  modules:
+    - 'caws-cli shared hook runtime and Codex PreToolUse adapter'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/quiet-merge.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/scan-secrets.sh'
+    - 'packages/caws-cli/tests/hooks/bats/quiet-merge.bats'
+    - 'packages/caws-cli/tests/hooks/bats/scan-secrets.bats'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+  out: []
+invariants:
+  - 'A hook rewrite never suppresses a CAWS refusal, discards its diagnostics, or changes its exit status.'
+  - 'Every hookSpecificOutput envelope names the event that actually invoked the handler.'
+  - 'Any shared hook template byte change advances the shared pack version and fingerprint together.'
+acceptance:
+  - id: A1
+    given: 'a rewritten caws worktree merge or destroy command whose governed command fails'
+    when: 'the rewritten command is executed'
+    then: 'the original non-zero exit status and both stdout and stderr diagnostics are preserved without a trailing success command'
+  - id: A2
+    given: 'a secret-bearing Write or Edit request delivered through the Codex PreToolUse contract'
+    when: 'scan-secrets emits its advisory'
+    then: 'hookSpecificOutput names PreToolUse and contains bounded advisory context without echoing the secret'
+  - id: A3
+    given: 'the shared hook templates change'
+    when: 'pack integrity and focused hook tests run'
+    then: 'the shared version and fingerprint advance and the exact runtime-contract assertions pass'
+observability:
+  - 'BATS executes the emitted updatedInput command and asserts its exact status and diagnostics.'
+  - 'BATS parses hookSpecificOutput and asserts the exact hookEventName.'
+rollback:
+  - 'Revert the runtime-contract commit and reinstall the preceding shared hook pack through caws init.'
+non_functional:
+  security:
+    - 'Secret fixtures remain synthetic and emitted advice never includes the matched secret value.'
+contracts:
+  - name: 'codex-pretool-runtime'
+    type: contract-test
+    path: 'packages/caws-cli/tests/hooks/bats/quiet-merge.bats'
