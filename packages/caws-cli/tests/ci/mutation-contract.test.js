@@ -63,7 +63,7 @@ function mutationPolicy(surfaceTargets) {
         threshold: 80,
         targets: surfaceTargets.map((mutate) => ({
           source: mutate.replace(/^dist\//, 'src/').replace(/\.js$/, '.ts'),
-          mutate,
+          reportPath: mutate,
         })),
       },
     },
