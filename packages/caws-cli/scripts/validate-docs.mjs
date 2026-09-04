@@ -77,7 +77,7 @@ export const STRICT_SET = [
  */
 export function extractFrontMatter(text) {
   // Normalize CRLF and a possible UTF-8 BOM.
-  const normalized = text.replace(/^﻿/, '').replace(/\r\n/g, '\n');
+  const normalized = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
   if (!normalized.startsWith('---\n')) {
     return { present: false, raw: null };
   }
