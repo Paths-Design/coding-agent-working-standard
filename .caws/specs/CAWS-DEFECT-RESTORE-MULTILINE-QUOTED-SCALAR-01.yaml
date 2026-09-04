@@ -56,5 +56,5 @@ evidence:
     recorded_at: "2026-09-04T21:38:20.664Z"
   - criterion_id: A4
     status: pass
-    evidence_ref: "Attribution anchor e299f5b416ad4ff33fb5724b182569dce02b975d; source bf1a4580923981e6ff1995e1f1f56305b0fc20f0. npm test fourfiles94pass exit0; npm run typecheck exit0; scoped eslint exit0; five CAWS gates PASS. Doctor unchanged baseline1E/13W/6I, no load errors: unrelated old foreign cwd_gone, registry residues, inactive peer leases and hook lag; own lease registered. Jest inherited verbose config warning."
-    recorded_at: "2026-09-04T21:29:35.227Z"
+    evidence_ref: "Final clean canonical2f21dcf0379905bf16e3ba5f5eef15d533bac568: npm test four targeted files97pass exit0, /private/tmp/caws-quoted-final-tests.json SHA2562c711cb2045e98af62d3c13a26c48a91b84c6456ccabb8024edab9fd6d196364. Follow-up857a7617 typecheck/eslint exit0 and five CAWS gates PASS. Actual Sterling restore/amend/reclose/archive succeeded: corrected source c06899d25a889122ace0b813921e69706032bc7f before archive514f0cf05b, prior ignored archive preserved. Own cwd refreshed and doctor returned to baseline1E/13W/6I (unrelated historical foreign cwd and residues), no load errors."
+    recorded_at: "2026-09-04T21:46:38.459Z"
