@@ -175,3 +175,7 @@ evidence:
     status: pass
     evidence_ref: generator emits lib/surfaces-registry.sh; session-id pin + agent-surface vendor dir source it with fallbacks; installed manifest row; SHARED_PACK_VERSION 54 + fingerprint baseline; build chain verifies TS+shell sync
     recorded_at: "2026-09-04T03:09:50.309Z"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "guard-strikes/reprieve/reset-strikes global store (~/.caws/state/sessions/<sid>/), legacy folded read-only once, unresolved refused loudly; pytest test_classify_command.py (3 pass) pins leading-pathspec commits admitted + truly-bare still ask; live repro (empty-reason bridge wedge) documented as the A6 motivating case"
+    recorded_at: "2026-09-04T03:09:50.781Z"
