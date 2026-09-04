@@ -1,0 +1,38 @@
+id: CAWS-CODEX-INSTRUCTION-REACH-002
+title: 'Make CAWS instructions reachable to Codex'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-04T18:06:30.103Z'
+updated_at: '2026-09-04T18:06:30.103Z'
+created_by_session: '01a06d5b-3024-73b3-8ae2-67a4e79017b1'
+blast_radius:
+  modules:
+    - 'Codex hook-pack instruction placement and init merge reporting'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'Instruction targeting mirrors Codex discovery precedence: a non-empty root AGENTS.override.md wins; otherwise root AGENTS.md is used or created.'
+  - 'CAWS owns only its bounded marker block; all bytes outside that block are preserved exactly.'
+  - 'Malformed or duplicate CAWS markers refuse without changing either root instruction file.'
+  - 'The always-on block remains concise and self-contained; the full adapter reference is installed as .codex/CAWS.md and is not falsely described as auto-loaded.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+observability:
+  - 'Init plan and apply report the active instruction target and merge outcome.'
+rollback:
+  - 'Revert the implementation commit; existing repository instructions remain intact outside the managed block.'
+non_functional:
+  security:
+    - 'Only a bounded CAWS marker block may be inserted or replaced; malformed or duplicate markers refuse without writing.'
+contracts:
+  - name: 'codex-instruction-reach'
+    type: contract-test
+    path: 'packages/caws-cli/tests/init/codex-instruction-merge.test.js'
