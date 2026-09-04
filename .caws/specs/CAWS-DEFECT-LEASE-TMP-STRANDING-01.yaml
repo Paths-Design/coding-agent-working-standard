@@ -2,7 +2,9 @@ id: CAWS-DEFECT-LEASE-TMP-STRANDING-01
 title: 'Stranded atomic-write tmp files in lease store: sweep on write, doctor visibility'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-lease-tmp
+updated_at: '2026-09-04T00:57:56.826Z'
 blast_radius:
   modules:
     - packages/caws-cli/src/store/atomic-write.ts
