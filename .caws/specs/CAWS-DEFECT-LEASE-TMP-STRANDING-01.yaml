@@ -83,3 +83,7 @@ evidence:
     status: pass
     evidence_ref: "npx jest tests/kernel/unit/doctor-stranded-lease-tmp.test.ts (4 pass): fires with names+ages, empty/unobserved silent"
     recorded_at: "2026-09-04T01:02:21.094Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "atomic-write-sweep foreign-files test: wrong base / wrong pattern / no-counter files never listed; the doctor observer uses the same lister"
+    recorded_at: "2026-09-04T01:02:21.580Z"
