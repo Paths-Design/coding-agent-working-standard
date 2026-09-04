@@ -71,8 +71,8 @@ function findTopLevelKeyLines(
 }
 
 /** Last line of a quoted scalar, or undefined for an incomplete/ambiguous
- * span. This scans delimiters only, never reserializes YAML. Continuations
- * must remain indented so an unclosed quote cannot consume the next key. */
+ * span. This scans delimiters only, never reserializes YAML. Quoted flow
+ * scalars may continue at column zero; indentation does not end the value. */
 function quotedScalarEnd(lines: readonly string[], start: number): number | undefined {
   const first = lines[start];
   if (first === undefined) return undefined;
@@ -83,7 +83,6 @@ function quotedScalarEnd(lines: readonly string[], start: number): number | unde
   for (let row = start; row < lines.length; row++) {
     const line = lines[row];
     if (line === undefined) return undefined;
-    if (row > start && line.trim() !== '' && !line.startsWith(' ')) return undefined;
     for (let col = row === start ? quoteStart + 1 : 0; col < line.length; col++) {
       const char = line[col];
       if (quote === '"' && char === '\\') {

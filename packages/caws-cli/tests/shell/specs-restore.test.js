@@ -89,7 +89,7 @@ function runRestore(root, opts) {
 }
 
 describe('caws specs restore', () => {
-  test.each(["'first\n\n  author''s final: note'", '"first\n\n  final: note"'])('restores quoted multiline closure notes via the audited transaction: %s', (notes) => {
+  test.each(["'first\n\n  author''s final: note'", "'first\n\nUnindented paragraph: note.\n\nFinal author''s note.'", '"first\n\n  final: note"'])('restores quoted multiline closure notes via the audited transaction: %s', (notes) => {
     const { root, caws } = mkRepo();
     const id = 'RESTORE-QUOTED-001';
     const canonicalPath = path.join(caws, 'specs', `${id}.yaml`);

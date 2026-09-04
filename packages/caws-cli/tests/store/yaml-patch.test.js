@@ -28,6 +28,7 @@ const KEY_NOT_FOUND = 'store.yaml_patch.key_not_found';
 describe('quoted multiline scalar removal', () => {
   test.each([
     "'first\n\n  remaining: note'",
+    "'first\n\nUnindented historical paragraph: still quoted.\n\nLast paragraph.'",
     "'author''s first\n  final ''quote''' # owned comment",
     '"first \\"quote\\"\n\n  final"',
     '"first\\\n  continued"',
@@ -43,7 +44,7 @@ describe('quoted multiline scalar removal', () => {
     }
   });
 
-  test.each(["'unclosed\n  more", '"unclosed\\"\n  more', "'closed' garbage", '"closed"garbage'])('refuses incomplete or ambiguous quoted value %s', (value) => {
+  test.each(["'unclosed\n  more", "'unclosed\nnext: 'separate value'", '"unclosed\\"\n  more', "'closed' garbage", '"closed"garbage'])('refuses incomplete or ambiguous quoted value %s', (value) => {
     const source = 'closure_notes: ' + value + '\nnext: kept\n';
     expect(expectErr(removeTopLevelScalar(source, 'closure_notes')).rule).toBe(AMBIGUOUS);
   });
