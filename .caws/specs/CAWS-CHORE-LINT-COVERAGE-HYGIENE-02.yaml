@@ -5,7 +5,7 @@ mode: chore
 lifecycle_state: active
 worktree: wt-lint-hygiene-2
 created_at: '2026-09-04T05:01:07.988Z'
-updated_at: '2026-09-04T05:02:34.988Z'
+updated_at: '2026-09-04T05:12:21.290Z'
 created_by_session: 'sess_c8430a4f-4c06-461c-9769-c3bcd6ca83a6'
 blast_radius:
   modules:
@@ -17,6 +17,7 @@ scope:
   in:
     - packages/caws-cli/tests/kernel/**
     - eslint.config.js
+    - codemod/**
   out: []
 invariants:
   - 'The kernel turn-log schema contract test asserts the same pins and fixtures with zero eslint-disable/@ts-ignore suppressions and zero explicit any; fixture mutation semantics (delete context.session_id, wrong-typed status/turn/schema_version) still compile under tsconfig.kernel-test.json strictness.'
