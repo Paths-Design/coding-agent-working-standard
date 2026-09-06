@@ -25,8 +25,24 @@ caws_normalize_session_env "$(resolve_caws_session_id_with_payload "${HOOK_SESSI
 caws_source_lib run-handlers.sh || missing run-handlers.sh
 export CAWS_PRIOR_BASH_ENV="${BASH_ENV:-}"
 export BASH_ENV="$RUNTIME_DIR/handler-env.sh"
+[[ "$#" -gt 0 ]] || exit 0
 if [[ "$EVENT" == pre_tool_use ]]; then
   run_handlers --short-circuit-on-block "$@"
 else
-  run_handlers "$@"
+  # Preserve the legacy PostToolUse dispatcher's runtime-only disable list.
+  # Policy retains the declared list, so removing an environment override can
+  # re-enable a handler without another adoption or a policy rewrite.
+  if [[ "$EVENT" == post_tool_use ]]; then
+    HANDLERS=()
+    for handler in "$@"; do
+      case ":${CAWS_DISABLED_HANDLERS:-}:" in
+        *":${handler%% *}:"*) ;;
+        *) HANDLERS+=("$handler") ;;
+      esac
+    done
+    [[ "${#HANDLERS[@]}" -gt 0 ]] || exit 0
+    run_handlers "${HANDLERS[@]}"
+  else
+    run_handlers "$@"
+  fi
 fi

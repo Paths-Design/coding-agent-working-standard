@@ -8,11 +8,18 @@ per-vendor adapters, replacing the prior per-agent-surface duplication.
 
 `CAWS-MACHINE-ADAPTER-RUNTIME-001` adds an opt-in machine runtime above this
 project-pack layout. `caws init adapters install` installs immutable, hashed
-snapshots under `${CAWS_HOME:-~/.caws}/lib/runtimes/<digest>` and a launcher at
-`bin/caws-hook`. The active pointer is `state/adapter-runtime.json`. Updates are
-serialized and activate by atomic pointer replacement; prior snapshots remain
-available through `caws init adapters rollback`. Installation refuses modified
-runtime bytes and symlinked destinations. `--plan` performs no writes.
+snapshots under `${CAWS_HOME:-~/.caws}/lib/runtimes/<digest>` and a stable bootstrap
+at `bin/caws-hook`. The active pointer is `state/adapter-runtime.json`. The
+bootstrap verifies and loads the selected snapshot's `launcher.py`, pinning its
+digest in-process for protocol-version-1 drivers so a concurrent update cannot
+mix that driver with another snapshot's libraries. Bootstrap protocol version 1 stays fixed; runtime behavior
+evolves inside snapshots. Updates and rollbacks change only the pointer, through
+one atomic replacement under the installation lock. Installation refuses
+modified runtime bytes and symlinked destinations. Rollback verifies the previous
+snapshot and can select it even when the active snapshot is damaged, preserving
+the damaged bytes for inspection. `--plan` performs no writes.
+Rolling back to an original standalone runtime restores that driver's older
+invocation semantics; it does not add snapshot pinning to the legacy driver.
 
 An adopted project retains its executable guards and an ordered event policy at
 `.caws/hooks/adapter-policy.json`. Its native hook registration calls the machine
@@ -31,8 +38,13 @@ storage. Installing an adapter grants no project ownership.
 
 Bash handler children preload the selected parser, session resolver and emitters,
 so idempotent local library sources cannot silently reinstate a stale adapter.
-Project library growth is retained through explicit policy overrides or refused
-for review. Guard scripts, helper oracles and guard-specific state remain local;
+Effective project library growth is retained through explicit policy overrides
+or refused for review. A shared fallback shadowed by a vendor library remains
+inactive after adoption, including when only that fallback was customized.
+Native hook attributes, matchers and relative order are retained; only recognized
+transport commands are replaced. Literal environment assignments survive, and
+PostToolUse continues to honor `CAWS_DISABLED_HANDLERS` at dispatch time. Guard
+scripts, helper oracles and guard-specific state remain local;
 this release does not globally migrate every project-owned guard helper.
 
 Reprieve commands now write a session-global record under
@@ -40,6 +52,11 @@ Reprieve commands now write a session-global record under
 read-only legacy lookup in the canonical project's vendor `hooks/state` dir.
 Global presence always shadows that legacy record, even when malformed or
 expired. Revocation writes an inactive global tombstone to prevent resurrection.
+Without a surface hint, human `show` and `list` calls discover legacy records
+across known vendor directories. Multiple copies for the same session require
+`--surface` for inspection; an existing global record remains decisive regardless
+of those copies. Revocation suppresses all legacy copies through one tombstone,
+including conflicting copies. JSON mode emits one JSON object on stdout.
 Human-only granting and exact session/handler membership remain enforced.
 An old dispatcher without the consultation seam still needs adoption; a new CLI
 writing a machine record alone cannot repair that dispatcher.

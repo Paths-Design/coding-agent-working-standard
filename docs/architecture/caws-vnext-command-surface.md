@@ -452,15 +452,17 @@ code-quality checks move to hook-pack advisory surfaces until a later
 doctrine slice decides whether hook-emitted events become the target
 Option A.
 
-#Machine adapter runtime (`CAWS-MACHINE-ADAPTER-RUNTIME-001`): `caws init adapters
-install|rollback|adopt` extends the existing `init` group without adding a
+### Machine adapter runtime
+
+`CAWS-MACHINE-ADAPTER-RUNTIME-001`: `caws init adapters install|rollback|adopt`
+extends the existing `init` group without adding a
 top-level command. `install`/`rollback` manage machine snapshots; `adopt` binds a
 project's reviewed guard policy to that runtime. All support `--plan`.
 Canonical project authority stays local. Reprieve writes move to the machine
 session store, with read-only legacy fallback and revocation tombstones.
 See [the runtime contract](hook-pack-shared-core.md#machine-adapter-runtime).
 
-## Added in v11.1 (lifecycle restoration)
+### Added in v11.1 (lifecycle restoration)
 
 | Command | Purpose |
 |---|---|

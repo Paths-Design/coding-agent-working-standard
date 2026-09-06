@@ -192,6 +192,161 @@ test('failed activation preserves the previous executable runtime; conflicting i
   expect(() => rollbackMachineRuntime({ home })).toThrow(/launcher modified/);
 });
 
+function crashAtPointer(home, sources, phase) {
+  const modulePath = path.resolve(__dirname, '../../dist/init/machine-adapters');
+  return spawnSync(
+    process.execPath,
+    [
+      '-e',
+      `
+    const fs = require('node:fs');
+    const { installMachineRuntime } = require(${JSON.stringify(modulePath)});
+    const rename = fs.renameSync;
+    fs.renameSync = function(from, to) {
+      if (to !== ${JSON.stringify(path.join(home, 'state/adapter-runtime.json'))})
+        return rename.apply(this, arguments);
+      if (${JSON.stringify(phase)} === 'after') rename.apply(this, arguments);
+      process.exit(73);
+    };
+    installMachineRuntime({ home: ${JSON.stringify(home)}, templatesRoot: ${JSON.stringify(sources)} });
+  `,
+    ],
+    { encoding: 'utf8' }
+  );
+}
+
+test.each(['before', 'after'])(
+  'process termination %s activation keeps a complete runtime and permits retry and rollback',
+  (phase) => {
+    const home = path.join(root, 'home');
+    const sources = path.join(root, 'sources');
+    fs.cpSync(templatesRoot, sources, { recursive: true });
+    const driver = path.join(sources, 'runtime/caws-hook.py');
+    fs.writeFileSync(
+      driver,
+      fs
+        .readFileSync(driver, 'utf8')
+        .replace('def main():', 'def main():\n    print("DRIVER=A", file=sys.stderr)')
+    );
+    const first = installMachineRuntime({ home, templatesRoot: sources });
+    const bootstrap = fs.readFileSync(first.launcher);
+    const repo = repository('project', {
+      'guard.sh': 'echo "DIGEST=$CAWS_ADAPTER_RUNTIME_DIGEST" >&2\n',
+    });
+    fs.writeFileSync(driver, fs.readFileSync(driver, 'utf8').replace('DRIVER=A', 'DRIVER=B'));
+    const second = installMachineRuntime({ home, templatesRoot: sources, plan: true });
+    const crash = crashAtPointer(home, sources, phase);
+    expect(crash.status).toBe(73);
+    expect(fs.existsSync(path.join(home, 'state/adapter-install.lock'))).toBe(true);
+    const active = invoke(home, repo);
+    expect(active.status).toBe(0);
+    expect(active.stderr).toContain(phase === 'before' ? 'DRIVER=A' : 'DRIVER=B');
+    expect(active.stderr).toContain(`DIGEST=${phase === 'before' ? first.digest : second.digest}`);
+    expect(fs.readFileSync(first.launcher)).toEqual(bootstrap);
+    // An operator has inspected the interrupted install. Clearing this fixture
+    // lock must be sufficient; no executable or pointer repair is necessary.
+    fs.rmdirSync(path.join(home, 'state/adapter-install.lock'));
+    installMachineRuntime({ home, templatesRoot: sources });
+    expect(invoke(home, repo).stderr).toContain('DRIVER=B');
+    rollbackMachineRuntime({ home, templatesRoot: sources });
+    const restored = invoke(home, repo);
+    expect(restored.status).toBe(0);
+    expect(restored.stderr).toContain('DRIVER=A');
+    expect(restored.stderr).toContain(`DIGEST=${first.digest}`);
+  }
+);
+
+test('an interrupted first installation can be retried without overwriting an unmanaged launcher', () => {
+  const home = path.join(root, 'home');
+  const crash = crashAtPointer(home, templatesRoot, 'before');
+  expect(crash.status).toBe(73);
+  const repo = repository('project', { 'guard.sh': 'echo ready >&2\n' });
+  expect(invoke(home, repo).status).toBe(2);
+  fs.rmdirSync(path.join(home, 'state/adapter-install.lock'));
+  const completed = installMachineRuntime({ home, templatesRoot });
+  expect(completed.changed).toBe(true);
+  const active = invoke(home, repo);
+  expect(active.status).toBe(0);
+  expect(active.stderr).toContain('ready');
+});
+
+test('rollback selects a verified previous snapshot even when the active snapshot is corrupt', () => {
+  const home = path.join(root, 'home');
+  const sources = path.join(root, 'sources');
+  fs.cpSync(templatesRoot, sources, { recursive: true });
+  const first = installMachineRuntime({ home, templatesRoot: sources });
+  fs.appendFileSync(path.join(sources, 'runtime/caws-hook.py'), '\n# next runtime\n');
+  const second = installMachineRuntime({ home, templatesRoot: sources });
+  const corrupt = path.join(home, 'lib/runtimes', second.digest, 'lib/emit.sh');
+  fs.appendFileSync(corrupt, '\n# damaged active file\n');
+  const preserved = fs.readFileSync(corrupt);
+  const repo = repository('project', { 'guard.sh': 'echo healthy >&2\n' });
+  expect(invoke(home, repo).status).toBe(2);
+  expect(rollbackMachineRuntime({ home, templatesRoot: sources, plan: true }).digest).toBe(
+    first.digest
+  );
+  expect(invoke(home, repo).status).toBe(2);
+  rollbackMachineRuntime({ home, templatesRoot: sources });
+  expect(invoke(home, repo).status).toBe(0);
+  expect(fs.readFileSync(corrupt)).toEqual(preserved);
+});
+
+test('an invocation keeps its selected driver and libraries when activation races with driver loading', () => {
+  const home = path.join(root, 'home');
+  const sources = path.join(root, 'sources');
+  fs.cpSync(templatesRoot, sources, { recursive: true });
+  const first = installMachineRuntime({ home, templatesRoot: sources });
+  const pointer = path.join(home, 'state/adapter-runtime.json');
+  const oldPointer = fs.readFileSync(pointer);
+  fs.appendFileSync(
+    path.join(sources, 'shared/lib/session-id.sh'),
+    '\nexport CAWS_FIXTURE_REVISION=updated\n'
+  );
+  const second = installMachineRuntime({ home, templatesRoot: sources });
+  const nextPointer = fs.readFileSync(pointer, 'utf8');
+  fs.writeFileSync(pointer, oldPointer);
+  const repo = repository('project', {
+    'guard.sh': 'echo "$CAWS_ADAPTER_RUNTIME_DIGEST ${CAWS_FIXTURE_REVISION:-original}" >&2\n',
+  });
+  const raced = spawnSync(
+    'python3',
+    [
+      '-c',
+      `
+import runpy, sys
+from pathlib import Path
+original = runpy.run_path
+def activate_during_load(filename, *args, **kwargs):
+    if filename.endswith('/launcher.py'):
+        Path(sys.argv[3]).write_text(sys.argv[4])
+        sys.argv = [sys.argv[0], 'codex', 'pre_tool_use']
+    return original(filename, *args, **kwargs)
+runpy.run_path = activate_during_load
+original(sys.argv[1], run_name='__main__')
+`,
+      first.launcher,
+      repo,
+      pointer,
+      nextPointer,
+    ],
+    {
+      cwd: repo,
+      encoding: 'utf8',
+      env: { ...process.env, CAWS_HOME: home, CAWS_PROJECT_DIR: repo },
+      input: JSON.stringify({
+        cwd: repo,
+        session_id: 'race-fixture',
+        tool_name: 'Bash',
+        tool_input: { command: 'true' },
+      }),
+    }
+  );
+  expect(raced.status).toBe(0);
+  expect(raced.stderr).toContain(`${first.digest} original`);
+  expect(JSON.parse(fs.readFileSync(pointer)).digest).toBe(second.digest);
+  expect(invoke(home, repo).stderr).toContain(`${second.digest} updated`);
+});
+
 test('quiet outside governed repositories; traversal, symlink policies and missing runtimes fail before guard execution', () => {
   const home = path.join(root, 'home');
   installMachineRuntime({ home });

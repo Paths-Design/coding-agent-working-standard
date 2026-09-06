@@ -49,9 +49,15 @@ def main():
     home = Path(os.environ.get('CAWS_HOME', str(Path.home() / '.caws')))
     if not home.is_absolute():
         raise ValueError('CAWS_HOME must be absolute')
-    pointer = json.loads(confined(home, 'state/adapter-runtime.json').read_bytes())
-    identity = pointer.get('digest')
-    if pointer.get('version') != 1 or not isinstance(identity, str) or not re.fullmatch('[a-f0-9]{64}', identity):
+    # The stable bootstrap pins its selection in-process, not in an inherited
+    # environment variable. Retain standalone invocation for the legacy layout.
+    identity = globals().get('_CAWS_RUNTIME_DIGEST')
+    if identity is None:
+        pointer = json.loads(confined(home, 'state/adapter-runtime.json').read_bytes())
+        if pointer.get('version') != 1:
+            raise ValueError('Malformed machine runtime pointer')
+        identity = pointer.get('digest')
+    if not isinstance(identity, str) or not re.fullmatch('[a-f0-9]{64}', identity):
         raise ValueError('Malformed machine runtime pointer')
     runtime = confined(home, f'lib/runtimes/{identity}')
     manifest_bytes = confined(runtime, 'manifest.json').read_bytes()
@@ -115,6 +121,8 @@ def main():
     if not isinstance(libraries, dict):
         raise ValueError('Libraries must be a path map')
     for name, relative in libraries.items():
+        if name in {'agent-surface.sh', 'runtime-paths.sh'}:
+            raise ValueError(f'Bootstrap library cannot be overridden: {name}')
         if not re.fullmatch(r'[A-Za-z0-9_.-]+', name) or not confined(canonical, relative).is_file():
             raise ValueError(f'Invalid project library: {name}')
     user_lib = confined(home, f'surfaces/{surface}/lib')
