@@ -111,11 +111,11 @@ evidence:
     artifact_path: tmp/machine-adapter-review-2026-09-06/adjudication.json
     commit_sha: "3b840a2e"
   - criterion_id: A3
-    status: pass
-    evidence_ref: "packages/caws-cli/tests/adapter/machine-adoption.test.js: literal custom handler order, unrelated hooks, explicit policy, growth preservation and duplicate/bootstrap refusal"
-    recorded_at: "2026-09-06T21:32:17.101Z"
-    artifact_path: tmp/machine-adapter-runtime-2026-09-06/README.md
-    commit_sha: "2658b1b3"
+    status: fail
+    evidence_ref: Review reproduced emitter precedence and native matcher/environment preservation regressions
+    recorded_at: "2026-09-06T22:35:20.978Z"
+    artifact_path: tmp/machine-adapter-review-2026-09-06/adjudication.json
+    commit_sha: "3b840a2e"
   - criterion_id: A4
     status: pass
     evidence_ref: "packages/caws-cli/tests/adapter/runtime-context.test.js: real CLI-bound linked worktree and real ownership guard; owner admitted, foreign session refused despite conflicting identity and Git variables"
