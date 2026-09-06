@@ -146,3 +146,7 @@ evidence:
     recorded_at: "2026-09-06T21:32:19.330Z"
     artifact_path: tmp/machine-adapter-runtime-2026-09-06/README.md
     commit_sha: "2658b1b3"
+  - criterion_id: A9
+    status: unchecked
+    evidence_ref: Machine install rejected by automatic approval review; requires explicit global-install approval followed by fresh native activation. See tmp/machine-adapter-runtime-2026-09-06/install-plan.json
+    recorded_at: "2026-09-06T21:32:19.780Z"
