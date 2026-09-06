@@ -1,0 +1,29 @@
+id: CAWS-DEFECT-BASH-WRITE-GUARD-CROSS-REPO-01
+title: 'Close the Bash-mediated cross-repo write hole in the shared guard pack'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-06T03:02:55.800Z'
+updated_at: '2026-09-06T03:02:55.800Z'
+created_by_session: 'session-a040cb04-424d-41ba-9922-df97fcd66394'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'bash-guard-cross-repo-boundary'
+    type: behavior
+    path: 'packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh'
