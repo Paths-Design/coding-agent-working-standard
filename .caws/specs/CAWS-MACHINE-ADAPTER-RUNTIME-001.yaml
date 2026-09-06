@@ -129,11 +129,11 @@ evidence:
     artifact_path: tmp/machine-adapter-runtime-2026-09-06/README.md
     commit_sha: "2658b1b3"
   - criterion_id: A6
-    status: pass
-    evidence_ref: "packages/caws-cli/tests/adapter/reprieve-roundtrip.test.js and reprieve.bats: expired/malformed/wrong-session and revoked records stay inactive; legacy fallback and pure reads"
-    recorded_at: "2026-09-06T21:32:18.439Z"
-    artifact_path: tmp/machine-adapter-runtime-2026-09-06/README.md
-    commit_sha: "2658b1b3"
+    status: fail
+    evidence_ref: Human legacy show/list report absence while actual shell reader honors the grant
+    recorded_at: "2026-09-06T22:35:21.454Z"
+    artifact_path: tmp/machine-adapter-review-2026-09-06/legacy-results.json
+    commit_sha: "3b840a2e"
   - criterion_id: A7
     status: pass
     evidence_ref: "packages/caws-cli/tests/shell/reprieve-no-self-grant.test.js and packages/caws-cli/tests/adapter/reprieve-roundtrip.test.js: registry variable union including DSH and Qwen refuses before state writes"
