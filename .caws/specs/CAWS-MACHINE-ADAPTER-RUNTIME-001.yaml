@@ -128,11 +128,11 @@ evidence:
     artifact_path: tmp/machine-adapter-fixes-2026-09-06/README.md
     commit_sha: "58d6bb767d1aa9984f92b29babf221ff5f5d3e65"
   - criterion_id: A6
-    status: fail
-    evidence_ref: Human legacy show/list report absence while actual shell reader honors the grant
-    recorded_at: "2026-09-06T22:35:21.454Z"
-    artifact_path: tmp/machine-adapter-review-2026-09-06/legacy-results.json
-    commit_sha: "3b840a2e"
+    status: pass
+    evidence_ref: "Current reprieve-roundtrip suite: human legacy show/list agrees with dispatcher, ambiguity is explicit, global shadowing and revocation prevent fallback resurrection; absent revoke stdout is valid JSON"
+    recorded_at: "2026-09-06T23:21:45.721Z"
+    artifact_path: tmp/machine-adapter-fixes-2026-09-06/README.md
+    commit_sha: "58d6bb767d1aa9984f92b29babf221ff5f5d3e65"
   - criterion_id: A7
     status: pass
     evidence_ref: "packages/caws-cli/tests/shell/reprieve-no-self-grant.test.js and packages/caws-cli/tests/adapter/reprieve-roundtrip.test.js: registry variable union including DSH and Qwen refuses before state writes"
