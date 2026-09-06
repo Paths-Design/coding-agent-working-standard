@@ -146,8 +146,8 @@ evidence:
     artifact_path: tmp/machine-adapter-install-2026-09-06/denial-native-activation-result.json
     commit_sha: "3271aba3"
   - criterion_id: A9
-    status: unchecked
-    evidence_ref: "Fixes landed and fixture checks pass. Fresh read-only installation plan preserved; real machine installation still requires explicit deployment approval after the earlier automatic approval review rejection, followed by fresh native Codex activation evidence."
-    recorded_at: "2026-09-06T23:22:48.012Z"
-    artifact_path: tmp/machine-adapter-fixes-2026-09-06/install-plan.json
-    commit_sha: "58d6bb767d1aa9984f92b29babf221ff5f5d3e65"
+    status: pass
+    evidence_ref: "Installed machine runtime f246a6c4 verified in fresh Codex 0.153.4; native output carries runtime digest, exact-session human-authorized cwd-guard skip and independent scope denial; no probe file created; SessionStart and Stop complete; test reprieve revoked afterwards"
+    recorded_at: "2026-09-06T23:53:23.376Z"
+    artifact_path: tmp/machine-adapter-install-2026-09-06/reprieve-native-activation-result.json
+    commit_sha: "3271aba3"
