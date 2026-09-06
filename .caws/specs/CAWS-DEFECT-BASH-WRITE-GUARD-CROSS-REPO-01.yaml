@@ -8,22 +8,47 @@ updated_at: '2026-09-06T03:02:55.800Z'
 created_by_session: 'session-a040cb04-424d-41ba-9922-df97fcd66394'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli (templates/hook-packs/shared + tests/hooks)
+    - .caws/hooks (self-hosted guard plane refresh)
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh
+    - packages/caws-cli/templates/hook-packs/shared/scope-guard.sh
+    - packages/caws-cli/tests/hooks/bash-write-guard-interpreter-cross-repo.test.js
+    - .caws/hooks/bash-write-guard.sh
+    - .caws/hooks/scope-guard.sh
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A Bash mutation whose target resolves inside a DIFFERENT git repository blocks at the same boundary as a foreign Write/Edit — for targets named on the command line (sed -i, cp, mv, rm, tee, redirects, git path-restore) and for interpreter-mediated writes (python/node) whose payload names the target as a path literal (inline -c/-e code, heredoc bodies, or the named script file content).'
+  - 'Bash reads of sibling repos (no write verb) and writes outside any git repository (/tmp scratch) remain permitted.'
+  - 'The scope-guard cross-repo refusal message names only the boundaries bash-write-guard actually enforces, and states the residual interpreter gap honestly instead of claiming it is closed.'
+  - 'Existing bash-write-guard behavior is unchanged everywhere else: allowlist priority, claim-oracle escalation, caws-message exemption, fd-redirect and quoted-argument handling.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a session rooted in a CAWS project with the shared guard pack active'
+    when: 'Bash runs `python3 <script>.py` where the script writes a path inside a sibling git repository (path present as a literal, e.g. Path.home() / "..." or an absolute path)'
+    then: 'bash-write-guard blocks with the cross-repo message and exits 2'
+  - id: A2
+    given: 'the same session'
+    when: 'a Bash interpreter invocation writes only in-project paths or paths outside any git repository (/tmp)'
+    then: 'the command is permitted (exit 0)'
+  - id: A3
+    given: 'the same session'
+    when: 'Bash runs `sed -i` into a sibling repo path, or `node -e "writeFileSync(<sibling path>, ...)"`, or a python heredoc whose body writes a sibling path'
+    then: 'each is blocked at the same cross-repo boundary (exit 2)'
+  - id: A4
+    given: 'a Write/Edit to a sibling repo is refused by scope-guard'
+    when: 'the refusal text describes the Bash boundary'
+    then: 'it names the exact mutation forms bash-write-guard adjudicates and does not claim interpreter writes are caught when they are not'
+  - id: A5
+    given: 'the same session'
+    when: 'an interpreter invocation only READS a sibling repo path (no write verb, e.g. open(<sibling>).read())'
+    then: 'the command is permitted (exit 0)'
 non_functional: {}
 contracts:
   - name: 'bash-guard-cross-repo-boundary'
     type: behavior
     path: 'packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh'
+    description: 'Bash mutation targets that resolve inside a different git repository block with exit 2 and a DIFFERENT-repository message, for command-line-named and interpreter-payload targets alike.'
