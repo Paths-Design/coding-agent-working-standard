@@ -51,6 +51,7 @@ invariants:
   - 'Reprieve grant, show, revoke, list and shell consultation agree on session identity and record location. Preserve human-only granting, exact session and handler membership, expiry, and revocation. A global revocation must not resurrect a legacy project-local grant through fallback.'
   - 'A current process still using an old dispatcher is not upgraded by changing files alone when the harness caches registration. Report required restart and verify activation from a fresh harness invocation. Do not weaken or reroute a currently blocking guard to make this rollout proceed.'
   - 'Keep existing foreign-owned lanes and unrelated dirty files untouched. Do not push the current accumulated main backlog as an incidental part of this slice. Record code landing, machine installation, harness activation, and live parity as separate evidence.'
+  - 'User-directed continuation on 2026-09-06: land the root-level harness adapter requested in session 43d310b9-8ebf-4da4-87ea-1a6fd4c08a1f. User explicitly authorized this continuation and issued the current Codex guard reprieve for finishing agent registry and harness work. The reprieve remains separate from project ownership and gate evidence.'
 acceptance:
   - id: A1
     given: 'two adopted fixture repositories with distinct custom guard sets'
