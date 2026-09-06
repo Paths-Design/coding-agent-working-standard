@@ -104,11 +104,11 @@ evidence:
     artifact_path: tmp/machine-adapter-fixes-2026-09-06/README.md
     commit_sha: "58d6bb767d1aa9984f92b29babf221ff5f5d3e65"
   - criterion_id: A2
-    status: fail
-    evidence_ref: Review reproduced interrupted activation leaving mixed launcher/pointer and refusing install and rollback
-    recorded_at: "2026-09-06T22:35:20.494Z"
-    artifact_path: tmp/machine-adapter-review-2026-09-06/adjudication.json
-    commit_sha: "3b840a2e"
+    status: pass
+    evidence_ref: "Current machine-runtime suite: read-only plans, idempotence, drift refusal, hard-exit retry before and after pointer activation, first-install recovery, corrupt-active rollback; saved old-version migration probe also passes"
+    recorded_at: "2026-09-06T23:21:43.950Z"
+    artifact_path: tmp/machine-adapter-fixes-2026-09-06/README.md
+    commit_sha: "58d6bb767d1aa9984f92b29babf221ff5f5d3e65"
   - criterion_id: A3
     status: fail
     evidence_ref: Review reproduced emitter precedence and native matcher/environment preservation regressions
