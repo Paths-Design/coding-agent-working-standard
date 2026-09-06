@@ -72,6 +72,7 @@ Handlers self-filter on `$HOOK_TOOL_NAME`; a non-matching tool is a cheap exit 0
 | `scope-guard.sh` | Write, Edit, Bash | Blocks edits outside the bound spec's `scope.in`; in union mode (no binding) checks all active specs. Applies progressive strikes via the `guard-strikes.sh` library. |
 | `worktree-write-guard.sh` | Write, Edit | Blocks base-branch writes when worktrees are active; refuses `<worktree>/.caws/specs/*` writes (canonical authority); routes `.caws/worktrees/<name>/*` payload writes through `lib/worktree-claim-oracle.cjs` so a foreign session's write hard-blocks. |
 | `bash-write-guard.sh` | Bash | Extracts mutation targets (redirection, `tee`, `sed -i`, `perl -pi`, `truncate`, `touch`, `rm`, `mv`, `cp`, `dd of=`, git path-restore) and routes each through the same `worktree-claim-oracle.cjs` — a Bash mutation of a foreign worktree's payload blocks at the same boundary as a foreign Write/Edit. |
+| `worktree-pin-guard.sh` | Bash | **OPT-IN** (Entry 41): pins a session whose project root is inside `.caws/worktrees/<name>` to that worktree — refuses commands whose working directory resolves outside it, blocks `git -C` / leading-`cd` git redirects to the canonical checkout or another worktree, and RELEASES the pin with an advisory when the pinned directory no longer exists (merge/destroy deleted it), so a session that merges its own worktree is never bricked. `caws worktree merge`/`destroy`/`create`/`ensure` stay reachable as the sanctioned exit/re-point verbs. |
 | `protected-paths.sh` | Write, Edit | Blocks hook **scripts** under `.claude/hooks/` (`*.sh`/`*.py`/`*.cjs`, exit 1) and strike-state `.claude/logs/guard-strikes-*.json` (exit 2). Documentation (`*.md`) under `.claude/hooks/` is admitted; every other extension stays blocked (fail-closed). |
 | `scan-secrets.sh` | Write, Edit, Bash | Advisory (exit 0): warns via `additionalContext` when a target path matches common secret-bearing patterns (`.env*`, `*.pem`, `*.key`, SSH/cloud config dirs). Does not block. |
 | `quiet-merge.sh` | Bash | Must run **last** — emits `updatedInput`. Rewrites `caws worktree merge`/`destroy` to `cd <repo-root> && <cmd> 2>/dev/null | tail -3` so the CWD survives the directory being destroyed mid-command, and trims verbose output. |
@@ -88,8 +89,10 @@ Handlers self-filter on `$HOOK_TOOL_NAME`; a non-matching tool is a cheap exit 0
 | `plan-transcript-snapshot.sh` | ExitPlanMode | Snapshots the conversation transcript next to the plan when a plan is presented; companion to `plan-transcript-finalize.sh`. |
 
 `quality-check.sh` and `validate-spec.sh` exist in the pack but are **commented
-out** of the PostToolUse handler list (opt-in). Wire them in
-`caws_dispatch/post_tool_use.sh` if you want them.
+out** of the PostToolUse handler list (opt-in), and `worktree-pin-guard.sh` is
+**commented out** of the PreToolUse handler list (opt-in — a session-level
+worktree pin is a repo policy choice; see failure-lineage Entry 41). Wire them
+in `dispatch/post_tool_use.sh` / `dispatch/pre_tool_use.sh` if you want them.
 
 ## SessionStart / Stop handlers
 
