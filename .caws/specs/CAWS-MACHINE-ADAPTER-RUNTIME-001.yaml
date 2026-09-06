@@ -140,11 +140,11 @@ evidence:
     artifact_path: tmp/machine-adapter-fixes-2026-09-06/README.md
     commit_sha: "58d6bb767d1aa9984f92b29babf221ff5f5d3e65"
   - criterion_id: A8
-    status: fail
-    evidence_ref: Fresh Codex 0.153.4 process treats exit-2 denial without stderr as hook failure and permits the controlled write; Stop rejects plain lifecycle output
-    recorded_at: "2026-09-06T23:38:06.150Z"
-    artifact_path: tmp/machine-adapter-install-2026-09-06/native-activation-result.json
-    commit_sha: "58d6bb76"
+    status: pass
+    evidence_ref: "Native Codex 0.153.4 fresh process blocks the controlled apply_patch attempt, reports installed digest f246a6c4, and completes SessionStart and Stop; 344 tests pass after native output contract repair"
+    recorded_at: "2026-09-06T23:48:53.808Z"
+    artifact_path: tmp/machine-adapter-install-2026-09-06/denial-native-activation-result.json
+    commit_sha: "3271aba3"
   - criterion_id: A9
     status: unchecked
     evidence_ref: "Fixes landed and fixture checks pass. Fresh read-only installation plan preserved; real machine installation still requires explicit deployment approval after the earlier automatic approval review rejection, followed by fresh native Codex activation evidence."
