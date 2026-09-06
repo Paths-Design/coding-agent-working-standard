@@ -134,3 +134,9 @@ evidence:
     recorded_at: "2026-09-06T21:32:18.439Z"
     artifact_path: tmp/machine-adapter-runtime-2026-09-06/README.md
     commit_sha: "2658b1b3"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "packages/caws-cli/tests/adapter/reprieve-no-self-grant.test.js and reprieve-roundtrip.test.js: registry variable union including DSH and Qwen refuses before state writes"
+    recorded_at: "2026-09-06T21:32:18.893Z"
+    artifact_path: tmp/machine-adapter-runtime-2026-09-06/README.md
+    commit_sha: "2658b1b3"
