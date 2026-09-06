@@ -99,11 +99,25 @@ caws init adapters adopt --agent-surface codex
 
 Use `claude-code` or `qwen-code` for the other supported automatic registrations.
 The plan displays complete proposed policy and native configuration bytes. It
-preserves literal handler order and unrelated native hooks. The applied migration
+preserves literal handler order, native matchers, timeouts and other hook
+attributes, and the relative order of CAWS and unrelated native hooks. Simple
+environment assignments on the old command are retained. Custom command wrappers,
+substitutions or trailing shell actions require explicit reconciliation; they
+are never executed during planning or silently discarded. The applied migration
 backs up exact old bytes in the machine home's `state/adoption-backups/` and
 rolls back its writes if application fails. It never sources shell while planning.
 Unknown dispatcher logic, conflicting roots, duplicate CAWS wiring, and
 unresolved library growth require reconciliation before adoption.
+
+The runtime owns the `agent-surface.sh` and `runtime-paths.sh` bootstrap libraries.
+Explicit policy overrides for those names are refused by both adoption and
+dispatch because those bootstrap files must load before policy overrides apply.
+
+Adoption preserves the library that actually won in the existing dispatcher.
+Editing a shared fallback does not promote it above an existing vendor library.
+The declared PostToolUse handler list is retained, including an explicitly
+re-enabled quality handler; `CAWS_DISABLED_HANDLERS` continues to filter exact
+handler basenames at invocation time.
 
 For reviewed custom dispatch logic, `--from <surface-policy.json>` accepts:
 
@@ -139,16 +153,31 @@ caws init adapters rollback --plan
 caws init adapters rollback
 ```
 
-An interrupted install leaves a visible `state/adapter-install.lock`; inspect it
-and the active pointer before removing a stale lock. Do not edit snapshot bytes.
-A missing or corrupted runtime is an explicit hook failure. Calls outside Git
-and outside CAWS projects are quiet.
+An interrupted install leaves a visible `state/adapter-install.lock`. Confirm no
+installer remains active and inspect the pointer before removing a stale lock.
+Then retry installation or rollback through the CLI; executable repair is not
+required. The stable bootstrap is unchanged by ordinary runtime updates, and
+protocol-version-1 runtime calls stay on their selected snapshot even if
+activation happens mid-call.
+An interrupted first install fails safely until retry publishes its pointer.
+The original standalone launcher layout is recognized by its verified manifest
+and upgraded to the stable bootstrap without overwriting local launcher changes.
+Rolling back to a legacy driver restores its original invocation semantics,
+including its lack of in-process snapshot pinning.
+Rollback can select a verified previous snapshot while preserving a damaged
+active snapshot. Do not edit snapshot bytes. A missing or corrupted selected
+runtime is an explicit hook failure. With a valid runtime, calls outside Git and
+outside CAWS projects are quiet.
 
 Reprieve grants now belong to the machine session store, across adopted projects.
 `--surface` identifies the target harness for operator provenance and legacy
 lookup; it does not partition new grants into vendor directories. Granting still
 requires a human shell, a target session, named handlers, reason, approver and
-expiry. `show`/`list` never create directories, and `revoke` retains an inactive
-record to suppress legacy copies. Old, unadopted dispatchers may not read new
-machine records. Verify a grant through the actual target dispatcher before
-claiming it took effect.
+expiry. Human `show`/`list` calls without a surface hint discover unambiguous
+legacy records across vendor directories. Conflicting copies for the same
+session require `--surface` for inspection; a global record always wins over
+them. `show`/`list` never create directories, and `revoke` retains an inactive
+record to suppress all legacy copies, including conflicting copies. `--json`
+emits one JSON value even when no earlier grant exists. Old, unadopted dispatchers
+may not read new machine records. Verify a grant through the actual target
+dispatcher before claiming it took effect.
