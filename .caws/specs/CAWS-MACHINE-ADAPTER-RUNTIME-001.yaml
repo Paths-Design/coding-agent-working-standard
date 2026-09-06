@@ -1,0 +1,89 @@
+id: CAWS-MACHINE-ADAPTER-RUNTIME-001
+title: 'Machine-wide harness adapter runtime with project-owned guard policy'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-09-06T20:43:45.205Z'
+updated_at: '2026-09-06T20:43:45.205Z'
+created_by_session: '01a07868-9878-7e72-bcd9-a6af25f92820'
+blast_radius:
+  modules:
+    - 'Machine adapter installation and runtime loading'
+    - 'Shared hook dispatch and per-harness adapters'
+    - 'Session identity and reprieve writer-reader contract'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/adapter'
+    - 'packages/caws-cli/src/init'
+    - 'packages/caws-cli/src/shell/commands/init.ts'
+    - 'packages/caws-cli/src/shell/commands/reprieve.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/templates/hook-packs'
+    - 'packages/caws-cli/tests/adapter'
+    - 'packages/caws-cli/tests/init'
+    - 'packages/caws-cli/tests/shell/reprieve-command.test.js'
+    - 'packages/caws-cli/tests/shell/reprieve-surface-detection.test.js'
+    - 'packages/caws-cli/tests/shell/reprieve-no-self-grant.test.js'
+    - 'packages/caws-cli/tests/shell/reprieve-relative-expiry.test.js'
+    - 'packages/caws-cli/tests/shell/init-action-positionals.test.js'
+    - 'packages/caws-cli/tests/hooks/bats'
+    - 'docs/architecture/hook-pack-shared-core.md'
+    - 'docs/architecture/caws-vnext-command-surface.md'
+    - 'docs/guides/hook-packs.md'
+  out: []
+invariants:
+  - 'DRAFT ARCHITECTURE DECISION: the predecessor CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 explicitly keeps dispatch and guard rows repo-local. This successor proposes moving the reusable adapter and dispatch runtime to the machine home while preserving repository-owned handler selection and guards. Obtain human architecture review before activating this change; do not silently reinterpret the predecessor.'
+  - 'Canonical project specs, policy, ownership bindings, worktrees and events remain the sole project authority. Turn logs and leases remain project-local operational cache. A global adapter transports identity and events; it grants no ownership and cannot bypass a foreign claim or a guard.'
+  - 'One installation per harness provides shared adapter/runtime code under the machine home. A later adapter update reaches every adopted project without editing those projects. Older wiring that cannot reach this runtime must be identified explicitly as requiring bootstrap; absence or a directory scaffold is never reported as active adoption.'
+  - 'Project handler order, custom guards, and intentional local library growth must survive adoption. Installation plans are read-only and enumerate exact file and wiring changes. Refuse ambiguous drift, symlink escapes, partial installs, and duplicate dispatch wiring; retain rollback bytes and provenance before replacing executable wiring.'
+  - 'Reprieve grant, show, revoke, list and shell consultation agree on session identity and record location. Preserve human-only granting, exact session and handler membership, expiry, and revocation. A global revocation must not resurrect a legacy project-local grant through fallback.'
+  - 'A current process still using an old dispatcher is not upgraded by changing files alone when the harness caches registration. Report required restart and verify activation from a fresh harness invocation. Do not weaken or reroute a currently blocking guard to make this rollout proceed.'
+  - 'Keep existing foreign-owned lanes and unrelated dirty files untouched. Do not push the current accumulated main backlog as an incidental part of this slice. Record code landing, machine installation, harness activation, and live parity as separate evidence.'
+acceptance:
+  - id: A1
+    given: 'two adopted fixture repositories with distinct custom guard sets'
+    when: 'the machine adapter is updated once'
+    then: 'both load the new adapter digest without any project-file changes and continue executing their own guard sets in their declared order'
+  - id: A2
+    given: 'a fresh machine home and an existing home with local adapter changes'
+    when: 'the CLI plans and applies installation'
+    then: 'planning writes nothing, repeated installation is idempotent, local growth is preserved or refused with an exact diff, and rollback restores the prior runtime'
+  - id: A3
+    given: 'legacy project wiring and simultaneous user/project wiring'
+    when: 'adoption is planned'
+    then: 'bootstrap requirements and duplicate dispatch are diagnosed, custom handler behavior is retained, and no automatic overwrite erases unresolved growth'
+  - id: A4
+    given: 'canonical and linked worktree contexts plus conflicting foreign harness identity variables'
+    when: 'a native event crosses the machine adapter and project guard boundary'
+    then: 'the same resolved session and canonical project authority are used throughout and foreign ownership still refuses'
+  - id: A5
+    given: 'a human grant created by the actual CLI in an isolated machine home'
+    when: 'actual dispatcher invocations run from two repositories and a linked worktree'
+    then: 'only the exact session and named handler are reprieved, the skip is observable, and other sessions or handlers remain enforced'
+  - id: A6
+    given: 'expired, malformed, revoked and legacy reprieve records'
+    when: 'show, list and dispatcher consultation run'
+    then: 'they agree on active standing, read paths do not create state, and revocation cannot resurrect an older local grant'
+  - id: A7
+    given: 'agent identity from any registry-declared harness including dsh'
+    when: 'that agent attempts to grant itself a reprieve'
+    then: 'the CLI refuses before writing any global or project state'
+  - id: A8
+    given: 'supported harness adapters and a missing or corrupt runtime'
+    when: 'lifecycle and tool events are translated'
+    then: 'native output and blocking semantics are preserved, broken enforcement is diagnosed safely, and unsupported or unmeasured harness parity is stated explicitly'
+  - id: A9
+    given: 'reviewed code and an approved machine installation plan'
+    when: 'a fresh installed Codex session uses the adapter in a consumer project'
+    then: 'captured native hook output proves the selected runtime digest, expected guard refusal and authorized reprieve consultation, with restart requirements and other harness proof ceilings recorded'
+non_functional: {}
+contracts:
+  - name: 'machine-adapter-update-propagation'
+    type: behavior
+  - name: 'project-guard-policy-preservation'
+    type: behavior
+  - name: 'reprieve-writer-reader-convergence'
+    type: behavior
