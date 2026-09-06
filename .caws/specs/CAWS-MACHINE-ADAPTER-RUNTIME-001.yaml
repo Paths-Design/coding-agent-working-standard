@@ -128,3 +128,9 @@ evidence:
     recorded_at: "2026-09-06T21:32:18.000Z"
     artifact_path: tmp/machine-adapter-runtime-2026-09-06/README.md
     commit_sha: "2658b1b3"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "packages/caws-cli/tests/adapter/reprieve-roundtrip.test.js and reprieve.bats: expired/malformed/wrong-session and revoked records stay inactive; legacy fallback and pure reads"
+    recorded_at: "2026-09-06T21:32:18.439Z"
+    artifact_path: tmp/machine-adapter-runtime-2026-09-06/README.md
+    commit_sha: "2658b1b3"
