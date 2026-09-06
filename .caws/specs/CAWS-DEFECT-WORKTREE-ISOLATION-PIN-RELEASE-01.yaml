@@ -8,12 +8,12 @@ updated_at: '2026-09-06T03:05:59.388Z'
 created_by_session: 'session-dd77bd5b-d68a-46c4-b511-5de3c60e1730'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - packages/caws-cli (templates/hook-packs/shared + src/init/hook-packs + tests/hooks)
+    - docs/failure-lineage.md
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
     - packages/caws-cli/templates/hook-packs/shared/worktree-pin-guard.sh
     - packages/caws-cli/templates/hook-packs/shared/dispatch/pre_tool_use.sh
     - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
@@ -22,14 +22,97 @@ scope:
     - packages/caws-cli/templates/hook-packs/claude-code/README.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - >-
+    A session whose project root is inside .caws/worktrees/<name> is pinned to
+    that worktree: Bash whose effective working directory resolves outside it is
+    refused (exit 2) with a remediation naming the pinned directory — except the
+    governed lifecycle commands caws worktree merge / destroy (the sanctioned
+    exits, which quiet-merge reroots to the repo root) and caws worktree create /
+    ensure (the re-point affordance).
+  - >-
+    RELEASE-ON-MISSING-DIRECTORY: when the pinned worktree directory no longer
+    exists (merge/destroy deleted it), the pin RELEASES for the rest of the
+    session — every subsequent Bash call is admitted with a loud advisory naming
+    the destroyed worktree and the re-point path. The bricked-session class (a
+    pin that outlives its directory and refuses everything, including pwd and
+    caws worktree create) is impossible.
+  - >-
+    A pinned session's git operations must target its own worktree: git -C
+    <dir> redirects and leading cd <dir> && ... git ... chains are refused when
+    <dir> resolves to the canonical checkout or another worktree. Git ops
+    targeting dirs outside the repository (scratch) remain permitted.
+  - >-
+    Unpinned sessions (project root not inside a worktree) and non-Bash tools
+    are untouched (exit 0, no output). When the pin cannot be derived (no
+    project dir env), the guard fails OPEN — an isolation guard must never turn
+    a broken env into a hard block.
+  - >-
+    The guard ships OPT-IN: it installs with the shared pack and is listed in
+    the dispatcher template as a commented HANDLERS entry, because
+    default-wired guards in this pack are narrow and the pin guard is a broad
+    session-level cwd enforcement a repo must opt into (documented in
+    failure-lineage Entry 41 and the claude-code README table).
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: a session pinned to an EXISTING worktree .caws/worktrees/<name>
+    when: 'Bash runs a plain command with the effective working directory inside the pinned worktree'
+    then: 'the guard exits 0 with no output (normal work is never blocked)'
+  - id: A2
+    given: a session pinned to an EXISTING worktree
+    when: 'Bash runs a command whose effective working directory resolves outside the pinned worktree (the shared checkout)'
+    then: >-
+      the guard blocks (exit 2) with a message naming the pinned worktree and
+      the exact re-run remediation, and naming the sanctioned exits
+  - id: A3
+    given: a session pinned to an EXISTING worktree with an outside working directory
+    when: 'Bash runs caws worktree merge <name>, caws worktree destroy <name>, caws worktree create <name2>, or caws worktree ensure <name2>'
+    then: 'the guard admits each (exit 0) — the sanctioned exit and re-point verbs stay reachable'
+  - id: A4
+    given: a session pinned to a worktree that was DESTROYED by its own merge (directory no longer exists)
+    when: 'Bash runs any command, including pwd, cd /tmp, git status, and caws worktree create'
+    then: >-
+      the guard admits each (exit 0) with a stderr advisory that the pin was
+      released because the pinned directory no longer exists — the bricked
+      session from the filed defect cannot recur
+  - id: A5
+    given: a session pinned to an EXISTING worktree
+    when: 'Bash runs git -C <canonical> ..., cd <canonical> && git ..., or cd .caws/worktrees/<other> && git ...'
+    then: 'the guard blocks (exit 2) with the own-worktree remediation; git ops redirected to scratch dirs outside the repository pass'
+  - id: A6
+    given: a session whose project root is NOT inside .caws/worktrees
+    when: 'Bash runs any command'
+    then: 'the guard exits 0 with no output (no behavior change for canonical-checkout sessions)'
+  - id: A7
+    given: any session
+    when: 'a non-Bash tool call (Write/Edit/Read) dispatches through the guard'
+    then: 'the guard exits 0 with no output (self-filters to Bash)'
+  - id: A8
+    given: the full slice on canonical
+    when: 'bats worktree-pin-guard.bats runs against the shared template, the manifest/init layout test passes, and docs/failure-lineage.md records Entry 41'
+    then: >-
+      every acceptance row above is proven by a real bats subprocess against the
+      template script, and no existing guard/init/layout test regresses
+non_functional:
+  reliability:
+    - >-
+      The pin release is derived statelessly from directory existence on every
+      call — no new state file, no latch, no strike ramp — so the guard can
+      never strand a session the way the grown static pin did.
+  security:
+    - >-
+      Release never silently weakens the boundary: it fires only when the
+      pinned directory is gone (the boundary no longer exists), and it always
+      prints a stderr advisory naming the destroyed worktree and the re-point
+      verbs.
 contracts:
   - name: 'worktree-pin-guard-behavior-v1'
     type: behavior
     path: 'packages/caws-cli/templates/hook-packs/shared/worktree-pin-guard.sh'
+    description: >-
+      Bash-only guard. Derives the session pin from CAWS_PROJECT_DIR (a path
+      inside .caws/worktrees/<name>), releases the pin with an advisory when
+      that directory no longer exists, blocks (exit 2) commands whose working
+      directory resolves outside the pin except caws worktree merge/destroy/
+      create/ensure, and blocks git -C / leading-cd redirects of git operations
+      to the canonical checkout or another worktree. Unpinned or non-Bash
+      dispatches exit 0.
