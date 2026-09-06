@@ -4,6 +4,54 @@ This document records the layout and contracts for CAWS hook packs after
 `CAWS-HOOK-PACK-SHARED-CORE-001`: a single shared hook core consumed by thin
 per-vendor adapters, replacing the prior per-agent-surface duplication.
 
+## Machine adapter runtime
+
+`CAWS-MACHINE-ADAPTER-RUNTIME-001` adds an opt-in machine runtime above this
+project-pack layout. `caws init adapters install` installs immutable, hashed
+snapshots under `${CAWS_HOME:-~/.caws}/lib/runtimes/<digest>` and a launcher at
+`bin/caws-hook`. The active pointer is `state/adapter-runtime.json`. Updates are
+serialized and activate by atomic pointer replacement; prior snapshots remain
+available through `caws init adapters rollback`. Installation refuses modified
+runtime bytes and symlinked destinations. `--plan` performs no writes.
+
+An adopted project retains its executable guards and an ordered event policy at
+`.caws/hooks/adapter-policy.json`. Its native hook registration calls the machine
+launcher with a surface and event. Subsequent runtime updates require no project
+edits. This is a **one-time bootstrap per project**: existing native registrations
+cannot discover a new runtime merely because a directory exists in the home.
+`caws init adapters adopt --agent-surface codex --plan` previews that bootstrap;
+see the [operator guide](../guides/hook-packs.md#machine-adapter-installation).
+
+The machine runtime transports input, normalized session identity, output and
+reprieve consultation. The execution root is the actual Git worktree; policy and
+handler paths resolve against the canonical checkout through Git's common dir,
+with inherited `GIT_*` overrides removed. Project specs, ownership bindings,
+gate policy, leases, session logs and events keep their existing authority and
+storage. Installing an adapter grants no project ownership.
+
+Bash handler children preload the selected parser, session resolver and emitters,
+so idempotent local library sources cannot silently reinstate a stale adapter.
+Project library growth is retained through explicit policy overrides or refused
+for review. Guard scripts, helper oracles and guard-specific state remain local;
+this release does not globally migrate every project-owned guard helper.
+
+Reprieve commands now write a session-global record under
+`state/sessions/<id>/guard-reprieve-<id>.json`. A missing global record permits a
+read-only legacy lookup in the canonical project's vendor `hooks/state` dir.
+Global presence always shadows that legacy record, even when malformed or
+expired. Revocation writes an inactive global tombstone to prevent resurrection.
+Human-only granting and exact session/handler membership remain enforced.
+An old dispatcher without the consultation seam still needs adoption; a new CLI
+writing a machine record alone cannot repair that dispatcher.
+
+The runtime packages adapter libraries for the seven implemented surfaces.
+Automatic native JSON wiring is implemented for Codex, Claude Code and Qwen Code.
+Kimi Code, ZCode, OpenCode and DSH require their native registration/bridge work;
+they are explicitly refused by automatic adoption. Their live parity is not
+established by the machine-runtime fixture tests. Codex's final native activation
+also requires a fresh invocation after hook trust/registration review; shell
+replays and code landing are separate from that activation evidence.
+
 ## Why
 
 Hook logic was physically duplicated per agent surface
