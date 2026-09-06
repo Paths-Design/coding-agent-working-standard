@@ -42,6 +42,41 @@ def git(directory, *args):
     return result.stdout.strip()
 
 
+def emit_codex_result(event, result, identity):
+    """Codex exit-2 enforcement reads stderr, not the JSON on stdout.
+
+    Keep the shared runner's exit/JSON contract, and supply the native blocking
+    channel even for a bare exit 2. Stop also requires structured stdout; plain
+    lifecycle CLI observations become system messages, never continuation votes.
+    """
+    text = result.stdout.decode('utf-8', errors='replace').strip()
+    parsed = True
+    try:
+        output = json.loads(text) if text else None
+    except ValueError:
+        parsed = False
+        output = None
+        if event == 'stop' and result.returncode == 0 and text.startswith(('{', '[')):
+            raise ValueError('Malformed Codex Stop JSON') from None
+    if result.returncode == 2:
+        reason = ''
+        if isinstance(output, dict):
+            specific = output.get('hookSpecificOutput')
+            candidates = [output.get('reason'), output.get('stopReason')]
+            if isinstance(specific, dict):
+                candidates.insert(0, specific.get('permissionDecisionReason'))
+            reason = next((value for value in candidates if isinstance(value, str) and value.strip()), '')
+        reason = reason or text or f'CAWS {event} blocked with exit code 2'
+        print(f'[caws machine adapter {identity}] {reason}', file=sys.stderr)
+    if event == 'stop' and result.returncode == 0 and text:
+        if not parsed:
+            print(json.dumps({'systemMessage': text}))
+            return
+        if not isinstance(output, dict):
+            raise ValueError('Malformed Codex Stop JSON: expected an object')
+    sys.stdout.buffer.write(result.stdout)
+
+
 def main():
     if len(sys.argv) != 3 or sys.argv[1] not in SURFACES or sys.argv[2] not in EVENTS:
         raise ValueError('Usage: caws-hook <surface> <pre_tool_use|post_tool_use|session_start|stop|pre_compact>')
@@ -144,7 +179,10 @@ def main():
     result = subprocess.run(['/bin/bash', str(runtime / 'dispatch.sh'), surface, event, str(hooks), *handlers],
                             cwd=root, env=env, input=json.dumps(payload).encode(),
                             stdout=subprocess.PIPE, check=False)
-    sys.stdout.buffer.write(result.stdout)
+    if surface == 'codex':
+        emit_codex_result(event, result, identity)
+    else:
+        sys.stdout.buffer.write(result.stdout)
     return result.returncode
 
 

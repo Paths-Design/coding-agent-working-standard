@@ -21,6 +21,16 @@ the damaged bytes for inspection. `--plan` performs no writes.
 Rolling back to an original standalone runtime restores that driver's older
 invocation semantics; it does not add snapshot pinning to the legacy driver.
 
+Codex requires a blocking reason on stderr for exit code 2; denial JSON on
+stdout alone does not satisfy that native contract. The machine driver retains
+the shared runner's exit code and JSON, and mirrors its reason to stderr with
+the selected runtime digest. A bare exit 2 receives an explicit diagnostic too.
+For Stop, successful plain lifecycle observations become a `systemMessage` JSON
+object. Existing structured decisions remain intact; malformed Stop JSON is an
+explicit adapter failure rather than informational success. These contracts
+require a native Codex check in addition to shell-level assertions; see the
+[native hook documentation](https://learn.chatgpt.com/docs/hooks).
+
 An adopted project retains its executable guards and an ordered event policy at
 `.caws/hooks/adapter-policy.json`. Its native hook registration calls the machine
 launcher with a surface and event. Subsequent runtime updates require no project
