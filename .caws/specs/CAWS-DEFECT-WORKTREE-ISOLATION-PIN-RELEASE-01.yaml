@@ -123,3 +123,7 @@ evidence:
     status: pass
     evidence_ref: "bats tests/hooks/bats/worktree-pin-guard.bats (14 cases, green) + jest 2280/2280 green"
     recorded_at: "2026-09-06T03:56:12.863Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "bats tests/hooks/bats/worktree-pin-guard.bats (14 cases, green) + jest 2280/2280 green"
+    recorded_at: "2026-09-06T03:56:13.293Z"
