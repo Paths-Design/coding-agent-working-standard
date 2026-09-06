@@ -71,3 +71,84 @@ Codex installs project-local `.codex/hooks.json` plus `.codex/hooks/*`. Codex lo
 ## Lineage
 
 Each hook traces to a `docs/failure-lineage.md` entry documenting the gap it closes: `god-object-check.sh` → Entry 28, `shortcut-language-check.sh` → Entry 29, `duplicate-export-check.sh` → Entry 30, `loc-delta-check.sh` → Entry 31. The per-pack lineage map lives in `.claude/hooks/CLAUDE.md` after install (sourced from `packages/caws-cli/templates/hook-packs/claude-code/CLAUDE.md`).
+
+
+## Machine adapter installation
+
+For machine-wide adapter updates, install the runtime once:
+
+```bash
+caws init adapters install --plan --json
+caws init adapters install
+```
+
+`CAWS_HOME` selects an absolute machine home (default `~/.caws`). The plan lists
+the runtime digest and installed paths. Runtime snapshots are integrity checked;
+manual changes there are refused on update. Intentional user adapter overrides
+belong in `surfaces/<surface>/lib/` under the machine home. They are executable
+customizations and are outside the snapshot's digest. Project overrides declared
+in policy take precedence, followed by user overrides, the surface snapshot,
+and the shared snapshot. Symlinked override files are refused.
+
+From each canonical project root, preview and apply its one-time adoption:
+
+```bash
+caws init adapters adopt --agent-surface codex --plan
+caws init adapters adopt --agent-surface codex
+```
+
+Use `claude-code` or `qwen-code` for the other supported automatic registrations.
+The plan displays complete proposed policy and native configuration bytes. It
+preserves literal handler order and unrelated native hooks. The applied migration
+backs up exact old bytes in the machine home's `state/adoption-backups/` and
+rolls back its writes if application fails. It never sources shell while planning.
+Unknown dispatcher logic, conflicting roots, duplicate CAWS wiring, and
+unresolved library growth require reconciliation before adoption.
+
+For reviewed custom dispatch logic, `--from <surface-policy.json>` accepts:
+
+```json
+{
+  "events": {
+    "pre_tool_use": {
+      "hooks_dir": ".caws/hooks",
+      "handlers": ["worktree-write-guard.sh", "custom-guard.sh"]
+    }
+  },
+  "libraries": {}
+}
+```
+
+Include every existing lifecycle registration; an omitted event with existing
+CAWS wiring is refused. Paths must be project-relative and executable handlers
+must exist. A policy can explicitly retain a local library through a
+`libraries` entry such as `"emit.sh": ".codex/hooks/lib/emit.sh"`. That library
+then remains locally maintained. Bootstrap-library changes need reconciliation.
+
+After applying, restart the harness and review changed hook definitions. For
+Codex, global and project hooks are additive: adoption checks for other CAWS
+registrations and refuses ambiguous duplicates. Native trust and actual hook
+execution must be verified in a fresh invocation. Installation and a passing
+shell replay do not establish that an already-running harness has switched.
+
+Update all adopted projects with another `caws init adapters install`. To
+restore the prior snapshot:
+
+```bash
+caws init adapters rollback --plan
+caws init adapters rollback
+```
+
+An interrupted install leaves a visible `state/adapter-install.lock`; inspect it
+and the active pointer before removing a stale lock. Do not edit snapshot bytes.
+A missing or corrupted runtime is an explicit hook failure. Calls outside Git
+and outside CAWS projects are quiet.
+
+Reprieve grants now belong to the machine session store, across adopted projects.
+`--surface` identifies the target harness for operator provenance and legacy
+lookup; it does not partition new grants into vendor directories. Granting still
+requires a human shell, a target session, named handlers, reason, approver and
+expiry. `show`/`list` never create directories, and `revoke` retains an inactive
+record to suppress legacy copies. Old, unadopted dispatchers may not read new
+machine records. Verify a grant through the actual target dispatcher before
+claiming it took effect.

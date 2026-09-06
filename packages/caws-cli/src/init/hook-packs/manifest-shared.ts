@@ -351,7 +351,7 @@ import { isAdapterCoveredSurface } from './types';
 // includes AGENTS.override.md before AGENTS.md, mirroring the harness's root
 // discovery precedence and admitting the file init may select for its managed
 // working-contract block.
-export const SHARED_PACK_VERSION = 57;
+export const SHARED_PACK_VERSION = 58;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

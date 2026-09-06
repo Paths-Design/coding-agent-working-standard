@@ -5,16 +5,15 @@
 // commenting a guard out of the dispatcher's HANDLERS array (which disables it for
 // EVERY agent, forever, with no reason/approver/expiry).
 //
-// Model: mirrors the danger-latch + scope-guard-strike substrate — a per-session
-// JSON state file under the vendor `hooks/state/` dir, keyed by sanitized session
-// id, gitignored operational cache (NOT .caws/ governance state), cleared by
-// deletion. The one addition over the latch model: an `expires_at` field.
+// Records live in the machine session store under CAWS_HOME. Legacy vendor
+// records are a read-only fallback; global presence shadows them and revoke
+// writes an inactive tombstone. This is operational cache, never ownership.
 //
 // Four subcommands:
 //   grant   — resolve session → write guard-reprieve-<sanitized>.json (+ audit log)
 //   show    — read + render the current session's reprieve
-//   revoke  — delete the file + append audit line (mandatory --reason)
-//   list    — enumerate active reprieve files in the vendor state dir
+//   revoke  — write a global tombstone + append audit line (mandatory --reason)
+//   list    — enumerate global records and unshadowed legacy records
 //
 // The writer and the reader (lib/reprieve.sh, consulted by run-handlers.sh) both
 // key on the resolved session id + sanitize_session transform, so the same session
@@ -27,6 +26,8 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { machineHome, assertMachinePath, atomicMachineWrite } from '../../init/machine-adapters';
+import { SURFACE_ENV_VARS, SURFACE_PIN_VARS, type AgentSurface } from '../../init/hook-packs/surfaces.generated';
 
 import { loadLeases, resolveRepoRoot, storeDiagnostic } from '../../store';
 import { renderDiagnostics } from '../render/diagnostic';
@@ -42,6 +43,7 @@ import { resolveAgentPidIdentity } from '../session/resolve-session';
 // ---------------------------------------------------------------------------
 
 export interface ReprieveCommandBase {
+  readonly homeDir?: string;
   readonly cwd?: string;
   readonly now?: () => Date;
   readonly out?: (line: string) => void;
@@ -57,6 +59,7 @@ export interface ReprieveRecord {
   readonly approved_by: string;
   readonly reason: string;
   readonly handlers: readonly string[];
+  readonly revoked_at?: string;
 }
 
 /** The vendor dirs a reprieve may live under. Mirrors agent-surface.sh's
@@ -72,6 +75,7 @@ const VENDOR_DIRS = [
   '.opencode',
   '.kimi-code',
   '.qwen',
+  '.dsh',
 ] as const;
 
 function setupIO(opts: ReprieveCommandBase) {
@@ -93,52 +97,59 @@ function setupIO(opts: ReprieveCommandBase) {
  * guessed.
  */
 function resolveReprieveStateDir(
-  repoRoot: string,
-  err: (line: string) => void,
-  showData: boolean,
-  surfaceOverride?: string,
-  env: NodeJS.ProcessEnv = process.env,
-  /** Provenance label for an override the caller already resolved (e.g. a lease). */
-  overrideSource = '--surface'
-): { stateDir: string; vendorDir: string; source: string; logsDir: string } | null {
-  let vendorDir: string | null;
-  let source: string;
-
-  if (surfaceOverride !== undefined) {
-    // An explicit --surface always wins: the operator may legitimately target a
-    // dispatcher other than the one they are running under.
-    vendorDir = surfaceToVendorDir(surfaceOverride, err, showData);
-    source = overrideSource;
-  } else {
-    const resolved = resolveVendorDir(repoRoot, env);
-    if (!resolved.ok) {
-      // Guessing here is what made a grant land in .claude while the codex
-      // dispatcher read .codex — success reported, reprieve inert.
-      err(
-        `caws reprieve: cannot tell which agent surface this reprieve is for. ${resolved.candidates.length} vendor dirs have a hooks/state substrate: ${resolved.candidates.join(', ')}.`
-      );
-      err(
-        `  Re-run with --surface <name>, e.g. --surface ${(resolved.candidates[0] as string).replace(/^\./, '')}`
-      );
-      err('  Guessing would write a record the running dispatcher never reads.');
-      return null;
-    }
-    vendorDir = resolved.vendorDir;
-    source = resolved.source;
-  }
+  repoRoot: string, err: (line: string) => void, showData: boolean,
+  surfaceOverride?: string, env: NodeJS.ProcessEnv = process.env,
+  overrideSource = '--surface', sessionId?: string, homeDir?: string
+): { stateDir: string; vendorDir: string; source: string; logsDir: string; home: string; legacyDir: string } | null {
+  const vendorDir = surfaceOverride !== undefined
+    ? surfaceToVendorDir(surfaceOverride, err, showData)
+    : vendorDirFromPlatform(env.CAWS_AGENT_SURFACE ?? '') ?? vendorDirFromEnv(env) ?? '.caws';
   if (vendorDir === null) return null;
-  const stateDir = path.join(repoRoot, vendorDir, 'hooks', 'state');
-  const logsDir = path.join(repoRoot, vendorDir, 'logs');
   try {
-    fs.mkdirSync(stateDir, { recursive: true });
-    fs.mkdirSync(logsDir, { recursive: true });
-  } catch (e) {
-    err(
-      `caws reprieve: failed to create vendor state dir: ${(e as Error).message}`
-    );
+    const home = homeDir ?? machineHome(env);
+    const sessions = path.join(home, 'state', 'sessions');
+    const stateDir = sessionId === undefined ? sessions : path.join(sessions, sanitizeSession(sessionId));
+    const logsDir = path.join(home, 'state');
+    assertMachinePath(home, stateDir);
+    assertMachinePath(home, logsDir);
+    return { home, stateDir, logsDir, vendorDir,
+      source: surfaceOverride !== undefined ? overrideSource : 'machine session store',
+      legacyDir: path.join(repoRoot, vendorDir, 'hooks', 'state') };
+  } catch (error) {
+    err(`caws reprieve: ${(error as Error).message}`);
     return null;
   }
-  return { stateDir, vendorDir, source, logsDir };
+}
+
+function recordFileForRead(state: { stateDir: string; legacyDir: string }, sessionId: string): string {
+  const globalFile = reprieveFileName(state.stateDir, sessionId);
+  // Global presence shadows legacy even when malformed, expired or revoked.
+  try { fs.lstatSync(globalFile); return globalFile; } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  return reprieveFileName(state.legacyDir, sessionId);
+}
+
+function parseRecord(file: string, sessionId?: string): ReprieveRecord {
+  if (fs.lstatSync(file).isSymbolicLink()) throw new Error('symlinked reprieve record');
+  const rec = JSON.parse(fs.readFileSync(file, 'utf8')) as ReprieveRecord;
+  if (!rec || typeof rec !== 'object' || typeof rec.session_id !== 'string' ||
+      (sessionId !== undefined && rec.session_id !== sessionId) ||
+      typeof rec.created_at !== 'string' || !rec.created_at ||
+      typeof rec.reason !== 'string' || !rec.reason || typeof rec.approved_by !== 'string' || !rec.approved_by ||
+      typeof rec.expires_at !== 'string' || !Array.isArray(rec.handlers) ||
+      rec.handlers.some(h => typeof h !== 'string') ||
+      (rec.revoked_at !== undefined && typeof rec.revoked_at !== 'string')) {
+    throw new Error('malformed reprieve record or session mismatch');
+  }
+  return rec;
+}
+
+function isActive(record: ReprieveRecord, now: Date): boolean {
+  // Legacy timezone-less ISO values use UTC, matching the shell reader.
+  const expires = /(?:Z|[+-]\d\d:\d\d)$/.test(record.expires_at) ? record.expires_at : `${record.expires_at}Z`;
+  return record.revoked_at === undefined && Number.isFinite(Date.parse(expires)) &&
+    Date.parse(expires) > now.getTime();
 }
 
 function surfaceToVendorDir(
@@ -157,6 +168,8 @@ function surfaceToVendorDir(
     opencode: '.opencode',
     'kimi-code': '.kimi-code',
     'qwen-code': '.qwen',
+    dsh: '.dsh',
+    '.dsh': '.dsh',
     '.claude': '.claude',
     '.codex': '.codex',
     '.zcode': '.zcode',
@@ -203,6 +216,7 @@ const SESSION_VAR_TO_VENDOR_DIR: Readonly<Record<string, string>> = {
   CLAUDE_CODE_SESSION_ID: '.claude',
   CODEX_THREAD_ID: '.codex',
   QWEN_CODE_SESSION_ID: '.qwen',
+  DSH_SESSION_ID: '.dsh',
   CURSOR_TRACE_ID: '.cursor',
 };
 
@@ -329,15 +343,17 @@ export function resolveVendorDir(
  * outside that subset would resolve a session (and grant) while reading as a
  * human. Sharing the constant makes that drift impossible to introduce silently.
  */
-const AGENT_SESSION_VARS = [
+const AGENT_SESSION_VARS = [...new Set([
   'CLAUDE_SESSION_ID',
   'CLAUDE_CODE_SESSION_ID',
   'CODEX_THREAD_ID',
   'QWEN_CODE_SESSION_ID',
+  'DSH_SESSION_ID',
   'CAWS_SESSION_ID',
   'HOOK_SESSION_ID',
   'CURSOR_TRACE_ID',
-] as const;
+  ...Object.values(SURFACE_ENV_VARS).flat(),
+])];
 
 function envHasValue(env: NodeJS.ProcessEnv, name: string): boolean {
   const v = env[name];
@@ -353,16 +369,23 @@ export function detectAgentSessionVars(env: NodeJS.ProcessEnv): string[] {
 }
 
 function resolveSessionId(env: NodeJS.ProcessEnv, cawsDir?: string): string {
-  for (const name of AGENT_SESSION_VARS) {
-    if (envHasValue(env, name)) return env[name] as string;
-  }
-  // CAWS-AGENT-PID-SESSION-CORRELATION-001: env chain missed. Consult the
+  // CAWS-AGENT-PID-SESSION-CORRELATION-001: consult the
   // agent-PID record (the same shared read the other two resolution surfaces
   // use) before degrading to 'unknown'. This unblocks reprieve show/revoke for
   // no-env-var callers, which today print "no reprieve for session unknown".
   if (cawsDir !== undefined) {
     const fromPid = resolveAgentPidIdentity({ cawsDir, env });
     if (fromPid !== null) return fromPid.session_id;
+  }
+  // Match the shell boundary: payload, selected surface, canonical normalized
+  // identity, then legacy env aliases. A foreign harness var cannot shadow a
+  // selected surface in show/revoke while dispatch consults another session.
+  if (envHasValue(env, 'HOOK_SESSION_ID')) return env.HOOK_SESSION_ID as string;
+  const pinned = SURFACE_PIN_VARS[env.CAWS_AGENT_SURFACE as AgentSurface];
+  if (pinned && envHasValue(env, pinned)) return env[pinned] as string;
+  if (envHasValue(env, 'CAWS_SESSION_ID')) return env.CAWS_SESSION_ID as string;
+  for (const name of AGENT_SESSION_VARS) {
+    if (envHasValue(env, name)) return env[name] as string;
   }
   return 'unknown';
 }
@@ -381,7 +404,7 @@ function reprieveFileName(stateDir: string, sessionId: string): string {
   return path.join(stateDir, `guard-reprieve-${sanitizeSession(sessionId)}.json`);
 }
 
-/** Append a JSONL audit record to <vendor>/logs/guard-reprieves.log. Non-fatal. */
+/** Append a JSONL audit record to the machine state directory. Non-fatal. */
 function appendAudit(
   logsDir: string,
   record: Record<string, unknown>,
@@ -389,6 +412,7 @@ function appendAudit(
 ): void {
   const logPath = path.join(logsDir, 'guard-reprieves.log');
   try {
+    fs.mkdirSync(logsDir, { recursive: true, mode: 0o700 });
     fs.appendFileSync(logPath, JSON.stringify(record) + '\n');
   } catch (e) {
     // Audit failure is non-fatal (mirrors the latch reset posture) — the
@@ -519,7 +543,7 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
   const env = opts.env ?? process.env;
   const sessionId =
     opts.session ?? (opts.current !== false ? resolveSessionId(env) : 'unknown');
-  if (sessionId === 'unknown' || sessionId.length === 0) {
+  if (sessionId === 'unknown' || !/^[A-Za-z0-9_-][A-Za-z0-9._-]*$/.test(sessionId)) {
     err(
       'caws reprieve grant: could not resolve a session id. Pass --session <id>, or run with CAWS_SESSION_ID/CLAUDE_SESSION_ID/CODEX_THREAD_ID set.'
     );
@@ -532,7 +556,7 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
     .split(',')
     .map((h) => h.trim())
     .filter((h) => h.length > 0);
-  if (handlers.length === 0) {
+  if (handlers.length === 0 || handlers.some(h => !/^[A-Za-z0-9_.-]+\.sh$/.test(h))) {
     err('caws reprieve grant: --handlers requires at least one handler basename.');
     return 1;
   }
@@ -671,7 +695,9 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
     showData,
     surfaceOverride,
     agentEnv,
-    surfaceSource
+    surfaceSource,
+    sessionId,
+    opts.homeDir
   );
   if (state === null) return 2;
 
@@ -697,9 +723,7 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
   // this command writes to the VENDOR dir, not .caws/, so a local atomic write
   // avoids pulling a store dependency for a non-governance file).
   try {
-    const tmp = `${filePath}.tmp.${process.pid}`;
-    fs.writeFileSync(tmp, JSON.stringify(record, null, 2) + '\n');
-    fs.renameSync(tmp, filePath);
+    atomicMachineWrite(state.home, filePath, JSON.stringify(record, null, 2) + '\n');
   } catch (e) {
     err(`caws reprieve grant: failed to write reprieve file: ${(e as Error).message}`);
     return 2;
@@ -745,7 +769,7 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
     // no way to notice that from a success message.
     out(`  surface:  ${state.vendorDir} (from ${state.source})`);
     out(`  file:     ${filePath}`);
-    out(`  Only the ${state.vendorDir} dispatcher consults this reprieve.`);
+    out(`  scope: session-global; machine dispatchers consult this record across projects.`);
   }
   return 0;
 }
@@ -771,12 +795,12 @@ export function runReprieveShowCommand(opts: ReprieveShowOptions): number {
     err(renderDiagnostics(repo.errors, { showData }));
     return 2;
   }
-  const state = resolveReprieveStateDir(repo.value.repoRoot, err, showData, opts.surface, opts.env ?? process.env);
-  if (state === null) return 2;
 
   const env = opts.env ?? process.env;
   const sessionId = opts.session ?? resolveSessionId(env, path.join(repo.value.repoRoot, '.caws'));
-  const filePath = reprieveFileName(state.stateDir, sessionId);
+  const state = resolveReprieveStateDir(repo.value.repoRoot, err, showData, opts.surface, env, '--surface', sessionId, opts.homeDir);
+  if (state === null) return 2;
+  const filePath = recordFileForRead(state, sessionId);
 
   if (!fs.existsSync(filePath)) {
     if (opts.json === true) {
@@ -786,23 +810,12 @@ export function runReprieveShowCommand(opts: ReprieveShowOptions): number {
     }
     return 0;
   }
-  let raw: string;
-  try {
-    raw = fs.readFileSync(filePath, 'utf8');
-  } catch (e) {
-    err(`caws reprieve show: could not read reprieve file: ${(e as Error).message}`);
-    return 2;
-  }
   let record: ReprieveRecord;
-  try {
-    record = JSON.parse(raw);
-  } catch {
-    err(`caws reprieve show: reprieve file is malformed JSON: ${filePath}`);
+  try { record = parseRecord(filePath, sessionId); } catch (error) {
+    err(`caws reprieve show: reprieve file is malformed: ${filePath}: ${(error as Error).message}`);
     return 1;
   }
-  // Derived expiry: report whether it is still active.
-  const exp = new Date(record.expires_at);
-  const active = Number.isFinite(exp.getTime()) && exp.getTime() > now.getTime();
+  const active = isActive(record, now);
   if (opts.json === true) {
     out(JSON.stringify({ ok: true, session_id: sessionId, active, reprieve: record, file: filePath }, null, 2));
   } else {
@@ -838,8 +851,6 @@ export function runReprieveRevokeCommand(opts: ReprieveRevokeOptions): number {
     err(renderDiagnostics(repo.errors, { showData }));
     return 2;
   }
-  const state = resolveReprieveStateDir(repo.value.repoRoot, err, showData, opts.surface, opts.env ?? process.env);
-  if (state === null) return 2;
 
   if (!opts.reason || opts.reason.length === 0) {
     err('caws reprieve revoke: --reason is required (records why the reprieve is being cleared).');
@@ -848,24 +859,27 @@ export function runReprieveRevokeCommand(opts: ReprieveRevokeOptions): number {
 
   const env = opts.env ?? process.env;
   const sessionId = opts.session ?? resolveSessionId(env, path.join(repo.value.repoRoot, '.caws'));
-  const filePath = reprieveFileName(state.stateDir, sessionId);
+  const state = resolveReprieveStateDir(repo.value.repoRoot, err, showData, opts.surface, env, '--surface', sessionId, opts.homeDir);
+  if (state === null) return 2;
+  const filePath = recordFileForRead(state, sessionId);
 
-  if (!fs.existsSync(filePath)) {
-    out(`no reprieve for session ${sessionId} (nothing to revoke)`);
-    return 0;
+  if (sessionId === 'unknown' || !/^[A-Za-z0-9_-][A-Za-z0-9._-]*$/.test(sessionId)) {
+    err('caws reprieve revoke: a resolved session id is required'); return 1;
   }
   let priorRecord: ReprieveRecord | null = null;
+  if (fs.existsSync(filePath)) {
+    try { priorRecord = parseRecord(filePath, sessionId); } catch { /* Revocation also suppresses corrupt records. */ }
+  } else { out(`no reprieve for session ${sessionId}; recording global revocation`); }
+  const revokedFile = reprieveFileName(state.stateDir, sessionId);
+  const tombstone: ReprieveRecord = {
+    session_id: sessionId, created_at: priorRecord?.created_at ?? now.toISOString(),
+    expires_at: now.toISOString(), approved_by: priorRecord?.approved_by ?? 'revocation',
+    reason: opts.reason, handlers: [], revoked_at: now.toISOString(),
+  };
   try {
-    priorRecord = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-  } catch {
-    // Malformed — still delete it, but note the parse failure.
-    priorRecord = null;
-  }
-  try {
-    fs.unlinkSync(filePath);
-  } catch (e) {
-    err(`caws reprieve revoke: could not delete reprieve file: ${(e as Error).message}`);
-    return 2;
+    atomicMachineWrite(state.home, revokedFile, JSON.stringify(tombstone, null, 2) + '\n');
+  } catch (error) {
+    err(`caws reprieve revoke: could not record revocation: ${(error as Error).message}`); return 2;
   }
   appendAudit(
     state.logsDir,
@@ -875,15 +889,15 @@ export function runReprieveRevokeCommand(opts: ReprieveRevokeOptions): number {
       session_id: sessionId,
       reason: opts.reason,
       cleared_reprieve: priorRecord,
-      file: filePath,
+      file: revokedFile,
     },
     err
   );
   if (opts.json === true) {
-    out(JSON.stringify({ ok: true, revoked: true, session_id: sessionId, file: filePath }, null, 2));
+    out(JSON.stringify({ ok: true, revoked: true, session_id: sessionId, file: revokedFile }, null, 2));
   } else {
     out(`revoked reprieve for session ${sessionId}`);
-    out(`  file:  ${filePath}`);
+    out(`  file:  ${revokedFile}`);
     out(`  reason: ${opts.reason}`);
   }
   return 0;
@@ -910,30 +924,27 @@ export function runReprieveListCommand(opts: ReprieveListOptions): number {
     err(renderDiagnostics(repo.errors, { showData }));
     return 2;
   }
-  const state = resolveReprieveStateDir(repo.value.repoRoot, err, showData, opts.surface, opts.env ?? process.env);
+  const state = resolveReprieveStateDir(repo.value.repoRoot, err, showData, opts.surface, opts.env ?? process.env, '--surface', undefined, opts.homeDir);
   if (state === null) return 2;
-
-  let entries: string[] = [];
+  const candidates = new Map<string, string>();
   try {
-    entries = fs
-      .readdirSync(state.stateDir)
-      .filter((f) => f.startsWith('guard-reprieve-') && f.endsWith('.json'));
-  } catch {
-    // Directory doesn't exist or unreadable → no reprieves.
-    entries = [];
-  }
-
-  const records: Array<ReprieveRecord & { active: boolean; file: string }> = [];
-  for (const name of entries) {
-    const fp = path.join(state.stateDir, name);
-    try {
-      const rec = JSON.parse(fs.readFileSync(fp, 'utf8')) as ReprieveRecord;
-      const exp = new Date(rec.expires_at);
-      const active = Number.isFinite(exp.getTime()) && exp.getTime() > now.getTime();
-      records.push({ ...rec, active, file: fp });
-    } catch {
-      // Skip malformed files (display-only; don't fail the list).
+    for (const name of fs.readdirSync(state.legacyDir)) {
+      const match = /^guard-reprieve-(.+)\.json$/.exec(name);
+      if (match) candidates.set(match[1] as string, path.join(state.legacyDir, name));
     }
+  } catch { /* An absent legacy substrate is normal. */ }
+  try {
+    for (const sessionId of fs.readdirSync(state.stateDir)) {
+      const file = reprieveFileName(path.join(state.stateDir, sessionId), sessionId);
+      try { fs.lstatSync(file); candidates.set(sessionId, file); } catch { /* Other session cache. */ }
+    }
+  } catch { /* Reading creates no machine state. */ }
+  const records: Array<ReprieveRecord & { active: boolean; file: string }> = [];
+  for (const [sessionId, file] of [...candidates].sort(([a], [b]) => a.localeCompare(b))) {
+    try {
+      const rec = parseRecord(file, sessionId);
+      records.push({ ...rec, active: isActive(rec, now), file });
+    } catch { /* Malformed global state never resurrects legacy records. */ }
   }
 
   if (opts.json === true) {

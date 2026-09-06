@@ -25,6 +25,7 @@ teardown_file() {
   caws_teardown_pack
 }
 
+setup() {
 AS_LIB="$CAWS_TEST_HOOKS_DIR/lib/agent-surface.sh"
 
 # git rev-parse --show-toplevel returns the realpath-resolved root (on macOS
@@ -36,6 +37,8 @@ CAWS_TEST_REPO_REAL="$(cd "$CAWS_TEST_REPO" && git rev-parse --show-toplevel)"
 # CAWS_PROJECT_DIR on stdout. Kept as a single literal so it survives the
 # env/bash word-splitting boundary intact (the run_guard pattern).
 RESOLVE_CMD="source '$AS_LIB' >/dev/null 2>&1; printf '%s\n' \"\${CAWS_PROJECT_DIR:-}\""
+
+}
 
 @test "agent-surface: CLAUDE_PROJECT_DIR at a subdir resolves to the repo root (A1, zcode scenario)" {
   local subdir="$CAWS_TEST_REPO/packages/caws-cli/templates"

@@ -83,6 +83,7 @@ function grant(repoRoot, opts) {
   const err = [];
   const code = runReprieveGrantCommand({
     cwd: repoRoot,
+        homeDir: path.join(repoRoot, 'machine-home'),
     env: {},
     now: () => NOW,
     out: (l) => out.push(l),
@@ -99,9 +100,10 @@ function grant(repoRoot, opts) {
 function readRecord(repoRoot) {
   const file = path.join(
     repoRoot,
-    '.claude',
-    'hooks',
+    'machine-home',
     'state',
+    'sessions',
+    SESSION,
     `guard-reprieve-${SESSION}.json`
   );
   return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -172,7 +174,7 @@ describe('CAWS-REPRIEVE-RELATIVE-EXPIRY-001: --for grants (A1)', () => {
     expect(r.code).toBe(1);
     expect(r.err).toContain('must expire in the future');
     expect(fs.existsSync(
-      path.join(repoRoot, '.claude', 'hooks', 'state', `guard-reprieve-${SESSION}.json`)
+      path.join(repoRoot, 'machine-home', 'state', 'sessions', SESSION, `guard-reprieve-${SESSION}.json`)
     )).toBe(false);
   });
 
@@ -262,7 +264,7 @@ describe('CAWS-REPRIEVE-RELATIVE-EXPIRY-001: CLI parse path', () => {
     // ones: CAWS-REPRIEVE-NO-SELF-GRANT-001 refuses the grant if ANY is set,
     // and CAWS_SESSION_ID is itself one of them. The session id is supplied via
     // --session so the record is still deterministically named.
-    const env = { ...process.env };
+    const env = { ...process.env, CAWS_HOME: path.join(cwd, 'machine-home') };
     for (const v of [
       'CLAUDE_SESSION_ID',
       'CLAUDE_CODE_SESSION_ID',
@@ -311,6 +313,7 @@ describe('CAWS-REPRIEVE-RELATIVE-EXPIRY-001: CLI parse path', () => {
     const repoRoot = makeRepoRoot();
     const r = spawnSync('node', [cli, 'reprieve', 'grant', '--help'], {
       cwd: repoRoot,
+        homeDir: path.join(repoRoot, 'machine-home'),
       encoding: 'utf8',
     });
     expect(r.stdout).toContain('--for <duration>');

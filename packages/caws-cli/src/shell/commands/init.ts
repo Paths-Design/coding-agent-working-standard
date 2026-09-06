@@ -26,6 +26,8 @@
 //       target
 
 import { execFileSync } from 'child_process';
+import { installMachineRuntime, rollbackMachineRuntime } from '../../init/machine-adapters';
+import { adoptMachineAdapter } from '../../init/machine-adapter-policy';
 import { resolveGitBinary } from '../../store/git-binary';
 import {
   detectAgentHarness,
@@ -159,7 +161,7 @@ export interface InitCommandOptions {
   readonly wireUserConfig?: boolean;
   /** Positional subcommand: 'diff' (read-only pack diff) or 'port'
    *  (CLI-mediated retrofit landing). (CAWS-HOOKPACK-UPGRADE-RETROFIT-001.) */
-  readonly action?: 'diff' | 'port';
+  readonly action?: 'diff' | 'port' | 'adapters';
   /** port: the managed destination path being retrofitted. */
   readonly actionArg?: string;
   /** diff: restrict the three-way decomposition to this pack path. */
@@ -967,6 +969,41 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   const out = opts.out ?? ((s: string) => process.stdout.write(s + '\n'));
   const err = opts.err ?? ((s: string) => process.stderr.write(s + '\n'));
   const showData = opts.showData === true;
+
+  if (opts.action === 'adapters') {
+    try {
+      const operation = opts.actionArg ?? 'install';
+      if (opts.overwrite || opts.force || opts.adopt || opts.wireUserConfig || opts.threeWayPath ||
+          (operation !== 'adopt' && (opts.fromFile || opts.agentSurface))) {
+        err('caws init adapters: incompatible options; use --plan/--json, or --agent-surface/--from with adopt'); return 2;
+      }
+      if (operation === 'adopt') {
+        if (!opts.agentSurface) { err('caws init adapters adopt: --agent-surface is required'); return 2; }
+        if (/(?:^|\/)\.caws\/worktrees\//.test(cwd)) {
+          err('caws init adapters adopt: run from the canonical project root'); return 1;
+        }
+        const result = adoptMachineAdapter({ repo: cwd, surface: opts.agentSurface,
+          plan: opts.plan === true, ...(opts.fromFile ? { fromFile: opts.fromFile } : {}) });
+        out(opts.json ? JSON.stringify(result, null, 2) :
+          `${opts.plan ? 'PLAN' : 'OK'} machine adapter adoption (${opts.agentSurface})\n` +
+          result.changes.map(c => `  ${c.path}\n${opts.plan ? c.after : ''}`).join('\n') +
+          '\n  Restart the harness and review changed hooks before claiming activation.');
+        return 0;
+      }
+      if (operation !== 'install' && operation !== 'rollback') {
+        err(`caws init adapters: unknown operation ${operation}; expected install | rollback | adopt`);
+        return 2;
+      }
+      const options = { plan: opts.plan === true };
+      const result = operation === 'rollback' ? rollbackMachineRuntime(options) : installMachineRuntime(options);
+      out(opts.json ? JSON.stringify(result, null, 2) :
+        `${opts.plan ? 'PLAN' : 'OK'} machine adapter ${operation}: ${result.digest}\n  home: ${result.home}\n  launcher: ${result.launcher}\n  changed: ${result.changed}\n  Project adoption and harness wiring are separate explicit steps.`);
+      return 0;
+    } catch (error) {
+      err(`caws init adapters: ${(error as Error).message}`);
+      return 1;
+    }
+  }
 
   // A7 (CAWS-HOOKPACK-UPGRADE-RETROFIT-001): init mutates the CANONICAL
   // checkout's hooks and settings. Run from inside a linked worktree it

@@ -643,3 +643,7 @@ packages/caws-cli/tests/hooks/pytest/.venv/
 .caws/events.jsonl.lock
 tmp/guard-strikes-*.json
 # <<< caws gitignore <<<
+
+# Codex operational cache (never executable hook sources)
+.codex/hooks/state/
+.codex/logs/

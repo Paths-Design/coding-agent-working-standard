@@ -20,23 +20,13 @@
 # commenting a guard out of the dispatcher's HANDLERS array (which disables it for
 # EVERY agent, forever, with no reason/approver/expiry).
 #
-# Record (written by `caws reprieve grant`, read here):
-#   ${CAWS_PROJECT_DIR}/${CAWS_VENDOR_DIR}/hooks/state/guard-reprieve-<sanitized-session>.json
-#   {
-#     "session_id": "...", "created_at": "...", "expires_at": "...",
-#     "approved_by": "...", "reason": "...", "handlers": ["protected-paths.sh", ...]
-#   }
-#
-# This lib mirrors the danger-latch substrate (block-dangerous.sh:73-103):
-#   - same state dir (hooks/state/), same sanitize_session transform, same
-#     per-session keying, same gitignored-operational-cache posture.
-#   - the writer (caws reprieve grant) and this reader both route through
-#     resolve_caws_session_id + sanitize_session so the same session id resolves
-#     to the same filename in every context (the DANGER-LATCH-UX-001 lesson).
-#
-# The one addition over the latch model: an `expires_at` field. An expired
-# reprieve is treated as ABSENT (derived on read, never mutated).
-#
+# Machine records live at ${CAWS_HOME:-$HOME/.caws}/state/sessions/<id>/
+# guard-reprieve-<id>.json. Global presence shadows legacy project records,
+# including malformed, expired and revoked records. Reads never create state.
+# A missing global record may be read from the canonical project's vendor
+# hooks/state directory for one-time migration compatibility. Grant writes only
+# the machine store; revoke writes a global tombstone so fallback cannot revive
+# an older grant. Neither state location confers project ownership.
 # IDEMPOTENT: safe to source multiple times.
 
 if [[ -n "${_CAWS_REPRIEVE_SH_LOADED:-}" ]]; then
@@ -44,34 +34,13 @@ if [[ -n "${_CAWS_REPRIEVE_SH_LOADED:-}" ]]; then
 fi
 _CAWS_REPRIEVE_SH_LOADED=1
 
-# Resolve the reprieve state directory. Mirrors danger_state_dir
-# (block-dangerous.sh:73-78): ${CAWS_PROJECT_DIR}/${CAWS_VENDOR_DIR}/hooks/state,
-# BUT resolves the CANONICAL project dir (not the cwd/worktree root) so a
-# reprieve granted in one context is honored in every worktree of the same
-# repo. CAWS-GUARD-REPRIEVE-LOCATION-COUPLING-001: without this, an agent that
-# grants from the canonical checkout then enters a worktree finds the
-# dispatcher's CAWS_PROJECT_DIR points at the worktree, the reprieve file is
-# absent there, and the guard re-blocks — defeating the feature in the exact
-# multi-worktree workflow CAWS is for. Same lesson guard-strikes.sh applies
-# (it moves strike state OUT of the worktree entirely). Resolution:
-#   1. git rev-parse --git-common-dir → <canonical>/.git; parent = canonical root
-#   2. fall back to CAWS_PROJECT_DIR when not in a linked worktree or git fails
-# Creates the dir if missing (mkdir -p is idempotent; a read consult that has to
-# create the dir is harmless — the file simply won't exist in it).
+# Resolve the machine session directory without creating it.
 caws_reprieve_state_dir() {
-  # CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A6: reprieve state is SESSION-GLOBAL
-  # in the global home. Legacy repo-local reprieve files are read for
-  # continuity by the session-keyed fallback below, never written again.
-  local _sid="${CAWS_SESSION_ID:-${HOOK_SESSION_ID:-}}"
-  if [[ -n "$_sid" && "$_sid" != "unknown" ]]; then
-    local _safe_sid
-    _safe_sid=$(printf '%s' "$_sid" | tr -c 'A-Za-z0-9._-' '_')
-    mkdir -p "${HOME:-/tmp}/.caws/state/sessions/${_safe_sid}"
-    printf '%s/.caws/state/sessions/%s\n' "${HOME:-/tmp}" "$_safe_sid"
-    return 0
-  fi
-  # Unresolved session: fall through to the legacy repo-local resolution.
-  _caws_legacy_reprieve_state_dir
+  local _sid="${1:-${CAWS_SESSION_ID:-${HOOK_SESSION_ID:-}}}"
+  [[ -n "$_sid" && "$_sid" != "unknown" ]] || return 1
+  local _safe_sid
+  _safe_sid=$(printf '%s' "$_sid" | tr -c 'A-Za-z0-9._-' '_')
+  printf '%s/state/sessions/%s\n' "${CAWS_HOME:-${HOME}/.caws}" "$_safe_sid"
 }
 
 _caws_legacy_reprieve_state_dir() {
@@ -103,7 +72,6 @@ _caws_legacy_reprieve_state_dir() {
     fi
     state_dir="$project_dir/${CAWS_VENDOR_DIR:-.claude}/hooks/state"
   fi
-  mkdir -p "$state_dir" 2>/dev/null || true
   printf '%s\n' "$state_dir"
 }
 
@@ -118,7 +86,19 @@ caws_reprieve_file() {
   else
     safe_session="$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9._-' '_')"
   fi
-  printf '%s/guard-reprieve-%s.json\n' "$(caws_reprieve_state_dir)" "$safe_session"
+  local global_file="$(caws_reprieve_state_dir "$session_id")/guard-reprieve-${safe_session}.json"
+  # Presence is decisive: expired, revoked or malformed global records must
+  # never resurrect a still-active legacy copy through fallback.
+  if [[ -e "$global_file" || -L "$global_file" ]]; then
+    printf '%s\n' "$global_file"
+  else
+    local legacy_file="$(_caws_legacy_reprieve_state_dir)/guard-reprieve-${safe_session}.json"
+    if [[ -e "$legacy_file" || -L "$legacy_file" ]]; then
+      printf '%s\n' "$legacy_file"
+    else
+      printf '%s\n' "$global_file"
+    fi
+  fi
 }
 
 # caws_is_handler_reprieved <handler-basename> [<session-id>]
@@ -171,13 +151,19 @@ caws_is_handler_reprieved() {
   # the latch reader — never block a tool call because the reprieve cache broke).
   local verdict
   verdict="$(python3 -c '
-import json, sys
+import json, sys, os
 try:
+    from pathlib import Path
+    record_path = Path(sys.argv[1])
+    if any(p.is_symlink() for p in [record_path, *list(record_path.parents)[:4]]):
+        sys.exit(1)
     with open(sys.argv[1]) as f:
         rec = json.load(f)
 except Exception:
     sys.exit(1)
-if not isinstance(rec, dict):
+if not isinstance(rec, dict) or rec.get("session_id") != sys.argv[3] or "revoked_at" in rec:
+    sys.exit(1)
+if any(not isinstance(rec.get(k), str) or not rec[k] for k in ("created_at", "approved_by", "reason")):
     sys.exit(1)
 expires_at = rec.get("expires_at")
 if not isinstance(expires_at, str) or not expires_at:
@@ -198,10 +184,10 @@ except Exception:
 if exp.tzinfo is None:
     exp = exp.replace(tzinfo=datetime.timezone.utc)
 now = datetime.datetime.now(datetime.timezone.utc)
-if exp < now:
+if exp <= now:
     sys.exit(1)
 handlers = rec.get("handlers")
-if not isinstance(handlers, list):
+if not isinstance(handlers, list) or any(not isinstance(h, str) for h in handlers):
     sys.exit(1)
 target = sys.argv[2]
 if target not in handlers:
@@ -209,7 +195,7 @@ if target not in handlers:
 # Positive match. Emit expires_at + reason for the caller to log.
 reason = rec.get("reason", "")
 print("ADMIT\t" + expires_at + "\t" + str(reason))
-' "$reprieve_file" "$handler" 2>/dev/null)" || return 1
+' "$reprieve_file" "$handler" "$session_id" 2>/dev/null)" || return 1
 
   if [[ "$verdict" == ADMIT* ]]; then
     # Parse the tab-delimited ADMIT line into the caller-facing globals.
