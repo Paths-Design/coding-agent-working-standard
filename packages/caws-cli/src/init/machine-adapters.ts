@@ -77,23 +77,37 @@ function readPointer(home: string): RuntimePointer | null {
   if (!fs.existsSync(file)) return null;
   const value = JSON.parse(fs.readFileSync(file, 'utf8')) as RuntimePointer;
   if (
+    !value ||
+    typeof value !== 'object' ||
     value.version !== 1 ||
     !validDigest(value.digest) ||
     (value.previous_digest !== null && !validDigest(value.previous_digest))
   ) {
     throw new Error('Malformed machine adapter runtime pointer');
   }
-  verifyRuntime(home, value.digest);
   return value;
 }
 
-export function verifyRuntime(home: string, digest: string): Record<string, string> {
+function readManifest(home: string, digest: string): Record<string, string> {
   if (!validDigest(digest)) throw new Error('Invalid runtime digest');
   const root = path.join(home, 'lib/runtimes', digest);
   assertMachinePath(home, path.join(root, 'manifest.json'));
   const manifest = fs.readFileSync(path.join(root, 'manifest.json'), 'utf8');
   if (sha(manifest) !== digest) throw new Error(`Runtime manifest integrity failure: ${digest}`);
   const files = JSON.parse(manifest) as Record<string, string>;
+  if (
+    !files ||
+    typeof files !== 'object' ||
+    Array.isArray(files) ||
+    !validDigest(files['launcher.py'])
+  )
+    throw new Error('Malformed machine runtime manifest');
+  return files;
+}
+
+export function verifyRuntime(home: string, digest: string): Record<string, string> {
+  const files = readManifest(home, digest);
+  const root = path.join(home, 'lib/runtimes', digest);
   for (const [relative, expected] of Object.entries(files)) {
     const file = path.join(root, relative);
     assertMachinePath(root, file);
@@ -104,6 +118,39 @@ export function verifyRuntime(home: string, digest: string): Record<string, stri
     }
   }
   return files;
+}
+
+/** A stable bootstrap survives snapshot updates. Recognize the original
+ * standalone layout by its verified manifest, but never replace local growth.
+ * A matching bootstrap with no pointer is an interrupted first installation. */
+function needsBootstrap(home: string, pointer: RuntimePointer | null, bootstrap: Buffer): boolean {
+  const launcher = path.join(home, 'bin/caws-hook');
+  assertMachinePath(home, launcher);
+  if (!fs.existsSync(launcher)) return true;
+  const installed = sha(fs.readFileSync(launcher));
+  if (installed === sha(bootstrap)) return false;
+  if (pointer) {
+    const manifest = readManifest(home, pointer.digest);
+    if (!manifest['bootstrap.py'] && installed === manifest['launcher.py']) return true;
+    throw new Error(
+      'Machine launcher modified; reconcile local growth before updating or rollback'
+    );
+  }
+  throw new Error('Unmanaged machine launcher exists; refusing to overwrite it');
+}
+
+function activateRuntime(
+  home: string,
+  pointer: RuntimePointer,
+  bootstrap: Buffer,
+  installBootstrap: boolean
+): void {
+  // During first-install/legacy migration, the bootstrap can run the old
+  // snapshot or fail safely until a pointer exists. Retry recognizes these
+  // exact bytes. All subsequent updates and rollbacks have ONE commit point.
+  if (installBootstrap)
+    atomicMachineWrite(home, path.join(home, 'bin/caws-hook'), bootstrap, 0o755);
+  atomicMachineWrite(home, pointerPath(home), JSON.stringify(pointer));
 }
 
 function runtimeFiles(templatesRoot: string): Map<string, Buffer> {
@@ -130,6 +177,7 @@ function runtimeFiles(templatesRoot: string): Map<string, Buffer> {
     }
   }
   add('launcher.py', path.join(templatesRoot, 'runtime/caws-hook.py'));
+  add('bootstrap.py', path.join(templatesRoot, 'runtime/bootstrap.py'));
   add('dispatch.sh', path.join(templatesRoot, 'runtime/dispatch.sh'));
   add('handler-env.sh', path.join(templatesRoot, 'runtime/handler-env.sh'));
   return files;
@@ -174,22 +222,17 @@ function installRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
   );
   const digest = sha(manifest);
   const prior = readPointer(home);
+  if (prior) verifyRuntime(home, prior.digest);
   const launcher = path.join(home, 'bin/caws-hook');
   const snapshot = path.join(home, 'lib/runtimes', digest);
   for (const file of [launcher, snapshot, pointerPath(home)]) assertMachinePath(home, file);
-  if (prior) {
-    const installedLauncher = fs.readFileSync(launcher);
-    if (sha(installedLauncher) !== verifyRuntime(home, prior.digest)['launcher.py']) {
-      throw new Error('Machine launcher modified; reconcile local growth before updating');
-    }
-  } else if (fs.existsSync(launcher)) {
-    throw new Error('Unmanaged machine launcher exists; refusing to overwrite it');
-  }
+  const bootstrap = files.get('bootstrap.py') as Buffer;
+  const installBootstrap = needsBootstrap(home, prior, bootstrap);
   const result: MachineRuntimeResult = {
     home,
     digest,
     previousDigest: prior?.digest ?? null,
-    changed: prior?.digest !== digest,
+    changed: prior?.digest !== digest || installBootstrap,
     launcher,
     files: [...files.keys()],
   };
@@ -209,19 +252,12 @@ function installRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
       if (fs.existsSync(temporary)) fs.rmSync(temporary, { recursive: true });
     }
   }
-  const oldLauncher = prior ? fs.readFileSync(launcher) : null;
-  try {
-    atomicMachineWrite(home, launcher, files.get('launcher.py') as Buffer, 0o755);
-    atomicMachineWrite(
-      home,
-      pointerPath(home),
-      JSON.stringify({ version: 1, digest, previous_digest: prior?.digest ?? null })
-    );
-  } catch (error) {
-    if (oldLauncher) atomicMachineWrite(home, launcher, oldLauncher, 0o755);
-    else if (fs.existsSync(launcher)) fs.unlinkSync(launcher);
-    throw error;
-  }
+  activateRuntime(
+    home,
+    { version: 1, digest, previous_digest: prior?.digest ?? null },
+    bootstrap,
+    installBootstrap
+  );
   return result;
 }
 
@@ -239,28 +275,19 @@ function rollbackRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
   const digest = current.previous_digest;
   const files = verifyRuntime(home, digest);
   const launcher = path.join(home, 'bin/caws-hook');
-  assertMachinePath(home, launcher);
-  if (sha(fs.readFileSync(launcher)) !== verifyRuntime(home, current.digest)['launcher.py']) {
-    throw new Error('Machine launcher modified; reconcile local growth before rollback');
-  }
+  const templatesRoot =
+    options.templatesRoot ?? path.resolve(__dirname, '../../templates/hook-packs');
+  const bootstrapPath = path.join(templatesRoot, 'runtime/bootstrap.py');
+  assertMachinePath(templatesRoot, bootstrapPath);
+  const bootstrap = fs.readFileSync(bootstrapPath);
+  const installBootstrap = needsBootstrap(home, current, bootstrap);
   if (!options.plan) {
-    const previous = fs.readFileSync(launcher);
-    try {
-      atomicMachineWrite(
-        home,
-        launcher,
-        fs.readFileSync(path.join(home, 'lib/runtimes', digest, 'launcher.py')),
-        0o755
-      );
-      atomicMachineWrite(
-        home,
-        pointerPath(home),
-        JSON.stringify({ version: 1, digest, previous_digest: current.digest })
-      );
-    } catch (error) {
-      atomicMachineWrite(home, launcher, previous, 0o755);
-      throw error;
-    }
+    activateRuntime(
+      home,
+      { version: 1, digest, previous_digest: current.digest },
+      bootstrap,
+      installBootstrap
+    );
   }
   return {
     home,
