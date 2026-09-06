@@ -2,10 +2,11 @@ id: CAWS-DEFECT-WORKTREE-ISOLATION-PIN-RELEASE-01
 title: 'Release the per-session worktree isolation pin when the pinned worktree is destroyed'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-pin-release
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-pin-release at a8f0dfaa51a7703cdf0426a06194b1b90ab5944d'
 created_at: '2026-09-06T03:05:53.302Z'
-updated_at: '2026-09-06T03:54:26.512Z'
+updated_at: '2026-09-06T03:56:40.475Z'
 created_by_session: 'session-dd77bd5b-d68a-46c4-b511-5de3c60e1730'
 blast_radius:
   modules:
