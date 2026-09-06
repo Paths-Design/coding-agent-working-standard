@@ -4,7 +4,11 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { assertMachinePath, atomicMachineWrite, machineHome } from './machine-adapters';
 import { isKnownSurface, resolveHookPack } from './hook-packs/register';
-import { readPristineBaseline } from './hook-install';
+import {
+  CANONICAL_HOOK_ENTRIES,
+  CANONICAL_QWEN_HOOK_ENTRIES,
+  readPristineBaseline,
+} from './hook-install';
 import { SHARED_PACK } from './hook-packs/manifest-shared';
 
 export const MACHINE_EVENTS = {
@@ -47,6 +51,120 @@ const normalize = (text: string): string =>
     .join('\n');
 const noVersion = (text: string): string =>
   text.replace(/hook_pack_version:\s*\d+/g, 'hook_pack_version: N');
+
+/** Tokenize the supported simple-command subset without expanding or executing
+ * project shell. Preserve raw assignment bytes; reject compound commands and
+ * substitutions instead of discarding custom execution semantics. */
+function nativeCommandWords(command: string): { raw: string; value: string }[] {
+  const words: { raw: string; value: string }[] = [];
+  let index = 0;
+  while (index < command.length) {
+    if (/[ \t]/.test(command[index] as string)) {
+      index++;
+      continue;
+    }
+    const start = index;
+    let value = '';
+    let quoted: string | null = null;
+    while (index < command.length) {
+      const char = command[index] as string;
+      if (!quoted && /[ \t]/.test(char)) break;
+      if (/[\r\n]/.test(char)) throw new Error('multiline command');
+      if (quoted === "'") {
+        if (char === "'") quoted = null;
+        else value += char;
+      } else if (char === '\\') {
+        const next = command[++index];
+        if (!next || /[\r\n]/.test(next) || (quoted && !/["\\$]/.test(next)))
+          throw new Error('unsupported shell escape');
+        value += next;
+      } else if (char === '`' || (char === '$' && command[index + 1] === '(')) {
+        throw new Error('command substitution');
+      } else if (char === '"' || (!quoted && char === "'")) {
+        quoted = quoted ? null : char;
+      } else {
+        if (!quoted && /[;&|<>()#]/.test(char)) throw new Error('compound command');
+        value += char;
+      }
+      index++;
+    }
+    if (quoted) throw new Error('unclosed shell quote');
+    words.push({ raw: command.slice(start, index), value });
+  }
+  return words;
+}
+
+function machineCommand(home: string, surface: string, event: string): string {
+  return `CAWS_HOME=${quote(home)} python3 ${quote(path.join(home, 'bin/caws-hook'))} ${surface} ${event}`;
+}
+
+function migrateNativeCommand(
+  command: string,
+  repo: string,
+  home: string,
+  surface: string,
+  event: Event
+): string {
+  const next = machineCommand(home, surface, event);
+  // These are the shipped root-resolving transports, not arbitrary shell to
+  // evaluate. The Qwen shim's conditional bootstrap is replaced by the runtime's
+  // own outside-project handling. Unknown wrappers require reconciliation.
+  const qwen = CANONICAL_QWEN_HOOK_ENTRIES[MACHINE_EVENTS[event]];
+  if (
+    surface === 'qwen-code' &&
+    command === (qwen?.hooks as NativeHook[] | undefined)?.[0]?.command
+  )
+    return next;
+  const rootPrelude = 'REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"; ';
+  const prelude = command.startsWith(rootPrelude) ? rootPrelude : '';
+  try {
+    const words = nativeCommandWords(command.slice(prelude.length));
+    const assignments: string[] = [];
+    if (words[0]?.value === 'env') words.shift();
+    while (words[0] && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0].raw)) {
+      const assignment = words.shift() as { raw: string; value: string };
+      if (!assignment.raw.startsWith('CAWS_HOME=')) assignments.push(assignment.raw);
+    }
+    const args = words.map((word) => word.value);
+    let recognized = false;
+    if (['python3', '/usr/bin/python3'].includes(args[0] ?? '')) {
+      recognized =
+        args.length === 4 &&
+        path.isAbsolute(args[1] ?? '') &&
+        args[1]?.endsWith('/bin/caws-hook') === true &&
+        args[2] === surface &&
+        args[3] === event;
+    } else {
+      if (['bash', '/bin/bash'].includes(args[0] ?? '')) args.shift();
+      const roots = [
+        '',
+        './',
+        `${repo}/`,
+        '$REPO_ROOT/',
+        '${REPO_ROOT}/',
+        '$CLAUDE_PROJECT_DIR/',
+        '${CLAUDE_PROJECT_DIR}/',
+        '$CODEX_PROJECT_DIR/',
+        '${CODEX_PROJECT_DIR}/',
+      ];
+      const dirs = [
+        '.caws',
+        surface === 'claude-code' ? '.claude' : surface === 'codex' ? '.codex' : '.qwen',
+      ];
+      recognized =
+        args.length === 1 &&
+        roots.some((root) =>
+          dirs.some((dir) => args[0] === `${root}${dir}/hooks/dispatch/${event}.sh`)
+        );
+    }
+    if (!recognized) throw new Error('unrecognized dispatcher invocation');
+    return prelude + [...assignments, next].join(' ');
+  } catch (error) {
+    throw new Error(
+      `Custom native command requires reconciliation (${MACHINE_EVENTS[event]}): ${(error as Error).message}`
+    );
+  }
+}
 
 /** Read a literal handler array, never source/eval project shell during a plan.
  * Only known dispatcher scaffolding is admitted. Custom shell logic outside the
@@ -187,7 +305,7 @@ export function adoptMachineAdapter(options: AdoptMachineAdapterOptions): {
   const config = beforeConfig === null ? {} : JSON.parse(beforeConfig);
   if (!config || typeof config !== 'object' || Array.isArray(config))
     throw new Error('Malformed harness configuration');
-  const isCaws = (command: unknown): boolean =>
+  const isCaws = (command: unknown): command is string =>
     typeof command === 'string' &&
     /(?:\.caws\/hooks\/|\.(?:codex|claude|qwen)\/hooks\/|\/bin\/caws-hook)/.test(command);
   // JSON and inline TOML are additive in Codex. Refuse the other layer rather
@@ -240,28 +358,12 @@ export function adoptMachineAdapter(options: AdoptMachineAdapterOptions): {
       );
       selected.events[event] = {
         hooks_dir: hooksDir,
-        handlers: handlers.filter(
-          (h) =>
-            !(
-              surface === 'codex' &&
-              event === 'post_tool_use' &&
-              h.split(' ')[0] === 'quality-check.sh'
-            )
-        ),
+        handlers,
       };
     }
-    const sharedAdapters = new Set([
-      'runtime-paths.sh',
-      'lib/agent-surface.sh',
-      'lib/session-id.sh',
-      'lib/reprieve.sh',
-      'lib/run-handlers.sh',
-      'lib/parse-input.sh',
-      'lib/emit.sh',
-    ]);
     const candidates = [
       ...SHARED_PACK.installedFiles
-        .filter((f) => sharedAdapters.has(f.sourcePath))
+        .filter((f) => f.sourcePath.startsWith('lib/') || f.sourcePath === 'runtime-paths.sh')
         .map((file) => ({ file, packId: 'shared' })),
       ...pack.pack.installedFiles
         .filter((f) => f.sourcePath.startsWith('hooks/lib/'))
@@ -271,6 +373,22 @@ export function adoptMachineAdapter(options: AdoptMachineAdapterOptions): {
       const local = path.join(repo, file.destPath);
       if (!fs.existsSync(local)) continue;
       assertMachinePath(repo, local);
+      const name = path.basename(file.sourcePath);
+      // Legacy lookup prefers the vendor library to the shared fallback even
+      // when the vendor copy is pristine. Retaining an inactive fallback as an
+      // override would promote it and can change native blocking semantics.
+      const vendorFile = `${vendor}/hooks/lib/${name}`;
+      if (
+        packId === 'shared' &&
+        file.sourcePath.startsWith('lib/') &&
+        name !== 'agent-surface.sh' &&
+        fs.existsSync(path.join(repo, vendorFile))
+      ) {
+        assertMachinePath(repo, path.join(repo, vendorFile));
+        if (!candidates.some((candidate) => candidate.file.destPath === vendorFile))
+          selected.libraries[name] = vendorFile;
+        continue;
+      }
       const bytes = fs.readFileSync(local, 'utf8');
       const baseline = readPristineBaseline(repo, packId, file.destPath);
       const upstream = fs.readFileSync(path.join(templatesRoot, packId, file.sourcePath), 'utf8');
@@ -282,7 +400,6 @@ export function adoptMachineAdapter(options: AdoptMachineAdapterOptions): {
         throw new Error(
           `Unresolved adapter growth at ${file.destPath}; no pristine baseline. Review and declare it via --from.`
         );
-      const name = path.basename(file.sourcePath);
       if (['runtime-paths.sh', 'agent-surface.sh'].includes(name) || selected.libraries[name]) {
         throw new Error(
           `Conflicting or bootstrap library growth at ${file.destPath}; reconcile before adoption`
@@ -304,13 +421,20 @@ export function adoptMachineAdapter(options: AdoptMachineAdapterOptions): {
       .map((group: NativeHookGroup) => {
         if (!group || !Array.isArray(group.hooks))
           throw new Error(`Malformed hook group: ${native}`);
-        const hooks = group.hooks.filter((h) => {
+        const hooks = group.hooks.map((h) => {
           if (!h || typeof h !== 'object') throw new Error(`Malformed hook: ${native}`);
           if (isCaws(h.command)) {
             replaced++;
-            return false;
+            if (!selected.events[event as Event])
+              throw new Error(
+                `Existing CAWS wiring for ${native} has no policy; refusing to drop it`
+              );
+            return {
+              ...h,
+              command: migrateNativeCommand(h.command, repo, home, surface, event as Event),
+            };
           }
-          return true;
+          return h;
         });
         return { ...group, hooks };
       })
@@ -319,24 +443,26 @@ export function adoptMachineAdapter(options: AdoptMachineAdapterOptions): {
       throw new Error(
         `Multiple CAWS handlers for ${native}; review duplicate wiring before adoption`
       );
-    if (selected.events[event as Event]) {
-      preserved.push({
-        matcher: event.includes('tool_use')
-          ? surface === 'qwen-code'
-            ? 'run_shell_command|write_file|edit|read_file|glob|grep_search|notebook_edit'
-            : 'Bash|apply_patch|Edit|Write|Read'
-          : '*',
-        hooks: [
-          {
-            type: 'command',
-            command: `CAWS_HOME=${quote(home)} python3 ${quote(path.join(home, 'bin/caws-hook'))} ${surface} ${event}`,
-            timeout: surface === 'qwen-code' ? 60000 : 60,
-          },
-        ],
-      });
-    } else if (replaced)
-      throw new Error(`Existing CAWS wiring for ${native} has no policy; refusing to drop it`);
-    config.hooks[native] = preserved;
+    if (selected.events[event as Event] && replaced === 0) {
+      const defaults =
+        surface === 'codex'
+          ? JSON.parse(fs.readFileSync(path.join(templatesRoot, 'codex/hooks.json'), 'utf8')).hooks[
+              native
+            ][0]
+          : (surface === 'claude-code' ? CANONICAL_HOOK_ENTRIES : CANONICAL_QWEN_HOOK_ENTRIES)[
+              native
+            ];
+      if (defaults)
+        preserved.push({
+          ...defaults,
+          hooks: defaults.hooks.map((hook: NativeHook) => ({
+            ...hook,
+            command: machineCommand(home, surface, event),
+          })),
+        });
+    }
+    if (preserved.length > 0 || Object.hasOwn(config.hooks, native))
+      config.hooks[native] = preserved;
   }
   const changes = [
     { path: policyPath, before: beforePolicy, after: JSON.stringify(policy, null, 2) + '\n' },
