@@ -110,3 +110,9 @@ evidence:
     recorded_at: "2026-09-06T21:32:16.666Z"
     artifact_path: tmp/machine-adapter-runtime-2026-09-06/README.md
     commit_sha: "2658b1b3"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "packages/caws-cli/tests/adapter/machine-adoption.test.js: literal custom handler order, unrelated hooks, explicit policy, growth preservation and duplicate/bootstrap refusal"
+    recorded_at: "2026-09-06T21:32:17.101Z"
+    artifact_path: tmp/machine-adapter-runtime-2026-09-06/README.md
+    commit_sha: "2658b1b3"
