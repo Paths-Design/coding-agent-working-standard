@@ -408,6 +408,30 @@ caws_source_lib() {
   local basename="${1:-}"
   [[ -z "$basename" ]] && return 1
 
+  # An adopted project declares intentional local overrides explicitly. Old
+  # vendored adapter copies are not allowed to shadow the machine runtime.
+  # This branch is entered only by the machine launcher; legacy dispatch keeps
+  # its existing resolution order below.
+  if [[ "${CAWS_MACHINE_RUNTIME:-}" == 1 ]]; then
+    local _machine_local
+    _machine_local="$(python3 -c 'import json,os,sys; p=json.loads(os.environ.get("CAWS_MACHINE_LIBRARIES", "{}")); print(p.get(sys.argv[1], ""))' "$basename")" || return 1
+    if [[ -n "$_machine_local" ]]; then
+      source "${CAWS_MACHINE_POLICY_ROOT}/${_machine_local}"
+      return $?
+    fi
+    local _machine_user="${CAWS_HOME:-${HOME}/.caws}/surfaces/${CAWS_AGENT_SURFACE}/lib/${basename}"
+    if [[ -f "$_machine_user" ]]; then
+      source "$_machine_user"
+      return $?
+    fi
+    if [[ -f "${CAWS_MACHINE_ADAPTER_LIB_DIR}/${basename}" ]]; then
+      source "${CAWS_MACHINE_ADAPTER_LIB_DIR}/${basename}"
+      return $?
+    fi
+    source "${CAWS_SHARED_LIB_DIR}/${basename}"
+    return $?
+  fi
+
   # Determine shared lib dir: prefer the exported env var, fall back to
   # locating it relative to this file (lib/ sibling).
   local _shared_lib

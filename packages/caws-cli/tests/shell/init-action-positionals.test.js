@@ -42,7 +42,7 @@ function spawnCli(root, args) {
   return spawnSync(process.execPath, [CLI, ...args], {
     cwd: root,
     encoding: 'utf8',
-    env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'init-action-positionals-test' },
+    env: { ...process.env, CAWS_HOME: path.join(root, 'machine-home'), CLAUDE_CODE_SESSION_ID: 'init-action-positionals-test' },
   });
 }
 
@@ -87,4 +87,18 @@ describe('caws init action positionals (full CLI parse path)', () => {
     expect(output).toContain('unexpected extra argument(s): stray-token');
     expect(output).toContain('This command takes no positional arguments');
   });
+});
+
+
+test('machine adapter operations reach the actual CLI parser and reject incompatible options without writes', () => {
+  const fs = require('node:fs');
+  const root = mkRepo();
+  const plan = spawnCli(root, ['init', 'adapters', 'install', '--plan', '--json']);
+  expect(plan.status).toBe(0);
+  expect(JSON.parse(plan.stdout).launcher).toBe(path.join(root, 'machine-home/bin/caws-hook'));
+  expect(fs.existsSync(path.join(root, 'machine-home'))).toBe(false);
+  const incompatible = spawnCli(root, ['init', 'adapters', 'install', '--overwrite', '--force']);
+  expect(incompatible.status).toBe(2);
+  expect(incompatible.stderr).toMatch(/incompatible/);
+  expect(fs.existsSync(path.join(root, 'machine-home'))).toBe(false);
 });

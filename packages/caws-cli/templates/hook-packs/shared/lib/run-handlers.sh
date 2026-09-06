@@ -119,9 +119,13 @@ run_handlers() {
   # a missing lib degrades to HOOK_SESSION_ID, and the reprieve check itself is
   # guarded by declare -F so a missing reprieve.sh is a no-op. Never blocks.
   local _rh_session_id="${HOOK_SESSION_ID:-}"
-  if [[ -f "${HOOKS_DIR}/lib/session-id.sh" ]]; then
+  if [[ "${CAWS_MACHINE_RUNTIME:-}" == 1 || -f "${HOOKS_DIR}/lib/session-id.sh" ]]; then
     # shellcheck source=lib/session-id.sh
-    source "${HOOKS_DIR}/lib/session-id.sh" 2>/dev/null || true
+    if [[ "${CAWS_MACHINE_RUNTIME:-}" == 1 ]]; then
+      caws_source_lib session-id.sh || return 2
+    else
+      source "${HOOKS_DIR}/lib/session-id.sh" 2>/dev/null || true
+    fi
     if declare -F resolve_caws_session_id_with_payload >/dev/null 2>&1; then
       _rh_session_id="$(resolve_caws_session_id_with_payload "${HOOK_SESSION_ID:-}")"
     fi
@@ -133,7 +137,11 @@ run_handlers() {
     fi
   fi
   # Best-effort source the reprieve lib so the loop check is available.
-  [[ -f "${HOOKS_DIR}/lib/reprieve.sh" ]] && source "${HOOKS_DIR}/lib/reprieve.sh" 2>/dev/null || true
+  if [[ "${CAWS_MACHINE_RUNTIME:-}" == 1 ]]; then
+    caws_source_lib reprieve.sh || return 2
+  else
+    [[ -f "${HOOKS_DIR}/lib/reprieve.sh" ]] && source "${HOOKS_DIR}/lib/reprieve.sh" 2>/dev/null || true
+  fi
 
   # Accept both surface-neutral (CAWS_HOOK_*) and legacy (CLAUDE_HOOK_*)
   # env var names for dry-run / timing so that existing consumer configs

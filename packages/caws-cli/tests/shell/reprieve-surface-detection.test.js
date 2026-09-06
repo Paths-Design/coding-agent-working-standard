@@ -73,6 +73,7 @@ function grant(repoRoot, extra = {}, env = HUMAN_ENV) {
   const err = [];
   const code = runReprieveGrantCommand({
     cwd: repoRoot,
+        homeDir: path.join(repoRoot, 'machine-home'),
     now: () => NOW,
     out: (l) => out.push(l),
     err: (l) => err.push(l),
@@ -87,6 +88,10 @@ function grant(repoRoot, extra = {}, env = HUMAN_ENV) {
   return { code, out: out.join('\n'), err: err.join('\n') };
 }
 
+function globalRecordExists(repoRoot) {
+  return fs.existsSync(path.join(repoRoot, 'machine-home/state/sessions', SESSION, `guard-reprieve-${SESSION}.json`));
+}
+
 function recordExistsIn(repoRoot, vendorDir) {
   return fs.existsSync(
     path.join(repoRoot, vendorDir, 'hooks', 'state', `guard-reprieve-${SESSION}.json`)
@@ -94,7 +99,7 @@ function recordExistsIn(repoRoot, vendorDir) {
 }
 
 describe('CAWS-REPRIEVE-SURFACE-DETECTION-001: the lease decides (A1, A2)', () => {
-  it('writes a codex-platform session to .codex even though .claude is first in VENDOR_DIRS', () => {
+  it('writes one global record while retaining codex lease provenance', () => {
     // THE regression test. Against first-match-wins this lands in .claude and
     // the codex dispatcher never sees it.
     const repoRoot = makeRepoRoot(STERLING_DIRS, {
@@ -104,7 +109,8 @@ describe('CAWS-REPRIEVE-SURFACE-DETECTION-001: the lease decides (A1, A2)', () =
     const r = grant(repoRoot);
 
     expect(r.code).toBe(0);
-    expect(recordExistsIn(repoRoot, '.codex')).toBe(true);
+    expect(globalRecordExists(repoRoot)).toBe(true);
+    expect(recordExistsIn(repoRoot, '.codex')).toBe(false);
     expect(recordExistsIn(repoRoot, '.claude')).toBe(false);
   });
 
@@ -125,7 +131,7 @@ describe('CAWS-REPRIEVE-SURFACE-DETECTION-001: the lease decides (A1, A2)', () =
     expect(vendorDirFromPlatform(platform)).toBe(expectedDir);
   });
 
-  it('routes each platform to its own dir from the same four-substrate repo', () => {
+  it('routes platforms to the same machine session store', () => {
     // Same on-disk shape, different lease: proves the lease is what varies the
     // outcome, not anything about the directory layout.
     for (const [platform, dir] of [
@@ -135,7 +141,8 @@ describe('CAWS-REPRIEVE-SURFACE-DETECTION-001: the lease decides (A1, A2)', () =
       const repoRoot = makeRepoRoot(STERLING_DIRS, { session_id: SESSION, platform });
       const r = grant(repoRoot);
       expect(r.code).toBe(0);
-      expect(recordExistsIn(repoRoot, dir)).toBe(true);
+      expect(globalRecordExists(repoRoot)).toBe(true);
+    expect(recordExistsIn(repoRoot, dir)).toBe(false);
       expect(recordExistsIn(repoRoot, '.claude')).toBe(false);
     }
   });
@@ -199,7 +206,8 @@ describe('CAWS-REPRIEVE-SURFACE-DETECTION-001: --surface still wins (A4)', () =>
     const r = grant(repoRoot, { surface: 'zcode' });
 
     expect(r.code).toBe(0);
-    expect(recordExistsIn(repoRoot, '.zcode')).toBe(true);
+    expect(globalRecordExists(repoRoot)).toBe(true);
+    expect(recordExistsIn(repoRoot, '.zcode')).toBe(false);
     expect(recordExistsIn(repoRoot, '.codex')).toBe(false);
   });
 
@@ -209,7 +217,8 @@ describe('CAWS-REPRIEVE-SURFACE-DETECTION-001: --surface still wins (A4)', () =>
     const r = grant(repoRoot, { surface: 'codex' });
 
     expect(r.code).toBe(0);
-    expect(recordExistsIn(repoRoot, '.codex')).toBe(true);
+    expect(globalRecordExists(repoRoot)).toBe(true);
+    expect(recordExistsIn(repoRoot, '.codex')).toBe(false);
   });
 });
 
@@ -231,7 +240,7 @@ describe('CAWS-REPRIEVE-SURFACE-DETECTION-001: env corroborates, never decides (
 });
 
 describe('CAWS-REPRIEVE-SURFACE-DETECTION-001: success names the surface (A7)', () => {
-  it('states the vendor dir, its provenance, and which dispatcher consults it', () => {
+  it('states the surface provenance and machine-wide session scope', () => {
     const repoRoot = makeRepoRoot(STERLING_DIRS, {
       session_id: SESSION,
       platform: 'codex',
@@ -239,7 +248,7 @@ describe('CAWS-REPRIEVE-SURFACE-DETECTION-001: success names the surface (A7)', 
     const r = grant(repoRoot);
 
     expect(r.out).toContain('surface:  .codex');
-    expect(r.out).toContain('Only the .codex dispatcher consults this reprieve');
+    expect(r.out).toContain('scope: session-global; machine dispatchers consult this record across projects.');
     // Provenance is what lets an operator audit a wrong-dir grant from the
     // success message alone — the sterling case went unnoticed for 7 minutes.
     expect(r.out).toContain('the lease for session');

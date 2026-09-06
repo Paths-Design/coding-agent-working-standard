@@ -921,11 +921,11 @@ export const INIT_COMMAND_META: LeafCommandMeta = {
   description:
     'Bootstrap the canonical vNext .caws/ project state (idempotent; refuses to overwrite legacy single-spec layout). With --agent-surface, also installs the corresponding hook pack. Subcommands: `init diff` (read-only pack drift view incl. three-way decomposition) and `init port <path> --from <file>` (CLI-mediated retrofit landing — no agent-side hook editing).',
   arguments: [
-    { name: 'action', required: false, description: 'subcommand: diff | port' },
+    { name: 'action', required: false, description: 'subcommand: diff | port | adapters' },
     {
       name: 'actionArg',
       required: false,
-      description: 'port: the managed pack destination path being retrofitted',
+      description: 'port: managed destination path; adapters: install | rollback | adopt (use --plan to preview)',
     },
   ],
   options: [

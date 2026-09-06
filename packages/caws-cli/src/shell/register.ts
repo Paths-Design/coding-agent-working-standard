@@ -418,9 +418,9 @@ export function registerShellCommands(
       ) => {
         // Positional subcommands (CAWS-HOOKPACK-UPGRADE-RETROFIT-001).
         // Unknown positional = usage error, not silently ignored.
-        if (action !== undefined && action !== 'diff' && action !== 'port') {
+        if (action !== undefined && action !== 'diff' && action !== 'port' && action !== 'adapters') {
           process.stderr.write(
-            `caws init: unknown subcommand "${action}" (expected diff | port).\n`
+            `caws init: unknown subcommand "${action}" (expected diff | port | adapters).\n`
           );
           exit(2);
           return;
@@ -465,7 +465,7 @@ export function registerShellCommands(
             opts.wireUserConfig;
         }
         if (action !== undefined) {
-          (runOpts as { action?: 'diff' | 'port' }).action = action;
+          (runOpts as { action?: 'diff' | 'port' | 'adapters' }).action = action;
         }
         if (actionArg !== undefined) {
           (runOpts as { actionArg?: string }).actionArg = actionArg;
