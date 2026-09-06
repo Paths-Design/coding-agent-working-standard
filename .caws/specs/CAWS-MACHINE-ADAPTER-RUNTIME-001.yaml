@@ -116,3 +116,9 @@ evidence:
     recorded_at: "2026-09-06T21:32:17.101Z"
     artifact_path: tmp/machine-adapter-runtime-2026-09-06/README.md
     commit_sha: "2658b1b3"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "packages/caws-cli/tests/adapter/runtime-context.test.js: real CLI-bound linked worktree and real ownership guard; owner admitted, foreign session refused despite conflicting identity and Git variables"
+    recorded_at: "2026-09-06T21:32:17.532Z"
+    artifact_path: tmp/machine-adapter-runtime-2026-09-06/README.md
+    commit_sha: "2658b1b3"
