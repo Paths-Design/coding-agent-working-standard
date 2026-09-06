@@ -140,3 +140,9 @@ evidence:
     recorded_at: "2026-09-06T21:32:18.893Z"
     artifact_path: tmp/machine-adapter-runtime-2026-09-06/README.md
     commit_sha: "2658b1b3"
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "packages/caws-cli/tests/adapter/machine-runtime.test.js: Codex-shaped output/refusal and missing/corrupt runtime checks; native registration and other-harness parity remain explicitly unmeasured in docs/architecture/hook-pack-shared-core.md"
+    recorded_at: "2026-09-06T21:32:19.330Z"
+    artifact_path: tmp/machine-adapter-runtime-2026-09-06/README.md
+    commit_sha: "2658b1b3"
