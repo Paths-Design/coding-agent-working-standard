@@ -2,10 +2,11 @@ id: CAWS-CODEX-INSTRUCTION-REACH-002
 title: 'Make CAWS instructions reachable to Codex'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-codex-instruction-reach-2
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-codex-instruction-reach-2 at dce6adafffcd9718c8c95ca8389c5c09d37e0e2d'
 created_at: '2026-09-04T18:06:30.103Z'
-updated_at: '2026-09-04T18:11:16.212Z'
+updated_at: '2026-09-06T05:16:33.565Z'
 created_by_session: '01a06d5b-3024-73b3-8ae2-67a4e79017b1'
 blast_radius:
   modules:
