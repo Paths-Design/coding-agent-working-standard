@@ -143,14 +143,183 @@ test('read-only show, list and dry-run create no state; DSH cannot self-grant', 
   expect(fs.existsSync(empty)).toBe(false);
 });
 
-
 test('read commands use the selected surface and payload identity, never a foreign harness shadow', () => {
   expect(grantFixture()).toBe(0);
   let observed;
-  const env = { CAWS_HOME: home, CAWS_AGENT_SURFACE: 'codex', CODEX_THREAD_ID: 'fixture-session', CLAUDE_SESSION_ID: 'foreign' };
-  expect(show({ ...options(), session: undefined, env, json: true, out: s => { observed = JSON.parse(s); } })).toBe(0);
+  const env = {
+    CAWS_HOME: home,
+    CAWS_AGENT_SURFACE: 'codex',
+    CODEX_THREAD_ID: 'fixture-session',
+    CLAUDE_SESSION_ID: 'foreign',
+  };
+  expect(
+    show({
+      ...options(),
+      session: undefined,
+      env,
+      json: true,
+      out: (s) => {
+        observed = JSON.parse(s);
+      },
+    })
+  ).toBe(0);
   expect(observed.session_id).toBe('fixture-session');
   expect(observed.active).toBe(true);
-  expect(show({ ...options(), session: undefined, env: { ...env, CODEX_THREAD_ID: 'foreign', HOOK_SESSION_ID: 'fixture-session' }, json: true, out: s => { observed = JSON.parse(s); } })).toBe(0);
+  expect(
+    show({
+      ...options(),
+      session: undefined,
+      env: { ...env, CODEX_THREAD_ID: 'foreign', HOOK_SESSION_ID: 'fixture-session' },
+      json: true,
+      out: (s) => {
+        observed = JSON.parse(s);
+      },
+    })
+  ).toBe(0);
   expect(observed.active).toBe(true);
+});
+
+function legacyRecord(vendor, sid = 'fixture-session') {
+  const file = path.join(a, vendor, 'hooks/state', `guard-reprieve-${sid}.json`);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(
+    file,
+    JSON.stringify({
+      session_id: sid,
+      created_at: '2026-01-01T00:00:00Z',
+      expires_at: '2099-01-01T00:00:00Z',
+      approved_by: 'fixture-human',
+      reason: 'isolated legacy migration fixture',
+      handlers: ['guard.sh'],
+    })
+  );
+  return file;
+}
+
+function humanCli(args) {
+  return spawnSync(
+    process.execPath,
+    [path.resolve(__dirname, '../../dist/index.js'), 'reprieve', ...args],
+    {
+      cwd: a,
+      encoding: 'utf8',
+      env: { PATH: process.env.PATH, HOME: path.join(root, 'user'), CAWS_HOME: home },
+    }
+  );
+}
+
+test('human show and list discover a legacy grant that the actual dispatcher honors without creating global state', () => {
+  legacyRecord('.codex');
+  const observed = humanCli(['show', '--session', 'fixture-session', '--json']);
+  expect(observed.status).toBe(0);
+  expect(JSON.parse(observed.stdout).active).toBe(true);
+  const listed = humanCli(['list', '--json']);
+  expect(listed.status).toBe(0);
+  expect(JSON.parse(listed.stdout).reprieves.map((r) => [r.session_id, r.active])).toEqual([
+    ['fixture-session', true],
+  ]);
+  const allowed = dispatch(a);
+  expect(allowed.status).toBe(0);
+  expect(allowed.stderr).toContain('[reprieve] guard.sh skipped for session fixture-session');
+  expect(fs.existsSync(path.join(home, 'state/sessions'))).toBe(false);
+});
+
+test('ambiguous legacy session copies require a surface, while global presence remains decisive', () => {
+  legacyRecord('.codex');
+  legacyRecord('.claude');
+  for (const args of [
+    ['show', '--session', 'fixture-session', '--json'],
+    ['list', '--json'],
+  ]) {
+    const ambiguous = humanCli(args);
+    expect(ambiguous.status).toBe(1);
+    expect(ambiguous.stderr).toMatch(/ambiguous legacy.*--surface/i);
+  }
+  const explicit = humanCli([
+    'show',
+    '--session',
+    'fixture-session',
+    '--surface',
+    'codex',
+    '--json',
+  ]);
+  expect(explicit.status).toBe(0);
+  expect(JSON.parse(explicit.stdout).active).toBe(true);
+  expect(grantFixture()).toBe(0);
+  const global = humanCli(['show', '--session', 'fixture-session', '--json']);
+  expect(global.status).toBe(0);
+  expect(JSON.parse(global.stdout).active).toBe(true);
+  const listed = humanCli(['list', '--json']);
+  expect(listed.status).toBe(0);
+  expect(JSON.parse(listed.stdout).reprieves.map((r) => r.session_id)).toEqual(['fixture-session']);
+  const revoked = humanCli([
+    'revoke',
+    '--session',
+    'fixture-session',
+    '--reason',
+    'fixture complete',
+    '--json',
+  ]);
+  expect(revoked.status).toBe(0);
+  expect(JSON.parse(revoked.stdout).revoked).toBe(true);
+  expect(dispatch(a).status).toBe(2);
+});
+
+test('list includes distinct unambiguous legacy sessions across surfaces', () => {
+  legacyRecord('.codex', 'codex-fixture');
+  legacyRecord('.claude', 'claude-fixture');
+  fs.mkdirSync(path.join(home, 'state/sessions'), { recursive: true });
+  fs.writeFileSync(path.join(home, 'state/sessions/.DS_Store'), 'unrelated directory metadata');
+  const listed = humanCli(['list', '--json']);
+  expect(listed.status).toBe(0);
+  expect(JSON.parse(listed.stdout).reprieves.map((r) => [r.session_id, r.active])).toEqual([
+    ['claude-fixture', true],
+    ['codex-fixture', true],
+  ]);
+});
+
+test('revocation suppresses conflicting legacy copies without guessing which one was active', () => {
+  const codex = legacyRecord('.codex');
+  const claude = legacyRecord('.claude');
+  const before = [codex, claude].map((file) => fs.readFileSync(file));
+  const revoked = humanCli([
+    'revoke',
+    '--session',
+    'fixture-session',
+    '--reason',
+    'suppress both fixture copies',
+    '--json',
+  ]);
+  expect(revoked.status).toBe(0);
+  expect(JSON.parse(revoked.stdout).revoked).toBe(true);
+  expect(revoked.stderr).toMatch(/ambiguous legacy/i);
+  expect([codex, claude].map((file) => fs.readFileSync(file))).toEqual(before);
+  expect(dispatch(a).status).toBe(2);
+  const listed = humanCli(['list', '--json']);
+  expect(listed.status).toBe(0);
+  expect(JSON.parse(listed.stdout).reprieves.map((r) => r.active)).toEqual([false]);
+});
+
+test('revoke --json on an absent grant emits one JSON object and prevents later legacy fallback', () => {
+  const revoked = humanCli([
+    'revoke',
+    '--session',
+    'fixture-session',
+    '--reason',
+    'fixture revocation',
+    '--json',
+  ]);
+  expect(revoked.status).toBe(0);
+  const record = JSON.parse(revoked.stdout);
+  expect(record).toEqual({
+    ok: true,
+    revoked: true,
+    session_id: 'fixture-session',
+    file: recordPath('fixture-session'),
+  });
+  legacyRecord('.codex');
+  const observed = humanCli(['show', '--session', 'fixture-session', '--json']);
+  expect(observed.status).toBe(0);
+  expect(JSON.parse(observed.stdout).active).toBe(false);
+  expect(dispatch(a).status).toBe(2);
 });

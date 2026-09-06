@@ -317,7 +317,11 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
         surface: 'claude-code',
       });
       expect(code).toBe(0);
-      expect(lines.join('\n')).toMatch(/recording global revocation/i);
+      expect(lines.join('\n')).toMatch(/revoked reprieve for session sess-nope/i);
+      const tombstone = path.join(repoRoot, 'machine-home/state/sessions/sess-nope/guard-reprieve-sess-nope.json');
+      expect(JSON.parse(fs.readFileSync(tombstone, 'utf8'))).toMatchObject({
+        session_id: 'sess-nope', handlers: [], reason: 'nothing to clear', revoked_at: expect.any(String),
+      });
     });
 
     test('refuses revoke without --reason', () => {
