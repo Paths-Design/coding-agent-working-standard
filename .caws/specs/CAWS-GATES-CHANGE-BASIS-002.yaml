@@ -1,0 +1,40 @@
+id: CAWS-GATES-CHANGE-BASIS-002
+title: 'budget_limit and scope_boundary measure the canonical staged index, so committed work and worktree branches are invisible to them'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-06T07:54:47.187Z'
+updated_at: '2026-09-06T07:54:47.187Z'
+created_by_session: 'e12db054-1b1d-4c96-b00b-2a3edb547f08'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/src/shell/gates/local-evaluators'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/gates/local-evaluators'
+    - 'packages/caws-cli/tests'
+  out: []
+invariants:
+  - 'listStagedChanges runs git diff --cached with cwd = the repo root resolved via --git-common-dir, which is by design the canonical main checkout; a gate run from inside a linked worktree therefore measures the canonical checkout''s index and never the worktree branch'
+  - 'the --cached basis measures the staged index only, so once work is committed (the workflow''s own instruction is to commit per logical unit) budget_limit and scope_boundary observe an empty change set and pass vacuously at any size, even with no worktrees involved'
+  - 'a gate that reports PASS must have measured the change set the caller believes it measured; when it cannot, the disposition must name the basis it used rather than emitting an unqualified PASS'
+acceptance:
+  - id: A1
+    given: 'a linked worktree whose branch carries committed changes exceeding the risk-tier budget'
+    when: 'caws gates run --spec <id> is invoked from inside that worktree'
+    then: 'budget_limit reports the branch''s cumulative delta against its base ref and blocks, rather than reporting PASS from the canonical checkout''s index'
+  - id: A2
+    given: 'a canonical checkout where all work is committed and the index is empty'
+    when: 'caws gates run is invoked'
+    then: 'budget_limit does not emit an unqualified PASS derived from the empty staged diff'
+  - id: A3
+    given: 'any gate evaluation'
+    when: 'the gate_evaluated event is appended'
+    then: 'it records the change basis and the resolved working directory, so a later reader can tell what was measured'
+non_functional: {}
+contracts:
+  - name: 'gate-change-basis'
+    type: contract-test
+    path: 'packages/caws-cli/tests/kernel/unit/policy-derive-budget.test.ts'
