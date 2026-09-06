@@ -2,9 +2,11 @@ id: CAWS-MACHINE-ADAPTER-RUNTIME-001
 title: 'Machine-wide harness adapter runtime with project-owned guard policy'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Installed and integrity-verified machine runtime f246a6c4 under ~/.caws after explicit user approval; CAWS repository adopted through the CLI with preserved guard policy and reviewed native hook trust. Fresh Codex 0.153.4 native output proves runtime selection, guard denial, authorized exact-session reprieve consultation, and successful SessionStart/Stop. Temporary probe grant revoked and no probe file remains. Native contract repair landed in 3271aba3; 344 tests and policy gates pass. Other repositories require one-time adoption; other harness native parity remains unmeasured. Full evidence: tmp/machine-adapter-install-2026-09-06/README.md.'
 created_at: '2026-09-06T20:43:45.205Z'
-updated_at: '2026-09-06T20:48:13.264Z'
+updated_at: '2026-09-06T23:54:18.197Z'
 created_by_session: '01a07868-9878-7e72-bcd9-a6af25f92820'
 blast_radius:
   modules:
