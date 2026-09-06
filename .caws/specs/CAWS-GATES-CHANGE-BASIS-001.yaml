@@ -1,0 +1,30 @@
+id: CAWS-GATES-CHANGE-BASIS-001
+title: 'budget_limit and scope_boundary measure the canonical staged index, so committed work and worktree branches are invisible to them'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-06T07:53:34.088Z'
+updated_at: '2026-09-06T07:53:34.088Z'
+created_by_session: 'e12db054-1b1d-4c96-b00b-2a3edb547f08'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/src/shell/gates/local-evaluators'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/gates/local-evaluators'
+    - 'packages/caws-cli/tests'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'gate-change-basis'
+    type: contract-test
+    path: 'packages/caws-cli/tests/kernel/unit/policy-derive-budget.test.ts'
