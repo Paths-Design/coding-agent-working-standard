@@ -4,7 +4,7 @@ risk_tier: 2
 mode: feature
 lifecycle_state: draft
 created_at: '2026-09-06T20:43:45.205Z'
-updated_at: '2026-09-06T20:43:45.205Z'
+updated_at: '2026-09-06T20:48:12.441Z'
 created_by_session: '01a07868-9878-7e72-bcd9-a6af25f92820'
 blast_radius:
   modules:
@@ -21,7 +21,6 @@ scope:
     - 'packages/caws-cli/src/shell/commands/reprieve.ts'
     - 'packages/caws-cli/src/shell/command-metadata.ts'
     - 'packages/caws-cli/src/shell/register.ts'
-    - 'packages/caws-cli/templates/hook-packs'
     - 'packages/caws-cli/tests/adapter'
     - 'packages/caws-cli/tests/init'
     - 'packages/caws-cli/tests/shell/reprieve-command.test.js'
@@ -33,7 +32,16 @@ scope:
     - 'docs/architecture/hook-pack-shared-core.md'
     - 'docs/architecture/caws-vnext-command-surface.md'
     - 'docs/guides/hook-packs.md'
+    - packages/caws-cli/templates/hook-packs/runtime
+    - packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/session-id.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/reprieve.sh
+    - packages/caws-cli/templates/hook-packs/shared/lib/run-handlers.sh
+    - packages/caws-cli/templates/hook-packs/codex/hooks/lib/run-handlers.sh
+    - packages/caws-cli/templates/hook-packs/kimi-code/hooks/lib/run-handlers.sh
   out: []
+  support:
+    - .gitignore
 invariants:
   - 'DRAFT ARCHITECTURE DECISION: the predecessor CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 explicitly keeps dispatch and guard rows repo-local. This successor proposes moving the reusable adapter and dispatch runtime to the machine home while preserving repository-owned handler selection and guards. Obtain human architecture review before activating this change; do not silently reinterpret the predecessor.'
   - 'Canonical project specs, policy, ownership bindings, worktrees and events remain the sole project authority. Turn logs and leases remain project-local operational cache. A global adapter transports identity and events; it grants no ownership and cannot bypass a foreign claim or a guard.'
