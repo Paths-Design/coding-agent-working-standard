@@ -104,3 +104,9 @@ evidence:
     recorded_at: "2026-09-06T21:32:16.222Z"
     artifact_path: tmp/machine-adapter-runtime-2026-09-06/README.md
     commit_sha: "2658b1b3"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "packages/caws-cli/tests/adapter/machine-runtime.test.js: pure plan, idempotence, update and rollback, injected activation failure, lock, drift and symlink refusals"
+    recorded_at: "2026-09-06T21:32:16.666Z"
+    artifact_path: tmp/machine-adapter-runtime-2026-09-06/README.md
+    commit_sha: "2658b1b3"
