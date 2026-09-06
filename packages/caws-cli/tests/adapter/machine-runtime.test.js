@@ -87,6 +87,77 @@ test('planning writes nothing; install is idempotent and runs distinct project g
   expect(JSON.parse(rb.stdout).hookSpecificOutput.additionalContext).toBe('B allowed');
 });
 
+function eventRepository(event, body) {
+  const repo = repository('native-output', { 'native.sh': body });
+  const file = path.join(repo, '.caws/hooks/adapter-policy.json');
+  const policy = JSON.parse(fs.readFileSync(file));
+  policy.surfaces.codex.events[event] = policy.surfaces.codex.events.pre_tool_use;
+  if (event !== 'pre_tool_use') delete policy.surfaces.codex.events.pre_tool_use;
+  fs.writeFileSync(file, JSON.stringify(policy));
+  return repo;
+}
+
+test.each([
+  [
+    'pre_tool_use',
+    '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"native fixture refusal"}}',
+  ],
+  ['stop', '{"decision":"block","reason":"native fixture refusal"}'],
+])(
+  'Codex %s exit 2 supplies the native stderr blocking reason and selected digest',
+  (event, output) => {
+    const home = path.join(root, 'home');
+    const installed = installMachineRuntime({ home, templatesRoot });
+    const repo = eventRepository(event, `printf '%s\\n' '${output}'\nexit 2\n`);
+    const result = invoke(home, repo, 'native-output', event);
+    expect(result.status).toBe(2);
+    expect(JSON.parse(result.stdout)).toEqual(JSON.parse(output));
+    expect(result.stderr).toContain('native fixture refusal');
+    expect(result.stderr).toContain(installed.digest);
+  }
+);
+
+test('Codex bare blocking exit cannot become a reasonless native hook failure', () => {
+  const home = path.join(root, 'home');
+  installMachineRuntime({ home, templatesRoot });
+  const repo = eventRepository('pre_tool_use', 'exit 2\n');
+  const result = invoke(home, repo);
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain('CAWS pre_tool_use blocked with exit code 2');
+});
+
+test('Codex Stop retains plain lifecycle output in a native JSON message', () => {
+  const home = path.join(root, 'home');
+  installMachineRuntime({ home, templatesRoot });
+  const repo = eventRepository('stop', 'printf "stopped fixture-session\\n"\n');
+  const result = invoke(home, repo, 'native-output', 'stop');
+  expect(result.status).toBe(0);
+  expect(JSON.parse(result.stdout)).toEqual({ systemMessage: 'stopped fixture-session' });
+});
+
+test('Codex Stop preserves an existing structured continuation decision', () => {
+  const home = path.join(root, 'home');
+  installMachineRuntime({ home, templatesRoot });
+  const output = { decision: 'block', reason: 'a required check is still pending' };
+  const repo = eventRepository('stop', `printf '%s\\n' '${JSON.stringify(output)}'\n`);
+  const result = invoke(home, repo, 'native-output', 'stop');
+  expect(result.status).toBe(2);
+  expect(JSON.parse(result.stdout)).toEqual(output);
+  expect(result.stderr).toContain(output.reason);
+});
+
+test.each(['{"decision":', 'null', '[]', 'true'])(
+  'Codex malformed Stop JSON %s is not silently converted to informational success',
+  (output) => {
+    const home = path.join(root, 'home');
+    installMachineRuntime({ home, templatesRoot });
+    const repo = eventRepository('stop', `printf '%s\\n' '${output}'\n`);
+    const result = invoke(home, repo, 'native-output', 'stop');
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('Malformed Codex Stop JSON');
+  }
+);
+
 test('one runtime update reaches two projects without project edits; rollback restores the digest', () => {
   const home = path.join(root, 'home');
   const sources = path.join(root, 'templates');
