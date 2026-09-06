@@ -118,3 +118,8 @@ contracts:
       create/ensure, and blocks git -C / leading-cd redirects of git operations
       to the canonical checkout or another worktree. Unpinned or non-Bash
       dispatches exit 0.
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "bats tests/hooks/bats/worktree-pin-guard.bats (14 cases, green) + jest 2280/2280 green"
+    recorded_at: "2026-09-06T03:56:12.863Z"
