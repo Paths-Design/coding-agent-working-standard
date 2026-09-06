@@ -135,9 +135,10 @@ evidence:
     commit_sha: "58d6bb767d1aa9984f92b29babf221ff5f5d3e65"
   - criterion_id: A7
     status: pass
-    evidence_ref: "packages/caws-cli/tests/shell/reprieve-no-self-grant.test.js and packages/caws-cli/tests/adapter/reprieve-roundtrip.test.js: registry variable union including DSH and Qwen refuses before state writes"
-    recorded_at: "2026-09-06T21:32:45.942Z"
-    commit_sha: "2658b1b3"
+    evidence_ref: "Current reprieve-no-self-grant and roundtrip suites: registry-derived agent variables including DSH and Qwen refuse before state writes"
+    recorded_at: "2026-09-06T23:21:46.156Z"
+    artifact_path: tmp/machine-adapter-fixes-2026-09-06/README.md
+    commit_sha: "58d6bb767d1aa9984f92b29babf221ff5f5d3e65"
   - criterion_id: A8
     status: fail
     evidence_ref: Adoption changes actual Codex permissionDecision output from deny to unsupported ask
