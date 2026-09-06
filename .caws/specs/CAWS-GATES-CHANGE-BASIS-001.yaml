@@ -17,7 +17,9 @@ scope:
     - 'packages/caws-cli/tests'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'listStagedChanges runs git diff --cached with cwd = the repo root resolved via --git-common-dir, which is by design the canonical main checkout; a gate run from inside a linked worktree therefore measures the canonical checkout''s index and never the worktree branch'
+  - 'the --cached basis measures the staged index only, so once work is committed (the workflow''s own instruction is to commit per logical unit) budget_limit and scope_boundary observe an empty change set and pass vacuously, at any size, even with no worktrees involved'
+  - 'a gate that reports PASS must have measured the change set the caller believes it measured; when it cannot, the disposition must say what basis it used rather than emitting an unqualified PASS'
 acceptance:
   - id: A1
     given: 'TODO'
