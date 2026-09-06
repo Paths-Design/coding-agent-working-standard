@@ -3,6 +3,7 @@ title: 'Machine-wide harness adapter runtime with project-owned guard policy'
 risk_tier: 2
 mode: feature
 lifecycle_state: active
+worktree: wt-machine-adapter-fixes
 created_at: '2026-09-06T20:43:45.205Z'
 updated_at: '2026-09-06T20:48:13.264Z'
 created_by_session: '01a07868-9878-7e72-bcd9-a6af25f92820'
