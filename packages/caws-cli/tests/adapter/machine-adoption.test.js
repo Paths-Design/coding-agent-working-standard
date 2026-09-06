@@ -214,6 +214,44 @@ test('bootstrap customization requires reconciliation', () => {
   expect(bytes()).toEqual(before);
 });
 
+test.each(['agent-surface.sh', 'runtime-paths.sh'])(
+  'explicit %s bootstrap overrides are refused before adoption writes',
+  (name) => {
+    const selected = adoptMachineAdapter({ ...opts, plan: true }).policy.surfaces.codex;
+    selected.libraries[name] = '.caws/hooks/custom-bootstrap.sh';
+    fs.writeFileSync(path.join(repo, selected.libraries[name]), 'echo custom-bootstrap >&2\n');
+    const policy = path.join(root, 'reviewed.json');
+    fs.writeFileSync(policy, JSON.stringify(selected));
+    const before = bytes();
+    expect(() => adoptMachineAdapter({ ...opts, fromFile: policy })).toThrow(
+      /Bootstrap library cannot be overridden/
+    );
+    expect(bytes()).toEqual(before);
+  }
+);
+
+test.each(['agent-surface.sh', 'runtime-paths.sh'])(
+  'runtime refuses an ignored %s bootstrap override before running a handler',
+  (name) => {
+    useProbe('pre_tool_use', 'echo handler-must-not-run >&2\n');
+    adoptMachineAdapter(opts);
+    const file = path.join(repo, '.caws/hooks/adapter-policy.json');
+    const policy = JSON.parse(fs.readFileSync(file));
+    policy.surfaces.codex.libraries[name] = '.caws/hooks/custom-bootstrap.sh';
+    fs.writeFileSync(
+      path.join(repo, policy.surfaces.codex.libraries[name]),
+      'echo custom-bootstrap >&2\n'
+    );
+    fs.writeFileSync(file, JSON.stringify(policy));
+    const wiring = JSON.parse(fs.readFileSync(path.join(repo, '.codex/hooks.json')));
+    const result = runHook(wiring.hooks.PreToolUse[0].hooks[0].command);
+    expect(result.status).toBe(2);
+    expect(JSON.parse(result.stdout)).toMatchObject({ decision: 'block' });
+    expect(result.stderr).toContain('Bootstrap library cannot be overridden');
+    expect(result.stderr).not.toContain('handler-must-not-run');
+  }
+);
+
 test('native matchers, hook attributes and relative hook order survive adoption', () => {
   const config = path.join(repo, '.codex/hooks.json');
   const wiring = JSON.parse(fs.readFileSync(config));

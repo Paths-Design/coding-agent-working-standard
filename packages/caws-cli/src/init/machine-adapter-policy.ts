@@ -252,6 +252,8 @@ function validateSurfacePolicy(repo: string, candidate: SurfacePolicy): void {
     }
   }
   for (const [name, relative] of Object.entries(candidate.libraries)) {
+    if (['agent-surface.sh', 'runtime-paths.sh'].includes(name))
+      throw new Error(`Bootstrap library cannot be overridden: ${name}`);
     if (
       !/^[A-Za-z0-9_.-]+$/.test(name) ||
       typeof relative !== 'string' ||

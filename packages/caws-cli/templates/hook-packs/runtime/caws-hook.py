@@ -121,6 +121,8 @@ def main():
     if not isinstance(libraries, dict):
         raise ValueError('Libraries must be a path map')
     for name, relative in libraries.items():
+        if name in {'agent-surface.sh', 'runtime-paths.sh'}:
+            raise ValueError(f'Bootstrap library cannot be overridden: {name}')
         if not re.fullmatch(r'[A-Za-z0-9_.-]+', name) or not confined(canonical, relative).is_file():
             raise ValueError(f'Invalid project library: {name}')
     user_lib = confined(home, f'surfaces/{surface}/lib')
