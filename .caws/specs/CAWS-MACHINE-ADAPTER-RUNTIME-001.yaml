@@ -44,7 +44,6 @@ scope:
   support:
     - .gitignore
 invariants:
-  - 'DRAFT ARCHITECTURE DECISION: the predecessor CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 explicitly keeps dispatch and guard rows repo-local. This successor proposes moving the reusable adapter and dispatch runtime to the machine home while preserving repository-owned handler selection and guards. Obtain human architecture review before activating this change; do not silently reinterpret the predecessor.'
   - 'Canonical project specs, policy, ownership bindings, worktrees and events remain the sole project authority. Turn logs and leases remain project-local operational cache. A global adapter transports identity and events; it grants no ownership and cannot bypass a foreign claim or a guard.'
   - 'One installation per harness provides shared adapter/runtime code under the machine home. A later adapter update reaches every adopted project without editing those projects. Older wiring that cannot reach this runtime must be identified explicitly as requiring bootstrap; absence or a directory scaffold is never reported as active adoption.'
   - 'Project handler order, custom guards, and intentional local library growth must survive adoption. Installation plans are read-only and enumerate exact file and wiring changes. Refuse ambiguous drift, symlink escapes, partial installs, and duplicate dispatch wiring; retain rollback bytes and provenance before replacing executable wiring.'
@@ -52,6 +51,7 @@ invariants:
   - 'A current process still using an old dispatcher is not upgraded by changing files alone when the harness caches registration. Report required restart and verify activation from a fresh harness invocation. Do not weaken or reroute a currently blocking guard to make this rollout proceed.'
   - 'Keep existing foreign-owned lanes and unrelated dirty files untouched. Do not push the current accumulated main backlog as an incidental part of this slice. Record code landing, machine installation, harness activation, and live parity as separate evidence.'
   - 'User-directed continuation on 2026-09-06: land the root-level harness adapter requested in session 43d310b9-8ebf-4da4-87ea-1a6fd4c08a1f. User explicitly authorized this continuation and issued the current Codex guard reprieve for finishing agent registry and harness work. The reprieve remains separate from project ownership and gate evidence.'
+  - 'The requested machine runtime supersedes the predecessor decision to keep reusable dispatch local; repository guard selection and ownership authority remain local. Explicit global machine installation approval is a separate deployment boundary.'
 acceptance:
   - id: A1
     given: 'two adopted fixture repositories with distinct custom guard sets'
