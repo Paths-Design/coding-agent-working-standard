@@ -40,7 +40,7 @@ function sourceUnderSurface(surface, script) {
 describe('CAWS_INSTRUCTION_FILES: derived per surface (agent-surface.sh)', () => {
   const cases = [
     { surface: 'claude-code', expected: 'CLAUDE.md' },
-    { surface: 'codex', expected: 'AGENTS.md' },
+    { surface: 'codex', expected: 'AGENTS.override.md AGENTS.md' },
     { surface: 'opencode', expected: 'AGENTS.md' },
     { surface: 'zcode', expected: 'AGENTS.md' },
     { surface: 'cursor', expected: 'AGENTS.md' },

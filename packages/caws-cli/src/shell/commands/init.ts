@@ -40,11 +40,13 @@ import {
   diffHookPack,
   installHookPack,
   mergeClaudeSettings,
+  mergeCodexProjectInstructions,
   mergeKimiUserConfig,
   mergeQwenInstructionImport,
   mergeQwenSettings,
   mergeZcodeConfig,
   planClaudeSettingsMerge,
+  planCodexProjectInstructions,
   planHookPackInstall,
   portHookFile,
   planKimiConfigExample,
@@ -105,6 +107,8 @@ import {
   renderZcodeSettingsWiring,
 } from '../render/init-hook-pack';
 import type {
+  CodexInstructionMergeResult,
+  CodexInstructionPlanResult,
   InstructionImportPlanResult,
   SettingsMergeResult,
   SettingsMergePlanResult,
@@ -446,6 +450,7 @@ interface InitPlanDocument {
     readonly settings_example: SettingsExamplePlanResult;
     readonly instruction_import: InstructionImportPlanResult;
   };
+  readonly codex_instructions?: CodexInstructionPlanResult;
   readonly codex_trust_note?: string;
   readonly next_apply_command: string;
 }
@@ -782,6 +787,16 @@ function renderInitPlan(plan: InitPlanDocument): string {
     );
   }
 
+  if (plan.codex_instructions) {
+    lines.push('');
+    lines.push('Codex project instructions:');
+    lines.push(`  target: ${plan.codex_instructions.target}`);
+    lines.push(`  outcome: ${plan.codex_instructions.kind}`);
+    if (plan.codex_instructions.kind === 'refused') {
+      lines.push(`  refusal: ${plan.codex_instructions.reason}`);
+    }
+  }
+
   if (plan.codex_trust_note) {
     lines.push('');
     lines.push(plan.codex_trust_note);
@@ -793,6 +808,30 @@ function renderInitPlan(plan: InitPlanDocument): string {
   } else {
     lines.push('Plan refused; resolve the refusal above before applying init.');
   }
+  return lines.join('\n');
+}
+
+function renderCodexInstructionMerge(
+  result: CodexInstructionMergeResult
+): string {
+  const lines = ['Codex project instructions:'];
+  if (result.kind === 'refused') {
+    lines.push(`  REFUSED — did not change ${result.target}.`);
+    if (result.reason === 'duplicate_managed_block') {
+      lines.push('  Duplicate CAWS instruction blocks need manual reconciliation.');
+    } else if (result.reason === 'malformed_managed_block') {
+      lines.push('  Found malformed CAWS instruction markers; no bytes were changed.');
+    } else {
+      lines.push(`  ${result.error ?? result.reason}`);
+    }
+    return lines.join('\n');
+  }
+
+  lines.push(`  ${result.kind}: ${result.target}`);
+  if (result.kind === 'merged' || result.kind === 'updated') {
+    lines.push('  Content outside the bounded CAWS block was preserved byte-for-byte.');
+  }
+  lines.push('  Restart Codex to rebuild the root instruction chain.');
   return lines.join('\n');
 }
 
@@ -875,13 +914,20 @@ function runInitPlan(
           instruction_import: planQwenInstructionImport(repoRoot),
         }
       : undefined;
+  const codexInstructions =
+    hookPlan.pack?.id === 'codex'
+      ? planCodexProjectInstructions(repoRoot)
+      : undefined;
   const codexTrustNote =
     hookPlan.pack?.id === 'codex'
       ? 'Codex project hooks require project trust and /hooks review before changed command hooks run.'
       : undefined;
 
   const plan: InitPlanDocument = {
-    ok: !unimplemented && !anyRefused,
+    ok:
+      !unimplemented &&
+      !anyRefused &&
+      codexInstructions?.kind !== 'refused',
     read_only: true,
     command: 'init',
     repo_root: repoRoot,
@@ -901,6 +947,9 @@ function runInitPlan(
     ...(zcodeSettings ? { zcode_settings: zcodeSettings } : {}),
     ...(kimiSettings ? { kimi_settings: kimiSettings } : {}),
     ...(qwenSettings ? { qwen_settings: qwenSettings } : {}),
+    ...(codexInstructions
+      ? { codex_instructions: codexInstructions }
+      : {}),
     ...(codexTrustNote ? { codex_trust_note: codexTrustNote } : {}),
     next_apply_command: applyCommand(opts),
   };
@@ -1127,6 +1176,7 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   // leftover pre-rename .claude/hooks/dispatch/ directory.
   let wiringStatus: ReturnType<typeof inspectClaudeSettings> | undefined;
   let mergeResult: SettingsMergeResult | undefined;
+  let codexInstructionResult: CodexInstructionMergeResult | undefined;
   let orphanedDispatchDir: string | null = null;
   if (hookPackResult.pack?.id === 'claude-code') {
     mergeResult = mergeClaudeSettings(repoRoot);
@@ -1138,6 +1188,8 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     wiringStatus = inspectClaudeSettings(repoRoot);
     out(renderSettingsWiring(wiringStatus, mergeResult, orphanedDispatchDir));
   } else if (hookPackResult.pack?.id === 'codex') {
+    codexInstructionResult = mergeCodexProjectInstructions(repoRoot);
+    out(renderCodexInstructionMerge(codexInstructionResult));
     out(renderCodexHookTrust());
   } else if (hookPackResult.pack?.id === 'zcode') {
     mergeResult = mergeZcodeConfig(repoRoot);
@@ -1212,5 +1264,7 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   const anyRefused = hookPackResult.actions.some(
     (a) => a.action === 'refused'
   );
-  return anyRefused ? 1 : 0;
+  const codexInstructionsRefused =
+    codexInstructionResult?.kind === 'refused';
+  return anyRefused || codexInstructionsRefused ? 1 : 0;
 }
