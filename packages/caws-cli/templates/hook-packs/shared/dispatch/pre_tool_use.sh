@@ -119,6 +119,12 @@ HANDLERS=(
   # foreign Write/Edit. Runs after worktree-write-guard (file-tool authority)
   # since the two cover disjoint tool surfaces.
   bash-write-guard.sh
+  # worktree-pin-guard.sh (OPT-IN — Entry 41, CAWS-DEFECT-WORKTREE-ISOLATION-
+  # PIN-RELEASE-01): pins a session whose project root is inside a worktree to
+  # that worktree, refuses commands whose working directory resolves outside
+  # it, and RELEASES the pin when the pinned directory no longer exists (so a
+  # session that merges its own worktree is never bricked). Not wired by
+  # default: it is a broad session-level cwd enforcement; uncomment to adopt.
   protected-paths.sh
   scan-secrets.sh
   # quiet-merge.sh MUST be the last interceptor: it emits
