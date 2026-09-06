@@ -123,10 +123,10 @@ evidence:
     commit_sha: "58d6bb767d1aa9984f92b29babf221ff5f5d3e65"
   - criterion_id: A5
     status: pass
-    evidence_ref: "packages/caws-cli/tests/adapter/runtime-context.test.js: actual CLI fixture grant consumed by dispatch in two repositories and a linked worktree; exact session and handler remain enforced"
-    recorded_at: "2026-09-06T21:32:18.000Z"
-    artifact_path: tmp/machine-adapter-runtime-2026-09-06/README.md
-    commit_sha: "2658b1b3"
+    evidence_ref: "Current runtime-context and reprieve-roundtrip suites: actual CLI fixture grant crosses two repositories and linked worktree; exact session/handler enforcement and observable skip remain"
+    recorded_at: "2026-09-06T23:21:45.287Z"
+    artifact_path: tmp/machine-adapter-fixes-2026-09-06/README.md
+    commit_sha: "58d6bb767d1aa9984f92b29babf221ff5f5d3e65"
   - criterion_id: A6
     status: fail
     evidence_ref: Human legacy show/list report absence while actual shell reader honors the grant
