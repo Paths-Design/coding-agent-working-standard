@@ -105,11 +105,11 @@ evidence:
     artifact_path: tmp/machine-adapter-runtime-2026-09-06/README.md
     commit_sha: "2658b1b3"
   - criterion_id: A2
-    status: pass
-    evidence_ref: "packages/caws-cli/tests/adapter/machine-runtime.test.js: pure plan, idempotence, update and rollback, injected activation failure, lock, drift and symlink refusals"
-    recorded_at: "2026-09-06T21:32:16.666Z"
-    artifact_path: tmp/machine-adapter-runtime-2026-09-06/README.md
-    commit_sha: "2658b1b3"
+    status: fail
+    evidence_ref: Review reproduced interrupted activation leaving mixed launcher/pointer and refusing install and rollback
+    recorded_at: "2026-09-06T22:35:20.494Z"
+    artifact_path: tmp/machine-adapter-review-2026-09-06/adjudication.json
+    commit_sha: "3b840a2e"
   - criterion_id: A3
     status: pass
     evidence_ref: "packages/caws-cli/tests/adapter/machine-adoption.test.js: literal custom handler order, unrelated hooks, explicit policy, growth preservation and duplicate/bootstrap refusal"
