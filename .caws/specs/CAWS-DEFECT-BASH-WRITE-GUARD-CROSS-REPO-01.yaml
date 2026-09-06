@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-bash-guard-cross-repo
 created_at: '2026-09-06T03:02:55.800Z'
-updated_at: '2026-09-06T03:03:37.609Z'
+updated_at: '2026-09-06T04:00:42.169Z'
 created_by_session: 'session-a040cb04-424d-41ba-9922-df97fcd66394'
 blast_radius:
   modules:
@@ -20,6 +20,8 @@ scope:
     - packages/caws-cli/tests/hooks/bash-write-guard-interpreter-cross-repo.test.js
     - .caws/hooks/bash-write-guard.sh
     - .caws/hooks/scope-guard.sh
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
   out: []
 invariants:
   - 'A Bash mutation whose target resolves inside a DIFFERENT git repository blocks at the same boundary as a foreign Write/Edit — for targets named on the command line (sed -i, cp, mv, rm, tee, redirects, git path-restore) and for interpreter-mediated writes (python/node) whose payload names the target as a path literal (inline -c/-e code, heredoc bodies, or the named script file content).'
