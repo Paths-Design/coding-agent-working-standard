@@ -99,10 +99,10 @@ contracts:
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "packages/caws-cli/tests/adapter/machine-runtime.test.js: two-project update changes executed adapter behavior, preserves policy bytes and ordered guards"
-    recorded_at: "2026-09-06T21:32:16.222Z"
-    artifact_path: tmp/machine-adapter-runtime-2026-09-06/README.md
-    commit_sha: "2658b1b3"
+    evidence_ref: "Current machine-runtime suite: one runtime update reaches two repositories with unchanged project policy and ordered custom guards; 335 selected tests pass"
+    recorded_at: "2026-09-06T23:21:43.499Z"
+    artifact_path: tmp/machine-adapter-fixes-2026-09-06/README.md
+    commit_sha: "58d6bb767d1aa9984f92b29babf221ff5f5d3e65"
   - criterion_id: A2
     status: fail
     evidence_ref: Review reproduced interrupted activation leaving mixed launcher/pointer and refusing install and rollback
