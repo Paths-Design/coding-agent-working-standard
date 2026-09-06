@@ -624,6 +624,18 @@ export const SHARED_PACK: HookPackV1 = {
       executable: true,
       managed: true,
     },
+    {
+      // CAWS-DEFECT-WORKTREE-ISOLATION-PIN-RELEASE-01 (Entry 41): opt-in
+      // worktree-pin guard. Installs with the pack; wiring is the commented
+      // HANDLERS entry in dispatch/pre_tool_use.sh. Deliberately no
+      // SHARED_PACK_VERSION bump in this slice: the in-flight v57 bump
+      // (CAWS-CODEX-INSTRUCTION-REACH-002) re-propagates the whole pack, and a
+      // second edit of the same constant would text-conflict across lanes.
+      destPath: '.caws/hooks/worktree-pin-guard.sh',
+      sourcePath: 'worktree-pin-guard.sh',
+      executable: true,
+      managed: true,
+    },
 
     // -- Dangerous command guards --
     {

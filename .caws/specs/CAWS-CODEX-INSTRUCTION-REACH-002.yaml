@@ -2,9 +2,10 @@ id: CAWS-CODEX-INSTRUCTION-REACH-002
 title: 'Make CAWS instructions reachable to Codex'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-codex-instruction-reach-2
 created_at: '2026-09-04T18:06:30.103Z'
-updated_at: '2026-09-04T18:06:40.046Z'
+updated_at: '2026-09-04T18:11:16.212Z'
 created_by_session: '01a06d5b-3024-73b3-8ae2-67a4e79017b1'
 blast_radius:
   modules:
@@ -15,14 +16,14 @@ scope:
   in:
     - packages/caws-cli/src/init/hook-install.ts
     - packages/caws-cli/src/shell/commands/init.ts
-    - packages/caws-cli/src/shell/render/init-hook-pack.ts
     - packages/caws-cli/src/init/hook-packs/manifest-codex.ts
     - packages/caws-cli/templates/hook-packs/codex/AGENTS.md
     - packages/caws-cli/templates/hook-packs/codex/CAWS.md
     - packages/caws-cli/tests/init/codex-instruction-merge.test.js
     - packages/caws-cli/tests/init/pack-fingerprints.json
-    - packages/caws-cli/scripts/fresh-install-smoke.mjs
-    - docs/architecture/hook-pack-shared-core.md
+    - packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/hooks/vendor-allowlist-generalized.test.js
   out: []
 invariants:
   - 'Instruction targeting mirrors Codex discovery precedence: a non-empty root AGENTS.override.md wins; otherwise root AGENTS.md is used or created.'
@@ -57,3 +58,20 @@ contracts:
   - name: 'codex-instruction-reach'
     type: contract-test
     path: 'packages/caws-cli/tests/init/codex-instruction-merge.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: codex-instruction-merge.test.js fresh plan/install cases passed; full 234-test selected suite passed
+    recorded_at: "2026-09-04T18:19:06.099Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "codex-instruction-merge.test.js override, CRLF preservation, upgrade, and byte-idempotence cases passed"
+    recorded_at: "2026-09-04T18:19:29.995Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "codex-instruction-merge.test.js malformed, duplicate, orphan-marker, symlink, and CLI nonzero refusal cases passed"
+    recorded_at: "2026-09-04T18:19:34.746Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: fresh Codex sessions 01a06da4-64e5-7353-afb7-fac2da5f1f15 and 01a06da4-ae2e-7181-8a6e-fe9748b8263a recalled the blind CAWS contract; SessionStart audit names project AGENTS.md
+    recorded_at: "2026-09-04T18:19:39.711Z"

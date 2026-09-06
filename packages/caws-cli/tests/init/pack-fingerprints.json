@@ -1,11 +1,11 @@
 {
   "shared": {
-    "fingerprint": "866e6c885aca2a98d834b7dc23725c80351d6eaa3d701c75339f0081978f76f1",
+    "fingerprint": "623b22102cd02fc34bffa3a6e1fcd82dc6c51816b0a98debc392be0cd84ffb7a",
     "version": 57
   },
   "claude-code": {
     "version": 22,
-    "fingerprint": "9c3d62f5642a0eea245abed1f02a98c814e4e82ee18e3c83d9eb8f3e61e94100"
+    "fingerprint": "e78a7e1c964c75f16a95866bcb0be499196f1afebe08715ffd7a32c634974eea"
   },
   "codex": {
     "version": 14,
