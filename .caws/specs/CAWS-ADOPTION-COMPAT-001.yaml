@@ -36,9 +36,9 @@ invariants:
   - 'Reviewed policy conversion refuses unsupported requirements unless preserved explicitly for external enforcement'
 acceptance:
   - id: A1
-    given: 'The spec implementation is complete.'
-    when: 'The acceptance statement is evaluated.'
-    then: 'A1|legacy singleton governance|an explicit reviewed adoption plan is applied|original bytes are archived and validated draft specs plus policy are installed'
+    given: 'legacy singleton governance'
+    when: 'an explicit reviewed adoption plan is applied'
+    then: 'original bytes are archived and validated draft specs plus policy are installed'
   - id: A2
     given: 'The spec implementation is complete.'
     when: 'The acceptance statement is evaluated.'
