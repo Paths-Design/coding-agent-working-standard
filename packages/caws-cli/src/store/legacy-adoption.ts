@@ -38,6 +38,9 @@ function inertWaiver(value: unknown): boolean {
   // Old date-only expiry means end of that UTC day; never infer an early expiry.
   const normalized = /^\d{4}-\d{2}-\d{2}$/.test(expiry) ? expiry + 'T23:59:59.999Z' : expiry;
   if (!/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(normalized)) return false;
+  const day = normalized.slice(0, 10);
+  const dayTime = Date.parse(day + 'T00:00:00Z');
+  if (!Number.isFinite(dayTime) || new Date(dayTime).toISOString().slice(0, 10) !== day) return false;
   const time = Date.parse(normalized);
   return Number.isFinite(time) && time < Date.now();
 }
