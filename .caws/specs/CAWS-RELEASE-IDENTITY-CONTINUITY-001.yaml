@@ -43,7 +43,11 @@ acceptance:
   - id: A3
     given: 'native identity context, explicit takeover intent and a path containing shell punctuation'
     when: 'create and claim execute through their documented command surfaces'
-    then: 'native behavior remains supported, fallback output is safely quoted, and existing takeover protections remain effective'
+    then: >-
+      native behavior remains supported, fallback output is safely quoted, and
+      successful audited takeover exposes its minted continuation before ancillary
+      failure; a metadata failure keeps its nonzero result without fabricating a
+      lease or reversing ownership
   - id: A4
     given: 'an existing owned worktree with neighboring cached identities'
     when: 'ensure or another lifecycle command compares the invoking caller to the owner'
@@ -72,9 +76,8 @@ evidence:
     evidence_ref: "/private/tmp/caws-identity-durable-receipt.json (e145c84e; 288 tests, zero failures or skips; both typechecks, scoped lint, gates and doctor re-executed; Tier 1 review pending)"
     recorded_at: "2026-09-07T07:35:55.007Z"
   - criterion_id: A3
-    status: pass
-    evidence_ref: "/private/tmp/caws-identity-durable-receipt.json (e145c84e; 288 tests, zero failures or skips; both typechecks, scoped lint, gates and doctor re-executed; Tier 1 review pending)"
-    recorded_at: "2026-09-07T07:36:07.324Z"
+    status: unchecked
+    recorded_at: "2026-09-07T08:22:04.706Z"
   - criterion_id: A4
     status: unchecked
     recorded_at: "2026-09-07T08:21:54.627Z"
