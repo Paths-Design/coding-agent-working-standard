@@ -74,3 +74,7 @@ evidence:
     status: pass
     evidence_ref: "/private/tmp/caws-identity-durable-receipt.json (e145c84e; 288 tests, zero failures or skips; both typechecks, scoped lint, gates and doctor re-executed; Tier 1 review pending)"
     recorded_at: "2026-09-07T07:36:07.324Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "/private/tmp/caws-identity-durable-receipt.json (e145c84e; 288 tests, zero failures or skips; both typechecks, scoped lint, gates and doctor re-executed; Tier 1 review pending)"
+    recorded_at: "2026-09-07T07:36:18.861Z"
