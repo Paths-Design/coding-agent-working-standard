@@ -54,3 +54,7 @@ evidence:
     status: pass
     evidence_ref: "/private/tmp/caws-identity-repair-receipt.json (bd2323ae; 93 tests, no failures or skips; scoped reproduction; human review pending)"
     recorded_at: "2026-09-07T06:45:26.626Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "/private/tmp/caws-identity-repair-receipt.json (bd2323ae; 93 tests, no failures or skips; scoped reproduction; human review pending)"
+    recorded_at: "2026-09-07T06:45:36.147Z"
