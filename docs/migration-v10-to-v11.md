@@ -202,29 +202,44 @@ Note: v11's hook-pack install requires a session restart to activate. The pack i
 
 v10.2 supported a single project-level working spec at `.caws/working-spec.yaml`. v11 does not. Every spec is per-feature at `.caws/specs/<id>.yaml`.
 
-If your project has a singleton:
+Use the reviewed, dry-run-default governance migration before system hook adoption:
 
 ```bash
-# 1. Decide what the singleton represents:
-#    - Active work? Convert it to a feature spec.
-#    - Historical baseline? Archive it.
-#    - Defunct? Delete it.
-
-# 2a. If it's active work — extract its content into a new feature spec:
-caws specs create MY-CURRENT-WORK-001 --mode feature --risk-tier 1 --title "..."
-# Then copy scope.in / scope.out / acceptance from .caws/working-spec.yaml
-# into the new file, adjust to v11 schema (no scope.out globs, contracts
-# required for tier 2, etc. — see CLAUDE.md authoring traps).
-
-# 2b. If it's historical:
-#    Delete .caws/working-spec.yaml manually. There is no convert command.
-
-# 3. Run caws init:
-caws init
-# It is idempotent for canonical v11 state. It will refuse to run while
-# the legacy singleton is still in place — that refusal is by design,
-# not a bug.
+caws init migrate --from /tmp/reviewed-governance.json
+caws init migrate apply --from /tmp/reviewed-governance.json
+caws init --agent-surface codex
+caws init adapters migrate --agent-surface codex --plan
 ```
+
+The JSON review has exactly `version: 1`, a nonempty `reason`, nonempty
+`requirementNotes` (array of strings), and `changes`. Each change has `path`,
+`beforeSha256` (SHA-256 of current UTF-8 bytes, or `null` only when absent),
+and `contents` (reviewed replacement YAML, or `null` to archive the original).
+Allowed paths are the singleton and singleton schema, `policy.yaml`, and named
+YAML files under `specs/`, all beneath `.caws/`. Singleton paths must be archived.
+
+Replacement policies must validate. Replacement specs must validate as unbound
+drafts without evidence or resolution. Existing modern policies and specs cannot
+be changed through this command. Every legacy spec and singleton must be reviewed.
+Prose scopes require path review before activation; migration proves no old ACs.
+
+Original source bytes remain versionable under `.caws/legacy/<plan-digest>/`.
+The full review receipt lives in the Git common directory as operational evidence.
+Preview writes nothing. Apply rejects stale hashes, unsafe paths, symlinks,
+conflicting archives, and concurrent migration. It archives originals before
+replacing files, retiring singleton paths last. An interrupted apply retains
+backups; inspect and regenerate the plan against current hashes before resuming.
+This command does not provide a multi-file rollback or commit files.
+
+`requirementNotes` must account for requirements without a modern gate equivalent.
+Coverage, mutation, performance, model quality, and review thresholds remain
+project obligations: archiving their policy is **not a waiver** or proof of
+continued enforcement. Keep external checks and identify missing enforcement.
+Budgets can be mapped exactly; the command does not infer policy equivalence.
+
+After reviewing and committing the conversion, initialize canonical state and
+retire each configured harness's project registration once. Subsequent stock hook
+updates happen in the user runtime; genuine project extensions remain explicit.
 
 ### `.caws/worktrees.json` shape
 

@@ -26,6 +26,7 @@
 //       target
 
 import { execFileSync } from 'child_process';
+import { adoptLegacyProject } from '../../store/legacy-adoption';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { installMachineRuntime, rollbackMachineRuntime } from '../../init/machine-adapters';
@@ -164,7 +165,7 @@ export interface InitCommandOptions {
   readonly wireUserConfig?: boolean;
   /** Positional subcommand: 'diff' (read-only pack diff) or 'port'
    *  (CLI-mediated retrofit landing). (CAWS-HOOKPACK-UPGRADE-RETROFIT-001.) */
-  readonly action?: 'diff' | 'port' | 'adapters';
+  readonly action?: 'diff' | 'port' | 'adapters' | 'migrate';
   /** port: the managed destination path being retrofitted. */
   readonly actionArg?: string;
   /** diff: restrict the three-way decomposition to this pack path. */
@@ -977,6 +978,39 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   const err = opts.err ?? ((s: string) => process.stderr.write(s + '\n'));
   const showData = opts.showData === true;
 
+  if (opts.action === 'migrate') {
+    if (
+      !opts.fromFile ||
+      (opts.actionArg !== undefined && opts.actionArg !== 'apply') ||
+      (opts.actionArg === 'apply' && opts.plan) ||
+      opts.overwrite ||
+      opts.force ||
+      opts.adopt ||
+      opts.agentSurface ||
+      opts.wireUserConfig ||
+      opts.threeWayPath ||
+      opts.projectsRoot ||
+      opts.nativeConfigTarget
+    ) {
+      err(
+        'caws init migrate: use --from reviewed-plan.json to preview; add positional apply to execute.'
+      );
+      return 2;
+    }
+    try {
+      const result = adoptLegacyProject(
+        cwd,
+        JSON.parse(fs.readFileSync(opts.fromFile, 'utf8')),
+        opts.actionArg === 'apply'
+      );
+      out(JSON.stringify(result, null, 2));
+      return 0;
+    } catch (error) {
+      err(`caws init migrate: ${(error as Error).message}`);
+      return 1;
+    }
+  }
+
   if (opts.action === 'adapters') {
     try {
       const operation = opts.actionArg ?? 'install';
@@ -1242,7 +1276,7 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
         : '';
     out(`  Apply with: caws init --agent-surface ${chosen.surface} --overwrite${targets} --force`);
   } else {
-    out(renderHookPackInstall(hookPackResult));
+    if (!system) out(renderHookPackInstall(hookPackResult));
   }
 
   // Step 3: wire .claude/settings.json. Only meaningful when the Claude Code
@@ -1319,7 +1353,11 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   // settings.json wiring is in place — without those signals the panel
   // becomes a constant STOP sign on re-runs, training agents to ignore
   // it.
-  out(renderActivationContract(hookPackResult, wiringStatus));
+  if (system) {
+    out(`System activation for ${chosen.surface}: user registration is configured. Verify native hook trust and execution in a fresh harness session.`);
+  } else {
+    out(renderActivationContract(hookPackResult, wiringStatus));
+  }
 
   // Step 5: first-contact commit hint. When .caws/ was newly created
   // (not 'already_initialized') AND the cwd is a real git working tree,

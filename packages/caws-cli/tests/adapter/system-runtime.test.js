@@ -405,3 +405,21 @@ test('unmodified stock guards protect hook paths and the stock renderer records 
   expect(fs.existsSync(path.join(sessionDir, 'turn-002.json'))).toBe(false);
   expect(fs.existsSync(path.join(p, '.caws/hooks'))).toBe(false);
 });
+
+test('system audit logs are machine-owned and do not dirty either project', () => {
+  const a = repo('audit-a'),
+    b = repo('audit-b');
+  installMachineRuntime({ home, templatesRoot: templates });
+  for (const p of [a, b]) {
+    const result = invoke(p, 'session_start', {}, {}, { tool_name: '', source: 'startup' });
+    expect(result.status).toBe(0);
+    const key = crypto.createHash('sha256').update(fs.realpathSync(p)).digest('hex');
+    const log = fs.readFileSync(
+      path.join(home, 'state/projects', key, 'logs/codex/audit.log'),
+      'utf8'
+    );
+    expect(log).toContain('session_start');
+    expect(log).toContain(p);
+    expect(fs.existsSync(path.join(p, '.codex/logs'))).toBe(false);
+  }
+});

@@ -926,13 +926,13 @@ export const INIT_COMMAND_META: LeafCommandMeta = {
   kind: 'leaf',
   name: 'init',
   description:
-    'Bootstrap canonical .caws/ governance state. Configured system surfaces inherit machine hooks without project copies. `init adapters install` updates the system runtime; configure registers it at harness user scope; migrate retires legacy project registrations once. `init diff` and `init port` maintain legacy project packs.',
+    'Bootstrap canonical .caws/ governance state. Configured system surfaces inherit machine hooks without project copies. `init adapters install` updates the system runtime; configure registers it at harness user scope; migrate retires legacy project registrations once. `init migrate --from <reviewed-plan.json>` previews legacy governance conversion; add positional apply to execute it. `init diff` and `init port` maintain legacy project packs.',
   arguments: [
-    { name: 'action', required: false, description: 'subcommand: diff | port | adapters' },
+    { name: 'action', required: false, description: 'subcommand: diff | port | adapters | migrate' },
     {
       name: 'actionArg',
       required: false,
-      description: 'port: managed destination path; adapters: install | rollback | configure | migrate | adopt (use --plan to preview)',
+      description: 'migrate: apply (omitted means preview); port: managed destination path; adapters: install | rollback | configure | migrate | adopt (use --plan to preview)',
     },
   ],
   options: [
@@ -976,7 +976,7 @@ export const INIT_COMMAND_META: LeafCommandMeta = {
     {
       flag: '--from <file>',
       description:
-        'For init port: reviewed replacement content outside the protected hooks tree. For adapters migrate/adopt: reviewed surface policy JSON (single project only).',
+        'For init migrate: reviewed legacy-governance JSON plan. For init port: reviewed replacement content outside the protected hooks tree. For adapters migrate/adopt: reviewed surface policy JSON (single project only).',
     },
     {
       flag: '--force',
