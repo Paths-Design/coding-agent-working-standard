@@ -840,7 +840,7 @@ export function amendSpecBody(
       );
     }
     if (acPlan.op === 'set') {
-      const entry = block.entries.find((e) => e.id === acPlan.id);
+      let entry = block.entries.find((e) => e.id === acPlan.id);
       if (entry === undefined) {
         return err(
           storeDiagnostic(
@@ -864,6 +864,23 @@ export function amendSpecBody(
           );
         }
         lines = next;
+        // The write may have re-rendered the field (inline scalar <-> `>-`
+        // continuation block), shifting every later line of the entry. The
+        // bracket above was resolved against the pre-write lines, so applying
+        // a second field against it can scan into the wrong offset. Re-locate
+        // the criterion after every write so multi-field rewrites survive
+        // folding — and fail closed rather than guessing if it ever vanishes.
+        const relocated = locateAcceptanceBlock(lines)?.entries.find((e) => e.id === acPlan.id);
+        if (relocated === undefined) {
+          return err(
+            storeDiagnostic(
+              STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+              `Could not re-locate criterion ${acPlan.id} after rewriting the ${field} field of spec "${input.id}".`,
+              { subject: input.id, data: { criterion_id: acPlan.id, field } }
+            )
+          );
+        }
+        entry = relocated;
       }
     } else if (acPlan.op === 'add') {
       const rendered = renderAcEntry(acPlan.added!);
