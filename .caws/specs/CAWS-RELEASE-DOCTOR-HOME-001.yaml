@@ -48,3 +48,7 @@ evidence:
     status: pass
     evidence_ref: "/private/tmp/caws-doctor-repair-receipt.json (61126f7c; 97 tests, no failures or skips; scoped reproduction)"
     recorded_at: "2026-09-07T06:26:48.212Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "/private/tmp/caws-doctor-repair-receipt.json (61126f7c; 97 tests, no failures or skips; scoped reproduction)"
+    recorded_at: "2026-09-07T06:27:00.347Z"
