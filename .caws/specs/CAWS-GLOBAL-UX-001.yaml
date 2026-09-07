@@ -2,9 +2,11 @@ id: CAWS-GLOBAL-UX-001
 title: 'Make global CAWS installation, help, documentation and self-adoption durable'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed contextual init help, reproducible global CLI installation, packaged global adoption documentation and native Claude migration. All four ACs have recorded evidence; fresh Codex and Claude lifecycle, guarded-write denial and renderer checks passed. Report: tmp/global-ux-2026-09-07/README.md'
 created_at: '2026-09-07T03:35:39.379Z'
-updated_at: '2026-09-07T03:52:30.414Z'
+updated_at: '2026-09-07T04:12:26.749Z'
 created_by_session: '01a07868-9878-7e72-bcd9-a6af25f92820'
 blast_radius:
   modules:
