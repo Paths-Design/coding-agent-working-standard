@@ -89,3 +89,9 @@ evidence:
     recorded_at: "2026-09-07T04:11:28.746Z"
     artifact_path: tmp/global-ux-2026-09-07/caws-global-ux-docs-recheck.txt
     commit_sha: "290705abb1942546fcd30afba6ebdbfc16b78bae"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Fresh native Codex and Claude lifecycle, protected-write denial and shared renderer verified"
+    recorded_at: "2026-09-07T04:11:29.707Z"
+    artifact_path: tmp/global-ux-2026-09-07/native-verification.json
+    commit_sha: "290705abb1942546fcd30afba6ebdbfc16b78bae"
