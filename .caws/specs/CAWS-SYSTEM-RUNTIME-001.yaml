@@ -103,3 +103,9 @@ evidence:
     recorded_at: "2026-09-07T02:01:45.834Z"
     artifact_path: /Users/darianrosebrook/Desktop/Projects/caws/tmp/system-runtime-2026-09-07/README.md
     commit_sha: "3d3f2c39"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "Fresh native Codex lifecycle plus protected-write denial and one rendered operator turn; no project hook copies, final digest in refusal."
+    recorded_at: "2026-09-07T02:01:46.594Z"
+    artifact_path: /Users/darianrosebrook/Desktop/Projects/caws/tmp/system-runtime-2026-09-07/native-no-local-hooks/native-activation-result.json
+    commit_sha: "3d3f2c39"
