@@ -45,3 +45,7 @@ evidence:
     status: pass
     evidence_ref: "87682e43; runtime-bootstrap.test.js 8 cases; /private/tmp/caws-runtime-repair-regression.json; source digests in /private/tmp/caws-runtime-repair-dedup-receipt.json"
     recorded_at: "2026-09-07T06:07:01.151Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "87682e43; machine-recovery.test.js executes emitted machine command from unrelated cwd; canonical and linked latches cleared, peer and foreign-project latches preserved; 146 Jest and 32 Bats pass, zero skips"
+    recorded_at: "2026-09-07T06:07:02.685Z"
