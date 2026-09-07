@@ -36,7 +36,7 @@ import {
 } from '../../kernel';
 
 import { composeStoreSnapshot, loadBridges, resolveRepoRoot } from '../../store';
-import { resolveSession } from '../session/resolve-session';
+import { resolveCallerSession } from '../session/resolve-session';
 import type { StoreSnapshot } from '../../store/types';
 import { resolveBinding } from '../binding/resolve-binding';
 import type {
@@ -230,7 +230,7 @@ function bridgeContext(
 ): { bridges?: import('../../store/bridge-store').BridgeRegistry; sessionId?: string } {
   const loaded = loadBridges(cawsDir);
   if (!loaded.ok || !loaded.value.present) return {};
-  const session = resolveSession({ cawsDir, worktreeRoot: cwd, env, allowMint: false });
+  const session = resolveCallerSession({ cawsDir, worktreeRoot: cwd, env, allowMint: false });
   if (!session.ok) return {};
   return { bridges: loaded.value.bridges, sessionId: session.value.identity.session_id };
 }

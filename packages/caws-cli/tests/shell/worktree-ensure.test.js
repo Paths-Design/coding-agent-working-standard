@@ -37,6 +37,7 @@ const HOOK = path.resolve(
   __dirname, '../../templates/hook-packs/shared/agent-register.sh'
 );
 
+const fixtureEnv = { HOME: process.env.HOME, PATH: process.env.PATH, CAWS_SESSION_ID: 'ensure-caller' };
 const repos = [];
 afterAll(() => {
   for (const r of repos) {
@@ -71,14 +72,14 @@ function mkSpec(root, id) {
     riskTier: 3,
     scopeIn: ['src/**'],
     cwd: root,
-    env: { ...process.env },
+    env: { ...fixtureEnv },
     out: s.outFn,
     err: s.errFn,
   });
   if (code !== 0) throw new Error(`mkSpec(${id}) failed: ${s.err.join('\n')}`);
 }
 
-function ensure(root, name, specId, env = process.env) {
+function ensure(root, name, specId, env = fixtureEnv) {
   const s = sinks();
   const code = runWorktreeEnsureCommand({
     name, specId,
@@ -138,7 +139,8 @@ describe('WORKTREE-ENSURE-AFFORDANCE-001', () => {
     const r = ensure(root, 'wt-a2', 'ENS-002');
     expect(r.code).toBe(0);
     expect(r.out.join('\n')).toContain('already bound to spec ENS-002');
-    expect(r.out.join('\n')).toMatch(/Next: cd \S+wt-a2/);
+    expect(r.out.join('\n')).toContain('Continue in this shell: export CAWS_SESSION_ID=');
+    expect(r.out.join('\n')).toContain("wt-a2' && caws claim");
 
     expect(countEvents(root, 'worktree_created')).toBe(before.created);
     expect(countEvents(root, 'worktree_bound')).toBe(before.bound);
@@ -150,12 +152,12 @@ describe('WORKTREE-ENSURE-AFFORDANCE-001', () => {
     const root = mkRepo();
     mkSpec(root, 'ENS-003');
     expect(ensure(root, 'wt-a3', 'ENS-003', {
-      ...process.env, CLAUDE_SESSION_ID: 'owner-session',
+      ...fixtureEnv, CAWS_SESSION_ID: 'owner-session',
     }).code).toBe(0);
 
     // A DIFFERENT session asks to ensure the same worktree.
     const r = ensure(root, 'wt-a3', 'ENS-003', {
-      ...process.env, CLAUDE_SESSION_ID: 'other-session',
+      ...fixtureEnv, CAWS_SESSION_ID: 'other-session',
     });
     expect(r.code).toBe(1);
     const text = r.err.join('\n');
@@ -196,12 +198,12 @@ describe('WORKTREE-ENSURE-AFFORDANCE-001', () => {
     // Governed fixture: activate then close with an explicit resolution.
     const specs = require('../../dist/shell/commands/specs');
     specs.runSpecsActivateCommand({
-      id: 'ENS-005', cwd: root, env: { ...process.env }, out: () => {}, err: () => {},
+      id: 'ENS-005', cwd: root, env: { ...fixtureEnv }, out: () => {}, err: () => {},
     });
     const closeErr = [];
     const cc = specs.runSpecsCloseCommand({
       id: 'ENS-005', resolution: 'abandoned', reason: 'fixture: closed to test the ensure refusal handoff',
-      cwd: root, env: { ...process.env }, out: () => {}, err: (l) => closeErr.push(l),
+      cwd: root, env: { ...fixtureEnv }, out: () => {}, err: (l) => closeErr.push(l),
     });
     if (readSpecState(root, 'ENS-005') !== 'closed') {
       throw new Error('A5 fixture failed to close ENS-005: ' + closeErr.join(' | '));

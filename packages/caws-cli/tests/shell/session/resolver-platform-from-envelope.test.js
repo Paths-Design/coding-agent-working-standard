@@ -200,7 +200,7 @@ describe('CAWS-RESOLVER-PLATFORM-FROM-ENVELOPE-001', () => {
       expect(result.value.identity.platform).toBe('zcode');
     });
 
-    test('resolveSessionCandidates admits every envelope with its own platform', () => {
+    test('resolveSessionCandidates admits only the caller and preserves its platform over cached labels', () => {
       const { cawsDir, now } = makeProjectRoot();
       writeEnvelope(cawsDir, 'sess_cand_zcode', { platform: 'zcode' });
       writeEnvelope(cawsDir, 'sess_cand_codex', { platform: 'codex' });
@@ -209,21 +209,19 @@ describe('CAWS-RESOLVER-PLATFORM-FROM-ENVELOPE-001', () => {
 
       const { candidates } = resolveSessionCandidates({
         cawsDir,
-        env: cleanEnv(),
+        env: { ...cleanEnv(), CODEX_THREAD_ID: 'sess_cand_zcode' },
         now: () => now,
       });
 
       const envelopeCandidates = candidates.filter(
         (c) => c.source === 'durable_hook_envelope'
       );
-      expect(envelopeCandidates).toHaveLength(3);
+      expect(envelopeCandidates).toHaveLength(1);
 
       const byId = Object.fromEntries(
         envelopeCandidates.map((c) => [c.identity.session_id, c.identity.platform])
       );
-      expect(byId['sess_cand_zcode']).toBe('zcode');
-      expect(byId['sess_cand_codex']).toBe('codex');
-      expect(byId['sess_cand_legacy']).toBe('claude-code');
+      expect(byId).toEqual({ sess_cand_zcode: 'codex' });
     });
   });
 });

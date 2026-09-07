@@ -30,7 +30,7 @@
 //   2. composeDoctorSnapshot(...)                → snapshot + doctorInput
 //   3. inspectProjectState(doctorInput)          → DoctorReport
 //   4. resolveBinding(cwd, registry, specs)
-//   5. resolveSession({ allowMint: false })      — read-only; never mints
+//   5. resolveCallerSession({ allowMint: false })      — read-only; never mints
 //   6. loadLeases(cawsDir)                       — read-only
 //   7. summarizeActiveAgents(leases, now, ttl)   — pure classification
 //   8. If --heartbeat: applyLeasePatch(write_lease for self)
@@ -63,7 +63,7 @@ import { resolveBinding } from '../binding/resolve-binding';
 import { renderDiagnostics } from '../render/diagnostic';
 import { renderShortStatus, renderStatus, type StatusPanel } from '../render/status';
 import { emitStaleTelemetryAdvisory, renderStaleTelemetryAdvisory } from '../render/stale-telemetry-advisory';
-import { resolveSession } from '../session/resolve-session';
+import { resolveCallerSession } from '../session/resolve-session';
 
 const DEFAULT_LEASE_STALE_TTL_MS = 30 * 60 * 1000; // 30m
 
@@ -131,7 +131,7 @@ export interface StatusCommandOptions {
   /** Opt-in lease mutation. When true, status writes/refreshes the
    *  current session's lease as a heartbeat. Default false. */
   readonly heartbeat?: boolean;
-  /** Explicit session id (overrides resolveSession). Identity only by
+  /** Explicit session id (overrides resolveCallerSession). Identity only by
    *  default — does NOT trigger a lease write unless --heartbeat is
    *  also passed. */
   readonly sessionId?: string;
@@ -221,7 +221,7 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
   //    (AUTH-BINDING-BRIDGE-001). Read-only composition: status never mints
   //    an identity, so a bridge surfaces only when one already resolves.
   const bridgesLoad = loadBridges(cawsDir);
-  const bridgeSession = resolveSession({
+  const bridgeSession = resolveCallerSession({
     cawsDir,
     worktreeRoot: cwd,
     env,
@@ -261,7 +261,7 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
     };
   }
 
-  const sessionResult = resolveSession({
+  const sessionResult = resolveCallerSession({
     cawsDir,
     worktreeRoot: cwd,
     env,

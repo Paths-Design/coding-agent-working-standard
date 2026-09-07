@@ -1,6 +1,8 @@
 // resolve-session — establish a SessionIdentity for the current shell call.
 //
-// This is the SOLE shell-side authority for "who is running this command?".
+// resolveCallerSession is the caller resolver for ownership and bridge authority.
+// resolveSession retains cached attribution for legacy consumers; its cache
+// fallbacks do not establish the invoking caller for ownership admission.
 // Source order:
 //
 //   1. CLAUDE_SESSION_ID env  → platform = "claude-code"
@@ -831,10 +833,10 @@ function mintCapsule(
 //
 // This is the canonical-checkout identity bridge. It fires BEFORE the durable-
 // envelope scan, so a no-env-var caller (ZCode / generic harness) at canonical
-// checkout resolves deterministically to its own session id instead of hitting
-// the ≥2-envelope ambiguity refusal. Mirrors lib/agent-pid.sh's
-// read_session_id_from_agent_pid exactly (same record format, same PID-reuse
-// start-time guard).
+// checkout can resolve its session id instead of hitting the ≥2-envelope
+// ambiguity refusal. The record format is shared with lib/agent-pid.sh.
+// Ownership resolution additionally requires complete process-instance evidence;
+// legacy attribution retains its existing incomplete-observation behavior.
 //
 // NO FRESHNESS WINDOW (refinement). Unlike the durable-envelope tier, this
 // record is keyed to a SPECIFIC LIVE PROCESS — the PID-walk just reached it
@@ -880,7 +882,7 @@ function defaultAgentPidWalk(names: readonly string[]): { pid: number; startEpoc
           const ms = Date.parse(lstart);
           startEpoch = Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
         } catch {
-          /* lstart unavailable — leave null (reader skips start-time check) */
+          /* lstart unavailable — strict ownership resolution declines this record */
         }
         return { pid, startEpoch };
       }
@@ -897,9 +899,10 @@ function defaultAgentPidWalk(names: readonly string[]): { pid: number; startEpoc
 
 /**
  * Resolve the session identity from the agent-PID correlation record. Returns
- * the recorded SessionIdentity on a valid, fresh, start-time-matched record;
- * returns null on any miss (fail-open — caller falls through to the existing
- * env→envelope→capsule chain).
+ * a recorded SessionIdentity or null on a miss. Strict callers require valid
+ * matching process start identities on both sides. Legacy attribution retains
+ * the conditional comparison when requireProcessInstanceMatch is omitted.
+ * No record age limit applies: an old record may describe the same live process.
  */
 export function resolveAgentPidIdentity(args: {
   cawsDir: string;
@@ -907,6 +910,8 @@ export function resolveAgentPidIdentity(args: {
   processNames?: readonly string[];
   pidWalkFn?: (names: readonly string[]) => { pid: number; startEpoch: number | null } | null;
   now?: () => Date;
+  /** Ownership admission requires both process-instance observations. */
+  requireProcessInstanceMatch?: boolean;
 }): SessionIdentity | null {
   // The per-surface name set comes from env (agent-surface.sh exports
   // CAWS_AGENT_PROCESS_NAMES) or the explicit override. Empty -> fail-open.
@@ -934,9 +939,18 @@ export function resolveAgentPidIdentity(args: {
   const rec = parsed as Partial<AgentPidRecord>;
   if (typeof rec.session_id !== 'string' || rec.session_id.length === 0) return null;
 
-  // PID-reuse guard: if both the record and the live process carry a start
-  // time, they must match. A reused PID has a different start time. This is
-  // the SOLE validity gate for this tier — see the function header.
+  // A live numeric PID alone cannot bind a saved identity to this process
+  // instance. The producer and walker use positive integer Unix seconds;
+  // missing values, coercible strings and invalid numbers are not observations.
+  if (args.requireProcessInstanceMatch === true) {
+    if (
+      typeof rec.started_at !== 'number' || !Number.isSafeInteger(rec.started_at) || rec.started_at <= 0 ||
+      typeof located.startEpoch !== 'number' || !Number.isSafeInteger(located.startEpoch) || located.startEpoch <= 0 ||
+      rec.started_at !== located.startEpoch
+    ) return null;
+  }
+
+  // Retain the legacy attribution comparison for non-ownership consumers.
   if (rec.started_at !== undefined && rec.started_at !== null && located.startEpoch !== null) {
     if (Math.floor(Number(rec.started_at)) !== Math.floor(located.startEpoch)) {
       return null; // PID reuse
@@ -959,9 +973,26 @@ function parseProcessNames(raw: string | undefined): readonly string[] {
 export function resolveSession(
   opts: ResolveSessionOptions
 ): Result<ResolvedSession> {
+  return resolveSessionIdentity(opts, true);
+}
+
+/**
+ * Resolve the invoking caller for ownership decisions. Cached envelopes,
+ * cwd ownership and capsules describe prior sessions, not this process.
+ * Only caller-carried environment or a correlated agent process can resume
+ * an identity. Explicit creation/takeover may opt in to minting a new one.
+ */
+export function resolveCallerSession(
+  opts: ResolveSessionOptions
+): Result<ResolvedSession> {
+  return resolveSessionIdentity(opts, false);
+}
+
+function resolveSessionIdentity(
+  opts: ResolveSessionOptions,
+  allowCachedIdentity: boolean
+): Result<ResolvedSession> {
   const env = opts.env ?? process.env;
-  const platform = opts.platform ?? process.platform;
-  const allowMint = opts.allowMint === true;
 
   // 0a. Surface-pinned precedence (CAWS-DEFECT-SESSION-IDENTITY-ENV-SHADOWING-01):
   //     when CAWS_AGENT_SURFACE names the dispatching platform, that surface's
@@ -1009,7 +1040,7 @@ export function resolveSession(
 
   // 1. CLAUDE_SESSION_ID env (authority source #1 — operator override)
   const claudeId = env['CLAUDE_SESSION_ID'];
-  if (typeof claudeId === 'string' && claudeId.length > 0) {
+  if (typeof claudeId === 'string' && claudeId.length > 0 && claudeId !== 'unknown') {
     return ok({
       identity: { session_id: claudeId, platform: 'claude-code' },
       source: 'claude_env',
@@ -1133,6 +1164,7 @@ export function resolveSession(
   const agentPidIdentity = resolveAgentPidIdentity({
     cawsDir: opts.cawsDir,
     env,
+    requireProcessInstanceMatch: !allowCachedIdentity,
     ...(opts.now !== undefined ? { now: opts.now } : {}),
     ...(opts.agentProcessNames !== undefined ? { processNames: opts.agentProcessNames } : {}),
     ...(opts.agentPidWalkFn !== undefined ? { pidWalkFn: opts.agentPidWalkFn } : {}),
@@ -1147,7 +1179,9 @@ export function resolveSession(
     });
   }
 
-  // 2.5. Durable hook envelope on disk (authority source #2.5)
+  if (!allowCachedIdentity) return resolveSessionFallback(opts);
+
+  // 2.5. Durable hook envelope on disk (legacy attribution only)
   //      CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001: bridges
   //      HOOK_SESSION_ID across agent-Bash invocations where the env
   //      var doesn't propagate. The hook script writes/refreshes
@@ -1349,9 +1383,14 @@ export function resolveSession(
     });
   }
 
+  return resolveSessionFallback(opts);
+}
+
+function resolveSessionFallback(opts: ResolveSessionOptions): Result<ResolvedSession> {
+  const env = opts.env ?? process.env;
   // 4. CURSOR_TRACE_ID env (low-stability fallback)
   const cursorId = env['CURSOR_TRACE_ID'];
-  if (typeof cursorId === 'string' && cursorId.length > 0) {
+  if (typeof cursorId === 'string' && cursorId.length > 0 && cursorId !== 'unknown') {
     return ok({
       identity: { session_id: cursorId, platform: 'cursor' },
       source: 'cursor_env',
@@ -1359,12 +1398,12 @@ export function resolveSession(
   }
 
   // 5. Mint a capsule — only when caller has opted in.
-  if (!allowMint) {
+  if (opts.allowMint !== true) {
     return err([
       diag(
         SHELL_RULES.SESSION_NO_STABLE_IDENTITY,
-        'No stable session identity could be resolved. Set CLAUDE_SESSION_ID or run a write-class command to mint a capsule.',
-        { platform, cawsDir: opts.cawsDir, worktreeRoot: opts.worktreeRoot }
+        'No stable session identity could be resolved. Resume the original harness session or use the CAWS_SESSION_ID continuation saved from creation. Do not copy an owner id from the registry or mint another capsule to recover ownership. A deliberate transfer requires user-authorized caws claim --takeover.',
+        { platform: opts.platform ?? process.platform, cawsDir: opts.cawsDir, worktreeRoot: opts.worktreeRoot }
       ),
     ]);
   }
@@ -1457,75 +1496,13 @@ export function describeSessionSource(s: ResolvedSession): Diagnostic {
   }
 }
 
-// ─── resolveSessionCandidates ───────────────────────────────────────────
-//
-// Multi-source admission helper. Returns ZERO or more SessionIdentity
-// candidates plus a diagnostic trace. NEVER mints. Designed for the
-// ownership-comparison surfaces (worktree destroy, merge) where the
-// question is "is the invoking process speaking for the registered
-// owner?" rather than "what identity should we stamp on a new record?".
-//
-// Source order MIRRORS resolveSession (CLAUDE_SESSION_ID,
-// HOOK_SESSION_ID, capsules, CURSOR_TRACE_ID) but is EXHAUSTIVE — every
-// source is consulted, not first-match. Capsules contribute well-formed
-// entries under .caws/sessions/*.json regardless of worktree_root
-// (eliminating the cwd-sensitivity that caused
-// CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001), BUT — since
-// SESSION-CANDIDATE-RESOLUTION-HARDENING-001 — admission is
-// CORROBORATION-GATED when more than one capsule shares the directory:
-// a capsule admits only when the invoking process can legitimately speak
-// for its session (a matching env identity, or the fresh repo-matched
-// caller-session pointer naming it). A single capsule on disk admits
-// unchanged (the machine-and-repo evidence the destroy-from-canonical
-// path pins). Uncorroborated capsules in a multi-capsule repo are
-// rejected WITH REASON in the trace — fail closed: an under-admit
-// degrades to the refusal an explicit --takeover resolves; an over-admit
-// was the D3 breach (a foreign session destroying a peer's worktree).
-//
-// Why no mint: ownership comparison should never invent an identity
-// that didn't exist before the comparison started. Minting on a failed
-// match would (a) leave a stale capsule on disk after a refused
-// comparison and (b) make the comparison's "no match" outcome
-// non-reproducible because the mint randomized state. The right
-// behavior on no-candidates-match is the refusal that the destroy/merge
-// command already issues, surfaced with the trace so the user sees
-// which sources were consulted.
-
-/**
- * SESSION-CANDIDATE-RESOLUTION-HARDENING-001: the set of session ids the
- * invoking process can CORROBORATE — explicit env identities plus the
- * fresh, repo-matched caller-session pointer (the last-writer lineage on
- * THIS machine for THIS repo). Best-effort and total: a missing/stale
- * pointer contributes nothing.
- */
-function capsuleCorroborationIds(
-  cawsDir: string,
-  env: NodeJS.ProcessEnv,
-  now: Date
-): Set<string> {
-  const ids = new Set<string>();
-  for (const key of ['CAWS_SESSION_ID', 'HOOK_SESSION_ID', 'CURSOR_TRACE_ID'] as const) {
-    const v = env[key];
-    if (typeof v === 'string' && v.length > 0 && v !== 'unknown') ids.add(v);
-  }
-  try {
-    const repoRoot = repoRootFromCawsDir(cawsDir);
-    const homes = sessionStateHomes(repoRoot);
-    const pointerId = readCallerSessionPointer({
-      repoRootReal: realpathSafe(repoRoot),
-      dirs: homes.all,
-      nowMs: now.getTime(),
-    });
-    if (pointerId !== null) ids.add(pointerId);
-  } catch {
-    // Corroboration is best-effort; absence narrows admission (fail closed).
-  }
-  return ids;
-}
+// Ownership candidates all describe the same invoking caller. Cached records
+// may enrich diagnostics, but never contribute another identity. In particular,
+// neither cache cardinality nor a shared last-writer pointer is corroboration.
 
 function readAllCapsules(
   cawsDir: string,
-  corroboration?: { env: NodeJS.ProcessEnv; now: Date }
+  corroboratedIds: ReadonlySet<string>
 ): {
   candidates: SessionCandidate[];
   trace: CandidateTraceEntry;
@@ -1601,40 +1578,8 @@ function readAllCapsules(
     wellFormed.push({ name, capsulePath, parsed });
   }
 
-  // SESSION-CANDIDATE-RESOLUTION-HARDENING-001: partition the well-formed
-  // capsules. One capsule on disk admits (compat — the single-session
-  // machine-and-repo evidence CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001
-  // pinned). Two or more capsules sharing the dir means DISTINCT sessions
-  // have minted here; each must then be corroborated (env identity or the
-  // fresh caller pointer) before it speaks for the invoking process.
-  if (corroboration !== undefined && wellFormed.length >= 2) {
-    const ids = capsuleCorroborationIds(cawsDir, corroboration.env, corroboration.now);
-    const uncorroborated: typeof wellFormed = [];
-    for (const w of wellFormed) {
-      if (ids.has(w.parsed.session_id)) {
-        candidates.push({
-          identity: {
-            session_id: w.parsed.session_id,
-            ...(w.parsed.platform !== undefined ? { platform: w.parsed.platform } : {}),
-          },
-          source: 'capsule',
-          capsulePath: w.capsulePath,
-        });
-      } else {
-        uncorroborated.push(w);
-      }
-    }
-    if (uncorroborated.length > 0) {
-      rejectedCount += uncorroborated.length;
-      rejectionReasons.push(
-        ...uncorroborated.map(
-          (w) =>
-            `uncorroborated-capsule: ${w.name} (multi-capsule repo; no env identity, fresh caller pointer, or takeover lineage names this session — D3 over-match guard)`
-        )
-      );
-    }
-  } else {
-    for (const w of wellFormed) {
+  for (const w of wellFormed) {
+    if (corroboratedIds.has(w.parsed.session_id)) {
       candidates.push({
         identity: {
           session_id: w.parsed.session_id,
@@ -1643,6 +1588,9 @@ function readAllCapsules(
         source: 'capsule',
         capsulePath: w.capsulePath,
       });
+    } else {
+      rejectedCount++;
+      rejectionReasons.push(`uncorroborated-capsule: ${w.name} (does not identify the invoking caller)`);
     }
   }
   if (candidates.length > 0) {
@@ -1697,298 +1645,55 @@ function readAllCapsules(
 }
 
 /**
- * Resolve every session identity the current process can plausibly
- * speak for. See SessionCandidates docs in ./types.ts for the contract.
- *
- * Pure function over (env, cawsDir, on-disk capsule files). No mutation,
- * no minting, no side effects.
+ * Resolve corroborated records for the invoking caller, using the same
+ * precedence as lifecycle attribution. Reads environment, process correlation
+ * and caches; never mutates or mints. See SessionCandidates for the contract.
  */
 export function resolveSessionCandidates(
   opts: ResolveCandidatesOptions
 ): SessionCandidates {
-  const env = opts.env ?? process.env;
-  const candidates: SessionCandidate[] = [];
-  const trace: CandidateTraceEntry[] = [];
+  const caller = opts.caller !== undefined ? ok(opts.caller) : resolveCallerSession({
+    ...opts,
+    worktreeRoot: repoRootFromCawsDir(opts.cawsDir),
+    allowMint: false,
+  });
+  const candidates: SessionCandidate[] = caller.ok ? [caller.value] : [];
+  const ids = new Set(candidates.map((c) => c.identity.session_id));
+  const trace: CandidateTraceEntry[] = caller.ok
+    ? [{ source: caller.value.source, outcome: 'admitted', count: 1,
+        admittedIds: [caller.value.identity.session_id] }]
+    : [{ source: 'caws_env', outcome: 'absent', count: 0,
+        reason: caller.errors.map((d) => d.message).join('; ') }];
 
-  // 1. CLAUDE_SESSION_ID env
-  const claudeId = env['CLAUDE_SESSION_ID'];
-  if (typeof claudeId === 'string' && claudeId.length > 0) {
-    candidates.push({
-      identity: { session_id: claudeId, platform: 'claude-code' },
-      source: 'claude_env',
-    });
-    trace.push({
-      source: 'claude_env',
-      outcome: 'admitted',
-      count: 1,
-      admittedIds: [claudeId],
-    });
-  } else {
-    trace.push({
-      source: 'claude_env',
-      outcome: 'absent',
-      reason: 'CLAUDE_SESSION_ID not set',
-    });
-  }
-
-  // 1.5. CLAUDE_CODE_SESSION_ID env (refuse literal 'unknown' and empty).
-  //      CAWS-SESSION-ID-AGENT-BASH-PROPAGATION-001: the harness UUID that
-  //      survives the tool boundary into agent-Bash. Admitted as a candidate
-  //      so ownership comparison can match a worktree owner stamped from this
-  //      same source — exact session_id equality, never widens authority.
-  const claudeCodeId = env['CLAUDE_CODE_SESSION_ID'];
-  if (
-    typeof claudeCodeId === 'string' &&
-    claudeCodeId.length > 0 &&
-    claudeCodeId !== 'unknown'
-  ) {
-    candidates.push({
-      identity: { session_id: claudeCodeId, platform: 'claude-code' },
-      source: 'claude_code_env',
-    });
-    trace.push({
-      source: 'claude_code_env',
-      outcome: 'admitted',
-      count: 1,
-      admittedIds: [claudeCodeId],
-    });
-  } else if (claudeCodeId === 'unknown') {
-    trace.push({
-      source: 'claude_code_env',
-      outcome: 'rejected',
-      reason: 'CLAUDE_CODE_SESSION_ID is literal "unknown"',
-    });
-  } else {
-    trace.push({
-      source: 'claude_code_env',
-      outcome: 'absent',
-      reason: 'CLAUDE_CODE_SESSION_ID not set',
-    });
-  }
-
-  // 1.6. CODEX_THREAD_ID env (refuse literal 'unknown' and empty).
-  //      CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 (A1): the Codex harness
-  //      thread id that survives the tool boundary into agent-Bash. Admitted as
-  //      a candidate so ownership comparison (destroy/merge) can match a
-  //      worktree owner stamped from this same source — exact session_id
-  //      equality, never widens authority. Mirrors tier 1.5 for claude-code.
-  const codexThreadId = env['CODEX_THREAD_ID'];
-  if (
-    typeof codexThreadId === 'string' &&
-    codexThreadId.length > 0 &&
-    codexThreadId !== 'unknown'
-  ) {
-    candidates.push({
-      identity: { session_id: codexThreadId, platform: 'codex' },
-      source: 'codex_thread_env',
-    });
-    trace.push({
-      source: 'codex_thread_env',
-      outcome: 'admitted',
-      count: 1,
-      admittedIds: [codexThreadId],
-    });
-  } else if (codexThreadId === 'unknown') {
-    trace.push({
-      source: 'codex_thread_env',
-      outcome: 'rejected',
-      reason: 'CODEX_THREAD_ID is literal "unknown"',
-    });
-  } else {
-    trace.push({
-      source: 'codex_thread_env',
-      outcome: 'absent',
-      reason: 'CODEX_THREAD_ID not set',
-    });
-  }
-
-  // 1.65. DSH_SESSION_ID env (refuse literal 'unknown' and empty).
-  //      The DeepSeek Harness per-session id, exported by DSH into every tool
-  //      subprocess like Codex's CODEX_THREAD_ID. Admitted as a candidate so
-  //      ownership comparison (destroy/merge) can match a worktree owner
-  //      stamped from this same source. Mirrors tiers 1.5/1.6.
-  const dshSessionId = env['DSH_SESSION_ID'];
-  if (
-    typeof dshSessionId === 'string' &&
-    dshSessionId.length > 0 &&
-    dshSessionId !== 'unknown'
-  ) {
-    candidates.push({
-      identity: { session_id: dshSessionId, platform: 'dsh' },
-      source: 'dsh_env',
-    });
-    trace.push({
-      source: 'dsh_env',
-      outcome: 'admitted',
-      count: 1,
-      admittedIds: [dshSessionId],
-    });
-  } else if (dshSessionId === 'unknown') {
-    trace.push({
-      source: 'dsh_env',
-      outcome: 'rejected',
-      reason: 'DSH_SESSION_ID is literal "unknown"',
-    });
-  } else {
-    trace.push({
-      source: 'dsh_env',
-      outcome: 'absent',
-      reason: 'DSH_SESSION_ID not set',
-    });
-  }
-
-  // 1.7. CAWS_SESSION_ID env (generic escape hatch for any harness).
-  //      Same slice (A1): gives opencode/zcode/windsurf a deterministic env
-  //      path. Platform derived via surfaceFromEnv (may be 'none' — honest).
-  const cawsId = env['CAWS_SESSION_ID'];
-  if (
-    typeof cawsId === 'string' &&
-    cawsId.length > 0 &&
-    cawsId !== 'unknown'
-  ) {
-    candidates.push({
-      identity: { session_id: cawsId, platform: surfaceFromEnv(env) },
-      source: 'caws_env',
-    });
-    trace.push({
-      source: 'caws_env',
-      outcome: 'admitted',
-      count: 1,
-      admittedIds: [cawsId],
-    });
-  } else if (cawsId === 'unknown') {
-    trace.push({
-      source: 'caws_env',
-      outcome: 'rejected',
-      reason: 'CAWS_SESSION_ID is literal "unknown"',
-    });
-  } else {
-    trace.push({
-      source: 'caws_env',
-      outcome: 'absent',
-      reason: 'CAWS_SESSION_ID not set',
-    });
-  }
-
-  // 2. HOOK_SESSION_ID env (refuse literal 'unknown' and empty)
-  const hookId = env['HOOK_SESSION_ID'];
-  if (typeof hookId === 'string' && hookId.length > 0 && hookId !== 'unknown') {
-    candidates.push({
-      identity: { session_id: hookId, platform: 'claude-code' },
-      source: 'hook_env',
-    });
-    trace.push({
-      source: 'hook_env',
-      outcome: 'admitted',
-      count: 1,
-      admittedIds: [hookId],
-    });
-  } else if (hookId === 'unknown') {
-    trace.push({
-      source: 'hook_env',
-      outcome: 'rejected',
-      reason: 'HOOK_SESSION_ID is literal "unknown" (parse-input.sh fallback)',
-    });
-  } else {
-    trace.push({
-      source: 'hook_env',
-      outcome: 'absent',
-      reason: 'HOOK_SESSION_ID not set',
-    });
-  }
-
-  // 2.5. Durable hook envelopes on disk
-  //      CAWS-WORKTREE-DESTROY-GHOST-ENTRY-OWNER-UNRESOLVABLE-001.
-  //
-  //      This source MIRRORS resolveSession's step 2.5 — the same
-  //      scanDurableEnvelopes() over `<repoRoot>/.caws/sessions/<id>/.session-envelope.json`
-  //      (new home; legacy `<repoRoot>/tmp/<id>/` is the bounded read-both
-  //      fallback — CAWS-SESSION-LOG-RELOCATE-001),
-  //      repo-root-filtered and freshness-checked — but with one
-  //      deliberate divergence in the >=2 case.
-  //
-  //      resolveSession() REFUSES on >=2 fresh envelopes because it must
-  //      pick exactly ONE identity to STAMP onto a new record; guessing
-  //      would be newest-wins, which the spec forbids.
-  //
-  //      resolveSessionCandidates() ADMITS ALL fresh envelopes. This is an
-  //      ownership-COMPARISON surface — the question is "can the invoking
-  //      process speak for the registered owner?", answered downstream by
-  //      admitsOwner()'s exact session_id equality. Admitting every fresh
-  //      envelope cannot widen authority: a foreign owner whose envelope is
-  //      not on disk still has no matching candidate, so the destroy/merge
-  //      refusal still fires (A4). What it DOES fix is the ghost-entry case
-  //      where the registered owner IS one of the fresh envelopes (the
-  //      caller's own claude-code UUID session) but, in agent-Bash,
-  //      HOOK_SESSION_ID is absent and no capsule carries that UUID — so the
-  //      pre-fix candidate set never saw the owner, and destroy refused a
-  //      worktree the caller legitimately owns. `caws status` already
-  //      resolved that same UUID as "self" via this exact envelope source;
-  //      this aligns the comparison surface with the display surface.
   const repoRoot = repoRootFromCawsDir(opts.cawsDir);
   const homes = sessionStateHomes(repoRoot);
-  const envScan = scanDurableEnvelopes({
-    repoRoot,
-    dirs: homes.all,
-    now: opts.now ? opts.now() : new Date(),
+  const scan = scanDurableEnvelopes({
+    repoRoot, dirs: homes.all, now: opts.now ? opts.now() : new Date(),
   });
-  if (envScan.candidates.length > 0) {
-    for (const c of envScan.candidates) {
-      candidates.push({
-        identity: {
-          session_id: c.envelope.session_id,
-          platform: c.envelope.platform ?? 'claude-code',
-        },
-        source: 'durable_hook_envelope',
-        envelopePath: c.envelopePath,
-      });
+  for (const entry of scan.candidates) {
+    const id = entry.envelope.session_id;
+    if (caller.ok && ids.has(id)) {
+      // Preserve caller attribution even if an old envelope labels it differently.
+      candidates.push({ identity: caller.value.identity,
+        source: 'durable_hook_envelope', envelopePath: entry.envelopePath });
+      trace.push({ source: 'durable_hook_envelope', outcome: 'admitted', count: 1,
+        admittedIds: [id] });
+    } else {
+      trace.push({ source: 'durable_hook_envelope', outcome: 'rejected', count: 0,
+        reason: `uncorroborated-envelope: ${entry.envelopePath} (does not identify the invoking caller)` });
     }
-    trace.push({
-      source: 'durable_hook_envelope',
-      outcome: 'admitted',
-      count: envScan.candidates.length,
-      admittedIds: envScan.candidates.map((c) => c.envelope.session_id),
-    });
-  } else {
-    trace.push({
-      source: 'durable_hook_envelope',
-      outcome: 'absent',
-      reason: `no fresh durable hook envelope under ${homes.newDir} (or legacy ${homes.legacyDir}) matched repo_root ${repoRoot}`,
-    });
   }
-
-  // 3. ALL capsules on disk (NOT cwd-keyed; that is the key distinction
-  //    from resolveSession's step-3 behavior), corroboration-gated when
-  //    multiple capsules share the dir (SESSION-CANDIDATE-RESOLUTION-
-  //    HARDENING-001).
-  const capsuleResult = readAllCapsules(opts.cawsDir, {
-    env,
-    now: opts.now ? opts.now() : new Date(),
-  });
-  candidates.push(...capsuleResult.candidates);
-  trace.push(capsuleResult.trace);
-
-  // 4. CURSOR_TRACE_ID env (low-stability fallback)
-  const cursorId = env['CURSOR_TRACE_ID'];
-  if (typeof cursorId === 'string' && cursorId.length > 0) {
-    candidates.push({
-      identity: { session_id: cursorId, platform: 'cursor' },
-      source: 'cursor_env',
-    });
-    trace.push({
-      source: 'cursor_env',
-      outcome: 'admitted',
-      count: 1,
-      admittedIds: [cursorId],
-    });
-  } else {
-    trace.push({
-      source: 'cursor_env',
-      outcome: 'absent',
-      reason: 'CURSOR_TRACE_ID not set',
-    });
+  if (scan.candidates.length === 0) {
+    trace.push({ source: 'durable_hook_envelope', outcome: 'absent', count: 0,
+      reason: 'no fresh repo-matched durable envelopes' });
   }
-
+  for (const warning of scan.warnings) {
+    trace.push({ source: 'durable_hook_envelope', outcome: 'rejected', count: 0,
+      reason: warning.message });
+  }
+  const capsules = readAllCapsules(opts.cawsDir, ids);
+  candidates.push(...capsules.candidates);
+  trace.push(capsules.trace);
   return { candidates, trace };
 }
 

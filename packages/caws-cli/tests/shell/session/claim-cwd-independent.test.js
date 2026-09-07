@@ -1,25 +1,17 @@
 'use strict';
 
 /**
- * SESSION-CAPSULE-WORKTREE-CWD-001 — caws claim resolves "the current session"
- * through the cwd-independent candidate set, so an agent that creates a
- * worktree from one directory and runs `caws claim` from another (the
- * documented create-then-enter flow) is recognized as the owner without
- * --takeover.
- *
- * Root cause being closed: claim was the only ownership surface that resolved
- * identity through single-identity resolveSession (cwd-keyed capsule tier) and
- * compared via the single-session assertOwnership. merge/bind/destroy already
- * built the cwd-independent resolveSessionCandidates set and admitted via
- * admitsOwner. claim now threads that same candidate set into assertOwnership.
+ * A directory switch alone is not a witness that the caller owns a capsule
+ * minted elsewhere. Preserve the old fixture as a refusal control. The actual
+ * create -> emitted continuation -> enter path is exercised through the built
+ * CLI in worktree-create-enter.test.js.
  *
  * SUT: compiled surface — require('../../../dist/shell/commands/claim').
  * `npm run build` compiles TS -> dist before jest runs.
  *
  * Coverage:
- *   A1  create-then-enter: owner capsule keyed to repo root, claim from inside
- *       the worktree (different cwd), no per-surface env var => recognized as
- *       owner (exit 0), NO --takeover required.
+ *   A1  owner capsule keyed to another cwd without current identity => refuse
+ *       without minting or changing ownership.
  *   A2  genuine foreign owner (no corroborating capsule) => still refused
  *       (foreign-owner diagnostic), unchanged.
  */
@@ -119,14 +111,15 @@ function setupRepo({ ownerSession }) {
 // scenario where CLAUDE_SESSION_ID etc. do not propagate into the subshell.
 // This is the path that, before the fix, minted a fresh id and forced
 // --takeover. CAWS_PROJECT_DIR is set so the resolver can locate .caws.
-function runClaimFrom(cwd, cawsDir) {
+function runClaimFrom(cwd, cawsDir, extraEnv = {}) {
   const out = [];
   const err = [];
   const code = runClaimCommand({
     cwd,
     now: () => new Date('2026-07-30T12:00:00.000Z'),
     env: {
-      ...process.env,
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
       // Explicitly ABSENT identity env vars — forces the resolver off the
       // tier-1 env path and onto the capsule/candidate path under test.
       CLAUDE_SESSION_ID: '',
@@ -136,6 +129,7 @@ function runClaimFrom(cwd, cawsDir) {
       HOOK_SESSION_ID: '',
       CURSOR_TRACE_ID: '',
       CAWS_PROJECT_DIR: path.dirname(cawsDir),
+      ...extraEnv,
     },
     out: (line) => out.push(line),
     err: (line) => err.push(line),
@@ -144,44 +138,40 @@ function runClaimFrom(cwd, cawsDir) {
 }
 
 describe('SESSION-CAPSULE-WORKTREE-CWD-001 — claim cwd-independent recognition', () => {
-  test('A1: claim from inside the worktree recognizes an owner minted from the repo root (no --takeover)', () => {
+  test('A1: a capsule from another cwd cannot establish the caller and claim never mints to compare ownership', () => {
     const ownerSession = 'caws-aaa111';
     const { root, cawsDir, wtPath } = setupRepo({ ownerSession });
 
-    // The owner identity was minted FROM THE REPO ROOT (e.g. when the worktree
-    // was created there), so its capsule is keyed to `root`, NOT to wtPath.
-    // A claim run from inside the worktree (cwd = wtPath) cannot match this
-    // capsule via the cwd-keyed tier-3 readCapsule — but the cwd-independent
-    // candidate set finds it and assertOwnership admits the owner.
+    // This fixture has no native process/env continuity and never executed
+    // create. A neighboring capsule alone cannot prove same-session entry.
     writeCapsule(cawsDir, ownerSession, root);
+    const beforeCapsules = fs.readdirSync(path.join(cawsDir, 'sessions')).sort();
+    const beforeRegistry = fs.readFileSync(path.join(cawsDir, 'worktrees.json'), 'utf8');
 
     const result = runClaimFrom(wtPath, cawsDir);
 
-    expect(result.code).toBe(0);
-    expect(result.out).toContain('OWNED (you)');
-    expect(result.err).not.toContain('foreign_owner_blocked');
-    expect(result.err).not.toContain('takeover not authorized');
+    expect(result.code).toBe(2);
+    expect(result.err).toContain('session identity');
+    expect(result.out).not.toContain('OWNED (you)');
+    expect(fs.readdirSync(path.join(cawsDir, 'sessions')).sort()).toEqual(beforeCapsules);
+    expect(fs.readFileSync(path.join(cawsDir, 'worktrees.json'), 'utf8')).toBe(beforeRegistry);
   });
 
   test('A2: a genuine foreign owner (no corroborating capsule) is still refused', () => {
     const ownerSession = 'caws-foreign222';
     const { cawsDir, wtPath } = setupRepo({ ownerSession });
 
-    // No capsule for the foreign owner; the only capsule is this process's own
-    // fresh mint (written by the resolver on the claim call). The candidate
-    // set does NOT contain the foreign owner, so admission must fail.
-    // (We deliberately do not write a capsule for ownerSession.)
-    const result = runClaimFrom(wtPath, cawsDir);
+    // The invoking identity differs from the registry owner and has no
+    // corroboration for that owner. The refusal remains a domain failure.
+    const result = runClaimFrom(wtPath, cawsDir, { CAWS_SESSION_ID: 'caller-session' });
 
     expect(result.code).toBe(1);
     expect(result.err).toContain('foreign_owner_blocked');
   });
 
   test('A1 (no-env control): with CAWS_SESSION_ID corroborating the owner, claim is recognized (the documented escape still works)', () => {
-    // Sanity: the pre-existing tier-1.7 CAWS_SESSION_ID path still admits the
-    // owner when set. This confirms the new candidate path is ADDITIVE, not a
-    // replacement, and that the A1 success above is specifically the
-    // no-env-var candidate path, not this env path leaking through.
+    // Explicit context identifies the caller across directories; it is the
+    // continuity source used by the fallback continuation printed by create.
     const ownerSession = 'caws-bbb333';
     const { root, cawsDir, wtPath } = setupRepo({ ownerSession });
     writeCapsule(cawsDir, ownerSession, root);
@@ -192,7 +182,8 @@ describe('SESSION-CAPSULE-WORKTREE-CWD-001 — claim cwd-independent recognition
       cwd: wtPath,
       now: () => new Date('2026-07-30T12:00:00Z'),
       env: {
-        ...process.env,
+        PATH: process.env.PATH,
+        HOME: process.env.HOME,
         CLAUDE_SESSION_ID: '',
         CLAUDE_CODE_SESSION_ID: '',
         CODEX_THREAD_ID: '',

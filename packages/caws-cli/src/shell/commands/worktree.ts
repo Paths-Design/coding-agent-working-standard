@@ -61,7 +61,8 @@ import {
 import { clearSpecBinding } from '../../store/specs-writer';
 import { pruneBridgeGhosts } from '../../store/bridge-store';
 import { buildActor } from '../session/actor';
-import { admitsOwner, resolveSession, resolveSessionCandidates } from '../session/resolve-session';
+import type { SessionSource } from '../session/types';
+import { admitsOwner, resolveCallerSession, resolveSessionCandidates } from '../session/resolve-session';
 import { renderDiagnostics } from '../render/diagnostic';
 import { emitPeerPresence } from '../render/peer-presence';
 
@@ -212,6 +213,20 @@ function resolveCawsCtx(
   return { repoRoot: r.value.repoRoot, cawsDir: r.value.cawsDir };
 }
 
+function surfaceContinuation(
+  id: { session: { session_id: string }; source: SessionSource },
+  worktreePath: string,
+  out: (line: string) => void
+): void {
+  const quote = (value: string): string => "'" + value.replaceAll("'", "'\\''") + "'";
+  // Emit the identity used by this invocation, never copy one out of registry.
+  if (id.source === 'minted' || id.source === 'caws_env') {
+    out(`Continue in this shell: export CAWS_SESSION_ID=${quote(id.session.session_id)}; cd ${quote(worktreePath)} && caws claim`);
+  } else {
+    out(`Next: cd ${quote(worktreePath)} && caws claim`);
+  }
+}
+
 function buildActorPair(
   cawsDir: string,
   cwd: string,
@@ -221,13 +236,13 @@ function buildActorPair(
   errFn: (line: string) => void,
   showData: boolean,
   cmd: string
-): { session: { session_id: string; platform?: string }; actor: ReturnType<typeof buildActor> } | null {
-  const sessionResult = resolveSession({
+): { session: { session_id: string; platform?: string }; source: SessionSource; actor: ReturnType<typeof buildActor> } | null {
+  const sessionResult = resolveCallerSession({
     cawsDir,
     worktreeRoot: cwd,
     env,
     now: nowFn,
-    allowMint: true,
+    allowMint: cmd === 'create',
   });
   if (!sessionResult.ok) {
     errFn(`caws worktree ${cmd}: failed to resolve session identity.`);
@@ -239,6 +254,7 @@ function buildActorPair(
     kind: actorKind ?? 'agent',
   });
   return {
+    source: sessionResult.value.source,
     session: {
       session_id: sessionResult.value.identity.session_id,
       ...(sessionResult.value.identity.platform !== undefined
@@ -306,10 +322,7 @@ export function runWorktreeCreateCommand(opts: WorktreeCreateOptions): number {
   const relWtPath = path.relative(ctx.repoRoot, String(wtPath));
   out(`created ${outcome.name} at ${relWtPath} (spec: ${opts.specId})`);
   surfaceBindActivation(outcome.data, opts.specId, out);
-  // CAWS-FIRST-CONTACT-UX-001 A3: tell the user where to work next.
-  // Without this hint, users continue editing in the canonical checkout
-  // and trigger union-mode scope behavior they can't explain.
-  out(`Next: cd ${relWtPath} to start working in the bound worktree.`);
+  surfaceContinuation(id, path.resolve(ctx.repoRoot, String(wtPath)), out);
   surfaceArtifactLinks(outcome.data?.artifact_links, out);
   surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
@@ -362,10 +375,9 @@ export function runWorktreeBindCommand(opts: WorktreeBindOptions): number {
   const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'bind');
   if (id === null) return 2;
 
-  // Ownership-comparison surface for the foreign-owner guard (Fix 4) — the same
-  // exhaustive candidate set destroy/merge build. Distinct from id.session
-  // (single-identity event actor).
-  const sessionCandidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env });
+  // Ownership comparison reuses the caller already resolved for the audit actor.
+  // Corroborated cache records cannot add another session to this identity.
+  const sessionCandidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env, caller: { identity: id.session, source: id.source } });
 
   // PRESENCE-DECISION-POINT-INJECTION-001: advisory peer block at the
   // authority decision point (bind mutates the worktree↔spec binding).
@@ -426,11 +438,10 @@ export function runWorktreeDestroyCommand(opts: WorktreeDestroyOptions): number 
   const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'destroy');
   if (id === null) return 2;
 
-  // Ownership-comparison surface: build the exhaustive candidate set
-  // (across all capsules + env sources) for the writer's admission test.
-  // Distinct from `id.session` (single-identity actor for the event).
-  // See CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001.
+  // Admission and audit attribution use the same resolved caller. Cached
+  // records may corroborate that identity, never introduce another session.
   const sessionCandidates = resolveSessionCandidates({
+    caller: { identity: id.session, source: id.source },
     cawsDir: ctx.cawsDir,
     env,
   });
@@ -502,7 +513,7 @@ export function runWorktreeUntrackCommand(opts: WorktreeUntrackOptions): number 
 
   const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'untrack');
   if (id === null) return 2;
-  const sessionCandidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env });
+  const sessionCandidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env, caller: { identity: id.session, source: id.source } });
 
   const result = untrackWorktree(ctx.cawsDir, {
     name: opts.name,
@@ -598,9 +609,9 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
     return 2;
   }
 
-  // See destroy: ownership-comparison surface needs the exhaustive
-  // candidate set, distinct from the single-identity actor.
+  // As in destroy, compare ownership using the already resolved audit actor.
   const sessionCandidates = resolveSessionCandidates({
+    caller: { identity: id.session, source: id.source },
     cawsDir: ctx.cawsDir,
     env,
   });
@@ -1519,7 +1530,7 @@ export function runWorktreePhysicalCleanupPlanCommand(opts: WorktreePhysicalClea
 
     const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'cleanup-plan');
     if (id === null) return 2;
-    const sessionCandidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env });
+    const sessionCandidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env, caller: { identity: id.session, source: id.source } });
     const outcomes: WorktreePhysicalCleanupApplyOutcome[] = [];
 
     for (const item of plan.items) {
@@ -2315,7 +2326,7 @@ export function runWorktreePruneCommand(opts: WorktreePruneOptions): number {
   if (opts.apply === true) {
     const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'prune');
     if (id === null) return 2;
-    const sessionCandidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env });
+    const sessionCandidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env, caller: { identity: id.session, source: id.source } });
     const outcomes: WorktreePruneApplyOutcome[] = [];
 
     for (const item of plan.items) {
@@ -2496,7 +2507,7 @@ export function runWorktreeRepairCommand(opts: WorktreeRepairOptions): number {
   // accurately even when no mutation will occur).
   const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'repair');
   if (id === null) return 2;
-  const sessionCandidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env });
+  const sessionCandidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env, caller: { identity: id.session, source: id.source } });
 
   let repaired = 0;
   let refused = 0;
@@ -2683,17 +2694,14 @@ export function runWorktreeEnsureCommand(opts: WorktreeEnsureOptions): number {
   // Foreign-owner soft-block (same discipline as bind/merge/claim). A stale
   // heartbeat is NOT authorization — surface the owner, let the human or the
   // claim surface decide. ensure takes no takeover flag by design.
+  const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'ensure');
+  if (id === null) return 2;
   const ownerId = existing.owner?.session_id;
-  if (ownerId !== undefined) {
-    const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'ensure');
-    if (id === null) return 2;
-    const candidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env });
-    if (admitsOwner(candidates, ownerId) === null) {
-      err(`caws worktree ensure: worktree "${opts.name}" is owned by another session (${ownerId}).`);
-      err('  Read their context before deciding: .caws/sessions/ session logs, caws agents list');
-      err('  Authority transfer stays on the single surface: caws claim --takeover (requires user authorization).');
-      return 1;
-    }
+  if (ownerId !== undefined && id.session.session_id !== ownerId) {
+    err(`caws worktree ensure: worktree "${opts.name}" is owned by another session (${ownerId}).`);
+    err('  Read their context before deciding: .caws/sessions/ session logs, caws agents list');
+    err('  Authority transfer stays on the single surface: caws claim --takeover (requires user authorization).');
+    return 1;
   }
 
   // Branch unmoved off base => safe admit. A moved branch means in-flight
@@ -2711,9 +2719,8 @@ export function runWorktreeEnsureCommand(opts: WorktreeEnsureOptions): number {
   }
 
   // ADMIT: idempotent no-op. No events, no registry/spec/file mutation.
-  const rel = path.relative(ctx.repoRoot, existing.path);
   out(`ensured ${opts.name} (already bound to spec ${opts.specId}; branch untouched at fork point)`);
-  out(`Next: cd ${rel} to start working in the bound worktree.`);
+  surfaceContinuation(id, path.resolve(ctx.repoRoot, existing.path), out);
   return 0;
 }
 

@@ -255,7 +255,7 @@ describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A1: per-surface env sou
 // --- A2: resolveSessionCandidates mirrors the per-surface sources -----------
 
 describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A2: candidate mirror', () => {
-  test('resolveSessionCandidates admits CODEX_THREAD_ID + CAWS_SESSION_ID candidates', () => {
+  test('resolveSessionCandidates admits only the canonical caller when other harness variables coexist', () => {
     const { cawsDir } = makeProjectRoot();
     const { candidates, trace } = resolveSessionCandidates({
       cawsDir,
@@ -267,20 +267,11 @@ describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A2: candidate mirror', 
       },
     });
     const ids = candidates.map((c) => c.identity.session_id);
-    expect(ids).toContain('codex-owner');
-    expect(ids).toContain('dsh-owner');
-    expect(ids).toContain('caws-owner');
-    // Each candidate carries its own platform (so a destroy/merge comparison
-    // against a surface-stamped owner admits it).
-    const codexCand = candidates.find((c) => c.identity.session_id === 'codex-owner');
-    expect(codexCand.identity.platform).toBe('codex');
-    const dshCand = candidates.find((c) => c.identity.session_id === 'dsh-owner');
-    expect(dshCand.identity.platform).toBe('dsh');
-    // All three sources recorded in the trace.
-    const sources = trace.map((t) => t.source);
-    expect(sources).toContain('codex_thread_env');
-    expect(sources).toContain('dsh_env');
-    expect(sources).toContain('caws_env');
+    expect(ids).toEqual(['caws-owner']);
+    expect(candidates[0].identity.platform).toBe('none');
+    expect(trace.filter((t) => t.outcome === 'admitted')).toEqual([
+      { source: 'caws_env', outcome: 'admitted', count: 1, admittedIds: ['caws-owner'] },
+    ]);
   });
 });
 
