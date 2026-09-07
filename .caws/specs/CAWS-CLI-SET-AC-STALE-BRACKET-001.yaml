@@ -8,20 +8,25 @@ updated_at: '2026-09-07T06:15:37.104Z'
 created_by_session: 'session-ddd10825-75fb-42af-85e5-b52fa5f4815c'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'spec store body writer'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - 'packages/caws-cli/src/store/specs-body-writer.ts'
+    - 'packages/caws-cli/tests/store/specs-body-writer-acceptance.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A field rewrite never lands outside the named criterion: sibling criteria stay byte-preserved on every set-ac path, and the write remains transactional on any refusal'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a spec whose criterion A1 carries scaffold or short inline given/when/then values'
+    when: 'caws specs amend --set-ac A1 supplies --given with text whose collapsed length exceeds the inline fold threshold together with --when and --then in one invocation'
+    then: 'all three supplied values land on A1 in a single transaction (the first field may fold to a continuation block; later fields are still located and written), the sibling criteria stay byte-preserved, and the set_acceptance event names exactly the supplied fields'
+  - id: A2
+    given: 'criterion A1 whose given field is currently a folded continuation block'
+    when: 'one invocation rewrites A1 back to short inline values across multiple fields'
+    then: 'the write succeeds with every value on the correct criterion line and every sibling criterion byte-preserved — the stale-bracket spill window never matches a foreign criterion'
 non_functional: {}
 contracts:
   - name: 'set-ac-multifield-rewrite'
