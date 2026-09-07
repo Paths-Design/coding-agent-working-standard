@@ -83,3 +83,9 @@ evidence:
     recorded_at: "2026-09-07T04:11:27.894Z"
     artifact_path: tmp/global-ux-2026-09-07/caws-global-ux-help-tests.txt
     commit_sha: "290705abb1942546fcd30afba6ebdbfc16b78bae"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Full documentation suite: 50 tests passed; installed package reference and setup guides verified"
+    recorded_at: "2026-09-07T04:11:28.746Z"
+    artifact_path: tmp/global-ux-2026-09-07/caws-global-ux-docs-recheck.txt
+    commit_sha: "290705abb1942546fcd30afba6ebdbfc16b78bae"
