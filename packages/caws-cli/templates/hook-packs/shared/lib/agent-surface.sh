@@ -306,6 +306,9 @@ esac
 # ---------------------------------------------------------------------------
 if [[ -n "${CAWS_PROJECT_DIR:-}" && "${CAWS_PROJECT_DIR}" != "." ]]; then
   CAWS_LOG_DIR="${CAWS_PROJECT_DIR}/${CAWS_VENDOR_DIR}/logs"
+  if [[ "${CAWS_SYSTEM_RUNTIME:-0}" == "1" && -n "${CAWS_MACHINE_LOG_DIR:-}" ]]; then
+    CAWS_LOG_DIR="$CAWS_MACHINE_LOG_DIR"
+  fi
 else
   # Project dir is "." (relative fallback) or empty — use a relative path.
   # Individual hooks that need an absolute log dir must resolve cwd themselves.

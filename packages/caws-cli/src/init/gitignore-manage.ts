@@ -22,7 +22,8 @@ import * as path from 'path';
  * v2: added `tmp/guard-strikes-*.json` (defense-in-depth for any legacy
  * guard-strike file that lands in a tracked `tmp/`;
  * CAWS-GUARD-STRIKE-FILE-OUT-OF-TREE-001). */
-export const GITIGNORE_BLOCK_VERSION = 2;
+// v3: session bridge claims are operational state, not source artifacts.
+export const GITIGNORE_BLOCK_VERSION = 3;
 
 export const GITIGNORE_BEGIN_MARKER = `# >>> caws gitignore (managed, v${GITIGNORE_BLOCK_VERSION}) >>>`;
 export const GITIGNORE_END_MARKER = '# <<< caws gitignore <<<';
@@ -55,6 +56,7 @@ export const EPHEMERAL_CAWS_ENTRIES: readonly string[] = [
   '.caws/worktrees.json',
   '.caws/agents.json',
   '.caws/leases/',
+  '.caws/claims/',
   '.caws/cache/',
   '.caws/sessions/',
   '.caws/state/',

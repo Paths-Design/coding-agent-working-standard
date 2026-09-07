@@ -266,6 +266,9 @@ def main():
                CAWS_SYSTEM_RUNTIME='1' if system is not None else '0',
                CAWS_ADAPTER_RUNTIME_DIGEST=identity,
                CAWS_AGENT_SURFACE=surface)
+    if system is not None:
+        project_key = digest(str(canonical).encode())
+        env['CAWS_MACHINE_LOG_DIR'] = str(confined(home, f'state/projects/{project_key}/logs/{surface}'))
     # Harness-owned transcript normalization follows the same explicit
     # project, user, shipped-adapter priority as shell adapter libraries.
     adapter_name = 'session-transcript.py'
