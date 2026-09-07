@@ -48,8 +48,8 @@ contracts:
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "/private/tmp/caws-identity-repair-receipt.json (bd2323ae; 93 tests, no failures or skips; scoped reproduction; human review pending)"
-    recorded_at: "2026-09-07T06:45:16.725Z"
+    evidence_ref: "/private/tmp/caws-identity-repair-final-receipt.json (7ec626fb; freshly rerun 93 tests, lint, both typechecks and gates; human review pending)"
+    recorded_at: "2026-09-07T06:53:12.970Z"
   - criterion_id: A2
     status: pass
     evidence_ref: "/private/tmp/caws-identity-repair-receipt.json (bd2323ae; 93 tests, no failures or skips; scoped reproduction; human review pending)"
