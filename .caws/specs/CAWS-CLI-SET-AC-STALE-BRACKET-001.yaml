@@ -38,3 +38,7 @@ evidence:
     status: pass
     evidence_ref: "jest specs-body-writer-acceptance: A1 red pre-fix (exit 1 refusal), green post-fix; 21/21 file pass; tsc clean"
     recorded_at: "2026-09-07T06:26:01.064Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: jest A2 shrink case green pre+post fix; sibling bytes preserved; 21/21 file pass
+    recorded_at: "2026-09-07T06:26:01.602Z"
