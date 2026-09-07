@@ -90,3 +90,7 @@ evidence:
     status: pass
     evidence_ref: "spec_body_amended.v1.json schema (additionalProperties false) + specs-body-writer-acceptance.test.js: accepted amendment lands as ONE audited commit on a clean tree (git log subject chore(caws): amend ACC-010; committed yaml holds rewritten text + status unchecked, old proof gone); event payload equality asserted"
     recorded_at: "2026-09-07T01:12:31.971Z"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "specs-amend.test.js shell suite: spawned dist CLI rewrites yaml via specs amend --set-ac --then --reason (fixture quoting survives), two-op invocation refused through real parser (mutually exclusive, exit 1), --help advertises all 7 flags, specs validate passes after amendment"
+    recorded_at: "2026-09-07T01:12:34.438Z"
