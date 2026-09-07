@@ -111,6 +111,7 @@ test.each(['minted', 'capsule'])(
       );
     const created = run(['worktree', 'create', 'wt-enter', '--spec', 'ENTER-001']);
     succeeded(created);
+    expect(created.stdout).not.toContain('Next: cd ');
     const beforeRegistry = registry();
     const owner = JSON.parse(beforeRegistry)['wt-enter'].owner.session_id;
     const beforeCapsules = capsules();
@@ -175,6 +176,7 @@ test('native identity survives create and enter without a fallback export', () =
   const native = { CODEX_THREAD_ID: 'native-owner', CAWS_AGENT_SURFACE: 'codex' };
   const created = run(['worktree', 'create', 'wt-enter', '--spec', 'ENTER-001'], root, native);
   succeeded(created);
+  expect(created.stdout).toContain('Next: cd .caws/worktrees/wt-enter');
   expect(created.stdout).not.toContain('export CAWS_SESSION_ID=');
   const claim = run(['claim'], path.join(root, '.caws/worktrees/wt-enter'), native);
   succeeded(claim);

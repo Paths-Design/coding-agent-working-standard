@@ -311,7 +311,6 @@ export function runWorktreeCreateCommand(opts: WorktreeCreateOptions): number {
   // CAWS-FIRST-CONTACT-UX-001 A3: tell the user where to work next.
   // Without this hint, users continue editing in the canonical checkout
   // and trigger union-mode scope behavior they can't explain.
-  out(`Next: cd ${relWtPath} to start working in the bound worktree.`);
   if (id.source === 'minted' || id.source === 'capsule') {
     // A cwd-keyed fallback does not propagate into the new worktree. Carry
     // only the identity this successful create actually used, never one read
@@ -319,6 +318,8 @@ export function runWorktreeCreateCommand(opts: WorktreeCreateOptions): number {
     const quote = (value: string): string => "'" + value.replaceAll("'", "'\\''") + "'";
     out('No native session identity was available; retain this create identity when entering.');
     out(`Continue in this shell: export CAWS_SESSION_ID=${quote(id.session.session_id)}; cd ${quote(path.resolve(ctx.repoRoot, String(wtPath)))} && caws claim`);
+  } else {
+    out(`Next: cd ${relWtPath} to start working in the bound worktree.`);
   }
   surfaceArtifactLinks(outcome.data?.artifact_links, out);
   surfaceAuditCommit(outcome.data?.audit_commit, err);
