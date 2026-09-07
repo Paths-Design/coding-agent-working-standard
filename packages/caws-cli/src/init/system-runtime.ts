@@ -1,5 +1,6 @@
 import { validateSystemPolicy, type SystemSurfacePolicy } from './system-project-policy';
 import { systemCommand } from './native-hook-identification';
+import { readSystemSurfaceSettings, nativeConfigPath } from './system-surface-settings';
 export type { SystemSurfacePolicy } from './system-project-policy';
 import type {
   NativeConfiguration,
@@ -52,6 +53,7 @@ export interface SystemOptions {
   templatesRoot?: string;
   repo?: string;
   fromFile?: string;
+  nativeConfigTarget?: string;
 }
 const encode = (value: unknown): string => JSON.stringify(value, null, 2) + '\n';
 const empty = (): SystemSurfacePolicy => ({
@@ -148,7 +150,9 @@ function requireRuntime(home: string): { files: string[]; defaults: Record<Event
   const files = verifyRuntime(home, pointer.digest);
   if (!files['system-policy.json'] || !files['session_log_renderer.py'])
     throw new Error('Installed runtime predates system hooks; run caws init adapters install');
-  const policy = JSON.parse(fs.readFileSync(path.join(home, 'lib/runtimes', pointer.digest, 'system-policy.json'), 'utf8'));
+  const policy = JSON.parse(
+    fs.readFileSync(path.join(home, 'lib/runtimes', pointer.digest, 'system-policy.json'), 'utf8')
+  );
   return { files: Object.keys(files), defaults: policy.events };
 }
 
@@ -162,10 +166,13 @@ export function configureSystemRuntime(options: SystemOptions): {
   requireRuntime(home);
   const user = options.userHome ?? os.homedir();
   const vendor = vendorFor(options.surface);
-  const file = path.join(
+  const priorSettings = readSystemSurfaceSettings(home, options.surface);
+  const target = options.nativeConfigTarget ?? priorSettings?.native_config_target;
+  const file = nativeConfigPath(
     user,
     vendor,
-    options.surface === 'codex' ? 'hooks.json' : 'settings.json'
+    options.surface === 'codex' ? 'hooks.json' : 'settings.json',
+    target
   );
   const native = config(user, file);
   const toml = before(user, path.join(user, vendor, 'config.toml'));
@@ -205,13 +212,11 @@ export function configureSystemRuntime(options: SystemOptions): {
           replacements++;
           return {
             ...hook,
-            command: hook.command === systemCommand(home, options.surface, event) ? hook.command : migrateNativeCommand(
-              hook.command,
-              user,
-              home,
-              options.surface,
-              event as Event
-            ) + ' --system',
+            command:
+              hook.command === systemCommand(home, options.surface, event)
+                ? hook.command
+                : migrateNativeCommand(hook.command, user, home, options.surface, event as Event) +
+                  ' --system',
           };
         }),
       };
@@ -249,7 +254,11 @@ export function configureSystemRuntime(options: SystemOptions): {
       root: home,
       path: settings,
       before: before(home, settings),
-      after: encode({ version: 1, enabled: true }),
+      after: encode({
+        version: 1,
+        enabled: true,
+        ...(target ? { native_config_target: target } : {}),
+      }),
     },
     { root: user, path: file, before: native.bytes, after: encode(native.value) },
   ].filter((c) => c.before !== c.after);
@@ -517,16 +526,8 @@ export function migrateSystemProject(options: SystemOptions): {
 export function systemSurfaceEnabled(surface: string | null | undefined): boolean {
   if (!surface || surface === 'none') return false;
   const home = machineHome();
-  const bytes = before(home, path.join(home, 'surfaces', surface, 'settings.json'));
-  if (bytes === null) return false;
-  const settings = JSON.parse(bytes);
-  if (
-    !settings ||
-    Object.keys(settings).sort().join(',') !== 'enabled,version' ||
-    settings.version !== 1 ||
-    typeof settings.enabled !== 'boolean'
-  )
-    throw new Error('Malformed system surface settings');
+  const settings = readSystemSurfaceSettings(home, surface);
+  if (!settings) return false;
   if (!settings.enabled) return false;
   requireRuntime(home);
   if (configureSystemRuntime({ surface, home, plan: true }).changed)

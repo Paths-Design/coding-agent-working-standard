@@ -174,6 +174,7 @@ export interface InitCommandOptions {
   readonly fromFile?: string;
   /** Migrate direct canonical projects together; never recurse into worktrees. */
   readonly projectsRoot?: string;
+  readonly nativeConfigTarget?: string;
 }
 
 function chooseSurface(
@@ -981,7 +982,8 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
       const operation = opts.actionArg ?? 'install';
       if (opts.overwrite || opts.force || opts.adopt || opts.wireUserConfig || opts.threeWayPath ||
           (!['adopt', 'configure', 'migrate'].includes(operation) && (opts.fromFile || opts.agentSurface)) ||
-          (opts.projectsRoot && operation !== 'migrate') || (opts.projectsRoot && opts.fromFile)) {
+          (opts.projectsRoot && operation !== 'migrate') || (opts.projectsRoot && opts.fromFile) ||
+        (opts.nativeConfigTarget && operation !== 'configure')) {
         err('caws init adapters: incompatible options; use --plan/--json, or --agent-surface/--from with adopt'); return 2;
       }
       if (operation === 'configure' || operation === 'migrate') {
@@ -989,7 +991,10 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
         const options = { surface: opts.agentSurface, plan: opts.plan === true };
         if (operation === 'configure') {
           if (opts.fromFile) { err('configure does not accept --from'); return 2; }
-          const result = configureSystemRuntime(options);
+          const result = configureSystemRuntime({
+            ...options,
+            ...(opts.nativeConfigTarget ? { nativeConfigTarget: opts.nativeConfigTarget } : {}),
+          });
           out(opts.json ? JSON.stringify(result, null, 2) : `${opts.plan ? 'PLAN' : 'OK'} system registration: ${opts.agentSurface}\n${result.changes.map(c => `  ${c.path}`).join('\n')}\nRestart and review native hook trust before activation.`);
           return 0;
         }
@@ -1031,8 +1036,8 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     }
   }
 
-  if (opts.projectsRoot) {
-    err('caws init: --projects-root is only supported with adapters migrate.');
+  if (opts.projectsRoot || opts.nativeConfigTarget) {
+    err('caws init: --projects-root requires adapters migrate; --native-config-target requires adapters configure.');
     return 2;
   }
 

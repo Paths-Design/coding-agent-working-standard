@@ -122,6 +122,23 @@ function runtimeFiles(templatesRoot: string): Map<string, Buffer> {
   add('bootstrap.py', path.join(templatesRoot, 'runtime/bootstrap.py'));
   add('dispatch.sh', path.join(templatesRoot, 'runtime/dispatch.sh'));
   add('handler-env.sh', path.join(templatesRoot, 'runtime/handler-env.sh'));
+  // The ownership oracle runs outside the CLI installation and must not depend
+  // on a governed project's node_modules. Copy the dependency's CommonJS API
+  // into the immutable snapshot (including its license), never into the repo.
+  const yamlRoot = fs.realpathSync(path.dirname(require.resolve('js-yaml/package.json')));
+  const addYaml = (relative: string): void => {
+    const source = path.join(yamlRoot, relative);
+    assertMachinePath(yamlRoot, source);
+    const stat = fs.lstatSync(source);
+    if (stat.isDirectory()) {
+      for (const entry of fs.readdirSync(source).sort()) addYaml(path.join(relative, entry));
+    } else if (stat.isFile()) {
+      files.set(`node_modules/js-yaml/${relative}`, fs.readFileSync(source));
+    } else {
+      throw new Error(`Unsupported YAML runtime dependency entry: ${source}`);
+    }
+  };
+  for (const relative of ['package.json', 'index.js', 'LICENSE', 'lib']) addYaml(relative);
   return files;
 }
 

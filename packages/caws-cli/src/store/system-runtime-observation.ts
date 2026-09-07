@@ -1,4 +1,5 @@
 import { validateSystemPolicy } from '../init/system-project-policy';
+import { readSystemSurfaceSettings, nativeConfigPath } from '../init/system-surface-settings';
 import type { NativeConfiguration } from '../init/native-hook-identification';
 import type { SystemProjectSettings } from '../init/system-runtime';
 import * as fs from 'node:fs';
@@ -35,10 +36,7 @@ export function observeSystemRuntime(repo: string): SystemRuntimeObservation | u
       ['claude-code', '.claude'],
       ['qwen-code', '.qwen'],
     ]) {
-      const settings = read<{ version: unknown; enabled: unknown }>(
-        home,
-        `surfaces/${surface}/settings.json`
-      );
+      const settings = readSystemSurfaceSettings(home, surface as string);
       const nativeName = surface === 'codex' ? 'hooks.json' : 'settings.json';
       if (configHasCawsHooks(read(repo, `${vendor}/${nativeName}`)))
         legacySurfaces.push(surface as string);
@@ -47,7 +45,16 @@ export function observeSystemRuntime(repo: string): SystemRuntimeObservation | u
         throw new Error(`Malformed system surface settings: ${surface}`);
       if (!settings.enabled) continue;
       surfaces.push(surface as string);
-      const native = read<NativeConfiguration>(os.homedir(), `${vendor}/${nativeName}`);
+      const nativePath = nativeConfigPath(
+        os.homedir(),
+        vendor as string,
+        nativeName,
+        settings.native_config_target
+      );
+      const native = read<NativeConfiguration>(
+        os.homedir(),
+        path.relative(os.homedir(), nativePath)
+      );
       for (const [event, name] of Object.entries({
         pre_tool_use: 'PreToolUse',
         post_tool_use: 'PostToolUse',

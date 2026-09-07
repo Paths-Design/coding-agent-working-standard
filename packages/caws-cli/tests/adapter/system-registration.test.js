@@ -50,15 +50,49 @@ beforeEach(() => {
 afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 const blank = () => ({ disabled: {}, extensions: {}, handlers: {}, libraries: {} });
 
+test('an explicit user-managed native-config target preserves the symlink and refuses a later redirect', () => {
+  const managed = path.join(user, 'managed');
+  fs.mkdirSync(managed);
+  const target = path.join(managed, 'hooks.json');
+  fs.writeFileSync(target, '{"hooks":{}}');
+  const native = path.join(user, '.codex/hooks.json');
+  fs.mkdirSync(path.dirname(native));
+  fs.symlinkSync(target, native);
+  expect(() => configureSystemRuntime(options)).toThrow(/symlink/);
+  const selected = { ...options, nativeConfigTarget: target };
+  expect(configureSystemRuntime({ ...selected, plan: true }).changed).toBe(true);
+  expect(fs.readFileSync(target, 'utf8')).toBe('{"hooks":{}}');
+  configureSystemRuntime(selected);
+  expect(fs.lstatSync(native).isSymbolicLink()).toBe(true);
+  expect(JSON.parse(fs.readFileSync(target)).hooks.PreToolUse[0].hooks[0].command).toContain(
+    '--system'
+  );
+  expect(configureSystemRuntime(options).changed).toBe(false);
+  const elsewhere = path.join(managed, 'elsewhere.json');
+  fs.writeFileSync(elsewhere, '{"hooks":{}}');
+  fs.unlinkSync(native);
+  fs.symlinkSync(elsewhere, native);
+  expect(() => configureSystemRuntime(options)).toThrow(/target changed/);
+  expect(fs.readFileSync(elsewhere, 'utf8')).toBe('{"hooks":{}}');
+});
+
 test('an explicitly enabled optional stock hook survives migration as an inherited-code extension', () => {
   const native = path.join(repo, '.codex/hooks.json');
   const config = JSON.parse(fs.readFileSync(native));
-  config.hooks.PostToolUse = [{ hooks: [{ command: `"${repo}/.caws/hooks/dispatch/post_tool_use.sh"` }] }];
+  config.hooks.PostToolUse = [
+    { hooks: [{ command: `"${repo}/.caws/hooks/dispatch/post_tool_use.sh"` }] },
+  ];
   fs.writeFileSync(native, JSON.stringify(config));
   const dispatch = path.join(repo, '.caws/hooks/dispatch/post_tool_use.sh');
-  fs.writeFileSync(dispatch, fs.readFileSync(dispatch, 'utf8').replace('# "quality-check.sh"', '"quality-check.sh"'));
+  fs.writeFileSync(
+    dispatch,
+    fs.readFileSync(dispatch, 'utf8').replace('# "quality-check.sh"', '"quality-check.sh"')
+  );
   const result = migrateSystemProject({ ...options, plan: true });
-  expect(result.policy.extensions.post_tool_use).toContainEqual({ handler: 'quality-check.sh', before: 'naming-check.sh' });
+  expect(result.policy.extensions.post_tool_use).toContainEqual({
+    handler: 'quality-check.sh',
+    before: 'naming-check.sh',
+  });
   expect(result.policy.handlers['quality-check.sh']).toBeUndefined();
 });
 test('unrelated native hook scripts are not classified as CAWS transports', () => {

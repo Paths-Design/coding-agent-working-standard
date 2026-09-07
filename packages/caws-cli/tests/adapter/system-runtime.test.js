@@ -133,14 +133,92 @@ test('malformed project settings fail closed instead of falling back to stock de
   expect(result.stdout).not.toContain('guard-never');
 });
 
+test('an explicitly adopted project cannot become ungoverned by losing its policy', () => {
+  const p = repo('missing-governance');
+  configure(p, { disabled: {}, extensions: {}, handlers: {}, libraries: {} });
+  stock('not-admitted');
+  installMachineRuntime({ home, templatesRoot: templates });
+  fs.unlinkSync(path.join(p, '.caws/policy.yaml'));
+  const result = invoke(p);
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain('governance');
+  expect(result.stdout).not.toContain('guard-not-admitted');
+});
+
+test('the machine ownership oracle evaluates YAML claims without depending on project node_modules', () => {
+  const p = repo('oracle');
+  const lane = path.join(p, '.caws/worktrees/foreign');
+  fs.mkdirSync(lane, { recursive: true });
+  fs.writeFileSync(
+    path.join(p, '.caws/worktrees.json'),
+    JSON.stringify({
+      worktrees: [{ name: 'foreign', path: lane, spec_id: 'FOREIGN', baseBranch: 'main' }],
+    })
+  );
+  fs.writeFileSync(
+    path.join(p, '.caws/specs/FOREIGN.yaml'),
+    'id: FOREIGN\nlifecycle_state: active\nscope:\n  in: ["src/**"]\n'
+  );
+  const installed = installMachineRuntime({ home });
+  const oracle = path.join(home, 'lib/runtimes', installed.digest, 'lib/worktree-claim-oracle.cjs');
+  const check = (target) =>
+    spawnSync(process.execPath, [oracle], {
+      cwd: p,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        NODE_PATH: '',
+        CAWS_ORACLE_PROJECT_DIR: p,
+        CAWS_ORACLE_CURRENT_BRANCH: 'main',
+        CAWS_ORACLE_REL_PATH: target,
+        CAWS_ORACLE_SESSION_ID: 'unbound',
+      },
+    });
+  expect(check('src/claimed.ts').stdout).toContain('block_claimed:foreign:src/**');
+  expect(check('unclaimed/file.ts').stdout).toContain('pass:');
+  expect(fs.existsSync(path.join(p, 'node_modules'))).toBe(false);
+});
+
 test('global registration waits for legacy retirement without duplicating the local chain or breaking a cached local entry', () => {
   const p = repo('transition');
-  fs.mkdirSync(path.join(p, '.caws/hooks')); fs.mkdirSync(path.join(p, '.codex'));
-  fs.writeFileSync(path.join(p, '.caws/hooks/old.sh'), '#!/bin/bash\necho legacy-denial >&2\nexit 2\n', { mode: 0o755 });
-  fs.writeFileSync(path.join(p, '.caws/hooks/adapter-policy.json'), JSON.stringify({ version: 1, surfaces: { codex: { events: { pre_tool_use: { hooks_dir: '.caws/hooks', handlers: ['old.sh'] } }, libraries: {} } } }));
-  fs.writeFileSync(path.join(p, '.codex/hooks.json'), JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ command: `python3 '${home}/bin/caws-hook' codex pre_tool_use` }] }] } }));
-  stock('after-migration'); installMachineRuntime({ home, templatesRoot: templates });
-  const local = () => spawnSync('python3', [path.join(home, 'bin/caws-hook'), 'codex', 'pre_tool_use'], { cwd: p, encoding: 'utf8', env: { ...process.env, CAWS_HOME: home }, input: JSON.stringify({ cwd: p, session_id: 'transition-test' }) });
+  fs.mkdirSync(path.join(p, '.caws/hooks'));
+  fs.mkdirSync(path.join(p, '.codex'));
+  fs.writeFileSync(
+    path.join(p, '.caws/hooks/old.sh'),
+    '#!/bin/bash\necho legacy-denial >&2\nexit 2\n',
+    { mode: 0o755 }
+  );
+  fs.writeFileSync(
+    path.join(p, '.caws/hooks/adapter-policy.json'),
+    JSON.stringify({
+      version: 1,
+      surfaces: {
+        codex: {
+          events: { pre_tool_use: { hooks_dir: '.caws/hooks', handlers: ['old.sh'] } },
+          libraries: {},
+        },
+      },
+    })
+  );
+  fs.writeFileSync(
+    path.join(p, '.codex/hooks.json'),
+    JSON.stringify({
+      hooks: {
+        PreToolUse: [
+          { hooks: [{ command: `python3 '${home}/bin/caws-hook' codex pre_tool_use` }] },
+        ],
+      },
+    })
+  );
+  stock('after-migration');
+  installMachineRuntime({ home, templatesRoot: templates });
+  const local = () =>
+    spawnSync('python3', [path.join(home, 'bin/caws-hook'), 'codex', 'pre_tool_use'], {
+      cwd: p,
+      encoding: 'utf8',
+      env: { ...process.env, CAWS_HOME: home },
+      input: JSON.stringify({ cwd: p, session_id: 'transition-test' }),
+    });
   expect(invoke(p).status).toBe(0);
   expect(invoke(p).stdout).toBe('');
   expect(local().status).toBe(2);
@@ -160,6 +238,12 @@ test('system registration remains quiet outside Git and outside CAWS projects', 
   expect(spawnSync('git', ['init', '-q'], { cwd: p }).status).toBe(0);
   expect(invoke(p).status).toBe(0);
   expect(invoke(p).stdout).toBe('');
+  fs.mkdirSync(path.join(p, '.caws/sessions'), { recursive: true });
+  expect(invoke(p).status).toBe(0);
+  expect(invoke(p).stdout).toBe('');
+  fs.writeFileSync(path.join(p, '.caws/working-spec.yaml'), 'id: LEGACY\n');
+  expect(invoke(p).status).toBe(0);
+  expect(invoke(p, 'session_start').stderr).toContain('Legacy governance');
 });
 
 test('linked worktrees select canonical machine settings while handlers receive the actual checkout', () => {

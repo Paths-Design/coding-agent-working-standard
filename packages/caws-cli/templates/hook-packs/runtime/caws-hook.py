@@ -83,7 +83,7 @@ def system_configuration(home, canonical, runtime, surface, event):
     if not settings.exists():
         return None
     enabled = json.loads(settings.read_bytes())
-    if not isinstance(enabled, dict) or set(enabled) != {'version', 'enabled'} or (type(enabled['version']) is not int or enabled['version'] != 1) or not isinstance(enabled['enabled'], bool):
+    if not isinstance(enabled, dict) or not {'version', 'enabled'}.issubset(enabled) or not set(enabled).issubset({'version', 'enabled', 'native_config_target'}) or (type(enabled['version']) is not int or enabled['version'] != 1) or not isinstance(enabled['enabled'], bool) or ('native_config_target' in enabled and (not isinstance(enabled['native_config_target'], str) or not Path(enabled['native_config_target']).is_absolute())):
         raise ValueError('Malformed system surface settings')
     if not enabled['enabled']:
         return None
@@ -205,12 +205,22 @@ def main():
         return 0
     common = Path(git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir'))
     canonical = common.parent
+    known_project = confined(home, 'state/projects/' + digest(str(canonical).encode()) + '.json').exists()
     if not (canonical / '.caws').exists():
+        if known_project:
+            raise ValueError('Adopted project governance is missing')
         return 0
     # Native user and project hooks are additive. The explicit user transport
     # waits for the one-time project registration retirement; old cached local
     # adapter entries still execute their policy during the transition.
     if system_entry and legacy_native_registered(canonical, surface, event):
+        return 0
+    # Session caches alone never opt a repository into governance. Legacy
+    # governance remains on its existing harness integration until migration;
+    # a user-level registration cannot reinterpret that authority schema.
+    if system_entry and not known_project and (not (canonical / '.caws/policy.yaml').is_file() or not (canonical / '.caws/specs').is_dir() or (canonical / '.caws/working-spec.yaml').exists()):
+        if event == 'session_start' and (canonical / '.caws/working-spec.yaml').exists():
+            print('[caws system runtime] Legacy governance remains on its existing integration; migrate governance before system adoption.', file=sys.stderr)
         return 0
     system = system_configuration(home, canonical, runtime, surface, event)
     if system_entry and system is None:

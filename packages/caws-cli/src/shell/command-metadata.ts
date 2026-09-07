@@ -932,6 +932,11 @@ export const INIT_COMMAND_META: LeafCommandMeta = {
     DATA_OPTION,
     { flag: '--projects-root <path>', description: 'adapters migrate only: plan/apply one-time migration for direct Git project children together; each project is backed up independently, review refusals are reported.' },
     {
+      flag: '--native-config-target <path>',
+      description:
+        'adapters configure only: explicitly preserve a user-managed native-config symlink by writing its exact resolved target inside the user home. The target is persisted and checked on subsequent configuration.',
+    },
+    {
       flag: '--plan',
       description:
         'Preview the canonical state, gitignore, hook-pack, and settings changes without writing anything.',

@@ -91,6 +91,13 @@ native trust and restart the harness before claiming activation. Claude Code and
 Qwen Code have JSON registration helpers, but their native execution must be
 verified by an agent in that harness; library installation alone proves no parity.
 
+If the user hook file is managed through a symlink, inspect its actual target and
+pass `configure --native-config-target /absolute/resolved/target`. CAWS preserves
+the link, backs up and updates that exact target inside the user home, and records
+the selection. A subsequent redirect is refused. Without this explicit selection,
+symlinked configuration is refused. If the target belongs to a configuration Git
+repository, its source change still needs the normal review and commit there.
+
 Retire old project registrations once from a central directory:
 
 ```bash
