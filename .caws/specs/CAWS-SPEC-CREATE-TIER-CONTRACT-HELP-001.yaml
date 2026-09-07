@@ -40,3 +40,7 @@ evidence:
     status: pass
     evidence_ref: "specs-create-tier-alias.test.js: --risk-tier description contains 'Tiers 1 and 2 require at least one --contract' + 'tier 3 / --mode chore do not'; rendered in specs create --help. Falsification: mutating the description reddens exactly this test (6 others green)"
     recorded_at: "2026-09-07T04:00:19.282Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "specs-create-tier-alias.test.js: --module/--invariant descriptions no longer contain 'you cannot replace', both name 'caws specs amend' as the replacement path"
+    recorded_at: "2026-09-07T04:00:19.930Z"
