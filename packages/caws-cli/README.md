@@ -1,201 +1,94 @@
-# @paths.design/caws-cli
+# CAWS CLI
 
-**CAWS CLI v11 — the governed core plus lifecycle for the Coding Agent
-Working Standard.**
+CAWS provides project governance and a shared machine runtime for coding agents.
+The published `@paths.design/caws-cli` package includes its kernel; there is no
+separately installed kernel package. Requires Node.js 18 or newer and Git. Native
+hook execution also needs Python 3 and Bash.
 
-CAWS (Coding Agent Working Standard) gives coding agents a deterministic
-substrate for project state, scope, claims, gates, waivers, and audit
-evidence. v11 is a ground-up rewrite around a pure kernel, an I/O
-store, and a thin shell. It replaces v10.x.
-
-## What v11 ships
-
-### Governed core and current lifecycle
-
-| Command | What it does |
-|---|---|
-| `caws init` | Bootstrap the canonical `.caws/` project state. Idempotent. Refuses to overwrite legacy single-spec layout. `--agent-surface` installs hook packs for supported agent harnesses. `--overwrite` without `--force` is a pure preview (nothing is written, not even version re-stamps). Subcommands: `init diff` (read-only pack drift view: kinds, installed-vs-template versions, diffs; `--three-way <path>` separates local growth from upstream change) and `init port <path> --from <file>` (CLI-mediated retrofit landing — validated, version-stamped, baseline-recorded, audit-committed; the agent never edits a protected hook path itself). |
-| `caws doctor` | Drift detection over `.caws/` state. Exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure). |
-| `caws status` | Read-only dashboard: project, current context, claim, doctor findings. Always exits 0; never mutates governance state. |
-| `caws scope show / check / contention` | Explain scope, enforce scope, or report cross-worktree path contention. |
-| `caws claim [--takeover] [--spec <id>] [--release]` | Surface or take ownership of the current worktree. Writes a `prior_owners` audit on takeover. `--spec`/`--release` acquire/release a BRIDGE binding (AUTH-BINDING-BRIDGE-001): session↔spec authority for non-worktree contexts over `.caws/claims/bridge.json`, with the full seven-slot lifecycle (acquire/observe/refuse/takeover/release/retire/prune) and the same `scope.in` admission surface as a worktree binding. |
-| (all authority-mutating commands) | `specs activate`, `worktree create/bind/merge`, and mutating `claim` paths print an advisory peer-presence block first when live peer leases exist — render-only, fail-open, bounded (visibility, never authority). |
-| `caws gates run --spec <id>` | Run quality gates against current changes. Policy decides block/warn/skip. Appends one `gate_evaluated` event per policy-declared gate. |
-| `caws evidence record --type <kind> --spec <id> --data <json>` | Append a typed evidence event (`test`/`gate`/`ac`/`human_decision`) to `.caws/events.jsonl`. `human_decision` (HUMAN-DECISION-EVIDENCE-001) is the schema-first record of a human judgment — REQUIRES_SPEC_ID, provenance-only. |
-| `caws events migrate / rotate / verify-archive` | Maintenance for the hash-chained `.caws/events.jsonl`. |
-| `caws waiver create/list/show/revoke` | Manage waiver records that filter matching gate violations — GATE-RUN-ONLY, legacy pre-v11 surface; a waiver never lifts a hook guard (hooks consult reprieves: `caws reprieve grant`). Singular surface — no plural alias. |
-| `caws specs create / list / show / recover / restore / retire-draft / prune-drafts / activate / deactivate / amend / amend-scope / evidence / close / reopen / archive / prune-archive / migrate / validate / relocate` | Manage the per-spec lifecycle in `.caws/specs/`. `amend` edits `blast_radius.modules`, `invariants`, and acceptance criteria through the audit trail — rewriting a criterion's text resets that criterion's evidence entry to `unchecked` in the same transaction, and a closed spec admits blank-filling only. Batch archive supports `--status closed`, `--include`, `--exclude`, and `--apply`. Lifecycle auto-commit commands refuse pre-write when the canonical HEAD is parked off-base (pass `--allow-foreign-branch` to override); `relocate <id> [--apply]` moves a mis-landed spec onto base via object plumbing, never touching a working tree (CANONICAL-DRIFT-GUARDS-001). |
-| `caws worktree create / list / ensure / bind / destroy / untrack / merge / review / migrate-registry / repair-sparse / repair / prune / cleanup-plan` | Worktree lifecycle on the vNext substrate. Canonical path for parallel agent work. `ensure <name> --spec <id>` is the idempotent create-or-admit form (WORKTREE-ENSURE-AFFORDANCE-001): absent lanes are created via the full create path; existing same-spec untouched lanes admit with no new events; foreign-owned, different-spec, closed-spec, and moved-branch states refuse with their handoffs. `review <name>` (WORKTREE-REVIEW-SURFACE-001) is the read-only human gate merge lacks — exact commit list, per-commit scope-provenance table (merge's dry run), lane diffstat, bound-spec AC evidence status, and owner lease work_state; it never mutates `.caws/` or appends events. |
-| `caws agents register / heartbeat / stop / list / show / work-state / prune` | Agent-liveness substrate in `.caws/leases/`; operational cache only. `work-state` sets a visibility-only annotation (`working / blocked_awaiting_human / review_ready / done`) on this session's lease — surfaced in `agents list`, the status Agents panel, and message sender-context; never authority. Leases carry fork identity (`--session-kind main\|fork\|subagent`, `--forked-from`; hook passthrough via CAWS_SESSION_KIND/CAWS_FORKED_FROM) and `hook_pid` (never session identity); `list` flags same-host overlapping leases as a possible conjoined pair (display-only) — CAWS-AGENTS-FORK-IDENTITY-001. |
-| `caws message send / reply / poll / inbox / history / status / prune` | Directed inter-agent messages over `.caws/messages.jsonl`; not authority. `--to` accepts `wt:<worktree>` / `spec:<spec-id>` aliases; a send to an idle (stopped-lease, fresh-heartbeat) recipient succeeds and surfaces at its next tool call; `send --urgency critical` polls before normal traffic regardless of age (ordering, NOT authority); refusals print a not-sent verdict to stdout and are ledgered as `refusal` records; `reply <message_id>` (positional, `--id` alias) answers on the same channel and writes `reply_to` linkage (`send --reply-to` validates the same); delivery records carry a receipt mode (`auto` for the heartbeat hook, `poll` for explicit polls); `poll --drain n` coalesces a backlog in one call (the hook polls with `--drain 5` and injects a digest); `inbox --all` lists every undelivered message repo-wide; `prune --apply` archives instead of deleting; `status <message_id>` (positional, `--id` alias) observes queued-vs-delivered, and `status --mine --queued --older-than-ms` lists your own dead letters (the hook escalates them, throttled); `agents list` derives silent-platform engagement badges. |
-| `caws session prune` | Dry-run-default retention for `.caws/sessions/` (SESSION-LOG-RETENTION-SCOPE-001). Session logs are operational cache. Only `turn-<NNN>.json` history is retention-eligible; the identity capsule (`.session-envelope.json`), `.meta.json`, and top-level dotfiles are preserved (per-path exclusion). The current session and any session with a live lease are protected. `--apply` performs the prune; never appends an event. Session LIFECYCLE remains deferred. |
-
-Run `caws <group> --help` for live options. The repository also ships a generated exhaustive reference at `docs/command-reference.md`, rendered from the same `COMMAND_SURFACE_METADATA` used by CLI help.
-
-## Posture
-
-v11 is structured as kernel + store + shell. The kernel has no `fs`,
-`path`, or clock access; the store owns all I/O and the hash-chained
-event log; the shell composes them into commands.
-
-Commands that existed in v10.2.x and were **removed in v11.0** (no
-replacement is planned in any current milestone): `scaffold`, `validate`,
-`verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `archive`,
-`provenance` (superseded by `events.jsonl`), `sidecar`, `mode`,
-`tutorial`, `plan`, `templates`, `workflow`, `quality-monitor`, `tool`,
-`test-analysis`, legacy `hooks` install (hook packs now install through
-`caws init --agent-surface <name>`).
-
-The v11 line includes the `caws agents` liveness substrate and the
-`caws message` directed message channel (send/reply/poll/inbox/history/
-status/prune). Recipient liveness is heartbeat-age-based: no lease or a
-stale heartbeat refuses the send (not-sent verdict on stdout), while an
-idle peer — a stopped lease with a fresh heartbeat, e.g. a session that
-ended its turn while background work runs — receives at its next tool
-call. Messages are not authority; verify any claim in a message against
-repo/runtime state. Still planned for a later multi-agent authority line:
-bridge-claim authority such as `caws claim --spec <id>`.
-
-Explicitly deferred to v11.3+: `caws session` and `caws parallel`. The
-`caws worktree create` loop pattern replaces `parallel` for multi-agent
-setup today.
-
-See `docs/architecture/caws-vnext-command-surface.md` in the repo for
-the complete doctrine, command surface, and architectural invariants.
-
-## Installation
+## Install and activate
 
 ```bash
-npm install -g @paths.design/caws-cli@^11.6.0
+npm install -g @paths.design/caws-cli
+caws --version
 ```
 
-The package depends on `@paths.design/caws-kernel@^1.4.0` (the pure
-governance primitives). Both are published independently; the kernel
-is published first and the CLI second.
-
-Requires Node.js >= 18.
-
-## Quickstart
-
-In a fresh repo:
-
-```bash
-git init
-caws init
-```
-
-To install an agent hook pack during init:
+The CLI installation, shared runtime installation, native registration, and
+project governance are distinct. Installing a package does not prove that a
+running harness executes its hooks.
 
 <!-- agent-surfaces-install:start -->
 ```bash
-caws init --agent-surface claude-code
+# Once per machine: install the shared runtime.
+caws init adapters install --plan
+caws init adapters install
+# Configure the harness you are using (Codex shown here).
+caws init adapters configure --agent-surface codex --plan
+caws init adapters configure --agent-surface codex
+# Once per existing project: retire reviewed local registration.
+caws init adapters migrate --agent-surface codex --plan
+caws init adapters migrate --agent-surface codex
+# New projects inherit the configured runtime.
 caws init --agent-surface codex
-caws init --agent-surface opencode
-caws init --agent-surface zcode
-caws init --agent-surface kimi-code
-caws init --agent-surface qwen-code
-caws init --agent-surface dsh
 ```
+
+Pack templates exist for `claude-code`, `codex`, `opencode`, `zcode`, `kimi-code`, `qwen-code`, `dsh`. Template availability does not establish native activation; verify in the target harness.
 <!-- agent-surfaces-install:end -->
 
-Codex installs project-local `.codex/hooks.json` plus `.codex/hooks/*`.
-After install, restart/reopen Codex and review or trust changed project
-hooks with `/hooks`.
+Run setup in the native harness you are adopting. Review its hook trust, then
+verify a fresh SessionStart, a protected-write refusal, Stop, and session
+rendering. User and project hook registrations are additive: migrate existing
+project registrations once, preserving reviewed custom behavior.
 
-The shared pack is surface-conditional in one dimension: the telemetry
-plane. For `dsh`, init installs the policy plane only — scope guards,
-audit, registration, dispatch — and omits the four telemetry rows
-(`session-log.sh`, `session_log_renderer.py`, `agent-heartbeat.sh`,
-`agent-stop.sh`), because the dsh harness adapter owns turn logs
-(`.caws/sessions/`) and agent leases (`.caws/leases/`) for that surface.
-Re-running `caws init --agent-surface dsh` also retires stale
-shared-managed copies of those rows from an earlier install (managed
-files only — unmanaged local growth is never touched; absent files are
-not an error). `caws doctor` warns `doctor.hooks.stale_telemetry_pack`
-when managed rows persist alongside an installed dsh pack, and `caws
-status` renders the matching repair advisory. For every other surface
-the shared pack installs unchanged, telemetry rows included.
-
-`caws init` creates the canonical vNext layout:
-
-```
-.caws/
-  specs/                  # per-feature specs (.caws/specs/<id>.yaml)
-  waivers/                # waiver records (.caws/waivers/<id>.yaml)
-  policy.yaml             # gate block/warn/skip policy
-  worktrees.json          # worktree registry
-  agents.json             # agent session registry
-  # events.jsonl is created on first append; never required at rest.
-```
-
-It refuses to run if legacy `.caws/working-spec.yaml` is present.
-Migrate that file into per-feature `.caws/specs/<id>.yaml` first (or
-do the migration on `caws-cli@10.2.x` and then upgrade).
-
-Then:
+## Daily project workflow
 
 ```bash
-caws doctor                  # health check (exit 0/1/2)
-caws status                  # dashboard
-caws scope show src/foo.ts   # what scope says about src/foo.ts
-caws gates run --spec FEAT-1 # run policy-driven gates
-caws waiver create FOO-1 \
-  --title "Temporary waiver for X" \
-  --gate budget_limit \
-  --reason "..." \
-  --approved-by "team-lead" \
-  --expires-at "2026-12-01T00:00:00Z"
-caws evidence record \
-  --type test --spec FEAT-1 \
-  --data '{"name":"unit","status":"pass"}'
+caws doctor
+caws status
+caws specs create FEAT-001 --title "Implement the selected feature" --mode feature --risk-tier 3 --scope-in src/
+caws worktree create wt-feature --spec FEAT-001
 ```
 
-## Architecture (v11)
+Work in the created worktree, surface ownership with `caws claim`, and use
+`caws scope check <path>` before edits. Run the project's tests and
+`caws gates run --spec FEAT-001`. Record acceptance evidence through
+`caws specs evidence`; tests and lease visibility never substitute for authority.
+From the canonical checkout, review and merge the finished lane through
+`caws worktree review` and `caws worktree merge`.
 
-Three layers:
+## Maintenance
 
-1. **Kernel** (`@paths.design/caws-kernel`) — pure TypeScript. Spec
-   parsing, policy validation, scope evaluation, doctor inspection,
-   waiver effectiveness, hash-chained event verification. No `fs`,
-   `path`, `process.env`, `Date.now()`, or `new Date()` in executable
-   code; all time is injected.
-2. **Store** — Node I/O. Atomic writes via `writeFileAtomic`,
-   hash-chained `events.jsonl` via lock + `prepareAppend`,
-   snapshot composition for the doctor, `working-spec.yaml` residue
-   detection.
-3. **Shell** — Commander commands and renderers. Composes store
-   snapshots, calls kernel functions, prints diagnostics.
+| Operation | Command | Boundary |
+|---|---|---|
+| Update CLI | `npm install -g @paths.design/caws-cli` | Package installation |
+| Update shared hooks/renderers | `caws init adapters install --plan`, then without `--plan` | One machine runtime |
+| Configure native transport | `caws init adapters configure --agent-surface codex --plan` | Harness user configuration; remove `--plan` after review |
+| Retire project registration | `caws init adapters migrate --agent-surface codex --plan` | One-time adoption; remove `--plan` after review |
+| Roll back shared runtime | `caws init adapters rollback --plan`, then without `--plan` | Previous verified snapshot; not CLI or project rollback |
+| Convert old governance | `caws init migrate --from reviewed.json`, then `caws init migrate apply --from reviewed.json` | Hash-checked, explicit source-preserving conversion |
 
-### Architectural invariants
+`CAWS_HOME` defaults to `~/.caws`. Machine snapshots are immutable. Put intentional
+harness adapters under `surfaces/<surface>/lib/`; preserve project extensions
+through reviewed machine policy. Specs, project policy, scope, claims and audit
+history remain in the canonical project's `.caws/` directory.
 
-1. `events.jsonl` is written ONLY through the store's `appendEvent`.
-2. `policy.yaml` owns gate `mode` (block/warn/skip). Waivers filter
-   violations out of the disposition; they do not change gate mode.
-3. Doctor is pure (kernel-side). The store composes the snapshot;
-   doctor inspects it.
-4. Missing != malformed. Diagnostics distinguish absence from
-   corruption.
-5. `events.jsonl` is never required at rest. The first `appendEvent`
-   creates it.
-6. `caws init` is idempotent and non-destructive. It refuses legacy
-   residue. There is no `--force`.
-7. `caws status` is observability. Running it any number of times
-   produces no `.caws/` byte changes.
+A reprieve is a human-granted, expiring, session-global hook exception. New grants
+live under `~/.caws/state/sessions/<session>/`; `--surface` identifies the harness
+and legacy lookup context, not a separate grant store. A waiver affects policy
+quality gates and never lifts a hook guard.
 
-## Exit codes
+Legacy `init diff`, `init port`, `--overwrite`, and `--adopt` remain available for
+unmigrated project packs. They are not the update workflow for system projects.
 
-- `0` — success / observation.
-- `1` — domain failure (gate failed, doctor finding, validation
-  rejected, scope refused).
-- `2` — composition failure (not a git repo, can't read `.caws/`,
-  missing required tooling).
+## Help and documentation
 
-## Contributing
+Use `caws --help` and dedicated help such as `caws init adapters configure --help`
+or `caws init migrate apply --help`. The installed package's
+[command reference](docs/command-reference.md) is generated from the same command
+tree during packaging. [CLI workflows](docs/api/cli.md) explain setup and option
+semantics; [runtime adoption](docs/guides/hook-packs.md) covers customization and
+verification. Generated references are transport artifacts, not tracked source.
 
-The CAWS repo self-hosts: `.caws/` drives real quality gates on this
-codebase. See the project repository for contributing guidelines and
-the agent workflow guide.
-
-## License
-
-MIT
+For CAWS development, use the repository's `scripts/install-cli-snapshot.mjs`
+installer after building. It checks packaged runtime parity before atomically
+activating a standalone CLI. A globally shared command must not point into a
+checkout's mutable `dist/` directory.

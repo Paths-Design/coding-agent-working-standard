@@ -4,23 +4,35 @@ authority: reference
 status: active
 title: Migrating from CAWS v10.2 to v11.1
 owner: vNext rewrite team
-updated: 2026-06-03
+updated: 2026-09-07
 audience: consumer
 ---
 
 # Migrating from CAWS v10.2 to v11.1
 
-**v11 is the canonical CAWS line for new work. It is not a drop-in replacement for every v10.2 workflow.**
+This guide records the v10-to-v11 governance cutover. The installed package has
+continued beyond those version numbers; use `caws --version` and `caws --help`
+for today's surface. The historical bucket tables below describe that cutover,
+not a current inventory or a reason to pin a new installation to v11.
 
-If you are starting a new project, use v11.x. If you are running a stateful v10.2 repo today, read this guide before upgrading — some commands you depend on have been removed, some renamed, and some are deferred to a later release.
+For current adoption, separate two operations:
 
-This guide does not promise compatibility. It documents the gap, the workarounds, and the rollback path.
+1. Convert legacy governance with a reviewed `caws init migrate --from <file>`
+   preview and explicit `caws init migrate apply --from <file>`. See
+   [Legacy state migration](#legacy-state-migration) for the input contract.
+2. Install the machine runtime, configure the native harness, and retire old
+   project registration once. Follow [runtime adoption](guides/hook-packs.md#machine-adapter-installation).
+
+Bridge claims, worktree prune/repair and session log retention now ship; leases
+remain visibility, not authority. Session lifecycle start/checkpoint/end and
+parallel orchestration remain deferred. Record AC closure with `specs evidence`;
+`evidence record --type ac` now redirects to that command.
 
 ---
 
 ## What v11 is and is not
 
-**v11 is** a complete rewrite of the CAWS governance core onto the kernel/store/shell architecture. The current v11 line ships fourteen command groups (`init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message`) — stable, hardened with lifecycle-transaction discipline, and operationally proven on the project's own self-hosted use.
+**v11 is** a complete rewrite of the CAWS governance core onto the kernel/store/shell architecture. The early v11 line shipped fourteen command groups (`init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message`) — stable, hardened with lifecycle-transaction discipline, and operationally proven on the project's own self-hosted use.
 
 **v11.1 is not** a compatibility shim over v10.2. A meaningful fraction of the v10.2 surface has been removed without replacement; another fraction is deferred to v11.2 or v11.3+. If your team relies daily on the removed surfaces, this upgrade is operational work, not a version bump.
 
@@ -497,7 +509,7 @@ The full `agents` group is no longer a reason to wait — it ships in v11.1.x. I
 
 ## Reaching this guide from removed-command errors
 
-Currently, running a removed v10.2 command on v11.1 produces a generic "unknown command" error. Improving the error-handler to direct users to this guide is tracked as a separate follow-up (`DOC-REMOVED-COMMAND-ERRORS-001`, not yet filed). Until then, this guide is reachable via:
+At the original cutover, running a removed v10.2 command on v11.1 produced a generic "unknown command" error. Current removed-command diagnostics redirect to supported commands. This guide is also reachable via:
 
 - The repo's `docs/migration-v10-to-v11.md` (this file).
 - The repo's CLAUDE.md (it links here).

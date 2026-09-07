@@ -1,20 +1,39 @@
-# CAWS — Agent Quick Reference (v11)
+# CAWS — Agent Quick Reference
 
-**Agent quickstart for working in CAWS-managed projects on the v11 substrate.**
+**Project governance with a shared machine runtime.**
 
 ## Read this first
 
-The v11 cutover is complete. `main` runs the v11 surface (kernel/store/shell architecture, A1 posture). The doctrine source is [`docs/architecture/caws-vnext-command-surface.md`](docs/architecture/caws-vnext-command-surface.md). When this doc and the doctrine doc disagree, the doctrine doc wins.
+CAWS keeps project authority in canonical `.caws/` and executable distribution
+under `~/.caws` (or absolute `CAWS_HOME`). The CLI includes its kernel. Run
+`caws --version` and `caws --help` for the installed package and command tree;
+the historical v11 architecture names do not pin the current package version.
+The doctrine source is [the command-surface contract](docs/architecture/caws-vnext-command-surface.md).
 
-**The v11 line ships fifteen top-level commands/groups** (plus the auto-generated `help`): the governed core plus `specs`, `worktree`, `events`, `agents`, `message`, `session`, and `reprieve`. Run `caws --help` for the authoritative list. Commands removed and not planned to return (`validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `provenance`, `hooks`, `scaffold`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `templates`, `sidecar` at the v11.0 cutover; `prepush` after it) will fail if invoked. `caws agents list/show` **ship in v11.1** (liveness substrate). `caws message` is a directed message channel, not authority. Provenance teeth live at the merge boundary: `caws worktree merge` refuses a lane whose commits touch paths outside the bound spec's scope, and records the landing in a `worktree_merged` event. Only the `caws session` lifecycle (start/checkpoint/end) and `caws parallel` are deferred (v11.3+); `caws session prune` (log retention, SESSION-LOG-RETENTION-SCOPE-001) ships ahead of it. Bridge claims and lease-backed *authority* are the v11.2 plan.
+Set up the machine with `caws init adapters install`, then configure the native
+harness with `caws init adapters configure --agent-surface <surface>`. Both apply
+by default; preview with `--plan`. An agent in that harness must verify native
+trust, lifecycle execution, a guarded-write refusal, and session rendering.
+Retire existing project registration once with `caws init adapters migrate` after
+reviewing custom hooks. New projects inherit the configured runtime through
+`caws init --agent-surface <surface>`. Future stock updates require one machine
+installation, not per-project pack refreshes. See each operation's `--help`.
 
-**Migrating from v10.2?** Read [`docs/migration-v10-to-v11.md`](docs/migration-v10-to-v11.md) before upgrading. It classifies every v10.2 command (Replaced / Renamed / Removed-no-replacement / Deferred) and includes a rollback one-liner. v11 is not a drop-in replacement for every v10.2 workflow.
+Legacy governance conversion is separate: `caws init migrate --from <reviewed-json>`
+previews; `caws init migrate apply --from <reviewed-json>` archives original bytes
+and installs validated draft governance. No completed work is inferred.
 
-## v11 command surface
+Bridge claims (`caws claim --spec`) ship and bind active specs. Agent leases,
+messages and manual handoff records provide visibility and provenance, not
+additional authority. Only session lifecycle start/checkpoint/end and the
+`parallel` orchestrator remain deferred. Removed v10 commands such as top-level
+`validate`, `evaluate`, `iterate` and `hooks` are not restored by global adoption.
+
+## Command surface
 
 | Command | Purpose |
 |---|---|
-| `caws init` | Bootstrap canonical `.caws/` state. Idempotent. Refuses legacy single-spec residue. Subcommands: `init diff` (read-only pack drift; `--three-way <path>` splits local growth vs upstream) and `init port <path> --from <file>` (CLI-mediated hook retrofit — never hand-edit installed hooks). `--overwrite` without `--force` writes nothing, not even re-stamps. |
+| `caws init` | Initialize project governance. `init adapters install/configure/migrate/rollback` manage machine distribution and native adoption. `init migrate` previews reviewed legacy governance conversion; `migrate apply` executes. `diff`/`port` and overwrite/adopt flags are legacy pack maintenance. |
 | `caws doctor` | Drift detection over `.caws/` state. Exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure). |
 | `caws status` | Read-only dashboard: project, current context, claim, doctor findings. Never mutates `.caws/`. |
 | `caws scope show / check / contention` | Explain scope, enforce scope, or report cross-worktree path contention. |
@@ -78,7 +97,7 @@ caws init                                  # idempotent; refuses legacy residue
   # events.jsonl is created on first append; never required at rest.
 ```
 
-If `.caws/working-spec.yaml` exists, `caws init` refuses. Migrate that file into per-feature `.caws/specs/<id>.yaml` first — or do the migration on `caws-cli@10.2.x` and then upgrade.
+If `.caws/working-spec.yaml` exists, plain init refuses. Use a reviewed `caws init migrate --from <plan>` preview and `caws init migrate apply --from <plan>`; see docs/migration-v10-to-v11.md.
 
 ## Daily agent workflow
 
@@ -191,7 +210,7 @@ These are enforced by code, not docs. Don't try to work around them.
 3. Doctor is pure (kernel-side). The store composes the snapshot; doctor inspects it.
 4. Missing != malformed. Diagnostics distinguish absence from corruption.
 5. `events.jsonl` is never required at rest. The first `appendEvent` creates it.
-6. `caws init` is idempotent and non-destructive. It refuses legacy residue. There is no `--force`.
+6. `caws init` is idempotent and non-destructive. Plain initialization refuses legacy residue; only explicit reviewed migration converts it. `--force` belongs solely to legacy pack `--overwrite`.
 7. `caws status` is observability. Running it any number of times produces no `.caws/` byte changes.
 
 ## Risk tiers (your quality contract)
@@ -223,14 +242,15 @@ caws waiver revoke FEAT-1a
 
 ## Reprieves
 
-A **reprieve** skips a PreToolUse guard for exactly one agent session until a stated expiry. It replaces the anti-pattern of commenting a guard out of the dispatcher's HANDLERS array (which disables it for *every* agent, forever, with no reason or expiry). Reprieves are operational cache (gitignored, under the vendor `hooks/state/` dir), not governance state — they do not flow through `events.jsonl` or the kernel.
+A **reprieve** skips a PreToolUse guard for exactly one agent session until a stated expiry. It replaces the anti-pattern of commenting a guard out of the dispatcher's HANDLERS array (which disables it for *every* agent, forever, with no reason or expiry). Reprieves are operational cache (gitignored, under `~/.caws/state/sessions/<session>/`), not governance state — they do not flow through `events.jsonl` or the kernel.
 
 ```bash
-caws reprieve grant --current \
+# Run this in a human terminal; agents cannot grant reprieves.
+caws reprieve grant --session <session-id> --surface codex \
   --handlers protected-paths.sh \
   --reason "editing casr-context.sh under CASR-HOOK-LIVE-WIRING-OWNER-STEP-01" \
   --approved-by "darian" \
-  --expires-at "2026-07-16T00:00:00Z"
+  --for 20m
 
 caws reprieve show --current
 caws reprieve revoke --current --reason "done editing hooks"
@@ -239,9 +259,9 @@ caws reprieve list
 
 **Reprieve vs waiver** — different enforcement layers, do not confuse them:
 - A **waiver** bypasses a **GATE** at policy-run time (`caws gates run`). It is governance state (`.caws/waivers/`), kernel-adjudicated, optionally scoped to a spec. Use it when a gate's threshold is wrong for a legitimate change.
-- A **reprieve** skips a **HOOK guard** at dispatch time (the PreToolUse chain). It is operational cache (vendor `hooks/state/`), session-scoped, expiring. Use it when one session legitimately needs to do what a guard blocks (e.g. editing a hook script) without disabling the guard for every other session.
+- A **reprieve** skips a **HOOK guard** at dispatch time (the PreToolUse chain). It is operational cache (machine session store), session-scoped, expiring. Use it when one session legitimately needs to do what a guard blocks (e.g. editing a hook script) without disabling the guard for every other session.
 
-A reprieve carries a mandatory `--reason`, `--approved-by`, and `--expires-at`. The skip is logged to stderr (`[reprieve] <handler> skipped for session <id> (expires <ts>)`) so the audit trail shows when and why a guard was skipped. A foreign session is never covered — the state file is keyed to the resolved session id.
+A reprieve requires `--reason`, `--approved-by`, and exactly one of `--for` or `--expires-at`. New grants are session-global; `--surface` supplies harness provenance and legacy lookup context. The skip is logged to stderr (`[reprieve] <handler> skipped for session <id> (expires <ts>)`) so the audit trail shows when and why a guard was skipped. A foreign session is never covered — the state file is keyed to the resolved session id.
 
 ## Exit codes (uniform across v11)
 

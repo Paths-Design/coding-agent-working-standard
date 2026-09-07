@@ -15,7 +15,7 @@ test('standalone activation survives source removal; failed and concurrent insta
     fs.mkdirSync(path.join(packageRoot, 'dist'), { recursive: true });
     fs.writeFileSync(path.join(packageRoot, 'package.json'), JSON.stringify({ name: '@paths.design/caws-cli', version: '1.0.0', bin: { caws: 'dist/index.js' }, files: ['dist'] }));
     fs.writeFileSync(path.join(packageRoot, 'dist', 'value.js'), "module.exports = 'working-v1';\n");
-    fs.writeFileSync(path.join(packageRoot, 'dist', 'index.js'), "#!/usr/bin/env node\nconsole.log(require('./value'));\n");
+    fs.writeFileSync(path.join(packageRoot, 'dist', 'index.js'), "#!/usr/bin/env node\nconsole.log(process.argv.includes('--json') ? JSON.stringify({digest: 'a'.repeat(64)}) : require('./value'));\n");
     const first = installCliSnapshot({ packageRoot, cawsHome, binPath });
     const invoke = () => spawnSync(binPath, ['doctor'], { encoding: 'utf8', cwd: root });
     assert.equal(invoke().stdout.trim(), 'working-v1');
@@ -27,11 +27,15 @@ test('standalone activation survives source removal; failed and concurrent insta
     assert.throws(() => installCliSnapshot({ packageRoot, cawsHome, binPath }), /absent-module/);
     assert.equal(fs.readlinkSync(binPath), first.target);
     assert.equal(invoke().stdout.trim(), 'working-v1');
+    fs.writeFileSync(path.join(packageRoot, 'dist', 'index.js'), "#!/usr/bin/env node\nconsole.log(process.argv.includes('--json') ? JSON.stringify({digest: (__dirname.includes('node_modules') ? 'b' : 'a').repeat(64)}) : 'candidate');\n");
+    assert.throws(() => installCliSnapshot({ packageRoot, cawsHome, binPath }), /Packaged runtime differs/);
+    assert.equal(fs.readlinkSync(binPath), first.target);
+    assert.equal(invoke().stdout.trim(), 'working-v1');
     fs.writeFileSync(`${binPath}.caws-install.lock`, 'another installer');
     assert.throws(() => installCliSnapshot({ packageRoot, cawsHome, binPath }), /EEXIST/);
     assert.equal(fs.readFileSync(`${binPath}.caws-install.lock`, 'utf8'), 'another installer');
     fs.unlinkSync(`${binPath}.caws-install.lock`);
-    fs.writeFileSync(path.join(packageRoot, 'dist', 'index.js'), "#!/usr/bin/env node\nconsole.log('working-v2');\n");
+    fs.writeFileSync(path.join(packageRoot, 'dist', 'index.js'), "#!/usr/bin/env node\nconsole.log(process.argv.includes('--json') ? JSON.stringify({digest: 'b'.repeat(64)}) : 'working-v2');\n");
     const second = installCliSnapshot({ packageRoot, cawsHome, binPath });
     assert.notEqual(second.target, first.target);
     assert.equal(invoke().stdout.trim(), 'working-v2');

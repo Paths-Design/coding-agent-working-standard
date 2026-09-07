@@ -1,3 +1,13 @@
+---
+doc_id: hook-packs
+authority: reference
+status: active
+title: CAWS shared runtime setup and hook maintenance
+owner: CAWS maintainers
+updated: 2026-09-07
+audience: consumer
+---
+
 # Hook packs: the edit-time advisory quality plane
 
 CAWS distributes guards, dispatchers and session renderers through a user-level runtime in `~/.caws`. Configure the native harness once and migrate existing project registrations once; subsequent runtime updates serve every adopted project. See [Machine adapter installation](#machine-adapter-installation). Legacy project packs remain supported during migration. The first part of this guide documents the **advisory quality plane** added by `QG-HOOKS-EXTRACT-001`.
@@ -93,6 +103,13 @@ The installer needs npm dependency access and does not run package lifecycle
 scripts. Build before installation; it never rebuilds the active checkout itself.
 
 ## Machine adapter installation
+
+The CLI package, shared runtime, native registration and project governance have
+separate lifecycles. Upgrade the CLI package first, then preview/apply the runtime
+update once. Each operation has dedicated help (`caws init adapters install
+--help`, `configure --help`, `migrate --help`, `rollback --help`). The development CLI snapshot
+installer also checks identical development/packaged runtime digests;
+dependency or packaging drift refuses activation instead of changing behavior.
 
 Install and configure CAWS once at user scope:
 
@@ -197,6 +214,34 @@ snapshot bytes. An interrupted install leaves `state/adapter-install.lock`; a
 configuration transaction leaves `state/system-configuration.lock` plus exact
 before/after backups. Inspect the owning process and partial bytes before removing
 a stale lock and retrying. Rollback refuses to overwrite a concurrent edit.
+
+## Human latch recovery
+
+From the canonical project checkout, a human can run the reset helper from the
+active verified runtime. This is separate from reprieve grants: latches remain
+project/harness state, while new reprieves are session-global. Do not edit a
+snapshot or infer the project root from its installation directory.
+
+```bash
+caws doctor
+runtime="$(python3 - <<'PY'
+import json, os, pathlib, re
+home = pathlib.Path(os.environ.get('CAWS_HOME', '~/.caws')).expanduser()
+digest = json.loads((home / 'state/adapter-runtime.json').read_text())['digest']
+assert re.fullmatch(r'[a-f0-9]{64}', digest)
+print(home / 'lib/runtimes' / digest)
+PY
+)"
+CAWS_MACHINE_RUNTIME=1 CAWS_PROJECT_DIR="$PWD" CAWS_AGENT_SURFACE=claude-code \
+  bash "$runtime/reset-danger-latch.sh" --session <session-id> --reason "Reviewed recovery"
+```
+
+The helper requires an absolute project root in machine mode, resolves the
+canonical Git state without inherited Git overrides, and records recovery in
+that project's harness log. Legacy installed helpers retain their existing root
+resolution. Recovery does not grant project scope or worktree ownership.
+
+## Compatibility and reprieves
 
 The old `adapters adopt` operation remains available for adapter-only project
 policies. It does not globalize stock guards/renderers; prefer configure/migrate.

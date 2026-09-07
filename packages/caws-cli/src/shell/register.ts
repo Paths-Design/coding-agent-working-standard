@@ -373,7 +373,7 @@ function defineFlat(program: Command, leaf: LeafCommandMeta): Command {
  * silently register a command with no help. */
 function leafMeta(meta: GroupCommandMeta, name: string): LeafCommandMeta {
   const found = meta.subcommands.find((s) => s.name === name);
-  if (!found) {
+  if (!found || found.kind !== 'leaf') {
     throw new Error(
       `register.ts: no metadata for "${meta.name} ${name}" in COMMAND_SURFACE_METADATA`
     );
@@ -397,94 +397,99 @@ export function registerShellCommands(
   // Replaces the legacy `caws init` registration removed from
   // src/index.js as part of slice 7b.
   // -------------------------------------------------------------------
-  defineFlat(program, INIT_COMMAND_META)
-    .action(
-      (
-        action: string | undefined,
-        actionArg: string | undefined,
-        opts: {
-          data?: boolean;
-          agentSurface?: string;
-          overwrite?: boolean | string[];
-          force?: boolean;
-          adopt?: boolean;
-          plan?: boolean;
-          dryRun?: boolean;
-          json?: boolean;
-          wireUserConfig?: boolean;
-          threeWay?: string;
-          from?: string;
-          projectsRoot?: string;
-          nativeConfigTarget?: string;
+  type InitOptions = {
+    data?: boolean; agentSurface?: string; overwrite?: boolean | string[];
+    force?: boolean; adopt?: boolean; plan?: boolean; dryRun?: boolean;
+    json?: boolean; wireUserConfig?: boolean; threeWay?: string; from?: string;
+    projectsRoot?: string; nativeConfigTarget?: string;
+  };
+  const invokeInit = (opts: InitOptions, action?: 'diff' | 'port' | 'adapters' | 'migrate', actionArg?: string): void => {
+    // Commander hands back the raw string for agentSurface; the
+    // runInitCommand validator rejects unknown values with exit 2.
+    const runOpts: Parameters<typeof runInitCommand>[0] = {
+      showData: opts.data === true,
+    };
+    if (opts.agentSurface !== undefined) {
+      (runOpts as { agentSurface?: string }).agentSurface =
+        opts.agentSurface;
+    }
+    if (opts.overwrite !== undefined) {
+      // `--overwrite [paths...]`: bare → true; with values → string[].
+      // Either form means "overwrite selected"; the paths (when present)
+      // restrict which destPaths are selected.
+      if (Array.isArray(opts.overwrite)) {
+        (runOpts as { overwrite?: boolean }).overwrite = true;
+        if (opts.overwrite.length > 0) {
+          (runOpts as { overwriteTargets?: readonly string[] }).overwriteTargets =
+        opts.overwrite;
         }
-      ) => {
-        // Positional subcommands (CAWS-HOOKPACK-UPGRADE-RETROFIT-001).
-        // Unknown positional = usage error, not silently ignored.
-        if (action !== undefined && action !== 'diff' && action !== 'port' && action !== 'adapters' && action !== 'migrate') {
-          process.stderr.write(
-            `caws init: unknown subcommand "${action}" (expected diff | port | adapters | migrate).\n`
-          );
-          exit(2);
-          return;
-        }
-        // Commander hands back the raw string for agentSurface; the
-        // runInitCommand validator rejects unknown values with exit 2.
-        const runOpts: Parameters<typeof runInitCommand>[0] = {
-          showData: opts.data === true,
-        };
-        if (opts.agentSurface !== undefined) {
-          (runOpts as { agentSurface?: string }).agentSurface =
-            opts.agentSurface;
-        }
-        if (opts.overwrite !== undefined) {
-          // `--overwrite [paths...]`: bare → true; with values → string[].
-          // Either form means "overwrite selected"; the paths (when present)
-          // restrict which destPaths are selected.
-          if (Array.isArray(opts.overwrite)) {
-            (runOpts as { overwrite?: boolean }).overwrite = true;
-            if (opts.overwrite.length > 0) {
-              (runOpts as { overwriteTargets?: readonly string[] }).overwriteTargets =
-                opts.overwrite;
-            }
-          } else {
-            (runOpts as { overwrite?: boolean }).overwrite = opts.overwrite;
-          }
-        }
-        if (opts.force !== undefined) {
-          (runOpts as { force?: boolean }).force = opts.force;
-        }
-        if (opts.adopt !== undefined) {
-          (runOpts as { adopt?: boolean }).adopt = opts.adopt;
-        }
-        if (opts.plan === true || opts.dryRun === true) {
-          (runOpts as { plan?: boolean }).plan = true;
-        }
-        if (opts.json !== undefined) {
-          (runOpts as { json?: boolean }).json = opts.json;
-        }
-        if (opts.wireUserConfig !== undefined) {
-          (runOpts as { wireUserConfig?: boolean }).wireUserConfig =
-            opts.wireUserConfig;
-        }
-        if (action !== undefined) {
-          (runOpts as { action?: 'diff' | 'port' | 'adapters' | 'migrate' }).action = action;
-        }
-        if (actionArg !== undefined) {
-          (runOpts as { actionArg?: string }).actionArg = actionArg;
-        }
-        if (opts.threeWay !== undefined) {
-          (runOpts as { threeWayPath?: string }).threeWayPath = opts.threeWay;
-        }
-        if (opts.projectsRoot !== undefined) (runOpts as { projectsRoot?: string }).projectsRoot = opts.projectsRoot;
-        if (opts.nativeConfigTarget !== undefined)
-          (runOpts as { nativeConfigTarget?: string }).nativeConfigTarget = opts.nativeConfigTarget;
-        if (opts.from !== undefined) {
-          (runOpts as { fromFile?: string }).fromFile = opts.from;
-        }
-        const code = runInitCommand(runOpts);
-        exit(code);
+      } else {
+        (runOpts as { overwrite?: boolean }).overwrite = opts.overwrite;
       }
-    );
+    }
+    if (opts.force !== undefined) {
+      (runOpts as { force?: boolean }).force = opts.force;
+    }
+    if (opts.adopt !== undefined) {
+      (runOpts as { adopt?: boolean }).adopt = opts.adopt;
+    }
+    if (opts.plan === true || opts.dryRun === true) {
+      (runOpts as { plan?: boolean }).plan = true;
+    }
+    if (opts.json !== undefined) {
+      (runOpts as { json?: boolean }).json = opts.json;
+    }
+    if (opts.wireUserConfig !== undefined) {
+      (runOpts as { wireUserConfig?: boolean }).wireUserConfig =
+        opts.wireUserConfig;
+    }
+    if (action !== undefined) {
+      (runOpts as { action?: 'diff' | 'port' | 'adapters' | 'migrate' }).action = action;
+    }
+    if (actionArg !== undefined) {
+      (runOpts as { actionArg?: string }).actionArg = actionArg;
+    }
+    if (opts.threeWay !== undefined) {
+      (runOpts as { threeWayPath?: string }).threeWayPath = opts.threeWay;
+    }
+    if (opts.projectsRoot !== undefined) (runOpts as { projectsRoot?: string }).projectsRoot = opts.projectsRoot;
+    if (opts.nativeConfigTarget !== undefined)
+      (runOpts as { nativeConfigTarget?: string }).nativeConfigTarget = opts.nativeConfigTarget;
+    if (opts.from !== undefined) {
+      (runOpts as { fromFile?: string }).fromFile = opts.from;
+    }
+    exit(runInitCommand(runOpts));
+  };
+  const registerInit = (parent: Command, meta: LeafCommandMeta | GroupCommandMeta, route: string[]): void => {
+    const cmd = meta.kind === 'leaf' ? defineLeaf(parent, meta) : parent.command(meta.name);
+    if (meta.kind === 'group') {
+      applyGroupMeta(cmd, meta);
+      cmd.enablePositionalOptions();
+      for (const child of meta.subcommands) registerInit(cmd, child, [...route, child.name]);
+    }
+    const actionMeta = meta.kind === 'leaf' ? meta : meta.defaultAction;
+    if (!actionMeta) return;
+    cmd.action((...args: unknown[]) => {
+      const invoked = args[args.length - 1] as Command;
+      if (meta.kind === 'group' && invoked.args.length) {
+        process.stderr.write(`caws init: unknown subcommand ${invoked.args.join(' ')}; nothing was applied.\n`);
+        exit(2); return;
+      }
+      const parsed = invoked.optsWithGlobals() as InitOptions;
+      const allowed = new Set(actionMeta.options.map(option => {
+        const name = /--([a-z-]+)/.exec(option.flag)?.[1] ?? '';
+        return name.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
+      }));
+      const incompatible = Object.keys(parsed).filter(key => parsed[key as keyof InitOptions] !== undefined && !allowed.has(key));
+      if (incompatible.length) {
+        process.stderr.write(`caws init ${route.join(' ')}: incompatible options: ${incompatible.join(', ')}; nothing was applied.\n`);
+        exit(2); return;
+      }
+      const operation = route[0] as 'diff' | 'port' | 'adapters' | 'migrate' | undefined;
+      invokeInit(parsed, operation, operation === 'port' ? invoked.args[0] : route[1]);
+    });
+  };
+  registerInit(program, INIT_COMMAND_META, []);
 
   // -------------------------------------------------------------------
   // caws doctor

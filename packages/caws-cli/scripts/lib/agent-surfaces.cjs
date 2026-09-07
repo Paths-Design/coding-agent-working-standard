@@ -56,12 +56,24 @@ function renderDeclaredOnly(known, implemented) {
  * surfaces are installable; declaring a non-implemented surface errors in init.)
  */
 function renderReadmeInstallBlock(implemented) {
-  const lines = ['```bash'];
-  for (const s of implemented) {
-    lines.push('caws init --agent-surface ' + s);
-  }
-  lines.push('```');
-  return lines.join('\n');
+  return [
+    '```bash',
+    '# Once per machine: install the shared runtime.',
+    'caws init adapters install --plan',
+    'caws init adapters install',
+    '# Configure the harness you are using (Codex shown here).',
+    'caws init adapters configure --agent-surface codex --plan',
+    'caws init adapters configure --agent-surface codex',
+    '# Once per existing project: retire reviewed local registration.',
+    'caws init adapters migrate --agent-surface codex --plan',
+    'caws init adapters migrate --agent-surface codex',
+    '# New projects inherit the configured runtime.',
+    'caws init --agent-surface codex',
+    '```',
+    '',
+    'Pack templates exist for ' + renderImplemented(implemented) +
+      '. Template availability does not establish native activation; verify in the target harness.',
+  ].join('\n');
 }
 
 /**
@@ -81,7 +93,7 @@ function renderGuideSurfaceProse(known, implemented) {
   return (
     'Use `caws init --agent-surface <' +
     list +
-    '>` to install a hook pack. ' +
+    '>` to initialize a project. Configured system surfaces inherit machine hooks without project copies. Use `caws init adapters install` for shared updates and `configure`/`migrate` for one-time native setup. Legacy pack templates for ' +
     implClause +
     declaredClause +
     '.'

@@ -1,3 +1,13 @@
+---
+doc_id: hook-pack-shared-core
+authority: reference
+status: active
+title: Shared hook runtime and native adapter contract
+owner: CAWS maintainers
+updated: 2026-09-07
+audience: consumer
+---
+
 # Hook Pack: Shared Core + Per-Vendor Adapters
 
 This document records the layout and contracts for CAWS hook packs after
@@ -15,6 +25,7 @@ Installing code confers no project authority.
 ```
 ~/.caws/
   bin/caws-hook                         stable launcher
+  lib/cli/<release>/                    standalone development CLI installations
   lib/runtimes/<digest>/                verified immutable executable snapshot
   state/adapter-runtime.json           atomic active/previous pointer
   surfaces/<surface>/settings.json     enabled native surface

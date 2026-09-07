@@ -9,9 +9,10 @@ function flattenLeaves(group, prefix = []) {
   if (!Array.isArray(group.subcommands)) {
     return [{ command: [...prefix, group.name].join(' '), options: group.options || [] }];
   }
-  return group.subcommands.flatMap((subcommand) =>
-    flattenLeaves(subcommand, [...prefix, group.name])
-  );
+  return [
+    ...(group.defaultAction ? [{ command: [...prefix, group.name].join(' '), options: group.options || [] }] : []),
+    ...group.subcommands.flatMap((subcommand) => flattenLeaves(subcommand, [...prefix, group.name])),
+  ];
 }
 
 function jsonLikeOptions() {
@@ -32,6 +33,7 @@ function jsonLikeOptions() {
 }
 
 function isOperatorSuppliedJsonInput(option) {
+  if (['init adapters migrate', 'init adapters adopt', 'init migrate', 'init migrate apply'].includes(option.command) && option.flag === '--from <file>') return true;
   if (option.command === 'evidence record' && option.flag === '--data <json>') {
     return true;
   }
@@ -50,6 +52,10 @@ describe('CLI JSON input surface reconciliation', () => {
 
     expect(inputs).toEqual([
       'evidence record --data <json>',
+      'init adapters adopt --from <file>',
+      'init adapters migrate --from <file>',
+      'init migrate --from <file>',
+      'init migrate apply --from <file>',
       'specs migrate --lifecycle-mapping <path>',
     ]);
   });

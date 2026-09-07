@@ -316,14 +316,31 @@ Full list: `.claude/rules/worktree-isolation.md`.
   `npm whoami` sessions — `EOTP` with a valid `npm whoami` means use the token
   via env, not the interactive session.
 
+## Shared runtime and native configuration
+
+Project `.caws/` owns governance; `~/.caws` owns shared executable snapshots,
+dispatch, renderers and harness adapters. Use `caws init adapters install` once
+per machine and `configure --agent-surface claude-code` for native user wiring.
+Preview each with `--plan`. Migrate existing project registrations once with
+`adapters migrate --agent-surface claude-code`, preserving custom behavior.
+Verify native SessionStart, protected-write refusal, Stop and session rendering
+inside Claude before claiming activation. Template availability is not proof.
+New projects inherit configured machine behavior; legacy packs use diff/port.
+
+Reprieves are human-granted session-global exceptions in
+`~/.caws/state/sessions/<session>/`. `--surface` records harness identity and
+selects legacy lookup; it does not partition new grants. `caws reprieve grant`
+requires an explicit target, handlers, reason, approver and one expiry choice.
+
 ## Bash hook latches
 
 The hook pack includes a "danger latch" that fires on certain Bash patterns
 (force-push, `reset --hard`, `rebase`, `cherry-pick`, `clean -f`, bare
 `checkout <path>`, deleted-tag pushes, pipe-to-shell, the `git init` family). If
 it fires once, **every subsequent Bash call in the session blocks** until a
-human runs `bash .caws/hooks/reset-danger-latch.sh --session <id> --reason
-"<why this is safe>"`. The reset scripts live under `.caws/hooks/`, not under
+human runs the verified runtime reset helper with `--session <id> --reason
+"<why this is safe>"` and the canonical project root. See the recovery command
+in [the runtime guide](docs/guides/hook-packs.md#human-latch-recovery). Legacy reset scripts live under `.caws/hooks/`, not under
 the harness vendor dir (`.claude/`) — that directory holds logs and settings,
 not the hook scripts. The block message prints the exact command with your
 session id already filled in; hand that to the user verbatim. There is no

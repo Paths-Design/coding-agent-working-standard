@@ -68,12 +68,16 @@ describe('populator renderers: derived shape from the live constants', () => {
     }
   });
 
-  test('renderReadmeInstallBlock emits one install line per implemented surface', () => {
+  test('renderReadmeInstallBlock distinguishes machine setup from project initialization', () => {
     const block = populator.renderReadmeInstallBlock(IMPLEMENTED_SURFACES);
     expect(block.startsWith('```bash\n')).toBe(true);
-    expect(block.trim().endsWith('```')).toBe(true);
+    expect(block).toContain('caws init adapters install --plan');
+    expect(block).toContain('caws init adapters configure --agent-surface codex');
+    expect(block).toContain('caws init adapters migrate --agent-surface codex');
+    expect(block).toContain('caws init --agent-surface codex');
+    expect(block).toContain('does not establish native activation');
     for (const s of IMPLEMENTED_SURFACES) {
-      expect(block).toContain(`caws init --agent-surface ${s}`);
+      expect(block).toContain('`' + s + '`');
     }
   });
 

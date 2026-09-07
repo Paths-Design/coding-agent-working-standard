@@ -6,27 +6,30 @@ CAWS is a kernel/store/shell architecture that gives coding agents and humans a 
 
 This repository is the source for the `@paths.design/caws-cli` npm package (the kernel is absorbed into it — there is no separate `@paths.design/caws-kernel` publish). CAWS self-hosts: `.caws/` drives real quality gates on this codebase.
 
-## Status: v11.x is the canonical line
+## Current architecture
 
-The v11 cutover is complete. `main` runs the v11 surface published to npm as `@paths.design/caws-cli` (currently 11.9.x; the kernel is absorbed into this single package — see below). v11.1 restored the spec and worktree lifecycle on top of the v11.0 governed core and shipped the agent-liveness visibility substrate (`caws agents`, `.caws/leases/`). v11.8 added `caws reprieve` (session-scoped guard reprieves) and the `zcode` agent surface. Multi-agent *authority* (bridge claims, lease-backed enforcement) remains in planning — see the doctrine doc §1.
+CAWS combines repository-owned governance with a shared machine runtime. The
+installed package version is reported by `caws --version`; the v11 governance
+architecture remains the foundation of the current CLI. Specs and worktree/bridge
+bindings own project authority. Runtime installation and agent leases do not grant it.
 
 **Doctrine source:** [`docs/architecture/caws-vnext-command-surface.md`](docs/architecture/caws-vnext-command-surface.md). Read it before relying on any other doc in this repo — historical context in deeper docs may still describe v10 behavior.
 
 **Migrating from v10.2?** Read [`docs/migration-v10-to-v11.md`](docs/migration-v10-to-v11.md) first. v11 is not a drop-in replacement for every v10.2 workflow — some commands are removed, some renamed, some deferred. The guide classifies every v10.2 command and includes a rollback one-liner.
 
-## What the v11 line ships
+## Command surface
 
-Fourteen top-level commands/groups (plus the auto-generated `help`).
+Use `caws --help` for the current command tree. Common project operations:
 
 | Command | Purpose |
 |---|---|
-| `caws init` | Bootstrap canonical `.caws/` state. Idempotent. Refuses legacy single-spec residue. No `--force`. `--agent-surface <claude-code\|codex\|opencode\|cursor\|windsurf\|none>` installs a hook pack. |
+| `caws init` | Initialize project governance. `init adapters` manages the shared runtime and native registration; `init migrate` converts reviewed legacy governance. Dedicated subcommand help describes each operation. |
 | `caws doctor` | Drift detection over `.caws/` state. Exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure). |
 | `caws status` | Read-only dashboard: project, current context, agents, claim, doctor findings. Never mutates `.caws/`. |
 | `caws scope show / check / contention` | Explain scope, enforce scope, or report cross-worktree path contention. |
 | `caws claim [--takeover] [--paths <path>]` | Surface or take ownership of the current worktree. Writes `prior_owners` audit on takeover; `--paths` declares working-tree ownership metadata on the current lease. |
 | `caws gates run --spec <id> [--context <cli\|commit\|ci>]` | Run policy-driven quality gates. Appends one `gate_evaluated` event per declared gate. |
-| `caws evidence record --type <kind> --spec <id> --data <json>` | Append a typed evidence event (`test` / `gate` / `ac`) to `.caws/events.jsonl`. |
+| `caws evidence record --type <kind> --spec <id> --data <json>` | Append a typed evidence event (`test` / `gate` / `human_decision`; AC closure uses `specs evidence`) to `.caws/events.jsonl`. |
 | `caws events migrate / rotate / verify-archive` | Maintenance for the hash-chained `.caws/events.jsonl` (v10→v11 migration, rotation, archive integrity). |
 | `caws waiver create / list / show / revoke` | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. `create` requires `--title`, `--gate`, `--reason`, `--approved-by`, `--expires-at`. |
 | `caws reprieve grant / show / revoke / list` | Session-scoped guard reprieve: skip a PreToolUse guard for one session until expiry. |
@@ -35,7 +38,7 @@ Fourteen top-level commands/groups (plus the auto-generated `help`).
 | `caws agents register / heartbeat / stop / list / show / prune` | Agent-liveness substrate (`.caws/leases/`). Operational cache only — never authority. |
 | `caws message send / reply / poll / inbox / history / status / prune` | Directed inter-agent message channel over `.caws/messages.jsonl`. Not authority; verify claims before acting. |
 
-Run `caws <group> --help` for live options, or read the generated [`docs/command-reference.md`](docs/command-reference.md) for the exhaustive leaf and flag surface.
+Run `caws <group> --help` for live options, or see [`docs/command-reference.md`](docs/command-reference.md) for the exhaustive leaf and flag surface.
 
 ## Quick start
 
@@ -47,15 +50,30 @@ Run `caws <group> --help` for live options, or read the generated [`docs/command
 ### Install
 
 ```bash
-npm install -g @paths.design/caws-cli@^11.9.0
+npm install -g @paths.design/caws-cli
 caws --version
 ```
+
+### Set up the machine once
+
+```bash
+caws init adapters install --plan
+caws init adapters install
+caws init adapters configure --agent-surface codex --plan
+caws init adapters configure --agent-surface codex
+```
+
+Review native hook trust and verify execution in the target harness. For an
+existing project, preview and apply `caws init adapters migrate --agent-surface
+codex` once to retire its local registration. See the [setup and migration
+guide](docs/guides/hook-packs.md#machine-adapter-installation) for custom hooks,
+other harnesses, symlinked configuration and exact backups.
 
 ### Bootstrap a project
 
 ```bash
 git init my-project && cd my-project
-caws init
+caws init --agent-surface codex
 ```
 
 `caws init` creates the canonical vNext layout:
@@ -70,7 +88,16 @@ caws init
   # events.jsonl is created on first append; never required at rest.
 ```
 
-It refuses to run if legacy `.caws/working-spec.yaml` is present. Migrate that file into per-feature `.caws/specs/<id>.yaml` first (or do the migration on `caws-cli@10.2.x` before upgrading).
+Project `.caws/` owns specs, policy and audit state. Shared executables, adapters
+and session-global reprieves live under `~/.caws` (`CAWS_HOME` can select another
+absolute machine home). Legacy singleton governance needs an explicit reviewed
+`caws init migrate --from <plan>` preview and `migrate apply --from <plan>`;
+see the [legacy migration guide](docs/migration-v10-to-v11.md).
+
+After upgrading the CLI package, preview and run `caws init adapters install`
+once to update stock hooks across adopted projects. `configure` changes native
+registration, `migrate` retires project registration, and `rollback` restores the
+previous shared runtime. These are separate operations, each with its own help.
 
 ### Author a spec
 
@@ -90,13 +117,14 @@ caws status                              # dashboard
 caws scope show src/foo.ts               # what scope says about a file
 caws gates run --spec FEAT-1             # run policy-driven gates
 caws waiver create FOO-1 \
+  --title "Reviewed budget exception" \
   --gate budget_limit \
   --reason "..." \
   --approved-by "team-lead" \
   --expires-at "2026-12-01T00:00:00Z"
 caws evidence record \
   --type test --spec FEAT-1 \
-  --data '{"name":"unit","status":"pass"}'
+  --data '{"command":"npm test","exit_code":0}'
 ```
 
 ## Multi-agent work
@@ -143,7 +171,7 @@ Three layers:
 3. Doctor is pure (kernel-side). The store composes the snapshot; doctor inspects it.
 4. Missing != malformed. Diagnostics distinguish absence from corruption.
 5. `events.jsonl` is never required at rest. The first `appendEvent` creates it.
-6. `caws init` is idempotent and non-destructive. It refuses legacy residue. There is no `--force`.
+6. `caws init` is idempotent and non-destructive. Plain initialization refuses legacy residue; explicit reviewed migration converts it. `--force` applies only to legacy pack `--overwrite`.
 7. `caws status` is observability. Running it any number of times produces no `.caws/` byte changes.
 
 ### Exit codes

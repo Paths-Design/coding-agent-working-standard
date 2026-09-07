@@ -68,14 +68,14 @@ describe('caws init action positionals (full CLI parse path)', () => {
     expect(output).toContain('caws init port: --from <staging-file> is required.');
   });
 
-  test('A3: `init a b c` (three positionals) is still refused, naming the excess token "c"', () => {
+  test('A3: unknown init subcommands are refused without silently dropping arguments', () => {
     const root = mkRepo();
     const result = spawnCli(root, ['init', 'a', 'b', 'c']);
     const output = `${result.stdout}${result.stderr}`;
 
     expect(result.status).not.toBe(0);
-    expect(output).toContain('unexpected extra argument(s): c');
-    expect(output).toContain('at most 2 positional arguments');
+    expect(output).toContain('unknown subcommand a b c');
+    expect(output).toContain('nothing was applied');
   });
 
   test('A4 control: a leaf with no declared positionals (specs list) still refuses a stray positional — the guard is not weakened globally', () => {

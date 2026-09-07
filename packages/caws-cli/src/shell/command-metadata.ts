@@ -16,10 +16,8 @@
 //     REGISTERED_COMMAND_GROUPS and that register.ts carries no inline
 //     description/option string literals.
 //
-// STAGING (this is slice 1): this module defines the interfaces and exports
-// an EMPTY frozen COMMAND_SURFACE_METADATA. register.ts is NOT yet refactored
-// to consume it (that is slices 2-3, group by group). The interface shapes
-// are stable; later slices only ADD entries.
+// The registered command tree and generated reference consume this metadata.
+// Nested groups and group default actions are represented explicitly.
 //
 // What is machine-derivable vs. hand-authored:
 //   - DERIVABLE (lock-tested against the kernel/schema): option `allowedValues`
@@ -38,7 +36,7 @@ import {
 import { SPECS_LIST_STATUSES } from '../store/specs-writer';
 import { KNOWN_SURFACES } from '../init/hook-packs/register';
 
-/** A positional argument on a command (this CLI uses at most one per command). */
+/** A positional argument on a command. */
 export interface CommandArgMeta {
   /** Argument name as it appears in usage, e.g. "id" or "path". */
   readonly name: string;
@@ -102,8 +100,7 @@ export interface LeafCommandMeta {
    *  are read through the shared `declaredArguments()` accessor so a leaf
    *  can never disagree with itself about its own positional count. */
   readonly argument?: CommandArgMeta;
-  /** Multiple positionals, in declaration order (e.g. init's `[action]`
-   *  then `[actionArg]`). Use this instead of `argument` when a leaf takes
+  /** Multiple positionals, in declaration order. Use this instead of `argument` when a leaf takes
    *  more than one positional; leave both leaves' worth of other metadata
    *  (name/description/options) unchanged. */
   readonly arguments?: readonly CommandArgMeta[];
@@ -123,7 +120,9 @@ export interface GroupCommandMeta {
   /** Declared group-level options, used only for intentional group actions/aliases. */
   readonly options?: readonly CommandOptionMeta[];
   /** The group's subcommands. */
-  readonly subcommands: readonly LeafCommandMeta[];
+  readonly subcommands: readonly CommandMeta[];
+  /** Optional action when invoked without a subcommand (init and migration previews). */
+  readonly defaultAction?: LeafCommandMeta;
 }
 
 /** Either a flat leaf command or a group with subcommands. */
@@ -923,77 +922,64 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
 // LeafCommandMeta entries at the top of COMMAND_SURFACE_METADATA. register.ts
 // consumes them via the defineFlat helper.
 
-export const INIT_COMMAND_META: LeafCommandMeta = {
-  kind: 'leaf',
-  name: 'init',
-  description:
-    'Bootstrap canonical .caws/ governance state. Configured system surfaces inherit machine hooks without project copies. `init adapters install` updates the system runtime; configure registers it at harness user scope; migrate retires legacy project registrations once. `init migrate --from <reviewed-plan.json>` previews legacy governance conversion; add positional apply to execute it. `init diff` and `init port` maintain legacy project packs.',
-  arguments: [
-    { name: 'action', required: false, description: 'subcommand: diff | port | adapters | migrate' },
-    {
-      name: 'actionArg',
-      required: false,
-      description: 'migrate: apply (omitted means preview); port: managed destination path; adapters: install | rollback | configure | migrate | adopt (use --plan to preview)',
-    },
-  ],
+const INIT_PLAN: CommandOptionMeta = { flag: '--plan', description: 'Read-only preview; do not apply changes.' };
+const INIT_DRY_RUN: CommandOptionMeta = { flag: '--dry-run', description: 'Compatibility alias for --plan; never writes.' };
+const INIT_JSON: CommandOptionMeta = { flag: '--json', description: 'Emit the result or preview as JSON.' };
+const INIT_SURFACE: CommandOptionMeta = { flag: '--agent-surface <name>', description: 'Select the native harness; a configured system surface inherits machine hooks without project copies', allowedValues: KNOWN_SURFACES };
+const INIT_PREVIEW = [INIT_PLAN, INIT_DRY_RUN, INIT_JSON, DATA_OPTION];
+const INIT_POLICY: CommandOptionMeta = { flag: '--from <file>', description: 'Read a reviewed surface-policy JSON file: disabled, extensions, handlers, libraries. Single project only; preserves classified custom behavior.' };
+const INIT_GOVERNANCE: CommandOptionMeta = { flag: '--from <file>', description: 'Read a reviewed governance-conversion JSON plan: version, reason, requirementNotes, changes. Original source hashes are verified before application.' };
+const INIT_INSTALL: LeafCommandMeta = {
+  kind: 'leaf', name: 'install',
+  description: 'Install or update the shared runtime under CAWS_HOME (default ~/.caws). Applies by default; --plan previews. Does not upgrade the CLI package or register a native harness. Example: caws init adapters install --plan --json',
+  options: INIT_PREVIEW,
+};
+const INIT_MIGRATE_PREVIEW: LeafCommandMeta = {
+  kind: 'leaf', name: 'migrate',
+  description: 'Preview reviewed legacy governance conversion without writes. Example: caws init migrate --from reviewed-governance.json. Use migrate apply to execute.',
+  options: [INIT_GOVERNANCE, ...INIT_PREVIEW],
+};
+const INIT_BOOTSTRAP: LeafCommandMeta = {
+  kind: 'leaf', name: 'init',
+  description: 'Initialize project-owned .caws governance and managed ignore rules. Configured harnesses inherit the shared runtime. Unconfigured harnesses retain legacy pack installation compatibility. Example: caws init --agent-surface codex --plan',
   options: [
-    DATA_OPTION,
-    { flag: '--projects-root <path>', description: 'adapters migrate only: plan/apply one-time migration for direct Git project children together; each project is backed up independently, review refusals are reported.' },
+    { ...INIT_PLAN, description: 'Preview canonical state, managed ignore rules and effective harness configuration without writing anything.' },
+    { ...INIT_DRY_RUN, description: 'Compatibility alias for --plan; previews init changes without writing anything.' },
+    { ...INIT_JSON, description: 'Emit the read-only init plan as JSON with --plan or --dry-run.' },
+    DATA_OPTION, INIT_SURFACE,
+    { flag: '--overwrite [paths...]', description: 'Legacy packs only: preview replacement of selected drifted files (all when bare). --force applies the reviewed replacement.' },
+    { flag: '--force', description: 'Legacy packs only: apply --overwrite replacements. Invalid without --overwrite; never overrides governance migration.' },
+    { flag: '--adopt', description: 'Legacy packs only: retain local files and stop tracking pack drift for those paths.' },
+    { flag: '--wire-user-config', description: 'Legacy kimi-code only: append reviewed hook registration to user config.toml.' },
+  ],
+};
+export const INIT_COMMAND_META: GroupCommandMeta = {
+  kind: 'group', name: 'init',
+  description: 'Project initialization and global runtime setup. Use adapters for machine installation and native configuration, migrate for legacy governance conversion, and diff/port for legacy pack maintenance.',
+  options: INIT_BOOTSTRAP.options,
+  defaultAction: INIT_BOOTSTRAP,
+  subcommands: [
     {
-      flag: '--native-config-target <path>',
-      description:
-        'adapters configure only: explicitly preserve a user-managed native-config symlink by writing its exact resolved target inside the user home. The target is persisted and checked on subsequent configuration.',
+      kind: 'group', name: 'adapters',
+      description: 'Machine runtime operations: install, configure, migrate, rollback and legacy adopt. With no operation, install is the compatibility default (applies unless --plan).',
+      options: INIT_PREVIEW,
+      defaultAction: { ...INIT_INSTALL, name: 'adapters' },
+      subcommands: [
+        INIT_INSTALL,
+        { kind: 'leaf', name: 'configure', description: 'Register the installed runtime in harness user configuration. Applies by default; --plan previews. Requires --agent-surface. Restart and verify native trust and execution separately. Example: caws init adapters configure --agent-surface codex --plan',
+          options: [INIT_SURFACE, ...INIT_PREVIEW, { flag: '--native-config-target <path>', description: 'Explicit resolved target of a user-managed native-config symlink inside the user home. Preserve the symlink and update only that target.' }] },
+        { kind: 'leaf', name: 'migrate', description: 'Retire legacy project native registrations once, after system configuration exists. Applies by default; --plan previews. Requires --agent-surface. Preserves unrelated hooks and exact backups; never migrates governance. Example: caws init adapters migrate --agent-surface codex --plan --json',
+          options: [INIT_SURFACE, INIT_POLICY, ...INIT_PREVIEW, { flag: '--projects-root <path>', description: 'Process direct Git project children independently. Incompatible with --from; projects needing review are reported without undoing successful migrations.' }] },
+        { kind: 'leaf', name: 'rollback', description: 'Restore the previous verified shared runtime through an atomic pointer swap. Applies by default; --plan previews. Does not roll back the CLI package, project policy, or native registration.', options: INIT_PREVIEW },
+        { kind: 'leaf', name: 'adopt', description: 'Legacy adapter-only compatibility operation. Applies by default; --plan previews. Requires --agent-surface. Does not globalize stock hooks or renderers; prefer configure followed by migrate.', options: [INIT_SURFACE, INIT_POLICY, ...INIT_PREVIEW] },
+      ],
     },
-    {
-      flag: '--plan',
-      description:
-        'Preview the canonical state, gitignore, hook-pack, and settings changes without writing anything.',
+    { kind: 'group', name: 'migrate', description: INIT_MIGRATE_PREVIEW.description,
+      options: INIT_MIGRATE_PREVIEW.options, defaultAction: INIT_MIGRATE_PREVIEW,
+      subcommands: [{ kind: 'leaf', name: 'apply', description: 'Apply a reviewed legacy-governance conversion plan after preview. Original hashes must still match. Archives originals before installing validated draft governance. Example: caws init migrate apply --from reviewed-governance.json', options: [INIT_GOVERNANCE, INIT_JSON, DATA_OPTION] }],
     },
-    {
-      flag: '--dry-run',
-      description:
-        'Compatibility alias for --plan; previews init changes without writing anything.',
-    },
-    {
-      flag: '--json',
-      description: 'Emit the read-only init plan as JSON with --plan or --dry-run.',
-    },
-    {
-      flag: '--agent-surface <name>',
-      description:
-        'Install a hook pack for an agent harness. When omitted, init attempts filesystem detection and skips hook install when ambiguous',
-      allowedValues: KNOWN_SURFACES,
-    },
-    {
-      flag: '--overwrite [paths...]',
-      description:
-        'For hook-pack install: select drifted or unmanaged files at managed pack paths for replacement — every pack file when bare, or only the listed destination paths. Without --force this is a pure preview: NOTHING is written (not even version re-stamps); add --force to apply.',
-    },
-    {
-      flag: '--three-way <path>',
-      description:
-        'init diff only: decompose one pack path into LOCAL GROWTH (installed vs pristine baseline) and UPSTREAM (baseline vs template) hunks, so a hand-edited hook can be retrofitted without conflating your edits with the pack changes.',
-    },
-    {
-      flag: '--from <file>',
-      description:
-        'For init migrate: reviewed legacy-governance JSON plan. For init port: reviewed replacement content outside the protected hooks tree. For adapters migrate/adopt: reviewed surface policy JSON (single project only).',
-    },
-    {
-      flag: '--force',
-      description:
-        'With --overwrite: apply the previewed replacements. CAUTION: local edits to the selected files are lost. A usage error without --overwrite.',
-    },
-    {
-      flag: '--adopt',
-      description:
-        'For hook-pack install: leave drifted or unmanaged files in place without enforcing pack contents. CAUTION: pack drift is no longer tracked for those paths.',
-    },
-    {
-      flag: '--wire-user-config',
-      description:
-        'kimi-code only: merge the canonical CAWS [[hooks]] blocks into the user-level $KIMI_CODE_HOME/config.toml (append-only, idempotent). Without this flag init installs the pack and prints the wiring for manual paste.',
-    },
+    { kind: 'leaf', name: 'diff', description: 'Read-only LEGACY project-pack drift comparison. System projects update their runtime once with adapters install.', options: [INIT_SURFACE, DATA_OPTION, { flag: '--three-way <path>', description: 'Compare installed bytes with their pristine baseline and current template, separating local growth from upstream changes.' }] },
+    { kind: 'leaf', name: 'port', argument: { name: 'path', required: true, description: 'Managed legacy pack destination path.' }, description: 'Apply reviewed content to one LEGACY project-pack path through the managed installer. Does not edit immutable machine runtime snapshots.', options: [INIT_SURFACE, DATA_OPTION, { flag: '--from <file>', description: 'Reviewed replacement content in a staging file outside the protected hook tree.' }] },
   ],
 };
 
@@ -1506,7 +1492,7 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'grant',
       description:
-        'Grant a reprieve that skips the named handler(s) for the current session until expiry. Replaces commenting a guard out of the dispatcher HANDLERS array (which disables it for every agent forever). The reprieve is recorded with a reason, approver, and expiry; the skip is logged to stderr when it fires; foreign sessions are never covered.',
+        'Human-terminal operation: grant a session-global reprieve under CAWS_HOME/state/sessions for the named handlers until expiry. Agents cannot grant their own reprieves. Replaces commenting a guard out of the dispatcher HANDLERS array (which disables it for every agent forever). The reprieve is recorded with a reason, approver, and expiry; the skip is logged to stderr when it fires; foreign sessions are never covered.',
       options: [
         {
           flag: '--handlers <list>',
@@ -1527,7 +1513,7 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
         },
         { flag: '--current', description: 'Resolve the session from env (default)' },
         { flag: '--session <id>', description: 'Explicit session id (overrides --current)' },
-        { flag: '--surface <name>', description: 'Agent surface / vendor dir (default: detect)' },
+        { flag: '--surface <name>', description: 'Harness provenance and legacy lookup context (default: detect); new grants use the machine session store' },
         { flag: '--dry-run', description: 'Validate and report without writing the state file' },
         { flag: '--json', description: 'Emit the result as JSON.' },
         DATA_OPTION,
@@ -1540,7 +1526,7 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
       options: [
         { flag: '--current', description: 'Resolve the session from env (default)' },
         { flag: '--session <id>', description: 'Explicit session id (overrides --current)' },
-        { flag: '--surface <name>', description: 'Agent surface / vendor dir (default: detect)' },
+        { flag: '--surface <name>', description: 'Harness provenance and legacy lookup context (default: detect); new grants use the machine session store' },
         { flag: '--json', description: 'Emit the record as JSON.' },
         DATA_OPTION,
       ],
@@ -1553,7 +1539,7 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
         { flag: '--reason <text>', required: true, description: 'Why the reprieve is being cleared; recorded' },
         { flag: '--current', description: 'Resolve the session from env (default)' },
         { flag: '--session <id>', description: 'Explicit session id (overrides --current)' },
-        { flag: '--surface <name>', description: 'Agent surface / vendor dir (default: detect)' },
+        { flag: '--surface <name>', description: 'Harness provenance and legacy lookup context (default: detect); new grants use the machine session store' },
         { flag: '--json', description: 'Emit the result as JSON.' },
         DATA_OPTION,
       ],
@@ -1563,7 +1549,7 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
       name: 'list',
       description: 'List active guard reprieves across sessions, with each one\'s handlers, expiry, and derived active/expired state.',
       options: [
-        { flag: '--surface <name>', description: 'Agent surface / vendor dir (default: detect)' },
+        { flag: '--surface <name>', description: 'Harness provenance and legacy lookup context (default: detect); new grants use the machine session store' },
         { flag: '--json', description: 'Emit the list as JSON.' },
         DATA_OPTION,
       ],
