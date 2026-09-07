@@ -77,6 +77,26 @@ danger_state_dir() {
   printf '%s\n' "$state_dir"
 }
 
+# Render a complete human-shell command. An immutable snapshot's path cannot
+# identify the governed project, and the human may be standing in another repo.
+# Quote every value as a shell word, including paths and the payload session id.
+danger_recovery_command() {
+  local project_dir="${CAWS_PROJECT_DIR:-.}"
+  local hooks_dir="${CAWS_HOOKS_DIR:-$SCRIPT_DIR}"
+  local machine=0
+  [[ "${CAWS_MACHINE_RUNTIME:-0}" == 1 ]] && machine=1
+  if [[ -d "$project_dir" ]]; then
+    project_dir="$(cd "$project_dir" && pwd -P)"
+  fi
+  case "$hooks_dir" in
+    /*) ;;
+    *) hooks_dir="$project_dir/$hooks_dir" ;;
+  esac
+  printf 'env CAWS_MACHINE_RUNTIME=%s CAWS_PROJECT_DIR=%q CAWS_AGENT_SURFACE=%q bash %q --session %q --reason %q' \
+    "$machine" "$project_dir" "$CAWS_AGENT_SURFACE" \
+    "$hooks_dir/reset-danger-latch.sh" "$1" '<why this is safe>'
+}
+
 # Shared session-id->safe-filename transform.
 _danger_safe_session() {
   local session_id="$1"
@@ -182,6 +202,7 @@ if [[ "$TOOL_NAME" != "Bash" ]] || [[ -z "$COMMAND" ]]; then
   exit 0
 fi
 
+RECOVERY_COMMAND="$(danger_recovery_command "$SESSION_ID")"
 LATCH_FILE="$(danger_latch_file "$SESSION_ID")"
 if [[ -f "$LATCH_FILE" ]]; then
   if is_reset_latch_invocation "$COMMAND"; then
@@ -203,7 +224,7 @@ if [[ -f "$LATCH_FILE" ]]; then
     [[ -n "$ORIG_WHY" ]] && TRIGGER_NOTE="$TRIGGER_NOTE (reason: $ORIG_WHY)"
     TRIGGER_NOTE="$TRIGGER_NOTE — NOT by the command you just ran. The latch is sticky for mutating commands, so they block until it is cleared (read-only commands and the reset itself are exempt)."
   fi
-  REASON="CAWS command-safety: a dangerous command was previously blocked or sent for approval in this session. $TRIGGER_NOTE This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke the command. You, the agent, CANNOT clear this in-band: the reset is human-only by design. Ask the USER to run, from their own shell (use --session with THIS session id, not --current): bash ${CAWS_HOOKS_DIR:-.caws/hooks}/reset-danger-latch.sh --session $SESSION_ID --reason \"<why this is safe>\"  (or --all to clear every latch). Sentinel: $LATCH_FILE"
+  REASON="CAWS command-safety: a dangerous command was previously blocked or sent for approval in this session. $TRIGGER_NOTE This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke the command. You, the agent, CANNOT clear this in-band: the reset is human-only by design. Ask the USER to run, from their own shell (use --session with THIS session id, not --current): $RECOVERY_COMMAND  (or --all to clear every latch). Sentinel: $LATCH_FILE"
   emit_block_json "$REASON"
   exit 0
 fi
@@ -260,7 +281,7 @@ fi
 CLASSIFIER="$SCRIPT_DIR/classify_command.py"
 if [[ ! -f "$CLASSIFIER" ]] || ! command -v python3 >/dev/null 2>&1; then
   record_danger_latch "$LATCH_FILE" "ask" "classifier unavailable" "$COMMAND"
-  REASON="CAWS command-safety: command classifier unavailable; dangerous-command safety cannot verify Bash semantics. The session danger latch is NOW ARMED (fail-closed). $_LATCH_SCOPE_NOTE — you cannot reset it yourself. Ask the USER to run: bash ${CAWS_HOOKS_DIR:-.caws/hooks}/reset-danger-latch.sh --session $SESSION_ID --reason \"<why this is safe>\". Command was: $COMMAND"
+  REASON="CAWS command-safety: command classifier unavailable; dangerous-command safety cannot verify Bash semantics. The session danger latch is NOW ARMED (fail-closed). $_LATCH_SCOPE_NOTE — you cannot reset it yourself. Ask the USER to run: $RECOVERY_COMMAND. Command was: $COMMAND"
   emit_ask_json "$REASON"
   exit 0
 fi
@@ -295,7 +316,7 @@ case "$DECISION" in
     ;;
   deny)
     record_danger_latch "$LATCH_FILE" "$DECISION" "$REASON" "$COMMAND"
-    FULL_REASON="CAWS command-safety: $REASON. This is a HARD BLOCK (catastrophic deny) and the session danger latch is NOW ARMED. $_LATCH_SCOPE_NOTE — you CANNOT reset it yourself. Do not rephrase, wrap, reorder, alias, or indirectly invoke this command (e.g. via 'command git ...', 'env ... git ...', 'bash -lc \"...\"', or 'git --bare init'). Ask the USER to run: bash ${CAWS_HOOKS_DIR:-.caws/hooks}/reset-danger-latch.sh --session $SESSION_ID --reason \"<why this is safe>\", then ask for the next step. Command was: $COMMAND"
+    FULL_REASON="CAWS command-safety: $REASON. This is a HARD BLOCK (catastrophic deny) and the session danger latch is NOW ARMED. $_LATCH_SCOPE_NOTE — you CANNOT reset it yourself. Do not rephrase, wrap, reorder, alias, or indirectly invoke this command (e.g. via 'command git ...', 'env ... git ...', 'bash -lc \"...\"', or 'git --bare init'). Ask the USER to run: $RECOVERY_COMMAND, then ask for the next step. Command was: $COMMAND"
     emit_block_json "$FULL_REASON"
     exit 0
     ;;
@@ -348,12 +369,12 @@ case "$DECISION" in
           exit 0
         fi
         record_danger_latch "$LATCH_FILE" "ask" "$REASON" "$COMMAND"
-        FULL_REASON="CAWS command-safety: $REASON. This is the SECOND capability-risk command this session — the first was a non-blocking warning; this one ARMS the session danger latch. $_LATCH_SCOPE_NOTE — you CANNOT reset it yourself. Do not rephrase, wrap, reorder, alias, or indirectly invoke the command to evade this. Ask the USER to confirm and run: bash ${CAWS_HOOKS_DIR:-.caws/hooks}/reset-danger-latch.sh --session $SESSION_ID --reason \"<why this is safe / approved>\", then proceed. Command was: $COMMAND"
+        FULL_REASON="CAWS command-safety: $REASON. This is the SECOND capability-risk command this session — the first was a non-blocking warning; this one ARMS the session danger latch. $_LATCH_SCOPE_NOTE — you CANNOT reset it yourself. Do not rephrase, wrap, reorder, alias, or indirectly invoke the command to evade this. Ask the USER to confirm and run: $RECOVERY_COMMAND, then proceed. Command was: $COMMAND"
         emit_block_json "$FULL_REASON"
         exit 0
       fi
       record_danger_latch "$LATCH_FILE" "ask" "$REASON" "$COMMAND"
-      FULL_REASON="CAWS command-safety: $REASON. This requires USER CONFIRMATION before it runs and the session danger latch is NOW ARMED (fail-closed: the classifier could not verify this command). $_LATCH_SCOPE_NOTE — you CANNOT reset it yourself. Do not rephrase, wrap, reorder, alias, or indirectly invoke the command to evade this. Ask the USER to confirm and run: bash ${CAWS_HOOKS_DIR:-.caws/hooks}/reset-danger-latch.sh --session $SESSION_ID --reason \"<why this is safe / approved>\", then proceed. Command was: $COMMAND"
+      FULL_REASON="CAWS command-safety: $REASON. This requires USER CONFIRMATION before it runs and the session danger latch is NOW ARMED (fail-closed: the classifier could not verify this command). $_LATCH_SCOPE_NOTE — you CANNOT reset it yourself. Do not rephrase, wrap, reorder, alias, or indirectly invoke the command to evade this. Ask the USER to confirm and run: $RECOVERY_COMMAND, then proceed. Command was: $COMMAND"
       emit_block_json "$FULL_REASON"
       exit 0
     fi
@@ -363,7 +384,7 @@ case "$DECISION" in
     ;;
   *)
     record_danger_latch "$LATCH_FILE" "ask" "classifier unknown decision: $DECISION" "$COMMAND"
-    FULL_REASON="CAWS command-safety: command classifier returned an unrecognized decision '$DECISION'. The session danger latch is NOW ARMED (fail-closed). $_LATCH_SCOPE_NOTE — you cannot reset it yourself. Ask the USER to run: bash ${CAWS_HOOKS_DIR:-.caws/hooks}/reset-danger-latch.sh --session $SESSION_ID --reason \"<why this is safe>\". Command was: $COMMAND"
+    FULL_REASON="CAWS command-safety: command classifier returned an unrecognized decision '$DECISION'. The session danger latch is NOW ARMED (fail-closed). $_LATCH_SCOPE_NOTE — you cannot reset it yourself. Ask the USER to run: $RECOVERY_COMMAND. Command was: $COMMAND"
     emit_ask_json "$FULL_REASON"
     exit 0
     ;;
