@@ -2,9 +2,11 @@ id: CAWS-RELEASE-IDENTITY-CONTINUITY-001
 title: 'Carry fallback create identity explicitly and refuse identity-free claim without minting'
 risk_tier: 1
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Exact-source code review approved c7d4aaa9675667eeee1c86f1eb0e1c3a7e82c010; P1 complete PID-instance evidence and P2 immediate audited-takeover continuation closed. Governed merge 5259c3de completed. Fresh main integration: 320 tests in 42 suites, zero failures/skips, matching approved test inventory; build, both typechecks, exact-manifest lint and all five gates passed. Evidence: /private/tmp/caws-identity-integration-receipt.json. Scoped identity lane complete; native runtime, mutation, adoption and release certification remain outside this closure. Broader release hold unchanged.'
 created_at: '2026-09-07T06:33:07.555Z'
-updated_at: '2026-09-07T07:20:38.996Z'
+updated_at: '2026-09-07T18:59:07.055Z'
 created_by_session: '01a07868-9878-7e72-bcd9-a6af25f92820'
 blast_radius:
   modules:
