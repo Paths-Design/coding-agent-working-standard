@@ -38,11 +38,21 @@ caws worktree create my-proj-agent-auth --spec <spec-id>
 # 2. Inside the worktree, surface ownership via CAWS
 cd .caws/worktrees/my-proj-agent-auth
 caws claim
-# Prints: <sessionId>:<platform>, last heartbeat, any tmp/<sessionId>/ session-log path
-# If the worktree has no prior owner, the current session takes it.
+# Prints the current ownership relation and recorded owner.
 ```
 
-The agent now works in `.caws/worktrees/my-proj-agent-auth/` on the generated branch. `caws claim` records ownership in `.caws/worktrees.json`. List all worktrees with `caws worktree list`.
+Creation records the owner in `.caws/worktrees.json`. Ordinary `caws claim`
+checks that owner against the current session; it does not mint a new identity
+to satisfy the comparison. List worktrees with `caws worktree list`.
+
+When creation falls back to a local session capsule, its output includes a
+`Continue in this shell:` command that exports the exact created
+`CAWS_SESSION_ID`, enters the worktree, and runs `caws claim`. Execute that
+continuation in the shell that will run subsequent CAWS commands. A new shell
+must retain that identity or receive its native harness identity again. A
+directory switch or another session's capsule does not establish continuity.
+Do not use an owner id copied from the registry to impersonate that owner;
+foreign ownership requires an explicitly authorized takeover.
 
 ## Ownership and the foreign-claim soft-block
 
@@ -122,7 +132,10 @@ caws worktree destroy proj-payments
 
 ## Workspace package managers (pnpm, yarn, npm workspaces)
 
-Linked git worktrees share the main checkout's `.git/` and tracked files but **do NOT share `node_modules/`** — each worktree starts with a bare working tree. Workspace-based tools (`pnpm`, `yarn workspaces`, `npm workspaces`, `turbo`) rely on a `node_modules/` tree at the workspace root and per-package `node_modules/` symlinks, so the first thing you'll notice inside a fresh linked worktree is that `pnpm test` (or your equivalent) fails immediately with missing-binary or missing-module errors.
+Linked Git worktrees share the object database, but each has its own tracked
+files and index. Dependencies need separate consideration: CAWS creation may
+link configured artifacts and reports those links in its output. Inspect that
+output before installing dependencies or choosing a runner.
 
 This is not a CAWS bug. It's how `git worktree` and workspace package managers interact.
 
@@ -138,7 +151,9 @@ npm -w @scope/my-package test
 turbo run test --filter=@scope/my-package
 ```
 
-The package scripts execute against your worktree's source (because git-worktree shares the tracked files) but resolve dependencies from the canonical `node_modules/`. No extra disk, no extra install.
+These commands execute against the canonical checkout's source. They do not
+test changes present only in a linked worktree. Run from the worktree root to
+test that lane, and record which checkout supplied the source and dependencies.
 
 **Option B — install in the worktree** (preferred when the slice is long enough that you'll cd in and out often):
 

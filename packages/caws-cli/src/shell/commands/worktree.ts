@@ -61,6 +61,7 @@ import {
 import { clearSpecBinding } from '../../store/specs-writer';
 import { pruneBridgeGhosts } from '../../store/bridge-store';
 import { buildActor } from '../session/actor';
+import type { SessionSource } from '../session/types';
 import { admitsOwner, resolveSession, resolveSessionCandidates } from '../session/resolve-session';
 import { renderDiagnostics } from '../render/diagnostic';
 import { emitPeerPresence } from '../render/peer-presence';
@@ -221,7 +222,7 @@ function buildActorPair(
   errFn: (line: string) => void,
   showData: boolean,
   cmd: string
-): { session: { session_id: string; platform?: string }; actor: ReturnType<typeof buildActor> } | null {
+): { session: { session_id: string; platform?: string }; source: SessionSource; actor: ReturnType<typeof buildActor> } | null {
   const sessionResult = resolveSession({
     cawsDir,
     worktreeRoot: cwd,
@@ -239,6 +240,7 @@ function buildActorPair(
     kind: actorKind ?? 'agent',
   });
   return {
+    source: sessionResult.value.source,
     session: {
       session_id: sessionResult.value.identity.session_id,
       ...(sessionResult.value.identity.platform !== undefined
@@ -310,6 +312,14 @@ export function runWorktreeCreateCommand(opts: WorktreeCreateOptions): number {
   // Without this hint, users continue editing in the canonical checkout
   // and trigger union-mode scope behavior they can't explain.
   out(`Next: cd ${relWtPath} to start working in the bound worktree.`);
+  if (id.source === 'minted' || id.source === 'capsule') {
+    // A cwd-keyed fallback does not propagate into the new worktree. Carry
+    // only the identity this successful create actually used, never one read
+    // back from an arbitrary owner record. The operator retains it explicitly.
+    const quote = (value: string): string => "'" + value.replaceAll("'", "'\\''") + "'";
+    out('No native session identity was available; retain this create identity when entering.');
+    out(`Continue in this shell: export CAWS_SESSION_ID=${quote(id.session.session_id)}; cd ${quote(path.resolve(ctx.repoRoot, String(wtPath)))} && caws claim`);
+  }
   surfaceArtifactLinks(outcome.data?.artifact_links, out);
   surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
