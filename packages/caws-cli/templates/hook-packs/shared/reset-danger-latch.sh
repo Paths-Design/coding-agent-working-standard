@@ -41,7 +41,19 @@ source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
 # reset-strikes.sh has always computed its root this way and is immune; this
 # matches it. The state dir is a property of where the hooks are INSTALLED, never
 # of where the operator is standing.
-PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+if [[ "${CAWS_MACHINE_RUNTIME:-}" == "1" ]]; then
+  # A snapshot's install directory is machine state, never the governed repo.
+  # Human recovery must name the project; never infer it from the snapshot.
+  if [[ "${CAWS_PROJECT_DIR:-}" != /* ]]; then
+    echo 'reset-danger-latch.sh: machine recovery requires absolute CAWS_PROJECT_DIR' >&2
+    exit 2
+  fi
+  _common_dir="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C "$CAWS_PROJECT_DIR" rev-parse --path-format=absolute --git-common-dir)"
+  PROJECT_DIR="$(dirname "$_common_dir")"
+  export CAWS_PROJECT_DIR="$PROJECT_DIR"
+else
+  PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+fi
 STATE_DIR="$PROJECT_DIR/${CAWS_VENDOR_DIR}/hooks/state"
 LOG_FILE="$PROJECT_DIR/${CAWS_VENDOR_DIR}/logs/danger-latch-resets.log"
 
