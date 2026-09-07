@@ -118,6 +118,72 @@ test('correlated live process identity survives competing caches; reused PID ref
   expect(resolveSessionCandidates({ cawsDir, env: {}, now, ...reused }).candidates).toEqual([]);
 });
 
+const invalidStarts = [
+  undefined,
+  null,
+  'not-a-time',
+  '',
+  '42',
+  false,
+  {},
+  [],
+  -1,
+  0,
+  42.5,
+  NaN,
+  Infinity,
+];
+test.each(
+  invalidStarts.flatMap((value, index) => [
+    [`record-${index}`, value, 42],
+    [`observation-${index}`, 42, value],
+  ])
+)('incomplete or invalid PID instance evidence refuses: %s', (_label, recorded, observed) => {
+  cache('owner');
+  fs.writeFileSync(
+    path.join(cawsDir, 'sessions', 'agent-pid-123.json'),
+    JSON.stringify({
+      session_id: 'owner',
+      started_at: recorded,
+    })
+  );
+  const options = {
+    agentProcessNames: ['fixture-agent'],
+    agentPidWalkFn: () => ({ pid: 123, startEpoch: observed }),
+  };
+  expect(resolve(options).ok).toBe(false);
+  expect(resolveSessionCandidates({ cawsDir, env: {}, now, ...options }).candidates).toEqual([]);
+  // Explicit caller context must still work when PID evidence cannot identify it.
+  for (const env of [{ CAWS_SESSION_ID: 'caller' }, { CURSOR_TRACE_ID: 'caller' }]) {
+    const identified = resolve({ ...options, env });
+    expect(identified.ok).toBe(true);
+    expect(identified.value.identity.session_id).toBe('caller');
+    expect(
+      admitsOwner(resolveSessionCandidates({ cawsDir, env, now, ...options }), 'owner')
+    ).toBeNull();
+  }
+});
+
+test('an old record still identifies the same live process instance without a TTL', () => {
+  fs.writeFileSync(
+    path.join(cawsDir, 'sessions', 'agent-pid-123.json'),
+    JSON.stringify({
+      session_id: 'caller',
+      started_at: 42,
+      last_seen_at: '2000-01-01T00:00:00Z',
+    })
+  );
+  const options = {
+    agentProcessNames: ['fixture-agent'],
+    agentPidWalkFn: () => ({ pid: 123, startEpoch: 42 }),
+  };
+  expect(resolve(options).value.identity.session_id).toBe('caller');
+  expect(
+    admitsOwner(resolveSessionCandidates({ cawsDir, env: {}, now, ...options }), 'caller').identity
+      .session_id
+  ).toBe('caller');
+});
+
 test('explicit mint creates a new caller instead of resuming a cached owner', () => {
   cache('owner');
   const result = resolve({ allowMint: true, mintIdSuffix: () => 'caller-fixture' });

@@ -375,9 +375,8 @@ export function runWorktreeBindCommand(opts: WorktreeBindOptions): number {
   const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'bind');
   if (id === null) return 2;
 
-  // Ownership-comparison surface for the foreign-owner guard (Fix 4) — the same
-  // exhaustive candidate set destroy/merge build. Distinct from id.session
-  // (single-identity event actor).
+  // Ownership comparison reuses the caller already resolved for the audit actor.
+  // Corroborated cache records cannot add another session to this identity.
   const sessionCandidates = resolveSessionCandidates({ cawsDir: ctx.cawsDir, env, caller: { identity: id.session, source: id.source } });
 
   // PRESENCE-DECISION-POINT-INJECTION-001: advisory peer block at the
@@ -439,10 +438,8 @@ export function runWorktreeDestroyCommand(opts: WorktreeDestroyOptions): number 
   const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'destroy');
   if (id === null) return 2;
 
-  // Ownership-comparison surface: build the exhaustive candidate set
-  // (across all capsules + env sources) for the writer's admission test.
-  // Distinct from `id.session` (single-identity actor for the event).
-  // See CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001.
+  // Admission and audit attribution use the same resolved caller. Cached
+  // records may corroborate that identity, never introduce another session.
   const sessionCandidates = resolveSessionCandidates({
     caller: { identity: id.session, source: id.source },
     cawsDir: ctx.cawsDir,
@@ -612,8 +609,7 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
     return 2;
   }
 
-  // See destroy: ownership-comparison surface needs the exhaustive
-  // candidate set, distinct from the single-identity actor.
+  // As in destroy, compare ownership using the already resolved audit actor.
   const sessionCandidates = resolveSessionCandidates({
     caller: { identity: id.session, source: id.source },
     cawsDir: ctx.cawsDir,

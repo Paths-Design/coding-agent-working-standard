@@ -164,6 +164,45 @@ test('claim without the continuation refuses without creating a second identity'
   expect(capsules()).toEqual(beforeCapsules);
 });
 
+test.each(['record', 'observation'])(
+  'CLI claim refuses an owner PID record with incomplete %s evidence',
+  (missing) => {
+    succeeded(run(['worktree', 'create', 'wt-enter', '--spec', 'ENTER-001']));
+    const owner = JSON.parse(registry())['wt-enter'].owner.session_id;
+    const before = governanceBytes();
+    const preload = path.join(root, 'pid-record.cjs');
+    // Supply controlled process observations to the real CLI's default walker.
+    // This exercises the command boundary, not native OS PID reuse.
+    fs.writeFileSync(
+      preload,
+      `require('node:fs').writeFileSync(
+    ${JSON.stringify(path.join(root, '.caws/sessions/agent-pid-'))} + process.pid + '.json',
+    JSON.stringify({ session_id: ${JSON.stringify(owner)}, started_at: ${missing === 'record' ? 'null' : '42'} })
+  );`
+    );
+    fs.writeFileSync(
+      path.join(root, 'fixture-bin/ps'),
+      `#!/bin/sh
+case "$*" in
+  *comm=*) printf '%s\\n' fixture-agent ;;
+  *lstart=*) printf '%s\\n' '${missing === 'observation' ? 'unavailable' : 'Thu Jan  1 00:00:42 1970'}' ;;
+  *) exit 1 ;;
+esac
+`,
+      { mode: 0o755 }
+    );
+    const result = run(['claim'], path.join(root, '.caws/worktrees/wt-enter'), {
+      NODE_OPTIONS: `--require=${JSON.stringify(preload)}`,
+      CAWS_AGENT_PROCESS_NAMES: 'fixture-agent',
+      TZ: 'UTC',
+    });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('No stable session identity');
+    expect(result.stdout).not.toContain('OWNED (you)');
+    expect(governanceBytes()).toEqual(before);
+  }
+);
+
 test.each([1, 2])(
   'claim cannot infer its caller from %i fresh envelopes and the cwd owner',
   (count) => {

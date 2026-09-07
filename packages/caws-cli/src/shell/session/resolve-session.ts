@@ -833,10 +833,10 @@ function mintCapsule(
 //
 // This is the canonical-checkout identity bridge. It fires BEFORE the durable-
 // envelope scan, so a no-env-var caller (ZCode / generic harness) at canonical
-// checkout resolves deterministically to its own session id instead of hitting
-// the ≥2-envelope ambiguity refusal. Mirrors lib/agent-pid.sh's
-// read_session_id_from_agent_pid exactly (same record format, same PID-reuse
-// start-time guard).
+// checkout can resolve its session id instead of hitting the ≥2-envelope
+// ambiguity refusal. The record format is shared with lib/agent-pid.sh.
+// Ownership resolution additionally requires complete process-instance evidence;
+// legacy attribution retains its existing incomplete-observation behavior.
 //
 // NO FRESHNESS WINDOW (refinement). Unlike the durable-envelope tier, this
 // record is keyed to a SPECIFIC LIVE PROCESS — the PID-walk just reached it
@@ -882,7 +882,7 @@ function defaultAgentPidWalk(names: readonly string[]): { pid: number; startEpoc
           const ms = Date.parse(lstart);
           startEpoch = Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
         } catch {
-          /* lstart unavailable — leave null (reader skips start-time check) */
+          /* lstart unavailable — strict ownership resolution declines this record */
         }
         return { pid, startEpoch };
       }
@@ -899,9 +899,10 @@ function defaultAgentPidWalk(names: readonly string[]): { pid: number; startEpoc
 
 /**
  * Resolve the session identity from the agent-PID correlation record. Returns
- * the recorded SessionIdentity on a valid, fresh, start-time-matched record;
- * returns null on any miss (fail-open — caller falls through to the existing
- * env→envelope→capsule chain).
+ * a recorded SessionIdentity or null on a miss. Strict callers require valid
+ * matching process start identities on both sides. Legacy attribution retains
+ * the conditional comparison when requireProcessInstanceMatch is omitted.
+ * No record age limit applies: an old record may describe the same live process.
  */
 export function resolveAgentPidIdentity(args: {
   cawsDir: string;
@@ -909,6 +910,8 @@ export function resolveAgentPidIdentity(args: {
   processNames?: readonly string[];
   pidWalkFn?: (names: readonly string[]) => { pid: number; startEpoch: number | null } | null;
   now?: () => Date;
+  /** Ownership admission requires both process-instance observations. */
+  requireProcessInstanceMatch?: boolean;
 }): SessionIdentity | null {
   // The per-surface name set comes from env (agent-surface.sh exports
   // CAWS_AGENT_PROCESS_NAMES) or the explicit override. Empty -> fail-open.
@@ -936,9 +939,18 @@ export function resolveAgentPidIdentity(args: {
   const rec = parsed as Partial<AgentPidRecord>;
   if (typeof rec.session_id !== 'string' || rec.session_id.length === 0) return null;
 
-  // PID-reuse guard: if both the record and the live process carry a start
-  // time, they must match. A reused PID has a different start time. This is
-  // the SOLE validity gate for this tier — see the function header.
+  // A live numeric PID alone cannot bind a saved identity to this process
+  // instance. The producer and walker use positive integer Unix seconds;
+  // missing values, coercible strings and invalid numbers are not observations.
+  if (args.requireProcessInstanceMatch === true) {
+    if (
+      typeof rec.started_at !== 'number' || !Number.isSafeInteger(rec.started_at) || rec.started_at <= 0 ||
+      typeof located.startEpoch !== 'number' || !Number.isSafeInteger(located.startEpoch) || located.startEpoch <= 0 ||
+      rec.started_at !== located.startEpoch
+    ) return null;
+  }
+
+  // Retain the legacy attribution comparison for non-ownership consumers.
   if (rec.started_at !== undefined && rec.started_at !== null && located.startEpoch !== null) {
     if (Math.floor(Number(rec.started_at)) !== Math.floor(located.startEpoch)) {
       return null; // PID reuse
@@ -1152,6 +1164,7 @@ function resolveSessionIdentity(
   const agentPidIdentity = resolveAgentPidIdentity({
     cawsDir: opts.cawsDir,
     env,
+    requireProcessInstanceMatch: !allowCachedIdentity,
     ...(opts.now !== undefined ? { now: opts.now } : {}),
     ...(opts.agentProcessNames !== undefined ? { processNames: opts.agentProcessNames } : {}),
     ...(opts.agentPidWalkFn !== undefined ? { pidWalkFn: opts.agentPidWalkFn } : {}),
