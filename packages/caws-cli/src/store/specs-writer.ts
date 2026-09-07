@@ -1056,6 +1056,17 @@ function renderInitialSpecYaml(input: CreateSpecInput): string {
 export const MODULES_PLACEHOLDER = 'TODO: list one or more modules this spec touches.';
 export const INVARIANTS_PLACEHOLDER = 'TODO: describe one invariant this spec guarantees.';
 
+/**
+ * The create scaffold's acceptance placeholder: each of given/when/then
+ * renders as the bare string 'TODO' (the create template above). Same
+ * single-source contract as the two placeholders above — the renderer that
+ * writes it, the create-time advisory, and `caws specs amend`'s closed-spec
+ * AC discharge check all key off this exact string. If those drift, amend
+ * either refuses a legitimate discharge or rewrites a claim on a concluded
+ * record, so the constant is the contract.
+ */
+export const ACCEPTANCE_PLACEHOLDER = 'TODO';
+
 export function isScaffoldPlaceholder(value: string): boolean {
   return value === MODULES_PLACEHOLDER || value === INVARIANTS_PLACEHOLDER;
 }
@@ -3645,8 +3656,13 @@ export function amendScopeSpec(
  *
  * Returns the new bytes, or null when the block cannot be created/located
  * (the null case is a fail-closed signal the caller surfaces as a plan reject).
+ *
+ * Exported for `specs-body-writer` (CAWS-SPEC-AMEND-ACCEPTANCE-001): an AC
+ * amendment must reset the criterion's evidence entry in the SAME transaction
+ * as the text rewrite — a rewritten claim may not silently retain the old
+ * claim's pass or waiver.
  */
-function patchEvidenceBlock(
+export function patchEvidenceBlock(
   source: string,
   entry: {
     criterion_id: string;
@@ -3711,6 +3727,59 @@ function patchEvidenceBlock(
 
   // INSERT: append the new item at the end of the evidence block.
   return [...lines.slice(0, blockEnd), ...renderedLines, ...lines.slice(blockEnd)].join('\n');
+}
+
+/**
+ * Line-surgical deletion of one evidence entry, keyed by `criterion_id`.
+ * Companion to patchEvidenceBlock for `caws specs amend --remove-ac`
+ * (CAWS-SPEC-AMEND-ACCEPTANCE-001): an evidence entry whose criterion_id
+ * matches no declared acceptance[].id is rejected by semantic validation,
+ * so removing a criterion and deleting its evidence are one transaction.
+ * A missing block or a missing id is a no-op (`removed: false`), not an
+ * error — the caller records what actually changed on the event.
+ */
+export function deleteEvidenceEntry(
+  source: string,
+  criterionId: string
+): { bytes: string; removed: boolean } {
+  const lines = source.split('\n');
+
+  const evidenceIdx = lines.findIndex((l) => /^evidence:\s*(\[\s*\])?\s*$/.test(l));
+  if (evidenceIdx === -1) return { bytes: source, removed: false };
+
+  const itemStartRe = /^  - criterion_id:\s*(.+?)\s*$/;
+  const starts: Array<{ id: string; line: number }> = [];
+  let blockEnd = evidenceIdx + 1;
+  for (let i = evidenceIdx + 1; i < lines.length; i++) {
+    const line = lines[i] ?? '';
+    if (/^\S/.test(line)) break;
+    const m = itemStartRe.exec(line);
+    if (m && m[1] !== undefined) {
+      starts.push({ id: unquoteScalar(m[1].trim()), line: i });
+    }
+    blockEnd = i + 1;
+  }
+
+  const idx = starts.findIndex((s) => s.id === criterionId);
+  if (idx === -1) return { bytes: source, removed: false };
+  const itemStart = starts[idx]!.line;
+  const itemEnd = idx + 1 < starts.length ? starts[idx + 1]!.line : blockEnd;
+  if (starts.length === 1) {
+    // Removing the ONLY entry must not strand a bare `evidence:` key — YAML
+    // reads that as null and document revalidation would refuse the spec
+    // ("Expected array." at /evidence). Normalize to the flow empty
+    // sequence, matching how `acceptance: []` is rendered elsewhere.
+    const next = [...lines];
+    next[evidenceIdx] = 'evidence: []';
+    return {
+      bytes: [...next.slice(0, itemStart), ...next.slice(itemEnd)].join('\n'),
+      removed: true,
+    };
+  }
+  return {
+    bytes: [...lines.slice(0, itemStart), ...lines.slice(itemEnd)].join('\n'),
+    removed: true,
+  };
 }
 
 function renderEvidenceEntry(

@@ -1962,12 +1962,27 @@ export interface SpecsAmendOptions extends BaseCommandOptions {
   readonly removeModule?: readonly string[];
   readonly addInvariant?: readonly string[];
   readonly removeInvariant?: readonly string[];
+  /** Rewrite given/when/then of this existing criterion (partial update). */
+  readonly setAc?: string;
+  /** Append a new criterion; requires --given/--when/--then. */
+  readonly addAc?: string;
+  /** Remove a criterion and its evidence entry. */
+  readonly removeAc?: string;
+  readonly given?: string;
+  readonly when?: string;
+  readonly then?: string;
+  /** Optional operator rationale, recorded verbatim on spec_body_amended. */
+  readonly reason?: string;
 }
 
 // Sterling ledger N16: the discharge path. `caws specs create --module/
 // --invariant` only helps specs that do not exist yet; this is what an
 // already-created spec uses to replace a scaffolded default without a
-// hand-edit that bypasses the audit trail.
+// hand-edit that bypasses the audit trail. The acceptance flags
+// (CAWS-SPEC-AMEND-ACCEPTANCE-001) extend the same governed path to AC text:
+// the scenario agents kept resolving by encoding the correction as an
+// invariant or spinning a successor spec, because no command could fix a
+// wrong claim on an existing spec.
 export function runSpecsAmendCommand(opts: SpecsAmendOptions): number {
   const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
 
@@ -1987,6 +2002,13 @@ export function runSpecsAmendCommand(opts: SpecsAmendOptions): number {
     ...(opts.removeModule !== undefined ? { removeModules: opts.removeModule } : {}),
     ...(opts.addInvariant !== undefined ? { addInvariants: opts.addInvariant } : {}),
     ...(opts.removeInvariant !== undefined ? { removeInvariants: opts.removeInvariant } : {}),
+    ...(opts.setAc !== undefined ? { setAc: opts.setAc } : {}),
+    ...(opts.addAc !== undefined ? { addAc: opts.addAc } : {}),
+    ...(opts.removeAc !== undefined ? { removeAc: opts.removeAc } : {}),
+    ...(opts.given !== undefined ? { acGiven: opts.given } : {}),
+    ...(opts.when !== undefined ? { acWhen: opts.when } : {}),
+    ...(opts.then !== undefined ? { acThen: opts.then } : {}),
+    ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
   });
   if (!isOk(result)) {
     err('caws specs amend: failed.');

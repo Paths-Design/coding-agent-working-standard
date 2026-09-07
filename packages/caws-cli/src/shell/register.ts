@@ -1386,6 +1386,13 @@ export function registerShellCommands(
           removeModule?: string[];
           addInvariant?: string[];
           removeInvariant?: string[];
+          setAc?: string;
+          addAc?: string;
+          removeAc?: string;
+          given?: string;
+          when?: string;
+          then?: string;
+          reason?: string;
           data?: boolean;
         }
       ) => {
@@ -1395,6 +1402,13 @@ export function registerShellCommands(
           ...(opts.removeModule !== undefined ? { removeModule: opts.removeModule } : {}),
           ...(opts.addInvariant !== undefined ? { addInvariant: opts.addInvariant } : {}),
           ...(opts.removeInvariant !== undefined ? { removeInvariant: opts.removeInvariant } : {}),
+          ...(opts.setAc !== undefined ? { setAc: opts.setAc } : {}),
+          ...(opts.addAc !== undefined ? { addAc: opts.addAc } : {}),
+          ...(opts.removeAc !== undefined ? { removeAc: opts.removeAc } : {}),
+          ...(opts.given !== undefined ? { given: opts.given } : {}),
+          ...(opts.when !== undefined ? { when: opts.when } : {}),
+          ...(opts.then !== undefined ? { then: opts.then } : {}),
+          ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
           showData: opts.data === true,
         });
         exit(code);
