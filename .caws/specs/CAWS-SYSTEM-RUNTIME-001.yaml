@@ -1,0 +1,65 @@
+id: CAWS-SYSTEM-RUNTIME-001
+title: 'Run CAWS hooks and renderers from machine configuration without per-project pack upgrades'
+risk_tier: 2
+mode: refactor
+lifecycle_state: draft
+created_at: '2026-09-07T00:24:16.669Z'
+updated_at: '2026-09-07T00:24:16.669Z'
+created_by_session: '01a07868-9878-7e72-bcd9-a6af25f92820'
+blast_radius:
+  modules:
+    - 'Machine runtime, native harness registration, project discovery and effective-runtime diagnostics'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/init/'
+    - 'packages/caws-cli/src/kernel/doctor/'
+    - 'packages/caws-cli/src/kernel/types.ts'
+    - 'packages/caws-cli/src/store/'
+    - 'packages/caws-cli/src/shell/commands/init.ts'
+    - 'packages/caws-cli/src/index.ts'
+    - 'packages/caws-cli/templates/hook-packs/'
+    - 'packages/caws-cli/tests/adapter/'
+    - 'packages/caws-cli/tests/kernel/unit/doctor-global-home.test.ts'
+    - 'packages/caws-cli/tests/kernel/unit/doctor-installed-pack-lag.test.ts'
+    - 'packages/caws-cli/tests/init/'
+    - 'docs/architecture/hook-pack-shared-core.md'
+    - 'docs/guides/hook-packs.md'
+  out: []
+invariants:
+  - 'Project governance authority remains canonical; distributing executable code grants no claim or scope authority'
+  - 'Machine updates preserve explicit project extensions and unrelated native hooks; drift is never silently discarded'
+acceptance:
+  - id: A1
+    given: 'two projects using the system runtime'
+    when: 'the runtime is updated once'
+    then: 'both execute the new stock guard and renderer bytes without project edits'
+  - id: A2
+    given: 'system-level native registration'
+    when: 'hooks run in canonical and linked worktrees'
+    then: 'the actual worktree and canonical governance roots are resolved and non-CAWS locations are quiet'
+  - id: A3
+    given: 'legacy hook wiring and unrelated native hooks'
+    when: 'migration is planned and applied'
+    then: 'transport is recognized precisely, duplicates are prevented, exact backups are retained and custom behavior requires explicit preservation or review'
+  - id: A4
+    given: 'malformed or missing runtime state, conflicting overrides or interrupted changes'
+    when: 'dispatch or installation is attempted'
+    then: 'enforcement fails explicitly and partial changes are recoverable'
+  - id: A5
+    given: 'a project executing machine-owned hooks'
+    when: 'doctor inspects it'
+    then: 'effective runtime health replaces obsolete project pack-version warnings and the launcher directory is recognized'
+  - id: A6
+    given: 'a harness agent maintaining its native adapter'
+    when: 'it follows the documented authoring contract'
+    then: 'code and configuration live at machine scope with native evidence distinct from fixture evidence'
+  - id: A7
+    given: 'the reviewed machine runtime'
+    when: 'installed and exercised through fresh native Codex registration'
+    then: 'lifecycle events and a controlled denied write identify the selected runtime without relying on project hook copies'
+non_functional: {}
+contracts:
+  - name: 'machine-runtime-distribution'
+    type: behavior
