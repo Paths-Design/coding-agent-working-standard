@@ -562,3 +562,69 @@ describe('A5: one transaction, schema-valid event, auto-commit', () => {
     expect(amendedEvents(cawsDir)[1].data.set_acceptance).toEqual([{ id: 'A1', fields: ['given'] }]);
   });
 });
+
+describe('set-ac multi-field survives folding (CAWS-CLI-SET-AC-STALE-BRACKET-001)', () => {
+  // Exceeds the renderer's inline fold threshold (>100 collapsed chars), so
+  // rewriting it folds the field into a `>-` continuation block and shifts
+  // every later line of the entry — the growth that previously left the
+  // remaining fields of a multi-field rewrite located against a stale bracket.
+  const LONG_GIVEN =
+    'a very long given clause that comfortably exceeds one hundred collapsed characters so the renderer folds it into a continuation block instead of an inline scalar';
+
+  test('A1: a multi-field rewrite whose first field folds lands every supplied field', () => {
+    const { root, cawsDir } = mkRepo();
+    writeSpec(cawsDir, 'ACC-001', { acs: TWO_ACS });
+    const before = readRaw(cawsDir, 'ACC-001');
+    const siblingBefore = before.slice(before.indexOf('  - id: A2'), before.indexOf('non_functional:'));
+
+    const r = amend(root, 'ACC-001', {
+      setAc: 'A1',
+      given: LONG_GIVEN,
+      when: 'a multi-field rewrite folds the first value',
+      then: 'the remaining fields still land on the named criterion',
+      reason: 'the scaffold values were placeholders',
+    });
+    expect(r.code).toBe(0);
+
+    const after = readRaw(cawsDir, 'ACC-001');
+    const a1 = after.slice(after.indexOf('  - id: A1'), after.indexOf('  - id: A2'));
+    // The long given folded…
+    expect(a1).toContain('    given: >-');
+    // …and the later fields still landed inline on the same criterion.
+    expect(a1).toContain("    when: 'a multi-field rewrite folds the first value'");
+    expect(a1).toContain("    then: 'the remaining fields still land on the named criterion'");
+    // The sibling criterion is byte-preserved.
+    expect(after.slice(after.indexOf('  - id: A2'), after.indexOf('non_functional:'))).toBe(siblingBefore);
+    // One amendment event naming exactly the supplied fields.
+    const events = amendedEvents(cawsDir);
+    expect(events).toHaveLength(1);
+    expect(events[0].data.set_acceptance).toEqual([{ id: 'A1', fields: ['given', 'when', 'then'] }]);
+  });
+
+  test('A2: shrinking back across multiple fields never spills into the sibling criterion', () => {
+    const { root, cawsDir } = mkRepo();
+    writeSpec(cawsDir, 'ACC-001', { acs: TWO_ACS });
+    expect(amend(root, 'ACC-001', { setAc: 'A1', given: LONG_GIVEN, reason: 'fold first' }).code).toBe(0);
+
+    const r = amend(root, 'ACC-001', {
+      setAc: 'A1',
+      given: 'tiny given',
+      when: 'tiny when',
+      then: 'tiny then',
+      reason: 'shrink back to inline',
+    });
+    expect(r.code).toBe(0);
+
+    const after = readRaw(cawsDir, 'ACC-001');
+    const a1 = after.slice(after.indexOf('  - id: A1'), after.indexOf('  - id: A2'));
+    expect(a1).toContain("    given: 'tiny given'");
+    expect(a1).toContain("    when: 'tiny when'");
+    expect(a1).toContain("    then: 'tiny then'");
+    expect(a1).not.toContain('>-');
+    // A2 keeps exactly its original wording — a stale bracket could make the
+    // rewrite land on the foreign criterion instead.
+    expect(after).toContain("    given: 'fixture given two'");
+    expect(after).toContain("    when: 'fixture when two'");
+    expect(after).toContain("    then: 'fixture then two'");
+  });
+});
