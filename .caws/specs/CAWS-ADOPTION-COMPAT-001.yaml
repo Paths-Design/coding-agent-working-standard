@@ -40,9 +40,9 @@ acceptance:
     when: 'an explicit reviewed adoption plan is applied'
     then: 'original bytes are archived and validated draft specs plus policy are installed'
   - id: A2
-    given: 'The spec implementation is complete.'
-    when: 'The acceptance statement is evaluated.'
-    then: 'A2|changed inputs or unsafe paths|adoption is attempted|it refuses before changing governance'
+    given: 'changed inputs or unsafe paths'
+    when: 'adoption is attempted'
+    then: 'it refuses before changing governance'
   - id: A3
     given: 'The spec implementation is complete.'
     when: 'The acceptance statement is evaluated.'
