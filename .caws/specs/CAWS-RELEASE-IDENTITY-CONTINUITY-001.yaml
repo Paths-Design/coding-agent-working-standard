@@ -1,0 +1,46 @@
+id: CAWS-RELEASE-IDENTITY-CONTINUITY-001
+title: 'Carry fallback create identity explicitly and refuse identity-free claim without minting'
+risk_tier: 1
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-07T06:33:07.555Z'
+updated_at: '2026-09-07T06:33:07.555Z'
+created_by_session: '01a07868-9878-7e72-bcd9-a6af25f92820'
+blast_radius:
+  modules:
+    - 'Worktree create and claim identity handoff'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/claim.ts'
+    - 'packages/caws-cli/src/shell/commands/worktree.ts'
+    - 'packages/caws-cli/tests/shell/session/claim-cwd-independent.test.js'
+    - 'packages/caws-cli/tests/shell/worktree-create-enter.test.js'
+    - 'docs/guides/worktree-isolation.md'
+  out: []
+invariants:
+  - 'A worktree owner or uncorroborated neighboring capsule is not proof of the invoking session'
+acceptance:
+  - id: A1
+    given: 'a real Git project and a create command with no native identity source'
+    when: 'the operator executes the exact continuation printed by successful creation'
+    then: 'claim resolves the created identity across directories without a second mint or a takeover'
+  - id: A2
+    given: 'an owned worktree and no stable invoking identity'
+    when: 'ordinary claim is requested'
+    then: 'it refuses without minting a capsule or mutating ownership, and foreign-owner controls remain refused'
+  - id: A3
+    given: 'native identity context, explicit takeover intent and a path containing shell punctuation'
+    when: 'create and claim execute through their documented command surfaces'
+    then: 'native behavior remains supported, fallback output is safely quoted, and existing takeover protections remain effective'
+observability:
+  - 'Rendered create continuation command and claim refusal identify missing session context without claiming ownership'
+rollback:
+  - 'Revert the reviewed command and fixture change together; never alter existing ownership records'
+non_functional:
+  security:
+    - 'Do not broaden candidate admission or permit a foreign takeover without explicit takeover intent'
+contracts:
+  - name: 'create-enter-identity-continuity'
+    type: behavior
