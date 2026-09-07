@@ -39,3 +39,7 @@ evidence:
     status: pass
     evidence_ref: /Users/darianrosebrook/Desktop/Projects/caws/tmp/system-adoption-2026-09-07/cli-rebuild-availability.json
     recorded_at: "2026-09-07T03:22:58.575Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: /Users/darianrosebrook/Desktop/Projects/caws/tmp/system-adoption-2026-09-07/cli-snapshot-tests.txt
+    recorded_at: "2026-09-07T03:22:59.375Z"
