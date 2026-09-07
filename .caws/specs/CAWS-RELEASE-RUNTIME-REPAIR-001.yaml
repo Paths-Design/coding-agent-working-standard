@@ -2,10 +2,11 @@ id: CAWS-RELEASE-RUNTIME-REPAIR-001
 title: 'Repair shared runtime bootstrap and emitted recovery context'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-release-runtime
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-release-runtime at fb24273e1d710cc85fa595ddf79d036cc87bcf58'
 created_at: '2026-09-07T05:23:59.234Z'
-updated_at: '2026-09-07T05:52:50.311Z'
+updated_at: '2026-09-07T06:12:59.378Z'
 created_by_session: '01a07868-9878-7e72-bcd9-a6af25f92820'
 blast_radius:
   modules:
