@@ -1,5 +1,6 @@
-// specs-body-writer — governed amendment of a spec's blast_radius.modules and
-// invariants (`caws specs amend`).
+// specs-body-writer — governed amendment of a spec's body via
+// `caws specs amend`: blast_radius.modules, invariants, and (since
+// CAWS-SPEC-AMEND-ACCEPTANCE-001) acceptance criteria.
 //
 // WHY THIS EXISTS
 //
@@ -24,7 +25,22 @@
 // than the defect it fixes. So the permission is asymmetric and narrow:
 // filling an entry that is still the scaffolded default is admitted; removing
 // or rewriting a substantive entry is refused. You may fill a blank; you may
-// never rewrite a claim.
+// never rewrite a claim. Acceptance criteria are the sharpest case — they are
+// the claims the close gate adjudicates — so an AC amendment on a closed spec
+// admits only the full scaffold discharge, and only when the criterion carries
+// no evidence entry (a closed spec's evidence is frozen).
+//
+// THE EVIDENCE COUPLING (why AC amendment is not just another field edit)
+//
+// The spec's `evidence:` block is the close gate's closure authority, keyed by
+// criterion id. A recorded pass proves the TEXT THAT EXISTED when it was
+// recorded. Rewriting a criterion's text therefore invalidates that proof by
+// construction: this writer resets the criterion's evidence entry to
+// `unchecked` in the same transaction and records the discarded status on the
+// event, so closure can never proceed over evidence that proved text which no
+// longer exists. Removing a criterion deletes its evidence entry outright (an
+// evidence entry whose criterion_id matches no declared AC is rejected by
+// semantic validation, so removal and evidence deletion are one write).
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -35,6 +51,7 @@ import {
   ok,
   parseAndValidateSpec,
   type EventBody,
+  type EvidenceStatus,
   type Result,
 } from '../kernel';
 import { autoCommit, isPathDirty } from './git-autocommit';
@@ -43,9 +60,12 @@ import { withLifecycleLock } from './lifecycle-lock';
 import { repoRootFromCawsDir, storeDiagnostic, validateSpecId } from './repo-root';
 import { STORE_RULES } from './rules';
 import {
+  ACCEPTANCE_PLACEHOLDER,
   INVARIANTS_PLACEHOLDER,
   MODULES_PLACEHOLDER,
+  deleteEvidenceEntry,
   isScaffoldPlaceholder,
+  patchEvidenceBlock,
   type SpecWriterOutcome,
 } from './specs-writer';
 import { readYamlSource } from './yaml-store';
@@ -56,6 +76,19 @@ export interface AmendSpecBodyInput {
   readonly removeModules?: readonly string[];
   readonly addInvariants?: readonly string[];
   readonly removeInvariants?: readonly string[];
+  /** Rewrite given/when/then of this EXISTING criterion (typo-guarded). */
+  readonly setAc?: string;
+  /** Append a new criterion with this id (refuses an existing id). */
+  readonly addAc?: string;
+  /** Remove this criterion and its evidence entry. */
+  readonly removeAc?: string;
+  /** Criterion field values; with --set-ac at least one is required, with
+   * --add-ac all three. Fields not supplied to --set-ac keep their text. */
+  readonly acGiven?: string;
+  readonly acWhen?: string;
+  readonly acThen?: string;
+  /** Optional operator rationale, recorded verbatim on spec_body_amended. */
+  readonly reason?: string;
   readonly now?: () => Date;
   readonly actor: EventBody['actor'];
 }
@@ -293,6 +326,215 @@ function patchSequence(
   return { lines: next, added, removed, dischargedScaffold, resulting };
 }
 
+// --- Acceptance criteria (CAWS-SPEC-AMEND-ACCEPTANCE-001) -------------------
+
+type AcField = 'given' | 'when' | 'then';
+const AC_FIELDS: readonly AcField[] = ['given', 'when', 'then'];
+const AC_ID_PATTERN = /^A\d+$/;
+// Single-quoted inline scalars stay readable; longer claims fold.
+const AC_INLINE_MAX = 100;
+const AC_WRAP_WIDTH = 78;
+
+/**
+ * The resolved acceptance amendment, decided against the PARSED spec before
+ * any byte is patched, so every semantic refusal writes nothing.
+ */
+interface AcAmendmentPlan {
+  readonly op: 'set' | 'add' | 'remove';
+  readonly id: string;
+  /** For 'set': only the fields whose collapsed text actually differs. */
+  readonly setFields?: Partial<Record<AcField, string>>;
+  /** For 'add': the full new criterion. */
+  readonly added?: {
+    readonly id: string;
+    readonly given: string;
+    readonly when: string;
+    readonly then: string;
+  };
+  /** For 'remove': the criterion as it stands before removal (event payload). */
+  readonly removedBefore?: {
+    readonly id: string;
+    readonly given: string;
+    readonly when: string;
+    readonly then: string;
+  };
+  /** True when a closed spec's full scaffold discharge is being performed. */
+  readonly scaffoldDischarge: boolean;
+}
+
+function collapseAcText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Flag-shape validation only — no file access, no lifecycle knowledge.
+ * Returns the refusal message, or null when the shape is coherent.
+ */
+function validateAcFlagShape(
+  input: AmendSpecBodyInput,
+  acTargets: readonly string[],
+  acFieldCount: number
+): string | null {
+  if (acTargets.length > 1) {
+    return (
+      '--set-ac/--add-ac/--remove-ac are mutually exclusive — exactly one acceptance op per ' +
+      `invocation (got set=${input.setAc ?? '—'}, add=${input.addAc ?? '—'}, remove=${input.removeAc ?? '—'}).`
+    );
+  }
+  const target = acTargets[0];
+  if (target === undefined) {
+    if (acFieldCount > 0) {
+      return (
+        '--given/--when/--then require an acceptance target: pass --set-ac <id> to rewrite an ' +
+        'existing criterion, or --add-ac <id> to declare a new one.'
+      );
+    }
+    return null;
+  }
+  if (!AC_ID_PATTERN.test(target)) {
+    return (
+      `Acceptance criterion id "${target}" must match A<digits> (e.g. A1, A12) — the spec schema ` +
+      'constrains acceptance[].id to ^A\\d+$.'
+    );
+  }
+  if (input.setAc !== undefined && acFieldCount === 0) {
+    return (
+      `--set-ac ${target} needs at least one of --given/--when/--then to state the new text; ` +
+      'fields not supplied keep their current wording.'
+    );
+  }
+  if (input.addAc !== undefined && acFieldCount !== 3) {
+    return (
+      `--add-ac ${target} needs all three of --given/--when/--then — a new criterion must state ` +
+      'its whole claim (the schema requires given/when/then, minLength 1).'
+    );
+  }
+  for (const [flag, value] of [
+    ['--given', input.acGiven],
+    ['--when', input.acWhen],
+    ['--then', input.acThen],
+  ] as const) {
+    if (value !== undefined && collapseAcText(value) === '') {
+      return `${flag} was supplied but is empty; a criterion field must be non-empty (schema minLength 1).`;
+    }
+  }
+  return null;
+}
+
+interface AcceptanceBlock {
+  readonly keyIdx: number;
+  readonly blockEnd: number;
+  /** Entry id → [start, end) line span (end exclusive). */
+  readonly entries: ReadonlyArray<{ id: string; start: number; end: number }>;
+}
+
+/**
+ * Locate the top-level `acceptance:` block and each `  - id:` entry's line
+ * span. Entries end at the next entry, the next top-level key, or EOF.
+ * Returns null when the block cannot be found — fail closed, never guess
+ * (mirrors locateSequence).
+ */
+function locateAcceptanceBlock(lines: readonly string[]): AcceptanceBlock | null {
+  const keyIdx = lines.findIndex((l) => /^acceptance:\s*(\[\s*\])?\s*$/.test(l));
+  if (keyIdx === -1) return null;
+  let blockEnd = lines.length;
+  for (let i = keyIdx + 1; i < lines.length; i++) {
+    if (/^\S/.test(lines[i] ?? '')) {
+      blockEnd = i;
+      break;
+    }
+  }
+  const starts: Array<{ id: string; line: number }> = [];
+  for (let i = keyIdx + 1; i < blockEnd; i++) {
+    const m = /^  - id:\s*(.+?)\s*$/.exec(lines[i] ?? '');
+    if (m && m[1] !== undefined) starts.push({ id: unquote(m[1]), line: i });
+  }
+  const entries = starts.map((s, k) => ({
+    id: s.id,
+    start: s.line,
+    end: k + 1 < starts.length ? starts[k + 1]!.line : blockEnd,
+  }));
+  return { keyIdx, blockEnd, entries };
+}
+
+const AC_FIELD_RE = /^    (given|when|then):(.*)$/;
+// `>-`, `>`, `|-`, `|` plus chomping/indent indicators.
+const AC_FOLDED_MARKER_RE = /^[|>][+-0-9]*$/;
+
+/**
+ * Render one criterion field value: short text becomes a single-quoted inline
+ * scalar; longer claims fold (`>-`, continuation indent 6) word-wrapped.
+ * Text is collapsed first — a criterion claim is prose, not layout.
+ */
+function renderAcFieldValue(field: AcField, value: string): string[] {
+  const text = collapseAcText(value);
+  if (text.length <= AC_INLINE_MAX) {
+    return [`    ${field}: ${quote(text)}`];
+  }
+  const words = text.split(' ');
+  const wrapped: string[] = [];
+  let current = '';
+  for (const w of words) {
+    if (current !== '' && current.length + 1 + w.length > AC_WRAP_WIDTH) {
+      wrapped.push(current);
+      current = w;
+    } else {
+      current = current === '' ? w : `${current} ${w}`;
+    }
+  }
+  if (current !== '') wrapped.push(current);
+  return [`    ${field}: >-`, ...wrapped.map((w) => `      ${w}`)];
+}
+
+function renderAcEntry(ac: {
+  id: string;
+  given: string;
+  when: string;
+  then: string;
+}): string[] {
+  return [
+    `  - id: ${ac.id}`,
+    ...renderAcFieldValue('given', ac.given),
+    ...renderAcFieldValue('when', ac.when),
+    ...renderAcFieldValue('then', ac.then),
+  ];
+}
+
+/**
+ * Replace one given/when/then value inside an acceptance entry, preserving
+ * every other byte of the entry (sibling fields, comments, key order).
+ * Inline scalars are swapped in place; folded blocks have their continuation
+ * lines consumed and re-rendered. Returns null when the field line cannot be
+ * found in the entry — fail closed, never guess.
+ */
+function replaceAcField(
+  lines: readonly string[],
+  entry: { readonly start: number; readonly end: number },
+  field: AcField,
+  value: string
+): string[] | null {
+  for (let i = entry.start + 1; i < entry.end; i++) {
+    const line = lines[i] ?? '';
+    const m = AC_FIELD_RE.exec(line);
+    if (m === null || (m[1] ?? '') !== field) continue;
+    const inline = (m[2] ?? '').trim();
+    const rendered = renderAcFieldValue(field, value);
+    if (AC_FOLDED_MARKER_RE.test(inline)) {
+      // Consume the folded continuation lines (indent > 4) up to the next
+      // key at indent 4 or the entry's end.
+      let j = i + 1;
+      while (j < entry.end) {
+        const cont = lines[j] ?? '';
+        if (/^ {4}\S/.test(cont) || /^ {0,3}\S/.test(cont)) break;
+        j++;
+      }
+      return [...lines.slice(0, i), ...rendered, ...lines.slice(j)];
+    }
+    return [...lines.slice(0, i), ...rendered, ...lines.slice(i + 1)];
+  }
+  return null;
+}
+
 function mapTxnToOutcome(
   result: LifecycleTransactionResult,
   id: string,
@@ -329,16 +571,32 @@ export function amendSpecBody(
   const removeModules = input.removeModules ?? [];
   const addInvariants = input.addInvariants ?? [];
   const removeInvariants = input.removeInvariants ?? [];
-  if (
-    addModules.length === 0 &&
-    removeModules.length === 0 &&
-    addInvariants.length === 0 &&
-    removeInvariants.length === 0
-  ) {
+
+  // --- Acceptance-criteria flag shape (CAWS-SPEC-AMEND-ACCEPTANCE-001) ----
+  // Exactly one AC op per invocation; --set-ac takes >=1 of --given/--when/
+  // --then (unspecified fields keep their text); --add-ac requires all three;
+  // bare --given/--when/--then without a target is refused.
+  const acTargets = [input.setAc, input.addAc, input.removeAc].filter(
+    (v): v is string => v !== undefined
+  );
+  const acFieldCount = [input.acGiven, input.acWhen, input.acThen].filter(
+    (v) => v !== undefined
+  ).length;
+  const hasModuleOps =
+    addModules.length > 0 ||
+    removeModules.length > 0 ||
+    addInvariants.length > 0 ||
+    removeInvariants.length > 0;
+
+  const acFlagError = validateAcFlagShape(input, acTargets, acFieldCount);
+  if (acFlagError !== null) {
+    return err(storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, acFlagError, { subject: input.id }));
+  }
+  if (acTargets.length === 0 && !hasModuleOps) {
     return err(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-        `caws specs amend requires at least one of --add-module/--remove-module/--add-invariant/--remove-invariant for spec "${input.id}".`,
+        `caws specs amend requires at least one of --add-module/--remove-module/--add-invariant/--remove-invariant, or an acceptance op (--set-ac/--add-ac/--remove-ac), for spec "${input.id}".`,
         { subject: input.id }
       )
     );
@@ -394,6 +652,153 @@ export function amendSpecBody(
     );
   }
 
+  // --- Acceptance target resolution (against the PARSED spec) -------------
+  // Every refusal here happens before any byte is patched: a refused amend
+  // writes nothing — no bytes, no event, no commit.
+  const acceptance = spec.acceptance;
+  let acPlan: AcAmendmentPlan | null = null;
+  const acTarget = input.setAc ?? input.addAc ?? input.removeAc;
+  if (acTarget !== undefined) {
+    const existing = acceptance.find((a) => a.id === acTarget);
+    if (input.addAc !== undefined && existing !== undefined) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Criterion ${acTarget} already exists on spec "${input.id}" — --add-ac never overwrites. Rewrite it with --set-ac ${acTarget}.`,
+          { subject: input.id, data: { criterion_id: acTarget } }
+        )
+      );
+    }
+    if (input.addAc === undefined && existing === undefined) {
+      const declared = acceptance.map((a) => a.id).join(', ');
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `No criterion ${acTarget} on spec "${input.id}" (declared: ${declared || 'none'}).` +
+            (input.setAc !== undefined
+              ? ` Declare it first with --add-ac ${acTarget}.`
+              : ' Nothing to remove.'),
+          { subject: input.id, data: { criterion_id: acTarget } }
+        )
+      );
+    }
+    if (input.removeAc !== undefined && acceptance.length === 1) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Criterion ${acTarget} is the only acceptance criterion on spec "${input.id}" — the schema requires at least one (acceptance minItems 1). Amend its text with --set-ac instead of removing it.`,
+          { subject: input.id, data: { criterion_id: acTarget } }
+        )
+      );
+    }
+    if (state === 'closed') {
+      if (input.addAc !== undefined || input.removeAc !== undefined) {
+        return err(
+          storeDiagnostic(
+            STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+            `Spec "${input.id}" is closed: adding or removing an acceptance criterion rewrites the concluded record.`,
+            {
+              subject: input.id,
+              narrowRepair: `Reopen it first: \`caws specs reopen ${input.id}\`.`,
+              data: { lifecycle_state: state, criterion_id: acTarget },
+            }
+          )
+        );
+      }
+      // --set-ac on a closed spec: only the FULL scaffold discharge of a
+      // criterion whose given/when/then are all still the create placeholder,
+      // and only while the criterion carries no evidence entry (a closed
+      // spec's evidence is frozen; repairing a mis-proven criterion means
+      // reopening the spec).
+      const fullScaffold =
+        existing?.given === ACCEPTANCE_PLACEHOLDER &&
+        existing?.when === ACCEPTANCE_PLACEHOLDER &&
+        existing?.then === ACCEPTANCE_PLACEHOLDER;
+      const allThree =
+        input.acGiven !== undefined && input.acWhen !== undefined && input.acThen !== undefined;
+      const hasEvidence = (spec.evidence ?? []).some((e) => e.criterion_id === acTarget);
+      if (!fullScaffold || !allThree || hasEvidence) {
+        return err(
+          storeDiagnostic(
+            STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+            `Spec "${input.id}" is closed, so --set-ac may only fill criterion ${acTarget} while it still holds its create scaffold ` +
+              `(given/when/then all "${ACCEPTANCE_PLACEHOLDER}", all three supplied, no recorded evidence).` +
+              (hasEvidence
+                ? ' This criterion carries a recorded evidence entry, which a closed spec freezes.'
+                : ''),
+            {
+              subject: input.id,
+              narrowRepair: `Rewriting a concluded claim needs \`caws specs reopen ${input.id}\` first.`,
+              data: { lifecycle_state: state, criterion_id: acTarget },
+            }
+          )
+        );
+      }
+      acPlan = {
+        op: 'set',
+        id: acTarget,
+        setFields: { given: input.acGiven, when: input.acWhen, then: input.acThen },
+        scaffoldDischarge: true,
+      };
+    } else if (input.setAc !== undefined) {
+      // Partial update: only fields whose collapsed text actually differs
+      // (so an exact re-supply does not reset evidence it did not change).
+      const setFields: Partial<Record<AcField, string>> = {};
+      if (
+        input.acGiven !== undefined &&
+        collapseAcText(input.acGiven) !== collapseAcText(existing?.given ?? '')
+      ) {
+        setFields.given = input.acGiven;
+      }
+      if (
+        input.acWhen !== undefined &&
+        collapseAcText(input.acWhen) !== collapseAcText(existing?.when ?? '')
+      ) {
+        setFields.when = input.acWhen;
+      }
+      if (
+        input.acThen !== undefined &&
+        collapseAcText(input.acThen) !== collapseAcText(existing?.then ?? '')
+      ) {
+        setFields.then = input.acThen;
+      }
+      if (Object.keys(setFields).length === 0 && !hasModuleOps) {
+        return err(
+          storeDiagnostic(
+            STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+            `No change: criterion ${acTarget} on spec "${input.id}" already carries the supplied text.`,
+            { subject: input.id, data: { criterion_id: acTarget } }
+          )
+        );
+      }
+      acPlan = { op: 'set', id: acTarget, setFields, scaffoldDischarge: false };
+    } else if (input.addAc !== undefined) {
+      acPlan = {
+        op: 'add',
+        id: acTarget,
+        added: {
+          id: acTarget,
+          given: input.acGiven ?? '',
+          when: input.acWhen ?? '',
+          then: input.acThen ?? '',
+        },
+        scaffoldDischarge: false,
+      };
+    } else {
+      acPlan = {
+        op: 'remove',
+        id: acTarget,
+        removedBefore: {
+          id: acTarget,
+          given: existing?.given ?? '',
+          when: existing?.when ?? '',
+          then: existing?.then ?? '',
+        },
+        scaffoldDischarge: false,
+      };
+    }
+  }
+
   let lines = originalBytes.split('\n');
 
   const modulesResult = patchSequence(lines, MODULES_SITE, addModules, removeModules);
@@ -419,6 +824,110 @@ export function amendSpecBody(
     );
   }
   lines = invariantsResult.lines;
+
+  // --- Acceptance-criteria amendment (byte surgery) ------------------------
+  let resetEvidence: Array<{ criterion_id: string; previous_status: EvidenceStatus }> = [];
+  let removedEvidence: Array<{ criterion_id: string; previous_status: EvidenceStatus }> = [];
+  if (acPlan !== null) {
+    const block = locateAcceptanceBlock(originalBytes.split('\n'));
+    if (block === null) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Could not locate the acceptance block in spec "${input.id}".`,
+          { subject: input.id }
+        )
+      );
+    }
+    if (acPlan.op === 'set') {
+      const entry = block.entries.find((e) => e.id === acPlan.id);
+      if (entry === undefined) {
+        return err(
+          storeDiagnostic(
+            STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+            `Could not locate criterion ${acPlan.id} in the acceptance block of spec "${input.id}" although the parsed spec declares it; refusing to guess at the byte level.`,
+            { subject: input.id, data: { criterion_id: acPlan.id } }
+          )
+        );
+      }
+      for (const field of AC_FIELDS) {
+        const value = acPlan.setFields?.[field];
+        if (value === undefined) continue;
+        const next = replaceAcField(lines, entry, field, value);
+        if (next === null) {
+          return err(
+            storeDiagnostic(
+              STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+              `Could not locate the ${field} field of criterion ${acPlan.id} in spec "${input.id}".`,
+              { subject: input.id, data: { criterion_id: acPlan.id, field } }
+            )
+          );
+        }
+        lines = next;
+      }
+    } else if (acPlan.op === 'add') {
+      const rendered = renderAcEntry(acPlan.added!);
+      // Normalize an inline-empty `acceptance: []` key before appending.
+      const normalized = lines.map((l, i) =>
+        i === block.keyIdx && /\[\s*\]/.test(l) ? 'acceptance:' : l
+      );
+      lines = [
+        ...normalized.slice(0, block.blockEnd),
+        ...rendered,
+        ...normalized.slice(block.blockEnd),
+      ];
+    } else {
+      const entry = block.entries.find((e) => e.id === acPlan.id);
+      if (entry === undefined) {
+        return err(
+          storeDiagnostic(
+            STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+            `Could not locate criterion ${acPlan.id} in the acceptance block of spec "${input.id}" although the parsed spec declares it; refusing to guess at the byte level.`,
+            { subject: input.id, data: { criterion_id: acPlan.id } }
+          )
+        );
+      }
+      lines = [...lines.slice(0, entry.start), ...lines.slice(entry.end)];
+    }
+
+    // Evidence coupling: a recorded status proved the PREVIOUS text. A
+    // rewritten criterion has its entry reset to `unchecked` in the same
+    // transaction (evidence_ref, waiver_reason, command, nodeid — all the
+    // proof of the old claim — dropped with it); a removed criterion has its
+    // entry deleted outright (an orphaned criterion_id is rejected by
+    // semantic validation, so removal and evidence deletion are one write).
+    const priorEvidence = (spec.evidence ?? []).find((e) => e.criterion_id === acPlan.id);
+    if (priorEvidence !== undefined && acPlan.op === 'set') {
+      resetEvidence = [{ criterion_id: acPlan.id, previous_status: priorEvidence.status }];
+    }
+    if (priorEvidence !== undefined && acPlan.op === 'remove') {
+      removedEvidence = [{ criterion_id: acPlan.id, previous_status: priorEvidence.status }];
+    }
+  }
+
+  const now = (input.now ?? (() => new Date()))().toISOString();
+  let patched = lines.join('\n');
+  if (resetEvidence.length > 0) {
+    const reset = resetEvidence[0]!;
+    const next = patchEvidenceBlock(patched, {
+      criterion_id: reset.criterion_id,
+      status: 'unchecked',
+      recorded_at: now,
+    });
+    if (next === null) {
+      return err(
+        storeDiagnostic(
+          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+          `Could not upsert the evidence entry for criterion ${reset.criterion_id} in spec "${input.id}".`,
+          { subject: input.id, data: { criterion_id: reset.criterion_id } }
+        )
+      );
+    }
+    patched = next;
+  }
+  if (removedEvidence.length > 0) {
+    patched = deleteEvidenceEntry(patched, removedEvidence[0]!.criterion_id).bytes;
+  }
 
   // The closed-spec rule. Everything this amendment did to a closed spec must
   // be a scaffold discharge; anything else is a retroactive rewrite of a
@@ -450,7 +959,6 @@ export function amendSpecBody(
     }
   }
 
-  const patched = lines.join('\n');
   if (patched === originalBytes) {
     return err(
       storeDiagnostic(
@@ -476,8 +984,8 @@ export function amendSpecBody(
   const discharged = [
     ...(modulesResult.dischargedScaffold ? [MODULES_SITE.label] : []),
     ...(invariantsResult.dischargedScaffold ? [INVARIANTS_SITE.label] : []),
+    ...(acPlan?.scaffoldDischarge === true ? ['acceptance'] : []),
   ];
-  const now = (input.now ?? (() => new Date()))().toISOString();
   const event: EventBody = {
     event: 'spec_body_amended',
     ts: now,
@@ -490,6 +998,23 @@ export function amendSpecBody(
       ...(invariantsResult.removed.length > 0
         ? { removed_invariants: invariantsResult.removed }
         : {}),
+      ...(acPlan?.op === 'set' &&
+      acPlan.setFields !== undefined &&
+      Object.keys(acPlan.setFields).length > 0
+        ? {
+            set_acceptance: [
+              {
+                id: acPlan.id,
+                fields: AC_FIELDS.filter((f) => acPlan.setFields?.[f] !== undefined),
+              },
+            ],
+          }
+        : {}),
+      ...(acPlan?.op === 'add' ? { added_acceptance: [acPlan.added] } : {}),
+      ...(acPlan?.op === 'remove' ? { removed_acceptance: [acPlan.removedBefore] } : {}),
+      ...(resetEvidence.length > 0 ? { reset_evidence: resetEvidence } : {}),
+      ...(removedEvidence.length > 0 ? { removed_evidence: removedEvidence } : {}),
+      ...(input.reason !== undefined ? { reason: input.reason } : {}),
       ...(discharged.length > 0 ? { discharged_scaffold_fields: discharged } : {}),
       previous_lifecycle_state: state,
       resulting_modules: modulesResult.resulting,

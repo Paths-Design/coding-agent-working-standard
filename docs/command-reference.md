@@ -606,7 +606,11 @@ Reopen a closed spec (closed -> active), the inverse of close. Removes resolutio
 
 ### `caws specs amend <id>`
 
-Amend a spec's blast_radius.modules or invariants. These fields are schema-required non-empty, so create writes a scaffolded default when no flag supplies one; this is how an already-created spec replaces that default without a hand edit that bypasses the audit trail. Appends spec_body_amended. Draft and active specs allow add and remove. A CLOSED spec allows only filling a field still holding its scaffolded default — a concluded record may have a blank filled, never a claim rewritten. Archived specs are refused (restore first). For scope, use caws specs amend-scope.
+Amend a spec's blast_radius.modules, invariants, or acceptance criteria. Modules and invariants are schema-required non-empty, so create writes a scaffolded default when no flag supplies one; this is how an already-created spec replaces that default without a hand edit that bypasses the audit trail. Acceptance flags are how a wrong criterion text gets fixed through the audited path: `--set-ac` rewrites exactly the fields supplied on one criterion, `--add-ac` declares a new criterion (all three fields required), `--remove-ac` deletes one. Appends spec_body_amended.
+
+Evidence coupling: a recorded evidence status proved the criterion text as it was, so a `--set-ac` that changes a criterion's text resets that criterion's evidence entry to `unchecked` in the same transaction (the event's `reset_evidence` carries the previous status), and `--remove-ac` deletes the criterion's evidence entry with it. An exact re-supply of unchanged text is refused as a no-op and resets nothing. One acceptance op per invocation; criterion ids match `A<digits>`.
+
+Draft and active specs allow add and remove. A CLOSED spec allows only filling a field still holding its scaffolded default — a concluded record may have a blank filled, never a claim rewritten; the scaffold discharge additionally refuses when the criterion already carries a recorded evidence entry, because a closed spec's evidence is frozen. Reopen first (`caws specs reopen`) for anything else. Archived specs are refused (restore first). For scope, use caws specs amend-scope.
 
 **Argument:** `id` (required) — Spec id to amend
 
@@ -616,6 +620,13 @@ Amend a spec's blast_radius.modules or invariants. These fields are schema-requi
 - `--remove-module <text>` (repeatable) — Remove a blast_radius.modules entry (repeatable); matches the logical value regardless of quoting.
 - `--add-invariant <text>` (repeatable) — Add an invariants entry (repeatable). Replaces the scaffolded default when that is the only entry.
 - `--remove-invariant <text>` (repeatable) — Remove an invariants entry (repeatable); matches the logical value regardless of quoting.
+- `--set-ac <id>` — Rewrite fields of acceptance criterion `<id>`. Unspecified fields keep their text; supplying only text that already matches is refused as a no-op.
+- `--add-ac <id>` — Declare acceptance criterion `<id>`; requires `--given`, `--when`, and `--then`. Refused when the id already exists (use `--set-ac`).
+- `--remove-ac <id>` — Delete acceptance criterion `<id>` and its evidence entry, if any. Refused when it is the only remaining criterion.
+- `--given <text>` — New `given` text for the criterion targeted by `--set-ac`/`--add-ac`.
+- `--when <text>` — New `when` text for the criterion targeted by `--set-ac`/`--add-ac`.
+- `--then <text>` — New `then` text for the criterion targeted by `--set-ac`/`--add-ac`.
+- `--reason <text>` — Operator rationale, recorded verbatim on the spec_body_amended event.
 - `--data` — Show structured data block on diagnostics
 
 ### `caws specs deactivate <id>`

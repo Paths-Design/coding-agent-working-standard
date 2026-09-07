@@ -882,13 +882,19 @@ Governed scope amendments for an active spec. Use one invocation with all `--add
 ```bash
 caws specs amend FEAT-1 --add-module packages/foo --add-invariant "ordering survives retries"
 caws specs amend FEAT-1 --remove-module packages/old
+caws specs amend FEAT-1 --set-ac A1 --then "ordering survives retries under load" --reason "the original then was untestable"
+caws specs amend FEAT-1 --add-ac A3 --given "a fresh replica" --when "sync runs" --then "no duplicate rows"
 ```
 
-Amend a spec's `blast_radius.modules` or `invariants`. For `scope.*`, use `caws specs amend-scope` instead. Appends a `spec_body_amended` event.
+Amend a spec's `blast_radius.modules`, `invariants`, or acceptance criteria. For `scope.*`, use `caws specs amend-scope` instead. Appends a `spec_body_amended` event.
 
-Both fields are schema-required non-empty, so `caws specs create` writes a scaffolded default when no `--module`/`--invariant` supplies one. This command is how a spec that already exists replaces that default — without it the only route was a hand edit of the YAML, which bypasses the audit trail.
+Both body fields are schema-required non-empty, so `caws specs create` writes a scaffolded default when no `--module`/`--invariant` supplies one. This command is how a spec that already exists replaces that default — without it the only route was a hand edit of the YAML, which bypasses the audit trail.
 
 Adding to a field whose only entry is the scaffolded default **replaces** that entry rather than appending beside it. Removal matches the logical value regardless of how the entry is quoted on disk. An amendment that would change nothing is refused rather than reported as success.
+
+Acceptance criteria take one operation per invocation: `--set-ac <id>` rewrites exactly the fields supplied on an existing criterion (unspecified fields keep their text; ids match `A<digits>`), `--add-ac <id>` declares a new criterion and requires all three of `--given`/`--when`/`--then`, and `--remove-ac <id>` deletes one (refused when it is the last remaining criterion). `--reason` records the operator rationale verbatim on the event.
+
+The evidence block is coupled to the text it proves: a `--set-ac` that changes a criterion's text resets that criterion's evidence entry to `unchecked` in the same transaction — the event's `reset_evidence` carries the previous status — because a recorded `pass` proved text that no longer exists. `--remove-ac` deletes the criterion's evidence entry with it; re-supplying text that already matches is refused as a no-op and resets nothing.
 
 **Permitted operations depend on lifecycle state:**
 
@@ -898,7 +904,7 @@ Adding to a field whose only entry is the scaffolded default **replaces** that e
 | `closed` | only filling a field that still holds its scaffolded default |
 | `archived` | refused — restore it first |
 
-A closed spec is the audit record of concluded work: it may have a blank filled, never a claim rewritten. Attempting to add to or remove from a field that already holds real content is refused and points at `caws specs reopen <id>`, which is the governed way to change a concluded spec. An archived body is a tombstone; rewriting it would falsify the record rather than correct it.
+A closed spec is the audit record of concluded work: it may have a blank filled, never a claim rewritten. Attempting to add to or remove from a field that already holds real content is refused and points at `caws specs reopen <id>`, which is the governed way to change a concluded spec. For acceptance criteria the same rule applies to `--set-ac`, with one narrow discharge: a criterion still holding the create scaffold (`given`/`when`/`then` all `TODO`) may be filled when all three fields are supplied — recorded in the event's `discharged_scaffold_fields` — and that discharge refuses when the criterion already carries a recorded evidence entry, because a closed spec's evidence is frozen. An archived body is a tombstone; rewriting it would falsify the record rather than correct it.
 
 ### `caws specs evidence <id>`
 
