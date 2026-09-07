@@ -33,3 +33,8 @@ contracts:
   - name: 'set-ac-multifield-rewrite'
     type: behavior
     path: 'packages/caws-cli/src/store/specs-body-writer.ts'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "jest specs-body-writer-acceptance: A1 red pre-fix (exit 1 refusal), green post-fix; 21/21 file pass; tsc clean"
+    recorded_at: "2026-09-07T06:26:01.064Z"
