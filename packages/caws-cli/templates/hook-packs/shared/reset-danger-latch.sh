@@ -48,11 +48,13 @@ if [[ "${CAWS_MACHINE_RUNTIME:-}" == "1" ]]; then
     echo 'reset-danger-latch.sh: machine recovery requires absolute CAWS_PROJECT_DIR' >&2
     exit 2
   fi
+  RECOVERY_WORKTREE_DIR="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C "$CAWS_PROJECT_DIR" rev-parse --show-toplevel)"
   _common_dir="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C "$CAWS_PROJECT_DIR" rev-parse --path-format=absolute --git-common-dir)"
   PROJECT_DIR="$(dirname "$_common_dir")"
   export CAWS_PROJECT_DIR="$PROJECT_DIR"
 else
   PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+  RECOVERY_WORKTREE_DIR="$PROJECT_DIR"
 fi
 STATE_DIR="$PROJECT_DIR/${CAWS_VENDOR_DIR}/hooks/state"
 LOG_FILE="$PROJECT_DIR/${CAWS_VENDOR_DIR}/logs/danger-latch-resets.log"
@@ -107,19 +109,21 @@ _caws_canonical_root() {
 _caws_all_vendor_state_dirs() {
   local out=()
   local vd dir seen prev
-  # Anchor at the CANONICAL root (where the latch writer lands files), not the
-  # install root (CAWS-LATCH-CANONICAL-STATE-DIR-001). Falls back to install
-  # root if the canonical resolution is unavailable.
-  local search_root
-  search_root="$(_caws_canonical_root)"
-  # Always include the resolved vendor dir first (the primary), then the rest.
-  for vd in "${CAWS_VENDOR_DIR:-.claude}" "${_caws_known_vendor_dirs[@]}"; do
-    dir="$search_root/$vd/hooks/state"
-    # Dedup (empty-array-safe under set -u).
-    seen=0
-    for prev in ${out[@]+"${out[@]}"}; do [[ "$prev" == "$dir" ]] && { seen=1; break; }; done
-    [[ "$seen" == 1 ]] && continue
-    [[ -d "$dir" ]] && out+=("$dir")
+  # Search the canonical repository AND the named worktree. Existing latch
+  # writers use the hook's project root; changing that landing spot would
+  # make an already armed worktree latch invisible after a runtime update.
+  # Both roots are derived from the selected project, never the human's cwd.
+  local search_root canonical_root
+  canonical_root="$(_caws_canonical_root)"
+  for search_root in "$canonical_root" "$RECOVERY_WORKTREE_DIR"; do
+    for vd in "${CAWS_VENDOR_DIR:-.claude}" "${_caws_known_vendor_dirs[@]}"; do
+      dir="$search_root/$vd/hooks/state"
+      # Dedup roots and vendor dirs (empty-array-safe under set -u).
+      seen=0
+      for prev in ${out[@]+"${out[@]}"}; do [[ "$prev" == "$dir" || "$prev" -ef "$dir" ]] && { seen=1; break; }; done
+      [[ "$seen" == 1 ]] && continue
+      [[ -d "$dir" ]] && out+=("$dir")
+    done
   done
   # Empty-array-safe under set -u: prints nothing when no vendor state dirs exist.
   printf '%s\n' ${out[@]+"${out[@]}"}

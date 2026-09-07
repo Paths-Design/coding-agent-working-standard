@@ -140,20 +140,12 @@ _caws_to_git_root() {
   local root
   root="$(cd "$d" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || true)"
   [[ -n "$root" ]] && printf '%s\n' "$root"
+  return 0
 }
 
 if [[ -z "${CAWS_PROJECT_DIR:-}" ]]; then
-  # A5: prefer the registry-derived vendor dir (generated snippet); the
-  # env-var heuristic below is the fallback for dispatches that predate the
-  # snippet.
-  if declare -F _caws_surface_vendor_dir >/dev/null 2>&1; then
-    local _registry_vendor_dir
-    _registry_vendor_dir="$(_caws_surface_vendor_dir "${CAWS_AGENT_SURFACE:-}")" || _registry_vendor_dir=""
-    if [[ -n "$_registry_vendor_dir" && "$_registry_vendor_dir" != ".caws" ]]; then
-      _CAWS_VENDOR_DIR="${_registry_vendor_dir}"
-      return 0
-    fi
-  fi
+  # A registry vendor name is not a project root. Complete root resolution
+  # regardless of which libraries the caller has already sourced.
   _CAWS_VENDOR_DIR_CANDIDATE=""
   if [[ -n "${CLAUDE_PROJECT_DIR:-}" ]]; then
     _CAWS_VENDOR_DIR_CANDIDATE="$CLAUDE_PROJECT_DIR"
