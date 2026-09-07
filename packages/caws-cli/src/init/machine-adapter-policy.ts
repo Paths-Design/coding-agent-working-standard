@@ -1,3 +1,15 @@
+import {
+  configHasCawsHooks,
+  isCawsNativeCommand,
+  machineCommand,
+} from './native-hook-identification';
+export {
+  configHasCawsHooks,
+  isCawsNativeCommand,
+  machineCommand,
+} from './native-hook-identification';
+import { extractMachineHandlers } from './machine-handler-policy';
+export { extractMachineHandlers } from './machine-handler-policy';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -11,13 +23,8 @@ import {
 } from './hook-install';
 import { SHARED_PACK } from './hook-packs/manifest-shared';
 
-export const MACHINE_EVENTS = {
-  pre_tool_use: 'PreToolUse',
-  post_tool_use: 'PostToolUse',
-  session_start: 'SessionStart',
-  stop: 'Stop',
-  pre_compact: 'PreCompact',
-} as const;
+import { MACHINE_EVENTS } from './native-hook-identification';
+export { MACHINE_EVENTS } from './native-hook-identification';
 type Event = keyof typeof MACHINE_EVENTS;
 interface EventPolicy {
   hooks_dir: string;
@@ -40,15 +47,6 @@ interface NativeHookGroup {
   [key: string]: unknown;
 }
 
-const quote = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
-const normalize = (text: string): string =>
-  text
-    .replace(/\r\n/g, '\n')
-    .split('\n')
-    .filter((line) => !/^\s*#/.test(line))
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .join('\n');
 const noVersion = (text: string): string =>
   text.replace(/hook_pack_version:\s*\d+/g, 'hook_pack_version: N');
 
@@ -94,11 +92,7 @@ function nativeCommandWords(command: string): { raw: string; value: string }[] {
   return words;
 }
 
-function machineCommand(home: string, surface: string, event: string): string {
-  return `CAWS_HOME=${quote(home)} python3 ${quote(path.join(home, 'bin/caws-hook'))} ${surface} ${event}`;
-}
-
-function migrateNativeCommand(
+export function migrateNativeCommand(
   command: string,
   repo: string,
   home: string,
@@ -136,6 +130,8 @@ function migrateNativeCommand(
         args[3] === event;
     } else {
       if (['bash', '/bin/bash'].includes(args[0] ?? '')) args.shift();
+      if (args[0] && path.isAbsolute(args[0]) && fs.existsSync(args[0]))
+        args[0] = fs.realpathSync(args[0]);
       const roots = [
         '',
         './',
@@ -154,7 +150,11 @@ function migrateNativeCommand(
       recognized =
         args.length === 1 &&
         roots.some((root) =>
-          dirs.some((dir) => args[0] === `${root}${dir}/hooks/dispatch/${event}.sh`)
+          dirs.some((dir) =>
+            ['dispatch', 'caws_dispatch'].some(
+              (dispatch) => args[0] === `${root}${dir}/hooks/${dispatch}/${event}.sh`
+            )
+          )
         );
     }
     if (!recognized) throw new Error('unrecognized dispatcher invocation');
@@ -164,48 +164,6 @@ function migrateNativeCommand(
       `Custom native command requires reconciliation (${MACHINE_EVENTS[event]}): ${(error as Error).message}`
     );
   }
-}
-
-/** Read a literal handler array, never source/eval project shell during a plan.
- * Only known dispatcher scaffolding is admitted. Custom shell logic outside the
- * array must be reconciled explicitly using --from <surface-policy.json>. */
-export function extractMachineHandlers(text: string, reference: string): string[] {
-  const array = /^(HANDLERS|_ALL_HANDLERS)=\(\s*\n([\s\S]*?)^\)/m;
-  const match = array.exec(text);
-  if (!match)
-    throw new Error('Dispatcher has no literal handler array; use --from with reviewed policy');
-  const skeleton = (body: string): string => normalize(body.replace(array, '$1=(\n)'));
-  const legacy = normalize(`set -uo pipefail
-SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
-HOOKS_DIR="$(dirname "$SCRIPT_DIR")"
-source "$HOOKS_DIR/lib/parse-input.sh" 2>/dev/null || exit 0
-parse_hook_input || exit 0
-source "$HOOKS_DIR/lib/run-handlers.sh" 2>/dev/null || exit 0
-HANDLERS=(
-)
-run_handlers \"\${HANDLERS[@]}\"`);
-  const actual = skeleton(text);
-  if (
-    actual !== skeleton(reference) &&
-    actual !== legacy &&
-    actual !== legacy.replace('run_handlers ', 'run_handlers --short-circuit-on-block ')
-  ) {
-    throw new Error(
-      'Custom dispatcher logic requires review; use --from with an explicit surface policy'
-    );
-  }
-  const handlers: string[] = [];
-  for (const raw of (match[2] as string).split('\n')) {
-    const line = raw.trim();
-    if (!line || line.startsWith('#')) continue;
-    const value = /^(?:"([^"$`\\]+)"|'([^'$`\\]+)'|([A-Za-z0-9_.-]+))(?:\s+#.*)?$/.exec(line);
-    const entry = value && (value[1] ?? value[2] ?? value[3]);
-    if (!entry || !/^[A-Za-z0-9_.-]+\.sh(?: [A-Za-z0-9_.:/-]+)*$/.test(entry)) {
-      throw new Error(`Nonliteral handler requires review: ${line}`);
-    }
-    handlers.push(entry);
-  }
-  return handlers;
 }
 
 function validateSurfacePolicy(repo: string, candidate: SurfacePolicy): void {
@@ -307,9 +265,7 @@ export function adoptMachineAdapter(options: AdoptMachineAdapterOptions): {
   const config = beforeConfig === null ? {} : JSON.parse(beforeConfig);
   if (!config || typeof config !== 'object' || Array.isArray(config))
     throw new Error('Malformed harness configuration');
-  const isCaws = (command: unknown): command is string =>
-    typeof command === 'string' &&
-    /(?:\.caws\/hooks\/|\.(?:codex|claude|qwen)\/hooks\/|\/bin\/caws-hook)/.test(command);
+  const isCaws = isCawsNativeCommand;
   // JSON and inline TOML are additive in Codex. Refuse the other layer rather
   // than claiming a single-dispatch install while it will actually fire twice.
   const userHome = options.userHome ?? process.env.HOME;
@@ -320,7 +276,13 @@ export function adoptMachineAdapter(options: AdoptMachineAdapterOptions): {
       path.join(userHome, vendor, 'config.toml')
     );
   for (const file of extraConfigs) {
-    if (fs.existsSync(file) && isCaws(fs.readFileSync(file, 'utf8'))) {
+    if (
+      fs.existsSync(file) &&
+      (file.endsWith('.json')
+        ? configHasCawsHooks(JSON.parse(fs.readFileSync(file, 'utf8')))
+        : /\[hooks[.\[\]]/.test(fs.readFileSync(file, 'utf8')) &&
+          isCaws(fs.readFileSync(file, 'utf8')))
+    ) {
       throw new Error(
         `Duplicate or ambiguous CAWS wiring at ${file}; reconcile it before adoption`
       );

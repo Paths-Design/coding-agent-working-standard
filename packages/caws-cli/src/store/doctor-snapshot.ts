@@ -44,6 +44,7 @@ import { parseManagedHeader } from '../init/hook-packs/managed-header';
 import { SHARED_PACK_VERSION, TELEMETRY_ROW_DEST_PATHS } from '../init/hook-packs/manifest-shared';
 import { listStrandedTmpSiblings } from './atomic-write';
 import { ADAPTER_COVERED_SURFACES } from '../init/hook-packs/types';
+import { observeSystemRuntime } from './system-runtime-observation';
 import { observeGatedSurfaceWiring } from '../init/hook-packs/user-scope-wiring';
 import { loadWorktrees } from './worktrees-store';
 
@@ -300,6 +301,7 @@ function observeFilesystem(
     // CAWS-DOCTOR-HOOKS-NO-CAWS-DRIFT-001: observe the hook pack so doctor
     // can flag the hooks-present/substrate-absent split-brain.
     hookPackInstalled: observeHookPackInstalled(repoRoot),
+    ...(() => { const systemRuntime = observeSystemRuntime(repoRoot); return systemRuntime ? { systemRuntime } : {}; })(),
     // CAWS-HARNESS-TELEMETRY-ADAPTER-001: observe managed telemetry rows and
     // installed adapter-pack surfaces so doctor can flag stale dual-writers.
     managedTelemetryRowPaths: observeManagedTelemetryRows(repoRoot),
@@ -309,7 +311,7 @@ function observeFilesystem(
       entries: readonly string[];
     } => {
       const home = os.homedir();
-      const root = path.join(home, '.caws');
+      const root = process.env.CAWS_HOME || path.join(home, '.caws');
       let entries: string[] = [];
       try {
         entries = fs.readdirSync(root);

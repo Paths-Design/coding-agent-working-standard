@@ -26,7 +26,10 @@
 //       target
 
 import { execFileSync } from 'child_process';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { installMachineRuntime, rollbackMachineRuntime } from '../../init/machine-adapters';
+import { configureSystemRuntime, migrateSystemProject, systemSurfaceEnabled } from '../../init/system-runtime';
 import { adoptMachineAdapter } from '../../init/machine-adapter-policy';
 import { resolveGitBinary } from '../../store/git-binary';
 import {
@@ -169,6 +172,9 @@ export interface InitCommandOptions {
   /** port: staging file OUTSIDE the protected hooks tree carrying the
    *  ported content. */
   readonly fromFile?: string;
+  /** Migrate direct canonical projects together; never recurse into worktrees. */
+  readonly projectsRoot?: string;
+  readonly nativeConfigTarget?: string;
 }
 
 function chooseSurface(
@@ -870,7 +876,8 @@ function runInitPlan(
 
   const detection = detectAgentHarness(repoRoot);
   const chosen = chooseSurface(opts.agentSurface, detection);
-  const hookPlan = planHookPackStep(repoRoot, chosen.surface, opts);
+  const system = systemSurfaceEnabled(chosen.surface);
+  const hookPlan = planHookPackStep(repoRoot, system ? 'none' : chosen.surface, opts);
   const resolution =
     chosen.surface && chosen.surface !== 'none'
       ? resolveHookPack(chosen.surface)
@@ -974,8 +981,32 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
     try {
       const operation = opts.actionArg ?? 'install';
       if (opts.overwrite || opts.force || opts.adopt || opts.wireUserConfig || opts.threeWayPath ||
-          (operation !== 'adopt' && (opts.fromFile || opts.agentSurface))) {
+          (!['adopt', 'configure', 'migrate'].includes(operation) && (opts.fromFile || opts.agentSurface)) ||
+          (opts.projectsRoot && operation !== 'migrate') || (opts.projectsRoot && opts.fromFile) ||
+        (opts.nativeConfigTarget && operation !== 'configure')) {
         err('caws init adapters: incompatible options; use --plan/--json, or --agent-surface/--from with adopt'); return 2;
+      }
+      if (operation === 'configure' || operation === 'migrate') {
+        if (!opts.agentSurface) { err('caws init adapters: --agent-surface is required'); return 2; }
+        const options = { surface: opts.agentSurface, plan: opts.plan === true };
+        if (operation === 'configure') {
+          if (opts.fromFile) { err('configure does not accept --from'); return 2; }
+          const result = configureSystemRuntime({
+            ...options,
+            ...(opts.nativeConfigTarget ? { nativeConfigTarget: opts.nativeConfigTarget } : {}),
+          });
+          out(opts.json ? JSON.stringify(result, null, 2) : `${opts.plan ? 'PLAN' : 'OK'} system registration: ${opts.agentSurface}\n${result.changes.map(c => `  ${c.path}`).join('\n')}\nRestart and review native hook trust before activation.`);
+          return 0;
+        }
+        const roots = opts.projectsRoot
+          ? fs.readdirSync(opts.projectsRoot, { withFileTypes: true }).filter(e => e.isDirectory() && !e.name.startsWith('.')).map(e => path.resolve(opts.projectsRoot!, e.name)).filter(p => fs.existsSync(path.join(p, '.git')) && fs.existsSync(path.join(p, '.caws')))
+          : [cwd];
+        const results = roots.map(repo => {
+          try { return { ok: true, ...migrateSystemProject({ ...options, repo, ...(opts.fromFile ? { fromFile: opts.fromFile } : {}) }) }; }
+          catch (error) { return { ok: false, root: repo, error: (error as Error).message }; }
+        });
+        out(opts.json ? JSON.stringify({ readOnly: opts.plan === true, results }, null, 2) : results.map(r => `${r.ok ? 'OK' : 'REVIEW'} ${r.root}: ${'error' in r ? r.error : r.changed ? 'migration prepared/applied' : 'unchanged'}`).join('\n'));
+        return results.every(r => r.ok) ? 0 : 1;
       }
       if (operation === 'adopt') {
         if (!opts.agentSurface) { err('caws init adapters adopt: --agent-surface is required'); return 2; }
@@ -991,7 +1022,7 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
         return 0;
       }
       if (operation !== 'install' && operation !== 'rollback') {
-        err(`caws init adapters: unknown operation ${operation}; expected install | rollback | adopt`);
+        err(`caws init adapters: unknown operation ${operation}; expected install | rollback | configure | migrate | adopt`);
         return 2;
       }
       const options = { plan: opts.plan === true };
@@ -1003,6 +1034,11 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
       err(`caws init adapters: ${(error as Error).message}`);
       return 1;
     }
+  }
+
+  if (opts.projectsRoot || opts.nativeConfigTarget) {
+    err('caws init: --projects-root requires adapters migrate; --native-config-target requires adapters configure.');
+    return 2;
   }
 
   // A7 (CAWS-HOOKPACK-UPGRADE-RETROFIT-001): init mutates the CANONICAL
@@ -1110,8 +1146,15 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   }
 
   if (opts.plan === true) {
-    return runInitPlan(repoRoot, opts, out, err, showData);
+    try { return runInitPlan(repoRoot, opts, out, err, showData); }
+    catch (error) { err(`caws init: ${(error as Error).message}`); return 1; }
   }
+
+  const detection = detectAgentHarness(repoRoot);
+  const chosen = chooseSurface(opts.agentSurface, detection);
+  let system: boolean;
+  try { system = systemSurfaceEnabled(chosen.surface); }
+  catch (error) { err(`caws init: ${(error as Error).message}`); return 1; }
 
   // Step 1: bootstrap canonical .caws/ state.
   const result = initProject(repoRoot);
@@ -1148,11 +1191,10 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   }
 
   // Step 2: choose the agent surface and install the hook pack.
-  const detection = detectAgentHarness(repoRoot);
-  const chosen = chooseSurface(opts.agentSurface, detection);
+  if (system) out(`System runtime configured for ${chosen.surface}; stock hooks and native registration are managed in the user home. No project hook pack is installed.`);
   const hookPackResult = performHookPackStep(
     repoRoot,
-    chosen.surface,
+    system ? 'none' : chosen.surface,
     chosen.reason,
     opts
   );

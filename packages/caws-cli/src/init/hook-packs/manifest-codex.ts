@@ -53,7 +53,7 @@ import type { HookPackV1 } from './types';
 // moves from the misleading .codex/AGENTS.md path to .codex/CAWS.md. The
 // concise, repository-wide working contract is merged into the root
 // instruction file by the init command, following Codex discovery precedence.
-export const CODEX_PACK_VERSION = 15;
+export const CODEX_PACK_VERSION = 17;
 
 export const CODEX_PACK: HookPackV1 = {
   id: 'codex',
@@ -117,6 +117,12 @@ export const CODEX_PACK: HookPackV1 = {
     },
 
     // -- Codex-specific lib overrides --
+    {
+      destPath: '.codex/hooks/lib/session-transcript.py',
+      sourcePath: 'hooks/lib/session-transcript.py',
+      executable: false,
+      managed: true,
+    },
     // These install to .codex/hooks/lib/ which is where caws_source_lib
     // looks for vendor overrides at runtime. Each file is sourced in
     // preference to the shared default when CAWS_VENDOR_DIR=.codex.

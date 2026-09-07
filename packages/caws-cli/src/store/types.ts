@@ -1,3 +1,4 @@
+import type { SystemRuntimeObservation } from '../kernel/doctor/types';
 // Node-only store types.
 //
 // The store layer is the bridge between the filesystem and the pure
@@ -186,6 +187,7 @@ export interface StoreSnapshot {
      * shared pack versions (observed from an installed row's managed
      * header vs the store's own SHARED_PACK_VERSION).
      */
+    readonly systemRuntime?: SystemRuntimeObservation;
     readonly installedSharedPackVersion?: number;
     readonly shippingSharedPackVersion?: number;
     /** CAWS-DEFECT-LEASE-TMP-STRANDING-01: stranded lease tmp files. */
