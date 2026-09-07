@@ -1,0 +1,50 @@
+id: CAWS-SPEC-AMEND-ACCEPTANCE-001
+title: 'specs amend cannot rewrite acceptance criteria, so agents encode AC corrections as invariants or spin successor specs'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-09-07T00:18:17.452Z'
+updated_at: '2026-09-07T00:18:17.452Z'
+created_by_session: 'session-ddd10825-75fb-42af-85e5-b52fa5f4815c'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/src/store/specs-body-writer.ts'
+    - 'packages/caws-cli/src/store/specs-writer.ts'
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/kernel/schemas/events/spec_body_amended.v1.json'
+    - 'docs/command-reference.md'
+    - 'docs/api/cli.md'
+    - 'docs/architecture/caws-vnext-command-surface.md'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/specs-body-writer.ts'
+    - 'packages/caws-cli/src/store/specs-writer.ts'
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/kernel/schemas/events/spec_body_amended.v1.json'
+    - 'packages/caws-cli/tests/store/specs-body-writer-acceptance.test.js'
+    - 'packages/caws-cli/tests/shell/specs-amend.test.js'
+    - 'docs/command-reference.md'
+    - 'docs/api/cli.md'
+    - 'docs/architecture/caws-vnext-command-surface.md'
+    - 'packages/caws-cli/README.md'
+  out: []
+invariants:
+  - 'Amending an acceptance criterion invalidates, never preserves, the closure evidence recorded against its previous text — a rewritten claim cannot silently retain the old claim''s pass or waiver.'
+  - 'AC amendment is a claim rewrite, so it is a draft/active operation: a closed spec admits only the full scaffold discharge, and an archived spec is a tombstone.'
+  - 'One criterion per invocation: --set-ac/--add-ac/--remove-ac are mutually exclusive and --given/--when/--then bind to exactly the named criterion, so no flag combination can leave ambiguity about which text replaced which.'
+  - 'An accepted amendment lands spec bytes, evidence block, and event in one lifecycle transaction; a refused one writes nothing at all.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'specs-amend-acceptance'
+    type: behavior
