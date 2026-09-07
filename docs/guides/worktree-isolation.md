@@ -45,12 +45,21 @@ Creation records the owner in `.caws/worktrees.json`. Ordinary `caws claim`
 checks that owner against the current session; it does not mint a new identity
 to satisfy the comparison. List worktrees with `caws worktree list`.
 
-When creation falls back to a local session capsule, its output includes a
+When creation has no caller identity, it mints a new capsule and prints a
 `Continue in this shell:` command that exports the exact created
 `CAWS_SESSION_ID`, enters the worktree, and runs `caws claim`. Execute that
 continuation in the shell that will run subsequent CAWS commands. A new shell
 must retain that identity or receive its native harness identity again. A
 directory switch or another session's capsule does not establish continuity.
+
+Ownership checks use the same caller precedence for claim, ensure, bind, merge,
+destroy and cleanup. A sole cached capsule, a fresh envelope, or a shared caller
+pointer cannot identify the invoking process. Existing `ensure` never mints: it
+requires the original session context and prints a continuation carrying that
+context when `CAWS_SESSION_ID` is in use. If context was lost, resume the original
+harness session or the saved creation continuation. Minting another capsule
+cannot recover ownership; an intentional transfer requires an authorized
+`caws claim --takeover`.
 Do not use an owner id copied from the registry to impersonate that owner;
 foreign ownership requires an explicitly authorized takeover.
 

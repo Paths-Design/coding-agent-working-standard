@@ -107,32 +107,16 @@ export interface SessionCandidate {
 }
 
 /**
- * Result of resolveSessionCandidates — the full set of session identities
- * the current process can plausibly speak for.
+ * Ownership comparison uses resolveCallerSession's precedence and NEVER
+ * mints. All admitted records name that same invoking caller. Cached records
+ * can corroborate an already resolved caller but cannot introduce identities.
+ * A singleton capsule, a fresh envelope, a caller pointer and cwd ownership
+ * are not proof that the process speaks for their recorded session.
  *
- * Authority semantics (ownership-comparison surfaces only):
- *
- *   resolveSession() picks ONE identity in priority order (and may mint
- *   one when allowMint is set). It is the right helper for surfaces that
- *   need to STAMP an identity onto a new record (worktree create, claim,
- *   evidence, gates) — there is exactly one author of any given record.
- *
- *   resolveSessionCandidates() returns ZERO OR MORE identities, NEVER
- *   mints, and is the right helper for ownership-comparison surfaces
- *   (worktree destroy, merge) that need to answer "is the agent invoking
- *   this command speaking for the registered owner?" The comparison
- *   admits if ANY candidate matches the registered owner's session_id.
- *
- * The split exists because resolveSession()'s cwd-keyed capsule lookup
- * is correct for identity stamping (the act of writing identifies you
- * with a specific worktree_root) but wrong for ownership comparison
- * across cwds (an agent that claimed inside a worktree may legitimately
- * destroy from the canonical checkout, and the cwd-keyed lookup would
- * synthesize a fresh identity that doesn't match the registry owner).
- *
- * See CAWS-WORKTREE-DESTROY-SESSION-RESOLUTION-001 for the failure mode
- * and CAWS-SESSION-ID-DRIFT-ENV-PRECEDENCE-001 for the prior fix that
- * narrowed but did not eliminate the comparison-side gap.
+ * resolveCallerSession is also the author resolver for worktree lifecycle
+ * and claim commands, so comparison and attribution agree. resolveSession
+ * retains legacy cached attribution for other consumers; it must not be used
+ * to admit a caller to somebody else's ownership.
  */
 export interface SessionCandidates {
   /** Ordered candidates. Empty when no source resolved an identity. */
@@ -179,7 +163,10 @@ export interface CandidateTraceEntry {
   readonly admittedIds?: ReadonlyArray<string>;
 }
 
-export interface ResolveCandidatesOptions {
+export interface ResolveCandidatesOptions extends Pick<ResolveSessionOptions, 'agentProcessNames' | 'agentPidWalkFn'> {
+  /** Reuse the caller already resolved for this invocation's actor. Prevents
+   * a second PID-record read from changing identity between audit and admission. */
+  readonly caller?: ResolvedSession;
   /** Injected environment. Defaults to `process.env`. */
   readonly env?: NodeJS.ProcessEnv;
   /** Injected `cawsDir` (the directory containing `sessions/`). Required. */

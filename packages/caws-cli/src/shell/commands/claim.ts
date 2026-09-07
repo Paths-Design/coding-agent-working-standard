@@ -5,7 +5,7 @@
 // Pipeline (--paths absent):
 //   1. resolveRepoRoot(cwd)
 //   2. composeStoreSnapshot (worktrees + agents + specs)
-//   3. resolveSession                           — mint only for explicit takeover
+//   3. resolveCallerSession                           — mint only for explicit takeover
 //   4. resolveBinding(cwd, registry, specs)        — identify the worktree
 //   5. kernel.assertOwnership(registry, name, session, { takeover }, now)
 //      → Ok(null)             — same-session, no patch
@@ -77,7 +77,14 @@ import { resolveBinding } from '../binding/resolve-binding';
 import { renderClaimPanel, classifyOwnership } from '../render/claim';
 import { renderDiagnostics } from '../render/diagnostic';
 import { emitPeerPresence } from '../render/peer-presence';
-import { resolveSession } from '../session/resolve-session';
+import { resolveCallerSession } from '../session/resolve-session';
+import type { ResolvedSession } from '../session/types';
+
+function surfaceMintedContinuation(session: ResolvedSession, out: (line: string) => void): void {
+  if (session.source !== 'minted') return;
+  const quoted = "'" + session.identity.session_id.replaceAll("'", "'\\''") + "'";
+  out(`Continue in this shell: export CAWS_SESSION_ID=${quoted}`);
+}
 
 export interface ClaimCommandOptions {
   readonly takeover?: boolean;
@@ -355,7 +362,7 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
   // Minting here would create a second identity after a no-env create/enter.
   // Only an explicit takeover may establish a new identity; ordinary entry
   // carries the context printed by create or supplied by the native harness.
-  const sessionResult = resolveSession({
+  const sessionResult = resolveCallerSession({
     cawsDir,
     worktreeRoot: cwd,
     env,
@@ -695,7 +702,7 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
   // to lifecycle verbs refresh agents.json so freshness display stays
   // current independent of IDE hooks. refreshAgentClaim only fails on
   // a malformed session shape; we just validated this session via
-  // resolveSession, so Err here would be a real bug. Treat it as exit 2.
+  // resolveCallerSession, so Err here would be a real bug. Treat it as exit 2.
   if (opts.paths === undefined) {
     const refreshResult = refreshAgentClaim(snapshot.agents, session, now, {
       bound_worktree: worktreeName,
@@ -782,6 +789,7 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
   );
 
   // A successful claim must describe the same caller we authorized above.
+  if (newRel === 'you') surfaceMintedContinuation(sessionResult.value, out);
   return newRel === 'you' ? 0 : 1;
 }
 
@@ -828,7 +836,7 @@ function runClaimBridgeDispatch(
   }
   const { cawsDir } = repoRootResult.value;
 
-  const sessionResult = resolveSession({
+  const sessionResult = resolveCallerSession({
     cawsDir,
     worktreeRoot: ctx.cwd,
     env: ctx.env,
@@ -928,6 +936,7 @@ function runClaimBridgeDispatch(
       }));
     } else {
       out(`bridge for ${specId} taken over from ${t.value.priorOwnerSessionId} (prior_owners audit appended; bridge_claim_taken_over event recorded).`);
+      surfaceMintedContinuation(sessionResult.value, out);
     }
     return 0;
   }
@@ -956,6 +965,7 @@ function runClaimBridgeDispatch(
     out("  Scope admission now flows from this binding: the spec's scope.in is your write surface —");
     out('  exactly as a worktree binding enforces it, nothing wider (bridge is authority, not scope expansion).');
     out(`  Release with: caws claim --release --spec ${specId}`);
+    surfaceMintedContinuation(sessionResult.value, out);
   }
   return 0;
 }
