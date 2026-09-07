@@ -2,10 +2,11 @@ id: CAWS-SYSTEM-RUNTIME-001
 title: 'Run CAWS hooks and renderers from machine configuration without per-project pack upgrades'
 risk_tier: 2
 mode: refactor
-lifecycle_state: active
-worktree: wt-system-runtime
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'System runtime installed and native Codex activation verified. Eight projects migrated centrally; one new project ran SessionStart, a denied protected write and Stop without local hook copies. AC A1-A7 evidence recorded. Tests and proof ceilings: tmp/system-runtime-2026-09-07/README.md. RC/Sterling customization and legacy governance remain separately identified adoption work.'
 created_at: '2026-09-07T00:24:16.669Z'
-updated_at: '2026-09-07T00:36:26.746Z'
+updated_at: '2026-09-07T02:02:20.714Z'
 created_by_session: '01a07868-9878-7e72-bcd9-a6af25f92820'
 blast_radius:
   modules:
