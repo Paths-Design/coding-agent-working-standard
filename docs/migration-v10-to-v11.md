@@ -216,7 +216,7 @@ The JSON review has exactly `version: 1`, a nonempty `reason`, nonempty
 `beforeSha256` (SHA-256 of current UTF-8 bytes, or `null` only when absent),
 and `contents` (reviewed replacement YAML, or `null` to archive the original).
 Allowed paths are the singleton and singleton schema, `policy.yaml`, and named
-YAML files under `specs/`, all beneath `.caws/`. Singleton paths must be archived.
+YAML files under `specs/` and `waivers/`, all beneath `.caws/`. Singleton paths must be archived. Waivers can only be archived unchanged when revoked or provably expired; unexpired and ambiguous records are refused. A legacy waiver aggregate must contain only inert entries.
 
 Replacement policies must validate. Replacement specs must validate as unbound
 drafts without evidence or resolution. Existing modern policies and specs cannot

@@ -127,3 +127,21 @@ test('CLI previews by default and requires explicit apply; incompatible options 
   expect(invoke({ actionArg: 'apply' })).toBe(0);
   expect(fs.existsSync(path.join(root, '.caws/working-spec.yaml'))).toBe(false);
 });
+
+test.each(['2000-01-01', '2000-01-01T00:00:00Z'])('archives expired legacy waiver %s without granting a replacement', expires => {
+  fs.mkdirSync(path.join(root, '.caws/waivers'));
+  const original = `id: OLD-WAIVER\nstatus: active\nexpires_at: ${expires}\n`;
+  fs.writeFileSync(path.join(root, '.caws/waivers/OLD-WAIVER.yaml'), original);
+  plan.changes.push({ path: '.caws/waivers/OLD-WAIVER.yaml', beforeSha256: sha(original), contents: null });
+  const result = adoptLegacyProject(root, plan, true);
+  expect(fs.readFileSync(path.join(root, result.archive, 'waivers/OLD-WAIVER.yaml'), 'utf8')).toBe(original);
+  expect(fs.existsSync(path.join(root, '.caws/waivers/OLD-WAIVER.yaml'))).toBe(false);
+});
+test.each(['2999-01-01', 'unknown'])('refuses unexpired or ambiguous legacy waiver %s before any writes', expires => {
+  fs.mkdirSync(path.join(root, '.caws/waivers'));
+  const original = `id: OLD-WAIVER\nstatus: active\nexpires_at: ${expires}\n`;
+  fs.writeFileSync(path.join(root, '.caws/waivers/OLD-WAIVER.yaml'), original);
+  plan.changes.push({ path: '.caws/waivers/OLD-WAIVER.yaml', beforeSha256: sha(original), contents: null });
+  expect(() => adoptLegacyProject(root, plan, true)).toThrow('provably expired or revoked');
+  unchanged();
+});
