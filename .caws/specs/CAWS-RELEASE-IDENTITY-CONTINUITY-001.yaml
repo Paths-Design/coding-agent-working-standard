@@ -40,6 +40,13 @@ acceptance:
     given: 'native identity context, explicit takeover intent and a path containing shell punctuation'
     when: 'create and claim execute through their documented command surfaces'
     then: 'native behavior remains supported, fallback output is safely quoted, and existing takeover protections remain effective'
+  - id: A4
+    given: 'an existing owned worktree with neighboring cached identities'
+    when: 'ensure or another lifecycle command compares the invoking caller to the owner'
+    then: >-
+      only caller-carried identity or its correlated process record admits; absent
+      or foreign callers refuse without minting, and successful ensure prints an
+      executable identity-preserving continuation
 observability:
   - 'Rendered create continuation command and claim refusal identify missing session context without claiming ownership'
 rollback:
