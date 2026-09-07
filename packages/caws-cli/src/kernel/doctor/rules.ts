@@ -270,12 +270,10 @@ export const DOCTOR_RULES = {
   HOOKS_SYSTEM_RUNTIME_INVALID: 'doctor.hooks.system_runtime_invalid',
   HOOKS_SYSTEM_LEGACY_WIRING: 'doctor.hooks.system_legacy_wiring',
   GLOBAL_HOME_UNMANAGED_STATE: 'doctor.global_home.unmanaged_state',
-  /**
-   * CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A4: ~/.caws exists but lacks the
-   * stamped state/global-home.json (either never migrated, or the stamp
-   * was removed). Severity: info. Repair: run the A1 migration slice.
-   */
+  /** Existing home with neither a legacy migration stamp nor a verified runtime. */
   GLOBAL_HOME_STAMP_MISSING: 'doctor.global_home.stamp_missing',
+  GLOBAL_HOME_UNREADABLE: 'doctor.global_home.unreadable',
+  GLOBAL_HOME_RUNTIME_INVALID: 'doctor.global_home.runtime_invalid',
 
   /**
    * CAWS-GATED-SURFACE-SCOPE-GUARD-001: a trust-gated surface (qwen-code,

@@ -1328,23 +1328,50 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     );
   }
 
-  // CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A4: the global home is the machine
-  // state layer the guard wedge and identity machinery now live in; it must
-  // be stamped and free of foreign residue. Unobserved = silent.
+  // Absent and unobserved homes require no repair. Present observations
+  // distinguish initialization from integrity and preserve the actual root.
   const globalHome = input.filesystem?.globalHomeObservation;
-  if (globalHome !== undefined) {
+  if (globalHome?.kind === 'unreadable') {
+    findings.push(
+      finding(
+        DOCTOR_RULES.GLOBAL_HOME_UNREADABLE,
+        'error',
+        `Cannot inspect machine global home ${globalHome.root}: ${globalHome.error.message}`,
+        {
+          subject: globalHome.root,
+          narrowRepair:
+            'Check that CAWS_HOME names an absolute readable directory and resolve the reported path or permission error, then rerun caws doctor.',
+          data: { code: globalHome.error.code },
+        }
+      )
+    );
+  }
+  if (globalHome?.kind === 'present') {
     const known = new Set(['state', 'surfaces', 'lib', 'bin']);
     const foreign = globalHome.entries.filter((e) => !known.has(e));
-    if (globalHome.stampPresent === false) {
+    if (globalHome.runtime.status === 'invalid') {
+      findings.push(
+        finding(
+          DOCTOR_RULES.GLOBAL_HOME_RUNTIME_INVALID,
+          'error',
+          `Machine runtime at ${globalHome.root} could not be verified: ${globalHome.runtime.error}`,
+          {
+            subject: globalHome.root,
+            narrowRepair:
+              'Preserve any local runtime changes and reconcile the reported state. Preview installation with caws init adapters install --plan before applying a repair.',
+          }
+        )
+      );
+    } else if (!globalHome.stampPresent && globalHome.runtime.status === 'absent') {
       findings.push(
         finding(
           DOCTOR_RULES.GLOBAL_HOME_STAMP_MISSING,
           'info',
-          'The machine global home (~/.caws) exists but lacks the stamped state/global-home.json. Identity/session machinery that moves global needs the stamp for governance (managed headers, version, migration manifest).',
+          `The machine global home (${globalHome.root}) exists but has neither an installed runtime nor a legacy migration stamp.`,
           {
-            subject: '~/.caws',
+            subject: globalHome.root,
             narrowRepair:
-              'Run the A1 migration slice of CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 to archive legacy residue and stamp the new home.',
+              'Review any existing contents, then run caws init adapters install with this same CAWS_HOME to install the machine runtime; preview with --plan. Configure and verify the native harness separately.',
           }
         )
       );
@@ -1354,11 +1381,11 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
         finding(
           DOCTOR_RULES.GLOBAL_HOME_UNMANAGED_STATE,
           'warning',
-          `Unmanaged state in the global home (~/.caws): ${foreign.join(', ')}. The known structure is state/, surfaces/, lib/, bin/; anything else is pre-migration residue or foreign litter.`,
+          `Unmanaged entries in the global home (${globalHome.root}): ${foreign.join(', ')}. CAWS manages state/, surfaces/, lib/, bin/; these other entries require review.`,
           {
-            subject: '~/.caws',
+            subject: globalHome.root,
             narrowRepair:
-              'Archive the foreign entries with a recorded manifest (the A1 migration pattern) — never blind-delete.',
+              'Review and preserve the named entries before moving them outside the managed home; do not delete unknown data.',
             data: { foreign_entries: [...foreign] },
           }
         )

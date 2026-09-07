@@ -1,10 +1,8 @@
 /**
  * CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A4 — global-home doctor coverage.
  *
- * The machine global home (~/.caws) is the identity/wedge state layer. Two
- * rules observe it: a missing stamp (info) and foreign entries outside the
- * known structure (warning). Unobserved observations stay silent (house
- * convention). DIAGNOSE ONLY: pure kernel over the snapshot.
+ * Pure diagnostics over explicit missing, unreadable, and present states.
+ * Verified runtime bytes do not establish native activation or authority.
  */
 
 import { inspectProjectState } from '../../../src/kernel/doctor/inspect';
@@ -14,8 +12,17 @@ import type { DoctorInput } from '../../../src/kernel/doctor/types';
 const NOW = new Date('2026-06-15T12:00:00.000Z');
 
 type FsObs = NonNullable<DoctorInput['filesystem']>;
-function fsObs(partial: Record<string, unknown>): FsObs {
-  return partial as unknown as FsObs;
+function fsObs(partial: Partial<FsObs>): FsObs {
+  return {
+    cawsDirExists: true,
+    specsDirExists: true,
+    waiversDirExists: true,
+    policyYamlExists: true,
+    worktreesJsonExists: true,
+    agentsJsonExists: true,
+    eventsJsonlExists: false,
+    ...partial,
+  };
 }
 
 function rules(report: ReturnType<typeof inspectProjectState>): string[] {
@@ -36,7 +43,13 @@ describe('global-home doctor rules (CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A4)', (
     const report = inspectProjectState(
       input(
         fsObs({
-          globalHomeObservation: { stampPresent: true, entries: ['state', 'surfaces', 'lib', 'bin'] },
+          globalHomeObservation: {
+            kind: 'present',
+            root: '/fixture/machine',
+            runtime: { status: 'absent' },
+            stampPresent: true,
+            entries: ['state', 'surfaces', 'lib', 'bin'],
+          },
         })
       )
     );
@@ -48,7 +61,13 @@ describe('global-home doctor rules (CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A4)', (
     const report = inspectProjectState(
       input(
         fsObs({
-          globalHomeObservation: { stampPresent: false, entries: ['state', 'lib'] },
+          globalHomeObservation: {
+            kind: 'present',
+            root: '/fixture/machine',
+            runtime: { status: 'absent' },
+            stampPresent: false,
+            entries: ['state', 'lib'],
+          },
         })
       )
     );
@@ -62,6 +81,9 @@ describe('global-home doctor rules (CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A4)', (
       input(
         fsObs({
           globalHomeObservation: {
+            kind: 'present',
+            root: '/fixture/machine',
+            runtime: { status: 'absent' },
             stampPresent: true,
             entries: ['state', 'working-spec.yaml', 'events.jsonl', 'specs'],
           },
@@ -69,13 +91,14 @@ describe('global-home doctor rules (CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A4)', (
       )
     );
     expect(rules(report)).toContain(DOCTOR_RULES.GLOBAL_HOME_UNMANAGED_STATE);
-    const finding = report.findings.find((f) => f.rule === DOCTOR_RULES.GLOBAL_HOME_UNMANAGED_STATE);
+    const finding = report.findings.find(
+      (f) => f.rule === DOCTOR_RULES.GLOBAL_HOME_UNMANAGED_STATE
+    );
     expect(finding?.severity).toBe('warning');
     expect(finding?.data).toMatchObject({
       foreign_entries: ['working-spec.yaml', 'events.jsonl', 'specs'],
     });
-    // The repair names the archive-with-manifest pattern, never blind-delete.
-    expect(finding?.narrowRepair).toContain('Archive');
+    expect(finding?.narrowRepair).toContain('preserve');
   });
 
   test('an unobserved global home stays silent (older snapshot writers)', () => {
@@ -85,5 +108,67 @@ describe('global-home doctor rules (CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A4)', (
     expect(rules(inspectProjectState(input(fsObs({}))))).not.toContain(
       DOCTOR_RULES.GLOBAL_HOME_STAMP_MISSING
     );
+  });
+
+  test.each([
+    { kind: 'absent', root: '/fixture/machine' } as const,
+    {
+      kind: 'present',
+      root: '/fixture/machine',
+      stampPresent: false,
+      entries: ['lib', 'state'],
+      runtime: { status: 'verified', digest: 'a'.repeat(64) },
+    } as const,
+  ])(
+    'absence and verified installation do not request a migration stamp: %j',
+    (globalHomeObservation) => {
+      const report = inspectProjectState(input(fsObs({ globalHomeObservation })));
+      expect(report.findings.filter((f) => f.rule.startsWith('doctor.global_home.'))).toEqual([]);
+    }
+  );
+
+  test('an unreadable path reports the failure and exact root without an initialization finding', () => {
+    const report = inspectProjectState(
+      input(
+        fsObs({
+          globalHomeObservation: {
+            kind: 'unreadable',
+            root: '/fixture/inaccessible',
+            error: { code: 'EACCES', message: 'denied' },
+          },
+        })
+      )
+    );
+    expect(report.findings.filter((f) => f.rule.startsWith('doctor.global_home.'))).toEqual([
+      expect.objectContaining({
+        rule: DOCTOR_RULES.GLOBAL_HOME_UNREADABLE,
+        severity: 'error',
+        subject: '/fixture/inaccessible',
+        data: { code: 'EACCES' },
+      }),
+    ]);
+  });
+
+  test('a legacy stamp cannot hide an invalid runtime', () => {
+    const report = inspectProjectState(
+      input(
+        fsObs({
+          globalHomeObservation: {
+            kind: 'present',
+            root: '/fixture/machine',
+            stampPresent: true,
+            entries: ['lib', 'state'],
+            runtime: { status: 'invalid', error: 'modified launcher' },
+          },
+        })
+      )
+    );
+    expect(report.findings.filter((f) => f.rule.startsWith('doctor.global_home.'))).toEqual([
+      expect.objectContaining({
+        rule: DOCTOR_RULES.GLOBAL_HOME_RUNTIME_INVALID,
+        severity: 'error',
+        message: expect.stringContaining('modified launcher'),
+      }),
+    ]);
   });
 });

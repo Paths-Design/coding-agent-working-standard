@@ -1,4 +1,4 @@
-import type { SystemRuntimeObservation } from '../kernel/doctor/types';
+import type { GlobalHomeObservation, SystemRuntimeObservation } from '../kernel/doctor/types';
 // Node-only store types.
 //
 // The store layer is the bridge between the filesystem and the pure
@@ -192,10 +192,7 @@ export interface StoreSnapshot {
     readonly shippingSharedPackVersion?: number;
     /** CAWS-DEFECT-LEASE-TMP-STRANDING-01: stranded lease tmp files. */
     /** CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A4: global home observation. */
-    readonly globalHomeObservation?: {
-      readonly stampPresent: boolean;
-      readonly entries: readonly string[];
-    };
+    readonly globalHomeObservation?: GlobalHomeObservation;
     readonly strandedLeaseTmpFiles?: readonly {
       readonly name: string;
       readonly ageMs: number;
