@@ -1,0 +1,29 @@
+id: CAWS-CLI-SET-AC-STALE-BRACKET-001
+title: 'set-ac re-locates the criterion between field writes so multi-field amendments survive folding'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-07T06:15:37.104Z'
+updated_at: '2026-09-07T06:15:37.104Z'
+created_by_session: 'session-ddd10825-75fb-42af-85e5-b52fa5f4815c'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'set-ac-multifield-rewrite'
+    type: behavior
+    path: 'packages/caws-cli/src/store/specs-body-writer.ts'
