@@ -2,10 +2,11 @@ id: CAWS-CLI-SNAPSHOT-INSTALL-001
 title: 'Keep the global CLI available while development builds replace dist'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-cli-snapshot-install
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Standalone global CLI installed and activated atomically; six live Sterling doctor probes passed during and after a real canonical build. Candidate failure, concurrent install lock, source removal and prior release retention verified with real package installation fixtures.'
 created_at: '2026-09-07T03:16:54.860Z'
-updated_at: '2026-09-07T03:16:55.890Z'
+updated_at: '2026-09-07T03:23:00.581Z'
 created_by_session: '01a07868-9878-7e72-bcd9-a6af25f92820'
 blast_radius:
   modules:
