@@ -69,3 +69,8 @@ non_functional: {}
 contracts:
   - name: 'specs-amend-acceptance'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "specs-body-writer-acceptance.test.js: set-ac exact-field rewrite + sibling byte preservation; evidence reset asserted (spec.evidence == unchecked, reset_evidence carries previous_status). Falsification: disabling the reset rule reddens exactly this test + the A5 commit test (2/19), 17 unaffected"
+    recorded_at: "2026-09-07T01:11:49.841Z"
