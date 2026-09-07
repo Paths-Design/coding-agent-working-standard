@@ -1,0 +1,41 @@
+id: CAWS-RELEASE-RUNTIME-REPAIR-001
+title: 'Repair shared runtime bootstrap and emitted recovery context'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-07T05:23:59.234Z'
+updated_at: '2026-09-07T05:23:59.234Z'
+created_by_session: '01a07868-9878-7e72-bcd9-a6af25f92820'
+blast_radius:
+  modules:
+    - 'Shared runtime bootstrap and human recovery messages'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/guard-message.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh'
+    - 'packages/caws-cli/tests/adapter/machine-recovery.test.js'
+    - 'packages/caws-cli/tests/adapter/runtime-context.test.js'
+  out: []
+invariants:
+  - 'Rendered recovery preserves canonical project and session boundaries; runtime snapshots remain immutable.'
+  - 'Registry source order does not change derived project, surface, or CLI state.'
+acceptance:
+  - id: A1
+    given: 'an initialized surface registry and legacy vendor project hint'
+    when: 'shared bootstrap is sourced in either order under normal and strict shells'
+    then: 'canonical root, vendor identity and CLI helper are available without errors.'
+  - id: A2
+    given: 'a machine runtime guard refusal and latches for two sessions'
+    when: 'the human executes the exact emitted recovery command'
+    then: 'only the named canonical project and session latch is cleared and snapshot bytes remain unchanged.'
+  - id: A3
+    given: 'legacy local hook installation'
+    when: 'its recovery command is rendered and executed'
+    then: 'the intended session latch is cleared without requiring global adoption.'
+non_functional: {}
+contracts:
+  - name: 'runtime-bootstrap-recovery'
+    type: behavior
