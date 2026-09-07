@@ -98,6 +98,16 @@ FILE_PATH="$HOOK_FILE_PATH"
 _hooks_prefix_match() {
   # Returns 0 (true) if FILE_PATH is under the shared pack's install
   # directory or a vendor-surface hooks dir.
+  # The system runtime's executables, adapters, policy overrides and reprieves
+  # have the same boundary as the former project hook directory. CLI-mediated
+  # installation/configuration is separate from an agent's direct file edit.
+  local machine_home="${CAWS_HOME:-${HOME}/.caws}"
+  [[ "$FILE_PATH" == "$machine_home/bin/"* ]] || \
+  [[ "$FILE_PATH" == "$machine_home/lib/"* ]] || \
+  [[ "$FILE_PATH" == "$machine_home/surfaces/"* ]] || \
+  [[ "$FILE_PATH" == "$machine_home/state/projects/"* ]] || \
+  [[ "$FILE_PATH" == "$machine_home/state/adapter-runtime.json" ]] || \
+  [[ "$FILE_PATH" == "$machine_home/state/sessions/"*/guard-reprieve-* ]] || \
   [[ "$FILE_PATH" == */.caws/hooks/* ]] || \
   [[ "$FILE_PATH" == ".caws/hooks/"* ]] || \
   [[ "$FILE_PATH" == */"${CAWS_VENDOR_DIR}"/hooks/* ]] || \

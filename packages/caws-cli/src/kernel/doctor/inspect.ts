@@ -1270,9 +1270,24 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   // pack older than the code that ships is running guard code its own repo
   // no longer contains. Both observations must be present; matching or
   // newer-installed versions are silent.
+  const systemRuntime = input.filesystem?.systemRuntime;
+  if (systemRuntime) {
+    findings.push(finding(
+      systemRuntime.error ? DOCTOR_RULES.HOOKS_SYSTEM_RUNTIME_INVALID : DOCTOR_RULES.HOOKS_SYSTEM_RUNTIME,
+      systemRuntime.error ? 'error' : 'info',
+      systemRuntime.error ? `System runtime configuration failure: ${systemRuntime.error}` : `System runtime ${systemRuntime.digest} configured for ${systemRuntime.surfaces.join(', ')}; ${systemRuntime.overrides.length} explicit extension/override entries. Native activation is verified separately.`,
+      { subject: '~/.caws', data: { ...systemRuntime }, narrowRepair: 'Inspect caws init adapters install --plan and configure/migrate previews. Update the machine runtime once; native hook trust and execution require harness verification.' }
+    ));
+    if (systemRuntime.legacySurfaces.length > 0) findings.push(finding(
+      DOCTOR_RULES.HOOKS_SYSTEM_LEGACY_WIRING, 'warning',
+      `Project CAWS hook registrations remain for ${systemRuntime.legacySurfaces.join(', ')}; these surfaces still need one-time system migration.`,
+      { subject: '.caws/hooks', data: { surfaces: [...systemRuntime.legacySurfaces] }, narrowRepair: 'Use caws init adapters migrate --agent-surface <surface> --plan after configuring that native harness. Preserve reviewed extensions; do not refresh copied packs.' }
+    ));
+  }
   const installedPack = input.filesystem?.installedSharedPackVersion;
   const shippingPack = input.filesystem?.shippingSharedPackVersion;
   if (
+    systemRuntime === undefined &&
     installedPack !== undefined &&
     shippingPack !== undefined &&
     installedPack < shippingPack
@@ -1318,7 +1333,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   // be stamped and free of foreign residue. Unobserved = silent.
   const globalHome = input.filesystem?.globalHomeObservation;
   if (globalHome !== undefined) {
-    const known = new Set(['state', 'surfaces', 'lib']);
+    const known = new Set(['state', 'surfaces', 'lib', 'bin']);
     const foreign = globalHome.entries.filter((e) => !known.has(e));
     if (globalHome.stampPresent === false) {
       findings.push(
@@ -1339,7 +1354,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
         finding(
           DOCTOR_RULES.GLOBAL_HOME_UNMANAGED_STATE,
           'warning',
-          `Unmanaged state in the global home (~/.caws): ${foreign.join(', ')}. The known structure is state/, surfaces/, lib/; anything else is pre-migration residue or foreign litter.`,
+          `Unmanaged state in the global home (~/.caws): ${foreign.join(', ')}. The known structure is state/, surfaces/, lib/, bin/; anything else is pre-migration residue or foreign litter.`,
           {
             subject: '~/.caws',
             narrowRepair:

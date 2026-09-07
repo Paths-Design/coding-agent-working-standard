@@ -414,6 +414,7 @@ export function registerShellCommands(
           wireUserConfig?: boolean;
           threeWay?: string;
           from?: string;
+          projectsRoot?: string;
         }
       ) => {
         // Positional subcommands (CAWS-HOOKPACK-UPGRADE-RETROFIT-001).
@@ -473,6 +474,7 @@ export function registerShellCommands(
         if (opts.threeWay !== undefined) {
           (runOpts as { threeWayPath?: string }).threeWayPath = opts.threeWay;
         }
+        if (opts.projectsRoot !== undefined) (runOpts as { projectsRoot?: string }).projectsRoot = opts.projectsRoot;
         if (opts.from !== undefined) {
           (runOpts as { fromFile?: string }).fromFile = opts.from;
         }

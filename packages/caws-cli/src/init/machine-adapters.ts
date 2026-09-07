@@ -1,8 +1,20 @@
+import { assertMachinePath } from './machine-paths';
+export { assertMachinePath } from './machine-paths';
+import {
+  sha,
+  pointerPath,
+  readPointer,
+  readManifest,
+  verifyRuntime,
+  type RuntimePointer,
+} from './machine-runtime-state';
+export { verifyRuntime } from './machine-runtime-state';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { IMPLEMENTED_SURFACES, resolveHookPack } from './hook-packs/register';
+import { extractMachineHandlers } from './machine-handler-policy';
 import { SHARED_PACK } from './hook-packs/manifest-shared';
 
 export interface MachineRuntimeOptions {
@@ -20,33 +32,10 @@ export interface MachineRuntimeResult {
   readonly files: readonly string[];
 }
 
-interface RuntimePointer {
-  version: 1;
-  digest: string;
-  previous_digest: string | null;
-}
-
 export function machineHome(env: NodeJS.ProcessEnv = process.env): string {
   const home = env.CAWS_HOME || path.join(os.homedir(), '.caws');
   if (!path.isAbsolute(home)) throw new Error('CAWS_HOME must be an absolute path');
   return path.resolve(home);
-}
-
-/** Refuse redirected installation/read paths. The caller may use a resolved
- * temporary root, but no component below that root may be a symlink. */
-export function assertMachinePath(root: string, file: string): void {
-  const relative = path.relative(root, file);
-  if (relative.startsWith('..') || path.isAbsolute(relative))
-    throw new Error(`Path escapes root: ${file}`);
-  let cursor = root;
-  for (const part of ['', ...relative.split(path.sep).filter(Boolean)]) {
-    if (part) cursor = path.join(cursor, part);
-    try {
-      if (fs.lstatSync(cursor).isSymbolicLink()) throw new Error(`Refusing symlink: ${cursor}`);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    }
-  }
 }
 
 export function atomicMachineWrite(
@@ -64,60 +53,6 @@ export function atomicMachineWrite(
   } finally {
     if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
   }
-}
-
-const sha = (bytes: Buffer | string): string => createHash('sha256').update(bytes).digest('hex');
-const validDigest = (value: unknown): value is string =>
-  typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
-const pointerPath = (home: string): string => path.join(home, 'state/adapter-runtime.json');
-
-function readPointer(home: string): RuntimePointer | null {
-  const file = pointerPath(home);
-  assertMachinePath(home, file);
-  if (!fs.existsSync(file)) return null;
-  const value = JSON.parse(fs.readFileSync(file, 'utf8')) as RuntimePointer;
-  if (
-    !value ||
-    typeof value !== 'object' ||
-    value.version !== 1 ||
-    !validDigest(value.digest) ||
-    (value.previous_digest !== null && !validDigest(value.previous_digest))
-  ) {
-    throw new Error('Malformed machine adapter runtime pointer');
-  }
-  return value;
-}
-
-function readManifest(home: string, digest: string): Record<string, string> {
-  if (!validDigest(digest)) throw new Error('Invalid runtime digest');
-  const root = path.join(home, 'lib/runtimes', digest);
-  assertMachinePath(home, path.join(root, 'manifest.json'));
-  const manifest = fs.readFileSync(path.join(root, 'manifest.json'), 'utf8');
-  if (sha(manifest) !== digest) throw new Error(`Runtime manifest integrity failure: ${digest}`);
-  const files = JSON.parse(manifest) as Record<string, string>;
-  if (
-    !files ||
-    typeof files !== 'object' ||
-    Array.isArray(files) ||
-    !validDigest(files['launcher.py'])
-  )
-    throw new Error('Malformed machine runtime manifest');
-  return files;
-}
-
-export function verifyRuntime(home: string, digest: string): Record<string, string> {
-  const files = readManifest(home, digest);
-  const root = path.join(home, 'lib/runtimes', digest);
-  for (const [relative, expected] of Object.entries(files)) {
-    const file = path.join(root, relative);
-    assertMachinePath(root, file);
-    if (!validDigest(expected) || sha(fs.readFileSync(file)) !== expected) {
-      throw new Error(
-        `Machine runtime file modified: ${relative}; preserve and reconcile local growth before updating`
-      );
-    }
-  }
-  return files;
 }
 
 /** A stable bootstrap survives snapshot updates. Recognize the original
@@ -160,9 +95,7 @@ function runtimeFiles(templatesRoot: string): Map<string, Buffer> {
     files.set(dest, fs.readFileSync(source));
   };
   for (const file of SHARED_PACK.installedFiles) {
-    if (file.sourcePath.startsWith('lib/') || file.sourcePath === 'runtime-paths.sh') {
-      add(file.sourcePath, path.join(templatesRoot, 'shared', file.sourcePath));
-    }
+    add(file.sourcePath, path.join(templatesRoot, 'shared', file.sourcePath));
   }
   for (const surface of IMPLEMENTED_SURFACES) {
     const resolved = resolveHookPack(surface);
@@ -176,6 +109,15 @@ function runtimeFiles(templatesRoot: string): Map<string, Buffer> {
       }
     }
   }
+  const defaults: Record<string, string[]> = {};
+  for (const event of ['pre_tool_use', 'post_tool_use', 'session_start', 'stop', 'pre_compact']) {
+    const dispatcher = fs.readFileSync(
+      path.join(templatesRoot, 'shared/dispatch', `${event}.sh`),
+      'utf8'
+    );
+    defaults[event] = extractMachineHandlers(dispatcher, dispatcher);
+  }
+  files.set('system-policy.json', Buffer.from(JSON.stringify({ version: 1, events: defaults })));
   add('launcher.py', path.join(templatesRoot, 'runtime/caws-hook.py'));
   add('bootstrap.py', path.join(templatesRoot, 'runtime/bootstrap.py'));
   add('dispatch.sh', path.join(templatesRoot, 'runtime/dispatch.sh'));
@@ -245,7 +187,12 @@ function installRuntime(options: MachineRuntimeOptions): MachineRuntimeResult {
     assertMachinePath(home, temporary);
     try {
       for (const [relative, bytes] of files)
-        atomicMachineWrite(home, path.join(temporary, relative), bytes);
+        atomicMachineWrite(
+          home,
+          path.join(temporary, relative),
+          bytes,
+          relative.endsWith('.sh') ? 0o755 : 0o600
+        );
       atomicMachineWrite(home, path.join(temporary, 'manifest.json'), manifest);
       fs.renameSync(temporary, snapshot);
     } finally {

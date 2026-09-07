@@ -919,17 +919,18 @@ export const INIT_COMMAND_META: LeafCommandMeta = {
   kind: 'leaf',
   name: 'init',
   description:
-    'Bootstrap the canonical vNext .caws/ project state (idempotent; refuses to overwrite legacy single-spec layout). With --agent-surface, also installs the corresponding hook pack. Subcommands: `init diff` (read-only pack drift view incl. three-way decomposition) and `init port <path> --from <file>` (CLI-mediated retrofit landing — no agent-side hook editing).',
+    'Bootstrap canonical .caws/ governance state. Configured system surfaces inherit machine hooks without project copies. `init adapters install` updates the system runtime; configure registers it at harness user scope; migrate retires legacy project registrations once. `init diff` and `init port` maintain legacy project packs.',
   arguments: [
     { name: 'action', required: false, description: 'subcommand: diff | port | adapters' },
     {
       name: 'actionArg',
       required: false,
-      description: 'port: managed destination path; adapters: install | rollback | adopt (use --plan to preview)',
+      description: 'port: managed destination path; adapters: install | rollback | configure | migrate | adopt (use --plan to preview)',
     },
   ],
   options: [
     DATA_OPTION,
+    { flag: '--projects-root <path>', description: 'adapters migrate only: plan/apply one-time migration for direct Git project children together; each project is backed up independently, review refusals are reported.' },
     {
       flag: '--plan',
       description:
@@ -963,7 +964,7 @@ export const INIT_COMMAND_META: LeafCommandMeta = {
     {
       flag: '--from <file>',
       description:
-        'init port only: staging file OUTSIDE the protected hooks tree carrying the ported content (new template + local growth). init validates it, version-stamps it, lands it atomically, records the pristine baseline, and audit-commits — the agent never edits the protected hook path itself.',
+        'For init port: reviewed replacement content outside the protected hooks tree. For adapters migrate/adopt: reviewed surface policy JSON (single project only).',
     },
     {
       flag: '--force',

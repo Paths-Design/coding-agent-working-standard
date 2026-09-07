@@ -4,80 +4,101 @@ This document records the layout and contracts for CAWS hook packs after
 `CAWS-HOOK-PACK-SHARED-CORE-001`: a single shared hook core consumed by thin
 per-vendor adapters, replacing the prior per-agent-surface duplication.
 
-## Machine adapter runtime
+## System runtime
 
-`CAWS-MACHINE-ADAPTER-RUNTIME-001` adds an opt-in machine runtime above this
-project-pack layout. `caws init adapters install` installs immutable, hashed
-snapshots under `${CAWS_HOME:-~/.caws}/lib/runtimes/<digest>` and a stable bootstrap
-at `bin/caws-hook`. The active pointer is `state/adapter-runtime.json`. The
-bootstrap verifies and loads the selected snapshot's `launcher.py`, pinning its
-digest in-process for protocol-version-1 drivers so a concurrent update cannot
-mix that driver with another snapshot's libraries. Bootstrap protocol version 1 stays fixed; runtime behavior
-evolves inside snapshots. Updates and rollbacks change only the pointer, through
-one atomic replacement under the installation lock. Installation refuses
-modified runtime bytes and symlinked destinations. Rollback verifies the previous
-snapshot and can select it even when the active snapshot is damaged, preserving
-the damaged bytes for inspection. `--plan` performs no writes.
-Rolling back to an original standalone runtime restores that driver's older
-invocation semantics; it does not add snapshot pinning to the legacy driver.
+`CAWS-SYSTEM-RUNTIME-001` makes `~/.caws` the executable distribution home.
+`CAWS_HOME` can select another absolute path. The runtime contains stock guards,
+helpers, dispatchers, session renderers and harness adapters. Project governance
+(specs, scope, claims, policy, events) stays in canonical project `.caws/` state.
+Installing code confers no project authority.
 
-Codex requires a blocking reason on stderr for exit code 2; denial JSON on
-stdout alone does not satisfy that native contract. The machine driver retains
-the shared runner's exit code and JSON, and mirrors its reason to stderr with
-the selected runtime digest. A bare exit 2 receives an explicit diagnostic too.
-For Stop, successful plain lifecycle observations become a `systemMessage` JSON
-object. Existing structured decisions remain intact; malformed Stop JSON is an
-explicit adapter failure rather than informational success. These contracts
-require a native Codex check in addition to shell-level assertions; see the
-[native hook documentation](https://learn.chatgpt.com/docs/hooks).
+```
+~/.caws/
+  bin/caws-hook                         stable launcher
+  lib/runtimes/<digest>/                verified immutable executable snapshot
+  state/adapter-runtime.json           atomic active/previous pointer
+  surfaces/<surface>/settings.json     enabled native surface
+  surfaces/<surface>/lib/              deliberate user adapter overrides
+  state/projects/<canonical-path-hash>.json   extensions and explicit overrides
+  state/adoption-backups/               exact configuration before/after bytes
+  state/sessions/<id>/                  session-global reprieves
+```
 
-An adopted project retains its executable guards and an ordered event policy at
-`.caws/hooks/adapter-policy.json`. Its native hook registration calls the machine
-launcher with a surface and event. Subsequent runtime updates require no project
-edits. This is a **one-time bootstrap per project**: existing native registrations
-cannot discover a new runtime merely because a directory exists in the home.
-`caws init adapters adopt --agent-surface codex --plan` previews that bootstrap;
-see the [operator guide](../guides/hook-packs.md#machine-adapter-installation).
+`caws init adapters install` updates the runtime once. A single atomic pointer
+change selects the new guard AND renderer code in every migrated project. The
+stable bootstrap pins its selected digest in-process; concurrent updates cannot
+mix two snapshots. Verification rejects modified bytes and symlink escapes.
+Installation uses a lock; `--plan` writes nothing. Runtime versions remain useful
+for diagnosis, but no project pack upgrade is required to receive new stock code.
 
-The machine runtime transports input, normalized session identity, output and
-reprieve consultation. The execution root is the actual Git worktree; policy and
-handler paths resolve against the canonical checkout through Git's common dir,
-with inherited `GIT_*` overrides removed. Project specs, ownership bindings,
-gate policy, leases, session logs and events keep their existing authority and
-storage. Installing an adapter grants no project ownership.
+`caws init adapters configure --agent-surface codex` registers the stable transport
+in the harness USER configuration. Codex uses `~/.codex/hooks.json`; registration
+and persisted native trust are distinct. User and project hooks are additive, so
+old project registrations must be retired once. The user transport carries an
+explicit `--system` mode and defers to a still-registered project CAWS chain.
+Cached adapter-only project entries continue working during the transition;
+after retirement they resolve the new machine settings. The centrally orchestrated
+`adapters migrate --projects-root <directory>` operation provides that migration;
+it never executes project shell while planning. Unrelated native hooks survive,
+exact bytes are backed up before mutation, and concurrent edits are not overwritten
+during application or rollback. An interrupted transaction leaves a visible lock
+and its before/after manifest for recovery.
 
-Bash handler children preload the selected parser, session resolver and emitters,
-so idempotent local library sources cannot silently reinstate a stale adapter.
-Effective project library growth is retained through explicit policy overrides
-or refused for review. A shared fallback shadowed by a vendor library remains
-inactive after adoption, including when only that fallback was customized.
-Native hook attributes, matchers and relative order are retained; only recognized
-transport commands are replaced. Literal environment assignments survive, and
-PostToolUse continues to honor `CAWS_DISABLED_HANDLERS` at dispatch time. Guard
-scripts, helper oracles and guard-specific state remain local;
-this release does not globally migrate every project-owned guard helper.
+Machine project settings contain only `disabled`, `extensions`, `handlers` and
+`libraries` maps per surface. They do not freeze the stock handler array. Stock
+order is read from the selected snapshot each time; new stock handlers therefore
+reach existing projects. Extensions name an insertion anchor. A removed or
+explicitly disabled anchor fails visibly rather than silently moving a guard.
+Custom stock handler overrides remain explicitly local and require maintenance.
+Unknown local helper or dispatcher growth requires reviewed reconciliation before
+migration; executable copies are preserved even after their registration retires.
 
-Reprieve commands now write a session-global record under
-`state/sessions/<id>/guard-reprieve-<id>.json`. A missing global record permits a
-read-only legacy lookup in the canonical project's vendor `hooks/state` dir.
-Global presence always shadows that legacy record, even when malformed or
-expired. Revocation writes an inactive global tombstone to prevent resurrection.
-Without a surface hint, human `show` and `list` calls discover legacy records
-across known vendor directories. Multiple copies for the same session require
-`--surface` for inspection; an existing global record remains decisive regardless
-of those copies. Revocation suppresses all legacy copies through one tombstone,
-including conflicting copies. JSON mode emits one JSON object on stdout.
-Human-only granting and exact session/handler membership remain enforced.
-An old dispatcher without the consultation seam still needs adoption; a new CLI
-writing a machine record alone cannot repair that dispatcher.
+New projects created by `caws init` on a configured system surface receive
+canonical governance state without local hook scripts or local native wiring.
+Unmigrated native registrations remain on their old chain until custom behavior
+is classified; doctor names that remaining migration. Old hook directories with
+no registered native chain fail visibly instead of silently discarding custom
+behavior. Legacy governance migration is a separate operation. Non-CAWS
+locations are quiet when the installed runtime is healthy.
 
-The runtime packages adapter libraries for the seven implemented surfaces.
-Automatic native JSON wiring is implemented for Codex, Claude Code and Qwen Code.
-Kimi Code, ZCode, OpenCode and DSH require their native registration/bridge work;
-they are explicitly refused by automatic adoption. Their live parity is not
-established by the machine-runtime fixture tests. Codex's final native activation
-also requires a fresh invocation after hook trust/registration review; shell
-replays and code landing are separate from that activation evidence.
+The execution root is the actual Git checkout; settings, extensions and governance
+resolve to its canonical root through Git's common directory. Inherited `GIT_*`
+variables cannot select another repository. Bash children preload the selected
+parser, session resolver and emitter. Project library declarations take priority
+over user adapter libraries, then packaged surface libraries, then shared defaults.
+Bootstrap libraries cannot be overridden. Explicit library entries apply at the
+`caws_source_lib` adapter seam; arbitrary directly sourced helper files require a
+reviewed handler override or an upstream fix.
+
+Codex maps exit 2 to a native refusal reason on stderr. Stop plain observations
+become a JSON `systemMessage`; structured decisions remain intact. The Codex
+`session-transcript.py` adapter translates visible rollout response items and tool
+records into the shared renderer's event model, without counting mirrored
+`event_msg` notifications twice or projecting private reasoning. Runtime dispatch
+selects the parser at machine scope. Fixture execution proves this transport;
+fresh native lifecycle/denial evidence proves activation in the installed harness.
+See the [native hook documentation](https://learn.chatgpt.com/docs/hooks).
+
+Harness adapters belong to agents working in that harness. Shared CAWS defines
+the input/output, identity, extension and session-event contracts; the harness
+agent maintains native registration, payload normalization, emitters and transcript
+normalization. They must demonstrate native discovery/trust, SessionStart, a denied
+write whose file stays absent, Stop, and canonical/linked-root resolution. A shell
+fixture cannot establish another harness's live parity. JSON configuration helpers
+exist for Codex, Claude Code and Qwen Code; Kimi, ZCode, OpenCode and DSH require
+native registration work by their harness agents. Shipping their adapter libraries
+is not a claim of native activation.
+
+Doctor observes the selected digest, runtime integrity, explicit overrides and
+remaining project registrations. It stops prescribing pack refreshes for a system
+runtime. These are filesystem observations; native trust/execution is verified
+separately. Session-global reprieves continue to require a human grant with exact
+session/handler membership and expiry; global records shadow legacy records,
+including malformed, expired and revoked records.
+
+The earlier `adapters adopt` project-policy format remains a compatibility path.
+It moves adapter libraries only and retains project guard arrays; use system
+configuration and migration for the complete global distribution model.
 
 ## Why
 

@@ -36,7 +36,7 @@ describe('global-home doctor rules (CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A4)', (
     const report = inspectProjectState(
       input(
         fsObs({
-          globalHomeObservation: { stampPresent: true, entries: ['state', 'surfaces', 'lib'] },
+          globalHomeObservation: { stampPresent: true, entries: ['state', 'surfaces', 'lib', 'bin'] },
         })
       )
     );

@@ -28,6 +28,7 @@ not bundled, producing a crash on every invocation in fresh installs.
 from __future__ import annotations
 
 import json
+import importlib.util
 import os
 import re
 import subprocess
@@ -537,6 +538,14 @@ def extract_tool_result_content(entry: dict[str, Any]) -> str:
 
 
 def parse_transcript_events(transcript_path: str) -> list[dict[str, Any]]:
+    adapter = os.environ.get("CAWS_SESSION_TRANSCRIPT_ADAPTER")
+    if os.environ.get("CAWS_MACHINE_RUNTIME") == "1" and adapter:
+        spec = importlib.util.spec_from_file_location("caws_session_transcript_adapter", adapter)
+        if spec is None or spec.loader is None:
+            raise ValueError("Cannot load configured transcript adapter")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.parse_transcript_events(transcript_path)
     events: list[dict[str, Any]] = []
     with open(transcript_path, encoding="utf-8") as handle:
         for raw_line in handle:

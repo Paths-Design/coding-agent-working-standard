@@ -266,6 +266,9 @@ export const DOCTOR_RULES = {
    * warning. Repair: archive the foreign entries with a manifest (the A1
    * migration pattern), never blind-delete.
    */
+  HOOKS_SYSTEM_RUNTIME: 'doctor.hooks.system_runtime',
+  HOOKS_SYSTEM_RUNTIME_INVALID: 'doctor.hooks.system_runtime_invalid',
+  HOOKS_SYSTEM_LEGACY_WIRING: 'doctor.hooks.system_legacy_wiring',
   GLOBAL_HOME_UNMANAGED_STATE: 'doctor.global_home.unmanaged_state',
   /**
    * CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A4: ~/.caws exists but lacks the

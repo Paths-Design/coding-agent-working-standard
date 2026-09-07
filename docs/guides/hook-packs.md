@@ -75,99 +75,105 @@ Each hook traces to a `docs/failure-lineage.md` entry documenting the gap it clo
 
 ## Machine adapter installation
 
-For machine-wide adapter updates, install the runtime once:
+Install and configure CAWS once at user scope:
 
 ```bash
 caws init adapters install --plan --json
 caws init adapters install
+caws init adapters configure --agent-surface codex --plan
+caws init adapters configure --agent-surface codex
 ```
 
-`CAWS_HOME` selects an absolute machine home (default `~/.caws`). The plan lists
-the runtime digest and installed paths. Runtime snapshots are integrity checked;
-manual changes there are refused on update. Intentional user adapter overrides
-belong in `surfaces/<surface>/lib/` under the machine home. They are executable
-customizations and are outside the snapshot's digest. Project overrides declared
-in policy take precedence, followed by user overrides, the surface snapshot,
-and the shared snapshot. Symlinked override files are refused.
+`CAWS_HOME` selects an absolute machine home (default `~/.caws`). The snapshot
+contains stock guards, helpers, dispatchers and session renderers, plus harness
+adapter libraries. Configure writes `~/.codex/hooks.json` for Codex. Review its
+native trust and restart the harness before claiming activation. Claude Code and
+Qwen Code have JSON registration helpers, but their native execution must be
+verified by an agent in that harness; library installation alone proves no parity.
 
-From each canonical project root, preview and apply its one-time adoption:
+Retire old project registrations once from a central directory:
 
 ```bash
-caws init adapters adopt --agent-surface codex --plan
-caws init adapters adopt --agent-surface codex
+caws init adapters migrate --agent-surface codex --projects-root ~/Desktop/Projects --plan --json
+caws init adapters migrate --agent-surface codex --projects-root ~/Desktop/Projects
 ```
 
-Use `claude-code` or `qwen-code` for the other supported automatic registrations.
-The plan displays complete proposed policy and native configuration bytes. It
-preserves literal handler order, native matchers, timeouts and other hook
-attributes, and the relative order of CAWS and unrelated native hooks. Simple
-environment assignments on the old command are retained. Custom command wrappers,
-substitutions or trailing shell actions require explicit reconciliation; they
-are never executed during planning or silently discarded. The applied migration
-backs up exact old bytes in the machine home's `state/adoption-backups/` and
-rolls back its writes if application fails. It never sources shell while planning.
-Unknown dispatcher logic, conflicting roots, duplicate CAWS wiring, and
-unresolved library growth require reconciliation before adoption.
+This examines direct Git project children. Each project is an independent
+transaction: successful migrations are retained while review-required projects
+are reported. It does not migrate legacy governance, claim worktrees or modify
+project source hooks. Run without `--projects-root` to migrate the current canonical
+checkout. Plans contain complete proposed configuration bytes. Apply requires the
+system registration to exist first. Native project and user hooks are additive;
+verify one effective CAWS transport per event after migration.
 
-The runtime owns the `agent-surface.sh` and `runtime-paths.sh` bootstrap libraries.
-Explicit policy overrides for those names are refused by both adoption and
-dispatch because those bootstrap files must load before policy overrides apply.
+During rollout the explicit system transport defers to an existing project CAWS
+registration, preventing duplicate handler execution. Unmigrated projects keep
+their old behavior until reviewed; doctor continues to identify their legacy
+registration. Cached adapter-only entries remain functional across this transition.
 
-Adoption preserves the library that actually won in the existing dispatcher.
-Editing a shared fallback does not promote it above an existing vendor library.
-The declared PostToolUse handler list is retained, including an explicitly
-re-enabled quality handler; `CAWS_DISABLED_HANDLERS` continues to filter exact
-handler basenames at invocation time.
+New projects subsequently use normal `caws init --agent-surface codex` and inherit
+the configured system runtime without receiving local hook copies. Future updates
+for every migrated project need only:
 
-For reviewed custom dispatch logic, `--from <surface-policy.json>` accepts:
+```bash
+caws init adapters install
+```
+
+Stock handler order comes from the new snapshot on each invocation. Projects do
+not pin a pack version or a full stock handler list. Explicit customizations live
+in machine `state/projects/<canonical-path-hash>.json`. The migration preserves
+unrelated hooks, backs up exact native bytes under `state/adoption-backups/`, and
+leaves old executable copies intact. It refuses unknown shell wrappers, reordered
+stock guards and unclassified helper growth rather than assuming they are stock.
+
+For a project requiring reconciliation, inspect its actual custom behavior and
+pass a reviewed surface policy with `--from <file>` (single project only):
 
 ```json
 {
-  "events": {
-    "pre_tool_use": {
-      "hooks_dir": ".caws/hooks",
-      "handlers": ["worktree-write-guard.sh", "custom-guard.sh"]
-    }
+  "disabled": {},
+  "extensions": {
+    "pre_tool_use": [{ "handler": "custom-guard.sh", "before": "scope-guard.sh" }]
   },
+  "handlers": { "custom-guard.sh": ".caws/hooks/custom-guard.sh" },
   "libraries": {}
 }
 ```
 
-Include every existing lifecycle registration; an omitted event with existing
-CAWS wiring is refused. Paths must be project-relative and executable handlers
-must exist. A policy can explicitly retain a local library through a
-`libraries` entry such as `"emit.sh": ".codex/hooks/lib/emit.sh"`. That library
-then remains locally maintained. Bootstrap-library changes need reconciliation.
+`--from` explicitly defines the behavior retained when retiring the old native
+transport, including any custom wrapper behavior. Do not supply an empty policy
+without reviewing what it retires. Extensions are inserted before named stock
+handlers; `null` appends. An absent anchor fails visibly. `disabled` names deliberate
+stock exclusions by event. Handler/library paths are canonical-project-relative
+and confined; handler files must be executable. These overrides stay locally
+maintained. Adapter libraries resolved through `caws_source_lib` can be declared
+in `libraries`; bootstrap `agent-surface.sh` and `runtime-paths.sh` are prohibited.
+Directly sourced helper growth requires a reviewed handler override or an upstream
+fix. User adapter libraries live in `~/.caws/surfaces/<surface>/lib/`; declared
+project adapters win, then user overrides, then packaged surface/shared code.
 
-After applying, restart the harness and review changed hook definitions. For
-Codex, global and project hooks are additive: adoption checks for other CAWS
-registrations and refuses ambiguous duplicates. Native trust and actual hook
-execution must be verified in a fresh invocation. Installation and a passing
-shell replay do not establish that an already-running harness has switched.
+Harness agents maintain their native adapters at this machine layer. Codex's
+`session-transcript.py` turns visible rollout response items into the shared
+renderer's events. Shared rendering and guard fixes ship once. See the
+[adapter authoring and proof contract](../architecture/hook-pack-shared-core.md#system-runtime)
+for required native evidence and the separation from fixture tests.
 
-Update all adopted projects with another `caws init adapters install`. To
-restore the prior snapshot:
+Doctor reports effective runtime integrity and residual local registration rather
+than asking each system project to refresh copied packs. Filesystem configuration
+is not evidence that an already-running harness switched snapshots or trusted a
+new native registration. Verify fresh SessionStart, denied-write and Stop events.
 
-```bash
-caws init adapters rollback --plan
-caws init adapters rollback
-```
+`caws init adapters rollback --plan` previews the previous verified snapshot;
+`rollback` applies it. The pointer swap is atomic and the bootstrap stays stable.
+Rolling back to the earlier adapter-only generation also restores that generation's
+project-policy requirements, so inspect compatibility before rollback. Never edit
+snapshot bytes. An interrupted install leaves `state/adapter-install.lock`; a
+configuration transaction leaves `state/system-configuration.lock` plus exact
+before/after backups. Inspect the owning process and partial bytes before removing
+a stale lock and retrying. Rollback refuses to overwrite a concurrent edit.
 
-An interrupted install leaves a visible `state/adapter-install.lock`. Confirm no
-installer remains active and inspect the pointer before removing a stale lock.
-Then retry installation or rollback through the CLI; executable repair is not
-required. The stable bootstrap is unchanged by ordinary runtime updates, and
-protocol-version-1 runtime calls stay on their selected snapshot even if
-activation happens mid-call.
-An interrupted first install fails safely until retry publishes its pointer.
-The original standalone launcher layout is recognized by its verified manifest
-and upgraded to the stable bootstrap without overwriting local launcher changes.
-Rolling back to a legacy driver restores its original invocation semantics,
-including its lack of in-process snapshot pinning.
-Rollback can select a verified previous snapshot while preserving a damaged
-active snapshot. Do not edit snapshot bytes. A missing or corrupted selected
-runtime is an explicit hook failure. With a valid runtime, calls outside Git and
-outside CAWS projects are quiet.
+The old `adapters adopt` operation remains available for adapter-only project
+policies. It does not globalize stock guards/renderers; prefer configure/migrate.
 
 Reprieve grants now belong to the machine session store, across adopted projects.
 `--surface` identifies the target harness for operator provenance and legacy

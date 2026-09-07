@@ -259,6 +259,7 @@ export interface DoctorInput {
      * HOOKS_INSTALLED_PACK_VERSION_LAG. Optional; either undefined =
      * unobserved (silent).
      */
+    readonly systemRuntime?: SystemRuntimeObservation;
     readonly installedSharedPackVersion?: number;
     readonly shippingSharedPackVersion?: number;
     /**
@@ -374,4 +375,13 @@ export interface DoctorReport {
   };
   /** True iff zero error-severity findings. Warnings/infos do not unset clean. */
   readonly clean: boolean;
+}
+
+/** Observed configured code source, not proof of native harness activation. */
+export interface SystemRuntimeObservation {
+  readonly surfaces: readonly string[];
+  readonly legacySurfaces: readonly string[];
+  readonly overrides: readonly string[];
+  readonly digest?: string;
+  readonly error?: string;
 }

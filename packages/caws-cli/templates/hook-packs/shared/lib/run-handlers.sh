@@ -178,6 +178,11 @@ run_handlers() {
     # normal, non-error case.
 
     local handler_path="${HOOKS_DIR}/${handler}"
+    if [[ "${CAWS_SYSTEM_RUNTIME:-}" == 1 ]]; then
+      local system_override
+      system_override="$(python3 -c 'import json,os,sys; print(json.loads(os.environ["CAWS_MACHINE_HANDLERS"]).get(sys.argv[1], ""))' "$handler")" || return 2
+      [[ -z "$system_override" ]] || handler_path="$system_override"
+    fi
     if [[ ! -x "$handler_path" ]]; then
       continue
     fi
