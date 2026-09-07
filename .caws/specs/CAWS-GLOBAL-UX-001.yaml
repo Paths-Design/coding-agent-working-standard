@@ -1,0 +1,71 @@
+id: CAWS-GLOBAL-UX-001
+title: 'Make global CAWS installation, help, documentation and self-adoption durable'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-07T03:35:39.379Z'
+updated_at: '2026-09-07T03:35:39.379Z'
+created_by_session: '01a07868-9878-7e72-bcd9-a6af25f92820'
+blast_radius:
+  modules:
+    - 'Global distribution and public CLI onboarding'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/package.json'
+    - 'package.json'
+    - 'package-lock.json'
+    - 'packages/caws-cli/src/init/machine-adapters.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/commands/init.ts'
+    - 'packages/caws-cli/scripts/'
+    - 'packages/caws-cli/tests/docs/'
+    - 'packages/caws-cli/tests/adapter/'
+    - 'packages/caws-cli/tests/shell/'
+    - 'packages/caws-cli/tests/init/'
+    - 'scripts/install-cli-snapshot.mjs'
+    - 'scripts/install-cli-snapshot.test.mjs'
+    - 'README.md'
+    - 'AGENTS.md'
+    - 'CLAUDE.md'
+    - 'docs/README.md'
+    - 'docs/api/cli.md'
+    - 'docs/command-reference.md'
+    - 'docs/guides/hook-packs.md'
+    - 'docs/guides/agent-integration-guide.md'
+    - 'docs/architecture/caws-vnext-command-surface.md'
+    - 'docs/architecture/hook-pack-shared-core.md'
+    - 'docs/migration-v10-to-v11.md'
+    - 'packages/caws-cli/README.md'
+    - 'packages/caws-cli/templates/agents.md'
+    - 'packages/caws-cli/templates/CLAUDE.md'
+    - '.gitignore'
+    - '.claude/settings.json'
+    - '.claude/settings.json.example'
+  out: []
+invariants:
+  - 'Published and development runtime content agree for identical source and dependencies'
+  - 'Project governance remains local; native customizations and foreign worktrees remain preserved'
+acceptance:
+  - id: A1
+    given: 'identical source'
+    when: 'the CLI is packed and independently installed'
+    then: 'runtime digests match the development build and failed verification cannot activate a candidate'
+  - id: A2
+    given: 'every init operation'
+    when: 'help and flag parsing run'
+    then: 'dedicated help exposes applicable options and invalid combinations cannot mutate state'
+  - id: A3
+    given: 'onboarding guidance and generated command references'
+    when: 'documentation and package checks run'
+    then: 'examples match actual CLI behavior and generated references are build artifacts rather than committed source'
+  - id: A4
+    given: 'CAWS native harness configuration'
+    when: 'its remaining adoption is applied'
+    then: 'the shared runtime executes native lifecycle and guard checks while project-owned policy and unrelated configuration are preserved'
+non_functional: {}
+contracts:
+  - name: 'global-cli-docs-native-adoption'
+    type: behavior
