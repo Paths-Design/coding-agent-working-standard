@@ -127,3 +127,33 @@ describe('caws specs create --tier alias', () => {
     expect(snapshot(root, 'TIER-CONFLICT-001')).toEqual(before);
   });
 });
+
+describe('create help teaches the tier 1/2 contract coupling (CAWS-SPEC-CREATE-TIER-CONTRACT-HELP-001)', () => {
+  test('--risk-tier help states the contract requirement where agents compose the tier', () => {
+    const create = specsCreateMeta();
+    const riskTier = create.options.find((option) => option.flag === '--risk-tier <n>');
+
+    expect(riskTier.description).toContain('Tiers 1 and 2 require at least one --contract');
+    expect(riskTier.description).toContain('tier 3 / --mode chore do not');
+  });
+
+  test('--module and --invariant help no longer claim the scaffolded default is irreplaceable', () => {
+    const create = specsCreateMeta();
+
+    for (const flag of ['--module <text>', '--invariant <text>']) {
+      const option = create.options.find((candidate) => candidate.flag === flag);
+      expect(option.description).not.toContain('you cannot replace');
+      expect(option.description).toContain('caws specs amend');
+    }
+  });
+
+  test('the generated reference carries the same corrected rows (no stale help survives)', () => {
+    const reference = fs.readFileSync(
+      path.join(__dirname, '..', '..', '..', '..', 'docs', 'command-reference.md'),
+      'utf8'
+    );
+
+    expect(reference).toContain('Tiers 1 and 2 require at least one --contract');
+    expect(reference).not.toContain('you cannot replace from the command surface');
+  });
+});

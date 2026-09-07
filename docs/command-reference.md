@@ -24,7 +24,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 
 ## Groups
 
-- [`caws init`](#caws-init) — Bootstrap the canonical vNext .caws/ project state (idempotent; refuses to overwrite legacy single-spec layout). With --agent-surface, also installs the corresponding hook pack. Subcommands: `init diff` (read-only pack drift view incl. three-way decomposition) and `init port <path> --from <file>` (CLI-mediated retrofit landing — no agent-side hook editing).
+- [`caws init`](#caws-init) — Bootstrap canonical .caws/ governance state. Configured system surfaces inherit machine hooks without project copies. `init adapters install` updates the system runtime; configure registers it at harness user scope; migrate retires legacy project registrations once. `init migrate --from <reviewed-plan.json>` previews legacy governance conversion; add positional apply to execute it. `init diff` and `init port` maintain legacy project packs.
 - [`caws doctor`](#caws-doctor) — Run drift detection against the current .caws/ state
 - [`caws status`](#caws-status) — Read-only dashboard: project, current context, claim, and doctor findings
 - [`caws scope`](#caws-scope) — Evaluate file paths against the bound spec scope
@@ -32,7 +32,7 @@ Every `caws` command group and its subcommands, generated from the same typed me
 - [`caws gates`](#caws-gates) — Inspect and run quality gates against the current changes (list/explain/run; policy-driven)
 - [`caws evidence`](#caws-evidence) — Record, list, show, and describe typed evidence events in .caws/events.jsonl (record/list/show/schema)
 - [`caws events`](#caws-events) — Read and maintain .caws/events.jsonl (list/show/rotate/migrate/verify-archive)
-- [`caws waiver`](#caws-waiver) — Manage CAWS waivers (bounded exception records that suppress matching gate violations)
+- [`caws waiver`](#caws-waiver) — Manage CAWS waivers — GATE-RUN-ONLY, legacy pre-v11 surface. A waiver suppresses matching violations in `caws gates run` and NEVER lifts a hook guard; hook blocks are governed by reprieves (`caws reprieve grant`), which is the system hooks actually consult.
 - [`caws reprieve`](#caws-reprieve) — Session-scoped guard reprieve: skip a PreToolUse guard for ONE session until a stated expiry. Use when a session legitimately needs to do what a guard blocks (e.g. editing a hook script) WITHOUT disabling it for every other session. Distinct from `caws waiver`: a reprieve skips a HOOK guard at dispatch time (operational cache, session-scoped, expiring); a waiver bypasses a GATE at policy-run time (governance state, kernel-adjudicated). Replaces the anti-pattern of commenting a guard out of the dispatcher HANDLERS array.
 - [`caws specs`](#caws-specs) — Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate/relocate)
 - [`caws worktree`](#caws-worktree) — Manage CAWS worktrees (create/list/ensure/bind/destroy/untrack/merge/review/migrate-registry/repair-sparse/repair/prune/cleanup-plan). Worktrees are git worktrees bound to active specs. Compatibility: `caws worktree --prune ...` is normalized to `caws worktree prune ...` before parsing.
@@ -44,18 +44,20 @@ Every `caws` command group and its subcommands, generated from the same typed me
 
 ## `caws init`
 
-Bootstrap the canonical vNext .caws/ project state (idempotent; refuses to overwrite legacy single-spec layout). With --agent-surface, also installs the corresponding hook pack. Subcommands: `init diff` (read-only pack drift view incl. three-way decomposition) and `init port <path> --from <file>` (CLI-mediated retrofit landing — no agent-side hook editing).
+Bootstrap canonical .caws/ governance state. Configured system surfaces inherit machine hooks without project copies. `init adapters install` updates the system runtime; configure registers it at harness user scope; migrate retires legacy project registrations once. `init migrate --from <reviewed-plan.json>` previews legacy governance conversion; add positional apply to execute it. `init diff` and `init port` maintain legacy project packs.
 
 **Options:**
 
 - `--data` — Show structured data block on diagnostics
+- `--projects-root <path>` — adapters migrate only: plan/apply one-time migration for direct Git project children together; each project is backed up independently, review refusals are reported.
+- `--native-config-target <path>` — adapters configure only: explicitly preserve a user-managed native-config symlink by writing its exact resolved target inside the user home. The target is persisted and checked on subsequent configuration.
 - `--plan` — Preview the canonical state, gitignore, hook-pack, and settings changes without writing anything.
 - `--dry-run` — Compatibility alias for --plan; previews init changes without writing anything.
 - `--json` — Emit the read-only init plan as JSON with --plan or --dry-run.
 - `--agent-surface <name>` — Install a hook pack for an agent harness. When omitted, init attempts filesystem detection and skips hook install when ambiguous: claude-code | codex | opencode | zcode | kimi-code | qwen-code | dsh | cursor | windsurf | none
 - `--overwrite [paths...]` — For hook-pack install: select drifted or unmanaged files at managed pack paths for replacement — every pack file when bare, or only the listed destination paths. Without --force this is a pure preview: NOTHING is written (not even version re-stamps); add --force to apply.
 - `--three-way <path>` — init diff only: decompose one pack path into LOCAL GROWTH (installed vs pristine baseline) and UPSTREAM (baseline vs template) hunks, so a hand-edited hook can be retrofitted without conflating your edits with the pack changes.
-- `--from <file>` — init port only: staging file OUTSIDE the protected hooks tree carrying the ported content (new template + local growth). init validates it, version-stamps it, lands it atomically, records the pristine baseline, and audit-commits — the agent never edits the protected hook path itself.
+- `--from <file>` — For init migrate: reviewed legacy-governance JSON plan. For init port: reviewed replacement content outside the protected hooks tree. For adapters migrate/adopt: reviewed surface policy JSON (single project only).
 - `--force` — With --overwrite: apply the previewed replacements. CAUTION: local edits to the selected files are lost. A usage error without --overwrite.
 - `--adopt` — For hook-pack install: leave drifted or unmanaged files in place without enforcing pack contents. CAUTION: pack drift is no longer tracked for those paths.
 - `--wire-user-config` — kimi-code only: merge the canonical CAWS [[hooks]] blocks into the user-level $KIMI_CODE_HOME/config.toml (append-only, idempotent). Without this flag init installs the pack and prints the wiring for manual paste.
@@ -292,11 +294,11 @@ Verify that the archive file named in the most recent chain_rotated event byte-m
 
 ## `caws waiver`
 
-Manage CAWS waivers — GATE-RUN-ONLY, legacy pre-v11 surface. A waiver suppresses matching violations in `caws gates run` and NEVER lifts a hook guard; hook blocks are governed by reprieves (`caws reprieve grant`), which is the system hooks actually consult (CAWS-DEFECT-WAIVER-SURFACE-UNCONSULTED-01).
+Manage CAWS waivers — GATE-RUN-ONLY, legacy pre-v11 surface. A waiver suppresses matching violations in `caws gates run` and NEVER lifts a hook guard; hook blocks are governed by reprieves (`caws reprieve grant`), which is the system hooks actually consult.
 
 ### `caws waiver create <id>`
 
-Create a new active waiver. Gate-run-only: a successful create prints a byte-stable notice naming `caws reprieve grant` as the hook-block path. Validates against the kernel before writing; --dry-run validates shape and duplicate id state without creating a file.
+Create a new active waiver. Gate-run-only: it suppresses matching violations in `caws gates run` and never lifts a hook guard (use `caws reprieve grant` for hook blocks). Validates against the kernel before writing; --dry-run validates shape and duplicate id state without creating a file.
 
 **Argument:** `id` (required) — Waiver id to create
 
@@ -314,7 +316,7 @@ Create a new active waiver. Gate-run-only: a successful create prints a byte-sta
 
 ### `caws waiver list`
 
-List waivers. By default excludes revoked and expired records.
+List waivers (gate-run-only; hooks consult reprieves, not waivers). By default excludes revoked and expired records.
 
 **Options:**
 
@@ -334,7 +336,7 @@ Show a waiver, including its derived effectiveness at now.
 
 ### `caws waiver revoke <id>`
 
-Revoke a waiver. Writes a revocation record; refuses double-revoke.
+Revoke a waiver (gate-run-only; hooks consult reprieves, not waivers). Writes a revocation record; refuses double-revoke.
 
 **Argument:** `id` (required) — Waiver id to revoke
 
@@ -435,14 +437,14 @@ Create a new spec in lifecycle_state: draft. Binding a worktree (caws worktree c
 - `--id <id>` — Alias for the positional spec id
 - `--title <title>` — Short spec title (required)
 - `--mode <mode>` — Spec mode (required): feature | refactor | fix | doc | chore
-- `--risk-tier <n>` — Risk tier (required): 1 | 2 | 3
+- `--risk-tier <n>` — Risk tier (required). Tiers 1 and 2 require at least one --contract (tier 3 / --mode chore do not): 1 | 2 | 3
 - `--tier <n>` — Alias for --risk-tier; writes the canonical risk_tier field: 1 | 2 | 3
 - `--scope-in <path>` (repeatable) — Populate scope.in at creation time (repeatable); avoids the YAML hand-edit. Widen later with `caws specs amend-scope`.
 - `--scope.in <path>` (repeatable) — Alias for --scope-in using the YAML field name; writes canonical scope.in and is repeatable.
 - `--acceptance <text>` (repeatable) — Seed an acceptance criterion at creation time (repeatable). Free text becomes the then clause; "given: ...; when: ...; then: ..." sets all fields.
 - `--contract <spec>` (repeatable) — Add a contract at creation (repeatable), as "name:type[:path]" where type is api|schema|contract-test|behavior. Example: --contract "core-api:behavior". Tier 1/2 specs REQUIRE at least one contract; tier 3 / --mode chore do not.
-- `--module <text>` (repeatable) — Populate blast_radius.modules at creation (repeatable). The field is schema-required non-empty; without this flag the command writes a scaffolded default you cannot replace from the command surface.
-- `--invariant <text>` (repeatable) — Populate invariants at creation (repeatable). The field is schema-required non-empty; without this flag the command writes a scaffolded default you cannot replace from the command surface.
+- `--module <text>` (repeatable) — Populate blast_radius.modules at creation (repeatable). The field is schema-required non-empty; without this flag the command writes a scaffolded default. Replace it later with caws specs amend --add-module, which replaces the scaffolded default when it is the only entry.
+- `--invariant <text>` (repeatable) — Populate invariants at creation (repeatable). The field is schema-required non-empty; without this flag the command writes a scaffolded default. Replace it later with caws specs amend --add-invariant, which replaces the scaffolded default when it is the only entry.
 - `--observability <text>` (repeatable) — Add an observability item at creation (repeatable): a log, metric, trace, or alert. REQUIRED non-empty for --risk-tier 1.
 - `--rollback <text>` (repeatable) — Add a rollback step at creation (repeatable). REQUIRED non-empty for --risk-tier 1.
 - `--activate` — Create the spec in lifecycle_state: active instead of draft. Only for a slice you are working without a worktree — the normal path is caws worktree create --spec <id>, which activates on bind.
@@ -606,11 +608,7 @@ Reopen a closed spec (closed -> active), the inverse of close. Removes resolutio
 
 ### `caws specs amend <id>`
 
-Amend a spec's blast_radius.modules, invariants, or acceptance criteria. Modules and invariants are schema-required non-empty, so create writes a scaffolded default when no flag supplies one; this is how an already-created spec replaces that default without a hand edit that bypasses the audit trail. Acceptance flags are how a wrong criterion text gets fixed through the audited path: `--set-ac` rewrites exactly the fields supplied on one criterion, `--add-ac` declares a new criterion (all three fields required), `--remove-ac` deletes one. Appends spec_body_amended.
-
-Evidence coupling: a recorded evidence status proved the criterion text as it was, so a `--set-ac` that changes a criterion's text resets that criterion's evidence entry to `unchecked` in the same transaction (the event's `reset_evidence` carries the previous status), and `--remove-ac` deletes the criterion's evidence entry with it. An exact re-supply of unchanged text is refused as a no-op and resets nothing. One acceptance op per invocation; criterion ids match `A<digits>`.
-
-Draft and active specs allow add and remove. A CLOSED spec allows only filling a field still holding its scaffolded default — a concluded record may have a blank filled, never a claim rewritten; the scaffold discharge additionally refuses when the criterion already carries a recorded evidence entry, because a closed spec's evidence is frozen. Reopen first (`caws specs reopen`) for anything else. Archived specs are refused (restore first). For scope, use caws specs amend-scope.
+Amend a spec's blast_radius.modules, invariants, or acceptance criteria. The first two are schema-required non-empty, so create writes a scaffolded default when no flag supplies one; this is how an already-created spec replaces that default without a hand edit that bypasses the audit trail. Acceptance flags (--set-ac/--add-ac/--remove-ac) amend a criterion's Given/When/Then text — exactly one AC op per invocation — and reset that criterion's recorded evidence in the same transaction, because a rewritten claim must never keep the proof of the old text. Appends spec_body_amended. Draft and active specs allow add, remove, and rewrite. A CLOSED spec allows only filling a field still holding its scaffolded default (for acceptance: all three fields, and only while the criterion carries no evidence) — a concluded record may have a blank filled, never a claim rewritten. Archived specs are refused (restore first). For scope, use caws specs amend-scope.
 
 **Argument:** `id` (required) — Spec id to amend
 
@@ -620,13 +618,13 @@ Draft and active specs allow add and remove. A CLOSED spec allows only filling a
 - `--remove-module <text>` (repeatable) — Remove a blast_radius.modules entry (repeatable); matches the logical value regardless of quoting.
 - `--add-invariant <text>` (repeatable) — Add an invariants entry (repeatable). Replaces the scaffolded default when that is the only entry.
 - `--remove-invariant <text>` (repeatable) — Remove an invariants entry (repeatable); matches the logical value regardless of quoting.
-- `--set-ac <id>` — Rewrite fields of acceptance criterion `<id>`. Unspecified fields keep their text; supplying only text that already matches is refused as a no-op.
-- `--add-ac <id>` — Declare acceptance criterion `<id>`; requires `--given`, `--when`, and `--then`. Refused when the id already exists (use `--set-ac`).
-- `--remove-ac <id>` — Delete acceptance criterion `<id>` and its evidence entry, if any. Refused when it is the only remaining criterion.
-- `--given <text>` — New `given` text for the criterion targeted by `--set-ac`/`--add-ac`.
-- `--when <text>` — New `when` text for the criterion targeted by `--set-ac`/`--add-ac`.
-- `--then <text>` — New `then` text for the criterion targeted by `--set-ac`/`--add-ac`.
-- `--reason <text>` — Operator rationale, recorded verbatim on the spec_body_amended event.
+- `--set-ac <id>` — Rewrite an existing acceptance criterion's text (e.g. A2). Pair with --given/--when/--then; fields not supplied keep their wording. Resets the criterion's evidence to unchecked.
+- `--add-ac <id>` — Declare a NEW acceptance criterion. Requires --given, --when, and --then. Refuses an id that already exists (use --set-ac to rewrite).
+- `--remove-ac <id>` — Remove an acceptance criterion and its evidence entry. Refused when it is the only criterion (schema minItems 1).
+- `--given <text>` — Criterion's Given text (with --set-ac or --add-ac).
+- `--when <text>` — Criterion's When text (with --set-ac or --add-ac).
+- `--then <text>` — Criterion's Then text (with --set-ac or --add-ac).
+- `--reason <text>` — Optional rationale recorded verbatim on the spec_body_amended event.
 - `--data` — Show structured data block on diagnostics
 
 ### `caws specs deactivate <id>`
@@ -889,14 +887,12 @@ Refresh this session's lease. Hook-invoked at PreToolUse. Throttle-aware.
 - `--session-id <id>` — Explicit session id (required for hook-invoked usage)
 - `--platform <p>` — Platform tag
 - `--reason <r>` — pre_tool_use | claim | status | manual_register
-- `--session-kind <main|fork|subagent>` — Harness session kind for the lease (display + coordination aid, never authority). The hook passes CAWS_SESSION_KIND through when set (CAWS-AGENTS-FORK-IDENTITY-001)
-- `--forked-from <session_id>` — Parent session id — only meaningful with --session-kind fork; refused otherwise
+- `--session-kind <main|fork|subagent>` — Harness session kind for the lease (display + coordination aid, never authority). The hook passes CAWS_SESSION_KIND through when set (CAWS-AGENTS-FORK-IDENTITY-001).
+- `--forked-from <session_id>` — Parent session id — only meaningful with --session-kind fork; refused otherwise (CAWS-AGENTS-FORK-IDENTITY-001).
 - `--throttle <ms>` — Skip write if last_active within this many ms (default: 0 — no throttle)
 - `--json` — Emit CAWS-native JSON to stdout
 - `--include-active-summary` — Include active_agent_count + active_agents in JSON output
 - `--data` — Show structured data block on diagnostics
-
-Leases carry `harness_session_kind` / `forked_from` (carried forward across throttled heartbeats) and `hook_pid` (the heartbeat-writing hook process's pid, replacing the legacy `pid` field on fresh writes; legacy `pid` remains read-only fallback and is never session identity). `caws agents list` annotates same-host leases with overlapping activity windows as a possible conjoined pair — display-only advisory (CAWS-AGENTS-FORK-IDENTITY-001).
 
 ### `caws agents stop`
 
@@ -995,20 +991,19 @@ Send a message to another session. Attributes the sender via this session's iden
 
 - `--to <endpoint>` — Recipient endpoint (required): a session id, or an alias wt:<worktree-name> / spec:<spec-id> resolving to the freshest bound session
 - `--text <message>` — Message body (required, non-empty)
-- `--reply-to <message_id>` — Thread linkage: the message id this send replies to. Must exist and be addressed to you (CAWS-MESSAGE-LEDGER-COMPLETENESS-001)
-- `--urgency <critical|normal>` — Delivery-ordering signal (default normal): a critical message polls before normal traffic regardless of age — ordering, NOT authority (CAWS-MESSAGE-DELIVERY-ECONOMICS-001)
+- `--reply-to <message_id>` — Thread linkage: the message id this send replies to. Must exist and be addressed to you (CAWS-MESSAGE-LEDGER-COMPLETENESS-001).
+- `--urgency <critical|normal>` — Delivery-ordering signal (default normal): a critical message polls before normal traffic regardless of age — ordering, NOT authority (CAWS-MESSAGE-DELIVERY-ECONOMICS-001).
 - `--allow-dead` — Send even if the recipient is not live in the registry (escape hatch; default off)
 - `--data` — Show structured data block on diagnostics
 
-Refused sends are ledgered as `refusal` records in messages.jsonl (best-effort telemetry; never read back for delivery state) so attempt-level success is measurable. Refusal classes: recipient_not_live, recipient_invalid, alias_unresolved, reply_to_self, message_not_found, reply_target_invalid, identity_ambiguous, urgency_invalid.
+### `caws message reply [message_id]`
 
-### `caws message reply`
+Reply to a message on its own channel — the recipient is the original message's kernel-attributed sender, so no session id is transcribed. Same liveness semantics as send; refuses an unknown id and refuses replying to your own message.
 
-Reply to a message on its own channel — the recipient is the original message's kernel-attributed sender, so no session id is transcribed. Same liveness semantics as send; refuses an unknown id and refuses replying to your own message. The message id takes the positional form (`reply <message_id>`) or the `--id` alias (CAWS-DEFECT-MSG-REPLY-POSITIONAL-01).
+**Argument:** `message_id` (optional) — Id of the message being replied to (primary positional form; --id is the alias)
 
 **Options:**
 
-- `<message_id>` — Id of the message being replied to (positional; primary form)
 - `--id <message_id>` — Id of the message being replied to (alias for the positional)
 - `--text <message>` — Reply body (required, non-empty)
 - `--allow-dead` — Send even if the recipient is not live in the registry (escape hatch; default off)
@@ -1023,8 +1018,8 @@ Pull the next undelivered message addressed to you. Deliver-once. The result car
 - `--me <session_id>` — Endpoint to poll for (default: this session id)
 - `--wait <ms>` — Block up to <ms> for a message before returning (long-poll; capped at 60000)
 - `--peek` — Show the next message without consuming it (no delivery record)
-- `--receipt <auto|poll>` — Receipt mode recorded on the delivery record: auto for the heartbeat hook's auto-delivery path, poll (default) for an explicit poll (CAWS-MESSAGE-LEDGER-COMPLETENESS-001)
-- `--drain <n>` — Consume up to n messages in one poll (1..10, default 1), critical-first then oldest-first — backlog coalescing for the auto-delivery hook (CAWS-MESSAGE-DELIVERY-ECONOMICS-001)
+- `--receipt <auto|poll>` — Receipt mode recorded on the delivery record: 'auto' for the heartbeat hook's auto-delivery path, 'poll' (default) for an explicit poll (CAWS-MESSAGE-LEDGER-COMPLETENESS-001).
+- `--drain <n>` — Consume up to n messages in one poll (1..10, default 1), critical-first then oldest-first — backlog coalescing for the auto-delivery hook (CAWS-MESSAGE-DELIVERY-ECONOMICS-001).
 - `--json` — Emit JSON ({message, messages, sender?, waiting, poll_ms}) instead of human text
 - `--data` — Show structured data block on diagnostics
 
@@ -1036,7 +1031,7 @@ List undelivered messages addressed to you without consuming them. Read-only; po
 
 - `--me <session_id>` — Endpoint inbox to list (default: this session id; ignored with --all)
 - `--limit <n>` — Maximum messages to print from the waiting queue
-- `--all` — List every undelivered message in the repo (all recipients), oldest-first, annotated with recipient and age. Read-only (CAWS-MESSAGE-LEDGER-COMPLETENESS-001)
+- `--all` — List every undelivered message in the repo (all recipients), oldest-first, annotated with recipient and age. Read-only (CAWS-MESSAGE-LEDGER-COMPLETENESS-001).
 - `--json` — Emit JSON ({ok, read_only, me, waiting, messages})
 - `--data` — Show structured data block on diagnostics
 
@@ -1052,21 +1047,20 @@ Show retained channel history between this session and another endpoint, each me
 - `--json` — Emit JSON ({ok, read_only, channel, total, messages})
 - `--data` — Show structured data block on diagnostics
 
-### `caws message status`
+### `caws message status [message_id]`
 
-Observe one message's delivery state (queued vs delivered, with timestamps) — lets a sender distinguish "queued" from "seen" without polling the recipient. Read-only. The message id takes the positional form (`status <message_id>`) or the `--id` alias (CAWS-DEFECT-MSG-REPLY-POSITIONAL-01).
+Observe one message's delivery state (queued vs delivered, with timestamps) — lets a sender distinguish "queued" from "seen" without polling the recipient. Read-only.
+
+**Argument:** `message_id` (optional) — Id of the message to observe (primary positional form; --id is the alias)
 
 **Options:**
 
-- `<message_id>` — Id of the message to observe (positional; primary form)
 - `--id <message_id>` — Id of the message to observe (alias for the positional)
-- `--mine` — Dead-letter view: list YOUR sent messages that are still undelivered instead of observing one id (CAWS-MESSAGE-BEHAVIOR-001)
-- `--queued` — With --mine: restrict to still-undelivered sends (required pairing for the dead-letter view)
-- `--older-than-ms <ms>` — With --mine --queued: only list sends queued at least this long (default 3600000 = 1h)
+- `--mine` — Dead-letter view: list YOUR sent messages that are still undelivered instead of observing one id (CAWS-MESSAGE-BEHAVIOR-001).
+- `--queued` — With --mine: restrict to still-undelivered sends (required pairing for the dead-letter view).
+- `--older-than-ms <ms>` — With --mine --queued: only list sends queued at least this long (default 3600000 = 1h).
 - `--json` — Emit JSON ({ok, read_only, message, delivered, delivered_at?})
 - `--data` — Show structured data block on diagnostics
-
-`caws message poll --json` also carries `mine_queued_1h` ({count, oldest_age_ms}) so the heartbeat hook can escalate dead letters without an extra CLI spawn; the escalation line is throttled by .caws/leases/heartbeat-escalation-state.json. `caws agents list` derives silent-platform badges from the ledger (>=5 inbound messages, outbound/inbound <= 0.2) — display-only (CAWS-MESSAGE-BEHAVIOR-001).
 
 ### `caws message prune`
 
@@ -1078,7 +1072,7 @@ Plan or apply retention cleanup for delivered non-authoritative chat messages. D
 - `--older-than-ms <ms>` — Select delivered messages older than this many milliseconds
 - `--include <ids>` — Comma-separated message ids to include
 - `--exclude <ids>` — Comma-separated message ids to exclude
-- `--apply` — Move selected delivered messages and their delivery markers from .caws/messages.jsonl into .caws/messages.jsonl.archive (prefixed with a prune marker naming the archived ids). The archive is telemetry, not authority (CAWS-MESSAGE-LEDGER-COMPLETENESS-001)
+- `--apply` — Rewrite .caws/messages.jsonl to remove selected delivered messages and their delivery markers
 - `--json` — Emit JSON prune plan/result
 - `--data` — Show structured data block on diagnostics
 
