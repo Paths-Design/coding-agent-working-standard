@@ -1,0 +1,45 @@
+id: CAWS-ADOPTION-COMPAT-001
+title: 'Preserve legacy governance during system runtime adoption'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-09-07T02:28:51.084Z'
+updated_at: '2026-09-07T02:28:51.084Z'
+created_by_session: '01a07868-9878-7e72-bcd9-a6af25f92820'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/legacy-adoption.ts'
+    - 'packages/caws-cli/src/shell/commands/init.ts'
+    - 'packages/caws-cli/src/shell/cli.ts'
+    - 'packages/caws-cli/src/shell/render/init-hook-pack.ts'
+    - 'packages/caws-cli/templates/hook-packs/runtime/bootstrap.py'
+    - 'packages/caws-cli/tests/shell/legacy-adoption.test.js'
+    - 'packages/caws-cli/tests/shell/init-plan.test.js'
+    - 'packages/caws-cli/tests/init/system-runtime.test.js'
+    - 'docs/migration-v10-to-v11.md'
+  out: []
+invariants:
+  - 'Legacy records remain byte-identical in an explicit archive; no acceptance evidence or authority is invented'
+  - 'Reviewed policy conversion refuses unsupported requirements unless preserved explicitly for external enforcement'
+acceptance:
+  - id: A1
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'A1|legacy singleton governance|an explicit reviewed adoption plan is applied|original bytes are archived and validated draft specs plus policy are installed'
+  - id: A2
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'A2|changed inputs or unsafe paths|adoption is attempted|it refuses before changing governance'
+  - id: A3
+    given: 'The spec implementation is complete.'
+    when: 'The acceptance statement is evaluated.'
+    then: 'A3|a system initialized project|init reports activation and hooks run|output names system verification and audit logs use machine state'
+non_functional: {}
+contracts:
+  - name: 'legacy-adoption-preservation'
+    type: behavior
