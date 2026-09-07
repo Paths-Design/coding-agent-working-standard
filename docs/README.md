@@ -7,7 +7,7 @@ This directory contains comprehensive documentation for the CAWS (Coding Agent W
 ```
 docs/
 ├── README.md              # This file - documentation overview
-├── command-reference.md   # Generated: exhaustive CLI leaf/flag surface
+├── command-reference.md   # Authored landing page; full reference is generated when packaging
 ├── failure-lineage.md     # Incident-derived doctrine, entry per failure class
 ├── release-procedure.md   # Tag-driven release procedure
 ├── api/                   # API reference documentation
@@ -38,6 +38,13 @@ docs/
 ## Core Documentation
 
 ### Quick Start Guide
+
+Start with [CLI installation and workflows](api/cli.md), then [machine runtime
+setup and adoption](guides/hook-packs.md#machine-adapter-installation). The
+[command reference](command-reference.md) explains live help and the generated
+package artifact. The CLI package, machine runtime, native registration, and
+project governance have separate update and verification boundaries.
+
 
 - **Setup**: Installation and configuration steps
 - **CLI Usage**: Basic commands and options

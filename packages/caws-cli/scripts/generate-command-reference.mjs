@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Generate docs/command-reference.md from COMMAND_SURFACE_METADATA
+// Generate packages/caws-cli/docs/command-reference.md from COMMAND_SURFACE_METADATA
 // (CAWS-DOCS-COMMAND-REFERENCE-GEN-001).
 //
 // COMMAND_SURFACE_METADATA (src/shell/command-metadata.ts → dist) is the typed
@@ -7,8 +7,7 @@
 // generator renders that same metadata to markdown, so the consumer-facing
 // command reference CANNOT drift from the actual CLI surface: a command, arg,
 // or visible flag added/removed/renamed in the metadata changes both --help
-// and this doc, and the sync test fails CI if the committed doc wasn't
-// regenerated.
+// and this doc, and the sync test fails CI if the packaged artifact is stale.
 //
 // Determinism: the output is a pure function of the metadata (no timestamps,
 // stable ordering as authored in the metadata array), so the drift test is not
@@ -23,7 +22,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,7 +30,7 @@ const require = createRequire(import.meta.url);
 // scripts/ -> caws-cli (package root) -> packages -> repo root
 const PKG_ROOT = path.resolve(__dirname, '..');
 const REPO_ROOT = path.resolve(PKG_ROOT, '..', '..');
-const OUT_PATH = path.join(REPO_ROOT, 'docs', 'command-reference.md');
+const OUT_PATH = path.join(PKG_ROOT, 'docs', 'command-reference.md');
 const METADATA_PATH = path.join(PKG_ROOT, 'dist', 'shell', 'command-metadata.js');
 
 // ─── Rendering (pure) ────────────────────────────────────────────────────────
@@ -63,8 +61,7 @@ function renderOption(opt) {
 /** Render the usage line for a leaf command under a group (or top-level). */
 function usage(prefix, leaf) {
   let u = `caws ${prefix}${leaf.name}`;
-  if (leaf.argument) {
-    const a = leaf.argument;
+  for (const a of leaf.arguments ?? (leaf.argument ? [leaf.argument] : [])) {
     u += a.required ? ` <${a.name}>` : ` [${a.name}]`;
   }
   return u;
@@ -80,8 +77,7 @@ function renderLeaf(leaf, prefix, headingLevel) {
     lines.push(leaf.description);
     lines.push('');
   }
-  if (leaf.argument) {
-    const a = leaf.argument;
+  for (const a of leaf.arguments ?? (leaf.argument ? [leaf.argument] : [])) {
     lines.push(
       `**Argument:** \`${a.name}\`${a.required ? ' (required)' : ' (optional)'}${a.description ? ` — ${a.description}` : ''}`
     );
@@ -110,7 +106,7 @@ export function renderReference(metadata) {
   lines.push('status: active');
   lines.push('title: CAWS CLI command reference');
   lines.push('owner: vNext rewrite team');
-  lines.push('updated: 2026-06-03');
+  lines.push('updated: 2026-09-07');
   lines.push('audience: consumer');
   lines.push('generated: true');
   lines.push('source: packages/caws-cli/src/shell/command-metadata.ts');
@@ -120,7 +116,7 @@ export function renderReference(metadata) {
   lines.push('  GENERATED FILE — do not edit by hand.');
   lines.push('  Source: packages/caws-cli/src/shell/command-metadata.ts (COMMAND_SURFACE_METADATA).');
   lines.push('  Regenerate: node packages/caws-cli/scripts/generate-command-reference.mjs');
-  lines.push('  The sync test (tests/docs/command-reference-sync.test.js) fails CI if this');
+  lines.push('  Package documentation checks fail if this');
   lines.push('  file drifts from the metadata.');
   lines.push('-->');
   lines.push('');
@@ -140,42 +136,18 @@ export function renderReference(metadata) {
   }
   lines.push('');
 
-  for (const cmd of metadata) {
-    lines.push(`## \`caws ${cmd.name}\``);
-    lines.push('');
-    if (cmd.description) {
-      lines.push(cmd.description);
-      lines.push('');
+  const renderCommand = (cmd, prefix = '', depth = 2) => {
+    if (cmd.kind === 'leaf') {
+      lines.push(...renderLeaf(cmd, prefix, depth));
+      return;
     }
-    if (cmd.kind === 'group') {
-      const groupOptLines = (cmd.options || []).map(renderOption).filter(Boolean);
-      if (groupOptLines.length) {
-        lines.push('**Options:**');
-        lines.push('');
-        lines.push(...groupOptLines);
-        lines.push('');
-      }
-      for (const sub of cmd.subcommands) {
-        lines.push(...renderLeaf(sub, `${cmd.name} `, 3));
-      }
-    } else {
-      // Leaf top-level command: render its arg/options under the group heading.
-      if (cmd.argument) {
-        const a = cmd.argument;
-        lines.push(
-          `**Argument:** \`${a.name}\`${a.required ? ' (required)' : ' (optional)'}${a.description ? ` — ${a.description}` : ''}`
-        );
-        lines.push('');
-      }
-      const optLines = (cmd.options || []).map(renderOption).filter(Boolean);
-      if (optLines.length) {
-        lines.push('**Options:**');
-        lines.push('');
-        lines.push(...optLines);
-        lines.push('');
-      }
-    }
-  }
+    lines.push(`${'#'.repeat(depth)} \`caws ${prefix}${cmd.name}\``, '', cmd.description, '');
+    if (cmd.defaultAction) lines.push(`Without a subcommand: ${cmd.defaultAction.description}`, '');
+    const options = (cmd.options || []).map(renderOption).filter(Boolean);
+    if (options.length) lines.push('**Options:**', '', ...options, '');
+    for (const child of cmd.subcommands) renderCommand(child, `${prefix}${cmd.name} `, depth + 1);
+  };
+  for (const cmd of metadata) renderCommand(cmd);
 
   // Single trailing newline, no others — stable for byte-compare.
   return lines.join('\n').replace(/\n+$/, '\n');
@@ -183,40 +155,10 @@ export function renderReference(metadata) {
 
 // ─── Metadata loading ────────────────────────────────────────────────────────
 
-/**
- * Resolve the canonical package's dist metadata when the local one is absent.
- * Linked git worktrees cannot build dist (build-cli's tsc fallback 404s on the
- * worktree tsconfig path), but they share the canonical .git — so resolve the
- * canonical checkout via `git rev-parse --git-common-dir` and read its dist.
- * The metadata is a pure data export, identical across trees for the same
- * committed source, so this is correct, not a workaround.
- */
-function canonicalMetadataPath() {
-  try {
-    const commonDir = execFileSync('git', ['rev-parse', '--git-common-dir'], {
-      cwd: PKG_ROOT,
-      encoding: 'utf8',
-    }).trim();
-    // commonDir is "<canonical>/.git"; its parent is the canonical checkout.
-    const canonicalRoot = path.dirname(path.resolve(PKG_ROOT, commonDir));
-    return path.join(canonicalRoot, 'packages', 'caws-cli', 'dist', 'shell', 'command-metadata.js');
-  } catch {
-    return null;
-  }
-}
-
+/** Load only this checkout’s build; another worktree may contain different metadata. */
 export function loadMetadata(metadataPath = METADATA_PATH) {
-  let resolved = metadataPath;
-  if (!fs.existsSync(resolved)) {
-    const canonical = canonicalMetadataPath();
-    if (canonical && fs.existsSync(canonical)) {
-      resolved = canonical;
-    } else {
-      throw new Error(
-        `command metadata not found at ${metadataPath} (nor at the canonical dist) — run the package build first (the metadata is tsc-compiled into dist/).`
-      );
-    }
-  }
+  if (!fs.existsSync(metadataPath)) throw new Error(`command metadata not found at ${metadataPath}; build this checkout before generating docs`);
+  const resolved = metadataPath;
   const mod = require(resolved);
   const meta = mod.COMMAND_SURFACE_METADATA;
   if (!Array.isArray(meta) || meta.length === 0) {
@@ -247,12 +189,13 @@ function main(argv) {
     );
     return 1;
   }
+  fs.mkdirSync(path.dirname(OUT_PATH), { recursive: true });
   fs.writeFileSync(OUT_PATH, rendered);
   process.stderr.write(`wrote ${path.relative(REPO_ROOT, OUT_PATH)}\n`);
   return 0;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     process.exit(main(process.argv.slice(2)));
   } catch (err) {

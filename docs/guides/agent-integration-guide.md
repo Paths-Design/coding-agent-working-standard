@@ -2,18 +2,38 @@
 doc_id: agent-integration-guide
 authority: reference
 status: active
-title: Agent integration guide (v11)
+title: Agent integration guide
 owner: vNext rewrite team
 updated: 2026-05-28
 ---
 
-# Agent integration guide (v11)
+# Agent integration guide
 
-This guide explains how to integrate an AI agent runtime (Claude Code, Cursor, custom orchestrator, etc.) with CAWS v11 as a quality and audit substrate.
+This guide explains how to integrate an AI agent runtime (Claude Code, Cursor, custom orchestrator, etc.) with CAWS as a quality and audit substrate.
 
-> **v11 surface.** The v11 line ships fourteen command groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message` (plus the auto-generated `help`). The legacy `caws evaluate`, `caws iterate`, `caws diagnose`, `caws agent evaluate` surfaces are removed. The integration patterns below use only the v11 surface.
+> The command tree is reported by `caws --help`. The installed CLI includes its
+> kernel. Project specs and bindings own authority; machine installation and
+> liveness records do not. Removed v10 commands remain removed.
 >
 > Doctrine source: [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md). Full CLI reference: [`docs/api/cli.md`](../api/cli.md).
+
+## Native setup and adapter ownership
+
+Install the runtime once with `caws init adapters install`; configure a supported
+native user registration with `caws init adapters configure --agent-surface <name>`.
+Use `--plan` for previews. Retire reviewed project registrations through
+`caws init adapters migrate`; new projects then inherit shared hooks and renderers.
+JSON registration helpers currently support Codex, Claude Code and Qwen Code.
+Other native configurations require adapters authored and verified by agents in
+those harnesses. Pack-template availability is a separate compatibility fact.
+
+Native evidence must include fresh lifecycle execution, a forbidden-write control,
+and session rendering. Fixtures establish protocol behavior, not native loading or
+trust. Keep harness-specific parsers in `~/.caws/surfaces/<surface>/lib/`; preserve
+project customizations through reviewed extension policy. See the
+[runtime guide](hook-packs.md#machine-adapter-installation) for exact commands,
+configuration symlinks, backups and rollback. Project specs, policy, scope and
+worktree authority remain under canonical project `.caws/`.
 
 ## What CAWS v11 gives an agent
 
@@ -35,7 +55,7 @@ All commands are scriptable. Exit codes are uniform: 0 success/observation, 1 do
 
 ## Prerequisites
 
-- v11 CLI installed: `npm install -g @paths.design/caws-cli@^11.5.0` (or `@latest`)
+- CLI installed: `npm install -g @paths.design/caws-cli`
 - Project initialized: `caws init` (idempotent; refuses legacy `.caws/working-spec.yaml` residue)
 - At least one spec created: `caws specs create <id> --title "..." --mode <feature|refactor|fix|doc|chore> --risk-tier 1 --contract "<name>:<behavior|api|schema|contract-test>"`
 
@@ -190,7 +210,7 @@ caws doctor && \
 
 - **No agent guidance API** (`caws iterate`, `caws workflow guidance` are removed). The runtime decides the loop.
 - **No quality scoring API** (`caws evaluate` is removed). Use `caws gates run` exit code + the per-gate event in `events.jsonl`.
-- **No git-hook installer** (`caws hooks install` is removed). <!-- agent-surfaces-prose:start --> Use `caws init --agent-surface <claude-code | codex | opencode | zcode | kimi-code | qwen-code | dsh | cursor | windsurf | none>` to install a hook pack. `claude-code`, `codex`, `opencode`, `zcode`, `kimi-code`, `qwen-code`, `dsh` are implemented; `cursor`, `windsurf` are declared surfaces but not implemented. <!-- agent-surfaces-prose:end -->
+- **No git-hook installer** (`caws hooks install` is removed). <!-- agent-surfaces-prose:start --> Use `caws init --agent-surface <claude-code | codex | opencode | zcode | kimi-code | qwen-code | dsh | cursor | windsurf | none>` to initialize a project. Configured system surfaces inherit machine hooks without project copies. Use `caws init adapters install` for shared updates and `configure`/`migrate` for one-time native setup. Legacy pack templates for `claude-code`, `codex`, `opencode`, `zcode`, `kimi-code`, `qwen-code`, `dsh` are implemented; `cursor`, `windsurf` are declared surfaces but not implemented. <!-- agent-surfaces-prose:end -->
 - **No provenance subsystem** (`caws provenance` is removed). The hash-chained `events.jsonl` is the audit surface.
 - **No `caws parallel setup`** (deferred to v11.3+). Loop `caws worktree create` per spec instead.
 
@@ -200,7 +220,7 @@ A v11-shaped CI step:
 
 ```yaml
 - name: Setup CAWS
-  run: npm install -g @paths.design/caws-cli@^11.5.0
+  run: npm install -g @paths.design/caws-cli
 
 - name: CAWS health check
   run: caws doctor

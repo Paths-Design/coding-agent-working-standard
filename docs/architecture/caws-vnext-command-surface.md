@@ -18,10 +18,31 @@ governs:
 
 # CAWS vNext command surface (v11.0.0 → v11.2)
 
-**Status:** active. v11.0.0 → v11.8.0 shipped (governed core, worktree lifecycle, events, agents, message; v11.8.0 adds the zcode agent surface, links `.caws/hooks/node_modules` into worktrees, fixes cross-harness worktree-ownership misattribution, and adds `caws reprieve` for session-scoped guard skips). Multi-agent authority remains in planning (see §1).
-**Branch:** `main` post-cutover.
-**Authors:** vNext rewrite team
-**Last updated:** 2026-07-17
+**Status:** active architecture contract. The CLI retains the v11 governance
+kernel/store/shell lineage and now distributes executable behavior at machine scope.
+Use `caws --version` for the installed package version.
+
+## Current distribution and authority contract
+
+- Canonical project `.caws/` owns specs, policy, scope bindings, waivers and audit
+  history. Worktree and bridge claims are authority; leases and messages are not.
+- `CAWS_HOME` (default `~/.caws`) owns verified runtime snapshots, user harness
+  adapters, dispatch, rendering and session-global reprieves. Installation grants
+  no project authority. Native trust/execution requires harness-specific evidence.
+- Upgrade the CLI package, then preview/apply `caws init adapters install` once.
+  `configure` changes native user registration; `migrate` retires reviewed project
+  registration. Project stock packs do not need refreshes after system adoption.
+- Reviewed `init migrate` governance conversion is separate from adapter migration.
+  Original bytes are preserved; imported drafts confer no invented completion.
+- Command registration and generated packaged reference share typed metadata.
+  Authored guides explain task semantics. Full generated references are ignored
+  transport artifacts, not committed source. Installed/development runtime digest
+  parity is checked before activating a standalone development CLI installation.
+
+The rollout records below are historical context, including old package versions,
+pack refresh instructions and delivery plans. They do not override this current
+contract or live command help. See [runtime setup](../guides/hook-packs.md) for the
+current operational workflow.
 
 This document is the doctrine source for the v11 cutover and its follow-on
 releases. It captures the cutover posture, the command surface that ships,
@@ -31,7 +52,7 @@ rewrite established.
 If a future change conflicts with anything below, fix the change or revise
 this doc — do not silently regress an invariant.
 
-> **v11.7.0 consumer note** — the shared hook pack version bumped 15 → 16
+> **Historical v11.7.0 consumer note** — the shared hook pack version bumped 15 → 16
 > (`agent-surface.sh` gained a `zcode` arm; `emit_ask` gained an optional
 > `[event]` parameter). Existing consumers' next `caws init` will report
 > `agent-surface.sh` and `emit.sh` as `managed_drift` until they re-run with
@@ -44,7 +65,7 @@ this doc — do not silently regress an invariant.
 
 ## 1. Cutover posture
 
-**Current state: v11.x is the canonical line.** The v11 cutover is complete; v11.1 restored the spec and worktree lifecycle on top of the v11.0 governed core. The original A1 doctrine and the v11.0 → v11.1 plan are preserved below as historical context.
+**Historical v11 cutover state.** The v11 cutover is complete; v11.1 restored the spec and worktree lifecycle on top of the v11.0 governed core. The original A1 doctrine and the v11.0 → v11.1 plan are preserved below as historical context.
 
 ### Historical: A1 chosen
 
@@ -55,9 +76,9 @@ The cutover posture chosen at v11.0.0 was:
 > Projects needing legacy lifecycle pin to `caws-cli@^10.2.x`.
 > vNext lifecycle returns in v11.1.
 
-The v11.1 plan shipped in v11.1.x. Today's recommended install path is `@paths.design/caws-cli@^11.8.0` (or unpinned). Projects migrating from v10.2 should read [`docs/migration-v10-to-v11.md`](../migration-v10-to-v11.md).
+The v11.1 plan shipped in v11.1.x. That historical release used the 11.x CLI line; current installation follows the machine-runtime guide. Projects migrating from v10.2 should read [`docs/migration-v10-to-v11.md`](../migration-v10-to-v11.md).
 
-> **v11.8.0 consumer note** — the shared hook pack version bumped 21 → 22
+> **Historical v11.8.0 consumer note** — the shared hook pack version bumped 21 → 22
 > and the codex override bumped 12 → 13. This release adds `lib/reprieve.sh`
 > (the reprieve consult lib) and a skip seam in `run-handlers.sh` (shared +
 > codex), plus `lib/session-id.sh` (the session-id precedence helper) and the

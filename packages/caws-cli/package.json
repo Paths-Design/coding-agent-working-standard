@@ -1,7 +1,7 @@
 {
   "name": "@paths.design/caws-cli",
   "version": "12.1.0",
-  "description": "CAWS CLI - the governed core for CAWS project state, scope, claims, gates, waivers, and evidence (v11.1). Restores canonical spec/worktree lifecycle on the vNext kernel/store/shell architecture.",
+  "description": "CAWS CLI: project governance with a shared machine runtime and native agent harness adapters.",
   "main": "dist/index.js",
   "bin": {
     "caws": "dist/index.js"
@@ -19,7 +19,7 @@
     "build": "node scripts/generate-surface-registry.mjs && node scripts/check-surface-registry.mjs && node scripts/build-cli.js",
     "docs:generate": "node scripts/generate-command-reference.mjs",
     "docs:populate": "node scripts/populate-doc-markers.mjs",
-    "docs:check": "node scripts/generate-command-reference.mjs --check && node scripts/populate-doc-markers.mjs --check",
+    "docs:check": "node scripts/stage-consumer-docs.mjs && node scripts/generate-command-reference.mjs --check && node scripts/populate-doc-markers.mjs --check",
     "docs:stage": "node scripts/stage-consumer-docs.mjs",
     "docs:clean": "node scripts/clean-staged-docs.mjs",
     "build:docs": "node scripts/build-cli.js && node scripts/generate-command-reference.mjs && node scripts/populate-doc-markers.mjs",
@@ -47,7 +47,7 @@
     "lint:staged": "npx eslint .",
     "format": "prettier --write 'src/**/*.{js,ts}' 'tests/**/*.{js,ts}'",
     "validate": "echo 'CLI package validation not required'",
-    "caws:validate": "node dist/index.js validate",
+    "caws:validate": "node dist/index.js doctor",
     "clean": "rm -rf dist test-caws-project .agent && npm run test:cleanup",
     "prepare": "husky >/dev/null 2>&1 || true",
     "smoke:fresh-install": "node scripts/fresh-install-smoke.mjs",

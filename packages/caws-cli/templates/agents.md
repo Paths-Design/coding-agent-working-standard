@@ -2,6 +2,17 @@
 
 This project uses [CAWS](https://github.com/paths-design/caws) (Coding Agent Working Standard) for quality-assured AI-assisted development. CAWS v11.1+ ships a small set of governed commands; this guide assumes that surface.
 
+## Runtime setup
+
+Project `.caws/` owns governance. Shared executable hooks, dispatch and renderers
+live under `~/.caws` (absolute `CAWS_HOME` overrides it). Install once with
+`caws init adapters install`, configure the native harness with `adapters configure`,
+and retire reviewed legacy project registrations with `adapters migrate`.
+Preview each operation with `--plan`; consult its dedicated `--help`.
+New projects inherit configured system behavior through `caws init --agent-surface`.
+Agents in each harness must verify native lifecycle, guards and session rendering.
+Reprieves are human-granted session-global exceptions; leases remain visibility.
+
 ## Build & Test
 
 ```bash

@@ -36,7 +36,7 @@ import {
 import { SPECS_LIST_STATUSES } from '../store/specs-writer';
 import { KNOWN_SURFACES } from '../init/hook-packs/register';
 
-/** A positional argument on a command (this CLI uses at most one per command). */
+/** A positional argument on a command. */
 export interface CommandArgMeta {
   /** Argument name as it appears in usage, e.g. "id" or "path". */
   readonly name: string;
@@ -100,8 +100,7 @@ export interface LeafCommandMeta {
    *  are read through the shared `declaredArguments()` accessor so a leaf
    *  can never disagree with itself about its own positional count. */
   readonly argument?: CommandArgMeta;
-  /** Multiple positionals, in declaration order (e.g. init's `[action]`
-   *  then `[actionArg]`). Use this instead of `argument` when a leaf takes
+  /** Multiple positionals, in declaration order. Use this instead of `argument` when a leaf takes
    *  more than one positional; leave both leaves' worth of other metadata
    *  (name/description/options) unchanged. */
   readonly arguments?: readonly CommandArgMeta[];
@@ -1492,7 +1491,7 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'grant',
       description:
-        'Grant a reprieve that skips the named handler(s) for the current session until expiry. Replaces commenting a guard out of the dispatcher HANDLERS array (which disables it for every agent forever). The reprieve is recorded with a reason, approver, and expiry; the skip is logged to stderr when it fires; foreign sessions are never covered.',
+        'Human-terminal operation: grant a session-global reprieve under CAWS_HOME/state/sessions for the named handlers until expiry. Agents cannot grant their own reprieves. Replaces commenting a guard out of the dispatcher HANDLERS array (which disables it for every agent forever). The reprieve is recorded with a reason, approver, and expiry; the skip is logged to stderr when it fires; foreign sessions are never covered.',
       options: [
         {
           flag: '--handlers <list>',
@@ -1513,7 +1512,7 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
         },
         { flag: '--current', description: 'Resolve the session from env (default)' },
         { flag: '--session <id>', description: 'Explicit session id (overrides --current)' },
-        { flag: '--surface <name>', description: 'Agent surface / vendor dir (default: detect)' },
+        { flag: '--surface <name>', description: 'Harness provenance and legacy lookup context (default: detect); new grants use the machine session store' },
         { flag: '--dry-run', description: 'Validate and report without writing the state file' },
         { flag: '--json', description: 'Emit the result as JSON.' },
         DATA_OPTION,
@@ -1526,7 +1525,7 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
       options: [
         { flag: '--current', description: 'Resolve the session from env (default)' },
         { flag: '--session <id>', description: 'Explicit session id (overrides --current)' },
-        { flag: '--surface <name>', description: 'Agent surface / vendor dir (default: detect)' },
+        { flag: '--surface <name>', description: 'Harness provenance and legacy lookup context (default: detect); new grants use the machine session store' },
         { flag: '--json', description: 'Emit the record as JSON.' },
         DATA_OPTION,
       ],
@@ -1539,7 +1538,7 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
         { flag: '--reason <text>', required: true, description: 'Why the reprieve is being cleared; recorded' },
         { flag: '--current', description: 'Resolve the session from env (default)' },
         { flag: '--session <id>', description: 'Explicit session id (overrides --current)' },
-        { flag: '--surface <name>', description: 'Agent surface / vendor dir (default: detect)' },
+        { flag: '--surface <name>', description: 'Harness provenance and legacy lookup context (default: detect); new grants use the machine session store' },
         { flag: '--json', description: 'Emit the result as JSON.' },
         DATA_OPTION,
       ],
@@ -1549,7 +1548,7 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
       name: 'list',
       description: 'List active guard reprieves across sessions, with each one\'s handlers, expiry, and derived active/expired state.',
       options: [
-        { flag: '--surface <name>', description: 'Agent surface / vendor dir (default: detect)' },
+        { flag: '--surface <name>', description: 'Harness provenance and legacy lookup context (default: detect); new grants use the machine session store' },
         { flag: '--json', description: 'Emit the list as JSON.' },
         DATA_OPTION,
       ],

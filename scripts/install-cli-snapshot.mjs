@@ -33,6 +33,8 @@ export function installCliSnapshot({ packageRoot, cawsHome, binPath }) {
     const releases = path.join(cawsHome, 'lib', 'cli');
     fs.mkdirSync(releases, { recursive: true });
     stage = fs.mkdtempSync(path.join(releases, '.install-'));
+    const stageDocs = path.join(packageRoot, 'scripts', 'stage-consumer-docs.mjs');
+    if (fs.existsSync(stageDocs)) run(process.execPath, [stageDocs], packageRoot);
     const packed = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', stage], packageRoot));
     const tarball = path.join(stage, path.basename(packed[0].filename));
     const digest = crypto.createHash('sha256').update(fs.readFileSync(tarball)).digest('hex');
