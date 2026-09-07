@@ -8,7 +8,7 @@ updated_at: '2026-09-07T02:58:58.517Z'
 created_by_session: '01a07868-9878-7e72-bcd9-a6af25f92820'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'Legacy governance import and system runtime adoption'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
