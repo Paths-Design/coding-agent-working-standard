@@ -44,9 +44,9 @@ acceptance:
     when: 'adoption is attempted'
     then: 'it refuses before changing governance'
   - id: A3
-    given: 'The spec implementation is complete.'
-    when: 'The acceptance statement is evaluated.'
-    then: 'A3|a system initialized project|init reports activation and hooks run|output names system verification and audit logs use machine state'
+    given: 'a system initialized project'
+    when: 'init reports activation and hooks run'
+    then: 'output names system verification and audit logs use machine state'
 non_functional: {}
 contracts:
   - name: 'legacy-adoption-preservation'
