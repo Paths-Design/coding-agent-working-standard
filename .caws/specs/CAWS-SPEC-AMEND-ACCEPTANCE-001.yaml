@@ -41,9 +41,29 @@ invariants:
   - 'An accepted amendment lands spec bytes, evidence block, and event in one lifecycle transaction; a refused one writes nothing at all.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'an active or draft spec carrying acceptance criterion A8 with recorded evidence against its current text'
+    when: 'caws specs amend <id> --set-ac A8 --then "<corrected text>" --reason "<why>" runs'
+    then: 'exactly the supplied fields of A8 are rewritten in place — unsupplied fields and every sibling AC are byte-preserved — and the evidence entry for A8 is reset to unchecked with evidence_ref/waiver_reason cleared, recorded as set_acceptance + reset_evidence (with previous_status) on one spec_body_amended event, so the close gate can no longer proceed over a pass that proved text which no longer exists'
+  - id: A2
+    given: 'an active or draft spec and a criterion id not yet declared'
+    when: 'caws specs amend <id> --add-ac A9 --given .. --when .. --then .. runs'
+    then: 'the criterion is appended after the last existing one and recorded as added_acceptance; --add-ac against an existing id refuses rather than silently overwriting, and a missing --given/--when/--then refuses at the flag layer'
+  - id: A3
+    given: 'an active or draft spec with at least two acceptance criteria'
+    when: 'caws specs amend <id> --remove-ac A4 runs'
+    then: 'the criterion and its evidence entry are removed in the same write — no orphan evidence survives, which semantic validation would otherwise reject — recorded as removed_acceptance + removed_evidence; removing the last remaining AC refuses (the schema requires minItems 1)'
+  - id: A4
+    given: 'a CLOSED spec, whose acceptance text is part of the concluded audit record'
+    when: 'any AC amendment runs against it'
+    then: 'rewriting substantive given/when/then text refuses byte-identically with no event (reopen first), except the full scaffold discharge: a criterion still holding the create scaffold (given/when/then all TODO) may be filled when all three fields are supplied, recorded in discharged_scaffold_fields — and that discharge refuses when the criterion already carries an evidence entry, because a closed spec''s evidence is frozen'
+  - id: A5
+    given: 'an accepted AC amendment of any kind'
+    when: 'the command finishes'
+    then: 'the appended spec_body_amended payload validates against the extended event schema, the patched spec re-validates (parse + semantics), and the spec-file change is captured in the auto-commit — the sanctioned path is also the audited, git-tracked path'
+  - id: A6
+    given: 'the CLI built from this source, exercised as a spawned process (the Commander path, not a handler call)'
+    when: 'caws specs amend runs with --set-ac/--add-ac/--remove-ac, --given/--when/--then, and --reason'
+    then: 'every flag forwards through register.ts; supplying more than one of set/add/remove refuses; --given/--when/--then without an AC target refuses; AC ids are validated against ^A\d+$; and --set-ac naming an unknown id refuses with a pointer to --add-ac so a typo cannot silently mint a new criterion'
 non_functional: {}
 contracts:
   - name: 'specs-amend-acceptance'
