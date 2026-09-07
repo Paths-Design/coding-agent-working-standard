@@ -86,3 +86,7 @@ evidence:
     status: pass
     evidence_ref: "specs-body-writer-acceptance.test.js: closed-spec substantive rewrite refused with reopen pointer (rendered to err stream); add/remove on closed refuse as concluded-record rewrites; full scaffold discharge succeeds recording discharged_scaffold_fields [acceptance]; discharge over recorded evidence refused (closed evidence frozen)"
     recorded_at: "2026-09-07T01:12:29.249Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "spec_body_amended.v1.json schema (additionalProperties false) + specs-body-writer-acceptance.test.js: accepted amendment lands as ONE audited commit on a clean tree (git log subject chore(caws): amend ACC-010; committed yaml holds rewritten text + status unchecked, old proof gone); event payload equality asserted"
+    recorded_at: "2026-09-07T01:12:31.971Z"
