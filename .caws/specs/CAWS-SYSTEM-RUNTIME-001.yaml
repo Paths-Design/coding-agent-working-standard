@@ -79,3 +79,9 @@ evidence:
     recorded_at: "2026-09-07T02:01:42.992Z"
     artifact_path: /Users/darianrosebrook/Desktop/Projects/caws/tmp/system-runtime-2026-09-07/README.md
     commit_sha: "3d3f2c39"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: System-registration and machine-adoption tests; exact migration backups and eight project applications.
+    recorded_at: "2026-09-07T02:01:43.727Z"
+    artifact_path: /Users/darianrosebrook/Desktop/Projects/caws/tmp/system-runtime-2026-09-07/README.md
+    commit_sha: "3d3f2c39"
