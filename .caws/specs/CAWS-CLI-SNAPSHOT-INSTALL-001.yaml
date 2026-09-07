@@ -34,3 +34,8 @@ non_functional: {}
 contracts:
   - name: 'standalone-cli-activation'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: /Users/darianrosebrook/Desktop/Projects/caws/tmp/system-adoption-2026-09-07/cli-rebuild-availability.json
+    recorded_at: "2026-09-07T03:22:58.575Z"
