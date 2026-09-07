@@ -2,9 +2,10 @@ id: CAWS-SPEC-AMEND-ACCEPTANCE-001
 title: 'specs amend cannot rewrite acceptance criteria, so agents encode AC corrections as invariants or spin successor specs'
 risk_tier: 2
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-ac-amend
 created_at: '2026-09-07T00:18:17.452Z'
-updated_at: '2026-09-07T00:18:17.452Z'
+updated_at: '2026-09-07T00:19:02.937Z'
 created_by_session: 'session-ddd10825-75fb-42af-85e5-b52fa5f4815c'
 blast_radius:
   modules:
