@@ -51,9 +51,9 @@ evidence:
     evidence_ref: "/private/tmp/caws-identity-repair-final-receipt.json (7ec626fb; freshly rerun 93 tests, lint, both typechecks and gates; human review pending)"
     recorded_at: "2026-09-07T06:53:12.970Z"
   - criterion_id: A2
-    status: pass
-    evidence_ref: "/private/tmp/caws-identity-repair-final-receipt.json (7ec626fb; freshly rerun 93 tests, lint, both typechecks and gates; human review pending)"
-    recorded_at: "2026-09-07T06:53:30.069Z"
+    status: fail
+    evidence_ref: "/private/tmp/caws-identity-review-receipt.json: unidentified caller is admitted via one fresh owner envelope; existing passing test set does not prove closure"
+    recorded_at: "2026-09-07T07:01:26.232Z"
   - criterion_id: A3
     status: pass
     evidence_ref: "/private/tmp/caws-identity-repair-final-receipt.json (7ec626fb; freshly rerun 93 tests, lint, both typechecks and gates; human review pending)"
