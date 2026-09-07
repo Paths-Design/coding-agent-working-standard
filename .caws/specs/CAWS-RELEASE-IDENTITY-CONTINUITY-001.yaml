@@ -45,3 +45,8 @@ non_functional:
 contracts:
   - name: 'create-enter-identity-continuity'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "/private/tmp/caws-identity-repair-receipt.json (bd2323ae; 93 tests, no failures or skips; scoped reproduction; human review pending)"
+    recorded_at: "2026-09-07T06:45:16.725Z"
