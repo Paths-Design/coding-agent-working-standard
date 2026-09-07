@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-release-runtime
 created_at: '2026-09-07T05:23:59.234Z'
-updated_at: '2026-09-07T05:34:27.279Z'
+updated_at: '2026-09-07T05:52:50.311Z'
 created_by_session: '01a07868-9878-7e72-bcd9-a6af25f92820'
 blast_radius:
   modules:
@@ -15,10 +15,10 @@ operational_rollback_slo: 5m
 scope:
   in:
     - 'packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh'
-    - 'packages/caws-cli/templates/hook-packs/shared/lib/guard-message.sh'
     - 'packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh'
     - 'packages/caws-cli/tests/adapter/machine-recovery.test.js'
     - packages/caws-cli/tests/adapter/runtime-bootstrap.test.js
+    - packages/caws-cli/templates/hook-packs/shared/reset-danger-latch.sh
   out: []
 invariants:
   - 'Rendered recovery preserves canonical project and session boundaries; runtime snapshots remain immutable.'
