@@ -78,3 +78,7 @@ evidence:
     status: pass
     evidence_ref: "specs-body-writer-acceptance.test.js: add-ac appends full criterion, new id immediately accepts evidence; 8-case refusal matrix (exclusive ops, missing target, partial fields, bad id shape, empty field, unknown id, existing id, last-AC) each asserting exact message + byte-identical file + zero events"
     recorded_at: "2026-09-07T01:12:07.926Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "specs-body-writer-acceptance.test.js: remove-ac deletes criterion AND its evidence entry in one write (raw yaml holds evidence: [] after last-entry removal — deleteEvidenceEntry normalization, real revalidation-refusal bug found and fixed); last-AC removal refused (schema minItems)"
+    recorded_at: "2026-09-07T01:12:09.610Z"
