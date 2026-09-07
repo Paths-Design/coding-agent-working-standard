@@ -73,8 +73,8 @@ evidence:
     recorded_at: "2026-09-07T08:36:47.706Z"
   - criterion_id: A2
     status: pass
-    evidence_ref: "/private/tmp/caws-identity-durable-receipt.json (e145c84e; 288 tests, zero failures or skips; both typechecks, scoped lint, gates and doctor re-executed; Tier 1 review pending)"
-    recorded_at: "2026-09-07T07:35:55.007Z"
+    evidence_ref: "/private/tmp/caws-identity-r2-receipt.json (c7d4aaa9; 320 tests, 42 suites, zero failures/skips; both typechecks, scoped lint and gates pass; P1/P2 regression controls included; merge review pending)"
+    recorded_at: "2026-09-07T08:36:58.256Z"
   - criterion_id: A3
     status: unchecked
     recorded_at: "2026-09-07T08:22:04.706Z"
