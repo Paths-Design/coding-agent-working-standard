@@ -73,3 +73,9 @@ evidence:
     recorded_at: "2026-09-07T02:01:42.255Z"
     artifact_path: /Users/darianrosebrook/Desktop/Projects/caws/tmp/system-runtime-2026-09-07/README.md
     commit_sha: "3d3f2c39"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: Canonical/linked worktree and non-CAWS tests; fresh native project without local hooks.
+    recorded_at: "2026-09-07T02:01:42.992Z"
+    artifact_path: /Users/darianrosebrook/Desktop/Projects/caws/tmp/system-runtime-2026-09-07/README.md
+    commit_sha: "3d3f2c39"
