@@ -268,16 +268,8 @@ export interface DoctorInput {
      * Optional; undefined = unobserved (silent).
      */
     readonly strandedLeaseTmpFiles?: readonly { readonly name: string; readonly ageMs: number }[];
-    /**
-     * CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A4: the machine's global home
-     * (~/.caws) observation — whether the stamped state/global-home.json
-     * exists and the top-level entry names. Optional; undefined =
-     * unobserved (silent).
-     */
-    readonly globalHomeObservation?: {
-      readonly stampPresent: boolean;
-      readonly entries: readonly string[];
-    };
+    /** Missing, unreadable, and present are distinct. Undefined is unobserved. */
+    readonly globalHomeObservation?: GlobalHomeObservation;
     readonly worktreeDirByName?: Readonly<Record<string, boolean>>;
     readonly specClaimedWorktreeDirByName?: Readonly<Record<string, boolean>>;
     /**
@@ -376,6 +368,25 @@ export interface DoctorReport {
   /** True iff zero error-severity findings. Warnings/infos do not unset clean. */
   readonly clean: boolean;
 }
+
+/** Byte integrity is an observation, not native activation or release authority. */
+export type GlobalHomeObservation =
+  | { readonly kind: 'absent'; readonly root: string }
+  | {
+      readonly kind: 'unreadable';
+      readonly root: string;
+      readonly error: { readonly code: string; readonly message: string };
+    }
+  | {
+      readonly kind: 'present';
+      readonly root: string;
+      readonly entries: readonly string[];
+      readonly stampPresent: boolean;
+      readonly runtime:
+        | { readonly status: 'absent' }
+        | { readonly status: 'verified'; readonly digest: string }
+        | { readonly status: 'invalid'; readonly error: string };
+    };
 
 /** Observed configured code source, not proof of native harness activation. */
 export interface SystemRuntimeObservation {

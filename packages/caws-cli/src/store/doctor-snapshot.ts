@@ -45,6 +45,7 @@ import { SHARED_PACK_VERSION, TELEMETRY_ROW_DEST_PATHS } from '../init/hook-pack
 import { listStrandedTmpSiblings } from './atomic-write';
 import { ADAPTER_COVERED_SURFACES } from '../init/hook-packs/types';
 import { observeSystemRuntime } from './system-runtime-observation';
+import { observeGlobalHome } from './global-home-observation';
 import { observeGatedSurfaceWiring } from '../init/hook-packs/user-scope-wiring';
 import { loadWorktrees } from './worktrees-store';
 
@@ -305,24 +306,7 @@ function observeFilesystem(
     // CAWS-HARNESS-TELEMETRY-ADAPTER-001: observe managed telemetry rows and
     // installed adapter-pack surfaces so doctor can flag stale dual-writers.
     managedTelemetryRowPaths: observeManagedTelemetryRows(repoRoot),
-    // CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A4: the machine global home.
-    globalHomeObservation: ((): {
-      stampPresent: boolean;
-      entries: readonly string[];
-    } => {
-      const home = os.homedir();
-      const root = process.env.CAWS_HOME || path.join(home, '.caws');
-      let entries: string[] = [];
-      try {
-        entries = fs.readdirSync(root);
-      } catch {
-        return { stampPresent: false, entries: [] };
-      }
-      return {
-        stampPresent: fs.existsSync(path.join(root, 'state', 'global-home.json')),
-        entries,
-      };
-    })(),
+    globalHomeObservation: observeGlobalHome(process.env.CAWS_HOME || path.join(os.homedir(), '.caws')),
     adapterPackSurfaceMarkers: observeAdapterPackSurfaceMarkers(repoRoot),
     // CAWS-DEFECT-LEASE-TMP-STRANDING-01: stranded atomic-write tmps in the
     // leases dir, observed through the atomic-write lister itself (the same

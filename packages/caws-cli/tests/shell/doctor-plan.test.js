@@ -2,10 +2,25 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 const { initProject } = require('../../dist/store/init-store');
 const { runDoctorCommand } = require('../../dist/shell/commands/doctor');
 const { cleanupAll, makeTempRepo } = require('../helpers/git-repo-factory');
+
+let fixture, previousHome;
+beforeEach(() => {
+  fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-doctor-plan-'));
+  previousHome = process.env.CAWS_HOME;
+  // This suite describes a project with no machine installation. Adoption
+  // and configured native surfaces are exercised in their own fixtures.
+  process.env.CAWS_HOME = path.join(fixture, 'absent-machine');
+});
+afterEach(() => {
+  if (previousHome === undefined) delete process.env.CAWS_HOME;
+  else process.env.CAWS_HOME = previousHome;
+  fs.rmSync(fixture, { recursive: true, force: true });
+});
 
 afterAll(() => {
   cleanupAll();
