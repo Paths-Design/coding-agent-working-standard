@@ -66,3 +66,10 @@ non_functional: {}
 contracts:
   - name: 'machine-runtime-distribution'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: Two-project guard AND renderer update regression; project bytes unchanged. README.md validation and system-runtime.test.js.
+    recorded_at: "2026-09-07T02:01:42.255Z"
+    artifact_path: /Users/darianrosebrook/Desktop/Projects/caws/tmp/system-runtime-2026-09-07/README.md
+    commit_sha: "3d3f2c39"
