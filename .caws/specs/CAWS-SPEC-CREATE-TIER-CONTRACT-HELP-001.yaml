@@ -21,8 +21,16 @@ invariants:
   - 'Option help text never contradicts the shipped command surface'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'the COMMAND_SURFACE_METADATA entry for `specs create --risk-tier`'
+    when: 'the option description is rendered in `caws specs create --help`'
+    then: 'the description states that tier 1 and tier 2 require at least one --contract entry while tier 3 and --mode chore do not, so the coupling is visible where agents compose the tier flag, not only at --contract'
+  - id: A2
+    given: 'the COMMAND_SURFACE_METADATA entries for `specs create --module` and `--invariant`'
+    when: 'the option descriptions are rendered'
+    then: 'neither claims the scaffolded default "you cannot replace from the command surface"; both name `caws specs amend --add-module` / `--add-invariant` as the replacement path, matching the shipped amend surface'
+  - id: A3
+    given: 'the generated reference docs/command-reference.md'
+    when: 'the `caws specs create` option rows are rendered from COMMAND_SURFACE_METADATA'
+    then: 'the --risk-tier, --module, and --invariant rows carry the same corrected text as the metadata, with no stale "cannot replace" claim remaining in the document'
 non_functional: {}
 contracts: []
