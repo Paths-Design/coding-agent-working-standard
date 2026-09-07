@@ -92,5 +92,9 @@ evidence:
     commit_sha: "8b58f10d79ac53200f40a1e1197cbc21c50f420c"
   - criterion_id: A4
     status: pass
-    evidence_ref: "/private/tmp/caws-identity-r2-receipt.json (c7d4aaa9; 320 tests, 42 suites, zero failures/skips; both typechecks, scoped lint and gates pass; P1/P2 regression controls included; merge review pending)"
-    recorded_at: "2026-09-07T08:37:18.878Z"
+    evidence_ref: "/private/tmp/caws-identity-integration-receipt.json; governed merge 5259c3de from approved c7d4aaa9; fresh main run 320 tests/42 suites, zero failures/skips; build, both typechecks, exact-manifest lint, all five gates passed. Scoped identity proof; broader release hold unchanged."
+    recorded_at: "2026-09-07T18:58:42.960Z"
+    command: "node node_modules/jest/bin/jest.js --maxWorkers=2 --testPathPatterns='tests/(shell/(session/.*|.*claim.*|session-candidate-overmatch-d3|worktree-.*|scope-.*|status-.*)|kernel/unit/worktree-ownership-candidates)\\.test\\.(js|ts)$' --json --outputFile=/private/tmp/caws-identity-integration-jest.json"
+    exit_code: 0
+    artifact_path: /private/tmp/caws-identity-integration-receipt.json
+    commit_sha: "8b58f10d79ac53200f40a1e1197cbc21c50f420c"
