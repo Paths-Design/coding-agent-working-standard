@@ -56,6 +56,14 @@ function governanceBytes() {
     })
   );
 }
+function transfers() {
+  return fs
+    .readFileSync(path.join(root, '.caws/events.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line))
+    .filter((event) => event.event === 'claim_taken_over');
+}
 beforeEach(() => {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "caws create ' ; ")));
   const bin = path.join(root, 'fixture-bin');
@@ -343,6 +351,99 @@ test('explicit takeover with no caller context creates and carries a new identit
   expect(continued.stdout).toContain(`OWNED (you) — ${record.owner.session_id}`);
   expect(governanceBytes()).toEqual(before);
   expect(capsules()).toEqual(beforeCapsules);
+});
+
+test.each(['missing lease', 'unreadable lease directory'])(
+  'audited takeover retains its continuation when path metadata fails: %s',
+  (failure) => {
+    succeeded(run(['worktree', 'create', 'wt-enter', '--spec', 'ENTER-001']));
+    const other = { CAWS_SESSION_ID: 'unrelated-owner' };
+    succeeded(
+      run(
+        [
+          'specs',
+          'create',
+          'OTHER-001',
+          '--title',
+          'Unrelated lane',
+          '--mode',
+          'chore',
+          '--risk-tier',
+          '3',
+          '--scope-in',
+          'other',
+        ],
+        root,
+        other
+      )
+    );
+    succeeded(run(['worktree', 'create', 'wt-unrelated', '--spec', 'OTHER-001'], root, other));
+    const before = JSON.parse(registry());
+    expect(transfers()).toEqual([]);
+    const leasePath = path.join(root, '.caws/leases');
+    expect(fs.existsSync(leasePath)).toBe(false);
+    if (failure === 'missing lease') fs.mkdirSync(leasePath);
+    else fs.writeFileSync(leasePath, 'fixture: a file cannot be read as a lease directory\n');
+    const leaseState = () =>
+      failure === 'missing lease' ? fs.readdirSync(leasePath) : fs.readFileSync(leasePath, 'utf8');
+    const beforeLeases = leaseState();
+
+    const cwd = path.join(root, '.caws/worktrees/wt-enter');
+    const result = run(['claim', '--takeover', '--paths', 'src'], cwd);
+    expect(result.status).toBe(1);
+    const after = JSON.parse(registry());
+    const owner = after['wt-enter'].owner.session_id;
+    expect(owner).not.toBe(before['wt-enter'].owner.session_id);
+    expect(after['wt-unrelated']).toEqual(before['wt-unrelated']);
+    expect(after['wt-enter'].prior_owners.map((o) => o.session_id)).toEqual([
+      before['wt-enter'].owner.session_id,
+    ]);
+    const recorded = transfers();
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].actor.id).toBe(owner);
+    expect(recorded[0].data.new_owner.session_id).toBe(owner);
+    expect(recorded[0].data.prior_owner.session_id).toBe(before['wt-enter'].owner.session_id);
+    expect(result.stdout).toContain(`Ownership transferred for worktree 'wt-enter' to ${owner}`);
+    expect(result.stderr).toContain('ownership transferred; path metadata failed');
+    expect(result.stderr).toContain(
+      failure === 'missing lease' ? 'No existing lease' : 'failed to load leases'
+    );
+    const lines = result.stdout.split('\n').filter((s) => s.startsWith('Continue in this shell: '));
+    expect(lines).toHaveLength(1);
+    const afterGovernance = governanceBytes(),
+      afterCapsules = capsules();
+    const continued = spawnSync(
+      '/bin/bash',
+      [
+        '--noprofile',
+        '--norc',
+        '-c',
+        `${lines[0].slice('Continue in this shell: '.length)}; caws claim`,
+      ],
+      { cwd, env, encoding: 'utf8' }
+    );
+    succeeded(continued);
+    expect(continued.stdout).toContain(`OWNED (you) — ${owner}`);
+    expect(governanceBytes()).toEqual(afterGovernance);
+    expect(capsules()).toEqual(afterCapsules);
+    expect(transfers()).toHaveLength(1);
+    expect(leaseState()).toEqual(beforeLeases);
+  }
+);
+
+test('a failed audited takeover reports no completed transfer or minted continuation', () => {
+  succeeded(run(['worktree', 'create', 'wt-enter', '--spec', 'ENTER-001']));
+  fs.writeFileSync(path.join(root, '.caws/events.jsonl'), 'fixture: invalid event chain\n');
+  const before = governanceBytes();
+  const result = run(
+    ['claim', '--takeover', '--paths', 'src'],
+    path.join(root, '.caws/worktrees/wt-enter')
+  );
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain('failed to apply takeover patch');
+  expect(result.stdout).not.toContain('Ownership transferred');
+  expect(result.stdout).not.toContain('Continue in this shell:');
+  expect(governanceBytes()).toEqual(before);
 });
 
 test('a newly minted bridge prints context that grants scope and can release the bridge', () => {

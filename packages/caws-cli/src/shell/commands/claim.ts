@@ -603,6 +603,7 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
     return 0;
   }
 
+  let takeoverApplied = false;
   if (patch !== null) {
     // Patch must be a takeover_claim (the kernel only emits null or a
     // takeover_claim from assertOwnership). Before applying it, refuse a
@@ -687,6 +688,11 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
       err(renderDiagnostics(applyResult.errors, { showData }));
       return 2;
     }
+    takeoverApplied = true;
+    // Ownership and its audit are committed now. Surface the actual caller
+    // before any operational-cache failure can bypass the continuation.
+    out(`Ownership transferred for worktree '${worktreeName}' to ${session.session_id}; audit event recorded.`);
+    surfaceMintedContinuation(sessionResult.value, out);
   }
 
   // 7. Refresh agents.json — ONLY on the legacy `--paths` absent branch.
@@ -730,11 +736,15 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
   // does NOT regress ownership; it surfaces as a typed diagnostic and
   // returns exit 1 so the operator sees that the paths were not stored.
   if (opts.paths !== undefined) {
+    const pathMetadataFailed = (): number => {
+      if (takeoverApplied) err('caws claim: ownership transferred; path metadata failed.');
+      return 1;
+    };
     const leasesResult = loadLeases(cawsDir);
     if (!leasesResult.ok) {
       err('caws claim: --paths: failed to load leases.');
       err(renderDiagnostics(leasesResult.errors, { showData }));
-      return 1;
+      return pathMetadataFailed();
     }
     const patchResult = updateAgentLeasePaths(leasesResult.value.leases, session, {
       claimed_paths: opts.paths,
@@ -742,13 +752,13 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
     if (!patchResult.ok) {
       err('caws claim: --paths: refused.');
       err(renderDiagnostics(patchResult.errors, { showData }));
-      return 1;
+      return pathMetadataFailed();
     }
     const applyPathsResult = applyLeasePatch(cawsDir, patchResult.value);
     if (!applyPathsResult.ok) {
       err('caws claim: --paths: lease apply failed.');
       err(renderDiagnostics(applyPathsResult.errors, { showData }));
-      return 1;
+      return pathMetadataFailed();
     }
     // Surface any warn-no-op diagnostics (missing lease file race
     // between load and apply). Treat as refusal so the operator sees
@@ -757,7 +767,7 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
     if (applyPathsResult.value.diagnostics.length > 0) {
       err('caws claim: --paths: lease apply produced diagnostics.');
       err(renderDiagnostics(applyPathsResult.value.diagnostics, { showData }));
-      if (!applyPathsResult.value.wrote) return 1;
+      if (!applyPathsResult.value.wrote) return pathMetadataFailed();
     }
   }
 
@@ -789,7 +799,6 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
   );
 
   // A successful claim must describe the same caller we authorized above.
-  if (newRel === 'you') surfaceMintedContinuation(sessionResult.value, out);
   return newRel === 'you' ? 0 : 1;
 }
 
