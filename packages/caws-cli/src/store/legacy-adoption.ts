@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as yaml from 'js-yaml';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { isOk, parseAndValidatePolicy, parseAndValidateSpec } from '../kernel';
@@ -20,6 +21,30 @@ export interface LegacyAdoptionPlan {
 const sha = (text: string): string => createHash('sha256').update(text).digest('hex');
 const legacy = ['.caws/working-spec.yaml', '.caws/working-spec.schema.json'];
 const specPath = /^\.caws\/specs\/[A-Z0-9][A-Z0-9_-]*\.ya?ml$/;
+const waiverPath = /^\.caws\/waivers\/[A-Za-z0-9_-]+\.ya?ml$/;
+
+function inertWaiver(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (Object.keys(record).join(',') === 'waivers') {
+    const entries = record.waivers;
+    if (entries === null) return true;
+    if (!entries || typeof entries !== 'object') return false;
+    return Object.values(entries).every(inertWaiver);
+  }
+  if (record.status === 'revoked') return true;
+  if (typeof record.expires_at !== 'string') return false;
+  const expiry = record.expires_at;
+  // Old date-only expiry means end of that UTC day; never infer an early expiry.
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(expiry) ? expiry + 'T23:59:59.999Z' : expiry;
+  if (!/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(normalized)) return false;
+  const day = normalized.slice(0, 10);
+  const dayTime = Date.parse(day + 'T00:00:00Z');
+  if (!Number.isFinite(dayTime) || new Date(dayTime).toISOString().slice(0, 10) !== day) return false;
+  const time = Date.parse(normalized);
+  return Number.isFinite(time) && time < Date.now();
+}
+
 
 /** Apply a reviewed conversion without inventing evidence or dropping original
  * source bytes. Preview is pure. A lock serializes this command; input hashes
@@ -62,7 +87,8 @@ export function adoptLegacyProject(cwd: string, input: unknown, apply: boolean) 
       names.has(change.path) ||
       (!legacy.includes(change.path) &&
         change.path !== '.caws/policy.yaml' &&
-        !specPath.test(change.path)) ||
+        !specPath.test(change.path) &&
+        !waiverPath.test(change.path)) ||
       (change.beforeSha256 !== null && !/^[a-f0-9]{64}$/.test(change.beforeSha256)) ||
       (change.contents !== null && typeof change.contents !== 'string')
     )
@@ -81,6 +107,9 @@ export function adoptLegacyProject(cwd: string, input: unknown, apply: boolean) 
     if (legacy.includes(change.path)) {
       if (change.contents !== null)
         throw new Error('Legacy singleton paths must be archived, never rewritten');
+    } else if (waiverPath.test(change.path)) {
+      if (original === null || change.contents !== null || !inertWaiver(yaml.load(original, { schema: yaml.JSON_SCHEMA })))
+        throw new Error(`Waiver must be provably expired or revoked for archival: ${change.path}`);
     } else if (change.path === '.caws/policy.yaml') {
       if (original !== null && isOk(parseAndValidatePolicy(original)))
         throw new Error('Existing modern policy must use its governance workflow');
