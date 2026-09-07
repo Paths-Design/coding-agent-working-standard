@@ -35,3 +35,8 @@ acceptance:
     then: 'the --risk-tier, --module, and --invariant rows carry the same corrected text as the metadata, with no stale "cannot replace" claim remaining in the document'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "specs-create-tier-alias.test.js: --risk-tier description contains 'Tiers 1 and 2 require at least one --contract' + 'tier 3 / --mode chore do not'; rendered in specs create --help. Falsification: mutating the description reddens exactly this test (6 others green)"
+    recorded_at: "2026-09-07T04:00:19.282Z"
