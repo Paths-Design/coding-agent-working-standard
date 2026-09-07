@@ -40,3 +40,8 @@ non_functional: {}
 contracts:
   - name: 'runtime-bootstrap-recovery'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "87682e43; runtime-bootstrap.test.js 8 cases; /private/tmp/caws-runtime-repair-regression.json; source digests in /private/tmp/caws-runtime-repair-dedup-receipt.json"
+    recorded_at: "2026-09-07T06:07:01.151Z"
