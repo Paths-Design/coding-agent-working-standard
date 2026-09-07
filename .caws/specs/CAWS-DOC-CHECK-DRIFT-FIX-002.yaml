@@ -1,0 +1,52 @@
+id: CAWS-DOC-CHECK-DRIFT-FIX-002
+title: 'Reconcile fresh doc-check drift: v11.1.x command surface growth + OIDC/kernel-absorption residue'
+risk_tier: 3
+mode: doc
+lifecycle_state: draft
+created_at: '2026-09-07T23:54:04.544Z'
+updated_at: '2026-09-07T23:54:04.544Z'
+created_by_session: 'e33f5221-a961-4418-9632-37ab8ab02449'
+blast_radius:
+  modules:
+    - 'documentation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'README.md'
+    - 'AGENTS.md'
+    - 'COMMIT_CONVENTIONS.md'
+    - 'MANUAL_RELEASE.md'
+    - 'SECURITY.md'
+    - 'CODE_OF_CONDUCT.md'
+    - 'docs/DEPLOYMENT.md'
+    - 'docs/MONITORING.md'
+    - 'docs/NPM_PUBLISHING_TEST.md'
+    - 'docs/README.md'
+    - 'docs/agent-workflow-tools.md'
+    - 'docs/failure-lineage.md'
+    - 'docs/agents/TUTORIAL.md'
+    - 'docs/agents/full-guide.md'
+    - 'docs/guides/agent-integration-guide.md'
+    - 'docs/guides/caws-contracts.md'
+    - 'docs/guides/caws-developer-guide.md'
+    - 'docs/guides/hooks-and-agent-workflows.md'
+    - 'docs/guides/multi-agent-workflow.md'
+    - 'docs/guides/worktree-isolation.md'
+    - 'docs/architecture/caws-vnext-command-surface.md'
+    - 'docs/architecture/cli-ux-job-model-audit.md'
+    - 'docs/architecture/design/agent-pid-correlation-scoping.md'
+    - 'docs/architecture/hook-pack-shared-core.md'
+    - 'docs/migration-v10-to-v11.md'
+    - 'docs/internal/caws-cli-defect-triage.md'
+    - 'docs/rewrite/investigations/05-workspace.md'
+  out: []
+invariants:
+  - 'Every path, command, flag, and package reference in a fixed doc must exist in the current working tree at commit time'
+acceptance:
+  - id: A1
+    given: 'a /doc-check audit (2026-09-07) found drift across 27 markdown files against the live v11.1.x+ command surface'
+    when: 'this spec closes'
+    then: 'every finding from that audit is corrected and re-verified against the live repo state'
+non_functional: {}
+contracts: []
