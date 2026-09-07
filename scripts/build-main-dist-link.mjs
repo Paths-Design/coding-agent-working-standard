@@ -2,6 +2,8 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import { installCliSnapshot } from './install-cli-snapshot.mjs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -24,7 +26,7 @@ function usage() {
     '  --install          Always run npm ci before building',
     '  --skip-install     Do not install dependencies, even if node_modules is absent',
     '  --skip-build       Only refresh symlinks; requires existing package dist',
-    '  --no-global-link   Do not npm-link the local CLI into the active Node prefix',
+    '  --no-global-link   Do not install a standalone CLI snapshot on PATH',
     '  --help             Show this help',
   ].join('\n');
 }
@@ -130,32 +132,16 @@ function firstWritablePathDir() {
   return null;
 }
 
-function linkGlobalShim() {
-  const existing = existingCawsBin();
-  const linkPath = existing ?? path.join(firstWritablePathDir() ?? '', 'caws');
-  if (!linkPath || linkPath === 'caws') {
-    throw new Error('could not find a writable PATH directory for the global caws shim');
-  }
-  const parent = path.dirname(linkPath);
-  fs.accessSync(parent, fs.constants.W_OK);
-  removeIfExists(linkPath);
-  fs.symlinkSync(CLI_BIN, linkPath, 'file');
-  console.log(`linked ${linkPath} -> ${CLI_BIN}`);
-}
-
 function linkGlobalCli() {
-  requirePath(path.join(CLI_PACKAGE, 'package.json'), 'CLI package metadata');
-  requirePath(CLI_BIN, 'CLI bin output');
-  console.log('$ npm link --workspace @paths.design/caws-cli');
-  const result = spawnSync('npm', ['link', '--workspace', '@paths.design/caws-cli'], {
-    cwd: repoRoot,
-    stdio: 'inherit',
-    env: process.env,
+  const existing = existingCawsBin();
+  const directory = firstWritablePathDir();
+  if (!existing && !directory) throw new Error('No writable PATH directory for caws');
+  const result = installCliSnapshot({
+    packageRoot: CLI_PACKAGE,
+    cawsHome: process.env.CAWS_HOME ?? path.join(os.homedir(), '.caws'),
+    binPath: existing ?? path.join(directory, 'caws'),
   });
-  if (result.status === 0) return;
-
-  console.log('npm link failed; falling back to a direct caws shim on PATH.');
-  linkGlobalShim();
+  console.log(`installed standalone CLI: ${result.target}`);
 }
 
 function main() {
@@ -163,6 +149,13 @@ function main() {
   if (opts.help) {
     console.log(usage());
     return;
+  }
+
+  // Detach an older npm-link installation before a build can remove its files.
+  const activeBin = opts.globalLink ? existingCawsBin() : null;
+  if (opts.build && activeBin && fs.existsSync(activeBin)) {
+    const resolved = fs.realpathSync(activeBin);
+    if (resolved === CLI_BIN) linkGlobalCli();
   }
 
   const nodeModules = path.join(repoRoot, 'node_modules');
@@ -194,7 +187,7 @@ function main() {
   if (opts.globalLink) {
     linkGlobalCli();
   } else {
-    console.log('skipping global npm link by request.');
+    console.log('skipping global snapshot installation by request.');
   }
 
   console.log(`build-main-dist-link complete: ${path.relative(repoRoot, opts.outputDir)}`);

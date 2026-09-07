@@ -73,6 +73,25 @@ System Codex registration lives in `~/.codex/hooks.json`. Native hook trust must
 Each hook traces to a `docs/failure-lineage.md` entry documenting the gap it closes: `god-object-check.sh` → Entry 28, `shortcut-language-check.sh` → Entry 29, `duplicate-export-check.sh` → Entry 30, `loc-delta-check.sh` → Entry 31. The per-pack lineage map lives in `.claude/hooks/CLAUDE.md` after install (sourced from `packages/caws-cli/templates/hook-packs/claude-code/CLAUDE.md`).
 
 
+## Development CLI installation
+
+A global CLI must not link into a development checkout's `dist/`: builds replace
+that directory and can interrupt every project using the command. From a built
+CAWS checkout, install a standalone package before activating it:
+
+```bash
+node scripts/install-cli-snapshot.mjs --package packages/caws-cli --bin "$(command -v caws)"
+```
+
+The installer packs the current build, installs production dependencies under
+`~/.caws/lib/cli/`, and checks help, initialization, and doctor in an isolated
+project. Only a successful candidate replaces the global symlink, using an atomic
+rename. Failed candidates preserve the previous command. Prior installations
+remain available for rollback and running processes. `build:main-dist-link` uses
+this installer instead of `npm link`; its `dist/main` links are development-only.
+The installer needs npm dependency access and does not run package lifecycle
+scripts. Build before installation; it never rebuilds the active checkout itself.
+
 ## Machine adapter installation
 
 Install and configure CAWS once at user scope:
