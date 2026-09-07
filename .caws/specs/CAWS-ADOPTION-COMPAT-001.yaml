@@ -51,3 +51,8 @@ non_functional: {}
 contracts:
   - name: 'legacy-adoption-preservation'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: /Users/darianrosebrook/Desktop/Projects/caws/tmp/system-adoption-2026-09-07/legacy-verification-before-commit.json
+    recorded_at: "2026-09-07T03:22:54.089Z"
