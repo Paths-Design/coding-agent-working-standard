@@ -53,7 +53,7 @@ import type { HookPackV1 } from './types';
 // moves from the misleading .codex/AGENTS.md path to .codex/CAWS.md. The
 // concise, repository-wide working contract is merged into the root
 // instruction file by the init command, following Codex discovery precedence.
-export const CODEX_PACK_VERSION = 16;
+export const CODEX_PACK_VERSION = 17;
 
 export const CODEX_PACK: HookPackV1 = {
   id: 'codex',

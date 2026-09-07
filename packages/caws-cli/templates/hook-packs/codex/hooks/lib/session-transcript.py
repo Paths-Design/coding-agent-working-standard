@@ -10,7 +10,10 @@
 Response items are the durable conversation stream. event_msg mirrors are
 deliberately ignored so one human message cannot become two CAWS turns.
 Only visible messages and tool records are projected; reasoning items and
-system/developer instructions are not session conversation content.
+system/developer instructions are not session conversation content. Native
+content provenance also distinguishes injected context carried as user-role
+messages from actual user input; older rollouts without it retain role-based
+compatibility.
 """
 import json
 import re
@@ -38,6 +41,12 @@ def parse_transcript_events(transcript_path):
                 content = item.get('content')
                 if not isinstance(content, list):
                     continue
+                metadata = item.get('internal_chat_message_metadata_passthrough')
+                kinds = metadata.get('content_item_kinds') if isinstance(metadata, dict) else None
+                if role == 'user' and isinstance(kinds, list):
+                    content = [block for index, block in enumerate(content)
+                               if index < len(kinds) and isinstance(kinds[index], str)
+                               and kinds[index].startswith('user.')]
                 text = '\n'.join(block['text'] for block in content if isinstance(block, dict)
                                  and block.get('type') in ('input_text', 'output_text', 'text')
                                  and isinstance(block.get('text'), str))

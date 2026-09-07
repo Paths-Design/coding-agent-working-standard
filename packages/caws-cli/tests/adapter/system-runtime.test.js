@@ -179,6 +179,49 @@ test('the machine ownership oracle evaluates YAML claims without depending on pr
   expect(fs.existsSync(path.join(p, 'node_modules'))).toBe(false);
 });
 
+test('the Codex renderer uses native content provenance to exclude injected user-role context', () => {
+  const transcript = path.join(root, 'native-provenance.jsonl');
+  const message = (content, kinds) => ({
+    type: 'response_item',
+    payload: {
+      type: 'message',
+      role: 'user',
+      content: content.map((text) => ({ type: 'input_text', text })),
+      internal_chat_message_metadata_passthrough: { content_item_kinds: kinds },
+    },
+  });
+  fs.writeFileSync(
+    transcript,
+    [
+      message(
+        ['plugin catalog', 'project instructions', 'environment details'],
+        ['plugins.recommendations', 'agents_md.instructions', 'environments.environment_context']
+      ),
+      message(['actual request', 'injected context'], ['user.text', 'agents_md.instructions']),
+    ]
+      .map(JSON.stringify)
+      .join('\n')
+  );
+  const adapter = path.resolve(
+    __dirname,
+    '../../templates/hook-packs/codex/hooks/lib/session-transcript.py'
+  );
+  const result = spawnSync(
+    'python3',
+    [
+      '-c',
+      'import runpy,json,sys; print(json.dumps(runpy.run_path(sys.argv[1])["parse_transcript_events"](sys.argv[2])))',
+      adapter,
+      transcript,
+    ],
+    { encoding: 'utf8' }
+  );
+  expect(result.status).toBe(0);
+  expect(JSON.parse(result.stdout)).toEqual([
+    { ev: 'user_text', text: 'actual request', ts: null },
+  ]);
+});
+
 test('global registration waits for legacy retirement without duplicating the local chain or breaking a cached local entry', () => {
   const p = repo('transition');
   fs.mkdirSync(path.join(p, '.caws/hooks'));

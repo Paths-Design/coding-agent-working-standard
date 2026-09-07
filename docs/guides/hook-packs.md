@@ -1,6 +1,6 @@
 # Hook packs: the edit-time advisory quality plane
 
-CAWS ships Claude Code and Codex hook packs (installed via `caws init --agent-surface claude-code` or `caws init --agent-surface codex`) that interpose governance between the agent and its edit/write/Bash tools. Most of each pack is hard governance — scope guards, worktree guards, dangerous-command blocking. This guide documents one slice of it: the **advisory quality plane** added by `QG-HOOKS-EXTRACT-001`.
+CAWS distributes guards, dispatchers and session renderers through a user-level runtime in `~/.caws`. Configure the native harness once and migrate existing project registrations once; subsequent runtime updates serve every adopted project. See [Machine adapter installation](#machine-adapter-installation). Legacy project packs remain supported during migration. The first part of this guide documents the **advisory quality plane** added by `QG-HOOKS-EXTRACT-001`.
 
 These four hooks are *advisory* edit-time signals. They implement the load-bearing edit-time quality checks (`god_object`, `todo_detection`, functional-duplication, change-budget) so the agent gets feedback *in the loop where it is editing*, instead of only when an operator later runs `caws gates run`.
 
@@ -64,9 +64,9 @@ Per-repo thresholds are environment variables read at hook runtime, so they can 
 }
 ```
 
-The hook scripts themselves are **managed pack files** — they carry CAWS managed-hook metadata and are updated by `caws init --agent-surface <claude-code|codex>`, not hand-edited. Tune behavior through env, not by editing the scripts.
+System hook scripts live in verified snapshots and are updated once with `caws init adapters install`. Tune thresholds through environment variables; preserve custom behavior through explicit extensions or overrides. Legacy project copies still use the pack retrofit commands until their native registration is migrated.
 
-Codex installs project-local `.codex/hooks.json` plus `.codex/hooks/*`. Codex loads project hooks only after the project layer is trusted, and new or changed non-managed hook definitions must be reviewed through `/hooks`.
+System Codex registration lives in `~/.codex/hooks.json`. Native hook trust must be reviewed when definitions change. Legacy project hooks remain additive until retired; their presence is not evidence that the global runtime is executing for that project.
 
 ## Lineage
 
