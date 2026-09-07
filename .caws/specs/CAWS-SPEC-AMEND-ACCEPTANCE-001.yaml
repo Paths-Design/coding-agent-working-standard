@@ -74,3 +74,7 @@ evidence:
     status: pass
     evidence_ref: "specs-body-writer-acceptance.test.js: set-ac exact-field rewrite + sibling byte preservation; evidence reset asserted (spec.evidence == unchecked, reset_evidence carries previous_status). Falsification: disabling the reset rule reddens exactly this test + the A5 commit test (2/19), 17 unaffected"
     recorded_at: "2026-09-07T01:11:49.841Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "specs-body-writer-acceptance.test.js: add-ac appends full criterion, new id immediately accepts evidence; 8-case refusal matrix (exclusive ops, missing target, partial fields, bad id shape, empty field, unknown id, existing id, last-AC) each asserting exact message + byte-identical file + zero events"
+    recorded_at: "2026-09-07T01:12:07.926Z"
