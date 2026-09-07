@@ -1,0 +1,51 @@
+id: CAWS-SPEC-CREATE-TIER-CONTRACT-HELP-001
+title: 'Create-surface help must teach the tier 1/2 contract requirement'
+risk_tier: 3
+mode: fix
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-contract-help at 9c33e43a6562db5a35b9eb77db789ba72800d0e9'
+created_at: '2026-09-07T03:53:13.768Z'
+updated_at: '2026-09-07T04:00:27.793Z'
+created_by_session: 'session-ddd10825-75fb-42af-85e5-b52fa5f4815c'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'docs/command-reference.md'
+    - 'packages/caws-cli/tests/shell/specs-create-tier-alias.test.js'
+  out: []
+invariants:
+  - 'Option help text never contradicts the shipped command surface'
+acceptance:
+  - id: A1
+    given: 'the COMMAND_SURFACE_METADATA entry for `specs create --risk-tier`'
+    when: 'the option description is rendered in `caws specs create --help`'
+    then: 'the description states that tier 1 and tier 2 require at least one --contract entry while tier 3 and --mode chore do not, so the coupling is visible where agents compose the tier flag, not only at --contract'
+  - id: A2
+    given: 'the COMMAND_SURFACE_METADATA entries for `specs create --module` and `--invariant`'
+    when: 'the option descriptions are rendered'
+    then: 'neither claims the scaffolded default "you cannot replace from the command surface"; both name `caws specs amend --add-module` / `--add-invariant` as the replacement path, matching the shipped amend surface'
+  - id: A3
+    given: 'the generated reference docs/command-reference.md'
+    when: 'the `caws specs create` option rows are rendered from COMMAND_SURFACE_METADATA'
+    then: 'the --risk-tier, --module, and --invariant rows carry the same corrected text as the metadata, with no stale "cannot replace" claim remaining in the document'
+non_functional: {}
+contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "specs-create-tier-alias.test.js: --risk-tier description contains 'Tiers 1 and 2 require at least one --contract' + 'tier 3 / --mode chore do not'; rendered in specs create --help. Falsification: mutating the description reddens exactly this test (6 others green)"
+    recorded_at: "2026-09-07T04:00:19.282Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "specs-create-tier-alias.test.js: --module/--invariant descriptions no longer contain 'you cannot replace', both name 'caws specs amend' as the replacement path"
+    recorded_at: "2026-09-07T04:00:19.930Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "generate-command-reference.mjs regenerated docs/command-reference.md from metadata (--check: up to date); test asserts reference contains the coupling text and zero 'you cannot replace from the command surface' strings"
+    recorded_at: "2026-09-07T04:00:20.584Z"

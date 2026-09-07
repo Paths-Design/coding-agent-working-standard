@@ -184,7 +184,8 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         },
         {
           flag: '--risk-tier <n>',
-          description: 'Risk tier (required)',
+          description:
+            'Risk tier (required). Tiers 1 and 2 require at least one --contract (tier 3 / --mode chore do not)',
           allowedValues: RISK_TIERS,
         },
         {
@@ -219,13 +220,13 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         {
           flag: '--module <text>',
           description:
-            'Populate blast_radius.modules at creation (repeatable). The field is schema-required non-empty; without this flag the command writes a scaffolded default you cannot replace from the command surface.',
+            'Populate blast_radius.modules at creation (repeatable). The field is schema-required non-empty; without this flag the command writes a scaffolded default. Replace it later with caws specs amend --add-module, which replaces the scaffolded default when it is the only entry.',
           collect: true,
         },
         {
           flag: '--invariant <text>',
           description:
-            'Populate invariants at creation (repeatable). The field is schema-required non-empty; without this flag the command writes a scaffolded default you cannot replace from the command surface.',
+            'Populate invariants at creation (repeatable). The field is schema-required non-empty; without this flag the command writes a scaffolded default. Replace it later with caws specs amend --add-invariant, which replaces the scaffolded default when it is the only entry.',
           collect: true,
         },
         {

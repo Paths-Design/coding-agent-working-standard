@@ -2,9 +2,10 @@ id: CAWS-GLOBAL-UX-001
 title: 'Make global CAWS installation, help, documentation and self-adoption durable'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-global-ux
 created_at: '2026-09-07T03:35:39.379Z'
-updated_at: '2026-09-07T03:35:39.379Z'
+updated_at: '2026-09-07T03:52:30.414Z'
 created_by_session: '01a07868-9878-7e72-bcd9-a6af25f92820'
 blast_radius:
   modules:
@@ -44,6 +45,7 @@ scope:
     - '.gitignore'
     - '.claude/settings.json'
     - '.claude/settings.json.example'
+    - packages/caws-cli/templates/hook-packs/shared/reset-danger-latch.sh
   out: []
 invariants:
   - 'Published and development runtime content agree for identical source and dependencies'
