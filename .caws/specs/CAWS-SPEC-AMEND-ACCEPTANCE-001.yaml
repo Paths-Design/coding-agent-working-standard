@@ -82,3 +82,7 @@ evidence:
     status: pass
     evidence_ref: "specs-body-writer-acceptance.test.js: remove-ac deletes criterion AND its evidence entry in one write (raw yaml holds evidence: [] after last-entry removal — deleteEvidenceEntry normalization, real revalidation-refusal bug found and fixed); last-AC removal refused (schema minItems)"
     recorded_at: "2026-09-07T01:12:09.610Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "specs-body-writer-acceptance.test.js: closed-spec substantive rewrite refused with reopen pointer (rendered to err stream); add/remove on closed refuse as concluded-record rewrites; full scaffold discharge succeeds recording discharged_scaffold_fields [acceptance]; discharge over recorded evidence refused (closed evidence frozen)"
+    recorded_at: "2026-09-07T01:12:29.249Z"
