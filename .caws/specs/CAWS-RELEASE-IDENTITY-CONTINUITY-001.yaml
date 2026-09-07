@@ -80,5 +80,6 @@ evidence:
     evidence_ref: "/private/tmp/caws-identity-r2-receipt.json (c7d4aaa9; 320 tests, 42 suites, zero failures/skips; both typechecks, scoped lint and gates pass; P1/P2 regression controls included; merge review pending)"
     recorded_at: "2026-09-07T08:37:08.123Z"
   - criterion_id: A4
-    status: unchecked
-    recorded_at: "2026-09-07T08:21:54.627Z"
+    status: pass
+    evidence_ref: "/private/tmp/caws-identity-r2-receipt.json (c7d4aaa9; 320 tests, 42 suites, zero failures/skips; both typechecks, scoped lint and gates pass; P1/P2 regression controls included; merge review pending)"
+    recorded_at: "2026-09-07T08:37:18.878Z"
