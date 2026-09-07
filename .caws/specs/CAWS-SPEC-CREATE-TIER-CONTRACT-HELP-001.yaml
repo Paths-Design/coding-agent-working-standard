@@ -2,10 +2,11 @@ id: CAWS-SPEC-CREATE-TIER-CONTRACT-HELP-001
 title: 'Create-surface help must teach the tier 1/2 contract requirement'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: wt-contract-help
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-contract-help at 9c33e43a6562db5a35b9eb77db789ba72800d0e9'
 created_at: '2026-09-07T03:53:13.768Z'
-updated_at: '2026-09-07T03:53:41.652Z'
+updated_at: '2026-09-07T04:00:27.793Z'
 created_by_session: 'session-ddd10825-75fb-42af-85e5-b52fa5f4815c'
 blast_radius:
   modules:
