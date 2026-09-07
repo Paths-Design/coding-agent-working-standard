@@ -70,3 +70,10 @@ non_functional: {}
 contracts:
   - name: 'global-cli-docs-native-adoption'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: Packaged runtime parity and failure-safe activation
+    recorded_at: "2026-09-07T04:11:27.043Z"
+    artifact_path: tmp/global-ux-2026-09-07/caws-global-ux-final-install.json
+    commit_sha: "290705abb1942546fcd30afba6ebdbfc16b78bae"
