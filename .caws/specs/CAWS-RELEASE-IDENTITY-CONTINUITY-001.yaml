@@ -48,9 +48,10 @@ acceptance:
     given: 'an existing owned worktree with neighboring cached identities'
     when: 'ensure or another lifecycle command compares the invoking caller to the owner'
     then: >-
-      only caller-carried identity or its correlated process record admits; absent
-      or foreign callers refuse without minting, and successful ensure prints an
-      executable identity-preserving continuation
+      only caller-carried identity or a process record with valid matching start
+      identities on both sides admits; absent, null, or malformed correlation
+      evidence and foreign callers refuse without minting, while successful ensure
+      prints an executable identity-preserving continuation
 observability:
   - 'Rendered create continuation command and claim refusal identify missing session context without claiming ownership'
 rollback:
@@ -75,6 +76,5 @@ evidence:
     evidence_ref: "/private/tmp/caws-identity-durable-receipt.json (e145c84e; 288 tests, zero failures or skips; both typechecks, scoped lint, gates and doctor re-executed; Tier 1 review pending)"
     recorded_at: "2026-09-07T07:36:07.324Z"
   - criterion_id: A4
-    status: pass
-    evidence_ref: "/private/tmp/caws-identity-durable-receipt.json (e145c84e; 288 tests, zero failures or skips; both typechecks, scoped lint, gates and doctor re-executed; Tier 1 review pending)"
-    recorded_at: "2026-09-07T07:36:18.861Z"
+    status: unchecked
+    recorded_at: "2026-09-07T08:21:54.627Z"
