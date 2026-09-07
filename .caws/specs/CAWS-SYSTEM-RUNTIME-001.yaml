@@ -97,3 +97,9 @@ evidence:
     recorded_at: "2026-09-07T02:01:45.112Z"
     artifact_path: /Users/darianrosebrook/Desktop/Projects/caws/tmp/system-runtime-2026-09-07/README.md
     commit_sha: "3d3f2c39"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: Documented machine-level adapter authoring contract; fixture evidence separated from observed native Codex behavior.
+    recorded_at: "2026-09-07T02:01:45.834Z"
+    artifact_path: /Users/darianrosebrook/Desktop/Projects/caws/tmp/system-runtime-2026-09-07/README.md
+    commit_sha: "3d3f2c39"
