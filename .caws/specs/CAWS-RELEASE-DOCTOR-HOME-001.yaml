@@ -1,0 +1,44 @@
+id: CAWS-RELEASE-DOCTOR-HOME-001
+title: 'Distinguish global home absence, unreadability and installed runtime integrity'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-07T06:14:10.049Z'
+updated_at: '2026-09-07T06:14:10.049Z'
+created_by_session: '01a07868-9878-7e72-bcd9-a6af25f92820'
+blast_radius:
+  modules:
+    - 'Doctor global home snapshot and pure diagnostics'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/doctor-snapshot.ts'
+    - 'packages/caws-cli/src/store/types.ts'
+    - 'packages/caws-cli/src/store/global-home-observation.ts'
+    - 'packages/caws-cli/src/kernel/doctor/types.ts'
+    - 'packages/caws-cli/src/kernel/doctor/rules.ts'
+    - 'packages/caws-cli/src/kernel/doctor/inspect.ts'
+    - 'packages/caws-cli/tests/kernel/unit/doctor-global-home.test.ts'
+    - 'packages/caws-cli/tests/store/global-home-observation.test.js'
+    - 'packages/caws-cli/tests/shell/doctor-plan.test.js'
+  out: []
+invariants:
+  - 'Doctor observes global runtime bytes without mutating state or claiming native activation'
+acceptance:
+  - id: A1
+    given: 'missing, inaccessible, invalid or empty global home paths'
+    when: 'the store observes the home and doctor inspects it'
+    then: 'absence, read failure and present uninitialized state are distinct with the actual path and no writes'
+  - id: A2
+    given: 'an installed content-addressed runtime without a legacy migration stamp'
+    when: 'doctor observes it before native configuration'
+    then: 'verified bytes remove the stale stamp finding while tampering or malformed state produces an error'
+  - id: A3
+    given: 'legacy stamped or unmanaged homes and an isolated clean project fixture'
+    when: 'doctor renders findings and repair plans'
+    then: 'compatibility diagnostics remain bounded and public remediation matches executable operations'
+non_functional: {}
+contracts:
+  - name: 'global-home-observation'
+    type: behavior
