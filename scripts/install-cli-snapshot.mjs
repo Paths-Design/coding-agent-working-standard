@@ -53,6 +53,15 @@ export function installCliSnapshot({ packageRoot, cawsHome, binPath }) {
     run('git', ['init', '-q'], probe, env);
     run(process.execPath, [entry, 'init'], probe, env);
     run(process.execPath, [entry, 'doctor'], probe, env);
+    // Tarball truth: dependency resolution and packaged templates must produce
+    // the same runtime as the build being installed, before any activation.
+    const runtimeArgs = ['init', 'adapters', 'install', '--plan', '--json'];
+    const sourceRuntime = JSON.parse(run(process.execPath, [path.join(packageRoot, 'dist', 'index.js'), ...runtimeArgs], probe, env));
+    const packagedRuntime = JSON.parse(run(process.execPath, [entry, ...runtimeArgs], probe, env));
+    if (!/^[a-f0-9]{64}$/.test(sourceRuntime.digest) || sourceRuntime.digest !== packagedRuntime.digest) {
+      throw new Error(`Packaged runtime differs from development build: ${packagedRuntime.digest} != ${sourceRuntime.digest}; reconcile dependencies and rebuild before installation`);
+    }
+
     // The directory and dependencies are retained unchanged after activation.
     const release = path.join(releases, `${digest.slice(0, 16)}-${path.basename(stage).slice(9)}`);
     fs.renameSync(stage, release);
@@ -63,7 +72,7 @@ export function installCliSnapshot({ packageRoot, cawsHome, binPath }) {
     fs.symlinkSync(target, temporaryLink);
     fs.renameSync(temporaryLink, binPath);
     temporaryLink = undefined;
-    return { release, binPath, target, packageSha256: digest, version: metadata.version };
+    return { release, binPath, target, packageSha256: digest, runtimeDigest: packagedRuntime.digest, version: metadata.version };
   } finally {
     if (temporaryLink) fs.rmSync(temporaryLink, { force: true });
     if (stage) fs.rmSync(stage, { recursive: true, force: true });
