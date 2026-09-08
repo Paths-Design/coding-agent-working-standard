@@ -1,0 +1,47 @@
+id: CAWS-RELEASE-QUALIFICATION-001
+title: 'Qualify packaged machine runtime upgrades before release'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-08T06:33:12.628Z'
+updated_at: '2026-09-08T06:33:12.628Z'
+created_by_session: '01a07f67-9951-7a20-bd4a-13838d58093c'
+blast_radius:
+  modules:
+    - 'Packaged runtime upgrade qualification and release orchestration'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - '.github/workflows/release.yml'
+    - '.github/workflows/ci-matrix.yml'
+    - '.github/workflows/release-qualification.yml'
+    - 'scripts/release-tag-publish.mjs'
+    - 'scripts/release-tag-publish.test.mjs'
+    - 'packages/caws-cli/scripts/runtime-upgrade-smoke.mjs'
+    - 'packages/caws-cli/scripts/fresh-install-smoke.mjs'
+    - 'packages/caws-cli/tests/ci/release-qualification.test.js'
+    - 'docs/release-procedure.md'
+    - 'packages/caws-cli/CHANGELOG.md'
+  out: []
+invariants:
+  - 'No publish occurs before checks for the candidate commit; prereleases never update latest'
+  - 'Upgrade fixtures isolate HOME and CAWS_HOME and preserve original governance and custom behavior'
+acceptance:
+  - id: A1
+    given: 'an installed npm 12.1.0 project and a packed candidate'
+    when: 'global installation and migration run'
+    then: 'guards and rendering execute with preserved governance and custom extensions, repeat previews are unchanged, and broken inputs refuse safely'
+  - id: A2
+    given: 'a candidate commit'
+    when: 'release qualification runs'
+    then: 'required tests and cross-platform package checks must pass before the publish job can execute'
+  - id: A3
+    given: 'prerelease and stable versions'
+    when: 'publication arguments are selected'
+    then: 'prereleases target next and stable releases target latest with strict version validation'
+non_functional: {}
+contracts:
+  - name: 'release-qualification'
+    type: contract-test
+    path: 'packages/caws-cli/tests/ci/release-qualification.test.js'
