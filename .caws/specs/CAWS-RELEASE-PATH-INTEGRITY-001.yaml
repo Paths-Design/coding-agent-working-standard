@@ -76,3 +76,7 @@ evidence:
     status: pass
     evidence_ref: "release-tag-publish.test.mjs: e2e records the real publish child's env — with NODE_AUTH_TOKEN + npm_config__authToken ambient and no NPM_TOKEN, npm receives none; negative control (revert to env-merge) fails it. 12 node:test pass."
     recorded_at: "2026-09-08T22:43:26.714Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "release-path-integrity.test.js: executes the real pr-checks.yml step; 11 known-bad paths blocked incl. restored duplicate-/backup-/.backup; allowlist near-misses blocked; all tracked files pass (no false positives)."
+    recorded_at: "2026-09-08T22:43:27.188Z"
