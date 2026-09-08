@@ -2,10 +2,11 @@ id: CAWS-CI-MUTATION-PROOF-DURABILITY-001
 title: 'Make CLI mutation and governance CI fail closed against topology drift'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-ci-mutation-proof
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed after exact-head CI at d059fc451e6233a2f46c8ff8330a3586aa463088: full mutation run 34238962091 passes all three surfaces and all 18 unchanged per-file floors (3906 mutants, no invalid verdicts); source-matched JSON/HTML reports retained under tmp/mutation-proof-2026-09-08. PR quality passes 212 suites and 2616 tests; release qualification passes six Linux/macOS Node 18/20/22 upgrade jobs. All five ACs recorded and policy gates pass. Dependency audit repair, coverage thresholds, and the earlier intermittent Git-fixture failure remain separate release hardening; no npm release is certified or published.'
 created_at: '2026-09-04T17:01:39.493Z'
-updated_at: '2026-09-08T14:34:21.556Z'
+updated_at: '2026-09-08T14:53:29.501Z'
 created_by_session: '01a06d4f-d5c4-7953-82b0-797ddb08bea4'
 blast_radius:
   modules:
