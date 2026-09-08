@@ -1,0 +1,40 @@
+id: CAWS-RELEASE-TAG-ROLLBACK-COMPLETION-001
+title: 'Roll back an unpublished tag when a release dependency fails'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-08T23:18:10.460Z'
+updated_at: '2026-09-08T23:18:10.460Z'
+created_by_session: '5a87baf0-9065-4d43-93aa-aad9f00de463'
+blast_radius:
+  modules:
+    - 'release publication path'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - '.github/workflows/release.yml'
+    - 'packages/caws-cli/tests/ci/release-path-integrity.test.js'
+    - 'docs/release-procedure.md'
+  out: []
+invariants:
+  - 'A pushed release tag must never survive a workflow run that did not publish the matching package.'
+  - 'The publish script remains the sole authority for tag disposition once it has started.'
+acceptance:
+  - id: A1
+    given: 'a release tag push whose qualification or mutation dependency fails'
+    when: 'the publish job is skipped as a result'
+    then: 'the pushed tag is deleted from origin rather than surviving with nothing published'
+  - id: A2
+    given: 'a release run in which the publish script started'
+    when: 'any later step fails'
+    then: 'the tag is preserved and no rollback overrides the script''s own disposition'
+  - id: A3
+    given: 'the documented failure table'
+    when: 'a maintainer consults it'
+    then: 'every failure stage states the actual tag handling with no remaining known asymmetry'
+non_functional: {}
+contracts:
+  - name: 'release-path-integrity'
+    type: contract-test
+    path: 'packages/caws-cli/tests/ci/release-path-integrity.test.js'
