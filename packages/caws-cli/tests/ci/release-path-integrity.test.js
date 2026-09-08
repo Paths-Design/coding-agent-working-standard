@@ -171,15 +171,10 @@ describe('mutation floor gates the release', () => {
 // A4 — a failure before the publish script must not orphan the tag.
 // ---------------------------------------------------------------------------
 
-/**
- * Execute the real "Roll back the tag when the publish script never ran" step.
- * `gh` is shimmed so tag-ref reads and deletes are controllable.
- */
-function runRollback({ markerPresent, deleteSucceeds, refStillExists }) {
-  const rollback = step(workflow('release.yml'), 'release', 'Roll back the tag when the publish script never ran');
+/** Execute the real "Delete the unpublished tag" step with `gh` shimmed. */
+function runRollback({ deleteSucceeds, refStillExists }) {
+  const rollback = step(workflow('release.yml'), 'rollback', 'Delete the unpublished tag');
   const root = fixture();
-  const marker = path.join(root, 'marker');
-  if (markerPresent) fs.writeFileSync(marker, 'caws-cli-v12.2.0-rc.1\n');
   const calls = path.join(root, 'gh-calls.txt');
   fs.writeFileSync(
     path.join(root, 'gh'),
@@ -196,7 +191,6 @@ function runRollback({ markerPresent, deleteSucceeds, refStillExists }) {
     env: {
       ...process.env,
       PATH: `${root}${path.delimiter}${process.env.PATH}`,
-      CAWS_RELEASE_SCRIPT_MARKER: marker,
       GITHUB_REPOSITORY: 'fixture/repo',
       GITHUB_REF_NAME: 'caws-cli-v12.2.0-rc.1',
     },
@@ -205,40 +199,71 @@ function runRollback({ markerPresent, deleteSucceeds, refStillExists }) {
   return { ...result, calls: fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8') : '' };
 }
 
-describe('tag rollback for failures before the publish script', () => {
-  test('the step is wired to run on failure and is not the publish step itself', () => {
+describe('an unpublished tag is rolled back', () => {
+  test('rollback is a separate job, so a SKIPPED release job still triggers it', () => {
     const release = workflow('release.yml');
-    const rollback = step(release, 'release', 'Roll back the tag when the publish script never ran');
-    expect(rollback.if).toBe('failure()');
-    // Both steps must agree on the marker path or the handoff is broken.
+    const rollback = release.jobs.rollback;
+    expect(rollback).toBeDefined();
+    // The case this exists for: qualification/mutation fails, the publish job
+    // never starts, and a step inside that job therefore could not have run.
+    const needs = rollback.needs;
+    expect(needs).toEqual(expect.arrayContaining(['qualification', 'mutation', 'release']));
+    expect(rollback.if).toContain('failure()');
+    // Deleting a ref needs write; the workflow-level grant is not inherited
+    // by a job that narrows permissions.
+    expect(rollback.permissions.contents).toBe('write');
+  });
+
+  test('rollback defers to the publish script once it has started', () => {
+    const release = workflow('release.yml');
+    // 'true' is the only value that suppresses rollback. A skipped release job
+    // yields '' and a pre-script failure yields 'false' — both must delete.
+    expect(release.jobs.rollback.if).toContain("needs.release.outputs.script_ran != 'true'");
+    expect(release.jobs.release.outputs.script_ran).toBe(
+      '${{ steps.disposition.outputs.script_ran }}'
+    );
+  });
+
+  test('the disposition step records the marker even when publish failed', () => {
+    const release = workflow('release.yml');
+    const disposition = step(release, 'release', 'Record publish-script disposition');
+    // Without always(), a failed publish step would skip this and the output
+    // would be empty — indistinguishable from a skipped job, which would then
+    // delete a tag the script may have deliberately preserved.
+    expect(disposition.if).toBe('always()');
+    expect(disposition.id).toBe('disposition');
     const publish = step(release, 'release', 'Run tag-driven publish');
-    expect(publish.env.CAWS_RELEASE_SCRIPT_MARKER).toBe(rollback.env.CAWS_RELEASE_SCRIPT_MARKER);
+    // Both steps must agree on the marker path or the handoff is broken.
+    expect(disposition.env.CAWS_RELEASE_SCRIPT_MARKER).toBe(
+      publish.env.CAWS_RELEASE_SCRIPT_MARKER
+    );
   });
 
-  test('a script that ran keeps its own tag decision', () => {
-    const result = runRollback({ markerPresent: true, deleteSucceeds: true, refStillExists: true });
-    expect(result.status).toBe(0);
-    // Critically: no delete attempted. Exit 12 deliberately leaves the tag,
-    // and exit 30 preserves it after a publish; overriding either would
-    // destroy provenance for an already-published package.
-    expect(result.calls).toBe('');
+  test.each([
+    ['true', false],
+    ['false', true],
+    ['', true],
+  ])('script_ran=%s decides whether the tag is deleted', (scriptRan, shouldDelete) => {
+    // Mirrors the job-level `if` GitHub evaluates; jest cannot run the engine,
+    // so this pins the boolean the expression must produce.
+    expect(scriptRan !== 'true').toBe(shouldDelete);
   });
 
-  test('a failure before the script deletes the orphaned tag', () => {
-    const result = runRollback({ markerPresent: false, deleteSucceeds: true, refStillExists: true });
+  test('a failed release deletes the orphaned tag', () => {
+    const result = runRollback({ deleteSucceeds: true, refStillExists: true });
     expect(result.status).toBe(0);
     expect(result.calls).toContain('-X DELETE repos/fixture/repo/git/refs/tags/caws-cli-v12.2.0-rc.1');
   });
 
   test('an already-absent tag is not an error', () => {
-    // The script deletes the tag itself on exit 20; if the marker write was
-    // what failed, this step must tolerate the tag already being gone.
-    const result = runRollback({ markerPresent: false, deleteSucceeds: false, refStillExists: false });
+    // The script deletes the tag itself on exit 20; rollback must tolerate
+    // the tag already being gone rather than failing the run twice.
+    const result = runRollback({ deleteSucceeds: false, refStillExists: false });
     expect(result.status).toBe(0);
   });
 
   test('a tag that survives a failed delete reports a repair command', () => {
-    const result = runRollback({ markerPresent: false, deleteSucceeds: false, refStillExists: true });
+    const result = runRollback({ deleteSucceeds: false, refStillExists: true });
     expect(result.status).toBe(1);
     expect(result.stdout).toContain('gh api -X DELETE repos/fixture/repo/git/refs/tags/caws-cli-v12.2.0-rc.1');
   });
