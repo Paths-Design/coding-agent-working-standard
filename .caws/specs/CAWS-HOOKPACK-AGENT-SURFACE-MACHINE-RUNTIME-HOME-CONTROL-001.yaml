@@ -1,0 +1,30 @@
+id: CAWS-HOOKPACK-AGENT-SURFACE-MACHINE-RUNTIME-HOME-CONTROL-001
+title: 'Behavioral control for caws_source_lib''s machine-runtime home tier'
+risk_tier: 3
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-08T04:30:58.615Z'
+updated_at: '2026-09-08T04:30:58.615Z'
+created_by_session: '96a9b85d-e209-45ad-9efb-d8522a340f79'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/tests/hooks/bats'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/hooks/bats/home-unset-guard-robustness.bats'
+  out: []
+invariants:
+  - 'The machine-runtime home-tier override in caws_source_lib is exercised by an executed behavioral test, not only a source-pattern grep'
+acceptance:
+  - id: A1
+    given: 'CAWS_MACHINE_RUNTIME=1, CAWS_MACHINE_LIBRARIES=''{}'', and HOME/CAWS_HOME both absent'
+    when: 'caws_source_lib sources a basename'
+    then: 'it falls through to CAWS_MACHINE_ADAPTER_LIB_DIR without error -- proving the user-home tier is genuinely skipped, not silently matched against a root path'
+  - id: A2
+    given: 'a real HOME containing .caws/surfaces/<surface>/lib/<basename> AND a CAWS_MACHINE_ADAPTER_LIB_DIR containing a same-named file'
+    when: 'caws_source_lib sources that basename'
+    then: 'the user-home override wins over the adapter fallback -- proving the legitimate machine-runtime user tier still functions after the authority-alias fix'
+non_functional: {}
+contracts: []
