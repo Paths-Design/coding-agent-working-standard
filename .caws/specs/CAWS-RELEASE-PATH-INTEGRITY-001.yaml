@@ -71,3 +71,8 @@ contracts:
   - name: 'release-path-integrity'
     type: contract-test
     path: 'packages/caws-cli/tests/ci/release-path-integrity.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "release-tag-publish.test.mjs: e2e records the real publish child's env — with NODE_AUTH_TOKEN + npm_config__authToken ambient and no NPM_TOKEN, npm receives none; negative control (revert to env-merge) fails it. 12 node:test pass."
+    recorded_at: "2026-09-08T22:43:26.714Z"
