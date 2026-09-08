@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: release-qualification
 created_at: '2026-09-08T06:33:12.628Z'
-updated_at: '2026-09-08T06:46:16.888Z'
+updated_at: '2026-09-08T07:15:38.825Z'
 created_by_session: '01a07f67-9951-7a20-bd4a-13838d58093c'
 blast_radius:
   modules:
@@ -26,6 +26,8 @@ scope:
     - 'packages/caws-cli/CHANGELOG.md'
     - packages/caws-cli/src/init/machine-handler-policy.ts
     - packages/caws-cli/tests/adapter/machine-handler-policy.test.js
+    - packages/caws-cli/src/store/leases-store.ts
+    - packages/caws-cli/tests/store/lease-cache-boundary.test.js
   out: []
 invariants:
   - 'No publish occurs before checks for the candidate commit; prereleases never update latest'
