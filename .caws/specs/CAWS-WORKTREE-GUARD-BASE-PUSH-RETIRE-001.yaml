@@ -2,10 +2,11 @@ id: CAWS-WORKTREE-GUARD-BASE-PUSH-RETIRE-001
 title: 'Retire worktree-guard.sh''s base-branch push block: safe under the governed merge model'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: worktree-guard-base-push-retire
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge worktree-guard-base-push-retire at dc1c0fe5f43a51057d752aab963d7ee5ab987feb'
 created_at: '2026-09-08T01:52:22.899Z'
-updated_at: '2026-09-08T02:06:55.277Z'
+updated_at: '2026-09-08T02:12:00.349Z'
 created_by_session: 'e33f5221-a961-4418-9632-37ab8ab02449'
 blast_radius:
   modules:
