@@ -2,10 +2,11 @@ id: CAWS-RELEASE-HARDENING-002
 title: 'Harden release dependencies, coverage enforcement, and Git fixture isolation'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: release-hardening
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed dependency audits, effective runtime coverage floors, and proven Git fixture isolation/cleanup repairs. A1-A5 pass; PR CI 34252748839, qualification 34252749057, full mutation 34251447987. Evidence: tmp/release-hardening-2026-09-08/README.md. Historical ENOENT cause remains unconfirmed; native acceptance traces and explicit version/tag decision remain release prerequisites.'
 created_at: '2026-09-08T15:22:41.118Z'
-updated_at: '2026-09-08T16:21:57.493Z'
+updated_at: '2026-09-08T16:55:46.756Z'
 created_by_session: '01a07f67-9951-7a20-bd4a-13838d58093c'
 blast_radius:
   modules:
