@@ -2,9 +2,10 @@ id: CAWS-CLI-INIT-SYSTEM-SURFACE-HOME-OVERRIDE-001
 title: 'Fix systemSurfaceEnabled ignoring injectable home override (test-hermeticity gap)'
 risk_tier: 3
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: fix-init-system-surface-home
 created_at: '2026-09-08T00:35:54.547Z'
-updated_at: '2026-09-08T00:35:54.547Z'
+updated_at: '2026-09-08T00:36:09.886Z'
 created_by_session: '96a9b85d-e209-45ad-9efb-d8522a340f79'
 blast_radius:
   modules:
