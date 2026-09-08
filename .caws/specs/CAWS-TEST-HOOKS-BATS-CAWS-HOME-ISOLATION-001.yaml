@@ -36,3 +36,7 @@ evidence:
     status: pass
     evidence_ref: "packages/caws-cli: npx bats tests/hooks/bats -> before fix 139/186 failing on this machine (real adopted ~/.caws + ~/.qwen wiring); after HOME-isolation fix in helpers.bash/kimi-surface.bats/qwen-surface.bats, 185/186 passing (/tmp/bats-final3.log)"
     recorded_at: "2026-09-08T02:15:03.579Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Remaining 1 failure ('shim: a protected hook edit carrying kimi's tool_input.path is blocked end-to-end') is the separate, already-diagnosed reprieve.sh:43 HOME-unbound-variable production defect, not a hermeticity false-failure; confirms the fix isolates exactly the intended class"
+    recorded_at: "2026-09-08T02:15:04.115Z"
