@@ -39,3 +39,7 @@ evidence:
     status: pass
     evidence_ref: "packages/caws-cli: npx jest tests/init/hook-install-layout.test.js tests/init/init-upgrade-retrofit.test.js tests/init/codex-instruction-merge.test.js -> 3 suites, 45 tests, all passed (previously failed on a real machine with adopted system runtime)"
     recorded_at: "2026-09-08T00:51:03.277Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "same run above executed directly on this machine which has genuinely adopted claude-code+codex system runtime (~/.caws/surfaces/{claude-code,codex}/settings.json enabled:true) -- all 3 suites pass hermetically. Full packages/caws-cli suite: npm run test:unit -> 202/202 suites, 2499/2499 tests passing"
+    recorded_at: "2026-09-08T00:51:03.785Z"
