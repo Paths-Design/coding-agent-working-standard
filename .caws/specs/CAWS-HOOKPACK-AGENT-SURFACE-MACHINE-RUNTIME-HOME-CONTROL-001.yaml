@@ -29,3 +29,8 @@ acceptance:
     then: 'the user-home override wins over the adapter fallback -- proving the legitimate machine-runtime user tier still functions after the authority-alias fix'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "bats: 'HOSTILE: caws_source_lib's machine-runtime user tier is skipped (not root-probed) when HOME and CAWS_HOME are absent' -- outcome alone is vacuous (both buggy/fixed fall through to adapter since a real root path can't be created without root), so the test asserts on the bash -x TRACE; reverting agent-surface.sh to 3f41fbed reproduced the trace line 'local _machine_user=/.caws/surfaces/claude-code/lib/probe.sh' and 'not ok'; fixed code never constructs it."
+    recorded_at: "2026-09-08T04:46:02.881Z"
