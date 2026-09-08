@@ -11,6 +11,17 @@ on:
   schedule:
     - cron: "0 7 * * *"
   workflow_dispatch: {}
+  workflow_call:
+    inputs:
+      required:
+        description: >-
+          Run the full per-file mutation floor regardless of event type.
+          The release workflow sets this so a tag publish cannot proceed on
+          harness-integrity alone. Keeping it an explicit input means an edit
+          to the pull_request condition below cannot silently un-gate a
+          release.
+        type: boolean
+        default: false
   pull_request:
     types: [opened, reopened, synchronize, labeled]
     branches: [main]
@@ -56,6 +67,7 @@ jobs:
     name: Mutation (${{ matrix.surface }}, per-file floor)
     needs: harness_integrity
     if: >-
+      inputs.required ||
       github.event_name != 'pull_request' ||
       contains(github.event.pull_request.labels.*.name, 'run-mutation')
     runs-on: ubuntu-latest
@@ -77,13 +89,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Restore mutation cache
-        uses: actions/cache@v4
-        with:
-          path: packages/caws-cli/reports/mutation-${{ matrix.surface }}/incremental.json
-          key: stryker-${{ matrix.surface }}-${{ hashFiles('packages/caws-cli/mutation-policy.json', 'packages/caws-cli/stryker*.conf.js', 'packages/caws-cli/scripts/stryker-config.cjs', 'packages/caws-cli/src/**', 'packages/caws-cli/tests/**') }}
-          restore-keys: |
-            stryker-${{ matrix.surface }}-
+      # No incremental cache. scripts/stryker-config.cjs sets
+      # `incremental: false` on purpose — Stryker's incremental reports retain
+      # removed test metadata and can make a report look current after policy
+      # drift, which is exactly the false-pass this gate must not have. A cache
+      # step here restored a path Stryker never writes, implying an
+      # optimisation that is deliberately absent.
 
       - name: Run mutation surface
         working-directory: packages/caws-cli

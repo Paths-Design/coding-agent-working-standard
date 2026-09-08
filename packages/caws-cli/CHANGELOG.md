@@ -1,4 +1,49 @@
-## [Unreleased]
+## [12.2.0-rc.1] (2026-09-08)
+
+Release candidate for the shared machine runtime. Publishes to the `next`
+distribution tag; the stable `latest` install remains 12.1.0.
+
+### Bug Fixes
+
+- **Release-path integrity** (`CAWS-RELEASE-PATH-INTEGRITY-001`). Five defects
+  found by pre-release review of the governed release and CI guard paths.
+
+  - **Registry credentials are isolated from the OIDC publish child.** The
+    publish step selected trusted publishing by declining to *add* a token,
+    but built the child environment by merging over `process.env` — a merge
+    can only add keys, so an inherited `NODE_AUTH_TOKEN` or `npm_config` auth
+    var survived and preempted the id-token exchange, silently downgrading to
+    token auth (how the 12.0.0 publish failed with E404). The environment is
+    now built by removal, and token mode reinstates exactly one source.
+  - **Shadow-file CI patterns restored.** Consolidating `caws-guards.yml` into
+    `pr-checks.yml` silently dropped `/duplicate-`, `/backup-` and `.backup$`;
+    nothing else blocked them, since `naming-check.sh` is advisory. The guard
+    also now matches the `[-_](enhanced|new|final|copy)` suffix forms doctrine
+    actually prohibits, with an anchored allowlist for files that *detect* the
+    anti-pattern. Version suffixes stay advisory — no lexical rule separates
+    `handler-v2.ts` from `migrate-v10.ts`.
+  - **Tag publication is gated on the per-file mutation floor.** The procedure
+    required mutation evidence on the candidate commit but nothing enforced
+    it; a tag could publish having never been mutation-tested. `mutation.yml`
+    is now callable with a `required` input and blocks the publish job.
+  - **A failure before the publish script no longer orphans the tag.** A
+    failed `npm ci` (reachable by a lockfile desync) left the pushed tag with
+    nothing published. The script now claims tag-disposition authority via a
+    marker; the workflow deletes the tag only when that marker is absent, so
+    no script decision is overridden.
+  - **A mutation surface with no targets is refused.** `assertMutationReport`
+    iterated `surface.targets || []`, exiting 0 having printed neither a PASS
+    nor a FAIL when both targets and report were empty.
+
+- **Retired `semantic-release` entrypoint removed.** Releases are tag-driven,
+  but `npm run release` still pointed at the retired path with no config
+  present. Production dependency closure is unchanged (125 packages).
+
+- **`js-yaml` advanced to 4.3.2** (GHSA-2883-xcg3-v3hh, high). Versions
+  4.0.0–4.3.1 do not limit CPU use for empty merge sources. `js-yaml` is a
+  direct production dependency and a root `overrides` entry pinned the whole
+  tree to the affected 4.3.1. Caught by the fresh-install smoke's
+  production-only audit, which is the gate added in 12.1.0 for exactly this.
 
 ### Features
 

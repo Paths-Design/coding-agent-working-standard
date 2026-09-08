@@ -48,9 +48,31 @@ jobs:
           BASE_REF: ${{ github.event.pull_request.base.sha }}
           HEAD_REF: ${{ github.event.pull_request.head.sha }}
         run: |
+          # Pattern list is pinned by packages/caws-cli/tests/ci/release-path-integrity.test.js,
+          # which executes THIS step against known-bad paths. Narrowing the
+          # regex fails that test — a guard consolidated out of another
+          # workflow already lost /duplicate-, /backup- and .backup once.
+          # (^|/) rather than / so a repo-root shadow file is caught too.
+          #
+          # ALLOW lists files whose NAME describes the anti-pattern they
+          # detect rather than being an instance of it. Entries are anchored
+          # and exact: a prefix or substring entry would let a real shadow
+          # file hide behind a legitimate neighbour.
+          # The [-_](enhanced|new|final|copy) suffixes mirror
+          # .caws/hooks/naming-check.sh, the repo's definition of a shadow file.
+          #
+          # naming-check.sh's *-v[0-9] rule is deliberately NOT enforced here.
+          # It cannot distinguish a shadow copy (handler-v2.ts) from a
+          # legitimately version-named module (migrate-v10.ts,
+          # migration-v10-to-v11.md), both of which are tracked in this repo.
+          # A false positive is free in an advisory hook and expensive in a
+          # blocking gate, so version suffixes stay advisory. This is pinned
+          # by the "every tracked file passes the guard" test — re-adding the
+          # rule fails it.
+          ALLOW='^(\.caws/hooks|packages/caws-cli/templates/hook-packs/shared)/duplicate-export-check\.sh$'
           CHANGED=$(git diff --no-ext-diff --name-only "${BASE_REF}...${HEAD_REF}")
-          BAD=$(printf '%s\n' "$CHANGED" | \
-            grep -E '/(copy|final|enhanced|v2)[.-]|/(new-)| - copy\.' || true)
+          BAD=$(printf '%s\n' "$CHANGED" | grep -Ev "$ALLOW" | \
+            grep -E '(^|/)(copy|final|enhanced|v2)[.-]|(^|/)(new|duplicate|backup)-|[-_](enhanced|new|final|copy)\.|\.backup$| - copy\.' || true)
           if [ -n "$BAD" ]; then
             echo "❌ Shadow/duplicate filename patterns detected:"
             echo "$BAD"

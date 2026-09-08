@@ -180,7 +180,7 @@ jobs:
             echo "## 📊 CAWS Gate Report"
             echo ""
             echo "✅ All CAWS governance checks passed"
-            echo "- Spec validation (caws doctor): ✅"
+            echo "- Spec + waiver validation (ci-governance-artifacts.mjs): ✅"
             echo "- Path discipline (policy/code separation): ✅"
             echo "- change_budget immutability: ✅"
             echo "- Waiver schema/ID validation: ✅"

@@ -152,12 +152,29 @@ Failure handling depends on **when** the failure happens:
 
 | Failure stage | Tag handling | Registry handling |
 |---|---|---|
-| Qualification dependency | **PRESERVED**; publish job never starts | Untouched by this workflow |
+| Qualification or mutation dependency | **PRESERVED**; publish job never starts | Untouched by this workflow |
+| Release-job step before the publish script (checkout, `npm ci`, `gh` ref read) | DELETED by the failure handler | Untouched |
 | Tag refusal (any refused pattern) | DELETED via `gh api` | Untouched |
 | Pre-publish validation (steps 1–3) | DELETED via `gh api` | Untouched |
 | Build / smoke (steps 4–5) | DELETED | Untouched |
 | `npm publish` non-zero exit (step 6) | **PRESERVED** | Unknown; inspect registry and artifact identity before retrying |
 | Registry verify / GitHub Release (steps 7–8) | **PRESERVED** | Registry has the version |
+
+Row 2 is handled by the `Roll back the tag when the publish script never ran`
+step. `scripts/release-tag-publish.mjs` writes a marker
+(`CAWS_RELEASE_SCRIPT_MARKER`) as soon as it starts, claiming tag-disposition
+authority; the handler deletes the tag only when that marker is **absent**, so
+it can never override a decision the script made — including exit 12, which
+deliberately leaves an unrecognised tag alone. The most likely way to reach
+this row is a lockfile desync failing `npm ci` (see step 3 below).
+
+**Known asymmetry:** row 1 still preserves the tag, because the rollback step
+lives inside the release job and a failed dependency skips that job entirely.
+A qualification or mutation failure therefore leaves a tag with nothing
+published, and re-tagging the same version requires deleting it first:
+`gh api -X DELETE repos/<owner>/<repo>/git/refs/tags/<tag>`. Closing this would
+mean promoting the handler to its own job keyed on a release-job output; it is
+a deliberate open choice, not an oversight.
 
 The asymmetric rule:
 
@@ -206,6 +223,15 @@ work (the parser accepts all four):
 The script extracts the section between this header and the next same-or-higher
 header. That text becomes the GitHub Release body.
 
+**Retitle `## [Unreleased]`; do not add a second header above it.** The
+CHANGELOG accumulates work under `## [Unreleased]` between releases, and that
+is the content the release is made of. Rename that header to the target
+version — `## [12.2.0-rc.1] (YYYY-MM-DD)` — rather than inserting a new
+version header and leaving the entries under `[Unreleased]`. Validation only
+checks that a header for the version *exists*, so the second shape passes
+while shipping an empty GitHub Release body. Start the next `## [Unreleased]`
+section when the next change lands, not as part of this commit.
+
 ### 3. Bump `package.json`
 
 In the same commit (or a separate one, doesn't matter — only the tag SHA's
@@ -216,10 +242,16 @@ content matters):
 "version": "11.1.5"
 ```
 
+**Then run `npm install` to resynchronise `package-lock.json`.** The lockfile
+records the workspace package's version too. `npm ci` refuses an out-of-sync
+lockfile, so forgetting this fails the release job at the install step —
+before `release-tag-publish.mjs` runs, which is precisely the orphaned-tag row
+in the failure table above. The tag is deleted for you, but the run is wasted.
+
 ### 4. Commit and push
 
 ```bash
-git add packages/caws-cli/CHANGELOG.md packages/caws-cli/package.json
+git add packages/caws-cli/CHANGELOG.md packages/caws-cli/package.json package-lock.json
 git commit -m "chore(release): caws-cli 11.1.5"
 git push origin main
 ```

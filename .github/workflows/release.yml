@@ -83,9 +83,24 @@ jobs:
     permissions:
       contents: read
 
+  # docs/release-procedure.md requires mutation evidence on the exact
+  # candidate commit. Before this job the requirement was satisfied only by
+  # chance — the full per-file floor runs nightly, on dispatch, or on a
+  # PR carrying the run-mutation label, so a tag could publish having never
+  # been mutation-tested. `required: true` forces the full run for the tag.
+  mutation:
+    uses: ./.github/workflows/mutation.yml
+    with:
+      required: true
+    permissions:
+      contents: read
+
   release:
     name: Tag-driven release
-    needs: qualification
+    # Both gates block publication. A failure in either leaves the tag
+    # PRESERVED and the registry untouched (see the failure table in
+    # docs/release-procedure.md).
+    needs: [qualification, mutation]
     runs-on: ubuntu-latest
     environment: Release
     steps:
@@ -184,6 +199,39 @@ jobs:
         # valid or not, preempts the OIDC exchange.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CAWS_RELEASE_SCRIPT_MARKER: ${{ runner.temp }}/caws-release-script-ran
         run: |
           set -e
           node scripts/release-tag-publish.mjs "${GITHUB_REF_NAME}"
+
+      - name: Roll back the tag when the publish script never ran
+        # The script applies the correct tag policy for every failure stage it
+        # can reach. Steps BEFORE it — checkout, npm ci, the gh ref read, or a
+        # cancelled//infrastructure failure — have no such policy, and used to
+        # leave the pushed tag in place with nothing published. That is the
+        # "tag exists, package does not" ambiguity the tag-driven design
+        # exists to remove, and a lockfile desync (the exact mistake
+        # docs/release-procedure.md warns about) reaches it via npm ci.
+        #
+        # The marker means "the script took responsibility". Its ABSENCE is
+        # the only case this step acts on, so no script decision is overridden.
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CAWS_RELEASE_SCRIPT_MARKER: ${{ runner.temp }}/caws-release-script-ran
+        run: |
+          set -euo pipefail
+          if [ -f "${CAWS_RELEASE_SCRIPT_MARKER}" ]; then
+            echo "::notice::Publish script ran and applied its own tag policy; leaving ${GITHUB_REF_NAME} as it left it."
+            exit 0
+          fi
+          echo "::error::Release failed before the publish script ran. Deleting ${GITHUB_REF_NAME} so no tag survives without a published package."
+          REF="repos/${GITHUB_REPOSITORY}/git/refs/tags/${GITHUB_REF_NAME}"
+          if gh api -X DELETE "${REF}"; then
+            echo "::notice::Deleted ${GITHUB_REF_NAME}. Fix the failure, then re-push the tag."
+          elif ! gh api "${REF}" >/dev/null 2>&1; then
+            echo "::notice::${GITHUB_REF_NAME} is already absent from origin; nothing to roll back."
+          else
+            echo "::error::Could not delete ${GITHUB_REF_NAME}. Repair manually: gh api -X DELETE ${REF}"
+            exit 1
+          fi
