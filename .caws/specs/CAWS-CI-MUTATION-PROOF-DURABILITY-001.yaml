@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-ci-mutation-proof
 created_at: '2026-09-04T17:01:39.493Z'
-updated_at: '2026-09-04T18:54:48.518Z'
+updated_at: '2026-09-08T14:22:55.273Z'
 created_by_session: '01a06d4f-d5c4-7953-82b0-797ddb08bea4'
 blast_radius:
   modules:
@@ -35,6 +35,8 @@ scope:
     - packages/caws-cli/tests/store/messages-behavior-store.test.js
     - packages/caws-cli/tests/store/messages-store.test.js
     - packages/caws-cli/src/store/messages-store.ts
+    - .gitignore
+    - packages/caws-cli/eslint.config.js
   out: []
 invariants:
   - 'A CI success cannot result from a missing workspace, target, test selection, report, or mutant population.'
