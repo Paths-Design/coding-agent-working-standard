@@ -84,3 +84,7 @@ evidence:
     status: pass
     evidence_ref: "release.yml release job needs [qualification, mutation]; mutation.yml workflow_call input required:boolean default false, job if consults inputs.required. actionlint exit 0."
     recorded_at: "2026-09-08T22:43:27.642Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "release-path-integrity.test.js: executes the real failure() step vs shimmed gh across 4 states — marker present (no delete), absent (delete), already-absent (tolerated), surviving (exit 1 + repair). Marker write proven by node:test."
+    recorded_at: "2026-09-08T22:43:28.139Z"
