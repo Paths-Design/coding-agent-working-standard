@@ -36,3 +36,8 @@ acceptance:
       and the sanctioned command: caws claim --takeover from inside the worktree
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "commit 424feb2d: AGENTS.md pitfall (lines 306-308) + CLAUDE.md worktree-discipline bullet (lines 243-249) each name CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 with the identity check (owner uuid == DSH_SESSION_ID minus session- prefix) and caws claim --takeover as the single sanctioned reclaim; grep verification of both files returned the matches; both edit-tool writes were ADMITted by the live write guards resolving this session as the rightful owner"
+    recorded_at: "2026-09-08T06:14:12.922Z"
