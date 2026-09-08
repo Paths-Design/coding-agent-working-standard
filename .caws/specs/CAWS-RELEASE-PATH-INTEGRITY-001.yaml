@@ -92,3 +92,7 @@ evidence:
     status: pass
     evidence_ref: "mutation-contract.test.js: empty targets + empty report, empty targets + populated report, and absent targets key all fail; passing surface still PASSes. Negative control: removing the guard fails 3."
     recorded_at: "2026-09-08T22:43:28.604Z"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "docs/release-procedure.md gains the pre-script failure row, Unreleased retitle, lockfile resync; caws-gate.yml summary names ci-governance-artifacts.mjs; semantic-release script+5 devDeps removed with prod closure unchanged (125 pkgs)."
+    recorded_at: "2026-09-08T22:43:29.054Z"
