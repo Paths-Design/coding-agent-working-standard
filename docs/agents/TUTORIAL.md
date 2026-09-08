@@ -2,16 +2,16 @@
 doc_id: agents-tutorial
 authority: reference
 status: active
-title: CAWS Tutorial — Step-by-Step Guide (v11.9.0)
+title: CAWS Tutorial — Step-by-Step Guide
 owner: vNext rewrite team
 updated: 2026-08-19
 ---
 
 # CAWS Tutorial — Step-by-Step Guide
 
-**Hands-on tutorial for implementing CAWS v11.9.0 in your project**
+**Hands-on tutorial for implementing CAWS in your project (v11 surface; check `caws --version` for the installed package version)**
 
-> **v11.1 surface.** This tutorial uses the v11.9.0 commands: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents`. Removed v10 commands (`validate`, `iterate`, `evaluate`, `diagnose`, `scaffold`, `verify-acs`, `burnup`, `sidecar`) are not used. Doctrine source: [`../architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md).
+> **v11 surface.** This tutorial uses these v11 commands: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `specs`, `worktree`, `agents`. Removed v10 commands (`validate`, `iterate`, `evaluate`, `diagnose`, `scaffold`, `verify-acs`, `burnup`, `sidecar`) are not used. Doctrine source: [`../architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md).
 
 ---
 
@@ -66,14 +66,14 @@ contract`). The shape is `"name:type[:path]"`, where type is one of
 `api | schema | contract-test | behavior`. A tier-3 or `--mode chore` spec needs
 no contract.
 
-This writes `.caws/specs/PREF-001.yaml` with `lifecycle_state: active`. Now edit it to add scope, invariants, acceptance, and non-functional requirements:
+This writes `.caws/specs/PREF-001.yaml` with `lifecycle_state: draft` (pass `--activate` to create it active directly, or bind a worktree later with `caws worktree create <name> --spec PREF-001`, which activates on bind). Now edit it to add scope, invariants, acceptance, and non-functional requirements:
 
 ```yaml
 id: PREF-001
 title: "Add User Preferences Storage"
 risk_tier: 2
 mode: feature
-lifecycle_state: active
+lifecycle_state: draft
 blast_radius:
   modules: [ui, storage, types]
   data_migration: false
@@ -122,10 +122,14 @@ caws doctor
 
 ## Step 2: Plan the Implementation
 
-### Copy Feature Template
+### Author a Feature Plan
+
+CAWS ships no plan-file generator or `.caws/templates/` directory — author
+the plan directly:
 
 ```bash
-cp .caws/templates/feature.plan.md docs/plans/PREF-001.md
+mkdir -p docs/plans
+$EDITOR docs/plans/PREF-001.md
 ```
 
 ### Fill in Feature Plan
@@ -382,7 +386,7 @@ find src/ tests/ -name "*.ts" -newer .caws/specs/<spec-id>.yaml -exec wc -l {} +
 ### Run quality gates
 
 ```bash
-caws gates run --spec FEAT-PREFS
+caws gates run --spec PREF-001
 ```
 
 **Expected**: exit 0 (all blocking gates pass).
@@ -441,13 +445,12 @@ caws specs show PREF-001
 
 ## Step 7: Create PR
 
-### Use PR Template
+### Author a PR Description
 
-```bash
-cp .caws/templates/pr.md docs/prs/PREF-001.md
-```
+CAWS ships no PR template generator — author the description directly
+(e.g. `docs/prs/PREF-001.md`, or straight into the PR body):
 
-### Fill in PR Template
+### Fill in PR Description
 
 ```markdown
 ## Title: feat: Add user preferences storage
@@ -525,7 +528,6 @@ You've successfully implemented a CAWS-managed feature with:
 - **Feature Spec**: `.caws/specs/<spec-id>.yaml`
 - **Tests**: `tests/preferences/`
 - **Documentation**: `docs/plans/PREF-001.md`
-- **Templates**: `.caws/templates/`
 
 ---
 
@@ -564,6 +566,5 @@ This ensures your storage works correctly with any valid input combination.
 
 **Happy coding with CAWS!**
 
-**Tutorial Version**: 2.0  
-**CAWS Version**: 11.1.6  
-**Last Updated**: 2026-05-28
+**Tutorial Version**: 2.0
+**Last Updated**: 2026-05-28 (check the installed package version with `caws --version`)

@@ -2,19 +2,18 @@
 doc_id: agents-full-guide
 authority: reference
 status: active
-title: CAWS Agent Workflow Guide (v11.9.0)
+title: CAWS Agent Workflow Guide
 owner: vNext rewrite team
 updated: 2026-08-19
 ---
 
-# CAWS — Agent Workflow Guide (v11.9.0)
+# CAWS — Agent Workflow Guide
 
 **Coding Agent Working Standard** — engineering-grade operating system for AI-assisted development.
 
-**Version**: 11.1.6
-**Last Updated**: 2026-08-19
+**Last Updated**: 2026-08-19 (check the installed package version with `caws --version`; do not trust a hardcoded version number in this doc)
 
-> **v11 posture (A1).** This guide describes the v11 surface — fourteen command groups: `init`, `doctor`, `scope`, `status`, `claim`, `gates`, `evidence`, `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message` (plus the auto-generated `help`). Run `caws --help` for the authoritative list. Removed commands (`validate`, `iterate`, `evaluate`, `diagnose`, `provenance`, `scaffold`, `parallel`, `mode`, `verify-acs`, `burnup`, `sidecar`, `test-analysis`, `templates`, `prepush`, legacy `hooks install`) are not registered with the CLI. Do NOT pin `caws-cli@^10.2.x`; v11.1 ships the full spec/worktree/agents surface.
+> **v11 posture (A1).** This guide describes the v11 surface — seventeen command groups: `init`, `doctor`, `scope`, `status`, `claim`, `gates`, `evidence`, `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message`, `session`, `working-tree`, `handoff` (plus the auto-generated `help`). Run `caws --help` for the authoritative list. Removed commands (`validate`, `iterate`, `evaluate`, `diagnose`, `provenance`, `scaffold`, `parallel`, `mode`, `verify-acs`, `burnup`, `sidecar`, `test-analysis`, `templates`, `prepush`, legacy `hooks install`) are not registered with the CLI. Do NOT pin `caws-cli@^10.2.x`; v11.1+ ships the full spec/worktree/agents/session surface.
 >
 > Doctrine source: [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md). Full CLI reference: [`docs/api/cli.md`](../api/cli.md). When this guide and the doctrine doc disagree, the doctrine doc wins.
 
@@ -99,7 +98,7 @@ id: FEAT-001
 title: 'Add user authentication flow'
 risk_tier: 1
 mode: feature
-lifecycle_state: active
+lifecycle_state: draft   # create writes draft; caws worktree create --spec FEAT-001 (or --activate) is what moves this to active
 operational_rollback_slo: '5m'
 blast_radius:
   modules: ['auth', 'api']
@@ -162,7 +161,7 @@ caws specs show <id>
 3. **Data plan**: Fixtures, factories, seed strategy
 4. **Observability**: Logs/metrics/traces for production verification
 
-**Output**: `feature.plan.md` committed to repo
+**Output**: a plan doc (e.g. `docs/plans/<id>.md`) committed to repo — CAWS ships no plan-file generator or template; author it directly.
 
 ### Phase 2: Implement (Test-Driven)
 
@@ -928,48 +927,6 @@ Each evidence-event payload is validated against a closed kernel schema (`additi
 
 ---
 
-## Integration with Cursor IDE
-
-CAWS provides deep Cursor IDE integration via hooks and rules.
-
-### Cursor Rules (`.cursor/rules/`)
-
-CAWS includes modular MDC rule files:
-
-1. **01-working-style.mdc** - Working style and risk limits
-2. **02-quality-gates.mdc** - Tests, linting, commit discipline
-3. **03-naming-and-refactor.mdc** - Naming conventions, anti-duplication
-4. **04-logging-language-style.mdc** - Logging clarity, emoji policy
-5. **05-safe-defaults-guards.mdc** - Defensive coding patterns
-6. **06-typescript-conventions.mdc** - TS/JS specific rules
-7. **07-process-ops.mdc** - Server and process management
-8. **08-solid-and-architecture.mdc** - SOLID principles
-9. **09-docstrings.mdc** - Cross-language documentation
-10. **10-authorship-and-attribution.mdc** - File attribution
-
-**These rules guide your behavior in Cursor automatically.**
-
-### Cursor Hooks (`.cursor/hooks/`)
-
-Real-time quality enforcement:
-
-- **validate-command** - Blocks dangerous commands (`rm -rf /`, force push)
-- **validate-file-read** - Prevents reading secrets (`.env`, keys)
-- **validate-file-write** - Enforces naming conventions
-- **post-edit** - Auto-formats code after changes
-
-### Disabling Temporarily
-
-```bash
-# If you need to bypass commit hooks temporarily
-git commit --no-verify  # Allowed for commits
-
-# Note: --no-verify is BLOCKED for git push
-# Push operations must pass all quality gates
-```
-
----
-
 ## Project archetypes (spec patterns)
 
 v11's `caws init` is no-arg and ships no project-template scaffolds. `caws templates` is removed and is not planned to return. Use `caws specs create` to bootstrap a spec, then fill in project-specific fields. Below are recommended `risk_tier` and `non_functional` defaults for common archetypes.
@@ -1169,19 +1126,17 @@ The store appends a hash-chained event either way. There is no separate provenan
 ### Documentation
 
 - **Complete Guide**: `docs/agents/full-guide.md` - Comprehensive CAWS reference
-- **Tutorial**: `docs/agents/tutorial.md` - Step-by-step learning path
-- **Examples**: `docs/agents/examples.md` - Real-world project examples
+- **Tutorial**: `docs/agents/TUTORIAL.md` - Step-by-step learning path
+- **Examples**: `docs/agents/EXAMPLES.md` - Real-world project examples
 
 ### Project-Specific
 
-- **Getting Started**: `.caws/GETTING_STARTED.md` - Generated per project
-- **Templates**: `.caws/templates/` - Feature plans, test plans, PR templates
-- **Examples**: `.caws/examples/` - feature spec examples
-
-### Cursor Rules
-
-- **Rules Directory**: `.cursor/rules/` - Modular MDC rule files
-- **Rules README**: `.cursor/rules/README.md` - Rule system documentation
+`caws init` scaffolds only `.caws/specs/`, `.caws/waivers/`, `policy.yaml`,
+`worktrees.json`, and `agents.json` — there is no generated
+`.caws/GETTING_STARTED.md`, no `.caws/templates/` directory, and no
+`.caws/examples/` directory. For a spec-shape reference, read an existing spec
+in this repo's own `.caws/specs/` or the kernel schema at
+`packages/caws-cli/src/kernel/schemas/spec.v1.json`.
 
 ---
 
