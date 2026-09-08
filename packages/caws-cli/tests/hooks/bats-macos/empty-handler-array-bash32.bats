@@ -14,7 +14,7 @@
 # silently passing without ever exercising the vulnerable code path. A test
 # suite is only as strong as its ability to fail for the right reason.
 
-load helpers
+load ../bats/helpers
 
 bats_require_minimum_version 1.5.0
 
