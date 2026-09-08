@@ -1,0 +1,30 @@
+id: CAWS-STERLING-RUNTIME-HANDOFF-001
+title: 'Document Sterling machine runtime migration handoff'
+risk_tier: 3
+mode: doc
+lifecycle_state: draft
+created_at: '2026-09-08T06:04:01.616Z'
+updated_at: '2026-09-08T06:04:01.616Z'
+created_by_session: '01a07f67-9951-7a20-bd4a-13838d58093c'
+blast_radius:
+  modules:
+    - 'Machine runtime adoption documentation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/guides/sterling-machine-runtime-migration.md'
+  out: []
+invariants:
+  - 'Preserve Sterling custom behavior and ownership; guide creation does not migrate Sterling'
+acceptance:
+  - id: A1
+    given: 'the authorized machine update'
+    when: 'installation is verified'
+    then: 'the active manifest is intact and a repeated install preview is unchanged'
+  - id: A2
+    given: 'Sterling hybrid adoption'
+    when: 'an agent follows the guide'
+    then: 'it has source-checked migration commands, customization reconciliation steps, native proof criteria and recovery boundaries'
+non_functional: {}
+contracts: []
