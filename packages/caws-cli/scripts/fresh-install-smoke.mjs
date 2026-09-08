@@ -38,6 +38,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isolatedEnvironment, qualify } from './runtime-upgrade-smoke.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -1624,6 +1625,16 @@ function runQwenTarballSmoke(tarballs) {
 
 try {
   const startMs = Date.now();
+  // The legacy-pack checks must exercise an unconfigured machine even when
+  // the caller has adopted the global runtime. Keep their machine and identity
+  // state isolated, then qualify the global upgrade path separately below.
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'caws-smoke-home-'));
+  registerCleanup(fixtureRoot);
+  const controls = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.startsWith('CAWS_SMOKE_')));
+  const isolated = isolatedEnvironment(fixtureRoot);
+  for (const key of Object.keys(process.env)) delete process.env[key];
+  Object.assign(process.env, isolated, controls);
+  mkdirSync(process.env.HOME, { recursive: true });
   const packIds = enabledPackIds();
   log(colors.dim(`fresh-install-smoke for ${PACKAGE_NAME} (package root: ${PACKAGE_ROOT})`));
   log(colors.dim(`enabled hook packs: ${packIds.join(', ')}`));
@@ -1741,6 +1752,9 @@ try {
     }
     log(colors.green(`\n[fresh-install-smoke] specs-migration-smoke chained successfully`));
   }
+  // Same packed-consumer boundary, now including the machine runtime and the
+  // published predecessor. There is no release-time skip for this proof.
+  qualify({ candidate: PACKAGE_ROOT, reportPath: process.env.CAWS_SMOKE_RUNTIME_REPORT });
   preserveCleanupPathsOnSuccess();
 } catch (err) {
   fail('unexpected error', { message: err.message, stack: err.stack?.slice(0, 1000) });

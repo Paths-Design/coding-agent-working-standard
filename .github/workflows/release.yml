@@ -77,8 +77,14 @@ permissions:
   id-token: write
 
 jobs:
+  qualification:
+    uses: ./.github/workflows/release-qualification.yml
+    permissions:
+      contents: read
+
   release:
     name: Tag-driven release
+    needs: qualification
     runs-on: ubuntu-latest
     environment: Release
     steps:
