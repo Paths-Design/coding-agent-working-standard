@@ -2,9 +2,10 @@ id: CAWS-STERLING-RUNTIME-HANDOFF-001
 title: 'Document Sterling machine runtime migration handoff'
 risk_tier: 3
 mode: doc
-lifecycle_state: draft
+lifecycle_state: active
+worktree: sterling-runtime-guide
 created_at: '2026-09-08T06:04:01.616Z'
-updated_at: '2026-09-08T06:04:01.616Z'
+updated_at: '2026-09-08T06:04:17.145Z'
 created_by_session: '01a07f67-9951-7a20-bd4a-13838d58093c'
 blast_radius:
   modules:
