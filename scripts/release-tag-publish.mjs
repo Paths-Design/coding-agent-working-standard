@@ -50,7 +50,7 @@
  *   20  pre-publish validation failed (version mismatch, CHANGELOG missing,
  *       build failed, smoke failed); tag was deleted.
  *   21  pre-publish failure but tag deletion ALSO failed (manual repair).
- *   30  post-publish failure (registry verify failed, release create failed);
+ *   30  uncertain npm publish outcome or post-publish ancillary failure;
  *       tag preserved, repair command emitted.
  */
 

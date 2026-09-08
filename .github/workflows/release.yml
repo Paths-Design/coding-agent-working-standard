@@ -15,7 +15,8 @@ name: Release
 #
 # Asymmetric failure invariant:
 #   - Pre-publish failures (1–5): tag is DELETED from origin via gh api.
-#   - npm publish failure (6): tag is DELETED (registry was not mutated).
+#   - Qualification failure: publish never starts; tag is PRESERVED.
+#   - npm publish failure (6): tag is PRESERVED (registry outcome is uncertain).
 #   - Post-publish failures (7–8): tag is PRESERVED; repair command emitted.
 #
 # Branch-push to main does NOT trigger publishes. There is no on: push:
