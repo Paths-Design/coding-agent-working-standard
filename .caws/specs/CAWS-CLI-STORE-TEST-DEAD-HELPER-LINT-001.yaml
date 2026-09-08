@@ -1,0 +1,26 @@
+id: CAWS-CLI-STORE-TEST-DEAD-HELPER-LINT-001
+title: 'Remove unused acceptanceBlock helper failing lint in specs-body-writer-acceptance.test.js'
+risk_tier: 3
+mode: chore
+lifecycle_state: draft
+created_at: '2026-09-08T00:52:03.880Z'
+updated_at: '2026-09-08T00:52:03.880Z'
+created_by_session: '96a9b85d-e209-45ad-9efb-d8522a340f79'
+blast_radius:
+  modules:
+    - 'caws-cli/tests/store'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/store/specs-body-writer-acceptance.test.js'
+  out: []
+invariants:
+  - 'packages/caws-cli lint (eslint no-unused-vars) passes with zero errors.'
+acceptance:
+  - id: A1
+    given: 'tests/store/specs-body-writer-acceptance.test.js defines an acceptanceBlock helper that is never called'
+    when: 'the dead helper is removed'
+    then: 'npm run lint passes with 0 errors and the test suite''s assertions are unchanged'
+non_functional: {}
+contracts: []
