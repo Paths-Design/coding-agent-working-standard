@@ -42,6 +42,7 @@ function runDestroy(root, name) {
   const out = [];
   const err = [];
   const code = runWorktreeDestroyCommand({
+    env: { CAWS_SESSION_ID: 'fixture-session' },
     cwd: root,
     name,
     out: (line) => out.push(line),

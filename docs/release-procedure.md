@@ -17,17 +17,69 @@ cascade. See `CAWS-RELEASE-TAG-DRIVEN-001` for the full incident trail.
 
 ## What CI does
 
-Pushing a tag matching `caws-cli-v*` triggers exactly one Release workflow
-run:
+Pushing a tag matching `caws-cli-v*` triggers the Release workflow. Its publish
+job depends on the reusable **Release Qualification** workflow at the same
+tagged commit. Qualification runs the complete Jest suite, lint, typechecking,
+documentation checks, Bats and Python hook tests, plus packaged upgrades on
+Linux/macOS with Node 18, 20 and 22. The macOS lane also runs the Bash 3.2
+regression suite. A failed qualification prevents the publish job from starting
+and preserves the tag for investigation.
+
+Once qualification succeeds, the publish job:
 
 1. Checks out the tag SHA (not a branch)
 2. Validates `packages/caws-cli/package.json` version equals the tag version
 3. Validates `packages/caws-cli/CHANGELOG.md` has a section for the version
 4. Builds caws-cli via Turbo
 5. Runs prepublish fresh-install smoke (`npm run smoke:fresh-install -w @paths.design/caws-cli`)
-6. Runs `npm publish --access public --provenance`
+6. Runs `npm publish --access public --provenance --tag <channel>` (`next` for
+   prereleases such as `12.2.0-rc.1`, `latest` for stable versions)
 7. Polls `npm view @paths.design/caws-cli@<version>` to confirm registry has it
-8. Creates a GitHub Release with the CHANGELOG section as body
+8. Creates a GitHub Release with the CHANGELOG section as body, marking
+   prereleases with `--prerelease`
+
+Qualification also runs on pull requests and pushes to `main`. The existing
+post-publication platform matrix is additional consumer observation; it cannot
+substitute for qualification before publication.
+
+## Machine runtime qualification
+
+Run the installed-artifact upgrade check locally after building:
+
+```bash
+npm run build -w @paths.design/caws-cli
+node packages/caws-cli/scripts/runtime-upgrade-smoke.mjs --report /tmp/caws-upgrade-report.json
+```
+
+The runner installs the actual npm `12.1.0` baseline, creates stock and custom
+Codex/Claude projects, replaces the package with a packed candidate, then tests
+machine installation, registration and project migration. It verifies preview
+purity, repeat operation stability, exact governance preservation, retained
+custom behavior, mixed migrated/unmigrated projects, linked worktrees, lifecycle
+rendering, delivery of one shared guard/renderer update to two projects, corrupt
+snapshot refusal and verified rollback. It uses disposable HOME, CAWS_HOME,
+Git configuration and npm configuration, with no inherited agent identity.
+The report records the platform, Node version, baseline version, candidate
+tarball SHA-256 and runtime digest. CI retains it under a commit-named artifact;
+generated reports are not committed to the source ledger.
+
+These are subprocess fixtures. Before a runtime release, retain separate fresh
+native traces from the intended harnesses proving trust, SessionStart, an
+expected guarded-write refusal, Stop and the rendered user/tool record.
+For Sterling, also prove its retained custom behavior and reconcile its local
+handler/library pins using the
+[Sterling migration guide](guides/sterling-machine-runtime-migration.md).
+Successful Codex migration does not establish Claude adoption, and installed
+configuration does not prove native execution. The release qualification matrix
+covers native runtime subprocesses on Linux/macOS; it makes no Windows native
+harness claim.
+
+Before selecting a release candidate, require current mutation topology,
+successful baseline/discovery, and per-file mutation results for kernel, store
+and shell on the candidate commit. A setup/import failure is inconclusive,
+not a killed mutant. Release Qualification currently does not run that mutation
+pipeline: its repair must land and its reports must be checked separately
+before publication. A green qualification run alone is not release approval.
 
 ## What CI does NOT do
 
@@ -68,26 +120,35 @@ Failure handling depends on **when** the failure happens:
 
 | Failure stage | Tag handling | Registry handling |
 |---|---|---|
+| Qualification dependency | **PRESERVED**; publish job never starts | Untouched by this workflow |
 | Tag refusal (any refused pattern) | DELETED via `gh api` | Untouched |
 | Pre-publish validation (steps 1–3) | DELETED via `gh api` | Untouched |
 | Build / smoke (steps 4–5) | DELETED | Untouched |
-| `npm publish` non-zero exit (step 6) | DELETED | Untouched (publish did not succeed) |
+| `npm publish` non-zero exit (step 6) | **PRESERVED** | Unknown; inspect registry and artifact identity before retrying |
 | Registry verify / GitHub Release (steps 7–8) | **PRESERVED** | Registry has the version |
 
 The asymmetric rule:
 
-> Once `npm publish` succeeds, the registry is authoritative and the tag is
+> Once `npm publish` is attempted, the registry may have accepted the package
+> even if the client exits nonzero. The tag is
 > the provenance anchor. We do NOT delete the tag just to restore symmetry.
 > Post-publish ancillary failures emit a precise repair command and exit
 > non-zero, but the tag and registry state remain.
 
 ## Procedure: releasing caws-cli
 
-### 1. Verify your PR is happy
+### 1. Verify the candidate commit
 
-Before merging the PR whose content you'll release, verify CI is green on it.
-There is no separate release-guard advisory under the tag-driven flow — the
-human decides what to tag and when.
+Before tagging, verify Release Qualification and the separate mutation evidence
+on the exact candidate commit. Retain the native runtime acceptance traces and
+review migration/customization notes. The maintainer decides when to publish;
+the tag workflow repeats qualification before granting publication access.
+
+Use a prerelease such as `12.2.0-rc.1` for the first machine-runtime candidate.
+Its npm channel is `next`, so it does not replace the stable `latest` install.
+Keep the version in package.json and the workspace lockfile synchronized, and
+give the candidate an explicit matching CHANGELOG section. Do not push a release
+tag until the remaining qualification and migration findings are resolved.
 
 ### 2. Author the CHANGELOG section
 
@@ -217,6 +278,13 @@ gh api -X DELETE repos/Paths-Design/coding-agent-working-standard/git/refs/tags/
 Run it, then fix the underlying issue and re-tag.
 
 ### Post-publish ancillary failure (exit code 30)
+
+A nonzero `npm publish` result also exits 30 with
+`publish.outcome_uncertain`. The tag is preserved and no GitHub Release is
+created by that run. Inspect `npm view <package>@<version> version
+dist.integrity dist-tags --json` and compare the registry artifact with the
+intended candidate before deciding whether to retry or repair ancillary state.
+The client exit code alone does not establish that publication failed.
 
 `npm publish` succeeded; one or both of (registry-verification poll,
 GitHub Release creation) failed. The tag is preserved. The registry has

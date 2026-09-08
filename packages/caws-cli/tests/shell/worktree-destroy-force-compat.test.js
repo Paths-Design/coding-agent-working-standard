@@ -106,6 +106,7 @@ function runDestroy(root, name, opts = {}) {
   const out = [];
   const err = [];
   const code = runWorktreeDestroyCommand({
+    env: { CAWS_SESSION_ID: 'fixture-session' },
     cwd: root,
     name,
     out: (line) => out.push(line),
@@ -120,7 +121,7 @@ function runCli(root, args) {
   return spawnSync(process.execPath, [CLI, ...args], {
     cwd: root,
     encoding: 'utf8',
-    env: { ...process.env, CAWS_QUIET: '1' },
+    env: { ...process.env, CAWS_SESSION_ID: 'fixture-session', CODEX_THREAD_ID: '', CLAUDE_SESSION_ID: '', CAWS_QUIET: '1' },
   });
 }
 

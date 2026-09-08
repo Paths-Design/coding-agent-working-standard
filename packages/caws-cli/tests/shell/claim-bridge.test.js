@@ -258,6 +258,7 @@ describe('AUTH-BINDING-BRIDGE-001 command surface', () => {
     const dry = (() => {
       const out = []; const err = [];
       const code = runWorktreePruneCommand({
+        env: SESS_A,
         cwd: root, out: (l) => out.push(l), err: (l) => err.push(l), showData: false,
       });
       return { code, text: out.join('\n') };
@@ -270,6 +271,7 @@ describe('AUTH-BINDING-BRIDGE-001 command surface', () => {
     const applied = (() => {
       const out = []; const err = [];
       const code = runWorktreePruneCommand({
+        env: SESS_A,
         cwd: root, apply: true, out: (l) => out.push(l), err: (l) => err.push(l), showData: false,
       });
       return { code, text: out.join('\n') };

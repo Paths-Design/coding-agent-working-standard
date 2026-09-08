@@ -2,6 +2,28 @@
 
 ### Features
 
+- **Shared machine runtime and native harness adoption.** Executable hook and
+  session-renderer distribution now lives under `~/.caws` (or absolute
+  `CAWS_HOME`), while canonical project `.caws/` retains governance authority.
+  Install once with `caws init adapters install`, configure each native harness
+  with `caws init adapters configure --agent-surface <surface>`, then preview
+  existing-project adoption with `caws init adapters migrate --agent-surface
+  <surface> --plan`. Review custom hooks before applying migration; use an
+  explicit reviewed policy where required. Stock runtime updates then reach
+  adopted projects from one machine installation. Project-specific overrides
+  remain independently maintained. Native trust and fresh lifecycle, guard and
+  renderer evidence are required to establish activation. Legacy governance
+  conversion remains a separate reviewed `caws init migrate` operation.
+
+- **Release qualification and candidate channels.** Publication depends on the
+  exact tagged commit passing the full test/hook checks and an actual npm
+  12.1.0-to-candidate upgrade matrix on Linux/macOS, Node 18/20/22. The upgrade
+  check covers custom hooks, preserved governance, mixed fleets, linked
+  worktrees, shared guard/renderer updates and corruption/rollback controls.
+  SemVer prereleases publish to `next` and create GitHub prereleases; stable
+  versions publish to `latest`. Separate mutation and native acceptance
+  evidence is still required before release approval.
+
 - **Spec creation provenance: `created_by_session`** (`CAWS-SPEC-CREATED-BY-SESSION-01`).
   `caws specs create` now stamps the resolving session's id into the spec body
   as an optional `created_by_session` field (provenance only, never authority),
@@ -74,6 +96,20 @@
     hook-block path; help and docs state the boundary.
 
 ### Fixed
+
+- Doctor and agent listing no longer diagnose heartbeat emission/escalation
+  caches as malformed leases. Their exact reserved filenames cannot be used
+  for session writes; malformed real leases still produce diagnostics.
+
+- Stock dispatchers installed by npm 12.1.0 are recognized during machine
+  migration even though their trailer predates the Bash 3.2 empty-array fix.
+  Changed executable scaffolding remains refused; only reviewed handler policy
+  is carried forward.
+
+- A nonzero `npm publish` exit preserves the release tag and requests registry
+  inspection. A dropped response or a later lifecycle failure can occur after
+  the registry accepts the package, so client failure no longer deletes its
+  possible provenance anchor.
 
 - **`caws message reply <message_id>` and `caws message status
   <message_id>` positional forms are accepted again.** The hook injection

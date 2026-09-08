@@ -123,6 +123,7 @@ function runCleanupPlan(repoRoot, opts = {}) {
   const out = [];
   const err = [];
   const code = runWorktreePhysicalCleanupPlanCommand({
+    env: { CAWS_SESSION_ID: 'fixture-session' },
     cwd: repoRoot,
     out: (l) => out.push(l),
     err: (l) => err.push(l),

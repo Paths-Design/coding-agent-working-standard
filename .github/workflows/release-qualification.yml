@@ -1,0 +1,72 @@
+name: Release Qualification
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+  workflow_call: {}
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Candidate tests and contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck -w @paths.design/caws-cli
+      - run: npm run lint -w @paths.design/caws-cli
+      - run: npm test -w @paths.design/caws-cli -- --maxWorkers=2
+      - run: node --test scripts/release-tag-publish.test.mjs scripts/ci-governance-artifacts.test.mjs
+      - run: npm run docs:check -w @paths.design/caws-cli
+      - run: npm run test:bats -w @paths.design/caws-cli
+      - run: npm run test:pytest -w @paths.design/caws-cli
+
+  package-upgrade:
+    name: Packaged upgrade (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: ['18', '20', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build -w @paths.design/caws-cli
+      - name: Verify required native runtime tools
+        run: |
+          /bin/bash --version
+          python3 --version
+          jq --version
+      - name: Install and upgrade the actual candidate package
+        run: node packages/caws-cli/scripts/runtime-upgrade-smoke.mjs --report qualification-report.json
+      - name: Bash 3.2 dispatch regression
+        if: runner.os == 'macOS' && matrix.node == '22'
+        run: npm run test:bats:macos -w @paths.design/caws-cli
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: upgrade-${{ github.sha }}-${{ matrix.os }}-node${{ matrix.node }}
+          path: qualification-report.json
+          if-no-files-found: error
