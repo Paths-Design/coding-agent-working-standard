@@ -82,8 +82,11 @@ The tag-driven release workflow (`.github/workflows/release.yml`):
 - Validates the tag matches `packages/caws-cli/package.json` version
 - Validates a `CHANGELOG.md` section exists for the version
 - Builds and runs the prepublish fresh-install smoke
-- Publishes to npm via `NPM_TOKEN` with `npm publish --provenance` (OIDC trusted
-  publishing is a planned follow-up, not the current mechanism)
+- Publishes to npm via OIDC trusted publishing (`id-token: write` + npm ≥
+  11.5.1 + a trusted publisher configured on npmjs.com for this repo/workflow)
+  with `npm publish --provenance`. `NPM_TOKEN` is deliberately NOT set in the
+  Release environment — a configured token, valid or not, preempts the OIDC
+  exchange.
 - Verifies the registry and creates a GitHub Release from the CHANGELOG section
 
 The maintainer authors the CHANGELOG and creates the tag manually. CI does not
