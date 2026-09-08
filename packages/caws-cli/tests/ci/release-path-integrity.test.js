@@ -126,3 +126,43 @@ describe('shadow-file guard pattern coverage', () => {
     expect(result.status).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// A3 — the per-file mutation floor gates a tag publish.
+// ---------------------------------------------------------------------------
+
+// YAML 1.1 parses a bare `on:` key as boolean true, so GitHub workflow
+// triggers land under wf[true] rather than wf.on. Read both.
+const triggersOf = (wf) => wf.on ?? wf[true];
+
+describe('mutation floor gates the release', () => {
+  test('the publish job cannot start unless mutation succeeded', () => {
+    const release = workflow('release.yml');
+    const needs = release.jobs.release.needs;
+    // needs may be a string or a list; normalise before asserting.
+    const blocking = Array.isArray(needs) ? needs : [needs];
+    expect(blocking).toContain('mutation');
+    expect(blocking).toContain('qualification');
+    // A `needs` entry only blocks if the job it names actually exists.
+    for (const job of blocking) expect(release.jobs[job]).toBeDefined();
+  });
+
+  test('the release mutation job runs the full floor, not harness integrity alone', () => {
+    const release = workflow('release.yml');
+    expect(release.jobs.mutation.uses).toBe('./.github/workflows/mutation.yml');
+    expect(release.jobs.mutation.with.required).toBe(true);
+  });
+
+  test('mutation.yml honours the required input over its pull_request condition', () => {
+    const mutation = workflow('mutation.yml');
+    const callable = triggersOf(mutation).workflow_call;
+    expect(callable).toBeDefined();
+    expect(callable.inputs.required.type).toBe('boolean');
+    // Default false keeps mutation off the per-PR critical path.
+    expect(callable.inputs.required.default).toBe(false);
+    // The full-floor job must consult the input; without this the release
+    // caller would fall through to the label/event condition.
+    expect(mutation.jobs.mutation.if).toContain('inputs.required');
+    expect(mutation.jobs.mutation.needs).toBe('harness_integrity');
+  });
+});

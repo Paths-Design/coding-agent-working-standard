@@ -83,9 +83,24 @@ jobs:
     permissions:
       contents: read
 
+  # docs/release-procedure.md requires mutation evidence on the exact
+  # candidate commit. Before this job the requirement was satisfied only by
+  # chance — the full per-file floor runs nightly, on dispatch, or on a
+  # PR carrying the run-mutation label, so a tag could publish having never
+  # been mutation-tested. `required: true` forces the full run for the tag.
+  mutation:
+    uses: ./.github/workflows/mutation.yml
+    with:
+      required: true
+    permissions:
+      contents: read
+
   release:
     name: Tag-driven release
-    needs: qualification
+    # Both gates block publication. A failure in either leaves the tag
+    # PRESERVED and the registry untouched (see the failure table in
+    # docs/release-procedure.md).
+    needs: [qualification, mutation]
     runs-on: ubuntu-latest
     environment: Release
     steps:
