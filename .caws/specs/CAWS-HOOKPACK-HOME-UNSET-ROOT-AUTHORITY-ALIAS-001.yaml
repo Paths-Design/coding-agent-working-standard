@@ -1,0 +1,57 @@
+id: CAWS-HOOKPACK-HOME-UNSET-ROOT-AUTHORITY-ALIAS-001
+title: 'Stop aliasing an unset HOME to root-based authority paths in hook guards'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-08T03:30:08.306Z'
+updated_at: '2026-09-08T03:30:08.306Z'
+created_by_session: '96a9b85d-e209-45ad-9efb-d8522a340f79'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/templates/hook-packs/shared'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/scope-guard.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/protected-paths.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/reprieve.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/session-log.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/plan-transcript-finalize.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/plan-transcript-snapshot.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/runtime-paths.sh'
+    - 'packages/caws-cli/tests/hooks/bats/home-unset-guard-robustness.bats'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+  out: []
+invariants:
+  - 'An absent HOME/CAWS_HOME must never be aliased to a root-based path (''/'', ''/.claude'', ''/.caws'') that participates in admission, override resolution, or reprieve authority'
+acceptance:
+  - id: A1
+    given: 'HOME and CAWS_HOME are both unset'
+    when: 'scope-guard.sh evaluates a Write/Edit to an absolute path outside the governed repo (e.g. /.claude/foo)'
+    then: 'the foreign-repo containment block still fires (exit 2) -- the absent home must NOT be aliased to ''/'' and admitted via ALLOW_PREFIXES'
+  - id: A2
+    given: 'HOME and CAWS_HOME are both unset'
+    when: 'agent-surface.sh''s machine-runtime library resolution or reprieve.sh''s state-dir lookup would otherwise construct a root-based path (/.caws/...)'
+    then: 'that tier is skipped entirely (treated as unavailable), never resolved against a literal filesystem root'
+  - id: A3
+    given: 'a real HOME is set'
+    when: 'the same guards run'
+    then: 'legitimate home-tier behavior (ALLOW_PREFIXES exemption, machine-runtime override resolution, reprieve state lookup) still works exactly as before this fix -- this is a positive control proving the fix does not regress the working case'
+  - id: A4
+    given: 'the home-unset-guard-robustness.bats regression tests added for CAWS-HOOKPACK-UNGUARDED-HOME-UNBOUND-VARIABLE-001'
+    when: 'strengthened per review'
+    then: 'block-dangerous(ls) asserts the command is admitted and the danger latch stays unarmed (not just absence of a crash message), and scope-guard(Edit) asserts the expected scope disposition, not just absence of a crash message'
+observability:
+  - 'no absolute home-tier path derived from an unset HOME/CAWS_HOME is ever constructed or matched against'
+rollback:
+  - 'revert to the /Users/darianrosebrook degrade-to-root-path fallback introduced by CAWS-HOOKPACK-UNGUARDED-HOME-UNBOUND-VARIABLE-001; no state migration involved, template-only change'
+non_functional:
+  security:
+    - 'an absent HOME/CAWS_HOME must not widen write authority, override-library resolution, or reprieve authority beyond what an explicitly-configured home would grant'
+contracts:
+  - name: 'hook-guard-home-authority-safety'
+    type: behavior
