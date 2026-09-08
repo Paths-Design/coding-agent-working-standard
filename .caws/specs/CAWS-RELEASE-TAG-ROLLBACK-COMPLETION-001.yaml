@@ -48,3 +48,7 @@ evidence:
     status: pass
     evidence_ref: "'Record publish-script disposition' step (if: always(), id: disposition) promotes the marker to script_ran, surviving a failed publish step. Only 'true' suppresses rollback, so script exits 12 and 30 are never overridden. Marker path asserted identical across publish and disposition steps."
     recorded_at: "2026-09-08T23:25:53.355Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "docs/release-procedure.md failure table rows 1-2 now read DELETED by the rollback job; the Known asymmetry paragraph is removed and replaced with the script_ran handoff semantics. release.yml header table rewritten (it asserted 'Qualification failure: PRESERVED'). Full jest 215 suites/2656 tests."
+    recorded_at: "2026-09-08T23:25:53.821Z"
