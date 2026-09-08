@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: release-qualification
 created_at: '2026-09-08T06:33:12.628Z'
-updated_at: '2026-09-08T07:39:25.063Z'
+updated_at: '2026-09-08T07:43:36.524Z'
 created_by_session: '01a07f67-9951-7a20-bd4a-13838d58093c'
 blast_radius:
   modules:
@@ -31,6 +31,14 @@ scope:
     - .github/workflows/caws-gate.yml
     - scripts/ci-governance-artifacts.mjs
     - scripts/ci-governance-artifacts.test.mjs
+    - packages/caws-cli/tests/shell/claim-bridge.test.js
+    - packages/caws-cli/tests/shell/worktree-physical-cleanup-plan.test.js
+    - packages/caws-cli/tests/shell/worktree-cleanup-plan.test.js
+    - packages/caws-cli/tests/shell/worktree-untrack.test.js
+    - packages/caws-cli/tests/shell/worktree-cleanup-plan-cwd-guard.test.js
+    - packages/caws-cli/tests/shell/worktree-destroy-force-compat.test.js
+    - packages/caws-cli/tests/shell/worktree-merge-recovery-guidance.test.js
+    - packages/caws-cli/tests/shell/worktree-destroy-not-found-handoff.test.js
   out: []
 invariants:
   - 'No publish occurs before checks for the candidate commit; prereleases never update latest'
