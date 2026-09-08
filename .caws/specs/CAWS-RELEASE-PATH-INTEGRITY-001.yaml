@@ -1,0 +1,69 @@
+id: CAWS-RELEASE-PATH-INTEGRITY-001
+title: 'Close pre-release review defects in the governed release and CI guard paths'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-08T19:43:23.119Z'
+updated_at: '2026-09-08T19:43:23.119Z'
+created_by_session: '5a87baf0-9065-4d43-93aa-aad9f00de463'
+blast_radius:
+  modules:
+    - 'release publication path'
+    - 'CI guard coverage'
+    - 'mutation assertion surface'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'scripts/release-tag-publish.mjs'
+    - 'scripts/release-tag-publish.test.mjs'
+    - '.github/workflows/release.yml'
+    - '.github/workflows/release-qualification.yml'
+    - '.github/workflows/pr-checks.yml'
+    - '.github/workflows/caws-gate.yml'
+    - '.github/workflows/mutation.yml'
+    - 'packages/caws-cli/scripts/assert-mutation-report.mjs'
+    - 'packages/caws-cli/scripts/stryker-config.cjs'
+    - 'packages/caws-cli/tests/ci'
+    - 'docs/release-procedure.md'
+    - 'package.json'
+    - 'package-lock.json'
+    - 'packages/caws-cli/package.json'
+    - 'packages/caws-cli/CHANGELOG.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'the publish step resolves OIDC trusted publishing'
+    when: 'a registry credential is present in the ambient environment'
+    then: 'the npm child process receives no credential and cannot silently fall back to token auth'
+  - id: A2
+    given: 'the CI shadow-file guard'
+    when: 'a changed path matches duplicate-, backup-, or a .backup suffix'
+    then: 'the check fails rather than passing clean'
+  - id: A3
+    given: 'a release tag push'
+    when: 'release qualification runs'
+    then: 'the per-file mutation floor is evaluated against the tagged commit before publication is reachable'
+  - id: A4
+    given: 'a release workflow failure occurring before the publish script runs'
+    when: 'the job terminates'
+    then: 'the pushed tag is removed from origin so no tag survives without a published package'
+  - id: A5
+    given: 'a mutation surface with no declared targets or an empty report'
+    when: 'the assertion script runs'
+    then: 'it fails loudly instead of exiting zero having checked nothing'
+  - id: A6
+    given: 'release documentation and CI step summaries'
+    when: 'a maintainer follows them'
+    then: 'Unreleased handling and the pre-script failure mode are documented, summary labels name the tools that actually ran, and the retired semantic-release entrypoint is absent'
+  - id: A7
+    given: 'the release candidate'
+    when: 'version and changelog preparation completes'
+    then: 'package.json, the workspace lockfile, and CHANGELOG.md agree on the candidate version and the release script validation passes'
+non_functional: {}
+contracts:
+  - name: 'release-path-integrity'
+    type: contract-test
+    path: 'packages/caws-cli/tests/ci/release-path-integrity.test.js'
