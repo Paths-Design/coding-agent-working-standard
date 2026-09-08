@@ -11,7 +11,7 @@ updated: 2026-05-28
 
 This guide shows agents how to use the v11.1 CAWS surface to navigate quality gates and recover from common blocks. The full CLI reference is at [`docs/api/cli.md`](api/cli.md); the doctrine source is [`docs/architecture/caws-vnext-command-surface.md`](architecture/caws-vnext-command-surface.md).
 
-> **v11 surface.** This doc references the fourteen current v11 command groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message`. v10 commands (`burnup`, `validate`, `evaluate`, `iterate`, `diagnose`, `waivers` plural, etc.) are removed and not returning.
+> **v11 surface.** This doc references a subset of the seventeen current v11 command groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message`, `session`, `working-tree`, `handoff`. v10 commands (`burnup`, `validate`, `evaluate`, `iterate`, `diagnose`, `waivers` plural, etc.) are removed and not returning.
 
 ## When you get blocked
 

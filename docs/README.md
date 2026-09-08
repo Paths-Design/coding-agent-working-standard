@@ -30,6 +30,11 @@ docs/
 │   ├── placeholder-governance.md     # Historical — see file banner
 │   ├── waiver-troubleshooting.md     # Waiver debugging
 │   └── worktree-isolation.md         # Worktree lifecycle
+├── philosophy/             # Cross-cutting design philosophy
+│   └── reflexivity.md
+├── rewrite/                # vNext rewrite corpus and investigation notes
+│   ├── corpus/            # Point-in-time reference corpus (delivered snapshot)
+│   └── investigations/    # Point-in-time investigation logs
 └── internal/              # Untracked, gitignored local scratch notes —
                             # content varies by checkout; not part of the
                             # tracked doc tree
