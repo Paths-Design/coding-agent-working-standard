@@ -2,10 +2,11 @@ id: CAWS-CLI-STORE-TEST-DEAD-HELPER-LINT-001
 title: 'Remove unused acceptanceBlock helper failing lint in specs-body-writer-acceptance.test.js'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
-worktree: fix-dead-acceptance-block-lint
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge fix-dead-acceptance-block-lint at 91a2db4233b43dabb4ff76d0034e4b420a2de0d0'
 created_at: '2026-09-08T00:52:03.880Z'
-updated_at: '2026-09-08T00:52:18.297Z'
+updated_at: '2026-09-08T00:56:19.364Z'
 created_by_session: '96a9b85d-e209-45ad-9efb-d8522a340f79'
 blast_radius:
   modules:
