@@ -1,0 +1,32 @@
+id: CAWS-TEST-HOOKS-BATS-CAWS-HOME-ISOLATION-001
+title: 'Isolate bats hook-pack install tests from the real machine CAWS_HOME'
+risk_tier: 3
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-08T02:01:44.688Z'
+updated_at: '2026-09-08T02:01:44.688Z'
+created_by_session: '96a9b85d-e209-45ad-9efb-d8522a340f79'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/tests/hooks/bats'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/hooks/bats/helpers.bash'
+    - 'packages/caws-cli/tests/hooks/bats/kimi-surface.bats'
+    - 'packages/caws-cli/tests/hooks/bats/qwen-surface.bats'
+  out: []
+invariants:
+  - 'Bats hook-guard tests must never read or depend on the invoking machine''s real ~/.caws state'
+acceptance:
+  - id: A1
+    given: 'a machine with a real, already-adopted ~/.caws system runtime (system_surface_enabled true for some surface)'
+    when: 'the full bats hook-guard suite runs'
+    then: 'caws_install_pack_once and the kimi/qwen surface installs use an isolated CAWS_HOME per invocation, and machine-level adoption state does not change any test outcome'
+  - id: A2
+    given: 'the existing kimi-surface.bats ''env -i'' minimal-environment live-dogfood-escape test'
+    when: 'the full bats suite runs after this fix'
+    then: 'only genuine production defects fail (not hermeticity false-failures), reducing prior observed failure count from 139 to the known-and-separately-tracked HOME-unbound-variable defect only'
+non_functional: {}
+contracts: []
