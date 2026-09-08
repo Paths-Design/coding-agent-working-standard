@@ -149,6 +149,18 @@ run_handlers() {
   local entries
   entries=("$@")
 
+  # CAWS-HOOKPACK-DISPATCH-EMPTY-HANDLERS-CRASH-001: bash 3.2 (macOS default
+  # /bin/bash) throws "unbound variable" expanding "${entries[@]}" when
+  # entries is a zero-length array under `set -u` -- even though the intended
+  # behavior for zero handlers is simply "do nothing, return 0" (see below).
+  # Guard on the count (always safe under set -u) instead of expanding the
+  # array directly. Do not swap this for ${entries[@]:-} (silently iterates
+  # once with an empty entry) or ${entries[@]+"${entries[@]}"} (this same
+  # bash version has quirky behavior for that idiom in some contexts, per the
+  # per-handler-args comment a few lines below) -- both were tried and ruled
+  # out empirically.
+  if (( ${#entries[@]} > 0 )); then
+
   local entry
   for entry in "${entries[@]}"; do
     # Split on whitespace: first token = script, rest = positional args.
@@ -250,6 +262,8 @@ run_handlers() {
       max_exit="$exit_code"
     fi
   done
+
+  fi
 
   [[ -n "$last_stdout" ]] && printf '%s\n' "$last_stdout"
 

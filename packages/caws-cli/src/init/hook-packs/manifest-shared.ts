@@ -351,7 +351,16 @@ import { isAdapterCoveredSurface } from './types';
 // includes AGENTS.override.md before AGENTS.md, mirroring the harness's root
 // discovery precedence and admitting the file init may select for its managed
 // working-contract block.
-export const SHARED_PACK_VERSION = 59;
+// v60 (CAWS-HOOKPACK-DISPATCH-EMPTY-HANDLERS-CRASH-001): every dispatch
+// script (pre_tool_use, post_tool_use, stop, session_start, pre_compact) and
+// lib/run-handlers.sh guard the handler-array expansion so a fully-disabled
+// handler set (e.g. CAWS_DISABLED_HANDLERS covering every entry) returns exit
+// 0 instead of crashing with "unbound variable" on bash 3.2 (macOS default
+// /bin/bash). This bump also catches up the fingerprint for three prior
+// content changes that landed without a version bump: lib/agent-surface.sh
+// and reset-danger-latch.sh (session-global home distribution work) and
+// block-dangerous.sh.
+export const SHARED_PACK_VERSION = 60;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

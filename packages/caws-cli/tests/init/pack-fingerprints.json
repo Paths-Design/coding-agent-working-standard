@@ -1,15 +1,15 @@
 {
   "shared": {
-    "version": 59,
-    "fingerprint": "5b2b75df21b0478469a1bf201dca953e162d6887e9c7f566faad5d6dbca4bd37"
+    "version": 60,
+    "fingerprint": "351fd1f378a9b3d72404cf00376d814a2bdc25cb35933f49a3474d9bd4dc3c0b"
   },
   "claude-code": {
     "version": 22,
     "fingerprint": "e78a7e1c964c75f16a95866bcb0be499196f1afebe08715ffd7a32c634974eea"
   },
   "codex": {
-    "version": 17,
-    "fingerprint": "34bd5d69b88bafcb8ffe29bdc1899e3e33d95e6be755dbbc98668a563c694fbb"
+    "version": 18,
+    "fingerprint": "4a0ab664b4f38b325c21d7ba78f04ef85a56cc41d21e14d592407ea703a25e0c"
   },
   "opencode": {
     "version": 7,
@@ -20,8 +20,8 @@
     "fingerprint": "15a8a3b26f677446a99de21734732decc0ef692ebbac8c8f10fd50519d0c10aa"
   },
   "kimi-code": {
-    "version": 3,
-    "fingerprint": "c6d5a4d0a75fc07228ef55de4e2afefdf80e8c744f2554c05929893eaece5288"
+    "version": 4,
+    "fingerprint": "bd8f15b45104fff8b3456b41108e5ce177d430c611e93ab551e0df05a5b30e57"
   },
   "qwen-code": {
     "version": 2,
