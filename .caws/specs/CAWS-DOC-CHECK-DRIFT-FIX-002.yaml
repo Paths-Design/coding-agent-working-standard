@@ -51,3 +51,8 @@ acceptance:
     then: 'every finding from that audit is corrected and re-verified against the live repo state'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "7 commits (df58a08c..ac299c89) fixed every finding from the 2026-09-07 doc-check audit across 26 of 27 files; docs/internal/caws-cli-defect-triage.md skipped (untracked/gitignored, does not materialize into this worktree, confirmed via git ls-files + git check-ignore, consistent with prior spec CAWS-DOC-CHECK-DRIFT-FIX-001's precedent); post-fix grep sweep for residual fourteen/tmp-sessionId/caws-kernel-path/v11.9.0 patterns found and fixed 5 additional instances outside the original audit's cited lines; caws doctor run clean of any drift attributable to this spec"
+    recorded_at: "2026-09-08T00:30:19.109Z"
