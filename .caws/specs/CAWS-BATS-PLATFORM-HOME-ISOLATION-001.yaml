@@ -2,9 +2,10 @@ id: CAWS-BATS-PLATFORM-HOME-ISOLATION-001
 title: 'Separate macOS Bats controls and isolate fixture homes'
 risk_tier: 3
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: bats-platform-home
 created_at: '2026-09-08T05:19:48.169Z'
-updated_at: '2026-09-08T05:19:48.169Z'
+updated_at: '2026-09-08T05:20:08.112Z'
 created_by_session: '01a07f67-9951-7a20-bd4a-13838d58093c'
 blast_radius:
   modules:
