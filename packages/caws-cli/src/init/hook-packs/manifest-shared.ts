@@ -376,7 +376,20 @@ import { isAdapterCoveredSurface } from './types';
 // stripped CI runner) previously crashed these with "HOME: unbound
 // variable" -- in block-dangerous.sh this surfaced as a fail-closed BLOCK
 // that also armed the danger latch for an ordinary command.
-export const SHARED_PACK_VERSION = 62;
+//
+// v63 (CAWS-HOOKPACK-HOME-UNSET-ROOT-AUTHORITY-ALIAS-001): the v62 ${HOME:-}
+// fallback fixed the crash but degraded several checks into aliasing an
+// absent home to a ROOT-BASED path ("/", "/.caws", "/.claude") instead of
+// "no home-tier authority exists". In scope-guard.sh this was a real
+// authority-widening bug: the home-vendor-dir ALLOW_PREFIXES entry became
+// the absolute prefix "/.claude/", which the foreign-repo containment check
+// consults BEFORE refusing -- so an absolute write outside the governed
+// repo (e.g. /.claude/pwned) was silently ADMITTED instead of BLOCKED.
+// Fixed scope-guard.sh, protected-paths.sh, agent-surface.sh, reprieve.sh,
+// block-dangerous.sh, and the best-effort session-log.sh/plan-transcript-*.sh/
+// runtime-paths.sh lookups to omit/skip the home-tier entirely when no real
+// home is known, rather than defaulting to a filesystem-root path.
+export const SHARED_PACK_VERSION = 63;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
