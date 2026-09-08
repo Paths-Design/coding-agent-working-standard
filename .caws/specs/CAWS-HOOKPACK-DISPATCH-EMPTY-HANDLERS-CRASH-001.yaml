@@ -44,3 +44,8 @@ contracts:
   - name: 'hook-dispatch-empty-handlers'
     type: contract-test
     path: 'packages/caws-cli/tests/adapter/machine-adoption.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "manual before/after repro: pre-fix post_tool_use.sh crashed 'HANDLERS[@]: unbound variable' exit 1 under bash 3.2.57 with all handlers disabled; post-fix exits 0. Confirmed via packages/caws-cli jest: npx jest tests/adapter/machine-adoption.test.js -t 'literal environment settings' -> 1 passed"
+    recorded_at: "2026-09-08T00:35:09.275Z"
