@@ -40,7 +40,7 @@ caws_reprieve_state_dir() {
   [[ -n "$_sid" && "$_sid" != "unknown" ]] || return 1
   local _safe_sid
   _safe_sid=$(printf '%s' "$_sid" | tr -c 'A-Za-z0-9._-' '_')
-  printf '%s/state/sessions/%s\n' "${CAWS_HOME:-${HOME}/.caws}" "$_safe_sid"
+  printf '%s/state/sessions/%s\n' "${CAWS_HOME:-${HOME:-}/.caws}" "$_safe_sid"
 }
 
 _caws_legacy_reprieve_state_dir() {

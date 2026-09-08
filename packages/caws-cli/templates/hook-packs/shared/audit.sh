@@ -31,7 +31,7 @@ source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
 # the hook process inherits a nonexistent CWD and most commands will fail.
 # Recover to a safe directory before doing anything else.
 if ! pwd >/dev/null 2>&1 || [ ! -d "$(pwd 2>/dev/null || echo __gone__)" ]; then
-  cd "${CAWS_PROJECT_DIR:-$HOME}" 2>/dev/null || cd "$HOME"
+  cd "${CAWS_PROJECT_DIR:-${HOME:-/tmp}}" 2>/dev/null || cd "${HOME:-/tmp}"
 fi
 
 parse_hook_input

@@ -69,7 +69,7 @@ SNAPSHOT="${PLAN_FILE%.md}.transcript.jsonl"
 cp "$TRANSCRIPT_PATH" "$SNAPSHOT" 2>/dev/null || exit 0
 
 # Mark for Stop-hook finalization.
-PENDING="$HOME/${CAWS_VENDOR_DIR}/.pending-plan-snapshots"
+PENDING="${HOME:-}/${CAWS_VENDOR_DIR}/.pending-plan-snapshots"
 mkdir -p "$(dirname "$PENDING")" 2>/dev/null || true
 
 # Idempotent append: don't duplicate if already pending.

@@ -414,7 +414,7 @@ caws_source_lib() {
       source "${CAWS_MACHINE_POLICY_ROOT}/${_machine_local}"
       return $?
     fi
-    local _machine_user="${CAWS_HOME:-${HOME}/.caws}/surfaces/${CAWS_AGENT_SURFACE}/lib/${basename}"
+    local _machine_user="${CAWS_HOME:-${HOME:-}/.caws}/surfaces/${CAWS_AGENT_SURFACE}/lib/${basename}"
     if [[ -f "$_machine_user" ]]; then
       source "$_machine_user"
       return $?

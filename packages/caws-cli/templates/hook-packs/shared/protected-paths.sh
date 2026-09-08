@@ -101,7 +101,7 @@ _hooks_prefix_match() {
   # The system runtime's executables, adapters, policy overrides and reprieves
   # have the same boundary as the former project hook directory. CLI-mediated
   # installation/configuration is separate from an agent's direct file edit.
-  local machine_home="${CAWS_HOME:-${HOME}/.caws}"
+  local machine_home="${CAWS_HOME:-${HOME:-}/.caws}"
   [[ "$FILE_PATH" == "$machine_home/bin/"* ]] || \
   [[ "$FILE_PATH" == "$machine_home/lib/"* ]] || \
   [[ "$FILE_PATH" == "$machine_home/surfaces/"* ]] || \

@@ -154,7 +154,7 @@ resolve_worktree_root() {
 
 # Always-allowed paths bypass scope checks entirely.
 ALLOW_PREFIXES=(
-  "$HOME/${CAWS_VENDOR_DIR}/"
+  "${HOME:-}/${CAWS_VENDOR_DIR}/"
   ".caws/"
   "${CAWS_VENDOR_DIR}/"
   "docs/"

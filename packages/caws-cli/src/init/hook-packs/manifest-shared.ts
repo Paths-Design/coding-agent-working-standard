@@ -367,7 +367,16 @@ import { isAdapterCoveredSurface } from './types';
 // hook migration with no documented rationale; publishing already-merged
 // commits rewrites no history and races no sibling's index, unlike the
 // force-push case immediately above it in the file, which stays blocked.
-export const SHARED_PACK_VERSION = 61;
+//
+// v62 (CAWS-HOOKPACK-UNGUARDED-HOME-UNBOUND-VARIABLE-001): guard every bare
+// $HOME dereference under set -u across protected-paths.sh, scope-guard.sh,
+// plan-transcript-finalize.sh, plan-transcript-snapshot.sh, session-log.sh,
+// runtime-paths.sh, block-dangerous.sh, audit.sh, and the agent-surface.sh /
+// reprieve.sh libs. A minimal environment with HOME unset (a container, a
+// stripped CI runner) previously crashed these with "HOME: unbound
+// variable" -- in block-dangerous.sh this surfaced as a fail-closed BLOCK
+// that also armed the danger latch for an ordinary command.
+export const SHARED_PACK_VERSION = 62;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

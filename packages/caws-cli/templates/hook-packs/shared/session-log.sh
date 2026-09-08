@@ -90,13 +90,13 @@ resolve_transcript() {
   # resolves to ~/.claude/projects/. Other surfaces may store transcripts
   # differently; an adapter overriding resolve_transcript is the sanctioned
   # extension point.
-  candidate="$HOME/${CAWS_VENDOR_DIR}/projects/${slug}/${SESSION_ID}.jsonl"
+  candidate="${HOME:-}/${CAWS_VENDOR_DIR}/projects/${slug}/${SESSION_ID}.jsonl"
   if [[ -f "$candidate" ]]; then
     printf '%s\n' "$candidate"
     return
   fi
 
-  candidate="$HOME/${CAWS_VENDOR_DIR}/projects/-${slug}/${SESSION_ID}.jsonl"
+  candidate="${HOME:-}/${CAWS_VENDOR_DIR}/projects/-${slug}/${SESSION_ID}.jsonl"
   if [[ -f "$candidate" ]]; then
     printf '%s\n' "$candidate"
     return
@@ -107,13 +107,13 @@ resolve_transcript() {
   # ~/.qwen/projects/<slug>/chats/<session-id>.jsonl. The payload's
   # $TRANSCRIPT_PATH usually names it already; this fallback covers hook
   # fires whose payload lacks the path.
-  candidate="$HOME/${CAWS_VENDOR_DIR}/projects/${slug}/chats/${SESSION_ID}.jsonl"
+  candidate="${HOME:-}/${CAWS_VENDOR_DIR}/projects/${slug}/chats/${SESSION_ID}.jsonl"
   if [[ -f "$candidate" ]]; then
     printf '%s\n' "$candidate"
     return
   fi
 
-  candidate="$HOME/${CAWS_VENDOR_DIR}/projects/-${slug}/chats/${SESSION_ID}.jsonl"
+  candidate="${HOME:-}/${CAWS_VENDOR_DIR}/projects/-${slug}/chats/${SESSION_ID}.jsonl"
   if [[ -f "$candidate" ]]; then
     printf '%s\n' "$candidate"
     return
@@ -127,7 +127,7 @@ resolve_transcript() {
   # lookup is the primary resolution path on that surface. Harmless on other
   # surfaces: session_index.jsonl exists only under .kimi-code.
   local index_file session_dir
-  index_file="$HOME/${CAWS_VENDOR_DIR}/session_index.jsonl"
+  index_file="${HOME:-}/${CAWS_VENDOR_DIR}/session_index.jsonl"
   if [[ -f "$index_file" ]]; then
     session_dir=$(jq -r --arg sid "$SESSION_ID" \
       'select(.sessionId == $sid) | .sessionDir' "$index_file" 2>/dev/null | tail -n 1)
