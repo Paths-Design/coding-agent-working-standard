@@ -360,7 +360,14 @@ import { isAdapterCoveredSurface } from './types';
 // content changes that landed without a version bump: lib/agent-surface.sh
 // and reset-danger-latch.sh (session-global home distribution work) and
 // block-dangerous.sh.
-export const SHARED_PACK_VERSION = 60;
+//
+// v61 (CAWS-WORKTREE-GUARD-BASE-PUSH-RETIRE-001): worktree-guard.sh no
+// longer refuses an ordinary `git push` from the base branch while
+// worktrees are active. That refusal was inherited unreviewed from a bulk
+// hook migration with no documented rationale; publishing already-merged
+// commits rewrites no history and races no sibling's index, unlike the
+// force-push case immediately above it in the file, which stays blocked.
+export const SHARED_PACK_VERSION = 61;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

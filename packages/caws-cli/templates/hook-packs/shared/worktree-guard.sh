@@ -301,13 +301,15 @@ if [[ -z "$BASE_BRANCH" ]] && [[ -f "$PROJECT_DIR/.caws/worktrees.json" ]] && co
 fi
 
 if [[ -n "$BASE_BRANCH" ]] && [[ "$CURRENT_BRANCH" == "$BASE_BRANCH" ]]; then
-  if echo "$COMMAND" | grep -qE 'git\s+push'; then
-    echo "BLOCKED: Pushing from the base branch ($BASE_BRANCH) while worktrees are active." >&2
-    echo "You should be working in a worktree, not on the base branch." >&2
-    echo "Use: cd .caws/worktrees/<name>/" >&2
-    exit 2
-  fi
-
+  # CAWS-WORKTREE-GUARD-BASE-PUSH-RETIRE-001: an ordinary `git push` from the
+  # base branch used to be refused here unconditionally. That block was
+  # inherited unreviewed from a bulk hook migration (no incident or rationale
+  # attached) and fired even when a peer's worktree had nothing to do with the
+  # push — merely being on the base branch with any worktree active anywhere
+  # in the repo was enough. Publishing already-merged commits rewrites no
+  # history and races no sibling's index; it has no isolation cost to justify
+  # refusing it, unlike the force-push case just above, which stays blocked
+  # because it CAN rewrite history other agents have based work on.
   if echo "$COMMAND" | grep -qE 'git\s+merge\b'; then
     emit_additional_context "Merging into base branch ($BASE_BRANCH) while worktrees are active. The commit-msg hook will enforce the merge(worktree): message format. Make sure the worktree for this branch has been destroyed first."
     exit 0
