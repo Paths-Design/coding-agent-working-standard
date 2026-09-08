@@ -422,12 +422,15 @@ to preserve recon's no-side-edit discipline.
 ## 2. Command surface
 
 The v11.0.0 governed core shipped eight command groups. The current v11 line has
-**fourteen** top-level commands/groups (plus the auto-generated `help`): it
+**seventeen** top-level commands/groups (plus the auto-generated `help`): it
 restored `worktree` (ninth) and `specs` (tenth) as lifecycle commands,
 added `events` (eleventh) for hash-chained audit-log maintenance
 (`migrate/rotate/verify-archive`), `agents` (twelfth) for multi-agent
-observability, `message` (thirteenth) for directed inter-agent messages, and
-`reprieve` (fourteenth, v11.8.0) for session-scoped guard reprieves.
+observability, `message` (thirteenth) for directed inter-agent messages,
+`reprieve` (fourteenth, v11.8.0) for session-scoped guard reprieves,
+`session` (fifteenth, v11.1) for turn-log retention and pickup handoffs,
+`working-tree` (sixteenth) for working-tree provenance advisories, and
+`handoff` (seventeenth) for portable session-to-session briefs.
 `agents` shipped ahead of the broader
 v11.2 multi-agent plan: its `register/heartbeat/stop/list/show/prune`
 subcommands are all live. `message` (send/reply/poll/inbox/history/status/

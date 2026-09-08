@@ -70,10 +70,10 @@ If the path is genuinely out of scope but you must touch it (rare — usually me
 ```bash
 # 1. Inspect — read-only
 caws claim
-# prints: <sessionId>:<platform>, last heartbeat age, tmp/<sessionId>/ session-log path
+# prints: <sessionId>:<platform>, last heartbeat age, .caws/sessions/<sessionId>/ session-log path
 
 # 2. Read the prior session's log first (it may be paused, not dead)
-ls tmp/<sessionId>/
+ls .caws/sessions/<sessionId>/
 
 # 3. ONLY with explicit user authorization, take over
 caws claim --takeover

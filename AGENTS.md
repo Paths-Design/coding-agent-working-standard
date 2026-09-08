@@ -196,7 +196,7 @@ command.
 ```
 Worktree 'wt-foreign' is claimed by 8be65780-...:claude-code
    Last heartbeat: 2026-04-27T17:04:00Z (23 min ago)
-   Session log:    tmp/8be65780-72e0-4fc7-a989-4ebac148c18d
+   Session log:    .caws/sessions/8be65780-72e0-4fc7-a989-4ebac148c18d
                    15 turns, last turn 2026-04-27T17:26:49Z
    To proceed:     caws claim --takeover
 ```

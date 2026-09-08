@@ -2,19 +2,19 @@
 doc_id: multi-agent-workflow-guide
 authority: reference
 status: active
-title: Multi-agent workflow (v11.9.0)
+title: Multi-agent workflow
 owner: vNext rewrite team
 updated: 2026-08-19
 audience: consumer
 ---
 
-# Multi-agent workflow (v11.9.0)
+# Multi-agent workflow
 
 **Each agent works on its own per-feature spec, in its own git worktree, with non-overlapping scope.**
 
 This guide describes the v11 multi-agent pattern. For worktree mechanics, see [`worktree-isolation.md`](worktree-isolation.md). For the full CLI surface, see [`docs/api/cli.md`](../api/cli.md).
 
-> **v11 surface.** The current v11 line ships fourteen command groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message` (plus the auto-generated `help`). Use `caws specs create` to author specs, `caws worktree create <name> --spec <id>` to bind worktrees (this also activates a draft spec), and `caws worktree merge <name>` to close out. Removed and not returning: `validate`, `iterate`, `evaluate`, `diagnose`, `parallel setup`.
+> **v11 surface.** The current v11 line ships seventeen command groups: `init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message`, `session`, `working-tree`, `handoff` (plus the auto-generated `help`). Use `caws specs create` to author specs, `caws worktree create <name> --spec <id>` to bind worktrees (this also activates a draft spec), and `caws worktree merge <name>` to close out. Removed and not returning: `validate`, `iterate`, `evaluate`, `diagnose`, `parallel setup`.
 
 ## The pattern
 
