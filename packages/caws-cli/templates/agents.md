@@ -145,6 +145,24 @@ caws reprieve show
 A `reprieve` skips a HOOK guard at dispatch time; a `waiver` bypasses a policy
 GATE at run time. They are not interchangeable.
 
+Three more surfaces round out multi-agent visibility (none of them authority):
+
+```bash
+# Retention for .caws/sessions/ turn logs (dry-run by default), and a way to
+# hand a paused session's context to a fresh one.
+caws session prune --apply
+caws session pickup --from <session-id> --paths <path>[,<path>...]
+
+# Uncommitted working-tree overlap with another session's declared paths.
+caws working-tree check
+caws working-tree ack
+
+# Portable handoff briefs (metadata only — never file contents) for
+# session-to-session continuity, written under .caws/handoffs/.
+caws handoff export
+caws handoff import <brief-path>
+```
+
 When a refusal fires, the warning includes the claimer's session id, heartbeat age, and a pointer to any `.caws/sessions/<sessionId>/` session-log directory — read that log for context before deciding to take over. A stale heartbeat does NOT mean the prior session is dead; it may be paused.
 
 ## Spec Lifecycle
