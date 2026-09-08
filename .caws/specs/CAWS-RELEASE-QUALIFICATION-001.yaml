@@ -75,3 +75,8 @@ evidence:
     evidence_ref: "https://github.com/Paths-Design/coding-agent-working-standard/actions/runs/34201681838; all 7 qualification jobs pass; publish dependency contract verified"
     recorded_at: "2026-09-08T08:14:13.044Z"
     commit_sha: "712d0fc97b2cb0d616cafd8d6753c683304106f3"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "node --test scripts/release-tag-publish.test.mjs scripts/ci-governance-artifacts.test.mjs: 6 pass; strict semver, next/latest channels, GitHub prerelease and uncertain publish controls"
+    recorded_at: "2026-09-08T08:19:47.306Z"
+    commit_sha: "712d0fc97b2cb0d616cafd8d6753c683304106f3"
