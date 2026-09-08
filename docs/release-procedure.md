@@ -60,7 +60,10 @@ rendering, delivery of one shared guard/renderer update to two projects, corrupt
 snapshot refusal and verified rollback. It uses disposable HOME, CAWS_HOME,
 Git configuration and npm configuration, with no inherited agent identity.
 The report records the platform, Node version, baseline version, candidate
-tarball SHA-256 and runtime digest. CI retains it under a commit-named artifact;
+tarball SHA-256 and runtime digest. It also audits the detached upgraded
+consumer with `npm audit --omit=dev --audit-level=low`, requires zero findings,
+and records that consumer lockfile's hash. This checks the dependency graph
+actually installed by users, without workspace overrides. CI retains the report under a commit-named artifact;
 generated reports are not committed to the source ledger.
 
 These are subprocess fixtures. Before a runtime release, retain separate fresh
@@ -78,8 +81,37 @@ Before selecting a release candidate, require current mutation topology,
 successful baseline/discovery, and per-file mutation results for kernel, store
 and shell on the candidate commit. A setup/import failure is inconclusive,
 not a killed mutant. Release Qualification currently does not run that mutation
-pipeline: its repair must land and its reports must be checked separately
-before publication. A green qualification run alone is not release approval.
+pipeline: dispatch the Mutation Gate for the candidate branch and check its
+retained reports separately before publication. A green qualification run alone
+is not release approval.
+
+## Dependency, coverage and fixture gates
+
+`npm run audit:dependencies` audits the committed lockfile, including development
+tools, and fails on any reported severity or registry error. Both PR CI and
+Release Qualification require it. The installed-package audit above is separate:
+a clean workspace lockfile does not establish a clean consumer installation.
+
+The combined Jest run owns coverage selection and thresholds at the top level
+of `packages/caws-cli/jest.config.js`. It collects the compiled runtime and
+directly tested kernel source, includes unexecuted files, and excludes test
+helpers. Source maps combine kernel unit and compiled integration execution.
+Both PR CI and Release Qualification request coverage and retain the JSON and
+LCOV reports in a commit-named artifact, including when a threshold fails.
+The init/machine-runtime surface requires 85% statements, 70% branches, 90%
+functions and 85% lines. After subtracting that group, the remaining runtime
+requires 60% statements, 50% branches, 60% functions and 60% lines. These are
+regression floors, not correctness proof; the 18 per-file mutation targets keep
+their separate 80% floors. CLI entry points exercised only in child processes
+remain zero in Jest's in-process report; installed-artifact fixtures supply
+their behavioral evidence rather than manufacturing coverage hits.
+
+Git fixtures discard inherited Git storage/config overrides. An interrupted
+copy is never retried or accepted: it removes its owned partial destination and
+throws with the original cause, process/worker identity, source/destination
+paths and observed filesystem state. If the earlier intermittent ENOENT recurs,
+retain this diagnostic with the CI run. Its historical cause is unconfirmed;
+passing stress runs do not establish that cause or prove it fixed.
 
 ## What CI does NOT do
 

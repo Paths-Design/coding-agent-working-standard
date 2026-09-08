@@ -41,12 +41,7 @@ jobs:
         run: npm run build
 
       - name: Security audit
-        run: |
-          # Use critical level - many high-severity vulns are in bundled deps without fixes
-          npm audit --audit-level=critical || {
-            echo "::warning::Security vulnerabilities found. Review npm audit output."
-            exit 0  # Don't fail PR for transitive dep issues
-          }
+        run: npm run audit:dependencies
 
       - name: Block shadow file patterns
         env:
@@ -92,6 +87,17 @@ jobs:
         # that future maintainers would trip over.
         # Governed by CI-PR-TEST-PASSTHROUGH-001.
         run: npx turbo run test -- --coverage
+
+      - name: Retain coverage evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ github.sha }}
+          path: |
+            packages/caws-cli/coverage/coverage-final.json
+            packages/caws-cli/coverage/coverage-summary.json
+            packages/caws-cli/coverage/lcov.info
+          if-no-files-found: error
 
       - name: Contract tests
         if: hashFiles('tests/contract/**') != ''

@@ -26,9 +26,20 @@ jobs:
         with:
           python-version: '3.12'
       - run: npm ci --no-audit --no-fund
+      - run: npm run audit:dependencies
       - run: npm run typecheck -w @paths.design/caws-cli
       - run: npm run lint -w @paths.design/caws-cli
-      - run: npm test -w @paths.design/caws-cli -- --maxWorkers=2
+      - run: npm test -w @paths.design/caws-cli -- --coverage --maxWorkers=2
+      - name: Retain coverage evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ github.sha }}
+          path: |
+            packages/caws-cli/coverage/coverage-final.json
+            packages/caws-cli/coverage/coverage-summary.json
+            packages/caws-cli/coverage/lcov.info
+          if-no-files-found: error
       - run: node --test scripts/release-tag-publish.test.mjs scripts/ci-governance-artifacts.test.mjs
       - run: npm run docs:check -w @paths.design/caws-cli
       - run: npm run test:bats -w @paths.design/caws-cli
