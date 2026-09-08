@@ -96,3 +96,7 @@ evidence:
     status: pass
     evidence_ref: "docs/release-procedure.md gains the pre-script failure row, Unreleased retitle, lockfile resync; caws-gate.yml summary names ci-governance-artifacts.mjs; semantic-release script+5 devDeps removed with prod closure unchanged (125 pkgs)."
     recorded_at: "2026-09-08T22:43:29.054Z"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "package.json+lockfile at 12.2.0-rc.1; release dry-run exit 0 release.success, CHANGELOG section extracted as 10048 chars; audit:dependencies 0 vulns; smoke:fresh-install exit 0 (runtime-upgrade PASS 9 cases); full jest 215 suites/2652 tests."
+    recorded_at: "2026-09-08T22:43:29.505Z"
