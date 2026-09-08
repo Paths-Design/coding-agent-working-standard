@@ -70,3 +70,9 @@ contracts:
   - name: 'mutation-ci-integrity'
     type: contract-test
     path: 'packages/caws-cli/tests/ci/mutation-contract.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "npm run mutation:validate: 144 current kernel/store/shell source files classified exactly once; 18 targets; missing and duplicate inventory controls pass"
+    recorded_at: "2026-09-08T14:37:37.916Z"
+    commit_sha: d059fc451e6233a2f46c8ff8330a3586aa463088
