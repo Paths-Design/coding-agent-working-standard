@@ -23,8 +23,16 @@ invariants:
   - 'AGENTS.md and CLAUDE.md state the same remediation and cite the same failure-class id; neither invents a second path.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      an agent working under DSH receives a foreign-claim or write-guard refusal on
+      a worktree it created itself, where the owner id is a different form of its
+      own session id
+    when: >-
+      the agent reads the Common pitfalls section of AGENTS.md or the Worktree
+      discipline section of CLAUDE.md
+    then: >-
+      exactly one imperative names CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001, the
+      identity check (owner uuid equals DSH_SESSION_ID minus the session- prefix),
+      and the sanctioned command: caws claim --takeover from inside the worktree
 non_functional: {}
 contracts: []
