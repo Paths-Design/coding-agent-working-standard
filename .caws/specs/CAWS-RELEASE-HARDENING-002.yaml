@@ -60,3 +60,29 @@ contracts:
   - name: 'release-hardening'
     type: contract-test
     path: 'packages/caws-cli/tests/ci/release-hardening.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "tmp/release-hardening-2026-09-08/README.md: updated audit zero; actual command rejects old lockfile with 35 findings/exit 1; status 42 negative control; six detached consumers clean"
+    recorded_at: "2026-09-08T16:53:08.265Z"
+    commit_sha: "4854d72aee4750e9446938547667b4b4ec57bd9a"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "tmp/release-hardening-2026-09-08/verified-results.json: 166 runtime files; global and init coverage floors pass; actual child Jest rejects below-floor fixture; CI 34252748839"
+    recorded_at: "2026-09-08T16:53:20.246Z"
+    commit_sha: "4854d72aee4750e9446938547667b4b4ec57bd9a"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "tmp/release-hardening-2026-09-08/caws-hardening-focused.log: 30 focused tests; copy-failure and foreign-Git red controls; 128 concurrent fixtures preserved ownership; historical ENOENT cause remains unconfirmed"
+    recorded_at: "2026-09-08T16:53:30.087Z"
+    commit_sha: "4854d72aee4750e9446938547667b4b4ec57bd9a"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "tmp/release-hardening-2026-09-08/verified-results.json: 214 suites/2624 tests; qualification 34252749057 six platforms/nine cases; full mutation 34251447987 18 files/3906 mutants with unchanged inputs after CI-assertion-only commit"
+    recorded_at: "2026-09-08T16:53:39.779Z"
+    commit_sha: "4854d72aee4750e9446938547667b4b4ec57bd9a"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "tmp/release-hardening-2026-09-08/README.md: source-bound CI metadata, independently verified reports, doctor/gates, and native/publication/historical-incident limitations"
+    recorded_at: "2026-09-08T16:53:51.552Z"
+    commit_sha: "4854d72aee4750e9446938547667b4b4ec57bd9a"
