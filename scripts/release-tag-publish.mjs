@@ -418,6 +418,27 @@ function main() {
 
   logInfo('release.start', { tag, dry_run: isDryRun, repo: process.env.GITHUB_REPOSITORY });
 
+  // Claim tag-disposition authority for the rest of this run.
+  //
+  // Every exit path below applies the correct tag policy for its own failure
+  // stage. Steps BEFORE this script (checkout, npm ci, gh auth) have no such
+  // policy — if one of them fails, the pushed tag survives with nothing
+  // published, which is the "tag exists, package does not" ambiguity this
+  // whole design exists to remove. The workflow's failure handler deletes the
+  // tag only when this marker is ABSENT, so the script's own decisions
+  // (including exit 12's deliberate leave-the-tag-alone) are never overridden.
+  const claimPath = process.env.CAWS_RELEASE_SCRIPT_MARKER;
+  if (claimPath) {
+    try {
+      writeFileSync(claimPath, `${tag}\n`);
+    } catch (error) {
+      // A marker we cannot write would make the workflow handler delete a tag
+      // this script is about to take responsibility for. Refuse instead.
+      logError('release.marker_unwritable', { path: claimPath, reason: error.message });
+      process.exit(20);
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Phase 1: Parse + refuse.
   //
