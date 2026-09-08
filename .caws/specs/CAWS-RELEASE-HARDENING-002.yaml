@@ -1,0 +1,60 @@
+id: CAWS-RELEASE-HARDENING-002
+title: 'Harden release dependencies, coverage enforcement, and Git fixture isolation'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-08T15:22:41.118Z'
+updated_at: '2026-09-08T15:22:41.118Z'
+created_by_session: '01a07f67-9951-7a20-bd4a-13838d58093c'
+blast_radius:
+  modules:
+    - 'dependency resolution and CI audit gates'
+    - 'CLI coverage enforcement and Git test fixtures'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'package.json'
+    - 'package-lock.json'
+    - 'packages/caws-cli/package.json'
+    - 'packages/caws-cli/jest.config.js'
+    - 'packages/caws-cli/scripts/run-tests.js'
+    - 'packages/caws-cli/scripts/cleanup-tests.js'
+    - 'packages/caws-cli/tests/helpers/git-repo-factory.js'
+    - 'packages/caws-cli/tests/ci'
+    - '.github/workflows/pr-checks.yml'
+    - '.github/workflows/release-qualification.yml'
+    - 'scripts/audit-dependencies.mjs'
+    - 'scripts/audit-dependencies.test.mjs'
+    - 'docs/release-procedure.md'
+  out: []
+invariants:
+  - 'Dependency and coverage failures must fail CI rather than become successful warnings.'
+  - 'Test fixture cleanup may remove only resources owned by its invocation and must not race another test run.'
+  - 'Existing mutation floors and runtime migration contracts are preserved.'
+acceptance:
+  - id: A1
+    given: 'the committed dependency graph'
+    when: 'clean dependency installation and registry audit run'
+    then: 'production and development findings are resolved and enforceable audit checks fail on a known vulnerable fixture'
+  - id: A2
+    given: 'all authored CLI runtime surfaces and the measured coverage baseline'
+    when: 'the actual Jest coverage command runs'
+    then: 'nonzero coverage floors are enforced and a controlled below-floor report or fixture causes failure'
+  - id: A3
+    given: 'concurrent test invocations using temporary Git repositories'
+    when: 'repository creation overlaps cleanup and failure paths'
+    then: 'each invocation preserves foreign fixtures and the regression reproducer passes without retries or swallowed copy errors'
+  - id: A4
+    given: 'the hardened candidate'
+    when: 'full tests, mutation checks, and Linux/macOS packaged-upgrade qualification run'
+    then: 'the candidate preserves runtime migration behavior and all declared checks pass'
+  - id: A5
+    given: 'the release hardening evidence'
+    when: 'the slice is reviewed for landing'
+    then: 'CI results and remaining release limitations are recorded with source identity'
+non_functional: {}
+contracts:
+  - name: 'release-hardening'
+    type: contract-test
+    path: 'packages/caws-cli/tests/ci/release-hardening.test.js'
