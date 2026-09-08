@@ -152,29 +152,35 @@ Failure handling depends on **when** the failure happens:
 
 | Failure stage | Tag handling | Registry handling |
 |---|---|---|
-| Qualification or mutation dependency | **PRESERVED**; publish job never starts | Untouched by this workflow |
-| Release-job step before the publish script (checkout, `npm ci`, `gh` ref read) | DELETED by the failure handler | Untouched |
+| Qualification or mutation dependency | DELETED by the `rollback` job; publish job never starts | Untouched by this workflow |
+| Release-job step before the publish script (checkout, `npm ci`, `gh` ref read) | DELETED by the `rollback` job | Untouched |
 | Tag refusal (any refused pattern) | DELETED via `gh api` | Untouched |
 | Pre-publish validation (steps 1–3) | DELETED via `gh api` | Untouched |
 | Build / smoke (steps 4–5) | DELETED | Untouched |
 | `npm publish` non-zero exit (step 6) | **PRESERVED** | Unknown; inspect registry and artifact identity before retrying |
 | Registry verify / GitHub Release (steps 7–8) | **PRESERVED** | Registry has the version |
 
-Row 2 is handled by the `Roll back the tag when the publish script never ran`
-step. `scripts/release-tag-publish.mjs` writes a marker
-(`CAWS_RELEASE_SCRIPT_MARKER`) as soon as it starts, claiming tag-disposition
-authority; the handler deletes the tag only when that marker is **absent**, so
-it can never override a decision the script made — including exit 12, which
-deliberately leaves an unrecognised tag alone. The most likely way to reach
-this row is a lockfile desync failing `npm ci` (see step 3 below).
+Rows 1 and 2 are handled by the `rollback` job. It is a separate job rather
+than a step inside `release`, because the case it most needs to cover is
+`release` being **skipped**: when qualification or mutation fails the publish
+job never starts, so a step inside it could not run.
 
-**Known asymmetry:** row 1 still preserves the tag, because the rollback step
-lives inside the release job and a failed dependency skips that job entirely.
-A qualification or mutation failure therefore leaves a tag with nothing
-published, and re-tagging the same version requires deleting it first:
-`gh api -X DELETE repos/<owner>/<repo>/git/refs/tags/<tag>`. Closing this would
-mean promoting the handler to its own job keyed on a release-job output; it is
-a deliberate open choice, not an oversight.
+The handoff works like this. `scripts/release-tag-publish.mjs` writes a marker
+(`CAWS_RELEASE_SCRIPT_MARKER`) as soon as it starts, claiming tag-disposition
+authority. A `Record publish-script disposition` step — `if: always()`, so it
+survives a failed publish — promotes that marker to the `script_ran` job
+output. The `rollback` job runs on `failure() && needs.release.outputs.script_ran != 'true'`:
+
+- `''` (release skipped) or `'false'` (failed before the script) — nothing
+  claimed the tag, so delete it.
+- `'true'` — the script owns the decision and applies its own policy for every
+  stage it can reach. Rollback must not override it: exit 12 deliberately
+  leaves an unrecognised tag alone, and exit 30 preserves the tag after a
+  publish that may have landed.
+
+So no tag survives a run that did not publish, and no rollback can destroy
+provenance for a package that did. The most likely way to reach row 2 is a
+lockfile desync failing `npm ci` (see step 3 below).
 
 The asymmetric rule:
 

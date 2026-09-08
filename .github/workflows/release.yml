@@ -13,9 +13,12 @@ name: Release
 #   7. polls `npm view` to verify registry has the version
 #   8. creates a GitHub Release with the CHANGELOG section as body
 #
-# Asymmetric failure invariant:
-#   - Pre-publish failures (1–5): tag is DELETED from origin via gh api.
-#   - Qualification failure: publish never starts; tag is PRESERVED.
+# Asymmetric failure invariant — the dividing line is whether npm publish was
+# ATTEMPTED, not which step failed:
+#   - Qualification/mutation failure: publish never starts; the rollback job
+#     DELETES the tag (nothing was published, so no tag should survive).
+#   - Release-job failure before the publish script: rollback job DELETES.
+#   - Pre-publish failures inside the script (1–5): the script DELETES.
 #   - npm publish failure (6): tag is PRESERVED (registry outcome is uncertain).
 #   - Post-publish failures (7–8): tag is PRESERVED; repair command emitted.
 #
@@ -97,12 +100,17 @@ jobs:
 
   release:
     name: Tag-driven release
-    # Both gates block publication. A failure in either leaves the tag
-    # PRESERVED and the registry untouched (see the failure table in
+    # Both gates block publication. A failure in either skips this job, and
+    # the rollback job below deletes the tag (see the failure table in
     # docs/release-procedure.md).
     needs: [qualification, mutation]
     runs-on: ubuntu-latest
     environment: Release
+    outputs:
+      # Whether the publish script started and therefore owns tag disposition.
+      # Consumed by the rollback job, which must not override a decision the
+      # script already made.
+      script_ran: ${{ steps.disposition.outputs.script_ran }}
     steps:
       - name: Checkout tag
         uses: actions/checkout@v4
@@ -204,28 +212,50 @@ jobs:
           set -e
           node scripts/release-tag-publish.mjs "${GITHUB_REF_NAME}"
 
-      - name: Roll back the tag when the publish script never ran
-        # The script applies the correct tag policy for every failure stage it
-        # can reach. Steps BEFORE it — checkout, npm ci, the gh ref read, or a
-        # cancelled//infrastructure failure — have no such policy, and used to
-        # leave the pushed tag in place with nothing published. That is the
-        # "tag exists, package does not" ambiguity the tag-driven design
-        # exists to remove, and a lockfile desync (the exact mistake
-        # docs/release-procedure.md warns about) reaches it via npm ci.
-        #
-        # The marker means "the script took responsibility". Its ABSENCE is
-        # the only case this step acts on, so no script decision is overridden.
-        if: failure()
+      - name: Record publish-script disposition
+        # Runs even when the publish step failed, so the rollback job can tell
+        # "the script started and owns the tag decision" from "we never got
+        # that far". A step-scoped marker file cannot cross the job boundary;
+        # this promotes it to a job output.
+        id: disposition
+        if: always()
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CAWS_RELEASE_SCRIPT_MARKER: ${{ runner.temp }}/caws-release-script-ran
         run: |
           set -euo pipefail
           if [ -f "${CAWS_RELEASE_SCRIPT_MARKER}" ]; then
-            echo "::notice::Publish script ran and applied its own tag policy; leaving ${GITHUB_REF_NAME} as it left it."
-            exit 0
+            echo "script_ran=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "script_ran=false" >> "$GITHUB_OUTPUT"
           fi
-          echo "::error::Release failed before the publish script ran. Deleting ${GITHUB_REF_NAME} so no tag survives without a published package."
+
+  rollback:
+    name: Roll back an unpublished tag
+    # A tag must never survive a run that did not publish the package.
+    #
+    # This is a JOB, not a step inside `release`, because the case that
+    # matters most is `release` being SKIPPED: when qualification or mutation
+    # fails, the publish job never starts, so a step inside it could not run.
+    # That was the documented asymmetry this closes.
+    #
+    # `script_ran` is empty when `release` was skipped and 'false' when it
+    # failed before the script started — both mean nothing claimed the tag, so
+    # delete it. It is 'true' once the script started, and the script applies
+    # its own policy for every stage it can reach (exit 12 deliberately leaves
+    # an unrecognised tag alone; exit 30 preserves the tag after a publish that
+    # may have landed). Never override those.
+    needs: [qualification, mutation, release]
+    if: failure() && needs.release.outputs.script_ran != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Delete the unpublished tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "::error::Release failed without publishing. Deleting ${GITHUB_REF_NAME} so no tag survives without a package."
           REF="repos/${GITHUB_REPOSITORY}/git/refs/tags/${GITHUB_REF_NAME}"
           if gh api -X DELETE "${REF}"; then
             echo "::notice::Deleted ${GITHUB_REF_NAME}. Fix the failure, then re-push the tag."
