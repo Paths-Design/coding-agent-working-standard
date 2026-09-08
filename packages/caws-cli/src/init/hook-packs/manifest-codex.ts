@@ -53,7 +53,13 @@ import type { HookPackV1 } from './types';
 // moves from the misleading .codex/AGENTS.md path to .codex/CAWS.md. The
 // concise, repository-wide working contract is merged into the root
 // instruction file by the init command, following Codex discovery precedence.
-export const CODEX_PACK_VERSION = 17;
+//
+// Version 18: CAWS-HOOKPACK-DISPATCH-EMPTY-HANDLERS-CRASH-001. hooks/lib/
+// run-handlers.sh (the codex override of the shared dispatch loop) guards the
+// same empty-handler-array expansion fixed in the shared pack, so a fully
+// disabled handler set for an event returns exit 0 instead of crashing with
+// "unbound variable" on bash 3.2 (macOS default /bin/bash).
+export const CODEX_PACK_VERSION = 18;
 
 export const CODEX_PACK: HookPackV1 = {
   id: 'codex',

@@ -132,4 +132,14 @@ for _h in "${_ALL_HANDLERS[@]}"; do
 done
 unset _h _h_base _DISABLED _disabled_arr
 
-run_handlers "${HANDLERS[@]}"
+# CAWS-HOOKPACK-DISPATCH-EMPTY-HANDLERS-CRASH-001: guard the count before
+# expanding "${HANDLERS[@]}" -- on bash 3.2 (macOS default /bin/bash),
+# expanding an empty array under `set -u` throws "unbound variable" rather
+# than a normal empty expansion. Disabling every handler above is a real,
+# supported configuration (see CAWS_DISABLED_HANDLERS above), not a
+# theoretical one.
+if (( ${#HANDLERS[@]} > 0 )); then
+  run_handlers "${HANDLERS[@]}"
+else
+  run_handlers
+fi

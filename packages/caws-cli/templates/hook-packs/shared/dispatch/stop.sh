@@ -55,4 +55,13 @@ HANDLERS=(
   "agent-stop.sh"
 )
 
-run_handlers "${HANDLERS[@]}"
+# CAWS-HOOKPACK-DISPATCH-EMPTY-HANDLERS-CRASH-001: guard the count before
+# expanding "${HANDLERS[@]}" -- on bash 3.2 (macOS default /bin/bash),
+# expanding an empty array under `set -u` throws "unbound variable" rather
+# than a normal empty expansion. HANDLERS is a static literal today, but this
+# keeps the invariant true if it ever becomes filterable like post_tool_use.sh.
+if (( ${#HANDLERS[@]} > 0 )); then
+  run_handlers "${HANDLERS[@]}"
+else
+  run_handlers
+fi

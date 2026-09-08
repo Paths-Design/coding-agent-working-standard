@@ -31,7 +31,12 @@
 
 import type { HookPackV1 } from './types';
 
-export const KIMI_CODE_PACK_VERSION = 3;
+// Version 4: CAWS-HOOKPACK-DISPATCH-EMPTY-HANDLERS-CRASH-001. hooks/lib/
+// run-handlers.sh (the kimi-code override of the shared dispatch loop) guards
+// the same empty-handler-array expansion fixed in the shared pack, so a fully
+// disabled handler set for an event returns exit 0 instead of crashing with
+// "unbound variable" on bash 3.2 (macOS default /bin/bash).
+export const KIMI_CODE_PACK_VERSION = 4;
 
 export const KIMI_CODE_PACK: HookPackV1 = {
   id: 'kimi-code',
