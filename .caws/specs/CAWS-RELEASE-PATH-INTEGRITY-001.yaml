@@ -32,7 +32,10 @@ scope:
     - 'packages/caws-cli/CHANGELOG.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A governed check must fail closed: no path may report success while having verified nothing.'
+  - 'A credential-isolation guarantee must be enforced by code, not asserted in a comment.'
+  - 'A pushed release tag must never survive a run that did not publish the matching package.'
+  - 'Consolidating or deleting a CI workflow must preserve every guard pattern it enforced.'
 acceptance:
   - id: A1
     given: 'the publish step resolves OIDC trusted publishing'
