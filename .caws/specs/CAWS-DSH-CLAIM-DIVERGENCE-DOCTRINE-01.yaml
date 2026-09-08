@@ -2,10 +2,11 @@ id: CAWS-DSH-CLAIM-DIVERGENCE-DOCTRINE-01
 title: 'Doctrine: DSH resolver-divergence self-claim remediation'
 risk_tier: 3
 mode: doc
-lifecycle_state: active
-worktree: wt-dsh-claim-doctrine
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-dsh-claim-doctrine at 590ec5831312af634a6d90e31608f1021202d432'
 created_at: '2026-09-08T06:08:36.520Z'
-updated_at: '2026-09-08T06:10:21.159Z'
+updated_at: '2026-09-08T06:14:28.453Z'
 created_by_session: 'session-4d5ce685-aad2-4294-b81d-e6cad705328a'
 blast_radius:
   modules:
