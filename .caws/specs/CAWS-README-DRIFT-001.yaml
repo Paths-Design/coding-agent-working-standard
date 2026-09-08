@@ -25,3 +25,8 @@ acceptance:
     then: 'every finding is corrected and the fixed multi-agent example is verified runnable via --plan'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "1 commit (b4ce2934): fixed the Multi-agent work example (FEAT-AUTH -> FEAT-AUTH-001 + --contract, re-verified valid via specs create --plan), added relocate/work-state/pickup to the specs/agents/session command lists, and replaced the Slice-8c.1 status-barnacle section with present-tense prose"
+    recorded_at: "2026-09-08T01:28:44.281Z"
