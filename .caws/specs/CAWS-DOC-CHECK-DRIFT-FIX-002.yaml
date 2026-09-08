@@ -2,10 +2,11 @@ id: CAWS-DOC-CHECK-DRIFT-FIX-002
 title: 'Reconcile fresh doc-check drift: v11.1.x command surface growth + OIDC/kernel-absorption residue'
 risk_tier: 3
 mode: doc
-lifecycle_state: active
-worktree: doc-drift-fix-002
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge doc-drift-fix-002 at 7fe88b140effc14b036660de1d809d2ede3ccbd0'
 created_at: '2026-09-07T23:54:04.544Z'
-updated_at: '2026-09-07T23:54:14.208Z'
+updated_at: '2026-09-08T00:30:39.809Z'
 created_by_session: 'e33f5221-a961-4418-9632-37ab8ab02449'
 blast_radius:
   modules:
