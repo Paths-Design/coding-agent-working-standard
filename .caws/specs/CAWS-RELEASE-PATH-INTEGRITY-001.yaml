@@ -88,3 +88,7 @@ evidence:
     status: pass
     evidence_ref: "release-path-integrity.test.js: executes the real failure() step vs shimmed gh across 4 states — marker present (no delete), absent (delete), already-absent (tolerated), surviving (exit 1 + repair). Marker write proven by node:test."
     recorded_at: "2026-09-08T22:43:28.139Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "mutation-contract.test.js: empty targets + empty report, empty targets + populated report, and absent targets key all fail; passing surface still PASSes. Negative control: removing the guard fails 3."
+    recorded_at: "2026-09-08T22:43:28.604Z"
