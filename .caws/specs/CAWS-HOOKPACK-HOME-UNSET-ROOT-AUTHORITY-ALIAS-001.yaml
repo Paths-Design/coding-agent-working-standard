@@ -56,3 +56,8 @@ non_functional:
 contracts:
   - name: 'hook-guard-home-authority-safety'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Hostile control (bats): 'scope-guard.sh does NOT admit a foreign absolute path via the home-vendor-dir allow-prefix when HOME is unset' -- reverting scope-guard.sh reproduced the bug exactly (Edit to /.claude/pwned-outside-repo.sh with HOME unset succeeded/exit 0 instead of exit 2); fixed code refuses with exit 2 'DIFFERENT repository'."
+    recorded_at: "2026-09-08T03:57:09.808Z"
