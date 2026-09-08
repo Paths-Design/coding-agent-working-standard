@@ -33,8 +33,7 @@ out/
 # =============
 coverage/
 reports/
-.stryker-tmp/
-.stryker-shell-tmp/
+.stryker*-tmp/
 .nyc_output/
 *.lcov
 *.clover
