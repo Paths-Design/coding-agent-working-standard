@@ -1,0 +1,48 @@
+id: CAWS-HOOKPACK-UNGUARDED-HOME-UNBOUND-VARIABLE-001
+title: 'Guard every bare $HOME dereference in shared hook-pack scripts under set -u'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-08T02:19:45.610Z'
+updated_at: '2026-09-08T02:19:45.610Z'
+created_by_session: '96a9b85d-e209-45ad-9efb-d8522a340f79'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/templates/hook-packs/shared'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/protected-paths.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/scope-guard.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/plan-transcript-finalize.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/plan-transcript-snapshot.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/session-log.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/runtime-paths.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/audit.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/agent-surface.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/reprieve.sh'
+    - 'packages/caws-cli/tests/hooks/bats/home-unset-guard-robustness.bats'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+  out: []
+invariants:
+  - 'No shared hook-pack script may dereference $HOME without a :- default under set -u'
+acceptance:
+  - id: A1
+    given: 'any shared hook-pack script that references $HOME under set -euo pipefail (protected-paths, scope-guard, plan-transcript-finalize, plan-transcript-snapshot, session-log, runtime-paths, block-dangerous, audit, and the agent-surface/reprieve libs)'
+    when: 'the script runs in an environment with HOME unset (env -i)'
+    then: 'it degrades gracefully instead of crashing with ''HOME: unbound variable'''
+  - id: A2
+    given: 'the pre-existing kimi-surface.bats live-dogfood-escape regression test (''shim: a protected hook edit carrying kimi''s tool_input.path is blocked end-to-end''), which currently fails against the unfixed reprieve.sh/protected-paths.sh'
+    when: 'the full bats suite reruns after this fix with no changes to that test file'
+    then: 'it passes, proving the fix closes the real dispatch-path crash, not just a synthetic unit check'
+observability:
+  - 'the fixed scripts print no ''unbound variable'' errors even with HOME unset'
+rollback:
+  - 'revert to the prior ${HOME}/bare-$HOME references; no state migration involved, template-only change'
+non_functional: {}
+contracts:
+  - name: 'hook-guard-home-robustness'
+    type: behavior
