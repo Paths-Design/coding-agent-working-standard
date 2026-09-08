@@ -303,6 +303,10 @@ A reprieve requires `--reason`, `--approved-by`, and exactly one of `--for` or `
 **Cause**: Another agent session owns the worktree.
 **Fix**: Read their session log under `.caws/sessions/<sessionId>/`; only `--takeover` with user authorization.
 
+**Problem**: Under DSH, `caws claim` or a write guard refuses a worktree you just created — the owner id is your own session id in another form (bare `<uuid>` vs your `session-<uuid>`).
+**Cause**: The lane was stamped by a runtime whose resolver emitted a different session-id form than the guards resolve from `DSH_SESSION_ID` (CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001) — the rightful owner treated as foreign.
+**Fix**: Verify the owner uuid equals your `DSH_SESSION_ID` minus the `session-` prefix, then reclaim your own lane with `caws claim --takeover` from inside the worktree — it restamps the owner through the current resolver and writes the `prior_owners` audit. A genuinely foreign owner still requires explicit user authorization.
+
 **Problem**: A gate keeps blocking and you want to bypass it.
 **Cause**: Hand-editing `change_budget` will be rejected by CI; the right escape is a waiver.
 **Fix**: `caws waiver create` with reason, approver, and expiry.
