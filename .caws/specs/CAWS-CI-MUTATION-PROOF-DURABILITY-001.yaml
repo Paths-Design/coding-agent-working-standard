@@ -76,3 +76,8 @@ evidence:
     evidence_ref: "npm run mutation:validate: 144 current kernel/store/shell source files classified exactly once; 18 targets; missing and duplicate inventory controls pass"
     recorded_at: "2026-09-08T14:37:37.916Z"
     commit_sha: d059fc451e6233a2f46c8ff8330a3586aa463088
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "https://github.com/Paths-Design/coding-agent-working-standard/actions/runs/34238933557: all three fresh-checkout Mutation Harness Integrity jobs passed baseline tests and nonzero discovery"
+    recorded_at: "2026-09-08T14:37:38.693Z"
+    commit_sha: d059fc451e6233a2f46c8ff8330a3586aa463088
