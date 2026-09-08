@@ -55,7 +55,8 @@
  */
 
 import { execSync, spawnSync } from 'child_process';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, mkdtempSync, writeFileSync, rmSync } from 'fs';
+import { tmpdir } from 'node:os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -86,7 +87,23 @@ const REFUSED_TAG_PREFIXES = [
 // Bare v* (no package prefix). Refused with a clear pointer to the new convention.
 const LEGACY_BARE_V_REGEX = /^v\d+\.\d+\.\d+([-+].*)?$/;
 
-const SEMVER_REGEX = /^\d+\.\d+\.\d+([-+].*)?$/;
+const NUMERIC = '(?:0|[1-9][0-9]*)';
+const PRERELEASE_ID = `(?:${NUMERIC}|[0-9]*[A-Za-z-][0-9A-Za-z-]*)`;
+const SEMVER_REGEX = new RegExp(`^${NUMERIC}\\.${NUMERIC}\\.${NUMERIC}(?:-${PRERELEASE_ID}(?:\\.${PRERELEASE_ID})*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$`);
+
+function releaseChannel(version) {
+  if (!SEMVER_REGEX.test(version)) throw new Error(`Invalid release version: ${version}`);
+  return version.split('+')[0].includes('-') ? 'next' : 'latest';
+}
+
+export function publicationArgs(version) {
+  return ['publish', '--access', 'public', '--provenance', '--tag', releaseChannel(version)];
+}
+
+export function releaseArgs(tag, version, notesFile) {
+  return ['release', 'create', tag, '--title', tag, '--notes-file', notesFile, '--verify-tag',
+    ...(releaseChannel(version) === 'next' ? ['--prerelease'] : [])];
+}
 
 // =============================================================================
 // Logging helpers — structured, single-line for CI log scraping.
@@ -119,7 +136,7 @@ function tagMatchesAnyReleaseTrigger(tag) {
   return RELEASE_TRIGGER_PREFIXES.some((prefix) => tag.startsWith(prefix));
 }
 
-function parseTag(tag) {
+export function parseTag(tag) {
   // Refused: bare v*
   if (LEGACY_BARE_V_REGEX.test(tag)) {
     return {
@@ -316,13 +333,17 @@ function createGitHubRelease(tag, version, changelogSection, isDryRun) {
     return { ok: false, reason: 'GITHUB_REPOSITORY env var not set; cannot create GitHub Release' };
   }
   const body = changelogSection || `Release ${version}`;
-  // Use gh release create. --notes uses the body verbatim. --verify-tag
+  // Use gh release create with exact notes bytes in a file. --verify-tag
   // ensures the tag exists (it should, but defense in depth).
-  const result = spawnSync(
-    'gh',
-    ['release', 'create', tag, '--title', tag, '--notes', body, '--verify-tag'],
-    { stdio: 'inherit' }
-  );
+  const notesDir = mkdtempSync(path.join(tmpdir(), 'caws-release-notes-'));
+  let result;
+  try {
+    const notesFile = path.join(notesDir, 'notes.md');
+    writeFileSync(notesFile, body);
+    result = spawnSync('gh', releaseArgs(tag, version, notesFile), { stdio: 'inherit' });
+  } finally {
+    rmSync(notesDir, { recursive: true, force: true });
+  }
   return {
     ok: result.status === 0,
     reason: result.status !== 0 ? `gh release create exited ${result.status}` : undefined,
@@ -461,7 +482,7 @@ function main() {
     const publishStep = runStep(
       'npm_publish',
       'npm',
-      ['publish', '--access', 'public', '--provenance'],
+      publicationArgs(version),
       {
         cwd: path.join(rootDir, pkg.pkgPath),
         // In OIDC mode inject NO token env: npm must see no configured
@@ -533,4 +554,4 @@ function main() {
   process.exit(0);
 }
 
-main();
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) main();
