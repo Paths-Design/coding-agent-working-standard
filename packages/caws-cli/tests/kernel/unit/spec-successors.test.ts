@@ -281,7 +281,14 @@ describe('successor resolver: existence oracle (A6, A7, A8, A17)', () => {
     },
   ];
 
-  const resolver = createSuccessorResolver(corpus);
+  let resolver: ReturnType<typeof createSuccessorResolver>;
+
+  beforeEach(() => {
+    // Construct inside a test lifecycle hook. Besides isolating state, this
+    // ensures an indexing mutation that throws is observed as a killed test,
+    // not as an invalid suite-load RuntimeError.
+    resolver = createSuccessorResolver(corpus);
+  });
 
   it.each([
     ['DRAFT-TARGET-01', 'draft'],
@@ -465,10 +472,14 @@ describe('successor resolver: existence oracle (A6, A7, A8, A17)', () => {
 });
 
 describe('close obligations: which references must resolve (A5, A6, A8, A17)', () => {
-  const resolver = createSuccessorResolver([
-    { id: 'AUTHORED-TARGET-01', lifecycle_state: 'active', archived: false },
-    { id: 'ABSORBER-01', lifecycle_state: 'active', archived: false },
-  ]);
+  let resolver: ReturnType<typeof createSuccessorResolver>;
+
+  beforeEach(() => {
+    resolver = createSuccessorResolver([
+      { id: 'AUTHORED-TARGET-01', lifecycle_state: 'active', archived: false },
+      { id: 'ABSORBER-01', lifecycle_state: 'active', archived: false },
+    ]);
+  });
 
   it('blocks close when a required target is unauthored', () => {
     const unresolved = findUnresolvedObligations(

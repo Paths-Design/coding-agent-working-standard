@@ -36,6 +36,22 @@ function plantTmp(dir, name, ageMs, ownerPid) {
   return { full, ownerPid };
 }
 
+function plantTmpAt(dir, name, mtimeMs) {
+  const full = path.join(dir, name);
+  fs.writeFileSync(full, 'partial');
+  const mtime = new Date(mtimeMs);
+  fs.utimesSync(full, mtime, mtime);
+  return full;
+}
+
+function freshlyLoadedList(target, now, opts) {
+  // Reload inside the active test so mutations to the module-level filename
+  // pattern are observable rather than escaping at suite-load time.
+  jest.resetModules();
+  const atomicWrite = require('../../dist/store/atomic-write');
+  return atomicWrite.listStrandedTmpSiblings(target, now, opts);
+}
+
 const DEAD_PID = 999999; // effectively never a live pid on test hosts
 
 describe('listStrandedTmpSiblings: the pattern is the boundary', () => {
@@ -77,6 +93,66 @@ describe('listStrandedTmpSiblings: the pattern is the boundary', () => {
       fs.writeFileSync(path.join(dir, 'lease.json.backup'), 'x');
       fs.writeFileSync(path.join(dir, 'lease.json.tmp.47057'), 'x'); // no counter
       expect(listStrandedTmpSiblings(path.join(dir, 'lease.json'))).toEqual([]);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('the exact pattern admits multi-digit pid/counter fields and rejects trailing growth', () => {
+    const dir = makeTempDir('caws-sweep-pattern-');
+    const now = Date.parse('2026-09-04T12:00:00.000Z');
+    try {
+      plantTmpAt(dir, 'lease-file.json.tmp.999999.12345', now - 10 * 60 * 1000);
+      plantTmpAt(dir, 'lease-file.json.tmp.999999.12345.extra', now - 10 * 60 * 1000);
+      plantTmpAt(dir, 'lease-file.json.tmp.not-a-pid.12345', now - 10 * 60 * 1000);
+      plantTmpAt(dir, 'lease-file.json.tmp.999999.not-a-counter', now - 10 * 60 * 1000);
+
+      const found = freshlyLoadedList(path.join(dir, 'lease-file.json'), now);
+
+      expect(found.map((entry) => path.basename(entry.path))).toEqual([
+        'lease-file.json.tmp.999999.12345',
+      ]);
+      expect(found[0]).toMatchObject({ ownerPid: 999999, ageMs: 10 * 60 * 1000 });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('soft-aged files distinguish a live owner, a dead owner, and invalid pid zero', () => {
+    const dir = makeTempDir('caws-sweep-owner-');
+    const now = Date.parse('2026-09-04T12:00:00.000Z');
+    try {
+      plantTmpAt(dir, `lease.json.tmp.${process.pid}.10`, now - 10 * 60 * 1000);
+      plantTmpAt(dir, 'lease.json.tmp.999999.11', now - 10 * 60 * 1000);
+      plantTmpAt(dir, 'lease.json.tmp.0.12', now - 10 * 60 * 1000);
+
+      const found = freshlyLoadedList(path.join(dir, 'lease.json'), now);
+
+      expect(found.map((entry) => entry.ownerPid).sort((a, b) => a - b)).toEqual([
+        0,
+        999999,
+      ]);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('default TTLs preserve both exact boundaries and do not sweep a two-minute dead owner', () => {
+    const dir = makeTempDir('caws-sweep-boundary-');
+    const now = Date.parse('2026-09-04T12:00:00.000Z');
+    try {
+      plantTmpAt(dir, 'lease.json.tmp.999999.20', now - 2 * 60 * 1000);
+      plantTmpAt(dir, 'lease.json.tmp.999999.21', now - 5 * 60 * 1000);
+      plantTmpAt(dir, `lease.json.tmp.${process.pid}.22`, now - 24 * 60 * 60 * 1000);
+
+      const found = freshlyLoadedList(path.join(dir, 'lease.json'), now);
+
+      expect(found.map((entry) => path.basename(entry.path)).sort()).toEqual(
+        [
+          'lease.json.tmp.999999.21',
+          `lease.json.tmp.${process.pid}.22`,
+        ].sort()
+      );
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

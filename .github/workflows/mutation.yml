@@ -1,42 +1,36 @@
 name: Mutation Gate
 
-# Mutation testing is the tier-1 proof that the test suite kills real mutants
-# (not just passes). It is deliberately OFF the per-PR critical path: the CLI
-# store run alone is ~22 minutes and the kernel run adds more, so gating every
-# PR on it would dominate review latency. Instead it runs:
+# Fast harness integrity runs on every PR. Full mutation runs nightly, on
+# workflow dispatch, or when a PR carries the run-mutation label. Targets,
+# dedicated tests, report paths, and per-file floors are owned by
+# packages/caws-cli/mutation-policy.json.
 #
-#   - nightly on a schedule (the standing floor enforcement on main),
-#   - on demand via the `run-mutation` PR label,
-#   - on demand via workflow_dispatch.
-#
-# Both the kernel and the CLI store are gated at thresholds.break = 80 — a
-# score below 80 FAILS the job. Stryker incremental mode caches per-file mutant
-# verdicts keyed on source+test byte hashes; actions/cache persists that file
-# across runs so a warm run only re-tests mutants whose covering bytes changed.
-#
-# Governed by CAWS-TEST-CI-WIRING-001.
+# Governed by CAWS-CI-MUTATION-PROOF-DURABILITY-001.
 
 on:
   schedule:
-    # 07:00 UTC nightly (after most US-day commits have landed on main).
     - cron: "0 7 * * *"
   workflow_dispatch: {}
   pull_request:
-    types: [labeled, synchronize]
+    types: [opened, reopened, synchronize, labeled]
     branches: [main]
 
 permissions:
   contents: read
 
+concurrency:
+  group: mutation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  kernel_mutation:
-    name: Kernel Mutation (break:80)
-    # Only run on PRs when the run-mutation label is present; always run on
-    # schedule and manual dispatch.
-    if: >-
-      github.event_name != 'pull_request' ||
-      contains(github.event.pull_request.labels.*.name, 'run-mutation')
+  harness_integrity:
+    name: Mutation Harness Integrity (${{ matrix.surface }})
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        surface: [kernel, store, shell]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -50,62 +44,26 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
-        run: npm run build
-
-      # Cache the Stryker incremental file keyed on the mutated kernel source +
-      # the kernel test suite. A change to either invalidates the relevant
-      # mutants only; an unchanged tree restores a full warm cache.
-      - name: Restore kernel mutation cache
-        uses: actions/cache@v4
-        with:
-          path: packages/caws-kernel/reports/stryker-incremental.json
-          key: stryker-kernel-${{ hashFiles('packages/caws-kernel/src/**/*.ts', 'packages/caws-kernel/tests/unit/**/*.test.ts') }}
-          restore-keys: |
-            stryker-kernel-
-
-      - name: Kernel mutation run
-        working-directory: packages/caws-kernel
-        run: npm run mutation:run
-
-  store_mutation:
-    name: CLI Store Mutation (break:80)
-    if: >-
-      github.event_name != 'pull_request' ||
-      contains(github.event.pull_request.labels.*.name, 'run-mutation')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
-      # mutation:run builds the CLI dist first (the store config mutates dist/).
-      - name: Restore store mutation cache
-        uses: actions/cache@v4
-        with:
-          path: packages/caws-cli/reports/stryker-incremental.json
-          key: stryker-store-${{ hashFiles('packages/caws-cli/src/store/**/*.ts', 'packages/caws-cli/tests/store/**/*.test.js') }}
-          restore-keys: |
-            stryker-store-
-
-      - name: Store mutation run
+      - name: Validate mutation source inventory
         working-directory: packages/caws-cli
-        run: npm run mutation:run
+        run: npm run mutation:validate
 
-  shell_mutation:
-    name: CLI Shell Mutation (break:80)
+      - name: Prove tests and mutant discovery
+        working-directory: packages/caws-cli
+        run: npm run mutation:dry-run -- --surface "${{ matrix.surface }}"
+
+  mutation:
+    name: Mutation (${{ matrix.surface }}, per-file floor)
+    needs: harness_integrity
     if: >-
       github.event_name != 'pull_request' ||
       contains(github.event.pull_request.labels.*.name, 'run-mutation')
     runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        surface: [kernel, store, shell]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -119,15 +77,28 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # mutation:run:shell builds the CLI dist first (the shell config mutates dist/).
-      - name: Restore shell mutation cache
+      - name: Restore mutation cache
         uses: actions/cache@v4
         with:
-          path: packages/caws-cli/reports/stryker-shell-incremental.json
-          key: stryker-shell-${{ hashFiles('packages/caws-cli/src/shell/**/*.ts', 'packages/caws-cli/tests/shell/**/*.test.js') }}
+          path: packages/caws-cli/reports/mutation-${{ matrix.surface }}/incremental.json
+          key: stryker-${{ matrix.surface }}-${{ hashFiles('packages/caws-cli/mutation-policy.json', 'packages/caws-cli/stryker*.conf.js', 'packages/caws-cli/scripts/stryker-config.cjs', 'packages/caws-cli/src/**', 'packages/caws-cli/tests/**') }}
           restore-keys: |
-            stryker-shell-
+            stryker-${{ matrix.surface }}-
 
-      - name: Shell mutation run
+      - name: Run mutation surface
         working-directory: packages/caws-cli
-        run: npm run mutation:run:shell
+        run: >-
+          npm run mutation:run:${{ matrix.surface }} --
+          --summary "$GITHUB_STEP_SUMMARY"
+          --sha "${{ github.sha }}"
+
+      - name: Retain mutation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-${{ matrix.surface }}-${{ github.sha }}
+          path: |
+            packages/caws-cli/reports/mutation-${{ matrix.surface }}/mutation-report.json
+            packages/caws-cli/reports/mutation-${{ matrix.surface }}/index.html
+          if-no-files-found: warn
+          retention-days: 30

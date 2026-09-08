@@ -62,6 +62,63 @@ function makeLive(caws, sessionId) {
 
 const sender = { kind: 'agent', id: 'sender-1', session_id: 'sender-1', platform: 'test' };
 
+test('poll and prune acquire the established message-ledger lock', () => {
+  const caws = cawsDir();
+  const openedLocks = [];
+  const realOpen = fs.openSync;
+  const openSpy = jest.spyOn(fs, 'openSync').mockImplementation((target, flags, ...rest) => {
+    if (flags === 'wx') openedLocks.push(String(target));
+    return realOpen.call(fs, target, flags, ...rest);
+  });
+  let polled;
+  let pruned;
+  try {
+    polled = pollMessage(caws, 'recip-1', { peek: true });
+    pruned = pruneMessages(caws, { status: 'delivered' });
+  } finally {
+    openSpy.mockRestore();
+  }
+
+  expect(polled.ok).toBe(true);
+  expect(pruned.ok).toBe(true);
+  expect(openedLocks).toEqual([
+    path.join(caws, 'messages.jsonl.lock'),
+    path.join(caws, 'messages.jsonl.lock'),
+  ]);
+});
+
+test('a lock held by an earlier CLI prevents poll and prune from mutating the ledger', () => {
+  const caws = cawsDir();
+  const sent = sendMessage(caws, {
+    actor: sender, to: 'recip-1', text: 'preserve during upgrade', requireLive: false,
+  });
+  expect(sent.ok).toBe(true);
+  const ledger = path.join(caws, 'messages.jsonl');
+  const original = fs.readFileSync(ledger);
+  const lock = path.join(caws, 'messages.jsonl.lock');
+  const held = JSON.stringify({ pid: process.pid, at: new Date().toISOString() });
+  fs.writeFileSync(lock, held, { flag: 'wx' });
+  try {
+    const results = [
+      pollMessage(caws, 'recip-1'),
+      pruneMessages(caws, { status: 'delivered', apply: true }),
+    ];
+    for (const result of results) {
+      expect(result.ok).toBe(false);
+      expect(result.errors[0]).toMatchObject({
+        rule: 'store.lifecycle.lock_contention', subject: lock,
+      });
+    }
+    expect(fs.readFileSync(ledger)).toEqual(original);
+    expect(fs.readFileSync(lock, 'utf8')).toBe(held);
+  } finally {
+    fs.unlinkSync(lock);
+  }
+  const delivered = pollMessage(caws, 'recip-1');
+  expect(delivered.ok).toBe(true);
+  expect(delivered.value.message.text).toBe('preserve during upgrade');
+});
+
 // ─── A1: round-trip + deliver-once ──────────────────────────────────────────
 
 test('A1: send then poll returns the exact text with sender attribution', () => {

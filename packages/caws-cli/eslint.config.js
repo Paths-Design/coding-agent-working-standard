@@ -22,7 +22,7 @@ const NODE_GLOBALS = {
 module.exports = [
   // Ignore patterns
   {
-    ignores: ['node_modules/**', 'dist/**', 'build/**', 'coverage/**', 'test-*/**', '**/.venv/**'],
+    ignores: ['node_modules/**', 'dist/**', 'build/**', 'coverage/**', '.stryker*-tmp/**', 'test-*/**', '**/.venv/**'],
   },
 
   // Base configuration (JS family). `eslint .` lints every file some block
