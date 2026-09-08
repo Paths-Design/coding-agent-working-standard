@@ -51,7 +51,7 @@ caws_install_pack_once() {
   git -C "$repo" config user.email 'test@caws.invalid'
   git -C "$repo" config commit.gpgsign false
   git -C "$repo" commit -q --allow-empty -m 'root commit'
-  ( cd "$repo" && CI=true NO_COLOR=1 node "$CLI_DIST_ENTRY" init --agent-surface claude-code >/dev/null 2>&1 )
+  ( cd "$repo" && CI=true NO_COLOR=1 HOME="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-home-XXXXXX")" node "$CLI_DIST_ENTRY" init --agent-surface claude-code >/dev/null 2>&1 )
   export CAWS_TEST_REPO="$repo"
   export CAWS_TEST_HOOKS_DIR="$repo/.caws/hooks"
 }
