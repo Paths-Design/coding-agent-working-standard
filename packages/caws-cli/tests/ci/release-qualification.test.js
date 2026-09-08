@@ -18,7 +18,7 @@ test('the tag publish job depends on qualification of the same checkout', () => 
   expect(upgrades.strategy.matrix.node).toEqual(['18', '20', '22']);
   const runs = upgrades.steps.map(step => step.run).filter(Boolean);
   expect(runs).toContain('node packages/caws-cli/scripts/runtime-upgrade-smoke.mjs --report qualification-report.json');
-  expect(qualification.jobs.tests.steps.map(step => step.run)).toContain('npm test -w @paths.design/caws-cli -- --maxWorkers=2');
+  expect(qualification.jobs.tests.steps.map(step => step.run)).toContain('npm test -w @paths.design/caws-cli -- --coverage --maxWorkers=2');
 });
 
 test('prerelease routing and fixture isolation contracts execute under Node', () => {
