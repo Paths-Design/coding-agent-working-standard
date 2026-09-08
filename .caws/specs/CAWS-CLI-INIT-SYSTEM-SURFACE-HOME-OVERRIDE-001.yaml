@@ -34,3 +34,8 @@ acceptance:
     then: 'all three suites still pass because their fixture setup is hermetic against real machine state'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "packages/caws-cli: npx jest tests/init/hook-install-layout.test.js tests/init/init-upgrade-retrofit.test.js tests/init/codex-instruction-merge.test.js -> 3 suites, 45 tests, all passed (previously failed on a real machine with adopted system runtime)"
+    recorded_at: "2026-09-08T00:51:03.277Z"
