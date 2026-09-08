@@ -35,3 +35,7 @@ evidence:
     status: pass
     evidence_ref: "packages/caws-cli: ../../node_modules/.bin/bats tests/hooks/bats/empty-handler-array-bash32.bats -> 5/5 passed on this machine's real bash 3.2.57 (environment sanity + positive control + 3 candidate tests)"
     recorded_at: "2026-09-08T01:56:03.473Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Verified non-vacuous: temporarily restored pre-8c237526 content of run-handlers.sh + post_tool_use.sh and reran the same bats file -> tests 3/4/5 failed with the exact original 'entries[@]: unbound variable' / 'HANDLERS[@]: unbound variable' crashes; restoring the fix made all 5 pass again"
+    recorded_at: "2026-09-08T01:56:03.990Z"
