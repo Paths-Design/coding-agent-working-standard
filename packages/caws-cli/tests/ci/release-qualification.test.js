@@ -8,7 +8,11 @@ const readWorkflow = name => yaml.load(fs.readFileSync(path.join(root, '.github/
 
 test('the tag publish job depends on qualification of the same checkout', () => {
   const release = readWorkflow('release.yml');
-  expect(release.jobs.release.needs).toBe('qualification');
+  // `needs` became a list when the mutation floor was added as a second
+  // blocking gate. Assert qualification is still required rather than pinning
+  // the arity, which would fail on any future gate. That the mutation gate is
+  // also present is owned by release-path-integrity.test.js.
+  expect(release.jobs.release.needs).toContain('qualification');
   expect(release.jobs.qualification.uses).toBe('./.github/workflows/release-qualification.yml');
   const qualification = readWorkflow('release-qualification.yml');
   expect(qualification.on).toHaveProperty('workflow_call');

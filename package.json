@@ -31,7 +31,7 @@
     "init": "node packages/caws-cli/dist/index.js init",
     "// Development utilities": "",
     "hooks:install": "chmod +x .git/hooks/pre-commit .git/hooks/pre-push",
-    "release": "semantic-release",
+    "// Releases are tag-driven; see docs/release-procedure.md. There is no release script.": "",
     "// CAWS-specific tools": "",
     "caws:validate": "caws doctor",
     "caws:verify": "exec bash scripts/verify.sh",

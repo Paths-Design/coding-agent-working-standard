@@ -76,7 +76,14 @@ function createStrykerConfig(surfaceId) {
       low: surface.threshold,
       break: null,
     },
-    tempDirName: `.stryker-${surfaceId}-tmp`,
+    // Salted per process. Two concurrent runs of the SAME surface (a retry
+    // racing a live job, or two local invocations) would otherwise share one
+    // sandbox directory, and `cleanTempDir: 'always'` means one run deletes
+    // the tree the other is executing from. The ignorePatterns glob above
+    // still matches the salted name. Report paths are deliberately NOT
+    // salted: they are the contract with assert-mutation-report.mjs and the
+    // CI artifact upload.
+    tempDirName: `.stryker-${surfaceId}-${process.pid}-tmp`,
     cleanTempDir: 'always',
     jest: {
       projectType: 'custom',
