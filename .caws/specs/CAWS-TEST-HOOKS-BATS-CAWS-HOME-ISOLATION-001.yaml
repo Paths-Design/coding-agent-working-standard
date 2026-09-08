@@ -2,10 +2,11 @@ id: CAWS-TEST-HOOKS-BATS-CAWS-HOME-ISOLATION-001
 title: 'Isolate bats hook-pack install tests from the real machine CAWS_HOME'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: bats-caws-home-isolation
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge bats-caws-home-isolation at 625e496d183cb720ff8eb35a68b03434d819d221'
 created_at: '2026-09-08T02:01:44.688Z'
-updated_at: '2026-09-08T02:01:59.687Z'
+updated_at: '2026-09-08T02:15:27.347Z'
 created_by_session: '96a9b85d-e209-45ad-9efb-d8522a340f79'
 blast_radius:
   modules:
