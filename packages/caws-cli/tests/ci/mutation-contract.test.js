@@ -376,3 +376,48 @@ describe('active workflow topology contract', () => {
     expect(cawsGate.jobs).toHaveProperty('caws-gate');
   });
 });
+
+describe('a surface that verifies nothing cannot report success', () => {
+  test('no declared targets fails even when the report is also empty', () => {
+    // The dangerous shape: with no targets the per-file loop never runs, so
+    // no errors accumulate and the script previously exited 0 having printed
+    // neither a PASS nor a FAIL. An empty report is what makes it silent —
+    // any file present would have been caught as "undeclared".
+    const result = runReportAssertion(mutationPolicy([]), report({}));
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('declares no targets');
+  });
+
+  test('no declared targets fails even when a report has passing files', () => {
+    const result = runReportAssertion(
+      mutationPolicy([]),
+      report({ 'dist/a.js': ['Killed', 'Killed'] })
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('declares no targets');
+  });
+
+  test('a surface whose targets key is absent entirely fails', () => {
+    const policy = mutationPolicy([]);
+    delete policy.surfaces.fixture.targets;
+
+    const result = runReportAssertion(policy, report({}));
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('declares no targets');
+  });
+
+  test('a passing surface still reports a per-file verdict', () => {
+    // Negative control for the three above: the guard must not have made the
+    // ordinary passing path fail.
+    const result = runReportAssertion(
+      mutationPolicy(['dist/a.js']),
+      report({ 'dist/a.js': ['Killed', 'Killed', 'Killed', 'Killed', 'Survived'] })
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('PASS dist/a.js 80.00%');
+  });
+});

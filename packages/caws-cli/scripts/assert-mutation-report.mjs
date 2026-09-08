@@ -90,6 +90,18 @@ export function assertMutationReport({ policy, surfaceId, report }) {
   if (!report.files || typeof report.files !== 'object') {
     return { errors: ['mutation report has no files object'], verdicts };
   }
+  // A surface with no targets verifies nothing. Without this the target loop
+  // below never runs, no errors accumulate, and main() exits 0 having printed
+  // neither a PASS nor a FAIL — success reported for work never done, which is
+  // the failure class this gate exists to prevent. validate-mutation-policy.mjs
+  // also rejects empty targets, but this function is exported and the script is
+  // independently CLI-invokable, so the guarantee belongs here too.
+  if (!Array.isArray(surface.targets) || surface.targets.length === 0) {
+    return {
+      errors: [`mutation surface ${surfaceId} declares no targets; nothing would be verified`],
+      verdicts,
+    };
+  }
 
   if (Array.isArray(surface.tests)) {
     if (!report.testFiles || typeof report.testFiles !== 'object') {
@@ -113,7 +125,7 @@ export function assertMutationReport({ policy, surfaceId, report }) {
   );
   const expected = new Set();
 
-  for (const target of surface.targets || []) {
+  for (const target of surface.targets) {
     const file = (target.reportPath || target.source).replace(/^\.\//, '');
     expected.add(file);
     const result = reportFiles.get(file);
@@ -164,6 +176,15 @@ export function assertMutationReport({ policy, surfaceId, report }) {
 
   for (const file of reportFiles.keys()) {
     if (!expected.has(file)) errors.push(`undeclared file in mutation report: ${file}`);
+  }
+
+  // Every declared target must have produced a verdict. This is the structural
+  // counterpart to the targets check above: it fails if a future edit adds a
+  // loop path that skips a target instead of recording one.
+  if (verdicts.length !== surface.targets.length) {
+    errors.push(
+      `expected one verdict per declared target (${surface.targets.length}), got ${verdicts.length}`
+    );
   }
 
   return { errors, verdicts };
