@@ -1,0 +1,38 @@
+id: CAWS-BATS-PLATFORM-HOME-ISOLATION-001
+title: 'Separate macOS Bats controls and isolate fixture homes'
+risk_tier: 3
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-08T05:19:48.169Z'
+updated_at: '2026-09-08T05:19:48.169Z'
+created_by_session: '01a07f67-9951-7a20-bd4a-13838d58093c'
+blast_radius:
+  modules:
+    - 'caws-cli/tests/hooks'
+    - 'pr-checks'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - '.github/workflows/pr-checks.yml'
+    - 'packages/caws-cli/package.json'
+    - 'packages/caws-cli/tests/hooks/'
+  out: []
+invariants:
+  - 'General Bats selection is portable; the macOS job retains mandatory Bash 3.2 instrument controls.'
+  - 'Hook fixtures never consult inherited user or machine homes and reclaim their own temporary homes.'
+acceptance:
+  - id: A1
+    given: 'general and macOS Bats selections'
+    when: 'CI selects tests'
+    then: 'Bash 3.2 instrument controls are excluded from the general suite and remain required in the macOS suite'
+  - id: A2
+    given: 'the macOS regression suite'
+    when: 'it executes under real Bash 3.2 and a modern Bash control'
+    then: 'Bash 3.2 passes while modern Bash fails the instrument controls'
+  - id: A3
+    given: 'contradictory or malformed inherited HOME and CAWS_HOME settings'
+    when: 'shared, Kimi and Qwen fixtures install'
+    then: 'fixtures install their intended local hook packs using isolated homes and remove those homes in teardown'
+non_functional: {}
+contracts: []
