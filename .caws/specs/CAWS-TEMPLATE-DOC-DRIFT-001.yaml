@@ -2,9 +2,10 @@ id: CAWS-TEMPLATE-DOC-DRIFT-001
 title: 'Fix drift in shipped project templates (templates/CLAUDE.md, agents.md): stale kernel path + incomplete command lists'
 risk_tier: 3
 mode: doc
-lifecycle_state: draft
+lifecycle_state: active
+worktree: template-doc-drift-001
 created_at: '2026-09-08T00:48:59.221Z'
-updated_at: '2026-09-08T00:48:59.221Z'
+updated_at: '2026-09-08T00:49:21.254Z'
 created_by_session: 'e33f5221-a961-4418-9632-37ab8ab02449'
 blast_radius:
   modules:
