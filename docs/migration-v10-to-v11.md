@@ -94,13 +94,13 @@ If the long-term decision is to rebuild any of these surfaces in v11.x, that wor
 
 | v10.2 command | Status in v11.1 | Workaround |
 |---|---|---|
-| `caws session` | Deferred to v11.3+ | Multi-agent session capsules are deferred; per-worktree binding remains the v11 isolation primitive |
+| `caws session` | `prune`/`pickup` **shipped in v11.1.x**; the full lifecycle (`start`/`checkpoint`/`end`/`list`/`show`/`briefing`) is deferred to v11.3+ | Multi-agent session capsules (the full lifecycle) are deferred; per-worktree binding remains the v11 isolation primitive |
 | `caws parallel setup` | Deferred to v11.3+ | Loop `caws worktree create <name> --spec <id>` per spec; there is no orchestration command in v11.1 |
-| `caws worktree prune` / `caws worktree reconcile` | Planned for v11.2 | `caws status` shows worktree state; manual cleanup via `git worktree` directly. Note: `caws worktree repair-sparse` **shipped in v11.1** — only `prune` and `reconcile` remain deferred. |
+| `caws worktree reconcile` | Planned for v11.2 | `caws status` shows worktree state; manual cleanup via `git worktree` directly. Note: `caws worktree prune` and `repair-sparse` **both shipped in v11.1** — only `reconcile` remains deferred. |
 
-> **Note:** The full `agents` group (`register/heartbeat/stop/list/show/prune`) and the full `events` group (`migrate/rotate/verify-archive`) are **shipped in v11.1.x**, not deferred — they were earlier planned for v11.2 but landed ahead of schedule. See the "Shipped ahead of plan (v11.1.x)" section below. The broader v11.2 multi-agent line (lease-backed ownership, the `claim_taken_over.v1` event) is still forthcoming.
+> **Note:** The full `agents` group (`register/heartbeat/stop/list/show/prune`), the full `events` group (`migrate/rotate/verify-archive`), `caws worktree prune`, `caws claim --spec` (bridge claims), and the `claim_taken_over.v1` event are all **shipped in v11.1.x**, not deferred — they were earlier planned for v11.2 but landed ahead of schedule. See the "Shipped ahead of plan (v11.1.x)" section below. Only `caws worktree reconcile` remains genuinely unplanned/unshipped in the v11.2 line.
 
-**Multi-agent operators**: if you rely daily on `caws session` or `caws parallel`, defer the upgrade until those land (v11.3+). The full `agents` group already ships in v11.1.x, so it is not a reason to defer. Single-agent users are unaffected.
+**Multi-agent operators**: if you rely daily on the full `caws session` lifecycle (`start`/`checkpoint`/`end`) or `caws parallel`, defer the upgrade until those land (v11.3+). The full `agents` group, `session prune`/`pickup`, `worktree prune`, and bridge claims (`claim --spec`) already ship in v11.1.x, so none of those are a reason to defer. Single-agent users are unaffected.
 
 ### Shipped ahead of plan (v11.1.x)
 
@@ -115,7 +115,16 @@ The following surfaces were planned for v11.2 but shipped in v11.1.x. They are *
 | `caws specs migrate` | — | v10→v11 spec YAML migrator (CAWS-MIGRATE-V10-SPECS-001). |
 | `caws worktree migrate-registry` | — | Converts v10.2 legacy-envelope `.caws/worktrees.json` to v11 flat-map shape. Idempotent. |
 | `caws worktree repair-sparse` | — | Restores the `.caws/specs` sparse-checkout invariant on a linked worktree. Non-destructive. |
+| `caws worktree repair` | — | Governed half-state executor: prunes ghost registry entries and clears dead spec→worktree bindings for the unambiguous classes (PRUNE-REPAIR-WORKTREE-001). |
+| `caws worktree prune` / `cleanup-plan` | — | Dry-run-by-default doctor-evidence prune and physical worktree cleanup planning/apply. `reconcile` is the one item in this line still unshipped. |
+| `caws worktree ensure` | — | Idempotent create-or-admit affordance (WORKTREE-ENSURE-AFFORDANCE-001): absent lanes create via the full path, existing same-spec untouched lanes admit with no new events. |
+| `caws worktree review` | — | Read-only pre-merge gate (WORKTREE-REVIEW-SURFACE-001): commit list, per-commit scope-provenance table, lane diffstat, bound spec's AC evidence, owner's lease work_state. Never mutates. |
 | `caws claim --paths` | — | Declares working-tree ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001). |
+| `caws claim --spec` / `--release` | — | Bridge claims (AUTH-BINDING-BRIDGE-001): session↔spec authority binding for non-worktree contexts. Same `scope.in` admission surface as a worktree binding; emits `claim_bridged.v1` / `bridge_claim_taken_over.v1`. |
+| `caws claim --takeover` | — | Emits `claim_taken_over.v1` in the same transaction as the ownership patch — the audit gap this guide once described as forthcoming is closed. |
+| `caws session prune` / `pickup` | — | Dry-run-default retention for `.caws/sessions/` turn logs (SESSION-LOG-RETENTION-SCOPE-001), and a `manual_pickup` event when one session continues another's paused work (MULTI-AGENT-HANDOFF-EVENT-001). The full session lifecycle remains deferred to v11.3+. |
+| `caws working-tree check` / `ack` | — | Working-tree provenance advisory (WORKING-TREE-PROVENANCE-GUARD-001): uncommitted-overlap detection against another session's declared ownership. Visibility only. |
+| `caws handoff export` / `import` | — | Portable handoff briefs for session-to-session continuity (HANDOFF-EXPORT-IMPORT-001). Provenance only. |
 
 ---
 
@@ -498,10 +507,10 @@ The following are tracked in `.caws/specs/` and may close additional gaps as the
 - `CAWS-CLI-BIN-EXECUTABLE-BIT-001` — workspace-install `chmod +x` defect (not user-facing in normal `npm install -g` flow).
 - `DANGER-LATCH-CALIBRATION-001` — calibrates the Claude Code hook pack's command classifier (only relevant if you adopted the hook pack via `caws init --agent-surface claude-code`).
 - `WORKTREE-MERGE-A2-FAULT-INJECTION-001` — adds an automated regression for the merge → spec-close honest-failure path (closes a manual-proof gap, not a behavior gap).
-- `PRUNE-REPAIR-WORKTREE-001` — restores `caws worktree prune/reconcile` ergonomics on the v11 substrate. Note: `caws worktree repair-sparse` **already shipped in v11.1**; only `prune` and `reconcile` remain open under this spec.
-- `AUTH-BINDING-BRIDGE-001` — agent-session binding for non-worktree contexts. Note: `caws claim --paths` **already shipped in v11.1** (SESSION-OWNERSHIP-METADATA-001), partially closing this gap. The remaining open item is `caws claim --spec <id>` bridge claims for non-worktree contexts, deferred to v11.2.
+- `PRUNE-REPAIR-WORKTREE-001` — **closed.** Restored `caws worktree repair` (the unambiguous-half-state executor) and `caws worktree prune`/`repair-sparse`, both shipped in v11.1. `caws worktree reconcile` was descoped from this spec's closure and has no currently active tracking spec — it remains the one genuinely unshipped item in this line.
+- `AUTH-BINDING-BRIDGE-001` — **closed.** Bridge claims (`caws claim --spec <id>` / `--release`) shipped in v11.1, alongside `caws claim --paths` (SESSION-OWNERSHIP-METADATA-001). Session↔spec authority for non-worktree contexts is fully live, not deferred.
 
-The full `agents` group (`register/heartbeat/stop/list/show/prune`) and full `events` group (`migrate/rotate/verify-archive`) shipped ahead of plan in v11.1.x. The remaining v11.2 surface (planned, not shipped) will add `caws claim --spec`, worktree lifecycle helpers (`prune/reconcile`), and the `claim_taken_over.v1` event. v11.3+ scope includes the deferred `caws session` and `caws parallel` surfaces.
+The full `agents` group (`register/heartbeat/stop/list/show/prune`), full `events` group (`migrate/rotate/verify-archive`), `caws worktree prune`, `caws claim --spec` bridge claims, and the `claim_taken_over.v1` event all shipped ahead of plan in v11.1.x. Only `caws worktree reconcile` remains genuinely unshipped in the v11.2 line (no active tracking spec as of this writing). v11.3+ scope includes the deferred `caws session` lifecycle (`start`/`checkpoint`/`end`) and `caws parallel` surfaces.
 
 The full `agents` group is no longer a reason to wait — it ships in v11.1.x. If `caws session` or `caws parallel` is the blocker for your team, that is the v11.3+ line to wait for.
 
