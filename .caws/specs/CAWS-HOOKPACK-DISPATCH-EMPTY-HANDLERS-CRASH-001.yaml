@@ -2,9 +2,11 @@ id: CAWS-HOOKPACK-DISPATCH-EMPTY-HANDLERS-CRASH-001
 title: 'Fix bash-3.2 empty-handler-array crash in shared hook dispatch scripts'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Bash 3.2 empty-handler-array crash fixed in shared/codex/kimi-code run-handlers.sh + all 5 shared dispatch scripts; SHARED/CODEX/KIMI_CODE pack versions bumped and fingerprints re-recorded. Confirmed via direct bash 3.2 repro and full jest suite (previously-failing machine-adoption.test.js and pack-fingerprint.test.js now pass; no new regressions).'
 created_at: '2026-09-08T00:01:40.851Z'
-updated_at: '2026-09-08T00:34:55.283Z'
+updated_at: '2026-09-08T00:35:23.261Z'
 created_by_session: '96a9b85d-e209-45ad-9efb-d8522a340f79'
 blast_radius:
   modules:
