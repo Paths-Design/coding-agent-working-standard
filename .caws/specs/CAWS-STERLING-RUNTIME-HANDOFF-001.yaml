@@ -29,3 +29,10 @@ acceptance:
     then: 'it has source-checked migration commands, customization reconciliation steps, native proof criteria and recovery boundaries'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: Authorized install activated d2ee8afcb862a037352863f7c47d877b31223b1c21c2e94bd97cb461e2654814; SHA256 manifest and all 91 payloads independently verified; repeated install preview changed=false; Codex and Claude configure previews unchanged
+    recorded_at: "2026-09-08T06:07:50.802Z"
+    command: caws init adapters install --plan --json
+    exit_code: 0
