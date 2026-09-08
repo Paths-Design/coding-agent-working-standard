@@ -176,6 +176,12 @@ export interface InitCommandOptions {
   /** Migrate direct canonical projects together; never recurse into worktrees. */
   readonly projectsRoot?: string;
   readonly nativeConfigTarget?: string;
+  /** Override for the machine-runtime home consulted by systemSurfaceEnabled
+   *  (default: CAWS_HOME env var, else ~/.caws). Callers that invoke
+   *  runInitCommand in-process (not via a spawned CLI subprocess, where the
+   *  CAWS_HOME env var already suffices) use this to sandbox against a
+   *  developer/agent machine that has genuinely adopted the system runtime. */
+  readonly home?: string;
 }
 
 function chooseSurface(
@@ -877,7 +883,7 @@ function runInitPlan(
 
   const detection = detectAgentHarness(repoRoot);
   const chosen = chooseSurface(opts.agentSurface, detection);
-  const system = systemSurfaceEnabled(chosen.surface);
+  const system = systemSurfaceEnabled(chosen.surface, opts.home);
   const hookPlan = planHookPackStep(repoRoot, system ? 'none' : chosen.surface, opts);
   const resolution =
     chosen.surface && chosen.surface !== 'none'
@@ -1187,7 +1193,7 @@ export function runInitCommand(opts: InitCommandOptions = {}): number {
   const detection = detectAgentHarness(repoRoot);
   const chosen = chooseSurface(opts.agentSurface, detection);
   let system: boolean;
-  try { system = systemSurfaceEnabled(chosen.surface); }
+  try { system = systemSurfaceEnabled(chosen.surface, opts.home); }
   catch (error) { err(`caws init: ${(error as Error).message}`); return 1; }
 
   // Step 1: bootstrap canonical .caws/ state.

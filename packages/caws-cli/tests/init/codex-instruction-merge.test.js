@@ -34,11 +34,18 @@ function makeDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'caws-codex-instructions-'));
 }
 
+// CAWS-CLI-INIT-SYSTEM-SURFACE-HOME-OVERRIDE-001: runInitCommand consults
+// systemSurfaceEnabled against this home. Without an isolated one, a
+// developer/agent machine that has genuinely run `caws init adapters
+// install` for codex makes systemSurfaceEnabled true here, so the CLI
+// correctly skips installing the project-local codex pack -- a false test
+// failure, not a product bug. Each call gets its own fresh, unadopted home.
 function runInit(root, opts = {}) {
   const out = [];
   const err = [];
   const code = runInitCommand({
     cwd: root,
+    home: makeDir(),
     out: (line) => out.push(line),
     err: (line) => err.push(line),
     ...opts,
