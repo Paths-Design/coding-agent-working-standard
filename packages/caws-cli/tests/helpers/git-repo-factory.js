@@ -63,8 +63,13 @@ const templates = new Map();
 
 /** Hermetic git env for a repo. Pins HOME and both config scopes at the repo. */
 function hermeticEnv(repoDir) {
+  // Storage/config overrides can redirect even `git -C` into another repo.
+  // Keep unrelated process settings, but rebuild Git's environment explicitly.
+  const inherited = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_'))
+  );
   return {
-    ...process.env,
+    ...inherited,
     // Hermetic: do not read or write the developer's global/system git config,
     // and disable any global hooks/templates that would otherwise run.
     HOME: repoDir,
@@ -146,7 +151,35 @@ function makeTempRepo(opts = {}) {
   created.add(repoDir);
   // `force: true` so the mkdtemp-created destination is written into rather
   // than refused as already-existing.
-  fs.cpSync(template, repoDir, { recursive: true, force: true });
+  try {
+    fs.cpSync(template, repoDir, { recursive: true, force: true });
+  } catch (cause) {
+    // Capture observations before removing our partial destination. A bare
+    // ENOENT cannot distinguish template loss from destination interference.
+    // Preserve the failure; retrying would erase the evidence of an unsafe run.
+    const fixtureContext = {
+      pid: process.pid,
+      worker: WORKER,
+      node: process.version,
+      template,
+      destination: repoDir,
+      templateExisted: fs.existsSync(template),
+      destinationExisted: fs.existsSync(repoDir),
+      templateObjectsPresent: fs.existsSync(path.join(template, '.git/objects')),
+      destinationObjectsPresent: fs.existsSync(path.join(repoDir, '.git/objects')),
+    };
+    const failure = Object.assign(new Error(
+      `Git fixture copy failed: ${cause.message}; context=${JSON.stringify(fixtureContext)}`,
+      { cause }
+    ), { code: cause.code, fixtureContext });
+    try {
+      cleanupRepo(repoDir);
+    } catch (cleanupError) {
+      // Preserve the copy failure as primary; retain ownership for afterAll.
+      failure.cleanupError = cleanupError;
+    }
+    throw failure;
+  }
   return repoDir;
 }
 
