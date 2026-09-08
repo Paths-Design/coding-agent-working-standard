@@ -63,3 +63,10 @@ contracts:
   - name: 'release-qualification'
     type: contract-test
     path: 'packages/caws-cli/tests/ci/release-qualification.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "tmp/release-qualification-2026-09-08/platform-summary.json; native-verification.json: six packaged platform lanes and five native probes"
+    recorded_at: "2026-09-08T08:11:58.283Z"
+    artifact_path: tmp/release-qualification-2026-09-08/platform-summary.json
+    commit_sha: "712d0fc97b2cb0d616cafd8d6753c683304106f3"
