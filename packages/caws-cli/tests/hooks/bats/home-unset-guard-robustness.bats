@@ -204,6 +204,58 @@ teardown_file() {
   assert_output "0"
 }
 
+# CAWS-HOOKPACK-AGENT-SURFACE-MACHINE-RUNTIME-HOME-CONTROL-001: the code
+# invariant above proves the vulnerable pattern is gone, but not that the
+# machine-runtime user-home tier still functions -- that branch is only
+# entered under CAWS_MACHINE_RUNTIME=1, which none of the reachability tests
+# above exercise. Drive caws_source_lib through that branch directly.
+
+@test "HOSTILE: caws_source_lib's machine-runtime user tier is skipped (not root-probed) when HOME and CAWS_HOME are absent" {
+  # An OUTCOME-only assertion here is vacuous: both the buggy and fixed
+  # versions fall through to the adapter tier, because a real root-relative
+  # /surfaces/.../lib/probe.sh cannot exist without root (proven empirically
+  # by tracing the pre-fix code: it correctly falls through too, just via a
+  # root-path check we cannot make legitimately succeed OR fail on demand).
+  # The actual difference is CONTROL FLOW: the fixed version never
+  # constructs or tests a machine_user path when no home is known; the
+  # pre-fix version does (against a literal "/.caws/surfaces/..." target).
+  # Assert on the trace, which is what genuinely discriminates the two.
+  local adapter_dir="$CAWS_TEST_REPO/.fake-adapter-lib"
+  mkdir -p "$adapter_dir"
+  printf 'MARKER=adapter\n' > "$adapter_dir/probe.sh"
+  run env -i PATH="$PATH" CAWS_MACHINE_RUNTIME=1 CAWS_MACHINE_LIBRARIES='{}' \
+    CAWS_AGENT_SURFACE=claude-code CAWS_MACHINE_ADAPTER_LIB_DIR="$adapter_dir" \
+    CAWS_SHARED_LIB_DIR="$CAWS_TEST_HOOKS_DIR/lib" \
+    bash -xc "
+      source '$CAWS_TEST_HOOKS_DIR/lib/agent-surface.sh'
+      caws_source_lib probe.sh
+      printf 'MARKER=%s\n' \"\$MARKER\"
+    "
+  assert_success
+  assert_output --partial 'MARKER=adapter'
+  refute_output --partial '/.caws/surfaces/'
+  refute_output --partial "'/surfaces/"
+}
+
+@test "POSITIVE CONTROL: caws_source_lib's machine-runtime user tier still wins over the adapter fallback under a real HOME" {
+  local adapter_dir="$CAWS_TEST_REPO/.fake-adapter-lib2"
+  mkdir -p "$adapter_dir"
+  printf 'MARKER=adapter\n' > "$adapter_dir/probe.sh"
+  local fake_home="$CAWS_TEST_REPO/.fake-home-machine-runtime"
+  mkdir -p "$fake_home/.caws/surfaces/claude-code/lib"
+  printf 'MARKER=user-override\n' > "$fake_home/.caws/surfaces/claude-code/lib/probe.sh"
+  run env -i PATH="$PATH" HOME="$fake_home" CAWS_MACHINE_RUNTIME=1 CAWS_MACHINE_LIBRARIES='{}' \
+    CAWS_AGENT_SURFACE=claude-code CAWS_MACHINE_ADAPTER_LIB_DIR="$adapter_dir" \
+    CAWS_SHARED_LIB_DIR="$CAWS_TEST_HOOKS_DIR/lib" \
+    bash -c "
+      source '$CAWS_TEST_HOOKS_DIR/lib/agent-surface.sh'
+      caws_source_lib probe.sh
+      printf 'MARKER=%s\n' \"\$MARKER\"
+    "
+  assert_success
+  assert_output --partial 'MARKER=user-override'
+}
+
 @test "audit.sh: the CWD-recovery fallback line survives HOME unset" {
   # audit.sh's HOME reference lives on the CWD-resilience recovery line,
   # which only runs when `pwd` itself fails -- reproducing a truly gone CWD
