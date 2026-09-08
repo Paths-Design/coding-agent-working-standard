@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: release-hardening
 created_at: '2026-09-08T15:22:41.118Z'
-updated_at: '2026-09-08T15:23:05.912Z'
+updated_at: '2026-09-08T15:47:43.567Z'
 created_by_session: '01a07f67-9951-7a20-bd4a-13838d58093c'
 blast_radius:
   modules:
@@ -25,10 +25,10 @@ scope:
     - 'packages/caws-cli/tests/ci'
     - '.github/workflows/pr-checks.yml'
     - '.github/workflows/release-qualification.yml'
-    - 'scripts/audit-dependencies.mjs'
-    - 'scripts/audit-dependencies.test.mjs'
     - 'docs/release-procedure.md'
   out: []
+  support:
+    - tmp/release-hardening-2026-09-08
 invariants:
   - 'Dependency and coverage failures must fail CI rather than become successful warnings.'
   - 'Test fixture cleanup may remove only resources owned by its invocation and must not race another test run.'
