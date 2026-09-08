@@ -39,3 +39,8 @@ contracts:
   - name: 'release-path-integrity'
     type: contract-test
     path: 'packages/caws-cli/tests/ci/release-path-integrity.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "release.yml gains a standalone 'rollback' job: needs [qualification, mutation, release], if failure() && needs.release.outputs.script_ran != 'true', permissions contents: write. A skipped release job yields '' which deletes. Pinned by release-path-integrity.test.js; actionlint exit 0."
+    recorded_at: "2026-09-08T23:25:52.866Z"
