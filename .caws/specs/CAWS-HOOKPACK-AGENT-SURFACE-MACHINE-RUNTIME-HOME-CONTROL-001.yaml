@@ -34,3 +34,7 @@ evidence:
     status: pass
     evidence_ref: "bats: 'HOSTILE: caws_source_lib's machine-runtime user tier is skipped (not root-probed) when HOME and CAWS_HOME are absent' -- outcome alone is vacuous (both buggy/fixed fall through to adapter since a real root path can't be created without root), so the test asserts on the bash -x TRACE; reverting agent-surface.sh to 3f41fbed reproduced the trace line 'local _machine_user=/.caws/surfaces/claude-code/lib/probe.sh' and 'not ok'; fixed code never constructs it."
     recorded_at: "2026-09-08T04:46:02.881Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "bats: 'POSITIVE CONTROL: caws_source_lib's machine-runtime user tier still wins over the adapter fallback under a real HOME' passes against both the reverted and fixed agent-surface.sh (expected -- the bug was specific to the unset-HOME path, so the real-HOME legitimate case was never broken). Full suites clean: npx jest -> 2531/2531 (/tmp/jest-machine-runtime.log); npx bats tests/hooks/bats -> 207/207 (/tmp/bats-machine-runtime.log)."
+    recorded_at: "2026-09-08T04:46:05.676Z"
