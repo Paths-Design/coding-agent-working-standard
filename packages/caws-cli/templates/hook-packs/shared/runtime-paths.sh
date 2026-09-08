@@ -30,9 +30,9 @@ ensure_hook_runtime_path() {
 
   local latest_node_bin=""
 
-  if [[ -d "$HOME/.nvm/versions/node" ]]; then
+  if [[ -d "${HOME:-}/.nvm/versions/node" ]]; then
     latest_node_bin=$(
-      find "$HOME/.nvm/versions/node" -maxdepth 4 -type f -name node 2>/dev/null \
+      find "${HOME:-}/.nvm/versions/node" -maxdepth 4 -type f -name node 2>/dev/null \
         | sed 's#/node$##' \
         | sort -V \
         | tail -n 1

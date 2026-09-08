@@ -161,7 +161,7 @@ classify_decision() {
   local result
   result=$(printf '%s' "$cmd" | python3 "$classifier" \
     --repo-root "${CAWS_PROJECT_DIR:-.}" \
-    --home "$HOME" \
+    --home "${HOME:-}" \
     --cwd "$(pwd)" 2>/dev/null) || {
     printf 'unavailable'
     return 0
@@ -290,7 +290,7 @@ REPO_ROOT="${CAWS_PROJECT_DIR:-.}"
 CLASSIFIER_STDERR=$(mktemp)
 RESULT=$(printf '%s' "$COMMAND" | python3 "$CLASSIFIER" \
   --repo-root "$REPO_ROOT" \
-  --home "$HOME" \
+  --home "${HOME:-}" \
   --cwd "$(pwd)" 2>"$CLASSIFIER_STDERR") || {
   DIAG=$(head -c 200 "$CLASSIFIER_STDERR" 2>/dev/null || true)
   rm -f "$CLASSIFIER_STDERR"

@@ -41,7 +41,7 @@ TRANSCRIPT_PATH="$HOOK_TRANSCRIPT_PATH"
 # This path uses CAWS_VENDOR_DIR for surface-neutrality.
 # For claude-code: ~/.claude/.pending-plan-snapshots (CAWS_VENDOR_DIR=.claude)
 # For other surfaces: ~/${CAWS_VENDOR_DIR}/.pending-plan-snapshots
-PENDING="$HOME/${CAWS_VENDOR_DIR}/.pending-plan-snapshots"
+PENDING="${HOME:-}/${CAWS_VENDOR_DIR}/.pending-plan-snapshots"
 [ -f "$PENDING" ] || exit 0
 
 while IFS= read -r snapshot; do
