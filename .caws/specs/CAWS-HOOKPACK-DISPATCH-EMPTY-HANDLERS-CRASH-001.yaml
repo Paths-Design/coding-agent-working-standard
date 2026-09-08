@@ -49,3 +49,7 @@ evidence:
     status: pass
     evidence_ref: "manual before/after repro: pre-fix post_tool_use.sh crashed 'HANDLERS[@]: unbound variable' exit 1 under bash 3.2.57 with all handlers disabled; post-fix exits 0. Confirmed via packages/caws-cli jest: npx jest tests/adapter/machine-adoption.test.js -t 'literal environment settings' -> 1 passed"
     recorded_at: "2026-09-08T00:35:09.275Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "packages/caws-cli: npx jest tests/init/pack-fingerprint.test.js -> 10 passed, 10 total (shared v60, codex v18, kimi-code v4 all recorded+matching live fingerprint)"
+    recorded_at: "2026-09-08T00:35:09.739Z"
