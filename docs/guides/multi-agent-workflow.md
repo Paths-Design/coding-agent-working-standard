@@ -172,7 +172,7 @@ Each feature gets its own `.caws/specs/<id>.yaml`. Don't share.
 Use narrow `scope.in` and explicit `scope.out` listing other agents' directories. Verify with `caws scope show <path>` before starting work.
 
 **Pitfall: `caws claim` refuses with a foreign-owner message.**
-Read the prior session's log under `tmp/<sessionId>/` first. `--takeover` only with explicit user authorization; it writes a durable `prior_owners` audit.
+Read the prior session's log under `.caws/sessions/<sessionId>/` first. `--takeover` only with explicit user authorization; it writes a durable `prior_owners` audit.
 
 **Pitfall: agents commit to the base branch.**
 Each agent must `cd` into its worktree before working. The pre-commit hook in this repo blocks direct base-branch commits while worktrees are active; only `merge(worktree):` and `wip(checkpoint):` formats are allowed.

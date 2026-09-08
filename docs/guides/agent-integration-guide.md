@@ -116,7 +116,7 @@ caws specs evidence <id> --ac A1 --status pass \
 ```
 
 **The `--data` payload is not free-form.** Each `--type` has a closed kernel
-schema (`packages/caws-kernel/src/schemas/events/*.v1.json`) with
+schema (`packages/caws-cli/src/kernel/schemas/events/*.v1.json`) with
 `additionalProperties: false`, so an invented field is rejected rather than
 stored. `status` is a closed enum (`pass | fail | unchecked | waived`), and
 `criterion_id` must match `^A\d+$` — matching the `id` of an entry in the spec's
@@ -171,7 +171,7 @@ When multiple agents work in parallel, each agent's runtime should:
 1. Create the worktree via `caws worktree create <name> --spec <id>` (writes binding + emits events).
 2. Have the agent run `caws claim` to surface ownership.
 3. Refuse to mutate state if `caws claim` exits non-zero with a foreign-claim message.
-4. Read `tmp/<sessionId>/` (the prior session's log) before deciding to take over.
+4. Read `.caws/sessions/<sessionId>/` (the prior session's log) before deciding to take over.
 5. Use `caws claim --takeover` only with explicit user authorization. Takeover writes a durable `prior_owners` audit on the worktree entry.
 6. Use `caws agents list` to inspect liveness of all registered sessions (observability only — not authority).
 
@@ -243,7 +243,7 @@ Run `caws scope show <path>` to see the decision. Likely the file is not in `sco
 Read the diagnostic output. If the violation is genuinely acceptable, open a waiver. Do not edit `policy.yaml` or the spec's `change_budget` to bypass.
 
 **`caws claim` refused with a foreign owner.**
-Another session id owns the worktree. Read their `tmp/<sessionId>/` log. Take over only with explicit user authorization.
+Another session id owns the worktree. Read their `.caws/sessions/<sessionId>/` log. Take over only with explicit user authorization.
 
 ## See also
 

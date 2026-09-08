@@ -15,7 +15,7 @@ updated: 2026-05-15
 
 CAWS does not ship its own runtime hooks. The integration patterns below describe how *agent runtimes* should call out to v11 CAWS commands during their own hook lifecycles.
 
-> **v11 posture (A1).** The current v11 line ships fourteen command groups: `init`, `doctor`, `scope`, `status`, `claim`, `gates`, `evidence`, `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message`. The hook examples that follow use the subset relevant to agent integration. References to removed v10 commands (`evaluate`, `iterate`, `validate`, `provenance`, `hooks install`, `scaffold`, `quality-gates`, `waivers` plural) have been replaced with v11 equivalents. Doctrine source: [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md).
+> **v11 posture (A1).** The current v11 line ships seventeen command groups: `init`, `doctor`, `scope`, `status`, `claim`, `gates`, `evidence`, `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message`, `session`, `working-tree`, `handoff`. The hook examples that follow use the subset relevant to agent integration. References to removed v10 commands (`evaluate`, `iterate`, `validate`, `provenance`, `hooks install`, `scaffold`, `quality-gates`, `waivers` plural) have been replaced with v11 equivalents. Doctrine source: [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md).
 
 ## Integration Patterns
 
@@ -421,8 +421,10 @@ code --list-extensions | grep caws
 # Git hooks only
 npm run hooks:install
 
-# Cursor hooks separate
-cp -r packages/caws-cli/templates/.cursor .
+# Cursor hooks authored by hand, ad hoc — no shared CAWS template ever
+# shipped one; each project wrote its own .cursor/hooks/*.sh from scratch
+mkdir -p .cursor/hooks
+$EDITOR .cursor/hooks/validate-spec.sh
 ```
 
 **After (v11)**: explicit per-tool integration calling the v11 surface

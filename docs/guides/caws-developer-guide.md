@@ -22,8 +22,13 @@ audience: consumer
 ## 1) Quick Start
 
 ```bash
-# create a spec for the change
-caws specs create FEAT-1234 --title "Apply coupon at checkout" --mode feature --risk-tier 1
+# create a spec for the change — tier 1 requires at least one --contract,
+# plus non-empty observability/rollback/non_functional.security
+caws specs create FEAT-1234 --title "Apply coupon at checkout" --mode feature --risk-tier 1 \
+  --contract "checkout-api:behavior" \
+  --observability "log: coupon application outcome" \
+  --rollback "disable coupon feature flag" \
+  --security "coupon codes are validated server-side"
 
 # edit spec & plan
 code .caws/specs/FEAT-1234.yaml docs/FEAT-1234/feature.plan.md docs/FEAT-1234/test-plan.md
