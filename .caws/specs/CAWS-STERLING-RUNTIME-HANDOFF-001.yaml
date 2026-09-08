@@ -2,10 +2,11 @@ id: CAWS-STERLING-RUNTIME-HANDOFF-001
 title: 'Document Sterling machine runtime migration handoff'
 risk_tier: 3
 mode: doc
-lifecycle_state: active
-worktree: sterling-runtime-guide
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Installed and integrity-verified machine runtime d2ee8afc; repeated install and native registration previews unchanged. Landed Sterling migration handoff guide with customization reconciliation, separate surface policies, native proof and recovery boundaries. Five gates pass; doctor has no errors and inherited warnings. Sterling itself was not migrated.'
 created_at: '2026-09-08T06:04:01.616Z'
-updated_at: '2026-09-08T06:04:17.145Z'
+updated_at: '2026-09-08T06:08:24.617Z'
 created_by_session: '01a07f67-9951-7a20-bd4a-13838d58093c'
 blast_radius:
   modules:
