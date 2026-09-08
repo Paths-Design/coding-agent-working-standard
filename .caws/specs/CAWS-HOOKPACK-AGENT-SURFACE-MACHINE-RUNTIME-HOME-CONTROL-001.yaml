@@ -2,9 +2,10 @@ id: CAWS-HOOKPACK-AGENT-SURFACE-MACHINE-RUNTIME-HOME-CONTROL-001
 title: 'Behavioral control for caws_source_lib''s machine-runtime home tier'
 risk_tier: 3
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: machine-runtime-home-control
 created_at: '2026-09-08T04:30:58.615Z'
-updated_at: '2026-09-08T04:30:58.615Z'
+updated_at: '2026-09-08T04:31:16.709Z'
 created_by_session: '96a9b85d-e209-45ad-9efb-d8522a340f79'
 blast_radius:
   modules:
