@@ -93,3 +93,9 @@ evidence:
     recorded_at: "2026-09-08T14:37:40.293Z"
     artifact_path: tmp/mutation-proof-2026-09-08/caws-mutation-diff-after.log
     commit_sha: d059fc451e6233a2f46c8ff8330a3586aa463088
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "https://github.com/Paths-Design/coding-agent-working-standard/actions/runs/34238962091: all three integrity and full mutation jobs pass; 18 per-file floors; retained JSON/HTML artifacts and CI step-summary invocations bind d059fc451e6233a2f46c8ff8330a3586aa463088; downloaded reports independently validated against source bytes"
+    recorded_at: "2026-09-08T14:51:56.561Z"
+    artifact_path: tmp/mutation-proof-2026-09-08/remote-report-index.json
+    commit_sha: d059fc451e6233a2f46c8ff8330a3586aa463088
