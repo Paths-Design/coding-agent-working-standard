@@ -1,6 +1,10 @@
 # Scoping: Agent-PID session correlation for canonical-checkout callers
 
-Status: **scoping draft** (not a spec yet). Author: sess_acb0b8de.
+Status: **implemented and closed** — see `CAWS-AGENT-PID-SESSION-CORRELATION-001`
+(`caws specs show CAWS-AGENT-PID-SESSION-CORRELATION-001 --archived`), which
+shipped the mechanism scoped below almost verbatim (`resolve-session.ts`'s
+`agent-pid-` record prefix / `agent_pid_record` source tier). This doc is kept
+as the historical scoping record. Author: sess_acb0b8de.
 Motivating defect: the canonical-checkout case that
 CAWS-RESOLVER-CWD-OWNERSHIP-CORROBORATION-001 (1aa014c3) deliberately did
 NOT close, and a latent silent-misattribution in the shell-side resolver.

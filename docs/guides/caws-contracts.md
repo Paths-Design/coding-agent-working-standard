@@ -63,24 +63,32 @@ CAWS risk tiers scale rigor to blast radius:
   tier.
 
 The gate is enforced by the kernel at spec-validation time
-(`packages/caws-kernel/src/spec/validate-semantics.ts`), so it applies whether you
+(`packages/caws-cli/src/kernel/spec/validate-semantics.ts`), so it applies whether you
 create via the CLI or hand-edit the YAML.
 
 ## How to satisfy or escape the requirement
 
-There is no `--contract` flag on `caws specs create`; contracts are added by editing
-the spec YAML. Because creation validates the planned YAML, you cannot create a
-tier-1/2 spec with an empty `contracts:` block in one step. Two paths:
+`caws specs create` has a `--contract <spec>` flag (repeatable): add a contract
+at creation time as `"name:type[:path]"`, where type is
+`api | schema | contract-test | behavior`. This satisfies a tier-1/2 spec in one
+step:
 
-1. **Bootstrap at tier 3, then raise the tier.** `caws specs create FOO-001 --mode
-   feature --risk-tier 3` succeeds with `contracts: []`. Open the spec, fill in
-   `scope.in`, add your `contracts:` entries, then change `risk_tier:` to 2 (or 1).
-   This is the path the create-rejection repair text points you to.
+```bash
+caws specs create FOO-001 --mode feature --risk-tier 2 \
+  --contract "core-api:behavior"
+```
+
+Two paths depending on the slice:
+
+1. **Pass `--contract` at creation** (above) — the direct path for a slice you
+   already know is tier 1/2.
 
 2. **Stay at tier 3 if the slice genuinely is low-risk.** A docs/test/small-fix
    slice does not need a contract; tier 3 is the right tier and `contracts: []` is
    correct. Don't inflate the tier to look rigorous — pick the tier that matches the
-   blast radius.
+   blast radius. If you bootstrapped at tier 3 and later discover the slice needs a
+   higher tier, edit the spec YAML directly to add `contracts:` entries and bump
+   `risk_tier:`.
 
 ## Where contracts are consumed
 

@@ -70,7 +70,7 @@ foreign ownership requires an explicitly authorized takeover.
 ```
 Worktree '<name>' is claimed by 8be65780-...:claude-code
    Last heartbeat: 2026-04-27T17:04:00Z (23 min ago)
-   Session log:    tmp/8be65780-72e0-4fc7-a989-4ebac148c18d
+   Session log:    .caws/sessions/8be65780-72e0-4fc7-a989-4ebac148c18d
                    15 turns, last turn 2026-04-27T17:26:49Z
    To proceed:     caws claim --takeover
 ```
@@ -181,31 +181,35 @@ This materializes a parallel `node_modules/` tree inside the worktree. Subsequen
 ## Filesystem layout
 
 ```
-project/                   # main working directory (e.g. branch: main)
+project/                            # main (canonical) working directory (e.g. branch: main)
 ├── .caws/
 │   ├── policy.yaml
 │   ├── specs/
 │   ├── waivers/
-│   ├── worktrees.json     # ownership registry (per-worktree session id, prior_owners audit)
-│   └── agents.json        # agent session registry (written by external session-log hook)
+│   ├── worktrees.json              # ownership registry (per-worktree session id, prior_owners audit)
+│   ├── agents.json                 # agent session registry (written by external session-log hook)
+│   └── worktrees/
+│       ├── proj-auth/              # agent 1's worktree (branch: agent-auth), created via
+│       │   ├── .caws/              #   `caws worktree create proj-auth --spec <id>`
+│       │   └── src/
+│       └── proj-payments/          # agent 2's worktree (branch: agent-payments)
+│           ├── .caws/
+│           └── src/
 ├── src/
 └── tests/
-
-../proj-auth/              # agent 1's worktree (branch: agent-auth)
-├── .caws/                 # shared with the main repo via git worktree
-└── src/
-
-../proj-payments/          # agent 2's worktree (branch: agent-payments)
-├── .caws/
-└── src/
 ```
 
-The `.caws/` directory is shared across worktrees because git worktree shares the working tree's tracked files. Per-worktree session ownership is keyed inside `.caws/worktrees.json` by worktree path.
+Worktrees live nested under `.caws/worktrees/<name>/` in the canonical checkout
+— not as sibling directories outside the project. Each worktree's `.caws/`
+sparse-checks out everything except `.caws/specs/` (canonical remains the sole
+authority for spec content — see [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md)).
+Per-worktree session ownership is keyed inside `.caws/worktrees.json` by
+worktree path.
 
 ## Troubleshooting
 
 **`caws claim` refuses with a foreign-owner message.**
-Another session id owns the worktree. Read their `tmp/<sessionId>/` log. Take over only with explicit authorization (`caws claim --takeover`).
+Another session id owns the worktree. Read their `.caws/sessions/<sessionId>/` log. Take over only with explicit authorization (`caws claim --takeover`).
 
 **`caws status` shows worktree findings under doctor.**
 Doctor surfaces drift: orphaned worktree entries, missing directories, ownership conflicts. The repair string in each finding is v11-honest — it points to manual `git worktree` operations or `caws claim`.

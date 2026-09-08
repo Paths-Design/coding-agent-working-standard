@@ -27,16 +27,19 @@ Use `caws --help` for the current command tree. Common project operations:
 | `caws doctor` | Drift detection over `.caws/` state. Exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure). |
 | `caws status` | Read-only dashboard: project, current context, agents, claim, doctor findings. Never mutates `.caws/`. |
 | `caws scope show / check / contention` | Explain scope, enforce scope, or report cross-worktree path contention. |
-| `caws claim [--takeover] [--paths <path>]` | Surface or take ownership of the current worktree. Writes `prior_owners` audit on takeover; `--paths` declares working-tree ownership metadata on the current lease. |
+| `caws claim [--takeover] [--paths <path>] [--spec <id>] [--release]` | Surface or take ownership of the current worktree. Writes `prior_owners` audit on takeover; `--paths` declares working-tree ownership metadata on the current lease; `--spec`/`--release` acquire/release a BRIDGE binding (session↔spec authority for non-worktree contexts). |
 | `caws gates run --spec <id> [--context <cli\|commit\|ci>]` | Run policy-driven quality gates. Appends one `gate_evaluated` event per declared gate. |
 | `caws evidence record --type <kind> --spec <id> --data <json>` | Append a typed evidence event (`test` / `gate` / `human_decision`; AC closure uses `specs evidence`) to `.caws/events.jsonl`. |
 | `caws events migrate / rotate / verify-archive` | Maintenance for the hash-chained `.caws/events.jsonl` (v10→v11 migration, rotation, archive integrity). |
 | `caws waiver create / list / show / revoke` | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. `create` requires `--title`, `--gate`, `--reason`, `--approved-by`, `--expires-at`. |
 | `caws reprieve grant / show / revoke / list` | Session-scoped guard reprieve: skip a PreToolUse guard for one session until expiry. |
 | `caws specs create / list / show / recover / restore / retire-draft / prune-drafts / activate / deactivate / amend / amend-scope / evidence / close / reopen / archive / prune-archive / migrate / validate` | Manage CAWS spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. `create` writes `lifecycle_state: draft` by default (`--activate` creates active directly); the normal path is `caws worktree create --spec <id>`, which activates on bind. Batch archive supports `--status closed`, `--include`, `--exclude`, and `--apply`. |
-| `caws worktree create / list / bind / destroy / untrack / merge / migrate-registry / repair-sparse / repair / prune / cleanup-plan` | Manage CAWS worktrees bound to active specs (`repair` prunes ghost registry entries + clears dead spec→worktree bindings; `repair-sparse` restores the `.caws/specs` sparse-checkout invariant; `untrack` releases the registry binding while keeping the directory; `prune`/`cleanup-plan` are dry-run-by-default cleanup planners). |
+| `caws worktree create / list / ensure / bind / destroy / untrack / merge / review / migrate-registry / repair-sparse / repair / prune / cleanup-plan` | Manage CAWS worktrees bound to active specs (`ensure` is the idempotent create-or-admit form; `review` is a read-only pre-merge gate; `repair` prunes ghost registry entries + clears dead spec→worktree bindings; `repair-sparse` restores the `.caws/specs` sparse-checkout invariant; `untrack` releases the registry binding while keeping the directory; `prune`/`cleanup-plan` are dry-run-by-default cleanup planners). |
 | `caws agents register / heartbeat / stop / list / show / prune` | Agent-liveness substrate (`.caws/leases/`). Operational cache only — never authority. |
 | `caws message send / reply / poll / inbox / history / status / prune` | Directed inter-agent message channel over `.caws/messages.jsonl`. Not authority; verify claims before acting. |
+| `caws session prune` | Dry-run-default retention for `.caws/sessions/` turn logs. The full lifecycle (`start`/`checkpoint`/`end`) remains deferred. |
+| `caws working-tree check / ack` | Working-tree provenance advisory: `check` reports uncommitted overlap with another session's lease; `ack` acknowledges it. |
+| `caws handoff export / import` | Portable handoff briefs for session-to-session continuity. |
 
 Run `caws <group> --help` for live options, or see [`docs/command-reference.md`](docs/command-reference.md) for the exhaustive leaf and flag surface.
 

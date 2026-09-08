@@ -2,7 +2,7 @@
 
 **Author**: @darianrosebrook  
 **Last Updated**: 2026-05-28  
-**Status**: Production Ready (v11.9.0)
+**Status**: Production Ready (check current version with `caws --version` or `npm view @paths.design/caws-cli version`)
 
 ## Overview
 
@@ -300,7 +300,7 @@ module.exports = new Telemetry();
   "metadata": {
     "spec_id": "<feature-spec-id>",
     "risk_tier": 1,
-    "version": "11.9.0"
+    "version": "<installed caws-cli version>"
   }
 }
 ```

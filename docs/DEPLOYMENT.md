@@ -25,7 +25,7 @@ This guide covers deploying CAWS to production environments. CAWS is primarily d
 
 CAWS packages are published to npm under the `@paths.design` scope:
 
-- **@paths.design/caws-cli** - Command-line interface (v11.9.0, `latest` dist-tag). This is the only package CAWS publishes — the kernel is absorbed into it; there is no separate `@paths.design/caws-kernel` publish, and no `@caws/mcp-server` package exists.
+- **@paths.design/caws-cli** - Command-line interface (check the current `latest` dist-tag version with `npm view @paths.design/caws-cli version`, or see `packages/caws-cli/CHANGELOG.md`). This is the only package CAWS publishes — the kernel is absorbed into it; there is no separate `@paths.design/caws-kernel` publish, and no `@caws/mcp-server` package exists.
 
 ```mermaid
 graph TB
@@ -163,31 +163,20 @@ NODE_ENV=production
 
 **GitHub Actions**:
 
+Publishing uses OIDC trusted publishing, not a stored npm token: the `Release`
+environment grants `id-token: write`, and npm exchanges that OIDC token for a
+publish credential at request time because a trusted publisher is configured
+for this repo + workflow file on npmjs.com. **Do not add `NPM_TOKEN` to the
+`Release` environment** — a configured token, valid or not, preempts the OIDC
+exchange and breaks this mechanism.
+
 ```yaml
-# Set in repository settings → Environments → Release
+permissions:
+  id-token: write        # OIDC trusted-publisher exchange
+  contents: write         # tag deletion on pre-publish failure
+
 secrets:
-  NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-```
-
-**Local Development**:
-
-```bash
-# Use environment variables or .env (gitignored)
-export NPM_TOKEN="npm_xxxxx"
-```
-
-**Container Orchestration**:
-
-```yaml
-# Kubernetes secrets
-apiVersion: v1
-kind: Secret
-metadata:
-  name: caws-secrets
-type: Opaque
-data:
-  npm-token: <base64-encoded-token>
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # tag ops + GitHub Release creation
 ```
 
 ---
@@ -240,7 +229,7 @@ When a pre-publish step fails, delete-and-retag. When a post-publish step fails,
 
 ### Publish authentication
 
-Publish uses `NPM_TOKEN` (a granular npm token stored in the `Release` GitHub environment). OIDC trusted-publishing is a planned future follow-up; `id-token: write` is retained in the workflow for that purpose but is not the current publish mechanism. `npm publish --provenance` is used for supply chain attestation.
+Publish uses OIDC trusted publishing: `id-token: write` in the `Release` GitHub environment, npm ≥ 11.5.1, and a trusted publisher configured on npmjs.com for this repo + workflow file. `NPM_TOKEN` is deliberately not set — a configured token, valid or not, preempts the OIDC exchange. `npm publish --provenance` is used for supply chain attestation.
 
 ### Quick reference: releasing caws-cli
 
@@ -562,9 +551,9 @@ npm publish --force
 # Enable 2FA on npm account
 npm profile enable-2fa auth-and-writes
 
-# Use granular automation tokens (not user tokens)
-# Rotate tokens every 90 days
-# Store token in GitHub Environments → Release → NPM_TOKEN
+# Publishing uses OIDC trusted publishing (npm >= 11.5.1), not a stored
+# token — configure the trusted publisher for this repo + workflow file
+# at npmjs.com/package/@paths.design/caws-cli/access
 
 # Provenance is included via: npm publish --provenance
 # Configured in scripts/release-tag-publish.mjs (not .releaserc.json)
@@ -576,11 +565,10 @@ npm profile enable-2fa auth-and-writes
 # GitHub Actions security
 permissions:
   contents: write  # Required for tag deletion on pre-publish failure
-  id-token: write  # Retained for future OIDC trusted-publisher adoption
+  id-token: write  # OIDC trusted-publisher exchange (the current publish mechanism)
 
-# Publish uses NPM_TOKEN (granular token in Release environment)
-env:
-  NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+# NPM_TOKEN is deliberately NOT set in the Release environment — a
+# configured token, valid or not, preempts the OIDC exchange above.
 ```
 
 ### Supply Chain Security
@@ -605,12 +593,11 @@ npm audit --audit-level=high
 **Issue: npm publish fails with 403**
 
 ```bash
-# Solution: Check npm token permissions
-npm whoami
-npm token list
-
-# Regenerate if needed (granular token with bypass-2FA for write actions)
-# Update NPM_TOKEN in GitHub → Settings → Environments → Release
+# Solution: Verify the OIDC trusted publisher on npmjs.com matches this
+# repo + workflow file exactly (org/repo, workflow filename, environment
+# name). A mismatch — or an NPM_TOKEN present in the Release environment
+# preempting the OIDC exchange — are the two most common causes.
+npm whoami   # confirms YOUR local identity; irrelevant to CI's OIDC auth
 ```
 
 **Issue: Tag pushed but workflow deleted it immediately**

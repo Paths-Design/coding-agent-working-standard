@@ -159,12 +159,15 @@ templates/hook-packs/
   claude-code/                # vendor adapter — harness-specific ONLY
     settings.json.example     # the wiring Claude Code reads
     CLAUDE.md                 # surface doc
-    overrides/                # named override files (see Override set)
+    README.md                 # human-facing hook-pack inventory
+                              # (no override files — claude-code ships no
+                              # per-vendor overrides today)
 
   codex/                      # vendor adapter — harness-specific ONLY
     hooks.json                # the wiring Codex reads
-    AGENTS.md                 # surface doc
-    overrides/                # named override files
+    CAWS.md                   # surface doc
+    hooks/lib/                # named override files (emit.sh, parse-input.sh,
+                              # run-handlers.sh, session-transcript.py)
 
   kimi-code/                  # vendor adapter — harness-specific ONLY
     hooks/caws-kimi-hook.sh   # shim the user-level config.toml wiring invokes
@@ -188,6 +191,10 @@ templates/hook-packs/
                                # interposition surface is a TS plugin, not a
                                # shell-invoked hook file)
     AGENTS.md                 # surface doc
+
+  dsh/                        # vendor adapter — harness-specific ONLY
+    AGENTS.md                 # surface doc (dsh is an admitted --agent-surface
+                               # value; no wiring/override files shipped yet)
 ```
 
 Installed layout in a consumer repo:

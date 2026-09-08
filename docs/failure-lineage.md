@@ -1496,7 +1496,7 @@ A fifth finding (D3) — a foreign session destroying another's live worktree at
 
 ### What we built or changed because of it
 
-`WORKTREE-ISOLATION-HARDENING-001` introduces **one ownership oracle, many callers** — not one physical module, but one *contract* (`lib/worktree-claim-oracle.js`, a standalone `node --check`-able helper, NOT an inline `node -e` heredoc) shelled out to by every mutation surface, kept in agreement with the CLI-side `admitsOwner`/`resolveSessionCandidates` by golden fixtures:
+`WORKTREE-ISOLATION-HARDENING-001` introduces **one ownership oracle, many callers** — not one physical module, but one *contract* (`lib/worktree-claim-oracle.cjs`, a standalone `node --check`-able helper, NOT an inline `node -e` heredoc) shelled out to by every mutation surface, kept in agreement with the CLI-side `admitsOwner`/`resolveSessionCandidates` by golden fixtures:
 
 - **Fix 1+2:** the `.caws/worktrees/*` arm now precedes the broad `.caws/*` allowlist and routes through the oracle — physical-root-aware: a foreign worktree-payload write hard-blocks, an owner's own payload write passes, and the canonical-root claimed-path block stays **session-independent** (no "owner may write canonical root" relaxation). `js-yaml` is required lazily so the foreign-payload block works even where `js-yaml` is unresolvable in an installed `.claude/hooks/lib/`.
 - **Fix 3:** new `bash-write-guard.sh` extracts targets for a deliberately NARROW mutation-form set (redirection, `tee`, `sed -i`, `perl -pi`, `truncate`, `touch`, `rm`, `mv`, `cp`, `dd of=`, the git path-restore family) and routes each through the SAME oracle — no arbitrary shell parsing; read-only commands pass; uncertain → ask (degrade to block, never silent allow).

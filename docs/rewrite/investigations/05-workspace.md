@@ -8,6 +8,10 @@
 
 ## Current state
 
+> State as of 2026-05-07 (pre-rewrite), not live. `packages/caws-types` and
+> `packages/quality-gates` no longer exist — the kernel was absorbed into
+> `packages/caws-cli`, the sole package this repo publishes today.
+
 ### Workspace topology
 
 Root `package.json` declares:

@@ -2,60 +2,23 @@
 
 ## Security Overview
 
-CAWS (Coding Agent Working Standard) prioritizes security through multiple layers of protection, including tool allowlisting, secret detection, provenance tracking, and comprehensive validation. This document outlines our security practices and vulnerability reporting process.
+CAWS (Coding Agent Working Standard) governs agent behavior through scope guards, a danger latch on destructive git operations, and a hash-chained audit trail (`.caws/events.jsonl`) — the same mechanisms that enforce project quality gates also bound what an agent can touch and record what it did. This document outlines those mechanisms, the current automated checks, and the vulnerability reporting process.
 
-## Security Features
+## Security Measures
 
-### Built-in Security Measures
+### Agent governance (CAWS itself)
 
-#### 1. Tool Allowlisting
+- **Scope guard**: a spec's `scope.in`/`scope.out` bounds which paths an agent may write; enforced at hook time via `caws scope check`, not by convention.
+- **Danger latch**: a hook pack blocks destructive git patterns (force-push, `reset --hard`, `rebase`, `cherry-pick`, `clean -f`, bare `checkout <path>`) and requires a human-run reset to clear.
+- **Audit trail**: every governed mutation (spec lifecycle, worktree binding, gate evaluation, claim/takeover) appends a hash-chained event to `.caws/events.jsonl` — tamper-evident, never hand-edited.
+- **Waivers, not silent bypass**: a gate violation can only be suppressed via `caws waiver create` (reason, approver, expiry required), not by editing policy or budget fields directly.
 
-- Restricted set of approved tools for agents
-- Prevents execution of unauthorized commands
-- Enforced through prompt linting and runtime checks
+### Automated CI checks
 
-#### 2. Secret Detection
+- `npm audit --audit-level=critical` runs in `.github/workflows/pr-checks.yml` (advisory — flags critical vulnerabilities, does not currently block the PR).
+- TypeScript type-checking and the CLI's Jest suite run in CI (`ci-matrix.yml`) as correctness gates, which also catch classes of logic error with security relevance (e.g. scope-guard bypasses).
 
-- Automated scanning of prompts and generated code
-- Pattern-based detection of credentials and sensitive data
-- Integration with security scanning tools
-
-#### 3. Provenance Tracking
-
-- Complete audit trail of all operations
-- Cryptographic signatures for integrity verification
-- SBOM (Software Bill of Materials) generation
-
-#### 4. Input Validation
-
-- Schema-based validation of working specifications
-- Sanitization of user inputs and project names
-- Type-safe operations with TypeScript
-
-#### 5. Supply Chain Security
-
-- Automated dependency vulnerability scanning
-- SLSA (Supply chain Levels for Software Artifacts) attestations
-- Containerized builds with provenance
-
-## Security Scanning
-
-### Automated Security Checks
-
-- **SAST**: Static Application Security Testing
-- **Secret Scanning**: Detection of credentials and keys
-- **Dependency Scanning**: Vulnerability assessment of dependencies
-- **Container Scanning**: Security analysis of build environments
-- **Code Quality**: ESLint security rules and best practices
-
-### Quality Gates
-
-All changes must pass security validation:
-
-- No high-severity vulnerabilities
-- No exposed secrets or credentials
-- Compliance with tool allowlists
-- Valid provenance manifests
+There is no dedicated SAST scanner, secret-scanning integration (GitLeaks/TruffleHog), Snyk, Dependabot, SLSA attestation, or SBOM generation wired into this repo today. If you are relying on this document for a compliance attestation, verify current tooling directly against `.github/workflows/` rather than assuming the items below are active.
 
 ## Vulnerability Reporting
 
@@ -152,42 +115,6 @@ The security incident response team consists of:
 - **Public**: Transparent updates when appropriate
 - **Regulatory**: Compliance with legal reporting requirements
 
-## Security Tools Integration
-
-### Supported Security Tools
-
-- **ESLint Security Plugin**: Static security analysis
-- **GitLeaks**: Secret detection in repositories
-- **npm audit**: Dependency vulnerability scanning
-- **Snyk**: Comprehensive security scanning
-- **Dependabot**: Automated dependency updates
-
-### Integration Points
-
-- Pre-commit hooks for secret detection
-- CI/CD pipeline security gates
-- Automated dependency monitoring
-- Container security scanning
-
-## Security Metrics
-
-### Trust Score Components
-
-Security contributes significantly to the CAWS trust score:
-
-- **Secret Detection**: Clean scan results
-- **Dependency Security**: No high-severity vulnerabilities
-- **Code Quality**: Security-focused linting compliance
-- **Access Control**: Proper permissions and restrictions
-- **Audit Trail**: Complete provenance tracking
-
-### Monitoring Dashboard
-
-- Real-time security status
-- Vulnerability trends over time
-- Compliance with security policies
-- Incident response metrics
-
 ## Security Updates
 
 ### Patch Releases
@@ -205,25 +132,7 @@ Security fixes are released promptly:
 - **Routine**: Regular security improvements
 - **Optional**: Enhanced security features
 
-## Emergency Contacts
-
-For urgent security matters requiring immediate attention:
-
-## Compliance
-
-### Standards Alignment
-
-- **OWASP Guidelines**: Web application security
-- **NIST Cybersecurity Framework**: Risk management
-- **ISO 27001**: Information security management
-- **SOC 2**: Security controls for service organizations
-
-### Regulatory Compliance
-
-- Data protection regulations (GDPR, CCPA)
-- Industry-specific security requirements
-- Export control compliance
-- Open source licensing requirements
+For urgent security matters requiring immediate attention, use the reporting email above — there is no separate emergency channel today.
 
 ## Responsible Disclosure
 
