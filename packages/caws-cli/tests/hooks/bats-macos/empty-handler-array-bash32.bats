@@ -32,24 +32,9 @@ setup_file() {
     return 1
   fi
 
-  # CAWS-CLI-INIT-SYSTEM-SURFACE-HOME-OVERRIDE-001: isolate CAWS_HOME so this
-  # install is hermetic against a runner/developer machine that has adopted
-  # the system runtime for codex (which would make `caws init` skip
-  # installing the project-local pack this test needs). caws_install_pack_once
-  # (helpers.bash) does not isolate CAWS_HOME, so this file installs its own
-  # fixture rather than sharing that helper.
-  BATS32_HOME="$(mktemp -d "${TMPDIR:-/tmp}/caws-bash32-home-XXXXXX")"
-  BATS32_REPO="$(mktemp -d "${TMPDIR:-/tmp}/caws-bash32-repo-XXXXXX")"
-  git -C "$BATS32_REPO" init -q -b main
-  git -C "$BATS32_REPO" config user.name 'CAWS Test'
-  git -C "$BATS32_REPO" config user.email 'test@caws.invalid'
-  git -C "$BATS32_REPO" config commit.gpgsign false
-  git -C "$BATS32_REPO" commit -q --allow-empty -m 'root commit'
-  ( cd "$BATS32_REPO" && CI=true NO_COLOR=1 CAWS_HOME="$BATS32_HOME" "$BATS32_BASH" -c \
-      "node '$CLI_DIST_ENTRY' init --agent-surface codex" >/dev/null 2>&1 )
-
-  export BATS32_BASH BATS32_HOME BATS32_REPO
-  export BATS32_HOOKS_DIR="$BATS32_REPO/.caws/hooks"
+  caws_install_pack_once codex
+  export BATS32_BASH
+  export BATS32_HOOKS_DIR="$CAWS_TEST_HOOKS_DIR"
 
   if [[ ! -x "$BATS32_HOOKS_DIR/dispatch/post_tool_use.sh" ]]; then
     echo "caws init did not install $BATS32_HOOKS_DIR/dispatch/post_tool_use.sh -- setup failed" >&2
@@ -77,8 +62,7 @@ setup_file() {
 }
 
 teardown_file() {
-  [[ -n "${BATS32_REPO:-}" ]] && rm -rf "$BATS32_REPO"
-  [[ -n "${BATS32_HOME:-}" ]] && rm -rf "$BATS32_HOME"
+  caws_teardown_pack
 }
 
 @test "environment sanity: /bin/bash on this runner is the historically vulnerable 3.2.x (Apple's GPLv2 freeze)" {

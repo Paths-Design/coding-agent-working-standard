@@ -22,22 +22,9 @@
 load helpers
 
 setup_file() {
-  [[ -f "$CLI_DIST_ENTRY" ]] || {
-    echo "caws-cli dist not built at $CLI_DIST_ENTRY" >&2
-    return 1
-  }
-  local repo
-  repo="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-kimi-XXXXXX")"
-  git -C "$repo" init -q -b main
-  git -C "$repo" config user.name 'CAWS Test'
-  git -C "$repo" config user.email 'test@caws.invalid'
-  git -C "$repo" config commit.gpgsign false
-  git -C "$repo" commit -q --allow-empty -m 'root commit'
-  ( cd "$repo" && CI=true NO_COLOR=1 HOME="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-kimi-home-XXXXXX")" node "$CLI_DIST_ENTRY" init --agent-surface kimi-code >/dev/null 2>&1 )
-  export CAWS_TEST_REPO="$repo"
-  export CAWS_TEST_HOOKS_DIR="$repo/.caws/hooks"
-  export KIMI_VENDOR_DIR="$repo/.kimi-code"
-  export KIMI_SHIM="$repo/.kimi-code/hooks/caws-kimi-hook.sh"
+  caws_install_pack_once kimi-code
+  export KIMI_VENDOR_DIR="$CAWS_TEST_REPO/.kimi-code"
+  export KIMI_SHIM="$KIMI_VENDOR_DIR/hooks/caws-kimi-hook.sh"
 }
 teardown_file() {
   caws_teardown_pack

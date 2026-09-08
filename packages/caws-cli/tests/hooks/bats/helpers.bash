@@ -39,25 +39,54 @@ CLI_DIST_ENTRY="$CLI_PKG_ROOT/dist/index.js"
 # Sets, for every test in the file:
 #   CAWS_TEST_REPO       the temp repo root (an initialized git repo + .caws/)
 #   CAWS_TEST_HOOKS_DIR  the installed shared-core hooks dir (.caws/hooks)
+#   CAWS_TEST_HOME      the isolated user home, reclaimed by teardown
+# Optional argument: agent surface (defaults to claude-code).
 caws_install_pack_once() {
   [[ -f "$CLI_DIST_ENTRY" ]] || {
     echo "caws-cli dist not built at $CLI_DIST_ENTRY (run: turbo run build --filter=@paths.design/caws-cli --force)" >&2
     return 1
   }
-  local repo
-  repo="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-XXXXXX")"
-  git -C "$repo" init -q -b main
-  git -C "$repo" config user.name 'CAWS Test'
-  git -C "$repo" config user.email 'test@caws.invalid'
-  git -C "$repo" config commit.gpgsign false
-  git -C "$repo" commit -q --allow-empty -m 'root commit'
-  ( cd "$repo" && CI=true NO_COLOR=1 HOME="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-home-XXXXXX")" node "$CLI_DIST_ENTRY" init --agent-surface claude-code >/dev/null 2>&1 )
-  export CAWS_TEST_REPO="$repo"
-  export CAWS_TEST_HOOKS_DIR="$repo/.caws/hooks"
+  local surface="${1:-claude-code}" init_output init_status
+  CAWS_TEST_REPO="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-XXXXXX")" || return 1
+  if ! CAWS_TEST_HOME="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-home-XXXXXX")"; then
+    caws_teardown_pack
+    return 1
+  fi
+  export CAWS_TEST_REPO CAWS_TEST_HOME
+  export CAWS_TEST_HOOKS_DIR="$CAWS_TEST_REPO/.caws/hooks"
+  # HOME controls native harness config; CAWS_HOME controls runtime adoption.
+  # Isolating only one still lets inherited machine state affect the fixture.
+  if init_output="$(
+    export HOME="$CAWS_TEST_HOME" CAWS_HOME="$CAWS_TEST_HOME/.caws"
+    git -C "$CAWS_TEST_REPO" init -q -b main &&
+    git -C "$CAWS_TEST_REPO" config user.name 'CAWS Test' &&
+    git -C "$CAWS_TEST_REPO" config user.email 'test@caws.invalid' &&
+    git -C "$CAWS_TEST_REPO" config commit.gpgsign false &&
+    git -C "$CAWS_TEST_REPO" commit -q --allow-empty -m 'root commit' &&
+    cd "$CAWS_TEST_REPO" &&
+    CI=true NO_COLOR=1 node "$CLI_DIST_ENTRY" init --agent-surface "$surface" 2>&1
+  )"; then
+    if [[ -x "$CAWS_TEST_HOOKS_DIR/dispatch/pre_tool_use.sh" ]]; then
+      return 0
+    fi
+    init_status=1
+    printf 'fixture install did not produce local hooks for %s\n' "$surface" >&2
+  else
+    init_status=$?
+  fi
+  printf '%s\n' "$init_output" >&2
+  caws_teardown_pack
+  return "$init_status"
 }
 
 caws_teardown_pack() {
-  [[ -n "${CAWS_TEST_REPO:-}" && -d "$CAWS_TEST_REPO" ]] && rm -rf "$CAWS_TEST_REPO"
+  if [[ -n "${CAWS_TEST_REPO:-}" && -d "$CAWS_TEST_REPO" ]]; then
+    rm -rf "$CAWS_TEST_REPO"
+  fi
+  if [[ -n "${CAWS_TEST_HOME:-}" && -d "$CAWS_TEST_HOME" ]]; then
+    rm -rf "$CAWS_TEST_HOME"
+  fi
+  unset CAWS_TEST_REPO CAWS_TEST_HOME CAWS_TEST_HOOKS_DIR
 }
 
 # Build a hook-input envelope JSON. Usage: hook_envelope <tool> <file_path> <command>
