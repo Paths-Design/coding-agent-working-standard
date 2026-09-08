@@ -52,6 +52,10 @@ function createStrykerConfig(surfaceId) {
   const config = {
     mutate: surface.targets.map((target) => target.source),
     testFiles: surface.tests,
+    // Surfaces can run concurrently. Stryker excludes only its own tempDirName
+    // by default, so sibling sandboxes would be copied while being removed.
+    // Keep authored source/tests; exclude only generated run artifacts.
+    ignorePatterns: ['.stryker*-tmp', '/reports', '/coverage', '/tmp', '.venv'],
     testRunner: 'jest',
     testRunnerNodeArgs: [],
     reporters: ['clear-text', 'json', 'html'],

@@ -188,6 +188,43 @@ describe('mutation policy topology contract', () => {
     expect(config.testFiles.every((file) => file.startsWith('tests/store/'))).toBe(true);
     expect(config.testFiles).toContain('tests/store/messages-behavior-store.test.js');
   });
+
+  test.each(['kernel', 'store', 'shell'])('%s sandbox excludes sibling runs while retaining source and tests', (surface) => {
+    const dir = makeTempDir();
+    const required = ['src/init/runtime.ts', 'src/store/required.ts', 'tests/store/required.test.js'];
+    const generated = [
+      '.stryker-kernel-tmp/sandbox/temporary.ts',
+      '.stryker-store-tmp/sandbox/temporary.ts',
+      '.stryker-shell-tmp/sandbox/temporary.ts',
+      'reports/mutation-store/mutation-report.json',
+      'coverage/coverage.json',
+    ];
+    for (const file of [...required, ...generated]) {
+      const destination = path.join(dir, file);
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.writeFileSync(destination, 'fixture');
+    }
+    // Exercise the installed Stryker reader that actually selects sandbox
+    // inputs; matching patterns ourselves would not prove its semantics.
+    const core = path.dirname(require.resolve('@stryker-mutator/core/package.json'));
+    const script = `
+      import fs from 'node:fs/promises';
+      import path from 'node:path';
+      import { pathToFileURL } from 'node:url';
+      const core = ${JSON.stringify(core)};
+      const { defaultOptions } = await import(pathToFileURL(path.join(core, 'dist/src/config/index.js')));
+      const { ProjectReader } = await import(pathToFileURL(path.join(core, 'dist/src/fs/project-reader.js')));
+      const reader = new ProjectReader(fs, {}, { ...defaultOptions, ...${JSON.stringify(createStrykerConfig(surface))} });
+      const files = await reader.resolveInputFileNames();
+      console.log(JSON.stringify(files.map(file => path.relative(process.cwd(), file)).sort()));
+    `;
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      cwd: dir, encoding: 'utf8', timeout: 10000,
+    });
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual(required);
+  });
 });
 
 describe('per-file mutation report contract', () => {
