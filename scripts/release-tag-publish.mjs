@@ -496,16 +496,16 @@ function main() {
       }
     );
     if (!publishStep.ok) {
-      logError('publish.failed', { exit_code: publishStep.exitCode });
-      // Publish failure: tag rollback IS appropriate here because the registry
-      // mutation did not succeed. (npm publish is the boundary; if it
-      // exited non-zero, no version was published.)
-      const del = deleteTagFromOrigin(tag, isDryRun);
-      if (!del.ok) {
-        logError('tag.delete.failed', { reason: del.reason });
-        process.exit(21);
-      }
-      process.exit(20);
+      // The server can accept the upload before a connection drops or a
+      // later npm lifecycle step fails. A nonzero client exit cannot prove
+      // absence, and deleting the tag can destroy published provenance.
+      logError('publish.outcome_uncertain', {
+        exit_code: publishStep.exitCode,
+        tag_preserved: true,
+        repair: `npm view ${pkg.name}@${version} version dist.integrity dist-tags --json`,
+        message: 'Inspect registry state and artifact identity before retrying. The tag is preserved; no GitHub Release was created.',
+      });
+      process.exit(30);
     }
   }
 
