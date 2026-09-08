@@ -226,13 +226,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build caws-cli
-        working-directory: packages/caws-cli
-        run: npm run build
-
       - name: Bash 3.2 empty-handler-array regression guard
         working-directory: packages/caws-cli
-        run: ../../node_modules/.bin/bats tests/hooks/bats/empty-handler-array-bash32.bats
+        run: npm run test:bats:macos
 
   # Hook python-classifier suite (classify_command decision matrix +
   # session_log_renderer). Proves the git-init/rebase/hard-reset classifications

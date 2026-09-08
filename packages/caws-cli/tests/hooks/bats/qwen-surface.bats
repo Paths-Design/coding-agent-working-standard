@@ -24,22 +24,9 @@
 load helpers
 
 setup_file() {
-  [[ -f "$CLI_DIST_ENTRY" ]] || {
-    echo "caws-cli dist not built at $CLI_DIST_ENTRY" >&2
-    return 1
-  }
-  local repo
-  repo="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-qwen-XXXXXX")"
-  git -C "$repo" init -q -b main
-  git -C "$repo" config user.name 'CAWS Test'
-  git -C "$repo" config user.email 'test@caws.invalid'
-  git -C "$repo" config commit.gpgsign false
-  git -C "$repo" commit -q --allow-empty -m 'root commit'
-  ( cd "$repo" && CI=true NO_COLOR=1 HOME="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-qwen-home-XXXXXX")" node "$CLI_DIST_ENTRY" init --agent-surface qwen-code >/dev/null 2>&1 )
-  export CAWS_TEST_REPO="$repo"
-  export CAWS_TEST_HOOKS_DIR="$repo/.caws/hooks"
-  export QWEN_VENDOR_DIR="$repo/.qwen"
-  export QWEN_SHIM="$repo/.qwen/hooks/caws-qwen-hook.sh"
+  caws_install_pack_once qwen-code
+  export QWEN_VENDOR_DIR="$CAWS_TEST_REPO/.qwen"
+  export QWEN_SHIM="$QWEN_VENDOR_DIR/hooks/caws-qwen-hook.sh"
 }
 teardown_file() {
   caws_teardown_pack

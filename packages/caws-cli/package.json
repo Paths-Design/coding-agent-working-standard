@@ -40,6 +40,7 @@
     "test:watch": "npm run build && jest --watch",
     "mutation:run:shell": "npm run build && npx stryker run stryker.shell.conf.js",
     "test:bats": "npm run build && bats tests/hooks/bats",
+    "test:bats:macos": "npm run build && bats tests/hooks/bats-macos",
     "test:pytest": "python3 -m venv tests/hooks/pytest/.venv && tests/hooks/pytest/.venv/bin/pip install -q -r tests/hooks/pytest/requirements.txt && tests/hooks/pytest/.venv/bin/pytest tests/hooks/pytest",
     "test:cleanup": "node scripts/cleanup-tests.js",
     "lint": "npx eslint . && bash scripts/lint-shell.sh",
