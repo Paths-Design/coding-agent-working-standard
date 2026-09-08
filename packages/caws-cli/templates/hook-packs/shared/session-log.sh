@@ -86,54 +86,59 @@ resolve_transcript() {
   local slug candidate
   slug=$(echo "$CWD" | sed 's|/|-|g; s|^-||')
 
-  # FLAG: transcript discovery path uses CAWS_VENDOR_DIR. For claude-code this
-  # resolves to ~/.claude/projects/. Other surfaces may store transcripts
-  # differently; an adapter overriding resolve_transcript is the sanctioned
-  # extension point.
-  candidate="${HOME:-}/${CAWS_VENDOR_DIR}/projects/${slug}/${SESSION_ID}.jsonl"
-  if [[ -f "$candidate" ]]; then
-    printf '%s\n' "$candidate"
-    return
-  fi
-
-  candidate="${HOME:-}/${CAWS_VENDOR_DIR}/projects/-${slug}/${SESSION_ID}.jsonl"
-  if [[ -f "$candidate" ]]; then
-    printf '%s\n' "$candidate"
-    return
-  fi
-
-  # Qwen Code keeps durable transcripts under a chats/ subdir of the project
-  # store (CAWS-SESSION-LOG-QWEN-001, verified 0.21.4):
-  # ~/.qwen/projects/<slug>/chats/<session-id>.jsonl. The payload's
-  # $TRANSCRIPT_PATH usually names it already; this fallback covers hook
-  # fires whose payload lacks the path.
-  candidate="${HOME:-}/${CAWS_VENDOR_DIR}/projects/${slug}/chats/${SESSION_ID}.jsonl"
-  if [[ -f "$candidate" ]]; then
-    printf '%s\n' "$candidate"
-    return
-  fi
-
-  candidate="${HOME:-}/${CAWS_VENDOR_DIR}/projects/-${slug}/chats/${SESSION_ID}.jsonl"
-  if [[ -f "$candidate" ]]; then
-    printf '%s\n' "$candidate"
-    return
-  fi
-
-  # Kimi Code keeps durable transcripts as per-session wire logs:
-  # ~/.kimi-code/session_index.jsonl maps sessionId -> sessionDir, and the
-  # transcript is <sessionDir>/agents/main/wire.jsonl
-  # (CAWS-SESSION-LOG-KIMI-001, wire protocol 1.4 verified against kimi-code
-  # 0.31.x). Kimi's hook payload carries no transcript_path, so this index
-  # lookup is the primary resolution path on that surface. Harmless on other
-  # surfaces: session_index.jsonl exists only under .kimi-code.
-  local index_file session_dir
-  index_file="${HOME:-}/${CAWS_VENDOR_DIR}/session_index.jsonl"
-  if [[ -f "$index_file" ]]; then
-    session_dir=$(jq -r --arg sid "$SESSION_ID" \
-      'select(.sessionId == $sid) | .sessionDir' "$index_file" 2>/dev/null | tail -n 1)
-    if [[ -n "$session_dir" ]] && [[ -f "$session_dir/agents/main/wire.jsonl" ]]; then
-      printf '%s\n' "$session_dir/agents/main/wire.jsonl"
+  # CAWS-HOOKPACK-HOME-UNSET-ROOT-AUTHORITY-ALIAS-001: every candidate below
+  # is HOME-rooted. No HOME means none of these best-effort surface-specific
+  # stores can be located, not a namespace at "/" -- skip the whole tier.
+  if [[ -n "${HOME:-}" ]]; then
+    # FLAG: transcript discovery path uses CAWS_VENDOR_DIR. For claude-code this
+    # resolves to ~/.claude/projects/. Other surfaces may store transcripts
+    # differently; an adapter overriding resolve_transcript is the sanctioned
+    # extension point.
+    candidate="${HOME}/${CAWS_VENDOR_DIR}/projects/${slug}/${SESSION_ID}.jsonl"
+    if [[ -f "$candidate" ]]; then
+      printf '%s\n' "$candidate"
       return
+    fi
+
+    candidate="${HOME}/${CAWS_VENDOR_DIR}/projects/-${slug}/${SESSION_ID}.jsonl"
+    if [[ -f "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return
+    fi
+
+    # Qwen Code keeps durable transcripts under a chats/ subdir of the project
+    # store (CAWS-SESSION-LOG-QWEN-001, verified 0.21.4):
+    # ~/.qwen/projects/<slug>/chats/<session-id>.jsonl. The payload's
+    # $TRANSCRIPT_PATH usually names it already; this fallback covers hook
+    # fires whose payload lacks the path.
+    candidate="${HOME}/${CAWS_VENDOR_DIR}/projects/${slug}/chats/${SESSION_ID}.jsonl"
+    if [[ -f "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return
+    fi
+
+    candidate="${HOME}/${CAWS_VENDOR_DIR}/projects/-${slug}/chats/${SESSION_ID}.jsonl"
+    if [[ -f "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return
+    fi
+
+    # Kimi Code keeps durable transcripts as per-session wire logs:
+    # ~/.kimi-code/session_index.jsonl maps sessionId -> sessionDir, and the
+    # transcript is <sessionDir>/agents/main/wire.jsonl
+    # (CAWS-SESSION-LOG-KIMI-001, wire protocol 1.4 verified against kimi-code
+    # 0.31.x). Kimi's hook payload carries no transcript_path, so this index
+    # lookup is the primary resolution path on that surface. Harmless on other
+    # surfaces: session_index.jsonl exists only under .kimi-code.
+    local index_file session_dir
+    index_file="${HOME}/${CAWS_VENDOR_DIR}/session_index.jsonl"
+    if [[ -f "$index_file" ]]; then
+      session_dir=$(jq -r --arg sid "$SESSION_ID" \
+        'select(.sessionId == $sid) | .sessionDir' "$index_file" 2>/dev/null | tail -n 1)
+      if [[ -n "$session_dir" ]] && [[ -f "$session_dir/agents/main/wire.jsonl" ]]; then
+        printf '%s\n' "$session_dir/agents/main/wire.jsonl"
+        return
+      fi
     fi
   fi
 

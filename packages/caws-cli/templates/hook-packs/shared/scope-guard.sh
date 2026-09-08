@@ -154,7 +154,6 @@ resolve_worktree_root() {
 
 # Always-allowed paths bypass scope checks entirely.
 ALLOW_PREFIXES=(
-  "${HOME:-}/${CAWS_VENDOR_DIR}/"
   ".caws/"
   "${CAWS_VENDOR_DIR}/"
   "docs/"
@@ -163,6 +162,16 @@ ALLOW_PREFIXES=(
   "tmp/"
   ".archive/"
 )
+# CAWS-HOOKPACK-HOME-UNSET-ROOT-AUTHORITY-ALIAS-001: only add the home-tier
+# exemption when HOME is actually known. An unset HOME defaulted to "" would
+# make this entry "/${CAWS_VENDOR_DIR}/" -- an ABSOLUTE prefix -- which the
+# foreign-repo containment check below (an absolute allow-prefix bypasses it
+# entirely) would then treat as a global exemption for any absolute path
+# under that vendor dir in ANY repository. Absent HOME means no home-tier
+# authority exists, not a authority rooted at "/".
+if [[ -n "${HOME:-}" ]]; then
+  ALLOW_PREFIXES+=("${HOME}/${CAWS_VENDOR_DIR}/")
+fi
 
 # Policy-declared non-governed zones (CAWSFIX-26 / ledger D9).
 POLICY_FILE="${CAWS_PROJECT_DIR:-.}/.caws/policy.yaml"

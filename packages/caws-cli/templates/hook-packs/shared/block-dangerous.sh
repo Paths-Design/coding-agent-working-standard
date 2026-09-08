@@ -158,11 +158,17 @@ classify_decision() {
     printf 'unavailable'
     return 0
   fi
+  # CAWS-HOOKPACK-HOME-UNSET-ROOT-AUTHORITY-ALIAS-001: only pass --home when
+  # HOME is actually known. classify_command.py's own default (Path.home())
+  # can still resolve a real home via the passwd database even when $HOME is
+  # unset in the environment; passing an explicit empty string would instead
+  # resolve to the CURRENT DIRECTORY there, weakening its "recursive delete
+  # targets home directory" hard-block by aliasing home to cwd.
+  local -a _classify_args=(--repo-root "${CAWS_PROJECT_DIR:-.}")
+  [[ -n "${HOME:-}" ]] && _classify_args+=(--home "$HOME")
+  _classify_args+=(--cwd "$(pwd)")
   local result
-  result=$(printf '%s' "$cmd" | python3 "$classifier" \
-    --repo-root "${CAWS_PROJECT_DIR:-.}" \
-    --home "${HOME:-}" \
-    --cwd "$(pwd)" 2>/dev/null) || {
+  result=$(printf '%s' "$cmd" | python3 "$classifier" "${_classify_args[@]}" 2>/dev/null) || {
     printf 'unavailable'
     return 0
   }
@@ -288,10 +294,14 @@ fi
 
 REPO_ROOT="${CAWS_PROJECT_DIR:-.}"
 CLASSIFIER_STDERR=$(mktemp)
-RESULT=$(printf '%s' "$COMMAND" | python3 "$CLASSIFIER" \
-  --repo-root "$REPO_ROOT" \
-  --home "${HOME:-}" \
-  --cwd "$(pwd)" 2>"$CLASSIFIER_STDERR") || {
+# CAWS-HOOKPACK-HOME-UNSET-ROOT-AUTHORITY-ALIAS-001: see classify_decision's
+# identical guard above -- omit --home when unknown so Python's own
+# Path.home() default (which can resolve via the passwd db) applies instead
+# of an explicit empty string aliasing home to the current directory.
+declare -a _CLASSIFY_ARGS=(--repo-root "$REPO_ROOT")
+[[ -n "${HOME:-}" ]] && _CLASSIFY_ARGS+=(--home "$HOME")
+_CLASSIFY_ARGS+=(--cwd "$(pwd)")
+RESULT=$(printf '%s' "$COMMAND" | python3 "$CLASSIFIER" "${_CLASSIFY_ARGS[@]}" 2>"$CLASSIFIER_STDERR") || {
   DIAG=$(head -c 200 "$CLASSIFIER_STDERR" 2>/dev/null || true)
   rm -f "$CLASSIFIER_STDERR"
   RESULT="{\"decision\":\"ask\",\"reason\":\"command classifier failed: ${DIAG:-unknown error}\",\"source\":\"classifier_error\",\"enforcement\":\"confirm\"}"

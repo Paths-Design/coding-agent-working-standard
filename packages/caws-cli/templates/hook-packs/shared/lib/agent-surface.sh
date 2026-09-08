@@ -414,10 +414,24 @@ caws_source_lib() {
       source "${CAWS_MACHINE_POLICY_ROOT}/${_machine_local}"
       return $?
     fi
-    local _machine_user="${CAWS_HOME:-${HOME:-}/.caws}/surfaces/${CAWS_AGENT_SURFACE}/lib/${basename}"
-    if [[ -f "$_machine_user" ]]; then
-      source "$_machine_user"
-      return $?
+    # CAWS-HOOKPACK-HOME-UNSET-ROOT-AUTHORITY-ALIAS-001: only probe the
+    # machine-user override when a real home is known. With both CAWS_HOME
+    # and HOME absent, defaulting to "" would resolve this to
+    # /surfaces/.../lib/<basename> at the filesystem root and, if a file
+    # happened to exist there, SOURCE it as a trusted override -- an absent
+    # home must mean this tier is unavailable, not rooted at "/".
+    local _machine_home=""
+    if [[ -n "${CAWS_HOME:-}" ]]; then
+      _machine_home="$CAWS_HOME"
+    elif [[ -n "${HOME:-}" ]]; then
+      _machine_home="${HOME}/.caws"
+    fi
+    if [[ -n "$_machine_home" ]]; then
+      local _machine_user="${_machine_home}/surfaces/${CAWS_AGENT_SURFACE}/lib/${basename}"
+      if [[ -f "$_machine_user" ]]; then
+        source "$_machine_user"
+        return $?
+      fi
     fi
     if [[ -f "${CAWS_MACHINE_ADAPTER_LIB_DIR}/${basename}" ]]; then
       source "${CAWS_MACHINE_ADAPTER_LIB_DIR}/${basename}"

@@ -101,13 +101,26 @@ _hooks_prefix_match() {
   # The system runtime's executables, adapters, policy overrides and reprieves
   # have the same boundary as the former project hook directory. CLI-mediated
   # installation/configuration is separate from an agent's direct file edit.
-  local machine_home="${CAWS_HOME:-${HOME:-}/.caws}"
-  [[ "$FILE_PATH" == "$machine_home/bin/"* ]] || \
-  [[ "$FILE_PATH" == "$machine_home/lib/"* ]] || \
-  [[ "$FILE_PATH" == "$machine_home/surfaces/"* ]] || \
-  [[ "$FILE_PATH" == "$machine_home/state/projects/"* ]] || \
-  [[ "$FILE_PATH" == "$machine_home/state/adapter-runtime.json" ]] || \
-  [[ "$FILE_PATH" == "$machine_home/state/sessions/"*/guard-reprieve-* ]] || \
+  #
+  # CAWS-HOOKPACK-HOME-UNSET-ROOT-AUTHORITY-ALIAS-001: only derive machine_home
+  # when a real home is known. With both CAWS_HOME and HOME absent, defaulting
+  # to "" would make every machine_home/* pattern below a top-level absolute
+  # prefix (e.g. "/bin/"*), matching unrelated real paths on the filesystem.
+  # No home means no machine-home tier to match against, not a tier rooted at "/".
+  local machine_home=""
+  if [[ -n "${CAWS_HOME:-}" ]]; then
+    machine_home="$CAWS_HOME"
+  elif [[ -n "${HOME:-}" ]]; then
+    machine_home="${HOME}/.caws"
+  fi
+  if [[ -n "$machine_home" ]]; then
+    [[ "$FILE_PATH" == "$machine_home/bin/"* ]] && return 0
+    [[ "$FILE_PATH" == "$machine_home/lib/"* ]] && return 0
+    [[ "$FILE_PATH" == "$machine_home/surfaces/"* ]] && return 0
+    [[ "$FILE_PATH" == "$machine_home/state/projects/"* ]] && return 0
+    [[ "$FILE_PATH" == "$machine_home/state/adapter-runtime.json" ]] && return 0
+    [[ "$FILE_PATH" == "$machine_home/state/sessions/"*/guard-reprieve-* ]] && return 0
+  fi
   [[ "$FILE_PATH" == */.caws/hooks/* ]] || \
   [[ "$FILE_PATH" == ".caws/hooks/"* ]] || \
   [[ "$FILE_PATH" == */"${CAWS_VENDOR_DIR}"/hooks/* ]] || \

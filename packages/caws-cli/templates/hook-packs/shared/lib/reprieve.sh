@@ -38,9 +38,21 @@ _CAWS_REPRIEVE_SH_LOADED=1
 caws_reprieve_state_dir() {
   local _sid="${1:-${CAWS_SESSION_ID:-${HOOK_SESSION_ID:-}}}"
   [[ -n "$_sid" && "$_sid" != "unknown" ]] || return 1
+  # CAWS-HOOKPACK-HOME-UNSET-ROOT-AUTHORITY-ALIAS-001: with both CAWS_HOME
+  # and HOME absent, there is no machine-user home -- return failure instead
+  # of aliasing to /state/sessions/<id>, which could resolve reprieve
+  # authority against a real filesystem root path.
+  local _home=""
+  if [[ -n "${CAWS_HOME:-}" ]]; then
+    _home="$CAWS_HOME"
+  elif [[ -n "${HOME:-}" ]]; then
+    _home="${HOME}/.caws"
+  else
+    return 1
+  fi
   local _safe_sid
   _safe_sid=$(printf '%s' "$_sid" | tr -c 'A-Za-z0-9._-' '_')
-  printf '%s/state/sessions/%s\n' "${CAWS_HOME:-${HOME:-}/.caws}" "$_safe_sid"
+  printf '%s/state/sessions/%s\n' "$_home" "$_safe_sid"
 }
 
 _caws_legacy_reprieve_state_dir() {
@@ -86,7 +98,16 @@ caws_reprieve_file() {
   else
     safe_session="$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9._-' '_')"
   fi
-  local global_file="$(caws_reprieve_state_dir "$session_id")/guard-reprieve-${safe_session}.json"
+  # A `$(...)` failure inside an assignment RHS does not trip `set -e`, so
+  # caws_reprieve_state_dir's `return 1` (no home known) must be checked
+  # explicitly here -- otherwise the empty substitution still constructs a
+  # root-relative "/guard-reprieve-<session>.json" global_file below.
+  local _state_dir
+  _state_dir="$(caws_reprieve_state_dir "$session_id")" || {
+    printf '%s\n' "$(_caws_legacy_reprieve_state_dir)/guard-reprieve-${safe_session}.json"
+    return 0
+  }
+  local global_file="${_state_dir}/guard-reprieve-${safe_session}.json"
   # Presence is decisive: expired, revoked or malformed global records must
   # never resurrect a still-active legacy copy through fallback.
   if [[ -e "$global_file" || -L "$global_file" ]]; then

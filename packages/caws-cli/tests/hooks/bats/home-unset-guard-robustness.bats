@@ -44,10 +44,34 @@ teardown_file() {
 @test "block-dangerous.sh: a Bash command through the real PreToolUse dispatch does not crash with HOME unset" {
   # tool_name=Bash reaches classify_decision's `--home "$HOME"` at
   # block-dangerous.sh line ~164 (self-filters away for non-Bash tools).
+  # Assert the ordinary command is actually ADMITTED and the danger latch
+  # stays UNARMED, not merely "no crash message" -- the pre-fix behavior was
+  # worse than a crash: the classifier failure was caught and re-surfaced as
+  # a fail-closed BLOCK that armed the danger latch for an ordinary `ls`.
+  rm -f "$CAWS_TEST_REPO/.claude/hooks/state/danger-latch-"*.json 2>/dev/null || true
   run env -i PATH="$PATH" \
     CAWS_PROJECT_DIR="$CAWS_TEST_REPO" CAWS_AGENT_SURFACE="claude-code" HOOK_CWD="$CAWS_TEST_REPO" \
     bash -c "printf '%s' '$(hook_envelope Bash "" "ls")' | bash '$CAWS_TEST_HOOKS_DIR/dispatch/pre_tool_use.sh'"
   refute_output --partial 'HOME: unbound variable'
+  refute_output --partial '"decision":"block"'
+  refute_output --partial 'danger latch'
+  run bash -c "ls '$CAWS_TEST_REPO/.claude/hooks/state/'danger-latch-*.json 2>/dev/null"
+  assert_output ""
+}
+
+@test "CODE INVARIANT: block-dangerous.sh omits --home rather than passing an empty string when HOME is unset" {
+  # classify_command.py's own --home default (Path.home()) can resolve a
+  # real home via the passwd database even when $HOME is unset in the
+  # environment; an explicit empty string instead resolves to the CURRENT
+  # DIRECTORY there (verified: Path("").resolve() == cwd), which would
+  # silently weaken the "recursive delete targets ancestor of home
+  # directory" hard-block for any raw ~-prefixed multi-segment target by
+  # comparing against the wrong reference path. Confirm the guard never
+  # constructs the vulnerable form.
+  run grep -c -- '--home "\${HOME:-}"' "$CAWS_TEST_HOOKS_DIR/block-dangerous.sh"
+  assert_output "0"
+  run grep -c -- '+=(--home "\$HOME")' "$CAWS_TEST_HOOKS_DIR/block-dangerous.sh"
+  assert_output "2"
 }
 
 @test "scope-guard.sh: an Edit through the real PreToolUse dispatch does not crash with HOME unset" {
@@ -105,6 +129,79 @@ teardown_file() {
     ensure_hook_runtime_path
   "
   refute_output --partial 'HOME: unbound variable'
+}
+
+
+# --- CAWS-HOOKPACK-HOME-UNSET-ROOT-AUTHORITY-ALIAS-001 ---------------------
+#
+# Merely "does not crash" was not enough: the CAWS_HOME_UNBOUND_VARIABLE fix
+# above degraded several ${HOME:-} fallbacks to a ROOT-BASED path ("/",
+# "/.claude", "/.caws") instead of "no home-tier authority exists" -- and
+# because scope-guard.sh consults absolute ALLOW_PREFIXES entries BEFORE its
+# foreign-repo containment refusal, that aliasing let an absolute write
+# outside the governed repo bypass containment entirely. Each test below is
+# a hostile control (proves the bug when present) paired with a positive
+# control (proves the legitimate case still works after the fix).
+
+@test "HOSTILE: scope-guard.sh does NOT admit a foreign absolute path via the home-vendor-dir allow-prefix when HOME is unset" {
+  # Pre-fix: "${HOME:-}/${CAWS_VENDOR_DIR}/" with HOME unset is the ABSOLUTE
+  # prefix "/.claude/". The foreign-repo containment block at scope-guard.sh
+  # consults absolute ALLOW_PREFIXES entries before refusing, so a write to
+  # /.claude/pwned-outside-repo.sh (a path outside this session's repo
+  # entirely) was silently ADMITTED (exit 0) instead of BLOCKED (exit 2).
+  run env -i PATH="$PATH" \
+    CAWS_PROJECT_DIR="$CAWS_TEST_REPO" CAWS_AGENT_SURFACE="claude-code" HOOK_CWD="$CAWS_TEST_REPO" \
+    bash -c "printf '%s' '$(hook_envelope Edit "/.claude/pwned-outside-repo.sh")' | bash '$CAWS_TEST_HOOKS_DIR/scope-guard.sh'"
+  assert_failure 2
+  assert_output --partial 'DIFFERENT repository'
+}
+
+@test "POSITIVE CONTROL: scope-guard.sh still honors the home-vendor-dir allow-prefix when HOME is real" {
+  local fake_home="$CAWS_TEST_REPO/.fake-home-scope-guard"
+  mkdir -p "$fake_home"
+  run env -i PATH="$PATH" HOME="$fake_home" \
+    CAWS_PROJECT_DIR="$CAWS_TEST_REPO" CAWS_AGENT_SURFACE="claude-code" HOOK_CWD="$CAWS_TEST_REPO" \
+    bash -c "printf '%s' '$(hook_envelope Edit "$fake_home/.claude/legit-state.json")' | bash '$CAWS_TEST_HOOKS_DIR/scope-guard.sh'"
+  assert_success
+}
+
+@test "HOSTILE: protected-paths.sh does NOT flag an unrelated absolute /.caws/bin/ path as protected machine-home state when HOME is unset" {
+  # Pre-fix: machine_home="${CAWS_HOME:-${HOME:-}/.caws}" with both unset is
+  # the absolute path "/.caws", so "$machine_home/bin/"* became "/.caws/bin/"*
+  # -- an unrelated real filesystem path (e.g. on a container where /.caws
+  # exists for an unrelated reason) would be wrongly BLOCKED as protected
+  # machine-home state it has no relationship to. Confirm this false-positive
+  # is closed: an absolute /.caws/bin/ path is admitted, not flagged.
+  run env -i PATH="$PATH" \
+    CAWS_PROJECT_DIR="$CAWS_TEST_REPO" CAWS_AGENT_SURFACE="claude-code" HOOK_CWD="$CAWS_TEST_REPO" \
+    bash -c "printf '%s' '$(hook_envelope_content Edit "/.caws/bin/unrelated-tool" "harmless")' | bash '$CAWS_TEST_HOOKS_DIR/protected-paths.sh'"
+  refute_output --partial 'is protected'
+  assert_success
+}
+
+@test "HOSTILE: reprieve.sh's state-dir lookup fails closed (not a root path) when HOME and CAWS_HOME are absent" {
+  run env -i PATH="$PATH" bash -c "
+    source '$CAWS_TEST_HOOKS_DIR/lib/reprieve.sh'
+    caws_reprieve_state_dir 'some-session-id'
+  "
+  assert_failure
+  refute_output --partial '/state/sessions/'
+}
+
+@test "POSITIVE CONTROL: reprieve.sh's state-dir lookup resolves correctly under a real HOME" {
+  local fake_home="$CAWS_TEST_REPO/.fake-home-reprieve"
+  mkdir -p "$fake_home"
+  run env -i PATH="$PATH" HOME="$fake_home" bash -c "
+    source '$CAWS_TEST_HOOKS_DIR/lib/reprieve.sh'
+    caws_reprieve_state_dir 'some-session-id'
+  "
+  assert_success
+  assert_output "${fake_home}/.caws/state/sessions/some-session-id"
+}
+
+@test "CODE INVARIANT: agent-surface.sh no longer aliases an absent home to a root-based machine-user override path" {
+  run grep -c '\${CAWS_HOME:-\${HOME:-\?}\?/\.caws}' "$CAWS_TEST_HOOKS_DIR/lib/agent-surface.sh"
+  assert_output "0"
 }
 
 @test "audit.sh: the CWD-recovery fallback line survives HOME unset" {
