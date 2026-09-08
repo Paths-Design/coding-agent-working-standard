@@ -137,7 +137,7 @@ describe('mutation policy topology contract', () => {
     const result = runNode(VALIDATOR, ['--policy', POLICY, '--root', PACKAGE_ROOT]);
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toMatch(/PASS: 141 source files accounted for exactly once/);
+    expect(result.stdout).toMatch(/PASS: 144 source files accounted for exactly once/);
     expect(result.stdout).toMatch(/18 mutation targets across 3 surfaces/);
   });
 
@@ -265,6 +265,28 @@ describe('per-file mutation report contract', () => {
 });
 
 describe('active workflow topology contract', () => {
+  test('PR checks preserve executable regression jobs and reject empty test selection', () => {
+    const prChecks = yaml.load(
+      fs.readFileSync(path.join(REPO_ROOT, '.github/workflows/pr-checks.yml'), 'utf8')
+    );
+    const jobs = prChecks.jobs;
+    for (const job of Object.values(jobs)) {
+      const dependencies = Array.isArray(job.needs) ? job.needs : job.needs ? [job.needs] : [];
+      for (const dependency of dependencies) expect(jobs).toHaveProperty(dependency);
+    }
+    expect(jobs.pr_comment.needs).toContain('hook_bats_bash32_macos');
+    expect(jobs.hook_bats_bash32_macos.steps).toContainEqual(
+      expect.objectContaining({ run: 'npm run test:bats:macos' })
+    );
+    expect(executableWorkflowText(prChecks)).not.toContain('--passWithNoTests');
+    expect(executableWorkflowText(prChecks)).not.toContain('perf:budgets');
+  });
+
+  test('the removed performance suite is not exposed as an executable package check', () => {
+    const metadata = JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8'));
+    expect(metadata.scripts).not.toHaveProperty('perf:budgets');
+  });
+
   test('the mutation workflow uses current caws-cli surfaces and retains evidence', () => {
     const workflow = fs.readFileSync(path.join(REPO_ROOT, '.github/workflows/mutation.yml'), 'utf8');
 

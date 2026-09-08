@@ -41,7 +41,6 @@
     "mutation:run:shell": "npm run build && node scripts/run-mutation.mjs --surface shell",
     "test:mutation": "npm run mutation:run:store",
     "test:axe": "npm run build && jest --testPathPatterns=axe && npm run test:cleanup",
-    "perf:budgets": "npm run build && jest --testPathPatterns=perf && npm run test:cleanup",
     "test:watch": "npm run build && jest --watch",
     "test:bats": "npm run build && bats tests/hooks/bats",
     "test:bats:macos": "npm run build && bats tests/hooks/bats-macos",

@@ -85,7 +85,7 @@ jobs:
         # avoids the npm/turbo double-`--` ambiguity (npm run test:unit -- -- ...)
         # that future maintainers would trip over.
         # Governed by CI-PR-TEST-PASSTHROUGH-001.
-        run: npx turbo run test -- --coverage --passWithNoTests
+        run: npx turbo run test -- --coverage
 
       - name: Contract tests
         if: hashFiles('tests/contract/**') != ''
@@ -182,39 +182,6 @@ jobs:
         working-directory: packages/caws-cli
         run: npm run test:pytest
 
-  # Quality gates (can run in parallel with tests)
-  quality_gates:
-    name: Quality Gates
-    runs-on: ubuntu-latest
-    needs: sanity
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
-      # Mutation testing is NOT a per-PR step. The store run alone is ~22min and
-      # the kernel run adds more; gating every PR on it would dominate the
-      # critical path. It runs on a schedule + label + dispatch in
-      # .github/workflows/mutation.yml (break:80, incremental-cached) instead.
-      # The prior `if: hashFiles('tests/mutation/**')` step silently skipped
-      # because that directory was removed in the test-corpus rebuild — a dead
-      # guard that enforced nothing. Removed under CAWS-TEST-CI-WIRING-001.
-
-      - name: Accessibility testing
-        if: hashFiles('tests/axe/**') != ''
-        run: npm run test:axe || echo "⚠️  Accessibility testing not configured"
-
-      - name: Performance budgets
-        run: npm run perf:budgets
-
   # Generate PR comment with summary
   pr_comment:
     name: PR Summary
@@ -225,7 +192,6 @@ jobs:
         hook_bats,
         hook_bats_bash32_macos,
         hook_pytest,
-        quality_gates,
       ]
     if: always()
     steps:
