@@ -65,3 +65,7 @@ evidence:
     status: pass
     evidence_ref: "Hostile controls (bats): reprieve.sh caws_reprieve_state_dir returns failure instead of '/state/sessions/<id>' when HOME/CAWS_HOME absent (reverting reprieve.sh reproduced the root-path output); agent-surface.sh CODE INVARIANT confirms the ${CAWS_HOME:-${HOME:-}/.caws} pattern is gone (reverting reproduced grep count 1, fixed code is 0); protected-paths.sh no longer flags /.caws/bin/* as protected (reverting reproduced the false block)."
     recorded_at: "2026-09-08T03:57:11.072Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Positive controls (bats): 'scope-guard.sh still honors the home-vendor-dir allow-prefix when HOME is real' and 'reprieve.sh's state-dir lookup resolves correctly under a real HOME' both pass against the fixed code, proving legitimate home-tier behavior is unchanged. Full suites clean: npx jest -> 2531/2531 passed (/tmp/jest-authority-fix2.log); npx bats tests/hooks/bats -> 205/205 passed (/tmp/bats-authority-fix.log)."
+    recorded_at: "2026-09-08T03:57:11.918Z"
