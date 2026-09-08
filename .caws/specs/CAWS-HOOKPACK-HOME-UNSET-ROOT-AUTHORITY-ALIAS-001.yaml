@@ -69,3 +69,7 @@ evidence:
     status: pass
     evidence_ref: "Positive controls (bats): 'scope-guard.sh still honors the home-vendor-dir allow-prefix when HOME is real' and 'reprieve.sh's state-dir lookup resolves correctly under a real HOME' both pass against the fixed code, proving legitimate home-tier behavior is unchanged. Full suites clean: npx jest -> 2531/2531 passed (/tmp/jest-authority-fix2.log); npx bats tests/hooks/bats -> 205/205 passed (/tmp/bats-authority-fix.log)."
     recorded_at: "2026-09-08T03:57:11.918Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "block-dangerous.sh danger-latch test strengthened to assert 'ls' is actually admitted and no danger-latch-*.json file is created, not just absence of a crash message. scope-guard.sh's existing crash-avoidance test is now supplemented by dedicated hostile/positive authority tests above rather than broadened in place, since the crash class and the authority class are independently reachable/verifiable."
+    recorded_at: "2026-09-08T03:57:12.892Z"
