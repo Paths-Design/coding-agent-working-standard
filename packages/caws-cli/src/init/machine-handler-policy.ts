@@ -16,6 +16,20 @@ export function extractMachineHandlers(text: string, reference: string): string[
   if (!match)
     throw new Error('Dispatcher has no literal handler array; use --from with reviewed policy');
   const skeleton = (body: string): string => normalize(body.replace(array, '$1=(\n)'));
+  const currentSkeleton = skeleton(reference);
+  // The published 12.1.0 dispatchers predate the Bash 3.2 empty-array guard.
+  // Admit that exact shipped trailer as well as the current one. Do not use a
+  // project's mutable pristine file as a reference for arbitrary shell logic.
+  let previousSkeleton = currentSkeleton;
+  for (const flags of ['', ' --short-circuit-on-block']) {
+    const invocation = `run_handlers${flags} "\${HANDLERS[@]}"`;
+    const guarded = [
+      'if (( ${#HANDLERS[@]} > 0 )); then', invocation,
+      'else', `run_handlers${flags}`, 'fi',
+    ].join('\n');
+    if (currentSkeleton.endsWith(guarded))
+      previousSkeleton = currentSkeleton.slice(0, -guarded.length) + invocation;
+  }
   const legacy = normalize(`set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
 HOOKS_DIR="$(dirname "$SCRIPT_DIR")"
@@ -27,7 +41,8 @@ HANDLERS=(
 run_handlers \"\${HANDLERS[@]}\"`);
   const actual = skeleton(text);
   if (
-    actual !== skeleton(reference) &&
+    actual !== currentSkeleton &&
+    actual !== previousSkeleton &&
     actual !== legacy &&
     actual !== legacy.replace('run_handlers ', 'run_handlers --short-circuit-on-block ')
   ) {
