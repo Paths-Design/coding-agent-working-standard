@@ -36,35 +36,9 @@ const mainProject = {
     '<rootDir>/tests/fixtures/',
     '<rootDir>/tests/kernel/',
   ],
-  // Coverage targets the COMPILED vNext surface (dist/store + dist/shell), the
-  // real SUT. istanbul remaps via the emitted .js.map sidecars
-  // (tsconfig.vnext.json: sourceMap: true) so the report lists src/**/*.ts
-  // rows. The five legacy src JS files are the JS the runtime genuinely loads
-  // (scripts/build-cli.js JS_ALLOWLIST). [CAWS-CLI-COVERAGE-HONESTY-001]
-  collectCoverageFrom: [
-    'dist/store/**/*.js',
-    'dist/shell/**/*.js',
-    '!dist/**/*.d.ts',
-    'src/index.js',
-    'src/config/index.js',
-    'src/error-handler.js',
-    'src/utils/detection.js',
-    'src/utils/error-categories.js',
-  ],
-  coverageReporters: ['text', 'lcov', 'html'],
-  coverageDirectory: 'coverage',
-  // Thresholds are 0 during the rebuild (zero tests exist). Slices 1-3 (kernel,
-  // store, shell) and slice 8 (CI wiring) ratchet these back toward and above
-  // the prior honest baseline. Do NOT set a non-zero floor until tests exist.
-  coverageThreshold: {
-    global: {
-      statements: 0,
-      branches: 0,
-      functions: 0,
-      lines: 0,
-    },
-  },
-  verbose: true,
+  // This project executes compiled code, including the kernel reached by
+  // store/shell integration tests. The kernel project owns direct TS tests.
+  coveragePathIgnorePatterns: ['/node_modules/', '/src/kernel/'],
   transformIgnorePatterns: ['node_modules/(?!(inquirer)/)'],
   testEnvironmentOptions: {
     error: false,
@@ -85,11 +59,30 @@ const kernelProject = {
   transform: {
     '^.+\\.ts$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.kernel-test.json' }],
   },
-  collectCoverageFrom: ['src/kernel/**/*.ts', '!src/kernel/**/*.d.ts', '!src/kernel/index.ts'],
+  coveragePathIgnorePatterns: ['/node_modules/', '/dist/'],
   clearMocks: true,
   restoreMocks: true,
 };
 
 module.exports = {
+  rootDir: __dirname,
+  verbose: true,
   projects: [mainProject, kernelProject],
+  // Jest reads coverage selection and thresholds from the global config,
+  // not nested project objects. Include the built runtime (including init)
+  // and source-tested kernel; source maps remap compiled TS back to src/.
+  collectCoverageFrom: [
+    'dist/**/*.js',
+    'src/kernel/**/*.ts',
+    '!src/kernel/**/*.d.ts',
+  ],
+  coverageReporters: ['text', 'json', 'json-summary', 'lcov', 'html'],
+  coverageDirectory: 'coverage',
+  coverageThreshold: {
+    global: { statements: 60, branches: 50, functions: 60, lines: 60 },
+    // The shared machine installation/migration surface has its own floor;
+    // broader CLI coverage cannot hide a regression here. Jest subtracts this
+    // group before checking the global floor against the remaining runtime.
+    [`${__dirname}/src/init/`]: { statements: 85, branches: 70, functions: 90, lines: 85 },
+  },
 };

@@ -104,6 +104,13 @@ export function qualify({ candidate = packageRoot, baseline = `${packageName}@12
     report.tarballSha256 = hash(fs.readFileSync(tarball));
     run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', tarball], consumer, env);
     assert.equal(cli(consumer, '--version').trim(), report.candidateVersion);
+    // Consumer resolution does not inherit workspace overrides or its lockfile.
+    // Audit the actual upgraded installation before trusting the package check.
+    const audit = JSON.parse(run('npm', ['audit', '--omit=dev', '--audit-level=low', '--json'], consumer, env));
+    assert.equal(audit.metadata.vulnerabilities.total, 0);
+    report.productionAudit = { vulnerabilities: audit.metadata.vulnerabilities,
+      lockfileSha256: hash(fs.readFileSync(path.join(consumer, 'package-lock.json'))) };
+    report.cases.push({ name: 'installed-production-audit', zeroFindings: true });
     const installed = JSON.parse(cli(consumer, 'init', 'adapters', 'install', '--json'));
     report.runtimeDigest = installed.digest;
     assert.equal(JSON.parse(cli(consumer, 'init', 'adapters', 'install', '--plan', '--json')).changed, false);

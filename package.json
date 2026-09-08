@@ -22,6 +22,7 @@
     "test:runner": "./scripts/test-runner.sh",
     "validate": "turbo run validate",
     "typecheck": "turbo run typecheck --continue",
+    "audit:dependencies": "npm audit --package-lock-only --audit-level=low",
     "clean": "turbo run clean",
     "build:main-dist-link": "node scripts/build-main-dist-link.mjs",
     "// CAWS CLI shortcuts (improved to actually run commands)": "",
