@@ -61,3 +61,7 @@ evidence:
     status: pass
     evidence_ref: "Hostile control (bats): 'scope-guard.sh does NOT admit a foreign absolute path via the home-vendor-dir allow-prefix when HOME is unset' -- reverting scope-guard.sh reproduced the bug exactly (Edit to /.claude/pwned-outside-repo.sh with HOME unset succeeded/exit 0 instead of exit 2); fixed code refuses with exit 2 'DIFFERENT repository'."
     recorded_at: "2026-09-08T03:57:09.808Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Hostile controls (bats): reprieve.sh caws_reprieve_state_dir returns failure instead of '/state/sessions/<id>' when HOME/CAWS_HOME absent (reverting reprieve.sh reproduced the root-path output); agent-surface.sh CODE INVARIANT confirms the ${CAWS_HOME:-${HOME:-}/.caws} pattern is gone (reverting reproduced grep count 1, fixed code is 0); protected-paths.sh no longer flags /.caws/bin/* as protected (reverting reproduced the false block)."
+    recorded_at: "2026-09-08T03:57:11.072Z"
