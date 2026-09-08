@@ -97,6 +97,10 @@
 
 ### Fixed
 
+- Doctor and agent listing no longer diagnose heartbeat emission/escalation
+  caches as malformed leases. Their exact reserved filenames cannot be used
+  for session writes; malformed real leases still produce diagnostics.
+
 - Stock dispatchers installed by npm 12.1.0 are recognized during machine
   migration even though their trailer predates the Bash 3.2 empty-array fix.
   Changed executable scaffolding remains refused; only reviewed handler policy

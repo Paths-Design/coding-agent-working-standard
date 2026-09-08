@@ -50,6 +50,13 @@ import { storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
 
 const LEASES_DIRNAME = 'leases';
+// agent-heartbeat.sh keeps these operational sidecars beside the leases.
+// Reserve the exact names in both directions: readers must not diagnose them
+// as malformed leases, and session writers must not overwrite the caches.
+const HEARTBEAT_CACHE_SESSION_NAMES = new Set([
+  'heartbeat-emit-state',
+  'heartbeat-escalation-state',
+]);
 
 /**
  * Strict-allowlist regex for lease filenames.
@@ -111,6 +118,13 @@ export function safeLeaseFilename(sessionId: unknown): Result<string> {
       )
     );
   }
+  if (HEARTBEAT_CACHE_SESSION_NAMES.has(sessionId)) {
+    return err(storeDiagnostic(
+      STORE_RULES.LEASE_SESSION_ID_INVALID,
+      `Lease session_id "${sessionId}" is reserved for heartbeat cache state.`,
+      { data: { session_id: sessionId } }
+    ));
+  }
   if (!LEASE_FILENAME_RE.test(sessionId)) {
     return err(
       storeDiagnostic(
@@ -169,6 +183,7 @@ export function loadLeases(cawsDir: string): Result<LoadLeasesResult> {
   for (const entry of entries) {
     if (!entry.endsWith('.json')) continue;
     const sessionId = entry.slice(0, -'.json'.length);
+    if (HEARTBEAT_CACHE_SESSION_NAMES.has(sessionId)) continue;
     if (!LEASE_FILENAME_RE.test(sessionId)) {
       // Not a lease file by our naming convention; ignore silently
       // rather than fabricate a malformed diagnostic for unrelated
