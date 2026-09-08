@@ -34,7 +34,8 @@ import { STORE_RULES } from './rules';
 
 const MESSAGES_FILENAME = 'messages.jsonl';
 const MESSAGES_ARCHIVE_FILENAME = 'messages.jsonl.archive';
-const MESSAGES_LOCK_FILENAME = 'messages.lock';
+// The lock filename is a compatibility boundary shared by installed CLI versions.
+const MESSAGES_LOCK_FILENAME = 'messages.jsonl.lock';
 /** A recipient lease older than this (no heartbeat) is not considered live. */
 const LIVENESS_TTL_MS = 30 * 60 * 1000; // 30m, matching the leases-store stale default
 
