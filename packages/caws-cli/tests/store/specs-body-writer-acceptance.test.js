@@ -193,13 +193,6 @@ function amendedEvents(cawsDir) {
   return readEvents(cawsDir).filter((e) => e.event === 'spec_body_amended');
 }
 
-/** Extract the raw acceptance block (from the `acceptance:` key to the next top-level key). */
-function acceptanceBlock(raw) {
-  const start = raw.indexOf('acceptance:');
-  const end = raw.indexOf('non_functional:', start);
-  return raw.slice(start, end);
-}
-
 function loadCleanSpec(cawsDir, id) {
   const loaded = loadSpecs(cawsDir);
   expect(loaded.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
