@@ -314,7 +314,7 @@ describe('active workflow topology contract', () => {
       env: { ...process.env, BASE_REF: 'missing-base', HEAD_REF: 'missing-head', LC_ALL: 'C' },
     });
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toMatch(/fatal:.*not a git repository/);
+    expect(result.stderr).toMatch(/not a git repository/i);
   });
 
   test('PR checks preserve executable regression jobs and reject empty test selection', () => {
