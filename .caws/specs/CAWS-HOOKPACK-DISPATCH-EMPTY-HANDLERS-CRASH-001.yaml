@@ -1,0 +1,41 @@
+id: CAWS-HOOKPACK-DISPATCH-EMPTY-HANDLERS-CRASH-001
+title: 'Fix bash-3.2 empty-handler-array crash in shared hook dispatch scripts'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-08T00:01:40.851Z'
+updated_at: '2026-09-08T00:01:40.851Z'
+created_by_session: '96a9b85d-e209-45ad-9efb-d8522a340f79'
+blast_radius:
+  modules:
+    - 'caws-cli/hook-dispatch'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/dispatch/pre_tool_use.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/dispatch/post_tool_use.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/dispatch/stop.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/dispatch/session_start.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/dispatch/pre_compact.sh'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+  out: []
+invariants:
+  - 'Every shared hook dispatch script exits 0 (fail-open) when every handler for its event is disabled, on any bash version including bash 3.2 (macOS default /bin/bash), never crashing with an unbound-variable error.'
+acceptance:
+  - id: A1
+    given: 'a hook dispatch script (pre_tool_use, post_tool_use, stop, session_start, or pre_compact) with every handler for its event disabled via CAWS_DISABLED_HANDLERS'
+    when: 'the dispatch script runs under bash 3.2 (set -uo pipefail, empty HANDLERS array)'
+    then: 'it exits 0 and does not throw an unbound-variable error'
+  - id: A2
+    given: 'the shared hook-pack template files changed (three prior commits plus this fix) since the last recorded fingerprint baseline'
+    when: 'SHARED_PACK_VERSION is bumped and the fingerprint is recomputed from the live template tree'
+    then: 'tests/init/pack-fingerprints.json records the new version and matching fingerprint, and pack-fingerprint.test.js passes'
+rollback:
+  - 'Revert the dispatch-script and manifest-shared.ts changes; consumers stay on the prior pack version until their next caws init re-stamps hooks.'
+non_functional: {}
+contracts:
+  - name: 'hook-dispatch-empty-handlers'
+    type: contract-test
+    path: 'packages/caws-cli/tests/adapter/machine-adoption.test.js'
