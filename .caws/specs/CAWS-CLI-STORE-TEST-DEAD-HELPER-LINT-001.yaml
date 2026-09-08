@@ -25,3 +25,8 @@ acceptance:
     then: 'npm run lint passes with 0 errors and the test suite''s assertions are unchanged'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "packages/caws-cli: npm run lint -> exit 0 (previously 1 error); npx jest tests/store/specs-body-writer-acceptance.test.js -> 21/21 passed, unchanged"
+    recorded_at: "2026-09-08T00:55:51.751Z"
