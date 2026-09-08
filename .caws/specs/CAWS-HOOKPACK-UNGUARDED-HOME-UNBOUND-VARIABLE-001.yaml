@@ -52,3 +52,7 @@ evidence:
     status: pass
     evidence_ref: "packages/caws-cli: npx bats tests/hooks/bats/home-unset-guard-robustness.bats -> 8/8 passed against fixed code, driving REAL envelopes through dispatch/pre_tool_use.sh, dispatch/stop.sh, dispatch/post_tool_use.sh with HOME unset (env -i). Each of the 9 fix locations (protected-paths.sh/reprieve.sh chain proven separately via kimi-surface.bats) was individually reverted and reconfirmed to fail for the right reason ('HOME: unbound variable') before restoring the fix -- no vacuous assertions. Full suites clean after: npx jest -> 2531/2531 passed (/tmp/jest-home-fix.log); npx bats tests/hooks/bats -> 198/198 passed (/tmp/bats-home-fix.log)."
     recorded_at: "2026-09-08T03:07:57.843Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "kimi-surface.bats 'shim: a protected hook edit carrying kimi's tool_input.path is blocked end-to-end' (file untouched by this commit) flipped from failing (pre-fix: reprieve.sh:43 HOME unbound variable crash) to passing in the full 198/198 clean bats run, proving the real dispatch-path fix without a synthetic-only check."
+    recorded_at: "2026-09-08T03:07:58.530Z"
