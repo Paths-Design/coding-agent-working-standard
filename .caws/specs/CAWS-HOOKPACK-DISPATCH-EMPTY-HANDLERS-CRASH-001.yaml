@@ -2,9 +2,10 @@ id: CAWS-HOOKPACK-DISPATCH-EMPTY-HANDLERS-CRASH-001
 title: 'Fix bash-3.2 empty-handler-array crash in shared hook dispatch scripts'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: fix-dispatch-empty-handlers
 created_at: '2026-09-08T00:01:40.851Z'
-updated_at: '2026-09-08T00:01:40.851Z'
+updated_at: '2026-09-08T00:01:52.438Z'
 created_by_session: '96a9b85d-e209-45ad-9efb-d8522a340f79'
 blast_radius:
   modules:
