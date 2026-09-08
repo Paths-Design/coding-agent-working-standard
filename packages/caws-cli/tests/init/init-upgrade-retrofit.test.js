@@ -90,10 +90,17 @@ function installedRepo(prefix) {
   return repoRoot;
 }
 
+// CAWS-CLI-INIT-SYSTEM-SURFACE-HOME-OVERRIDE-001: runInitCommand consults
+// systemSurfaceEnabled against this home. Without an isolated one, a
+// developer/agent machine that has genuinely run `caws init adapters
+// install` makes systemSurfaceEnabled true here, so the CLI correctly skips
+// installing/re-stamping the project-local pack -- a false test failure, not
+// a product bug. Each call gets its own fresh, unadopted home.
 function runInit(opts) {
   const out = [];
   const err = [];
   const code = runInitCommand({
+    home: fs.mkdtempSync(path.join(os.tmpdir(), 'caws-retrofit-home-')),
     ...opts,
     out: (line) => out.push(line),
     err: (line) => err.push(line),

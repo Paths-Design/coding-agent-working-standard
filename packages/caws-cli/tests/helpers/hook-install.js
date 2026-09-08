@@ -20,6 +20,7 @@
  */
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
@@ -29,6 +30,44 @@ const CLI_DIST_ENTRY = path.join(CLI_PKG_ROOT, 'dist', 'index.js');
 
 /** @type {number} how many times runInit has actually invoked the CLI. */
 let installCount = 0;
+
+/**
+ * CAWS-CLI-INIT-SYSTEM-SURFACE-HOME-OVERRIDE-001: isolated CAWS_HOME dirs
+ * created for spawned `caws init` calls, tracked so they can be reclaimed.
+ * Without an isolated CAWS_HOME, the spawned CLI's systemSurfaceEnabled()
+ * falls back to the REAL machine's ~/.caws, so a developer/agent machine that
+ * has genuinely run `caws init adapters install` makes `caws init` skip
+ * project-local hook installation here -- a false test failure, not a product
+ * bug.
+ * @type {Set<string>}
+ */
+const createdHomes = new Set();
+
+/** A fresh, empty CAWS_HOME with no adopted system-runtime surfaces. */
+function mkIsolatedCawsHome() {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-test-home-'));
+  createdHomes.add(home);
+  return home;
+}
+
+/** Remove every isolated CAWS_HOME created by runInit. Call in afterAll. */
+function cleanupCawsHomes() {
+  for (const home of [...createdHomes]) {
+    fs.rmSync(home, { recursive: true, force: true });
+    createdHomes.delete(home);
+  }
+}
+
+// Backstop: a thrown test that skips afterAll should not leak temp dirs.
+process.once('exit', () => {
+  for (const home of createdHomes) {
+    try {
+      fs.rmSync(home, { recursive: true, force: true });
+    } catch {
+      /* best-effort on exit */
+    }
+  }
+});
 
 /** Reset the install counter (call in beforeAll if a suite asserts on it). */
 function resetInstallCount() {
@@ -74,7 +113,7 @@ function runInit(repoDir, opts = {}) {
       cwd: repoDir,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, CI: 'true', NO_COLOR: '1' },
+      env: { ...process.env, CI: 'true', NO_COLOR: '1', CAWS_HOME: mkIsolatedCawsHome() },
     });
   } catch (err) {
     // execFileSync throws on non-zero exit; surface code + captured output so
@@ -114,4 +153,5 @@ module.exports = {
   assertDistBuilt,
   resetInstallCount,
   getInstallCount,
+  cleanupCawsHomes,
 };

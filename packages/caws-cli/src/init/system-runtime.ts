@@ -523,9 +523,11 @@ export function migrateSystemProject(options: SystemOptions): {
 }
 
 /** Filesystem configuration only; native trust and execution need native proof. */
-export function systemSurfaceEnabled(surface: string | null | undefined): boolean {
+export function systemSurfaceEnabled(
+  surface: string | null | undefined,
+  home: string = machineHome()
+): boolean {
   if (!surface || surface === 'none') return false;
-  const home = machineHome();
   const settings = readSystemSurfaceSettings(home, surface);
   if (!settings) return false;
   if (!settings.enabled) return false;
