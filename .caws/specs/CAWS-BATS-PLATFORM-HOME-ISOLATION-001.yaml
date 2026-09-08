@@ -37,3 +37,25 @@ acceptance:
     then: 'fixtures install their intended local hook packs using isolated homes and remove those homes in teardown'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Re-run: bats-suite-selection.test.js passes 2/2. Actual Bats discovery from package script selections counts zero Bash 3.2 instruments in general CI and one in the dedicated macOS suite. The test failed against the prior layout (general selection count was one)."
+    recorded_at: "2026-09-08T05:36:02.028Z"
+    command: ./node_modules/.bin/jest --runInBand --runTestsByPath tests/hooks/bats-suite-selection.test.js
+    exit_code: 0
+    commit_sha: "989feef2"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Re-run: dedicated macOS suite passes 5/5 on /bin/bash 3.2.57 with inherited adopted CAWS_HOME. A disposable copy selecting /usr/local/bin/bash 5.3.3 failed exactly instrument tests 1 and 2 while candidates 3, 4 and 5 passed. Probe and temporary fixture were removed."
+    recorded_at: "2026-09-08T05:36:10.126Z"
+    command: ../../node_modules/.bin/bats tests/hooks/bats-macos
+    exit_code: 0
+    commit_sha: "989feef2"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Re-run: fixture-home-isolation.bats passes 5/5. Direct CLI control rejects hostile machine settings; shared, Kimi and Qwen fixtures install local hooks under that inherited environment and reclaim their own homes. Failed installation preserves CLI exit 2 and leaves no temporary roots. Before the repair all three fixture cases failed at init."
+    recorded_at: "2026-09-08T05:36:18.919Z"
+    command: ../../node_modules/.bin/bats tests/hooks/bats/fixture-home-isolation.bats
+    exit_code: 0
+    commit_sha: "989feef2"
