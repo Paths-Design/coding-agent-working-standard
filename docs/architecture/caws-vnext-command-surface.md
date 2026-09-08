@@ -487,7 +487,9 @@ See [the runtime contract](hook-pack-shared-core.md#machine-adapter-runtime).
 
 | Command | Purpose |
 |---|---|
-| `caws worktree create/list/ensure/bind/destroy/untrack/merge/migrate-registry/repair-sparse/repair/prune/cleanup-plan` | Worktree lifecycle on the vNext substrate. Canonical path for parallel agent work. `repair` prunes ghost registry entries + clears dead spec→worktree bindings; `repair-sparse` restores the `.caws/specs` sparse-checkout invariant; `untrack` releases the registry binding while keeping the directory; `prune`/`cleanup-plan` are dry-run-by-default cleanup planners. `ensure <name> --spec <id>` (WORKTREE-ENSURE-AFFORDANCE-001) is the idempotent create-or-admit affordance — absent lanes create via the full create path (events, activation-on-bind, artifact linking); an existing same-spec, admitting-owner, untouched-fork-point lane ADMITS with no new events and prints the cd entry command; foreign-owned, different-spec, closed/archived-spec, and moved-branch states refuse with their handoffs. It is the verb the unbound SessionStart advisory (pack v46) and the scope no-authority remediation name. |
+| `caws worktree create/list/ensure/bind/destroy/untrack/merge/review/migrate-registry/repair-sparse/repair/prune/cleanup-plan` | Worktree lifecycle on the vNext substrate. Canonical path for parallel agent work. `repair` prunes ghost registry entries + clears dead spec→worktree bindings; `repair-sparse` restores the `.caws/specs` sparse-checkout invariant; `untrack` releases the registry binding while keeping the directory; `prune`/`cleanup-plan` are dry-run-by-default cleanup planners. `ensure <name> --spec <id>` (WORKTREE-ENSURE-AFFORDANCE-001) is the idempotent create-or-admit affordance — absent lanes create via the full create path (events, activation-on-bind, artifact linking); an existing same-spec, admitting-owner, untouched-fork-point lane ADMITS with no new events and prints the cd entry command; foreign-owned, different-spec, closed/archived-spec, and moved-branch states refuse with their handoffs. It is the verb the unbound SessionStart advisory (pack v46) and the scope no-authority remediation name. `review <name>` (WORKTREE-REVIEW-SURFACE-001) is the read-only pre-merge gate: commit list, per-commit scope-provenance table (the dry-run of merge's provenance gate), lane diffstat, the bound spec's AC evidence status, and the owner's lease work_state — never mutates `.caws/` or appends events. |
+| `caws working-tree check/ack` | WORKING-TREE-PROVENANCE-GUARD-001. `check` reports uncommitted working-tree overlap with another session's declared ownership metadata (set via `caws claim --paths <path>`); `ack` acknowledges the advisory. Visibility only — never mutates authority. |
+| `caws handoff export/import` | HANDOFF-EXPORT-IMPORT-001. Portable handoff briefs for session-to-session continuity: `export` writes a brief describing current spec/scope/evidence state; `import` reads one into a fresh session. Provenance only, never authority. |
 | `caws worktree migrate-registry` | Convert v10.2 legacy-envelope `.caws/worktrees.json` into the v11 flat-map shape. Idempotent on already-flat files. |
 | `caws worktree repair-sparse <name>` | Restore the `/*` + `!/.caws/specs/` sparse-checkout invariant on a linked worktree. Idempotent and non-destructive: refuses dirty/untracked content under `<wt>/.caws/specs/` rather than stashing, cleaning, resetting, or deleting. Added by `WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001`. |
 | `caws worktree repair` | Repair unambiguous worktree/spec half-states surfaced by `caws doctor`: prune ghost registry entries and clear dead spec→worktree bindings. Never creates or deletes a git worktree directory. |
@@ -605,8 +607,10 @@ lease writes.
 ### Help banner (v11.0.0 historical snapshot)
 
 > **Historical — captured at v11.0.0.** The current surface has
-> fourteen top-level commands/groups: `init doctor status scope claim gates
-> evidence events waiver specs worktree agents message reprieve` plus the
+> seventeen top-level commands/groups: `init doctor status scope claim gates
+> evidence events waiver specs worktree agents message reprieve session
+> working-tree handoff` (source of truth:
+> `packages/caws-cli/src/shell/registered-command-groups.js`) plus the
 > auto-generated `help`. Run `caws --help` against the installed CLI to see
 > the live banner.
 
@@ -682,7 +686,7 @@ Reason categories:
 | `plan <action>` | `src/commands/plan.js` (438 LOC) | yes (writes plan markdown to `--output`) | user-specified path | **PNC** | (none) |
 | `worktree create/list/destroy/merge/prune/repair/bind/claim` | `src/commands/worktree.js` (502 LOC) | yes | `.caws/worktrees.json`, git worktrees | **LG** | **Removed in v11.0; RESTORED in v11.1** as vNext `caws worktree create/list/bind/destroy/merge/migrate-registry/repair-sparse`, plus **`caws worktree repair`** (the governed unambiguous-half-state executor — ghost-registry prune + dead spec→worktree binding clear). `caws claim` handles ownership. Broad `prune`/`reconcile` over ambiguous classes remain deferred. |
 | `agents list/show <id>` | `src/commands/agents.js` (124 LOC) | no (read-only) | reads `.caws/agents.json` | **PNC** (overlaps with vNext `status`/claim panel) | **Removed in v11.0; RESTORED in v11.1** as `caws agents list/show` (plus `register/heartbeat/stop/prune`). Reads `.caws/leases/` (not legacy `.caws/agents.json`). |
-| `session start/checkpoint/end/list/show/briefing` | `src/commands/session.js` (312 LOC) | yes | `.caws/sessions/`, `.caws/sessions.json` (separate state) | **PNC + AC** | v11 doctor does not observe sessions; re-add later if needed |
+| `session start/checkpoint/end/list/show/briefing` | `src/commands/session.js` (312 LOC) | yes | `.caws/sessions/`, `.caws/sessions.json` (separate state) | **PNC + AC** | **`start/checkpoint/end/list/show/briefing` remain deferred to v11.3+.** `caws session prune` (SESSION-LOG-RETENTION-SCOPE-001) and `caws session pickup` (MULTI-AGENT-HANDOFF-EVENT-001) shipped in v11.1 — see §2. |
 | `parallel setup/status/merge/teardown` | `src/commands/parallel.js` (242 LOC) | yes | `.caws/parallel/...` (separate state); creates worktrees | **LG** | v11.1 lifecycle work |
 | `templates [subcommand]` | `src/commands/templates.js` (237 LOC) | no | reads `templates/` | **PNC** | (none) |
 | `diagnose [--fix]` | `src/commands/diagnose.js` (525 LOC) | yes (`--fix`) | various; advertises legacy commands as "core" | **AC** | `caws doctor` is the v11 diagnostic surface |
@@ -744,6 +748,7 @@ escalated).
 | `.caws/events.jsonl` | **store ONLY** (`appendEvent` in `events-store.ts`) | Hash-chained, append-only durable governance/audit facts. First `appendEvent` creates the file under lock. Never required at rest. |
 | `.caws/leases/<session_id>` (v11.2) | store (`leases-store.ts`) | **Ephemeral operational cache.** Per-session liveness file. Content-authoritative (`last_command_at` is the primary timestamp). Writes are non-blocking and outside `lifecycle-transaction`. Never participates in governance authority decisions. |
 | `.caws/claims/bridge.json` (v11.2) | store (`claim-store.ts`) | **Authority binding** for non-worktree session ↔ spec. Mutated only through `lifecycle-transaction`. |
+| `.caws/sessions/<sessionId>/` (v11.1) | `caws session prune`/`pickup` | **Operational cache** (gitignored; never `events.jsonl`, never read by the kernel for authority). Per-session turn history (`turn-<NNN>.json`) plus the identity capsule (`.session-envelope.json`) and `.meta.json`. `prune` is dry-run-by-default retention over turn history only; `pickup` records a `manual_pickup` event when one session continues another's paused work. Distinct from the legacy flat `.caws/sessions.json` file (see §4 refused table), which remains inert. |
 
 **State-file role split:** liveness (leases) and authority (worktrees,
 bridge claims) are deliberately separated. `agents.json` is compatibility/
@@ -758,7 +763,7 @@ re-introduce the mixed-regime hazard the rewrite eliminated.
 | `.caws/working-spec.yaml` | `init-store.findLegacyResidue` and `doctor-snapshot.observeInitResidue` (both via `fs.statSync().isFile()`) | `caws init` refuses with `INIT_LEGACY_RESIDUE`; `caws doctor` emits `doctor.init.legacy_working_spec_present` (error). |
 | `.caws/working-spec.schema.json` | same | `caws doctor` emits `doctor.init.legacy_working_spec_schema_present` (error). |
 | `.caws/provenance/` | (not yet a doctor rule) | Superseded by `events.jsonl`. Future: doctor rule to flag presence. |
-| `.caws/sessions/`, `.caws/sessions.json` | (no v11 awareness) | Created only by removed `session` command. Inert in v11. |
+| `.caws/sessions.json` (flat file, distinct from the `.caws/sessions/` directory below) | (no v11 awareness) | Created only by removed `session` command. Inert in v11; zero references in current source. |
 | `.caws/parallel/...` | (no v11 awareness) | Created only by removed `parallel` command. Inert in v11. |
 | `.caws/mode.yaml` | (no v11 awareness) | Created only by removed `mode` command. Inert in v11. |
 | `.caws/quality-gates-report.json` | (no v11 awareness) | Cache file; can be deleted manually. |
