@@ -26,3 +26,8 @@ acceptance:
     then: 'all hand-authored (non-marker-synced) command lists and paths in both files are corrected and re-verified against caws <group> --help output'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "1 commit (810e4485) fixed kernel-path + specs/worktree/agents/claim leaf-list undercounts + missing session/working-tree/handoff prose in templates/CLAUDE.md and templates/agents.md; each added example verified against live --help output; populate-doc-markers.mjs --check and npm run docs:check clean; tests/docs/agent-doc-examples.test.js + agent-recovery-path-drift.test.js pass 28/28 against rebuilt dist"
+    recorded_at: "2026-09-08T00:55:06.894Z"
