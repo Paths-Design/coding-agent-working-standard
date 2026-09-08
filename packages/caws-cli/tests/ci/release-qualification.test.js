@@ -22,7 +22,7 @@ test('the tag publish job depends on qualification of the same checkout', () => 
 });
 
 test('prerelease routing and fixture isolation contracts execute under Node', () => {
-  const result = spawnSync(process.execPath, ['--test', 'scripts/release-tag-publish.test.mjs'], { cwd: root, encoding: 'utf8' });
+  const result = spawnSync(process.execPath, ['--test', 'scripts/release-tag-publish.test.mjs', 'scripts/ci-governance-artifacts.test.mjs'], { cwd: root, encoding: 'utf8' });
   expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
   expect(result.stdout).toContain('# fail 0');
 });

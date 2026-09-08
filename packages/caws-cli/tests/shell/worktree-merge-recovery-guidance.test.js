@@ -55,6 +55,7 @@ function runMerge(root, opts = {}) {
   const out = [];
   const err = [];
   const code = runWorktreeMergeCommand({
+    env: { CAWS_SESSION_ID: 'fixture-session' },
     cwd: root,
     name: 'wt-unready',
     out: (line) => out.push(line),

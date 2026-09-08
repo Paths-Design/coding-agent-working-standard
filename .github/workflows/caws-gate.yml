@@ -13,10 +13,9 @@
 # smoke test against published packages is covered separately by
 # CI-MATRIX-VALIDATION-001.
 #
-# v11 surface: this workflow invokes `caws doctor` (drift detection over
-# .caws/ state) and `caws gates run --spec <id>` (policy-driven quality
-# gates). It does NOT invoke `caws validate`, which was removed in v11.0
-# and is not planned to return.
+# Portable source validation uses the CLI specs-validate command implementation
+# and the kernel-backed waiver store. Local runtime doctor findings (leases,
+# worktree registries and installed hook packs) are not CI artifact evidence.
 #
 # Spec: CI-CAWS-GATE-V11-SURFACE-001
 
@@ -76,48 +75,17 @@ jobs:
             exit 1
           fi
 
-      - name: Run caws doctor on changed specs
-        run: |
-          set -u
-          CAWS="${{ steps.caws-bin.outputs.path }}"
-          BASE="${{ github.event.pull_request.base.sha }}"
-          HEAD="${{ github.event.pull_request.head.sha }}"
+      - name: Test portable governance validation
+        run: node --test scripts/ci-governance-artifacts.test.mjs
 
-          # Collect every per-feature spec file touched in this PR.
-          # v11 removes the project-level working-spec.yaml; only
-          # per-feature specs under .caws/specs/ exist.
-          CHANGED_SPECS=$(git diff --name-only "$BASE" "$HEAD" \
-            | grep -E '^\.caws/specs/.+\.(yaml|yml)$' \
-            | grep -v '^\.caws/specs/\.archive/' \
-            | sort -u || true)
-
-          if [ -z "$CHANGED_SPECS" ]; then
-            echo "ℹ️ No CAWS spec files changed in this PR — skipping spec validation."
-            exit 0
-          fi
-
-          echo "🔍 Specs touched in this PR:"
-          echo "$CHANGED_SPECS" | sed 's/^/   - /'
-          echo ""
-
-          # caws doctor performs drift detection over the entire .caws/
-          # state, including structural validation of every spec file.
-          # A single invocation covers all specs; per-file iteration is
-          # not needed in v11.
-          #
-          # Exit codes (from caws doctor):
-          #   0 — clean
-          #   1 — findings or load errors (treated as failure)
-          #   2 — composition failure (treated as failure)
-          echo "▶️  $CAWS doctor"
-          if ! $CAWS doctor; then
-            echo ""
-            echo "❌ caws doctor reported drift or load errors in the PR's .caws/ state."
-            echo "💡 Run \`caws doctor\` locally to see the findings."
-            exit 1
-          fi
-
-          echo "✅ caws doctor clean."
+      - name: Validate changed specs and waiver artifacts
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        # A clean checkout has no machine installation, live leases, or local
+        # worktree registry. Validate committed artifacts through the current
+        # CLI parser/kernel; doctor remains the local runtime drift check.
+        run: node scripts/ci-governance-artifacts.mjs "$BASE_SHA" "$HEAD_SHA"
 
       - name: Enforce path discipline
         run: |
@@ -184,27 +152,6 @@ jobs:
             echo "   3. Reference the waiver in the spec's waiver_ids field"
             exit 1
           fi
-
-      - name: Validate waivers
-        run: |
-          # Waiver schema check. Preserved from v10 — pure YAML + regex.
-          # Waiver file storage location is unchanged in v11.
-          if [ ! -d .caws/waivers ]; then
-            exit 0
-          fi
-          shopt -s nullglob
-          for waiver_file in .caws/waivers/*.yaml; do
-            echo "Validating waiver: $waiver_file"
-            if ! python3 -c "import yaml; yaml.safe_load(open('$waiver_file'))"; then
-              echo "❌ Invalid YAML in waiver: $waiver_file"
-              exit 1
-            fi
-            WAIVER_ID=$(python3 -c "import yaml; print(yaml.safe_load(open('$waiver_file'))['id'])")
-            if [[ ! "$WAIVER_ID" =~ ^WV-[0-9]{4}$ ]]; then
-              echo "❌ Invalid waiver ID format: $WAIVER_ID (expected WV-NNNN)"
-              exit 1
-            fi
-          done
 
       - name: Require dual control for policy changes
         run: |

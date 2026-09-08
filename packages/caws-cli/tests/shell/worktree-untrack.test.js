@@ -127,6 +127,7 @@ function runUntrack(repoRoot, name, opts = {}) {
   const out = [];
   const err = [];
   const code = runWorktreeUntrackCommand({
+    env: { CAWS_SESSION_ID: 'fixture-session' },
     cwd: repoRoot,
     name,
     out: (l) => out.push(l),
