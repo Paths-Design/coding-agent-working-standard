@@ -30,3 +30,8 @@ acceptance:
     then: 'the candidate test fails (proving the regression guard actually detects the reintroduced defect, not just a vacuous pass)'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "packages/caws-cli: ../../node_modules/.bin/bats tests/hooks/bats/empty-handler-array-bash32.bats -> 5/5 passed on this machine's real bash 3.2.57 (environment sanity + positive control + 3 candidate tests)"
+    recorded_at: "2026-09-08T01:56:03.473Z"
