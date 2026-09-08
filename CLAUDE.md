@@ -240,6 +240,14 @@ When git worktrees are active for parallel work:
   <main-repo>/.venv/bin/activate`), not a per-worktree one.
 - `caws claim` shows ownership; `caws claim --takeover` acquires from a foreign
   session and writes a durable `prior_owners` audit.
+- **DSH self-claim divergence**: a refusal on a worktree you just created, where
+  the owner id is your own session id in another form (bare `<uuid>` vs
+  `session-<uuid>` — CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001), is a
+  legacy-stamped lane, not a foreign session. Verify the uuid matches your
+  `DSH_SESSION_ID` minus the `session-` prefix, then reclaim with
+  `caws claim --takeover` from inside the worktree — it restamps the owner
+  through the current resolver and writes the `prior_owners` audit. A genuinely
+  foreign owner still requires explicit user authorization.
 - Use the lifecycle commands (`caws worktree create | list | bind | destroy |
   merge | migrate-registry | repair-sparse | repair`) — do not fall back to raw
   `git worktree`/`git merge` by default.
