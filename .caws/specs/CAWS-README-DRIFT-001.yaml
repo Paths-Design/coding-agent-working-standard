@@ -1,0 +1,26 @@
+id: CAWS-README-DRIFT-001
+title: 'Fix root README drift: broken multi-agent example, undercounted command lists, status-barnacle section'
+risk_tier: 3
+mode: doc
+lifecycle_state: draft
+created_at: '2026-09-08T01:25:56.278Z'
+updated_at: '2026-09-08T01:25:56.278Z'
+created_by_session: 'e33f5221-a961-4418-9632-37ab8ab02449'
+blast_radius:
+  modules:
+    - 'documentation'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'README.md'
+  out: []
+invariants:
+  - 'Every command example in README.md must be runnable as written against the live CLI, verified with --plan where the command is mutating'
+acceptance:
+  - id: A1
+    given: 'a fresh audit (2026-09-07) found the Multi-agent work example refused by the live CLI for two independent reasons, plus undercounted specs/agents/session command lists and a dated status-barnacle section'
+    when: 'this spec closes'
+    then: 'every finding is corrected and the fixed multi-agent example is verified runnable via --plan'
+non_functional: {}
+contracts: []
