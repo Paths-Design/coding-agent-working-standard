@@ -33,11 +33,11 @@ Use `caws --help` for the current command tree. Common project operations:
 | `caws events migrate / rotate / verify-archive` | Maintenance for the hash-chained `.caws/events.jsonl` (v10→v11 migration, rotation, archive integrity). |
 | `caws waiver create / list / show / revoke` | Manage waiver records that filter matching gate violations. Singular surface — no plural alias. `create` requires `--title`, `--gate`, `--reason`, `--approved-by`, `--expires-at`. |
 | `caws reprieve grant / show / revoke / list` | Session-scoped guard reprieve: skip a PreToolUse guard for one session until expiry. |
-| `caws specs create / list / show / recover / restore / retire-draft / prune-drafts / activate / deactivate / amend / amend-scope / evidence / close / reopen / archive / prune-archive / migrate / validate` | Manage CAWS spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. `create` writes `lifecycle_state: draft` by default (`--activate` creates active directly); the normal path is `caws worktree create --spec <id>`, which activates on bind. Batch archive supports `--status closed`, `--include`, `--exclude`, and `--apply`. |
+| `caws specs create / list / show / recover / restore / retire-draft / prune-drafts / activate / deactivate / amend / amend-scope / evidence / close / reopen / archive / prune-archive / migrate / validate / relocate` | Manage CAWS spec lifecycle. Specs live at `.caws/specs/<id>.yaml`. `create` writes `lifecycle_state: draft` by default (`--activate` creates active directly); the normal path is `caws worktree create --spec <id>`, which activates on bind. Batch archive supports `--status closed`, `--include`, `--exclude`, and `--apply`. |
 | `caws worktree create / list / ensure / bind / destroy / untrack / merge / review / migrate-registry / repair-sparse / repair / prune / cleanup-plan` | Manage CAWS worktrees bound to active specs (`ensure` is the idempotent create-or-admit form; `review` is a read-only pre-merge gate; `repair` prunes ghost registry entries + clears dead spec→worktree bindings; `repair-sparse` restores the `.caws/specs` sparse-checkout invariant; `untrack` releases the registry binding while keeping the directory; `prune`/`cleanup-plan` are dry-run-by-default cleanup planners). |
-| `caws agents register / heartbeat / stop / list / show / prune` | Agent-liveness substrate (`.caws/leases/`). Operational cache only — never authority. |
+| `caws agents register / heartbeat / stop / list / show / work-state / prune` | Agent-liveness substrate (`.caws/leases/`). Operational cache only — never authority. `work-state` is a visibility-only annotation (`working`/`blocked_awaiting_human`/`review_ready`/`done`) a session sets on its own lease. |
 | `caws message send / reply / poll / inbox / history / status / prune` | Directed inter-agent message channel over `.caws/messages.jsonl`. Not authority; verify claims before acting. |
-| `caws session prune` | Dry-run-default retention for `.caws/sessions/` turn logs. The full lifecycle (`start`/`checkpoint`/`end`) remains deferred. |
+| `caws session prune / pickup` | `prune`: dry-run-default retention for `.caws/sessions/` turn logs. `pickup`: records a `manual_pickup` event when one session continues another's paused work. The full lifecycle (`start`/`checkpoint`/`end`) remains deferred. |
 | `caws working-tree check / ack` | Working-tree provenance advisory: `check` reports uncommitted overlap with another session's lease; `ack` acknowledges it. |
 | `caws handoff export / import` | Portable handoff briefs for session-to-session continuity. |
 
@@ -140,8 +140,10 @@ from `scope.in`/`scope.out`; ownership lives in `.caws/worktrees.json`.
 ```bash
 # One spec + one worktree per agent (loop this per agent; there is no
 # `caws parallel setup` — that surface is deferred to v11.3+)
-caws specs create FEAT-AUTH --title "Auth" --mode feature --risk-tier 2
-caws worktree create wt-auth --spec FEAT-AUTH   # writes the binding atomically
+# Tier 2 requires at least one --contract.
+caws specs create FEAT-AUTH-001 --title "Auth" --mode feature --risk-tier 2 \
+  --contract "auth-api:behavior"
+caws worktree create wt-auth --spec FEAT-AUTH-001   # writes the binding atomically
 cd .caws/worktrees/wt-auth
 
 # See who else is live before mutating shared state
@@ -217,13 +219,12 @@ Authoritative for v11:
 - **[`AGENTS.md`](AGENTS.md)** — agent quickstart for working on this repo.
 - **[`CLAUDE.md`](CLAUDE.md)** — Claude Code project guidance.
 
-Cleanup status (Slice 8c.1):
-
-- Files swept and rewritten v11-honest: this README, `AGENTS.md`, `CLAUDE.md`, `packages/caws-cli/README.md`, the doctrine doc.
-- Files swept for active v10 instructions removed: `docs/agents/`, `docs/guides/`, `docs/api/cli.md`, `docs/agent-workflow-tools.md`.
-- Files explicitly historical (allowed to retain v10 references): `docs/MIGRATION_GUIDE_V3.5.md`, `docs/ROLLBACK.md`, `docs/DEPLOYMENT.md`, `docs/failure-lineage.md`, anything under `docs/internal/`.
-
-If you find a doc that still teaches removed commands as current workflow, file an issue or PR — it's a 8c.1 escapee.
+Some docs are explicitly historical and may retain v10 references on purpose —
+`docs/MIGRATION_GUIDE_V3.5.md`, `docs/ROLLBACK.md`, `docs/DEPLOYMENT.md`,
+`docs/failure-lineage.md`, and anything under `docs/internal/` or
+`docs/rewrite/` record what was true at a point in time, not current behavior.
+Everywhere else, if you find a doc teaching a removed command as current
+workflow, file an issue or PR.
 
 ## Development
 
