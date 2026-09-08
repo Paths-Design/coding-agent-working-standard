@@ -36,3 +36,9 @@ evidence:
     recorded_at: "2026-09-08T06:07:50.802Z"
     command: caws init adapters install --plan --json
     exit_code: 0
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Guide checked against CLI help, system-runtime.ts, system-project-policy.ts and Sterling local logger; relative links and fenced blocks checked; all five policy gates pass; doctor 0E/12W/7I"
+    recorded_at: "2026-09-08T06:07:51.292Z"
+    artifact_path: docs/guides/sterling-machine-runtime-migration.md
+    commit_sha: "9964bb6f"
