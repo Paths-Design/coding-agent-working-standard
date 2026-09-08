@@ -38,3 +38,8 @@ non_functional:
 contracts:
   - name: 'worktree-guard-base-push'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "6cb49a278e79555bd389e4cb8e6e23ed4301bc0b: both worktree-guard.sh copies edited (template + installed), SHARED_PACK_VERSION 60->61, pack-fingerprints.json recalibrated (jest tests/init/pack-fingerprint.test.js 10/10 pass, tests/init 205/205 pass, tests/hooks 58/58 pass). Force-publish refusal verified unchanged via direct guard invocation (exit 2, both --force and -f variants). Plain publish verified admitted (exit 0). bats file added (worktree-guard-base-push.bats) but blocked from end-to-end execution by a separate pre-existing regression (caws init no longer installs project-local .caws/hooks for system surfaces) already being fixed on peer branch bats-caws-home-isolation."
+    recorded_at: "2026-09-08T02:11:30.841Z"
