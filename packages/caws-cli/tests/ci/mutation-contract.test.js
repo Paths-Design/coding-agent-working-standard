@@ -302,6 +302,21 @@ describe('per-file mutation report contract', () => {
 });
 
 describe('active workflow topology contract', () => {
+  test('the PR shadow-file check refuses when Git cannot compute the diff', () => {
+    const prChecks = yaml.load(
+      fs.readFileSync(path.join(REPO_ROOT, '.github/workflows/pr-checks.yml'), 'utf8')
+    );
+    const step = prChecks.jobs.sanity.steps.find((item) => item.name === 'Block shadow file patterns');
+    expect(step).toHaveProperty('run');
+    const result = spawnSync('/bin/bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c',
+      step.run.replaceAll('${{ github.base_ref }}', 'main')], {
+      cwd: makeTempDir(), encoding: 'utf8', timeout: 10000,
+      env: { ...process.env, BASE_REF: 'missing-base', HEAD_REF: 'missing-head', LC_ALL: 'C' },
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/fatal:.*not a git repository/);
+  });
+
   test('PR checks preserve executable regression jobs and reject empty test selection', () => {
     const prChecks = yaml.load(
       fs.readFileSync(path.join(REPO_ROOT, '.github/workflows/pr-checks.yml'), 'utf8')

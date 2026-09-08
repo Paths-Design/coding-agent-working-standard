@@ -19,6 +19,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -47,8 +49,12 @@ jobs:
           }
 
       - name: Block shadow file patterns
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.sha }}
         run: |
-          BAD=$(git diff --name-only origin/${{ github.base_ref }}... | \
+          CHANGED=$(git diff --no-ext-diff --name-only "${BASE_REF}...${HEAD_REF}")
+          BAD=$(printf '%s\n' "$CHANGED" | \
             grep -E '/(copy|final|enhanced|v2)[.-]|/(new-)| - copy\.' || true)
           if [ -n "$BAD" ]; then
             echo "❌ Shadow/duplicate filename patterns detected:"
