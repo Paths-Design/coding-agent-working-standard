@@ -80,3 +80,7 @@ evidence:
     status: pass
     evidence_ref: "release-path-integrity.test.js: executes the real pr-checks.yml step; 11 known-bad paths blocked incl. restored duplicate-/backup-/.backup; allowlist near-misses blocked; all tracked files pass (no false positives)."
     recorded_at: "2026-09-08T22:43:27.188Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "release.yml release job needs [qualification, mutation]; mutation.yml workflow_call input required:boolean default false, job if consults inputs.required. actionlint exit 0."
+    recorded_at: "2026-09-08T22:43:27.642Z"
