@@ -74,6 +74,25 @@ STUB
   refute_output --partial 'not in the defined scope'
 }
 
+@test "scope-guard: a top-level admitted file stays silent" {
+  _run_scope_guard_with_stub "package.json" 0 ""
+  assert_success
+  assert_output ""
+}
+
+@test "scope-guard: a top-level rejected file follows the nested-path scope contract" {
+  local json='{"decision":"reject","rule":"scope.reject.scope_out","path":"package.json","bindingState":"bound","mode":"authoritative","boundSpecId":"FIX-1","matchedPattern":"package.json"}'
+  _run_scope_guard_with_stub "package.json" 1 "$json"
+  assert_output --partial 'out-of-scope'
+  assert_output --partial 'FIX-1'
+}
+
+@test "scope-guard: a top-level file with unreadable scope diagnostics fails closed" {
+  _run_scope_guard_with_stub "package.json" 1 "not json"
+  assert_output --partial '"decision": "block"'
+  assert_output --partial 'could not render the structured diagnostic'
+}
+
 @test "scope-guard: an out-of-scope reject is surfaced from the JSON contract (authoritative)" {
   local json='{"decision":"reject","rule":"scope.reject.scope_out","path":"packages/out/x.ts","bindingState":"bound","mode":"authoritative","boundSpecId":"FIX-1","matchedPattern":"packages/out"}'
   _run_scope_guard_with_stub "packages/out/x.ts" 1 "$json"

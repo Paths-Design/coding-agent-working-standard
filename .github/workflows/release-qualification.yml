@@ -48,6 +48,10 @@ jobs:
       - run: npm run test:bats -w @paths.design/caws-cli
         env:
           CAWS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/hook-artifacts
+      - run: node --test packages/caws-cli/scripts/scope-runtime-smoke.test.mjs
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        env:
+          CAWS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/hook-artifacts
       - run: npm run test:pytest -w @paths.design/caws-cli
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
       - name: Retain hook byte artifacts
