@@ -8,21 +8,31 @@ updated_at: '2026-09-13T21:15:58.659Z'
 created_by_session: 'session-240709a9-82fe-4b27-a566-34c10c8f563d'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli machine hook runtime'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - 'packages/caws-cli/templates/hook-packs/runtime/caws-hook.py'
+    - 'packages/caws-cli/tests/adapter/machine-runtime.test.js'
     - packages/caws-cli/templates/hook-packs/runtime/caws-hook.py
     - packages/caws-cli/tests/adapter/machine-runtime.test.js
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'When git cannot resolve a project root (no repository, broken .git ancestor, missing git binary, or CAWS ancestor without git), the machine adapter exits 0 and never blocks the tool call; it prints a stderr notice when a .git or .caws ancestor exists.'
+  - 'Governance that IS resolvable keeps failing closed: malformed policy, traversal, missing adopted governance, and migration refusals are unchanged.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a working directory with a .caws ancestor but no git repository (the proving-grounds shape)'
+    when: 'the machine adapter hook runs for any event'
+    then: 'it exits 0, emits no block decision, and prints a stderr notice that governance was not applied'
+  - id: A2
+    given: 'a working directory whose .git ancestor exists but is broken (empty .git directory)'
+    when: 'the machine adapter hook runs'
+    then: 'it exits 0 with a stderr notice instead of exiting 2'
+  - id: A3
+    given: 'a governed repository with malformed adapter policy'
+    when: 'the machine adapter hook runs'
+    then: 'it still exits 2 (fail-closed boundary unchanged)'
 non_functional: {}
 contracts: []
