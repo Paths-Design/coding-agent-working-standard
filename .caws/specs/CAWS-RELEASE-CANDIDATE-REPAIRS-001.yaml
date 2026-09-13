@@ -72,21 +72,22 @@ evidence:
     artifact_path: /private/tmp/caws-release-candidate-20260913/ci-consumer/inspection.json
     commit_sha: cd362d7bb71a5475e77df1024bbcb8a66b85ba93
   - criterion_id: A3
-    status: fail
-    evidence_ref: "Qualification control 34746411914: Bats 226/227 fail, real CLI scope probe exits 1; pytest still passes 225 and artifact upload succeeds. Scope source repair remains blocked pending human reprieve."
-    recorded_at: "2026-09-13T08:14:38.805Z"
-    exit_code: 1
-    artifact_path: /private/tmp/caws-release-candidate-20260913/ci-scope-control/inspection.json
-    commit_sha: "42e878804a9df4af4517132e24f20b08258f9985"
+    status: pass
+    evidence_ref: d24520e6 scope fixtures and killed controls; live native Write admitted with artifact and refused with absent target after reprieve revocation. Root Edit pre-tool trace and fresh lifecycle gaps remain explicit release limits.
+    recorded_at: "2026-09-13T08:54:37.209Z"
+    artifact_path: /private/tmp/caws-release-candidate-20260913/native-scope-repair/inspection.json
+    commit_sha: d24520e6d3a9e4f63999e7df00e4d54f18b8504a
   - criterion_id: A4
     status: pass
-    evidence_ref: "Release Qualification 34744744419 six RC2 packaged upgrades; raw command, governance, corruption/rollback and detached audit artifacts inspected"
-    recorded_at: "2026-09-13T07:34:36.018Z"
-    artifact_path: /private/tmp/caws-release-candidate-20260913/ci-upgrade/inspection.json
-    commit_sha: cd362d7bb71a5475e77df1024bbcb8a66b85ba93
+    evidence_ref: "Qualification 34747864150: six RC2 upgrades; 66 receipts per job, four equal governance snapshots, audit zero, corruption refusal and rollback. Same tarball and runtime installed live."
+    recorded_at: "2026-09-13T08:54:43.943Z"
+    artifact_path: /private/tmp/caws-release-candidate-20260913/ci-scope-repair-upgrade/inspection.json
+    commit_sha: d24520e6d3a9e4f63999e7df00e4d54f18b8504a
   - criterion_id: A5
     status: pass
-    evidence_ref: "714f24c3: Release Qualification 34746027714 and full Mutation Gate 34746026634 pass; 19 source bodies and per-file reports inspected. 42e87880 intentionally fails the now-required scope regressions; A3 remains FAIL."
-    recorded_at: "2026-09-13T08:14:37.960Z"
-    artifact_path: /private/tmp/caws-release-candidate-20260913/ci-mutation-repaired/inspection.json
-    commit_sha: "714f24c3c2e25e5fa51a78af19c505ec07852633"
+    evidence_ref: "d24520e6: Release Qualification 34747864150 and full Mutation Gate 34747874070 passed. All 19 report source bodies match commit; every 80 percent floor unchanged and passed. Native gaps remain separate."
+    recorded_at: "2026-09-13T08:54:50.559Z"
+    command: gh run view 34747874070 --log
+    exit_code: 0
+    artifact_path: /private/tmp/caws-release-candidate-20260913/scope-repair-mutation-inspection.stdout
+    commit_sha: d24520e6d3a9e4f63999e7df00e4d54f18b8504a
