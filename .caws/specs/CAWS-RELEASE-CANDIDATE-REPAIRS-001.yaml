@@ -2,9 +2,10 @@ id: CAWS-RELEASE-CANDIDATE-REPAIRS-001
 title: 'Repair candidate CI and release evidence gaps'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-release-candidate
 created_at: '2026-09-13T06:26:55.237Z'
-updated_at: '2026-09-13T06:26:55.237Z'
+updated_at: '2026-09-13T06:27:21.164Z'
 created_by_session: '01a097e1-0a6f-7821-80d8-dedde2ac2cd6'
 blast_radius:
   modules:
