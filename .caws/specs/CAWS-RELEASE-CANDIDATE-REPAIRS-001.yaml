@@ -71,3 +71,10 @@ evidence:
     recorded_at: "2026-09-13T07:34:34.429Z"
     artifact_path: /private/tmp/caws-release-candidate-20260913/ci-consumer/inspection.json
     commit_sha: cd362d7bb71a5475e77df1024bbcb8a66b85ba93
+  - criterion_id: A3
+    status: fail
+    evidence_ref: Root exemption and inherited cwd defects reproduced. Source repair blocked pending human-only guard reprieve; fresh native lifecycle not verified.
+    recorded_at: "2026-09-13T07:34:35.237Z"
+    command: node --test packages/caws-cli/scripts/scope-runtime-smoke.test.mjs
+    exit_code: 1
+    artifact_path: /private/tmp/caws-release-candidate-20260913/scope-runtime-red-complete/scope-runtime-JCm2UW/scope-decisions.json
