@@ -65,3 +65,9 @@ evidence:
     exit_code: 0
     artifact_path: /private/tmp/caws-release-candidate-20260913/unicode-sensitivity/inspection.json
     commit_sha: cd362d7bb71a5475e77df1024bbcb8a66b85ba93
+  - criterion_id: A2
+    status: pass
+    evidence_ref: CI Matrix 34744746927 six exact RC1 installations; historical release occurrence replay; two killed resolver controls. New automatic workflow_run remains unobserved.
+    recorded_at: "2026-09-13T07:34:34.429Z"
+    artifact_path: /private/tmp/caws-release-candidate-20260913/ci-consumer/inspection.json
+    commit_sha: cd362d7bb71a5475e77df1024bbcb8a66b85ba93
