@@ -42,3 +42,7 @@ evidence:
     status: pass
     evidence_ref: "npx jest tests/adapter/machine-runtime.test.js -t 'unresolvable project context'"
     recorded_at: "2026-09-13T21:19:33.699Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "npx jest tests/adapter/machine-runtime.test.js -t 'unresolvable project context'"
+    recorded_at: "2026-09-13T21:19:34.204Z"
