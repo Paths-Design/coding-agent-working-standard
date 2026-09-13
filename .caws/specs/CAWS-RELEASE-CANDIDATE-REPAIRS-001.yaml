@@ -78,3 +78,9 @@ evidence:
     command: node --test packages/caws-cli/scripts/scope-runtime-smoke.test.mjs
     exit_code: 1
     artifact_path: /private/tmp/caws-release-candidate-20260913/scope-runtime-red-complete/scope-runtime-JCm2UW/scope-decisions.json
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Release Qualification 34744744419 six RC2 packaged upgrades; raw command, governance, corruption/rollback and detached audit artifacts inspected"
+    recorded_at: "2026-09-13T07:34:36.018Z"
+    artifact_path: /private/tmp/caws-release-candidate-20260913/ci-upgrade/inspection.json
+    commit_sha: cd362d7bb71a5475e77df1024bbcb8a66b85ba93
