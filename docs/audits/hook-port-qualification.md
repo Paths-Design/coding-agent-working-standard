@@ -795,7 +795,23 @@ filesystem failure behavior.
 Full mutation and qualification were dispatched again at `714f24c3`:
 [Mutation Gate 34746026634](https://github.com/Paths-Design/coding-agent-working-standard/actions/runs/34746026634)
 and [Release Qualification 34746027714](https://github.com/Paths-Design/coding-agent-working-standard/actions/runs/34746027714).
-Their results must be inspected before treating the mutation repair as qualified.
+Both runs completed successfully, and the reports were downloaded and inspected.
+`E/qualification-repair-ci.log` records 2,764 Jest tests, all 277 Bats cases and
+225 pytest cases passing. `E/ci-repair-qualified/inspection.json` verifies all six
+upgrade tarball identities, 66 command receipts per cell, equal governance hashes,
+and the retained archive/lease failure controls with unchanged ledger bytes.
+
+`E/ci-mutation-repaired/inspection.json` records exit 0 from all three local
+`assert-mutation-report.mjs` checks against the downloaded reports, exact source
+body equality for all 19 targets, and no runtime/compile-error or pending verdicts.
+`messages-store.ts` now scores 970/1,208 (80.30%): 964 killed, six poll/wait timeouts,
+226 survivors, 12 without coverage. The omitted suite brings 103 formerly
+uncovered mutants into execution: 59 are killed and 44 survive. The six timeouts
+alter wait bounds or poll-loop termination; two report explicit hit-limit reasons.
+Timeouts count as detected under the existing policy; they are not assertion
+kills. This meets the 80% floor, not an exhaustive correctness claim. Across all
+19 targets, 597 mutants survive and 67 lack coverage; their report locations and
+replacements remain available for further focused tests and equivalence review.
 
 CAWS gates passed all five dispositions. `E/doctor-candidate.command.json` records
 doctor exit 1, with the existing 1E/7W/15I findings: another session's missing cwd
@@ -824,3 +840,23 @@ runs even after a Bats failure. This is an intentional failure-control experimen
 and a release blocker, not an xfail, skipped test or repaired implementation.
 It also permits observing pytest and artifact retention after actual failed steps.
 The checkpoint remains unmerged while the human-only reprieve is pending.
+
+The checkpoint is `42e878804a9df4af4517132e24f20b08258f9985`.
+[Qualification control 34746411914](https://github.com/Paths-Design/coding-agent-working-standard/actions/runs/34746411914)
+failed as intended: Bats cases 226 and 227 failed, and the installed real CLI scope
+probe exited 1. Then pytest completed with 225 passing cases and the hook artifact
+upload succeeded. `E/scope-control-ci.log` records the two exit-1 steps followed
+by pytest success and artifact ID 10313719435. The downloaded
+`E/ci-scope-control/hook-bytes-42e8788…/scope-runtime-9Jg8UP/scope-decisions.json`
+reproduces all four rows in the scope table above. `E/ci-scope-control/inspection.json`
+retains the independent comparison. Thus the failure-continuation claim is backed
+by an actual failed workflow, not only YAML inspection.
+
+The unapplied review artifact is `E/pending-scope-repair.patch`, SHA-256
+`cc686a0dbcff83508ef55f0c20a5ed1b303a8d43846bcbc946821af9c9260f90`.
+It removes the root exemption, evaluates both scope commands in the target lane,
+fails closed on a failed diagnostic invocation, and proposes shared pack 76 with
+fingerprint `ecc6770f67c2dff1d9da5e39894ec2f752ef56fcdcc44c43f4d3de2b6e3befba`.
+These are proposed bytes, not installed or validated repair behavior. Source
+patch application, green regression runs, package/runtime requalification and
+fresh native harness evidence remain required before tag approval.
