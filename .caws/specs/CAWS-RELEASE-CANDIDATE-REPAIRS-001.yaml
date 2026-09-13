@@ -84,3 +84,9 @@ evidence:
     recorded_at: "2026-09-13T07:34:36.018Z"
     artifact_path: /private/tmp/caws-release-candidate-20260913/ci-upgrade/inspection.json
     commit_sha: cd362d7bb71a5475e77df1024bbcb8a66b85ba93
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "714f24c3: Release Qualification 34746027714 and full Mutation Gate 34746026634 pass; 19 source bodies and per-file reports inspected. 42e87880 intentionally fails the now-required scope regressions; A3 remains FAIL."
+    recorded_at: "2026-09-13T08:14:37.960Z"
+    artifact_path: /private/tmp/caws-release-candidate-20260913/ci-mutation-repaired/inspection.json
+    commit_sha: "714f24c3c2e25e5fa51a78af19c505ec07852633"
