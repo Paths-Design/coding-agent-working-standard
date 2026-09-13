@@ -2,10 +2,11 @@ id: FIX-HOOK-NOGIT-001
 title: 'Machine adapter fails open when no Git project is resolvable'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: wt-fix-hook-nogit
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-fix-hook-nogit at 34c29926c1ab1c9b4ea5454d935463a38688fbc2'
 created_at: '2026-09-13T21:15:53.477Z'
-updated_at: '2026-09-13T21:16:17.560Z'
+updated_at: '2026-09-13T21:20:06.367Z'
 created_by_session: 'session-240709a9-82fe-4b27-a566-34c10c8f563d'
 blast_radius:
   modules:
