@@ -37,3 +37,8 @@ acceptance:
     then: 'it still exits 2 (fail-closed boundary unchanged)'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "npx jest tests/adapter/machine-runtime.test.js -t 'unresolvable project context'"
+    recorded_at: "2026-09-13T21:19:33.699Z"
