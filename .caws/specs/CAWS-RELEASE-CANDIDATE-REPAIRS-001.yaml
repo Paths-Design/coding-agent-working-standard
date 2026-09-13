@@ -73,11 +73,11 @@ evidence:
     commit_sha: cd362d7bb71a5475e77df1024bbcb8a66b85ba93
   - criterion_id: A3
     status: fail
-    evidence_ref: Root exemption and inherited cwd defects reproduced. Source repair blocked pending human-only guard reprieve; fresh native lifecycle not verified.
-    recorded_at: "2026-09-13T07:34:35.237Z"
-    command: node --test packages/caws-cli/scripts/scope-runtime-smoke.test.mjs
+    evidence_ref: "Qualification control 34746411914: Bats 226/227 fail, real CLI scope probe exits 1; pytest still passes 225 and artifact upload succeeds. Scope source repair remains blocked pending human reprieve."
+    recorded_at: "2026-09-13T08:14:38.805Z"
     exit_code: 1
-    artifact_path: /private/tmp/caws-release-candidate-20260913/scope-runtime-red-complete/scope-runtime-JCm2UW/scope-decisions.json
+    artifact_path: /private/tmp/caws-release-candidate-20260913/ci-scope-control/inspection.json
+    commit_sha: "42e878804a9df4af4517132e24f20b08258f9985"
   - criterion_id: A4
     status: pass
     evidence_ref: "Release Qualification 34744744419 six RC2 packaged upgrades; raw command, governance, corruption/rollback and detached audit artifacts inspected"
