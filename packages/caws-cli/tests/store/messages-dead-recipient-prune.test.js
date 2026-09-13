@@ -113,10 +113,30 @@ function liveLines(caws) {
 }
 
 function plan(caws, extra = {}) {
-  return pruneMessages(caws, {
+  const options = {
     status: 'undelivered-to-dead-session',
     ...extra,
-  });
+  };
+  const ledger = path.join(caws, 'messages.jsonl');
+  const before = fs.readFileSync(ledger);
+  const result = pruneMessages(caws, options);
+  if (process.env.CAWS_TEST_ARTIFACT_DIR) {
+    const parent = path.resolve(process.env.CAWS_TEST_ARTIFACT_DIR);
+    fs.mkdirSync(parent, { recursive: true });
+    const artifact = fs.mkdtempSync(path.join(parent, 'dead-recipient-prune-'));
+    fs.writeFileSync(path.join(artifact, 'input.json'), JSON.stringify(options, null, 2));
+    fs.writeFileSync(path.join(artifact, 'result.json'), JSON.stringify(result, null, 2));
+    fs.writeFileSync(path.join(artifact, 'before.jsonl'), before);
+    fs.copyFileSync(ledger, path.join(artifact, 'after.jsonl'));
+    const archive = path.join(caws, 'messages.jsonl.archive');
+    const archiveExists = fs.existsSync(archive);
+    const archiveIsFile = archiveExists && fs.statSync(archive).isFile();
+    fs.writeFileSync(path.join(artifact, 'state.json'), JSON.stringify({ archiveExists, archiveIsFile }));
+    if (archiveIsFile) fs.copyFileSync(archive, path.join(artifact, 'archive.jsonl'));
+    const leases = path.join(caws, 'leases');
+    if (fs.existsSync(leases)) fs.cpSync(leases, path.join(artifact, 'leases'), { recursive: true });
+  }
+  return result;
 }
 
 describe('dead-recipient prune selector (CAWS-DEFECT-MESSAGE-PRUNE-DEAD-RECIPIENT-01)', () => {
@@ -230,6 +250,20 @@ describe('dead-recipient prune selector (CAWS-DEFECT-MESSAGE-PRUNE-DEAD-RECIPIEN
       selector: 'undelivered-to-dead-session',
       ids: ['m-pruned'],
     });
+  });
+
+  test('A6: archive append failure preserves the exact dead-recipient ledger bytes', () => {
+    const caws = cawsDir();
+    writeMessage(caws, { id: 'm-preserve-on-archive-failure', to: 'ghost-session' });
+    fs.mkdirSync(path.join(caws, 'messages.jsonl.archive'));
+    const ledger = path.join(caws, 'messages.jsonl');
+    const before = fs.readFileSync(ledger);
+
+    const result = plan(caws, { apply: true });
+    expect(result.ok).toBe(false);
+    expect(result.errors[0].rule).toBe('store.messages.archive_append_failed');
+    expect(fs.readFileSync(ledger)).toEqual(before);
+    expect(fs.statSync(path.join(caws, 'messages.jsonl.archive')).isDirectory()).toBe(true);
   });
 
   test('A7: a lease-registry load failure fails the plan closed and the ledger is untouched', () => {

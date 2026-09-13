@@ -31,6 +31,8 @@ jobs:
       - run: npm run typecheck -w @paths.design/caws-cli
       - run: npm run lint -w @paths.design/caws-cli
       - run: npm test -w @paths.design/caws-cli -- --coverage --maxWorkers=2
+        env:
+          CAWS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/hook-artifacts
       - name: Retain coverage evidence
         if: always()
         uses: actions/upload-artifact@v4

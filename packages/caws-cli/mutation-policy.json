@@ -224,6 +224,7 @@
         "tests/store/atomic-write.test.js",
         "tests/store/events-store.test.js",
         "tests/store/messages-behavior-store.test.js",
+        "tests/store/messages-dead-recipient-prune.test.js",
         "tests/store/messages-store.test.js",
         "tests/store/yaml-patch.test.js"
       ]

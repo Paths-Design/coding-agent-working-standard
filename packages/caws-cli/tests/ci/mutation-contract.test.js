@@ -191,6 +191,7 @@ describe('mutation policy topology contract', () => {
     expect(config.testFiles).not.toHaveLength(0);
     expect(config.testFiles.every((file) => file.startsWith('tests/store/'))).toBe(true);
     expect(config.testFiles).toContain('tests/store/messages-behavior-store.test.js');
+    expect(config.testFiles).toContain('tests/store/messages-dead-recipient-prune.test.js');
   });
 
   test.each(['kernel', 'store', 'shell'])('%s sandbox excludes sibling runs while retaining source and tests', (surface) => {
