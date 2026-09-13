@@ -860,3 +860,121 @@ fingerprint `ecc6770f67c2dff1d9da5e39894ec2f752ef56fcdcc44c43f4d3de2b6e3befba`.
 These are proposed bytes, not installed or validated repair behavior. Source
 patch application, green regression runs, package/runtime requalification and
 fresh native harness evidence remain required before tag approval.
+
+### Approved scope repair and live verification (2026-09-13)
+
+This section supersedes the pending-repair status above. The human granted the
+session reprieve at 08:20 UTC. Commit `d24520e6d3a9e4f63999e7df00e4d54f18b8504a`
+applies root-file scope parity, evaluates both scope commands in the target
+worktree, and emits an explicit block if the diagnostic command fails. Shared
+pack 76 has the fingerprint proposed above. Build, lint, 16 scope Bats tests,
+14 pack-fingerprint checks, and the real-CLI scope scenario exited 0; receipts
+are `E/scope-repair-build.command.json`, `E/scope-repair-lint.command.json`,
+`E/scope-bats-green.command.json`, `E/scope-fingerprint-green.command.json`, and
+`E/scope-runtime-final.command.json`. Lint still prints existing shell warnings.
+
+[Release Qualification 34747864150](https://github.com/Paths-Design/coding-agent-working-standard/actions/runs/34747864150)
+passed on that commit: 2,764 Jest tests in 220 suites, 281 Bats tests, 225 pytest
+tests, release contracts, the real-CLI scope scenario, and six Linux/macOS
+package-upgrade jobs on Node 18/20/22. `E/scope-repair-qualification-log.stdout`
+retains the commands and output. The downloaded scope artifact is summarized in
+`E/ci-scope-repair-hooks/inspection.json`; its actual decisions and strike state are:
+
+| Target | Canonical answer | Bound-lane answer | Guard output | Stored strikes |
+| --- | --- | --- | --- | ---: |
+| `package.json` | no authority | admit | silent | 0 |
+| `src/owned/ok.ts` | no authority | admit | silent | 0 |
+| `blocked.json` | admit | reject | advisory; edit proceeds | 1 |
+| `src/other/no.ts` | admit | reject | ask | 2 |
+| `blocked.json` again | admit | reject | block | 3 |
+| `package.json` again | no authority | admit | silent | 3 |
+
+This deliberately conflicting fixture distinguishes correct path resolution
+from accidentally consulting the canonical checkout. Scope rejection retains
+the existing progressive policy: the first violation proceeds with an advisory.
+Root parity does not mean every first out-of-scope attempt is hard-blocked.
+Every guard subprocess above exited 0; the response body carries ask/block.
+
+Matched isolated controls in `E/scope-sensitivity/inspection.json` returned
+0 for unchanged bytes and 1 for each restored defect. Restoring the root
+exemption silently admitted rejected root files; restoring the wrong cwd
+struck legitimate paths and silently admitted rejected ones. Both failures were
+assertion failures with complete decision artifacts, not setup failures.
+`E/scope-diagnostic-sensitivity/inspection.json` separately records baseline 0
+and mutant 1 when the diagnostic exit check is removed. That control proves
+the explicit block diagnostic is checked; its empty mutant output alone does
+not establish that every dispatcher would admit the failed subprocess.
+
+[Full Mutation Gate 34747874070](https://github.com/Paths-Design/coding-agent-working-standard/actions/runs/34747874070)
+also passed on `d24520e6`. The downloaded reports are under
+`E/ci-scope-repair-mutation/`; `E/scope-repair-mutation-inspection.stdout`
+compares all 19 embedded source bodies with `git show d24520e6:<path>` and
+prints the raw mutant status counts. Every unchanged 80% per-file floor passes.
+Messages-store remains 964 assertion kills plus 6 timeouts out of 1,208 mutants
+(80.298%), with 226 survivors and 12 uncovered mutants. Timeouts are not
+assertion kills. This finite inventory does not cover every hook or shell form.
+
+`E/ci-scope-repair-upgrade/inspection.json` independently checks all six upgrade
+artifacts: each has 66 command receipts (57 exit 0, nine expected exit 2), four
+equal before/after governance snapshots, the exact rendered operator request,
+and a detached production audit reporting zero findings. Raw receipts 37/41/
+45/49/54 show protected-write refusal; 60/62 show the updated guard in both
+projects; 64 reports `Runtime modified: protected-paths.sh`; 65 rolls back and
+66 restores the original refusal. These are installed subprocess fixtures,
+with synthetic transcript input; they do not demonstrate native tool execution.
+
+All six CI packages and the live installation share tarball SHA-256
+`154799547293a85b01bac45c88ea8a49e48c205b46977d3390a46b952a5fa8aa`
+and runtime digest
+`685aaa1fd2d8f9cceb81b18d5baae95a30d2c730deee59c48f1ab5caaab090b2`.
+`scripts/install-cli-snapshot.mjs` and `caws init adapters install --json`
+both exited 0 (`E/scope-repair-cli-install.*`, `E/scope-repair-runtime-install.*`).
+The selected CLI reports `12.2.0-rc.2`; source and installed scope-guard SHA-256
+both equal `affde14eaa2005c905d82518976cd5934a19ba2cd7dc952922a4b3a3c1d36433`
+(`E/live-selection.json`). The CLI is a standalone snapshot, not a worktree link.
+The temporary reprieve was revoked at 08:42:58 UTC; its tombstone has no handlers.
+
+Native evidence in `E/native-scope-repair/inspection.json` establishes these
+specific observations after revocation:
+
+- An actual root `package-lock.json` Edit added one whitespace byte, changing
+  SHA-256 `23b710f5…` to `f23598e7…` without changing parsed JSON. A second Edit
+  restored the exact original bytes. Both have PostToolUse records, but matching
+  PreToolUse records were not found. They demonstrate actual edits, not a
+  completely observed successful guard decision.
+- Native Write `exec-705d09fd-3ccb-42fb-81a2-5a273abfc678` produced scope
+  `decision: block`, handler exit 0 and adapter exit 2. The attempted
+  `scope-repair-denied-control.txt` was absent before and after the call.
+- Native Write `exec-99ddd2eb-cf13-4877-bbf1-4033e48afc42` produced a completed,
+  unreprieved scope-handler record and adapter exit 0, then created the expected
+  owned-lane artifact. Its retained bytes hash to
+  `a444254b62621a30bd8ce9d1eddc95d1dd27dcb9f874dff9566e7d1e0d4f4192`.
+  Both Write records identify the new runtime and the exact source hash above.
+
+**Tag approval remains open.** Green CI could coexist with incorrect native
+registration, a skipped or timed-out pre-tool chain, or unsupported shell
+syntax. Two actual shell refusals also remain unresolved:
+`exec-1bd11859-eed7-450c-bb4b-31a97f68f644` interpreted a relative output path
+from the canonical checkout despite the requested workdir;
+`exec-94b6664c-238a-4ec1-8a1a-83974cbcc19c` reported the quoted Python comparison
+`>=cfg['threshold']` as target `=cfg[threshold],` (`ask_dynamic_unconfined`).
+`E/scope-repair-native-bash-findings.stdout` retains both handler records and
+input hashes. The scope repair does not fix or explain those classifier cases.
+
+Before tagging, inspect raw native PreToolUse envelopes (including cwd/workdir),
+matcher/registration decisions, process start/exit/timeout records, and any
+partial execution journals for the two successful Edit call IDs
+`exec-fa83ccb4-3d77-440f-b6cd-116b18b2ec12` and
+`exec-19109738-df94-4ef0-bd9a-e61eb7f5188c`. Add regressions at the boundary
+identified by those records. Replay the two shell counterexamples with their
+original envelopes and retain extracted mutation targets. Obtain fresh native
+Codex/Claude/Kimi trust, SessionStart, actual admitted/refused writes, and Stop
+rendering traces. Existing tests cannot substitute for those observations.
+
+Not verified: those missing native traces and shell repairs, fresh harness
+lifecycle sequences, RC2 publication or automatic post-release consumption,
+every legacy project override, classifier corpus error rates, production
+latency, or crash/fsync durability. Doctor remains nonzero for legacy pack
+drift and a foreign session whose cwd no longer exists; no foreign session or
+custom project hook was overwritten. These limits prevent a release-ready claim
+while allowing the bounded scope and CI repair to be delivered.
