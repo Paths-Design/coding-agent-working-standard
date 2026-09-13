@@ -46,3 +46,7 @@ evidence:
     status: pass
     evidence_ref: "npx jest tests/adapter/machine-runtime.test.js -t 'unresolvable project context'"
     recorded_at: "2026-09-13T21:19:34.204Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "tests/adapter/machine-runtime.test.js: quiet outside governed repositories (exit 2 preserved)"
+    recorded_at: "2026-09-13T21:19:34.699Z"
