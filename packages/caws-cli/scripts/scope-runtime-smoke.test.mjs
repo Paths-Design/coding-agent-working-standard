@@ -50,9 +50,11 @@ test('installed scope guard evaluates root and nested targets in their bound lan
     fs.mkdirSync(bin);
     fs.writeFileSync(path.join(bin, 'caws'), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(entry)} "$@"\n`, { mode: 0o755 });
     env.PATH = bin + path.delimiter + env.PATH;
+    const strikesFile = path.join(env.HOME, '.caws/state/sessions/scope-runtime-owner/strikes.json');
     const cases = [], failures = [];
-    for (const [target, admitted] of [['package.json', true], ['src/owned/ok.ts', true],
-      ['blocked.json', false], ['src/other/no.ts', false]]) {
+    for (const [target, admitted, strikeCount] of [['package.json', true, 0], ['src/owned/ok.ts', true, 0],
+      ['blocked.json', false, 1], ['src/other/no.ts', false, 2], ['blocked.json', false, 3],
+      ['package.json', true, 3]]) {
       const canonical = JSON.parse(cli(['scope', 'show', target, '--json']));
       const bound = JSON.parse(cli(['scope', 'show', target, '--json'], lane));
       assert.equal(bound.boundSpecId, 'SCOPE-OWNER-001');
@@ -63,15 +65,26 @@ test('installed scope guard evaluates root and nested targets in their bound lan
         encoding: 'utf8', timeout: 60000, input: JSON.stringify({ cwd: repo,
           session_id: 'scope-runtime-owner', tool_name: 'Edit', tool_input: { file_path: path.join(lane, target) } }),
       });
-      cases.push({ target, admitted, canonical, bound, exit_code: result.status,
+      const strikes = fs.existsSync(strikesFile) ? JSON.parse(fs.readFileSync(strikesFile, 'utf8')) : {};
+      cases.push({ target, admitted, canonical, bound, strikes, exit_code: result.status,
         stdout: result.stdout, stderr: result.stderr });
       if (artifacts) fs.writeFileSync(path.join(artifacts, 'scope-decisions.json'), JSON.stringify(cases, null, 2));
       try {
         assert.equal(result.status, 0, result.stderr);
+        assert.equal(strikes.scope_guard ?? 0, strikeCount);
         if (admitted) assert.equal(result.stdout, '', `admitted ${target}: ${result.stdout}`);
         else {
           assert.match(result.stdout, /not in the defined scope/);
           assert.match(result.stdout, /SCOPE-OWNER-001/);
+          const response = JSON.parse(result.stdout);
+          if (strikeCount === 1) {
+            assert.match(response.hookSpecificOutput.additionalContext, /This edit proceeds/);
+            assert.equal(response.hookSpecificOutput.permissionDecision, undefined);
+          } else if (strikeCount === 2) {
+            assert.equal(response.hookSpecificOutput.permissionDecision, 'ask');
+          } else {
+            assert.equal(response.decision, 'block');
+          }
         }
       } catch (error) {
         failures.push({ target, message: error.message });

@@ -4,6 +4,8 @@ Second release candidate for the shared machine runtime; publishes to `next`.
 
 ### Hooks and release qualification
 
+- Apply kernel scope rules to top-level files and evaluate edits in their target
+  worktree, even when a harness starts the guard from the canonical checkout.
 - Preserve redirected command operands and absolute wrappers in write guards;
   normalize logical and physical repository paths consistently.
 - Retain per-handler outcomes separately from adapter exits, handle Kimi's
