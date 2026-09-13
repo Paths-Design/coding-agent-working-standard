@@ -336,13 +336,17 @@ def main():
     candidate = payload.get('cwd') or os.environ.get('CAWS_PROJECT_DIR') or os.getcwd()
     try:
         root = Path(git(candidate, 'rev-parse', '--show-toplevel'))
-    except ValueError:
-        # A normal directory outside Git has no project hooks. A broken Git or
-        # CAWS ancestor is an infrastructure failure, never a quiet admission.
+    except (ValueError, OSError) as error:
+        # Without a resolvable Git root there is no canonical project authority
+        # to enforce, so the adapter must not block the surface it observes.
+        # A directory with no .git/.caws ancestor is quietly inactive; one with
+        # a broken .git or a CAWS ancestor fails open loudly so the operator
+        # can see governance was not applied.
         probe = Path(candidate).absolute()
         if any((p / '.git').exists() or (p / '.caws').exists() for p in [probe, *probe.parents]):
-            raise
-        return inactive('outside a Git project')
+            print(f'[caws machine adapter] project could not be resolved ({error}); '
+                  f'continuing without CAWS governance in {probe}', file=sys.stderr)
+        return inactive('outside a resolvable Git project')
     common = Path(git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir'))
     canonical = common.parent
     known_project = confined(home, 'state/projects/' + digest(str(canonical).encode()) + '.json').exists()

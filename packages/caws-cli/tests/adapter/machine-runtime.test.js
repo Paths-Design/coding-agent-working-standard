@@ -76,6 +76,31 @@ test('two same-priority advisory handlers survive as one bounded adapter result'
   expect(output.hookSpecificOutput.additionalContext).toContain('second advisory');
 });
 
+test('unresolvable project context fails open loudly instead of blocking the session', () => {
+  const home = path.join(root, 'home');
+  installMachineRuntime({ home, templatesRoot });
+  // Shape 1: a .caws ancestor without any git repository (proving-grounds).
+  const cawsAncestor = path.join(root, 'bench');
+  fs.mkdirSync(path.join(cawsAncestor, '.caws'), { recursive: true });
+  fs.mkdirSync(path.join(cawsAncestor, 'subject'), { recursive: true });
+  const cawsResult = invoke(home, path.join(cawsAncestor, 'subject'));
+  expect(cawsResult.status).toBe(0);
+  expect(cawsResult.stderr).toContain('continuing without CAWS governance');
+  // Shape 2: a broken .git ancestor (empty .git directory, no repository).
+  const broken = path.join(root, 'broken');
+  fs.mkdirSync(path.join(broken, '.git'), { recursive: true });
+  fs.mkdirSync(path.join(broken, 'subject'), { recursive: true });
+  const brokenResult = invoke(home, path.join(broken, 'subject'));
+  expect(brokenResult.status).toBe(0);
+  expect(brokenResult.stderr).toContain('continuing without CAWS governance');
+  // Shape 3: a plain directory with neither marker stays quiet.
+  const plain = path.join(root, 'plain');
+  fs.mkdirSync(plain);
+  const quiet = invoke(home, plain);
+  expect(quiet.status).toBe(0);
+  expect(quiet.stderr).not.toContain('CAWS machine adapter');
+});
+
 test('malformed and over-budget optional advisories are omitted without acquiring denial authority', () => {
   const home = path.join(root, 'home');
   installMachineRuntime({ home, templatesRoot });
