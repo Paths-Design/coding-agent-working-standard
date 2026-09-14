@@ -595,3 +595,85 @@ def test_configured_owner_identities_are_additive(monkeypatch, classify):
         "--reason y --expires-at 2030-01-01T00:00:00Z"
     )
     assert decision_of(result) == "deny", result
+
+
+# ── CLASSIFY-CREDENTIAL-PUBLIC-FILE-EXCLUSION-001 ───────────────────────────
+# A credential READ is catastrophic and stays in the latch-arming class: the
+# content enters the model context and is transmitted to the provider, so the
+# disclosure is irreversible in the same way mkfs is. Because the class is
+# justified, PATTERN PRECISION is the whole corrective surface — and the
+# selector was matching files that are public BY CONSTRUCTION, where no
+# disclosure is possible.
+#
+# Observed live: `echo "=== .env.example ===" && cat .env.example && ... git
+# ls-files | grep -E "\.env"` hard-denied during a SECURITY-HARDENING task,
+# armed the latch, and the retry killed the session (exit 143, 931s lost). The
+# file it blocked was git-tracked with four keys and four EMPTY values.
+
+REAL_CREDENTIAL_READS = [
+    "cat .env",
+    "cat .env.local",
+    "cat .env.production",
+    "cat .env.development.local",
+    "cat config/.env",
+    "cat ~/.ssh/id_rsa",
+    "cat ~/.ssh/id_ed25519",
+    "cat ~/.aws/credentials",
+]
+
+# Conventionally PUBLIC files: committed templates with placeholder values, and
+# public keys whose entire purpose is distribution.
+PUBLIC_BY_CONSTRUCTION = [
+    "cat .env.example",
+    "cat .env.sample",
+    "cat .env.template",
+    "cat .env.dist",
+    "cat .env.defaults",
+    "cat paths.design-site/.env.example",
+    "cat ~/.ssh/id_rsa.pub",
+    "cat ~/.ssh/id_ed25519.pub",
+]
+
+
+@pytest.mark.parametrize("command", REAL_CREDENTIAL_READS)
+def test_real_credential_reads_still_deny(classify, command):
+    """A1: the fix must not trade away recall on real secrets."""
+    result = classify(command)
+    assert decision_of(result) == "deny", result
+    assert "credential" in result[1], result
+
+
+@pytest.mark.parametrize("command", PUBLIC_BY_CONSTRUCTION)
+def test_public_by_construction_files_do_not_deny(classify, command):
+    """A2: a committed template or a public key cannot be exfiltrated."""
+    result = classify(command)
+    assert decision_of(result) != "deny", (
+        f"{command!r} denied as a credential read, but it is public by "
+        f"construction: {result}"
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "cat .env.example .env.local",
+        "cat .env.example .env",
+        "cat ~/.ssh/id_rsa.pub ~/.ssh/id_rsa",
+    ],
+)
+def test_mixed_command_still_denies(classify, command):
+    """A3: the exclusion is a lookahead on the file selector, NOT a short
+    circuit — naming a template alongside a real credential must still deny.
+    This is the test that fails if someone replaces the lookahead with a
+    pre-filter that returns allow on any template match."""
+    result = classify(command)
+    assert decision_of(result) == "deny", result
+
+
+def test_system_credential_rule_is_untouched(classify):
+    """A5: the exclusion is scoped to the .env/.ssh/.aws selector; the separate
+    /etc/passwd|shadow rule and the id_rsa|credentials rule must not change."""
+    for command in ("cat /etc/passwd", "cat /etc/shadow"):
+        result = classify(command)
+        assert decision_of(result) == "deny", result
+

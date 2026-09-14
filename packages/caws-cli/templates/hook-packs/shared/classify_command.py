@@ -186,9 +186,20 @@ DENY_SEGMENT_PATTERNS: list[tuple[str, str]] = [
     (r"\bgit\s+checkout\s+\.\s*$", "git checkout . (discard all changes)"),
     (r"\bgit\s+restore\s+\.\s*$", "git restore . (discard all changes)"),
     (r"^sudo\s+(?!npm|yarn|pnpm|brew|apt-get|apt|dnf|yum)", "sudo command"),
-    (r"\bcat\b.*\.(env|ssh/|aws/)", "credential file read"),
+    # CLASSIFY-CREDENTIAL-PUBLIC-FILE-EXCLUSION-001: credential reads stay
+    # catastrophic/latch-arming — the content enters the model context and is
+    # transmitted to the provider, so the disclosure is irreversible — but the
+    # selector must not match files that are public BY CONSTRUCTION, where no
+    # disclosure is possible. A committed template (`.env.example` and friends)
+    # is exactly the artifact an agent should read to learn which variables the
+    # project expects; denying it hard-blocked a security-hardening task, armed
+    # the latch, and killed the session over a file with four EMPTY values.
+    # `*.pub` likewise: a public key exists to be distributed.
+    # The lookahead is on the FILE selector only, so naming a template
+    # alongside a real credential still denies.
+    (r"\bcat\b.*(\.env(?!\.(example|sample|template|dist|defaults)\b)|\.ssh/(?![^\s]*\.pub\b)|\.aws/)", "credential file read"),
     (r"\bcat\b.*/etc/(passwd|shadow)\b", "system credential read"),
-    (r"\bcat\b.*(id_rsa|credentials)\b", "credential file read"),
+    (r"\bcat\b.*(id_rsa(?!\.pub\b)|credentials)\b", "credential file read"),
     # CAWS spec/policy/waiver protection (RC defect #8).
     # Naked rm/mv on .caws/specs/, .caws/policy.yaml, or .caws/waivers/ bypasses
     # the audit trail. Use `caws specs close|archive`, `caws waiver revoke`,
