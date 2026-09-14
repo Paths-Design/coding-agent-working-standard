@@ -978,3 +978,105 @@ latency, or crash/fsync durability. Doctor remains nonzero for legacy pack
 drift and a foreign session whose cwd no longer exists; no foreign session or
 custom project hook was overwritten. These limits prevent a release-ready claim
 while allowing the bounded scope and CI repair to be delivered.
+
+### Preserve the newer no-Git fix when restoring scope (2026-09-14)
+
+A fresh check after the renewed human reprieve found runtime `ab5a9b31…`
+selected, although the CLI still reported RC2. Its scope-guard hash was the
+older `8825241a…`, while its launcher included the newer no-Git fix landed on
+`main` as `a0cdf79d` under `FIX-HOOK-NOGIT-001`. The previous live-runtime claim
+was therefore no longer current. `E/combined-preinstall-observation.stdout`
+retains the runtime pointer, CLI target and both installed file hashes.
+
+The two-file no-Git commit was cherry-picked into the owned candidate lane as
+`9328739ea8d1da95f14e8c903ef6739aa861b470`. This preserves both fixes without
+replacing the newer launcher with the earlier package. Build exited 0; 43
+adapter/fingerprint tests and the six-row real-CLI scope scenario passed
+(`E/combined-build.*`, `E/combined-adapter-tests.*`, `E/combined-scope-test.*`).
+[Qualification 34799605069](https://github.com/Paths-Design/coding-agent-working-standard/actions/runs/34799605069)
+passed on this exact combined commit: 2,765 Jest tests in 220 suites, 281 Bats
+cases, 225 Python tests, and all six packaged upgrades. Its full log is
+`E/combined-qualification-log.stdout`; upgrade inspection is
+`E/ci-combined-upgrade/inspection.json`.
+
+`E/combined-scope-artifact-inspection.stdout` prints the six retained CI rows:
+root/nested admitted paths stay silent at zero strikes despite canonical
+ambiguity; root/nested refused paths advance through advisory, ask, and block
+at strikes 1/2/3 despite canonical admission; an admitted root path stays silent
+even after strike 3. The underlying `scope-decisions.json` and 27 command
+receipts retain the actual CLI decisions and hook output. A first scope strike
+still permits the edit under the existing progressive policy.
+
+The six upgrade artifacts agree on package SHA-256
+`613b66712d139e61c4b356c988585baab93dca52baf90cd80f8a2e2a763ff606`
+and runtime digest
+`7d5f287eff6968f27031d6fb3e16814d6df4d4af28aa83862f6b210520c73c4f`.
+Each retains 66 command receipts, four equal governance snapshots, the exact
+rendered user request, and a zero-finding production audit. The snapshot
+installer and `caws init adapters install --json` both exited 0 and selected
+this same package/runtime (`E/combined-cli-install.*`,
+`E/combined-runtime-install.*`). The renewed reprieve was then revoked using
+the CLI (`E/combined-reprieve-revoke.*`).
+
+The separate installed-launcher experiment retains its complete raw command
+inputs and outputs in `E/combined-launcher-NLBBOh/`. A `.caws` ancestor without
+Git and an empty/broken `.git` ancestor each returned 0 with the explicit
+`continuing without CAWS governance` diagnostic. A plain directory returned 0
+silently. A configured governed repository's cross-repository Write returned
+2, named the scope guard, and left the target absent. This confirms the intended
+no-Git behavior for those shapes, including the deliberate absence of governance
+when Git cannot resolve a root; it does not prove behavior for every Git failure.
+
+The first attempt, `E/combined-launcher-lrUuED/`, correctly failed its refusal
+assertion: the fixture had installed legacy project registration, so the system
+entry stayed inactive. Configuring the disposable machine adapter before init
+fixed the setup. The successful probe also requires a recorded selection of
+`scope-guard.sh` before exercising refusal. Merely installing files or observing
+a silent exit 0 would have missed this distinction.
+
+After live installation and reprieve revocation, native records in
+`E/combined-native/inspection.json` and `hook-events.json` show:
+
+| Native call | Scope handler | Adapter | Observed artifact |
+| --- | --- | --- | --- |
+| Write `exec-cf8c798a-1362-457d-8b88-e1b0dcdf2a43` | completed, exit 0 | 0 | control file created |
+| Edit `exec-98ab0a98-8880-4b90-97f3-eb250ca38361` | completed, exit 0 | 0 | control text changed |
+| Write `exec-fcb5ce59-cc95-45e7-a31c-c9fa568f9ae8` | block JSON, exit 0 | 2 | denied root file absent |
+
+All three scope observations name runtime `7d5f287e…` and scope source hash
+`affde14e…`, with status `completed`, not `reprieved`. The resulting admitted
+text is `Combined runtime native Write and Edit control.` and hashes to
+`6039d4be839b6a9e3687d3ee8dc2eba55beeb892ec8dad5a73623755f5967cd6`.
+The small Edit has the pre-tool record missing from the earlier large lockfile
+Edits. This narrows that gap; it does not identify its cause or prove large
+payload handling. The earlier shell counterexamples and fresh native lifecycle
+requirements remain open before tagging.
+
+The final installation observation, `E/combined-final-runtime.stdout` (exit 0),
+compares installed scope and launcher bytes directly with the candidate source
+and asserts runtime `7d5f287e…`. `E/combined-gates.stdout` reports all five gates
+passing, and `E/combined-docs-check.stdout` exits 0. `E/combined-doctor.stdout`
+exits 1 with 1 error, 7 warnings and 15 informational findings, including legacy
+pack 56 versus shipped 76 and the foreign session's missing cwd. These findings
+remain open; the machine-runtime comparison does not establish that legacy
+project dispatchers use the same code.
+
+[Full Mutation Gate 34799889038](https://github.com/Paths-Design/coding-agent-working-standard/actions/runs/34799889038)
+also passed on `9328739e`. Downloaded reports under `E/ci-combined-mutation/`
+contain 19 production source bodies and 22 test source bodies; the independent
+`E/combined-mutation-inspection.stdout` comparison matches every body to that
+commit (exit 0). Re-running `assert-mutation-report.mjs` separately for kernel,
+shell and store exited 0 for each (`E/combined-mutation-*-verdict.*`), with all
+declared 80% per-file floors unchanged and no invalid or ignored verdicts.
+
+The reports contain 3,622 killed, 19 timed-out, 596 surviving and 67 uncovered
+mutants. `messages-store.ts` is 971/1,208 detected (80.38%): 965 killed, six
+timeouts, 225 survivors and 12 uncovered. Timeouts count as detected under the
+existing policy; this result does not establish assertion-based detection for
+those 19 mutants, and the survivors were not individually adjudicated as
+equivalent. Claiming complete behavioral coverage would require inspecting the
+surviving/timeout locations and killing tests, reaching uncovered paths, and
+adding discriminating assertions. The full CI log is
+`E/combined-mutation-log.stdout`; the native trace gaps above remain separate
+from these mutation floors. No tag, publication or default-branch merge was
+performed by this qualification.
