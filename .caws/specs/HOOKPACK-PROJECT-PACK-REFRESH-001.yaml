@@ -1,0 +1,26 @@
+id: HOOKPACK-PROJECT-PACK-REFRESH-001
+title: 'refresh this repo''s project-local hook pack to the shipping baseline so DSH executes current guards'
+risk_tier: 2
+mode: chore
+lifecycle_state: draft
+created_at: '2026-09-14T07:04:53.103Z'
+updated_at: '2026-09-14T07:04:53.103Z'
+created_by_session: 'session-c04418cd-a035-44a9-b26e-378d285ccad1'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
