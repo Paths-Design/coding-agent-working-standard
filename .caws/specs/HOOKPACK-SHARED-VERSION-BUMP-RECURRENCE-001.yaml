@@ -8,19 +8,35 @@ updated_at: '2026-09-14T04:28:56.690Z'
 created_by_session: 'session-c04418cd-a035-44a9-b26e-378d285ccad1'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts (SHARED_PACK_VERSION)'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json (recorded baseline)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
+    - packages/caws-cli/tests/init/pack-fingerprints.json
+  out:
+    - packages/caws-cli/dist
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'This is a RECURRENCE of HOOKPACK-SHARED-VERSION-STAMP-INTEGRITY-001, recorded as its own slice rather than folded backwards into two already-closed classifier specs. The two classifier slices (CLASSIFY-CREDENTIAL-PUBLIC-FILE-EXCLUSION-001 and CLASSIFY-CREDENTIAL-READ-VERB-COVERAGE-001) each edited templates/hook-packs/shared/classify_command.py and neither carried the version bump that the shared-pack change requires.'
+  - 'The control worked. tests/init/pack-fingerprint.test.js (CAWS-TEST-HOOK-INSTALL-FINGERPRINT-001) went RED immediately, naming the shared pack. The guard behaved exactly as designed: a template change without a matching recorded fingerprint and version bump fails closed.'
+  - 'The lesson is about the LEDGER, not the constant: the invariant belongs to the template change, so it must be discharged in the slice that makes the change. Splitting a template edit from its bump means the second slice is red on arrival and only a later actor notices.'
+  - 'Every staleness signal in the guard plane keys on the version STAMP rather than file content, so an un-bumped template change moves the enforcement plane while every consumer of the signal believes nothing changed. This is why the bump is not bookkeeping.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'the shared pack template tree containing both classifier changes'
+    when: 'pack-fingerprint.test.js recomputes the live fingerprint'
+    then: 'the shared pack case passes: recorded version equals SHARED_PACK_VERSION and the recorded fingerprint equals the live one'
+  - id: A2
+    given: 'the recorded baselines for the seven surface packs'
+    when: 'the same suite runs'
+    then: 'all eight pack cases pass and no surface baseline is modified by this slice'
+observability:
+  - 'The bumped version is what the installed hook_pack_version header and doctor.hooks.installed_pack_version_lag both compare against, so the two classifier fixes become reportable as a version delta rather than only as content drift.'
+rollback:
+  - 'Revert the commit; SHARED_PACK_VERSION returns to 68 with its prior fingerprint and pack-fingerprint returns to its pre-slice red state. No installed file is touched by this slice.'
+non_functional:
+  reliability:
+    - 'A constant plus a derived JSON baseline; the control that consumes them already fails closed on disagreement.'
 contracts: []
