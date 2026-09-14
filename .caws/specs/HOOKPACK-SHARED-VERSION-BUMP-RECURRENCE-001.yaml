@@ -45,3 +45,7 @@ evidence:
     status: pass
     evidence_ref: "pack-fingerprint.test.js 'shared pack fingerprint is unchanged (or version bumped)' - RED before this slice (baseline v76 ecc6770f vs live 5b8690cc), green after re-deriving at v77"
     recorded_at: "2026-09-14T04:31:21.155Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "pack-fingerprint.test.js: all eight pack cases pass; only the shared entry of pack-fingerprints.json changed (git diff touches 2 files); hook-install-layout.test.js 21/21 confirms the manifest still covers every template file"
+    recorded_at: "2026-09-14T04:31:21.647Z"
