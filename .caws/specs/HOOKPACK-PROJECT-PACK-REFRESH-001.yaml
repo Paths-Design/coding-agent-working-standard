@@ -54,3 +54,8 @@ non_functional:
   reliability:
     - 'Whole-pack replacement rather than per-file, because the guards and their libraries must move together; the fail-closed library branch is the reason per-file porting is unsafe here.'
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "doctor after refresh: installed_pack_version_lag and pack_body_drift no longer reported for this repo (installed rows now v77)"
+    recorded_at: "2026-09-14T07:32:28.249Z"
