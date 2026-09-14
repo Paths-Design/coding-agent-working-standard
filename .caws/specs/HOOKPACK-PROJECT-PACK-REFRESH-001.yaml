@@ -8,19 +8,48 @@ updated_at: '2026-09-14T07:04:53.103Z'
 created_by_session: 'session-c04418cd-a035-44a9-b26e-378d285ccad1'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - '.caws/hooks (the project-local shared hook pack executed by project-wired harnesses)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
-  out: []
+    - .caws/hooks
+  out:
+    - packages/caws-cli
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The execution plane is per harness. claude-code and codex are registered in the machine runtime and run the current snapshot; the DSH bridge invokes <repoRoot>/.caws/hooks/dispatch/<event>.sh directly (caws-dsh-bundle src/hooks-caws.ts), so in this repo DSH sessions execute the PROJECT copy. That copy sat at hook_pack_version 54-57 while the CLI ships 77.'
+  - 'The gap was observed, not inferred: two Bash invocations in this session were refused by .caws/hooks/worktree-guard.sh with "Copying files from a worktree to the main repo is forbidden" where the trigger text existed only inside a heredoc PAYLOAD. The template guard does not have that defect — it normalizes command text through caws_bash_command_lines, which calls caws_blank_heredoc_bodies. The stale local copy has no heredoc library and no normalization call, so it reads payload as command.'
+  - 'ATOMICITY IS LOAD-BEARING. The current worktree-guard.sh sources lib/heredoc.sh and lib/bash-mutation-targets.sh and exits 2 ("command-recognition library unavailable; blocked") when they are absent. Both are among the files this repo lacks. A partial or per-file port that lands a guard without its library would fail closed and block EVERY Bash command. The refresh must land the whole set together.'
+  - 'Local growth was reviewed before overwriting, not assumed away. Of 49 present-but-different files, 48 are byte-identical to their recorded pristine baseline (no local edits). The one exception, worktree-guard.sh, differs from its baseline only by CAWS-WORKTREE-GUARD-BASE-PUSH-RETIRE-001, and that retirement is ALSO present in the shipping template, so overwriting preserves it rather than reverting it.'
+  - 'All project-pack files are git-tracked, so the refresh is reversible by reverting the commit. No machine runtime snapshot is modified by this slice.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'the refreshed project pack'
+    when: 'caws doctor runs'
+    then: 'doctor.hooks.installed_pack_version_lag no longer reports an installed version below the shipping version for this repo'
+  - id: A2
+    given: 'the refreshed project pack'
+    when: 'the libraries the current guards require are checked'
+    then: 'lib/heredoc.sh and lib/bash-mutation-targets.sh are present in .caws/hooks/lib, so no guard can hit its fail-closed library branch'
+  - id: A3
+    given: 'a command whose heredoc BODY contains worktree and main-repo path tokens, with the command itself starting with a copy verb'
+    when: 'the refreshed .caws/hooks/worktree-guard.sh adjudicates it'
+    then: 'it does not block on the body text, because command normalization now runs'
+  - id: A4
+    given: 'the pre-refresh tree'
+    when: 'the same A3 command is adjudicated by the stale .caws/hooks/worktree-guard.sh'
+    then: 'it blocks, demonstrating the defect was real rather than asserted'
+  - id: A5
+    given: 'the deliberate CAWS-WORKTREE-GUARD-BASE-PUSH-RETIRE-001 change in the installed guard'
+    when: 'the refresh completes'
+    then: 'the retirement is still present in .caws/hooks/worktree-guard.sh — the refresh did not silently revert a documented governance decision'
+observability:
+  - 'The version stamp is the observable: the installed rows move from 54-57 to 77, doctor stops reporting the lag, and the absent library files appear under .caws/hooks/lib.'
+rollback:
+  - 'Revert the refresh commit; the project pack returns to 54-57 with the previously observed stale-guard behavior. The machine runtime is untouched either way.'
+non_functional:
+  security:
+    - 'The refresh ADDS enforcement to the surface that most needed it: the local copy gains the credential-precision, heredoc-neutralization, and mutation-target libraries it lacked. Nothing is removed that the template does not also carry, verified per file against the pristine baseline.'
+  reliability:
+    - 'Whole-pack replacement rather than per-file, because the guards and their libraries must move together; the fail-closed library branch is the reason per-file porting is unsafe here.'
 contracts: []
