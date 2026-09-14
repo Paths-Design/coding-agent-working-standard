@@ -2,10 +2,11 @@ id: CAWS-RELEASE-CANDIDATE-REPAIRS-001
 title: 'Repair candidate CI and release evidence gaps'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-release-candidate
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'User-approved landing of candidate 28bd955e. Source 9328739e passed Qualification 34799605069 and full Mutation Gate 34799889038; 19 production and 22 test report bodies matched. Combined runtime 7d5f287e installed with native admitted Write/Edit and refused Write artifacts after reprieve revocation. Large Edit traces, shell counterexamples, fresh harness lifecycle checks, legacy hook drift, and post-release consumption remain explicit release limits in docs/audits/hook-port-qualification.md. This closure completes the bounded repair slice; no tag or publication is claimed.'
 created_at: '2026-09-13T06:26:55.237Z'
-updated_at: '2026-09-13T06:27:21.164Z'
+updated_at: '2026-09-14T03:31:30.414Z'
 created_by_session: '01a097e1-0a6f-7821-80d8-dedde2ac2cd6'
 blast_radius:
   modules:
