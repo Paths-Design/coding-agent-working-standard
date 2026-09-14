@@ -71,3 +71,7 @@ evidence:
     status: pass
     evidence_ref: "pre-refresh: .caws/hooks/worktree-guard.sh v57 matched the copy verb ANYWHERE (grep -qE '\\b(cp|mv)\\b'), so a stray token in a heredoc payload blocked the whole call; reproduced live twice"
     recorded_at: "2026-09-14T07:32:30.354Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "grep -c BASE-PUSH-RETIRE .caws/hooks/worktree-guard.sh -> 1 after the refresh; the documented retirement survived (also present in template v77)"
+    recorded_at: "2026-09-14T07:32:30.869Z"
