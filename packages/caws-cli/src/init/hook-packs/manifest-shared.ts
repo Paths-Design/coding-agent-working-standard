@@ -428,7 +428,11 @@ import { isAdapterCoveredSurface } from './types';
 // managed template now carries a parseable header, so a fresh install is
 // re-adoptable by a later install or a second-surface init.
 // v76: root-file parity and target-worktree scope delegation.
-export const SHARED_PACK_VERSION = 76;
+// v77: credential-read selector precision — public-by-construction exclusion
+// (.env.example, *.pub) and unambiguous read-verb coverage. Both edits landed
+// in classified slices that did not carry this bump; the fingerprint control
+// caught the omission (HOOKPACK-SHARED-VERSION-BUMP-RECURRENCE-001).
+export const SHARED_PACK_VERSION = 77;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
