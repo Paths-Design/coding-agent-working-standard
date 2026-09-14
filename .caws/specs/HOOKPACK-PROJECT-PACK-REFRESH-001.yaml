@@ -2,9 +2,11 @@ id: HOOKPACK-PROJECT-PACK-REFRESH-001
 title: 'refresh this repo''s project-local hook pack to the shipping baseline so DSH executes current guards'
 risk_tier: 2
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Project-local hook pack refreshed from v54-57 to v77 and committed (e1a059b0). Reviewed before overwriting: 48 of 49 present-but-different files were byte-identical to their pristine baseline; the one exception differed only by CAWS-WORKTREE-GUARD-BASE-PUSH-RETIRE-001, which the shipping template also carries, so it was preserved (verified present after). Landed atomically because the current worktree-guard exits 2 when its libraries are absent. Verified: doctor lag and body-drift findings cleared, both libraries present, and the token shape that blocked twice now executes.'
 created_at: '2026-09-14T07:04:53.103Z'
-updated_at: '2026-09-14T07:32:57.933Z'
+updated_at: '2026-09-14T07:32:59.420Z'
 created_by_session: 'session-c04418cd-a035-44a9-b26e-378d285ccad1'
 blast_radius:
   modules:
