@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 56
+# hook_pack_version: 77
 # caws_min_major: 11
 # lineage_refs: (new in shared-core-001)
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -44,7 +44,8 @@
 #                         passes the command through unrewritten).
 #   CAWS_INSTRUCTION_FILES — space-separated root instruction filenames the
 #                         harness reads at the repo root (e.g. "CLAUDE.md" for
-#                         claude-code, "AGENTS.md" for codex/opencode/zcode).
+#                         claude-code, "AGENTS.override.md AGENTS.md" for codex,
+#                         and "AGENTS.md" for opencode/zcode).
 #                         Used by worktree-write-guard.sh's allowlist so a
 #                         session editing its harness's doctrine file does not
 #                         trip the base-branch write guard. The unknown-surface
@@ -139,20 +140,12 @@ _caws_to_git_root() {
   local root
   root="$(cd "$d" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || true)"
   [[ -n "$root" ]] && printf '%s\n' "$root"
+  return 0
 }
 
 if [[ -z "${CAWS_PROJECT_DIR:-}" ]]; then
-  # A5: prefer the registry-derived vendor dir (generated snippet); the
-  # env-var heuristic below is the fallback for dispatches that predate the
-  # snippet.
-  if declare -F _caws_surface_vendor_dir >/dev/null 2>&1; then
-    local _registry_vendor_dir
-    _registry_vendor_dir="$(_caws_surface_vendor_dir "${CAWS_AGENT_SURFACE:-}")" || _registry_vendor_dir=""
-    if [[ -n "$_registry_vendor_dir" && "$_registry_vendor_dir" != ".caws" ]]; then
-      _CAWS_VENDOR_DIR="${_registry_vendor_dir}"
-      return 0
-    fi
-  fi
+  # A registry vendor name is not a project root. Complete root resolution
+  # regardless of which libraries the caller has already sourced.
   _CAWS_VENDOR_DIR_CANDIDATE=""
   if [[ -n "${CLAUDE_PROJECT_DIR:-}" ]]; then
     _CAWS_VENDOR_DIR_CANDIDATE="$CLAUDE_PROJECT_DIR"
@@ -188,6 +181,9 @@ export CAWS_AGENT_SURFACE
 # ---------------------------------------------------------------------------
 # 3. Derive per-surface values.
 # ---------------------------------------------------------------------------
+# Capture an explicitly preset CAWS_AGENT_PROCESS_NAMES BEFORE the case arms
+# overwrite it (see the preserve block after the case).
+_CAWS_AGENT_PROCESS_NAMES_PRESET="${CAWS_AGENT_PROCESS_NAMES:-}"
 case "$CAWS_AGENT_SURFACE" in
   claude-code)
     CAWS_VENDOR_DIR=".claude"
@@ -201,7 +197,7 @@ case "$CAWS_AGENT_SURFACE" in
     CAWS_PLATFORM_FLAG="codex"
     # Codex has no PreToolUse "ask" decision; map ask -> deny.
     CAWS_PERMISSION_VOCAB="deny"
-    CAWS_INSTRUCTION_FILES="AGENTS.md"
+    CAWS_INSTRUCTION_FILES="AGENTS.override.md AGENTS.md"
     CAWS_AGENT_PROCESS_NAMES="codex"
     ;;
   cursor)
@@ -300,11 +296,42 @@ case "$CAWS_AGENT_SURFACE" in
     ;;
 esac
 
+# Preserve an explicitly preset CAWS_AGENT_PROCESS_NAMES over the surface
+# default (DANGER-LATCH-QUARANTINE-TRAP-001): operators and the bats suite
+# steer ancestor-identity resolution this way. The hook env is harness-owned
+# (an agent's Bash-tool env cannot reach it), so this is an operator control,
+# not an agent-controllable kill-steer.
+if [[ -n "${_CAWS_AGENT_PROCESS_NAMES_PRESET:-}" ]]; then
+  CAWS_AGENT_PROCESS_NAMES="$_CAWS_AGENT_PROCESS_NAMES_PRESET"
+fi
+export CAWS_AGENT_PROCESS_NAMES
+
+# ---------------------------------------------------------------------------
+# 3b. DANGER-LATCH-QUARANTINE-TRAP-001: per-surface kill-escalation enablement.
+#
+# When a quarantined session makes a further non-read-only attempt, the trap
+# may terminate the session's agent process (SIGTERM) — but ONLY on surfaces
+# where one process == one session. Hosts where a single server process serves
+# many sessions/threads (DSH server, Cursor/Windsurf IDE hosts, opencode
+# server) must NOT kill: the PID names the shared host, not the offender.
+# An operator can force either way by presetting CAWS_TRAP_KILL in the env
+# (the `:-` default form keeps a preset env value authoritative).
+# ---------------------------------------------------------------------------
+case "$CAWS_AGENT_SURFACE" in
+  claude-code|codex|zcode|kimi-code|qwen-code) _CAWS_TRAP_KILL_DEFAULT=1 ;;
+  *) _CAWS_TRAP_KILL_DEFAULT=0 ;;
+esac
+: "${CAWS_TRAP_KILL:=$_CAWS_TRAP_KILL_DEFAULT}"
+export CAWS_TRAP_KILL
+
 # ---------------------------------------------------------------------------
 # 4. Derive CAWS_LOG_DIR from the resolved project dir and vendor dir.
 # ---------------------------------------------------------------------------
 if [[ -n "${CAWS_PROJECT_DIR:-}" && "${CAWS_PROJECT_DIR}" != "." ]]; then
   CAWS_LOG_DIR="${CAWS_PROJECT_DIR}/${CAWS_VENDOR_DIR}/logs"
+  if [[ "${CAWS_SYSTEM_RUNTIME:-0}" == "1" && -n "${CAWS_MACHINE_LOG_DIR:-}" ]]; then
+    CAWS_LOG_DIR="$CAWS_MACHINE_LOG_DIR"
+  fi
 else
   # Project dir is "." (relative fallback) or empty — use a relative path.
   # Individual hooks that need an absolute log dir must resolve cwd themselves.
@@ -406,6 +433,44 @@ export CAWS_VENDOR_DIR CAWS_PLATFORM_FLAG CAWS_PERMISSION_VOCAB CAWS_INSTRUCTION
 caws_source_lib() {
   local basename="${1:-}"
   [[ -z "$basename" ]] && return 1
+
+  # An adopted project declares intentional local overrides explicitly. Old
+  # vendored adapter copies are not allowed to shadow the machine runtime.
+  # This branch is entered only by the machine launcher; legacy dispatch keeps
+  # its existing resolution order below.
+  if [[ "${CAWS_MACHINE_RUNTIME:-}" == 1 ]]; then
+    local _machine_local
+    _machine_local="$(python3 -c 'import json,os,sys; p=json.loads(os.environ.get("CAWS_MACHINE_LIBRARIES", "{}")); print(p.get(sys.argv[1], ""))' "$basename")" || return 1
+    if [[ -n "$_machine_local" ]]; then
+      source "${CAWS_MACHINE_POLICY_ROOT}/${_machine_local}"
+      return $?
+    fi
+    # CAWS-HOOKPACK-HOME-UNSET-ROOT-AUTHORITY-ALIAS-001: only probe the
+    # machine-user override when a real home is known. With both CAWS_HOME
+    # and HOME absent, defaulting to "" would resolve this to
+    # /surfaces/.../lib/<basename> at the filesystem root and, if a file
+    # happened to exist there, SOURCE it as a trusted override -- an absent
+    # home must mean this tier is unavailable, not rooted at "/".
+    local _machine_home=""
+    if [[ -n "${CAWS_HOME:-}" ]]; then
+      _machine_home="$CAWS_HOME"
+    elif [[ -n "${HOME:-}" ]]; then
+      _machine_home="${HOME}/.caws"
+    fi
+    if [[ -n "$_machine_home" ]]; then
+      local _machine_user="${_machine_home}/surfaces/${CAWS_AGENT_SURFACE}/lib/${basename}"
+      if [[ -f "$_machine_user" ]]; then
+        source "$_machine_user"
+        return $?
+      fi
+    fi
+    if [[ -f "${CAWS_MACHINE_ADAPTER_LIB_DIR}/${basename}" ]]; then
+      source "${CAWS_MACHINE_ADAPTER_LIB_DIR}/${basename}"
+      return $?
+    fi
+    source "${CAWS_SHARED_LIB_DIR}/${basename}"
+    return $?
+  fi
 
   # Determine shared lib dir: prefer the exported env var, fall back to
   # locating it relative to this file (lib/ sibling).

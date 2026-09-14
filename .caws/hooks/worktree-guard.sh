@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 57
+# hook_pack_version: 77
 # caws_min_major: 11
 # lineage_refs: 4,6,11,19,32
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -56,11 +56,22 @@ if [[ "$TOOL_NAME" != "Bash" ]] || [[ -z "$COMMAND" ]]; then
   exit 0
 fi
 
+# Share lexical command positions with the write boundary. No quote sentinels
+# over the raw command: those would hide executable $(...) inside double quotes.
+if [[ -f "$SCRIPT_DIR/lib/heredoc.sh" && -f "$SCRIPT_DIR/lib/bash-mutation-targets.sh" ]]; then
+  source "$SCRIPT_DIR/lib/heredoc.sh"
+  source "$SCRIPT_DIR/lib/bash-mutation-targets.sh"
+  COMMAND="$(caws_bash_command_lines "$COMMAND")"
+else
+  echo "[worktree-guard] command-recognition library unavailable; blocked" >&2
+  exit 2
+fi
+
 # Resolve main repo root (shared helper — HOOK-LIB-CONSOLIDATION-001 T2a).
 PROJECT_DIR="$(resolve_canonical_dir "${CAWS_PROJECT_DIR:-.}")"
 
 # Block sparse checkout (runs before "only check git commands" early-exit)
-if echo "$COMMAND" | grep -qE 'caws\s+(worktree\s+create|parallel\s+setup).*--scope'; then
+if echo "$COMMAND" | grep -qE '^caws\s+(worktree\s+create|parallel\s+setup).*--scope'; then
   echo "BLOCKED: --scope (sparse checkout) is not allowed." >&2
   echo "Sparse checkout breaks cross-module imports in most projects." >&2
   echo "Use full worktrees without --scope. Scope enforcement comes from" >&2
@@ -68,7 +79,7 @@ if echo "$COMMAND" | grep -qE 'caws\s+(worktree\s+create|parallel\s+setup).*--sc
   exit 2
 fi
 
-if echo "$COMMAND" | grep -qE '(^|;|&&|\|)\s*git\s+sparse-checkout'; then
+if echo "$COMMAND" | grep -qE '^git\s+sparse-checkout'; then
   # WORKTREE-SPEC-CANONICAL-ACCESS-GUARD-001 A3: blanket refusal stays.
   echo "BLOCKED: agent-issued git sparse-checkout is refused in CAWS projects." >&2
   echo "" >&2
@@ -127,20 +138,20 @@ if is_canonical_checkout "$CANONICAL_GUARD_CHECK_CWD"; then
           } catch(e) { console.log(''); }
         " 2>/dev/null || echo "")
         if [[ -n "$FIRST_ACTIVE_WT" ]]; then
-          if echo "$COMMAND" | grep -qE '(^|[[:space:];&|])git\s+checkout\s+[^[:space:]-]'; then
+          if echo "$COMMAND" | grep -qE '^git\s+checkout\s+[^[:space:]-]'; then
             canonical_guard_emit_block "git checkout (branch switch)" "$FIRST_ACTIVE_WT"
             exit 2
           fi
-          if echo "$COMMAND" | grep -qE '(^|[[:space:];&|])git\s+switch\s+[^[:space:]-]'; then
+          if echo "$COMMAND" | grep -qE '^git\s+switch\s+[^[:space:]-]'; then
             canonical_guard_emit_block "git switch (branch switch)" "$FIRST_ACTIVE_WT"
             exit 2
           fi
-          if echo "$COMMAND" | grep -qE '(^|[[:space:];&|])git\s+branch\s+(-f|--force)'; then
+          if echo "$COMMAND" | grep -qE '^git\s+branch\s+(-f|--force)'; then
             canonical_guard_emit_block "git branch -f (force branch update)" "$FIRST_ACTIVE_WT"
             exit 2
           fi
-          if echo "$COMMAND" | grep -qE '(^|[[:space:];&|])git\s+reset\b' \
-             && ! echo "$COMMAND" | grep -qE 'git\s+reset\s+--hard'; then
+          if echo "$COMMAND" | grep -qE '^git\s+reset\b' \
+             && ! echo "$COMMAND" | grep -qE '^git\s+reset\s+--hard'; then
             canonical_guard_emit_block "git reset (HEAD mutation)" "$FIRST_ACTIVE_WT"
             exit 2
           fi
@@ -152,7 +163,7 @@ fi
 # Block cross-boundary file copies (worktree → main).
 WORKTREE_BASE="$PROJECT_DIR/.caws/worktrees"
 if [[ -d "$WORKTREE_BASE" ]]; then
-  if echo "$COMMAND" | grep -qE '\b(cp|mv)\b'; then
+  if echo "$COMMAND" | grep -qE '^(cp|mv)[[:space:]]'; then
     AGENT_IN_WORKTREE=false
     if [[ -n "$HOOK_CWD" ]] && [[ "$HOOK_CWD" == "$WORKTREE_BASE"/* ]]; then
       AGENT_IN_WORKTREE=true
@@ -181,7 +192,7 @@ if [[ -d "$WORKTREE_BASE" ]]; then
 fi
 
 # Only check git commands from here on
-if ! echo "$COMMAND" | grep -qE '(^|\s|&&|\|)git\s'; then
+if ! echo "$COMMAND" | grep -qE '^git\s'; then
   exit 0
 fi
 
@@ -230,28 +241,28 @@ fi
 
 # --- Block dangerous git operations when worktrees are active ---
 
-if echo "$COMMAND" | grep -qE 'git\s+commit\s+.*--amend'; then
+if echo "$COMMAND" | grep -qE '^git\s+commit\s+.*--amend'; then
   echo "BLOCKED: git commit --amend is not allowed while worktrees are active." >&2
   echo "Amending commits risks rewriting another agent's work." >&2
   echo "Create a new commit instead." >&2
   exit 2
 fi
 
-if echo "$COMMAND" | grep -qE 'git\s+stash' && ! echo "$COMMAND" | grep -qE 'git\s+stash\s+list'; then
+if echo "$COMMAND" | grep -qE '^git\s+stash' && ! echo "$COMMAND" | grep -qE '^git\s+stash\s+list'; then
   echo "BLOCKED: git stash is not allowed while worktrees are active." >&2
   echo "Stash is shared across all worktrees and can capture or destroy another agent's work." >&2
   echo "Commit your changes to your branch instead." >&2
   exit 2
 fi
 
-if echo "$COMMAND" | grep -qE 'git\s+reset\s+--hard'; then
+if echo "$COMMAND" | grep -qE '^git\s+reset\s+--hard'; then
   echo "BLOCKED: git reset --hard is not allowed while worktrees are active." >&2
   echo "This could discard work that other agents depend on." >&2
   exit 2
 fi
 
 # WORKTREE-ISOLATION-HARDENING-001 (Fix 5): the git restore synonym gap.
-if echo "$COMMAND" | grep -qE '(^|[[:space:];&|])git\s+restore\b'; then
+if echo "$COMMAND" | grep -qE '^git\s+restore\b'; then
   echo "BLOCKED: git restore (working-tree/path restore) is not allowed while worktrees are active." >&2
   echo "git restore DISCARDS uncommitted changes by path — the same work-loss hazard as git reset --hard." >&2
   echo "This is a path/working-tree restore, NOT a branch switch." >&2
@@ -260,21 +271,21 @@ if echo "$COMMAND" | grep -qE '(^|[[:space:];&|])git\s+restore\b'; then
   exit 2
 fi
 
-if echo "$COMMAND" | grep -qE '(^|[[:space:];&|])git\s+checkout\s+--\s'; then
+if echo "$COMMAND" | grep -qE '^git\s+checkout\s+--\s'; then
   echo "BLOCKED: git checkout -- <path> (working-tree discard) is not allowed while worktrees are active." >&2
   echo "This discards uncommitted changes to the named path(s) — a work-loss hazard while parallel work exists." >&2
   echo "Commit first, or operate from the owning worktree's session." >&2
   exit 2
 fi
 
-if echo "$COMMAND" | grep -qE '(^|[[:space:];&|])git\s+clean\b'; then
+if echo "$COMMAND" | grep -qE '^git\s+clean\b'; then
   echo "BLOCKED: git clean (untracked-file deletion) is not allowed while worktrees are active." >&2
   echo "git clean can delete another agent's untracked files across the shared tree." >&2
   echo "Remove specific files you own explicitly instead." >&2
   exit 2
 fi
 
-if echo "$COMMAND" | grep -qE 'git\s+push\s+.*(--force|-f\s)'; then
+if echo "$COMMAND" | grep -qE '^git\s+push\s+.*(--force|-f\s)'; then
   echo "BLOCKED: Force push is not allowed while worktrees are active." >&2
   echo "This could rewrite history that other agents have based work on." >&2
   exit 2
@@ -310,12 +321,12 @@ if [[ -n "$BASE_BRANCH" ]] && [[ "$CURRENT_BRANCH" == "$BASE_BRANCH" ]]; then
   # history and races no sibling's index; it has no isolation cost to justify
   # refusing it, unlike the force-push case just above, which stays blocked
   # because it CAN rewrite history other agents have based work on.
-  if echo "$COMMAND" | grep -qE 'git\s+merge\b'; then
+  if echo "$COMMAND" | grep -qE '^git\s+merge\b'; then
     emit_additional_context "Merging into base branch ($BASE_BRANCH) while worktrees are active. The commit-msg hook will enforce the merge(worktree): message format. Make sure the worktree for this branch has been destroyed first."
     exit 0
   fi
 
-  if echo "$COMMAND" | grep -qE 'git\s+commit\b' && ! echo "$COMMAND" | grep -qE '--amend'; then
+  if echo "$COMMAND" | grep -qE '^git\s+commit\b' && ! echo "$COMMAND" | grep -qE -e '--amend'; then
     emit_additional_context "NOTE: committing to the base branch ($BASE_BRANCH) while worktrees are active. Worktrees are preferred for isolated feature work, but logical checkpoint commits from the current checkout are allowed by CAWS governance. Avoid --amend and force-push while worktrees are active."
     exit 0
   fi

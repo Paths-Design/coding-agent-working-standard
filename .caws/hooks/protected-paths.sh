@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 56
+# hook_pack_version: 77
 # caws_min_major: 11
 # lineage_refs: 8,16,23
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -98,6 +98,29 @@ FILE_PATH="$HOOK_FILE_PATH"
 _hooks_prefix_match() {
   # Returns 0 (true) if FILE_PATH is under the shared pack's install
   # directory or a vendor-surface hooks dir.
+  # The system runtime's executables, adapters, policy overrides and reprieves
+  # have the same boundary as the former project hook directory. CLI-mediated
+  # installation/configuration is separate from an agent's direct file edit.
+  #
+  # CAWS-HOOKPACK-HOME-UNSET-ROOT-AUTHORITY-ALIAS-001: only derive machine_home
+  # when a real home is known. With both CAWS_HOME and HOME absent, defaulting
+  # to "" would make every machine_home/* pattern below a top-level absolute
+  # prefix (e.g. "/bin/"*), matching unrelated real paths on the filesystem.
+  # No home means no machine-home tier to match against, not a tier rooted at "/".
+  local machine_home=""
+  if [[ -n "${CAWS_HOME:-}" ]]; then
+    machine_home="$CAWS_HOME"
+  elif [[ -n "${HOME:-}" ]]; then
+    machine_home="${HOME}/.caws"
+  fi
+  if [[ -n "$machine_home" ]]; then
+    [[ "$FILE_PATH" == "$machine_home/bin/"* ]] && return 0
+    [[ "$FILE_PATH" == "$machine_home/lib/"* ]] && return 0
+    [[ "$FILE_PATH" == "$machine_home/surfaces/"* ]] && return 0
+    [[ "$FILE_PATH" == "$machine_home/state/projects/"* ]] && return 0
+    [[ "$FILE_PATH" == "$machine_home/state/adapter-runtime.json" ]] && return 0
+    [[ "$FILE_PATH" == "$machine_home/state/sessions/"*/guard-reprieve-* ]] && return 0
+  fi
   [[ "$FILE_PATH" == */.caws/hooks/* ]] || \
   [[ "$FILE_PATH" == ".caws/hooks/"* ]] || \
   [[ "$FILE_PATH" == */"${CAWS_VENDOR_DIR}"/hooks/* ]] || \

@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 56
+# hook_pack_version: 77
 # caws_min_major: 11
 # lineage_refs: 8,16,25,27,28,29,30,31
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -132,4 +132,14 @@ for _h in "${_ALL_HANDLERS[@]}"; do
 done
 unset _h _h_base _DISABLED _disabled_arr
 
-run_handlers "${HANDLERS[@]}"
+# CAWS-HOOKPACK-DISPATCH-EMPTY-HANDLERS-CRASH-001: guard the count before
+# expanding "${HANDLERS[@]}" -- on bash 3.2 (macOS default /bin/bash),
+# expanding an empty array under `set -u` throws "unbound variable" rather
+# than a normal empty expansion. Disabling every handler above is a real,
+# supported configuration (see CAWS_DISABLED_HANDLERS above), not a
+# theoretical one.
+if (( ${#HANDLERS[@]} > 0 )); then
+  run_handlers "${HANDLERS[@]}"
+else
+  run_handlers
+fi

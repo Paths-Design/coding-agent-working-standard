@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 56
+# hook_pack_version: 77
 # caws_min_major: 11
 # lineage_refs: 8,11,12,16
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -154,7 +154,6 @@ resolve_worktree_root() {
 
 # Always-allowed paths bypass scope checks entirely.
 ALLOW_PREFIXES=(
-  "$HOME/${CAWS_VENDOR_DIR}/"
   ".caws/"
   "${CAWS_VENDOR_DIR}/"
   "docs/"
@@ -163,6 +162,16 @@ ALLOW_PREFIXES=(
   "tmp/"
   ".archive/"
 )
+# CAWS-HOOKPACK-HOME-UNSET-ROOT-AUTHORITY-ALIAS-001: only add the home-tier
+# exemption when HOME is actually known. An unset HOME defaulted to "" would
+# make this entry "/${CAWS_VENDOR_DIR}/" -- an ABSOLUTE prefix -- which the
+# foreign-repo containment check below (an absolute allow-prefix bypasses it
+# entirely) would then treat as a global exemption for any absolute path
+# under that vendor dir in ANY repository. Absent HOME means no home-tier
+# authority exists, not a authority rooted at "/".
+if [[ -n "${HOME:-}" ]]; then
+  ALLOW_PREFIXES+=("${HOME}/${CAWS_VENDOR_DIR}/")
+fi
 
 # Policy-declared non-governed zones (CAWSFIX-26 / ledger D9).
 POLICY_FILE="${CAWS_PROJECT_DIR:-.}/.caws/policy.yaml"
@@ -297,9 +306,7 @@ if [[ "$FOREIGN_REPO" == "1" ]]; then
   exit 2
 fi
 
-if [[ "$REL_PATH" != */* ]]; then
-  exit 0
-fi
+# Root files use the same kernel scope decision as nested files.
 for prefix in "${ALLOW_PREFIXES[@]}"; do
   if [[ "$FILE_PATH" == "${prefix}"* ]] || [[ "$REL_PATH" == "${prefix}"* ]]; then
     exit 0
@@ -346,16 +353,16 @@ if ! command -v caws >/dev/null 2>&1; then
   exit 0
 fi
 
-if caws scope check "$REL_PATH" >/dev/null 2>&1; then
+# The target lane supplies scope authority even when the harness cwd is canonical.
+if (cd "$WORK_DIR" && caws scope check "$REL_PATH") >/dev/null 2>&1; then
   # Kernel-authoritative ADMIT. Skip strike counter entirely.
   exit 0
 fi
 
 # Refused (or no-authority). Pull the structured diagnostic from the kernel.
-SCOPE_JSON="$(caws scope show "$REL_PATH" --json 2>/dev/null)"
-
-# Fail closed if the diagnostic is unavailable/unparseable: refuse, don't admit.
-if [[ -z "$SCOPE_JSON" ]] || ! command -v jq >/dev/null 2>&1 \
+# Fail closed on a failed invocation as well as an unreadable diagnostic.
+if ! SCOPE_JSON="$(cd "$WORK_DIR" && caws scope show "$REL_PATH" --json 2>/dev/null)" \
+   || [[ -z "$SCOPE_JSON" ]] || ! command -v jq >/dev/null 2>&1 \
    || ! printf '%s' "$SCOPE_JSON" | jq -e . >/dev/null 2>&1; then
   _scope_env_block "refused '$REL_PATH' but could not render the structured diagnostic (\`caws scope show --json\` unavailable or unparseable). The edit is refused rather than silently admitted. Diagnose: caws scope show $REL_PATH."
   exit 0

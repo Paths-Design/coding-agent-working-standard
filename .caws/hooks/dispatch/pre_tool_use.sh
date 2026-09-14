@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 54
+# hook_pack_version: 77
 # caws_min_major: 11
 # lineage_refs: 8,11,17,19,22,23,24,26
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -119,6 +119,12 @@ HANDLERS=(
   # foreign Write/Edit. Runs after worktree-write-guard (file-tool authority)
   # since the two cover disjoint tool surfaces.
   bash-write-guard.sh
+  # worktree-pin-guard.sh (OPT-IN — Entry 41, CAWS-DEFECT-WORKTREE-ISOLATION-
+  # PIN-RELEASE-01): pins a session whose project root is inside a worktree to
+  # that worktree, refuses commands whose working directory resolves outside
+  # it, and RELEASES the pin when the pinned directory no longer exists (so a
+  # session that merges its own worktree is never bricked). Not wired by
+  # default: it is a broad session-level cwd enforcement; uncomment to adopt.
   protected-paths.sh
   scan-secrets.sh
   # quiet-merge.sh MUST be the last interceptor: it emits
@@ -128,4 +134,13 @@ HANDLERS=(
   quiet-merge.sh
 )
 
-run_handlers --short-circuit-on-block "${HANDLERS[@]}"
+# CAWS-HOOKPACK-DISPATCH-EMPTY-HANDLERS-CRASH-001: guard the count before
+# expanding "${HANDLERS[@]}" -- on bash 3.2 (macOS default /bin/bash),
+# expanding an empty array under `set -u` throws "unbound variable" rather
+# than a normal empty expansion. HANDLERS is a static literal today, but this
+# keeps the invariant true if it ever becomes filterable like post_tool_use.sh.
+if (( ${#HANDLERS[@]} > 0 )); then
+  run_handlers --short-circuit-on-block "${HANDLERS[@]}"
+else
+  run_handlers --short-circuit-on-block
+fi
