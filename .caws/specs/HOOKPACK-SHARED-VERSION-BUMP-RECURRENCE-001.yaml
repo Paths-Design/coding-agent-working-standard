@@ -2,9 +2,11 @@ id: HOOKPACK-SHARED-VERSION-BUMP-RECURRENCE-001
 title: 'the shared pack changed twice more without a SHARED_PACK_VERSION bump; ledger in the classifier slices should have carried it'
 risk_tier: 2
 mode: chore
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Shared pack bumped to v77 and the fingerprint baseline re-derived after two classifier slices changed the pack without a bump. pack-fingerprint 14/14 and hook-install-layout 21/21 green; AC evidence A1/A2 recorded.'
 created_at: '2026-09-14T04:28:56.690Z'
-updated_at: '2026-09-14T04:31:20.696Z'
+updated_at: '2026-09-14T04:31:29.090Z'
 created_by_session: 'session-c04418cd-a035-44a9-b26e-378d285ccad1'
 blast_radius:
   modules:
