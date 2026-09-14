@@ -200,6 +200,26 @@ DENY_SEGMENT_PATTERNS: list[tuple[str, str]] = [
     (r"\bcat\b.*(\.env(?!\.(example|sample|template|dist|defaults)\b)|\.ssh/(?![^\s]*\.pub\b)|\.aws/)", "credential file read"),
     (r"\bcat\b.*/etc/(passwd|shadow)\b", "system credential read"),
     (r"\bcat\b.*(id_rsa(?!\.pub\b)|credentials)\b", "credential file read"),
+    # CLASSIFY-CREDENTIAL-READ-VERB-COVERAGE-001: a credential read is
+    # catastrophic wherever it happens, not only through `cat`. `head .env` and
+    # `cp .env /tmp/x` disclose exactly as `cat .env` does — the second while
+    # also depositing the secret where a later command can read it.
+    #
+    # ANCHORED TO COMMAND POSITION on purpose, unlike the `cat` alternatives
+    # above. head/tail/less/more/od/strings are ordinary English words, and an
+    # unanchored alternation would match unquoted prose — `git commit -m add
+    # more .env handling` would hard-deny and arm the latch. Quoted content is
+    # already stripped before these patterns run, so anchoring closes the
+    # remaining residue. Anchoring can only ADD coverage: every command these
+    # match is admitted today.
+    #
+    # PATTERN-TAKING TOOLS ARE DELIBERATELY ABSENT. `grep`, `rg`, `sed` and
+    # `awk` accept the credential name as a PATTERN, not a path — and
+    # `git ls-files | grep -E "\.env"` is the security check whose
+    # false-positive hard-deny armed the latch and killed a session. Admitting
+    # them here would reintroduce exactly that incident.
+    (r"(^|[|;&(])\s*(head|tail|less|more|base64|xxd|od|strings|cp)\b.*(\.env(?!\.(example|sample|template|dist|defaults)\b)|\.ssh/(?![^\s]*\.pub\b)|\.aws/|id_rsa(?!\.pub\b)|credentials\b)", "credential file read"),
+    (r"(^|[|;&(])\s*(head|tail|less|more|base64|xxd|od|strings|cp)\b.*/etc/(passwd|shadow)\b", "system credential read"),
     # CAWS spec/policy/waiver protection (RC defect #8).
     # Naked rm/mv on .caws/specs/, .caws/policy.yaml, or .caws/waivers/ bypasses
     # the audit trail. Use `caws specs close|archive`, `caws waiver revoke`,

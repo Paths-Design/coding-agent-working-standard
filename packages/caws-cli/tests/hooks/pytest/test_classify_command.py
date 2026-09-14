@@ -677,3 +677,94 @@ def test_system_credential_rule_is_untouched(classify):
         result = classify(command)
         assert decision_of(result) == "deny", result
 
+
+# ── CLASSIFY-CREDENTIAL-READ-VERB-COVERAGE-001 ──────────────────────────────
+# A credential read is catastrophic wherever it happens, not only through `cat`.
+# `head .env` and `cp .env /tmp/x` disclose exactly as `cat .env` does — the
+# second while also depositing the secret where a later command can read it.
+#
+# Only verbs whose operand is UNAMBIGUOUSLY a file are added. Pattern-taking
+# tools (grep, rg, sed, awk) stay out deliberately: there the credential name is
+# a PATTERN, not a path, and admitting them would turn the security check that
+# started this whole line of work back into a session-killing hard-deny.
+
+NEW_VERB_READS = [
+    "head .env",
+    "tail -n 5 .env",
+    "less .env",
+    "more .env",
+    "base64 .env",
+    "xxd .env",
+    "od -c .env",
+    "strings .env",
+    "cp .env /tmp/x",
+    "cat .env | head -3",
+]
+
+
+@pytest.mark.parametrize("command", NEW_VERB_READS)
+def test_credential_reads_through_new_verbs_deny(classify, command):
+    """A1: every newly covered read channel denies on a real credential."""
+    result = classify(command)
+    assert decision_of(result) == "deny", result
+    assert "credential" in result[1], result
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "head .env.example",
+        "cp .env.example /tmp/x",
+        "base64 .env.sample",
+        "tail -3 .env.template",
+        "head ~/.ssh/id_rsa.pub",
+    ],
+)
+def test_public_by_construction_stays_readable_through_new_verbs(classify, command):
+    """A2: the public-by-construction exclusion is verb-independent."""
+    result = classify(command)
+    assert decision_of(result) != "deny", (
+        f"{command!r} denied as a credential read, but it is public by "
+        f"construction: {result}"
+    )
+
+
+def test_template_alongside_real_credential_still_denies_through_new_verb(classify):
+    """A6: the lookahead is on the file selector, so a mixed command denies."""
+    result = classify("head .env.example .env.local")
+    assert decision_of(result) == "deny", result
+
+
+def test_read_verbs_are_anchored_to_command_position(classify):
+    """A4: head/tail/less/more/od/strings are ordinary English words. Anchoring
+    to command position keeps UNQUOTED prose from matching; quoted content is
+    already stripped before these patterns run (`echo "cat .env"` allows)."""
+    result = classify("git commit -m add more .env handling")
+    assert "credential" not in result[1], (
+        f"unquoted prose matched the credential selector: {result}"
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        'git ls-files | grep -E "\\.env"',
+        'grep -rn "\\.env" .gitignore',
+        'rg --files-with-matches "\\.env"',
+        'sed -n 1p .env',
+        'awk -F= "{print \\$1}" .env',
+    ],
+)
+def test_pattern_taking_tools_are_not_credential_reads(classify, command):
+    """A3: the hazard guard. `git ls-files | grep -E "\\.env"` is the security
+    check whose false-positive hard-deny armed the latch and killed a session.
+    grep/rg/sed/awk take PATTERNS, so the credential token need not be a file at
+    all; admitting them here would reintroduce that incident. This test fails if
+    someone widens the verb alternation to include them."""
+    result = classify(command)
+    assert result[1] != "credential file read", (
+        f"{command!r} was classified as a credential read; pattern-taking tools "
+        f"must stay out of the selector: {result}"
+    )
+
+
