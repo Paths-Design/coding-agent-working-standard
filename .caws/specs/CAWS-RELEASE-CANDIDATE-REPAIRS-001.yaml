@@ -85,9 +85,9 @@ evidence:
     commit_sha: "9328739ea8d1da95f14e8c903ef6739aa861b470"
   - criterion_id: A5
     status: pass
-    evidence_ref: "d24520e6: Release Qualification 34747864150 and full Mutation Gate 34747874070 passed. All 19 report source bodies match commit; every 80 percent floor unchanged and passed. Native gaps remain separate."
-    recorded_at: "2026-09-13T08:54:50.559Z"
-    command: gh run view 34747874070 --log
+    evidence_ref: "9328739e: Qualification 34799605069 and full Mutation Gate 34799889038 passed. Independent report comparison matched 19 production and 22 test source bodies. All unchanged 80 percent per-file floors passed without invalid or ignored verdicts. Reports retain 3622 killed, 19 timeouts, 596 survivors and 67 uncovered; native gaps and survivor adjudication remain separate limits."
+    recorded_at: "2026-09-14T03:03:54.240Z"
+    command: gh run view 34799889038 --log
     exit_code: 0
-    artifact_path: /private/tmp/caws-release-candidate-20260913/scope-repair-mutation-inspection.stdout
-    commit_sha: d24520e6d3a9e4f63999e7df00e4d54f18b8504a
+    artifact_path: /private/tmp/caws-release-candidate-20260913/combined-mutation-inspection.stdout
+    commit_sha: "9328739ea8d1da95f14e8c903ef6739aa861b470"
