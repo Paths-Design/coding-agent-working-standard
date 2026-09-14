@@ -26,8 +26,22 @@ export function isolatedEnvironment(root, inherited = process.env) {
     PYTHONDONTWRITEBYTECODE: '1' };
 }
 
+let receiptSequence = 0;
+export function observedSpawn(command, args, options) {
+  const started = Date.now();
+  const result = spawnSync(command, args, options);
+  const dir = options.env?.CAWS_QUALIFICATION_ARTIFACT_DIR;
+  if (dir) {
+    const receipt = { command, args, cwd: options.cwd, input: options.input ?? null,
+      exit_code: result.status, signal: result.signal, error: result.error?.message ?? null,
+      duration_ms: Date.now() - started, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+    write(path.join(dir, `command-${String(++receiptSequence).padStart(4, '0')}.json`), JSON.stringify(receipt, null, 2) + '\n');
+  }
+  return result;
+}
+
 function run(command, args, cwd, env, options = {}) {
-  const result = spawnSync(command, args, { cwd, env, encoding: 'utf8', timeout: 300000,
+  const result = observedSpawn(command, args, { cwd, env, encoding: 'utf8', timeout: 300000,
     maxBuffer: 8 * 1024 * 1024, ...options });
   if (result.status !== 0) throw new Error(`${command} ${args.join(' ')}: exit ${result.status}\n${result.error?.message ?? ''}\n${result.stdout}\n${result.stderr}`);
   return result.stdout;
@@ -61,6 +75,13 @@ export function qualify({ candidate = packageRoot, baseline = `${packageName}@12
   if (json(path.join(candidate, 'package.json')).name !== packageName) throw new Error('Expected CAWS CLI candidate');
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-runtime-upgrade-')));
   const env = isolatedEnvironment(root);
+  let artifacts = null;
+  if (reportPath) {
+    const parent = `${path.resolve(reportPath)}.artifacts`;
+    fs.mkdirSync(parent, { recursive: true });
+    artifacts = fs.mkdtempSync(path.join(parent, 'run-'));
+  }
+  if (artifacts) env.CAWS_QUALIFICATION_ARTIFACT_DIR = artifacts;
   fs.mkdirSync(env.HOME, { recursive: true });
   // Detached npm installation: no workspace dependencies or lifecycle repair.
   const consumer = path.join(root, 'consumer');
@@ -69,7 +90,7 @@ export function qualify({ candidate = packageRoot, baseline = `${packageName}@12
   const cli = (cwd, ...args) => run(process.execPath, [entry, ...args], cwd, env);
   const git = (cwd, ...args) => run('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', ...args], cwd, env);
   const step = message => console.log(`[runtime-upgrade] ${message}`);
-  const report = { schemaVersion: 1, candidateVersion: json(path.join(candidate, 'package.json')).version,
+  const report = { schemaVersion: 2, artifacts, candidateVersion: json(path.join(candidate, 'package.json')).version,
     baseline, platform: process.platform, node: process.version, cases: [], proof: 'installed-artifact subprocess fixtures; native harness activation is separate' };
   try {
     step('install published baseline and materialize stock/custom projects');
@@ -120,7 +141,7 @@ export function qualify({ candidate = packageRoot, baseline = `${packageName}@12
     }
     const blank = () => ({ disabled: {}, extensions: {}, handlers: {}, libraries: {} });
     // Mixed fleet: user transport defers while baseline native hooks remain.
-    const hook = (f, event, extra = {}, runtimeEnv = {}) => spawnSync('python3',
+    const hook = (f, event, extra = {}, runtimeEnv = {}) => observedSpawn('python3',
       [path.join(env.CAWS_HOME, 'bin/caws-hook'), f.surface, event, '--system'], {
         cwd: f.cwd ?? f.repo, env: { ...env, ...runtimeEnv }, encoding: 'utf8', timeout: 60000,
         input: JSON.stringify({ cwd: f.cwd ?? f.repo, session_id: `qualification-${f.name}`,
@@ -146,6 +167,8 @@ export function qualify({ candidate = packageRoot, baseline = `${packageName}@12
       const applied = JSON.parse(cli(f.repo, ...args)); assert.equal(applied.results[0].ok, true);
       assert.equal(JSON.parse(cli(f.repo, ...args, '--plan')).results[0].changed, false);
       assert.deepEqual(governance(f.repo), f.before);
+      if (artifacts) write(path.join(artifacts, `${f.name}-governance.json`),
+        JSON.stringify({ before: f.before, after: governance(f.repo) }, null, 2) + '\n');
       const denial = hook(f, 'pre_tool_use');
       assert.equal(denial.status, 2, JSON.stringify({ fixture: f.name, stdout: denial.stdout, stderr: denial.stderr }));
       assert.match(denial.stderr + denial.stdout, /protected|scope|governed/i);
@@ -183,6 +206,12 @@ export function qualify({ candidate = packageRoot, baseline = `${packageName}@12
       assert.equal(result.status, 0, `${event}: ${result.stderr}`);
     }
     const turn = json(path.join(fixtures[0].repo, '.caws/sessions', `qualification-${fixtures[0].name}`, 'turn-001.json'));
+    if (artifacts) {
+      write(path.join(artifacts, 'turn-001.json'), JSON.stringify(turn, null, 2) + '\n');
+      write(path.join(artifacts, 'transcript.jsonl'), fs.readFileSync(transcript));
+      write(path.join(artifacts, 'hook-events.jsonl'), fs.readFileSync(path.join(fixtures[0].repo,
+        '.caws/sessions', `qualification-${fixtures[0].name}`, 'hook-events.jsonl')));
+    }
     assert.equal(turn.user, prompt);
     assert.match(JSON.stringify(turn.timeline), /q-call|fixture-directory|pwd/);
     report.cases.push({ name: 'lifecycle-renderer', userPreserved: true, toolPreserved: true });
@@ -219,10 +248,14 @@ export function qualify({ candidate = packageRoot, baseline = `${packageName}@12
     assert.doesNotMatch(recovered.stderr, /qualification-updated-guard|Runtime modified/);
     report.cases.push({ name: 'update-corruption-rollback', twoProjectGuardAndRendererUpdate: true, recovered: true });
     report.ok = true;
-    if (reportPath) write(path.resolve(reportPath), JSON.stringify(report, null, 2) + '\n');
     step(`PASS: ${report.cases.length} cases; candidate ${report.tarballSha256}`);
     return report;
+  } catch (error) {
+    report.ok = false;
+    report.error = { name: error.name, message: error.message };
+    throw error;
   } finally {
+    if (reportPath) write(path.resolve(reportPath), JSON.stringify(report, null, 2) + '\n');
     fs.rmSync(root, { recursive: true, force: true });
   }
 }

@@ -26,7 +26,28 @@ test('the tag publish job depends on qualification of the same checkout', () => 
 });
 
 test('prerelease routing and fixture isolation contracts execute under Node', () => {
-  const result = spawnSync(process.execPath, ['--test', 'scripts/release-tag-publish.test.mjs', 'scripts/ci-governance-artifacts.test.mjs'], { cwd: root, encoding: 'utf8' });
+  const result = spawnSync(process.execPath, ['--test', 'scripts/release-tag-publish.test.mjs', 'scripts/ci-governance-artifacts.test.mjs', 'scripts/ci-matrix-version.test.mjs'], { cwd: root, encoding: 'utf8' });
   expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
   expect(result.stdout).toContain('# fail 0');
+});
+
+test('consumer matrix executes occurrence resolution and checks the installed version', () => {
+  const steps = readWorkflow('ci-matrix.yml').jobs.matrix.steps;
+  expect(steps.find(step => step.id === 'ver').run).toBe('node scripts/ci-matrix-version.mjs');
+  const install = steps.find(step => step.name === 'Install published CAWS CLI from npm (fresh, global)');
+  expect(install.env.CAWS_EXPECTED_VERSION).toBe('${{ steps.ver.outputs.version }}');
+  expect(install.run).toContain('test "$ACTUAL_VERSION" = "$CAWS_EXPECTED_VERSION"');
+  expect(install.run.indexOf('engine-strict true')).toBeLessThan(install.run.indexOf('npm install -g'));
+  expect(steps.find(step => step.name === 'Retain exact consumer identity').with.path).toContain('matrix-target.json');
+});
+
+test('a failed Bats suite retains raw bytes and does not suppress pytest evidence', () => {
+  const steps = readWorkflow('release-qualification.yml').jobs.tests.steps;
+  expect(steps.find(step => step.run === 'npm ci --no-audit --no-fund').id).toBe('dependencies');
+  expect(steps.find(step => step.run === 'npm run test:pytest -w @paths.design/caws-cli').if)
+    .toBe("${{ !cancelled() && steps.dependencies.outcome == 'success' }}");
+  const scopeProbe = steps.find(step => step.run === 'node --test packages/caws-cli/scripts/scope-runtime-smoke.test.mjs');
+  expect(scopeProbe.if).toBe("${{ !cancelled() && steps.dependencies.outcome == 'success' }}");
+  expect(scopeProbe.env.CAWS_TEST_ARTIFACT_DIR).toBe('${{ github.workspace }}/hook-artifacts');
+  expect(steps.find(step => step.name === 'Retain hook byte artifacts').if).toBe('always()');
 });

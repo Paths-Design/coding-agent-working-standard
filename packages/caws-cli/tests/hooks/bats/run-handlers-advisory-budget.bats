@@ -24,6 +24,12 @@ teardown_file() {
   caws_teardown_pack
 }
 
+teardown() {
+  if [[ -n "${_alignment_root:-}" && -z "${CAWS_TEST_ARTIFACT_DIR:-}" ]]; then
+    rm -rf "$_alignment_root"
+  fi
+}
+
 # Compose a chain of stub handlers and report what the composer emitted.
 # Usage: compose <card-bytes>... [BUDGET=<bytes>]
 # Each positional argument is one handler emitting a card of that many bytes of
@@ -152,7 +158,10 @@ EOF
   # character means the walk-back did not run, and a body that is not a byte
   # prefix of the source means the cut split a character.
   local fake_hooks
-  fake_hooks="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-rh-align-XXXXXX")"
+  local artifact_parent="${CAWS_TEST_ARTIFACT_DIR:-${TMPDIR:-/tmp}}"
+  mkdir -p "$artifact_parent"
+  fake_hooks="$(mktemp -d "$artifact_parent/caws-bats-rh-align-XXXXXX")"
+  _alignment_root="$fake_hooks"
   cat > "$fake_hooks/utf8.sh" <<'EOF'
 #!/usr/bin/env bash
 cat >/dev/null
@@ -160,39 +169,43 @@ python3 -c 'import json; print(json.dumps({"hookSpecificOutput":{"hookEventName"
 EOF
   chmod +x "$fake_hooks/utf8.sh"
 
-  # 605 lands the requested keep on a 4-byte boundary; 607 and 609 land one and
-  # three bytes past it, which is exactly what must exercise the walk-back.
+  # Sweep adjacent budgets across several complete characters. The composer
+  # reserves room for other cards, so the whole budget is not the helper's
+  # byte limit; three adjacent whole budgets can produce the same prefix.
   local budget
-  for budget in 605 607 609; do
+  for budget in {600..620}; do
     run env -i PATH="$PATH" LC_ALL=en_US.UTF-8 CAWS_HOOK_ADVISORY_BUDGET_BYTES="$budget" bash -c "
       source '$CAWS_TEST_HOOKS_DIR/lib/run-handlers.sh'
       export HOOKS_DIR='$fake_hooks' HOOK_INPUT_JSON='{}'
       out=\"\$(run_handlers utf8.sh)\"
-      ctx=\"\$(printf '%s' \"\$out\" | jq -r '.hookSpecificOutput.additionalContext // empty')\"
-      printf 'ctx=%s\n' \"\$(printf '%s' \"\$ctx\" | base64)\"
-    " 2>/dev/null
-    local b64 ctx
-    b64="$(printf '%s' "$output" | sed -n 's/^ctx=//p')"
-    [[ -n "$b64" ]] || fail "budget $budget: no context captured"
-    ctx="$(printf '%s' "$b64" | base64 -d)"
-    python3 - "$budget" "$ctx" <<'PY' || fail "budget $budget: alignment/reconstruction check failed"
-import sys
+      printf '%s' \"\$out\" > '$fake_hooks/budget-$budget.json'
+      printf '%s' \"\$out\" | jq -j '.hookSpecificOutput.additionalContext // empty' > '$fake_hooks/budget-$budget.context'
+    " 2>"$fake_hooks/budget-$budget.stderr"
+    assert_success
+    # Read exact bytes from the artifact. A line-prefixed Base64 transport
+    # loses all but the first line on platforms whose encoder wraps output.
+    python3 - "$budget" "$fake_hooks/budget-$budget.context" <<'PY' >"$fake_hooks/budget-$budget.assertion.json" || fail "budget $budget: alignment/reconstruction check failed; artifacts: $fake_hooks"
+import hashlib, json, pathlib, re, sys
 budget = int(sys.argv[1])
-ctx = sys.argv[2]
+raw = pathlib.Path(sys.argv[2]).read_bytes()
+ctx = raw.decode("utf-8", "strict")
 orig = "\U0001F600" * 400
 emitted = len(ctx.encode("utf-8"))
 assert emitted <= budget, f"emitted {emitted} exceeds budget {budget}"
 assert "\ufffd" not in ctx, "replacement character present (walk-back did not run)"
 assert "[truncated:" in ctx, "no truncation marker"
-body = ctx[: ctx.rindex("\u2026")]
+match = re.fullmatch(r"(.+)\u2026 \[truncated: ([0-9]+) bytes elided\]", ctx, re.S)
+assert match, "malformed truncation marker"
+body = match[1]
 assert body, "marker-only card: no content kept"
 assert orig.encode("utf-8").startswith(body.encode("utf-8")), (
     "kept body is not a byte prefix of the card: the cut split a character"
 )
-print(f"budget {budget}: emitted={emitted} body_bytes={len(body.encode())} aligned")
+assert len(body.encode()) + int(match[2]) == len(orig.encode()), "kept/elided arithmetic lost bytes"
+print(json.dumps({"budget": budget, "emitted": emitted, "body_bytes": len(body.encode()),
+                  "aligned": True, "sha256": hashlib.sha256(raw).hexdigest()}))
 PY
   done
-  rm -rf "$fake_hooks"
 }
 
 @test "advisory budget: a declined card reports its OWN size, not a cumulative total" {

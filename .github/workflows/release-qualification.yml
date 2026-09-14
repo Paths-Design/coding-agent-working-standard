@@ -26,10 +26,13 @@ jobs:
         with:
           python-version: '3.12'
       - run: npm ci --no-audit --no-fund
+        id: dependencies
       - run: npm run audit:dependencies
       - run: npm run typecheck -w @paths.design/caws-cli
       - run: npm run lint -w @paths.design/caws-cli
       - run: npm test -w @paths.design/caws-cli -- --coverage --maxWorkers=2
+        env:
+          CAWS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/hook-artifacts
       - name: Retain coverage evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -40,10 +43,24 @@ jobs:
             packages/caws-cli/coverage/coverage-summary.json
             packages/caws-cli/coverage/lcov.info
           if-no-files-found: error
-      - run: node --test scripts/release-tag-publish.test.mjs scripts/ci-governance-artifacts.test.mjs
+      - run: node --test scripts/release-tag-publish.test.mjs scripts/ci-governance-artifacts.test.mjs scripts/ci-matrix-version.test.mjs packages/caws-cli/scripts/runtime-upgrade-smoke.test.mjs
       - run: npm run docs:check -w @paths.design/caws-cli
       - run: npm run test:bats -w @paths.design/caws-cli
+        env:
+          CAWS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/hook-artifacts
+      - run: node --test packages/caws-cli/scripts/scope-runtime-smoke.test.mjs
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        env:
+          CAWS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/hook-artifacts
       - run: npm run test:pytest -w @paths.design/caws-cli
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+      - name: Retain hook byte artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hook-bytes-${{ github.sha }}
+          path: hook-artifacts/
+          if-no-files-found: warn
 
   package-upgrade:
     name: Packaged upgrade (${{ matrix.os }}, Node ${{ matrix.node }})
@@ -79,5 +96,7 @@ jobs:
         if: always()
         with:
           name: upgrade-${{ github.sha }}-${{ matrix.os }}-node${{ matrix.node }}
-          path: qualification-report.json
+          path: |
+            qualification-report.json
+            qualification-report.json.artifacts/
           if-no-files-found: error

@@ -1,6 +1,6 @@
 {
   "name": "@paths.design/caws-cli",
-  "version": "12.2.0-rc.1",
+  "version": "12.2.0-rc.2",
   "description": "CAWS CLI: project governance with a shared machine runtime and native agent harness adapters.",
   "main": "dist/index.js",
   "bin": {

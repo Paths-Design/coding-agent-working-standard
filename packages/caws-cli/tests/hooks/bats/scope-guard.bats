@@ -32,14 +32,14 @@ teardown_file() {
 # claim is "the hook maps the CLI's answer onto admit/refuse", which is exactly
 # what the stub exercises. A relative REL_PATH avoids the foreign-repo guard.
 _run_scope_guard_with_stub() {
-  local rel_path="$1" check_exit="$2" json="$3"
+  local rel_path="$1" check_exit="$2" json="$3" show_exit="${4:-0}"
   local stubdir
   stubdir="$(mktemp -d "${TMPDIR:-/tmp}/caws-stub-XXXXXX")"
   cat > "$stubdir/caws" <<STUB
 #!/usr/bin/env bash
 # args: scope check <path>  |  scope show <path> --json
 if [[ "\$1" == "scope" && "\$2" == "check" ]]; then exit ${check_exit}; fi
-if [[ "\$1" == "scope" && "\$2" == "show" ]]; then printf '%s' '${json}'; exit 0; fi
+if [[ "\$1" == "scope" && "\$2" == "show" ]]; then printf '%s' '${json}'; exit ${show_exit}; fi
 exit 0
 STUB
   chmod +x "$stubdir/caws"
@@ -72,6 +72,32 @@ STUB
   _run_scope_guard_with_stub "packages/in/ok.ts" 0 ""
   assert_success
   refute_output --partial 'not in the defined scope'
+}
+
+@test "scope-guard: a top-level admitted file stays silent" {
+  _run_scope_guard_with_stub "package.json" 0 ""
+  assert_success
+  assert_output ""
+}
+
+@test "scope-guard: a top-level rejected file follows the nested-path scope contract" {
+  local json='{"decision":"reject","rule":"scope.reject.scope_out","path":"package.json","bindingState":"bound","mode":"authoritative","boundSpecId":"FIX-1","matchedPattern":"package.json"}'
+  _run_scope_guard_with_stub "package.json" 1 "$json"
+  assert_output --partial 'out-of-scope'
+  assert_output --partial 'FIX-1'
+}
+
+@test "scope-guard: a top-level file with unreadable scope diagnostics fails closed" {
+  _run_scope_guard_with_stub "package.json" 1 "not json"
+  assert_output --partial '"decision": "block"'
+  assert_output --partial 'could not render the structured diagnostic'
+}
+
+@test "scope-guard: a failed diagnostic command cannot supply an admission" {
+  local json='{"decision":"admit","rule":"scope.admit.scope_in","path":"package.json","bindingState":"bound","mode":"authoritative","boundSpecId":"FIX-1"}'
+  _run_scope_guard_with_stub "package.json" 1 "$json" 2
+  assert_output --partial '"decision": "block"'
+  assert_output --partial 'could not render the structured diagnostic'
 }
 
 @test "scope-guard: an out-of-scope reject is surfaced from the JSON contract (authoritative)" {

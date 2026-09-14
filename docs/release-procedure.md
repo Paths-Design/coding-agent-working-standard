@@ -22,8 +22,8 @@ job depends on the reusable **Release Qualification** workflow at the same
 tagged commit. Qualification runs the complete Jest suite, lint, typechecking,
 documentation checks, Bats and Python hook tests, plus packaged upgrades on
 Linux/macOS with Node 18, 20 and 22. The macOS lane also runs the Bash 3.2
-regression suite. A failed qualification prevents the publish job from starting
-and preserves the tag for investigation.
+regression suite. A failed qualification prevents the publish job from starting;
+the rollback job removes the unpublished tag and retains the workflow evidence.
 
 Once qualification succeeds, the publish job:
 
@@ -64,7 +64,12 @@ tarball SHA-256 and runtime digest. It also audits the detached upgraded
 consumer with `npm audit --omit=dev --audit-level=low`, requires zero findings,
 and records that consumer lockfile's hash. This checks the dependency graph
 actually installed by users, without workspace overrides. CI retains the report under a commit-named artifact;
-generated reports are not committed to the source ledger.
+generated reports are not committed to the source ledger. Schema-v2 reports name
+a unique directory under `qualification-report.json.artifacts/` containing command
+inputs, exit statuses, stdout/stderr, before/after governance hashes, the source
+transcript and rendered turn. Failed runs retain their report and command receipts
+too. Inspect these artifacts before accepting preservation or rollback claims;
+the report's boolean case summaries alone are insufficient.
 
 These are subprocess fixtures. Before a runtime release, retain separate fresh
 native traces from the intended harnesses proving trust, SessionStart, an
@@ -83,7 +88,8 @@ and shell on the candidate commit. A setup/import failure is inconclusive,
 not a killed mutant. Release Qualification currently does not run that mutation
 pipeline: dispatch the Mutation Gate for the candidate branch and check its
 retained reports separately before publication. A green qualification run alone
-is not release approval.
+is not release approval. The tag-driven Release workflow also calls the full
+Mutation Gate with `required: true`; both qualification and mutation block publish.
 
 ## Dependency, coverage and fixture gates
 
@@ -101,7 +107,7 @@ LCOV reports in a commit-named artifact, including when a threshold fails.
 The init/machine-runtime surface requires 85% statements, 70% branches, 90%
 functions and 85% lines. After subtracting that group, the remaining runtime
 requires 60% statements, 50% branches, 60% functions and 60% lines. These are
-regression floors, not correctness proof; the 18 per-file mutation targets keep
+regression floors, not correctness proof; the 19 per-file mutation targets keep
 their separate 80% floors. CLI entry points exercised only in child processes
 remain zero in Jest's in-process report; installed-artifact fixtures supply
 their behavioral evidence rather than manufacturing coverage hits.
@@ -290,6 +296,13 @@ The workflow logs are structured JSON for grep-ability. Look for:
 - `release.success` — full success
 
 ### 7. Verify outcomes
+
+The automatic consumer matrix resolves the successful Release run's canonical
+tag to an exact package version and checks npm's `gitHead` against that run's SHA.
+It never substitutes `latest` for a prerelease. Manual `latest`/`next` requests
+resolve once before installation. Each matrix cell retains `matrix-target.json`
+(version, integrity and release identity) and `installed-version.txt`; the installed
+CLI must report the selected version. Missing or mismatched identity fails the job.
 
 ```bash
 npm view @paths.design/caws-cli@11.1.5 version

@@ -48,40 +48,33 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         node: ["20", "22"]
     steps:
+      - uses: actions/checkout@v4
       - name: Setup Node.js ${{ matrix.node }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
           registry-url: "https://registry.npmjs.org"
 
-      # Resolve the version to verify. workflow_dispatch passes an explicit
-      # input; the post-Release run defaults to the `latest` dist-tag (the
-      # publish that just completed sets latest).
+      # The successful Release occurrence names its tag and commit. Resolve
+      # manual channels once, then install the resulting exact version too.
       - name: Resolve target version
         id: ver
         shell: bash
-        run: |
-          VERSION="${{ github.event.inputs.version }}"
-          if [ -z "$VERSION" ]; then VERSION="latest"; fi
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Verifying @paths.design/caws-cli@${VERSION}"
+        run: node scripts/ci-matrix-version.mjs
 
       - name: Install published CAWS CLI from npm (fresh, global)
         shell: bash
+        env:
+          CAWS_EXPECTED_VERSION: ${{ steps.ver.outputs.version }}
         run: |
+          set -euo pipefail
           npm config set fetch-retries 3
           npm config set fetch-retry-mintimeout 20000
-          npm install -g "@paths.design/caws-cli@${{ steps.ver.outputs.version }}"
-          echo "Installed:"
-          caws --version
-
-      # engines guard (A3): if this Node major is below the package's declared
-      # minimum, the install or first invocation must fail loudly rather than
-      # silently regress. `npm install -g` honors engines with engine-strict;
-      # set it so an unsupported Node fails the cell.
-      - name: Enforce engines (no silent unsupported-Node regression)
-        shell: bash
-        run: npm config set engine-strict true
+          npm config set engine-strict true
+          npm install -g "@paths.design/caws-cli@${CAWS_EXPECTED_VERSION}"
+          ACTUAL_VERSION="$(caws --version)"
+          printf '%s\n' "$ACTUAL_VERSION" | tee installed-version.txt
+          test "$ACTUAL_VERSION" = "$CAWS_EXPECTED_VERSION"
 
       # The v11 smoke sequence, in a fresh git repo, exercising the
       # cross-platform-sensitive paths: init (writes .caws/ + hook pack +
@@ -137,3 +130,13 @@ jobs:
           fi
 
           echo "Smoke OK on ${{ matrix.os }} / node ${{ matrix.node }} for version ${{ steps.ver.outputs.version }}"
+
+      - name: Retain exact consumer identity
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: consumer-${{ github.run_id }}-${{ matrix.os }}-node${{ matrix.node }}
+          path: |
+            matrix-target.json
+            installed-version.txt
+          if-no-files-found: warn
