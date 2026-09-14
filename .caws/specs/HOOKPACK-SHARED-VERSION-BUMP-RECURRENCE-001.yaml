@@ -2,11 +2,9 @@ id: HOOKPACK-SHARED-VERSION-BUMP-RECURRENCE-001
 title: 'the shared pack changed twice more without a SHARED_PACK_VERSION bump; ledger in the classifier slices should have carried it'
 risk_tier: 2
 mode: chore
-lifecycle_state: closed
-resolution: completed
-closure_notes: 'Auto-closed by caws worktree merge wt-vbump2 at 29f9569ca1536587f5fddbdbab537a5947b6fdf2'
+lifecycle_state: active
 created_at: '2026-09-14T04:28:56.690Z'
-updated_at: '2026-09-14T04:30:57.867Z'
+updated_at: '2026-09-14T04:31:20.696Z'
 created_by_session: 'session-c04418cd-a035-44a9-b26e-378d285ccad1'
 blast_radius:
   modules:
