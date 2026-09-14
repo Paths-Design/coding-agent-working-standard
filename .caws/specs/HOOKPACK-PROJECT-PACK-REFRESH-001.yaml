@@ -59,3 +59,7 @@ evidence:
     status: pass
     evidence_ref: "doctor after refresh: installed_pack_version_lag and pack_body_drift no longer reported for this repo (installed rows now v77)"
     recorded_at: "2026-09-14T07:32:28.249Z"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "ls .caws/hooks/lib/heredoc.sh .caws/hooks/lib/bash-mutation-targets.sh -> both present, so the fail-closed library branch is unreachable"
+    recorded_at: "2026-09-14T07:32:29.308Z"
