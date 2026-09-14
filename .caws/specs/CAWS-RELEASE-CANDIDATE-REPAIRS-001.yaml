@@ -73,10 +73,10 @@ evidence:
     commit_sha: cd362d7bb71a5475e77df1024bbcb8a66b85ba93
   - criterion_id: A3
     status: pass
-    evidence_ref: d24520e6 scope fixtures and killed controls; live native Write admitted with artifact and refused with absent target after reprieve revocation. Root Edit pre-tool trace and fresh lifecycle gaps remain explicit release limits.
-    recorded_at: "2026-09-13T08:54:37.209Z"
-    artifact_path: /private/tmp/caws-release-candidate-20260913/native-scope-repair/inspection.json
-    commit_sha: d24520e6d3a9e4f63999e7df00e4d54f18b8504a
+    evidence_ref: "9328739e six-row real-CLI scope artifacts and installed launcher controls; live runtime 7d5f287e native Write and small Edit admitted, refused root Write absent, reprieve revoked. Earlier large Edit PreToolUse records, shell counterexamples, and fresh lifecycle traces remain release limits."
+    recorded_at: "2026-09-14T02:55:49.016Z"
+    artifact_path: /private/tmp/caws-release-candidate-20260913/combined-native/inspection.json
+    commit_sha: "9328739ea8d1da95f14e8c903ef6739aa861b470"
   - criterion_id: A4
     status: pass
     evidence_ref: "Qualification 34747864150: six RC2 upgrades; 66 receipts per job, four equal governance snapshots, audit zero, corruption refusal and rollback. Same tarball and runtime installed live."
