@@ -1,0 +1,47 @@
+id: CAWS-VERIFY-ACS-HELP-AND-TEMPLATE-DRIFT-001
+title: 'Derive the executable-runner split into --help, correct the pytest resolution claim, and unstale the shipped removed-command templates'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-16T23:33:40.123Z'
+updated_at: '2026-09-16T23:33:40.123Z'
+created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/src/shell'
+    - 'packages/caws-cli/templates'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/store/evidence-rederive.ts'
+    - 'packages/caws-cli/templates/CLAUDE.md'
+    - 'packages/caws-cli/templates/agents.md'
+    - 'packages/caws-cli/tests/shell/verify-acs-help-surface.test.js'
+    - 'packages/caws-cli/CHANGELOG.md'
+    - 'AGENTS.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'the shipped templates list removed v10 commands'
+    when: 'a command in that list is registered on the live surface'
+    then: 'a test fails naming it, and verify-acs is absent from both removed-lists'
+  - id: A2
+    given: '--runner accepts pytest|jest|vitest|cargo|go but only pytest and jest can execute'
+    when: 'a reader consults --help or the generated command reference'
+    then: 'the executable and detected-only sets are named separately and both the help text and the dispatch switch derive from one exported constant'
+  - id: A3
+    given: 'jest is resolved from the repo node_modules/.bin but pytest is invoked as ambient python3 -m pytest'
+    when: 'a reader consults the --run description'
+    then: 'it states the pytest mechanism accurately instead of claiming both are repo-resolved'
+  - id: A4
+    given: 'global agent doctrine instructs recording evidence with --verify'
+    when: 'an agent reads the repo agent docs'
+    then: 'AGENTS.md documents caws specs evidence --verify'
+non_functional: {}
+contracts:
+  - name: 'command-surface-help'
+    type: behavior
