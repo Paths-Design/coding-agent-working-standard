@@ -2,10 +2,11 @@ id: CAWS-CLI-EXIT-TRUNCATES-PIPED-STDOUT-001
 title: 'caws command exit must flush piped stdout: process.exit discards the buffer, so any >64KB output is silently truncated at exit 0'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-exit-flush
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-exit-flush at 94a9c99b26bf887200c5e4864e15bcea095f1209'
 created_at: '2026-09-16T04:25:16.428Z'
-updated_at: '2026-09-16T04:25:57.780Z'
+updated_at: '2026-09-16T04:38:43.463Z'
 created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
 blast_radius:
   modules:
