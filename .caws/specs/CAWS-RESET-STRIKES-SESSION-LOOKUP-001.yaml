@@ -61,3 +61,10 @@ evidence:
     command: npx bats tests/hooks/bats/reset-strikes.bats
     exit_code: 0
     commit_sha: "4e7cf268"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "bats A3 'listing labels the live store with the real session id' asserts BOTH that the output contains session=<the fixture uuid> AND that it does not contain the literal 'session=strikes'. The second assertion is the one that pins the actual bug: describe_file parsed the sid out of the FILENAME, so every live-store file (basename strikes.json) was labelled session=strikes. A3 was the first test to flip green after sid_for_file landed, while A1/A2b/A4 still failed - which correctly localised the remaining failure to the --session matcher rather than the sid derivation."
+    recorded_at: "2026-09-16T08:16:18.710Z"
+    command: npx bats tests/hooks/bats/reset-strikes.bats
+    exit_code: 0
+    commit_sha: "4e7cf268"
