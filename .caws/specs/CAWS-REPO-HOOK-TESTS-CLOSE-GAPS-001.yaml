@@ -53,3 +53,11 @@ evidence:
     exit_code: 0
     artifact_path: .husky/tests/run.sh
     commit_sha: "2f98d3c2"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Anti-vacuity: T8f flips exactly one stage to failure and demands a different exit code and message, so a hook that ignored stage results could not pass both T8b and T8f."
+    recorded_at: "2026-09-16T06:08:30.191Z"
+    command: bash .husky/tests/run.sh
+    exit_code: 0
+    artifact_path: .husky/pre-push
+    commit_sha: "2f98d3c2"
