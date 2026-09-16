@@ -195,15 +195,15 @@ else
 fi
 
 caws_prepush_lock_release "$T4LOCK"
-if [ -d "$T4LOCK" ]; then
-  bad "T4c release removes a lock this process owns" "lock dir still present"
+if [ -L "$T4LOCK" ]; then
+  bad "T4c release removes a lock this process owns" "lock still present"
 else
   ok "T4c release removes a lock this process owns"
 fi
 
 # Stale lock (holder dead) must be reclaimed, or one crashed push wedges the
-# repo until a human deletes the directory.
-mkdir -p "$T4LOCK"; printf '%s\n' "999999" > "$T4LOCK/pid"
+# repo until a human deletes it.
+ln -s 999999 "$T4LOCK"
 if caws_prepush_lock_acquire "$T4LOCK" 0 1; then
   ok "T4d stale lock (dead pid) is reclaimed rather than wedging pushes"
 else
@@ -213,14 +213,39 @@ caws_prepush_lock_release "$T4LOCK"
 
 # A release by a NON-owner must be a no-op, or a slow process could delete the
 # lock a successor legitimately holds.
-mkdir -p "$T4LOCK"; printf '%s\n' "999999" > "$T4LOCK/pid"
+ln -s 999999 "$T4LOCK"
 caws_prepush_lock_release "$T4LOCK"
-if [ -d "$T4LOCK" ]; then
+if [ -L "$T4LOCK" ]; then
   ok "T4e release by a non-owner is a no-op"
 else
   bad "T4e release by a non-owner is a no-op" "it deleted a lock it did not own"
 fi
-rm -rf "$T4LOCK"
+rm -f "$T4LOCK"
+
+# A failure that is NOT contention must be reported as such (exit 2), or a
+# filesystem that cannot take the symlink looks like an eternally-held lock and
+# wedges every push in the repository.
+if caws_prepush_lock_acquire "$SCRATCH/no-such-dir/lock" 0 1; then
+  bad "T4f a lock that cannot be created returns 2, not contention" "it reported success"
+else
+  t4f=$?
+  if [ "$t4f" = "2" ]; then
+    ok "T4f a lock that cannot be created returns 2, distinguishable from contention"
+  else
+    bad "T4f a lock that cannot be created returns 2, not contention" "returned $t4f (1 would spin as if contended)"
+  fi
+fi
+
+# The lock must carry its owner atomically: there is no instant at which it
+# exists without a readable pid. This is the invariant the mkdir version broke.
+caws_prepush_lock_acquire "$T4LOCK" 0 1
+t4_owner=$(caws_prepush_lock_owner "$T4LOCK")
+if [ "$t4_owner" = "$$" ]; then
+  ok "T4g the lock records its owner's pid ($t4_owner) in the same atomic act that creates it"
+else
+  bad "T4g the lock records its owner's pid in the same atomic act that creates it" "owner reads '${t4_owner:-<none>}', expected $$"
+fi
+caws_prepush_lock_release "$T4LOCK"
 
 # ─────────────────────────────────────────────────────────────────────────
 # T5  pre-push fails CLOSED when its lock library is missing.
@@ -344,6 +369,213 @@ if [ "$T6SCANNED" -ge 2 ]; then
   ok "T6e husky scan covered $T6SCANNED package.json file(s) (scanner is live)"
 else
   bad "T6e husky scan covers the repo's package.json files" "only $T6SCANNED found — T6d would pass vacuously"
+fi
+
+# ─────────────────────────────────────────────────────────────────────────
+# T7  Real contention: N processes race one free lock, exactly one wins.
+#     T4b proved the protocol sequentially — acquire, then try again from a
+#     second process. That cannot observe a torn window between "is it free?"
+#     and "take it". These processes all block on a start gate and go at once.
+# ─────────────────────────────────────────────────────────────────────────
+T7LOCK="$SCRATCH/racelock"
+T7DIR="$SCRATCH/race"
+mkdir -p "$T7DIR"
+T7N=16
+i=1
+while [ "$i" -le "$T7N" ]; do
+  (
+    # Block until the gate opens so the attempts overlap instead of queueing.
+    while [ ! -f "$T7DIR/go" ]; do sleep 0.01; done
+    . .husky/lib/prepush-lock.sh
+    if caws_prepush_lock_acquire "$T7LOCK" 0 1; then
+      printf 'win %s\n' "$$" > "$T7DIR/r$i"
+    else
+      printf 'lose\n' > "$T7DIR/r$i"
+    fi
+  ) &
+  i=$((i + 1))
+done
+sleep 0.3
+: > "$T7DIR/go"
+wait
+
+T7REPORTED=$(find "$T7DIR" -name 'r*' -type f | wc -l | tr -d ' ')
+T7WINS=$(grep -l '^win' "$T7DIR"/r* 2>/dev/null | wc -l | tr -d ' ')
+
+# Non-vacuity: a run where half the processes died would also show one winner.
+if [ "$T7REPORTED" = "$T7N" ]; then
+  ok "T7a all $T7N racing processes reported a verdict (none died silently)"
+else
+  bad "T7a all $T7N racing processes reported a verdict" "only $T7REPORTED of $T7N wrote a result"
+fi
+if [ "$T7WINS" = "1" ]; then
+  ok "T7b exactly 1 of $T7N concurrent processes acquired the lock (mutual exclusion holds)"
+else
+  bad "T7b exactly 1 of $T7N concurrent processes acquired the lock" "$T7WINS winners — the lock did not serialise them"
+fi
+rm -f "$T7LOCK"
+
+# ─────────────────────────────────────────────────────────────────────────
+# T8  pre-push end to end, with the four heavy stage commands stubbed.
+#     Running the real stages is a 15-minute build, so the stages are stubbed
+#     while the hook itself stays the real file. GIT_DIR points at a scratch git
+#     dir so the lock lands there rather than on the real common dir, which a
+#     peer's genuine push may be holding.
+# ─────────────────────────────────────────────────────────────────────────
+T8GIT="$SCRATCH/gitdir"
+mkdir -p "$T8GIT/objects" "$T8GIT/refs"
+printf 'ref: refs/heads/main\n' > "$T8GIT/HEAD"
+
+# The stages are stubbed as EXPORTED SHELL FUNCTIONS, not as executables on
+# PATH, and that is forced by the hook rather than chosen. pre-push begins with
+#   export PATH="/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:$PATH"
+# so a stub directory can never be reached first — /usr/local/bin/npm exists on
+# this machine. A bash function outranks PATH lookup entirely, and child bash
+# processes inherit exported functions, so `bash .husky/pre-push` sees them.
+#
+# `timeout` has to be stubbed too, for a non-obvious reason: run_with_timeout
+# prefers the real /usr/local/bin/timeout, which is a separate process and would
+# exec the real npm past the functions. The replacement drops the seconds and
+# runs the command in-shell, where the function is visible. The cost is stated
+# plainly: T8 does not exercise the real timeout path or the 124 branch.
+_caws_stage_stub() {
+  local name="$1"; shift
+  local lock="free"
+  if [ -n "${CAWS_STAGE_LOCK:-}" ] && [ -L "$CAWS_STAGE_LOCK" ]; then lock="held"; fi
+  printf '%s %s lock=%s\n' "$name" "$*" "$lock" >> "$CAWS_STAGE_LOG"
+  if [ -n "${CAWS_STAGE_FAIL:-}" ] && [ "$1" = "$CAWS_STAGE_FAIL" ]; then return 1; fi
+  return 0
+}
+npm() { _caws_stage_stub npm "$@"; }
+npx() { _caws_stage_stub npx "$@"; }
+timeout() { shift; "$@"; }
+export -f _caws_stage_stub npm npx timeout
+
+# Safety gate. If the function export does not survive into the child shell,
+# pre-push would run the REAL lint, build and test suite — 15+ minutes. Replay
+# the hook's preamble and require that npm and timeout are both functions there
+# before running anything.
+T8KINDS=$(bash -c '
+  export PATH="/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:$PATH"
+  if [ -s "$HOME/.nvm/nvm.sh" ]; then . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1; fi
+  printf "%s,%s,%s" "$(type -t npm)" "$(type -t npx)" "$(type -t timeout)"' 2>/dev/null)
+T8SKIP=""
+if [ "$T8KINDS" = "function,function,function" ]; then
+  ok "T8a npm/npx/timeout resolve as exported functions inside pre-push's preamble"
+else
+  T8SKIP=1
+  bad "T8a npm/npx/timeout resolve as exported functions inside pre-push's preamble" \
+      "got '$T8KINDS' (want function,function,function). Refusing to run pre-push: it would start a real build and a real test suite."
+fi
+
+if [ -z "$T8SKIP" ]; then
+  T8LOG="$SCRATCH/stages.log"
+  : > "$T8LOG"
+  GIT_DIR="$T8GIT" \
+    CAWS_STAGE_LOG="$T8LOG" CAWS_STAGE_LOCK="$T8GIT/caws-prepush.lock" \
+    bash .husky/pre-push origin https://example.invalid/repo.git > "$SCRATCH/prepush.out" 2>&1
+  t8_exit=$?
+  cp "$T8LOG" "${TMPDIR:-/tmp}/caws-hooktest-stages.log" 2>/dev/null
+  cp "$SCRATCH/prepush.out" "${TMPDIR:-/tmp}/caws-hooktest-prepush.out" 2>/dev/null
+
+  if [ "$t8_exit" = "0" ]; then
+    ok "T8b pre-push exits 0 when all four stages pass"
+  else
+    bad "T8b pre-push exits 0 when all four stages pass" "exit=$t8_exit; output: $(tr '\n' '|' < "$SCRATCH/prepush.out")"
+  fi
+
+  t8_order=$(cut -d' ' -f1-2 "$T8LOG" | tr '\n' ',')
+  if [ "$t8_order" = "npx turbo,npm audit,npm run,npm test," ]; then
+    ok "T8c all four stages ran in order: $t8_order"
+  else
+    bad "T8c all four stages ran in order" "got: ${t8_order:-<nothing logged>} (expected 'npx turbo,npm audit,npm run,npm test,')"
+  fi
+
+  # The point of the lock is that it is HELD while the stages run, not merely
+  # created and removed around them.
+  t8_held=$(grep -c 'lock=held' "$T8LOG" 2>/dev/null)
+  t8_held=$(printf '%s' "${t8_held:-0}" | head -1)
+  t8_free=$(grep -c 'lock=free' "$T8LOG" 2>/dev/null)
+  t8_free=$(printf '%s' "${t8_free:-0}" | head -1)
+  if [ "$t8_held" = "4" ] && [ "$t8_free" = "0" ]; then
+    ok "T8d the lock was held during all 4 stages (held=$t8_held free=$t8_free)"
+  else
+    bad "T8d the lock was held during all 4 stages" "held=$t8_held free=$t8_free"
+  fi
+
+  if [ ! -L "$T8GIT/caws-prepush.lock" ]; then
+    ok "T8e the lock is released when pre-push exits"
+  else
+    bad "T8e the lock is released when pre-push exits" "lock dir still present after exit"
+  fi
+
+  # A stage that fails must refuse the push. Without this, T8b only pins the
+  # happy path, and a hook that ignored every exit code would still pass.
+  : > "$T8LOG"
+  GIT_DIR="$T8GIT" \
+    CAWS_STAGE_LOG="$T8LOG" CAWS_STAGE_LOCK="$T8GIT/caws-prepush.lock" CAWS_STAGE_FAIL="audit" \
+    bash .husky/pre-push origin https://example.invalid/repo.git > "$SCRATCH/prepush-fail.out" 2>&1
+  t8_fail_exit=$?
+  if [ "$t8_fail_exit" = "1" ] && grep -q 'refusing the push' "$SCRATCH/prepush-fail.out"; then
+    ok "T8f a failing stage makes pre-push refuse the push (exit 1)"
+  else
+    bad "T8f a failing stage makes pre-push refuse the push" "exit=$t8_fail_exit; output: $(tr '\n' '|' < "$SCRATCH/prepush-fail.out")"
+  fi
+
+  # The real lock path is deliberately not exercised above (GIT_DIR was
+  # redirected), so assert it separately rather than leaving it unstated.
+  t8_real_lock=$(caws_prepush_lock_dir)
+  case "$t8_real_lock" in
+    */caws-prepush.lock)
+      ok "T8g the real lock resolves onto the common git dir: $t8_real_lock" ;;
+    *)
+      bad "T8g the real lock resolves onto the common git dir" "got '${t8_real_lock:-<empty>}'" ;;
+  esac
+fi
+
+# The stubs shadow the real npm for the rest of this script; T9 runs the real
+# one. Retire them explicitly rather than relying on ordering.
+unset -f npm npx timeout _caws_stage_stub
+if [ "$(type -t npm)" = "function" ]; then
+  bad "T8h the stage stubs are retired before the next test" "npm is still a function; T9 would measure the stub"
+else
+  ok "T8h the stage stubs are retired before the next test (npm is $(type -t npm 2>/dev/null || echo external) again)"
+fi
+
+# ─────────────────────────────────────────────────────────────────────────
+# T9  prepare REPAIRS a wrong core.hooksPath, not merely re-asserts a right one.
+#     The wrong value is produced in a scratch GIT_DIR, so the shared repository
+#     config — which every concurrent session's hooks depend on — is never
+#     touched. That constraint is why an earlier slice waived this criterion.
+# ─────────────────────────────────────────────────────────────────────────
+T9GIT="$SCRATCH/gitdir-prepare"
+mkdir -p "$T9GIT/objects" "$T9GIT/refs"
+printf 'ref: refs/heads/main\n' > "$T9GIT/HEAD"
+
+T9REAL_BEFORE=$(git config --get core.hooksPath 2>/dev/null)
+
+GIT_DIR="$T9GIT" git config core.hooksPath .husky-WRONG 2>/dev/null
+t9_wrong=$(GIT_DIR="$T9GIT" git config --get core.hooksPath 2>/dev/null)
+if [ "$t9_wrong" = ".husky-WRONG" ]; then
+  ok "T9a scratch config holds a wrong core.hooksPath ('.husky-WRONG') to repair from"
+else
+  bad "T9a scratch config holds a wrong core.hooksPath to repair from" "reads '${t9_wrong:-<unset>}' — the rest of T9 would prove nothing"
+fi
+
+GIT_DIR="$T9GIT" npm run prepare --workspaces=false >/dev/null 2>&1
+t9_exit=$?
+t9_after=$(GIT_DIR="$T9GIT" git config --get core.hooksPath 2>/dev/null)
+if [ "$t9_exit" = "0" ] && [ "$t9_after" = ".husky" ]; then
+  ok "T9b prepare repaired '.husky-WRONG' -> '.husky' (repair, not idempotence)"
+else
+  bad "T9b prepare repaired '.husky-WRONG' -> '.husky'" "exit=$t9_exit value='${t9_after:-<unset>}'"
+fi
+
+T9REAL_AFTER=$(git config --get core.hooksPath 2>/dev/null)
+if [ "$T9REAL_AFTER" = "$T9REAL_BEFORE" ] && [ "$T9REAL_AFTER" = ".husky" ]; then
+  ok "T9c the real repository config was never touched (still '$T9REAL_AFTER')"
+else
+  bad "T9c the real repository config was never touched" "before='$T9REAL_BEFORE' after='$T9REAL_AFTER' — this test leaked into shared state"
 fi
 
 echo
