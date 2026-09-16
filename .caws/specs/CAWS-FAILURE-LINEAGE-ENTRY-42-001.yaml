@@ -26,3 +26,11 @@ acceptance:
     then: 'Entry 42 records both specimens, the prescribed-bypass root cause with verified source line citations, and what was not verified'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Entry 42 present at docs/failure-lineage.md (commit 4c0c618c). Both specimens recorded: shortcut-language rewording (caws session 0d83351d, from its own transcript) and the tier-1/2 contract downgrade (20 of 101 archived denials, mode unchanged in all 20). Source citations re-verified against the live tree before commit: validate-semantics.ts:36 prints \"Add at least one contract or change risk_tier to 3 or mode to chore.\" and specs.ts:449 prints \"Or use --risk-tier 3 / --mode chore.\" — both matched exactly via sed. Corpus counts reproducible: 101 denials across 153 transcript files holding refusal text, 1387 advisory-on-success emissions (760 tier-2 / 622 tier-3), 51 of 101 denials preceded in-transcript by the advisory; 517 of 5859 spec YAMLs carry mode: chore across 33 .caws/specs dirs, 127 of them at tier 1/2. Entry states what was NOT verified: retry pairing is within a single transcript file (caps the 5 abandonments, not the 20 downgrades), the 20 downgraded specs were not checked for later tier amendment, and the 127 chore specs were not audited for honest classification. Post-commit content check: all nine key claims and both entry tables survived lint-staged prettier reflow (grep counts nonzero; 12 table rows intact)."
+    recorded_at: "2026-09-16T07:40:38.658Z"
+    command: grep -c on docs/failure-lineage.md after commit 4c0c618c
+    exit_code: 0
+    artifact_path: docs/failure-lineage.md
