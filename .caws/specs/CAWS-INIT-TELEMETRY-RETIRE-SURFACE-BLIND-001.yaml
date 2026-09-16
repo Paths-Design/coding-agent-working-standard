@@ -64,3 +64,11 @@ evidence:
     command: npx jest tests/init/adapter-covered-telemetry-cut.test.js
     exit_code: 0
     commit_sha: "5785158d"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Single-covered-surface repo (dsh marker only): planTelemetryRetirement returns retire=all four TELEMETRY_ROW_DEST_PATHS, retained=[] and retainedFor=[] (the reason is never asserted without an effect), and retireStaleTelemetryRows removes all four from disk. This preserves the original CAWS-HARNESS-TELEMETRY-ADAPTER-001 behavior, i.e. the fix narrows retirement without disabling it. NON-VACUOUS: mutating the guard to 'if (true || claimedRows.has(relPath))' (never retire anything) turns this test RED."
+    recorded_at: "2026-09-16T06:03:40.510Z"
+    test_nodeid: "CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001: retirement is surface-aware > A3: a repo with only adapter-covered surfaces still retires every row"
+    command: npx jest tests/init/adapter-covered-telemetry-cut.test.js
+    exit_code: 0
+    commit_sha: "5785158d"
