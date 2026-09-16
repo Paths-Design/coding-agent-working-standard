@@ -34,5 +34,11 @@ acceptance:
     given: 'the documented entry point npm run test:hooks and a root .npmrc carrying workspaces=true'
     when: 'it is invoked from the repo root'
     then: 'the root script runs rather than npm resolving the name against a workspace that does not define it'
+  - id: A3
+    given: 'the hook test suite''s assertion that prepare wires core.hooksPath'
+    when: 'the assertion runs'
+    then: >-
+      it exercises the root prepare script rather than passing because
+      core.hooksPath already held the right value
 non_functional: {}
 contracts: []
