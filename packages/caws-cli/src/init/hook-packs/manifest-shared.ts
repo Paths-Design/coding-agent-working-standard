@@ -437,7 +437,22 @@ import { isAdapterCoveredSurface } from './types';
 // interrupt kinds, and detects rewinds; harness_claude.py carries the usage
 // and row lineage that make those visible; a new dispatch/session_end.sh seals
 // .meta.json with the exit reason and session usage total.
-export const SHARED_PACK_VERSION = 78;
+//
+// v79 (CAWS-RESET-STRIKES-SESSION-LOOKUP-001): reset-strikes.sh --session could
+// never reach the LIVE strike store. The session-global store encodes the sid in
+// the DIRECTORY ($HOME/.caws/state/sessions/<sid>/strikes.json); the legacy
+// repo-local files encode it in the FILENAME (guard-strikes-<sid>.json).
+// collect_strike_files returns both, but --session filtered with
+// grep 'guard-strikes-<sid>.json$' — a pattern the live path cannot match. So
+// the one mode the block message tells a human to run (it prints --session <id>
+// pre-filled) exited 1 with "No strike file found" against a live strike file
+// that existed. The listing had the same bug from the other end, labelling every
+// live file "session=strikes" (the basename, not the sid). Matching now derives
+// the sid from either shape, and an unknown-session refusal lists the sessions
+// that DO have strike state instead of leaving the operator guessing a uuid.
+// Bump re-propagates: 28 of 28 runtime snapshots under ~/.caws/lib/runtimes
+// carry the old filter, and installed copies are copied, not linked.
+export const SHARED_PACK_VERSION = 79;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
@@ -1000,8 +1015,6 @@ export function sharedPackForSurface(surface: AgentSurface): HookPackV1 {
   const covered = new Set<string>(TELEMETRY_ROW_DEST_PATHS);
   return {
     ...SHARED_PACK,
-    installedFiles: SHARED_PACK.installedFiles.filter(
-      (f) => !covered.has(f.destPath)
-    ),
+    installedFiles: SHARED_PACK.installedFiles.filter((f) => !covered.has(f.destPath)),
   };
 }

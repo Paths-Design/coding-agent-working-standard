@@ -115,11 +115,36 @@ file_mtime() {
     || echo "unknown"
 }
 
+# The two strike-file shapes encode the session id in different places:
+#   live   $HOME/.caws/state/sessions/<sid>/strikes.json   -> the DIRECTORY
+#   legacy <repo>/<vendor>/logs/guard-strikes-<sid>.json   -> the FILENAME
+# Parsing the filename alone yields the literal "strikes" for every live file,
+# which both mislabelled the listing and made --session unable to match the
+# store this script calls the live source.
+sid_for_file() {
+  local f="$1" base
+  base=$(basename "$f")
+  if [[ "$base" == "strikes.json" ]]; then
+    basename "$(dirname "$f")"
+  else
+    printf '%s' "$base" | sed 's/^guard-strikes-//; s/\.json$//'
+  fi
+}
+
+# Every session id that currently has strike state, newline-separated.
+known_sessions() {
+  local f
+  while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    sid_for_file "$f"
+  done <<< "$(collect_strike_files)" | sort -u
+}
+
 describe_file() {
   local f="$1"
   local mtime sid content
   mtime=$(file_mtime "$f")
-  sid=$(basename "$f" | sed 's/^guard-strikes-//; s/\.json$//')
+  sid=$(sid_for_file "$f")
   content=$(cat "$f" 2>/dev/null || echo '{}')
   printf '  %s  session=%s\n    strikes=%s\n    path=%s\n\n' \
     "$mtime" "$sid" "$content" "$f"
@@ -206,8 +231,31 @@ case "$MODE" in
 
   session)
     [[ -z "$SESSION" ]] && { echo "--session requires a uuid" >&2; exit 1; }
-    matches=$(collect_strike_files | grep "guard-strikes-${SESSION}\.json$" || true)
-    [[ -z "$matches" ]] && { echo "No strike file found for session: $SESSION" >&2; exit 1; }
+    # Match on the DERIVED session id, not on a filename pattern — the live
+    # session-global store carries the sid in its parent directory and can
+    # never match a guard-strikes-<sid>.json glob.
+    matches=""
+    while IFS= read -r f; do
+      [[ -z "$f" ]] && continue
+      if [[ "$(sid_for_file "$f")" == "$SESSION" ]]; then
+        matches+="$f"$'\n'
+      fi
+    done <<< "$(collect_strike_files)"
+    matches="${matches%$'\n'}"
+    if [[ -z "$matches" ]]; then
+      echo "No strike file found for session: $SESSION" >&2
+      # A refusal that does not say what IS available leaves the operator
+      # guessing at a uuid — the failure mode this whole script exists to end.
+      known=$(known_sessions)
+      if [[ -n "$known" ]]; then
+        echo "Sessions with strike state:" >&2
+        while IFS= read -r s; do [[ -n "$s" ]] && echo "  $s" >&2; done <<< "$known"
+        echo "Or use --current to reset the most-recently-modified file." >&2
+      else
+        echo "No strike files exist in this project or under \${HOME}/.caws/state/sessions." >&2
+      fi
+      exit 1
+    fi
     while IFS= read -r f; do reset_file "$f"; done <<< "$matches"
     ;;
 
