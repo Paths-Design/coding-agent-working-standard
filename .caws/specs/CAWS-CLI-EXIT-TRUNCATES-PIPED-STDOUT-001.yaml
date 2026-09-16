@@ -82,3 +82,10 @@ evidence:
     command: npx jest
     exit_code: 0
     commit_sha: b1197f0f
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "jest … A2 — same command piped vs redirected to a file. Pre-fix: piped=65536 vs file=253831 (188295 bytes lost, 74%). Post-fix the two byte counts are equal"
+    recorded_at: "2026-09-16T04:38:24.854Z"
+    command: npx jest
+    exit_code: 0
+    commit_sha: b1197f0f
