@@ -43,3 +43,11 @@ non_functional: {}
 contracts:
   - name: 'kernel-spec-diagnostics'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Repo-wide scan test 'no narrowRepair in the kernel offers a relabel as the repair' (tests/kernel/unit/remediation-no-label-escape.test.ts). RED FIRST: before the fix it failed listing 4 hits - policy/validate-semantics.ts:76, spec/validate-semantics.ts:36, :47, :103. One (gates.<id>.mode -> 'block') was a FALSE POSITIVE: a gate's mode, prescribing the STRICTER value. Detector narrowed with a (?<![.\\w]) lookbehind and that exact string pinned as a regression test. GREEN AFTER: scan returns []. Non-vacuity guarded by 'the extractor actually finds the kernel remediation corpus' (asserts >50 narrowRepair literals parsed), so a broken regex cannot pass as zero violations."
+    recorded_at: "2026-09-16T07:57:42.670Z"
+    command: npx jest tests/kernel/unit/remediation-no-label-escape.test.ts
+    exit_code: 0
+    commit_sha: "3c7c3f02"
