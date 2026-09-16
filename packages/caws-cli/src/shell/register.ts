@@ -95,6 +95,7 @@ import {
   runSpecsMigrateCommand,
   runSpecsRelocateCommand,
   runSpecsShowCommand,
+  runSpecsVerifyAcsCommand,
   runSpecsValidateCommand,
   runStatusCommand,
   runWaiverCreateCommand,
@@ -1413,6 +1414,23 @@ export function registerShellCommands(
         ...(opts.artifactPath !== undefined ? { artifactPath: opts.artifactPath } : {}),
         ...(opts.commitSha !== undefined ? { commitSha: opts.commitSha } : {}),
         showData: globals.data === true,
+      });
+      exit(code);
+    }
+  );
+
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'verify-acs')).action(
+    (
+      id: string,
+      opts: { run?: boolean; strict?: boolean; json?: boolean; runner?: string; data?: boolean }
+    ) => {
+      const code = runSpecsVerifyAcsCommand({
+        id,
+        ...(opts.run === true ? { run: true } : {}),
+        ...(opts.strict === true ? { strict: true } : {}),
+        ...(opts.json === true ? { json: true } : {}),
+        ...(typeof opts.runner === 'string' ? { runner: opts.runner } : {}),
+        showData: opts.data === true,
       });
       exit(code);
     }

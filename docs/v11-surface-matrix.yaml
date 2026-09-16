@@ -360,17 +360,21 @@ v10_2_commands:
       message: 'caws burnup was removed in v11. Derive budget burn-up from caws status + spec change_budget manually.'
 
   - command: verify-acs
-    disposition: removed
-    v11_status: intentionally_absent
-    replacement: null
-    since: null
+    disposition: replaced
+    v11_status: shipped
+    replacement: 'caws specs verify-acs <id>'
+    since: '12.2'
     source_docs:
-      - 'docs/migration-v10-to-v11.md#removed-without-replacement'
+      - 'docs/migration-v10-to-v11.md#replaced'
     implementation_probe:
-      group: null
+      group: specs
+      subcommand: verify-acs
     runtime_diagnostic:
-      kind: removed
-      message: 'caws verify-acs was removed in v11. Encode AC-evidence assertions in your test suite directly.'
+      kind: replaced
+      message: 'caws verify-acs moved to caws specs verify-acs in v12.2; a collected-but-unexecuted test is reported as not_rederived, never as passing.'
+      use:
+        - 'caws specs verify-acs <id>'
+        - 'caws specs verify-acs <id> --run'
 
   - command: evaluate
     disposition: removed

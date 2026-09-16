@@ -56,6 +56,10 @@ import {
 
 export const TEST_RUNNERS = ['pytest', 'jest', 'vitest', 'cargo', 'go', 'unknown'] as const;
 export type TestRunner = (typeof TEST_RUNNERS)[number];
+/** Runners a caller may name as an override; `unknown` is a detection result, not a choice. */
+export const SELECTABLE_TEST_RUNNERS: readonly TestRunner[] = TEST_RUNNERS.filter(
+  (r) => r !== 'unknown'
+);
 
 export interface SpawnOptions {
   readonly cwd: string;
@@ -448,6 +452,16 @@ function pytestOutcome(
     return { ...base, outcome: 'unavailable', detail: 'python3 not found' };
   if (collect.kind === 'error') return { ...base, outcome: 'unavailable', detail: collect.message };
   if (collect.kind === 'exit') {
+    // python3 present, pytest not installed: the runner is unavailable, which
+    // must never read as "the citation names nothing" (an infrastructure gap
+    // would otherwise refute an honest citation).
+    if (/No module named pytest/.test(collect.stderr)) {
+      return {
+        ...base,
+        outcome: 'unavailable',
+        detail: 'pytest is not installed for python3 (No module named pytest)',
+      };
+    }
     // 5 = no tests collected; anything else is a collection error (import
     // failure, syntax error). Both mean the citation cannot be collected.
     return {

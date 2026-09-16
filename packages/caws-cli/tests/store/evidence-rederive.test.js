@@ -31,6 +31,14 @@ const { planRederivation } = require('../../dist/kernel');
 // .bin symlink at the repo root is the same file the CLI would find.
 const JEST_BIN = fs.realpathSync(path.resolve(__dirname, '../../../../node_modules/.bin/jest'));
 
+// pytest is not part of this package's toolchain (CI's main test job has no
+// python setup). Real-pytest cases run only where it exists; the
+// pytest-missing path is pinned unconditionally below with a spy.
+const HAS_PYTEST =
+  require('child_process').spawnSync('python3', ['-m', 'pytest', '--version'], { encoding: 'utf8' })
+    .status === 0;
+const describeWithPytest = HAS_PYTEST ? describe : describe.skip;
+
 const repos = [];
 afterEach(() => {
   for (const repo of repos.splice(0)) fs.rmSync(repo, { recursive: true, force: true });
@@ -310,7 +318,34 @@ describe('jest re-derivation', () => {
 
 // ─── test class: pytest (A1) ─────────────────────────────────────────────────
 
-describe('pytest re-derivation', () => {
+describe('pytest not installed (A13)', () => {
+  test('python3 present but no pytest module -> unavailable, never missing', () => {
+    const { root } = mkFixtureRepo();
+    const calls = [];
+    const fn = (file, args) => {
+      calls.push({ file, args });
+      throw Object.assign(new Error('Command failed'), {
+        status: 1,
+        stdout: '',
+        stderr: '/usr/bin/python3: No module named pytest\n',
+      });
+    };
+    const o = outcomesFor(
+      root,
+      spec({ A1: { test_nodeid: 'py/tests/test_sample.py::test_passes' } }),
+      {
+        runTests: true,
+        execFile: fn,
+      }
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0].file).toBe('python3');
+    expect(o.A1[0].outcome).toBe('unavailable');
+    expect(o.A1[0].detail).toBe('pytest is not installed for python3 (No module named pytest)');
+  });
+});
+
+describeWithPytest('pytest re-derivation', () => {
   test('existence-only -> not_run with the collected count; --run passing -> passed; failing -> failed', () => {
     const { root } = mkFixtureRepo();
     const collect = outcomesFor(
