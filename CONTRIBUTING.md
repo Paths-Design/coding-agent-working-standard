@@ -25,6 +25,38 @@ npm run dev
 npm run test
 ```
 
+### Activating your build as the `caws` command
+
+`npm run build` does **not** change the `caws` on your PATH. That command is a
+pinned snapshot under `~/.caws/lib/cli/<release>/`, deliberately not a link into
+this checkout's `dist/` — a link would break every project on your machine each
+time you rebuild. To test your changes through the real command:
+
+```bash
+npm run build                                    # build first; the installer never rebuilds
+node scripts/install-cli-snapshot.mjs \
+  --package packages/caws-cli --bin "$(command -v caws)"
+```
+
+The installer packs the build, installs production dependencies, smoke-checks
+help/init/doctor in an isolated project, and only swaps the symlink on success.
+Failed candidates leave the previous command in place, and prior snapshots stay
+on disk for rollback.
+
+**If your change touches machine lifecycle wiring** (for example adding an event
+to `MACHINE_EVENTS`), finish the full ordered sequence — CLI package, then
+shared runtime, then native registration:
+
+```bash
+caws init adapters install                                  # shared runtime
+caws init adapters configure --agent-surface claude-code    # native registration
+```
+
+Order matters: each step is performed by the CLI installed in the step before
+it. Running `configure` from a stale CLI reports `OK` while writing the old
+event set, and the newer build then fails with `System surface settings and
+native registration disagree` — which re-running `configure` alone will not fix.
+
 ## Contribution Process
 
 ### 1. Create an Issue

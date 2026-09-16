@@ -105,8 +105,24 @@ scripts. Build before installation; it never rebuilds the active checkout itself
 ## Machine adapter installation
 
 The CLI package, shared runtime, native registration and project governance have
-separate lifecycles. Upgrade the CLI package first, then preview/apply the runtime
-update once. Each operation has dedicated help (`caws init adapters install
+separate lifecycles, and they upgrade in a fixed order because **each step is
+performed by the CLI installed in the step before it**:
+
+1. **CLI package** — `scripts/install-cli-snapshot.mjs` (above), or npm for a
+   released install.
+2. **Shared runtime** — `caws init adapters install`.
+3. **Native registration** — `caws init adapters configure --agent-surface <surface>`.
+4. **Project governance** — `caws init --agent-surface <surface>` per repo.
+
+Skipping step 1 does not fail loudly. `configure` wires the lifecycle events
+*the CLI running it* knows about, so a stale CLI reports `OK` while writing the
+old event set; the newer build then refuses every `init` with `System surface
+settings and native registration disagree; run caws init adapters configure`.
+That remediation names step 3 when step 1 is what is stale, so following it
+verbatim loops. Confirm the active CLI by content rather than by `--version` —
+two builds can share a version string and differ.
+
+Each operation has dedicated help (`caws init adapters install
 --help`, `configure --help`, `migrate --help`, `rollback --help`). The development CLI snapshot
 installer also checks identical development/packaged runtime digests;
 dependency or packaging drift refuses activation instead of changing behavior.
