@@ -1,0 +1,46 @@
+id: CAWS-REPO-GIT-HOOKS-DEAD-HOOKSPATH-001
+title: 'Restore this repo''s git hooks: fix core.hooksPath and rewrite the hooks onto the v11 surface'
+risk_tier: 3
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-16T04:58:52.855Z'
+updated_at: '2026-09-16T04:58:52.855Z'
+created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - '.husky/commit-msg'
+    - '.husky/pre-commit'
+    - '.husky/pre-push'
+    - '.husky/_/husky.sh'
+    - '.husky/README.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'core.hooksPath and the .husky tree after this change'
+    when: 'git hook run commit-msg / pre-commit / pre-push is invoked'
+    then: 'git finds each hook instead of reporting ''cannot find a hook named <name>'''
+  - id: A2
+    given: 'the base branch main with one or more registered worktrees whose baseBranch is main'
+    when: 'a commit message not matching merge(worktree): / wip(checkpoint): / chore(caws): is validated'
+    then: 'the commit-msg hook exits non-zero and names the allowed prefixes'
+  - id: A3
+    given: 'the same base-branch and worktree state'
+    when: 'a merge(worktree): or wip(checkpoint): or chore(caws): message is validated'
+    then: 'the commit-msg hook exits 0'
+  - id: A4
+    given: 'a v11 flat-map .caws/worktrees.json whose records carry no status field'
+    when: 'a hook counts lanes for the current base branch'
+    then: 'the count matches the number of registered records with that baseBranch and is not forced to zero'
+  - id: A5
+    given: 'the rewritten hooks'
+    when: 'their text is searched for removed v11 surfaces'
+    then: 'no reference remains to caws parallel, caws waivers, caws provenance, caws validate <working-spec>, .caws/working-spec.yaml, .caws/parallel.json or .caws/sessions.json'
+non_functional: {}
+contracts: []
