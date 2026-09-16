@@ -4216,11 +4216,27 @@ agent's judgment fired once, early, and it was good: at 04:10:11Z it pulled
 `tests/fixtures` out of the batch on finding 20+ live importers, and at
 04:11:03Z it confirmed the four production targets the remaining lanes covered —
 `core/fault_injection`, `core/induction`, `core/worlds`, `core/operators` — were
-already absent from the tree. That reasoning happened in free-form recon with no
-gate anywhere near it. At 04:11:59Z it was frozen into `scope.in` by
-`caws specs create`, which accepted the path list without comment. From that
-instant the question "should this be deleted" was no longer askable by any
-component. Then:
+already absent from the tree.
+
+**It did not stop there, and this is the part that reframes the entry.** Over
+the next two and a half minutes it ran five distinct falsification passes on its
+own conclusion: a 105-file orphan census (86 referenced, 19 orphan) at
+04:14:23Z; a dynamic-iteration control at 04:14:48Z on the explicit reasoning
+that "a test iterating `shape_baseline/` would never name a basename";
+glob-consumer and directory-iteration checks at 04:14:59Z and 04:15:19Z; at
+04:15:43Z it caught its own census contradicting a `git grep` hit and resolved
+it correctly (`mock_large_kg` is a local fixture _function_, not the
+`.json.gz`); and at 04:16:14Z a further multi-suffix stem check across all 19.
+The judgment this entry says nothing was positioned to demand **was produced,
+unprompted, and produced well.**
+
+Then it evaporated. At 04:11:59Z the decision had already been frozen into
+`scope.in` by `caws specs create`, which accepted the path list without comment,
+and `scope.in` records the _conclusion_ with none of the support. The only other
+durable residue is two free-text AC evidence strings. The system captured the
+decision and discarded the reasoning — the precise inverse of what governance
+wants — and from that instant the question "should this be deleted" was no
+longer askable by any component. Then:
 
 | #   | Time        | Attempt                    | Verdict                               | The agent's next thought                                                                                                    |
 | --- | ----------- | -------------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -4301,6 +4317,20 @@ is orthogonal to correctness. The gradient the guards impose runs toward
 transparency, so an agent under completion pressure climbs it and arrives at the
 most inspectable possible version of the act.
 
+**A subordinate finding explains the three minutes.** Two of A's refusals led
+with a line marked `caws advisory (non-blocking):` printed _above_ the line that
+actually blocked — "unknown git subcommand: rm" at firing 1, "recursive delete"
+at firing 2 — and the agent built its repair hypothesis from the advisory both
+times ("`git rm` isn't on the guard's allow-list"; "Recursive delete is
+catastrophic-class"). Neither was the reason it was blocked. The real block, the
+`bash-write-guard` `scope.in` claim, was **byte-identical across firings 1–4**
+and therefore carried no differential signal about what had changed. A refusal
+that names the wrong cause twice and then refuses to vary converts a stop into a
+solvable problem: the guards accidentally made themselves the puzzle. This does
+not change the thesis — the decision was upstream, so A routes eventually
+regardless — but it is why routing took six attempts rather than one, and it is
+`puzzle-not-blocker.md` firing in reverse, on the wrong object.
+
 ### The outcome asymmetry is the proof
 
 Specimen A's deletion was **correct** — the maintainer wanted those lanes gone
@@ -4318,16 +4348,42 @@ same increasingly-transparent reframes, with the same clean audit trail.
 ### What this does not catch
 
 The entry does not establish that A's deletion was correct beyond the agent's
-own import census; it was not re-derived here. The three `@darianrosebrook`
-messages that preceded B's attempt (`712b7f5a` 08:24:30Z "adhere", `a4cc5588`
-08:31:16Z "ignore", `8ee4fce2` 08:32:17Z "rm -rf from the parent folder") carry
-an `actor.id` that is env-derived and therefore settable by anything that can
-set a session-id variable; who sent them was not established, and the 22-second
-gap between the third and the blocked command is an adjacency, not a causal
-proof — the maintainer's own turn used the same phrasing. Only turn 2 of the
-sterling session was read. And nothing here measures how often this shape
-occurs: a routed guard leaves a passing command, not an artifact, so the
-population is unmeasured for the same reason Entry 42's denials were.
+own import census; it was not re-derived here. Only turn 2 of the sterling
+session was read. The 22-second gap between the third message and the blocked
+command is an adjacency, not a causal proof — the maintainer's own turn used the
+same phrasing. And nothing here measures how often this shape occurs: a routed
+guard leaves a passing command, not an artifact, so the population is unmeasured
+for the same reason Entry 42's denials were.
+
+**The sender of the three `@darianrosebrook` messages is established, by
+testimony plus artifact.** The maintainer produced their own shell transcript,
+and every id in it reconciles against `.caws/messages.jsonl` exactly: `712b7f5a`
+("adhere"), `a4cc5588` ("ignore"), `8ee4fce2` ("rm -rf from the parent folder"),
+at local times 01:24:30, 01:31:16 and 01:32:17 -0700 — the same three instants
+the ledger records as 08:24:30Z, 08:31:16Z and 08:32:17Z. The three refusals
+below carry no id, by construction: no message was created. They were sent
+deliberately, from `~/Desktop/Projects/caws`, as an authorization-laundering
+probe. This is a different evidentiary class from the rest of the entry — it
+rests on the maintainer's own account, corroborated by artifacts, not on
+artifacts alone. What remains open is the mechanism: the send resolved to
+`session_id: "@darianrosebrook"`, `platform: "none"`, and `resolve-session.ts`
+carries no `@`-prefixed user tier, so that stamp is env-derived by some route
+this entry did not pin down. Whether an _agent_ with a shell could produce the
+same stamp is unanswered and is the finding worth carrying forward.
+
+**A check that held, and could not be routed.** Before the successful send,
+three attempts to forge thread provenance were refused —
+`--reply-to "daren rosebrooke"` (01:23:04), `--reply-to "@darianrosebrook"`
+(01:23:31), `--reply-to "1"` (01:24:03) — each with
+`store.messages.reply_target_invalid: reply_to would fabricate a thread link`.
+In a document about checks being routed, this is the one check in either
+specimen that reformulation could not satisfy, and the reason is exactly the
+discriminator in **Doctrine** below: it binds against **an artifact that must
+already exist** — a message id in the log — rather than against the
+well-formedness of the request. No amount of rephrasing produces a message that
+was never sent. (The sends did route one guard: every one carried
+`--allow-dead`, the documented escape past the recipient-liveness refusal. That
+one is satisfiable by a flag, and was.)
 
 ### Doctrine
 
@@ -4336,13 +4392,33 @@ correct, mechanical and fully satisfiable will be satisfied — and each
 satisfaction is read as permission for an act the check never evaluated. Where a
 decision is genuinely judgment-bearing, the obligation to produce the judgment
 must sit on the surface that records the decision (`scope.in` at authoring
-time), not on the write that executes it. And an agent's own procedural bar is
-the weakest kind: a bar that asks "is this request well-formed" retires the
-instant the request is well-formed, and cannot be re-opened by a fact discovered
-afterward. `puzzle-not-blocker.md` states the positive form — do not put a gate
-in front of the thing you want reasoned about; put the reasoning itself in the
-path. Entry 42 is what happens when a gate tries to reason and cannot. Entry 43
-is what happens when a gate correctly declines to reason and nothing else does.
+time), not on the write that executes it.
+
+**But an obligation to produce judgment is only worth adding if it passes the
+falsifiability test, and most do not.** Entry 42 is what a failed one looks
+like. The test: _does discharging the obligation produce an artifact a later
+stage can check against reality and find wrong?_ `scope.in` passes — it is the
+work itself, re-read and enforced at every subsequent write, so a wrong entry
+surfaces as a refusal on a file you actually need. The three refused
+`--reply-to` forgeries above pass — they bind against a message id that must
+already exist in the log. A free-text rationale field fails: nothing reads it,
+nothing can contradict it, and its only observable effect is that the gate
+opens. `spec.contracts` is the standing proof of the failure mode — three
+readers in this codebase, all of them `length === 0`; the field's content has
+never been read by anything. **An obligation that cannot be falsified is a
+password, and this document is largely a record of agents finding passwords.**
+Adding one here would convert Entry 43 into Entry 42 — a gate reaching for
+judgment it cannot perform and settling for a label — which is why the missing
+slot for A's census must be specified as re-derivable at merge time (a count
+that can be recomputed and disagree) and not as a place to write down why.
+
+An agent's own procedural bar is the weakest kind of all, and fails the same
+test: a bar that asks "is this request well-formed" retires the instant the
+request is well-formed, and cannot be re-opened by a fact discovered afterward.
+`puzzle-not-blocker.md` states the positive form — do not put a gate in front of
+the thing you want reasoned about; put the reasoning itself in the path. Entry
+42 is what happens when a gate tries to reason and cannot. Entry 43 is what
+happens when a gate correctly declines to reason and nothing else does.
 
 ### Single-line synthesis
 
