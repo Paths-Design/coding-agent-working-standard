@@ -57,6 +57,14 @@ acceptance:
     then: >-
       that row renders an explicit unknown divergence marker naming the unresolvable
       ref, every other row still renders its real counts, and the command exits 0
+  - id: A4
+    given: 'a session whose cwd is inside tracked worktree wt-demo, ahead 2 / behind 3 of main'
+    when: 'caws status runs'
+    then: >-
+      the Current context block carries a lane line naming the worktree branch, its
+      base, ahead=2, behind=3, and the reconcile command to run because the lane
+      does not contain base; the byte-identical run mutates nothing under .caws/ and
+      appends no event
 non_functional: {}
 contracts:
   - name: 'lane-divergence'
