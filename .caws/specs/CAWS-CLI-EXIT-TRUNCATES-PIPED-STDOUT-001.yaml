@@ -18,7 +18,11 @@ scope:
     - 'packages/caws-cli/tests/shell/exit-flushes-piped-stdout.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'NO CAWS EXIT PATH THAT FOLLOWS COMMAND OUTPUT MAY DISCARD IT: the shared command exit hook sets process.exitCode and returns, letting Node drain stdout/stderr before the process ends. process.exit() is never the mechanism by which a command''s own exit code is delivered.'
+  - 'EXIT CODES ARE PRESERVED EXACTLY: changing the delivery mechanism must not change a single observed exit status. Every code a command returns (0, 1, 2) is the process''s observed status, on both the success and refusal paths.'
+  - 'TERMINATION STAYS PROMPT: the shell and store layers are fully synchronous (no timers, watchers, servers, or async handles), so a natural exit ends as soon as output drains. A hang is a regression, not an acceptable trade for a flush.'
+  - 'CONTROL FLOW IS UNCHANGED: every call site of the hook already terminates its block (returns or is the last statement), so setting exitCode instead of terminating the process cannot let code run that previously did not.'
+  - 'THE PROOF MUST CROSS A PROCESS BOUNDARY: this defect is invisible to any test that injects an out() sink, because the loss happens between the write and the pipe. Evidence is a real spawn with a real pipe and output larger than the OS pipe buffer.'
 acceptance:
   - id: A1
     given: 'TODO'
