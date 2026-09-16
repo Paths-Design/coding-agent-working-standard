@@ -413,9 +413,21 @@ describe('argv injection is refused before any spawn (A7)', () => {
     expect(calls[0].options.killSignal).toBe('SIGKILL');
     expect(calls[0].options.maxBuffer).toBeGreaterThan(0);
 
-    // And for real: pytest simply cannot collect it.
+    // And for real. Which outcome that is depends on the machine: the executor
+    // invokes `python3 -m pytest`, so a host whose ambient python3 cannot
+    // import pytest must report the runner unavailable rather than infer
+    // anything about the nodeid. Asserting `missing` unconditionally made this
+    // pass only where some python3 on PATH happened to carry pytest, and fail
+    // under the pre-push hook's leaner PATH. Both branches prove the same
+    // thing, and neither may report the hostile string as collected.
     const real = outcomesFor(root, spec({ A1: { test_nodeid: hostile } }), { runTests: true });
-    expect(real.A1[0].outcome).toBe('missing');
+    if (HAS_PYTEST) {
+      expect(real.A1[0].outcome).toBe('missing');
+      expect(real.A1[0].detail).toMatch(/pytest (could not collect|collected nothing)/);
+    } else {
+      expect(real.A1[0].outcome).toBe('unavailable');
+      expect(real.A1[0].detail).toMatch(/No module named pytest|python3 not found/);
+    }
     expect(fs.existsSync('/tmp/x')).toBe(false);
   });
 });
