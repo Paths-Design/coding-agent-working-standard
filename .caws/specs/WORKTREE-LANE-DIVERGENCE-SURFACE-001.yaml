@@ -86,3 +86,11 @@ contracts:
   - name: 'lane-divergence'
     type: contract-test
     path: 'packages/caws-cli/tests/shell/worktree-lane-divergence.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "jest tests/shell/worktree-lane-divergence.test.js 'A1: worktree list reports the lane 2 ahead / 3 behind, matching git' — row contains ahead=2 behind=3 and is corroborated in-test against git rev-list --left-right --count main...wt-demo => ['3','2']"
+    recorded_at: "2026-09-16T03:54:44.196Z"
+    command: npx jest
+    exit_code: 0
+    commit_sha: "31c190ac"
