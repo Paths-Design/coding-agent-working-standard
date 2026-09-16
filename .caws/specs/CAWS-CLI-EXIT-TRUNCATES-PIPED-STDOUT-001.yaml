@@ -53,6 +53,13 @@ acceptance:
       the child terminates on its own — the result carries no kill signal and no
       timeout — proving a natural exit does not hang waiting on an unreferenced
       handle
+  - id: A5
+    given: 'the shared exit hook registered by registerShellCommands with no injected exit override'
+    when: 'it is invoked with a code'
+    then: >-
+      it sets process.exitCode to that code and returns, and does not call
+      process.exit — pinned directly so a future refactor back to process.exit fails
+      here and not only in the slow spawn test
 non_functional: {}
 contracts:
   - name: 'exit-flush'
