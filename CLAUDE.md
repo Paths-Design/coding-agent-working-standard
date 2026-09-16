@@ -363,6 +363,37 @@ Verify native SessionStart, protected-write refusal, Stop and session rendering
 inside Claude before claiming activation. Template availability is not proof.
 New projects inherit configured machine behavior; legacy packs use diff/port.
 
+### Which hook copy governs you (two live copies, not one)
+
+Guard scripts exist in two places at once, and **which one executes depends on
+the surface, not on the file**:
+
+| Copy | Executed by | In this repo |
+|---|---|---|
+| `~/.caws` (machine runtime, via `~/.caws/bin/caws-hook`) | machine-routed surfaces | `claude-code`, `codex` |
+| `.caws/hooks/dispatch/<event>.sh` (project-local, exec'd directly) | project-wired surfaces | `qwen-code`, `kimi-code`, `opencode`, `zcode`, `dsh` |
+
+The asymmetry is the trap, and it points the opposite way from the obvious
+guess. From a Claude Code session, `.claude/settings.json` carries no hook
+commands and your guards come from `~/.caws` — so editing `.caws/hooks/` does
+nothing you can observe. **It is still not a no-op.** That same edit is live
+governance for every project-wired surface: the qwen and kimi shims and the
+opencode plugin exec `$ROOT/.caws/hooks/dispatch/<event>.sh` directly, and the
+opencode plugin **fails OPEN** when that tree is absent or incomplete. So an
+"inert" experiment there can silently disarm another harness's guard plane.
+
+Two consequences:
+
+- **Never delete or prune `.caws/hooks/` as dead weight.** It is live runtime
+  code for five surfaces here, and it hosts the human-only escape hatches
+  (`reset-danger-latch.sh`, `reset-strikes.sh`) that live block messages instruct
+  the user to run by that exact path.
+- **A stale project pack is invisible from Claude.** `doctor.hooks.installed_pack_version_lag`
+  can sit at an old version while every Claude session looks healthy, because
+  Claude never reads that copy. Treat that warning as real; refresh with
+  `caws init --agent-surface <an-already-wired-surface>` so the shared core
+  updates without re-registering a machine-routed surface.
+
 Reprieves are human-granted session-global exceptions in
 `~/.caws/state/sessions/<session>/`. `--surface` records harness identity and
 selects legacy lookup; it does not partition new grants. `caws reprieve grant`
