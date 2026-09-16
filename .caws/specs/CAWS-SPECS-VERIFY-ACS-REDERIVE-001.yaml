@@ -2,9 +2,11 @@ id: CAWS-SPECS-VERIFY-ACS-REDERIVE-001
 title: 'Re-derive acceptance evidence: restore verify-acs with three uncollapsed verdicts, verify-at-record, cite-at-close'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Restores caws specs verify-acs with three verdicts that never collapse (verified / refuted / not_rederived), --verify at record time, and citation+artifact re-derivation at close. A collected-but-unexecuted test is not_rederived, never pass - the v10.2 ancestral defect is pinned red. evidence[].command and acceptance[].test_command are never executed: no flag, no opt-in. Close and merge spawn no test runner; the gate stays warn-mode and block would be a relocation pre-merge, not a one-line flip. Two deviations recorded for the reader: (1) A4 proves close-time staleness on the artifact class, not the test class, because catching a stale test at close would contradict A9; (2) every close of an evidenced spec now emits a summary advisory on stderr, which is a behavior change and carries an alert-fatigue risk worth watching. Per-file mutation score on the new kernel classifier: 97.33 percent, 0 timeouts, 7 survivors each justified as equivalent or as a static-mutant blind spot.'
 created_at: '2026-09-16T18:52:32.338Z'
-updated_at: '2026-09-16T20:21:50.774Z'
+updated_at: '2026-09-16T22:47:10.004Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
