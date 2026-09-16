@@ -54,7 +54,6 @@
     "validate": "echo 'CLI package validation not required'",
     "caws:validate": "node dist/index.js doctor",
     "clean": "rm -rf dist test-caws-project .agent && npm run test:cleanup",
-    "prepare": "husky >/dev/null 2>&1 || true",
     "smoke:fresh-install": "node scripts/fresh-install-smoke.mjs",
     "prepublishOnly": "npm run build && node scripts/fresh-install-smoke.mjs"
   },

@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "// Git hooks: point git at the tracked .husky tree. Deliberately NOT husky's own CLI, which sets core.hooksPath to .husky/_ and once left this repo with no hooks at all.": "",
+    "// Root .npmrc sets workspaces=true, so `npm run <name>` resolves <name> against the workspaces and never reaches these root scripts. Run them as `npm run <name> --workspaces=false`. (npm install still runs the root prepare lifecycle script; only explicit `npm run` is shadowed.)": "",
     "prepare": "git config core.hooksPath .husky",
     "test:hooks": "bash .husky/tests/run.sh",
     "// Core turbo scripts (delegated to individual packages)": "",
