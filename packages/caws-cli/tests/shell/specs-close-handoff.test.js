@@ -80,7 +80,12 @@ describe('caws specs close state-aware handoff', () => {
   test('already-closed refusal names inspect/archive/recover commands without mutation', () => {
     const root = mkRepo();
     const cawsDir = path.join(root, '.caws');
-    writeSpec(cawsDir, 'CLOSE-HANDOFF-001', 'closed', "resolution: completed\nclosure_notes: 'already done'\n");
+    writeSpec(
+      cawsDir,
+      'CLOSE-HANDOFF-001',
+      'closed',
+      "resolution: completed\nclosure_notes: 'already done'\n"
+    );
     const before = snapshot(cawsDir, 'CLOSE-HANDOFF-001');
 
     const result = runClose(root, 'CLOSE-HANDOFF-001');

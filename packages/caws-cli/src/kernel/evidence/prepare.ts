@@ -40,10 +40,7 @@ import type { ChainedEvent, EventBody, Hash } from './types';
  * the new event's seq becomes prev.seq + 1 and prev_hash becomes
  * prev.event_hash.
  */
-export function prepareAppend(
-  prev: ChainedEvent | null,
-  body: unknown
-): Result<ChainedEvent> {
+export function prepareAppend(prev: ChainedEvent | null, body: unknown): Result<ChainedEvent> {
   // Validate the body first. This catches: bad event type, missing data,
   // missing actor, bad spec_id class, etc.
   const bodyResult = validateEventBody(body);
@@ -90,8 +87,23 @@ export function prepareAppend(
   //
   // exactOptionalPropertyTypes: spec_id is included only when validBody had it.
   const preHash:
-    | { seq: number; event: EventBody['event']; ts: string; actor: EventBody['actor']; spec_id: string; data: EventBody['data']; prev_hash: Hash | null }
-    | { seq: number; event: EventBody['event']; ts: string; actor: EventBody['actor']; data: EventBody['data']; prev_hash: Hash | null } =
+    | {
+        seq: number;
+        event: EventBody['event'];
+        ts: string;
+        actor: EventBody['actor'];
+        spec_id: string;
+        data: EventBody['data'];
+        prev_hash: Hash | null;
+      }
+    | {
+        seq: number;
+        event: EventBody['event'];
+        ts: string;
+        actor: EventBody['actor'];
+        data: EventBody['data'];
+        prev_hash: Hash | null;
+      } =
     validBody.spec_id !== undefined
       ? {
           seq,

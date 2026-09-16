@@ -42,7 +42,10 @@ const { CODEX_PACK } = require('../../dist/init/hook-packs/manifest-codex');
 const { IMPLEMENTED_SURFACES } = require('../../dist/init/hook-packs/register');
 const { DSH_PACK, DSH_PACK_VERSION } = require('../../dist/init/hook-packs/manifest-dsh');
 const { SURFACE_HOOK_MECHANISMS } = require('../../dist/init/hook-packs/surfaces.generated');
-const { renderHookPackInstall, renderActivationContract } = require('../../dist/shell/render/init-hook-pack');
+const {
+  renderHookPackInstall,
+  renderActivationContract,
+} = require('../../dist/shell/render/init-hook-pack');
 
 const EXCLUDED_DIRS = new Set(['tmp', '.caws', '__pycache__', 'node_modules']);
 const EXCLUDED_FILES = new Set(['.DS_Store']);
@@ -61,8 +64,8 @@ function listTemplateFiles(dir, baseDir = dir) {
   return out;
 }
 
-const ALL_TEMPLATE_FILES = ['shared', 'claude-code', 'codex', 'opencode', 'zcode'].flatMap(
-  (pack) => listTemplateFiles(path.join(PACKS_ROOT, pack))
+const ALL_TEMPLATE_FILES = ['shared', 'claude-code', 'codex', 'opencode', 'zcode'].flatMap((pack) =>
+  listTemplateFiles(path.join(PACKS_ROOT, pack))
 );
 
 /** The subset of template files that carry the managed marker (the ones whose
@@ -316,10 +319,7 @@ describe('A4: caws init preserves a grown hook and never silently clobbers it', 
 
   test('a second shared install is byte-identical and unchanged for every manifest destination', () => {
     const before = new Map(
-      SHARED_PACK.installedFiles.map(({ destPath }) => [
-        destPath,
-        fs.readFileSync(abs(destPath)),
-      ])
+      SHARED_PACK.installedFiles.map(({ destPath }) => [destPath, fs.readFileSync(abs(destPath))])
     );
 
     const r = installHookPack(SHARED_PACK, { repoRoot });
@@ -710,13 +710,7 @@ describe('A8: the DSH description derives its mechanism from the surface registr
   const RETIRED_PIN = '@deepseek-ai/dsh-hooks-caws';
   const REFERENCE_BUNDLE = '@caws/dsh-bundle';
   const DSH_DOCTRINE = path.join(PACKS_ROOT, 'dsh', 'AGENTS.md');
-  const MANIFEST_SOURCE = path.join(
-    CLI_PKG_ROOT,
-    'src',
-    'init',
-    'hook-packs',
-    'manifest-dsh.ts'
-  );
+  const MANIFEST_SOURCE = path.join(CLI_PKG_ROOT, 'src', 'init', 'hook-packs', 'manifest-dsh.ts');
   const REGISTRY = path.join(CLI_PKG_ROOT, 'surfaces', 'registry.json');
 
   // Drive the SHIPPED manifest, not a hand-built stub: the summary is part of

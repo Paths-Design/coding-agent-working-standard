@@ -48,7 +48,7 @@ export function deriveBudget(
   policy: Policy,
   spec: { risk_tier: RiskTier },
   waivers: readonly Waiver[],
-  options: DeriveBudgetOptions,
+  options: DeriveBudgetOptions
 ): Result<{ budget: EffectiveBudget; trace: BudgetDerivationTrace }> {
   const tierKey = String(spec.risk_tier) as '1' | '2' | '3';
   const baseline = policy.risk_tiers[tierKey];
@@ -62,7 +62,7 @@ export function deriveBudget(
         subject: '.caws/policy.yaml',
         location: { pointer: `/risk_tiers/${tierKey}` },
         narrowRepair: `Add risk_tiers["${tierKey}"] with max_files and max_loc.`,
-      }),
+      })
     );
   }
 
@@ -123,7 +123,11 @@ function evaluateWaiver(waiver: Waiver, now: Date, minApprovers: number): Waiver
   if (waiver.expires_at !== undefined) {
     const exp = parseDate(waiver.expires_at);
     if (exp === null) {
-      return { kind: 'skip', reason: 'malformed', detail: `unparseable expires_at=${waiver.expires_at}` };
+      return {
+        kind: 'skip',
+        reason: 'malformed',
+        detail: `unparseable expires_at=${waiver.expires_at}`,
+      };
     }
     if (exp.getTime() <= now.getTime()) {
       return { kind: 'skip', reason: 'expired', detail: `expired_at=${waiver.expires_at}` };

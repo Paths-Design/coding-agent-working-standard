@@ -24,24 +24,26 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const {
-  runWorktreeEnsureCommand,
-} = require('../../dist/shell/commands/worktree');
-const {
-  runSpecsCreateCommand,
-} = require('../../dist/shell/commands/specs');
+const { runWorktreeEnsureCommand } = require('../../dist/shell/commands/worktree');
+const { runSpecsCreateCommand } = require('../../dist/shell/commands/specs');
 const { initProject } = require('../../dist/store/init-store');
 const { loadEvents } = require('../../dist/store/events-store');
 
-const HOOK = path.resolve(
-  __dirname, '../../templates/hook-packs/shared/agent-register.sh'
-);
+const HOOK = path.resolve(__dirname, '../../templates/hook-packs/shared/agent-register.sh');
 
-const fixtureEnv = { HOME: process.env.HOME, PATH: process.env.PATH, CAWS_SESSION_ID: 'ensure-caller' };
+const fixtureEnv = {
+  HOME: process.env.HOME,
+  PATH: process.env.PATH,
+  CAWS_SESSION_ID: 'ensure-caller',
+};
 const repos = [];
 afterAll(() => {
   for (const r of repos) {
-    try { fs.rmSync(r, { recursive: true, force: true }); } catch { /* ignore */ }
+    try {
+      fs.rmSync(r, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
   }
 });
 
@@ -82,7 +84,8 @@ function mkSpec(root, id) {
 function ensure(root, name, specId, env = fixtureEnv) {
   const s = sinks();
   const code = runWorktreeEnsureCommand({
-    name, specId,
+    name,
+    specId,
     cwd: root,
     env: { ...env },
     out: s.outFn,
@@ -116,8 +119,11 @@ describe('WORKTREE-ENSURE-AFFORDANCE-001', () => {
     // Worktree physically exists and is registered-bound.
     expect(fs.existsSync(path.join(root, '.caws', 'worktrees', 'wt-a1'))).toBe(true);
     const registry = JSON.parse(
-      fs.readFileSync(path.join(root, '.caws', 'worktrees.json'), 'utf8'));
-    expect(registry.worktrees?.wt_a1?.spec_id ?? registry['wt-a1']?.spec_id ?? JSON.stringify(registry)).toBeTruthy();
+      fs.readFileSync(path.join(root, '.caws', 'worktrees.json'), 'utf8')
+    );
+    expect(
+      registry.worktrees?.wt_a1?.spec_id ?? registry['wt-a1']?.spec_id ?? JSON.stringify(registry)
+    ).toBeTruthy();
 
     // Draft activated by the bind; both events in the chain.
     expect(readSpecState(root, 'ENS-001')).toBe('active');
@@ -144,20 +150,23 @@ describe('WORKTREE-ENSURE-AFFORDANCE-001', () => {
 
     expect(countEvents(root, 'worktree_created')).toBe(before.created);
     expect(countEvents(root, 'worktree_bound')).toBe(before.bound);
-    expect(fs.statSync(path.join(root, '.caws', 'worktrees.json')).mtimeMs)
-      .toBe(before.mtime);
+    expect(fs.statSync(path.join(root, '.caws', 'worktrees.json')).mtimeMs).toBe(before.mtime);
   });
 
   test('A3: foreign live-owned worktree refuses with the soft-block; no takeover flag exists', () => {
     const root = mkRepo();
     mkSpec(root, 'ENS-003');
-    expect(ensure(root, 'wt-a3', 'ENS-003', {
-      ...fixtureEnv, CAWS_SESSION_ID: 'owner-session',
-    }).code).toBe(0);
+    expect(
+      ensure(root, 'wt-a3', 'ENS-003', {
+        ...fixtureEnv,
+        CAWS_SESSION_ID: 'owner-session',
+      }).code
+    ).toBe(0);
 
     // A DIFFERENT session asks to ensure the same worktree.
     const r = ensure(root, 'wt-a3', 'ENS-003', {
-      ...fixtureEnv, CAWS_SESSION_ID: 'other-session',
+      ...fixtureEnv,
+      CAWS_SESSION_ID: 'other-session',
     });
     expect(r.code).toBe(1);
     const text = r.err.join('\n');
@@ -169,7 +178,8 @@ describe('WORKTREE-ENSURE-AFFORDANCE-001', () => {
     let unknownFlag = false;
     try {
       execFileSync('node', [cli, 'worktree', 'ensure', 'x', '--spec', 'ENS-003', '--takeover'], {
-        cwd: root, stdio: 'pipe',
+        cwd: root,
+        stdio: 'pipe',
       });
     } catch (e) {
       unknownFlag = /unknown option|error: option/i.test(String(e.stderr || e.message));
@@ -198,12 +208,21 @@ describe('WORKTREE-ENSURE-AFFORDANCE-001', () => {
     // Governed fixture: activate then close with an explicit resolution.
     const specs = require('../../dist/shell/commands/specs');
     specs.runSpecsActivateCommand({
-      id: 'ENS-005', cwd: root, env: { ...fixtureEnv }, out: () => {}, err: () => {},
+      id: 'ENS-005',
+      cwd: root,
+      env: { ...fixtureEnv },
+      out: () => {},
+      err: () => {},
     });
     const closeErr = [];
     const cc = specs.runSpecsCloseCommand({
-      id: 'ENS-005', resolution: 'abandoned', reason: 'fixture: closed to test the ensure refusal handoff',
-      cwd: root, env: { ...fixtureEnv }, out: () => {}, err: (l) => closeErr.push(l),
+      id: 'ENS-005',
+      resolution: 'abandoned',
+      reason: 'fixture: closed to test the ensure refusal handoff',
+      cwd: root,
+      env: { ...fixtureEnv },
+      out: () => {},
+      err: (l) => closeErr.push(l),
     });
     if (readSpecState(root, 'ENS-005') !== 'closed') {
       throw new Error('A5 fixture failed to close ENS-005: ' + closeErr.join(' | '));
@@ -224,29 +243,35 @@ describe('WORKTREE-ENSURE-AFFORDANCE-001', () => {
 
     // scope show --json on a governed path from the unbound canonical root.
     const cli = path.resolve(__dirname, '..', '..', 'dist', 'index.js');
-    const scopeJson = JSON.parse(execFileSync('node', [
-      cli, 'scope', 'show', 'src/foo.ts', '--json',
-    ], { cwd: root, encoding: 'utf8' }));
+    const scopeJson = JSON.parse(
+      execFileSync('node', [cli, 'scope', 'show', 'src/foo.ts', '--json'], {
+        cwd: root,
+        encoding: 'utf8',
+      })
+    );
     expect(scopeJson.decision).toBe('no_authority');
     const commands = JSON.stringify(scopeJson.remediation?.commands ?? []);
     expect(commands).toContain('caws worktree ensure <name> --spec');
 
     // The SessionStart hook composes the same remediation shape.
     const stub = path.join(root, 'stub-caws');
-    fs.writeFileSync(stub, [
-      '#!/bin/bash',
-      'if [[ "$*" == *"scope show"* ]]; then',
-      `cat <<'JSON'`,
-      JSON.stringify({
-        decision: 'no_authority',
-        rule: 'scope.no_authority.unbound',
-        authorityCandidates: [{ specId: 'ENS-006', lifecycleState: 'active' }],
-      }),
-      'JSON',
-      'fi',
-      'exit 0',
-      '',
-    ].join('\n'));
+    fs.writeFileSync(
+      stub,
+      [
+        '#!/bin/bash',
+        'if [[ "$*" == *"scope show"* ]]; then',
+        `cat <<'JSON'`,
+        JSON.stringify({
+          decision: 'no_authority',
+          rule: 'scope.no_authority.unbound',
+          authorityCandidates: [{ specId: 'ENS-006', lifecycleState: 'active' }],
+        }),
+        'JSON',
+        'fi',
+        'exit 0',
+        '',
+      ].join('\n')
+    );
     fs.chmodSync(stub, 0o755);
 
     const stdout = execFileSync('bash', [HOOK], {

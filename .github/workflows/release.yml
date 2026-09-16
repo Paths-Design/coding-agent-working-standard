@@ -139,9 +139,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
-          cache: "npm"
-          cache-dependency-path: "package-lock.json"
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
           # NO registry-url here: setup-node's registry-url writes an .npmrc
           # authToken line, and npm uses a configured token INSTEAD of the
           # OIDC trusted-publisher exchange. Public installs need no auth.

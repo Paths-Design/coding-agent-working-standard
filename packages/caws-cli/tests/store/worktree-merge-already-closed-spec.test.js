@@ -24,10 +24,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const { createSpec, closeSpec } = require('../../dist/store/specs-writer');
-const {
-  createWorktree,
-  mergeWorktree,
-} = require('../../dist/store/worktrees-writer');
+const { createWorktree, mergeWorktree } = require('../../dist/store/worktrees-writer');
 const { initProject } = require('../../dist/store/init-store');
 // Read the chain directly so we can assert event counts without going
 // through a render layer.
@@ -261,7 +258,8 @@ describe('mergeWorktree closure_notes authored at merge time [CAWS-FEAT-WORKTREE
     // Non-empty commit on the worktree branch so the merge has something to merge.
     commitCaws(repo, 'pre-merge state for closure-notes');
 
-    const userNotes = 'Closed via merge: A4 two-process replay verified, parity exact, LOCAL_ONLY retained.';
+    const userNotes =
+      'Closed via merge: A4 two-process replay verified, parity exact, LOCAL_ONLY retained.';
     const result = mergeWorktree(caws, {
       name: 'wt-mn',
       session: SESSION,
@@ -297,10 +295,12 @@ describe('mergeWorktree closure_notes authored at merge time [CAWS-FEAT-WORKTREE
     // Splice a closure_notes line into the still-active spec — the shape an
     // author who pre-wrote notes before merging produces.
     const specPath = path.join(caws, 'specs', `${id}.yaml`);
-    const body = fs.readFileSync(specPath, 'utf8').replace(
-      'lifecycle_state: active',
-      `lifecycle_state: active\nclosure_notes: '${preAuthoredNotes}'`
-    );
+    const body = fs
+      .readFileSync(specPath, 'utf8')
+      .replace(
+        'lifecycle_state: active',
+        `lifecycle_state: active\nclosure_notes: '${preAuthoredNotes}'`
+      );
     fs.writeFileSync(specPath, body);
     commitCaws(repo, 'spec with pre-written closure_notes');
     const created = createWorktree(caws, {

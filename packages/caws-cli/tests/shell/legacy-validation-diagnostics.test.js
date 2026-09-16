@@ -32,11 +32,12 @@ describe('validation-era legacy command diagnostics', () => {
       },
       {
         argv: ['evaluate'],
-        expected: 'caws gates run covers policy gates; quality-evaluation reports are not reproduced.',
+        expected:
+          'caws gates run covers policy gates; quality-evaluation reports are not reproduced.',
       },
       {
         argv: ['iterate'],
-        expected: "Use spec acceptance criteria as guidance.",
+        expected: 'Use spec acceptance criteria as guidance.',
       },
       {
         argv: ['burnup'],

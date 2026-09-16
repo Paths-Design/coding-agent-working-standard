@@ -25,10 +25,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const {
-  pruneMessages,
-  channelId,
-} = require('../../dist/store/messages-store');
+const { pruneMessages, channelId } = require('../../dist/store/messages-store');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const FLOOR_7D = 7 * DAY_MS;
@@ -106,10 +103,7 @@ function appendDelivery(caws, deliverId) {
 }
 
 function liveLines(caws) {
-  return fs
-    .readFileSync(path.join(caws, 'messages.jsonl'), 'utf8')
-    .split('\n')
-    .filter(Boolean);
+  return fs.readFileSync(path.join(caws, 'messages.jsonl'), 'utf8').split('\n').filter(Boolean);
 }
 
 function plan(caws, extra = {}) {
@@ -131,10 +125,14 @@ function plan(caws, extra = {}) {
     const archive = path.join(caws, 'messages.jsonl.archive');
     const archiveExists = fs.existsSync(archive);
     const archiveIsFile = archiveExists && fs.statSync(archive).isFile();
-    fs.writeFileSync(path.join(artifact, 'state.json'), JSON.stringify({ archiveExists, archiveIsFile }));
+    fs.writeFileSync(
+      path.join(artifact, 'state.json'),
+      JSON.stringify({ archiveExists, archiveIsFile })
+    );
     if (archiveIsFile) fs.copyFileSync(archive, path.join(artifact, 'archive.jsonl'));
     const leases = path.join(caws, 'leases');
-    if (fs.existsSync(leases)) fs.cpSync(leases, path.join(artifact, 'leases'), { recursive: true });
+    if (fs.existsSync(leases))
+      fs.cpSync(leases, path.join(artifact, 'leases'), { recursive: true });
   }
   return result;
 }
@@ -180,9 +178,9 @@ describe('dead-recipient prune selector (CAWS-DEFECT-MESSAGE-PRUNE-DEAD-RECIPIEN
 
     const defaultFloor = plan(caws);
     expect(defaultFloor.value.candidates.map((c) => c.id)).toEqual(['m-old']);
-    expect(
-      defaultFloor.value.skipped.map((s) => [s.id, s.reason])
-    ).toEqual([['m-new', 'newer-than-floor']]);
+    expect(defaultFloor.value.skipped.map((s) => [s.id, s.reason])).toEqual([
+      ['m-new', 'newer-than-floor'],
+    ]);
 
     const immediate = plan(caws, { olderThanMs: 0 });
     expect(immediate.value.dead_recipient_floor_ms).toBe(0);

@@ -84,7 +84,7 @@ function grant(repoRoot, opts) {
   const err = [];
   const code = runReprieveGrantCommand({
     cwd: repoRoot,
-        homeDir: path.join(repoRoot, 'machine-home'),
+    homeDir: path.join(repoRoot, 'machine-home'),
     env: {},
     now: () => NOW,
     out: (l) => out.push(l),
@@ -174,9 +174,18 @@ describe('CAWS-REPRIEVE-RELATIVE-EXPIRY-001: --for grants (A1)', () => {
     const r = grant(repoRoot, { for: '0s' });
     expect(r.code).toBe(1);
     expect(r.err).toContain('must expire in the future');
-    expect(fs.existsSync(
-      path.join(repoRoot, 'machine-home', 'state', 'sessions', SESSION, `guard-reprieve-${SESSION}.json`)
-    )).toBe(false);
+    expect(
+      fs.existsSync(
+        path.join(
+          repoRoot,
+          'machine-home',
+          'state',
+          'sessions',
+          SESSION,
+          `guard-reprieve-${SESSION}.json`
+        )
+      )
+    ).toBe(false);
   });
 
   it('refuses an unparseable duration and names the accepted units (A2)', () => {
@@ -283,7 +292,7 @@ describe('CAWS-REPRIEVE-RELATIVE-EXPIRY-001: CLI parse path', () => {
       ['--handlers', 'protected-paths.sh', '--reason', 'r', '--approved-by', '@t', '--for', '30m'],
       repoRoot
     );
-    expect(r.stderr).not.toContain("unknown option");
+    expect(r.stderr).not.toContain('unknown option');
     expect(r.stderr).not.toContain("required option '--expires-at'");
     expect(r.status).toBe(0);
     const record = readRecord(repoRoot);
@@ -308,7 +317,7 @@ describe('CAWS-REPRIEVE-RELATIVE-EXPIRY-001: CLI parse path', () => {
     const repoRoot = makeRepoRoot();
     const r = spawnSync('node', [cli, 'reprieve', 'grant', '--help'], {
       cwd: repoRoot,
-        homeDir: path.join(repoRoot, 'machine-home'),
+      homeDir: path.join(repoRoot, 'machine-home'),
       encoding: 'utf8',
     });
     expect(r.stdout).toContain('--for <duration>');

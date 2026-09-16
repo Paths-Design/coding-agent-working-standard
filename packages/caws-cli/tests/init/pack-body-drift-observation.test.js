@@ -26,10 +26,7 @@ const fs = require('fs');
 const path = require('path');
 const { makeTempRepo, cleanupAll } = require('../helpers/git-repo-factory');
 const { SHARED_PACK } = require('../../dist/init/hook-packs/manifest-shared');
-const {
-  installHookPack,
-  observeSharedPackBodyDrift,
-} = require('../../dist/init/hook-install');
+const { installHookPack, observeSharedPackBodyDrift } = require('../../dist/init/hook-install');
 
 const DEST = '.caws/hooks/block-dangerous.sh';
 
@@ -44,8 +41,7 @@ describe('observeSharedPackBodyDrift (A4)', () => {
   afterAll(() => cleanupAll());
 
   const destAbs = (rel) => path.join(repo, rel);
-  const baselineAbs = (rel) =>
-    path.join(repo, '.caws', 'hooks', '.pristine', 'shared', rel);
+  const baselineAbs = (rel) => path.join(repo, '.caws', 'hooks', '.pristine', 'shared', rel);
 
   test('a byte-pristine install reports no body drift', () => {
     expect(observeSharedPackBodyDrift(repo)).toEqual([]);
@@ -57,10 +53,7 @@ describe('observeSharedPackBodyDrift (A4)', () => {
     // carries no local growth. Reporting it would be a false positive on every
     // clean install (the defect class this observation exists to avoid).
     const original = fs.readFileSync(destAbs(DEST), 'utf8');
-    const restamped = original.replace(
-      /^(#\s*hook_pack_version:\s*)\d+/m,
-      '$1999'
-    );
+    const restamped = original.replace(/^(#\s*hook_pack_version:\s*)\d+/m, '$1999');
     expect(restamped).not.toBe(original);
     fs.writeFileSync(destAbs(DEST), restamped);
     try {

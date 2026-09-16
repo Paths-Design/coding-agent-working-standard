@@ -73,9 +73,7 @@ describe('registration: kimi-code is a first-class surface', () => {
   });
 
   test('CANONICAL_KIMI_HOOK_ENTRIES covers all five events', () => {
-    expect(CANONICAL_KIMI_HOOK_ENTRIES.map((e) => e.event).sort()).toEqual(
-      [...ALL_EVENTS].sort()
-    );
+    expect(CANONICAL_KIMI_HOOK_ENTRIES.map((e) => e.event).sort()).toEqual([...ALL_EVENTS].sort());
   });
 
   test('every canonical command resolves the git root and no-ops without the shim', () => {
@@ -94,9 +92,7 @@ describe('kimiUserConfigPath', () => {
     );
   });
   test('falls back to ~/.kimi-code/config.toml when unset or blank', () => {
-    expect(kimiUserConfigPath({})).toBe(
-      path.join(os.homedir(), '.kimi-code', 'config.toml')
-    );
+    expect(kimiUserConfigPath({})).toBe(path.join(os.homedir(), '.kimi-code', 'config.toml'));
     expect(kimiUserConfigPath({ KIMI_CODE_HOME: '   ' })).toBe(
       path.join(os.homedir(), '.kimi-code', 'config.toml')
     );
@@ -256,7 +252,8 @@ describe('missingKimiHookEvents', () => {
     expect(missingKimiHookEvents(other).sort()).toEqual([...ALL_EVENTS].sort());
   });
   test('shim command without matching event does not count', () => {
-    const wrong = '[[hooks]]\nevent = "Notification"\ncommand = \'"$ROOT/.kimi-code/hooks/caws-kimi-hook.sh" PreToolUse || true\'\n';
+    const wrong =
+      '[[hooks]]\nevent = "Notification"\ncommand = \'"$ROOT/.kimi-code/hooks/caws-kimi-hook.sh" PreToolUse || true\'\n';
     const missing = missingKimiHookEvents(wrong);
     expect(missing).toContain('PreToolUse');
   });

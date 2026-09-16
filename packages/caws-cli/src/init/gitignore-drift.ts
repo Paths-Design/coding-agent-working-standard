@@ -24,10 +24,7 @@ import type { DoctorFinding } from '../kernel';
 
 import { storeDiagnostic } from '../store/repo-root';
 
-import {
-  EPHEMERAL_CAWS_ENTRIES,
-  computeGitignore,
-} from './gitignore-manage';
+import { EPHEMERAL_CAWS_ENTRIES, computeGitignore } from './gitignore-manage';
 
 /** Rule id for the gitignore-drift finding (mirrors the kernel rule-id style). */
 export const GITIGNORE_DRIFT_RULE = 'shell.gitignore.ephemeral_state_untracked';
@@ -67,10 +64,7 @@ function hasAnySpec(cawsDir: string): boolean {
  * The check is read-only; it never writes .gitignore (that is `caws init`'s
  * job). Severity is WARNING so it does not flip doctor's exit code.
  */
-export function detectGitignoreDrift(
-  repoRoot: string,
-  cawsDir: string
-): DoctorFinding | null {
+export function detectGitignoreDrift(repoRoot: string, cawsDir: string): DoctorFinding | null {
   if (!hasGitDir(repoRoot)) return null;
   if (!hasAnySpec(cawsDir)) return null;
 

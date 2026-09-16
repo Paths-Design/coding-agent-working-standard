@@ -44,8 +44,7 @@ export const DOCTOR_RULES = {
    * picking a winner requires authority policy from
    * WORKTREE-SPEC-AUTHORITY-CONTROL-PLANE-001.
    */
-  WORKTREE_BINDING_CONTRADICTION_3WAY:
-    'doctor.worktree.binding_contradiction_3way',
+  WORKTREE_BINDING_CONTRADICTION_3WAY: 'doctor.worktree.binding_contradiction_3way',
   /**
    * `git worktree list --porcelain` reports a linked worktree at some
    * path; no `.caws/worktrees.json` entry references that path. H6 in
@@ -93,8 +92,7 @@ export const DOCTOR_RULES = {
    * evaluated. Severity INFO — incomplete observability is preferable
    * to fail-closed.
    */
-  WORKTREE_GIT_OBSERVATION_UNAVAILABLE:
-    'doctor.worktree.git_observation_unavailable',
+  WORKTREE_GIT_OBSERVATION_UNAVAILABLE: 'doctor.worktree.git_observation_unavailable',
   /**
    * Bidirectional binding exists, but the spec's lifecycle_state is not
    * 'active' (it is draft, closed, or archived). Closed/archived specs
@@ -193,8 +191,7 @@ export const DOCTOR_RULES = {
    */
   INIT_LEGACY_WORKING_SPEC_PRESENT: 'doctor.init.legacy_working_spec_present',
   /** `.caws/working-spec.schema.json` legacy artifact present. Error. */
-  INIT_LEGACY_WORKING_SPEC_SCHEMA_PRESENT:
-    'doctor.init.legacy_working_spec_schema_present',
+  INIT_LEGACY_WORKING_SPEC_SCHEMA_PRESENT: 'doctor.init.legacy_working_spec_schema_present',
   /**
    * `.caws/specs/` directory absent on a project that otherwise looks
    * initialized. Stores default to "no specs" so this is operational

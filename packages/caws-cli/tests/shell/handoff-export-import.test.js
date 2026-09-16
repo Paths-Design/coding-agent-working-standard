@@ -157,7 +157,9 @@ describe('HANDOFF-EXPORT-IMPORT-001', () => {
     expect(pickups[0].data.receiving_session).toBe('receiver-sess');
 
     // No claim/lease mutation: the source lease is byte-identical to what we wrote.
-    const lease = JSON.parse(fs.readFileSync(path.join(cawsDir, 'leases', 'author-sess.json'), 'utf8'));
+    const lease = JSON.parse(
+      fs.readFileSync(path.join(cawsDir, 'leases', 'author-sess.json'), 'utf8')
+    );
     expect(lease.claimed_paths).toEqual(['packages/foo']);
     expect(lease.session_id).toBe('author-sess');
   });

@@ -1,9 +1,9 @@
 # Scope discipline — procedure
 
 Operational procedure for staying in scope and avoiding strike lockouts in this
-CAWS-governed repo. The *doctrine* (why this matters, the load-bearing
+CAWS-governed repo. The _doctrine_ (why this matters, the load-bearing
 invariants) lives in the root `CLAUDE.md` under **Scope is an agreement** and
-**Pre-edit admission**. This file is the *how* those sections point to: the
+**Pre-edit admission**. This file is the _how_ those sections point to: the
 checklists, the strike-state mechanics, and the recovery steps. Read the
 doctrine first; reach here for the recipe.
 
@@ -47,10 +47,10 @@ If any target returns REFUSE:
 
 1. Stop. Do not edit anything.
 2. Run **one** `caws specs amend-scope <SPEC-ID> --add <path>...` adding all
-   missing paths in a single call (the sanctioned path — CAWS-SCOPE-AMEND-COMMAND-001).
-   It writes canonical, bumps `updated_at`, and appends `spec_scope_amended`.
-   **No `git cherry-pick`** — scope resolves through canonical, so the worktree
-   sees the change immediately.
+   missing paths in a single call (the sanctioned path —
+   CAWS-SCOPE-AMEND-COMMAND-001). It writes canonical, bumps `updated_at`, and
+   appends `spec_scope_amended`. **No `git cherry-pick`** — scope resolves
+   through canonical, so the worktree sees the change immediately.
 3. Rerun the scope-proof block. Every target must now return ADMIT.
 4. Begin editing.
 
@@ -62,9 +62,11 @@ cherry-pick engages the danger latch and needs a human reset. Avoid it.)
 
 After the edit phase and before `git commit`:
 
-- Run the targeted tests for the surface you touched (`jest <path>`, kernel `npm test`, etc.).
+- Run the targeted tests for the surface you touched (`jest <path>`, kernel
+  `npm test`, etc.).
 - Run the relevant typecheck/build (`tsc`, turbo build for the package).
-- Run `caws scope check <path>` on each written file (admission proof, not just show).
+- Run `caws scope check <path>` on each written file (admission proof, not just
+  show).
 - Run `git status --short` to verify only the planned write targets are dirty.
 
 Commit only when all checks pass or you can explain in the commit message why a
@@ -80,10 +82,10 @@ as writes.
 **Concretely:**
 
 - Do NOT write to `/tmp/` from the agent. The scope guard doesn't admit paths
-  under `/tmp/` because they're not in any spec's `scope.in`. Use `node -e '...'`
-  for inline JS, stdout/stderr redirection inside Bash for capture, or in-scope
-  test instrumentation (a temporary `console.log` inside an already-admitted
-  `*.test.js` file, removed before commit).
+  under `/tmp/` because they're not in any spec's `scope.in`. Use
+  `node -e '...'` for inline JS, stdout/stderr redirection inside Bash for
+  capture, or in-scope test instrumentation (a temporary `console.log` inside an
+  already-admitted `*.test.js` file, removed before commit).
 - Do NOT redirect diagnostic output to a new file unless that file's path is
   predeclared in the preflight write-target list AND passes `caws scope show`.
 - Do NOT use Write tool for ANY purpose without preflight. There is no "but it's
@@ -91,9 +93,12 @@ as writes.
 
 The valid escape hatches for diagnostic work:
 
-- Inline Bash with `node -e`, `python -c`, `jq`, etc. — no file is written, only stdout returned.
-- Temporary `console.log` inside an existing in-scope test file. Add, run, capture, remove before commit. The file itself stays scope-admitted.
-- Reading existing artifacts (`fs.readFileSync`, `cat`, `jq` against a real on-disk file) — read is never gated, only writes are.
+- Inline Bash with `node -e`, `python -c`, `jq`, etc. — no file is written, only
+  stdout returned.
+- Temporary `console.log` inside an existing in-scope test file. Add, run,
+  capture, remove before commit. The file itself stays scope-admitted.
+- Reading existing artifacts (`fs.readFileSync`, `cat`, `jq` against a real
+  on-disk file) — read is never gated, only writes are.
 
 This rule exists because the agent earned a strike on `/tmp/migrator-probe.js`
 during CAWS-MIGRATE-V10-SPECS-001 commit 3 by treating "it's just a probe" as a
@@ -120,9 +125,9 @@ When you draft scope.in, mentally walk every file you'll create or modify:
 - For every comment-only edit you intend (deprecation markers, doctrine
   annotations): is the file in scope.in? The invariant body saying "add comment
   to X" is NOT scope admission.
-- For every doctrine doc you'll touch (CLAUDE.md, AGENTS.md, COMMIT_CONVENTIONS.md,
-  docs/architecture/*, docs/failure-lineage.md): is it in scope.in or admitted
-  via `policy.root_passthrough`?
+- For every doctrine doc you'll touch (CLAUDE.md, AGENTS.md,
+  COMMIT_CONVENTIONS.md, docs/architecture/\*, docs/failure-lineage.md): is it
+  in scope.in or admitted via `policy.root_passthrough`?
 - For every integration test that creates real fixtures (linked worktrees, git
   repos): is the new test file path in scope.in?
 
@@ -145,32 +150,34 @@ When mid-implementation you realize a file isn't in scope:
   id + exact missing entry.
 - **Amend the scope with `caws specs amend-scope`** — the sanctioned path
   (CAWS-SCOPE-AMEND-COMMAND-001). It mutates `scope.in` on the canonical control
-  plane, bumps `updated_at`, and appends a `spec_scope_amended` audit event — all
-  in one governed transaction:
+  plane, bumps `updated_at`, and appends a `spec_scope_amended` audit event —
+  all in one governed transaction:
   ```
   caws specs amend-scope <SPEC-ID> --add path/one --add path/two
   ```
-  Because scope resolves through canonical regardless of cwd, `caws scope check
-  <path>` from your worktree ADMITs the added path **immediately** — there is
-  **no `git cherry-pick` to run** (and therefore no danger latch to trip). Use
-  `--remove`, `--add-out`, `--remove-out` as needed. Run it from anywhere.
+  Because scope resolves through canonical regardless of cwd,
+  `caws scope check <path>` from your worktree ADMITs the added path
+  **immediately** — there is **no `git cherry-pick` to run** (and therefore no
+  danger latch to trip). Use `--remove`, `--add-out`, `--remove-out` as needed.
+  Run it from anywhere.
 - **Do not chain amendments.** If you need 3 files, `--add` all 3 in one
   `amend-scope` call, not three.
-- **Fallback (rare):** if `amend-scope` cannot cover the change (e.g. a non-scope
-  spec field), hand-edit the canonical spec, commit it as `chore(caws): amend
-  <SPEC-ID> scope for <what>` (bump `updated_at`), then `git cherry-pick` into
-  your worktree branch. ⚠️ **Raw `git cherry-pick` engages the danger latch and
-  requires a human reset** — prefer `amend-scope`, which avoids it entirely. (The
-  classifier admits a cherry-pick that touches ONLY `.caws/specs/*.yaml` without
-  latching, but `amend-scope` is still the first choice.)
+- **Fallback (rare):** if `amend-scope` cannot cover the change (e.g. a
+  non-scope spec field), hand-edit the canonical spec, commit it as
+  `chore(caws): amend <SPEC-ID> scope for <what>` (bump `updated_at`), then
+  `git cherry-pick` into your worktree branch. ⚠️ **Raw `git cherry-pick`
+  engages the danger latch and requires a human reset** — prefer `amend-scope`,
+  which avoids it entirely. (The classifier admits a cherry-pick that touches
+  ONLY `.caws/specs/*.yaml` without latching, but `amend-scope` is still the
+  first choice.)
 
 ### 3. Blast-radius and scope-collision review at draft time
 
 When authoring a new spec, before flipping to `active`:
 
 - **List every package, every directory tree, every test file, every doc, every
-  hook template, every CI surface you might touch.** Put them in scope.in. Easier
-  to over-include and trim than to scramble mid-implementation.
+  hook template, every CI surface you might touch.** Put them in scope.in.
+  Easier to over-include and trim than to scramble mid-implementation.
 - **Cross-check `scope.out` against sibling specs' `scope.in`.** Listing a
   sibling's `scope.in` paths in your `scope.out` will refuse YOUR edits to those
   paths even when admitted (it's enforcement, not documentation). Either omit or
@@ -192,45 +199,47 @@ is deliberately scoped to the checkout you are working in:
 - From the **canonical checkout**, strikes accumulate in
   `.claude/logs/guard-strikes-<session>.json` — one file per session.
 - From inside a **linked worktree**, strikes accumulate in that worktree's own
-  gitdir-relative file (`<gitdir>/caws-guard-strikes/guard-strikes-<session>.json`,
-  where `<gitdir>` is `<canonical>/.git/worktrees/<name>` — outside every working
-  tree so `git add -A` can never commit it; see
+  gitdir-relative file
+  (`<gitdir>/caws-guard-strikes/guard-strikes-<session>.json`, where `<gitdir>`
+  is `<canonical>/.git/worktrees/<name>` — outside every working tree so
+  `git add -A` can never commit it; see
   `CAWS-GUARD-STRIKE-FILE-OUT-OF-TREE-001`).
 
-**Strikes do NOT bleed across worktrees.** A strike earned in worktree A does not
-corner an edit in worktree B, and a strike earned in a worktree is *not* visible
-in the canonical `.claude/logs` file (and vice-versa). This per-checkout
+**Strikes do NOT bleed across worktrees.** A strike earned in worktree A does
+not corner an edit in worktree B, and a strike earned in a worktree is _not_
+visible in the canonical `.claude/logs` file (and vice-versa). This per-checkout
 isolation is **intentional**, not a defect: cross-worktree strike accumulation
-was a high-severity multi-agent control-plane collapse in the failure lineage (an
-agent flagged a bogus authority violation because another worktree's strikes
+was a high-severity multi-agent control-plane collapse in the failure lineage
+(an agent flagged a bogus authority violation because another worktree's strikes
 leaked in). If a block message says "strike 3" but the canonical `.claude/logs`
 file shows a lower count, you are reading the wrong file — the live count is in
-*your current checkout's* strike file (the worktree gitdir when you're inside a
+_your current checkout's_ strike file (the worktree gitdir when you're inside a
 worktree).
 
 Two important behaviors within a given checkout:
 
-1. **A file that earned strikes earlier stays "hot."** Even after you correct the
-   underlying scope (e.g., add the file to a spec's `scope.in`), the guard does
-   NOT re-evaluate prior strikes — it adds the next strike on top of the
+1. **A file that earned strikes earlier stays "hot."** Even after you correct
+   the underlying scope (e.g., add the file to a spec's `scope.in`), the guard
+   does NOT re-evaluate prior strikes — it adds the next strike on top of the
    cumulative count for that checkout. If you've already burned strikes 1 and 2
    on `path/X`, the next edit will hard-block at strike 3 regardless of whether
    the scope is now correct.
 
 2. **The recovery path is the strike-reset script, not the scope edit alone.**
-   When the guard says "ask the user to run: `bash .caws/hooks/reset-strikes.sh
-   --session <id>`" — that's not optional. After correcting the scope cause, you
-   still need to clear the accumulated strike state. `reset-strikes.sh` collects
-   strike files from the canonical vendor log dir (`.claude/logs` for Claude
-   Code), every worktree gitdir, and the legacy `.caws/worktrees/**/tmp`
-   location, so the reset clears the right one.
+   When the guard says "ask the user to run:
+   `bash .caws/hooks/reset-strikes.sh --session <id>`" — that's not optional.
+   After correcting the scope cause, you still need to clear the accumulated
+   strike state. `reset-strikes.sh` collects strike files from the canonical
+   vendor log dir (`.claude/logs` for Claude Code), every worktree gitdir, and
+   the legacy `.caws/worktrees/**/tmp` location, so the reset clears the right
+   one.
 
    **The scripts live in `.caws/hooks/`, not `.claude/hooks/`.** The vendor dir
    (`.claude/`, `.codex/`, `.cursor/`, …) holds per-harness logs and settings;
    the hook scripts are shared across every surface and live in the CAWS tree.
-   The guard prints the full command with the session id already resolved —
-   hand it to the user verbatim rather than reconstructing it, since an agent
-   cannot clear its own strike state and a wrong path leaves both of you stuck.
+   The guard prints the full command with the session id already resolved — hand
+   it to the user verbatim rather than reconstructing it, since an agent cannot
+   clear its own strike state and a wrong path leaves both of you stuck.
 
 The right discipline: don't speculatively edit a file before verifying it's in
 scope. Use `caws scope show <path>` first if uncertain. The check costs nothing
@@ -241,19 +250,19 @@ and avoids burning a strike on a file you'll have to revisit.
 1. **Stop editing the hot file.** Don't retry on the same path — each retry is
    another strike.
 2. **Diagnose** with `caws scope show <path>` from inside the worktree. Capture
-   the exact refusal message, and read *which* of the three outcomes you got —
+   the exact refusal message, and read _which_ of the three outcomes you got —
    `ADMIT`, `REFUSE`, or `NO AUTHORITY`. They have different fixes.
 3. **If `NO AUTHORITY` (`scope.no_authority.unbound`):** no spec is bound to
-   this checkout, so the kernel cannot decide scope at all and amending will
-   not help — the path may already be in `scope.in` and still refuse. Create or
-   enter the bound worktree (`caws worktree create <name> --spec <id>`, or `cd
-   .caws/worktrees/<name>`), then rerun the check. Beware `caws scope show
-   <path> --spec <id>`: it answers "would this path fit that spec", prints
-   `binding: bound` about the **named spec** rather than your checkout, and does
-   not prove write authority. Only the bare form does.
+   this checkout, so the kernel cannot decide scope at all and amending will not
+   help — the path may already be in `scope.in` and still refuse. Create or
+   enter the bound worktree (`caws worktree create <name> --spec <id>`, or
+   `cd .caws/worktrees/<name>`), then rerun the check. Beware
+   `caws scope show <path> --spec <id>`: it answers "would this path fit that
+   spec", prints `binding: bound` about the **named spec** rather than your
+   checkout, and does not prove write authority. Only the bare form does.
 4. **If blocked but the path is in your spec's `scope.in`,** suspect a
-   directory-claim collision: run `caws scope contention <path>`. A sibling
-   spec listing a *directory* (e.g. `packages/caws-cli/tests`) in its `scope.in`
+   directory-claim collision: run `caws scope contention <path>`. A sibling spec
+   listing a _directory_ (e.g. `packages/caws-cli/tests`) in its `scope.in`
    makes its worktree claim every path beneath it, so two specs both "own" the
    file and the worktree claim wins. The fix is to narrow the claiming spec to
    file-granular entries, not to amend yours again.

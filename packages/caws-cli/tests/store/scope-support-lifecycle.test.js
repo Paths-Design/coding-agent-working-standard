@@ -217,10 +217,7 @@ describe('A2: removing the last scope.support entry', () => {
     });
 
     expect(removed.ok).toBe(true);
-    expect(specOnDisk(caws, 'SSLC-A2B-001').scope.in).toEqual([
-      'src/lane.txt',
-      'src/other.txt',
-    ]);
+    expect(specOnDisk(caws, 'SSLC-A2B-001').scope.in).toEqual(['src/lane.txt', 'src/other.txt']);
   });
 
   test('removing the last scope.out entry is equally landable', () => {

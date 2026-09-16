@@ -29,10 +29,7 @@ const CLI_PKG_ROOT = path.resolve(__dirname, '..', '..');
 const REPO_ROOT = path.resolve(CLI_PKG_ROOT, '..', '..');
 const POPULATOR = path.join(CLI_PKG_ROOT, 'scripts', 'populate-doc-markers.mjs');
 
-const {
-  KNOWN_SURFACES,
-  IMPLEMENTED_SURFACES,
-} = require('../../dist/init/hook-packs/register');
+const { KNOWN_SURFACES, IMPLEMENTED_SURFACES } = require('../../dist/init/hook-packs/register');
 
 // Pure renderers + marker replacement live in the CommonJS helper so the jest
 // sandbox (CommonJS, no --experimental-vm-modules) can load them directly. The
@@ -106,13 +103,7 @@ describe('populator renderers: derived shape from the live constants', () => {
 
 describe('fillMarkers: marker-region replacement semantics', () => {
   test('block fill wraps content with newlines; idempotent on re-run', () => {
-    const text = [
-      'intro',
-      '<!-- m:start -->',
-      'old',
-      '<!-- m:end -->',
-      'outro',
-    ].join('\n');
+    const text = ['intro', '<!-- m:start -->', 'old', '<!-- m:end -->', 'outro'].join('\n');
     const fill = [{ name: 'm', content: 'NEW' }];
     const once = populator.fillMarkers(text, fill);
     const twice = populator.fillMarkers(once, fill);
@@ -129,9 +120,7 @@ describe('fillMarkers: marker-region replacement semantics', () => {
 
   test('a missing marker pair throws (drift detection)', () => {
     const text = 'no markers here';
-    expect(() => populator.fillMarkers(text, [{ name: 'm', content: 'X' }])).toThrow(
-      /not found/
-    );
+    expect(() => populator.fillMarkers(text, [{ name: 'm', content: 'X' }])).toThrow(/not found/);
   });
 });
 

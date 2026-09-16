@@ -20,10 +20,7 @@ const fs = require('fs');
 const path = require('path');
 
 const registry = JSON.parse(
-  fs.readFileSync(
-    path.join(__dirname, '../../surfaces/registry.json'),
-    'utf8'
-  )
+  fs.readFileSync(path.join(__dirname, '../../surfaces/registry.json'), 'utf8')
 );
 const generated = require('../../dist/init/hook-packs/surfaces.generated');
 const {
@@ -41,7 +38,7 @@ describe('surface registry conformance (A2)', () => {
     expect(generated.SENTINEL_SURFACE).toBe('none');
   });
 
-  test('every pinVar is one of that surface\'s own env vars', () => {
+  test("every pinVar is one of that surface's own env vars", () => {
     for (const [id, s] of entries) {
       if (s.pinVar === null || s.pinVar === undefined) continue;
       expect(s.envVars).toContain(s.pinVar);
@@ -49,7 +46,7 @@ describe('surface registry conformance (A2)', () => {
     }
   });
 
-  test('TRUST_GATED_SURFACES matches the init guard\'s GATED_SURFACES', () => {
+  test("TRUST_GATED_SURFACES matches the init guard's GATED_SURFACES", () => {
     expect([...generated.TRUST_GATED_SURFACES].sort()).toEqual([...GATED_SURFACES].sort());
     expect([...generated.TRUST_GATED_SURFACES].sort()).toEqual(['qwen-code', 'zcode']);
   });

@@ -12,15 +12,26 @@ audience: consumer
 
 **For AI agents and developers working with CAWS v11 waivers.**
 
-> **v11 surface only.** Waivers in v11 use the singular `caws waiver create | list | show | revoke` surface. The legacy `caws waivers` (plural) command and the `waiver_ids: [...]` field on the spec are removed. Doctrine source: [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md).
+> **v11 surface only.** Waivers in v11 use the singular
+> `caws waiver create | list | show | revoke` surface. The legacy `caws waivers`
+> (plural) command and the `waiver_ids: [...]` field on the spec are removed.
+> Doctrine source:
+> [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md).
 
 ## How waivers work in v11
 
-Waivers in v11 are records under `.caws/waivers/<id>.yaml`, written through the store via `caws waiver create`. A waiver targets one or more gate names (`gates:`, an array — repeat `--gate` on the CLI for more than one). When `caws gates run --spec <id>` evaluates a targeted gate and a violation matches an active, non-expired waiver, the violation is filtered out of the disposition.
+Waivers in v11 are records under `.caws/waivers/<id>.yaml`, written through the
+store via `caws waiver create`. A waiver targets one or more gate names
+(`gates:`, an array — repeat `--gate` on the CLI for more than one). When
+`caws gates run --spec <id>` evaluates a targeted gate and a violation matches
+an active, non-expired waiver, the violation is filtered out of the disposition.
 
-**Waivers do not change gate `mode`.** `mode` is owned by `policy.yaml` (block / warn / skip). Waivers filter individual violations.
+**Waivers do not change gate `mode`.** `mode` is owned by `policy.yaml` (block /
+warn / skip). Waivers filter individual violations.
 
-**Waivers do not need to be referenced from the spec.** v11 has no `waiver_ids:` field. The store discovers waivers by scanning `.caws/waivers/`, matching them against gate-evaluation events at run time.
+**Waivers do not need to be referenced from the spec.** v11 has no `waiver_ids:`
+field. The store discovers waivers by scanning `.caws/waivers/`, matching them
+against gate-evaluation events at run time.
 
 ## Quick fixes
 
@@ -31,7 +42,8 @@ Waivers in v11 are records under `.caws/waivers/<id>.yaml`, written through the 
 1. The waiver's `gate` field doesn't match the gate the policy is failing.
 2. The waiver has expired (check `expires_at`).
 3. The waiver was revoked.
-4. The waiver file is malformed (`caws waiver list` will skip it; `caws doctor` will surface it).
+4. The waiver file is malformed (`caws waiver list` will skip it; `caws doctor`
+   will surface it).
 
 **Diagnose**:
 
@@ -58,19 +70,30 @@ caws waiver create <new-id> \
 
 **Cause**: a waiver with that id already exists at `.caws/waivers/<id>.yaml`.
 
-**Fix**: pick a different id. Waiver ids must match `^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+[a-z]?$` (ends in digits, optionally one trailing lowercase letter — `FEAT-1-w` and `FEAT-1-w1` both fail this since they end in a letter-only segment). Convention: `<spec-id>-<n>`, e.g. `FEAT-1a` or `FEAT-1-2`. Or revoke the existing waiver first if it's stale.
+**Fix**: pick a different id. Waiver ids must match
+`^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+[a-z]?$` (ends in digits, optionally one
+trailing lowercase letter — `FEAT-1-w` and `FEAT-1-w1` both fail this since they
+end in a letter-only segment). Convention: `<spec-id>-<n>`, e.g. `FEAT-1a` or
+`FEAT-1-2`. Or revoke the existing waiver first if it's stale.
 
-The exit code for this case is `1` (domain failure), and the diagnostic mentions the duplicate id explicitly. The CLI uses the `STORE_RULES.WAIVERS_ALREADY_EXISTS` rule constant (8a1).
+The exit code for this case is `1` (domain failure), and the diagnostic mentions
+the duplicate id explicitly. The CLI uses the
+`STORE_RULES.WAIVERS_ALREADY_EXISTS` rule constant (8a1).
 
 ### Issue 3: waiver expired and now the gate blocks
 
-**Cause**: `expires_at` is in the past. Expired waivers no longer filter violations.
+**Cause**: `expires_at` is in the past. Expired waivers no longer filter
+violations.
 
-**Fix**: either fix the underlying gate violation (the right answer) or open a new waiver with a forward-dated `expires_at` and a fresh approval. Do not edit the expired waiver's YAML by hand — the audit trail expects waivers to be created and revoked through the CLI.
+**Fix**: either fix the underlying gate violation (the right answer) or open a
+new waiver with a forward-dated `expires_at` and a fresh approval. Do not edit
+the expired waiver's YAML by hand — the audit trail expects waivers to be
+created and revoked through the CLI.
 
 ### Issue 4: I tried to set `change_budget` in my spec to "fix" the budget gate
 
-**Cause**: hand-editing `change_budget` is a governed-paths violation. CI rejects it. The right escape is a waiver against the budget gate.
+**Cause**: hand-editing `change_budget` is a governed-paths violation. CI
+rejects it. The right escape is a waiver against the budget gate.
 
 **Fix**: revert the spec edit and open a waiver:
 
@@ -83,11 +106,14 @@ caws waiver create FEAT-1a \
   --expires-at "2026-09-01T00:00:00Z"
 ```
 
-In v11, budget enforcement is driven by `policy.yaml` (which owns the gate's `mode`) and per-spec `risk_tier` thresholds. The spec's `change_budget` is informational; gates enforce against policy-derived limits.
+In v11, budget enforcement is driven by `policy.yaml` (which owns the gate's
+`mode`) and per-spec `risk_tier` thresholds. The spec's `change_budget` is
+informational; gates enforce against policy-derived limits.
 
 ### Issue 5: `caws gates run --spec <id>` exits 2
 
-**Cause**: composition failure. Not a quality issue — usually means CAWS can't read your `.caws/` state.
+**Cause**: composition failure. Not a quality issue — usually means CAWS can't
+read your `.caws/` state.
 
 **Diagnose**:
 
@@ -97,7 +123,8 @@ cat .caws/policy.yaml | head        # is policy.yaml readable / well-formed?
 caws doctor                          # surfaces composition findings as "load errors"
 ```
 
-**Fix**: address the underlying setup problem. Re-run `caws init` if `.caws/` is missing (it's idempotent).
+**Fix**: address the underlying setup problem. Re-run `caws init` if `.caws/` is
+missing (it's idempotent).
 
 ## v11 waiver lifecycle
 
@@ -118,7 +145,8 @@ caws waiver show FEAT-1a            # one waiver
 caws waiver revoke FEAT-1a
 ```
 
-Each operation appends an event to `.caws/events.jsonl` via the store's hash-chained `appendEvent`. The audit trail is durable and verifiable.
+Each operation appends an event to `.caws/events.jsonl` via the store's
+hash-chained `appendEvent`. The audit trail is durable and verifiable.
 
 ## Waiver record shape (v11)
 
@@ -146,13 +174,15 @@ waiver can target more than one gate; repeat `--gate` on the CLI to add more.
 reflects whether the waiver is currently in force (accounts for expiry,
 independent of `status`).
 
-Authored by `caws waiver create`. Do not hand-edit. The store enforces atomic writes via `writeFileAtomic`.
+Authored by `caws waiver create`. Do not hand-edit. The store enforces atomic
+writes via `writeFileAtomic`.
 
 Fields v11 does NOT use (legacy v3/v10 leftovers — ignore them):
 
 - `delta:` (max_files / max_loc) — budget is policy-driven in v11.
 - `gate:` singular — the current field is `gates:`, an array.
-- `risk_assessment:` (impact_level / mitigation_plan) — capture in `reason` instead.
+- `risk_assessment:` (impact_level / mitigation_plan) — capture in `reason`
+  instead.
 - `approvers:` plural — v11 records a single `approved_by`.
 - `description:` — capture in `reason`.
 
@@ -164,14 +194,16 @@ Waivers are for **legitimate, time-bound bypass with audit**. They are not:
 - A substitute for fixing scope.
 - A way to make T1-tier failures go away without human review.
 
-If a gate failure is reproducible and the underlying issue is fixable, fix it. Use waivers for genuinely exceptional cases.
+If a gate failure is reproducible and the underlying issue is fixable, fix it.
+Use waivers for genuinely exceptional cases.
 
 ## Validation checklist
 
 Before opening a waiver:
 
 - [ ] The gate name matches what `caws gates run --spec <id>` reports.
-- [ ] The reason explains *why the violation is acceptable*, not just *that you want past it*.
+- [ ] The reason explains _why the violation is acceptable_, not just _that you
+      want past it_.
 - [ ] The approver is real and authorized.
 - [ ] `expires_at` is short and matches the planned remediation horizon.
 - [ ] No hand-edits to `policy.yaml` or the spec's `change_budget`.
@@ -184,7 +216,9 @@ After opening:
 
 ## See also
 
-- [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md) — doctrine source
+- [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md)
+  — doctrine source
 - [`docs/api/cli.md`](../api/cli.md) — full CLI reference (§8 `caws waiver`)
-- [`docs/agent-workflow-tools.md`](../agent-workflow-tools.md) — agent block-recovery patterns
+- [`docs/agent-workflow-tools.md`](../agent-workflow-tools.md) — agent
+  block-recovery patterns
 - [`AGENTS.md`](../../AGENTS.md) — agent quickstart

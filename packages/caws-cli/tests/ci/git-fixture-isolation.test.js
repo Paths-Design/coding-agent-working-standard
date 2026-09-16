@@ -30,14 +30,21 @@ test('an interrupted copy fails once, removes its partial destination, and retai
     throw original;
   });
   let caught;
-  try { factory.makeTempRepo(); } catch (error) { caught = error; }
+  try {
+    factory.makeTempRepo();
+  } catch (error) {
+    caught = error;
+  }
   expect(copy).toHaveBeenCalledTimes(1);
   expect(caught).toBeInstanceOf(Error);
   expect(fs.existsSync(destination)).toBe(false);
   expect(caught.cause).toBe(original);
   expect(caught.code).toBe('ENOENT');
   expect(caught.fixtureContext).toMatchObject({
-    pid: process.pid, destination, destinationExisted: true, templateExisted: true,
+    pid: process.pid,
+    destination,
+    destinationExisted: true,
+    templateExisted: true,
   });
   expect(caught.message).toContain('copy interrupted');
 });
@@ -45,21 +52,32 @@ test('an interrupted copy fails once, removes its partial destination, and retai
 test('inherited Git storage and config overrides cannot redirect a fixture into a foreign repository', () => {
   const foreign = factory.makeTempRepo();
   const before = factory.git(foreign, ['rev-parse', 'HEAD']);
-  const result = spawnSync(process.execPath, ['-e', `
+  const result = spawnSync(
+    process.execPath,
+    [
+      '-e',
+      `
     const fs = require('fs');
     const f = require(${JSON.stringify(factoryPath)});
     const repo = f.makeTempRepo();
     console.log(JSON.stringify({ repo: fs.realpathSync(repo), top: fs.realpathSync(f.git(repo, ['rev-parse', '--show-toplevel'])), clean: f.git(repo, ['status', '--porcelain']), email: f.git(repo, ['config', '--get', 'user.email']) }));
-  `], {
-    encoding: 'utf8',
-    env: {
-      ...process.env, TMPDIR: root(),
-      GIT_DIR: path.join(foreign, '.git'), GIT_WORK_TREE: foreign,
-      GIT_INDEX_FILE: path.join(foreign, '.git/index'),
-      GIT_OBJECT_DIRECTORY: path.join(foreign, '.git/objects'),
-      GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'user.email', GIT_CONFIG_VALUE_0: 'foreign@invalid',
-    },
-  });
+  `,
+    ],
+    {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        TMPDIR: root(),
+        GIT_DIR: path.join(foreign, '.git'),
+        GIT_WORK_TREE: foreign,
+        GIT_INDEX_FILE: path.join(foreign, '.git/index'),
+        GIT_OBJECT_DIRECTORY: path.join(foreign, '.git/objects'),
+        GIT_CONFIG_COUNT: '1',
+        GIT_CONFIG_KEY_0: 'user.email',
+        GIT_CONFIG_VALUE_0: 'foreign@invalid',
+      },
+    }
+  );
   expect(result.error).toBeUndefined();
   expect(result.status).toBe(0);
   const observed = JSON.parse(result.stdout);
@@ -87,16 +105,35 @@ test('independent processes with the same worker ID can create and clean fixture
     }
     console.log('32 isolated repositories');
   `;
-  const results = await Promise.all(Array.from({ length: 4 }, () => new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ['-e', script], { env: { ...process.env, TMPDIR: directory, JEST_WORKER_ID: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = ''; let stderr = '';
-    child.stdout.on('data', (chunk) => { stdout += chunk; });
-    child.stderr.on('data', (chunk) => { stderr += chunk; });
-    child.on('error', reject);
-    child.on('close', (code, signal) => resolve({ code, signal, stdout, stderr }));
-  })));
+  const results = await Promise.all(
+    Array.from(
+      { length: 4 },
+      () =>
+        new Promise((resolve, reject) => {
+          const child = spawn(process.execPath, ['-e', script], {
+            env: { ...process.env, TMPDIR: directory, JEST_WORKER_ID: '1' },
+            stdio: ['ignore', 'pipe', 'pipe'],
+          });
+          let stdout = '';
+          let stderr = '';
+          child.stdout.on('data', (chunk) => {
+            stdout += chunk;
+          });
+          child.stderr.on('data', (chunk) => {
+            stderr += chunk;
+          });
+          child.on('error', reject);
+          child.on('close', (code, signal) => resolve({ code, signal, stdout, stderr }));
+        })
+    )
+  );
   for (const result of results) {
-    expect(result).toEqual({ code: 0, signal: null, stdout: '32 isolated repositories\n', stderr: '' });
+    expect(result).toEqual({
+      code: 0,
+      signal: null,
+      stdout: '32 isolated repositories\n',
+      stderr: '',
+    });
   }
   expect(fs.readFileSync(path.join(sentinel, 'keep'), 'utf8')).toBe('foreign bytes');
   expect(fs.readdirSync(directory)).toEqual(['foreign-repository']);

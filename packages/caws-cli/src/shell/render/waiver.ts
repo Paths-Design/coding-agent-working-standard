@@ -15,10 +15,7 @@
 // keeps test output deterministic and matches the discipline that the
 // rest of the shell follows.
 
-import type {
-  Waiver,
-  WaiverEffectiveness,
-} from '../../kernel';
+import type { Waiver, WaiverEffectiveness } from '../../kernel';
 
 export interface RenderWaiverSummaryInput {
   readonly waiver: Waiver;
@@ -97,8 +94,7 @@ export function renderWaiverDetail(input: RenderWaiverDetailInput): string {
     lines.push(`    Revoked at:     ${w.revocation.revoked_at}`);
     if (w.revocation.revoked_by !== undefined)
       lines.push(`    Revoked by:     ${w.revocation.revoked_by}`);
-    if (w.revocation.reason !== undefined)
-      lines.push(`    Reason:         ${w.revocation.reason}`);
+    if (w.revocation.reason !== undefined) lines.push(`    Reason:         ${w.revocation.reason}`);
   }
   return lines.join('\n');
 }

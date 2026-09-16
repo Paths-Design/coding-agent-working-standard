@@ -85,14 +85,7 @@ export const CODEX_PACK: HookPackV1 = {
     'Codex vendor adapter: hooks.json wiring, CAWS.md reference, and codex-specific ' +
     'lib overrides. Shared hook logic is in the `shared` pack under .caws/hooks/.',
   activation: 'restart_required',
-  lifecycleEvents: [
-    'pre_bash',
-    'pre_write',
-    'pre_edit',
-    'session_start',
-    'pre_compact',
-    'stop',
-  ],
+  lifecycleEvents: ['pre_bash', 'pre_write', 'pre_edit', 'session_start', 'pre_compact', 'stop'],
   stateModel: {
     reads: [
       '.caws/specs/*.yaml',

@@ -112,14 +112,16 @@ describe('caws message prune retention cleanup', () => {
     expect(prune.description).toContain('preserved');
     const status = prune.options.find((option) => option.flag === '--status <status>');
     expect(status.allowedValues).toEqual(['delivered', 'undelivered-to-dead-session']);
-    expect(prune.options.map((option) => option.flag)).toEqual(expect.arrayContaining([
-      '--status <status>',
-      '--older-than-ms <ms>',
-      '--include <ids>',
-      '--exclude <ids>',
-      '--apply',
-      '--json',
-    ]));
+    expect(prune.options.map((option) => option.flag)).toEqual(
+      expect.arrayContaining([
+        '--status <status>',
+        '--older-than-ms <ms>',
+        '--include <ids>',
+        '--exclude <ids>',
+        '--apply',
+        '--json',
+      ])
+    );
   });
 
   test('dry-run reports delivered candidates and skipped undelivered messages without mutation', () => {
@@ -162,9 +164,16 @@ describe('caws message prune retention cleanup', () => {
     runSend(root, 'alice', 'bob', 'delivered');
     runSend(root, 'alice', 'bob', 'waiting');
     runPoll(root, 'bob');
-    const deliveredId = messageRecords(root).find((record) => record.record === 'message' && record.text === 'delivered').id;
+    const deliveredId = messageRecords(root).find(
+      (record) => record.record === 'message' && record.text === 'delivered'
+    ).id;
 
-    const result = runPrune(root, { status: 'delivered', include: [deliveredId], apply: true, json: true });
+    const result = runPrune(root, {
+      status: 'delivered',
+      include: [deliveredId],
+      apply: true,
+      json: true,
+    });
 
     expect(result.code).toBe(0);
     const payload = JSON.parse(result.out);
@@ -176,9 +185,15 @@ describe('caws message prune retention cleanup', () => {
       pruned_delivery_records: 1,
     });
     const records = messageRecords(root);
-    expect(records.some((record) => record.record === 'message' && record.text === 'delivered')).toBe(false);
-    expect(records.some((record) => record.record === 'delivery' && record.deliver_id === deliveredId)).toBe(false);
-    expect(records.some((record) => record.record === 'message' && record.text === 'waiting')).toBe(true);
+    expect(
+      records.some((record) => record.record === 'message' && record.text === 'delivered')
+    ).toBe(false);
+    expect(
+      records.some((record) => record.record === 'delivery' && record.deliver_id === deliveredId)
+    ).toBe(false);
+    expect(records.some((record) => record.record === 'message' && record.text === 'waiting')).toBe(
+      true
+    );
   });
 });
 
@@ -255,8 +270,12 @@ describe('caws message prune dead-recipient selector (CAWS-DEFECT-MESSAGE-PRUNE-
     expect(result.out).toContain('Pruned 1 undelivered message(s) to dead recipient(s)');
     expect(result.out).toContain('Preserved 1 message(s) for live or idle recipient(s)');
     const records = messageRecords(root);
-    expect(records.some((record) => record.record === 'message' && record.id === 'dead-1')).toBe(false);
-    expect(records.some((record) => record.record === 'message' && record.id === 'live-old')).toBe(true);
+    expect(records.some((record) => record.record === 'message' && record.id === 'dead-1')).toBe(
+      false
+    );
+    expect(records.some((record) => record.record === 'message' && record.id === 'live-old')).toBe(
+      true
+    );
     const archive = fs.readFileSync(path.join(root, '.caws', 'messages.jsonl.archive'), 'utf8');
     expect(archive).toContain('"selector":"undelivered-to-dead-session"');
   });

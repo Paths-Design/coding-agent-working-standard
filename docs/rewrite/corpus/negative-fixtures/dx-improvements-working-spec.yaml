@@ -128,7 +128,7 @@ tasks:
       - src/error-handler.js
       - src/commands/*.js
     tests_required: true
-    
+
   - id: T2
     title: TypeScript Auto-Detection
     effort_hours: 24
@@ -137,7 +137,7 @@ tasks:
       - src/generators/jest-config.js
       - templates/typescript/
     tests_required: true
-    
+
   - id: T3
     title: Status Command
     effort_hours: 16
@@ -146,7 +146,7 @@ tasks:
       - src/utils/status-display.js
       - src/utils/suggestions-engine.js
     tests_required: true
-    
+
   - id: T4
     title: Diagnose Command
     effort_hours: 24
@@ -155,7 +155,7 @@ tasks:
       - src/utils/health-checks/*.js
       - src/utils/auto-fix.js
     tests_required: true
-    
+
   - id: T5
     title: Templates List Command
     effort_hours: 8
@@ -184,7 +184,7 @@ ai_assessment:
 # Success Metrics
 success_metrics:
   quantitative:
-    - time_to_first_success_reduction: 66%  # 15min → 5min
+    - time_to_first_success_reduction: 66% # 15min → 5min
     - error_clarity_rating: 8.5
     - common_issue_detection_rate: 80%
     - auto_fix_success_rate: 75%
@@ -226,7 +226,7 @@ review:
 
 # Release Strategy
 release:
-  type: minor  # v3.3.0
+  type: minor # v3.3.0
   changelog_highlights:
     - Enhanced error messages with actionable suggestions
     - TypeScript project auto-detection and configuration
@@ -236,7 +236,7 @@ release:
   breaking_changes: none
   deprecations: none
   migration_guide_required: false
-  
+
 # Timeline
 timeline:
   estimated_duration_weeks: 2
@@ -250,4 +250,3 @@ timeline:
       - Templates list (T5)
       - Documentation updates
       - Testing and QA
-

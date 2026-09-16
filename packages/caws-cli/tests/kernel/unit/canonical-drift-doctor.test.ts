@@ -27,10 +27,12 @@ const REGISTRY_WITH_WORKTREE = {
 
 describe('doctor.canonical.mis_parked_head (CANONICAL-DRIFT-GUARDS-001)', () => {
   test('A1: parked HEAD + active worktree => WARN finding naming both branches + repair', () => {
-    const findings = inspectProjectState(input({
-      worktrees: REGISTRY_WITH_WORKTREE,
-      canonicalBranchObservation: { currentBranch: 'feat/other', baseBranch: 'main' },
-    })).findings;
+    const findings = inspectProjectState(
+      input({
+        worktrees: REGISTRY_WITH_WORKTREE,
+        canonicalBranchObservation: { currentBranch: 'feat/other', baseBranch: 'main' },
+      })
+    ).findings;
 
     const hit = findings.find((f) => f.rule === 'doctor.canonical.mis_parked_head');
     expect(hit).toBeDefined();
@@ -44,25 +46,31 @@ describe('doctor.canonical.mis_parked_head (CANONICAL-DRIFT-GUARDS-001)', () => 
   });
 
   test('A2a: zero worktrees => no finding (idle repo parked anywhere is not drift)', () => {
-    const findings = inspectProjectState(input({
-      worktrees: {},
-      canonicalBranchObservation: { currentBranch: 'feat/other', baseBranch: 'main' },
-    })).findings;
+    const findings = inspectProjectState(
+      input({
+        worktrees: {},
+        canonicalBranchObservation: { currentBranch: 'feat/other', baseBranch: 'main' },
+      })
+    ).findings;
     expect(findings.find((f) => f.rule === 'doctor.canonical.mis_parked_head')).toBeUndefined();
   });
 
   test('A2b: HEAD on base => no finding (healthy state)', () => {
-    const findings = inspectProjectState(input({
-      worktrees: REGISTRY_WITH_WORKTREE,
-      canonicalBranchObservation: { currentBranch: 'main', baseBranch: 'main' },
-    })).findings;
+    const findings = inspectProjectState(
+      input({
+        worktrees: REGISTRY_WITH_WORKTREE,
+        canonicalBranchObservation: { currentBranch: 'main', baseBranch: 'main' },
+      })
+    ).findings;
     expect(findings.find((f) => f.rule === 'doctor.canonical.mis_parked_head')).toBeUndefined();
   });
 
   test('A2c: observation absent => no finding (missing != malformed; kernel skips)', () => {
-    const findings = inspectProjectState(input({
-      worktrees: REGISTRY_WITH_WORKTREE,
-    })).findings;
+    const findings = inspectProjectState(
+      input({
+        worktrees: REGISTRY_WITH_WORKTREE,
+      })
+    ).findings;
     expect(findings.find((f) => f.rule === 'doctor.canonical.mis_parked_head')).toBeUndefined();
   });
 });

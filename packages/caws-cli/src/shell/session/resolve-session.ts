@@ -228,9 +228,7 @@ interface CallerSessionPointerShape {
   readonly last_seen_at: string;
 }
 
-function isCallerSessionPointerShape(
-  v: unknown
-): v is CallerSessionPointerShape {
+function isCallerSessionPointerShape(v: unknown): v is CallerSessionPointerShape {
   if (typeof v !== 'object' || v === null) return false;
   const o = v as Record<string, unknown>;
   return (
@@ -253,11 +251,7 @@ function sessionStateHomes(repoRoot: string): {
   legacyDir: string;
   all: string[];
 } {
-  const newDir = path.join(
-    repoRoot,
-    '.caws',
-    DURABLE_ENVELOPE_NEW_DIRNAME
-  );
+  const newDir = path.join(repoRoot, '.caws', DURABLE_ENVELOPE_NEW_DIRNAME);
   const legacyDir = path.join(repoRoot, DURABLE_ENVELOPE_LEGACY_DIRNAME);
   return { newDir, legacyDir, all: [newDir, legacyDir] };
 }
@@ -326,10 +320,7 @@ function readCallerSessionPointerFromDir(args: {
 
   // Freshness filter on last_seen_at, same window as envelopes.
   const lastSeenMs = Date.parse(parsed.last_seen_at);
-  if (
-    !Number.isFinite(lastSeenMs) ||
-    lastSeenMs < args.nowMs - DURABLE_ENVELOPE_FRESHNESS_MS
-  ) {
+  if (!Number.isFinite(lastSeenMs) || lastSeenMs < args.nowMs - DURABLE_ENVELOPE_FRESHNESS_MS) {
     return null; // stale
   }
   return parsed.session_id;
@@ -360,10 +351,7 @@ function readCallerSessionPointerFromDir(args: {
  * loadWorktrees is fail-open (ok({}) on a missing worktrees.json), so an
  * absent registry contributes no owner and the caller falls through as before.
  */
-function resolveOwnerFromCwd(
-  cawsDir: string,
-  worktreeRoot: string
-): SessionIdentity | null {
+function resolveOwnerFromCwd(cawsDir: string, worktreeRoot: string): SessionIdentity | null {
   const registryResult = loadWorktrees(cawsDir);
   if (!registryResult.ok) return null;
   const registry: WorktreeRegistry = registryResult.value;
@@ -377,25 +365,17 @@ function resolveOwnerFromCwd(
     const recordReal = realpathSafe(record.path);
     // Ancestor-or-equal: recordReal is cwdReal, or cwdReal is beneath it.
     if (recordReal !== cwdReal) {
-      const withSep = recordReal.endsWith(path.sep)
-        ? recordReal
-        : recordReal + path.sep;
+      const withSep = recordReal.endsWith(path.sep) ? recordReal : recordReal + path.sep;
       if (!cwdReal.startsWith(withSep)) continue;
     }
     const depth = recordReal.split(path.sep).length;
-    if (
-      depth > bestDepth ||
-      (depth === bestDepth && best !== null)
-    ) {
+    if (depth > bestDepth || (depth === bestDepth && best !== null)) {
       best = record;
       bestDepth = depth;
     }
   }
   if (best === null || best.owner === undefined) return null;
-  if (
-    typeof best.owner.session_id !== 'string' ||
-    best.owner.session_id.length === 0
-  ) {
+  if (typeof best.owner.session_id !== 'string' || best.owner.session_id.length === 0) {
     return null;
   }
   return best.owner;
@@ -459,11 +439,10 @@ function isDurableEnvelopeShape(v: unknown): v is DurableEnvelopeShape {
  * silently skipped — never deleted from the read path. Cleanup is
  * operator-driven (`rm -rf .caws/sessions/<id>/`).
  */
-function scanDurableEnvelopes(args: {
-  repoRoot: string;
-  dirs: string[];
-  now: Date;
-}): { candidates: DurableEnvelopeCandidate[]; warnings: Diagnostic[] } {
+function scanDurableEnvelopes(args: { repoRoot: string; dirs: string[]; now: Date }): {
+  candidates: DurableEnvelopeCandidate[];
+  warnings: Diagnostic[];
+} {
   const warnings: Diagnostic[] = [];
   const candidates: DurableEnvelopeCandidate[] = [];
   const seenSessionIds = new Set<string>();
@@ -579,20 +558,20 @@ function scanDurableEnvelopes(args: {
 }
 
 // (CAWS-REFACTOR-SHARED-UTILS-001) diag + infoDiag delegate to storeDiagnostic.
-function diag(
-  rule: string,
-  message: string,
-  data?: Record<string, unknown>
-): Diagnostic {
-  return storeDiagnostic(rule, message, data !== undefined ? { severity: 'error', data } : { severity: 'error' });
+function diag(rule: string, message: string, data?: Record<string, unknown>): Diagnostic {
+  return storeDiagnostic(
+    rule,
+    message,
+    data !== undefined ? { severity: 'error', data } : { severity: 'error' }
+  );
 }
 
-function infoDiag(
-  rule: string,
-  message: string,
-  data?: Record<string, unknown>
-): Diagnostic {
-  return storeDiagnostic(rule, message, data !== undefined ? { severity: 'info', data } : { severity: 'info' });
+function infoDiag(rule: string, message: string, data?: Record<string, unknown>): Diagnostic {
+  return storeDiagnostic(
+    rule,
+    message,
+    data !== undefined ? { severity: 'info', data } : { severity: 'info' }
+  );
 }
 
 function readCapsule(
@@ -757,9 +736,7 @@ function cleanupSupersededCapsules(
   return { deleted, warnings };
 }
 
-function mintCapsule(
-  opts: ResolveSessionOptions
-): Result<{
+function mintCapsule(opts: ResolveSessionOptions): Result<{
   capsule: SessionCapsule;
   capsulePath: string;
   cleanupWarnings: Diagnostic[];
@@ -776,9 +753,7 @@ function mintCapsule(
   const env = opts.env ?? process.env;
   const explicit = opts.platform;
   const platform: string =
-    typeof explicit === 'string' && isAgentSurface(explicit)
-      ? explicit
-      : surfaceFromEnv(env);
+    typeof explicit === 'string' && isAgentSurface(explicit) ? explicit : surfaceFromEnv(env);
   const sessionId = `caws-${suffix}`;
   const capsule: SessionCapsule = {
     session_id: sessionId,
@@ -804,10 +779,7 @@ function mintCapsule(
   const cleanup = cleanupSupersededCapsules(sessionsDir, opts.worktreeRoot);
 
   const capsulePath = path.join(sessionsDir, `${sessionId}.json`);
-  const writeResult = writeFileAtomic(
-    capsulePath,
-    JSON.stringify(capsule, null, 2) + '\n'
-  );
+  const writeResult = writeFileAtomic(capsulePath, JSON.stringify(capsule, null, 2) + '\n');
   if (!writeResult.ok) {
     return err([
       diag(
@@ -868,17 +840,25 @@ interface AgentPidRecord {
 }
 
 /** Default PID-walk: walk the current process's ancestors via ps. */
-function defaultAgentPidWalk(names: readonly string[]): { pid: number; startEpoch: number | null } | null {
+function defaultAgentPidWalk(
+  names: readonly string[]
+): { pid: number; startEpoch: number | null } | null {
   if (names.length === 0) return null;
   try {
     let pid = process.pid;
     for (let hop = 0; hop < 16 && pid > 1; hop++) {
-      const comm = execSync(`ps -o comm= -p ${pid}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+      const comm = execSync(`ps -o comm= -p ${pid}`, {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore'],
+      }).trim();
       const base = comm.split('/').pop() ?? '';
       if (names.includes(base)) {
         let startEpoch: number | null = null;
         try {
-          const lstart = execSync(`ps -o lstart= -p ${pid}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+          const lstart = execSync(`ps -o lstart= -p ${pid}`, {
+            encoding: 'utf8',
+            stdio: ['pipe', 'pipe', 'ignore'],
+          }).trim();
           const ms = Date.parse(lstart);
           startEpoch = Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
         } catch {
@@ -886,7 +866,10 @@ function defaultAgentPidWalk(names: readonly string[]): { pid: number; startEpoc
         }
         return { pid, startEpoch };
       }
-      const ppidOut = execSync(`ps -o ppid= -p ${pid}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+      const ppidOut = execSync(`ps -o ppid= -p ${pid}`, {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore'],
+      }).trim();
       const next = parseInt(ppidOut, 10);
       if (!Number.isFinite(next) || next <= 1 || next === pid) break;
       pid = next;
@@ -922,7 +905,11 @@ export function resolveAgentPidIdentity(args: {
   const located = walk(names);
   if (located === null) return null;
 
-  const recordPath = path.join(args.cawsDir, 'sessions', `${AGENT_PID_RECORD_PREFIX}${located.pid}.json`);
+  const recordPath = path.join(
+    args.cawsDir,
+    'sessions',
+    `${AGENT_PID_RECORD_PREFIX}${located.pid}.json`
+  );
   let raw: string;
   try {
     raw = fs.readFileSync(recordPath, 'utf8');
@@ -944,10 +931,15 @@ export function resolveAgentPidIdentity(args: {
   // missing values, coercible strings and invalid numbers are not observations.
   if (args.requireProcessInstanceMatch === true) {
     if (
-      typeof rec.started_at !== 'number' || !Number.isSafeInteger(rec.started_at) || rec.started_at <= 0 ||
-      typeof located.startEpoch !== 'number' || !Number.isSafeInteger(located.startEpoch) || located.startEpoch <= 0 ||
+      typeof rec.started_at !== 'number' ||
+      !Number.isSafeInteger(rec.started_at) ||
+      rec.started_at <= 0 ||
+      typeof located.startEpoch !== 'number' ||
+      !Number.isSafeInteger(located.startEpoch) ||
+      located.startEpoch <= 0 ||
       rec.started_at !== located.startEpoch
-    ) return null;
+    )
+      return null;
   }
 
   // Retain the legacy attribution comparison for non-ownership consumers.
@@ -957,7 +949,8 @@ export function resolveAgentPidIdentity(args: {
     }
   }
 
-  const platform = typeof rec.surface === 'string' && rec.surface.length > 0 ? rec.surface : undefined;
+  const platform =
+    typeof rec.surface === 'string' && rec.surface.length > 0 ? rec.surface : undefined;
   return {
     session_id: rec.session_id,
     ...(platform !== undefined ? { platform } : {}),
@@ -970,9 +963,7 @@ function parseProcessNames(raw: string | undefined): readonly string[] {
   return raw.split(/\s+/).filter((n) => n.length > 0);
 }
 
-export function resolveSession(
-  opts: ResolveSessionOptions
-): Result<ResolvedSession> {
+export function resolveSession(opts: ResolveSessionOptions): Result<ResolvedSession> {
   return resolveSessionIdentity(opts, true);
 }
 
@@ -982,9 +973,7 @@ export function resolveSession(
  * Only caller-carried environment or a correlated agent process can resume
  * an identity. Explicit creation/takeover may opt in to minting a new one.
  */
-export function resolveCallerSession(
-  opts: ResolveSessionOptions
-): Result<ResolvedSession> {
+export function resolveCallerSession(opts: ResolveSessionOptions): Result<ResolvedSession> {
   return resolveSessionIdentity(opts, false);
 }
 
@@ -1062,11 +1051,7 @@ function resolveSessionIdentity(
   //      tier-2 does: never alias a broken context into a shared identity.
   //      Stays below CLAUDE_SESSION_ID so the operator override still wins.
   const claudeCodeId = env['CLAUDE_CODE_SESSION_ID'];
-  if (
-    typeof claudeCodeId === 'string' &&
-    claudeCodeId.length > 0 &&
-    claudeCodeId !== 'unknown'
-  ) {
+  if (typeof claudeCodeId === 'string' && claudeCodeId.length > 0 && claudeCodeId !== 'unknown') {
     return ok({
       identity: { session_id: claudeCodeId, platform: 'claude-code' },
       source: 'claude_code_env',
@@ -1107,11 +1092,7 @@ function resolveSessionIdentity(
   //      true caller. Refuse literal 'unknown'/empty (same discipline as the
   //      sibling tiers).
   const dshSessionId = env['DSH_SESSION_ID'];
-  if (
-    typeof dshSessionId === 'string' &&
-    dshSessionId.length > 0 &&
-    dshSessionId !== 'unknown'
-  ) {
+  if (typeof dshSessionId === 'string' && dshSessionId.length > 0 && dshSessionId !== 'unknown') {
     return ok({
       identity: { session_id: dshSessionId, platform: 'dsh' },
       source: 'dsh_env',
@@ -1126,11 +1107,7 @@ function resolveSessionIdentity(
   //      surfaceFromEnv (which may return 'none' for the generic var — that is
   //      an honest attribution, better than a wrong one).
   const cawsId = env['CAWS_SESSION_ID'];
-  if (
-    typeof cawsId === 'string' &&
-    cawsId.length > 0 &&
-    cawsId !== 'unknown'
-  ) {
+  if (typeof cawsId === 'string' && cawsId.length > 0 && cawsId !== 'unknown') {
     return ok({
       identity: { session_id: cawsId, platform: surfaceFromEnv(env) },
       source: 'caws_env',
@@ -1256,15 +1233,10 @@ function resolveSessionIdentity(
         env['CAWS_SESSION_ID'],
         env['HOOK_SESSION_ID'],
         env['CURSOR_TRACE_ID'],
-      ].filter(
-        (v): v is string =>
-          typeof v === 'string' && v.length > 0 && v !== 'unknown'
-      );
+      ].filter((v): v is string => typeof v === 'string' && v.length > 0 && v !== 'unknown');
       const corroborated = envSessionIds.includes(callerId);
       if (corroborated) {
-        const matches = envScan.candidates.filter(
-          (c) => c.envelope.session_id === callerId
-        );
+        const matches = envScan.candidates.filter((c) => c.envelope.session_id === callerId);
         if (matches.length === 1) {
           const mine = matches[0]!;
           return ok(
@@ -1361,7 +1333,7 @@ function resolveSessionIdentity(
         source: 'durable_hook_envelope',
         envelopePath: sole.envelopePath,
       },
-      envScan.warnings.length > 0 ? envScan.warnings : undefined,
+      envScan.warnings.length > 0 ? envScan.warnings : undefined
     );
   }
   // envScan.candidates.length === 0: fall through to capsule.
@@ -1403,7 +1375,11 @@ function resolveSessionFallback(opts: ResolveSessionOptions): Result<ResolvedSes
       diag(
         SHELL_RULES.SESSION_NO_STABLE_IDENTITY,
         'No stable session identity could be resolved. Resume the original harness session or use the CAWS_SESSION_ID continuation saved from creation. Do not copy an owner id from the registry or mint another capsule to recover ownership. A deliberate transfer requires user-authorized caws claim --takeover.',
-        { platform: opts.platform ?? process.platform, cawsDir: opts.cawsDir, worktreeRoot: opts.worktreeRoot }
+        {
+          platform: opts.platform ?? process.platform,
+          cawsDir: opts.cawsDir,
+          worktreeRoot: opts.worktreeRoot,
+        }
       ),
     ]);
   }
@@ -1422,7 +1398,7 @@ function resolveSessionFallback(opts: ResolveSessionOptions): Result<ResolvedSes
       source: 'minted',
       capsulePath: minted.value.capsulePath,
     },
-    cleanupWarnings.length > 0 ? cleanupWarnings : undefined,
+    cleanupWarnings.length > 0 ? cleanupWarnings : undefined
   );
 }
 
@@ -1590,7 +1566,9 @@ function readAllCapsules(
       });
     } else {
       rejectedCount++;
-      rejectionReasons.push(`uncorroborated-capsule: ${w.name} (does not identify the invoking caller)`);
+      rejectionReasons.push(
+        `uncorroborated-capsule: ${w.name} (does not identify the invoking caller)`
+      );
     }
   }
   if (candidates.length > 0) {
@@ -1649,47 +1627,81 @@ function readAllCapsules(
  * precedence as lifecycle attribution. Reads environment, process correlation
  * and caches; never mutates or mints. See SessionCandidates for the contract.
  */
-export function resolveSessionCandidates(
-  opts: ResolveCandidatesOptions
-): SessionCandidates {
-  const caller = opts.caller !== undefined ? ok(opts.caller) : resolveCallerSession({
-    ...opts,
-    worktreeRoot: repoRootFromCawsDir(opts.cawsDir),
-    allowMint: false,
-  });
+export function resolveSessionCandidates(opts: ResolveCandidatesOptions): SessionCandidates {
+  const caller =
+    opts.caller !== undefined
+      ? ok(opts.caller)
+      : resolveCallerSession({
+          ...opts,
+          worktreeRoot: repoRootFromCawsDir(opts.cawsDir),
+          allowMint: false,
+        });
   const candidates: SessionCandidate[] = caller.ok ? [caller.value] : [];
   const ids = new Set(candidates.map((c) => c.identity.session_id));
   const trace: CandidateTraceEntry[] = caller.ok
-    ? [{ source: caller.value.source, outcome: 'admitted', count: 1,
-        admittedIds: [caller.value.identity.session_id] }]
-    : [{ source: 'caws_env', outcome: 'absent', count: 0,
-        reason: caller.errors.map((d) => d.message).join('; ') }];
+    ? [
+        {
+          source: caller.value.source,
+          outcome: 'admitted',
+          count: 1,
+          admittedIds: [caller.value.identity.session_id],
+        },
+      ]
+    : [
+        {
+          source: 'caws_env',
+          outcome: 'absent',
+          count: 0,
+          reason: caller.errors.map((d) => d.message).join('; '),
+        },
+      ];
 
   const repoRoot = repoRootFromCawsDir(opts.cawsDir);
   const homes = sessionStateHomes(repoRoot);
   const scan = scanDurableEnvelopes({
-    repoRoot, dirs: homes.all, now: opts.now ? opts.now() : new Date(),
+    repoRoot,
+    dirs: homes.all,
+    now: opts.now ? opts.now() : new Date(),
   });
   for (const entry of scan.candidates) {
     const id = entry.envelope.session_id;
     if (caller.ok && ids.has(id)) {
       // Preserve caller attribution even if an old envelope labels it differently.
-      candidates.push({ identity: caller.value.identity,
-        source: 'durable_hook_envelope', envelopePath: entry.envelopePath });
-      trace.push({ source: 'durable_hook_envelope', outcome: 'admitted', count: 1,
-        admittedIds: [id] });
+      candidates.push({
+        identity: caller.value.identity,
+        source: 'durable_hook_envelope',
+        envelopePath: entry.envelopePath,
+      });
+      trace.push({
+        source: 'durable_hook_envelope',
+        outcome: 'admitted',
+        count: 1,
+        admittedIds: [id],
+      });
     } else {
-      trace.push({ source: 'durable_hook_envelope', outcome: 'rejected', count: 0,
-        reason: `uncorroborated-envelope: ${entry.envelopePath} (does not identify the invoking caller)` });
+      trace.push({
+        source: 'durable_hook_envelope',
+        outcome: 'rejected',
+        count: 0,
+        reason: `uncorroborated-envelope: ${entry.envelopePath} (does not identify the invoking caller)`,
+      });
     }
   }
   if (scan.candidates.length === 0) {
-    trace.push({ source: 'durable_hook_envelope', outcome: 'absent', count: 0,
-      reason: 'no fresh repo-matched durable envelopes' });
+    trace.push({
+      source: 'durable_hook_envelope',
+      outcome: 'absent',
+      count: 0,
+      reason: 'no fresh repo-matched durable envelopes',
+    });
   }
   for (const warning of scan.warnings) {
-    trace.push({ source: 'durable_hook_envelope', outcome: 'rejected', count: 0,
-      reason: warning.message });
+    trace.push({
+      source: 'durable_hook_envelope',
+      outcome: 'rejected',
+      count: 0,
+      reason: warning.message,
+    });
   }
   const capsules = readAllCapsules(opts.cawsDir, ids);
   candidates.push(...capsules.candidates);
@@ -1725,9 +1737,7 @@ export function admitsOwner(
  * which sources were consulted and why none matched, to satisfy the
  * spec's non_functional.reliability invariant against silent fallbacks.
  */
-export function describeCandidateTrace(
-  candidates: SessionCandidates
-): string {
+export function describeCandidateTrace(candidates: SessionCandidates): string {
   const lines: string[] = [];
   for (const entry of candidates.trace) {
     const base = `  - ${entry.source}: ${entry.outcome}`;

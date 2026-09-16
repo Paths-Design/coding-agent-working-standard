@@ -65,13 +65,21 @@ const NOTICE =
 test('A1: a successful waiver create prints the byte-stable gate-run-only notice', () => {
   const root = mkRepo(true);
   const r = spawnCli(root, [
-    'waiver', 'create', 'WV-1',
-    '--gate', 'scope_boundary',
-    '--spec', 'SPEC-X',
-    '--title', 'test waiver',
-    '--reason', 'because',
-    '--approved-by', 'reviewer',
-    '--expires-at', '2026-12-31T00:00:00.000Z',
+    'waiver',
+    'create',
+    'WV-1',
+    '--gate',
+    'scope_boundary',
+    '--spec',
+    'SPEC-X',
+    '--title',
+    'test waiver',
+    '--reason',
+    'because',
+    '--approved-by',
+    'reviewer',
+    '--expires-at',
+    '2026-12-31T00:00:00.000Z',
   ]);
   expect(r.status).toBe(0);
   expect(r.stdout).toMatch(NOTICE);
@@ -94,13 +102,21 @@ test('A2: waiver group and leaf help state the gate-run-only boundary and name r
 test('A3: applicability is unchanged when policy declares no gates (accepts as before; notice appears regardless)', () => {
   const root = mkRepo(false);
   const r = spawnCli(root, [
-    'waiver', 'create', 'WV-2',
-    '--gate', 'scope_boundary',
-    '--spec', 'SPEC-X',
-    '--title', 'test waiver',
-    '--reason', 'because',
-    '--approved-by', 'reviewer',
-    '--expires-at', '2026-12-31T00:00:00.000Z',
+    'waiver',
+    'create',
+    'WV-2',
+    '--gate',
+    'scope_boundary',
+    '--spec',
+    'SPEC-X',
+    '--title',
+    'test waiver',
+    '--reason',
+    'because',
+    '--approved-by',
+    'reviewer',
+    '--expires-at',
+    '2026-12-31T00:00:00.000Z',
   ]);
   // Pre-slice behavior: the kernel validates shape and duplicate state only;
   // gate applicability is derived at gates-run time, so create ACCEPTS.

@@ -251,28 +251,44 @@ describe('canonicalJson: each individual unsupported type is independently rejec
 
   test('L87: undefined top-level throws CANONICAL_UNSUPPORTED_TYPE', () => {
     let caught: unknown;
-    try { canonicalJson(undefined); } catch (e) { caught = e; }
+    try {
+      canonicalJson(undefined);
+    } catch (e) {
+      caught = e;
+    }
     expect(caught).toBeInstanceOf(EvidenceCanonicalError);
     expect((caught as EvidenceCanonicalError).rule).toBe(EVIDENCE_RULES.CANONICAL_UNSUPPORTED_TYPE);
   });
 
   test('L87: function top-level throws CANONICAL_UNSUPPORTED_TYPE', () => {
     let caught: unknown;
-    try { canonicalJson(function noop() {}); } catch (e) { caught = e; }
+    try {
+      canonicalJson(function noop() {});
+    } catch (e) {
+      caught = e;
+    }
     expect(caught).toBeInstanceOf(EvidenceCanonicalError);
     expect((caught as EvidenceCanonicalError).rule).toBe(EVIDENCE_RULES.CANONICAL_UNSUPPORTED_TYPE);
   });
 
   test('L87: symbol top-level throws CANONICAL_UNSUPPORTED_TYPE', () => {
     let caught: unknown;
-    try { canonicalJson(Symbol('x')); } catch (e) { caught = e; }
+    try {
+      canonicalJson(Symbol('x'));
+    } catch (e) {
+      caught = e;
+    }
     expect(caught).toBeInstanceOf(EvidenceCanonicalError);
     expect((caught as EvidenceCanonicalError).rule).toBe(EVIDENCE_RULES.CANONICAL_UNSUPPORTED_TYPE);
   });
 
   test('L87: bigint top-level throws CANONICAL_UNSUPPORTED_TYPE', () => {
     let caught: unknown;
-    try { canonicalJson(42n); } catch (e) { caught = e; }
+    try {
+      canonicalJson(42n);
+    } catch (e) {
+      caught = e;
+    }
     expect(caught).toBeInstanceOf(EvidenceCanonicalError);
     expect((caught as EvidenceCanonicalError).rule).toBe(EVIDENCE_RULES.CANONICAL_UNSUPPORTED_TYPE);
   });
@@ -288,7 +304,11 @@ describe('canonicalJson: each individual unsupported type is independently rejec
     // Asserting the "in array element" text kills both L128 ConditionalExpression
     // and LogicalOperator mutants that short-circuit the OR.
     let caught: unknown;
-    try { canonicalJson([1, function noop() {}, 3]); } catch (e) { caught = e; }
+    try {
+      canonicalJson([1, function noop() {}, 3]);
+    } catch (e) {
+      caught = e;
+    }
     expect(caught).toBeInstanceOf(EvidenceCanonicalError);
     expect((caught as EvidenceCanonicalError).rule).toBe(EVIDENCE_RULES.CANONICAL_UNSUPPORTED_TYPE);
     expect((caught as EvidenceCanonicalError).path).toBe('[1]');
@@ -298,7 +318,11 @@ describe('canonicalJson: each individual unsupported type is independently rejec
 
   test('L128: symbol in array element throws with "in array element" message', () => {
     let caught: unknown;
-    try { canonicalJson([Symbol('s')]); } catch (e) { caught = e; }
+    try {
+      canonicalJson([Symbol('s')]);
+    } catch (e) {
+      caught = e;
+    }
     expect(caught).toBeInstanceOf(EvidenceCanonicalError);
     expect((caught as EvidenceCanonicalError).rule).toBe(EVIDENCE_RULES.CANONICAL_UNSUPPORTED_TYPE);
     expect((caught as EvidenceCanonicalError).path).toBe('[0]');
@@ -308,7 +332,11 @@ describe('canonicalJson: each individual unsupported type is independently rejec
 
   test('L128: bigint in array element throws with "in array element" message', () => {
     let caught: unknown;
-    try { canonicalJson([1n]); } catch (e) { caught = e; }
+    try {
+      canonicalJson([1n]);
+    } catch (e) {
+      caught = e;
+    }
     expect(caught).toBeInstanceOf(EvidenceCanonicalError);
     expect((caught as EvidenceCanonicalError).rule).toBe(EVIDENCE_RULES.CANONICAL_UNSUPPORTED_TYPE);
     expect((caught as EvidenceCanonicalError).path).toBe('[0]');
@@ -332,7 +360,11 @@ describe('canonicalJson: each individual unsupported type is independently rejec
     // Asserting "for property" text kills both L153 ConditionalExpression and
     // LogicalOperator mutants.
     let caught: unknown;
-    try { canonicalJson({ fn: function noop() {} }); } catch (e) { caught = e; }
+    try {
+      canonicalJson({ fn: function noop() {} });
+    } catch (e) {
+      caught = e;
+    }
     expect(caught).toBeInstanceOf(EvidenceCanonicalError);
     expect((caught as EvidenceCanonicalError).rule).toBe(EVIDENCE_RULES.CANONICAL_UNSUPPORTED_TYPE);
     expect((caught as EvidenceCanonicalError).path).toBe('fn');
@@ -344,7 +376,11 @@ describe('canonicalJson: each individual unsupported type is independently rejec
 
   test('L153: symbol object value throws with "for property" message', () => {
     let caught: unknown;
-    try { canonicalJson({ sym: Symbol('s') }); } catch (e) { caught = e; }
+    try {
+      canonicalJson({ sym: Symbol('s') });
+    } catch (e) {
+      caught = e;
+    }
     expect(caught).toBeInstanceOf(EvidenceCanonicalError);
     expect((caught as EvidenceCanonicalError).rule).toBe(EVIDENCE_RULES.CANONICAL_UNSUPPORTED_TYPE);
     expect((caught as EvidenceCanonicalError).path).toBe('sym');
@@ -355,7 +391,11 @@ describe('canonicalJson: each individual unsupported type is independently rejec
 
   test('L153: bigint object value throws with "for property" message', () => {
     let caught: unknown;
-    try { canonicalJson({ bi: 1n }); } catch (e) { caught = e; }
+    try {
+      canonicalJson({ bi: 1n });
+    } catch (e) {
+      caught = e;
+    }
     expect(caught).toBeInstanceOf(EvidenceCanonicalError);
     expect((caught as EvidenceCanonicalError).rule).toBe(EVIDENCE_RULES.CANONICAL_UNSUPPORTED_TYPE);
     expect((caught as EvidenceCanonicalError).path).toBe('bi');

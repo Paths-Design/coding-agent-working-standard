@@ -124,7 +124,10 @@ describe('doctor.hooks.pack_local_growth (CAWS-DEFECT-HOOK-DRIFT-NO-NONDESTRUCTI
         fsObs({
           installedSharedPackVersion: 67,
           shippingSharedPackVersion: 68,
-          installedSharedPackBodyDrift: [growthRow('.caws/hooks/audit.sh'), staleRow('.caws/hooks/stop.sh')],
+          installedSharedPackBodyDrift: [
+            growthRow('.caws/hooks/audit.sh'),
+            staleRow('.caws/hooks/stop.sh'),
+          ],
         })
       )
     );
@@ -142,9 +145,9 @@ describe('doctor.hooks.pack_local_growth (CAWS-DEFECT-HOOK-DRIFT-NO-NONDESTRUCTI
         })
       )
     );
-    expect(
-      findingFor(stampOnly, DOCTOR_RULES.HOOKS_INSTALLED_PACK_VERSION_LAG)?.severity
-    ).toBe('warning');
+    expect(findingFor(stampOnly, DOCTOR_RULES.HOOKS_INSTALLED_PACK_VERSION_LAG)?.severity).toBe(
+      'warning'
+    );
   });
 
   test('A4: a growth row with a readable baseline but unreadable template never downgrades anything', () => {

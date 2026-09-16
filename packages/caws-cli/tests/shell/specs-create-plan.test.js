@@ -123,9 +123,7 @@ describe('caws specs create --plan', () => {
     });
 
     expect(result.code).toBe(1);
-    expect(result.err).toContain(
-      'Did you mean --contract "verifychain-detects-tamper:behavior"?'
-    );
+    expect(result.err).toContain('Did you mean --contract "verifychain-detects-tamper:behavior"?');
     expect(fs.existsSync(specPath(root, 'PLAN-CONTRACT-001'))).toBe(false);
     expect(fs.existsSync(eventsPath(root))).toBe(false);
   });

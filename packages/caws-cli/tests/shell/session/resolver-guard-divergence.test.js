@@ -163,9 +163,7 @@ describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A1: per-surface env sou
     });
     expect(result.ok).toBe(true);
     expect(result.value.source).toBe('codex_thread_env');
-    expect(result.value.identity.session_id).toBe(
-      '019f6289-d6d6-76b3-a6d1-04123944b2e6'
-    );
+    expect(result.value.identity.session_id).toBe('019f6289-d6d6-76b3-a6d1-04123944b2e6');
     expect(result.value.identity.platform).toBe('codex');
   });
 
@@ -520,7 +518,10 @@ describe('CAWS-AGENT-PID-SESSION-CORRELATION-001 — A7: agent-PID tier', () => 
       env: cleanEnv(),
       now: () => now,
       agentProcessNames: [], // unknown surface
-      agentPidWalkFn: () => { walkCalled = true; return null; },
+      agentPidWalkFn: () => {
+        walkCalled = true;
+        return null;
+      },
     });
     expect(walkCalled).toBe(false); // the walk was never invoked
     expect(result.ok).toBe(true);
@@ -534,12 +535,18 @@ describe('CAWS-AGENT-PID-SESSION-CORRELATION-001 — A7: agent-PID tier', () => 
     writeAgentPidRecord(cawsDir, 1111, 'sess_a', { startedAt: 1700 });
     writeAgentPidRecord(cawsDir, 2222, 'sess_b', { startedAt: 1800 });
     const a = resolveSession({
-      cawsDir, worktreeRoot: cawsDir, env: cleanEnv(), now: () => now,
+      cawsDir,
+      worktreeRoot: cawsDir,
+      env: cleanEnv(),
+      now: () => now,
       agentProcessNames: ['zcode-cli'],
       agentPidWalkFn: () => ({ pid: 1111, startEpoch: 1700 }),
     });
     const b = resolveSession({
-      cawsDir, worktreeRoot: cawsDir, env: cleanEnv(), now: () => now,
+      cawsDir,
+      worktreeRoot: cawsDir,
+      env: cleanEnv(),
+      now: () => now,
       agentProcessNames: ['zcode-cli'],
       agentPidWalkFn: () => ({ pid: 2222, startEpoch: 1800 }),
     });
@@ -569,15 +576,9 @@ describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A4: mint platform is a 
     expect(platform).not.toBe('linux');
     expect(platform).not.toBe('win32');
     // Must be a member of the AgentSurface enum.
-    expect([
-      'claude-code',
-      'codex',
-      'opencode',
-      'zcode',
-      'cursor',
-      'windsurf',
-      'none',
-    ]).toContain(platform);
+    expect(['claude-code', 'codex', 'opencode', 'zcode', 'cursor', 'windsurf', 'none']).toContain(
+      platform
+    );
   });
 
   test('minted platform derives from env (CODEX_THREAD_ID → codex)', () => {
@@ -661,13 +662,7 @@ describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A5: durable envelope pl
       );
       expect(run.status).toBe(0);
 
-      const envelopePath = path.join(
-        repoRoot,
-        '.caws',
-        'sessions',
-        sid,
-        '.session-envelope.json'
-      );
+      const envelopePath = path.join(repoRoot, '.caws', 'sessions', sid, '.session-envelope.json');
       expect(fs.existsSync(envelopePath)).toBe(true);
       const envelope = JSON.parse(fs.readFileSync(envelopePath, 'utf8'));
       // The fallback would be 'claude-code'; a codex session must never get it.
@@ -716,10 +711,19 @@ describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A6: precedence consolid
     // unknown. The pin/canonical cases pin the shadowing fix; the rest keep
     // the legacy chain for unpinned contexts.
     const cases = [
-      { env: { CAWS_AGENT_SURFACE: 'dsh', DSH_SESSION_ID: 'x', CLAUDE_SESSION_ID: 'a' }, want: 'x' },
-      { env: { CAWS_AGENT_SURFACE: 'codex', CODEX_THREAD_ID: 'c', CLAUDE_SESSION_ID: 'a' }, want: 'c' },
+      {
+        env: { CAWS_AGENT_SURFACE: 'dsh', DSH_SESSION_ID: 'x', CLAUDE_SESSION_ID: 'a' },
+        want: 'x',
+      },
+      {
+        env: { CAWS_AGENT_SURFACE: 'codex', CODEX_THREAD_ID: 'c', CLAUDE_SESSION_ID: 'a' },
+        want: 'c',
+      },
       { env: { CAWS_SESSION_ID: 'd', CLAUDE_SESSION_ID: 'a', DSH_SESSION_ID: 'x' }, want: 'd' },
-      { env: { CLAUDE_SESSION_ID: 'a', CLAUDE_CODE_SESSION_ID: 'b', CODEX_THREAD_ID: 'c' }, want: 'a' },
+      {
+        env: { CLAUDE_SESSION_ID: 'a', CLAUDE_CODE_SESSION_ID: 'b', CODEX_THREAD_ID: 'c' },
+        want: 'a',
+      },
       { env: { CLAUDE_CODE_SESSION_ID: 'b', CODEX_THREAD_ID: 'c' }, want: 'b' },
       { env: { CODEX_THREAD_ID: 'c', QWEN_CODE_SESSION_ID: 'q' }, want: 'c' },
       { env: { QWEN_CODE_SESSION_ID: 'q', DSH_SESSION_ID: 'x' }, want: 'q' },
@@ -772,7 +776,13 @@ describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A6: precedence consolid
     // session id would win over the lower-precedence variable this case sets,
     // and the assertion would read back the planted value instead of 'e'.
     const childEnv = { ...process.env, HOOK_SESSION_ID: 'e' };
-    for (const v of ['CLAUDE_SESSION_ID', 'CODEX_THREAD_ID', 'QWEN_CODE_SESSION_ID', 'CAWS_SESSION_ID', 'CURSOR_TRACE_ID'])
+    for (const v of [
+      'CLAUDE_SESSION_ID',
+      'CODEX_THREAD_ID',
+      'QWEN_CODE_SESSION_ID',
+      'CAWS_SESSION_ID',
+      'CURSOR_TRACE_ID',
+    ])
       delete childEnv[v];
     // Plant a HIGHER-precedence id, exactly as a real harness would.
     childEnv.CLAUDE_CODE_SESSION_ID = 'ambient-leak-sentinel';
@@ -810,10 +820,7 @@ describe('CAWS-SESSION-RESOLVER-GUARD-DIVERGENCE-001 — A6: precedence consolid
 
   test('both write guards source the shared helper and pass the resolved id to the oracle', () => {
     for (const guard of ['bash-write-guard.sh', 'worktree-write-guard.sh']) {
-      const src = fs.readFileSync(
-        path.join(path.dirname(SHARED_LIB), '..', guard),
-        'utf8'
-      );
+      const src = fs.readFileSync(path.join(path.dirname(SHARED_LIB), '..', guard), 'utf8');
       expect(src).toMatch(/lib\/session-id\.sh/);
       expect(src).toMatch(/resolve_caws_session_id_with_payload/);
       // The oracle call uses the resolved CAWS_ORACLE_SESSION_ID, not raw HOOK_SESSION_ID.

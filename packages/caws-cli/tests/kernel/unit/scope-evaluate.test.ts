@@ -533,21 +533,13 @@ describe('evaluatePath: scope.out — message + data fields + narrowRepair (L145
   test('empty scope.out -> scope.out gate skipped (L145 ArrayDeclaration mutant)', () => {
     // Stryker replaces scopeOut with ["Stryker was here"] — would cause false rejection.
     // Kill: with empty out, a path in scope.in MUST admit.
-    const d = evaluatePath(
-      'src/x.ts',
-      makeBound({ in: ['src'], out: [] }, 'S-EMPTY-OUT'),
-      policy
-    );
+    const d = evaluatePath('src/x.ts', makeBound({ in: ['src'], out: [] }, 'S-EMPTY-OUT'), policy);
     expect(d.kind).toBe('admit');
     expect(d.rule).toBe(SCOPE_RULES.ADMIT_SCOPE_IN);
   });
 
   test('scope.out length > 0 but no match -> falls through to admit (L146 ConditionalExpression branch)', () => {
-    const d = evaluatePath(
-      'src/other.ts',
-      makeBound({ in: ['src'], out: ['lib'] }, 'S-2'),
-      policy
-    );
+    const d = evaluatePath('src/other.ts', makeBound({ in: ['src'], out: ['lib'] }, 'S-2'), policy);
     expect(d.kind).toBe('admit');
     expect(d.rule).toBe(SCOPE_RULES.ADMIT_SCOPE_IN);
   });
@@ -666,11 +658,7 @@ describe('evaluatePath: scope.support at root level — message + data (L201-211
 
   test('empty scope.support at root level -> falls through to reject (L201 ArrayDeclaration)', () => {
     // ["Stryker was here"] mutant would cause false reject on a real support path
-    const d = evaluatePath(
-      'SHARED.md',
-      makeBound({ in: ['src'], support: [] }, 'S-1'),
-      policy
-    );
+    const d = evaluatePath('SHARED.md', makeBound({ in: ['src'], support: [] }, 'S-1'), policy);
     expect(d.kind).toBe('reject');
     expect(d.rule).toBe(SCOPE_RULES.REJECT_ROOT_NOT_ALLOWED);
   });
@@ -985,21 +973,13 @@ describe('evaluatePath: authority + bindingState fields on all non-trivial paths
 
   // L206 StringLiteral: authority in root-level scope.support return
   test('root-level scope.support has authority: kernel/scope (L206 StringLiteral)', () => {
-    const d = evaluatePath(
-      'SHARED.md',
-      makeBound({ in: ['src'], support: ['SHARED.md'] }),
-      policy
-    );
+    const d = evaluatePath('SHARED.md', makeBound({ in: ['src'], support: ['SHARED.md'] }), policy);
     expect(d.authority).toBe('kernel/scope');
   });
 
   // L210 StringLiteral: bindingState in root-level scope.support return
   test('root-level scope.support has bindingState: bound (L210 StringLiteral)', () => {
-    const d = evaluatePath(
-      'SHARED.md',
-      makeBound({ in: ['src'], support: ['SHARED.md'] }),
-      policy
-    );
+    const d = evaluatePath('SHARED.md', makeBound({ in: ['src'], support: ['SHARED.md'] }), policy);
     expect(d.bindingState).toBe('bound');
   });
 

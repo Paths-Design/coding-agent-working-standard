@@ -73,12 +73,12 @@ export interface WaiverCommandBase {
 // — the kernel's Authority enum is closed, and the rule prefix
 // `shell.*` is what distinguishes shell-owned diagnostics from kernel-
 // owned ones. storeDiagnostic bakes in that authority.
-function shellDiag(
-  rule: string,
-  message: string,
-  subject?: string
-): Diagnostic {
-  return storeDiagnostic(rule, message, subject !== undefined ? { severity: 'error', subject } : { severity: 'error' });
+function shellDiag(rule: string, message: string, subject?: string): Diagnostic {
+  return storeDiagnostic(
+    rule,
+    message,
+    subject !== undefined ? { severity: 'error', subject } : { severity: 'error' }
+  );
 }
 
 function setupIO(opts: WaiverCommandBase) {
@@ -139,9 +139,7 @@ function waiverJson(args: {
     created_at: args.waiver.created_at,
     expires_at: args.waiver.expires_at,
     scope: args.waiver.scope ?? {},
-    ...(args.waiver.revocation !== undefined
-      ? { revocation: args.waiver.revocation }
-      : {}),
+    ...(args.waiver.revocation !== undefined ? { revocation: args.waiver.revocation } : {}),
   };
 }
 
@@ -203,15 +201,23 @@ export function runWaiverCreateCommand(opts: WaiverCreateOptions): number {
     }
     const effectiveness = waiverEffectiveness(validated.value, now);
     if (opts.json === true) {
-      out(JSON.stringify({
-        ok: true,
-        dry_run: true,
-        read_only: true,
-        would_write: true,
-        waiver: waiverJson({ waiver: validated.value, effectiveness }),
-      }, null, 2));
+      out(
+        JSON.stringify(
+          {
+            ok: true,
+            dry_run: true,
+            read_only: true,
+            would_write: true,
+            waiver: waiverJson({ waiver: validated.value, effectiveness }),
+          },
+          null,
+          2
+        )
+      );
     } else {
-      out(`caws waiver create --dry-run: valid waiver; would write .caws/waivers/${validated.value.id}.yaml`);
+      out(
+        `caws waiver create --dry-run: valid waiver; would write .caws/waivers/${validated.value.id}.yaml`
+      );
       out(
         renderWaiverDetail({
           waiver: validated.value,
@@ -229,9 +235,7 @@ export function runWaiverCreateCommand(opts: WaiverCreateOptions): number {
     // I/O failure (write_io_failed). Exit code reflects the difference:
     // duplicate is a user-correctable domain error (1), I/O is a hard
     // store failure (2).
-    const isDuplicate = write.errors.some(
-      (d) => d.rule === STORE_RULES.WAIVERS_ALREADY_EXISTS
-    );
+    const isDuplicate = write.errors.some((d) => d.rule === STORE_RULES.WAIVERS_ALREADY_EXISTS);
     err(
       isDuplicate
         ? `caws waiver create: waiver ${validated.value.id} already exists.`
@@ -334,14 +338,20 @@ export function runWaiverPruneCommand(opts: WaiverPruneOptions): number {
 
   if (!isApply) {
     if (opts.json === true) {
-      out(JSON.stringify({
-        ok: true,
-        dry_run: true,
-        read_only: true,
-        status: opts.status,
-        count: targets.length,
-        targets,
-      }, null, 2));
+      out(
+        JSON.stringify(
+          {
+            ok: true,
+            dry_run: true,
+            read_only: true,
+            status: opts.status,
+            count: targets.length,
+            targets,
+          },
+          null,
+          2
+        )
+      );
     } else {
       out(`caws waiver prune: ${targets.length} expired waiver(s) would be revoked.`);
       if (targets.length === 0) out('  (none)');
@@ -374,14 +384,20 @@ export function runWaiverPruneCommand(opts: WaiverPruneOptions): number {
   }
 
   if (opts.json === true) {
-    out(JSON.stringify({
-      ok: true,
-      dry_run: false,
-      read_only: false,
-      status: opts.status,
-      count: revoked.length,
-      revoked,
-    }, null, 2));
+    out(
+      JSON.stringify(
+        {
+          ok: true,
+          dry_run: false,
+          read_only: false,
+          status: opts.status,
+          count: revoked.length,
+          revoked,
+        },
+        null,
+        2
+      )
+    );
   } else {
     out(`caws waiver prune --apply: revoked ${revoked.length} expired waiver(s).`);
     if (revoked.length === 0) out('  (none)');
@@ -534,8 +550,7 @@ export function runWaiverRevokeCommand(opts: WaiverRevokeOptions): number {
     // errors → exit 1. Other failures (I/O, validation) are exit 2.
     const isDomain = result.errors.some(
       (d) =>
-        d.rule === STORE_RULES.WAIVERS_NOT_FOUND ||
-        d.rule === STORE_RULES.WAIVERS_ALREADY_EXISTS
+        d.rule === STORE_RULES.WAIVERS_NOT_FOUND || d.rule === STORE_RULES.WAIVERS_ALREADY_EXISTS
     );
     err(
       isDomain

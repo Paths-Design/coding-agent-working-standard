@@ -111,12 +111,17 @@ function existingCawsBin() {
   const result = runCapture('sh', ['-lc', 'which -a caws 2>/dev/null || true']);
   const candidates = result.stdout
     .split('\n')
-    .map((line) => line.trim())
+    .map(line => line.trim())
     .filter(Boolean);
-  return candidates.find((candidate) => {
-    const resolved = path.resolve(candidate);
-    return !resolved.startsWith(repoRoot) && !resolved.includes(`${path.sep}node_modules${path.sep}.bin${path.sep}`);
-  }) ?? null;
+  return (
+    candidates.find(candidate => {
+      const resolved = path.resolve(candidate);
+      return (
+        !resolved.startsWith(repoRoot) &&
+        !resolved.includes(`${path.sep}node_modules${path.sep}.bin${path.sep}`)
+      );
+    }) ?? null
+  );
 }
 
 function firstWritablePathDir() {

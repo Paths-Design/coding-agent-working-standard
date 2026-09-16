@@ -80,7 +80,8 @@ const PACKAGES = [
 const REFUSED_TAG_PREFIXES = [
   {
     prefix: 'caws-kernel-v',
-    reason: 'kernel CI publish is not enabled in v1 — publish caws-kernel manually for now; see docs/release-procedure.md',
+    reason:
+      'kernel CI publish is not enabled in v1 — publish caws-kernel manually for now; see docs/release-procedure.md',
   },
 ];
 
@@ -89,7 +90,9 @@ const LEGACY_BARE_V_REGEX = /^v\d+\.\d+\.\d+([-+].*)?$/;
 
 const NUMERIC = '(?:0|[1-9][0-9]*)';
 const PRERELEASE_ID = `(?:${NUMERIC}|[0-9]*[A-Za-z-][0-9A-Za-z-]*)`;
-const SEMVER_REGEX = new RegExp(`^${NUMERIC}\\.${NUMERIC}\\.${NUMERIC}(?:-${PRERELEASE_ID}(?:\\.${PRERELEASE_ID})*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$`);
+const SEMVER_REGEX = new RegExp(
+  `^${NUMERIC}\\.${NUMERIC}\\.${NUMERIC}(?:-${PRERELEASE_ID}(?:\\.${PRERELEASE_ID})*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$`
+);
 
 function releaseChannel(version) {
   if (!SEMVER_REGEX.test(version)) throw new Error(`Invalid release version: ${version}`);
@@ -101,8 +104,17 @@ export function publicationArgs(version) {
 }
 
 export function releaseArgs(tag, version, notesFile) {
-  return ['release', 'create', tag, '--title', tag, '--notes-file', notesFile, '--verify-tag',
-    ...(releaseChannel(version) === 'next' ? ['--prerelease'] : [])];
+  return [
+    'release',
+    'create',
+    tag,
+    '--title',
+    tag,
+    '--notes-file',
+    notesFile,
+    '--verify-tag',
+    ...(releaseChannel(version) === 'next' ? ['--prerelease'] : []),
+  ];
 }
 
 // =============================================================================
@@ -149,7 +161,7 @@ export function publishEnvironment({ hasNpmToken, inherited = process.env }) {
     env.NPM_TOKEN = inherited.NPM_TOKEN;
   }
   const removed = Object.keys(inherited)
-    .filter((key) => isRegistryCredential(key) && !(key in env))
+    .filter(key => isRegistryCredential(key) && !(key in env))
     .sort();
   return { env, removed };
 }
@@ -182,7 +194,7 @@ function logError(msg, extra = {}) {
 const RELEASE_TRIGGER_PREFIXES = ['caws-cli-v', 'caws-kernel-v', 'v'];
 
 function tagMatchesAnyReleaseTrigger(tag) {
-  return RELEASE_TRIGGER_PREFIXES.some((prefix) => tag.startsWith(prefix));
+  return RELEASE_TRIGGER_PREFIXES.some(prefix => tag.startsWith(prefix));
 }
 
 export function parseTag(tag) {
@@ -223,8 +235,10 @@ export function parseTag(tag) {
   return {
     ok: false,
     refusalType: 'unknown_prefix',
-    reason: `tag "${tag}" does not match any enabled package prefix. Expected: ${PACKAGES.filter((p) => p.enabled)
-      .map((p) => p.tagPrefix + 'X.Y.Z')
+    reason: `tag "${tag}" does not match any enabled package prefix. Expected: ${PACKAGES.filter(
+      p => p.enabled
+    )
+      .map(p => p.tagPrefix + 'X.Y.Z')
       .join(', ')}`,
     shouldDelete: matchedTrigger,
   };
@@ -490,7 +504,10 @@ function main() {
       logError('validation.failed', { check: name, reason: r.reason });
       const del = deleteTagFromOrigin(tag, isDryRun);
       if (!del.ok) {
-        logError('tag.delete.failed', { reason: del.reason, repair: `gh api -X DELETE repos/${process.env.GITHUB_REPOSITORY}/git/refs/tags/${tag}` });
+        logError('tag.delete.failed', {
+          reason: del.reason,
+          repair: `gh api -X DELETE repos/${process.env.GITHUB_REPOSITORY}/git/refs/tags/${tag}`,
+        });
         process.exit(21);
       }
       logInfo('tag.deleted', { tag, dry_run: !!del.dryRun });
@@ -513,7 +530,12 @@ function main() {
     process.exit(20);
   }
 
-  const smokeStep = runStep('prepublish_smoke', 'npm', ['run', 'smoke:fresh-install', '-w', pkg.name]);
+  const smokeStep = runStep('prepublish_smoke', 'npm', [
+    'run',
+    'smoke:fresh-install',
+    '-w',
+    pkg.name,
+  ]);
   if (!smokeStep.ok) {
     logError('smoke.failed', { exit_code: smokeStep.exitCode });
     const del = deleteTagFromOrigin(tag, isDryRun);
@@ -556,18 +578,13 @@ function main() {
       // rather than silently changing which auth path npm takes.
       credentials_removed: removed,
     });
-    const publishStep = runStep(
-      'npm_publish',
-      'npm',
-      publicationArgs(version),
-      {
-        cwd: path.join(rootDir, pkg.pkgPath),
-        // envExact, not env: the guarantee is that no inherited credential
-        // reaches npm, which requires replacing the environment rather than
-        // merging into it.
-        envExact: publishEnv,
-      }
-    );
+    const publishStep = runStep('npm_publish', 'npm', publicationArgs(version), {
+      cwd: path.join(rootDir, pkg.pkgPath),
+      // envExact, not env: the guarantee is that no inherited credential
+      // reaches npm, which requires replacing the environment rather than
+      // merging into it.
+      envExact: publishEnv,
+    });
     if (!publishStep.ok) {
       // The server can accept the upload before a connection drops or a
       // later npm lifecycle step fails. A nonzero client exit cannot prove
@@ -576,7 +593,8 @@ function main() {
         exit_code: publishStep.exitCode,
         tag_preserved: true,
         repair: `npm view ${pkg.name}@${version} version dist.integrity dist-tags --json`,
-        message: 'Inspect registry state and artifact identity before retrying. The tag is preserved; no GitHub Release was created.',
+        message:
+          'Inspect registry state and artifact identity before retrying. The tag is preserved; no GitHub Release was created.',
       });
       process.exit(30);
     }
@@ -610,7 +628,8 @@ function main() {
     logError('post_publish.partial_failure', {
       tag_preserved: true,
       failures: postPublishFailures,
-      message: 'npm publish succeeded; tag is preserved as the provenance anchor. Run the repair commands above to complete ancillary steps.',
+      message:
+        'npm publish succeeded; tag is preserved as the provenance anchor. Run the repair commands above to complete ancillary steps.',
     });
     process.exit(30);
   }

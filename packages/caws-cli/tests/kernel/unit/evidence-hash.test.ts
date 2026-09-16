@@ -86,7 +86,7 @@ describe('computeEventHash: purity + idempotency', () => {
   test('different prev_hash -> different hash (chain link is part of the claim)', () => {
     const other: HashableEvent = {
       ...baseEvent,
-      prev_hash: 'sha256:' + 'a'.repeat(64) as Hash,
+      prev_hash: ('sha256:' + 'a'.repeat(64)) as Hash,
     };
     expect(computeEventHash(other)).not.toBe(computeEventHash(baseEvent));
   });

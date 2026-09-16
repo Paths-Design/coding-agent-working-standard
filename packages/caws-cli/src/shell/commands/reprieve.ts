@@ -27,7 +27,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { machineHome, assertMachinePath, atomicMachineWrite } from '../../init/machine-adapters';
-import { SURFACE_ENV_VARS, SURFACE_PIN_VARS, type AgentSurface } from '../../init/hook-packs/surfaces.generated';
+import {
+  SURFACE_ENV_VARS,
+  SURFACE_PIN_VARS,
+  type AgentSurface,
+} from '../../init/hook-packs/surfaces.generated';
 
 import { loadLeases, resolveRepoRoot, storeDiagnostic } from '../../store';
 import { renderDiagnostics } from '../render/diagnostic';
@@ -102,13 +106,19 @@ interface ReprieveState {
  * without a hint discover records across known surfaces; ambiguity is decided
  * per session only after global shadowing, never by directory iteration order. */
 function resolveReprieveStateDir(
-  repoRoot: string, err: (line: string) => void, showData: boolean,
-  surfaceOverride?: string, env: NodeJS.ProcessEnv = process.env,
-  overrideSource = '--surface', sessionId?: string, homeDir?: string
+  repoRoot: string,
+  err: (line: string) => void,
+  showData: boolean,
+  surfaceOverride?: string,
+  env: NodeJS.ProcessEnv = process.env,
+  overrideSource = '--surface',
+  sessionId?: string,
+  homeDir?: string
 ): ReprieveState | null {
-  let vendorDir = surfaceOverride !== undefined
-    ? surfaceToVendorDir(surfaceOverride, err, showData)
-    : vendorDirFromPlatform(env.CAWS_AGENT_SURFACE ?? '') ?? vendorDirFromEnv(env);
+  let vendorDir =
+    surfaceOverride !== undefined
+      ? surfaceToVendorDir(surfaceOverride, err, showData)
+      : (vendorDirFromPlatform(env.CAWS_AGENT_SURFACE ?? '') ?? vendorDirFromEnv(env));
   if (surfaceOverride !== undefined && vendorDir === null) return null;
   if (vendorDir === null && sessionId !== undefined) {
     const lease = vendorDirFromLease(path.join(repoRoot, '.caws'), sessionId);
@@ -117,14 +127,22 @@ function resolveReprieveStateDir(
   try {
     const home = homeDir ?? machineHome(env);
     const sessions = path.join(home, 'state', 'sessions');
-    const stateDir = sessionId === undefined ? sessions : path.join(sessions, sanitizeSession(sessionId));
+    const stateDir =
+      sessionId === undefined ? sessions : path.join(sessions, sanitizeSession(sessionId));
     const logsDir = path.join(home, 'state');
     assertMachinePath(home, stateDir);
     assertMachinePath(home, logsDir);
-    return { home, stateDir, logsDir, repoRoot, vendorDir: vendorDir ?? '.caws',
+    return {
+      home,
+      stateDir,
+      logsDir,
+      repoRoot,
+      vendorDir: vendorDir ?? '.caws',
       source: surfaceOverride !== undefined ? overrideSource : 'machine session store',
-      legacyDirs: (vendorDir ? [vendorDir] : [...VENDOR_DIRS, '.caws'])
-        .map(dir => path.join(repoRoot, dir, 'hooks', 'state')) };
+      legacyDirs: (vendorDir ? [vendorDir] : [...VENDOR_DIRS, '.caws']).map((dir) =>
+        path.join(repoRoot, dir, 'hooks', 'state')
+      ),
+    };
   } catch (error) {
     err(`caws reprieve: ${(error as Error).message}`);
     return null;
@@ -132,28 +150,37 @@ function resolveReprieveStateDir(
 }
 
 function recordPresent(file: string): boolean {
-  try { fs.lstatSync(file); return true; } catch (error) {
+  try {
+    fs.lstatSync(file);
+    return true;
+  } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     return false;
   }
 }
 
 function readDirectoryIfPresent(dir: string): string[] {
-  try { return fs.readdirSync(dir); } catch (error) {
+  try {
+    return fs.readdirSync(dir);
+  } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     return [];
   }
 }
 
 function ambiguousLegacy(sessionId: string): Error {
-  return new Error(`Ambiguous legacy reprieve for session ${sessionId}; select --surface <name> to inspect a specific copy`);
+  return new Error(
+    `Ambiguous legacy reprieve for session ${sessionId}; select --surface <name> to inspect a specific copy`
+  );
 }
 
 function recordFileForRead(state: ReprieveState, sessionId: string): string | null {
   const globalFile = reprieveFileName(state.stateDir, sessionId);
   // Global presence shadows legacy even when malformed, expired or revoked.
   if (recordPresent(globalFile)) return globalFile;
-  const legacy = state.legacyDirs.map(dir => reprieveFileName(dir, sessionId)).filter(recordPresent);
+  const legacy = state.legacyDirs
+    .map((dir) => reprieveFileName(dir, sessionId))
+    .filter(recordPresent);
   if (legacy.length > 1) throw ambiguousLegacy(sessionId);
   return legacy[0] ?? null;
 }
@@ -162,13 +189,22 @@ function parseRecord(file: string, sessionId: string, state: ReprieveState): Rep
   assertMachinePath(file.startsWith(state.stateDir + path.sep) ? state.home : state.repoRoot, file);
   if (fs.lstatSync(file).isSymbolicLink()) throw new Error('symlinked reprieve record');
   const rec = JSON.parse(fs.readFileSync(file, 'utf8')) as ReprieveRecord;
-  if (!rec || typeof rec !== 'object' || typeof rec.session_id !== 'string' ||
-      (sessionId !== undefined && rec.session_id !== sessionId) ||
-      typeof rec.created_at !== 'string' || !rec.created_at ||
-      typeof rec.reason !== 'string' || !rec.reason || typeof rec.approved_by !== 'string' || !rec.approved_by ||
-      typeof rec.expires_at !== 'string' || !Array.isArray(rec.handlers) ||
-      rec.handlers.some(h => typeof h !== 'string') ||
-      (rec.revoked_at !== undefined && typeof rec.revoked_at !== 'string')) {
+  if (
+    !rec ||
+    typeof rec !== 'object' ||
+    typeof rec.session_id !== 'string' ||
+    (sessionId !== undefined && rec.session_id !== sessionId) ||
+    typeof rec.created_at !== 'string' ||
+    !rec.created_at ||
+    typeof rec.reason !== 'string' ||
+    !rec.reason ||
+    typeof rec.approved_by !== 'string' ||
+    !rec.approved_by ||
+    typeof rec.expires_at !== 'string' ||
+    !Array.isArray(rec.handlers) ||
+    rec.handlers.some((h) => typeof h !== 'string') ||
+    (rec.revoked_at !== undefined && typeof rec.revoked_at !== 'string')
+  ) {
     throw new Error('malformed reprieve record or session mismatch');
   }
   return rec;
@@ -176,9 +212,14 @@ function parseRecord(file: string, sessionId: string, state: ReprieveState): Rep
 
 function isActive(record: ReprieveRecord, now: Date): boolean {
   // Legacy timezone-less ISO values use UTC, matching the shell reader.
-  const expires = /(?:Z|[+-]\d\d:\d\d)$/.test(record.expires_at) ? record.expires_at : `${record.expires_at}Z`;
-  return record.revoked_at === undefined && Number.isFinite(Date.parse(expires)) &&
-    Date.parse(expires) > now.getTime();
+  const expires = /(?:Z|[+-]\d\d:\d\d)$/.test(record.expires_at)
+    ? record.expires_at
+    : `${record.expires_at}Z`;
+  return (
+    record.revoked_at === undefined &&
+    Number.isFinite(Date.parse(expires)) &&
+    Date.parse(expires) > now.getTime()
+  );
 }
 
 function surfaceToVendorDir(
@@ -251,9 +292,7 @@ const SESSION_VAR_TO_VENDOR_DIR: Readonly<Record<string, string>> = {
 
 /** Vendor dirs that have a hooks/state substrate on disk, in probe order. */
 function candidateVendorDirs(repoRoot: string): string[] {
-  return VENDOR_DIRS.filter((v) =>
-    fs.existsSync(path.join(repoRoot, v, 'hooks', 'state'))
-  );
+  return VENDOR_DIRS.filter((v) => fs.existsSync(path.join(repoRoot, v, 'hooks', 'state')));
 }
 
 /** The vendor dir implied by the running harness, or null if no var names one. */
@@ -300,10 +339,7 @@ export type LeaseSurfaceLookup =
   | { readonly kind: 'unregistered' }
   | { readonly kind: 'unknown_platform'; readonly platform: string };
 
-export function vendorDirFromLease(
-  cawsDir: string,
-  sessionId: string
-): LeaseSurfaceLookup {
+export function vendorDirFromLease(cawsDir: string, sessionId: string): LeaseSurfaceLookup {
   const loaded = loadLeases(cawsDir);
   if (!loaded.ok) return { kind: 'unregistered' };
   const lease = loaded.value.leases[sessionId];
@@ -330,10 +366,7 @@ export type VendorDirResolution =
  * several vendor dirs, so a codex session's grant landed where the codex
  * dispatcher never looks and the command still printed success.
  */
-export function resolveVendorDir(
-  repoRoot: string,
-  env: NodeJS.ProcessEnv
-): VendorDirResolution {
+export function resolveVendorDir(repoRoot: string, env: NodeJS.ProcessEnv): VendorDirResolution {
   const fromEnv = vendorDirFromEnv(env);
   if (fromEnv !== null) {
     return { ok: true, vendorDir: fromEnv, source: 'the running agent session' };
@@ -377,17 +410,19 @@ export function resolveVendorDir(
  * time a surface is added (DSH/Qwen did exactly that) and the suite then fails
  * only inside the new harness.
  */
-export const AGENT_SESSION_VARS = [...new Set([
-  'CLAUDE_SESSION_ID',
-  'CLAUDE_CODE_SESSION_ID',
-  'CODEX_THREAD_ID',
-  'QWEN_CODE_SESSION_ID',
-  'DSH_SESSION_ID',
-  'CAWS_SESSION_ID',
-  'HOOK_SESSION_ID',
-  'CURSOR_TRACE_ID',
-  ...Object.values(SURFACE_ENV_VARS).flat(),
-])];
+export const AGENT_SESSION_VARS = [
+  ...new Set([
+    'CLAUDE_SESSION_ID',
+    'CLAUDE_CODE_SESSION_ID',
+    'CODEX_THREAD_ID',
+    'QWEN_CODE_SESSION_ID',
+    'DSH_SESSION_ID',
+    'CAWS_SESSION_ID',
+    'HOOK_SESSION_ID',
+    'CURSOR_TRACE_ID',
+    ...Object.values(SURFACE_ENV_VARS).flat(),
+  ]),
+];
 
 function envHasValue(env: NodeJS.ProcessEnv, name: string): boolean {
   const v = env[name];
@@ -575,8 +610,7 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
   // from this session's lease, so the session must be known before the state
   // dir can be located.
   const env = opts.env ?? process.env;
-  const sessionId =
-    opts.session ?? (opts.current !== false ? resolveSessionId(env) : 'unknown');
+  const sessionId = opts.session ?? (opts.current !== false ? resolveSessionId(env) : 'unknown');
   if (sessionId === 'unknown' || !/^[A-Za-z0-9_-][A-Za-z0-9._-]*$/.test(sessionId)) {
     err(
       'caws reprieve grant: could not resolve a session id. Pass --session <id>, or run with CAWS_SESSION_ID/CLAUDE_SESSION_ID/CODEX_THREAD_ID set.'
@@ -584,13 +618,12 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
     return 1;
   }
 
-
   // Parse + validate the handlers list.
   const handlers = opts.handlers
     .split(',')
     .map((h) => h.trim())
     .filter((h) => h.length > 0);
-  if (handlers.length === 0 || handlers.some(h => !/^[A-Za-z0-9_.-]+\.sh$/.test(h))) {
+  if (handlers.length === 0 || handlers.some((h) => !/^[A-Za-z0-9_.-]+\.sh$/.test(h))) {
     err('caws reprieve grant: --handlers requires at least one handler basename.');
     return 1;
   }
@@ -699,7 +732,9 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
       err('  A session with no lease never registered through governed channels,');
       err('  so no dispatcher is known to consult this reprieve.');
       err('  Check the id with: caws agents list');
-      err('  Or name the surface explicitly: --surface <claude-code|codex|zcode|cursor|windsurf|opencode>');
+      err(
+        '  Or name the surface explicitly: --surface <claude-code|codex|zcode|cursor|windsurf|opencode>'
+      );
       return 1;
     }
     if (lookup.kind === 'unknown_platform') {
@@ -747,7 +782,11 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
 
   if (opts.dryRun === true) {
     const payload = opts.json
-      ? JSON.stringify({ ok: true, dry_run: true, would_write: true, reprieve: record, target: filePath }, null, 2)
+      ? JSON.stringify(
+          { ok: true, dry_run: true, would_write: true, reprieve: record, target: filePath },
+          null,
+          2
+        )
       : `caws reprieve grant --dry-run: would write ${filePath}\n  session: ${sessionId}\n  handlers: ${handlers.join(', ')}\n  expires: ${storedExpiry}`;
     out(payload);
     return 0;
@@ -832,10 +871,21 @@ export function runReprieveShowCommand(opts: ReprieveShowOptions): number {
 
   const env = opts.env ?? process.env;
   const sessionId = opts.session ?? resolveSessionId(env, path.join(repo.value.repoRoot, '.caws'));
-  const state = resolveReprieveStateDir(repo.value.repoRoot, err, showData, opts.surface, env, '--surface', sessionId, opts.homeDir);
+  const state = resolveReprieveStateDir(
+    repo.value.repoRoot,
+    err,
+    showData,
+    opts.surface,
+    env,
+    '--surface',
+    sessionId,
+    opts.homeDir
+  );
   if (state === null) return 2;
   let filePath: string | null;
-  try { filePath = recordFileForRead(state, sessionId); } catch (error) {
+  try {
+    filePath = recordFileForRead(state, sessionId);
+  } catch (error) {
     err(`caws reprieve show: ${(error as Error).message}`);
     return 1;
   }
@@ -849,13 +899,21 @@ export function runReprieveShowCommand(opts: ReprieveShowOptions): number {
     return 0;
   }
   let record: ReprieveRecord;
-  try { record = parseRecord(filePath, sessionId, state); } catch (error) {
+  try {
+    record = parseRecord(filePath, sessionId, state);
+  } catch (error) {
     err(`caws reprieve show: reprieve file is malformed: ${filePath}: ${(error as Error).message}`);
     return 1;
   }
   const active = isActive(record, now);
   if (opts.json === true) {
-    out(JSON.stringify({ ok: true, session_id: sessionId, active, reprieve: record, file: filePath }, null, 2));
+    out(
+      JSON.stringify(
+        { ok: true, session_id: sessionId, active, reprieve: record, file: filePath },
+        null,
+        2
+      )
+    );
   } else {
     out(`reprieve for session ${sessionId} — ${active ? 'ACTIVE' : 'EXPIRED'}`);
     out(`  handlers: ${record.handlers.join(', ')}`);
@@ -897,32 +955,53 @@ export function runReprieveRevokeCommand(opts: ReprieveRevokeOptions): number {
 
   const env = opts.env ?? process.env;
   const sessionId = opts.session ?? resolveSessionId(env, path.join(repo.value.repoRoot, '.caws'));
-  const state = resolveReprieveStateDir(repo.value.repoRoot, err, showData, opts.surface, env, '--surface', sessionId, opts.homeDir);
+  const state = resolveReprieveStateDir(
+    repo.value.repoRoot,
+    err,
+    showData,
+    opts.surface,
+    env,
+    '--surface',
+    sessionId,
+    opts.homeDir
+  );
   if (state === null) return 2;
 
   if (sessionId === 'unknown' || !/^[A-Za-z0-9_-][A-Za-z0-9._-]*$/.test(sessionId)) {
-    err('caws reprieve revoke: a resolved session id is required'); return 1;
+    err('caws reprieve revoke: a resolved session id is required');
+    return 1;
   }
   let filePath: string | null = null;
-  try { filePath = recordFileForRead(state, sessionId); } catch (error) {
+  try {
+    filePath = recordFileForRead(state, sessionId);
+  } catch (error) {
     // Revocation is session-global even if old vendor copies conflict. Do not
     // prevent the operator from suppressing them all with one tombstone.
     err(`caws reprieve revoke: ${(error as Error).message}; recording global revocation`);
   }
   let priorRecord: ReprieveRecord | null = null;
   if (filePath !== null) {
-    try { priorRecord = parseRecord(filePath, sessionId, state); } catch { /* Revocation also suppresses corrupt records. */ }
+    try {
+      priorRecord = parseRecord(filePath, sessionId, state);
+    } catch {
+      /* Revocation also suppresses corrupt records. */
+    }
   }
   const revokedFile = reprieveFileName(state.stateDir, sessionId);
   const tombstone: ReprieveRecord = {
-    session_id: sessionId, created_at: priorRecord?.created_at ?? now.toISOString(),
-    expires_at: now.toISOString(), approved_by: priorRecord?.approved_by ?? 'revocation',
-    reason: opts.reason, handlers: [], revoked_at: now.toISOString(),
+    session_id: sessionId,
+    created_at: priorRecord?.created_at ?? now.toISOString(),
+    expires_at: now.toISOString(),
+    approved_by: priorRecord?.approved_by ?? 'revocation',
+    reason: opts.reason,
+    handlers: [],
+    revoked_at: now.toISOString(),
   };
   try {
     atomicMachineWrite(state.home, revokedFile, JSON.stringify(tombstone, null, 2) + '\n');
   } catch (error) {
-    err(`caws reprieve revoke: could not record revocation: ${(error as Error).message}`); return 2;
+    err(`caws reprieve revoke: could not record revocation: ${(error as Error).message}`);
+    return 2;
   }
   appendAudit(
     state.logsDir,
@@ -937,7 +1016,9 @@ export function runReprieveRevokeCommand(opts: ReprieveRevokeOptions): number {
     err
   );
   if (opts.json === true) {
-    out(JSON.stringify({ ok: true, revoked: true, session_id: sessionId, file: revokedFile }, null, 2));
+    out(
+      JSON.stringify({ ok: true, revoked: true, session_id: sessionId, file: revokedFile }, null, 2)
+    );
   } else {
     out(`revoked reprieve for session ${sessionId}`);
     out(`  file:  ${revokedFile}`);
@@ -967,7 +1048,16 @@ export function runReprieveListCommand(opts: ReprieveListOptions): number {
     err(renderDiagnostics(repo.errors, { showData }));
     return 2;
   }
-  const state = resolveReprieveStateDir(repo.value.repoRoot, err, showData, opts.surface, opts.env ?? process.env, '--surface', undefined, opts.homeDir);
+  const state = resolveReprieveStateDir(
+    repo.value.repoRoot,
+    err,
+    showData,
+    opts.surface,
+    opts.env ?? process.env,
+    '--surface',
+    undefined,
+    opts.homeDir
+  );
   if (state === null) return 2;
   const candidates = new Map<string, string>();
   try {
@@ -996,7 +1086,9 @@ export function runReprieveListCommand(opts: ReprieveListOptions): number {
     try {
       const rec = parseRecord(file, sessionId, state);
       records.push({ ...rec, active: isActive(rec, now), file });
-    } catch { /* Malformed global state never resurrects legacy records. */ }
+    } catch {
+      /* Malformed global state never resurrects legacy records. */
+    }
   }
 
   if (opts.json === true) {
@@ -1008,7 +1100,9 @@ export function runReprieveListCommand(opts: ReprieveListOptions): number {
     return 0;
   }
   for (const r of records) {
-    out(`${r.session_id} — ${r.active ? 'ACTIVE' : 'EXPIRED'} — handlers: ${r.handlers.join(', ')} — expires: ${r.expires_at}`);
+    out(
+      `${r.session_id} — ${r.active ? 'ACTIVE' : 'EXPIRED'} — handlers: ${r.handlers.join(', ')} — expires: ${r.expires_at}`
+    );
   }
   return 0;
 }

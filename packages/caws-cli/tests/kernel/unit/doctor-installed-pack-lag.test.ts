@@ -82,21 +82,43 @@ describe('doctor.hooks.installed_pack_version_lag (CAWS-DEFECT-STALE-INSTALLED-G
   // finding are still reported; the lag is now reported WITH them instead of
   // being hidden by them.
   test('a system runtime does NOT replace copied pack lag — all three findings report', () => {
-    const report = inspectProjectState(input(fsObs({
-      installedSharedPackVersion: 1, shippingSharedPackVersion: 56,
-      systemRuntime: { surfaces: ['codex'], legacySurfaces: ['claude-code'], overrides: ['codex:handlers:custom.sh'], digest: 'a'.repeat(64) },
-    })));
+    const report = inspectProjectState(
+      input(
+        fsObs({
+          installedSharedPackVersion: 1,
+          shippingSharedPackVersion: 56,
+          systemRuntime: {
+            surfaces: ['codex'],
+            legacySurfaces: ['claude-code'],
+            overrides: ['codex:handlers:custom.sh'],
+            digest: 'a'.repeat(64),
+          },
+        })
+      )
+    );
     expect(rules(report)).toContain(DOCTOR_RULES.HOOKS_INSTALLED_PACK_VERSION_LAG);
     expect(rules(report)).toContain(DOCTOR_RULES.HOOKS_SYSTEM_RUNTIME);
     expect(rules(report)).toContain(DOCTOR_RULES.HOOKS_SYSTEM_LEGACY_WIRING);
   });
 
   test('a broken system runtime is an error even if copied packs match shipping', () => {
-    const report = inspectProjectState(input(fsObs({
-      installedSharedPackVersion: 56, shippingSharedPackVersion: 56,
-      systemRuntime: { surfaces: ['codex'], legacySurfaces: [], overrides: [], error: 'Runtime modified: scope-guard.sh' },
-    })));
-    expect(report.findings.find(f => f.rule === DOCTOR_RULES.HOOKS_SYSTEM_RUNTIME_INVALID)?.severity).toBe('error');
+    const report = inspectProjectState(
+      input(
+        fsObs({
+          installedSharedPackVersion: 56,
+          shippingSharedPackVersion: 56,
+          systemRuntime: {
+            surfaces: ['codex'],
+            legacySurfaces: [],
+            overrides: [],
+            error: 'Runtime modified: scope-guard.sh',
+          },
+        })
+      )
+    );
+    expect(
+      report.findings.find((f) => f.rule === DOCTOR_RULES.HOOKS_SYSTEM_RUNTIME_INVALID)?.severity
+    ).toBe('error');
     expect(rules(report)).not.toContain(DOCTOR_RULES.HOOKS_SYSTEM_RUNTIME);
   });
 

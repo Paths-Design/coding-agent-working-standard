@@ -28,7 +28,11 @@ const { initProject } = require('../../dist/store/init-store');
 const repos = [];
 afterAll(() => {
   for (const r of repos) {
-    try { fs.rmSync(r, { recursive: true, force: true }); } catch { /* ignore */ }
+    try {
+      fs.rmSync(r, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
   }
 });
 
@@ -133,7 +137,8 @@ test('send with empty --to returns exit 1', () => {
 test('send outside a git repo returns exit 2', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-nogit-'));
   repos.push(tmp);
-  const out = [], err = [];
+  const out = [],
+    err = [];
   const code = runMessageSendCommand({
     cwd: tmp,
     env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'alice' },
@@ -283,7 +288,11 @@ function makeBound(root, sid, { worktree, spec, status = 'active', ageMs = 1000 
 function readLog(root) {
   const file = path.join(root, '.caws', 'messages.jsonl');
   if (!fs.existsSync(file)) return [];
-  return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  return fs
+    .readFileSync(file, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => JSON.parse(l));
 }
 
 test('UX A1: send to an idle (stopped, fresh-heartbeat) recipient succeeds with an idle note', () => {
@@ -455,7 +464,17 @@ test('LEDGER A3: send --reply-to to a message not addressed to the caller is ref
   const code = runMessageSendCommand({ ...bobOpts, to: 'alice', text: 'thread?', replyTo: msgId });
   expect(code).toBe(1);
   const { out } = io(root, 'bob');
-  const code2 = runMessageSendCommand({ ...{ cwd: root, env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'bob' }, out: (s) => out.push(s), err: () => {} }, to: 'alice', text: 'thread?', replyTo: msgId });
+  const code2 = runMessageSendCommand({
+    ...{
+      cwd: root,
+      env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'bob' },
+      out: (s) => out.push(s),
+      err: () => {},
+    },
+    to: 'alice',
+    text: 'thread?',
+    replyTo: msgId,
+  });
   expect(code2).toBe(1);
   expect(out.join('\n')).toMatch(/not sent — reply target invalid/);
 });
@@ -473,7 +492,12 @@ test('LEDGER A2: a valid send --reply-to writes reply_to on the record', () => {
       .split('\n')[0]
   ).id;
   const { opts: aliceOpts } = io(root, 'alice');
-  const code = runMessageSendCommand({ ...aliceOpts, to: 'bob', text: 'linked reply', replyTo: msgId });
+  const code = runMessageSendCommand({
+    ...aliceOpts,
+    to: 'bob',
+    text: 'linked reply',
+    replyTo: msgId,
+  });
   expect(code).toBe(0);
   const lines = fs
     .readFileSync(path.join(root, '.caws', 'messages.jsonl'), 'utf8')
@@ -559,8 +583,15 @@ test('ECON A4: send --urgency critical writes the field; bogus urgency is refuse
   // bogus value
   const bogusOut = [];
   const code = runMessageSendCommand({
-    ...{ cwd: root, env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'alice' }, out: (s) => bogusOut.push(s), err: () => {} },
-    to: 'bob', text: 'x', urgency: 'bogus',
+    ...{
+      cwd: root,
+      env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'alice' },
+      out: (s) => bogusOut.push(s),
+      err: () => {},
+    },
+    to: 'bob',
+    text: 'x',
+    urgency: 'bogus',
   });
   expect(code).toBe(1);
   expect(bogusOut.join('\n')).toMatch(/not sent — invalid urgency/);
@@ -584,8 +615,14 @@ test('ECON A2: poll --drain JSON carries messages[], message alias, waiting, and
   expect(runMessageSendCommand({ ...bobOpts, to: 'alice', text: 'two' })).toBe(0);
   const jsonOut = [];
   const code = runMessagePollCommand({
-    ...{ cwd: root, env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'alice' }, out: (s) => jsonOut.push(s), err: () => {} },
-    json: true, drain: 5,
+    ...{
+      cwd: root,
+      env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'alice' },
+      out: (s) => jsonOut.push(s),
+      err: () => {},
+    },
+    json: true,
+    drain: 5,
   });
   expect(code).toBe(0);
   const parsed = JSON.parse(jsonOut.join('\n'));
@@ -610,19 +647,23 @@ test('OFFER A1: JSON offer poll stays queued until the exact offer is settled', 
   expect(offered.waiting).toBe(1);
 
   const settleOut = [];
-  expect(runMessageSettleCommand({
-    ...aliceOpts,
-    out: (line) => settleOut.push(line),
-    offerId: offered.offer.id,
-    outcome: 'delivered',
-    json: true,
-  })).toBe(0);
+  expect(
+    runMessageSettleCommand({
+      ...aliceOpts,
+      out: (line) => settleOut.push(line),
+      offerId: offered.offer.id,
+      outcome: 'delivered',
+      json: true,
+    })
+  ).toBe(0);
   expect(JSON.parse(settleOut.join('\n'))).toMatchObject({
     ok: true,
     settlement: { offerId: offered.offer.id, boundary: 'adapter_handoff' },
   });
 
   const after = [];
-  expect(runMessagePollCommand({ ...aliceOpts, out: (line) => after.push(line), json: true, peek: true })).toBe(0);
+  expect(
+    runMessagePollCommand({ ...aliceOpts, out: (line) => after.push(line), json: true, peek: true })
+  ).toBe(0);
   expect(JSON.parse(after.join('\n')).message).toBeNull();
 });

@@ -21,9 +21,7 @@ function auditDoc() {
 }
 
 function tableRow(markdown, firstCell) {
-  return markdown
-    .split('\n')
-    .find((line) => line.startsWith(`| \`${firstCell}\``));
+  return markdown.split('\n').find((line) => line.startsWith(`| \`${firstCell}\``));
 }
 
 describe('CLI UX no-scope-authority reconciliation audit', () => {
@@ -41,9 +39,14 @@ describe('CLI UX no-scope-authority reconciliation audit', () => {
     const doc = auditDoc();
 
     expect(doc).toContain('### Post-Handoff Authority Resample');
-    expect(doc).toContain('Sterling `.caws/sessions` | 4,728 | 364 | 649');
+    // The row must still record 4,728 sessions / 364 / 649. Matched with tolerant
+    // whitespace because the cell padding is prettier's to decide, not this test's.
+    expect(doc).toMatch(/Sterling `\.caws\/sessions`\s*\|\s*4,728\s*\|\s*364\s*\|\s*649/);
     expect(doc).toContain('remediation.authorityCandidates');
-    expect(doc).toMatch(/omits the stale generic `repair`\s+field/);
+    // Wrap-tolerant across the whole phrase: the markdown config is
+    // proseWrap: always at printWidth 80, so any word boundary here can become
+    // a line break when the surrounding prose changes length.
+    expect(doc).toMatch(/omits\s+the\s+stale\s+generic\s+`repair`\s+field/);
     expect(doc).toContain('UX-NO-SCOPE-AUTHORITY-SESSION-RESAMPLE-001');
     expect(doc).toContain(
       'packages/caws-cli/tests/docs/cli-ux-no-scope-authority-reconciliation.test.js'

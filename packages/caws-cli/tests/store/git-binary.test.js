@@ -131,9 +131,7 @@ describe('resolveGitBinary', () => {
       resetGitBinaryCache();
 
       expect(resolveGitBinary()).not.toBe(planted);
-      expect(path.basename(path.dirname(resolveGitBinary()))).not.toBe(
-        path.basename(cwdDecoy)
-      );
+      expect(path.basename(path.dirname(resolveGitBinary()))).not.toBe(path.basename(cwdDecoy));
     } finally {
       process.chdir(previousCwd);
     }

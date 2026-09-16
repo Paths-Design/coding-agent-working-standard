@@ -76,7 +76,8 @@ const ROOT_CANDIDATES: readonly ArtifactCandidate[] = [
       'bun.lockb',
       'package.json',
     ],
-    installHint: 'Run the project package-manager install command in the worktree before running tests.',
+    installHint:
+      'Run the project package-manager install command in the worktree before running tests.',
   },
   {
     // .caws/hooks/node_modules is checked directly here (ROOT_CANDIDATES bypass
@@ -104,19 +105,22 @@ const ROOT_CANDIDATES: readonly ArtifactCandidate[] = [
     relPath: '.venv',
     kind: 'python_venv',
     manifestFiles: ['uv.lock', 'poetry.lock', 'requirements.txt', 'pyproject.toml'],
-    installHint: 'Create or install the Python environment in the worktree before running Python tests.',
+    installHint:
+      'Create or install the Python environment in the worktree before running Python tests.',
   },
   {
     relPath: 'target',
     kind: 'rust_target',
     manifestFiles: ['Cargo.lock', 'Cargo.toml'],
-    installHint: 'Run cargo build or cargo test in the worktree to materialize the Rust target cache.',
+    installHint:
+      'Run cargo build or cargo test in the worktree to materialize the Rust target cache.',
   },
   {
     relPath: '.build',
     kind: 'swift_build',
     manifestFiles: ['Package.resolved', 'Package.swift'],
-    installHint: 'Run swift build or swift test in the worktree to materialize the Swift build cache.',
+    installHint:
+      'Run swift build or swift test in the worktree to materialize the Swift build cache.',
   },
 ];
 
@@ -141,7 +145,10 @@ function discoverCandidates(repoRoot: string): readonly ArtifactCandidate[] {
   const out: ArtifactCandidate[] = [];
 
   for (const candidate of ROOT_CANDIDATES) {
-    if (hasAnyManifest(repoRoot, candidate) || fs.existsSync(path.join(repoRoot, candidate.relPath))) {
+    if (
+      hasAnyManifest(repoRoot, candidate) ||
+      fs.existsSync(path.join(repoRoot, candidate.relPath))
+    ) {
       out.push(candidate);
     }
   }
@@ -476,10 +483,14 @@ function ensureSharedExclude(
 ): { readonly ok: true } | { readonly ok: false; readonly reason: string } {
   let excludePath: string;
   try {
-    excludePath = execFileSync(resolveGitBinary(), ['-C', worktreeRoot, 'rev-parse', '--git-path', 'info/exclude'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }).trim();
+    excludePath = execFileSync(
+      resolveGitBinary(),
+      ['-C', worktreeRoot, 'rev-parse', '--git-path', 'info/exclude'],
+      {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }
+    ).trim();
   } catch (e) {
     return { ok: false, reason: errorMessage(e) };
   }
@@ -490,10 +501,7 @@ function ensureSharedExclude(
     const lines = existing.split(/\r?\n/);
     if (lines.includes(relPath) || lines.includes(`${relPath}/`)) return { ok: true };
     const prefix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
-    fs.appendFileSync(
-      excludePath,
-      `${prefix}# CAWS worktree artifact links\n${relPath}\n`
-    );
+    fs.appendFileSync(excludePath, `${prefix}# CAWS worktree artifact links\n${relPath}\n`);
     return { ok: true };
   } catch (e) {
     return { ok: false, reason: errorMessage(e) };

@@ -121,7 +121,9 @@ describe('caws status focused filters', () => {
     expect(payload.doctor.counts.warnings).toBeGreaterThanOrEqual(1);
     expect(payload.worktrees).toBeUndefined();
     expect(payload.agents).toBeUndefined();
-    expect(fs.readFileSync(path.join(caws, 'specs', 'STATUS-FILTER-001.yaml'), 'utf8')).toBe(beforeSpec);
+    expect(fs.readFileSync(path.join(caws, 'specs', 'STATUS-FILTER-001.yaml'), 'utf8')).toBe(
+      beforeSpec
+    );
     expect(fs.existsSync(path.join(caws, 'events.jsonl'))).toBe(beforeEvents);
   });
 });

@@ -2,11 +2,14 @@
 
 **Author**: @darianrosebrook  
 **Last Updated**: 2026-05-28  
-**Status**: Production Ready (check current version with `caws --version` or `npm view @paths.design/caws-cli version`)
+**Status**: Production Ready (check current version with `caws --version` or
+`npm view @paths.design/caws-cli version`)
 
 ## Overview
 
-This document covers monitoring, observability, and health checks for CAWS in production environments. While CAWS is primarily an npm package, proper monitoring ensures reliability and helps detect issues early.
+This document covers monitoring, observability, and health checks for CAWS in
+production environments. While CAWS is primarily an npm package, proper
+monitoring ensures reliability and helps detect issues early.
 
 ---
 
@@ -143,7 +146,7 @@ async function checkMCPServer() {
     const duration = Date.now() - start;
     checks.performanceOK = duration < 500;
 
-    const allHealthy = Object.values(checks).every((v) => v);
+    const allHealthy = Object.values(checks).every(v => v);
 
     return {
       status: allHealthy ? 'healthy' : 'degraded',
@@ -162,7 +165,7 @@ async function checkMCPServer() {
 
 // Optional: Expose health endpoint
 if (require.main === module) {
-  checkMCPServer().then((health) => {
+  checkMCPServer().then(health => {
     console.log(JSON.stringify(health, null, 2));
     process.exit(health.status === 'healthy' ? 0 : 1);
   });
@@ -258,13 +261,14 @@ class Telemetry {
     if (!fs.existsSync(logFile)) return null;
 
     const lines = fs.readFileSync(logFile, 'utf8').trim().split('\n');
-    const records = lines.map((line) => JSON.parse(line));
+    const records = lines.map(line => JSON.parse(line));
 
     return {
       total_executions: records.length,
-      success_rate: records.filter((r) => r.success).length / records.length,
-      avg_duration: records.reduce((sum, r) => sum + r.duration, 0) / records.length,
-      commands: [...new Set(records.map((r) => r.command))],
+      success_rate: records.filter(r => r.success).length / records.length,
+      avg_duration:
+        records.reduce((sum, r) => sum + r.duration, 0) / records.length,
+      commands: [...new Set(records.map(r => r.command))],
     };
   }
 }
@@ -278,12 +282,12 @@ module.exports = new Telemetry();
 
 ### Log Levels
 
-| Level     | Use Case             | Example                                      |
-| --------- | -------------------- | -------------------------------------------- |
-| **ERROR** | Failures, exceptions | "Failed to parse .caws/specs/<id>.yaml"      |
-| **WARN**  | Recoverable issues   | "Deprecated flag used: --old-flag"           |
-| **INFO**  | Important events     | "Gates run complete: 0 violations"           |
-| **DEBUG** | Detailed debugging   | "Loaded spec from .caws/specs/<id>.yaml"     |
+| Level     | Use Case             | Example                                  |
+| --------- | -------------------- | ---------------------------------------- |
+| **ERROR** | Failures, exceptions | "Failed to parse .caws/specs/<id>.yaml"  |
+| **WARN**  | Recoverable issues   | "Deprecated flag used: --old-flag"       |
+| **INFO**  | Important events     | "Gates run complete: 0 violations"       |
+| **DEBUG** | Detailed debugging   | "Loaded spec from .caws/specs/<id>.yaml" |
 
 ### Log Format (JSON)
 
@@ -594,7 +598,8 @@ fi
 - **Deployment Guide**: `docs/DEPLOYMENT.md`
 - **Rollback Guide**: `docs/ROLLBACK.md`
 - **npm Package**: https://www.npmjs.com/package/@paths.design/caws-cli
-- **GitHub Actions**: https://github.com/Paths-Design/coding-agent-working-standard/actions
+- **GitHub Actions**:
+  https://github.com/Paths-Design/coding-agent-working-standard/actions
 
 ---
 
@@ -603,7 +608,8 @@ fi
 For monitoring issues or questions:
 
 - **Email**: hello@paths.design
-- **GitHub Issues**: [Report an issue](https://github.com/Paths-Design/coding-agent-working-standard/issues)
+- **GitHub Issues**:
+  [Report an issue](https://github.com/Paths-Design/coding-agent-working-standard/issues)
 
 ---
 

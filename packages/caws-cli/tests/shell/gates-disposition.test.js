@@ -42,7 +42,10 @@ function dispoFor(result, gateId) {
 
 describe('deriveDispositions: block / warn / skip semantics', () => {
   test('block + violation -> fail AND blocks', () => {
-    const r = deriveDispositions(report([v('budget_limit')]), policy({ budget_limit: gate('block') }));
+    const r = deriveDispositions(
+      report([v('budget_limit')]),
+      policy({ budget_limit: gate('block') })
+    );
     const d = dispoFor(r, 'budget_limit');
     expect(d.outcome).toBe('fail');
     expect(d.blocks).toBe(true);
@@ -50,7 +53,10 @@ describe('deriveDispositions: block / warn / skip semantics', () => {
   });
 
   test('warn + violation -> fail but DOES NOT block (the load-bearing distinction)', () => {
-    const r = deriveDispositions(report([v('budget_limit')]), policy({ budget_limit: gate('warn') }));
+    const r = deriveDispositions(
+      report([v('budget_limit')]),
+      policy({ budget_limit: gate('warn') })
+    );
     const d = dispoFor(r, 'budget_limit');
     expect(d.outcome).toBe('fail');
     expect(d.blocks).toBe(false);
@@ -58,14 +64,20 @@ describe('deriveDispositions: block / warn / skip semantics', () => {
   });
 
   test('skip mode -> skipped, never blocks (even with a violation)', () => {
-    const r = deriveDispositions(report([v('budget_limit')]), policy({ budget_limit: gate('skip') }));
+    const r = deriveDispositions(
+      report([v('budget_limit')]),
+      policy({ budget_limit: gate('skip') })
+    );
     const d = dispoFor(r, 'budget_limit');
     expect(d.outcome).toBe('skipped');
     expect(d.blocks).toBe(false);
   });
 
   test('enabled:false -> skipped, never blocks (even at mode block with a violation)', () => {
-    const r = deriveDispositions(report([v('budget_limit')]), policy({ budget_limit: gate('block', false) }));
+    const r = deriveDispositions(
+      report([v('budget_limit')]),
+      policy({ budget_limit: gate('block', false) })
+    );
     const d = dispoFor(r, 'budget_limit');
     expect(d.outcome).toBe('skipped');
     expect(d.blocks).toBe(false);
@@ -153,10 +165,7 @@ describe('deriveDispositions: canonical gate name literals are load-bearing', ()
 
   for (const name of CANONICAL) {
     test(`canonical gate '${name}' routes its violation to block disposition`, () => {
-      const r = deriveDispositions(
-        report([v(name)]),
-        policy({ [name]: gate('block') })
-      );
+      const r = deriveDispositions(report([v(name)]), policy({ [name]: gate('block') }));
       expect(isOk(r)).toBe(true);
       const d = dispoFor(r, name);
       expect(d).toBeDefined();
@@ -182,7 +191,13 @@ describe('deriveDispositions: canonical gate name literals are load-bearing', ()
     );
     expect(isOk(r)).toBe(true);
     const ids = r.dispositions.map((d) => d.gate_id);
-    const expectedOrder = ['budget_limit', 'spec_completeness', 'scope_boundary', 'god_object', 'todo_detection'];
+    const expectedOrder = [
+      'budget_limit',
+      'spec_completeness',
+      'scope_boundary',
+      'god_object',
+      'todo_detection',
+    ];
     let prev = -1;
     for (const name of expectedOrder) {
       const idx = ids.indexOf(name);
@@ -214,10 +229,7 @@ describe('deriveDispositions: alias string literals are load-bearing', () => {
   });
 
   test("'god_objects' alias maps to exact string 'god_object' (plural->singular)", () => {
-    const r = deriveDispositions(
-      report([v('god_objects')]),
-      policy({ god_object: gate('block') })
-    );
+    const r = deriveDispositions(report([v('god_objects')]), policy({ god_object: gate('block') }));
     expect(isOk(r)).toBe(true);
     const d = dispoFor(r, 'god_object');
     expect(d).toBeDefined();
@@ -285,8 +297,8 @@ describe('deriveDispositions: anyBlocks semantics (some, not every)', () => {
     const r = deriveDispositions(
       report([v('budget_limit'), v('scope_boundary')]),
       policy({
-        budget_limit: gate('block'),  // blocks
-        scope_boundary: gate('warn'),  // fails but does NOT block
+        budget_limit: gate('block'), // blocks
+        scope_boundary: gate('warn'), // fails but does NOT block
       })
     );
     expect(isOk(r)).toBe(true);
@@ -342,20 +354,14 @@ describe('deriveDispositions: gate ordering and deduplication', () => {
 
   test('a gate present in KNOWN_GATE_IDS but absent from policy is NOT emitted', () => {
     // Only budget_limit is in policy; spec_completeness is KNOWN but not declared.
-    const r = deriveDispositions(
-      report([]),
-      policy({ budget_limit: gate('block') })
-    );
+    const r = deriveDispositions(report([]), policy({ budget_limit: gate('block') }));
     expect(isOk(r)).toBe(true);
     const ids = r.dispositions.map((d) => d.gate_id);
     expect(ids).toEqual(['budget_limit']);
   });
 
   test('non-canonical gates declared in policy ARE evaluated (DRIFT-001)', () => {
-    const r = deriveDispositions(
-      report([v('drift_gate')]),
-      policy({ drift_gate: gate('block') })
-    );
+    const r = deriveDispositions(report([v('drift_gate')]), policy({ drift_gate: gate('block') }));
     expect(isOk(r)).toBe(true);
     const d = dispoFor(r, 'drift_gate');
     expect(d).toBeDefined();
@@ -372,10 +378,7 @@ describe('deriveDispositions: multiple violations on the same gate', () => {
   test('two violations on the same gate both appear in its violations array', () => {
     const v1 = { gate: 'budget_limit', message: 'first violation' };
     const v2 = { gate: 'budget_limit', message: 'second violation' };
-    const r = deriveDispositions(
-      report([v1, v2]),
-      policy({ budget_limit: gate('block') })
-    );
+    const r = deriveDispositions(report([v1, v2]), policy({ budget_limit: gate('block') }));
     expect(isOk(r)).toBe(true);
     const d = dispoFor(r, 'budget_limit');
     expect(d.violations).toHaveLength(2);

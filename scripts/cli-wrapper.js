@@ -19,7 +19,7 @@ async function runCLI() {
         stdio: 'inherit',
       });
 
-      build.on('close', (code) => {
+      build.on('close', code => {
         if (code === 0) {
           resolve();
         } else {
@@ -39,7 +39,7 @@ async function runCLI() {
       cwd: path.join(__dirname, '..'),
     });
 
-    cli.on('close', (code) => {
+    cli.on('close', code => {
       process.exit(code);
     });
   } catch (error) {

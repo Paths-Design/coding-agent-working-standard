@@ -56,10 +56,7 @@ function isTopLevelKeyLine(line: string, key: string): boolean {
 }
 
 /** Return all (line-index, line-end-pos) for top-level occurrences of key. */
-function findTopLevelKeyLines(
-  lines: readonly string[],
-  key: string
-): readonly number[] {
+function findTopLevelKeyLines(lines: readonly string[], key: string): readonly number[] {
   const hits: number[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -109,10 +106,7 @@ function quotedScalarEnd(lines: readonly string[], start: number): number | unde
  *
  *  Returns true if the value spans multiple lines (refusal case for
  *  surgical scalar replacement). */
-function valueSpansMultipleLines(
-  lines: readonly string[],
-  keyLineIdx: number
-): boolean {
+function valueSpansMultipleLines(lines: readonly string[], keyLineIdx: number): boolean {
   const line = lines[keyLineIdx];
   if (line === undefined) return true;
   const colonIdx = line.indexOf(':');
@@ -176,11 +170,7 @@ function splitLines(source: string): {
   // restores the trailing newline conditionally.
 }
 
-function joinLines(
-  lines: readonly string[],
-  sep: string,
-  originalHadTrailing: boolean
-): string {
+function joinLines(lines: readonly string[], sep: string, originalHadTrailing: boolean): string {
   const joined = lines.join(sep);
   return originalHadTrailing ? joined + sep : joined;
 }
@@ -190,11 +180,7 @@ function originalHadTrailing(source: string, sep: string): boolean {
 }
 
 /** Set a top-level scalar key's value. Refuses ambiguous mutations. */
-export function setTopLevelScalar(
-  source: string,
-  key: string,
-  value: string
-): Result<string> {
+export function setTopLevelScalar(source: string, key: string, value: string): Result<string> {
   const sep = source.includes('\r\n') ? '\r\n' : '\n';
   const trailing = originalHadTrailing(source, sep);
   const { lines } = splitLines(source);
@@ -268,8 +254,7 @@ export function setTopLevelScalar(
       }
     }
   }
-  const trailingComment =
-    commentStart >= 0 ? '  ' + originalLine.slice(commentStart) : '';
+  const trailingComment = commentStart >= 0 ? '  ' + originalLine.slice(commentStart) : '';
   const newLine = `${key}: ${value}${trailingComment}`;
 
   const newLines = lines.slice();
@@ -358,11 +343,7 @@ export function insertTopLevelScalarAfter(
   }
 
   const newLine = `${key}: ${value}`;
-  const newLines = [
-    ...lines.slice(0, insertIdx),
-    newLine,
-    ...lines.slice(insertIdx),
-  ];
+  const newLines = [...lines.slice(0, insertIdx), newLine, ...lines.slice(insertIdx)];
   return ok(joinLines(newLines, sep, trailing));
 }
 
@@ -387,10 +368,7 @@ export function insertTopLevelScalarAfter(
  *  Used by closeSpec and destroyWorktree to clear the `worktree:`
  *  binding on terminal lifecycle transitions per the byte-level
  *  invariant: grep '^worktree:' <spec>.yaml must return no match. */
-export function removeTopLevelScalar(
-  source: string,
-  key: string
-): Result<string> {
+export function removeTopLevelScalar(source: string, key: string): Result<string> {
   const sep = source.includes('\r\n') ? '\r\n' : '\n';
   const trailing = originalHadTrailing(source, sep);
   const { lines } = splitLines(source);
@@ -432,9 +410,6 @@ export function removeTopLevelScalar(
     );
   }
 
-  const newLines = [
-    ...lines.slice(0, keyLineIdx),
-    ...lines.slice(endLine + 1),
-  ];
+  const newLines = [...lines.slice(0, keyLineIdx), ...lines.slice(endLine + 1)];
   return ok(joinLines(newLines, sep, trailing));
 }

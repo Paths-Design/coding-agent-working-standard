@@ -187,7 +187,13 @@ export function runSessionPickupCommand(opts: SessionPickupOptions): number {
   }
   const cawsDir = rootRes.value.cawsDir;
 
-  const sessionResult = resolveSession({ cawsDir, worktreeRoot: cwd, env, now: nowFn, allowMint: true });
+  const sessionResult = resolveSession({
+    cawsDir,
+    worktreeRoot: cwd,
+    env,
+    now: nowFn,
+    allowMint: true,
+  });
   if (!sessionResult.ok) {
     err('caws session pickup: failed to resolve session identity.');
     err(renderDiagnostics(sessionResult.errors, { showData }));

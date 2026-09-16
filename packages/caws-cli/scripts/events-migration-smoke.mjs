@@ -105,8 +105,14 @@ function cleanup() {
   }
 }
 process.on('exit', cleanup);
-process.on('SIGINT', () => { cleanup(); process.exit(130); });
-process.on('SIGTERM', () => { cleanup(); process.exit(143); });
+process.on('SIGINT', () => {
+  cleanup();
+  process.exit(130);
+});
+process.on('SIGTERM', () => {
+  cleanup();
+  process.exit(143);
+});
 
 // ─── Pack + tarball inspection ───────────────────────────────────────────
 
@@ -115,10 +121,10 @@ function packPackage(packageRoot, packageName) {
   const packDir = mkdtempSync(join(tmpdir(), 'caws-pack-'));
   registerCleanup(packDir);
 
-  const result = spawnSync(
-    'npm', ['pack', '--pack-destination', packDir, '--json'],
-    { cwd: packageRoot, encoding: 'utf8' }
-  );
+  const result = spawnSync('npm', ['pack', '--pack-destination', packDir, '--json'], {
+    cwd: packageRoot,
+    encoding: 'utf8',
+  });
   if (result.status !== 0) {
     fail(`npm pack ${packageName} failed`, {
       exitCode: result.status,
@@ -151,10 +157,7 @@ function assertTarballContains(tarball, expectedFiles) {
   // The npm-pack tarball layout is package/<path>, so we look for
   // package/<path> for each expected entry.
   step(`assert tarball contains required files: ${tarball}`);
-  const result = spawnSync(
-    'tar', ['-tzf', tarball],
-    { encoding: 'utf8' }
-  );
+  const result = spawnSync('tar', ['-tzf', tarball], { encoding: 'utf8' });
   if (result.status !== 0) {
     fail('tar -tzf failed', { tarball, stderr: result.stderr.trim() });
   }
@@ -184,22 +187,13 @@ function installTarballs(cliTarball) {
     version: '0.0.0',
     private: true,
   };
-  writeFileSync(
-    join(projectDir, 'package.json'),
-    JSON.stringify(pkgJson, null, 2)
-  );
+  writeFileSync(join(projectDir, 'package.json'), JSON.stringify(pkgJson, null, 2));
 
   // The kernel is absorbed into the CLI tarball (CAWS-ABSORB-KERNEL-01);
   // a single install models exactly what a consumer gets.
   const installResult = spawnSync(
     'npm',
-    [
-      'install',
-      '--no-audit',
-      '--no-fund',
-      '--ignore-scripts',
-      cliTarball,
-    ],
+    ['install', '--no-audit', '--no-fund', '--ignore-scripts', cliTarball],
     { cwd: projectDir, encoding: 'utf8' }
   );
   if (installResult.status !== 0) {
@@ -304,34 +298,37 @@ contracts: []
   // what handles this.
   const v10Lines = [];
   for (let seq = 1; seq <= 3; seq++) {
-    v10Lines.push(JSON.stringify({
-      seq,
-      ts: '2026-04-11T01:00:00.000Z',
-      session_id: 'standalone',
-      actor: 'cli',
-      event: 'validation_completed',
-      spec_id: 'X-1',
-      data: { passed: true },
-      prev_hash: seq === 1 ? '' : `sha256:${String(seq - 1).padStart(64, '0')}`,
-      event_hash: `sha256:${String(seq).padStart(64, '0')}`,
-    }));
+    v10Lines.push(
+      JSON.stringify({
+        seq,
+        ts: '2026-04-11T01:00:00.000Z',
+        session_id: 'standalone',
+        actor: 'cli',
+        event: 'validation_completed',
+        spec_id: 'X-1',
+        data: { passed: true },
+        prev_hash: seq === 1 ? '' : `sha256:${String(seq - 1).padStart(64, '0')}`,
+        event_hash: `sha256:${String(seq).padStart(64, '0')}`,
+      })
+    );
   }
   const eventsContent = v10Lines.join('\n') + '\n';
   writeFileSync(join(cawsDir, 'events.jsonl'), eventsContent);
 
   // Record ground-truth digest + line count for later assertions.
-  const digest =
-    'sha256:' + createHash('sha256').update(eventsContent).digest('hex');
+  const digest = 'sha256:' + createHash('sha256').update(eventsContent).digest('hex');
   const expectedLineCount = 3;
   ok(`scratch repo at ${repoDir}; events.jsonl digest=${digest}, lines=${expectedLineCount}`);
   return { repoDir, expectedDigest: digest, expectedLineCount };
 }
 
 function findArchive(cawsDir) {
-  const entries = execSync(
-    `ls -1 "${cawsDir}" | grep '^events.jsonl.archive-' || true`,
-    { encoding: 'utf8' }
-  ).trim().split('\n').filter(Boolean);
+  const entries = execSync(`ls -1 "${cawsDir}" | grep '^events.jsonl.archive-' || true`, {
+    encoding: 'utf8',
+  })
+    .trim()
+    .split('\n')
+    .filter(Boolean);
   if (entries.length !== 1) {
     fail(`expected exactly 1 archive in ${cawsDir}, found ${entries.length}`, {
       entries: entries.join(', '),
@@ -393,8 +390,7 @@ function runEndToEndSmoke(cawsBin, repoDir, expectedDigest, expectedLineCount) {
       archiveSize: archiveBytes.length,
     });
   }
-  const archiveDigest =
-    'sha256:' + createHash('sha256').update(archiveBytes).digest('hex');
+  const archiveDigest = 'sha256:' + createHash('sha256').update(archiveBytes).digest('hex');
   if (archiveDigest !== expectedDigest) {
     fail('archive digest does not match pre-rotation digest', {
       expected: expectedDigest,
@@ -428,8 +424,7 @@ function runEndToEndSmoke(cawsBin, repoDir, expectedDigest, expectedLineCount) {
   step('tamper archive and re-verify');
   appendFileSync(archivePath, 'A12_TAMPER\n');
   const tamperedDigest =
-    'sha256:' +
-    createHash('sha256').update(readFileSync(archivePath)).digest('hex');
+    'sha256:' + createHash('sha256').update(readFileSync(archivePath)).digest('hex');
   if (tamperedDigest === expectedDigest) {
     fail('tampered archive somehow has the same digest as the original', {
       expected: expectedDigest,
@@ -484,9 +479,7 @@ try {
   const { projectDir, cawsBin } = installTarballs(cliTarball);
 
   // 4. Build fixture (scratch repo with v10 events.jsonl + v11 spec).
-  const { repoDir, expectedDigest, expectedLineCount } = setupScratchRepo(
-    projectDir
-  );
+  const { repoDir, expectedDigest, expectedLineCount } = setupScratchRepo(projectDir);
 
   // 5. End-to-end smoke against the installed binary.
   runEndToEndSmoke(cawsBin, repoDir, expectedDigest, expectedLineCount);

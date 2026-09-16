@@ -205,7 +205,7 @@ describe('successors: intra-spec semantics (A3, A4, A18, A19)', () => {
       `successors:
   - target_spec_id: TEST-1
     disposition: required`,
-      'TEST-1',
+      'TEST-1'
     );
 
     expect(rulesFrom(source)).toContain(SPEC_RULES.SUCCESSOR_SELF_REFERENCE);
@@ -217,7 +217,7 @@ describe('successors: intra-spec semantics (A3, A4, A18, A19)', () => {
   - target_spec_id: SOME-SPEC-01
     disposition: absorbed
     absorbed_by: TEST-1`,
-      'TEST-1',
+      'TEST-1'
     );
 
     expect(rulesFrom(source)).toContain(SPEC_RULES.SUCCESSOR_ABSORBED_BY_SELF_REFERENCE);
@@ -250,7 +250,7 @@ describe('successors: intra-spec semantics (A3, A4, A18, A19)', () => {
     const spec = parseShape(
       specWith(`successors:
   - target_spec_id: DEFINITELY-NOT-AUTHORED-99
-    disposition: required`),
+    disposition: required`)
     );
 
     expect(isOk(validateSpecSemantics(spec))).toBe(true);
@@ -345,10 +345,7 @@ describe('successor resolver: existence oracle (A6, A7, A8, A17)', () => {
     ]);
 
     expect(
-      findUnresolvedObligations(
-        [{ target_spec_id: 'DUPE-01', disposition: 'required' }],
-        ambiguous,
-      ),
+      findUnresolvedObligations([{ target_spec_id: 'DUPE-01', disposition: 'required' }], ambiguous)
     ).toEqual([]);
   });
 
@@ -366,10 +363,7 @@ describe('successor resolver: existence oracle (A6, A7, A8, A17)', () => {
       { id: 'DUPE-02', lifecycle_state: 'archived', archived: true },
     ]);
 
-    expect(unlabeled.resolve('DUPE-02').ambiguous_sources).toEqual([
-      'live[0]',
-      'archive[1]',
-    ]);
+    expect(unlabeled.resolve('DUPE-02').ambiguous_sources).toEqual(['live[0]', 'archive[1]']);
   });
 
   it('prefers the LIVE entry for standing when both copies exist', () => {
@@ -484,7 +478,7 @@ describe('close obligations: which references must resolve (A5, A6, A8, A17)', (
   it('blocks close when a required target is unauthored', () => {
     const unresolved = findUnresolvedObligations(
       [{ target_spec_id: 'NEVER-AUTHORED-01', disposition: 'required' }],
-      resolver,
+      resolver
     );
 
     expect(unresolved).toEqual([
@@ -501,8 +495,8 @@ describe('close obligations: which references must resolve (A5, A6, A8, A17)', (
     expect(
       findUnresolvedObligations(
         [{ target_spec_id: 'AUTHORED-TARGET-01', disposition: 'required' }],
-        resolver,
-      ),
+        resolver
+      )
     ).toEqual([]);
   });
 
@@ -517,8 +511,8 @@ describe('close obligations: which references must resolve (A5, A6, A8, A17)', (
             rationale: 'Superseded by a different approach.',
           },
         ],
-        resolver,
-      ),
+        resolver
+      )
     ).toEqual([]);
   });
 
@@ -535,8 +529,8 @@ describe('close obligations: which references must resolve (A5, A6, A8, A17)', (
             absorbed_by: 'ABSORBER-01',
           },
         ],
-        resolver,
-      ),
+        resolver
+      )
     ).toEqual([]);
   });
 
@@ -549,7 +543,7 @@ describe('close obligations: which references must resolve (A5, A6, A8, A17)', (
           absorbed_by: 'NEVER-AUTHORED-01',
         },
       ],
-      resolver,
+      resolver
     );
 
     expect(unresolved).toHaveLength(1);
@@ -561,7 +555,7 @@ describe('close obligations: which references must resolve (A5, A6, A8, A17)', (
   it('blocks close on REGISTRY_UNAVAILABLE rather than downgrading to local-only', () => {
     const unresolved = findUnresolvedObligations(
       [{ target_spec_id: 'AUTHORED-TARGET-01', disposition: 'required' }],
-      createSuccessorResolver(undefined),
+      createSuccessorResolver(undefined)
     );
 
     expect(unresolved).toHaveLength(1);
@@ -575,7 +569,7 @@ describe('close obligations: which references must resolve (A5, A6, A8, A17)', (
         { target_spec_id: 'AUTHORED-TARGET-01', disposition: 'required' },
         { target_spec_id: 'MISSING-B-01', disposition: 'required' },
       ],
-      resolver,
+      resolver
     );
 
     expect(unresolved.map((u) => u.target_spec_id)).toEqual(['MISSING-A-01', 'MISSING-B-01']);
@@ -592,8 +586,8 @@ describe('close obligations: which references must resolve (A5, A6, A8, A17)', (
     expect(
       findUnresolvedObligations(
         [{ target_spec_id: 'PROPOSED-01', disposition: 'absorbed' }],
-        resolver,
-      ),
+        resolver
+      )
     ).toEqual([]);
   });
 
@@ -610,8 +604,8 @@ describe('close obligations: which references must resolve (A5, A6, A8, A17)', (
             absorbed_by: 'ALSO-NEVER-AUTHORED-01',
           },
         ],
-        resolver,
-      ),
+        resolver
+      )
     ).toEqual([]);
   });
 });
@@ -626,7 +620,7 @@ describe('event projection preserves the whole declaration (A9)', () => {
   - target_spec_id: SECOND-TARGET-01
     disposition: absorbed
     absorbed_by: ABSORBER-01
-    rationale: Folded into the broader slice.`),
+    rationale: Folded into the broader slice.`)
     );
 
     // A projection that keeps ids and drops rationale would pass a naive
@@ -650,7 +644,7 @@ describe('event projection preserves the whole declaration (A9)', () => {
     const spec = parseShape(
       specWith(`successors:
   - target_spec_id: FIRST-TARGET-01
-    disposition: required`),
+    disposition: required`)
     );
 
     const projected = projectSuccessorsForEvent(spec);

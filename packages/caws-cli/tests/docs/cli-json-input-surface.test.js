@@ -10,30 +10,37 @@ function flattenLeaves(group, prefix = []) {
     return [{ command: [...prefix, group.name].join(' '), options: group.options || [] }];
   }
   return [
-    ...(group.defaultAction ? [{ command: [...prefix, group.name].join(' '), options: group.options || [] }] : []),
-    ...group.subcommands.flatMap((subcommand) => flattenLeaves(subcommand, [...prefix, group.name])),
+    ...(group.defaultAction
+      ? [{ command: [...prefix, group.name].join(' '), options: group.options || [] }]
+      : []),
+    ...group.subcommands.flatMap((subcommand) =>
+      flattenLeaves(subcommand, [...prefix, group.name])
+    ),
   ];
 }
 
 function jsonLikeOptions() {
-  return COMMAND_SURFACE_METADATA.flatMap((group) => flattenLeaves(group))
-    .flatMap((leaf) =>
-      leaf.options
-        .filter((option) =>
-          /--json|<json>|JSON|lifecycle-mapping/.test(
-            `${option.flag} ${option.description}`
-          )
-        )
-        .map((option) => ({
-          command: leaf.command,
-          flag: option.flag,
-          description: option.description,
-        }))
-    );
+  return COMMAND_SURFACE_METADATA.flatMap((group) => flattenLeaves(group)).flatMap((leaf) =>
+    leaf.options
+      .filter((option) =>
+        /--json|<json>|JSON|lifecycle-mapping/.test(`${option.flag} ${option.description}`)
+      )
+      .map((option) => ({
+        command: leaf.command,
+        flag: option.flag,
+        description: option.description,
+      }))
+  );
 }
 
 function isOperatorSuppliedJsonInput(option) {
-  if (['init adapters migrate', 'init adapters adopt', 'init migrate', 'init migrate apply'].includes(option.command) && option.flag === '--from <file>') return true;
+  if (
+    ['init adapters migrate', 'init adapters adopt', 'init migrate', 'init migrate apply'].includes(
+      option.command
+    ) &&
+    option.flag === '--from <file>'
+  )
+    return true;
   if (option.command === 'evidence record' && option.flag === '--data <json>') {
     return true;
   }

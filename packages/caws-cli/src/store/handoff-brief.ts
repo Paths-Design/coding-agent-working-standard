@@ -81,7 +81,12 @@ export interface HandoffBrief {
 }
 
 /** The handoff event types from the phase-1 taxonomy. */
-const HANDOFF_EVENT_TYPES = new Set(['stash_restore', 'claim_transfer', 'overlap_ack_proceed', 'manual_pickup']);
+const HANDOFF_EVENT_TYPES = new Set([
+  'stash_restore',
+  'claim_transfer',
+  'overlap_ack_proceed',
+  'manual_pickup',
+]);
 
 /** Build the metadata-only brief for a session. Pure over the on-disk snapshot. */
 export function buildHandoffBrief(input: {
@@ -92,7 +97,14 @@ export function buildHandoffBrief(input: {
 }): HandoffBrief | null {
   // Lease metadata (operational cache read; work_state + claimed_paths).
   let lease:
-    | { platform?: string; work_state?: string; work_state_note?: string; claimed_paths?: readonly string[]; bound_worktree?: string; bound_spec_id?: string }
+    | {
+        platform?: string;
+        work_state?: string;
+        work_state_note?: string;
+        claimed_paths?: readonly string[];
+        bound_worktree?: string;
+        bound_spec_id?: string;
+      }
     | undefined;
   const leases = loadLeases(input.cawsDir);
   if (isOk(leases)) {
@@ -131,14 +143,21 @@ export function buildHandoffBrief(input: {
       if (!HANDOFF_EVENT_TYPES.has(ev.event)) continue;
       const data = (ev.data ?? {}) as Record<string, unknown>;
       const src = typeof data['source_session'] === 'string' ? data['source_session'] : undefined;
-      const rcv = typeof data['receiving_session'] === 'string' ? data['receiving_session'] : undefined;
+      const rcv =
+        typeof data['receiving_session'] === 'string' ? data['receiving_session'] : undefined;
       if (src !== input.sessionId && rcv !== input.sessionId) continue;
       prior.push({
         event: ev.event,
         ts: ev.ts,
         ...(src !== undefined ? { source_session: src } : {}),
         ...(rcv !== undefined ? { receiving_session: rcv } : {}),
-        ...(Array.isArray(data['paths']) ? { paths: (data['paths'] as unknown[]).filter((p): p is string => typeof p === 'string').map(redactPath) } : {}),
+        ...(Array.isArray(data['paths'])
+          ? {
+              paths: (data['paths'] as unknown[])
+                .filter((p): p is string => typeof p === 'string')
+                .map(redactPath),
+            }
+          : {}),
         ...(typeof ev.seq === 'number' ? { seq: ev.seq } : {}),
       });
     }
@@ -160,10 +179,7 @@ export function buildHandoffBrief(input: {
     prior_handoffs: prior,
   };
 
-  const contentSha256 = crypto
-    .createHash('sha256')
-    .update(canonicalJson(brief))
-    .digest('hex');
+  const contentSha256 = crypto.createHash('sha256').update(canonicalJson(brief)).digest('hex');
   return { ...brief, content_sha256: contentSha256 };
 }
 
@@ -222,7 +238,11 @@ export function readHandoffBrief(
   }
   const obj = parsed as Record<string, unknown>;
   const source = obj['source_session'];
-  if (typeof source !== 'object' || source === null || typeof (source as { session_id?: unknown }).session_id !== 'string') {
+  if (
+    typeof source !== 'object' ||
+    source === null ||
+    typeof (source as { session_id?: unknown }).session_id !== 'string'
+  ) {
     return { malformed: true, reason: 'source_session.session_id missing or not a string' };
   }
   return parsed as HandoffBrief;

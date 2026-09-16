@@ -283,8 +283,7 @@ function patchSequence(
   if (block === null) return null;
 
   const removeSet = new Set(remove.map(unquote));
-  const firstLogical =
-    block.entries[0] !== undefined ? entryLogical(block.entries[0]) : undefined;
+  const firstLogical = block.entries[0] !== undefined ? entryLogical(block.entries[0]) : undefined;
   const onlyScaffold =
     block.entries.length === 1 && firstLogical !== undefined && firstLogical === site.scaffold;
   const dischargedScaffold = onlyScaffold && add.length > 0;
@@ -318,11 +317,7 @@ function patchSequence(
   for (const v of added) {
     rendered.push(`${pad}- ${quote(v)}`);
   }
-  const next = [
-    ...lines.slice(0, block.keyIdx + 1),
-    ...rendered,
-    ...lines.slice(block.endIdx),
-  ];
+  const next = [...lines.slice(0, block.keyIdx + 1), ...rendered, ...lines.slice(block.endIdx)];
   return { lines: next, added, removed, dischargedScaffold, resulting };
 }
 
@@ -486,12 +481,7 @@ function renderAcFieldValue(field: AcField, value: string): string[] {
   return [`    ${field}: >-`, ...wrapped.map((w) => `      ${w}`)];
 }
 
-function renderAcEntry(ac: {
-  id: string;
-  given: string;
-  when: string;
-  then: string;
-}): string[] {
+function renderAcEntry(ac: { id: string; given: string; when: string; then: string }): string[] {
   return [
     `  - id: ${ac.id}`,
     ...renderAcFieldValue('given', ac.given),
@@ -590,7 +580,9 @@ export function amendSpecBody(
 
   const acFlagError = validateAcFlagShape(input, acTargets, acFieldCount);
   if (acFlagError !== null) {
-    return err(storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, acFlagError, { subject: input.id }));
+    return err(
+      storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, acFlagError, { subject: input.id })
+    );
   }
   if (acTargets.length === 0 && !hasModuleOps) {
     return err(

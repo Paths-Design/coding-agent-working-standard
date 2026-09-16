@@ -136,7 +136,9 @@ function claimMeta() {
 describe('caws claim release and preview UX', () => {
   test('help metadata lists plan, JSON, release, and apply flags', () => {
     const flags = claimMeta().options.map((option) => option.flag);
-    expect(flags).toEqual(expect.arrayContaining(['--plan', '--json', '--release-paths', '--apply']));
+    expect(flags).toEqual(
+      expect.arrayContaining(['--plan', '--json', '--release-paths', '--apply'])
+    );
   });
 
   test('takeover plan reports prior-owner audit impact without mutating registry or leases', () => {
@@ -174,7 +176,9 @@ describe('caws claim release and preview UX', () => {
     });
     expect(readText(path.join(cawsDir, 'worktrees.json'))).toBe(beforeRegistry);
     expect(
-      fs.existsSync(path.join(cawsDir, 'leases')) ? fs.readdirSync(path.join(cawsDir, 'leases')) : []
+      fs.existsSync(path.join(cawsDir, 'leases'))
+        ? fs.readdirSync(path.join(cawsDir, 'leases'))
+        : []
     ).toEqual(beforeLeases);
   });
 

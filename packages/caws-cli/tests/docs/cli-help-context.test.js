@@ -27,7 +27,9 @@ function loadMetadata() {
     }
   }
   if (!fs.existsSync(metadataPath)) {
-    throw new Error(`command metadata not found at ${LOCAL_METADATA_PATH}; run npm run build first`);
+    throw new Error(
+      `command metadata not found at ${LOCAL_METADATA_PATH}; run npm run build first`
+    );
   }
   return require(metadataPath).COMMAND_SURFACE_METADATA;
 }
@@ -37,9 +39,7 @@ function escapeRegExp(value) {
 }
 
 function namesCommand(description, name) {
-  return new RegExp(`(^|[^a-z0-9-])${escapeRegExp(name)}($|[^a-z0-9-])`, 'i').test(
-    description
-  );
+  return new RegExp(`(^|[^a-z0-9-])${escapeRegExp(name)}($|[^a-z0-9-])`, 'i').test(description);
 }
 
 function findGroup(metadata, groupName) {
@@ -92,13 +92,23 @@ const CLEANUP_LEAF_EXPECTATIONS = [
     group: 'worktree',
     leaf: 'untrack',
     options: ['--reason', '--apply', '--json'],
-    terms: ['dry-run by default', 'requires --reason', '--apply removes only the control-plane binding'],
+    terms: [
+      'dry-run by default',
+      'requires --reason',
+      '--apply removes only the control-plane binding',
+    ],
   },
   {
     group: 'worktree',
     leaf: 'prune',
     options: ['--state', '--status', '--include', '--exclude', '--apply', '--json'],
-    terms: ['dry-run by default', 'with --apply', 'ghost-registry', 'dead-binding', 'closed-spec-residue'],
+    terms: [
+      'dry-run by default',
+      'with --apply',
+      'ghost-registry',
+      'dead-binding',
+      'closed-spec-residue',
+    ],
   },
   {
     group: 'worktree',

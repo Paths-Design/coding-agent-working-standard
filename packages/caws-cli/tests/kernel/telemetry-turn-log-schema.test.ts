@@ -40,9 +40,7 @@ function expectRejected(
   const valid = validate(payload);
   expect(valid).toBe(false);
   const errors: ErrorObject[] = validate.errors || [];
-  const matched = errors.some(
-    (e) => e.instancePath === instancePath && e.keyword === keyword
-  );
+  const matched = errors.some((e) => e.instancePath === instancePath && e.keyword === keyword);
   if (!matched) {
     throw new Error(
       `expected rejection at ${instancePath} (${keyword}), got: ` +
@@ -203,19 +201,11 @@ describe('turn-log.v2 schema (CAWS-HARNESS-TELEMETRY-ADAPTER-001 A5)', () => {
     });
 
     it('pins the status enum to the renderer vocabulary', () => {
-      expect(turnLogSchema.properties.status.enum).toEqual([
-        'ok',
-        'error',
-        'blocked',
-        'rewound',
-      ]);
+      expect(turnLogSchema.properties.status.enum).toEqual(['ok', 'error', 'blocked', 'rewound']);
     });
 
     it('pins the rewind_kind vocabulary to the two classifications', () => {
-      expect(turnLogSchema.properties.rewind_kind.enum).toEqual([
-        'same_prompt',
-        'edited_prompt',
-      ]);
+      expect(turnLogSchema.properties.rewind_kind.enum).toEqual(['same_prompt', 'edited_prompt']);
     });
 
     it('closes the usage object so an unaccounted token class cannot slip in', () => {
@@ -237,9 +227,7 @@ describe('turn-log.v2 schema (CAWS-HARNESS-TELEMETRY-ADAPTER-001 A5)', () => {
     it('leaves timeline items open on per-kind detail but pinned on the core', () => {
       const item = turnLogSchema.$defs.timelineItem;
       expect(item.additionalProperties).toBe(true);
-      expect([...item.required].sort()).toEqual(
-        ['kind', 'provenance', 'ts'].sort()
-      );
+      expect([...item.required].sort()).toEqual(['kind', 'provenance', 'ts'].sort());
     });
   });
 
@@ -249,9 +237,7 @@ describe('turn-log.v2 schema (CAWS-HARNESS-TELEMETRY-ADAPTER-001 A5)', () => {
       if (!valid) {
         throw new Error(
           'full payload rejected: ' +
-            (validate.errors || [])
-              .map((e) => `${e.instancePath} ${e.message}`)
-              .join('; ')
+            (validate.errors || []).map((e) => `${e.instancePath} ${e.message}`).join('; ')
         );
       }
     });
@@ -261,9 +247,7 @@ describe('turn-log.v2 schema (CAWS-HARNESS-TELEMETRY-ADAPTER-001 A5)', () => {
       if (!valid) {
         throw new Error(
           'minimal payload rejected: ' +
-            (validate.errors || [])
-              .map((e) => `${e.instancePath} ${e.message}`)
-              .join('; ')
+            (validate.errors || []).map((e) => `${e.instancePath} ${e.message}`).join('; ')
         );
       }
     });
@@ -287,9 +271,7 @@ describe('turn-log.v2 schema (CAWS-HARNESS-TELEMETRY-ADAPTER-001 A5)', () => {
       if (!valid) {
         throw new Error(
           'steering payload rejected: ' +
-            (validate.errors || [])
-              .map((e) => `${e.instancePath} ${e.message}`)
-              .join('; ')
+            (validate.errors || []).map((e) => `${e.instancePath} ${e.message}`).join('; ')
         );
       }
     });
@@ -302,9 +284,7 @@ describe('turn-log.v2 schema (CAWS-HARNESS-TELEMETRY-ADAPTER-001 A5)', () => {
         'user_interrupt_generation',
         'user_interrupt',
       ]) {
-        expect(
-          validate({ ...minimalDegradedPayload, ended_by: endedBy })
-        ).toBe(true);
+        expect(validate({ ...minimalDegradedPayload, ended_by: endedBy })).toBe(true);
       }
     });
 
@@ -366,14 +346,11 @@ describe('turn-log.v2 schema (CAWS-HARNESS-TELEMETRY-ADAPTER-001 A5)', () => {
     });
 
     it('rejects a usage block missing a token class rather than defaulting it', () => {
-      const { output: _dropped, ...partial } =
-        steeringSignalsPayload.usage as Record<string, unknown>;
-      expectRejected(
-        validate,
-        { ...steeringSignalsPayload, usage: partial },
-        '/usage',
-        'required'
-      );
+      const { output: _dropped, ...partial } = steeringSignalsPayload.usage as Record<
+        string,
+        unknown
+      >;
+      expectRejected(validate, { ...steeringSignalsPayload, usage: partial }, '/usage', 'required');
     });
 
     it('rejects a negative token count', () => {
@@ -407,12 +384,7 @@ describe('turn-log.v2 schema (CAWS-HARNESS-TELEMETRY-ADAPTER-001 A5)', () => {
     });
 
     it('rejects status values outside the renderer vocabulary', () => {
-      expectRejected(
-        validate,
-        { ...minimalDegradedPayload, status: 'failed' },
-        '/status',
-        'enum'
-      );
+      expectRejected(validate, { ...minimalDegradedPayload, status: 'failed' }, '/status', 'enum');
     });
 
     it('rejects non-positive turn numbers', () => {
@@ -434,12 +406,7 @@ describe('turn-log.v2 schema (CAWS-HARNESS-TELEMETRY-ADAPTER-001 A5)', () => {
     it('rejects a context object missing session identity', () => {
       const context = { ...fullRealShapedPayload.context };
       delete context.session_id;
-      expectRejected(
-        validate,
-        { ...fullRealShapedPayload, context },
-        '/context',
-        'required'
-      );
+      expectRejected(validate, { ...fullRealShapedPayload, context }, '/context', 'required');
     });
 
     it('rejects a context object with unknown fields', () => {

@@ -101,7 +101,8 @@ function ledger(root) {
 
 function extractRenderer() {
   const src = fs.readFileSync(HOOK_TEMPLATE, 'utf8');
-  const anchor = 'HEARTBEAT_MSG_TELEMETRY="$PROJECT_DIR_FOR_CACHE/.caws/leases/heartbeat-message-telemetry.jsonl" HEARTBEAT_ESCALATION_STATE="$PROJECT_DIR_FOR_CACHE/.caws/leases/heartbeat-escalation-state.json" node -e \'';
+  const anchor =
+    'HEARTBEAT_MSG_TELEMETRY="$PROJECT_DIR_FOR_CACHE/.caws/leases/heartbeat-message-telemetry.jsonl" HEARTBEAT_ESCALATION_STATE="$PROJECT_DIR_FOR_CACHE/.caws/leases/heartbeat-escalation-state.json" node -e \'';
   const start = src.indexOf(anchor);
   if (start === -1) throw new Error('renderer anchor not found in template');
   const body = src.slice(start + anchor.length);

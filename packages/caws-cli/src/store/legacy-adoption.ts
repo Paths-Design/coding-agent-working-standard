@@ -40,11 +40,11 @@ function inertWaiver(value: unknown): boolean {
   if (!/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(normalized)) return false;
   const day = normalized.slice(0, 10);
   const dayTime = Date.parse(day + 'T00:00:00Z');
-  if (!Number.isFinite(dayTime) || new Date(dayTime).toISOString().slice(0, 10) !== day) return false;
+  if (!Number.isFinite(dayTime) || new Date(dayTime).toISOString().slice(0, 10) !== day)
+    return false;
   const time = Date.parse(normalized);
   return Number.isFinite(time) && time < Date.now();
 }
-
 
 /** Apply a reviewed conversion without inventing evidence or dropping original
  * source bytes. Preview is pure. A lock serializes this command; input hashes
@@ -108,7 +108,11 @@ export function adoptLegacyProject(cwd: string, input: unknown, apply: boolean) 
       if (change.contents !== null)
         throw new Error('Legacy singleton paths must be archived, never rewritten');
     } else if (waiverPath.test(change.path)) {
-      if (original === null || change.contents !== null || !inertWaiver(yaml.load(original, { schema: yaml.JSON_SCHEMA })))
+      if (
+        original === null ||
+        change.contents !== null ||
+        !inertWaiver(yaml.load(original, { schema: yaml.JSON_SCHEMA }))
+      )
         throw new Error(`Waiver must be provably expired or revoked for archival: ${change.path}`);
     } else if (change.path === '.caws/policy.yaml') {
       if (original !== null && isOk(parseAndValidatePolicy(original)))

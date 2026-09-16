@@ -84,10 +84,7 @@ function indexLockExhaustedReason(maxAttempts: number): string {
   );
 }
 
-export type AutoCommitKind =
-  | 'committed'
-  | 'refused_dirty'
-  | 'skipped_no_git';
+export type AutoCommitKind = 'committed' | 'refused_dirty' | 'skipped_no_git';
 
 export interface AutoCommitOutcome {
   readonly kind: AutoCommitKind;

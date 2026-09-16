@@ -93,9 +93,7 @@ describe('status binding line describes the actual rule', () => {
 
     const result = runStatus(root);
 
-    const binding = result.out
-      .split('\n')
-      .find((l) => l.trim().startsWith('binding:'));
+    const binding = result.out.split('\n').find((l) => l.trim().startsWith('binding:'));
 
     expect(binding).toContain('unbound (no write authority here');
     expect(binding).toContain('bind one to edit');
@@ -115,14 +113,11 @@ describe('status binding line describes the actual rule', () => {
     writeSpec(many.caws, 'ACTIVE-C-003');
     const none = mkRepo();
 
-    const bindingLine = (text) =>
-      text.split('\n').find((l) => l.trim().startsWith('binding:'));
+    const bindingLine = (text) => text.split('\n').find((l) => l.trim().startsWith('binding:'));
 
     // This is the whole point: the kernel's answer does not vary with the
     // active-spec count, so the rendered line must not either.
-    expect(bindingLine(runStatus(many.root).out)).toBe(
-      bindingLine(runStatus(none.root).out)
-    );
+    expect(bindingLine(runStatus(many.root).out)).toBe(bindingLine(runStatus(none.root).out));
   });
 });
 
@@ -133,7 +128,11 @@ describe('status separates work in flight from active backlog', () => {
     writeSpec(caws, 'UNBOUND-002');
     writeSpec(caws, 'UNBOUND-003');
     writeRegistry(caws, {
-      'wt-one': { specId: 'BOUND-001', baseBranch: 'main', path: path.join(caws, 'worktrees', 'wt-one') },
+      'wt-one': {
+        specId: 'BOUND-001',
+        baseBranch: 'main',
+        path: path.join(caws, 'worktrees', 'wt-one'),
+      },
     });
 
     const result = runStatus(root);
@@ -146,7 +145,11 @@ describe('status separates work in flight from active backlog', () => {
     const { root, caws } = mkRepo();
     writeSpec(caws, 'BOUND-001', { worktree: 'wt-one' });
     writeRegistry(caws, {
-      'wt-one': { specId: 'BOUND-001', baseBranch: 'main', path: path.join(caws, 'worktrees', 'wt-one') },
+      'wt-one': {
+        specId: 'BOUND-001',
+        baseBranch: 'main',
+        path: path.join(caws, 'worktrees', 'wt-one'),
+      },
     });
 
     const result = runStatus(root);

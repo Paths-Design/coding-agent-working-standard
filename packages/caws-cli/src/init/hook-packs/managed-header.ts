@@ -41,7 +41,7 @@ function parseJsonManagedHeader(content: string): ManagedHeader | null {
 
   const readString = (key: string): string => {
     const match = description.match(new RegExp(`${key}=([^\\s.]+)`));
-    return match ? match[1] ?? '' : '';
+    return match ? (match[1] ?? '') : '';
   };
 
   const hookPack = readString('hook_pack');
@@ -82,7 +82,10 @@ export function parseManagedHeader(content: string): ManagedHeader | null {
   let sawMarker = false;
 
   for (const raw of lines) {
-    const line = raw.trim().replace(/^<!--\s*/, '').replace(/\s*-->\s*$/, '');
+    const line = raw
+      .trim()
+      .replace(/^<!--\s*/, '')
+      .replace(/\s*-->\s*$/, '');
     if (!line) continue;
 
     if (line.includes(HEADER_MARKER)) {

@@ -177,10 +177,7 @@ function parseJsonlContent(raw: string, filePath: string): Result<EventsLoadResu
  * never accepts a pre-chained event — sequence and hash are kernel
  * authority.
  */
-export function appendEvent(
-  cawsDir: string,
-  body: EventBody
-): Result<ChainedEvent> {
+export function appendEvent(cawsDir: string, body: EventBody): Result<ChainedEvent> {
   const eventsPath = path.join(cawsDir, 'events.jsonl');
   const lockPath = `${eventsPath}.lock`;
 
@@ -326,10 +323,7 @@ export interface RotateEventsOptions {
  * On success returns the new ChainedEvent (the chain_rotated genesis event
  * that is now the entirety of the new events.jsonl).
  */
-export function rotateEvents(
-  cawsDir: string,
-  opts: RotateEventsOptions
-): Result<ChainedEvent> {
+export function rotateEvents(cawsDir: string, opts: RotateEventsOptions): Result<ChainedEvent> {
   const eventsPath = path.join(cawsDir, 'events.jsonl');
   const lockPath = `${eventsPath}.lock`;
 
@@ -395,8 +389,7 @@ export function rotateEvents(
     // in a later slice if recovery from partial corruption becomes a
     // first-class operator concern. Not in v11.2 scope.
     const hasPartialCorruption =
-      scanResult.stats.unparseable > 0 &&
-      scanResult.stats.unparseable < scanResult.lineCount;
+      scanResult.stats.unparseable > 0 && scanResult.stats.unparseable < scanResult.lineCount;
     if (hasPartialCorruption) {
       return err(
         storeDiagnostic(

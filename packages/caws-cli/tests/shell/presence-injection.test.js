@@ -30,14 +30,16 @@ const {
 } = require('../../dist/shell/commands/specs');
 const { initProject } = require('../../dist/store/init-store');
 
-const HOOK = path.resolve(
-  __dirname, '../../templates/hook-packs/shared/agent-register.sh'
-);
+const HOOK = path.resolve(__dirname, '../../templates/hook-packs/shared/agent-register.sh');
 
 const repos = [];
 afterAll(() => {
   for (const r of repos) {
-    try { fs.rmSync(r, { recursive: true, force: true }); } catch { /* ignore */ }
+    try {
+      fs.rmSync(r, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
   }
 });
 
@@ -114,10 +116,14 @@ describe('decision-point peer block (specs activate surface)', () => {
     const root = mkRepo();
     mkSpec(root, 'SPEC-001');
     writeLease(root, 'peer-aaa', {
-      bound_worktree: 'wt-x', bound_spec_id: 'SPEC-X', branch: 'feat/x',
+      bound_worktree: 'wt-x',
+      bound_spec_id: 'SPEC-X',
+      branch: 'feat/x',
     });
     writeLease(root, 'peer-bbb', {
-      bound_worktree: 'wt-y', bound_spec_id: 'SPEC-Y', branch: 'feat/y',
+      bound_worktree: 'wt-y',
+      bound_spec_id: 'SPEC-Y',
+      branch: 'feat/y',
     });
 
     const { code, out } = activate(root, 'SPEC-001');
@@ -160,9 +166,10 @@ describe('decision-point peer block (specs activate surface)', () => {
     writeLease(root, 'sess-self');
     writeLease(root, 'peer-ccc');
 
-    const { code, out } = activate(
-      root, 'SPEC-004', { ...process.env, CLAUDE_SESSION_ID: 'sess-self' }
-    );
+    const { code, out } = activate(root, 'SPEC-004', {
+      ...process.env,
+      CLAUDE_SESSION_ID: 'sess-self',
+    });
     expect(code).toBe(0);
     const text = out.join('\n');
 
@@ -190,16 +197,19 @@ describe('decision-point peer block (specs activate surface)', () => {
 describe('A5: SessionStart unbound advisory (agent-register.sh)', () => {
   function stubCaws(root, fixture) {
     const stub = path.join(root, 'stub-caws');
-    fs.writeFileSync(stub, [
-      '#!/bin/bash',
-      'if [[ "$*" == *"scope show"* ]]; then',
-      `cat <<'JSON'`,
-      fixture,
-      'JSON',
-      'fi',
-      'exit 0',
-      '',
-    ].join('\n'));
+    fs.writeFileSync(
+      stub,
+      [
+        '#!/bin/bash',
+        'if [[ "$*" == *"scope show"* ]]; then',
+        `cat <<'JSON'`,
+        fixture,
+        'JSON',
+        'fi',
+        'exit 0',
+        '',
+      ].join('\n')
+    );
     fs.chmodSync(stub, 0o755);
     return stub;
   }
@@ -233,16 +243,19 @@ describe('A5: SessionStart unbound advisory (agent-register.sh)', () => {
     const zero = activate(root, 'SPEC-101'); // no leases -> activates cleanly
     if (zero.code !== 0) throw new Error('activate SPEC-101 failed: ' + zero.err.join('\n'));
 
-    const stub = stubCaws(root, JSON.stringify({
-      decision: 'no_authority',
-      rule: 'scope.no_authority.unbound',
-      authorityCandidates: [
-        { specId: 'SPEC-101', lifecycleState: 'active' },
-        { specId: 'SPEC-102', lifecycleState: 'active' },
-        { specId: 'SPEC-103', lifecycleState: 'active' },
-        { specId: 'SPEC-104', lifecycleState: 'active' },
-      ],
-    }));
+    const stub = stubCaws(
+      root,
+      JSON.stringify({
+        decision: 'no_authority',
+        rule: 'scope.no_authority.unbound',
+        authorityCandidates: [
+          { specId: 'SPEC-101', lifecycleState: 'active' },
+          { specId: 'SPEC-102', lifecycleState: 'active' },
+          { specId: 'SPEC-103', lifecycleState: 'active' },
+          { specId: 'SPEC-104', lifecycleState: 'active' },
+        ],
+      })
+    );
 
     const stdout = runHook(root, stub);
     expect(stdout).toContain('NO write authority');
@@ -253,10 +266,13 @@ describe('A5: SessionStart unbound advisory (agent-register.sh)', () => {
 
   test('bound checkout (decision != no_authority) emits nothing', () => {
     const root = mkRepo();
-    const stub = stubCaws(root, JSON.stringify({
-      decision: 'admit',
-      rule: 'scope.admit.scope_in',
-    }));
+    const stub = stubCaws(
+      root,
+      JSON.stringify({
+        decision: 'admit',
+        rule: 'scope.admit.scope_in',
+      })
+    );
 
     const stdout = runHook(root, stub);
     expect(stdout).not.toContain('NO write authority');

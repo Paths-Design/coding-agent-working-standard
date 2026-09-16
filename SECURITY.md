@@ -2,23 +2,42 @@
 
 ## Security Overview
 
-CAWS (Coding Agent Working Standard) governs agent behavior through scope guards, a danger latch on destructive git operations, and a hash-chained audit trail (`.caws/events.jsonl`) — the same mechanisms that enforce project quality gates also bound what an agent can touch and record what it did. This document outlines those mechanisms, the current automated checks, and the vulnerability reporting process.
+CAWS (Coding Agent Working Standard) governs agent behavior through scope
+guards, a danger latch on destructive git operations, and a hash-chained audit
+trail (`.caws/events.jsonl`) — the same mechanisms that enforce project quality
+gates also bound what an agent can touch and record what it did. This document
+outlines those mechanisms, the current automated checks, and the vulnerability
+reporting process.
 
 ## Security Measures
 
 ### Agent governance (CAWS itself)
 
-- **Scope guard**: a spec's `scope.in`/`scope.out` bounds which paths an agent may write; enforced at hook time via `caws scope check`, not by convention.
-- **Danger latch**: a hook pack blocks destructive git patterns (force-push, `reset --hard`, `rebase`, `cherry-pick`, `clean -f`, bare `checkout <path>`) and requires a human-run reset to clear.
-- **Audit trail**: every governed mutation (spec lifecycle, worktree binding, gate evaluation, claim/takeover) appends a hash-chained event to `.caws/events.jsonl` — tamper-evident, never hand-edited.
-- **Waivers, not silent bypass**: a gate violation can only be suppressed via `caws waiver create` (reason, approver, expiry required), not by editing policy or budget fields directly.
+- **Scope guard**: a spec's `scope.in`/`scope.out` bounds which paths an agent
+  may write; enforced at hook time via `caws scope check`, not by convention.
+- **Danger latch**: a hook pack blocks destructive git patterns (force-push,
+  `reset --hard`, `rebase`, `cherry-pick`, `clean -f`, bare `checkout <path>`)
+  and requires a human-run reset to clear.
+- **Audit trail**: every governed mutation (spec lifecycle, worktree binding,
+  gate evaluation, claim/takeover) appends a hash-chained event to
+  `.caws/events.jsonl` — tamper-evident, never hand-edited.
+- **Waivers, not silent bypass**: a gate violation can only be suppressed via
+  `caws waiver create` (reason, approver, expiry required), not by editing
+  policy or budget fields directly.
 
 ### Automated CI checks
 
-- `npm audit --audit-level=critical` runs in `.github/workflows/pr-checks.yml` (advisory — flags critical vulnerabilities, does not currently block the PR).
-- TypeScript type-checking and the CLI's Jest suite run in CI (`ci-matrix.yml`) as correctness gates, which also catch classes of logic error with security relevance (e.g. scope-guard bypasses).
+- `npm audit --audit-level=critical` runs in `.github/workflows/pr-checks.yml`
+  (advisory — flags critical vulnerabilities, does not currently block the PR).
+- TypeScript type-checking and the CLI's Jest suite run in CI (`ci-matrix.yml`)
+  as correctness gates, which also catch classes of logic error with security
+  relevance (e.g. scope-guard bypasses).
 
-There is no dedicated SAST scanner, secret-scanning integration (GitLeaks/TruffleHog), Snyk, Dependabot, SLSA attestation, or SBOM generation wired into this repo today. If you are relying on this document for a compliance attestation, verify current tooling directly against `.github/workflows/` rather than assuming the items below are active.
+There is no dedicated SAST scanner, secret-scanning integration
+(GitLeaks/TruffleHog), Snyk, Dependabot, SLSA attestation, or SBOM generation
+wired into this repo today. If you are relying on this document for a compliance
+attestation, verify current tooling directly against `.github/workflows/` rather
+than assuming the items below are active.
 
 ## Vulnerability Reporting
 
@@ -28,8 +47,8 @@ There is no dedicated SAST scanner, secret-scanning integration (GitLeaks/Truffl
 
 Instead, report security issues privately to our security team at:
 
-**Email**: security@paths.design
-**Subject**: [SECURITY] Vulnerability Report for CAWS
+**Email**: security@paths.design **Subject**: [SECURITY] Vulnerability Report
+for CAWS
 
 ### What to Include in Your Report
 
@@ -132,7 +151,8 @@ Security fixes are released promptly:
 - **Routine**: Regular security improvements
 - **Optional**: Enhanced security features
 
-For urgent security matters requiring immediate attention, use the reporting email above — there is no separate emergency channel today.
+For urgent security matters requiring immediate attention, use the reporting
+email above — there is no separate emergency channel today.
 
 ## Responsible Disclosure
 
@@ -153,8 +173,8 @@ We support responsible disclosure practices:
 
 ---
 
-**Last Updated**: 2025
-**Contact**: security@paths.design
-**Response Time**: 24-72 hours for initial acknowledgment
+**Last Updated**: 2025 **Contact**: security@paths.design **Response Time**:
+24-72 hours for initial acknowledgment
 
-For security-related questions or concerns, please contact us through the appropriate channels listed above.
+For security-related questions or concerns, please contact us through the
+appropriate channels listed above.

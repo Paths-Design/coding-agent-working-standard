@@ -5,13 +5,7 @@
 // kernel's worktree module reasons about the structured shape.
 
 import * as path from 'path';
-import {
-  err,
-  isOk,
-  ok,
-  type Result,
-  type WorktreeRegistry,
-} from '../kernel';
+import { err, isOk, ok, type Result, type WorktreeRegistry } from '../kernel';
 import { readJsonFile } from './json-store';
 import { storeDiagnostic } from './repo-root';
 import { STORE_RULES } from './rules';
@@ -28,11 +22,9 @@ export function loadWorktrees(cawsDir: string): Result<WorktreeRegistry> {
   const value = r.value;
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return err(
-      storeDiagnostic(
-        STORE_RULES.REGISTRY_NOT_OBJECT,
-        `worktrees.json is not a JSON object.`,
-        { subject: filePath }
-      )
+      storeDiagnostic(STORE_RULES.REGISTRY_NOT_OBJECT, `worktrees.json is not a JSON object.`, {
+        subject: filePath,
+      })
     );
   }
   return ok(value as WorktreeRegistry);

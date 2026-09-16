@@ -149,7 +149,11 @@ describe('create help teaches the tier 1/2 contract coupling (CAWS-SPEC-CREATE-T
   });
 
   test('the generated reference carries the same corrected rows (no stale help survives)', () => {
-    execFileSync(process.execPath, [path.resolve(__dirname, '../../scripts/generate-command-reference.mjs')], { stdio: 'pipe' });
+    execFileSync(
+      process.execPath,
+      [path.resolve(__dirname, '../../scripts/generate-command-reference.mjs')],
+      { stdio: 'pipe' }
+    );
     const reference = fs.readFileSync(
       path.join(__dirname, '..', '..', 'docs', 'command-reference.md'),
       'utf8'

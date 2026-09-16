@@ -89,12 +89,21 @@ function runRestore(root, opts) {
 }
 
 describe('caws specs restore', () => {
-  test.each(["'first\n\n  author''s final: note'", "'first\n\nUnindented paragraph: note.\n\nFinal author''s note.'", '"first\n\n  final: note"'])('restores quoted multiline closure notes via the audited transaction: %s', (notes) => {
+  test.each([
+    "'first\n\n  author''s final: note'",
+    "'first\n\nUnindented paragraph: note.\n\nFinal author''s note.'",
+    '"first\n\n  final: note"',
+  ])('restores quoted multiline closure notes via the audited transaction: %s', (notes) => {
     const { root, caws } = mkRepo();
     const id = 'RESTORE-QUOTED-001';
     const canonicalPath = path.join(caws, 'specs', `${id}.yaml`);
     writeClosedSpec(caws, id);
-    const original = fs.readFileSync(canonicalPath, 'utf8').replace('resolution: completed\n', 'resolution: completed\nclosure_notes: ' + notes + '\n# preserve neighbor exactly  \n');
+    const original = fs
+      .readFileSync(canonicalPath, 'utf8')
+      .replace(
+        'resolution: completed\n',
+        'resolution: completed\nclosure_notes: ' + notes + '\n# preserve neighbor exactly  \n'
+      );
     fs.writeFileSync(canonicalPath, original);
     commitAll(root, 'add quoted closure fixture');
     expect(archiveSpec(caws, { id, actor: ACTOR }).ok).toBe(true);
@@ -107,9 +116,14 @@ describe('caws specs restore', () => {
     const result = runRestore(root, { id, targetState: 'active', apply: true });
     expect(result).toMatchObject({ code: 0, err: '' });
     const restored = fs.readFileSync(canonicalPath, 'utf8');
-    expect(restored).toBe(archive.replace('lifecycle_state: archived', 'lifecycle_state: active')
-      .replace(/^updated_at:.*$/m, "updated_at: '2026-07-04T02:03:04.000Z'")
-      .replace('resolution: completed\n', '').replace('closure_notes: ' + notes + '\n', '').replace('worktree: stale-worktree\n', ''));
+    expect(restored).toBe(
+      archive
+        .replace('lifecycle_state: archived', 'lifecycle_state: active')
+        .replace(/^updated_at:.*$/m, "updated_at: '2026-07-04T02:03:04.000Z'")
+        .replace('resolution: completed\n', '')
+        .replace('closure_notes: ' + notes + '\n', '')
+        .replace('worktree: stale-worktree\n', '')
+    );
     expect(fs.readFileSync(archivePath, 'utf8')).toBe(archive);
     expect(latestEvent(caws, 'spec_restored', id).data.restored_lifecycle_state).toBe('active');
   });

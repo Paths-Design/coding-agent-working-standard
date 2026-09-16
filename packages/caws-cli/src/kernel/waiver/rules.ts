@@ -10,10 +10,8 @@ export const WAIVER_RULES = {
   WAIVER_INVALID_REASON: 'waiver.schema.invalid_reason',
   WAIVER_INVALID_APPROVED_BY: 'waiver.schema.invalid_approved_by',
   WAIVER_INVALID_CREATED_AT: 'waiver.schema.invalid_created_at',
-  WAIVER_REVOKED_WITHOUT_RECORD:
-    'waiver.schema.revoked_without_revocation_record',
-  WAIVER_ACTIVE_WITH_REVOCATION:
-    'waiver.schema.active_status_carries_revocation_record',
+  WAIVER_REVOKED_WITHOUT_RECORD: 'waiver.schema.revoked_without_revocation_record',
+  WAIVER_ACTIVE_WITH_REVOCATION: 'waiver.schema.active_status_carries_revocation_record',
 } as const;
 
 export type WaiverRule = (typeof WAIVER_RULES)[keyof typeof WAIVER_RULES];

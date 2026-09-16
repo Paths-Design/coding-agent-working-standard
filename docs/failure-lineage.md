@@ -4174,8 +4174,8 @@ lowered `risk_tier` 2→3 with the `mode` unchanged in every case, carrying
 danger-latch, worktree-guard and init-wiring slices into the tier reserved for
 low-blast-radius work; the aggravating factor is that the kernel prescribed it,
 `validate-semantics.ts:36` printing "Add at least one contract **or change
-risk_tier to 3 or mode to chore**" on every denial while the correct guidance
-printed unconditionally on 1387 _successful_ creates and therefore never at the
+risk*tier to 3 or mode to chore\*\*" on every denial while the correct guidance
+printed unconditionally on 1387 \_successful* creates and therefore never at the
 moment a tier was chosen (51 of the 101 denials happened in sessions that had
 already seen it); a parallel exemption runs through the 517 `mode: chore` specs,
 127 of them at tier 1/2; none of it was visible in-band because a refused create
@@ -4188,4 +4188,4 @@ request and replaced the blocker with an obligation to recon why the governed
 path was not being taken, which is `puzzle-not-blocker.md` applied by hand and
 the same shape as the one fix that did ship in that session — `createWorktree`
 refusing to bind a spec with no declared `scope.in`, with the refusal naming
-`amend-scope` as the discharge.**
+`amend-scope` as the discharge.\*\*

@@ -32,9 +32,7 @@ function input(fs: FsObs): DoctorInput {
 
 describe('doctor.hooks.user_scope_dual_wiring (CAWS-GATED-SURFACE-SCOPE-GUARD-001)', () => {
   test('rule id is the stable string the remediation text names', () => {
-    expect(DOCTOR_RULES.HOOKS_USER_SCOPE_DUAL_WIRING).toBe(
-      'doctor.hooks.user_scope_dual_wiring'
-    );
+    expect(DOCTOR_RULES.HOOKS_USER_SCOPE_DUAL_WIRING).toBe('doctor.hooks.user_scope_dual_wiring');
   });
 
   test('same surface in BOTH observations fires the warning with both lists in data', () => {

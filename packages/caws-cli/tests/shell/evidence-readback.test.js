@@ -149,7 +149,10 @@ describe('caws evidence list/show readback', () => {
   test('show distinguishes not found and ambiguous references', () => {
     const { repoRoot, test } = fixtureRepo();
 
-    const missing = runShow(repoRoot, 'sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+    const missing = runShow(
+      repoRoot,
+      'sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+    );
     const ambiguous = runShow(repoRoot, test.event_hash.slice(0, 7));
 
     expect(missing.code).toBe(1);

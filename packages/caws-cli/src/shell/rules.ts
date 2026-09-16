@@ -21,15 +21,13 @@ export const SHELL_RULES = {
   // resolved identity from the dispatching surface's own env var (defeats
   // cross-surface shadowing). Distinct id from the claude_env rule — the
   // mechanism, not the platform, is what the diagnostic names.
-  SESSION_RESOLVED_FROM_SURFACE_PINNED_ENV:
-    'shell.session.resolved_from_surface_pinned_env',
+  SESSION_RESOLVED_FROM_SURFACE_PINNED_ENV: 'shell.session.resolved_from_surface_pinned_env',
   // CAWS-SESSION-ID-AGENT-BASH-PROPAGATION-001: CLAUDE_CODE_SESSION_ID is the
   // harness session UUID exported by Claude Code into EVERY tool subprocess
   // (including agent-Bash), so it resolves the agent-Bash write path
   // deterministically without falling through to the racy
   // tmp/.caller-session.json pointer. Authority tier 1.5.
-  SESSION_RESOLVED_FROM_CLAUDE_CODE_ENV:
-    'shell.session.resolved_from_claude_code_env',
+  SESSION_RESOLVED_FROM_CLAUDE_CODE_ENV: 'shell.session.resolved_from_claude_code_env',
   SESSION_RESOLVED_FROM_HOOK_ENV: 'shell.session.resolved_from_hook_env',
   SESSION_RESOLVED_FROM_CAPSULE: 'shell.session.resolved_from_capsule',
   SESSION_RESOLVED_FROM_CURSOR_ENV: 'shell.session.resolved_from_cursor_env',
@@ -37,26 +35,22 @@ export const SHELL_RULES = {
   // CAWS-SESSION-ID-DURABLE-HOOK-ENVELOPE-001: priority 2.5 between
   // hook_env and capsule. Bridges HOOK_SESSION_ID across agent-Bash
   // invocations where the env var doesn't propagate.
-  SESSION_RESOLVED_FROM_DURABLE_ENVELOPE:
-    'shell.session.resolved_from_durable_envelope',
+  SESSION_RESOLVED_FROM_DURABLE_ENVELOPE: 'shell.session.resolved_from_durable_envelope',
   // CAWS-AGENT-PID-SESSION-CORRELATION-001: priority 2.4 between hook_env and
   // the durable envelope. Resolves canonical-checkout callers (no env var) by
   // keying on the agent process PID — a stable, per-session-unique ancestor.
-  SESSION_RESOLVED_FROM_AGENT_PID:
-    'shell.session.resolved_from_agent_pid',
+  SESSION_RESOLVED_FROM_AGENT_PID: 'shell.session.resolved_from_agent_pid',
   /** Refusal: two or more fresh durable envelopes match the current
    *  repo_root. The resolver cannot pick a winner; the operator must
    *  disambiguate (set CLAUDE_SESSION_ID, or route through a hook
    *  context that sets HOOK_SESSION_ID, or remove stale tmp/<id>/
    *  directories). NEVER newest-wins. */
-  SESSION_DURABLE_ENVELOPE_AMBIGUOUS:
-    'shell.session.durable_envelope_ambiguous',
+  SESSION_DURABLE_ENVELOPE_AMBIGUOUS: 'shell.session.durable_envelope_ambiguous',
   /** Non-fatal warning: a tmp/<id>/.session-envelope.json file was
    *  present but unreadable or unparseable. The envelope is skipped
    *  as a candidate; resolution continues with remaining envelopes
    *  and capsule fallback. */
-  SESSION_DURABLE_ENVELOPE_MALFORMED:
-    'shell.session.durable_envelope_malformed',
+  SESSION_DURABLE_ENVELOPE_MALFORMED: 'shell.session.durable_envelope_malformed',
   SESSION_CAPSULE_MINTED: 'shell.session.capsule_minted',
   SESSION_CAPSULE_INVALID: 'shell.session.capsule_invalid',
   SESSION_CAPSULE_WRITE_FAILED: 'shell.session.capsule_write_failed',
@@ -68,8 +62,7 @@ export const SHELL_RULES = {
 
   // cwd → worktree binding resolution.
   BINDING_CWD_OUTSIDE_REPO: 'shell.binding.cwd_outside_repo',
-  BINDING_WORKTREE_NOT_FOUND_IN_REGISTRY:
-    'shell.binding.worktree_not_found_in_registry',
+  BINDING_WORKTREE_NOT_FOUND_IN_REGISTRY: 'shell.binding.worktree_not_found_in_registry',
   BINDING_NO_SPEC_FOR_WORKTREE: 'shell.binding.no_spec_for_worktree',
   BINDING_UNBOUND_CWD: 'shell.binding.unbound_cwd',
 

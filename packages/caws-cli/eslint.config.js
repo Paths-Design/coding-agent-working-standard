@@ -22,7 +22,15 @@ const NODE_GLOBALS = {
 module.exports = [
   // Ignore patterns
   {
-    ignores: ['node_modules/**', 'dist/**', 'build/**', 'coverage/**', '.stryker*-tmp/**', 'test-*/**', '**/.venv/**'],
+    ignores: [
+      'node_modules/**',
+      'dist/**',
+      'build/**',
+      'coverage/**',
+      '.stryker*-tmp/**',
+      'test-*/**',
+      '**/.venv/**',
+    ],
   },
 
   // Base configuration (JS family). `eslint .` lints every file some block
@@ -39,7 +47,10 @@ module.exports = [
     rules: {
       ...js.configs.recommended.rules,
       'no-console': 'off', // CLI tools need console output
-      'no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrors: 'none', ignoreRestSiblings: true }],
+      'no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', caughtErrors: 'none', ignoreRestSiblings: true },
+      ],
       'no-process-exit': 'off', // CLI tools need process.exit
     },
   },

@@ -21,11 +21,7 @@
 const fs = require('fs');
 const path = require('path');
 const { makeTempRepo, cleanupAll, git } = require('../helpers/git-repo-factory');
-const {
-  appendEvent,
-  composeStoreSnapshot,
-  composeDoctorSnapshot,
-} = require('../../dist/store');
+const { appendEvent, composeStoreSnapshot, composeDoctorSnapshot } = require('../../dist/store');
 const { inspectProjectState } = require('../../dist/kernel');
 const { DOCTOR_RULES } = require('../../dist/kernel');
 

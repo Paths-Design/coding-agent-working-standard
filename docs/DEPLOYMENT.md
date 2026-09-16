@@ -15,7 +15,9 @@ updated: 2026-08-19
 
 ## Overview
 
-This guide covers deploying CAWS to production environments. CAWS is primarily distributed as npm packages, but this guide also covers deployment considerations for teams running internal instances.
+This guide covers deploying CAWS to production environments. CAWS is primarily
+distributed as npm packages, but this guide also covers deployment
+considerations for teams running internal instances.
 
 ---
 
@@ -25,7 +27,11 @@ This guide covers deploying CAWS to production environments. CAWS is primarily d
 
 CAWS packages are published to npm under the `@paths.design` scope:
 
-- **@paths.design/caws-cli** - Command-line interface (check the current `latest` dist-tag version with `npm view @paths.design/caws-cli version`, or see `packages/caws-cli/CHANGELOG.md`). This is the only package CAWS publishes — the kernel is absorbed into it; there is no separate `@paths.design/caws-kernel` publish, and no `@caws/mcp-server` package exists.
+- **@paths.design/caws-cli** - Command-line interface (check the current
+  `latest` dist-tag version with `npm view @paths.design/caws-cli version`, or
+  see `packages/caws-cli/CHANGELOG.md`). This is the only package CAWS publishes
+  — the kernel is absorbed into it; there is no separate
+  `@paths.design/caws-kernel` publish, and no `@caws/mcp-server` package exists.
 
 ```mermaid
 graph TB
@@ -39,7 +45,8 @@ graph TB
     D --> I[GitHub Release created]
 ```
 
-Branch pushes to `main` do **not** trigger any publish. Releases are tag-driven only.
+Branch pushes to `main` do **not** trigger any publish. Releases are tag-driven
+only.
 
 ---
 
@@ -47,13 +54,13 @@ Branch pushes to `main` do **not** trigger any publish. Releases are tag-driven 
 
 ### Infrastructure Requirements
 
-| Component   | Requirement | Notes                             |
-| ----------- | ----------- | --------------------------------- |
+| Component   | Requirement | Notes                                             |
+| ----------- | ----------- | ------------------------------------------------- |
 | **Node.js** | >= 18.0.0   | Per `package.json` engines field; CI runs Node 22 |
-| **npm**     | >= 10.0.0   | For package management            |
-| **Git**     | >= 2.30.0   | Required by CAWS for repo state           |
-| **Storage** | 100 MB      | For CLI and dependencies          |
-| **Memory**  | 512 MB      | Minimum for CLI operations        |
+| **npm**     | >= 10.0.0   | For package management                            |
+| **Git**     | >= 2.30.0   | Required by CAWS for repo state                   |
+| **Storage** | 100 MB      | For CLI and dependencies                          |
+| **Memory**  | 512 MB      | Minimum for CLI operations                        |
 
 ### Network Requirements
 
@@ -165,25 +172,29 @@ NODE_ENV=production
 
 Publishing uses OIDC trusted publishing, not a stored npm token: the `Release`
 environment grants `id-token: write`, and npm exchanges that OIDC token for a
-publish credential at request time because a trusted publisher is configured
-for this repo + workflow file on npmjs.com. **Do not add `NPM_TOKEN` to the
+publish credential at request time because a trusted publisher is configured for
+this repo + workflow file on npmjs.com. **Do not add `NPM_TOKEN` to the
 `Release` environment** — a configured token, valid or not, preempts the OIDC
 exchange and breaks this mechanism.
 
 ```yaml
 permissions:
-  id-token: write        # OIDC trusted-publisher exchange
-  contents: write         # tag deletion on pre-publish failure
+  id-token: write # OIDC trusted-publisher exchange
+  contents: write # tag deletion on pre-publish failure
 
 secrets:
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # tag ops + GitHub Release creation
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # tag ops + GitHub Release creation
 ```
 
 ---
 
 ## Release Process
 
-Releases are **tag-driven and human-explicit** (CAWS-RELEASE-TAG-DRIVEN-001). CI does not decide when to publish, what version to publish, or what to put in the CHANGELOG. The maintainer makes all three decisions manually, then pushes a canonical tag. See **`docs/release-procedure.md`** for the full procedure including failure recovery; the summary below is for orientation only.
+Releases are **tag-driven and human-explicit** (CAWS-RELEASE-TAG-DRIVEN-001). CI
+does not decide when to publish, what version to publish, or what to put in the
+CHANGELOG. The maintainer makes all three decisions manually, then pushes a
+canonical tag. See **`docs/release-procedure.md`** for the full procedure
+including failure recovery; the summary below is for orientation only.
 
 ### How it works
 
@@ -204,32 +215,38 @@ graph LR
 ```
 
 **What CI does NOT do:**
+
 - Modify `package.json` or `CHANGELOG.md`
 - Commit anything back to `main`
 - Trigger on `push: branches: [main]` — there is no such trigger
 
 ### Tag conventions
 
-| Tag pattern | Outcome |
-|---|---|
-| `caws-cli-vX.Y.Z` | **Accepted** — triggers publish |
-| `caws-kernel-v*` | **Refused and deleted** — kernel publishes manually in v1 |
-| `v*` (bare) | **Refused and deleted** — legacy convention, auto-cleaned |
+| Tag pattern       | Outcome                                                   |
+| ----------------- | --------------------------------------------------------- |
+| `caws-cli-vX.Y.Z` | **Accepted** — triggers publish                           |
+| `caws-kernel-v*`  | **Refused and deleted** — kernel publishes manually in v1 |
+| `v*` (bare)       | **Refused and deleted** — legacy convention, auto-cleaned |
 
 **Never push a bare `v*` tag** — it gets auto-deleted by the workflow.
 
 ### Asymmetric failure invariant
 
-| Failure stage | Tag handling | Registry |
-|---|---|---|
-| Pre-publish (validate / build / smoke / publish) | Tag **DELETED** | Untouched |
-| Post-publish (registry-verify / GitHub Release) | Tag **PRESERVED** | Has the version |
+| Failure stage                                    | Tag handling      | Registry        |
+| ------------------------------------------------ | ----------------- | --------------- |
+| Pre-publish (validate / build / smoke / publish) | Tag **DELETED**   | Untouched       |
+| Post-publish (registry-verify / GitHub Release)  | Tag **PRESERVED** | Has the version |
 
-When a pre-publish step fails, delete-and-retag. When a post-publish step fails, the workflow emits a repair command — run it; do not retag.
+When a pre-publish step fails, delete-and-retag. When a post-publish step fails,
+the workflow emits a repair command — run it; do not retag.
 
 ### Publish authentication
 
-Publish uses OIDC trusted publishing: `id-token: write` in the `Release` GitHub environment, npm ≥ 11.5.1, and a trusted publisher configured on npmjs.com for this repo + workflow file. `NPM_TOKEN` is deliberately not set — a configured token, valid or not, preempts the OIDC exchange. `npm publish --provenance` is used for supply chain attestation.
+Publish uses OIDC trusted publishing: `id-token: write` in the `Release` GitHub
+environment, npm ≥ 11.5.1, and a trusted publisher configured on npmjs.com for
+this repo + workflow file. `NPM_TOKEN` is deliberately not set — a configured
+token, valid or not, preempts the OIDC exchange. `npm publish --provenance` is
+used for supply chain attestation.
 
 ### Quick reference: releasing caws-cli
 
@@ -564,8 +581,8 @@ npm profile enable-2fa auth-and-writes
 ```yaml
 # GitHub Actions security
 permissions:
-  contents: write  # Required for tag deletion on pre-publish failure
-  id-token: write  # OIDC trusted-publisher exchange (the current publish mechanism)
+  contents: write # Required for tag deletion on pre-publish failure
+  id-token: write # OIDC trusted-publisher exchange (the current publish mechanism)
 
 # NPM_TOKEN is deliberately NOT set in the Release environment — a
 # configured token, valid or not, preempts the OIDC exchange above.
@@ -641,7 +658,8 @@ npm cache clean --force
 
 - **Deployment Issues**: hello@paths.design
 - **Security Issues**: security@paths.design
-- **GitHub Issues**: https://github.com/Paths-Design/coding-agent-working-standard/issues
+- **GitHub Issues**:
+  https://github.com/Paths-Design/coding-agent-working-standard/issues
 - **npm Package**: https://www.npmjs.com/package/@paths.design/caws-cli
 
 ---
@@ -668,7 +686,8 @@ npm cache clean --force
 
 ### Resources
 
-- [docs/release-procedure.md](release-procedure.md) — full canonical release procedure (CAWS-RELEASE-TAG-DRIVEN-001)
+- [docs/release-procedure.md](release-procedure.md) — full canonical release
+  procedure (CAWS-RELEASE-TAG-DRIVEN-001)
 - [npm Publishing Best Practices](https://docs.npmjs.com/packages-and-modules/contributing-packages-to-the-registry)
 - [SLSA Provenance](https://slsa.dev/provenance/)
 - [GitHub OIDC](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect)

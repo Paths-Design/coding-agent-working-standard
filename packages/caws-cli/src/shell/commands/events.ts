@@ -319,8 +319,7 @@ function archiveStatus(cawsDir: string, rotation: ChainedEvent): RotationSummary
     archive_digest: actualDigest,
     archive_line_count: actualLineCount,
     archive_digest_matches: priorDigest === null ? null : actualDigest === priorDigest,
-    archive_line_count_matches:
-      priorLineCount === null ? null : actualLineCount === priorLineCount,
+    archive_line_count_matches: priorLineCount === null ? null : actualLineCount === priorLineCount,
   };
 }
 
@@ -329,7 +328,10 @@ function eventMatchesRef(event: ChainedEvent, ref: string): boolean {
   return event.event_hash === ref || event.event_hash.startsWith(ref);
 }
 
-function resolveEventRef(events: readonly ChainedEvent[], ref: string):
+function resolveEventRef(
+  events: readonly ChainedEvent[],
+  ref: string
+):
   | { kind: 'found'; event: ChainedEvent }
   | { kind: 'not_found' }
   | { kind: 'ambiguous'; matches: readonly ChainedEvent[] } {
@@ -366,18 +368,24 @@ export function runEventsListCommand(opts: EventsListCommandOptions): number {
     rotations.length > 0 ? rotations[rotations.length - 1]! : null;
 
   if (opts.json === true) {
-    out(JSON.stringify({
-      ok: true,
-      read_only: true,
-      chain_valid: true,
-      event_count: loaded.events.length,
-      counts_by_event: countByEvent(loaded.events),
-      latest_event: latest === null ? null : eventSummary(latest),
-      rotation_count: rotations.length,
-      latest_rotation: latestRotation,
-      rotations,
-      recent_events: recent,
-    }, null, 2));
+    out(
+      JSON.stringify(
+        {
+          ok: true,
+          read_only: true,
+          chain_valid: true,
+          event_count: loaded.events.length,
+          counts_by_event: countByEvent(loaded.events),
+          latest_event: latest === null ? null : eventSummary(latest),
+          rotation_count: rotations.length,
+          latest_rotation: latestRotation,
+          rotations,
+          recent_events: recent,
+        },
+        null,
+        2
+      )
+    );
     return 0;
   }
 
@@ -398,7 +406,9 @@ export function runEventsListCommand(opts: EventsListCommandOptions): number {
   }
   out(`  recent_events${limit === 0 ? ' (suppressed by --limit 0)' : ` (last ${recent.length})`}:`);
   for (const event of recent) {
-    out(`  - seq=${event.seq} event=${event.event} hash=${event.hash} spec=${event.spec_id ?? '(none)'}`);
+    out(
+      `  - seq=${event.seq} event=${event.event} hash=${event.hash} spec=${event.spec_id ?? '(none)'}`
+    );
   }
   return 0;
 }
@@ -446,13 +456,19 @@ export function runEventsShowCommand(opts: EventsShowCommandOptions): number {
 
   const summary = eventSummary(event);
   if (opts.json === true) {
-    out(JSON.stringify({
-      ok: true,
-      read_only: true,
-      chain_valid: true,
-      event: summary,
-      rotation,
-    }, null, 2));
+    out(
+      JSON.stringify(
+        {
+          ok: true,
+          read_only: true,
+          chain_valid: true,
+          event: summary,
+          rotation,
+        },
+        null,
+        2
+      )
+    );
     return 0;
   }
 
@@ -492,20 +508,22 @@ export function runEventsShowCommand(opts: EventsShowCommandOptions): number {
  *       with no reason, --apply with plan === refuse)
  *   2 = composition failure (repo-root, session, IO failure on read)
  */
-export function runEventsMigrateCommand(
-  opts: EventsMigrateCommandOptions
-): number {
+export function runEventsMigrateCommand(opts: EventsMigrateCommandOptions): number {
   const { cwd, now, env, out, err, showData } = defaults(opts);
   const isApply = opts.apply === true;
   const isDryRun = !isApply; // default
 
   if (opts.from !== 'v10') {
-    err(`caws events migrate: only --from v10 is supported in v11.2; got ${JSON.stringify(opts.from)}.`);
+    err(
+      `caws events migrate: only --from v10 is supported in v11.2; got ${JSON.stringify(opts.from)}.`
+    );
     return 1;
   }
 
   if (isApply && (typeof opts.reason !== 'string' || opts.reason.length === 0)) {
-    err('caws events migrate --apply: --reason "<text>" is required (the value is recorded verbatim into the chain_rotated payload).');
+    err(
+      'caws events migrate --apply: --reason "<text>" is required (the value is recorded verbatim into the chain_rotated payload).'
+    );
     return 1;
   }
 
@@ -530,7 +548,9 @@ export function runEventsMigrateCommand(
       err(`(rule: ${MIGRATION_RULES.EMPTY_INPUT})`);
       return 1;
     }
-    err(`caws events migrate: failed to read events.jsonl (${cause.code ?? 'unknown error'}): ${cause.message ?? 'no message'}.`);
+    err(
+      `caws events migrate: failed to read events.jsonl (${cause.code ?? 'unknown error'}): ${cause.message ?? 'no message'}.`
+    );
     return 2;
   }
 
@@ -549,16 +569,18 @@ export function runEventsMigrateCommand(
   // than the generic planner rule.
   if (detection.value.kind === 'unparseable_only') {
     err('caws events migrate: refuse — fully-unparseable events.jsonl.');
-    err(renderDiagnostics(
-      [
-        storeDiagnostic(
-          MIGRATION_RULES.MIGRATE_UNPARSEABLE_REFUSED,
-          `events.jsonl has no JSON-parseable lines (${detection.value.stats.unparseable} unparseable, ${detection.value.lineCount} total). Migration cannot claim it found a v10 chain. If you want to archive the corrupt log as evidence quarantine, use 'caws events rotate --reason "<text>"' (which admits fully-unparseable logs under the honest 'unparseable' status).`,
-          { subject: eventsPath }
-        ),
-      ],
-      { showData }
-    ));
+    err(
+      renderDiagnostics(
+        [
+          storeDiagnostic(
+            MIGRATION_RULES.MIGRATE_UNPARSEABLE_REFUSED,
+            `events.jsonl has no JSON-parseable lines (${detection.value.stats.unparseable} unparseable, ${detection.value.lineCount} total). Migration cannot claim it found a v10 chain. If you want to archive the corrupt log as evidence quarantine, use 'caws events rotate --reason "<text>"' (which admits fully-unparseable logs under the honest 'unparseable' status).`,
+            { subject: eventsPath }
+          ),
+        ],
+        { showData }
+      )
+    );
     return 1;
   }
 
@@ -630,7 +652,9 @@ export function runEventsMigrateCommand(
   });
 
   if (!rotateResult.ok) {
-    err('caws events migrate --apply: rotateEvents failed after dry-run admitted the plan. This indicates state changed between plan and apply (concurrent writer? operator edit?).');
+    err(
+      'caws events migrate --apply: rotateEvents failed after dry-run admitted the plan. This indicates state changed between plan and apply (concurrent writer? operator edit?).'
+    );
     err(renderDiagnostics(rotateResult.errors, { showData }));
     return 1;
   }
@@ -638,7 +662,9 @@ export function runEventsMigrateCommand(
   const event = rotateResult.value;
   const actualArchive = event.data['prior_file_path'];
   if (actualArchive !== proposedArchive) {
-    err(`caws events migrate --apply: INTERNAL FAILURE — dry-run proposed archive name "${proposedArchive}" but rotateEvents produced "${actualArchive}". This is a programmer error; investigate windowsSafeIso parity between events-migration.ts and events-store.ts.`);
+    err(
+      `caws events migrate --apply: INTERNAL FAILURE — dry-run proposed archive name "${proposedArchive}" but rotateEvents produced "${actualArchive}". This is a programmer error; investigate windowsSafeIso parity between events-migration.ts and events-store.ts.`
+    );
     err(`(rule: ${MIGRATION_RULES.INTERNAL_DRYRUN_APPLY_MISMATCH})`);
     return 2;
   }
@@ -660,19 +686,27 @@ function printMigratePlan(
     out(`${tag} plan: refuse (${plan.cause})`);
     if (plan.detection) {
       out(`  detection: ${plan.detection.kind}, ${plan.detection.lineCount} lines`);
-      out(`    v10_string_actor=${plan.detection.stats.v10_string_actor}, v11_object_actor=${plan.detection.stats.v11_object_actor}, unparseable=${plan.detection.stats.unparseable}`);
+      out(
+        `    v10_string_actor=${plan.detection.stats.v10_string_actor}, v11_object_actor=${plan.detection.stats.v11_object_actor}, unparseable=${plan.detection.stats.unparseable}`
+      );
     }
     if (plan.v10Specs) {
-      out(`  v10 specs: ${plan.v10Specs.v10Paths.length} detected (${plan.v10Specs.v10Paths.join(', ')})`);
+      out(
+        `  v10 specs: ${plan.v10Specs.v10Paths.length} detected (${plan.v10Specs.v10Paths.join(', ')})`
+      );
     }
     return;
   }
   out(`${tag} plan: rotate`);
   out(`  detection: ${plan.detection.kind}, ${plan.detection.lineCount} lines`);
-  out(`    v10_string_actor=${plan.detection.stats.v10_string_actor}, v11_object_actor=${plan.detection.stats.v11_object_actor}, unparseable=${plan.detection.stats.unparseable}`);
+  out(
+    `    v10_string_actor=${plan.detection.stats.v10_string_actor}, v11_object_actor=${plan.detection.stats.v11_object_actor}, unparseable=${plan.detection.stats.unparseable}`
+  );
   out(`  proposed archive: ${plan.proposedArchiveName}`);
   if (plan.v10Specs) {
-    out(`  v10 specs scan: ${plan.v10Specs.v10Paths.length} v10, ${plan.v10Specs.v11Paths.length} v11, ${plan.v10Specs.unclassifiedPaths.length} unclassified`);
+    out(
+      `  v10 specs scan: ${plan.v10Specs.v10Paths.length} v10, ${plan.v10Specs.v11Paths.length} v11, ${plan.v10Specs.unclassifiedPaths.length} unclassified`
+    );
   }
   if (plan.allowClean) {
     out(`  flags: --allow-clean`);
@@ -756,10 +790,7 @@ function planRotatePreview(
   }
 
   const rawBytes = fs.readFileSync(eventsPath);
-  const priorFileDigest = `sha256:${crypto
-    .createHash('sha256')
-    .update(rawBytes)
-    .digest('hex')}`;
+  const priorFileDigest = `sha256:${crypto.createHash('sha256').update(rawBytes).digest('hex')}`;
   const detection = detectEventsLogShape(rawBytes.toString('utf8'));
   if (!detection.ok) {
     return {
@@ -857,13 +888,13 @@ function planRotatePreview(
  *       without --allow-clean) OR --reason missing
  *   2 = composition failure (repo-root, session)
  */
-export function runEventsRotateCommand(
-  opts: EventsRotateCommandOptions
-): number {
+export function runEventsRotateCommand(opts: EventsRotateCommandOptions): number {
   const { cwd, now, env, out, err, showData } = defaults(opts);
 
   if (typeof opts.reason !== 'string' || opts.reason.length === 0) {
-    err('caws events rotate: --reason "<text>" is required (recorded verbatim into the chain_rotated payload).');
+    err(
+      'caws events rotate: --reason "<text>" is required (recorded verbatim into the chain_rotated payload).'
+    );
     return 1;
   }
 
@@ -902,14 +933,20 @@ export function runEventsRotateCommand(
     });
     if (preview.kind === 'refuse') {
       if (opts.json === true) {
-        out(JSON.stringify({
-          ok: false,
-          dry_run: true,
-          read_only: true,
-          refused: true,
-          reason: preview.message,
-          data: preview.data ?? {},
-        }, null, 2));
+        out(
+          JSON.stringify(
+            {
+              ok: false,
+              dry_run: true,
+              read_only: true,
+              refused: true,
+              reason: preview.message,
+              data: preview.data ?? {},
+            },
+            null,
+            2
+          )
+        );
       } else {
         err('caws events rotate --dry-run: refuse.');
         err(`  ${preview.message}`);
@@ -917,18 +954,24 @@ export function runEventsRotateCommand(
       return 1;
     }
     if (opts.json === true) {
-      out(JSON.stringify({
-        ok: true,
-        dry_run: true,
-        read_only: true,
-        archive: preview.archiveName,
-        archive_path: preview.archivePath,
-        prior_file_digest: preview.priorFileDigest,
-        prior_line_count: preview.priorLineCount,
-        prior_chain_status: preview.priorChainStatus,
-        actor_shape_stats: preview.actorShapeStats,
-        genesis_event: preview.genesisEvent,
-      }, null, 2));
+      out(
+        JSON.stringify(
+          {
+            ok: true,
+            dry_run: true,
+            read_only: true,
+            archive: preview.archiveName,
+            archive_path: preview.archivePath,
+            prior_file_digest: preview.priorFileDigest,
+            prior_line_count: preview.priorLineCount,
+            prior_chain_status: preview.priorChainStatus,
+            actor_shape_stats: preview.actorShapeStats,
+            genesis_event: preview.genesisEvent,
+          },
+          null,
+          2
+        )
+      );
     } else {
       out('caws events rotate --dry-run: would rotate events.jsonl.');
       out(`  proposed archive: ${preview.archivePath}`);
@@ -995,9 +1038,7 @@ export type EventsVerifyArchiveCommandOptions = BaseCommandOptions;
  *   1 = any verification failure (one of the 5 modes)
  *   2 = composition failure
  */
-export function runEventsVerifyArchiveCommand(
-  opts: EventsVerifyArchiveCommandOptions
-): number {
+export function runEventsVerifyArchiveCommand(opts: EventsVerifyArchiveCommandOptions): number {
   const { cwd, out, err, showData } = defaults(opts);
 
   const rootResult = resolveRepoRoot(cwd);
@@ -1012,18 +1053,22 @@ export function runEventsVerifyArchiveCommand(
   //    we cannot identify the most recent chain_rotated.
   const loaded = loadEvents(cawsDir);
   if (!loaded.ok) {
-    err('caws events verify-archive: cannot load current events.jsonl; verification depends on locating the most recent chain_rotated event.');
-    err(renderDiagnostics(
-      [
-        storeDiagnostic(
-          MIGRATION_RULES.VERIFY_CURRENT_CHAIN_INVALID,
-          `events.jsonl could not be loaded as a valid hash-chained log. The underlying store diagnostics follow.`,
-          { subject: path.join(cawsDir, 'events.jsonl') }
-        ),
-        ...loaded.errors,
-      ],
-      { showData }
-    ));
+    err(
+      'caws events verify-archive: cannot load current events.jsonl; verification depends on locating the most recent chain_rotated event.'
+    );
+    err(
+      renderDiagnostics(
+        [
+          storeDiagnostic(
+            MIGRATION_RULES.VERIFY_CURRENT_CHAIN_INVALID,
+            `events.jsonl could not be loaded as a valid hash-chained log. The underlying store diagnostics follow.`,
+            { subject: path.join(cawsDir, 'events.jsonl') }
+          ),
+          ...loaded.errors,
+        ],
+        { showData }
+      )
+    );
     return 1;
   }
 
@@ -1036,16 +1081,20 @@ export function runEventsVerifyArchiveCommand(
     }
   }
   if (mostRecentRotation === null) {
-    err('caws events verify-archive: no chain_rotated event found in current events.jsonl. Nothing to verify against.');
-    err(renderDiagnostics(
-      [
-        storeDiagnostic(
-          MIGRATION_RULES.VERIFY_NO_ROTATION_EVENT,
-          `The current events.jsonl chain contains ${loaded.value.events.length} event(s) but no chain_rotated event. verify-archive needs at least one rotation event to know what to verify.`
-        ),
-      ],
-      { showData }
-    ));
+    err(
+      'caws events verify-archive: no chain_rotated event found in current events.jsonl. Nothing to verify against.'
+    );
+    err(
+      renderDiagnostics(
+        [
+          storeDiagnostic(
+            MIGRATION_RULES.VERIFY_NO_ROTATION_EVENT,
+            `The current events.jsonl chain contains ${loaded.value.events.length} event(s) but no chain_rotated event. verify-archive needs at least one rotation event to know what to verify.`
+          ),
+        ],
+        { showData }
+      )
+    );
     return 1;
   }
 
@@ -1057,16 +1106,18 @@ export function runEventsVerifyArchiveCommand(
 
   if (!fs.existsSync(archivePath)) {
     err('caws events verify-archive: archive file is missing.');
-    err(renderDiagnostics(
-      [
-        storeDiagnostic(
-          MIGRATION_RULES.VERIFY_ARCHIVE_MISSING,
-          `Archive file ${archiveName} (named by chain_rotated event seq=${mostRecentRotation.seq}) does not exist at ${archivePath}.`,
-          { subject: archivePath }
-        ),
-      ],
-      { showData }
-    ));
+    err(
+      renderDiagnostics(
+        [
+          storeDiagnostic(
+            MIGRATION_RULES.VERIFY_ARCHIVE_MISSING,
+            `Archive file ${archiveName} (named by chain_rotated event seq=${mostRecentRotation.seq}) does not exist at ${archivePath}.`,
+            { subject: archivePath }
+          ),
+        ],
+        { showData }
+      )
+    );
     return 1;
   }
 
@@ -1077,31 +1128,35 @@ export function runEventsVerifyArchiveCommand(
 
   if (actualDigest !== expectedDigest) {
     err('caws events verify-archive: archive digest mismatch (tamper detection).');
-    err(renderDiagnostics(
-      [
-        storeDiagnostic(
-          STORE_RULES.EVENTS_ARCHIVE_DIGEST_MISMATCH,
-          `Archive ${archiveName} sha256 does not match the chain_rotated committed digest. Expected ${expectedDigest}, got ${actualDigest}. The archive may have been edited after rotation.`,
-          { subject: archivePath, data: { expected: expectedDigest, actual: actualDigest } }
-        ),
-      ],
-      { showData }
-    ));
+    err(
+      renderDiagnostics(
+        [
+          storeDiagnostic(
+            STORE_RULES.EVENTS_ARCHIVE_DIGEST_MISMATCH,
+            `Archive ${archiveName} sha256 does not match the chain_rotated committed digest. Expected ${expectedDigest}, got ${actualDigest}. The archive may have been edited after rotation.`,
+            { subject: archivePath, data: { expected: expectedDigest, actual: actualDigest } }
+          ),
+        ],
+        { showData }
+      )
+    );
     return 1;
   }
 
   if (actualLineCount !== expectedLineCount) {
     err('caws events verify-archive: archive line-count mismatch.');
-    err(renderDiagnostics(
-      [
-        storeDiagnostic(
-          STORE_RULES.EVENTS_ARCHIVE_LINE_COUNT_MISMATCH,
-          `Archive ${archiveName} non-empty line count does not match the chain_rotated committed count. Expected ${expectedLineCount}, got ${actualLineCount}.`,
-          { subject: archivePath, data: { expected: expectedLineCount, actual: actualLineCount } }
-        ),
-      ],
-      { showData }
-    ));
+    err(
+      renderDiagnostics(
+        [
+          storeDiagnostic(
+            STORE_RULES.EVENTS_ARCHIVE_LINE_COUNT_MISMATCH,
+            `Archive ${archiveName} non-empty line count does not match the chain_rotated committed count. Expected ${expectedLineCount}, got ${actualLineCount}.`,
+            { subject: archivePath, data: { expected: expectedLineCount, actual: actualLineCount } }
+          ),
+        ],
+        { showData }
+      )
+    );
     return 1;
   }
 

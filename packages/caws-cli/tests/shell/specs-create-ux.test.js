@@ -64,9 +64,7 @@ describe('caws specs create UX diagnostics', () => {
       'Contract shape: {name, type: api|schema|contract-test|behavior, path?, description?}'
     );
     expect(result.err).toContain('Example: --contract "core-api:behavior"');
-    expect(result.err).toContain(
-      'Did you mean --contract "verifychain-detects-tamper:behavior"?'
-    );
+    expect(result.err).toContain('Did you mean --contract "verifychain-detects-tamper:behavior"?');
   });
 
   // CAWS-DEFECT-MSG-ENRICHMENT-01 (DEFECT-02): a Tier-1/2 create rejected for

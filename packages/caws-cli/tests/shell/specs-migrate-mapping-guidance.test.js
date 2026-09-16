@@ -50,9 +50,7 @@ function expectMappingGuidance(output) {
   expect(output).toContain('Example mapping file:');
   expect(output).toContain('"FEAT-123": {');
   expect(output).toContain('"lifecycle_state": "closed"');
-  expect(output).toContain(
-    'caws specs migrate --from v10 --lifecycle-mapping lifecycle-map.json'
-  );
+  expect(output).toContain('caws specs migrate --from v10 --lifecycle-mapping lifecycle-map.json');
 }
 
 describe('caws specs migrate --lifecycle-mapping guidance', () => {
@@ -71,9 +69,7 @@ describe('caws specs migrate --lifecycle-mapping guidance', () => {
 
     expect(result.status).toBe(2);
     expect(result.stdout).toBe('');
-    expect(result.stderr).toContain(
-      'caws specs migrate: failed to load --lifecycle-mapping file.'
-    );
+    expect(result.stderr).toContain('caws specs migrate: failed to load --lifecycle-mapping file.');
     expect(result.stderr).toContain(`Cannot parse ${mappingPath} as JSON`);
     expectMappingGuidance(result.stderr);
     expect(result.stderr).not.toContain('{bad json');

@@ -55,11 +55,7 @@ export interface LaneDivergence {
   readonly unknownReason: string | null;
 }
 
-function unresolved(
-  branch: string,
-  baseBranch: string,
-  unknownReason: string
-): LaneDivergence {
+function unresolved(branch: string, baseBranch: string, unknownReason: string): LaneDivergence {
   return {
     branch,
     baseBranch,

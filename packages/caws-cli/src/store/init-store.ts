@@ -47,13 +47,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import {
-  isOk,
-  parseAndValidatePolicy,
-  type Diagnostic,
-  type Policy,
-  type Result,
-} from '../kernel';
+import { isOk, parseAndValidatePolicy, type Diagnostic, type Policy, type Result } from '../kernel';
 import { err, ok } from '../kernel';
 
 import { writeFileAtomic } from './atomic-write';
@@ -80,10 +74,7 @@ const CANONICAL_PATHS = {
  * later doctor/repair surface. Adding more entries here is the
  * sanctioned way to extend the legacy-residue check.
  */
-const LEGACY_PATHS = [
-  '.caws/working-spec.yaml',
-  '.caws/working-spec.schema.json',
-] as const;
+const LEGACY_PATHS = ['.caws/working-spec.yaml', '.caws/working-spec.schema.json'] as const;
 
 // ---------------------------------------------------------------------------
 // Default policy
@@ -254,9 +245,7 @@ function mkdirRecursive(target: string): Result<true> {
  *        (WRITE_IO_FAILED) or a default-policy that fails kernel
  *        validation (INIT_DEFAULT_POLICY_INVALID).
  */
-export function initProject(
-  repoRoot: string
-): Result<InitProjectResult> {
+export function initProject(repoRoot: string): Result<InitProjectResult> {
   if (typeof repoRoot !== 'string' || repoRoot.length === 0) {
     throw new TypeError('initProject: repoRoot must be a non-empty string.');
   }
@@ -314,26 +303,17 @@ export function initProject(
     created.push(abs(repoRoot, CANONICAL_PATHS.waiversDir));
   }
   if (!present.policyFile) {
-    const r = writeFileAtomic(
-      abs(repoRoot, CANONICAL_PATHS.policyFile),
-      DEFAULT_POLICY_YAML
-    );
+    const r = writeFileAtomic(abs(repoRoot, CANONICAL_PATHS.policyFile), DEFAULT_POLICY_YAML);
     if (!isOk(r)) return r;
     created.push(abs(repoRoot, CANONICAL_PATHS.policyFile));
   }
   if (!present.worktreesFile) {
-    const r = writeFileAtomic(
-      abs(repoRoot, CANONICAL_PATHS.worktreesFile),
-      '{}\n'
-    );
+    const r = writeFileAtomic(abs(repoRoot, CANONICAL_PATHS.worktreesFile), '{}\n');
     if (!isOk(r)) return r;
     created.push(abs(repoRoot, CANONICAL_PATHS.worktreesFile));
   }
   if (!present.agentsFile) {
-    const r = writeFileAtomic(
-      abs(repoRoot, CANONICAL_PATHS.agentsFile),
-      '{}\n'
-    );
+    const r = writeFileAtomic(abs(repoRoot, CANONICAL_PATHS.agentsFile), '{}\n');
     if (!isOk(r)) return r;
     created.push(abs(repoRoot, CANONICAL_PATHS.agentsFile));
   }

@@ -29,9 +29,14 @@ const CALLER_SESSION_POINTER_FILENAME = '.caller-session.json';
 
 function readSelfSessionId(cawsDir: string): string | undefined {
   try {
-    const raw = fs.readFileSync(path.join(cawsDir, 'sessions', CALLER_SESSION_POINTER_FILENAME), 'utf8');
+    const raw = fs.readFileSync(
+      path.join(cawsDir, 'sessions', CALLER_SESSION_POINTER_FILENAME),
+      'utf8'
+    );
     const obj = JSON.parse(raw) as { session_id?: unknown };
-    return typeof obj.session_id === 'string' && obj.session_id.length > 0 ? obj.session_id : undefined;
+    return typeof obj.session_id === 'string' && obj.session_id.length > 0
+      ? obj.session_id
+      : undefined;
   } catch {
     return undefined;
   }
@@ -89,7 +94,9 @@ export function runWorkingTreeCheckCommand(opts: WorkingTreeCheckOptions): numbe
     out('caws working-tree check: no overlap with another active session.');
     return 0;
   }
-  out(`caws working-tree check: ${result.overlaps.length} OTHER session(s) overlap the dirty tree.`);
+  out(
+    `caws working-tree check: ${result.overlaps.length} OTHER session(s) overlap the dirty tree.`
+  );
   for (const o of result.overlaps) {
     out(`  session ${o.sessionId} (${o.source}):`);
     for (const p of o.overlappingPaths) out(`    ${p}`);
@@ -155,7 +162,9 @@ export function runWorkingTreeAckCommand(opts: WorkingTreeAckOptions): number {
     paths: [...opts.paths],
     ...(opts.target !== undefined ? { target_command: opts.target } : {}),
   };
-  const prior = Array.isArray(target.prior_overlap_acks) ? (target.prior_overlap_acks as unknown[]) : [];
+  const prior = Array.isArray(target.prior_overlap_acks)
+    ? (target.prior_overlap_acks as unknown[])
+    : [];
   const updated = { ...target, prior_overlap_acks: [...prior, ack] };
   const leasePath = path.join(cawsDir, 'leases', `${opts.sessionId}.json`);
   const w = writeFileAtomic(leasePath, JSON.stringify(updated, null, 2) + '\n');
@@ -171,7 +180,13 @@ export function runWorkingTreeAckCommand(opts: WorkingTreeAckOptions): number {
   // loudly but does NOT undo the ack — the lease record (operational cache)
   // already carries it, and the two surfaces reconcile via the audit trail.
   const env = opts.env ?? process.env;
-  const sessionResult = resolveSession({ cawsDir, worktreeRoot: cwd, env, now: nowFn, allowMint: true });
+  const sessionResult = resolveSession({
+    cawsDir,
+    worktreeRoot: cwd,
+    env,
+    now: nowFn,
+    allowMint: true,
+  });
   if (sessionResult.ok) {
     const receivingSessionId = sessionResult.value.identity.session_id;
     const actor = buildActor({ session: sessionResult.value, kind: 'agent' });
@@ -188,12 +203,16 @@ export function runWorkingTreeAckCommand(opts: WorkingTreeAckOptions): number {
     } as unknown as EventBody;
     const appended = appendEvent(cawsDir, body);
     if (!appended.ok) {
-      err('caws working-tree ack: the ack was recorded but the overlap_ack_proceed event could not be appended.');
+      err(
+        'caws working-tree ack: the ack was recorded but the overlap_ack_proceed event could not be appended.'
+      );
       err(renderDiagnostics(appended.errors, { showData }));
     }
   }
 
   out(`acked overlap for session ${opts.sessionId}: ${opts.paths.join(', ')}`);
-  out(`  prior_overlap_acks now has ${prior.length + 1} entry/entries on session ${opts.sessionId}.`);
+  out(
+    `  prior_overlap_acks now has ${prior.length + 1} entry/entries on session ${opts.sessionId}.`
+  );
   return 0;
 }

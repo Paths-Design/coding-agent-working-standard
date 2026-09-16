@@ -244,8 +244,7 @@ describe('CAWS-CLI-EXIT-TRUNCATES-PIPED-STDOUT-001', () => {
         const stmtEnd = after.indexOf(');');
         const tail = stmtEnd === -1 ? '' : after.slice(stmtEnd + 2).trimStart();
         if (!tail.startsWith('return')) {
-          const line =
-            source.slice(0, match.end - 1 + call.index).split('\n').length;
+          const line = source.slice(0, match.end - 1 + call.index).split('\n').length;
           offenders.push(`register.ts:${line} — exit() not followed by return`);
         }
       });
@@ -290,7 +289,6 @@ describe('CAWS-CLI-EXIT-TRUNCATES-PIPED-STDOUT-001', () => {
       expect(exitCalls).toEqual([]);
       expect(typeof process.exitCode).toBe('number');
     } finally {
-
       process.exit = realExit;
       process.stdout.write = realWrite;
       process.exitCode = realExitCode;

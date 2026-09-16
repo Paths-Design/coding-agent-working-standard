@@ -10,9 +10,16 @@ for (const missing of [false, true]) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'upgrade-evidence-'));
     try {
       const env = { ...process.env, CAWS_QUALIFICATION_ARTIFACT_DIR: root };
-      const result = observedSpawn(missing ? path.join(root, 'absent-command') : process.execPath,
-        missing ? [] : ['-e', 'process.stdout.write("observed-output"); process.stderr.write("observed-error"); process.exitCode=7;'],
-        { cwd: root, env, encoding: 'utf8', input: 'observed-input', timeout: 5000 });
+      const result = observedSpawn(
+        missing ? path.join(root, 'absent-command') : process.execPath,
+        missing
+          ? []
+          : [
+              '-e',
+              'process.stdout.write("observed-output"); process.stderr.write("observed-error"); process.exitCode=7;',
+            ],
+        { cwd: root, env, encoding: 'utf8', input: 'observed-input', timeout: 5000 }
+      );
       const files = fs.readdirSync(root);
       assert.equal(files.length, 1);
       const receipt = JSON.parse(fs.readFileSync(path.join(root, files[0]), 'utf8'));
@@ -27,6 +34,8 @@ for (const missing of [false, true]) {
         assert.equal(receipt.error, null);
       }
       assert.equal('env' in receipt, false);
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 }

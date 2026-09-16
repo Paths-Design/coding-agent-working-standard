@@ -208,10 +208,14 @@ export function writeFileAtomic(
     }
     const cause = e as { message?: string; code?: string };
     return err(
-      storeDiagnostic(STORE_RULES.WRITE_IO_FAILED, `Failed to write ${targetPath}: ${cause.message ?? 'unknown error'}.`, {
-        subject: targetPath,
-        data: { code: cause.code },
-      })
+      storeDiagnostic(
+        STORE_RULES.WRITE_IO_FAILED,
+        `Failed to write ${targetPath}: ${cause.message ?? 'unknown error'}.`,
+        {
+          subject: targetPath,
+          data: { code: cause.code },
+        }
+      )
     );
   }
 }

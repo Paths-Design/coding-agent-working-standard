@@ -40,7 +40,10 @@ function writeLease(root, sessionId, overrides = {}) {
     last_seen_reason: 'manual_register',
     ...overrides,
   };
-  fs.writeFileSync(path.join(leasesDir, `${sessionId}.json`), JSON.stringify(lease, null, 2) + '\n');
+  fs.writeFileSync(
+    path.join(leasesDir, `${sessionId}.json`),
+    JSON.stringify(lease, null, 2) + '\n'
+  );
 }
 
 function leaseNames(root) {

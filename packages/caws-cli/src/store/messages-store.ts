@@ -181,7 +181,10 @@ export interface RecipientLiveness {
  * successful send can note an idle recipient. See CAWS-DEFECT-MSG-ENRICHMENT-01
  * and CAWS-MESSAGE-DELIVERY-UX-001.
  */
-export function describeRecipientLiveness(cawsDir: string, sessionId: string): Result<RecipientLiveness> {
+export function describeRecipientLiveness(
+  cawsDir: string,
+  sessionId: string
+): Result<RecipientLiveness> {
   const leasesResult = loadLeases(cawsDir);
   if (!leasesResult.ok) return err(leasesResult.errors);
   const lease = leasesResult.value.leases[sessionId] as
@@ -189,7 +192,8 @@ export function describeRecipientLiveness(cawsDir: string, sessionId: string): R
     | undefined;
   if (!lease) return ok({ live: false, reason: 'no_lease' });
   const status = lease.status;
-  const ageMs = typeof lease.last_active === 'string' ? Date.now() - Date.parse(lease.last_active) : NaN;
+  const ageMs =
+    typeof lease.last_active === 'string' ? Date.now() - Date.parse(lease.last_active) : NaN;
   const ageKnown = Number.isFinite(ageMs);
   if (ageKnown && ageMs > LIVENESS_TTL_MS) {
     // Stale heartbeat dominates every status — even an 'active' lease older
@@ -362,7 +366,9 @@ export function sendMessage(
     channel: channelId(from, to),
     text,
     ts: new Date().toISOString(),
-    ...(params.replyTo !== undefined && params.replyTo.length > 0 ? { reply_to: params.replyTo } : {}),
+    ...(params.replyTo !== undefined && params.replyTo.length > 0
+      ? { reply_to: params.replyTo }
+      : {}),
     ...(params.urgency === 'critical' ? { urgency: 'critical' as const } : {}),
   };
   const appended = appendLine(cawsDir, record);
@@ -437,11 +443,7 @@ export function resolveRecipient(cawsDir: string, to: string): Result<ResolvedRe
     const stopped = lease.status === 'stopped';
     // Freshest heartbeat wins; on a tie prefer a non-stopped lease (a live
     // turn beats an idle one at identical age).
-    if (
-      best === null ||
-      ageMs < best.ageMs ||
-      (ageMs === best.ageMs && best.stopped && !stopped)
-    ) {
+    if (best === null || ageMs < best.ageMs || (ageMs === best.ageMs && best.stopped && !stopped)) {
       best = { sessionId, ageMs, stopped };
     }
   }
@@ -625,7 +627,9 @@ interface ParsedMessageLine {
   readonly parsed: MessageLedgerRecord | null;
 }
 
-function readMessageLines(cawsDir: string): Result<{ readonly lines: ParsedMessageLine[]; readonly diagnostics: Diagnostic[] }> {
+function readMessageLines(
+  cawsDir: string
+): Result<{ readonly lines: ParsedMessageLine[]; readonly diagnostics: Diagnostic[] }> {
   const file = messagesPath(cawsDir);
   if (!fs.existsSync(file)) return ok({ lines: [], diagnostics: [] });
 
@@ -686,7 +690,8 @@ interface MessageLedgerState {
 }
 
 function isMessageOfferRecord(record: MessageLedgerRecord): record is MessageOfferRecord {
-  return record.record === 'offer' &&
+  return (
+    record.record === 'offer' &&
     typeof record.offer_id === 'string' &&
     typeof record.recipient === 'string' &&
     Array.isArray(record.deliver_ids) &&
@@ -694,23 +699,29 @@ function isMessageOfferRecord(record: MessageLedgerRecord): record is MessageOff
     record.deliver_ids.every((id) => typeof id === 'string') &&
     typeof record.ts === 'string' &&
     typeof record.expires_at === 'string' &&
-    record.mode === 'auto';
+    record.mode === 'auto'
+  );
 }
 
 function isMessageOfferSettlementRecord(
   record: MessageLedgerRecord
 ): record is MessageOfferSettlementRecord {
-  return record.record === 'offer_settlement' &&
+  return (
+    record.record === 'offer_settlement' &&
     typeof record.offer_id === 'string' &&
     typeof record.recipient === 'string' &&
     typeof record.ts === 'string' &&
     (record.outcome === 'released' ||
-      (record.outcome === 'delivered' && record.boundary === 'adapter_handoff'));
+      (record.outcome === 'delivered' && record.boundary === 'adapter_handoff'))
+  );
 }
 
 /** Replay append-only message state. Invalid cross-offer settlements are
  * ignored here; the writer rejects them before append. */
-function replayMessageLedger(lines: readonly ParsedMessageLine[], nowMs = Date.now()): MessageLedgerState {
+function replayMessageLedger(
+  lines: readonly ParsedMessageLine[],
+  nowMs = Date.now()
+): MessageLedgerState {
   const messages: MessageRecord[] = [];
   const deliveredAt = new Map<string, string>();
   const latestDeliveredAt = new Map<string, string>();
@@ -724,7 +735,11 @@ function replayMessageLedger(lines: readonly ParsedMessageLine[], nowMs = Date.n
       latestDeliveredAt.set(record.deliver_id, record.ts);
     } else if (record && isMessageOfferRecord(record) && !offers.has(record.offer_id)) {
       offers.set(record.offer_id, record);
-    } else if (record && isMessageOfferSettlementRecord(record) && !settlements.has(record.offer_id)) {
+    } else if (
+      record &&
+      isMessageOfferSettlementRecord(record) &&
+      !settlements.has(record.offer_id)
+    ) {
       const offer = offers.get(record.offer_id);
       if (offer?.recipient === record.recipient) settlements.set(record.offer_id, record);
     }
@@ -737,8 +752,14 @@ function replayMessageLedger(lines: readonly ParsedMessageLine[], nowMs = Date.n
     const settledAt = Date.parse(settlement.ts);
     const offeredAt = Date.parse(offer.ts);
     const expiresAt = Date.parse(offer.expires_at);
-    if (!Number.isFinite(settledAt) || !Number.isFinite(offeredAt) ||
-        !Number.isFinite(expiresAt) || settledAt < offeredAt || settledAt > expiresAt) continue;
+    if (
+      !Number.isFinite(settledAt) ||
+      !Number.isFinite(offeredAt) ||
+      !Number.isFinite(expiresAt) ||
+      settledAt < offeredAt ||
+      settledAt > expiresAt
+    )
+      continue;
     for (const messageId of offer.deliver_ids) {
       const message = messagesById.get(messageId);
       if (message?.to === offer.recipient && !deliveredAt.has(messageId)) {
@@ -750,7 +771,8 @@ function replayMessageLedger(lines: readonly ParsedMessageLine[], nowMs = Date.n
   const reserved = new Set<string>();
   for (const offer of offers.values()) {
     const expiresAt = Date.parse(offer.expires_at);
-    if (settlements.has(offer.offer_id) || !Number.isFinite(expiresAt) || expiresAt <= nowMs) continue;
+    if (settlements.has(offer.offer_id) || !Number.isFinite(expiresAt) || expiresAt <= nowMs)
+      continue;
     for (const messageId of offer.deliver_ids) {
       const message = messagesById.get(messageId);
       if (message?.to === offer.recipient) reserved.add(messageId);
@@ -759,7 +781,12 @@ function replayMessageLedger(lines: readonly ParsedMessageLine[], nowMs = Date.n
   return { messages, deliveredAt, latestDeliveredAt, offers, settlements, reserved };
 }
 
-function messageEntry(message: MessageRecord, delivered: boolean, state: 'candidate' | 'skipped', reason: string): MessagePruneEntry {
+function messageEntry(
+  message: MessageRecord,
+  delivered: boolean,
+  state: 'candidate' | 'skipped',
+  reason: string
+): MessagePruneEntry {
   return {
     id: message.id,
     ts: message.ts,
@@ -781,7 +808,10 @@ export interface MessagePruneOptions {
   readonly apply?: boolean;
 }
 
-function buildMessagePrunePlan(cawsDir: string, opts: MessagePruneOptions): Result<MessagePrunePlan & { readonly lines: readonly ParsedMessageLine[] }> {
+function buildMessagePrunePlan(
+  cawsDir: string,
+  opts: MessagePruneOptions
+): Result<MessagePrunePlan & { readonly lines: readonly ParsedMessageLine[] }> {
   const loaded = readMessageLines(cawsDir);
   if (!loaded.ok) return err(loaded.errors);
   const state = replayMessageLedger(loaded.value.lines);
@@ -864,11 +894,12 @@ function buildMessagePrunePlan(cawsDir: string, opts: MessagePruneOptions): Resu
         .filter((offer) => offer.deliver_ids.every((id) => candidateIds.has(id)))
         .map((offer) => offer.offer_id)
     );
-    const deliveryRecordsToRemove = loaded.value.lines.filter((entry) =>
-      (entry.parsed?.record === 'delivery' && candidateIds.has(entry.parsed.deliver_id)) ||
-      (entry.parsed?.record === 'offer_settlement' &&
-        entry.parsed.outcome === 'delivered' &&
-        fullyPrunedOffers.has(entry.parsed.offer_id))
+    const deliveryRecordsToRemove = loaded.value.lines.filter(
+      (entry) =>
+        (entry.parsed?.record === 'delivery' && candidateIds.has(entry.parsed.deliver_id)) ||
+        (entry.parsed?.record === 'offer_settlement' &&
+          entry.parsed.outcome === 'delivered' &&
+          fullyPrunedOffers.has(entry.parsed.offer_id))
     ).length;
 
     return ok({
@@ -919,11 +950,12 @@ function buildMessagePrunePlan(cawsDir: string, opts: MessagePruneOptions): Resu
       .filter((offer) => offer.deliver_ids.every((id) => candidateIds.has(id)))
       .map((offer) => offer.offer_id)
   );
-  const deliveryRecordsToRemove = loaded.value.lines.filter((entry) =>
-    (entry.parsed?.record === 'delivery' && candidateIds.has(entry.parsed.deliver_id)) ||
-    (entry.parsed?.record === 'offer_settlement' &&
-      entry.parsed.outcome === 'delivered' &&
-      fullyPrunedOffers.has(entry.parsed.offer_id))
+  const deliveryRecordsToRemove = loaded.value.lines.filter(
+    (entry) =>
+      (entry.parsed?.record === 'delivery' && candidateIds.has(entry.parsed.deliver_id)) ||
+      (entry.parsed?.record === 'offer_settlement' &&
+        entry.parsed.outcome === 'delivered' &&
+        fullyPrunedOffers.has(entry.parsed.offer_id))
   ).length;
 
   return ok({
@@ -938,106 +970,117 @@ function buildMessagePrunePlan(cawsDir: string, opts: MessagePruneOptions): Resu
   });
 }
 
-export function pruneMessages(cawsDir: string, opts: MessagePruneOptions): Result<MessagePruneResult> {
-  return withLifecycleLock(cawsDir, () => {
-    const planned = buildMessagePrunePlan(cawsDir, opts);
-    if (!planned.ok) return err(planned.errors);
+export function pruneMessages(
+  cawsDir: string,
+  opts: MessagePruneOptions
+): Result<MessagePruneResult> {
+  return withLifecycleLock(
+    cawsDir,
+    () => {
+      const planned = buildMessagePrunePlan(cawsDir, opts);
+      if (!planned.ok) return err(planned.errors);
 
-    const { lines, ...plan } = planned.value;
-    if (plan.selector_required_for_apply) {
-      return err(
-        storeDiagnostic(
-          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-          'message prune --apply requires --older-than-ms or --include so broad chat-log cleanup is explicit.'
-        )
+      const { lines, ...plan } = planned.value;
+      if (plan.selector_required_for_apply) {
+        return err(
+          storeDiagnostic(
+            STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+            'message prune --apply requires --older-than-ms or --include so broad chat-log cleanup is explicit.'
+          )
+        );
+      }
+
+      if (opts.apply !== true || plan.candidates.length === 0) {
+        return ok({
+          ...plan,
+          applied: opts.apply === true,
+          pruned_messages: 0,
+          pruned_delivery_records: 0,
+        });
+      }
+
+      const candidateIds = new Set(plan.candidates.map((candidate) => candidate.id));
+      const state = replayMessageLedger(lines);
+      const fullyPrunedOffers = new Set(
+        [...state.offers.values()]
+          .filter((offer) => offer.deliver_ids.every((id) => candidateIds.has(id)))
+          .map((offer) => offer.offer_id)
       );
-    }
+      let prunedDeliveryRecords = 0;
+      const keptLines: string[] = [];
+      const archivedLines: string[] = [];
+      for (const entry of lines) {
+        if (entry.parsed?.record === 'message' && candidateIds.has(entry.parsed.id)) {
+          archivedLines.push(entry.raw);
+          continue;
+        }
+        if (entry.parsed?.record === 'delivery' && candidateIds.has(entry.parsed.deliver_id)) {
+          prunedDeliveryRecords++;
+          archivedLines.push(entry.raw);
+          continue;
+        }
+        if (entry.parsed?.record === 'offer' && fullyPrunedOffers.has(entry.parsed.offer_id)) {
+          archivedLines.push(entry.raw);
+          continue;
+        }
+        if (
+          entry.parsed?.record === 'offer_settlement' &&
+          fullyPrunedOffers.has(entry.parsed.offer_id)
+        ) {
+          if (entry.parsed.outcome === 'delivered') prunedDeliveryRecords++;
+          archivedLines.push(entry.raw);
+          continue;
+        }
+        keptLines.push(entry.raw);
+      }
 
-    if (opts.apply !== true || plan.candidates.length === 0) {
+      // Archive-first (CAWS-MESSAGE-LEDGER-COMPLETENESS-001): append the pruned
+      // records plus one {record: 'prune', ids, ts} marker to the archive BEFORE
+      // rewriting the live ledger, so pruned history is never silently dropped.
+      // The archive is telemetry, not authority — no command reads it for
+      // delivery state. A retried prune re-appends (append-only log semantics).
+      // CAWS-DEFECT-MESSAGE-PRUNE-DEAD-RECIPIENT-01: the dead-recipient marker
+      // names its selector so archived dead letters are distinguishable from
+      // delivered-retention prunes; the delivered marker is byte-unchanged.
+      const marker = JSON.stringify({
+        record: 'prune',
+        ...(plan.status === 'undelivered-to-dead-session' ? { selector: plan.status } : {}),
+        ids: plan.candidates.map((candidate) => candidate.id),
+        ts: new Date().toISOString(),
+      });
+      try {
+        fs.appendFileSync(
+          path.join(cawsDir, MESSAGES_ARCHIVE_FILENAME),
+          [marker, ...archivedLines].join('\n') + '\n'
+        );
+      } catch (e) {
+        return err(
+          storeDiagnostic(
+            STORE_RULES.MESSAGES_ARCHIVE_APPEND_FAILED,
+            `Failed to append pruned records to ${MESSAGES_ARCHIVE_FILENAME}: ${(e as Error).message}. ` +
+              `The live ledger was NOT modified.`
+          )
+        );
+      }
+
+      const file = messagesPath(cawsDir);
+      const written = writeFileAtomic(
+        file,
+        keptLines.length > 0 ? keptLines.join('\n') + '\n' : ''
+      );
+      if (!written.ok) return err(written.errors);
+
       return ok({
         ...plan,
-        applied: opts.apply === true,
-        pruned_messages: 0,
-        pruned_delivery_records: 0,
+        applied: true,
+        pruned_messages: plan.candidates.length,
+        pruned_delivery_records: prunedDeliveryRecords,
       });
+    },
+    {
+      lockPath: path.join(cawsDir, MESSAGES_LOCK_FILENAME),
     }
-
-    const candidateIds = new Set(plan.candidates.map((candidate) => candidate.id));
-    const state = replayMessageLedger(lines);
-    const fullyPrunedOffers = new Set(
-      [...state.offers.values()]
-        .filter((offer) => offer.deliver_ids.every((id) => candidateIds.has(id)))
-        .map((offer) => offer.offer_id)
-    );
-    let prunedDeliveryRecords = 0;
-    const keptLines: string[] = [];
-    const archivedLines: string[] = [];
-    for (const entry of lines) {
-      if (entry.parsed?.record === 'message' && candidateIds.has(entry.parsed.id)) {
-        archivedLines.push(entry.raw);
-        continue;
-      }
-      if (entry.parsed?.record === 'delivery' && candidateIds.has(entry.parsed.deliver_id)) {
-        prunedDeliveryRecords++;
-        archivedLines.push(entry.raw);
-        continue;
-      }
-      if (entry.parsed?.record === 'offer' && fullyPrunedOffers.has(entry.parsed.offer_id)) {
-        archivedLines.push(entry.raw);
-        continue;
-      }
-      if (entry.parsed?.record === 'offer_settlement' && fullyPrunedOffers.has(entry.parsed.offer_id)) {
-        if (entry.parsed.outcome === 'delivered') prunedDeliveryRecords++;
-        archivedLines.push(entry.raw);
-        continue;
-      }
-      keptLines.push(entry.raw);
-    }
-
-    // Archive-first (CAWS-MESSAGE-LEDGER-COMPLETENESS-001): append the pruned
-    // records plus one {record: 'prune', ids, ts} marker to the archive BEFORE
-    // rewriting the live ledger, so pruned history is never silently dropped.
-    // The archive is telemetry, not authority — no command reads it for
-    // delivery state. A retried prune re-appends (append-only log semantics).
-    // CAWS-DEFECT-MESSAGE-PRUNE-DEAD-RECIPIENT-01: the dead-recipient marker
-    // names its selector so archived dead letters are distinguishable from
-    // delivered-retention prunes; the delivered marker is byte-unchanged.
-    const marker = JSON.stringify({
-      record: 'prune',
-      ...(plan.status === 'undelivered-to-dead-session'
-        ? { selector: plan.status }
-        : {}),
-      ids: plan.candidates.map((candidate) => candidate.id),
-      ts: new Date().toISOString(),
-    });
-    try {
-      fs.appendFileSync(
-        path.join(cawsDir, MESSAGES_ARCHIVE_FILENAME),
-        [marker, ...archivedLines].join('\n') + '\n'
-      );
-    } catch (e) {
-      return err(
-        storeDiagnostic(
-          STORE_RULES.MESSAGES_ARCHIVE_APPEND_FAILED,
-          `Failed to append pruned records to ${MESSAGES_ARCHIVE_FILENAME}: ${(e as Error).message}. ` +
-            `The live ledger was NOT modified.`
-        )
-      );
-    }
-
-    const file = messagesPath(cawsDir);
-    const written = writeFileAtomic(file, keptLines.length > 0 ? keptLines.join('\n') + '\n' : '');
-    if (!written.ok) return err(written.errors);
-
-    return ok({
-      ...plan,
-      applied: true,
-      pruned_messages: plan.candidates.length,
-      pruned_delivery_records: prunedDeliveryRecords,
-    });
-  }, {
-    lockPath: path.join(cawsDir, MESSAGES_LOCK_FILENAME),
-  });
+  );
 }
 
 /**
@@ -1058,7 +1101,11 @@ export function pruneMessages(cawsDir: string, opts: MessagePruneOptions): Resul
  * line is atomic, and sends never read-modify-write. Peek takes the lock too (a
  * consistent read), but appends nothing.
  */
-export function pollMessage(cawsDir: string, me: string, options: PollOptions = {}): Result<PollResult> {
+export function pollMessage(
+  cawsDir: string,
+  me: string,
+  options: PollOptions = {}
+): Result<PollResult> {
   const waitMs = Math.min(Math.max(0, options.waitMs ?? 0), MAX_WAIT_MS);
   const deadline = Date.now() + waitMs;
   const receipt = options.receipt === 'auto' ? 'auto' : 'poll';
@@ -1069,17 +1116,14 @@ export function pollMessage(cawsDir: string, me: string, options: PollOptions = 
     MAX_OFFER_TTL_MS
   );
   const attempt = () =>
-    withLifecycleLock(cawsDir, () => pollMessageLocked(
+    withLifecycleLock(
       cawsDir,
-      me,
-      options.peek === true,
-      receipt,
-      drain,
-      offer,
-      offerTtlMs
-    ), {
-      lockPath: path.join(cawsDir, MESSAGES_LOCK_FILENAME),
-    });
+      () =>
+        pollMessageLocked(cawsDir, me, options.peek === true, receipt, drain, offer, offerTtlMs),
+      {
+        lockPath: path.join(cawsDir, MESSAGES_LOCK_FILENAME),
+      }
+    );
 
   // First attempt is always made. If waiting and empty, retry until the deadline,
   // releasing the lock between tries (the lock is scoped to each attempt() call).
@@ -1186,61 +1230,75 @@ export function settleMessageOffer(
   recipient: string,
   outcome: 'delivered' | 'released'
 ): Result<MessageOfferSettlement> {
-  return withLifecycleLock(cawsDir, () => {
-    const loaded = readMessageLines(cawsDir);
-    if (!loaded.ok) return err(loaded.errors);
-    const state = replayMessageLedger(loaded.value.lines);
-    const offer = state.offers.get(offerId);
-    if (!offer) {
-      return err(storeDiagnostic(
-        STORE_RULES.MESSAGES_OFFER_NOT_FOUND,
-        `Message offer "${offerId}" does not exist.`
-      ));
-    }
-    if (offer.recipient !== recipient) {
-      return err(storeDiagnostic(
-        STORE_RULES.MESSAGES_OFFER_RECIPIENT_MISMATCH,
-        `Message offer "${offerId}" belongs to recipient "${offer.recipient}", not "${recipient}".`
-      ));
-    }
-    if (state.settlements.has(offerId)) {
-      return err(storeDiagnostic(
-        STORE_RULES.MESSAGES_OFFER_NOT_ACTIVE,
-        `Message offer "${offerId}" is already settled; replay is refused.`
-      ));
-    }
-    const expiresAt = Date.parse(offer.expires_at);
-    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
-      return err(storeDiagnostic(
-        STORE_RULES.MESSAGES_OFFER_NOT_ACTIVE,
-        `Message offer "${offerId}" expired and is no longer eligible for settlement.`
-      ));
-    }
-    if (offer.deliver_ids.some((messageId) => state.deliveredAt.has(messageId))) {
-      return err(storeDiagnostic(
-        STORE_RULES.MESSAGES_OFFER_NOT_ACTIVE,
-        `Message offer "${offerId}" contains a message already delivered by another consumer.`
-      ));
-    }
-    const now = new Date().toISOString();
-    const settlement: MessageOfferSettlementRecord = {
-      record: 'offer_settlement',
-      offer_id: offerId,
-      recipient,
-      outcome,
-      ts: now,
-      ...(outcome === 'delivered' ? { boundary: 'adapter_handoff' as const } : {}),
-    };
-    const appended = appendLine(cawsDir, settlement);
-    if (!appended.ok) return err(appended.errors);
-    return ok({
-      offerId,
-      recipient,
-      outcome,
-      settledAt: now,
-      ...(settlement.boundary !== undefined ? { boundary: settlement.boundary } : {}),
-    });
-  }, { lockPath: path.join(cawsDir, MESSAGES_LOCK_FILENAME) });
+  return withLifecycleLock(
+    cawsDir,
+    () => {
+      const loaded = readMessageLines(cawsDir);
+      if (!loaded.ok) return err(loaded.errors);
+      const state = replayMessageLedger(loaded.value.lines);
+      const offer = state.offers.get(offerId);
+      if (!offer) {
+        return err(
+          storeDiagnostic(
+            STORE_RULES.MESSAGES_OFFER_NOT_FOUND,
+            `Message offer "${offerId}" does not exist.`
+          )
+        );
+      }
+      if (offer.recipient !== recipient) {
+        return err(
+          storeDiagnostic(
+            STORE_RULES.MESSAGES_OFFER_RECIPIENT_MISMATCH,
+            `Message offer "${offerId}" belongs to recipient "${offer.recipient}", not "${recipient}".`
+          )
+        );
+      }
+      if (state.settlements.has(offerId)) {
+        return err(
+          storeDiagnostic(
+            STORE_RULES.MESSAGES_OFFER_NOT_ACTIVE,
+            `Message offer "${offerId}" is already settled; replay is refused.`
+          )
+        );
+      }
+      const expiresAt = Date.parse(offer.expires_at);
+      if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+        return err(
+          storeDiagnostic(
+            STORE_RULES.MESSAGES_OFFER_NOT_ACTIVE,
+            `Message offer "${offerId}" expired and is no longer eligible for settlement.`
+          )
+        );
+      }
+      if (offer.deliver_ids.some((messageId) => state.deliveredAt.has(messageId))) {
+        return err(
+          storeDiagnostic(
+            STORE_RULES.MESSAGES_OFFER_NOT_ACTIVE,
+            `Message offer "${offerId}" contains a message already delivered by another consumer.`
+          )
+        );
+      }
+      const now = new Date().toISOString();
+      const settlement: MessageOfferSettlementRecord = {
+        record: 'offer_settlement',
+        offer_id: offerId,
+        recipient,
+        outcome,
+        ts: now,
+        ...(outcome === 'delivered' ? { boundary: 'adapter_handoff' as const } : {}),
+      };
+      const appended = appendLine(cawsDir, settlement);
+      if (!appended.ok) return err(appended.errors);
+      return ok({
+        offerId,
+        recipient,
+        outcome,
+        settledAt: now,
+        ...(settlement.boundary !== undefined ? { boundary: settlement.boundary } : {}),
+      });
+    },
+    { lockPath: path.join(cawsDir, MESSAGES_LOCK_FILENAME) }
+  );
 }
 
 /**
@@ -1346,7 +1404,7 @@ export function mineQueued(
   return ok({
     messages: aged,
     count: aged.length,
-    oldestAgeMs: aged.length > 0 ? aged[0]?.ageMs ?? null : null,
+    oldestAgeMs: aged.length > 0 ? (aged[0]?.ageMs ?? null) : null,
     diagnostics: loaded.value.diagnostics,
   });
 }
@@ -1431,7 +1489,10 @@ export interface MessageDeliveryState {
  * UX-001). Read-only: appends nothing. Returns ok(null) when the id is absent —
  * absence is a not-found answer, not a load error.
  */
-export function getMessageDeliveryState(cawsDir: string, messageId: string): Result<MessageDeliveryState | null> {
+export function getMessageDeliveryState(
+  cawsDir: string,
+  messageId: string
+): Result<MessageDeliveryState | null> {
   const loaded = readMessageLines(cawsDir);
   if (!loaded.ok) return err(loaded.errors);
   const state = replayMessageLedger(loaded.value.lines);

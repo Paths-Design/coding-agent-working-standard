@@ -174,9 +174,11 @@ describe('worktree destroy demotes an unstarted slice', () => {
 
     expect(result.code).toBe(0);
     expect(lifecycleOf(cawsDir, 'DESTROY-UNKNOWN-003')).toBe('active');
-    expect(readEvents(cawsDir).slice(eventsBefore).map((e) => e.event)).toEqual([
-      'worktree_destroyed',
-    ]);
+    expect(
+      readEvents(cawsDir)
+        .slice(eventsBefore)
+        .map((e) => e.event)
+    ).toEqual(['worktree_destroyed']);
   });
 
   test('a MERGED branch keeps the spec active — reachability alone cannot tell it from an unstarted one', () => {

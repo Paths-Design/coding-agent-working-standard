@@ -47,7 +47,10 @@ export interface ShapeValidateOptions {
  * Tier-gated rules (T1 contracts, T1 observability, etc.) are NOT checked
  * here; they live in validate-semantics.ts.
  */
-export function validateSpecShape(input: unknown, options: ShapeValidateOptions = {}): Result<Spec> {
+export function validateSpecShape(
+  input: unknown,
+  options: ShapeValidateOptions = {}
+): Result<Spec> {
   const validate = getValidator();
   const valid = validate(input);
   if (valid) {
@@ -62,7 +65,7 @@ export function validateSpecShape(input: unknown, options: ShapeValidateOptions 
         authority: 'kernel/spec',
         message: 'Schema validation failed without producing errors.',
         ...(options.sourcePath !== undefined && { subject: options.sourcePath }),
-      }),
+      })
     );
   }
   return err(errors);
@@ -96,7 +99,8 @@ function ajvErrorToDiagnostic(e: ErrorObject, sourcePath: string | undefined): D
 
 function pickStableRule(e: ErrorObject): string {
   const params = (e.params ?? {}) as Record<string, unknown>;
-  const additionalProperty = typeof params['additionalProperty'] === 'string' ? params['additionalProperty'] : undefined;
+  const additionalProperty =
+    typeof params['additionalProperty'] === 'string' ? params['additionalProperty'] : undefined;
 
   // additionalProperties: false catches forbidden surfaces by name.
   if (e.keyword === 'additionalProperties' && additionalProperty !== undefined) {
@@ -172,7 +176,8 @@ function formatMessage(e: ErrorObject): string {
 
 function formatRepair(e: ErrorObject): string | undefined {
   const params = (e.params ?? {}) as Record<string, unknown>;
-  const additionalProperty = typeof params['additionalProperty'] === 'string' ? params['additionalProperty'] : undefined;
+  const additionalProperty =
+    typeof params['additionalProperty'] === 'string' ? params['additionalProperty'] : undefined;
 
   if (e.keyword === 'additionalProperties' && additionalProperty !== undefined) {
     switch (additionalProperty) {

@@ -114,7 +114,9 @@ export function renderReference(metadata) {
   lines.push('');
   lines.push('<!--');
   lines.push('  GENERATED FILE — do not edit by hand.');
-  lines.push('  Source: packages/caws-cli/src/shell/command-metadata.ts (COMMAND_SURFACE_METADATA).');
+  lines.push(
+    '  Source: packages/caws-cli/src/shell/command-metadata.ts (COMMAND_SURFACE_METADATA).'
+  );
   lines.push('  Regenerate: node packages/caws-cli/scripts/generate-command-reference.mjs');
   lines.push('  Package documentation checks fail if this');
   lines.push('  file drifts from the metadata.');
@@ -157,7 +159,10 @@ export function renderReference(metadata) {
 
 /** Load only this checkout’s build; another worktree may contain different metadata. */
 export function loadMetadata(metadataPath = METADATA_PATH) {
-  if (!fs.existsSync(metadataPath)) throw new Error(`command metadata not found at ${metadataPath}; build this checkout before generating docs`);
+  if (!fs.existsSync(metadataPath))
+    throw new Error(
+      `command metadata not found at ${metadataPath}; build this checkout before generating docs`
+    );
   const resolved = metadataPath;
   const mod = require(resolved);
   const meta = mod.COMMAND_SURFACE_METADATA;

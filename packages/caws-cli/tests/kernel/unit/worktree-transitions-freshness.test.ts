@@ -15,7 +15,11 @@
  * reliance on wall-clock) — the non_functional.reliability requirement.
  */
 
-import { heartbeatAge, isStaleByTTL, refreshAgentClaim } from '../../../src/kernel/worktree/freshness';
+import {
+  heartbeatAge,
+  isStaleByTTL,
+  refreshAgentClaim,
+} from '../../../src/kernel/worktree/freshness';
 import { WORKTREE_RULES } from '../../../src/kernel/worktree/rules';
 import { isOk, isErr } from '../../../src/kernel/result/construct';
 import type { Spec } from '../../../src/kernel/spec/types';
@@ -161,7 +165,11 @@ describe('freshness: isStaleByTTL (display/hygiene predicate, NEVER authority �
 
   test('staleness is purely temporal — it does not consider ownership (doctrine: stale != abandoned)', () => {
     // Two records with identical age are equally stale regardless of bound_worktree.
-    const a: AgentRecord = { session_id: 'a', last_active: '2026-06-13T11:50:00.000Z', bound_worktree: 'wt-a' };
+    const a: AgentRecord = {
+      session_id: 'a',
+      last_active: '2026-06-13T11:50:00.000Z',
+      bound_worktree: 'wt-a',
+    };
     const b: AgentRecord = { session_id: 'b', last_active: '2026-06-13T11:50:00.000Z' };
     expect(isStaleByTTL(a, ttl, now)).toBe(isStaleByTTL(b, ttl, now));
   });

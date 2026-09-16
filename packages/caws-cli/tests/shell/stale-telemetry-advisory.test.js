@@ -60,9 +60,7 @@ describe('stale-telemetry advisory: render contract', () => {
       renderStaleTelemetryAdvisory([staleFinding({ stale_rows: [], adapter_surfaces: ['dsh'] })])
     ).toBe('');
     expect(
-      renderStaleTelemetryAdvisory([
-        staleFinding({ stale_rows: ALL_ROWS, adapter_surfaces: [] }),
-      ])
+      renderStaleTelemetryAdvisory([staleFinding({ stale_rows: ALL_ROWS, adapter_surfaces: [] })])
     ).toBe('');
     // Non-string entries in the arrays are filtered, not trusted.
     expect(

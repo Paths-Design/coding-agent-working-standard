@@ -33,7 +33,8 @@ function makeRun(results) {
   const run = (command, args) => {
     calls.push([command, ...args].join(' '));
     const next = results.shift();
-    if (next === undefined) throw new Error(`run() called more times than queued: ${calls.join(' | ')}`);
+    if (next === undefined)
+      throw new Error(`run() called more times than queued: ${calls.join(' | ')}`);
     return next;
   };
   run.calls = calls;
@@ -94,7 +95,11 @@ test('a jest run killed by a signal exits non-zero, not 0', () => {
 
 test('jest failing to spawn exits non-zero and reports the spawn error', () => {
   const err = makeErr();
-  const run = makeRun([OK, { status: null, signal: null, error: new Error('spawn npx ENOENT') }, OK]);
+  const run = makeRun([
+    OK,
+    { status: null, signal: null, error: new Error('spawn npx ENOENT') },
+    OK,
+  ]);
 
   const code = main({ run, err, argv: [] });
 

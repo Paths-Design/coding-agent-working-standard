@@ -153,10 +153,7 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
     lines.push('  diff below shows what --force would change (-: your line, +: incoming):');
     for (const w of withheld) {
       lines.push('');
-      const diffBody =
-        w.diff.length > 0
-          ? w.diff
-          : `(no diff available for ${w.destPath})`;
+      const diffBody = w.diff.length > 0 ? w.diff : `(no diff available for ${w.destPath})`;
       for (const dl of diffBody.split('\n')) lines.push(`    ${dl}`);
     }
     lines.push('');
@@ -192,9 +189,7 @@ export function renderCodexHookTrust(): string {
  *  There is no orphaned-dispatch-dir concept for zcode (it has no pre-rename
  *  legacy layout). A .zcode/config.json.example is always written as a
  *  reference artifact alongside the merge. */
-export function renderZcodeSettingsWiring(
-  mergeResult: SettingsMergeResult
-): string {
+export function renderZcodeSettingsWiring(mergeResult: SettingsMergeResult): string {
   const lines: string[] = [];
   lines.push(section('Step: .zcode/config.json wiring'));
 
@@ -516,13 +511,19 @@ export function renderActivationContract(
   const lines: string[] = [];
   lines.push(section('Step: activation'));
 
-  if (!result.pack || result.outcome === 'skipped_explicit_none' || result.outcome === 'skipped_ambiguous') {
+  if (
+    !result.pack ||
+    result.outcome === 'skipped_explicit_none' ||
+    result.outcome === 'skipped_ambiguous'
+  ) {
     // Both no-pack outcomes share this panel: with pack null the run wrote
     // nothing, and the honest statement is about THIS run — a pre-existing
     // install under .caws/hooks (if any) stands unchanged.
     lines.push('  This run installed no hook pack (none was selected for this surface).');
     lines.push('  Nothing was written or changed by this step.');
-    lines.push('  A hook pack already installed under .caws/hooks (if any) remains in effect unchanged.');
+    lines.push(
+      '  A hook pack already installed under .caws/hooks (if any) remains in effect unchanged.'
+    );
     if (context?.adoptRequested === true) {
       lines.push('  --adopt only decides collision handling DURING an install; with no install');
       lines.push('  occurring it writes nothing and changes no governance state.');

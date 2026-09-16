@@ -29,27 +29,12 @@ export type {
 export { buildActor } from './session/actor';
 export type { BuildActorOptions } from './session/actor';
 
-export {
-  resolveBinding,
-  parseWorktreePorcelain,
-} from './binding/resolve-binding';
-export type {
-  GitWorktreeEntry,
-  ResolveBindingInput,
-  ResolvedBinding,
-} from './binding/types';
+export { resolveBinding, parseWorktreePorcelain } from './binding/resolve-binding';
+export type { GitWorktreeEntry, ResolveBindingInput, ResolvedBinding } from './binding/types';
 
-export {
-  renderDiagnostic,
-  renderDiagnostics,
-  countSeverities,
-} from './render/diagnostic';
+export { renderDiagnostic, renderDiagnostics, countSeverities } from './render/diagnostic';
 export type { RenderDiagnosticsOptions } from './render/diagnostic';
-export {
-  renderFinding,
-  renderFindings,
-  countFindingSeverities,
-} from './render/finding';
+export { renderFinding, renderFindings, countFindingSeverities } from './render/finding';
 export type { RenderFindingsOptions } from './render/finding';
 export { renderDecision } from './render/decision';
 export type { RenderDecisionOptions } from './render/decision';
@@ -114,11 +99,7 @@ export type { StatusCommandOptions } from './commands/status';
 export { renderStatus } from './render/status';
 export type { StatusRenderInput } from './render/status';
 
-export {
-  runGatesExplainCommand,
-  runGatesListCommand,
-  runGatesRunCommand,
-} from './commands/gates';
+export { runGatesExplainCommand, runGatesListCommand, runGatesRunCommand } from './commands/gates';
 export type {
   GatesExplainCommandOptions,
   GatesListCommandOptions,
@@ -127,27 +108,13 @@ export type {
 } from './commands/gates';
 
 export { renderGatesRun } from './render/gates';
-export {
-  validateGatesReport,
-} from './gates/gate-result-contract';
-export type {
-  GatesReport,
-  GatesViolation,
-  GatesWarning,
-} from './gates/gate-result-contract';
+export { validateGatesReport } from './gates/gate-result-contract';
+export type { GatesReport, GatesViolation, GatesWarning } from './gates/gate-result-contract';
 export { deriveDispositions } from './gates/disposition';
-export type {
-  DispositionResult,
-  GateDisposition,
-  GateOutcome,
-} from './gates/disposition';
+export type { DispositionResult, GateDisposition, GateOutcome } from './gates/disposition';
 
 export { filterWaivedViolations } from './gates/waiver-filter';
-export type {
-  WaiverFilterInput,
-  WaiverFilterResult,
-  WaiverEvidence,
-} from './gates/waiver-filter';
+export type { WaiverFilterInput, WaiverFilterResult, WaiverEvidence } from './gates/waiver-filter';
 
 export {
   runWaiverCreateCommand,
@@ -179,14 +146,8 @@ export type {
   ReprieveListOptions,
 } from './commands/reprieve';
 
-export {
-  renderWaiverSummary,
-  renderWaiverDetail,
-} from './render/waiver';
-export type {
-  RenderWaiverSummaryInput,
-  RenderWaiverDetailInput,
-} from './render/waiver';
+export { renderWaiverSummary, renderWaiverDetail } from './render/waiver';
+export type { RenderWaiverSummaryInput, RenderWaiverDetailInput } from './render/waiver';
 
 export { runInitCommand } from './commands/init';
 export type { InitCommandOptions } from './commands/init';

@@ -115,13 +115,17 @@ export function assertMutationReport({ policy, surfaceId, report }) {
         if (!reportTests.has(file)) errors.push(`missing report test file ${file}`);
       }
       for (const file of reportTests) {
-        if (!expectedTests.has(file)) errors.push(`undeclared test file in mutation report: ${file}`);
+        if (!expectedTests.has(file))
+          errors.push(`undeclared test file in mutation report: ${file}`);
       }
     }
   }
 
   const reportFiles = new Map(
-    Object.entries(report.files).map(([file, result]) => [normalizeReportPath(file, report), result])
+    Object.entries(report.files).map(([file, result]) => [
+      normalizeReportPath(file, report),
+      result,
+    ])
   );
   const expected = new Set();
 
@@ -144,12 +148,18 @@ export function assertMutationReport({ policy, surfaceId, report }) {
     const unknown = [...counts.keys()].filter((status) => !knownStatuses.has(status));
     if (unknown.length > 0) errors.push(`${file} has unknown mutant status: ${unknown.join(', ')}`);
 
-    const detected = [...detectedStatuses].reduce((sum, status) => sum + (counts.get(status) || 0), 0);
+    const detected = [...detectedStatuses].reduce(
+      (sum, status) => sum + (counts.get(status) || 0),
+      0
+    );
     const undetected = [...undetectedStatuses].reduce(
       (sum, status) => sum + (counts.get(status) || 0),
       0
     );
-    const invalid = [...invalidStatuses].reduce((sum, status) => sum + (counts.get(status) || 0), 0);
+    const invalid = [...invalidStatuses].reduce(
+      (sum, status) => sum + (counts.get(status) || 0),
+      0
+    );
     const ignored = counts.get('Ignored') || 0;
     const valid = detected + undetected;
     const threshold = target.threshold ?? surface.threshold;

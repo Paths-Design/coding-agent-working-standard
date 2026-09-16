@@ -21,7 +21,10 @@ export interface SemanticOptions {
  *  - critical gates (budget_limit, spec_completeness, scope_boundary) not in block mode
  *  - root_passthrough entries that match high-blast-radius file names
  */
-export function validatePolicySemantics(policy: Policy, options: SemanticOptions = {}): Result<Policy> {
+export function validatePolicySemantics(
+  policy: Policy,
+  options: SemanticOptions = {}
+): Result<Policy> {
   const errors: Diagnostic[] = [];
   const warnings: Diagnostic[] = [];
   const subjectBase = options.sourcePath ?? '.caws/policy.yaml';
@@ -43,7 +46,7 @@ export function validatePolicySemantics(policy: Policy, options: SemanticOptions
         location: { pointer: '/risk_tiers' },
         narrowRepair:
           'Order tiers from strict to permissive: max_files must increase or stay equal as risk_tier rises.',
-      }),
+      })
     );
   }
 
@@ -55,8 +58,9 @@ export function validatePolicySemantics(policy: Policy, options: SemanticOptions
         message: `Risk-tier max_loc must be monotonic: T1 (${t1.max_loc}) ≤ T2 (${t2.max_loc}) ≤ T3 (${t3.max_loc}).`,
         subject: subjectBase,
         location: { pointer: '/risk_tiers' },
-        narrowRepair: 'Order tiers from strict to permissive: max_loc must increase or stay equal as risk_tier rises.',
-      }),
+        narrowRepair:
+          'Order tiers from strict to permissive: max_loc must increase or stay equal as risk_tier rises.',
+      })
     );
   }
 
@@ -75,7 +79,7 @@ export function validatePolicySemantics(policy: Policy, options: SemanticOptions
           location: { pointer: `/gates/${gateId}/mode` },
           narrowRepair: `Set gates.${gateId}.mode to "block" unless the deviation is intentional and documented.`,
           severity: 'warning',
-        }),
+        })
       );
     }
   }
@@ -93,7 +97,7 @@ export function validatePolicySemantics(policy: Policy, options: SemanticOptions
         narrowRepair:
           'Remove non_governed_zones_force unless authority relinquishment is reviewed and documented in policy.',
         severity: 'warning',
-      }),
+      })
     );
   }
 
@@ -110,7 +114,7 @@ export function validatePolicySemantics(policy: Policy, options: SemanticOptions
             location: { pointer: `/root_passthrough/${idx}` },
             narrowRepair: `Remove "${entry}" from root_passthrough and list it explicitly in scope.in of any spec that needs to edit it.`,
             severity: 'warning',
-          }),
+          })
         );
       }
     }

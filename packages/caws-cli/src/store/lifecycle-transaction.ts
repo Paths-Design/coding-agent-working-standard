@@ -161,14 +161,16 @@ function rollbackOne(
         const cause = e as { code?: string };
         // Already gone — treat as success.
         if (cause.code === 'ENOENT') return { ok: true };
-        return { ok: false, reason: `failed to remove ${snapshot.path}: ${cause.code ?? 'unknown'}` };
+        return {
+          ok: false,
+          reason: `failed to remove ${snapshot.path}: ${cause.code ?? 'unknown'}`,
+        };
       }
       return { ok: true };
     }
     // Restore prior contents. Use writeFileAtomic with the captured
     // mode so the rollback itself is atomic at the file level.
-    const opts =
-      snapshot.originalMode !== undefined ? { preserveMode: true } : {};
+    const opts = snapshot.originalMode !== undefined ? { preserveMode: true } : {};
     // Pre-stage the target file with original mode by chmod-then-write
     // is overkill; writeFileAtomic with preserveMode will stat the
     // target (which currently has the failed-transaction bytes and
@@ -217,7 +219,9 @@ function buildRecoveryInstruction(
   }
   lines.push('');
   lines.push('Required action: review each listed file against the planned event payload above to');
-  lines.push('determine whether to redo the lifecycle transition or to manually restore prior state.');
+  lines.push(
+    'determine whether to redo the lifecycle transition or to manually restore prior state.'
+  );
   lines.push('Do NOT hand-author entries into events.jsonl.');
   return lines.join('\n');
 }
@@ -251,9 +255,7 @@ interface InjectedFault {
 }
 
 function readInjectedFault(): InjectedFault | null {
-  const isTestEnv =
-    process.env.NODE_ENV === 'test' ||
-    process.env.JEST_WORKER_ID !== undefined;
+  const isTestEnv = process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID !== undefined;
   if (!isTestEnv) return null;
   const raw = process.env.CAWS_TEST_INJECT_LIFECYCLE_FAULT;
   if (raw === undefined || raw.length === 0) return null;
@@ -300,11 +302,7 @@ export function runLifecycleTransaction(
           data: { source_rule: d.rule },
         };
         if (d.subject !== undefined) extra.subject = d.subject;
-        return storeDiagnostic(
-          STORE_RULES.LIFECYCLE_PLAN_REJECTED,
-          d.message,
-          extra
-        );
+        return storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, extra);
       });
       return err(diagnostics);
     }
@@ -338,11 +336,7 @@ export function runLifecycleTransaction(
             data: { source_rule: d.rule, rolled_back: rolledBack.length },
           };
           if (d.subject !== undefined) extra.subject = d.subject;
-          return storeDiagnostic(
-            STORE_RULES.LIFECYCLE_WRITE_FAILED,
-            d.message,
-            extra
-          );
+          return storeDiagnostic(STORE_RULES.LIFECYCLE_WRITE_FAILED, d.message, extra);
         });
         return err(diagnostics);
       }
@@ -398,8 +392,7 @@ export function runLifecycleTransaction(
   for (let i = 0; i < plan.events.length; i++) {
     const body = plan.events[i];
     if (!body) continue;
-    const shouldInject =
-      injectedFault !== null && body.event === injectedFault.eventMatch;
+    const shouldInject = injectedFault !== null && body.event === injectedFault.eventMatch;
     const result = shouldInject
       ? err(
           storeDiagnostic(

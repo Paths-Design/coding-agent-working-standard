@@ -82,8 +82,7 @@ export const STORE_RULES = {
    *  needed; not in v11.2 scope. The fully-unparseable case is
    *  handled separately (the planner refuses earlier with its own
    *  diagnostic). */
-  EVENTS_ROTATE_PARTIAL_CORRUPTION:
-    'store.events.rotate.partial_corruption',
+  EVENTS_ROTATE_PARTIAL_CORRUPTION: 'store.events.rotate.partial_corruption',
   /** verify-archive recomputed the archive file's sha256 and it did not
    *  match the prior_file_digest committed in the most recent
    *  chain_rotated event. Tamper detection trip. */
@@ -91,13 +90,11 @@ export const STORE_RULES = {
   /** verify-archive recomputed the archive file's line count and it did
    *  not match the prior_line_count committed in the most recent
    *  chain_rotated event. */
-  EVENTS_ARCHIVE_LINE_COUNT_MISMATCH:
-    'store.events.archive.line_count_mismatch',
+  EVENTS_ARCHIVE_LINE_COUNT_MISMATCH: 'store.events.archive.line_count_mismatch',
   /** events migrate --apply refused because v10 spec YAMLs were detected
    *  and --allow-partial-upgrade was not passed. The half-upgrade refusal
    *  is structural (see CAWS-MIGRATE-V10-EVENTS-001 A10 invariant). */
-  EVENTS_MIGRATE_PARTIAL_UPGRADE_REFUSED:
-    'store.events.migrate.partial_upgrade_refused',
+  EVENTS_MIGRATE_PARTIAL_UPGRADE_REFUSED: 'store.events.migrate.partial_upgrade_refused',
 
   // ---- specs migration (CAWS-MIGRATE-V10-SPECS-001) -----------------------
   /** Scan failed to read .caws/specs/ directory. Structural — refuses
@@ -113,8 +110,7 @@ export const STORE_RULES = {
   /** A post-write validation of the transformer's output rejected the
    *  spec; the write for that file was rolled back. Other files in
    *  the batch are NOT rolled back per non_functional reliability rule. */
-  SPECS_MIGRATE_POST_WRITE_VALIDATION_FAILED:
-    'store.specs.migrate.post_write_validation_failed',
+  SPECS_MIGRATE_POST_WRITE_VALIDATION_FAILED: 'store.specs.migrate.post_write_validation_failed',
   /** Writing a migrated spec file to disk failed (atomic write rejected
    *  by filesystem). The other writes proceeded; the report records
    *  which files were skipped. */
@@ -122,8 +118,7 @@ export const STORE_RULES = {
   /** Writing the durable migration report to disk failed AFTER spec
    *  writes succeeded. The migrations are on disk; only the audit
    *  trail failed. Operator must investigate. */
-  SPECS_MIGRATE_REPORT_WRITE_FAILED:
-    'store.specs.migrate.report_write_failed',
+  SPECS_MIGRATE_REPORT_WRITE_FAILED: 'store.specs.migrate.report_write_failed',
 
   // ---- init (slice 7b) ----------------------------------------------------
   /** A legacy file (e.g., working-spec.yaml) blocks vNext init. */
@@ -139,12 +134,10 @@ export const STORE_RULES = {
   /** A planned file write failed; the transaction aborted before event append. */
   LIFECYCLE_WRITE_FAILED: 'store.lifecycle.write_failed',
   /** State writes succeeded but event append failed; rollback succeeded. */
-  LIFECYCLE_PARTIAL_FAILURE_RECOVERED:
-    'store.lifecycle.partial_failure_recovered',
+  LIFECYCLE_PARTIAL_FAILURE_RECOVERED: 'store.lifecycle.partial_failure_recovered',
   /** State writes succeeded, event append failed, AND rollback also failed.
    *  Caller MUST handle the recovery instruction in the diagnostic data. */
-  LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED:
-    'store.lifecycle.partial_failure_unrecovered',
+  LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED: 'store.lifecycle.partial_failure_unrecovered',
   /** yaml-patch refused an ambiguous mutation (e.g., duplicate top-level key,
    *  or a flow-style mapping at the target location). */
   YAML_PATCH_AMBIGUOUS: 'store.yaml_patch.ambiguous',

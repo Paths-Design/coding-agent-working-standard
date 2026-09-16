@@ -100,8 +100,7 @@ const ZCODE_USER_SCOPE_WIRING = {
           hooks: [
             {
               type: 'command',
-              command:
-                '"${ZCODE_PROJECT_DIR}"/.zcode/hooks/caws-bridge.sh pre_tool_use',
+              command: '"${ZCODE_PROJECT_DIR}"/.zcode/hooks/caws-bridge.sh pre_tool_use',
             },
           ],
         },
@@ -138,7 +137,9 @@ describe('detection: user-scope CAWS wiring (A1/A2 precondition)', () => {
     try {
       h.writeUserScope('qwen-code', {
         hooks: {
-          Stop: [{ hooks: [{ type: 'command', command: 'bash "$ROOT/.caws/hooks/dispatch/stop.sh"' }] }],
+          Stop: [
+            { hooks: [{ type: 'command', command: 'bash "$ROOT/.caws/hooks/dispatch/stop.sh"' }] },
+          ],
         },
       });
       expect(detectUserScopeCawsWiring('qwen-code', h.home).present).toBe(true);

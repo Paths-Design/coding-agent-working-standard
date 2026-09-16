@@ -241,8 +241,7 @@ function computeActiveSummary(
   // missing, fall back to an empty summary. Caller (register/heartbeat
   // --include-active-summary) receives `active_agent_count: 0` and an
   // empty active_agents array rather than a Node throw.
-  const summary = callSummarizeActiveAgentsSafe(registry, now, ttlMs)
-    ?? EMPTY_ACTIVITY_SUMMARY;
+  const summary = callSummarizeActiveAgentsSafe(registry, now, ttlMs) ?? EMPTY_ACTIVITY_SUMMARY;
   const entries: ActiveAgentSummaryEntry[] = summary.active.map((lease) => ({
     session_id: lease.session_id,
     bound_worktree: lease.bound_worktree ?? null,
@@ -553,7 +552,9 @@ export interface ListOpts extends BaseAgentsOpts {
 const SILENT_MIN_INBOUND = 5;
 const SILENT_MAX_RATIO = 0.2;
 
-function silentPlatforms(engagement: Record<string, { to: number; from: number; ratio: number | null }>) {
+function silentPlatforms(
+  engagement: Record<string, { to: number; from: number; ratio: number | null }>
+) {
   const out: { platform: string; to: number; from: number }[] = [];
   for (const [platform, e] of Object.entries(engagement)) {
     if (e.to >= SILENT_MIN_INBOUND && e.ratio !== null && e.ratio <= SILENT_MAX_RATIO) {
@@ -630,7 +631,9 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
       // LEASE-WORK-STATE-001: append the visibility-only state tag when
       // declared; absent renders nothing extra.
       const stateTag = l.work_state !== undefined ? `  ${l.work_state}` : '';
-      out(`  ${l.session_id}  ${l.bound_worktree ?? '(no worktree)'}  ${l.bound_spec_id ?? '(no spec)'}${stateTag}`);
+      out(
+        `  ${l.session_id}  ${l.bound_worktree ?? '(no worktree)'}  ${l.bound_spec_id ?? '(no spec)'}${stateTag}`
+      );
     }
     if (wantsStale) {
       out(`stale:  ${summary.stale.length}`);
@@ -768,7 +771,9 @@ export function runAgentsPruneCommand(opts: PruneOpts): number {
         out(`  ${tag} ${id}`);
       }
       if (r.value.skippedForeignHost.length > 0) {
-        out(`  (${r.value.skippedForeignHost.length} foreign-host lease(s) skipped — pid not checkable here)`);
+        out(
+          `  (${r.value.skippedForeignHost.length} foreign-host lease(s) skipped — pid not checkable here)`
+        );
       }
     }
     return 0;
@@ -803,7 +808,9 @@ export function runAgentsPruneCommand(opts: PruneOpts): number {
       diagnostics: r.value.diagnostics,
     });
   } else {
-    out(`prune (${opts.apply === true ? 'apply' : 'dry-run'}): ${r.value.candidates.length} candidate(s)`);
+    out(
+      `prune (${opts.apply === true ? 'apply' : 'dry-run'}): ${r.value.candidates.length} candidate(s)`
+    );
     for (const id of r.value.candidates) {
       const tag = r.value.deleted.includes(id) ? 'DELETED' : 'would-delete';
       out(`  ${tag} ${id}`);

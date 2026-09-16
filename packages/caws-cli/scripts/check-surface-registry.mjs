@@ -16,7 +16,9 @@ execFileSync(process.execPath, [join(here, 'generate-surface-registry.mjs')], { 
 let drift = false;
 for (let i = 0; i < targets.length; i++) {
   if (readFileSync(targets[i], 'utf8') !== before[i]) {
-    console.error(`surface-registry drift: ${targets[i]} does not match surfaces/registry.json. Run: node scripts/generate-surface-registry.mjs`);
+    console.error(
+      `surface-registry drift: ${targets[i]} does not match surfaces/registry.json. Run: node scripts/generate-surface-registry.mjs`
+    );
     drift = true;
   }
 }

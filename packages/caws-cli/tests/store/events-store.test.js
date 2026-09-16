@@ -340,7 +340,11 @@ describe('tolerantScanEventsFile (observed via rotate stats): actor-shape + tail
       [
         JSON.stringify({ actor: 'v10a', event_hash: 'sha256:' + '1'.repeat(64) }),
         JSON.stringify({ actor: 'v10b' }),
-        JSON.stringify({ actor: { kind: 'agent', id: 'x' }, seq: 3, event_hash: 'sha256:' + '2'.repeat(64) }),
+        JSON.stringify({
+          actor: { kind: 'agent', id: 'x' },
+          seq: 3,
+          event_hash: 'sha256:' + '2'.repeat(64),
+        }),
       ].join('\n') + '\n'
     );
     const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
@@ -478,7 +482,10 @@ describe('loadEvents/parseJsonlContent: message + data + line numbers', () => {
   test('interior malformed JSON: message names the line + data.line', () => {
     const dir = cawsDir();
     const valid = appendEvent(dir, body()).value;
-    fs.writeFileSync(ev(dir), JSON.stringify(valid) + '\n{ not json\n' + JSON.stringify(valid) + '\n');
+    fs.writeFileSync(
+      ev(dir),
+      JSON.stringify(valid) + '\n{ not json\n' + JSON.stringify(valid) + '\n'
+    );
     const r = loadEvents(dir);
     expect(r.ok).toBe(false);
     expect(r.errors[0].rule).toBe(INTERIOR_MALFORMED);
@@ -584,7 +591,10 @@ describe('tolerantScan (via rotate stats): classification predicate edges', () =
 
   test('tail seq must be an INTEGER >= 1: seq 0 and seq 2.5 yield no prior_seq', () => {
     const dir = cawsDir();
-    fs.writeFileSync(ev(dir), JSON.stringify({ actor: 'x', seq: 0, event_hash: 'sha256:' + 'a'.repeat(64) }) + '\n');
+    fs.writeFileSync(
+      ev(dir),
+      JSON.stringify({ actor: 'x', seq: 0, event_hash: 'sha256:' + 'a'.repeat(64) }) + '\n'
+    );
     const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
     expect(r.ok).toBe(true);
     // seq 0 is < 1 -> tailSeq null -> prior_seq absent; but tailHash IS valid.
@@ -819,7 +829,10 @@ describe('events-store round 3: priorChainStatus enum + clean-v11 predicate comb
 describe('events-store round 3: tolerantScan tail boundaries (seq===1, regex anchors)', () => {
   test('a tail seq of EXACTLY 1 is accepted as prior_seq (kills the sq > 1 mutant)', () => {
     const dir = cawsDir();
-    fs.writeFileSync(ev(dir), JSON.stringify({ actor: 'x', seq: 1, event_hash: 'sha256:' + 'c'.repeat(64) }) + '\n');
+    fs.writeFileSync(
+      ev(dir),
+      JSON.stringify({ actor: 'x', seq: 1, event_hash: 'sha256:' + 'c'.repeat(64) }) + '\n'
+    );
     const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
     expect(r.ok).toBe(true);
     expect(r.value.data.prior_seq).toBe(1); // seq 1 IS >= 1
@@ -828,7 +841,10 @@ describe('events-store round 3: tolerantScan tail boundaries (seq===1, regex anc
   test('a hash with extra leading chars is rejected (the ^ anchor matters)', () => {
     const dir = cawsDir();
     // "XXsha256:<64hex>" — without ^, an unanchored regex would match the substring.
-    fs.writeFileSync(ev(dir), JSON.stringify({ actor: 'x', seq: 5, event_hash: 'XXsha256:' + 'd'.repeat(64) }) + '\n');
+    fs.writeFileSync(
+      ev(dir),
+      JSON.stringify({ actor: 'x', seq: 5, event_hash: 'XXsha256:' + 'd'.repeat(64) }) + '\n'
+    );
     const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
     expect(r.ok).toBe(true);
     expect(r.value.data.prior_tail_hash).toBeNull(); // ^ anchor rejects the prefix
@@ -836,7 +852,11 @@ describe('events-store round 3: tolerantScan tail boundaries (seq===1, regex anc
 
   test('a hash with extra trailing chars is rejected (the $ anchor matters)', () => {
     const dir = cawsDir();
-    fs.writeFileSync(ev(dir), JSON.stringify({ actor: 'x', seq: 5, event_hash: 'sha256:' + 'e'.repeat(64) + 'EXTRA' }) + '\n');
+    fs.writeFileSync(
+      ev(dir),
+      JSON.stringify({ actor: 'x', seq: 5, event_hash: 'sha256:' + 'e'.repeat(64) + 'EXTRA' }) +
+        '\n'
+    );
     const r = rotateEvents(dir, { reason: 'x', actor: rotateActor });
     expect(r.ok).toBe(true);
     expect(r.value.data.prior_tail_hash).toBeNull(); // $ anchor rejects the suffix
@@ -988,10 +1008,7 @@ describe('events-store round 4: tolerantScan parsed-shape arms (via rotate stats
 
   test('an actor that is an OBJECT with a string kind is v11 (the typeof === object arm)', () => {
     const dir = cawsDir();
-    fs.writeFileSync(
-      ev(dir),
-      JSON.stringify({ actor: { kind: 'agent', id: 'a' } }) + '\n'
-    );
+    fs.writeFileSync(ev(dir), JSON.stringify({ actor: { kind: 'agent', id: 'a' } }) + '\n');
     const r = rotateEvents(dir, { reason: 'x', actor: rotateActor, allowClean: true });
     expect(r.ok).toBe(true);
     expect(r.value.data.actor_shape_stats.v11_object_actor).toBe(1);

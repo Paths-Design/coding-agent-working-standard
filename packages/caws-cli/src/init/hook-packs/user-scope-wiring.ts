@@ -81,10 +81,7 @@ export function detectUserScopeCawsWiring(
 }
 
 /** Project-scope config path per gated surface (the wiring init installs). */
-export function gatedProjectConfigPath(
-  surface: 'qwen-code' | 'zcode',
-  repoRoot: string
-): string {
+export function gatedProjectConfigPath(surface: 'qwen-code' | 'zcode', repoRoot: string): string {
   return surface === 'qwen-code'
     ? path.join(repoRoot, '.qwen', 'settings.json')
     : path.join(repoRoot, '.zcode', 'config.json');
@@ -114,9 +111,7 @@ export function observeGatedSurfaceWiring(
     const markers = cawsCommandMarkers(surface);
     let parsed: unknown;
     try {
-      parsed = JSON.parse(
-        fs.readFileSync(gatedProjectConfigPath(surface, repoRoot), 'utf8')
-      );
+      parsed = JSON.parse(fs.readFileSync(gatedProjectConfigPath(surface, repoRoot), 'utf8'));
     } catch {
       continue; // absent project config: nothing on the project side
     }

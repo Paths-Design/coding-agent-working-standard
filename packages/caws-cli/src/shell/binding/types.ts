@@ -17,11 +17,7 @@
 // porcelain lookup as a deterministic fallback), never from the
 // filesystem layout alone.
 
-import type {
-  BindingState,
-  Spec,
-  WorktreeRegistry,
-} from '../../kernel';
+import type { BindingState, Spec, WorktreeRegistry } from '../../kernel';
 
 export interface ResolveBindingInput {
   /** Repo root (from store/repo-root.ts, --git-common-dir based). */

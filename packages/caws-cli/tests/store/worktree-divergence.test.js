@@ -19,10 +19,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const {
-  computeLaneDivergence,
-  formatLaneCounts,
-} = require('../../dist/store');
+const { computeLaneDivergence, formatLaneCounts } = require('../../dist/store');
 const { cleanupAll, git, makeTempRepo } = require('../helpers/git-repo-factory');
 
 afterAll(() => {

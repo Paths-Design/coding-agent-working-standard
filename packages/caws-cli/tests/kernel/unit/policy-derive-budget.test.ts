@@ -109,7 +109,10 @@ describe('deriveBudget: an applicable waiver RAISES the budget by its delta', ()
     const r = deriveBudget(
       policy(),
       { risk_tier: 1 },
-      [waiver({ waiver_id: 'W-1' }), waiver({ waiver_id: 'W-2', delta: { max_files: 3, max_loc: 30 } })],
+      [
+        waiver({ waiver_id: 'W-1' }),
+        waiver({ waiver_id: 'W-2', delta: { max_files: 3, max_loc: 30 } }),
+      ],
       { now: NOW }
     );
     expect(isOk(r)).toBe(true);
@@ -147,9 +150,14 @@ describe('deriveBudget: each waiver-skip reason is enforced (mutation-rich decis
   });
 
   test('a waiver expiring strictly AFTER now is NOT expired (boundary check)', () => {
-    const r = deriveBudget(base(), { risk_tier: 1 }, [waiver({ expires_at: '2026-06-13T12:00:00.001Z' })], {
-      now: NOW,
-    });
+    const r = deriveBudget(
+      base(),
+      { risk_tier: 1 },
+      [waiver({ expires_at: '2026-06-13T12:00:00.001Z' })],
+      {
+        now: NOW,
+      }
+    );
     expect(isOk(r)).toBe(true);
     if (isOk(r)) expect(r.value.trace.appliedWaivers).toHaveLength(1);
   });
@@ -168,9 +176,14 @@ describe('deriveBudget: each waiver-skip reason is enforced (mutation-rich decis
   });
 
   test('a ZERO-delta waiver with no approvers is APPLIED (approver gate only matters when raising)', () => {
-    const r = deriveBudget(base(), { risk_tier: 1 }, [waiver({ delta: { max_files: 0, max_loc: 0 }, approvers: [] })], {
-      now: NOW,
-    });
+    const r = deriveBudget(
+      base(),
+      { risk_tier: 1 },
+      [waiver({ delta: { max_files: 0, max_loc: 0 }, approvers: [] })],
+      {
+        now: NOW,
+      }
+    );
     expect(isOk(r)).toBe(true);
     if (isOk(r)) {
       // No skip for approvers because delta does not raise budget.
@@ -182,7 +195,9 @@ describe('deriveBudget: each waiver-skip reason is enforced (mutation-rich decis
   test('min_approvers_for_budget_raise from policy is honored', () => {
     const p = policy({ waivers: { min_approvers_for_budget_raise: 2 } });
     // One approver < required 2 -> skipped.
-    const r = deriveBudget(p, { risk_tier: 1 }, [waiver({ approvers: [{ name: 'a' }] })], { now: NOW });
+    const r = deriveBudget(p, { risk_tier: 1 }, [waiver({ approvers: [{ name: 'a' }] })], {
+      now: NOW,
+    });
     expect(isOk(r)).toBe(true);
     if (isOk(r)) expect(r.value.trace.skippedWaivers[0]?.reason).toBe('insufficient_approvers');
   });
@@ -247,7 +262,9 @@ describe('deriveBudget: skipped waiver detail field presence/absence (L83 Condit
   // We need to assert the EXACT detail string to kill StringLiteral mutants too.
 
   test('status_not_active skip: detail field is present with exact status value', () => {
-    const r = deriveBudget(policy(), { risk_tier: 1 }, [waiver({ status: 'revoked' })], { now: NOW });
+    const r = deriveBudget(policy(), { risk_tier: 1 }, [waiver({ status: 'revoked' })], {
+      now: NOW,
+    });
     expect(isOk(r)).toBe(true);
     if (isOk(r)) {
       const skipped = r.value.trace.skippedWaivers[0]!;
@@ -257,7 +274,9 @@ describe('deriveBudget: skipped waiver detail field presence/absence (L83 Condit
   });
 
   test('status_not_active skip: detail encodes the actual status (expired_license)', () => {
-    const r = deriveBudget(policy(), { risk_tier: 1 }, [waiver({ status: 'expired' })], { now: NOW });
+    const r = deriveBudget(policy(), { risk_tier: 1 }, [waiver({ status: 'expired' })], {
+      now: NOW,
+    });
     expect(isOk(r)).toBe(true);
     if (isOk(r)) {
       const skipped = r.value.trace.skippedWaivers[0]!;
@@ -266,7 +285,9 @@ describe('deriveBudget: skipped waiver detail field presence/absence (L83 Condit
   });
 
   test('gate_not_covered skip: detail is present with exact string', () => {
-    const r = deriveBudget(policy(), { risk_tier: 1 }, [waiver({ gates: ['scope_boundary'] })], { now: NOW });
+    const r = deriveBudget(policy(), { risk_tier: 1 }, [waiver({ gates: ['scope_boundary'] })], {
+      now: NOW,
+    });
     expect(isOk(r)).toBe(true);
     if (isOk(r)) {
       const skipped = r.value.trace.skippedWaivers[0]!;
@@ -277,7 +298,9 @@ describe('deriveBudget: skipped waiver detail field presence/absence (L83 Condit
 
   test('malformed expires_at skip: detail encodes the bad value', () => {
     const badDate = 'totally-unparseable';
-    const r = deriveBudget(policy(), { risk_tier: 1 }, [waiver({ expires_at: badDate })], { now: NOW });
+    const r = deriveBudget(policy(), { risk_tier: 1 }, [waiver({ expires_at: badDate })], {
+      now: NOW,
+    });
     expect(isOk(r)).toBe(true);
     if (isOk(r)) {
       const skipped = r.value.trace.skippedWaivers[0]!;
@@ -314,7 +337,9 @@ describe('deriveBudget: skipped waiver detail field presence/absence (L83 Condit
 
   test('insufficient_approvers skip: detail encodes counts as "N < required M"', () => {
     const p = policy({ waivers: { min_approvers_for_budget_raise: 3 } });
-    const r = deriveBudget(p, { risk_tier: 1 }, [waiver({ approvers: [{ name: 'a' }] })], { now: NOW });
+    const r = deriveBudget(p, { risk_tier: 1 }, [waiver({ approvers: [{ name: 'a' }] })], {
+      now: NOW,
+    });
     expect(isOk(r)).toBe(true);
     if (isOk(r)) {
       const skipped = r.value.trace.skippedWaivers[0]!;

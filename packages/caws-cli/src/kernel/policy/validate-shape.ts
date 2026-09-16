@@ -35,7 +35,10 @@ export interface ShapeValidateOptions {
  * gates, broad non_governed_zones, slash-containing root_passthrough.
  * Other AJV violations land in policy.schema.violation.
  */
-export function validatePolicyShape(input: unknown, options: ShapeValidateOptions = {}): Result<Policy> {
+export function validatePolicyShape(
+  input: unknown,
+  options: ShapeValidateOptions = {}
+): Result<Policy> {
   const validate = getValidator();
   const valid = validate(input);
   if (valid) {
@@ -49,7 +52,7 @@ export function validatePolicyShape(input: unknown, options: ShapeValidateOption
         authority: 'kernel/policy',
         message: 'Schema validation failed without producing errors.',
         ...(options.sourcePath !== undefined && { subject: options.sourcePath }),
-      }),
+      })
     );
   }
   return err(errors);
@@ -79,7 +82,8 @@ function ajvErrorToDiagnostic(e: ErrorObject, sourcePath: string | undefined): D
 
 function pickStableRule(e: ErrorObject): string {
   const params = (e.params ?? {}) as Record<string, unknown>;
-  const additional = typeof params['additionalProperty'] === 'string' ? params['additionalProperty'] : undefined;
+  const additional =
+    typeof params['additionalProperty'] === 'string' ? params['additionalProperty'] : undefined;
 
   // additionalProperties: false on /risk_tiers/<n> with key 'label'
   if (
@@ -100,12 +104,20 @@ function pickStableRule(e: ErrorObject): string {
   }
 
   // additionalProperties: false on /gates with an unrecognized gate name
-  if (e.keyword === 'additionalProperties' && additional !== undefined && e.instancePath === '/gates') {
+  if (
+    e.keyword === 'additionalProperties' &&
+    additional !== undefined &&
+    e.instancePath === '/gates'
+  ) {
     return POLICY_RULES.UNKNOWN_GATE;
   }
 
   // gate mode enum violation
-  if (e.keyword === 'enum' && e.instancePath.endsWith('/mode') && e.instancePath.startsWith('/gates/')) {
+  if (
+    e.keyword === 'enum' &&
+    e.instancePath.endsWith('/mode') &&
+    e.instancePath.startsWith('/gates/')
+  ) {
     return POLICY_RULES.UNKNOWN_GATE_MODE;
   }
 
@@ -149,7 +161,8 @@ function formatMessage(e: ErrorObject): string {
 
 function formatRepair(e: ErrorObject): string | undefined {
   const params = (e.params ?? {}) as Record<string, unknown>;
-  const additional = typeof params['additionalProperty'] === 'string' ? params['additionalProperty'] : undefined;
+  const additional =
+    typeof params['additionalProperty'] === 'string' ? params['additionalProperty'] : undefined;
 
   if (e.keyword === 'additionalProperties') {
     if (additional === 'label' && e.instancePath.startsWith('/risk_tiers/')) {
@@ -166,7 +179,11 @@ function formatRepair(e: ErrorObject): string | undefined {
     }
   }
 
-  if (e.keyword === 'enum' && e.instancePath.endsWith('/mode') && e.instancePath.startsWith('/gates/')) {
+  if (
+    e.keyword === 'enum' &&
+    e.instancePath.endsWith('/mode') &&
+    e.instancePath.startsWith('/gates/')
+  ) {
     return 'Use one of: block, warn, skip.';
   }
 

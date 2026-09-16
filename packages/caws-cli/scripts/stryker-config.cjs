@@ -15,9 +15,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const packageRoot = path.resolve(__dirname, '..');
-const policy = JSON.parse(
-  fs.readFileSync(path.join(packageRoot, 'mutation-policy.json'), 'utf8')
-);
+const policy = JSON.parse(fs.readFileSync(path.join(packageRoot, 'mutation-policy.json'), 'utf8'));
 
 function createJestConfig(surfaceId, tests) {
   const config = {
@@ -32,10 +30,7 @@ function createJestConfig(surfaceId, tests) {
   };
   if (surfaceId === 'kernel') {
     config.transform = {
-      '^.+\\.ts$': [
-        'ts-jest',
-        { tsconfig: '<rootDir>/tsconfig.kernel-test.json' },
-      ],
+      '^.+\\.ts$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.kernel-test.json' }],
     };
   }
   return config;

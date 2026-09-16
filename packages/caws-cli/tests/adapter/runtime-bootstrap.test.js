@@ -32,24 +32,38 @@ describe('shared bootstrap preserves context independently of registry source or
     const surface = path.join(lib, 'agent-surface.sh');
     const registry = path.join(lib, 'surfaces-registry.sh');
     const files = scenario.registryFirst ? [registry, surface] : [surface, registry];
-    const result = spawnSync('/bin/bash', [
-      '--noprofile', '--norc',
-      '-c',
-      `${scenario.strict ? 'set -euo pipefail;' : ''}
+    const result = spawnSync(
+      '/bin/bash',
+      [
+        '--noprofile',
+        '--norc',
+        '-c',
+        `${scenario.strict ? 'set -euo pipefail;' : ''}
        source "$1"
        source "$2"
        source "$3"
        printf 'root=%s\nvendor=%s\nsurface=%s\n' "\${CAWS_PROJECT_DIR:-MISSING}" "\${CAWS_VENDOR_DIR:-MISSING}" "\${CAWS_PLATFORM_FLAG:-MISSING}"
        caws_run_cli`,
-      'bootstrap-fixture', ...files, surface,
-    ], {
-      cwd: root,
-      encoding: 'utf8',
-      // Use the OS tools rather than user shell wrappers or startup files.
-      env: { PATH: '/usr/bin:/bin', CAWS_AGENT_SURFACE: 'codex', CODEX_PROJECT_DIR: hint, CAWS_BIN: cli },
-    });
+        'bootstrap-fixture',
+        ...files,
+        surface,
+      ],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        // Use the OS tools rather than user shell wrappers or startup files.
+        env: {
+          PATH: '/usr/bin:/bin',
+          CAWS_AGENT_SURFACE: 'codex',
+          CODEX_PROJECT_DIR: hint,
+          CAWS_BIN: cli,
+        },
+      }
+    );
     const expectedRoot = scenario.gitProject ? project : hint;
     expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: '' });
-    expect(result.stdout).toBe(`root=${expectedRoot}\nvendor=.codex\nsurface=codex\n${expectedRoot}\n`);
+    expect(result.stdout).toBe(
+      `root=${expectedRoot}\nvendor=.codex\nsurface=codex\n${expectedRoot}\n`
+    );
   });
 });

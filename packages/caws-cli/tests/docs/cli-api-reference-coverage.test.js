@@ -7,16 +7,17 @@ const LOCAL_METADATA_PATH = path.join(PKG_ROOT, 'dist', 'shell', 'command-metada
 const CLI_DOC_PATH = path.join(PKG_ROOT, 'docs', 'command-reference.md');
 
 function loadMetadata() {
-  if (!fs.existsSync(LOCAL_METADATA_PATH)) throw new Error('Build this checkout before checking docs');
+  if (!fs.existsSync(LOCAL_METADATA_PATH))
+    throw new Error('Build this checkout before checking docs');
   return require(LOCAL_METADATA_PATH).COMMAND_SURFACE_METADATA;
 }
 
 function leafKeys(metadata, prefix = 'caws') {
-  return metadata.flatMap(command => {
+  return metadata.flatMap((command) => {
     const key = `${prefix} ${command.name}`;
-    return command.kind === 'leaf' ? [key] : [
-      ...(command.defaultAction ? [key] : []), ...leafKeys(command.subcommands, key),
-    ];
+    return command.kind === 'leaf'
+      ? [key]
+      : [...(command.defaultAction ? [key] : []), ...leafKeys(command.subcommands, key)];
   });
 }
 
@@ -42,7 +43,11 @@ function headingCommandKeys(markdown) {
 }
 
 describe('packaged command reference coverage', () => {
-  beforeAll(() => execFileSync(process.execPath, [path.join(PKG_ROOT, 'scripts/stage-consumer-docs.mjs')], { stdio: 'pipe' }));
+  beforeAll(() =>
+    execFileSync(process.execPath, [path.join(PKG_ROOT, 'scripts/stage-consumer-docs.mjs')], {
+      stdio: 'pipe',
+    })
+  );
   test('documents every visible CLI leaf command from COMMAND_SURFACE_METADATA', () => {
     const documented = headingCommandKeys(fs.readFileSync(CLI_DOC_PATH, 'utf8'));
     const missing = leafKeys(loadMetadata()).filter((key) => !documented.has(key));

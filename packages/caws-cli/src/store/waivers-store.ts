@@ -197,11 +197,10 @@ export function markRevoked(
   const filePath = waiverFilePath(cawsDir, id);
   if (!fs.existsSync(filePath)) {
     return err(
-      storeDiagnostic(
-        STORE_RULES.WAIVERS_NOT_FOUND,
-        `Waiver ${id} not found at ${filePath}.`,
-        { subject: filePath, data: { id } }
-      )
+      storeDiagnostic(STORE_RULES.WAIVERS_NOT_FOUND, `Waiver ${id} not found at ${filePath}.`, {
+        subject: filePath,
+        data: { id },
+      })
     );
   }
 
@@ -214,11 +213,10 @@ export function markRevoked(
 
   if (existing.status === 'revoked') {
     return err(
-      storeDiagnostic(
-        STORE_RULES.WAIVERS_ALREADY_EXISTS,
-        `Waiver ${id} is already revoked.`,
-        { subject: filePath, data: { id } }
-      )
+      storeDiagnostic(STORE_RULES.WAIVERS_ALREADY_EXISTS, `Waiver ${id} is already revoked.`, {
+        subject: filePath,
+        data: { id },
+      })
     );
   }
 
@@ -259,8 +257,7 @@ function serializeWaiver(w: Waiver): string {
   }
   if (w.constraints !== undefined) {
     lines.push('constraints:');
-    if (w.constraints.max_uses !== undefined)
-      lines.push(`  max_uses: ${w.constraints.max_uses}`);
+    if (w.constraints.max_uses !== undefined) lines.push(`  max_uses: ${w.constraints.max_uses}`);
   }
   if (w.revocation !== undefined) {
     lines.push('revocation:');

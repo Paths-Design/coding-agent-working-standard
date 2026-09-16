@@ -153,7 +153,14 @@ describe('semantic layer (spec.semantic.*): tier gates', () => {
     rollback?: boolean;
     security?: boolean;
   }): string {
-    const { tier, mode = 'feature', contracts = false, observability = false, rollback = false, security = false } = opts;
+    const {
+      tier,
+      mode = 'feature',
+      contracts = false,
+      observability = false,
+      rollback = false,
+      security = false,
+    } = opts;
     const contractsBlock = contracts
       ? `contracts:
   - name: c
@@ -163,7 +170,9 @@ describe('semantic layer (spec.semantic.*): tier gates', () => {
       : 'contracts: []';
     const obsBlock = observability ? 'observability:\n  - log it' : '';
     const rbBlock = rollback ? 'rollback:\n  - revert' : '';
-    const nfBlock = security ? 'non_functional:\n  security:\n    - no new surface' : 'non_functional: {}';
+    const nfBlock = security
+      ? 'non_functional:\n  security:\n    - no new surface'
+      : 'non_functional: {}';
     return `
 id: TEST-1
 title: t
@@ -192,7 +201,13 @@ ${contractsBlock}
 
   test('tier-1 with no contracts -> tier1.contracts_required', () => {
     // Satisfy observability/rollback/security so ONLY the contract gate fires.
-    const y = buildSpec({ tier: 1, contracts: false, observability: true, rollback: true, security: true });
+    const y = buildSpec({
+      tier: 1,
+      contracts: false,
+      observability: true,
+      rollback: true,
+      security: true,
+    });
     expect(rules(y)).toContain(SPEC_RULES.TIER1_MISSING_CONTRACTS);
   });
 
@@ -203,12 +218,25 @@ ${contractsBlock}
   });
 
   test('mode:chore exempts the contract requirement even at tier 1', () => {
-    const y = buildSpec({ tier: 1, mode: 'chore', contracts: false, observability: true, rollback: true, security: true });
+    const y = buildSpec({
+      tier: 1,
+      mode: 'chore',
+      contracts: false,
+      observability: true,
+      rollback: true,
+      security: true,
+    });
     expect(rules(y)).not.toContain(SPEC_RULES.TIER1_MISSING_CONTRACTS);
   });
 
   test('tier-1 missing observability/rollback/security each fire their own rule', () => {
-    const y = buildSpec({ tier: 1, contracts: true, observability: false, rollback: false, security: false });
+    const y = buildSpec({
+      tier: 1,
+      contracts: true,
+      observability: false,
+      rollback: false,
+      security: false,
+    });
     const rs = rules(y);
     expect(rs).toContain(SPEC_RULES.TIER1_MISSING_OBSERVABILITY);
     expect(rs).toContain(SPEC_RULES.TIER1_MISSING_ROLLBACK);
@@ -222,7 +250,8 @@ describe('semantic layer: lifecycle + resolution rules', () => {
     const mutated = { ...spec, resolution: 'completed' } as Spec;
     const r = validateSpecSemantics(mutated);
     expect(isErr(r)).toBe(true);
-    if (isErr(r)) expect(r.errors.map((e) => e.rule)).toContain(SPEC_RULES.RESOLUTION_REQUIRES_CLOSURE);
+    if (isErr(r))
+      expect(r.errors.map((e) => e.rule)).toContain(SPEC_RULES.RESOLUTION_REQUIRES_CLOSURE);
     else throw new Error('expected requires_closure');
   });
 
@@ -231,7 +260,8 @@ describe('semantic layer: lifecycle + resolution rules', () => {
     const mutated = { ...spec, lifecycle_state: 'closed' } as Spec;
     const r = validateSpecSemantics(mutated);
     expect(isErr(r)).toBe(true);
-    if (isErr(r)) expect(r.errors.map((e) => e.rule)).toContain(SPEC_RULES.CLOSED_SPEC_MISSING_RESOLUTION);
+    if (isErr(r))
+      expect(r.errors.map((e) => e.rule)).toContain(SPEC_RULES.CLOSED_SPEC_MISSING_RESOLUTION);
     else throw new Error('expected resolution_required');
   });
 
@@ -240,7 +270,8 @@ describe('semantic layer: lifecycle + resolution rules', () => {
     const mutated = { ...spec, supersedes: spec.id } as Spec;
     const r = validateSpecSemantics(mutated);
     expect(isErr(r)).toBe(true);
-    if (isErr(r)) expect(r.errors.map((e) => e.rule)).toContain(SPEC_RULES.SUPERSEDES_SELF_REFERENCE);
+    if (isErr(r))
+      expect(r.errors.map((e) => e.rule)).toContain(SPEC_RULES.SUPERSEDES_SELF_REFERENCE);
     else throw new Error('expected self_reference');
   });
 });
@@ -299,13 +330,19 @@ describe('shape layer: forbidden legacy field acceptance_criteria', () => {
 
 describe('shape layer: forbidden legacy field scope.include / scope.exclude', () => {
   test('scope.include forbidden -> FORBIDDEN_FIELD_SCOPE_INCLUDE rule', () => {
-    const y = VALID_TIER3.replace('scope:\n  in:\n    - src/x.ts', 'scope:\n  in:\n    - src/x.ts\n  include:\n    - src/y.ts');
+    const y = VALID_TIER3.replace(
+      'scope:\n  in:\n    - src/x.ts',
+      'scope:\n  in:\n    - src/x.ts\n  include:\n    - src/y.ts'
+    );
     const rs = rules(y);
     expect(rs).toContain(SPEC_RULES.FORBIDDEN_FIELD_SCOPE_INCLUDE);
   });
 
   test('scope.exclude forbidden -> FORBIDDEN_FIELD_SCOPE_EXCLUDE rule', () => {
-    const y = VALID_TIER3.replace('scope:\n  in:\n    - src/x.ts', 'scope:\n  in:\n    - src/x.ts\n  exclude:\n    - src/z.ts');
+    const y = VALID_TIER3.replace(
+      'scope:\n  in:\n    - src/x.ts',
+      'scope:\n  in:\n    - src/x.ts\n  exclude:\n    - src/z.ts'
+    );
     const rs = rules(y);
     expect(rs).toContain(SPEC_RULES.FORBIDDEN_FIELD_SCOPE_EXCLUDE);
   });
@@ -388,7 +425,9 @@ describe('shape layer: diagnostic messages and repair hints (formatMessage / for
     const r = parseAndValidateSpec(y);
     expect(isErr(r)).toBe(true);
     if (isErr(r)) {
-      const d = r.errors.find((e) => e.rule === SPEC_RULES.SCHEMA_VIOLATION && e.message?.includes('mystery_field'));
+      const d = r.errors.find(
+        (e) => e.rule === SPEC_RULES.SCHEMA_VIOLATION && e.message?.includes('mystery_field')
+      );
       expect(d).toBeDefined();
       // narrowRepair for unknown field says Remove field "mystery_field"
       expect(d!.narrowRepair).toContain('mystery_field');
@@ -647,7 +686,7 @@ describe('semantic layer: diagnostic message/data fields (kill StringLiteral/Obj
     const spec = parseShape(VALID_TIER3);
     const mutated = {
       ...spec,
-      mode: 'feature' as const,  // chore exempts contracts; use feature so the gate fires
+      mode: 'feature' as const, // chore exempts contracts; use feature so the gate fires
       risk_tier: 1 as const,
       contracts: [],
       observability: ['log'],
@@ -671,7 +710,7 @@ describe('semantic layer: diagnostic message/data fields (kill StringLiteral/Obj
     const spec = parseShape(VALID_TIER3);
     const mutated = {
       ...spec,
-      mode: 'feature' as const,  // chore exempts contracts; use feature so the gate fires
+      mode: 'feature' as const, // chore exempts contracts; use feature so the gate fires
       risk_tier: 2 as const,
       contracts: [],
     };
@@ -959,21 +998,33 @@ describe('semantic layer: tier-3 full valid pass', () => {
 describe('semantic layer: resolution values on closed/archived specs', () => {
   test('closed spec WITH resolution completed -> passes semantics', () => {
     const spec = parseShape(VALID_TIER3);
-    const mutated = { ...spec, lifecycle_state: 'closed' as const, resolution: 'completed' as const };
+    const mutated = {
+      ...spec,
+      lifecycle_state: 'closed' as const,
+      resolution: 'completed' as const,
+    };
     const r = validateSpecSemantics(mutated);
     expect(isOk(r)).toBe(true);
   });
 
   test('archived spec WITH resolution superseded -> passes semantics', () => {
     const spec = parseShape(VALID_TIER3);
-    const mutated = { ...spec, lifecycle_state: 'archived' as const, resolution: 'superseded' as const };
+    const mutated = {
+      ...spec,
+      lifecycle_state: 'archived' as const,
+      resolution: 'superseded' as const,
+    };
     const r = validateSpecSemantics(mutated);
     expect(isOk(r)).toBe(true);
   });
 
   test('draft spec WITH resolution -> fires resolution.requires_closure', () => {
     const spec = parseShape(VALID_TIER3);
-    const mutated = { ...spec, lifecycle_state: 'draft' as const, resolution: 'abandoned' as const };
+    const mutated = {
+      ...spec,
+      lifecycle_state: 'draft' as const,
+      resolution: 'abandoned' as const,
+    };
     const r = validateSpecSemantics(mutated);
     expect(isErr(r)).toBe(true);
     if (isErr(r)) {
@@ -1045,7 +1096,9 @@ describe('shape layer: narrowRepair presence and exactness (kills L88 Conditiona
       const d = r.errors.find((e) => e.rule === SPEC_RULES.FORBIDDEN_FIELD_CHANGE_BUDGET);
       expect(d).toBeDefined();
       expect(d!.narrowRepair).toBeDefined();
-      expect(d!.narrowRepair).toBe('Remove change_budget from the spec. Budgets derive from policy.yaml risk_tiers.');
+      expect(d!.narrowRepair).toBe(
+        'Remove change_budget from the spec. Budgets derive from policy.yaml risk_tiers.'
+      );
     }
   });
 
@@ -1055,7 +1108,9 @@ describe('shape layer: narrowRepair presence and exactness (kills L88 Conditiona
     if (isErr(r)) {
       const d = r.errors.find((e) => e.rule === SPEC_RULES.FORBIDDEN_FIELD_ACCEPTANCE_CRITERIA);
       expect(d).toBeDefined();
-      expect(d!.narrowRepair).toBe('Rename acceptance_criteria to acceptance. The alias was removed.');
+      expect(d!.narrowRepair).toBe(
+        'Rename acceptance_criteria to acceptance. The alias was removed.'
+      );
     }
   });
 
@@ -1093,7 +1148,9 @@ describe('shape layer: narrowRepair presence and exactness (kills L88 Conditiona
     if (isErr(r)) {
       const d = r.errors.find((e) => e.rule === SPEC_RULES.FORBIDDEN_FIELD_STATUS);
       expect(d).toBeDefined();
-      expect(d!.narrowRepair).toBe('Use lifecycle_state (draft|active|closed|archived) instead of status.');
+      expect(d!.narrowRepair).toBe(
+        'Use lifecycle_state (draft|active|closed|archived) instead of status.'
+      );
     }
   });
 
@@ -1101,7 +1158,9 @@ describe('shape layer: narrowRepair presence and exactness (kills L88 Conditiona
     const r = parseAndValidateSpec(VALID_TIER3 + '\nweird_field: value');
     expect(isErr(r)).toBe(true);
     if (isErr(r)) {
-      const d = r.errors.find((e) => e.rule === SPEC_RULES.SCHEMA_VIOLATION && e.message?.includes('weird_field'));
+      const d = r.errors.find(
+        (e) => e.rule === SPEC_RULES.SCHEMA_VIOLATION && e.message?.includes('weird_field')
+      );
       expect(d).toBeDefined();
       expect(d!.narrowRepair).toContain('Remove field "weird_field"');
       expect(d!.narrowRepair).toContain('schema admits no other top-level fields');
@@ -1134,7 +1193,9 @@ describe('shape layer: narrowRepair presence and exactness (kills L88 Conditiona
     if (isErr(r)) {
       const d = r.errors.find((e) => e.rule === SPEC_RULES.RISK_TIER_OUT_OF_RANGE);
       expect(d).toBeDefined();
-      expect(d!.narrowRepair).toBe('Use integer 1, 2, or 3 — values outside this range are not permitted.');
+      expect(d!.narrowRepair).toBe(
+        'Use integer 1, 2, or 3 — values outside this range are not permitted.'
+      );
     }
   });
 
@@ -1158,7 +1219,9 @@ describe('shape layer: narrowRepair presence and exactness (kills L88 Conditiona
     if (isErr(r)) {
       const d = r.errors.find((e) => e.rule === SPEC_RULES.SCOPE_OUT_GLOB_FORBIDDEN);
       expect(d).toBeDefined();
-      expect(d!.narrowRepair).toBe('Use directory paths only. Glob patterns (* or ?) are not allowed in scope.out.');
+      expect(d!.narrowRepair).toBe(
+        'Use directory paths only. Glob patterns (* or ?) are not allowed in scope.out.'
+      );
     }
   });
 
@@ -1517,7 +1580,9 @@ describe('shape layer: pickStableRule cross-condition negative tests', () => {
       // The /acceptance minItems error must NOT be misclassified as SCOPE_IN_EMPTY
       expect(rs).not.toContain(SPEC_RULES.SCOPE_IN_EMPTY);
       // It should be a SCHEMA_VIOLATION (the catch-all for /acceptance minItems)
-      const schemaErr = r.errors.find((e) => e.rule === SPEC_RULES.SCHEMA_VIOLATION && e.data?.['ajvKeyword'] === 'minItems');
+      const schemaErr = r.errors.find(
+        (e) => e.rule === SPEC_RULES.SCHEMA_VIOLATION && e.data?.['ajvKeyword'] === 'minItems'
+      );
       expect(schemaErr).toBeDefined();
     }
   });
@@ -1536,10 +1601,7 @@ describe('shape layer: pickStableRule cross-condition negative tests', () => {
    */
   test('scope.in empty AND scope.out glob both at same time -> each rule fires separately', () => {
     // Both conditions simultaneously - scope.in empty AND scope.out has glob
-    const y = VALID_TIER3.replace(
-      '  in:\n    - src/x.ts',
-      '  in: []\n  out:\n    - "packages/**"'
-    );
+    const y = VALID_TIER3.replace('  in:\n    - src/x.ts', '  in: []\n  out:\n    - "packages/**"');
     const r = parseAndValidateSpec(y);
     expect(isErr(r)).toBe(true);
     if (isErr(r)) {
@@ -1608,7 +1670,9 @@ describe('shape layer: pickStableRule cross-condition negative tests', () => {
     expect(isErr(r)).toBe(true);
     if (isErr(r)) {
       // The type error on /mode should be SCHEMA_VIOLATION (not MODE_DEVELOPMENT_REMOVED)
-      const typeOnMode = r.errors.find((e) => e.data?.['ajvKeyword'] === 'type' && e.subject?.includes('/mode'));
+      const typeOnMode = r.errors.find(
+        (e) => e.data?.['ajvKeyword'] === 'type' && e.subject?.includes('/mode')
+      );
       if (typeOnMode) {
         expect(typeOnMode.rule).toBe(SPEC_RULES.SCHEMA_VIOLATION);
         expect(typeOnMode.rule).not.toBe(SPEC_RULES.MODE_DEVELOPMENT_REMOVED);
@@ -1633,7 +1697,9 @@ describe('shape layer: pickStableRule cross-condition negative tests', () => {
       const rs = r.errors.map((e) => e.rule);
       expect(rs).not.toContain(SPEC_RULES.RISK_TIER_TYPE_REJECTED);
       // Should be SCHEMA_VIOLATION for the type error on /title
-      const typeErr = r.errors.find((e) => e.data?.['ajvKeyword'] === 'type' && e.subject?.includes('/title'));
+      const typeErr = r.errors.find(
+        (e) => e.data?.['ajvKeyword'] === 'type' && e.subject?.includes('/title')
+      );
       if (typeErr) {
         expect(typeErr.rule).toBe(SPEC_RULES.SCHEMA_VIOLATION);
       }
@@ -1656,7 +1722,9 @@ describe('shape layer: pickStableRule cross-condition negative tests', () => {
       expect(rs).not.toContain(SPEC_RULES.RISK_TIER_OUT_OF_RANGE);
       expect(rs).not.toContain(SPEC_RULES.MODE_DEVELOPMENT_REMOVED);
       // It should fall through to SCHEMA_VIOLATION with enum keyword
-      const enumErr = r.errors.find((e) => e.data?.['ajvKeyword'] === 'enum' && e.subject?.includes('/lifecycle_state'));
+      const enumErr = r.errors.find(
+        (e) => e.data?.['ajvKeyword'] === 'enum' && e.subject?.includes('/lifecycle_state')
+      );
       expect(enumErr).toBeDefined();
     }
   });
@@ -1675,7 +1743,9 @@ describe('shape layer: pickStableRule cross-condition negative tests', () => {
       const rs = r.errors.map((e) => e.rule);
       expect(rs).not.toContain(SPEC_RULES.SCOPE_IN_EMPTY);
       // Should be SCHEMA_VIOLATION (type error on /scope/in)
-      const typeErr = r.errors.find((e) => e.data?.['ajvKeyword'] === 'type' && e.subject?.includes('/scope/in'));
+      const typeErr = r.errors.find(
+        (e) => e.data?.['ajvKeyword'] === 'type' && e.subject?.includes('/scope/in')
+      );
       if (typeErr) {
         expect(typeErr.rule).toBe(SPEC_RULES.SCHEMA_VIOLATION);
       }
@@ -1700,7 +1770,9 @@ describe('shape layer: pickStableRule cross-condition negative tests', () => {
       // minLength on /scope/out/0 should NOT give SCOPE_OUT_GLOB_FORBIDDEN
       expect(rs).not.toContain(SPEC_RULES.SCOPE_OUT_GLOB_FORBIDDEN);
       // Should be SCHEMA_VIOLATION for the minLength error
-      const minLenErr = r.errors.find((e) => e.data?.['ajvKeyword'] === 'minLength' && e.subject?.includes('/scope/out'));
+      const minLenErr = r.errors.find(
+        (e) => e.data?.['ajvKeyword'] === 'minLength' && e.subject?.includes('/scope/out')
+      );
       if (minLenErr) {
         expect(minLenErr.rule).toBe(SPEC_RULES.SCHEMA_VIOLATION);
       }
@@ -1721,7 +1793,9 @@ describe('shape layer: pickStableRule cross-condition negative tests', () => {
       const rs = r.errors.map((e) => e.rule);
       expect(rs).not.toContain(SPEC_RULES.ID_PATTERN_VIOLATION);
       // Should be SCHEMA_VIOLATION (type error on /id)
-      const typeErr = r.errors.find((e) => e.data?.['ajvKeyword'] === 'type' && e.subject?.includes('/id'));
+      const typeErr = r.errors.find(
+        (e) => e.data?.['ajvKeyword'] === 'type' && e.subject?.includes('/id')
+      );
       if (typeErr) {
         expect(typeErr.rule).toBe(SPEC_RULES.SCHEMA_VIOLATION);
       }
@@ -1746,7 +1820,9 @@ describe('shape layer: pickStableRule cross-condition negative tests', () => {
       const rs = r.errors.map((e) => e.rule);
       expect(rs).not.toContain(SPEC_RULES.ID_PATTERN_VIOLATION);
       // Should be SCHEMA_VIOLATION
-      const patternErr = r.errors.find((e) => e.data?.['ajvKeyword'] === 'pattern' && e.subject?.includes('/acceptance'));
+      const patternErr = r.errors.find(
+        (e) => e.data?.['ajvKeyword'] === 'pattern' && e.subject?.includes('/acceptance')
+      );
       if (patternErr) {
         expect(patternErr.rule).toBe(SPEC_RULES.SCHEMA_VIOLATION);
       }
@@ -1927,7 +2003,10 @@ describe('shape layer: AJV allErrors=true produces ALL errors simultaneously', (
     // Remove title AND use invalid risk_tier → two separate schema errors
     // risk_tier=5 fires enum on /risk_tier (RISK_TIER_OUT_OF_RANGE)
     // missing title fires required (SCHEMA_VIOLATION with message containing "title")
-    const y = VALID_TIER3.replace('title: A valid tier 3 spec\n', '').replace('risk_tier: 3', 'risk_tier: 5');
+    const y = VALID_TIER3.replace('title: A valid tier 3 spec\n', '').replace(
+      'risk_tier: 3',
+      'risk_tier: 5'
+    );
     const r = parseAndValidateSpec(y);
     expect(isErr(r)).toBe(true);
     if (isErr(r)) {
@@ -1942,8 +2021,7 @@ describe('shape layer: AJV allErrors=true produces ALL errors simultaneously', (
   });
 
   test('three simultaneous errors: missing title, invalid risk_tier, invalid id all appear', () => {
-    const y = VALID_TIER3
-      .replace('title: A valid tier 3 spec\n', '')
+    const y = VALID_TIER3.replace('title: A valid tier 3 spec\n', '')
       .replace('risk_tier: 3', 'risk_tier: 5')
       .replace('id: TEST-1', 'id: bad-id');
     const r = parseAndValidateSpec(y);
@@ -1960,9 +2038,10 @@ describe('shape layer: AJV allErrors=true produces ALL errors simultaneously', (
   });
 
   test('two scope errors at once: scope.in empty AND invalid id', () => {
-    const y = VALID_TIER3
-      .replace('  in:\n    - src/x.ts', '  in: []')
-      .replace('id: TEST-1', 'id: notvalid-lower');
+    const y = VALID_TIER3.replace('  in:\n    - src/x.ts', '  in: []').replace(
+      'id: TEST-1',
+      'id: notvalid-lower'
+    );
     const r = parseAndValidateSpec(y);
     expect(isErr(r)).toBe(true);
     if (isErr(r)) {
@@ -2028,7 +2107,9 @@ contracts: []
     expect(isErr(r)).toBe(true);
     if (isErr(r)) {
       // Find the type error on blast_radius.modules
-      const d = r.errors.find((e) => e.data?.['ajvKeyword'] === 'type' && e.subject?.includes('modules'));
+      const d = r.errors.find(
+        (e) => e.data?.['ajvKeyword'] === 'type' && e.subject?.includes('modules')
+      );
       if (d) {
         // This is the DEFAULT case in formatRepair — returns undefined
         expect(d.narrowRepair).toBeUndefined();
@@ -2063,7 +2144,9 @@ contracts: []
     expect(isErr(r)).toBe(true);
     if (isErr(r)) {
       // Find a type error on /scope/in (not the minItems for /scope/in)
-      const d = r.errors.find((e) => e.data?.['ajvKeyword'] === 'type' && e.subject?.includes('/scope/in'));
+      const d = r.errors.find(
+        (e) => e.data?.['ajvKeyword'] === 'type' && e.subject?.includes('/scope/in')
+      );
       if (d) {
         // Default case in formatRepair → undefined
         expect(d.narrowRepair).toBeUndefined();
@@ -2539,7 +2622,11 @@ describe('semantic layer: resolution/lifecycle condition BOTH sides (kills L109/
    */
   test('closed spec WITH resolution completed does NOT fire RESOLUTION_REQUIRES_CLOSURE', () => {
     const spec = parseShape(VALID_TIER3);
-    const mutated = { ...spec, lifecycle_state: 'closed' as const, resolution: 'completed' as const };
+    const mutated = {
+      ...spec,
+      lifecycle_state: 'closed' as const,
+      resolution: 'completed' as const,
+    };
     const r = validateSpecSemantics(mutated);
     if (isErr(r)) {
       expect(r.errors.map((e) => e.rule)).not.toContain(SPEC_RULES.RESOLUTION_REQUIRES_CLOSURE);
@@ -2554,7 +2641,11 @@ describe('semantic layer: resolution/lifecycle condition BOTH sides (kills L109/
    */
   test('archived spec WITH resolution superseded does NOT fire RESOLUTION_REQUIRES_CLOSURE', () => {
     const spec = parseShape(VALID_TIER3);
-    const mutated = { ...spec, lifecycle_state: 'archived' as const, resolution: 'superseded' as const };
+    const mutated = {
+      ...spec,
+      lifecycle_state: 'archived' as const,
+      resolution: 'superseded' as const,
+    };
     const r = validateSpecSemantics(mutated);
     if (isErr(r)) {
       expect(r.errors.map((e) => e.rule)).not.toContain(SPEC_RULES.RESOLUTION_REQUIRES_CLOSURE);
@@ -2570,7 +2661,11 @@ describe('semantic layer: resolution/lifecycle condition BOTH sides (kills L109/
    */
   test('spec.lifecycle_state=closed with resolution abandoned is valid (no RESOLUTION_REQUIRES_CLOSURE)', () => {
     const spec = parseShape(VALID_TIER3);
-    const mutated = { ...spec, lifecycle_state: 'closed' as const, resolution: 'abandoned' as const };
+    const mutated = {
+      ...spec,
+      lifecycle_state: 'closed' as const,
+      resolution: 'abandoned' as const,
+    };
     const r = validateSpecSemantics(mutated);
     if (isErr(r)) {
       expect(r.errors.map((e) => e.rule)).not.toContain(SPEC_RULES.RESOLUTION_REQUIRES_CLOSURE);
@@ -2792,7 +2887,9 @@ describe('semantic layer: experimental_mode condition BOTH sides (kills L95 surv
     // No experimental_mode in VALID_TIER3
     const r = validateSpecSemantics(spec);
     if (isErr(r)) {
-      expect(r.errors.map((e) => e.rule)).not.toContain(SPEC_RULES.EXPERIMENTAL_MODE_TIER_RESTRICTED);
+      expect(r.errors.map((e) => e.rule)).not.toContain(
+        SPEC_RULES.EXPERIMENTAL_MODE_TIER_RESTRICTED
+      );
     } else {
       expect(isOk(r)).toBe(true);
     }
@@ -2809,7 +2906,11 @@ describe('semantic layer: experimental_mode condition BOTH sides (kills L95 surv
     const mutated = {
       ...spec,
       risk_tier: 3 as const,
-      experimental_mode: { enabled: true, rationale: 'safe to experiment at tier 3', expires_at: '2031-12-31' },
+      experimental_mode: {
+        enabled: true,
+        rationale: 'safe to experiment at tier 3',
+        expires_at: '2031-12-31',
+      },
     };
     const r = validateSpecSemantics(mutated);
     expect(isOk(r)).toBe(true);
@@ -2956,7 +3057,12 @@ describe('semantic layer: evidence rules (CAWS-SPEC-AC-EVIDENCE-AUTHORITY-01)', 
         { id: 'A2', given: 'g', when: 'w', then: 't' },
       ],
       evidence: [
-        { criterion_id: 'A1', status: 'pass' as const, evidence_ref: 'npm test', recorded_at: '2026-08-07T20:00:00.000Z' },
+        {
+          criterion_id: 'A1',
+          status: 'pass' as const,
+          evidence_ref: 'npm test',
+          recorded_at: '2026-08-07T20:00:00.000Z',
+        },
       ],
     } as Spec;
     const r = validateSpecSemantics(mutated);
@@ -3008,7 +3114,12 @@ describe('semantic layer: evidence rules (CAWS-SPEC-AC-EVIDENCE-AUTHORITY-01)', 
       ...spec,
       acceptance: [{ id: 'A1', given: 'g', when: 'w', then: 't' }],
       evidence: [
-        { criterion_id: 'A99', status: 'pass' as const, evidence_ref: 'npm test', recorded_at: '2026-08-07T20:00:00.000Z' },
+        {
+          criterion_id: 'A99',
+          status: 'pass' as const,
+          evidence_ref: 'npm test',
+          recorded_at: '2026-08-07T20:00:00.000Z',
+        },
       ],
     } as Spec;
     const r = validateSpecSemantics(mutated);
@@ -3035,7 +3146,7 @@ describe('semantic layer: evidence rules (CAWS-SPEC-AC-EVIDENCE-AUTHORITY-01)', 
 
 describe('shape layer: created_by_session provenance field (SPEC-CREATED-BY-SESSION-001)', () => {
   test('admitted: a non-empty created_by_session passes the strict schema and round-trips', () => {
-    const r = parseAndValidateSpec(VALID_TIER3 + "\ncreated_by_session: sess_abc123\n");
+    const r = parseAndValidateSpec(VALID_TIER3 + '\ncreated_by_session: sess_abc123\n');
     expect(isOk(r)).toBe(true);
     if (isOk(r)) {
       expect(r.value.created_by_session).toBe('sess_abc123');

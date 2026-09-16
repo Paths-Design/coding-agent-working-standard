@@ -174,11 +174,18 @@ describe('the behavior survives Commander parsing', () => {
     const result = spawnSync(
       process.execPath,
       [
-        CLI, 'specs', 'create', 'HINT-SPAWN-007',
-        '--title', 'spawned contract hint fixture',
-        '--mode', 'fix',
-        '--risk-tier', '2',
-        '--contract', 'core-api:behavior:packages/caws-cli/src/index.ts',
+        CLI,
+        'specs',
+        'create',
+        'HINT-SPAWN-007',
+        '--title',
+        'spawned contract hint fixture',
+        '--mode',
+        'fix',
+        '--risk-tier',
+        '2',
+        '--contract',
+        'core-api:behavior:packages/caws-cli/src/index.ts',
       ],
       {
         cwd: root,

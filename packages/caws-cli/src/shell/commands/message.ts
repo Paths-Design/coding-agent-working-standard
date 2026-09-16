@@ -177,11 +177,7 @@ export function runMessageSendCommand(opts: MessageSendCommandOptions): number {
 
   // --urgency validation (CAWS-MESSAGE-DELIVERY-ECONOMICS-001): 'critical' is
   // the only non-default value; anything else is refused and ledgered.
-  if (
-    opts.urgency !== undefined &&
-    opts.urgency !== 'critical' &&
-    opts.urgency !== 'normal'
-  ) {
+  if (opts.urgency !== undefined && opts.urgency !== 'critical' && opts.urgency !== 'normal') {
     const invalidReason = `--urgency accepts exactly "critical" or "normal"; got "${String(opts.urgency)}".`;
     recordRefusal(cawsDir, {
       class: 'urgency_invalid',
@@ -208,7 +204,9 @@ export function runMessageSendCommand(opts: MessageSendCommandOptions): number {
     err(renderDiagnostics(sent.errors, { showData }));
     return 1;
   }
-  out(`sent to ${sent.value.message.to} (id ${sent.value.message.id}, channel ${sent.value.message.channel})`);
+  out(
+    `sent to ${sent.value.message.to} (id ${sent.value.message.id}, channel ${sent.value.message.channel})`
+  );
   if (sent.value.recipientIdle) {
     out(
       `(note: recipient lease is stopped but its heartbeat is fresh — idle between turns; ` +
@@ -395,23 +393,27 @@ export function runMessageStatusCommand(opts: MessageStatusCommandOptions): numb
       return 2;
     }
     if (opts.json === true) {
-      out(JSON.stringify({
-        ok: true,
-        read_only: true,
-        me,
-        older_than_ms: olderThanMs,
-        count: queued.value.count,
-        oldest_age_ms: queued.value.oldestAgeMs,
-        messages: queued.value.messages.map((entry) => ({
-          message: entry.message,
-          age_ms: entry.ageMs,
-        })),
-      }));
+      out(
+        JSON.stringify({
+          ok: true,
+          read_only: true,
+          me,
+          older_than_ms: olderThanMs,
+          count: queued.value.count,
+          oldest_age_ms: queued.value.oldestAgeMs,
+          messages: queued.value.messages.map((entry) => ({
+            message: entry.message,
+            age_ms: entry.ageMs,
+          })),
+        })
+      );
       return 0;
     }
     const oldest =
       queued.value.oldestAgeMs !== null ? ` (oldest ${formatAge(queued.value.oldestAgeMs)})` : '';
-    out(`Your undelivered sent messages (older than ${formatAge(olderThanMs)}): ${queued.value.count}${oldest}`);
+    out(
+      `Your undelivered sent messages (older than ${formatAge(olderThanMs)}): ${queued.value.count}${oldest}`
+    );
     if (queued.value.count === 0) {
       out('(none)');
       return 0;
@@ -486,7 +488,7 @@ export function runMessageStatusCommand(opts: MessageStatusCommandOptions): numb
   out(
     delivered
       ? `delivered: yes (at ${deliveredAt})`
-      : 'delivered: no (still queued — surfaces at the recipient\'s next poll/tool call)'
+      : "delivered: no (still queued — surfaces at the recipient's next poll/tool call)"
   );
   out(message.text);
   return 0;
@@ -609,11 +611,12 @@ export function runMessagePollCommand(opts: MessagePollCommandOptions): number {
     out('(no messages)');
     return 0;
   }
-  const peekTag = opts.peek === true
-    ? ' (peek — not consumed)'
-    : opts.offer === true
-      ? ' (offered — awaiting adapter settlement)'
-      : '';
+  const peekTag =
+    opts.peek === true
+      ? ' (peek — not consumed)'
+      : opts.offer === true
+        ? ' (offered — awaiting adapter settlement)'
+        : '';
   for (const entry of messages) {
     const senderBits: string[] = [];
     if (entry.sender?.worktree !== undefined) senderBits.push(`worktree ${entry.sender.worktree}`);
@@ -659,12 +662,7 @@ export function runMessageSettleCommand(opts: MessageSettleCommandOptions): numb
   }
   const me = resolveMe('settle', rootResult.value.cawsDir, cwd, env, opts.me, err, showData);
   if (me === null) return 1;
-  const settled = settleMessageOffer(
-    rootResult.value.cawsDir,
-    opts.offerId,
-    me,
-    opts.outcome
-  );
+  const settled = settleMessageOffer(rootResult.value.cawsDir, opts.offerId, me, opts.outcome);
   if (!settled.ok) {
     err('caws message settle: offer was not settled.');
     err(renderDiagnostics(settled.errors, { showData }));
@@ -771,19 +769,21 @@ export function runMessageInboxCommand(opts: MessageInboxCommandOptions = {}): n
       return 2;
     }
     if (opts.json === true) {
-      out(JSON.stringify({
-        ok: true,
-        read_only: true,
-        repo_wide: true,
-        count: all.value.count,
-        oldest_age_ms: all.value.oldestAgeMs,
-        messages: all.value.messages.map((entry) => ({
-          ...entry.message,
-          recipient: entry.recipient,
-          age_ms: entry.ageMs,
-        })),
-        diagnostics: all.value.diagnostics,
-      }));
+      out(
+        JSON.stringify({
+          ok: true,
+          read_only: true,
+          repo_wide: true,
+          count: all.value.count,
+          oldest_age_ms: all.value.oldestAgeMs,
+          messages: all.value.messages.map((entry) => ({
+            ...entry.message,
+            recipient: entry.recipient,
+            age_ms: entry.ageMs,
+          })),
+          diagnostics: all.value.diagnostics,
+        })
+      );
       return 0;
     }
     const oldest =
@@ -795,7 +795,9 @@ export function runMessageInboxCommand(opts: MessageInboxCommandOptions = {}): n
     }
     for (const entry of all.value.messages) {
       const from = entry.message.actor.session_id ?? entry.message.actor.id;
-      out(`${entry.message.ts} ${from} -> ${entry.recipient} [queued ${formatAge(entry.ageMs)}]: ${entry.message.text}`);
+      out(
+        `${entry.message.ts} ${from} -> ${entry.recipient} [queued ${formatAge(entry.ageMs)}]: ${entry.message.text}`
+      );
     }
     return 0;
   }
@@ -812,14 +814,16 @@ export function runMessageInboxCommand(opts: MessageInboxCommandOptions = {}): n
   }
 
   if (opts.json === true) {
-    out(JSON.stringify({
-      ok: true,
-      read_only: true,
-      me,
-      waiting: result.value.waiting,
-      messages: result.value.messages,
-      diagnostics: result.value.diagnostics,
-    }));
+    out(
+      JSON.stringify({
+        ok: true,
+        read_only: true,
+        me,
+        waiting: result.value.waiting,
+        messages: result.value.messages,
+        diagnostics: result.value.diagnostics,
+      })
+    );
     return 0;
   }
 
@@ -860,19 +864,23 @@ export function runMessageHistoryCommand(opts: MessageHistoryCommandOptions): nu
   }
   const limit = sanitizeLimit(opts.limit);
   const messages =
-    limit !== undefined ? result.value.slice(Math.max(0, result.value.length - limit)) : result.value;
+    limit !== undefined
+      ? result.value.slice(Math.max(0, result.value.length - limit))
+      : result.value;
   const channel = [me, opts.with].sort().join('::');
 
   if (opts.json === true) {
-    out(JSON.stringify({
-      ok: true,
-      read_only: true,
-      me,
-      with: opts.with,
-      channel,
-      total: result.value.length,
-      messages,
-    }));
+    out(
+      JSON.stringify({
+        ok: true,
+        read_only: true,
+        me,
+        with: opts.with,
+        channel,
+        total: result.value.length,
+        messages,
+      })
+    );
     return 0;
   }
 
@@ -929,11 +937,13 @@ export function runMessagePruneCommand(opts: MessagePruneCommandOptions = {}): n
   }
 
   if (opts.json === true) {
-    out(JSON.stringify({
-      ok: true,
-      dry_run: opts.apply !== true,
-      ...result.value,
-    }));
+    out(
+      JSON.stringify({
+        ok: true,
+        dry_run: opts.apply !== true,
+        ...result.value,
+      })
+    );
     return 0;
   }
 
@@ -950,7 +960,9 @@ export function runMessagePruneCommand(opts: MessagePruneCommandOptions = {}): n
           `Archived to .caws/messages.jsonl.archive with a selector marker (telemetry; not read for delivery state).`
       );
     } else {
-      out('No changes written. Pass --apply to prune the listed dead-recipient messages (retention floor applies).');
+      out(
+        'No changes written. Pass --apply to prune the listed dead-recipient messages (retention floor applies).'
+      );
     }
     for (const candidate of result.value.candidates) {
       out(`candidate ${renderPruneEntry(candidate)}`);
@@ -959,13 +971,17 @@ export function runMessagePruneCommand(opts: MessagePruneCommandOptions = {}): n
       (entry) => entry.reason === 'recipient-live' || entry.reason === 'recipient-idle'
     ).length;
     if (preservedLive > 0) {
-      out(`Preserved ${preservedLive} message(s) for live or idle recipient(s) — deliver-once holds.`);
+      out(
+        `Preserved ${preservedLive} message(s) for live or idle recipient(s) — deliver-once holds.`
+      );
     }
     const preservedFloor = result.value.skipped.filter(
       (entry) => entry.reason === 'newer-than-floor' || entry.reason === 'offer-pending'
     ).length;
     if (preservedFloor > 0) {
-      out(`Held back ${preservedFloor} message(s) newer than the floor or pending offer settlement.`);
+      out(
+        `Held back ${preservedFloor} message(s) newer than the floor or pending offer settlement.`
+      );
     }
     if (result.value.diagnostics.length > 0) {
       err(renderDiagnostics(result.value.diagnostics, { showData }));
@@ -974,14 +990,18 @@ export function runMessagePruneCommand(opts: MessagePruneCommandOptions = {}): n
   }
 
   const mode = opts.apply === true ? 'applied' : 'dry-run';
-  out(`Message prune (${mode}, status=delivered): ${result.value.candidates.length} candidate(s), ${result.value.skipped.length} skipped`);
+  out(
+    `Message prune (${mode}, status=delivered): ${result.value.candidates.length} candidate(s), ${result.value.skipped.length} skipped`
+  );
   if (opts.apply === true) {
     out(
       `Pruned ${result.value.pruned_messages} delivered message(s); removed ${result.value.pruned_delivery_records} delivery marker(s). ` +
         `Archived to .caws/messages.jsonl.archive (telemetry; not read for delivery state).`
     );
   } else {
-    out('No changes written. Pass --apply with --older-than-ms or --include to prune selected delivered chat records.');
+    out(
+      'No changes written. Pass --apply with --older-than-ms or --include to prune selected delivered chat records.'
+    );
   }
   for (const candidate of result.value.candidates) {
     out(`candidate ${renderPruneEntry(candidate)}`);

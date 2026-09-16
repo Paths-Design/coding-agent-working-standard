@@ -80,7 +80,10 @@ const PACKS = {
 
 function enabledPackIds() {
   const raw = process.env.CAWS_SMOKE_PACKS ?? process.env.CAWS_SMOKE_PACK ?? PACK_ID;
-  const ids = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  const ids = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
   const invalid = ids.filter((id) => !PACKS[id]);
   if (invalid.length > 0) {
     fail('unknown CAWS_SMOKE_PACKS value', {
@@ -168,8 +171,14 @@ function cleanup() {
   }
 }
 process.on('exit', cleanup);
-process.on('SIGINT', () => { cleanup(); process.exit(130); });
-process.on('SIGTERM', () => { cleanup(); process.exit(143); });
+process.on('SIGINT', () => {
+  cleanup();
+  process.exit(130);
+});
+process.on('SIGTERM', () => {
+  cleanup();
+  process.exit(143);
+});
 
 function preserveCleanupPathsOnSuccess() {
   if (!process.env.CAWS_SMOKE_KEEP_ON_SUCCESS) return;
@@ -183,24 +192,32 @@ function preserveCleanupPathsOnSuccess() {
 function packOne(packageRoot, label) {
   const packDir = mkdtempSync(join(tmpdir(), `caws-pack-${label}-`));
   registerCleanup(packDir);
-  const result = spawnSync(
-    'npm', ['pack', '--pack-destination', packDir, '--json'],
-    { cwd: packageRoot, encoding: 'utf8', env: npmEnv() }
-  );
+  const result = spawnSync('npm', ['pack', '--pack-destination', packDir, '--json'], {
+    cwd: packageRoot,
+    encoding: 'utf8',
+    env: npmEnv(),
+  });
   if (result.status !== 0) {
     fail(`npm pack failed for ${label}`, {
-      exitCode: result.status, stderr: result.stderr.trim(),
+      exitCode: result.status,
+      stderr: result.stderr.trim(),
     });
   }
   let parsed;
-  try { parsed = JSON.parse(result.stdout); }
-  catch { fail(`npm pack stdout is not JSON for ${label}`, { stdout: result.stdout.slice(0, 500) }); }
+  try {
+    parsed = JSON.parse(result.stdout);
+  } catch {
+    fail(`npm pack stdout is not JSON for ${label}`, { stdout: result.stdout.slice(0, 500) });
+  }
   if (!Array.isArray(parsed) || parsed.length !== 1) {
-    fail(`npm pack returned unexpected shape for ${label}`, { got: JSON.stringify(parsed).slice(0, 500) });
+    fail(`npm pack returned unexpected shape for ${label}`, {
+      got: JSON.stringify(parsed).slice(0, 500),
+    });
   }
   const { filename, files = [] } = parsed[0];
   const tarball = join(packDir, filename);
-  if (!existsSync(tarball)) fail(`tarball missing after npm pack for ${label}`, { expected: tarball });
+  if (!existsSync(tarball))
+    fail(`tarball missing after npm pack for ${label}`, { expected: tarball });
   return { tarball, filename, files };
 }
 
@@ -226,7 +243,8 @@ function installTarball({ cliTarball }) {
   // --ignore-scripts is intentional — we want the published bits as-is,
   // not prepare/postinstall hooks that might paper over packaging gaps.
   const result = spawnSync(
-    'npm', ['install', '--no-audit', '--no-fund', '--ignore-scripts', cliTarball],
+    'npm',
+    ['install', '--no-audit', '--no-fund', '--ignore-scripts', cliTarball],
     { cwd: projectDir, encoding: 'utf8', env: npmEnv() }
   );
   if (result.status !== 0) {
@@ -255,10 +273,15 @@ function installTarball({ cliTarball }) {
   // Verify the absorbed kernel actually exports registerAgentSession — the
   // symbol the CLI crashes without at runtime. Better to fail fast here with
   // a clear diagnostic than in a consumer's first `caws status`.
-  const probe = spawnSync('node', ['-e',
-    `const k = require(${JSON.stringify(installedKernel)}); ` +
-    `process.stdout.write(typeof k.registerAgentSession);`,
-  ], { encoding: 'utf8' });
+  const probe = spawnSync(
+    'node',
+    [
+      '-e',
+      `const k = require(${JSON.stringify(installedKernel)}); ` +
+        `process.stdout.write(typeof k.registerAgentSession);`,
+    ],
+    { encoding: 'utf8' }
+  );
   if (probe.stdout !== 'function') {
     fail('absorbed kernel does not export registerAgentSession', {
       installedKernel,
@@ -284,7 +307,10 @@ function loadManifest(installedRoot, packId = PACK_ID) {
   // Use require() via child_process for clean ESM/CJS interop with the compiled CJS manifest.
   const result = spawnSync(
     'node',
-    ['-e', `const m = require(${JSON.stringify(manifestPath)}); process.stdout.write(JSON.stringify(m[${JSON.stringify(spec.exportName)}]));`],
+    [
+      '-e',
+      `const m = require(${JSON.stringify(manifestPath)}); process.stdout.write(JSON.stringify(m[${JSON.stringify(spec.exportName)}]));`,
+    ],
     { encoding: 'utf8' }
   );
   if (result.status !== 0) {
@@ -312,7 +338,8 @@ function assertTemplateSourcesPresent(installedRoot, pack, packId = PACK_ID) {
     fail(`${missing.length} template source(s) missing from published tarball`, {
       packRoot,
       missing: JSON.stringify(missing, null, 2),
-      remediation: 'Check packages/caws-cli/package.json:files — must include templates/hook-packs/**',
+      remediation:
+        'Check packages/caws-cli/package.json:files — must include templates/hook-packs/**',
     });
   }
   ok(`all ${pack.installedFiles.length} template sources present under ${packRoot}`);
@@ -329,10 +356,10 @@ function runInit(projectDir, installedRoot, packId = PACK_ID) {
   }
 
   const cli = join(installedRoot, 'dist', 'index.js');
-  const result = spawnSync(
-    'node', [cli, 'init', '--agent-surface', packId],
-    { cwd: projectDir, encoding: 'utf8' }
-  );
+  const result = spawnSync('node', [cli, 'init', '--agent-surface', packId], {
+    cwd: projectDir,
+    encoding: 'utf8',
+  });
   if (result.status !== 0) {
     fail(`caws init --agent-surface ${packId} exited non-zero`, {
       exitCode: result.status,
@@ -461,7 +488,8 @@ function assertSharedAgentHooks(sharedPack) {
   // declared, managed, executable, and rooted under .caws/hooks/.
   if (typeof sharedPack.packVersion !== 'number' || sharedPack.packVersion < 1) {
     fail('installed shared manifest pack version below the v1 floor', {
-      minimum: 1, got: sharedPack.packVersion,
+      minimum: 1,
+      got: sharedPack.packVersion,
     });
   }
   const required = ['agent-register.sh', 'agent-heartbeat.sh', 'agent-stop.sh'];
@@ -471,7 +499,9 @@ function assertSharedAgentHooks(sharedPack) {
     if (!entry.managed) fail(`${name} is not managed:true`);
     if (!entry.executable) fail(`${name} is not executable:true`);
   }
-  ok(`shared pack v${sharedPack.packVersion} carries all three agent-*.sh under .caws/hooks/ (managed+executable)`);
+  ok(
+    `shared pack v${sharedPack.packVersion} carries all three agent-*.sh under .caws/hooks/ (managed+executable)`
+  );
 }
 
 function assertOracleRunsUnderTypeModule(projectDir) {
@@ -527,7 +557,8 @@ function assertOracleRunsUnderTypeModule(projectDir) {
     // oracle) would instead crash with a non-zero exit and the ESM error on
     // stderr, and stdout would be empty.
     const decision = (r.stdout || '').trim().split('\n')[0];
-    const validOutcome = /^(pass|block_claimed|block_foreign_worktree|ask_uncertain|error_fail_closed)\b/;
+    const validOutcome =
+      /^(pass|block_claimed|block_foreign_worktree|ask_uncertain|error_fail_closed)\b/;
     if (r.status !== 0 || !validOutcome.test(decision)) {
       fail('oracle did not run under "type":"module" — the .cjs fix is not in effect', {
         exitCode: r.status,
@@ -545,12 +576,17 @@ function assertOracleRunsUnderTypeModule(projectDir) {
 function assertSessionStartCreatesLease(projectDir, shimDir) {
   step('A14.5 — SessionStart dispatcher creates a lease file');
   const sessionId = 'caws-smoke-session-a';
-  const dispatcher = join(projectDir, '.caws', 'hooks', 'dispatch','session_start.sh');
-  const r = runDispatcher(projectDir, dispatcher, {
-    hook_event_name: 'SessionStart',
-    session_id: sessionId,
-    cwd: projectDir,
-  }, { PATH: pathWithShim(shimDir) });
+  const dispatcher = join(projectDir, '.caws', 'hooks', 'dispatch', 'session_start.sh');
+  const r = runDispatcher(
+    projectDir,
+    dispatcher,
+    {
+      hook_event_name: 'SessionStart',
+      session_id: sessionId,
+      cwd: projectDir,
+    },
+    { PATH: pathWithShim(shimDir) }
+  );
   // The dispatcher fans out to a handler chain (audit, session-log,
   // agent-register). A non-zero exit from a sibling handler (e.g.
   // session-log.sh's python renderer being unreachable) does not
@@ -572,7 +608,11 @@ function assertSessionStartCreatesLease(projectDir, shimDir) {
   // Record (don't fail on) sibling-handler noise so the failure-mode is
   // visible during smoke runs.
   if (r.status !== 0) {
-    log(colors.dim(`  [info] dispatcher max_exit=${r.status} (sibling handler noise — lease created OK)`));
+    log(
+      colors.dim(
+        `  [info] dispatcher max_exit=${r.status} (sibling handler noise — lease created OK)`
+      )
+    );
   }
   ok(`SessionStart created .caws/leases/${sessionId}.json with status=active`);
   return sessionId;
@@ -580,14 +620,19 @@ function assertSessionStartCreatesLease(projectDir, shimDir) {
 
 function assertPreToolUseSilentAtN1(projectDir, shimDir, sessionId) {
   step('A14.6 — PreToolUse is silent when only one lease exists');
-  const dispatcher = join(projectDir, '.caws', 'hooks', 'dispatch','pre_tool_use.sh');
-  const r = runDispatcher(projectDir, dispatcher, {
-    hook_event_name: 'PreToolUse',
-    session_id: sessionId,
-    tool_name: 'Bash',
-    tool_input: { command: 'echo test' },
-    cwd: projectDir,
-  }, { PATH: pathWithShim(shimDir) });
+  const dispatcher = join(projectDir, '.caws', 'hooks', 'dispatch', 'pre_tool_use.sh');
+  const r = runDispatcher(
+    projectDir,
+    dispatcher,
+    {
+      hook_event_name: 'PreToolUse',
+      session_id: sessionId,
+      tool_name: 'Bash',
+      tool_input: { command: 'echo test' },
+      cwd: projectDir,
+    },
+    { PATH: pathWithShim(shimDir) }
+  );
   // The contract for A14.6 is "stdout contains no envelope tokens" —
   // dispatcher exit code is incidental (sibling handlers may return
   // non-zero for unrelated reasons).
@@ -606,25 +651,40 @@ function seedPeerLeaseAndAssertEnvelope(projectDir, installedRoot, shimDir, self
   // Seed the peer via the actual CLI to exercise the same write path the
   // real hook uses.
   const cli = join(installedRoot, 'dist', 'index.js');
-  const reg = spawnSync('node', [cli, 'agents', 'register',
-    '--session-id', peerId,
-    '--platform', 'claude-code',
-    '--reason', 'manual_register',
-  ], { cwd: projectDir, encoding: 'utf8' });
+  const reg = spawnSync(
+    'node',
+    [
+      cli,
+      'agents',
+      'register',
+      '--session-id',
+      peerId,
+      '--platform',
+      'claude-code',
+      '--reason',
+      'manual_register',
+    ],
+    { cwd: projectDir, encoding: 'utf8' }
+  );
   if (reg.status !== 0) {
     fail('failed to seed peer lease via caws agents register', {
       stderr: reg.stderr.trim().slice(0, 1000),
     });
   }
 
-  const dispatcher = join(projectDir, '.caws', 'hooks', 'dispatch','pre_tool_use.sh');
-  const r = runDispatcher(projectDir, dispatcher, {
-    hook_event_name: 'PreToolUse',
-    session_id: selfSessionId,
-    tool_name: 'Bash',
-    tool_input: { command: 'echo test' },
-    cwd: projectDir,
-  }, { PATH: pathWithShim(shimDir) });
+  const dispatcher = join(projectDir, '.caws', 'hooks', 'dispatch', 'pre_tool_use.sh');
+  const r = runDispatcher(
+    projectDir,
+    dispatcher,
+    {
+      hook_event_name: 'PreToolUse',
+      session_id: selfSessionId,
+      tool_name: 'Bash',
+      tool_input: { command: 'echo test' },
+      cwd: projectDir,
+    },
+    { PATH: pathWithShim(shimDir) }
+  );
   // Contract: dispatcher stdout names the peer. Exit code is incidental.
   if (!r.stdout.includes('hookSpecificOutput')) {
     fail('PreToolUse did not emit hookSpecificOutput envelope at N=2', {
@@ -650,12 +710,17 @@ function seedPeerLeaseAndAssertEnvelope(projectDir, installedRoot, shimDir, self
 
 function assertStopMarksLeaseStopped(projectDir, shimDir, sessionId) {
   step('A14.8 — Stop dispatcher flips lease to stopped with stopped_at');
-  const dispatcher = join(projectDir, '.caws', 'hooks', 'dispatch','stop.sh');
-  const r = runDispatcher(projectDir, dispatcher, {
-    hook_event_name: 'Stop',
-    session_id: sessionId,
-    cwd: projectDir,
-  }, { PATH: pathWithShim(shimDir) });
+  const dispatcher = join(projectDir, '.caws', 'hooks', 'dispatch', 'stop.sh');
+  const r = runDispatcher(
+    projectDir,
+    dispatcher,
+    {
+      hook_event_name: 'Stop',
+      session_id: sessionId,
+      cwd: projectDir,
+    },
+    { PATH: pathWithShim(shimDir) }
+  );
   // Contract: lease flips to stopped. Dispatcher exit code is incidental.
   const lease = readLease(projectDir, sessionId);
   if (!lease) {
@@ -677,7 +742,8 @@ function assertAgentsPanelRendersBeforeDoctor(projectDir, installedRoot) {
   step('A14.9 — caws status renders Agents panel before Doctor');
   const cli = join(installedRoot, 'dist', 'index.js');
   const r = spawnSync('node', [cli, 'status'], {
-    cwd: projectDir, encoding: 'utf8',
+    cwd: projectDir,
+    encoding: 'utf8',
   });
   if (r.status !== 0 && r.status !== 1) {
     // status exits 1 when there are warnings; both are non-fatal here.
@@ -702,7 +768,8 @@ function assertAgentsPanelRendersBeforeDoctor(projectDir, installedRoot) {
   }
   if (agentsIdx >= doctorIdx) {
     fail('Agents panel appears AFTER Doctor panel in caws status', {
-      agentsIdx, doctorIdx,
+      agentsIdx,
+      doctorIdx,
     });
   }
   ok(`Agents panel renders at offset ${agentsIdx} before Doctor at ${doctorIdx}`);
@@ -711,24 +778,41 @@ function assertAgentsPanelRendersBeforeDoctor(projectDir, installedRoot) {
 function assertCliStaysHookProtocolFree(projectDir, installedRoot) {
   step('A14.10 — installed CLI emits zero hook-protocol tokens');
   const cli = join(installedRoot, 'dist', 'index.js');
-  const r = spawnSync('node', [cli, 'agents', 'heartbeat',
-    '--session-id', 'caws-smoke-protocol-check',
-    '--platform', 'claude-code',
-    '--throttle', '0',
-    '--json',
-    '--include-active-summary',
-  ], { cwd: projectDir, encoding: 'utf8' });
+  const r = spawnSync(
+    'node',
+    [
+      cli,
+      'agents',
+      'heartbeat',
+      '--session-id',
+      'caws-smoke-protocol-check',
+      '--platform',
+      'claude-code',
+      '--throttle',
+      '0',
+      '--json',
+      '--include-active-summary',
+    ],
+    { cwd: projectDir, encoding: 'utf8' }
+  );
   if (r.status !== 0) {
     fail('caws agents heartbeat exited non-zero', {
-      exitCode: r.status, stderr: r.stderr.trim().slice(0, 1000),
+      exitCode: r.status,
+      stderr: r.stderr.trim().slice(0, 1000),
     });
   }
-  const forbidden = ['hookSpecificOutput', 'hookEventName', 'permissionDecision', 'additionalContext'];
+  const forbidden = [
+    'hookSpecificOutput',
+    'hookEventName',
+    'permissionDecision',
+    'additionalContext',
+  ];
   const combined = `${r.stdout}\n${r.stderr}`;
   const leaks = forbidden.filter((tok) => combined.includes(tok));
   if (leaks.length > 0) {
     fail('installed CLI leaked hook-protocol tokens', {
-      leaks, output: combined.slice(0, 2000),
+      leaks,
+      output: combined.slice(0, 2000),
     });
   }
   // Also assert the JSON parses cleanly so we know we actually saw output.
@@ -864,7 +948,8 @@ function assertWorktreeRepairCoupledSurface(projectDir, installedRoot, installed
   // A1: caws worktree repair --help exits 0 through the installed binary and
   // renders the repair description (proves the new CLI leaf is in the tarball).
   const help = spawnSync('node', [cli, 'worktree', 'repair', '--help'], {
-    cwd: projectDir, encoding: 'utf8',
+    cwd: projectDir,
+    encoding: 'utf8',
   });
   if (help.status !== 0) {
     fail('caws worktree repair --help exited non-zero on the installed binary', {
@@ -931,7 +1016,9 @@ function assertWorktreeRepairCoupledSurface(projectDir, installedRoot, installed
   try {
     result = JSON.parse(probe.stdout);
   } catch {
-    fail('installed-kernel probe did not emit JSON', { stdout: (probe.stdout || '').slice(0, 800) });
+    fail('installed-kernel probe did not emit JSON', {
+      stdout: (probe.stdout || '').slice(0, 800),
+    });
   }
   if (!result.rule) {
     fail('installed kernel is missing DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING', {
@@ -941,7 +1028,8 @@ function assertWorktreeRepairCoupledSurface(projectDir, installedRoot, installed
   }
   if (!result.prunedOk || !result.clearedOk) {
     fail('installed kernel rejected a well-formed repair event', {
-      prunedOk: result.prunedOk, clearedOk: result.clearedOk,
+      prunedOk: result.prunedOk,
+      clearedOk: result.clearedOk,
       hint: 'worktree_pruned / spec_binding_cleared schema missing from the published kernel',
     });
   }
@@ -950,28 +1038,44 @@ function assertWorktreeRepairCoupledSurface(projectDir, installedRoot, installed
       hint: 'the h_class enum / additionalProperties:false schema did not ship or is not enforced',
     });
   }
-  ok(`installed kernel carries the repair rule (${result.rule}) and enforces both event schemas (bad h_class rejected)`);
+  ok(
+    `installed kernel carries the repair rule (${result.rule}) and enforces both event schemas (bad h_class rejected)`
+  );
 }
 
 function assertHeartbeatWorksWithoutJq(projectDir, installedRoot, shimDir, selfSessionId) {
   step('A14.11 — heartbeat hook composes envelope without jq on PATH');
   const pathNoJq = pathWithoutJq(shimDir);
   if (pathNoJq === null) {
-    log(colors.yellow(
-      '  [skip] jq present in /usr/bin or /bin — cannot construct an isolated PATH; ' +
-      'skipping the negative assertion. The hook code does not invoke jq directly ' +
-      '(verified by static grep in tests), so this skip is a test-environment ' +
-      'limitation rather than evidence of a jq dependency.'
-    ));
+    log(
+      colors.yellow(
+        '  [skip] jq present in /usr/bin or /bin — cannot construct an isolated PATH; ' +
+          'skipping the negative assertion. The hook code does not invoke jq directly ' +
+          '(verified by static grep in tests), so this skip is a test-environment ' +
+          'limitation rather than evidence of a jq dependency.'
+      )
+    );
     return;
   }
 
   // Seed a peer so the heartbeat actually wants to emit an envelope.
   const peerId = 'caws-smoke-no-jq-peer';
   const cli = join(installedRoot, 'dist', 'index.js');
-  const reg = spawnSync('node', [cli, 'agents', 'register',
-    '--session-id', peerId, '--platform', 'claude-code', '--reason', 'manual_register',
-  ], { cwd: projectDir, encoding: 'utf8' });
+  const reg = spawnSync(
+    'node',
+    [
+      cli,
+      'agents',
+      'register',
+      '--session-id',
+      peerId,
+      '--platform',
+      'claude-code',
+      '--reason',
+      'manual_register',
+    ],
+    { cwd: projectDir, encoding: 'utf8' }
+  );
   if (reg.status !== 0) {
     fail('failed to seed no-jq peer', { stderr: reg.stderr.trim().slice(0, 500) });
   }
@@ -979,11 +1083,13 @@ function assertHeartbeatWorksWithoutJq(projectDir, installedRoot, shimDir, selfS
   const hookPath = join(projectDir, '.caws', 'hooks', 'agent-heartbeat.sh');
   // Sanity-check: jq is actually not reachable on this PATH.
   const jqCheck = spawnSync('bash', ['-c', 'command -v jq || echo NOT_FOUND'], {
-    encoding: 'utf8', env: { PATH: pathNoJq },
+    encoding: 'utf8',
+    env: { PATH: pathNoJq },
   });
   if (!jqCheck.stdout.includes('NOT_FOUND')) {
     fail('jq is still reachable on stripped PATH (test setup bug)', {
-      pathNoJq, jqCheck: jqCheck.stdout.trim(),
+      pathNoJq,
+      jqCheck: jqCheck.stdout.trim(),
     });
   }
 
@@ -1001,7 +1107,8 @@ function assertHeartbeatWorksWithoutJq(projectDir, installedRoot, shimDir, selfS
   });
   if (r.status !== 0) {
     fail('heartbeat hook exited non-zero without jq', {
-      exitCode: r.status, stderr: r.stderr.trim().slice(0, 1500),
+      exitCode: r.status,
+      stderr: r.stderr.trim().slice(0, 1500),
     });
   }
   if (!r.stdout.includes('hookSpecificOutput')) {
@@ -1129,14 +1236,18 @@ function assertCodexHooksJson(projectDir) {
   for (const { eventName, command } of commands) {
     log(colors.dim(`  artifact hooks.json:${eventName}: ${command}`));
   }
-  ok('installed hooks.json has Codex-valid schema and five runtime-root shared-core dispatcher commands');
+  ok(
+    'installed hooks.json has Codex-valid schema and five runtime-root shared-core dispatcher commands'
+  );
 }
 
 function assertCodexProtectedPathDispatcher(projectDir) {
   step('Codex artifact proof — installed hooks.json command blocks protected hook edit');
   const hooksPath = join(projectDir, '.codex', 'hooks.json');
   const parsed = JSON.parse(readFileSync(hooksPath, 'utf8'));
-  const preToolUse = collectCodexCommands(parsed).find(({ eventName }) => eventName === 'PreToolUse');
+  const preToolUse = collectCodexCommands(parsed).find(
+    ({ eventName }) => eventName === 'PreToolUse'
+  );
   if (!preToolUse) {
     fail('installed Codex hooks.json has no PreToolUse command', { hooksPath });
   }
@@ -1176,7 +1287,9 @@ function assertCodexProtectedPathDispatcher(projectDir) {
       stderr: result.stderr.trim().slice(0, 1000),
     });
   }
-  ok('installed Codex hooks.json command blocked a relative .codex/hooks edit with concrete protected-path evidence');
+  ok(
+    'installed Codex hooks.json command blocked a relative .codex/hooks edit with concrete protected-path evidence'
+  );
 }
 
 function runCodexTarballSmoke(tarballs) {
@@ -1245,7 +1358,8 @@ function runKimiInit(projectDir, installedRoot, kimiHome) {
   mkdirSync(kimiHome, { recursive: true });
   const cli = join(installedRoot, 'dist', 'index.js');
   const result = spawnSync(
-    'node', [cli, 'init', '--agent-surface', 'kimi-code', '--wire-user-config'],
+    'node',
+    [cli, 'init', '--agent-surface', 'kimi-code', '--wire-user-config'],
     { cwd: projectDir, encoding: 'utf8', env: { ...process.env, KIMI_CODE_HOME: kimiHome } }
   );
   if (result.status !== 0) {
@@ -1345,11 +1459,15 @@ function assertKimiShimInertInNonCawsRepo(projectDir) {
       stderr: result.stderr.trim().slice(0, 500),
     });
   }
-  ok('shim exited 0 silently outside a CAWS repo (a protected-path payload was NOT enforced there)');
+  ok(
+    'shim exited 0 silently outside a CAWS repo (a protected-path payload was NOT enforced there)'
+  );
 }
 
 function assertKimiProtectedPathDispatcher(projectDir) {
-  step('Kimi artifact proof — protected-path guard blocks through the shim (exit 2 + stderr reason)');
+  step(
+    'Kimi artifact proof — protected-path guard blocks through the shim (exit 2 + stderr reason)'
+  );
   const shim = join(projectDir, '.kimi-code', 'hooks', 'caws-kimi-hook.sh');
   const payload = {
     session_id: 'caws-smoke-kimi-protected',
@@ -1383,7 +1501,9 @@ function assertKimiProtectedPathDispatcher(projectDir) {
       stderr: result.stderr.trim().slice(0, 1000),
     });
   }
-  ok('installed shim blocked a relative .kimi-code/hooks edit from a subdirectory with concrete protected-path evidence');
+  ok(
+    'installed shim blocked a relative .kimi-code/hooks edit from a subdirectory with concrete protected-path evidence'
+  );
 }
 
 function runKimiTarballSmoke(tarballs) {
@@ -1457,10 +1577,10 @@ function runQwenInit(projectDir, installedRoot) {
     execSync('git commit --allow-empty -q -m init', { cwd: projectDir });
   }
   const cli = join(installedRoot, 'dist', 'index.js');
-  const result = spawnSync(
-    'node', [cli, 'init', '--agent-surface', 'qwen-code'],
-    { cwd: projectDir, encoding: 'utf8' }
-  );
+  const result = spawnSync('node', [cli, 'init', '--agent-surface', 'qwen-code'], {
+    cwd: projectDir,
+    encoding: 'utf8',
+  });
   if (result.status !== 0) {
     fail('caws init --agent-surface qwen-code exited non-zero', {
       exitCode: result.status,
@@ -1558,11 +1678,15 @@ function assertQwenShimInertInNonCawsRepo(projectDir) {
       stderr: result.stderr.trim().slice(0, 500),
     });
   }
-  ok('shim exited 0 silently outside a CAWS repo (a protected-path payload was NOT enforced there)');
+  ok(
+    'shim exited 0 silently outside a CAWS repo (a protected-path payload was NOT enforced there)'
+  );
 }
 
 function assertQwenProtectedPathDispatcher(projectDir) {
-  step('Qwen artifact proof — protected-path guard blocks through the shim (qwen tool id normalized)');
+  step(
+    'Qwen artifact proof — protected-path guard blocks through the shim (qwen tool id normalized)'
+  );
   const shim = join(projectDir, '.qwen', 'hooks', 'caws-qwen-hook.sh');
   // Deliberately the QWEN runtime tool id: the protected-paths guard
   // self-filters on Write|Edit, so this payload only blocks when the vendor
@@ -1589,18 +1713,23 @@ function assertQwenProtectedPathDispatcher(projectDir) {
   // the max non-2 code. Either way the guard must have FIRED: the stderr
   // carries the protected-path evidence (fail-closed message present).
   if (!result.stderr.includes('.qwen/hooks/caws-qwen-hook.sh is protected')) {
-    fail('Qwen protected-path dispatch did not fire for a write_file payload (normalization or guard regression)', {
-      exitCode: result.status,
-      stdout: result.stdout.trim().slice(0, 1000),
-      stderr: result.stderr.trim().slice(0, 1000),
-    });
+    fail(
+      'Qwen protected-path dispatch did not fire for a write_file payload (normalization or guard regression)',
+      {
+        exitCode: result.status,
+        stdout: result.stdout.trim().slice(0, 1000),
+        stderr: result.stderr.trim().slice(0, 1000),
+      }
+    );
   }
   if (result.status === 0) {
     fail('Qwen protected-path dispatch exited 0 despite the guard firing', {
       stdout: result.stdout.trim().slice(0, 1000),
     });
   }
-  ok('installed shim blocked a relative .qwen/hooks edit from a subdirectory via write_file normalization');
+  ok(
+    'installed shim blocked a relative .qwen/hooks edit from a subdirectory via write_file normalization'
+  );
 }
 
 function runQwenTarballSmoke(tarballs) {
@@ -1630,7 +1759,9 @@ try {
   // state isolated, then qualify the global upgrade path separately below.
   const fixtureRoot = mkdtempSync(join(tmpdir(), 'caws-smoke-home-'));
   registerCleanup(fixtureRoot);
-  const controls = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.startsWith('CAWS_SMOKE_')));
+  const controls = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => key.startsWith('CAWS_SMOKE_'))
+  );
   const isolated = isolatedEnvironment(fixtureRoot);
   for (const key of Object.keys(process.env)) delete process.env[key];
   Object.assign(process.env, isolated, controls);
@@ -1705,7 +1836,11 @@ try {
   }
 
   const elapsedMs = Date.now() - startMs;
-  log(colors.green(`\n[fresh-install-smoke] PASS in ${elapsedMs}ms — requested hook-pack tarball smoke(s) proved installed runtime artifacts`));
+  log(
+    colors.green(
+      `\n[fresh-install-smoke] PASS in ${elapsedMs}ms — requested hook-pack tarball smoke(s) proved installed runtime artifacts`
+    )
+  );
 
   // Chain into the events-migration smoke (CAWS-MIGRATE-V10-EVENTS-001
   // A12). This script (fresh-install-smoke.mjs) is already wired into

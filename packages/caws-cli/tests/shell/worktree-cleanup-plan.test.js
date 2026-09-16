@@ -184,7 +184,9 @@ describe('caws worktree prune read-only cleanup plan', () => {
 
     const registry = JSON.parse(readBytes(path.join(caws, 'worktrees.json')));
     expect(registry['wt-ghost']).toBeUndefined();
-    expect(readBytes(path.join(caws, 'specs', 'GHOST-BIND-001.yaml'))).not.toMatch(/worktree: wt-dead/);
+    expect(readBytes(path.join(caws, 'specs', 'GHOST-BIND-001.yaml'))).not.toMatch(
+      /worktree: wt-dead/
+    );
     expect(eventsOfType(caws, 'worktree_pruned')).toHaveLength(1);
     expect(eventsOfType(caws, 'spec_binding_cleared')).toHaveLength(1);
   });
