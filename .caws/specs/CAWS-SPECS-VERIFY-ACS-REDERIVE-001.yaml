@@ -147,3 +147,9 @@ evidence:
     recorded_at: "2026-09-16T22:27:26.704Z"
     test_nodeid: packages/caws-cli/tests/shell/specs-close-rederive.test.js
     commit_sha: "686dd33d"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "tests/store/evidence-rederive.test.js runs a hanging-runner fixture: the verdict is not_rederived with reason timeout inside the configured bound, and the test asserts no orphan child survives the call."
+    recorded_at: "2026-09-16T22:28:23.779Z"
+    test_nodeid: packages/caws-cli/tests/store/evidence-rederive.test.js
+    commit_sha: f77060e5
