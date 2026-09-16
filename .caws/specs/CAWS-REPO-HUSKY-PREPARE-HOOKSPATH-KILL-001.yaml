@@ -43,3 +43,12 @@ acceptance:
       core.hooksPath already held the right value
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "T6d scans every tracked package.json and fails if any script invokes husky; it now finds none (the caws-cli prepare is removed). T6g pins the detector against the exact historical string 'husky >/dev/null 2>&1 || true' (must flag) and against 'git config core.hooksPath .husky' / 'bash .husky/tests/run.sh' (must not), so T6d cannot pass by having a broken matcher. T6e asserts the scan covered 2 files rather than silently zero. T6b runs the root prepare and reads core.hooksPath back as .husky; T6f asserts npm echoed the root script body so that is an observed execution. NOT verified: a real 'npm install' — it cannot be run from a linked worktree without destroying the node_modules symlinks. The negative case was observed live instead: before this fix, npm run prepare from the repo root set core.hooksPath to .husky/_ and made all three hooks unresolvable."
+    recorded_at: "2026-09-16T05:50:28.884Z"
+    command: bash .husky/tests/run.sh
+    exit_code: 0
+    artifact_path: .husky/tests/run.sh
+    commit_sha: "8c740723"
