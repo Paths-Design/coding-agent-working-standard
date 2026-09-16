@@ -437,7 +437,7 @@ import { isAdapterCoveredSurface } from './types';
 // interrupt kinds, and detects rewinds; harness_claude.py carries the usage
 // and row lineage that make those visible; a new dispatch/session_end.sh seals
 // .meta.json with the exit reason and session usage total.
-export const SHARED_PACK_VERSION = 78;
+export const SHARED_PACK_VERSION = 79;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
@@ -1000,8 +1000,6 @@ export function sharedPackForSurface(surface: AgentSurface): HookPackV1 {
   const covered = new Set<string>(TELEMETRY_ROW_DEST_PATHS);
   return {
     ...SHARED_PACK,
-    installedFiles: SHARED_PACK.installedFiles.filter(
-      (f) => !covered.has(f.destPath)
-    ),
+    installedFiles: SHARED_PACK.installedFiles.filter((f) => !covered.has(f.destPath)),
   };
 }
