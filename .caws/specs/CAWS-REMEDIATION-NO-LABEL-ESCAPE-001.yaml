@@ -51,3 +51,10 @@ evidence:
     command: npx jest tests/kernel/unit/remediation-no-label-escape.test.ts
     exit_code: 0
     commit_sha: "3c7c3f02"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Live runtime artifact, not just an assertion. Ran the LOCAL dist (node packages/caws-cli/dist/index.js specs create PROBE-1 --title 'Tier two, no contract' --mode feature --risk-tier 2 --scope-in src/x.ts --plan). Output: 'diagnostics: - store.lifecycle.plan_rejected: Tier 2 specs require at least one contract. repair: Declare at least one contract: --contract \"name:api|schema|contract-test|behavior\". The tier is a judgement about blast radius, not a knob for clearing this check.' and 'would_write: no / No files, events, or worktree registry entries were written.' The gate STILL FIRES (rule unchanged) and the repair no longer names a relabel. Also covered by unit tests 'tier 1/2 with contracts: [] still fails with tierN.contracts_required' plus 'the tier-N repair names adding a contract and never a tier or mode change'."
+    recorded_at: "2026-09-16T07:57:53.109Z"
+    command: node packages/caws-cli/dist/index.js specs create PROBE-1 --mode feature --risk-tier 2 --plan
+    exit_code: 0
+    commit_sha: "3c7c3f02"
