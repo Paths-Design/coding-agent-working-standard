@@ -47,3 +47,12 @@ non_functional: {}
 contracts:
   - name: 'telemetry-retirement-scope'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Mixed-surface repo (dsh marker + qwen-code pack, both written from the REAL manifests via resolveHookPack so the fixture cannot drift from what init installs): planTelemetryRetirement returns retire=[] and retained=all four TELEMETRY_ROW_DEST_PATHS with retainedFor=['qwen-code'], and retireStaleTelemetryRows leaves every row BYTE-IDENTICAL on disk (asserted by content compare, not existsSync, so a truncating bug cannot pass). Runtime artifact from a real spawned CLI on a dsh+opencode repo: 'Telemetry rows (adapter-covered surface owns this plane): / would retire: none / kept, still installed by opencode (4): / - .caws/hooks/agent-heartbeat.sh / - .caws/hooks/agent-stop.sh / - .caws/hooks/session-log.sh / - .caws/hooks/session_log_renderer.py'. NON-VACUOUS: mutating the guard to 'if (false && claimedRows.has(relPath))' (pre-fix surface-blind behavior) turns this test RED."
+    recorded_at: "2026-09-16T06:03:18.092Z"
+    test_nodeid: "CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001: retirement is surface-aware > A1: a co-installed non-covered surface keeps every telemetry row"
+    command: npx jest tests/init/adapter-covered-telemetry-cut.test.js
+    exit_code: 0
+    commit_sha: "5785158d"
