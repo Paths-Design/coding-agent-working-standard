@@ -74,6 +74,12 @@ export type {
   BridgeGhostCandidate,
 } from './bridge-store';
 export { loadWorktrees } from './worktrees-store';
+
+// Lane divergence (WORKTREE-LANE-DIVERGENCE-SURFACE-001) — read-only git
+// plumbing shared by `caws worktree list` and `caws status` so the two
+// surfaces cannot disagree about how far a lane has moved from its base.
+export { computeLaneDivergence, formatLaneCounts } from './worktree-divergence';
+export type { LaneDivergence } from './worktree-divergence';
 export { loadAgents } from './agents-store';
 export { appendEvent, loadEvents, rotateEvents } from './events-store';
 export type { RotateEventsOptions } from './events-store';

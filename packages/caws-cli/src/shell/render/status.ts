@@ -15,6 +15,7 @@
 //   Current context
 //     cwd relation: tracked / untracked / outside repo
 //     worktree name (if resolved) / bound spec id / binding state
+//     lane divergence from base (only inside a tracked worktree)
 //     current session id (or "unresolved (read-only)")
 //
 //   Claim (only when inside a tracked worktree)
@@ -35,6 +36,7 @@ import type {
   WorktreeRegistry,
 } from '../../kernel';
 
+import { formatLaneCounts, type LaneDivergence } from '../../store';
 import type { ResolvedBinding } from '../binding/types';
 import type { ResolvedSession } from '../session/types';
 import { renderClaimPanel } from './claim';
@@ -75,6 +77,15 @@ export interface StatusRenderInput {
   readonly selfSessionId?: string | null;
   /** Optional focused panel selection. Undefined means full dashboard. */
   readonly panels?: readonly StatusPanel[];
+
+  // ─── WORKTREE-LANE-DIVERGENCE-SURFACE-001 ─────────────────────────────
+  /**
+   * The current worktree's position relative to its base, pre-computed by the
+   * command (git plumbing is the command's job; this module stays pure).
+   * Absent when cwd is not inside a tracked worktree — in which case NOTHING
+   * lane-shaped renders, rather than a zero-filled placeholder.
+   */
+  readonly lane?: LaneDivergence;
 }
 
 const DEFAULT_FINDING_CAP = 5;
@@ -113,6 +124,11 @@ export function renderShortStatus(input: StatusRenderInput): string {
     `  events:    ${eventSummary}`,
     `  cwd:       ${describeCwdRelation(input.binding)}`,
     `  binding:   ${describeBindingState(input.binding.binding, activeSpecCount)}`,
+    // Absent outside a tracked worktree: a lane line with nothing to describe
+    // would be noise, and a zero-filled one would be a lie.
+    ...(input.lane !== undefined
+      ? [`  lane:      ${input.lane.branch} → ${input.lane.baseBranch}  ${formatLaneCounts(input.lane)}`]
+      : []),
   ].join('\n');
 }
 
@@ -198,6 +214,37 @@ function formatAge(ms: number): string {
   if (ms < 3600_000) return `${Math.round(ms / 60_000)}m`;
   if (ms < 86_400_000) return `${Math.round(ms / 3600_000)}h`;
   return `${Math.round(ms / 86_400_000)}d`;
+}
+
+/**
+ * Lane lines for the Current context block.
+ *
+ * Renders the same `ahead=N behind=M` token `caws worktree list` prints — one
+ * computation, one vocabulary, so a reader comparing the two surfaces is
+ * comparing identical strings rather than two dialects of the same fact.
+ *
+ * The parenthetical is load-bearing, not decoration. These counts come from
+ * LOCAL refs shared with the canonical checkout, read at this instant; a peer
+ * landing work moves them. Presenting a bare number would invite reading it as
+ * a merge-time guarantee, which it is not — `caws worktree merge`'s
+ * compare-and-swap is what actually reconciles.
+ */
+function renderLaneLines(lane: LaneDivergence, worktreeName: string, lines: string[]): void {
+  const counts = formatLaneCounts(lane);
+  if (lane.unknownReason !== null) {
+    lines.push(
+      `  lane:        ${lane.branch} → ${lane.baseBranch}  ${counts}  (unavailable: ${lane.unknownReason})`
+    );
+    return;
+  }
+  const currency = lane.containsBase === true ? `contains ${lane.baseBranch}` : 'local refs, read just now';
+  lines.push(`  lane:        ${lane.branch} → ${lane.baseBranch}  ${counts}  (${currency})`);
+  if (lane.containsBase === true) return;
+  lines.push(
+    `  reconcile:   this lane is missing ${lane.behind} commit(s) from ${lane.baseBranch} — ` +
+      `\`git merge ${lane.baseBranch}\` from here, or let \`caws worktree merge ${worktreeName}\` ` +
+      `land against ${lane.baseBranch} as it stands then (compare-and-swap).`
+  );
 }
 
 function describeCwdRelation(binding: ResolvedBinding): string {
@@ -397,6 +444,9 @@ export function renderStatus(input: StatusRenderInput): string {
   lines.push(
     `  binding:     ${describeBindingState(input.binding.binding, activeSpecCount)}`
   );
+  if (input.binding.worktreeName !== undefined && input.lane !== undefined) {
+    renderLaneLines(input.lane, input.binding.worktreeName, lines);
+  }
 
   if (input.session !== null) {
     lines.push(
