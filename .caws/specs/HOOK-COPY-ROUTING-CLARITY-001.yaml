@@ -30,3 +30,11 @@ acceptance:
       the editing agent's own guards are unaffected
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "CLAUDE.md 'Which hook copy governs you' table names machine-routed (claude-code, codex) vs project-wired (qwen-code, kimi-code, opencode, zcode, dsh) and states the edit-is-never-a-no-op consequence plus the opencode fail-OPEN posture"
+    recorded_at: "2026-09-16T04:44:03.627Z"
+    command: git show --stat 136f11c27a6a
+    exit_code: 0
+    commit_sha: "136f11c27a6a"
