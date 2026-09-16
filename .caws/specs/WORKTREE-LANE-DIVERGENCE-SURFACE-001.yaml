@@ -33,9 +33,14 @@ invariants:
   - 'ONE COMPUTATION, TWO SURFACES: worktree list and status read the same store-layer function over the same (base, branch) pair, so the two surfaces can never disagree about how far a lane has diverged.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      a registered worktree wt-demo on branch wt-demo whose base main has advanced 3
+      commits since the fork point, and wt-demo carries 2 commits of its own
+    when: 'caws worktree list runs from the canonical checkout'
+    then: >-
+      the wt-demo row reports ahead=2 behind=3 (branch-only commits then base-only
+      commits, matching git rev-list --left-right --count main...wt-demo), and exits
+      0
 non_functional: {}
 contracts:
   - name: 'lane-divergence'
