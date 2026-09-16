@@ -61,6 +61,14 @@ acceptance:
       it sets process.exitCode to that code and returns, and does not call
       process.exit — pinned directly so a future refactor back to process.exit fails
       here and not only in the slow spawn test
+  - id: A6
+    given: 'every .action() handler registered by registerShellCommands'
+    when: 'the source is scanned for exit() calls that are not the handler''s final one'
+    then: >-
+      each such call is immediately followed by return — because under exitCode
+      delivery a missing return both overwrites the refusal code with a later 0 AND
+      executes the command the caller was just refused; the scanner also asserts it
+      found >50 handlers so the check cannot pass vacuously
 non_functional: {}
 contracts:
   - name: 'exit-flush'
