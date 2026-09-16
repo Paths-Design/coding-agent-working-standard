@@ -50,3 +50,11 @@ evidence:
     exit_code: 0
     artifact_path: packages/caws-cli/tests/store/specs-scope-in-placeholder.test.js
     commit_sha: c9eca2c5
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "4/4 pass. createWorktree against a scaffold-bearing spec returns ok:false and the diagnostic names 'amend-scope' plus the spec id — the message is asserted, not merely the failure, because the diagnostic is the only surface read at the moment of the block. ATOMICITY: the refusal writes no registry entry (loadWorktrees has no 'wt-atomic' key) and leaves the spec 'lifecycle_state: draft' with no worktree: key, so it cannot leave the one-sided binding the lifecycle transaction exists to prevent; the guard sits at worktrees-writer.ts:844, before activateSpecOnBind at 959. MIXED SHAPE: a scaffold sitting BESIDE real paths still refuses — this is the 8-of-10 shape in this repo, and a guard keyed on 'scope.in is ONLY the scaffold' would have let every one of them through. ANTI-VACUITY: 'a declared scope.in binds normally' returns ok:true, so a createWorktree broken for any other reason could not make the refusal tests pass for the wrong reason; and the mixed-shape fixture throws if its edit does not apply, after an earlier revision silently edited nothing (create renders entries QUOTED) and passed for the wrong reason. BLAST RADIUS, measured not assumed: this refusal broke 5 tests in tests/store/lifecycle-rollback-harness.test.js and 1 in tests/shell/ax-probe-remediation-fixes.test.js, all of which did specs-create-without-scope then bind. Classified against unmodified main (13/13 passed there, 5 failed with the change), so the regression was mine and those suites encoded the old permissive contract; both now declare scope. NOT VERIFIED: no test covers the CLI's own 'Next: caws worktree create' guidance in specs create output, which still does not tell the caller to declare scope first."
+    recorded_at: "2026-09-16T07:32:09.466Z"
+    command: npx jest tests/store/worktree-bind-scope-placeholder.test.js
+    exit_code: 0
+    artifact_path: packages/caws-cli/src/store/worktrees-writer.ts
+    commit_sha: c9eca2c5
