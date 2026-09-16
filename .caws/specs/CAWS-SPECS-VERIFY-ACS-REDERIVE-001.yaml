@@ -201,3 +201,9 @@ evidence:
     recorded_at: "2026-09-16T22:41:46.226Z"
     test_nodeid: packages/caws-cli/tests/shell/specs-evidence-verify.test.js
     commit_sha: "9df496bb"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "DEVIATION FROM THE LITERAL ROW, stated so it is legible in the ledger: staleness at close is proven on the ARTIFACT class, not the test class. tests/shell/specs-close-rederive.test.js records pass with --verify against a present artifact, then deletes it and commits, and specs close names that criterion refuted (artifact_missing) at exit 0 - which discharges the stated then: re-derivation happens at close, not only at record time. The literal given (break a cited TEST and have close name it) is deliberately NOT implemented: it contradicts A9 and design section 5, because close must never spawn a test runner inside a lifecycle transaction. A stale cited test is caught by caws specs verify-acs <id> --run, and the close summary says so in its own text."
+    recorded_at: "2026-09-16T22:44:24.534Z"
+    test_nodeid: packages/caws-cli/tests/shell/specs-close-rederive.test.js
+    commit_sha: "686dd33d"
