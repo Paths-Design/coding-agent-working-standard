@@ -46,3 +46,10 @@ evidence:
     command: npx jest tests/init/adapter-covered-telemetry-cut.test.js
     exit_code: 0
     commit_sha: e3d8ec6b
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "InitPlanDocument gains an optional telemetry_retirement: TelemetryRetirePlan field ({retire, absent, unmanaged}). Test 'init --plan --json for an adapter-covered surface enumerates the deletions' spawns the real CLI and asserts plan.telemetry_retirement.retire contains '.caws/hooks/session-log.sh', then asserts the file is STILL on disk - so the JSON promised a deletion without performing one. Before the fix the same assertion failed with 'Received: undefined'."
+    recorded_at: "2026-09-16T05:41:05.341Z"
+    command: npx jest tests/init/adapter-covered-telemetry-cut.test.js
+    exit_code: 0
+    commit_sha: e3d8ec6b
