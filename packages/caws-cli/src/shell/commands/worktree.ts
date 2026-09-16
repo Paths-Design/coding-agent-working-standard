@@ -34,7 +34,7 @@ import {
   type WorktreeRecord,
 } from '../../kernel';
 
-import { loadLeases, loadSpecs, loadWorktrees, realpathSafe, resolveRepoRoot, runGit, writeFileAtomic } from '../../store';
+import { computeLaneDivergence, formatLaneCounts, loadLeases, loadSpecs, loadWorktrees, realpathSafe, resolveRepoRoot, runGit, writeFileAtomic } from '../../store';
 import { isGovernedStatePath } from '../../store/git-autocommit';
 import { composeDoctorSnapshot } from '../../store/doctor-snapshot';
 import { configureWorktreeSparseCheckout } from '../../store/git-sparse-checkout';
@@ -347,13 +347,52 @@ export function runWorktreeListCommand(opts: WorktreeListOptions = {}): number {
     out('(no worktrees registered)');
     return 0;
   }
+  // WORKTREE-LANE-DIVERGENCE-SURFACE-001: "what is this lane?" was already
+  // answered here; "is it current?" was not, and agents dropped to raw
+  // `git rev-list --left-right --count` to find out. Divergence is read-only
+  // git plumbing over refs this process already shares, so it joins the row
+  // rather than living in a second command.
+  let staleLanes = 0;
+  const unavailable: string[] = [];
   for (const entry of result.value.entries) {
     const rel = path.relative(ctx.repoRoot, entry.path);
     const ownerStr = entry.owner ? entry.owner.session_id.slice(0, 8) : 'unowned';
     const specStr = entry.specId ?? '(unbound)';
+    const divergence = computeLaneDivergence(ctx.repoRoot, entry.branch, entry.baseBranch);
     out(
-      `${entry.name.padEnd(28)} ${entry.branch.padEnd(20)} → ${entry.baseBranch.padEnd(12)} spec=${specStr.padEnd(20)} owner=${ownerStr.padEnd(10)} ${rel}`
+      `${entry.name.padEnd(28)} ${entry.branch.padEnd(20)} → ${entry.baseBranch.padEnd(12)} ${formatLaneCounts(divergence).padEnd(22)} spec=${specStr.padEnd(20)} owner=${ownerStr.padEnd(10)} ${rel}`
     );
+    if (divergence.unknownReason !== null) {
+      unavailable.push(`${entry.name}: ${divergence.unknownReason}`);
+    } else if (divergence.behind !== null && divergence.behind > 0) {
+      staleLanes += 1;
+    }
+  }
+
+  // An unresolvable ref is reported by name and reason rather than rendered as
+  // `ahead=0 behind=0`, which would read as "this lane is current" — the one
+  // answer that is actively wrong.
+  if (unavailable.length > 0) {
+    out('');
+    out('Divergence unavailable:');
+    for (const line of unavailable) out(`  ${line}`);
+  }
+
+  // Being behind base is not an error and does not block `caws worktree
+  // merge` — it is the normal condition of a lane while peers land work. It
+  // is surfaced because it changes what a reader does next, and because the
+  // counts are a point-in-time read of LOCAL refs that a peer's next merge
+  // invalidates.
+  // The footer carries the GUIDANCE, not a second copy of the per-row counts —
+  // every `behind=` value is already on its own row above.
+  if (staleLanes > 0) {
+    out('');
+    out(
+      `${staleLanes} of ${result.value.entries.length} lane(s) are missing commits from their base (behind > 0 above).`
+    );
+    out('  Reconcile now: from inside the worktree, git merge <base>.');
+    out('  Or not at all: caws worktree merge <name> lands against the base as it stands then, via compare-and-swap.');
+    out('  Counts read local refs at this instant; a peer landing work moves them.');
   }
   return 0;
 }

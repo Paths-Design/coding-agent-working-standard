@@ -699,7 +699,7 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
     {
       kind: 'leaf',
       name: 'list',
-      description: 'List registered worktrees with branch, spec binding, and owner.',
+      description: 'List registered worktrees with branch, lane divergence from base (ahead/behind), spec binding, and owner.',
       options: [DATA_OPTION],
     },
     {

@@ -169,6 +169,7 @@
         "src/store/waivers-store.ts",
         "src/store/working-tree-overlap.ts",
         "src/store/worktree-artifacts.ts",
+        "src/store/worktree-divergence.ts",
         "src/store/worktrees-migration.ts",
         "src/store/worktrees-store.ts",
         "src/store/worktrees-writer.ts",

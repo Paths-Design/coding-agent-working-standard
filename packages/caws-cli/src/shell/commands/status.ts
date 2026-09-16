@@ -51,6 +51,7 @@ import * as os from 'node:os';
 import {
   applyLeasePatch,
   composeDoctorSnapshot,
+  computeLaneDivergence,
   loadLeases,
   readGitDirInfo,
   resolveRepoRoot,
@@ -58,6 +59,7 @@ import {
   loadBridges,
   inboxAllMessages,
   formatAge,
+  type LaneDivergence,
 } from '../../store';
 import { resolveBinding } from '../binding/resolve-binding';
 import { renderDiagnostics } from '../render/diagnostic';
@@ -353,6 +355,29 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
   }
 
   const panels = selectedPanels(opts);
+
+  // ─── WORKTREE-LANE-DIVERGENCE-SURFACE-001 ─────────────────────────────
+  // "Is this lane current?" was the one question status could not answer, so
+  // agents dropped to raw `git rev-list --left-right --count`. Computed here
+  // (the command owns subprocesses; the renderer stays pure) and ONLY when cwd
+  // is inside a tracked worktree — outside one there is no lane, and a
+  // placeholder would be noise at best.
+  //
+  // Status's default-purity contract is intact: rev-parse and rev-list write
+  // nothing. A git failure degrades to an explicit unknown marker inside the
+  // returned struct and never changes the exit code.
+  //
+  // Read against the CANONICAL repo root even when cwd is the worktree —
+  // worktrees share one ref namespace, and using one root everywhere is why
+  // `worktree list` and `status` cannot report different numbers for one lane.
+  let lane: LaneDivergence | undefined;
+  if (binding.worktreeName !== undefined) {
+    const record = snapshot.worktrees[binding.worktreeName];
+    if (record !== undefined) {
+      lane = computeLaneDivergence(repoRoot, record.branch ?? '', record.baseBranch ?? '');
+    }
+  }
+
   const effectiveLeaseSummary = wantsHeartbeat
     ? (callSummarizeActiveAgentsSafe(leases, now, leaseTtl) ?? EMPTY_ACTIVITY_SUMMARY)
     : summary;
@@ -375,6 +400,7 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
     ...(opts.staleTtlMs !== undefined ? { staleTtlMs: opts.staleTtlMs } : {}),
     ...(opts.findingCap !== undefined ? { findingCap: opts.findingCap } : {}),
     ...(panels !== undefined ? { panels } : {}),
+    ...(lane !== undefined ? { lane } : {}),
   };
 
   if (opts.json === true) {
@@ -416,6 +442,19 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
           stopped: effectiveLeaseSummary.stopped,
         },
         self_session_id: sessionIdentity?.session_id ?? null,
+      };
+    }
+    // Mirrors the text path: Current context (and therefore the lane) renders
+    // only in default mode, never under a focused-panel selection.
+    if (panels === undefined && lane !== undefined) {
+      payload.lane = {
+        worktree: binding.worktreeName ?? null,
+        branch: lane.branch,
+        base_branch: lane.baseBranch,
+        ahead: lane.ahead,
+        behind: lane.behind,
+        contains_base: lane.containsBase,
+        unknown_reason: lane.unknownReason,
       };
     }
     if (jsonPanels.includes('doctor')) {
