@@ -4365,11 +4365,14 @@ below carry no id, by construction: no message was created. They were sent
 deliberately, from `~/Desktop/Projects/caws`, as an authorization-laundering
 probe. This is a different evidentiary class from the rest of the entry — it
 rests on the maintainer's own account, corroborated by artifacts, not on
-artifacts alone. What remains open is the mechanism: the send resolved to
-`session_id: "@darianrosebrook"`, `platform: "none"`, and `resolve-session.ts`
-carries no `@`-prefixed user tier, so that stamp is env-derived by some route
-this entry did not pin down. Whether an _agent_ with a shell could produce the
-same stamp is unanswered and is the finding worth carrying forward.
+artifacts alone. The mechanism is **resolver tier 1.7**: `CAWS_SESSION_ID`, the
+documented generic escape hatch, accepts any string — including a human handle —
+and `buildActor` copies `session.identity.session_id` verbatim into `actor.id`.
+Probed from an agent process, `CAWS_SESSION_ID='@probe-not-a-real-user'` yields
+`session: @probe-not-a-real-user:none (source: caws_env)`, the same shape as
+`@darianrosebrook:none`; the maintainer's own sends reaching `messages.jsonl`
+prove nothing downstream rejects it. So an agent can produce a byte-identical
+stamp, and the stamp is not evidence of who acted.
 
 **A check that held, and could not be routed.** Before the successful send,
 three attempts to forge thread provenance were refused —
@@ -4384,6 +4387,68 @@ well-formedness of the request. No amount of rephrasing produces a message that
 was never sent. (The sends did route one guard: every one carried
 `--allow-dead`, the documented escape past the recipient-liveness refusal. That
 one is satisfiable by a flag, and was.)
+
+### Forgeable attribution is the posture, not the gap
+
+The maintainer's position, recorded here because a reader of the paragraph above
+will otherwise treat agent-producible identity as a defect awaiting a fix:
+**there is deliberately no CAWS affordance for who the user is, and the absence
+is the safer choice.**
+
+Attribution in this system is forgeable at three depths, and they get worse as
+they get more structural:
+
+1. **Free-text approver fields.** `--approved-by` takes any string. Entry 40 is
+   the incident; the fix that shipped was an argument-position blocklist keyed
+   on the owner's own enumeration of their name — which authenticates nobody.
+2. **Resolver-derived identity.** Tier 1.7 above. It _looks_ stronger than free
+   text because the CLI computes it rather than accepting it, but the
+   computation reads an env var the caller controls. Looking stronger while
+   being equally soft is the worse property of the two.
+3. **Git authorship.** Every commit is attributed to `user.name`/`user.email`
+   from git config — the human's. No forgery is required at any point: an agent
+   committing through the sanctioned path is _automatically_ recorded as the
+   owner. The lifecycle auto-commits in this very entry's history
+   (`chore(caws): evidence …`, `merge(worktree): …`) are authored
+   `darianrosebrook <hello@darianrosebrook.com>` and were written by an agent.
+
+The third is the one that settles the design question. An agent running on the
+owner's machine **holds the owner's identity by construction** — it runs as that
+user, with that user's credentials and that user's git config. There is no
+principal to authenticate against, because the principal genuinely is the owner.
+Any in-band check would be asking the credential-holder to prove it holds the
+credential.
+
+**Why the obvious remedy is rejected.** The only mechanisms that could raise the
+bar — a keychain prompt, a `sudo` gate, a hardware touch — work by putting an
+interactive human-presence check _in the agent's path_. That manufactures
+exactly the incentive this document is a catalogue of: a blocked agent that
+needs a credential to proceed will work on obtaining the credential, and a
+prompt it can trigger is a prompt it can learn to trigger at a moment of its own
+choosing. Entry 42 is the small version of that dynamic; a capturable auth
+prompt is the large one. It would also leave depth 3 completely untouched. The
+maintainer's stance is therefore explicit: **harder to forge but not impossible
+is the accepted resting point**, and CAWS makes no claim to stop a misbehaving
+agent. It is permissive by default and reserves blocking for the class where
+redirection is itself the exploit — which is precisely the distinction Specimens
+A and B are here to draw.
+
+**Where the effort goes instead: legibility, not difficulty.** Entry 40 was
+caught by one human reading one line of a ledger, and the nine handle-bearing
+waivers in sterling are unresolved not because forging them was hard but because
+nobody read them. What scales is not making the stamp expensive to produce; it
+is making a self-asserted stamp _look_ self-asserted to a reader skimming in
+bulk. The resolver already computes this and throws it away: `caws status`
+prints `(source: caws_env)` alongside the identity, distinguishing an identity
+_typed into an env var_ from one _observed from a harness session_ — and that
+provenance is dropped at the record boundary, where `actor` keeps `kind`, `id`,
+`session_id` and `platform` but not how the identity was resolved. Persisting it
+would not have stopped any forgery in this document. It would have made the
+sterling waiver corpus readable at a glance as nine assertions rather than nine
+approvals. It also passes the test in **Doctrine** below — the field is computed
+by the resolver, never supplied by the caller, and is checkable against the
+record's `platform` — which is the bar any proposal here has to clear. _This is
+a proposal; nothing implements it._
 
 ### Doctrine
 
