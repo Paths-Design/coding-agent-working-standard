@@ -67,7 +67,7 @@ import {
   SELECTABLE_TEST_RUNNERS,
   type TestRunner,
 } from '../../store/evidence-rederive';
-import type { LifecycleMapping, RederivationSummary } from '../../kernel';
+import type { LifecycleMapping, RederivationSummary, Spec } from '../../kernel';
 import { EVIDENCE_STATUSES, SPEC_MODES, SPEC_RESOLUTIONS, type EvidenceStatus } from '../../kernel';
 import * as fs from 'node:fs';
 import { buildActor } from '../session/actor';
@@ -1704,10 +1704,69 @@ export interface SpecsEvidenceOptions extends BaseCommandOptions {
   readonly exitCode?: number;
   readonly artifactPath?: string;
   readonly commitSha?: string;
+  /** Re-derive the cited evidence before recording; refuse a refuted `pass`. */
+  readonly verify?: boolean;
 }
 
 function isEvidenceStatus(value: unknown): value is EvidenceStatus {
   return typeof value === 'string' && (EVIDENCE_STATUSES as readonly string[]).includes(value);
+}
+
+// ─── --verify: re-derive before recording ─────────────────────────────────
+//
+// The record-time half of CAWS-SPECS-VERIFY-ACS-REDERIVE-001. The expensive
+// path (running the cited test) belongs here — the operation is already
+// deliberate and single-criterion, and it is the moment the claim is made.
+// A `pass` whose citation is refuted is refused and nothing is written. A
+// citation that cannot be re-derived is still recorded, but named as
+// self-reported on stderr so the ledger never reads it as verified.
+
+type PendingEvidence = NonNullable<Spec['evidence']>[number];
+
+type VerifyGate =
+  | { readonly kind: 'refuse'; readonly lines: readonly string[] }
+  | { readonly kind: 'verified'; readonly lines: readonly string[] }
+  | { readonly kind: 'unverifiable'; readonly lines: readonly string[] };
+
+function verifyPendingEvidence(repoRoot: string, spec: Spec, pending: PendingEvidence): VerifyGate {
+  // Project the entry being recorded over the spec as it will be after the
+  // write, so re-derivation targets exactly this claim.
+  const others = (spec.evidence ?? []).filter((e) => e.criterion_id !== pending.criterion_id);
+  const projected: Spec = { ...spec, evidence: [...others, pending] };
+  const result = rederiveSpecEvidence(repoRoot, projected, {
+    classes: ['citation', 'artifact', 'test'],
+    runTests: true,
+  });
+  const verdict = result.verdicts.find((v) => v.id === pending.criterion_id);
+  if (verdict === undefined) {
+    return {
+      kind: 'refuse',
+      lines: [
+        `caws specs evidence --verify: ${pending.criterion_id} is not a declared acceptance criterion of ${spec.id}.`,
+      ],
+    };
+  }
+  const line = `  ${describeVerdict(verdict)}`;
+  if (verdict.verdict === 'refuted' && pending.status === 'pass') {
+    return {
+      kind: 'refuse',
+      lines: [
+        `caws specs evidence --verify: refusing to record status pass for ${pending.criterion_id} — the cited evidence does not re-derive.`,
+        line,
+        '  Nothing was written. Fix the citation (or the code it cites) and record again; use --status fail if the criterion genuinely fails.',
+      ],
+    };
+  }
+  if (verdict.verdict === 'verified') {
+    return { kind: 'verified', lines: ['verified before recording:', line] };
+  }
+  return {
+    kind: 'unverifiable',
+    lines: [
+      `caws specs evidence --verify: ${pending.criterion_id} could not be mechanically re-derived; recording as self-reported.`,
+      line,
+    ],
+  };
 }
 
 export function runSpecsEvidenceCommand(opts: SpecsEvidenceOptions): number {
@@ -1736,6 +1795,43 @@ export function runSpecsEvidenceCommand(opts: SpecsEvidenceOptions): number {
     'evidence'
   );
   if (actor === null) return 2;
+
+  if (opts.verify === true) {
+    if (
+      opts.testNodeid === undefined &&
+      opts.artifactPath === undefined &&
+      opts.commitSha === undefined
+    ) {
+      err(
+        'caws specs evidence --verify: nothing to verify. Supply at least one of --test-nodeid, --artifact-path, --commit-sha ' +
+          '(a --command is recorded but never executed, so it cannot be verified).'
+      );
+      return 1;
+    }
+    const shown = showSpec(ctx.cawsDir, opts.id);
+    if (!isOk(shown)) {
+      err('caws specs evidence: failed.');
+      err(renderDiagnostics(shown.errors, { showData }));
+      return 1;
+    }
+    const pending: PendingEvidence = {
+      criterion_id: opts.ac,
+      status: opts.status,
+      recorded_at: nowFn().toISOString(),
+      ...(opts.evidenceRef !== undefined ? { evidence_ref: opts.evidenceRef } : {}),
+      ...(opts.testNodeid !== undefined ? { test_nodeid: opts.testNodeid } : {}),
+      ...(opts.command !== undefined ? { command: opts.command } : {}),
+      ...(opts.exitCode !== undefined ? { exit_code: opts.exitCode } : {}),
+      ...(opts.artifactPath !== undefined ? { artifact_path: opts.artifactPath } : {}),
+      ...(opts.commitSha !== undefined ? { commit_sha: opts.commitSha } : {}),
+    };
+    const gate = verifyPendingEvidence(ctx.repoRoot, shown.value.spec, pending);
+    if (gate.kind === 'refuse') {
+      for (const l of gate.lines) err(l);
+      return 1;
+    }
+    for (const l of gate.lines) (gate.kind === 'verified' ? out : err)(l);
+  }
 
   const result = recordSpecEvidence(ctx.cawsDir, {
     id: opts.id,

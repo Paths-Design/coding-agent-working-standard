@@ -564,6 +564,11 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
           flag: '--commit-sha <sha>',
           description: 'Optional: commit sha (7-40 hex chars) evidencing the criterion',
         },
+        {
+          flag: '--verify',
+          description:
+            "Re-derive the cited evidence before recording: run the cited test through the repository's own runner, check the cited artifact and commit. Refuses to record status pass when the citation is refuted and writes nothing; a citation that cannot be re-derived is recorded and named as self-reported. Requires at least one of --test-nodeid / --artifact-path / --commit-sha (a --command is recorded but never executed, so it cannot be verified)",
+        },
         DATA_OPTION,
       ],
     },

@@ -1390,6 +1390,7 @@ export function registerShellCommands(
         exitCode?: string;
         artifactPath?: string;
         commitSha?: string;
+        verify?: boolean;
         data?: boolean;
       },
       command: Command
@@ -1413,6 +1414,7 @@ export function registerShellCommands(
         ...(opts.exitCode !== undefined ? { exitCode: Number(opts.exitCode) } : {}),
         ...(opts.artifactPath !== undefined ? { artifactPath: opts.artifactPath } : {}),
         ...(opts.commitSha !== undefined ? { commitSha: opts.commitSha } : {}),
+        ...(opts.verify === true ? { verify: true } : {}),
         showData: globals.data === true,
       });
       exit(code);
