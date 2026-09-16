@@ -110,3 +110,10 @@ evidence:
     command: npx jest
     exit_code: 0
     commit_sha: b1197f0f
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "jest … A6 — source scan of all 86 .action() handlers: zero exit() calls that are not the handler's final one lack a following return; scanner self-guards by asserting it found >50 handlers. Found and fixed 2 real fall-throughs (worktree prune, cleanup-plan) that worktree-prune-status-alias + worktree-group-prune-handoff had caught as exit 1 becoming 0"
+    recorded_at: "2026-09-16T04:38:27.063Z"
+    command: npx jest
+    exit_code: 0
+    commit_sha: b1197f0f
