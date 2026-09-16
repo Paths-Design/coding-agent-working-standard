@@ -65,3 +65,10 @@ evidence:
     command: npx jest (full CLI suite)
     exit_code: 0
     commit_sha: "3c7c3f02"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Tests 'the rule still fires on a non-tier-3 spec' and 'its repair names removing experimental_mode and never a tier change'. NOTE THIS IS A NEW FINDING, not in Entry 42: the scan surfaced spec/validate-semantics.ts:103 ('Remove experimental_mode or change risk_tier to 3.') as a THIRD instance of the class. Entry 42 measured only the two contract-gate sites (:36 and specs.ts:449). Same shape: a gate that exists to keep experimental_mode off tier 1/2, whose own remediation offers moving the spec to tier 3. Unmeasured - there is no transcript count for how often it was taken, because denials leave no artifact (the unresolved gap this slice does NOT close). Repair now reads: 'Remove experimental_mode from this spec. It is a Tier 3 affordance; a Tier 1/2 slice carries the blast radius that makes it inadmissible.'"
+    recorded_at: "2026-09-16T07:58:13.809Z"
+    command: npx jest tests/kernel/unit/remediation-no-label-escape.test.ts
+    exit_code: 0
+    commit_sha: "3c7c3f02"
