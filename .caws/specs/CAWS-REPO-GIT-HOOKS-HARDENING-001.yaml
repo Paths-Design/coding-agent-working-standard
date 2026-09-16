@@ -74,3 +74,11 @@ evidence:
     exit_code: 0
     artifact_path: .husky/tests/run.sh
     commit_sha: "1eaf6be3"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "T1a puts a stub node that prints nothing earlier in PATH, invokes pre-commit under a parent whose argv contains --amend, and asserts exit 1. T1b (stub prints 3) also refuses. T1c is the non-vacuity control: a stub printing 0 must NOT trigger the amend guard, proving the harness can produce a non-refusing outcome and that T1a/T1b are not passing because the hook refuses unconditionally."
+    recorded_at: "2026-09-16T05:43:42.796Z"
+    command: bash .husky/tests/run.sh
+    exit_code: 0
+    artifact_path: .husky/tests/run.sh
+    commit_sha: "1eaf6be3"
