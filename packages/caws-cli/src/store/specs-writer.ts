@@ -52,6 +52,7 @@ import { autoCommit, isPathDirty, type AutoCommitOutcome } from './git-autocommi
 import { runLifecycleTransaction, type LifecycleTransactionResult } from './lifecycle-transaction';
 import { withLifecycleLock } from './lifecycle-lock';
 import { repoRootFromCawsDir, storeDiagnostic, validateSpecId } from './repo-root';
+import { describeVerdict, rederiveSpecEvidence } from './evidence-rederive';
 import { STORE_RULES } from './rules';
 import { insertTopLevelScalarAfter, removeTopLevelScalar, setTopLevelScalar } from './yaml-patch';
 import { readYamlSource } from './yaml-store';
@@ -1464,14 +1465,67 @@ export function closeSpec(cawsDir: string, input: CloseSpecInput): Result<SpecWr
   // the close proceeds. This ships the authority surface (the evidence: block,
   // the record op, the dual-write) and makes the gate visible to agents
   // immediately, without breaking the existing close/merge test corpus (which
-  // predates evidence). The flip to BLOCK mode is a one-line change in a
-  // follow-up slice that back-fills evidence on the affected test fixtures.
+  // predates evidence).
+  //
+  // BLOCK MODE IS NOT A ONE-LINE FLIP HERE. mergeWorktree calls closeSpec
+  // AFTER the base ref has advanced (worktrees-writer.ts, the closeSpec call
+  // inside mergeWorktree); a non-ok result from this function on that path is
+  // reported as LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED — "merge succeeded but
+  // spec close failed" — which is a split-state merge, not a refusal. Turning
+  // either gate below into `return err(...)` would therefore land a merge and
+  // then strand it, on the single most load-bearing governed command. Blocking
+  // first requires RELOCATING the gate to a pre-merge check (before
+  // merge-tree / commit-tree / update-ref) so a refused close never leaves a
+  // landed merge behind, plus back-filling evidence on the ~60 close/merge
+  // fixtures that predate the evidence block.
   //
   // The gate reads ONLY the spec's `evidence:` block — never the ac_recorded
   // event stream (doctrinal: closure couples to the authority surface, not
   // audit history — same as the successor-custody gate above).
   const unsatisfied = unsatisfiedAcceptanceCriteria(spec);
   const evidenceWarnings: string[] = [];
+
+  // CAWS-SPECS-VERIFY-ACS-REDERIVE-001: `status` is a claim, not a proof.
+  // Re-derive the NON-EXECUTING classes (cited commit exists and is reachable;
+  // cited artifact is present at that revision) so a `pass` whose citation
+  // does not re-derive is named at close, and every pass is labelled for what
+  // it is: verified, refuted, or self-asserted. Test runners are NOT spawned
+  // here — close is a transaction that also runs inside merge, and a hung
+  // runner there is a worse failure than the one this gate exists to catch.
+  // The expensive path lives at record time (`caws specs evidence --verify`)
+  // and on demand (`caws specs verify-acs <id> --run`).
+  const gateRepoRoot = repoRootFromCawsDir(cawsDir);
+  const rederived = rederiveSpecEvidence(gateRepoRoot, spec, {
+    classes: ['citation', 'artifact'],
+    runTests: false,
+  });
+  const refutedPasses = rederived.verdicts.filter(
+    (v) => v.verdict === 'refuted' && v.status === 'pass'
+  );
+  if (refutedPasses.length > 0) {
+    evidenceWarnings.push(
+      `Spec "${input.id}" closed with ${refutedPasses.length} acceptance criterion/criteria recorded as pass whose cited evidence does NOT re-derive ` +
+        `[warn-mode: close proceeded]:\n` +
+        refutedPasses.map((v) => `  - ${describeVerdict(v)}`).join('\n') +
+        `\nA pass whose citation is refuted is a claim without proof. Reopen, fix the citation (or the code it cites), ` +
+        `re-record with --verify, and re-close:\n` +
+        `  1. caws specs reopen ${input.id} --reason "re-recording refuted AC evidence"\n` +
+        `  2. caws specs evidence ${input.id} --ac <id> --status pass --evidence-ref "<ref>" --commit-sha <sha> | --artifact-path <path> | --test-nodeid <id> --verify\n` +
+        `  3. caws specs close ${input.id} --resolution completed --reason "<your closure notes>"`
+    );
+  }
+  // Legibility, not mechanism: a verdict derived from an agent-supplied field
+  // proves the citation is real, not that it is relevant. Print the counts so
+  // a self-assertion reads as a self-assertion to someone skimming the ledger.
+  if ((spec.evidence ?? []).length > 0) {
+    const s = rederived.summary;
+    evidenceWarnings.push(
+      `Evidence at close for "${input.id}": ${s.total} criteria — verified ${s.verified}, refuted ${s.refuted}, not_rederived ${s.not_rederived} ` +
+        `(self-reported ${s.self_reported}, narrative-only ${s.narrative_only}, command declared ${s.command_declared}). ` +
+        `Verified here means the cited commit/artifact re-derives; cited tests are not executed at close — ` +
+        `record with \`caws specs evidence --verify\` or inspect with \`caws specs verify-acs ${input.id} --run\`.`
+    );
+  }
   if (unsatisfied.length > 0) {
     // WARN (not block): the close proceeds, but the outcome carries an advisory
     // so agents see which ACs lack evidence. When the gate flips to block, this
