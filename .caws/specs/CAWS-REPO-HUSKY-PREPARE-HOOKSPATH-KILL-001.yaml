@@ -25,8 +25,10 @@ invariants:
   - 'Silencing output and forcing the exit code (>/dev/null 2>&1 || true) turns a failure into an invisible state change, and is banned for anything that mutates git configuration.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'the caws monorepo with core.hooksPath correctly set to .husky'
+    when: 'npm install or npm run prepare runs from the repo root'
+    then: >-
+      core.hooksPath still resolves to .husky and every hook-named file is still
+      found; no lifecycle script repoints it at .husky/_
 non_functional: {}
 contracts: []
