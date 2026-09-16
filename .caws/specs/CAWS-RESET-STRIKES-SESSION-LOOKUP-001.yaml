@@ -54,3 +54,10 @@ evidence:
     command: bash packages/caws-cli/templates/hook-packs/shared/reset-strikes.sh --dry-run --session 0d83351d-d384-4100-8148-a3f40dbc6b7a
     exit_code: 0
     commit_sha: "4e7cf268"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "bats A2 'session still resets a LEGACY repo-local strike file' plants <repo>/.claude/logs/guard-strikes-<sid>.json and asserts it is gone after --session. This test PASSED BEFORE the fix (it was 1 of only 2 green in the red run), which is what makes it a real regression guard rather than a restatement of A1: it proves the change WIDENED the match instead of relocating it. Paired with A2b 'targets ONLY the named session, not every strike file' — two live sessions planted, one named, the other must survive. Without A2b a filter that collapsed to 'reset everything' would satisfy A1 while being catastrophic for a human resetting one wedged session. 8/8 bats green."
+    recorded_at: "2026-09-16T08:16:00.398Z"
+    command: npx bats tests/hooks/bats/reset-strikes.bats
+    exit_code: 0
+    commit_sha: "4e7cf268"
