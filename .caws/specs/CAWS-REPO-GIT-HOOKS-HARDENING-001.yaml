@@ -50,3 +50,12 @@ acceptance:
     then: 'the second does not run a concurrent build/test and reports the contention instead'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "T3b: a PATH-shim git logged every invocation pre-commit made; 15 calls recorded, 0 beginning with 'stash'. T3a/T3d are non-vacuity controls (a fixture is staged so lint-staged is genuinely reached; the log is asserted non-empty). Live corroboration: the real commit 1eaf6be3 printed 'Skipping backup because --no-stash was used'; git stash list was 0 before and 0 after."
+    recorded_at: "2026-09-16T05:43:34.696Z"
+    command: bash .husky/tests/run.sh
+    exit_code: 0
+    artifact_path: .husky/tests/run.sh
+    commit_sha: "1eaf6be3"
