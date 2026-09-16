@@ -84,7 +84,9 @@ caws gates run --spec FEAT-001
 
 The following v10 commands were removed in v11.0 and are not coming back:
 
-`scaffold`, `validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `archive` (the command — `caws specs archive` is the replacement), `provenance`, `sidecar`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `templates`, legacy `hooks install`.
+`scaffold`, `validate` (the top-level command — `caws specs validate <file>` checks one spec file), `evaluate`, `iterate`, `diagnose`, `burnup`, `archive` (the command — `caws specs archive` is the replacement), `provenance`, `sidecar`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `templates`, legacy `hooks install`.
+
+One exception, and it is the only one: `verify-acs` was on this list and came back. `caws specs verify-acs <id>` re-derives a spec's recorded acceptance evidence against reality — the cited commit, artifact and test — instead of trusting its `status` field. Use it; the rest of the list above still stands.
 
 Their behaviors fold into `doctor`, `gates run`, `status`, `specs`, and `evidence record`. The hash-chained `.caws/events.jsonl` is the audit surface; users wire their own hooks against `caws gates run`.
 

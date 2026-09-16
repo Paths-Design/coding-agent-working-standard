@@ -60,6 +60,22 @@ export type TestRunner = (typeof TEST_RUNNERS)[number];
 export const SELECTABLE_TEST_RUNNERS: readonly TestRunner[] = TEST_RUNNERS.filter(
   (r) => r !== 'unknown'
 );
+/**
+ * Runners this module can actually run. Selectable is a larger set than
+ * executable: naming `--runner cargo` is accepted and reports `unavailable`,
+ * because detection is implemented for every runner but execution is not.
+ *
+ * Exported so the dispatch below and the `--runner` help text derive the split
+ * from ONE place. The help previously listed the selectable set with no hint
+ * that three of its members verify nothing, and a reader wiring `--runner go`
+ * into CI got a gate that reports success while checking nothing — the failure
+ * class this repository's release stance names as the most dangerous.
+ */
+export const EXECUTABLE_TEST_RUNNERS: readonly TestRunner[] = ['pytest', 'jest'];
+
+function isExecutableRunner(runner: TestRunner): boolean {
+  return EXECUTABLE_TEST_RUNNERS.includes(runner);
+}
 
 export interface SpawnOptions {
   readonly cwd: string;
@@ -565,27 +581,28 @@ function testOutcome(
 
   const file = nodeid.split('::')[0] ?? '';
   const ctx = resolveRunner(repoRoot, file, opts.runner);
-  switch (ctx.runner) {
-    case 'pytest':
-      return pytestOutcome(exec, ctx, repoRoot, nodeid, opts.runTests, t);
-    case 'jest':
-      return jestOutcome(exec, ctx, repoRoot, nodeid, opts.runTests, t);
-    case 'vitest':
-    case 'cargo':
-    case 'go':
-      return {
-        ...base,
-        outcome: 'unavailable',
-        detail: `runner ${ctx.runner} detected; re-derivation is not implemented for it — run the test yourself and cite the artifact`,
-      };
-    case 'unknown':
-      return {
-        ...base,
-        outcome: 'unavailable',
-        detail:
-          'no test runner detected (pytest.ini/conftest.py, jest.config.*, vitest.config.*, Cargo.toml, go.mod)',
-      };
+  // Derived from EXECUTABLE_TEST_RUNNERS rather than a hand-listed set of
+  // fall-through cases, so adding an execution path cannot leave this branch —
+  // or the `--runner` help that reads the same constant — behind.
+  if (!isExecutableRunner(ctx.runner)) {
+    return {
+      ...base,
+      outcome: 'unavailable',
+      detail:
+        ctx.runner === 'unknown'
+          ? 'no test runner detected (pytest.ini/conftest.py, jest.config.*, vitest.config.*, Cargo.toml, go.mod)'
+          : `runner ${ctx.runner} detected; re-derivation does not execute this runner — run the test yourself and cite the resulting commit or artifact`,
+    };
   }
+  if (ctx.runner === 'pytest') return pytestOutcome(exec, ctx, repoRoot, nodeid, opts.runTests, t);
+  if (ctx.runner === 'jest') return jestOutcome(exec, ctx, repoRoot, nodeid, opts.runTests, t);
+  // Declared executable with no dispatch arm. That is a programming error, and
+  // it must not read as a verdict about the citation.
+  return {
+    ...base,
+    outcome: 'unavailable',
+    detail: `runner ${ctx.runner} is declared executable but has no dispatch arm`,
+  };
 }
 
 // ─── report ──────────────────────────────────────────────────────────────────

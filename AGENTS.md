@@ -163,6 +163,16 @@ caws evidence record --type test --spec FEAT-1 \
 # the close gate reads. It dual-writes the ac_recorded event too.
 # (`caws evidence record --type ac` is refused and redirects here.)
 caws specs evidence FEAT-1 --ac A1 --status pass --evidence-ref "npm test"
+# Cite a machine-checkable field and add --verify wherever you can. --verify
+# re-derives the citation BEFORE writing and refuses to record status pass when
+# it is refuted — nothing is written, the failing detail is printed. Without it,
+# status is a self-assertion no later stage can disagree with.
+caws specs evidence FEAT-1 --ac A1 --status pass \
+  --test-nodeid "tests/foo.test.js::renders the empty state" --verify
+# The nodeid is pytest-style `<file>::<test name>` for jest as well as pytest.
+# Inspect the whole spec's evidence without writing anything:
+caws specs verify-acs FEAT-1 --run   # --run executes cited tests; existence
+                                     # alone is not_rederived, never pass
 # Payload shapes are closed (additionalProperties: false) and status is a closed
 # enum. Print the authoritative shape + a runnable example for any kind with:
 #   caws evidence schema --type <test|gate|ac|human_decision>
@@ -393,8 +403,8 @@ doc that pre-dates v11.0 cutover. **Fix**: Those commands were removed in v11.0.
 Use `caws doctor` (drift / structure) and `caws gates run --spec <id>` (policy /
 quality) as the validation surface. `caws specs create` was restored in v11.1;
 `caws verify-acs` returned as `caws specs verify-acs <id>` in 12.2 (re-derives
-recorded evidence; `--run` executes cited tests; a collected-but- unexecuted
-test reports `not_rederived`, never pass). The rest are not planned to return.
+recorded evidence; `--run` executes cited tests; a collected-but-unexecuted test
+reports `not_rederived`, never pass). The rest are not planned to return.
 
 **Problem**: `caws init` refuses to run. **Cause**: Legacy
 `.caws/working-spec.yaml` residue from v10.x. **Fix**: Migrate that file's

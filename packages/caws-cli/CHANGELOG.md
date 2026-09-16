@@ -21,6 +21,13 @@ run). Existence of a check is not execution, and execution is not passing.
   A verdict derived from an agent-supplied field is marked `self_reported`.
   The v10.2 defect where a collected-but-unexecuted test printed PASS is
   pinned red.
+- **Detection is wider than execution, and the help says so.** `--runner`
+  accepts `pytest`, `jest`, `vitest`, `cargo` and `go` because detection is
+  implemented for all five, but only `pytest` and `jest` execute; the other
+  three report `unavailable` and verify nothing. The split is derived from one
+  exported constant that both the dispatch and the `--runner` help read, so it
+  cannot drift, and the project templates no longer list `verify-acs` among
+  commands that are "not coming back".
 - **`caws specs evidence --verify`** re-derives the citation at record time and
   refuses to record `status: pass` when it is refuted, writing nothing.
   Unverifiable citations record with a self-reported notice.
