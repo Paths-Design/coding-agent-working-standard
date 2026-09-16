@@ -134,3 +134,11 @@ evidence:
     command: npx jest tests/kernel/telemetry-turn-log-schema.test.ts
     exit_code: 0
     commit_sha: "579182dcf25b"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "rendered==oracle on 70-turn transcript: requests=3175 input=6334 cache_read=1048236836 cache_write=16758025 output=3367422"
+    recorded_at: "2026-09-16T04:17:29.699Z"
+    test_nodeid: "tests/hooks/pytest/test_session_log_renderer.py::TestRealTranscriptUsageParity::test_session_totals_match_an_independent_dedup_count"
+    command: python3 -m pytest tests/hooks/pytest -q -s
+    exit_code: 0
+    commit_sha: "579182dcf25b"
