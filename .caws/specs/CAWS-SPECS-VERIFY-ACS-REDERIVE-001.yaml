@@ -195,3 +195,9 @@ evidence:
     recorded_at: "2026-09-16T22:39:34.341Z"
     test_nodeid: packages/caws-cli/tests/shell/specs-close-rederive.test.js
     commit_sha: "686dd33d"
+  - criterion_id: A14
+    status: pass
+    evidence_ref: "Proven against the built artifact, not handler unit tests: node dist/index.js specs evidence --help shows --verify and specs verify-acs --help shows --run --strict --runner --json, with one real dist invocation per flag in tests/shell/specs-evidence-verify.test.js and tests/shell/specs-verify-acs.test.js. The generated command reference, rendered from dist/shell/command-metadata.js, carries the verify-acs entry and all four options."
+    recorded_at: "2026-09-16T22:41:46.226Z"
+    test_nodeid: packages/caws-cli/tests/shell/specs-evidence-verify.test.js
+    commit_sha: "9df496bb"
