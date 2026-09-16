@@ -59,3 +59,10 @@ evidence:
     command: "git ls-files -z | xargs -0 ./node_modules/.bin/prettier --list-different | wc -l"
     exit_code: 0
     artifact_path: .prettierignore
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "178 CAWS-MANAGED/@generated/DO-NOT-EDIT files were sha256-hashed before the pass. After formatting AND after a full 'npm run build' (which regenerates surfaces.generated.ts and templates/hook-packs/shared/lib/surfaces-registry.sh), scanning 'git diff --name-only' for any path whose first 12 lines carry a managed or generated marker returned ZERO hits, and 'git diff --name-only | grep ^.caws/' returned none. Pack fingerprint test passes unchanged inside the 229/2851 green suite, so no pack version bump and no consumer re-propagation is forced. Three files matched the managed-marker grep only because they CONTAIN the string (the header-writing code in hook-install.ts/managed-header.ts and test assertions) and were verified as false positives before being left formattable; CHANGELOG.md and templates/CLAUDE.md matched on prose mentions of semantic-release and managed headers, and templates/CLAUDE.md was confirmed to sit in no fingerprinted pack dir."
+    recorded_at: "2026-09-16T08:12:24.370Z"
+    command: "git diff --name-only | while read f; do head -12 $f | grep -q 'CAWS-MANAGED|@generated|DO NOT EDIT' && echo VIOLATION $f; done"
+    exit_code: 0
+    artifact_path: packages/caws-cli/tests/init/pack-fingerprint.test.js
