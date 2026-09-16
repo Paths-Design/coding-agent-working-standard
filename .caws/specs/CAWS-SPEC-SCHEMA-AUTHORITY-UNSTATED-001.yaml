@@ -70,3 +70,10 @@ evidence:
     command: npx jest tests/shell/specs-validate-authority.test.js
     exit_code: 0
     commit_sha: fd4c2108
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Two false-positive guards. (1) A clean initialized repo reports zero legacy-schema findings - the baseline that proves the other assertions detect the FILE rather than merely the fact that doctor emits findings in an initialized repo. (2) An unrelated live schema at .caws/schemas/waivers.schema.json is NOT flagged: detection matches the specific dead filename, never the schemas/ directory, which is the protected-paths overmatch failure class this repo has hit before. Kernel unit adds the empty-list case (neither copy present -> zero findings)."
+    recorded_at: "2026-09-16T06:57:29.250Z"
+    command: npx jest tests/store/doctor-snapshot-legacy-spec-schema.test.js tests/kernel/unit/doctor-legacy-spec-schema.test.ts
+    exit_code: 0
+    commit_sha: fd4c2108
