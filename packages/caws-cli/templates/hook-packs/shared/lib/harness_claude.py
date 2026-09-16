@@ -158,15 +158,81 @@ def _matches_claude(row: dict[str, Any]) -> bool:
     return row.get("type") in {"user", "assistant", "attachment"}
 
 
+def _row_lineage(obj: dict[str, Any]) -> dict[str, Any]:
+    """Carry a row's identity and its parent's onto the canonical event.
+
+    The renderer needs both to detect a rewind: a re-typed prompt re-parents
+    onto the record that closed the earlier turn (observed: a
+    `system/turn_duration` row), so two turn-opening prompts sharing a
+    parent_uuid are the same conversational slot occupied twice.
+
+    A null/absent parentUuid is NOT lineage — it is the transcript's root, and
+    every resumed session can carry several of them. Emitting it would make
+    every root-parented prompt collide with every other, so it is dropped here
+    rather than filtered downstream.
+    """
+    lineage: dict[str, Any] = {}
+    uuid_value = obj.get("uuid")
+    parent_value = obj.get("parentUuid")
+    if isinstance(uuid_value, str) and uuid_value:
+        lineage["uuid"] = uuid_value
+    if isinstance(parent_value, str) and parent_value:
+        lineage["parent_uuid"] = parent_value
+    return lineage
+
+
+def _token_count(value: Any) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
+
+
+def _api_request_event(
+    obj: dict[str, Any], message: dict[str, Any], ts: str | None
+) -> dict[str, Any] | None:
+    """One event per API response, carrying that response's usage.
+
+    Claude Code writes ONE transcript row per assistant content block, and
+    every row of a multi-block reply repeats the same `message.usage`
+    verbatim (verified: zero rows sharing (message.id, requestId) carried a
+    differing token tuple across a 1,124-row transcript). So usage is
+    deduplicated downstream on that key and taken once — summing the rows
+    would roughly double every count.
+
+    A row with no `message.usage` yields no event at all, so a harness that
+    records no usage renders the block absent rather than zero-filled.
+    """
+    usage = message.get("usage")
+    message_id = message.get("id")
+    if not isinstance(usage, dict) or not isinstance(message_id, str) or not message_id:
+        return None
+    request_id = obj.get("requestId")
+    model = message.get("model")
+    return {
+        "ev": "api_request",
+        "message_id": message_id,
+        "request_id": request_id if isinstance(request_id, str) and request_id else None,
+        "model": model if isinstance(model, str) and model else None,
+        "usage": {
+            "input": _token_count(usage.get("input_tokens")),
+            "cache_read": _token_count(usage.get("cache_read_input_tokens")),
+            "cache_write": _token_count(usage.get("cache_creation_input_tokens")),
+            "output": _token_count(usage.get("output_tokens")),
+        },
+        "ts": ts,
+    }
+
+
 def normalize_claude_row(obj: dict[str, Any], _state: dict[str, Any]) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     ts = parse_timestamp(obj.get("timestamp"))
     kind = obj.get("type")
     if kind == "user":
         content = obj.get("message", {}).get("content")
+        lineage = _row_lineage(obj)
         if isinstance(content, str):
             shell = _shell_event(content, ts)
-            events.append(shell if shell else {"ev": "user_text", "text": content, "ts": ts})
+            events.append(
+                shell if shell else {"ev": "user_text", "text": content, "ts": ts, **lineage}
+            )
         elif isinstance(content, list):
             for item in content:
                 if not isinstance(item, dict):
@@ -183,9 +249,16 @@ def normalize_claude_row(obj: dict[str, Any], _state: dict[str, Any]) -> list[di
                 elif item.get("type") == "text":
                     text = item.get("text", "")
                     shell = _shell_event(text, ts)
-                    events.append(shell if shell else {"ev": "user_text", "text": text, "ts": ts})
+                    events.append(
+                        shell if shell else {"ev": "user_text", "text": text, "ts": ts, **lineage}
+                    )
     elif kind == "assistant":
-        content = obj.get("message", {}).get("content", [])
+        message = obj.get("message")
+        message = message if isinstance(message, dict) else {}
+        api_request = _api_request_event(obj, message, ts)
+        if api_request is not None:
+            events.append(api_request)
+        content = message.get("content", [])
         if isinstance(content, list):
             for item in content:
                 if not isinstance(item, dict):

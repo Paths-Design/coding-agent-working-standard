@@ -13,6 +13,8 @@ import uuid
 EVENTS = {
     'pre_tool_use': 'PreToolUse', 'post_tool_use': 'PostToolUse',
     'session_start': 'SessionStart', 'stop': 'Stop', 'pre_compact': 'PreCompact',
+    # Session teardown, distinct from stop (which fires once per turn).
+    'session_end': 'SessionEnd',
 }
 SURFACES = {'codex', 'claude-code', 'kimi-code', 'qwen-code', 'zcode', 'opencode', 'dsh'}
 
@@ -298,7 +300,7 @@ def main():
     if (len(sys.argv) < 3 or len(flags) != len(set(flags)) or
             set(flags) - {'--system', '--describe'} or
             sys.argv[1] not in SURFACES or sys.argv[2] not in EVENTS):
-        raise ValueError('Usage: caws-hook <surface> <pre_tool_use|post_tool_use|session_start|stop|pre_compact> [--system] [--describe]')
+        raise ValueError('Usage: caws-hook <surface> <pre_tool_use|post_tool_use|session_start|stop|pre_compact|session_end> [--system] [--describe]')
     surface, event = sys.argv[1:3]
     def inactive(reason):
         if describe:

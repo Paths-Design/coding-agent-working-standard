@@ -432,7 +432,12 @@ import { isAdapterCoveredSurface } from './types';
 // (.env.example, *.pub) and unambiguous read-verb coverage. Both edits landed
 // in classified slices that did not carry this bump; the fingerprint control
 // caught the omission (HOOKPACK-SHARED-VERSION-BUMP-RECURRENCE-001).
-export const SHARED_PACK_VERSION = 77;
+// v78: session-log steering/usage signals. session_log_renderer.py records
+// per-request usage (deduplicated on message id + request id), splits the two
+// interrupt kinds, and detects rewinds; harness_claude.py carries the usage
+// and row lineage that make those visible; a new dispatch/session_end.sh seals
+// .meta.json with the exit reason and session usage total.
+export const SHARED_PACK_VERSION = 78;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
@@ -501,6 +506,7 @@ export const SHARED_PACK: HookPackV1 = {
     'session_start',
     'pre_compact',
     'stop',
+    'session_end',
   ],
   stateModel: {
     // The shared core reads canonical CAWS state.
@@ -563,6 +569,12 @@ export const SHARED_PACK: HookPackV1 = {
     {
       destPath: '.caws/hooks/dispatch/pre_compact.sh',
       sourcePath: 'dispatch/pre_compact.sh',
+      executable: true,
+      managed: true,
+    },
+    {
+      destPath: '.caws/hooks/dispatch/session_end.sh',
+      sourcePath: 'dispatch/session_end.sh',
       executable: true,
       managed: true,
     },

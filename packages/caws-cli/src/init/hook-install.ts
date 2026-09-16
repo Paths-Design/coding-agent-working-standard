@@ -1301,6 +1301,19 @@ export const CANONICAL_HOOK_ENTRIES: Readonly<
       },
     ],
   },
+  // Session teardown, once per session — Stop fires once per TURN. The
+  // handler only seals artifacts earlier events wrote, so the timeout is
+  // short: nothing here may keep the harness from exiting.
+  SessionEnd: {
+    hooks: [
+      {
+        type: 'command',
+        command:
+          'CAWS_AGENT_SURFACE=claude-code CAWS_PROJECT_DIR="$CLAUDE_PROJECT_DIR" "$CLAUDE_PROJECT_DIR"/.caws/hooks/dispatch/session_end.sh',
+        timeout: 10,
+      },
+    ],
+  },
 };
 
 /** A fresh settings.json containing ONLY the canonical CAWS wiring. */

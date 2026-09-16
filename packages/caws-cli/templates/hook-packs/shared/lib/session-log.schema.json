@@ -31,6 +31,48 @@
       "type": "string",
       "minLength": 1
     },
+    "turnUsage": {
+      "type": "object",
+      "description": "API cost of one turn (or, on the session artifact, of the whole session). requests counts UNIQUE (message id, request id) pairs: Claude Code writes one transcript row per assistant content block and repeats the same usage block on each, so a row count would roughly double every figure. Token classes are the four billed classes; a class the harness omits reads as 0, but a harness that reports no usage at all omits this object entirely.",
+      "required": [
+        "requests",
+        "input",
+        "cache_read",
+        "cache_write",
+        "output",
+        "models"
+      ],
+      "properties": {
+        "requests": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "input": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cache_read": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cache_write": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "output": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          },
+          "description": "Distinct models seen, in first-seen order."
+        }
+      },
+      "additionalProperties": false
+    },
     "timestampLike": {
       "type": [
         "string",
@@ -750,8 +792,10 @@
           "enum": [
             "ok",
             "blocked",
-            "error"
-          ]
+            "error",
+            "rewound"
+          ],
+          "description": "rewound outranks the outcome statuses: the user rewound past this turn, so whatever it produced (including an error) was discarded."
         },
         "decisions": {
           "type": "array",
@@ -796,6 +840,8 @@
             {
               "type": "string",
               "enum": [
+                "user_interrupt_tool",
+                "user_interrupt_generation",
                 "user_interrupt"
               ]
             },
@@ -803,7 +849,24 @@
               "type": "null"
             }
           ],
-          "description": "How the turn ended when it did not end normally. user_interrupt = the user pressed escape mid-action ('[Request interrupted' event) \u2014 the strongest steering signal a session records. null/absent = the agent finished on its own."
+          "description": "How the turn ended when it did not end normally \u2014 the user pressed escape mid-action ('[Request interrupted' event), the strongest steering signal a session records. user_interrupt_tool = the user vetoed a specific action the agent proposed ('for tool use'); user_interrupt_generation = the user cut the reply off. null/absent = the agent finished on its own. user_interrupt is the legacy collapsed value: still accepted so artifacts written before the split keep validating, never emitted now."
+        },
+        "usage": {
+          "$ref": "#/$defs/turnUsage",
+          "description": "Absent \u2014 not zero-filled \u2014 when the harness transcript records no usage, so 'not measured' never reads as 'cost nothing'."
+        },
+        "rewound_from": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The turn number this turn replaced: the user rewound past that turn and re-sent on the same conversational slot. Absent when the turn is not a rewind."
+        },
+        "rewind_kind": {
+          "type": "string",
+          "enum": [
+            "same_prompt",
+            "edited_prompt"
+          ],
+          "description": "Whether the re-sent prompt was byte-identical to the one it replaced or edited. Present exactly when rewound_from is."
         },
         "interjections": {
           "type": "array",
@@ -867,6 +930,28 @@
         },
         "transcript_path": {
           "type": "string"
+        },
+        "ended": {
+          "type": "object",
+          "description": "Written by the SessionEnd handler when the session terminates. Absent on a session still running, or one whose harness fires no SessionEnd.",
+          "required": [
+            "reason",
+            "ts"
+          ],
+          "properties": {
+            "reason": {
+              "$ref": "#/$defs/nonEmptyString",
+              "description": "The harness's own reason string (claude-code: clear | logout | prompt_input_exit | other), recorded verbatim rather than mapped, so a new harness value is preserved instead of collapsed."
+            },
+            "ts": {
+              "$ref": "#/$defs/timestampLike"
+            }
+          },
+          "additionalProperties": false
+        },
+        "usage": {
+          "$ref": "#/$defs/turnUsage",
+          "description": "Sum of the rendered turn usage blocks, sealed at SessionEnd. Absent when no turn recorded usage."
         }
       },
       "additionalProperties": true

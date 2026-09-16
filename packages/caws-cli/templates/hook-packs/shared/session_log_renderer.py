@@ -625,6 +625,15 @@ def accumulate_turns(events: list[dict[str, Any]], cwd: str) -> tuple[list[dict[
     # no turn ever opens, they emit as one synthetic turn — capture beats
     # purity for a session whose only content is user shell activity.
     pending_shell: list[dict[str, Any]] = []
+    # Deduplication for api_request usage, SESSION-scoped rather than
+    # per-turn: a fork or resume copies earlier rows verbatim into the head of
+    # the new transcript, so the same (message id, request id) can reappear in
+    # a different turn. A per-turn set would count those copies again.
+    seen_requests: set[tuple[str, str | None]] = set()
+    # parent_uuid -> the turn opened by the prompt that most recently claimed
+    # that conversational slot. A second turn-opening prompt on the same
+    # parent means the user rewound and re-sent.
+    prompt_parents: dict[str, dict[str, Any]] = {}
 
     def _turn_is_open(turn: dict[str, Any]) -> bool:
         return bool(
@@ -659,17 +668,74 @@ def accumulate_turns(events: list[dict[str, Any]], cwd: str) -> tuple[list[dict[
                 # are otherwise discarded by the turn-file-only renderer
                 # (SESSION-LOG-REMOTE-DEBRIEF-001 A4).
                 if text.startswith("[Request interrupted") and _turn_is_open(current):
-                    current["ended_by"] = "user_interrupt"
+                    # The two interrupt shapes are different steering acts and
+                    # the harness distinguishes them, so the log does too: the
+                    # "for tool use" variant is the user vetoing a specific
+                    # action the agent proposed, while the bare variant is the
+                    # user cutting generation off. Collapsing both to one
+                    # "user_interrupt" value discarded that distinction.
+                    current["ended_by"] = (
+                        "user_interrupt_tool"
+                        if text.startswith("[Request interrupted by user for tool use]")
+                        else "user_interrupt_generation"
+                    )
                 session_events.append(parse_control_event(text, ts))
                 continue
             if current["user"] or current["timeline"] or current["control_events"] or current["interjections"] or current["hook_contexts"]:
                 turns.append(current)
             current = new_turn(text, ts)
+            # Rewind detection. Only a prompt that OPENS a turn reaches here —
+            # noise rows and interrupts were filtered above, and tool_use /
+            # tool_result events never open a turn. That is what keeps the two
+            # structural false positives out: parallel tool calls also fan out
+            # parentUuid (tool_use -> [next tool_use, tool_result]), and a
+            # <local-command-caveat> row re-parents onto the same turn-closing
+            # record a re-typed prompt would (observed live). Neither is a
+            # turn-opening prompt, so neither can claim a slot here.
+            parent_uuid = entry.get("parent_uuid")
+            if isinstance(parent_uuid, str) and parent_uuid:
+                rewound = prompt_parents.get(parent_uuid)
+                if rewound is not None:
+                    current["rewound_from_turn"] = rewound
+                    current["rewind_kind"] = (
+                        "same_prompt" if (rewound.get("user") or "") == text else "edited_prompt"
+                    )
+                    rewound["rewound"] = True
+                # The newest claimant owns the slot, so a third attempt points
+                # at the second rather than chaining back to the first.
+                prompt_parents[parent_uuid] = current
             if pending_shell:
                 # Shell activity that preceded this first real turn prepends
                 # to it (SESSION-LOG-REMOTE-DEBRIEF-001 A2).
                 current["timeline"] = pending_shell + current["timeline"]
                 pending_shell = []
+            continue
+
+        if ev == "api_request":
+            message_id = entry.get("message_id")
+            if not isinstance(message_id, str) or not message_id:
+                continue
+            request_id = entry.get("request_id")
+            key = (message_id, request_id if isinstance(request_id, str) else None)
+            if key in seen_requests:
+                continue
+            seen_requests.add(key)
+            usage = entry.get("usage")
+            if not isinstance(usage, dict):
+                continue
+            totals = current.get("usage")
+            if totals is None:
+                totals = {"requests": 0, "input": 0, "cache_read": 0,
+                          "cache_write": 0, "output": 0, "models": []}
+                current["usage"] = totals
+            totals["requests"] += 1
+            for token_class in ("input", "cache_read", "cache_write", "output"):
+                value = usage.get(token_class)
+                if isinstance(value, int) and not isinstance(value, bool):
+                    totals[token_class] += value
+            model = entry.get("model")
+            if isinstance(model, str) and model:
+                append_unique(totals["models"], model)
             continue
 
         if ev == "user_shell":
@@ -1078,6 +1144,7 @@ def build_turn_payload(
     turn: dict[str, Any],
     number: int,
     context: dict[str, Any] | None = None,
+    turn_numbers: dict[int, int] | None = None,
 ) -> dict[str, Any]:
     reasoning_texts = [item["text"] for item in turn["timeline"] if item.get("kind") == "reasoning"]
     decisions, next_action, blocking_issue = extract_heuristic_fields(reasoning_texts)
@@ -1116,7 +1183,15 @@ def build_turn_payload(
         context.get("status") in ("block", "ask")
         for context in turn["hook_contexts"]
     )
-    status = "error" if turn_ended_in_error else "blocked" if blocking_issue or hook_blocked else "ok"
+    # "rewound" outranks the outcome statuses: whatever this turn produced was
+    # discarded when the user rewound past it and re-sent, so reporting it as
+    # ok/error/blocked would describe work that no longer counts.
+    status = (
+        "rewound" if turn.get("rewound")
+        else "error" if turn_ended_in_error
+        else "blocked" if blocking_issue or hook_blocked
+        else "ok"
+    )
 
     refs = {
         "files": {
@@ -1129,7 +1204,7 @@ def build_turn_payload(
         "artifacts": turn["artifacts"],
     }
 
-    return {
+    payload: dict[str, Any] = {
         "schema_version": 2,
         "turn": number,
         # Self-identification: the turn file travels alone (uploaded to a
@@ -1143,9 +1218,11 @@ def build_turn_payload(
         "user_ts": turn.get("user_ts"),
         "turn_summary": summary,
         "status": status,
-        # How the turn ended, when it did not end normally. Currently only
-        # "user_interrupt" (escape mid-action) — the strongest steering signal
-        # a session records. null means the agent finished on its own.
+        # How the turn ended, when it did not end normally. Escape mid-action
+        # is the strongest steering signal a session records, split by what
+        # the user cut off: "user_interrupt_tool" vetoed a proposed action,
+        # "user_interrupt_generation" cut off the reply. null means the agent
+        # finished on its own.
         "ended_by": turn.get("ended_by"),
         "decisions": decisions,
         "next_action": next_action,
@@ -1155,6 +1232,27 @@ def build_turn_payload(
         "interjections": turn["interjections"],
         "timeline": turn["timeline"],
     }
+
+    # Both blocks are added only when the signal exists. A harness whose
+    # transcript carries no usage must render NO usage key — a zero-filled
+    # block would read as "this turn cost nothing" instead of "not recorded".
+    usage = turn.get("usage")
+    if usage:
+        payload["usage"] = usage
+
+    # rewound_from is a TURN NUMBER, and numbers are assigned only after the
+    # non-substantive turns are filtered out, so accumulate_turns hands over an
+    # object reference and it is resolved here against the final numbering. An
+    # earlier turn that did not survive that filter yields no rewound_from
+    # rather than a number pointing at the wrong turn.
+    rewound_from = turn.get("rewound_from_turn")
+    if rewound_from is not None and turn_numbers is not None:
+        resolved = turn_numbers.get(id(rewound_from))
+        if resolved is not None:
+            payload["rewound_from"] = resolved
+            payload["rewind_kind"] = turn.get("rewind_kind")
+
+    return payload
 
 
 def run_git(cwd: str, args: list[str], max_output: int = 12000) -> str:
@@ -1314,8 +1412,12 @@ def _render_session_unlocked(
             "dirty_files": dirty,
             "lineage": transcript_lineage(transcript_path),
         }
+        # Built before any payload so a rewind can resolve a turn number that
+        # is only known once the substantive set is final.
+        turn_numbers = {id(turn): idx + 1 for idx, turn in enumerate(substantive)}
         turn_payloads = [
-            build_turn_payload(turn, idx + 1, context) for idx, turn in enumerate(substantive)
+            build_turn_payload(turn, idx + 1, context, turn_numbers)
+            for idx, turn in enumerate(substantive)
         ]
 
     if not turn_payloads:

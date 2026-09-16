@@ -61,6 +61,7 @@ export function observeSystemRuntime(repo: string): SystemRuntimeObservation | u
         session_start: 'SessionStart',
         stop: 'Stop',
         pre_compact: 'PreCompact',
+        session_end: 'SessionEnd',
       })) {
         const groups = native?.hooks?.[name];
         if (

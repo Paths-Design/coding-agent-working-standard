@@ -44,7 +44,7 @@ export function configHasCawsHooks(config: unknown): boolean {
 export function isCawsNativeCommand(command: unknown): command is string {
   return (
     typeof command === 'string' &&
-    /(?:\/(?:bin\/caws-hook)(?:['"\s;|&<>]|$)|\.caws\/hooks\/[^'"\s;|&<>]+\.sh(?:['"\s;|&<>]|$)|\.(?:codex|claude|qwen)\/hooks\/(?:(?:dispatch|caws_dispatch)\/(?:pre_tool_use|post_tool_use|session_start|stop|pre_compact)\.sh|(?:caws-qwen-hook|session-log)\.sh)(?:['"\s;|&<>]|$))/.test(
+    /(?:\/(?:bin\/caws-hook)(?:['"\s;|&<>]|$)|\.caws\/hooks\/[^'"\s;|&<>]+\.sh(?:['"\s;|&<>]|$)|\.(?:codex|claude|qwen)\/hooks\/(?:(?:dispatch|caws_dispatch)\/(?:pre_tool_use|post_tool_use|session_start|stop|pre_compact|session_end)\.sh|(?:caws-qwen-hook|session-log)\.sh)(?:['"\s;|&<>]|$))/.test(
       command
     )
   );
@@ -56,4 +56,5 @@ export const MACHINE_EVENTS = {
   session_start: 'SessionStart',
   stop: 'Stop',
   pre_compact: 'PreCompact',
+  session_end: 'SessionEnd',
 } as const;

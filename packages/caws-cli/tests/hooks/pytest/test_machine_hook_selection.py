@@ -81,6 +81,38 @@ class MachineHookSelection(unittest.TestCase):
             {'argv': command, 'exit_code': result.returncode, 'cwd': str(self.repo)}, indent=2))
         return result
 
+    def test_session_end_is_a_dispatchable_event_with_its_own_handler_policy(self):
+        # SESSION-LOG-STEERING-USAGE-SIGNALS-001 A4. session_end is a NEW
+        # lifecycle event, so three things must line up or the handler is
+        # unreachable: the launcher accepts the argument, the installed
+        # runtime snapshot carries a dispatcher for it, and system-policy.json
+        # names its default handlers. Asserting only the first would pass with
+        # nothing wired behind it.
+        policy = json.loads((self.runtime / 'system-policy.json').read_text())['events']
+        self.assertIn('session_end', policy)
+        self.assertIn('session-log.sh', policy['session_end'])
+        # session_end seals; it must NOT inherit stop's rendering fan-out.
+        self.assertNotIn('plan-transcript-finalize.sh', policy['session_end'])
+
+        described = subprocess.run(
+            ['python3', str(self.home / 'bin/caws-hook'), self.surface,
+             'session_end', '--system', '--describe'],
+            cwd=self.repo, env=self.env, capture_output=True,
+            input=json.dumps({'session_id': 'selection-session',
+                              'reason': 'other'}).encode())
+        self.assertEqual(described.returncode, 0, described.stderr)
+        selection = json.loads(described.stdout)
+        self.assertEqual(selection['event'], 'session_end')
+
+    def test_an_unknown_lifecycle_event_is_still_refused(self):
+        # Guard against the widening above being a hole: the launcher accepts
+        # exactly the declared events, not any string.
+        result = subprocess.run(
+            ['python3', str(self.home / 'bin/caws-hook'), self.surface,
+             'session_ended', '--system', '--describe'],
+            cwd=self.repo, env=self.env, capture_output=True, input=b'{}')
+        self.assertNotEqual(result.returncode, 0)
+
     def test_description_is_read_only_and_matches_executed_override(self):
         before = {str(p.relative_to(self.root)): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
         description = self.invoke('describe', '--describe')

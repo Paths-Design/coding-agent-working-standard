@@ -16,10 +16,14 @@
 # Session Logger — lean structured session capture.
 #
 # Canonical artifacts:
-#   session.json       — session index + aggregated refs + git snapshot
-#   turn-001.json      — per-turn detailed timeline
-#   handoff.json       — compact continuation view for follow-on agents
-#   session.txt        — human-readable summary pointing at the JSON artifacts
+#   turn-001.json      — per-turn detailed timeline; the only artifact the
+#                        renderer emits. The former aggregates (session.json,
+#                        handoff.json, session.txt) were write-only
+#                        duplication of these files and are now deleted on
+#                        sight by remove_legacy_aggregates().
+#   .meta.json         — session-scoped metadata, written at SessionStart and
+#                        sealed at SessionEnd with the exit reason and the
+#                        session usage total.
 #
 # Output: <canonical-repo-root>/.caws/sessions/<session-id>/
 # (CAWS-SESSION-LOG-RELOCATE-001: per-session state lives under .caws/sessions/
@@ -237,6 +241,68 @@ handle_stop() {
   render_session_output "$(resolve_transcript)"
 }
 
+# The harness's own SessionEnd reason, read verbatim. parse-input.sh does not
+# extract it (no guard needs it), so it is pulled from the payload here rather
+# than by widening the shared scalar extractor for one handler. Both transport
+# modes are covered: a large payload lives in HOOK_PAYLOAD_FILE and the inline
+# variable is deliberately absent there.
+_session_end_reason() {
+  local raw=""
+  if [[ "${HOOK_PAYLOAD_TRUNCATED:-0}" == "1" && -n "${HOOK_PAYLOAD_FILE:-}" ]]; then
+    raw=$(jq -r '.reason // empty' "$HOOK_PAYLOAD_FILE" 2>/dev/null) || raw=""
+  elif [[ -n "${HOOK_INPUT_JSON:-}" ]]; then
+    raw=$(printf '%s' "$HOOK_INPUT_JSON" | jq -r '.reason // empty' 2>/dev/null) || raw=""
+  fi
+  printf '%s\n' "${raw:-other}"
+}
+
+# SessionEnd SEALS; it never renders. A render here would race the Stop
+# handler's final render while the harness is tearing down, and could rewrite
+# turn files mid-exit. Every failure path returns 0: the session is already
+# ending and a logger must never be what blocks it.
+handle_session_end() {
+  [[ -f "$META_FILE" ]] || return 0
+
+  local turn_count usage sealed tmp
+  turn_count=$(find "$LOG_DIR" -maxdepth 1 -name 'turn-*.json' 2>/dev/null | wc -l | tr -d ' ')
+
+  usage='null'
+  if [[ "${turn_count:-0}" -gt 0 ]]; then
+    # Session usage is the sum of what was rendered, so it can never
+    # contradict the turn files a reader has in front of them. models keeps
+    # first-seen order rather than sorting, matching the per-turn contract.
+    usage=$(find "$LOG_DIR" -maxdepth 1 -name 'turn-*.json' -exec cat {} + 2>/dev/null | jq -s '
+      [ .[] | .usage // empty ]
+      | if length == 0 then null
+        else {
+          requests:    (map(.requests)    | add),
+          input:       (map(.input)       | add),
+          cache_read:  (map(.cache_read)  | add),
+          cache_write: (map(.cache_write) | add),
+          output:      (map(.output)      | add),
+          models:      ([ .[] | .models[] ]
+                        | reduce .[] as $m ([]; if index($m) then . else . + [$m] end))
+        }
+        end' 2>/dev/null) || usage='null'
+  fi
+  [[ -n "$usage" ]] || usage='null'
+
+  sealed=$(jq -c \
+    --arg reason "$(_session_end_reason)" \
+    --arg ts "$TIMESTAMP" \
+    --argjson usage "$usage" \
+    '. + {ended: {reason: $reason, ts: $ts}}
+       + (if $usage == null then {} else {usage: $usage} end)' \
+    "$META_FILE" 2>/dev/null) || return 0
+  [[ -n "$sealed" ]] || return 0
+
+  # Atomic replace: a reader must never observe a half-written .meta.json.
+  tmp="${META_FILE}.tmp.$$"
+  printf '%s\n' "$sealed" > "$tmp" 2>/dev/null && mv -f "$tmp" "$META_FILE" 2>/dev/null
+  rm -f "$tmp" 2>/dev/null
+  return 0
+}
+
 handle_pre_compact() {
   render_session_output "$(resolve_transcript)"
 }
@@ -289,6 +355,7 @@ handle_post_tool_use() {
 case "$HOOK_EVENT" in
   SessionStart) handle_session_start ;;
   Stop) handle_stop ;;
+  SessionEnd) handle_session_end ;;
   PreCompact) handle_pre_compact ;;
   PostToolUse) handle_post_tool_use ;;
   *) ;;
