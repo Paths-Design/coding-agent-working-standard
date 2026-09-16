@@ -35,3 +35,9 @@ acceptance:
     then: 'it is directed to caws worktree create, which confers write authority without moving the canonical HEAD'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "worktree-isolation.md:71-76 (commit da9c6cdf) states canonical HEAD is shared state and that every session's CAWS lifecycle auto-commit (specs evidence, specs close, worktree bind/destroy) lands on whatever branch canonical has checked out regardless of which session created it; the forbidden-ops list gains 'git checkout -b in the canonical checkout'. CLAUDE.md Worktree discipline carries the same rule as its first bullet."
+    recorded_at: "2026-09-16T05:20:23.931Z"
+    commit_sha: da9c6cdf
