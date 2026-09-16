@@ -135,3 +135,9 @@ evidence:
     recorded_at: "2026-09-16T22:26:01.692Z"
     test_nodeid: packages/caws-cli/tests/shell/specs-verify-acs.test.js
     commit_sha: "01dc84ca"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "tests/store/evidence-rederive.test.js covers the four fabrication fixtures: a nodeid naming no test, an artifact_path absent at the cited revision, a commit_sha that is no object, and a commit_sha that is an object but unreachable. Each yields refuted with a distinct reason (test_not_found, artifact_missing, object_missing, object_unreachable)."
+    recorded_at: "2026-09-16T22:26:33.263Z"
+    test_nodeid: packages/caws-cli/tests/store/evidence-rederive.test.js
+    commit_sha: "01dc84ca"
