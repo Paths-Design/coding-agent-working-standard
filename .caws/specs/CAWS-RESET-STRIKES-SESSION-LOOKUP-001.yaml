@@ -75,3 +75,10 @@ evidence:
     command: npx bats tests/hooks/bats/reset-strikes.bats
     exit_code: 0
     commit_sha: "4e7cf268"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "SHARED_PACK_VERSION 78->79 in manifest-shared.ts with a v79 rationale comment matching the file's per-bump convention, and tests/init/pack-fingerprints.json shared entry updated to version 79 / fingerprint b2fa4b2d0155d724384c07796ce574958f22fb244af367f3dcf7dd294aa4bee8. The new fingerprint was DERIVED from the failing pack-fingerprint.test.js diff (expected 3d53d501... received b2fa4b2d...), not hand-authored - that guard recomputes sha256 over the sorted [relpath, contentHash] pairs of the live template tree, so it detects exactly the class this AC exists for: a template change landing without a version bump. tests/init 13 suites / 242 tests green after the bump. Propagation NECESSITY measured: find ~/.caws/lib/runtimes -name reset-strikes.sh -exec grep -l 'guard-strikes-${SESSION}' = 28 of 28."
+    recorded_at: "2026-09-16T08:16:53.614Z"
+    command: npx jest tests/init
+    exit_code: 0
+    commit_sha: "48218b45"
