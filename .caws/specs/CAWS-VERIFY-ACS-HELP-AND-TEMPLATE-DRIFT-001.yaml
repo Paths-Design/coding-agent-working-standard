@@ -2,9 +2,10 @@ id: CAWS-VERIFY-ACS-HELP-AND-TEMPLATE-DRIFT-001
 title: 'Derive the executable-runner split into --help, correct the pytest resolution claim, and unstale the shipped removed-command templates'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-help-drift
 created_at: '2026-09-16T23:33:40.123Z'
-updated_at: '2026-09-16T23:33:40.123Z'
+updated_at: '2026-09-16T23:33:51.039Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
