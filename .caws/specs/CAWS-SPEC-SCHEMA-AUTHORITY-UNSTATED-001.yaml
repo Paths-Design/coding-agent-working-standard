@@ -63,3 +63,10 @@ evidence:
     command: npx jest tests/store/doctor-snapshot-legacy-spec-schema.test.js tests/kernel/unit/doctor-legacy-spec-schema.test.ts
     exit_code: 0
     commit_sha: fd4c2108
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Real spawned CLI. On success stdout carries 'Authority: the kernel spec schema (spec.v1). Project-local schema files under .caws/ (e.g. working-spec.schema.json) are legacy residue and are NOT consulted.' - asserted on all three parts (names the winner, names the loser by filename, says NOT consulted), because naming only the winner leaves the operator's actual false belief standing. The failure path carries the same note on stderr (verified live against a spec carrying the forbidden change_budget key). A third test pins that the note is WITHHELD when no verdict was reached (unreadable file), so it never asserts an authority that was not applied. NON-VACUOUS: deleting the success-path note turns A3 RED."
+    recorded_at: "2026-09-16T06:57:19.259Z"
+    command: npx jest tests/shell/specs-validate-authority.test.js
+    exit_code: 0
+    commit_sha: fd4c2108
