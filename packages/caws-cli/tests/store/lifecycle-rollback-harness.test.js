@@ -38,7 +38,12 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const { createSpec, closeSpec, archiveSpec, retireDraftSpec } = require('../../dist/store/specs-writer');
+const {
+  createSpec,
+  closeSpec,
+  archiveSpec,
+  retireDraftSpec,
+} = require('../../dist/store/specs-writer');
 const {
   createWorktree,
   bindWorktreeRepair,
@@ -242,7 +247,12 @@ describe('closeSpec — inject on spec_closed [classify: transaction-contained]'
     const preCount = readEventsRaw(caws).length;
 
     const result = withFault('spec_closed', () =>
-      closeSpec(caws, { id, resolution: 'completed', reason: 'test closure under rollback fault', actor: ACTOR })
+      closeSpec(caws, {
+        id,
+        resolution: 'completed',
+        reason: 'test closure under rollback fault',
+        actor: ACTOR,
+      })
     );
 
     expect(result.ok).toBe(true);
@@ -309,7 +319,11 @@ describe('closeSpec closure_notes preservation [CAWS-CLI-MERGE-AUTOCLOSE-PRESERV
     const id = 'HARNESS-NOTES-BLOCK-001';
     // Block scalar — preserved before the fix too; pinned so a future
     // refactor of the preserve logic cannot regress the block-scalar path.
-    const block = ['closure_notes: |', '  line one of author notes', '  line two of author notes'].join('\n');
+    const block = [
+      'closure_notes: |',
+      '  line one of author notes',
+      '  line two of author notes',
+    ].join('\n');
     writeActiveSpecWithNotes(caws, id, block);
 
     const result = closeSpec(caws, {
@@ -391,9 +405,7 @@ describe('retireDraftSpec — inject on spec_retired [classify: transaction-cont
     commitCaws(repo, 'add draft fixture'); // retire requires blob_sha at HEAD
     const preCount = readEventsRaw(caws).length;
 
-    const result = withFault('spec_retired', () =>
-      retireDraftSpec(caws, { id, actor: ACTOR })
-    );
+    const result = withFault('spec_retired', () => retireDraftSpec(caws, { id, actor: ACTOR }));
 
     expect(result.ok).toBe(true);
     expect(result.value.kind).toBe('partial_failure_recovered');
@@ -414,14 +426,17 @@ describe('archiveSpec — inject on spec_archived [classify: external-unlink gat
     writeActiveSpec(caws, id, 'active');
     commitCaws(repo, 'add active fixture'); // archive requires blob_sha at HEAD
     // archiveSpec requires a closed spec; close it first (cleanly).
-    const closeRes = closeSpec(caws, { id, resolution: 'completed', reason: 'closing before archive test', actor: ACTOR });
+    const closeRes = closeSpec(caws, {
+      id,
+      resolution: 'completed',
+      reason: 'closing before archive test',
+      actor: ACTOR,
+    });
     expect(closeRes.ok).toBe(true);
     expect(closeRes.value.kind).toBe('success');
     const preCount = readEventsRaw(caws).length;
 
-    const result = withFault('spec_archived', () =>
-      archiveSpec(caws, { id, actor: ACTOR })
-    );
+    const result = withFault('spec_archived', () => archiveSpec(caws, { id, actor: ACTOR }));
 
     expect(result.ok).toBe(true);
     expect(result.value.kind).toBe('partial_failure_recovered');
@@ -441,7 +456,18 @@ describe('archiveSpec — inject on spec_archived [classify: external-unlink gat
 
 /** A committed active spec a worktree can bind to. */
 function seedBoundableSpec(caws, id) {
-  const r = createSpec(caws, { id, title: 'x', mode: 'chore', riskTier: 3, actor: ACTOR });
+  // scopeIn is declared because binding refuses a spec whose scope.in is still
+  // the create scaffold (CAWS-SPEC-SCOPE-IN-PLACEHOLDER-CONTRACT-001). These
+  // lanes commit only spec YAML, so the path itself is immaterial — what
+  // matters is that the surface was declared rather than left unfilled.
+  const r = createSpec(caws, {
+    id,
+    title: 'x',
+    mode: 'chore',
+    riskTier: 3,
+    actor: ACTOR,
+    scopeIn: ['payload.txt'],
+  });
   if (!r.ok || r.value.kind !== 'success') {
     throw new Error('seed spec failed: ' + JSON.stringify(r));
   }
@@ -480,7 +506,9 @@ describe('createWorktree — SECOND-event injection on worktree_bound [classify:
     // first event (worktree_created) was already appended and cannot be
     // un-appended. The result tells the truth — UNRECOVERED, not recovered.
     expect(result.ok).toBe(false);
-    expect(result.errors.map((e) => e.rule)).toContain('store.lifecycle.partial_failure_unrecovered');
+    expect(result.errors.map((e) => e.rule)).toContain(
+      'store.lifecycle.partial_failure_unrecovered'
+    );
     // worktree_created remains in the immutable hash chain.
     const kinds = readEventsRaw(caws).map((e) => e.event);
     expect(kinds).toContain('worktree_created');

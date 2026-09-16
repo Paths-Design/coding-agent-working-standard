@@ -48,23 +48,12 @@ import {
 
 import { appendEvent, loadEvents } from './events-store';
 import { loadSpecs } from './specs-store';
-import {
-  autoCommit,
-  isPathDirty,
-  type AutoCommitOutcome,
-} from './git-autocommit';
-import {
-  runLifecycleTransaction,
-  type LifecycleTransactionResult,
-} from './lifecycle-transaction';
+import { autoCommit, isPathDirty, type AutoCommitOutcome } from './git-autocommit';
+import { runLifecycleTransaction, type LifecycleTransactionResult } from './lifecycle-transaction';
 import { withLifecycleLock } from './lifecycle-lock';
 import { repoRootFromCawsDir, storeDiagnostic, validateSpecId } from './repo-root';
 import { STORE_RULES } from './rules';
-import {
-  insertTopLevelScalarAfter,
-  removeTopLevelScalar,
-  setTopLevelScalar,
-} from './yaml-patch';
+import { insertTopLevelScalarAfter, removeTopLevelScalar, setTopLevelScalar } from './yaml-patch';
 import { readYamlSource } from './yaml-store';
 
 // ─── Common types ────────────────────────────────────────────────────────
@@ -189,9 +178,7 @@ function buildSuccessorCorpus(cawsDir: string): SpecCorpusEntry[] | undefined {
   const loaded = loadSpecs(cawsDir);
   // loadSpecs reports an unreadable specs dir as READ_IO_FAILED with zero
   // specs. Distinguish that from a legitimately empty repository.
-  const readFailed = loaded.diagnostics.some(
-    (d) => d.rule === STORE_RULES.READ_IO_FAILED
-  );
+  const readFailed = loaded.diagnostics.some((d) => d.rule === STORE_RULES.READ_IO_FAILED);
   if (readFailed && loaded.specs.length === 0) return undefined;
 
   const entries: SpecCorpusEntry[] = loaded.specs.map((s) => ({
@@ -238,10 +225,7 @@ function buildSuccessorCorpus(cawsDir: string): SpecCorpusEntry[] | undefined {
   return entries;
 }
 
-function unresolvedObligationMessage(
-  specId: string,
-  u: UnresolvedObligation
-): string {
+function unresolvedObligationMessage(specId: string, u: UnresolvedObligation): string {
   const where = `successors[${u.index}].${u.field}`;
   switch (u.outcome) {
     case 'UNAUTHORED':
@@ -257,8 +241,7 @@ function unresolvedObligationMessage(
       );
     case 'MALFORMED_ID':
       return (
-        `Cannot close "${specId}": ${where} ("${u.target_spec_id}") is not a ` +
-        `valid spec id.`
+        `Cannot close "${specId}": ${where} ("${u.target_spec_id}") is not a ` + `valid spec id.`
       );
     default:
       return `Cannot close "${specId}": ${where} ("${u.target_spec_id}") did not resolve.`;
@@ -620,11 +603,7 @@ export type SpecWriterOutcome =
 function specPath(cawsDir: string, id: string): string {
   return path.join(cawsDir, 'specs', `${id}.yaml`);
 }
-function specRelPath(
-  cawsDir: string,
-  id: string,
-  repoRoot: string
-): string {
+function specRelPath(cawsDir: string, id: string, repoRoot: string): string {
   return path.relative(repoRoot, specPath(cawsDir, id));
 }
 function hasComplexTopLevelValue(source: string, key: string): boolean {
@@ -776,10 +755,7 @@ function runGitQuery(
  * recorded in a spec_archived event, `git show <blob_sha>` recovers
  * the body regardless of subsequent commit graph rewrites.
  */
-function gitBlobShaAtHead(
-  repoRoot: string,
-  relPath: string
-): string | null {
+function gitBlobShaAtHead(repoRoot: string, relPath: string): string | null {
   const output = runGitQuery(['ls-tree', 'HEAD', '--', relPath], repoRoot);
   if (output === null || output.length === 0) return null;
   // Output shape: "<mode> <type> <sha>\t<path>"
@@ -794,14 +770,8 @@ function gitBlobShaAtHead(
  * null if no such commit exists (file never tracked). Recorded for
  * human audit on spec_archived events; NOT used by recover.
  */
-function gitLastCommitForPath(
-  repoRoot: string,
-  relPath: string
-): string | null {
-  const output = runGitQuery(
-    ['log', '-1', '--format=%H', '--', relPath],
-    repoRoot
-  );
+function gitLastCommitForPath(repoRoot: string, relPath: string): string | null {
+  const output = runGitQuery(['log', '-1', '--format=%H', '--', relPath], repoRoot);
   if (output === null || output.length === 0) return null;
   return /^[0-9a-f]{40}$/.test(output) ? output : null;
 }
@@ -892,13 +862,7 @@ function attachAutoCommit(
 ): Result<SpecWriterOutcome> {
   if (!isOk(outcome)) return outcome;
   if (outcome.value.kind !== 'success') return outcome;
-  const audit = autoCommitSpecWrite(
-    cawsDir,
-    specId,
-    action,
-    wasDirtyBeforeWrite,
-    extraPaths
-  );
+  const audit = autoCommitSpecWrite(cawsDir, specId, action, wasDirtyBeforeWrite, extraPaths);
   return ok({
     ...outcome.value,
     data: { audit_commit: audit },
@@ -922,13 +886,11 @@ function renderInitialSpecYaml(input: CreateSpecInput): string {
   // paths are supplied, fall back to the single scaffold line that
   // preserves prior behavior.
   const dedupedScopeIn =
-    input.scopeIn !== undefined && input.scopeIn.length > 0
-      ? [...new Set(input.scopeIn)]
-      : null;
+    input.scopeIn !== undefined && input.scopeIn.length > 0 ? [...new Set(input.scopeIn)] : null;
   const scopeInLines =
     dedupedScopeIn !== null
       ? dedupedScopeIn.map((p) => `    - '${p.replace(/'/g, "''")}'`)
-      : [`    - 'TODO: list the file(s) or directories this spec authorizes.'`];
+      : [`    - '${SCOPE_IN_PLACEHOLDER}'`];
   const sq = (s: string): string => `'${s.replace(/'/g, "''")}'`;
   const acceptanceLines =
     input.acceptance !== undefined && input.acceptance.length > 0
@@ -941,13 +903,7 @@ function renderInitialSpecYaml(input: CreateSpecInput): string {
             `    then: ${sq(entry.then)}`,
           ]),
         ]
-      : [
-          `acceptance:`,
-          `  - id: A1`,
-          `    given: 'TODO'`,
-          `    when: 'TODO'`,
-          `    then: 'TODO'`,
-        ];
+      : [`acceptance:`, `  - id: A1`, `    given: 'TODO'`, `    when: 'TODO'`, `    then: 'TODO'`];
   // FIX-SPECS-CONTRACT-ORIENTATION-001: when --contract entries were supplied,
   // render them so a tier-1/2 spec is created valid in one command. Each entry
   // is {name, type[, path]}; single-quote string scalars defensively. When none
@@ -960,9 +916,7 @@ function renderInitialSpecYaml(input: CreateSpecInput): string {
           ...input.contracts.flatMap((c) => [
             `  - name: ${sq(c.name)}`,
             `    type: ${c.type}`,
-            ...(c.path !== undefined && c.path.length > 0
-              ? [`    path: ${sq(c.path)}`]
-              : []),
+            ...(c.path !== undefined && c.path.length > 0 ? [`    path: ${sq(c.path)}`] : []),
           ]),
         ]
       : [`contracts: []`];
@@ -1057,6 +1011,22 @@ export const MODULES_PLACEHOLDER = 'TODO: list one or more modules this spec tou
 export const INVARIANTS_PLACEHOLDER = 'TODO: describe one invariant this spec guarantees.';
 
 /**
+ * The scope.in scaffold, written when `caws specs create` is given no
+ * `--scope-in`. Same single-source contract as the two above, and it was
+ * missing from it: the string lived inline in the create renderer, so
+ * `isScaffoldPlaceholder` did not recognise it, `placeholderFields` did not
+ * report it, and `amend-scope --add` appended beside it instead of replacing
+ * it the way `amend --add-module` replaces MODULES_PLACEHOLDER. Ten specs in
+ * this repo reached closed or archived still carrying it — eight of them
+ * alongside a fully declared scope.in, which is the appended-not-replaced
+ * signature.
+ *
+ * scope.in is the one placeholder that is also an authority claim, so it
+ * additionally gates binding: see assertScopeInDeclared in worktrees-writer.
+ */
+export const SCOPE_IN_PLACEHOLDER = 'TODO: list the file(s) or directories this spec authorizes.';
+
+/**
  * The create scaffold's acceptance placeholder: each of given/when/then
  * renders as the bare string 'TODO' (the create template above). Same
  * single-source contract as the two placeholders above — the renderer that
@@ -1068,7 +1038,11 @@ export const INVARIANTS_PLACEHOLDER = 'TODO: describe one invariant this spec gu
 export const ACCEPTANCE_PLACEHOLDER = 'TODO';
 
 export function isScaffoldPlaceholder(value: string): boolean {
-  return value === MODULES_PLACEHOLDER || value === INVARIANTS_PLACEHOLDER;
+  return (
+    value === MODULES_PLACEHOLDER ||
+    value === INVARIANTS_PLACEHOLDER ||
+    value === SCOPE_IN_PLACEHOLDER
+  );
 }
 
 /** Placeholder fields still present in a parsed spec, for advisories. */
@@ -1080,15 +1054,15 @@ export function placeholderFields(spec: Spec): string[] {
   if (spec.invariants?.some((i) => i === INVARIANTS_PLACEHOLDER) === true) {
     fields.push('invariants');
   }
+  if (spec.scope?.in?.some((p) => p === SCOPE_IN_PLACEHOLDER) === true) {
+    fields.push('scope.in');
+  }
   return fields;
 }
 
 // ─── createSpec ──────────────────────────────────────────────────────────
 
-export function planCreateSpec(
-  cawsDir: string,
-  input: CreateSpecInput
-): Result<CreateSpecPlan> {
+export function planCreateSpec(cawsDir: string, input: CreateSpecInput): Result<CreateSpecPlan> {
   const idValidation = validateSpecId(input.id);
   if (!idValidation.ok) return idValidation;
 
@@ -1133,14 +1107,10 @@ export function planCreateSpec(
     : parsed.errors.map((d) =>
         storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
           subject: d.subject ?? input.id,
-          ...(d.narrowRepair !== undefined
-            ? { narrowRepair: d.narrowRepair }
-            : {}),
+          ...(d.narrowRepair !== undefined ? { narrowRepair: d.narrowRepair } : {}),
           data: {
             source_rule: d.rule,
-            ...(d.location?.pointer !== undefined
-              ? { source_pointer: d.location.pointer }
-              : {}),
+            ...(d.location?.pointer !== undefined ? { source_pointer: d.location.pointer } : {}),
           },
         })
       );
@@ -1154,10 +1124,7 @@ export function planCreateSpec(
   });
 }
 
-export function createSpec(
-  cawsDir: string,
-  input: CreateSpecInput
-): Result<SpecWriterOutcome> {
+export function createSpec(cawsDir: string, input: CreateSpecInput): Result<SpecWriterOutcome> {
   const plan = planCreateSpec(cawsDir, input);
   if (!isOk(plan)) return plan;
   if (!plan.value.valid) return err(plan.value.diagnostics);
@@ -1188,10 +1155,7 @@ export function createSpec(
   // findSpecPath, but defense-in-depth), and (b) the contract is
   // that callers always observe data.audit_commit on success.
   const repoRoot = repoRootFromCawsDir(cawsDir);
-  const wasDirtyBeforeWrite = isPathDirty(
-    repoRoot,
-    specRelPath(cawsDir, input.id, repoRoot)
-  );
+  const wasDirtyBeforeWrite = isPathDirty(repoRoot, specRelPath(cawsDir, input.id, repoRoot));
 
   const txnResult = withLifecycleLock(cawsDir, () =>
     runLifecycleTransaction({
@@ -1209,10 +1173,7 @@ export function createSpec(
 
 // ─── activateSpec ────────────────────────────────────────────────────────
 
-export function activateSpec(
-  cawsDir: string,
-  input: ActivateSpecInput
-): Result<SpecWriterOutcome> {
+export function activateSpec(cawsDir: string, input: ActivateSpecInput): Result<SpecWriterOutcome> {
   const idValidation = validateSpecId(input.id);
   if (!idValidation.ok) return idValidation;
 
@@ -1243,9 +1204,7 @@ export function activateSpec(
           // only d.message silently discarded it, leaving a first-timer with a
           // bare "requires a contract" and no way forward.
           // (CAWS-SPEC-CREATE-FIRSTTIMER-UX-001 A1/A2)
-          ...(d.narrowRepair !== undefined
-            ? { narrowRepair: d.narrowRepair }
-            : {}),
+          ...(d.narrowRepair !== undefined ? { narrowRepair: d.narrowRepair } : {}),
           data: { source_rule: d.rule },
         })
       )
@@ -1310,10 +1269,7 @@ export function activateSpec(
   } as unknown as EventBody;
 
   const repoRoot = repoRootFromCawsDir(cawsDir);
-  const wasDirtyBeforeWrite = isPathDirty(
-    repoRoot,
-    specRelPath(cawsDir, input.id, repoRoot)
-  );
+  const wasDirtyBeforeWrite = isPathDirty(repoRoot, specRelPath(cawsDir, input.id, repoRoot));
 
   const txnResult = withLifecycleLock(cawsDir, () =>
     runLifecycleTransaction({
@@ -1373,10 +1329,7 @@ export function unsatisfiedAcceptanceCriteria(spec: Spec): UnsatisfiedCriterion[
 
 // ─── closeSpec ───────────────────────────────────────────────────────────
 
-export function closeSpec(
-  cawsDir: string,
-  input: CloseSpecInput
-): Result<SpecWriterOutcome> {
+export function closeSpec(cawsDir: string, input: CloseSpecInput): Result<SpecWriterOutcome> {
   const idValidation = validateSpecId(input.id);
   if (!idValidation.ok) return idValidation;
 
@@ -1432,9 +1385,7 @@ export function closeSpec(
           // only d.message silently discarded it, leaving a first-timer with a
           // bare "requires a contract" and no way forward.
           // (CAWS-SPEC-CREATE-FIRSTTIMER-UX-001 A1/A2)
-          ...(d.narrowRepair !== undefined
-            ? { narrowRepair: d.narrowRepair }
-            : {}),
+          ...(d.narrowRepair !== undefined ? { narrowRepair: d.narrowRepair } : {}),
           data: { source_rule: d.rule },
         })
       )
@@ -1479,10 +1430,7 @@ export function closeSpec(
   // governable, not whether it is finished.
   if (spec.successors !== undefined && spec.successors.length > 0) {
     const corpus = buildSuccessorCorpus(cawsDir);
-    const unresolved = findUnresolvedObligations(
-      spec.successors,
-      createSuccessorResolver(corpus)
-    );
+    const unresolved = findUnresolvedObligations(spec.successors, createSuccessorResolver(corpus));
     if (unresolved.length > 0) {
       return err(
         unresolved.map((u) =>
@@ -1624,20 +1572,14 @@ export function closeSpec(
       // overwritten either way). The fillable case for a stub is *absent*
       // notes, handled by the `else` insert branch below.
       const isEmptyNotes = /^closure_notes:[ \t]*(#.*)?$/m.test(patched);
-      const preserve =
-        input.preserveExistingNotes === true && !isEmptyNotes;
+      const preserve = input.preserveExistingNotes === true && !isEmptyNotes;
       if (!preserve && !hasComplexTopLevelValue(patched, 'closure_notes')) {
         const step3 = setTopLevelScalar(patched, 'closure_notes', escaped);
         if (!step3.ok) return err(step3.errors);
         patched = step3.value;
       }
     } else {
-      const step3 = insertTopLevelScalarAfter(
-        patched,
-        'resolution',
-        'closure_notes',
-        escaped
-      );
+      const step3 = insertTopLevelScalarAfter(patched, 'resolution', 'closure_notes', escaped);
       if (!step3.ok) return err(step3.errors);
       patched = step3.value;
     }
@@ -1683,9 +1625,7 @@ export function closeSpec(
   // no-op (per removeTopLevelScalar's contract) and no prior_worktree
   // is recorded.
   const priorWorktree =
-    typeof spec.worktree === 'string' && spec.worktree.length > 0
-      ? spec.worktree
-      : undefined;
+    typeof spec.worktree === 'string' && spec.worktree.length > 0 ? spec.worktree : undefined;
   const step5 = removeTopLevelScalar(patched, 'worktree');
   if (!step5.ok) return err(step5.errors);
   patched = step5.value;
@@ -1735,10 +1675,7 @@ export function closeSpec(
   // 'refused_dirty'); the close itself still applies to the working
   // tree.
   const repoRoot = repoRootFromCawsDir(cawsDir);
-  const wasDirtyBeforeWrite = isPathDirty(
-    repoRoot,
-    specRelPath(cawsDir, input.id, repoRoot)
-  );
+  const wasDirtyBeforeWrite = isPathDirty(repoRoot, specRelPath(cawsDir, input.id, repoRoot));
 
   const txnResult = withLifecycleLock(cawsDir, () =>
     runLifecycleTransaction({
@@ -1756,11 +1693,13 @@ export function closeSpec(
   // into the success outcome (additive, non-blocking) so agents see which ACs
   // lack evidence when the close proceeds. Mirrors amendScopeSpec's composeWarnings.
   if (evidenceWarnings.length > 0 && isOk(committed) && committed.value.kind === 'success') {
-    return ok({ ...committed.value, warnings: [...(committed.value.warnings ?? []), ...evidenceWarnings] });
+    return ok({
+      ...committed.value,
+      warnings: [...(committed.value.warnings ?? []), ...evidenceWarnings],
+    });
   }
   return committed;
 }
-
 
 // ─── reopenSpec ──────────────────────────────────────────────────────────
 
@@ -1783,10 +1722,7 @@ export interface ReopenSpecInput {
 // the same at its 3263-3272). The worktree binding is left absent (close
 // already cleared it; reopen -> unbound -> operator re-binds via worktree
 // create/bind, which requires active). worktrees.json is not touched.
-export function reopenSpec(
-  cawsDir: string,
-  input: ReopenSpecInput
-): Result<SpecWriterOutcome> {
+export function reopenSpec(cawsDir: string, input: ReopenSpecInput): Result<SpecWriterOutcome> {
   const idValidation = validateSpecId(input.id);
   if (!idValidation.ok) return idValidation;
 
@@ -1922,10 +1858,7 @@ export function reopenSpec(
   } as unknown as EventBody;
 
   const repoRoot = repoRootFromCawsDir(cawsDir);
-  const wasDirtyBeforeWrite = isPathDirty(
-    repoRoot,
-    specRelPath(cawsDir, input.id, repoRoot)
-  );
+  const wasDirtyBeforeWrite = isPathDirty(repoRoot, specRelPath(cawsDir, input.id, repoRoot));
 
   const txnResult = withLifecycleLock(cawsDir, () =>
     runLifecycleTransaction({
@@ -2161,10 +2094,7 @@ export function deactivateSpec(
 
 // ─── archiveSpec ─────────────────────────────────────────────────────────
 
-export function archiveSpec(
-  cawsDir: string,
-  input: ArchiveSpecInput
-): Result<SpecWriterOutcome> {
+export function archiveSpec(cawsDir: string, input: ArchiveSpecInput): Result<SpecWriterOutcome> {
   const idValidation = validateSpecId(input.id);
   if (!idValidation.ok) return idValidation;
 
@@ -2206,9 +2136,7 @@ export function archiveSpec(
           // only d.message silently discarded it, leaving a first-timer with a
           // bare "requires a contract" and no way forward.
           // (CAWS-SPEC-CREATE-FIRSTTIMER-UX-001 A1/A2)
-          ...(d.narrowRepair !== undefined
-            ? { narrowRepair: d.narrowRepair }
-            : {}),
+          ...(d.narrowRepair !== undefined ? { narrowRepair: d.narrowRepair } : {}),
           data: { source_rule: d.rule },
         })
       )
@@ -2243,9 +2171,7 @@ export function archiveSpec(
     const existingBytes = readYamlSource(toPath);
     // An unreadable existing body is not a reason to proceed blindly: we would
     // be overwriting something we cannot preserve. Surface it as the collision.
-    const existingUpdatedAt = isOk(existingBytes)
-      ? topLevelUpdatedAt(existingBytes.value)
-      : null;
+    const existingUpdatedAt = isOk(existingBytes) ? topLevelUpdatedAt(existingBytes.value) : null;
     const incomingUpdatedAt = topLevelUpdatedAt(originalBytes);
 
     if (input.replace !== true) {
@@ -2345,8 +2271,7 @@ export function archiveSpec(
     data: eventData,
   } as unknown as EventBody;
 
-  const wasDirtyBeforeWrite =
-    isPathDirty(repoRoot, fromRel) || isPathDirty(repoRoot, toRel);
+  const wasDirtyBeforeWrite = isPathDirty(repoRoot, fromRel) || isPathDirty(repoRoot, toRel);
   let unlinkOk = false;
   let unlinkError: string | null = null;
 
@@ -2446,7 +2371,10 @@ export function archiveSpec(
 
 // ─── selectClosedSpecsForArchive ────────────────────────────────────────
 
-function closedArchiveFreshness(spec: Spec, nowMs: number): {
+function closedArchiveFreshness(
+  spec: Spec,
+  nowMs: number
+): {
   readonly timestamp?: string;
   readonly timestampMs?: number;
   readonly age_ms?: number;
@@ -2539,7 +2467,10 @@ export function selectClosedSpecsForArchive(
     }
     updatedBeforeMs = parsed;
   }
-  if (input.olderThanMs !== undefined && (!Number.isInteger(input.olderThanMs) || input.olderThanMs < 0)) {
+  if (
+    input.olderThanMs !== undefined &&
+    (!Number.isInteger(input.olderThanMs) || input.olderThanMs < 0)
+  ) {
     return err(
       storeDiagnostic(
         STORE_RULES.LIFECYCLE_PLAN_REJECTED,
@@ -2571,7 +2502,12 @@ export function selectClosedSpecsForArchive(
         continue;
       }
       const freshness = closedArchiveFreshness(spec, nowMs);
-      const selectorSkipReason = closedArchiveSelectorSkipReason(spec, input, freshness, updatedBeforeMs);
+      const selectorSkipReason = closedArchiveSelectorSkipReason(
+        spec,
+        input,
+        freshness,
+        updatedBeforeMs
+      );
       if (selectorSkipReason !== null) {
         skipped.push(archiveSkipFromSpec(spec, selectorSkipReason, freshness));
         continue;
@@ -2583,7 +2519,8 @@ export function selectClosedSpecsForArchive(
       if (excludeSet.has(spec.id)) continue;
       if (spec.lifecycle_state !== 'closed') continue;
       const freshness = closedArchiveFreshness(spec, nowMs);
-      if (closedArchiveSelectorSkipReason(spec, input, freshness, updatedBeforeMs) !== null) continue;
+      if (closedArchiveSelectorSkipReason(spec, input, freshness, updatedBeforeMs) !== null)
+        continue;
       candidates.push(archiveCandidateFromSpec(cawsDir, spec, freshness));
     }
   }
@@ -2661,7 +2598,10 @@ export function archiveClosedSpecs(
   });
 }
 
-function specFreshness(spec: Spec, nowMs: number): {
+function specFreshness(
+  spec: Spec,
+  nowMs: number
+): {
   readonly timestamp?: string;
   readonly age_ms?: number;
 } {
@@ -2712,12 +2652,13 @@ export function selectDraftSpecsForPrune(
 
   const specsById = new Map(loaded.specs.map((spec) => [spec.id, spec]));
   const repoRoot = repoRootFromCawsDir(cawsDir);
-  const ids = include.length > 0
-    ? include.filter((id) => !excludeSet.has(id))
-    : loaded.specs
-        .filter((spec) => spec.lifecycle_state === 'draft' && !excludeSet.has(spec.id))
-        .map((spec) => spec.id)
-        .sort();
+  const ids =
+    include.length > 0
+      ? include.filter((id) => !excludeSet.has(id))
+      : loaded.specs
+          .filter((spec) => spec.lifecycle_state === 'draft' && !excludeSet.has(spec.id))
+          .map((spec) => spec.id)
+          .sort();
 
   const buckets = {
     candidates: [] as DraftPrunePlanEntry[],
@@ -2729,14 +2670,17 @@ export function selectDraftSpecsForPrune(
     const explicitlyIncluded = include.includes(id);
     const spec = specsById.get(id);
     if (spec === undefined) {
-      pushDraftPlanEntry({
-        id,
-        disposition: 'refused',
-        state: 'missing_refused',
-        lifecycle_state: 'missing',
-        reason: 'Included spec id is not present in canonical .caws/specs.',
-        next_command: 'caws specs list --archived',
-      }, buckets);
+      pushDraftPlanEntry(
+        {
+          id,
+          disposition: 'refused',
+          state: 'missing_refused',
+          lifecycle_state: 'missing',
+          reason: 'Included spec id is not present in canonical .caws/specs.',
+          next_command: 'caws specs list --archived',
+        },
+        buckets
+      );
       continue;
     }
 
@@ -2749,16 +2693,19 @@ export function selectDraftSpecsForPrune(
           : spec.lifecycle_state === 'closed'
             ? `caws specs archive ${spec.id}`
             : `caws specs show ${spec.id} --archived`;
-      pushDraftPlanEntry({
-        id: spec.id,
-        disposition: 'refused',
-        state: 'non_draft_refused',
-        lifecycle_state: spec.lifecycle_state,
-        path: relPath,
-        title: spec.title,
-        reason: `Spec is ${spec.lifecycle_state}, not draft.`,
-        next_command: nextCommand,
-      }, buckets);
+      pushDraftPlanEntry(
+        {
+          id: spec.id,
+          disposition: 'refused',
+          state: 'non_draft_refused',
+          lifecycle_state: spec.lifecycle_state,
+          path: relPath,
+          title: spec.title,
+          reason: `Spec is ${spec.lifecycle_state}, not draft.`,
+          next_command: nextCommand,
+        },
+        buckets
+      );
       continue;
     }
 
@@ -2776,50 +2723,64 @@ export function selectDraftSpecsForPrune(
     } as const;
 
     if (spec.worktree !== undefined && !includeBound) {
-      pushDraftPlanEntry({
-        ...base,
-        disposition: 'refused',
-        state: 'bound_draft_refused',
-        reason: `Draft has worktree binding "${spec.worktree}"; resolve the binding before batch retirement.`,
-        next_command: `caws specs show ${spec.id}`,
-      }, buckets);
+      pushDraftPlanEntry(
+        {
+          ...base,
+          disposition: 'refused',
+          state: 'bound_draft_refused',
+          reason: `Draft has worktree binding "${spec.worktree}"; resolve the binding before batch retirement.`,
+          next_command: `caws specs show ${spec.id}`,
+        },
+        buckets
+      );
       continue;
     }
 
     if (!selected) {
       if (freshness.age_ms === undefined) {
-        pushDraftPlanEntry({
-          ...base,
-          disposition: 'refused',
-          state: 'timestamp_unknown_refused',
-          reason: 'Draft has no parseable updated_at or created_at timestamp, so staleness cannot be determined.',
-          next_command: `caws specs show ${spec.id}`,
-        }, buckets);
+        pushDraftPlanEntry(
+          {
+            ...base,
+            disposition: 'refused',
+            state: 'timestamp_unknown_refused',
+            reason:
+              'Draft has no parseable updated_at or created_at timestamp, so staleness cannot be determined.',
+            next_command: `caws specs show ${spec.id}`,
+          },
+          buckets
+        );
       } else {
-        pushDraftPlanEntry({
-          ...base,
-          disposition: 'skipped',
-          state: 'fresh_draft_skipped',
-          reason: `Draft age ${freshness.age_ms}ms is below older-than threshold ${olderThanMs}ms.`,
-          next_command: `caws specs retire-draft ${spec.id} --reason <reason>`,
-        }, buckets);
+        pushDraftPlanEntry(
+          {
+            ...base,
+            disposition: 'skipped',
+            state: 'fresh_draft_skipped',
+            reason: `Draft age ${freshness.age_ms}ms is below older-than threshold ${olderThanMs}ms.`,
+            next_command: `caws specs retire-draft ${spec.id} --reason <reason>`,
+          },
+          buckets
+        );
       }
       continue;
     }
 
-    pushDraftPlanEntry({
-      ...base,
-      disposition: 'candidate',
-      state: spec.worktree !== undefined
-        ? 'bound_draft_candidate'
-        : explicitlyIncluded
-          ? 'included_draft'
-          : 'stale_draft',
-      reason: explicitlyIncluded
-        ? 'Draft was explicitly included.'
-        : `Draft age ${freshness.age_ms ?? 0}ms meets older-than threshold ${olderThanMs}ms.`,
-      next_command: `caws specs retire-draft ${spec.id} --reason <reason>`,
-    }, buckets);
+    pushDraftPlanEntry(
+      {
+        ...base,
+        disposition: 'candidate',
+        state:
+          spec.worktree !== undefined
+            ? 'bound_draft_candidate'
+            : explicitlyIncluded
+              ? 'included_draft'
+              : 'stale_draft',
+        reason: explicitlyIncluded
+          ? 'Draft was explicitly included.'
+          : `Draft age ${freshness.age_ms ?? 0}ms meets older-than threshold ${olderThanMs}ms.`,
+        next_command: `caws specs retire-draft ${spec.id} --reason <reason>`,
+      },
+      buckets
+    );
   }
 
   const byId = (a: DraftPrunePlanEntry, b: DraftPrunePlanEntry) =>
@@ -2973,9 +2934,7 @@ export function retireDraftSpec(
           // only d.message silently discarded it, leaving a first-timer with a
           // bare "requires a contract" and no way forward.
           // (CAWS-SPEC-CREATE-FIRSTTIMER-UX-001 A1/A2)
-          ...(d.narrowRepair !== undefined
-            ? { narrowRepair: d.narrowRepair }
-            : {}),
+          ...(d.narrowRepair !== undefined ? { narrowRepair: d.narrowRepair } : {}),
           data: { source_rule: d.rule },
         })
       )
@@ -3133,9 +3092,13 @@ export function clearSpecBinding(
   const targetPath = specPath(cawsDir, input.id);
   if (!fs.existsSync(targetPath)) {
     return err(
-      storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, `Spec "${input.id}" not found at ${targetPath}.`, {
-        subject: input.id,
-      })
+      storeDiagnostic(
+        STORE_RULES.LIFECYCLE_PLAN_REJECTED,
+        `Spec "${input.id}" not found at ${targetPath}.`,
+        {
+          subject: input.id,
+        }
+      )
     );
   }
   const sourceResult = readYamlSource(targetPath);
@@ -3165,7 +3128,9 @@ export function clearSpecBinding(
       kind: 'success',
       id: input.id,
       path: targetPath,
-      data: { audit_commit: { kind: 'skipped', reason: 'dry_run' } as unknown as AutoCommitOutcome },
+      data: {
+        audit_commit: { kind: 'skipped', reason: 'dry_run' } as unknown as AutoCommitOutcome,
+      },
     });
   }
 
@@ -3363,9 +3328,7 @@ function patchScopeSequence(
   // compared on the unquoted scalar so a path already stored in quoted form
   // ('a/b.ts') is not re-added as a bare duplicate
   // (CAWS-CLI-AMEND-SCOPE-REMOVE-OUT-QUOTED-NOOP-001).
-  const toAdd = add
-    .map((p) => p.trim())
-    .filter((p) => p && !presentPaths.has(unquoteScalar(p)));
+  const toAdd = add.map((p) => p.trim()).filter((p) => p && !presentPaths.has(unquoteScalar(p)));
   if (toAdd.length > 0) {
     const newItems = toAdd.map((p) => `    - ${p}`);
     working = [...working.slice(0, insertAt), ...newItems, ...working.slice(insertAt)];
@@ -3471,7 +3434,17 @@ export function amendScopeSpec(
   // Patch scope.in then scope.out on the raw bytes (comment-preserving).
   let patched = originalBytes;
   if (addIn.length > 0 || removeIn.length > 0) {
-    const r = patchScopeSequence(patched, 'in', addIn, removeIn);
+    // Adding a real path discharges the create scaffold: the placeholder was
+    // "nobody has declared this yet", and now somebody has. Mirrors
+    // `amend --add-module` replacing MODULES_PLACEHOLDER. Routed through the
+    // existing removal set rather than a bespoke branch so it inherits
+    // patchScopeSequence's quote-insensitive matching — the scaffold is
+    // written quoted, and a raw-text comparison would silently never match
+    // (the CAWS-CLI-AMEND-SCOPE-REMOVE-OUT-QUOTED-NOOP-001 failure mode).
+    // Only on a real add: a bare `--remove` must not rewrite the scaffold.
+    const dischargeScaffold = addIn.some((p) => p !== SCOPE_IN_PLACEHOLDER);
+    const removeInEffective = dischargeScaffold ? [...removeIn, SCOPE_IN_PLACEHOLDER] : removeIn;
+    const r = patchScopeSequence(patched, 'in', addIn, removeInEffective);
     if (r === null) {
       return err(
         storeDiagnostic(
@@ -3606,10 +3579,7 @@ export function amendScopeSpec(
   }
 
   const repoRoot = repoRootFromCawsDir(cawsDir);
-  const wasDirtyBeforeWrite = isPathDirty(
-    repoRoot,
-    specRelPath(cawsDir, input.id, repoRoot)
-  );
+  const wasDirtyBeforeWrite = isPathDirty(repoRoot, specRelPath(cawsDir, input.id, repoRoot));
 
   const txnResult = withLifecycleLock(cawsDir, () =>
     runLifecycleTransaction({
@@ -3622,7 +3592,13 @@ export function amendScopeSpec(
     return err(txnResult.errors);
   }
   const outcome = mapTxnToOutcome(txnResult.value, input.id, targetPath);
-  const committed = attachAutoCommit(outcome, cawsDir, input.id, 'amend-scope', wasDirtyBeforeWrite);
+  const committed = attachAutoCommit(
+    outcome,
+    cawsDir,
+    input.id,
+    'amend-scope',
+    wasDirtyBeforeWrite
+  );
   // Fold the advisory warnings into the success outcome (additive, non-blocking).
   if (composeWarnings.length > 0 && isOk(committed) && committed.value.kind === 'success') {
     return ok({ ...committed.value, warnings: composeWarnings });
@@ -3722,7 +3698,9 @@ export function patchEvidenceBlock(
       if (/^  - /.test(line)) break;
       itemEnd = i + 1;
     }
-    return [...lines.slice(0, existingItemLine), ...renderedLines, ...lines.slice(itemEnd)].join('\n');
+    return [...lines.slice(0, existingItemLine), ...renderedLines, ...lines.slice(itemEnd)].join(
+      '\n'
+    );
   }
 
   // INSERT: append the new item at the end of the evidence block.
@@ -3820,7 +3798,14 @@ function renderEvidenceEntry(
 /** Minimal YAML scalar formatter: quote strings containing YAML-special chars. */
 function yamlScalar(value: string): string {
   if (value === '') return `""`;
-  if (/[:#\[\]{}&*!|>'"%@`,]/.test(value) || /^\s|\s$/.test(value) || value === 'true' || value === 'false' || value === 'null' || /^-?\d/.test(value)) {
+  if (
+    /[:#\[\]{}&*!|>'"%@`,]/.test(value) ||
+    /^\s|\s$/.test(value) ||
+    value === 'true' ||
+    value === 'false' ||
+    value === 'null' ||
+    /^-?\d/.test(value)
+  ) {
     return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
   }
   return value;
@@ -3971,10 +3956,7 @@ export function recordSpecEvidence(
   } as unknown as EventBody;
 
   const repoRoot = repoRootFromCawsDir(cawsDir);
-  const wasDirtyBeforeWrite = isPathDirty(
-    repoRoot,
-    specRelPath(cawsDir, input.id, repoRoot)
-  );
+  const wasDirtyBeforeWrite = isPathDirty(repoRoot, specRelPath(cawsDir, input.id, repoRoot));
 
   const txnResult = withLifecycleLock(cawsDir, () =>
     runLifecycleTransaction({
@@ -4117,10 +4099,7 @@ function readArchivedFromEventLog(
     return [];
   }
   // Map: spec_id → most recent spec_archived event payload+ts.
-  const latest = new Map<
-    string,
-    { ts: string; path: string; blob_sha: string | null }
-  >();
+  const latest = new Map<string, { ts: string; path: string; blob_sha: string | null }>();
   for (const line of raw.split('\n')) {
     if (line.length === 0) continue;
     let parsed: unknown;
@@ -4152,10 +4131,7 @@ function readArchivedFromEventLog(
     }
     latest.set(evt.spec_id, {
       ts: evt.ts,
-      path:
-        typeof evt.data.to_path === 'string'
-          ? evt.data.to_path
-          : evt.data.from_path,
+      path: typeof evt.data.to_path === 'string' ? evt.data.to_path : evt.data.from_path,
       blob_sha: typeof evt.data.blob_sha === 'string' ? evt.data.blob_sha : null,
     });
   }
@@ -4257,10 +4233,7 @@ interface ArchivedSpecEvent {
  * and re-archived, only the latest spec_archived is relevant for
  * recovery.
  */
-function findArchivedSpecEvent(
-  cawsDir: string,
-  specId: string
-): ArchivedSpecEvent | null {
+function findArchivedSpecEvent(cawsDir: string, specId: string): ArchivedSpecEvent | null {
   const eventsPath = path.join(cawsDir, 'events.jsonl');
   if (!fs.existsSync(eventsPath)) return null;
   let raw: string;
@@ -4394,10 +4367,7 @@ export function recoverArchivedSpec(
         source_event: evt.event,
       });
     }
-    const recoveredFromArchivePath = recoverPathFromGitHistory(
-      repoRoot,
-      evt.to_path
-    );
+    const recoveredFromArchivePath = recoverPathFromGitHistory(repoRoot, evt.to_path);
     if (recoveredFromArchivePath !== null) {
       return ok({
         source: recoveredFromArchivePath,
@@ -4408,10 +4378,7 @@ export function recoverArchivedSpec(
     }
   }
 
-  const recoveredFromSourcePath = recoverPathFromGitHistory(
-    repoRoot,
-    evt.from_path
-  );
+  const recoveredFromSourcePath = recoverPathFromGitHistory(repoRoot, evt.from_path);
   if (recoveredFromSourcePath !== null) {
     return ok({
       source: recoveredFromSourcePath,
@@ -4468,12 +4435,7 @@ function planRestoreArchivedSpec(
     if (!updated.ok) return updated;
     patched = updated.value;
   } else {
-    const updated = insertTopLevelScalarAfter(
-      patched,
-      'lifecycle_state',
-      'updated_at',
-      `'${now}'`
-    );
+    const updated = insertTopLevelScalarAfter(patched, 'lifecycle_state', 'updated_at', `'${now}'`);
     if (!updated.ok) return updated;
     patched = updated.value;
   }
@@ -4495,14 +4457,10 @@ function planRestoreArchivedSpec(
     : parsed.errors.map((d) =>
         storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
           subject: d.subject ?? input.id,
-          ...(d.narrowRepair !== undefined
-            ? { narrowRepair: d.narrowRepair }
-            : {}),
+          ...(d.narrowRepair !== undefined ? { narrowRepair: d.narrowRepair } : {}),
           data: {
             source_rule: d.rule,
-            ...(d.location?.pointer !== undefined
-              ? { source_pointer: d.location.pointer }
-              : {}),
+            ...(d.location?.pointer !== undefined ? { source_pointer: d.location.pointer } : {}),
           },
         })
       );
@@ -4565,21 +4523,12 @@ export function restoreArchivedSpec(
   if (!txnResult.ok) return err(txnResult.errors);
 
   const outcome = mapTxnToOutcome(txnResult.value, input.id, plan.value.targetPath);
-  const committed = attachAutoCommit(
-    outcome,
-    cawsDir,
-    input.id,
-    'restore',
-    wasDirtyBeforeWrite
-  );
+  const committed = attachAutoCommit(outcome, cawsDir, input.id, 'restore', wasDirtyBeforeWrite);
   if (!isOk(committed)) return committed;
   return ok({ kind: 'applied', plan: plan.value, outcome: committed.value });
 }
 
-function recoverPathFromGitHistory(
-  repoRoot: string,
-  relPath: string
-): string | null {
+function recoverPathFromGitHistory(repoRoot: string, relPath: string): string | null {
   const commitListing = runGitQuery(
     ['log', '--all', '--follow', '--format=%H', '--', relPath],
     repoRoot
@@ -4980,11 +4929,7 @@ export function relocateSpecToBase(
     }
 
     // Hash the blob into the object db (stdin — no working-tree temp file).
-    const blobSha = runGitPlumb(
-      ['hash-object', '-w', '--stdin'],
-      input.repoRoot,
-      { input: blob }
-    );
+    const blobSha = runGitPlumb(['hash-object', '-w', '--stdin'], input.repoRoot, { input: blob });
     if (blobSha === null) {
       return err(
         storeDiagnostic(
@@ -5015,7 +4960,11 @@ export function relocateSpecToBase(
       { env: idxEnv }
     );
     if (upd === null) {
-      try { fs.rmSync(path.join(input.repoRoot, tmpIndex), { force: true }); } catch { /* best-effort */ }
+      try {
+        fs.rmSync(path.join(input.repoRoot, tmpIndex), { force: true });
+      } catch {
+        /* best-effort */
+      }
       return err(
         storeDiagnostic(
           STORE_RULES.LIFECYCLE_WRITE_FAILED,
@@ -5025,14 +4974,16 @@ export function relocateSpecToBase(
       );
     }
     const newTree = runGitPlumb(['write-tree'], input.repoRoot, { env: idxEnv });
-    try { fs.rmSync(path.join(input.repoRoot, tmpIndex), { force: true }); } catch { /* best-effort */ }
+    try {
+      fs.rmSync(path.join(input.repoRoot, tmpIndex), { force: true });
+    } catch {
+      /* best-effort */
+    }
     if (newTree === null) {
       return err(
-        storeDiagnostic(
-          STORE_RULES.LIFECYCLE_WRITE_FAILED,
-          'write-tree failed.',
-          { subject: input.id }
-        )
+        storeDiagnostic(STORE_RULES.LIFECYCLE_WRITE_FAILED, 'write-tree failed.', {
+          subject: input.id,
+        })
       );
     }
 
@@ -5043,11 +4994,9 @@ export function relocateSpecToBase(
     );
     if (newCommit === null) {
       return err(
-        storeDiagnostic(
-          STORE_RULES.LIFECYCLE_WRITE_FAILED,
-          'commit-tree failed.',
-          { subject: input.id }
-        )
+        storeDiagnostic(STORE_RULES.LIFECYCLE_WRITE_FAILED, 'commit-tree failed.', {
+          subject: input.id,
+        })
       );
     }
 
