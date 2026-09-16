@@ -1198,12 +1198,14 @@ export function activateSpec(cawsDir: string, input: ActivateSpecInput): Result<
         storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
           subject: d.subject ?? input.id,
           // Thread the kernel diagnostic's narrowRepair through so the shell's
-          // renderDiagnostics prints the `repair:` line. The kernel already
-          // names the escape for the tier-contract gate ("Add at least one
-          // contract or change risk_tier to 3 or mode to chore."); copying
-          // only d.message silently discarded it, leaving a first-timer with a
-          // bare "requires a contract" and no way forward.
+          // renderDiagnostics prints the `repair:` line. Copying only d.message
+          // silently discarded it, leaving a first-timer with a bare "requires
+          // a contract" and no way forward.
           // (CAWS-SPEC-CREATE-FIRSTTIMER-UX-001 A1/A2)
+          // The repair names the substantive fix only. It must never offer a
+          // relabel as an alternative — a remediation that prescribes its own
+          // bypass gets taken (CAWS-REMEDIATION-NO-LABEL-ESCAPE-001; measured
+          // in docs/failure-lineage.md Entry 42, Specimen B).
           ...(d.narrowRepair !== undefined ? { narrowRepair: d.narrowRepair } : {}),
           data: { source_rule: d.rule },
         })
@@ -1379,12 +1381,14 @@ export function closeSpec(cawsDir: string, input: CloseSpecInput): Result<SpecWr
         storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
           subject: d.subject ?? input.id,
           // Thread the kernel diagnostic's narrowRepair through so the shell's
-          // renderDiagnostics prints the `repair:` line. The kernel already
-          // names the escape for the tier-contract gate ("Add at least one
-          // contract or change risk_tier to 3 or mode to chore."); copying
-          // only d.message silently discarded it, leaving a first-timer with a
-          // bare "requires a contract" and no way forward.
+          // renderDiagnostics prints the `repair:` line. Copying only d.message
+          // silently discarded it, leaving a first-timer with a bare "requires
+          // a contract" and no way forward.
           // (CAWS-SPEC-CREATE-FIRSTTIMER-UX-001 A1/A2)
+          // The repair names the substantive fix only. It must never offer a
+          // relabel as an alternative — a remediation that prescribes its own
+          // bypass gets taken (CAWS-REMEDIATION-NO-LABEL-ESCAPE-001; measured
+          // in docs/failure-lineage.md Entry 42, Specimen B).
           ...(d.narrowRepair !== undefined ? { narrowRepair: d.narrowRepair } : {}),
           data: { source_rule: d.rule },
         })
@@ -2130,12 +2134,14 @@ export function archiveSpec(cawsDir: string, input: ArchiveSpecInput): Result<Sp
         storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
           subject: d.subject ?? input.id,
           // Thread the kernel diagnostic's narrowRepair through so the shell's
-          // renderDiagnostics prints the `repair:` line. The kernel already
-          // names the escape for the tier-contract gate ("Add at least one
-          // contract or change risk_tier to 3 or mode to chore."); copying
-          // only d.message silently discarded it, leaving a first-timer with a
-          // bare "requires a contract" and no way forward.
+          // renderDiagnostics prints the `repair:` line. Copying only d.message
+          // silently discarded it, leaving a first-timer with a bare "requires
+          // a contract" and no way forward.
           // (CAWS-SPEC-CREATE-FIRSTTIMER-UX-001 A1/A2)
+          // The repair names the substantive fix only. It must never offer a
+          // relabel as an alternative — a remediation that prescribes its own
+          // bypass gets taken (CAWS-REMEDIATION-NO-LABEL-ESCAPE-001; measured
+          // in docs/failure-lineage.md Entry 42, Specimen B).
           ...(d.narrowRepair !== undefined ? { narrowRepair: d.narrowRepair } : {}),
           data: { source_rule: d.rule },
         })
@@ -2928,12 +2934,14 @@ export function retireDraftSpec(
         storeDiagnostic(STORE_RULES.LIFECYCLE_PLAN_REJECTED, d.message, {
           subject: d.subject ?? input.id,
           // Thread the kernel diagnostic's narrowRepair through so the shell's
-          // renderDiagnostics prints the `repair:` line. The kernel already
-          // names the escape for the tier-contract gate ("Add at least one
-          // contract or change risk_tier to 3 or mode to chore."); copying
-          // only d.message silently discarded it, leaving a first-timer with a
-          // bare "requires a contract" and no way forward.
+          // renderDiagnostics prints the `repair:` line. Copying only d.message
+          // silently discarded it, leaving a first-timer with a bare "requires
+          // a contract" and no way forward.
           // (CAWS-SPEC-CREATE-FIRSTTIMER-UX-001 A1/A2)
+          // The repair names the substantive fix only. It must never offer a
+          // relabel as an alternative — a remediation that prescribes its own
+          // bypass gets taken (CAWS-REMEDIATION-NO-LABEL-ESCAPE-001; measured
+          // in docs/failure-lineage.md Entry 42, Specimen B).
           ...(d.narrowRepair !== undefined ? { narrowRepair: d.narrowRepair } : {}),
           data: { source_rule: d.rule },
         })

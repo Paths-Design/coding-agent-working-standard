@@ -33,8 +33,10 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
           message: 'Tier 1 specs require at least one contract.',
           subject: subjectBase,
           location: { pointer: '/contracts' },
-          narrowRepair: 'Add at least one contract or change risk_tier to 3 or mode to chore.',
-        }),
+          narrowRepair:
+            'Declare at least one contract: --contract "name:api|schema|contract-test|behavior". ' +
+            'The tier is a judgement about blast radius, not a knob for clearing this check.',
+        })
       );
     } else if (spec.risk_tier === 2 && spec.contracts.length === 0) {
       errors.push(
@@ -44,8 +46,10 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
           message: 'Tier 2 specs require at least one contract.',
           subject: subjectBase,
           location: { pointer: '/contracts' },
-          narrowRepair: 'Add at least one contract or change risk_tier to 3 or mode to chore.',
-        }),
+          narrowRepair:
+            'Declare at least one contract: --contract "name:api|schema|contract-test|behavior". ' +
+            'The tier is a judgement about blast radius, not a knob for clearing this check.',
+        })
       );
     }
   }
@@ -61,7 +65,7 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
           subject: subjectBase,
           location: { pointer: '/observability' },
           narrowRepair: 'Add at least one observability item (log, metric, trace, alert).',
-        }),
+        })
       );
     }
     if (!spec.rollback || spec.rollback.length === 0) {
@@ -73,7 +77,7 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
           subject: subjectBase,
           location: { pointer: '/rollback' },
           narrowRepair: 'Add at least one rollback step.',
-        }),
+        })
       );
     }
     const sec = spec.non_functional.security;
@@ -86,7 +90,7 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
           subject: subjectBase,
           location: { pointer: '/non_functional/security' },
           narrowRepair: 'Add at least one security requirement.',
-        }),
+        })
       );
     }
   }
@@ -100,13 +104,19 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
         message: 'experimental_mode is only valid on Tier 3 specs.',
         subject: subjectBase,
         location: { pointer: '/experimental_mode' },
-        narrowRepair: 'Remove experimental_mode or change risk_tier to 3.',
-      }),
+        narrowRepair:
+          'Remove experimental_mode from this spec. It is a Tier 3 affordance; ' +
+          'a Tier 1/2 slice carries the blast radius that makes it inadmissible.',
+      })
     );
   }
 
   // resolution may exist only when lifecycle_state is closed or archived.
-  if (spec.resolution !== undefined && spec.lifecycle_state !== 'closed' && spec.lifecycle_state !== 'archived') {
+  if (
+    spec.resolution !== undefined &&
+    spec.lifecycle_state !== 'closed' &&
+    spec.lifecycle_state !== 'archived'
+  ) {
     errors.push(
       diagnostic({
         rule: SPEC_RULES.RESOLUTION_REQUIRES_CLOSURE,
@@ -115,7 +125,7 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
         subject: subjectBase,
         location: { pointer: '/resolution' },
         narrowRepair: 'Remove resolution, or transition lifecycle_state to closed.',
-      }),
+      })
     );
   }
 
@@ -132,7 +142,7 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
         subject: subjectBase,
         location: { pointer: '/resolution' },
         narrowRepair: 'Set resolution to one of: completed, superseded, abandoned.',
-      }),
+      })
     );
   }
 
@@ -146,7 +156,7 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
         subject: subjectBase,
         location: { pointer: '/supersedes' },
         narrowRepair: 'Remove the self-reference or change the supersedes target.',
-      }),
+      })
     );
   }
 
@@ -177,7 +187,7 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
               subject: subjectBase,
               location: { pointer: `${pointer}/rationale` },
               narrowRepair: 'Add a rationale explaining why no successor is required.',
-            }),
+            })
           );
         }
       }
@@ -193,7 +203,7 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
             subject: subjectBase,
             location: { pointer: `${pointer}/absorbed_by` },
             narrowRepair: 'Add absorbed_by naming the spec that took on this work.',
-          }),
+          })
         );
       }
 
@@ -209,7 +219,7 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
             subject: subjectBase,
             location: { pointer: `${pointer}/rationale` },
             narrowRepair: 'Write a substantive rationale or remove the field.',
-          }),
+          })
         );
       }
 
@@ -225,7 +235,7 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
             subject: subjectBase,
             location: { pointer: `${pointer}/target_spec_id` },
             narrowRepair: 'Name a different spec, or remove the successor entry.',
-          }),
+          })
         );
       }
 
@@ -238,7 +248,7 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
             subject: subjectBase,
             location: { pointer: `${pointer}/absorbed_by` },
             narrowRepair: 'Name the spec that actually discharged the obligation.',
-          }),
+          })
         );
       }
 
@@ -258,7 +268,7 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
             location: { pointer: `${pointer}/absorbed_by` },
             narrowRepair:
               'Set disposition to "required", or name the different spec that absorbed the work.',
-          }),
+          })
         );
       }
 
@@ -276,7 +286,7 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
             location: { pointer: `${pointer}/target_spec_id` },
             narrowRepair:
               'Merge the entries into one declaration with a single disposition and rationale.',
-          }),
+          })
         );
       } else {
         seenTargets.set(successor.target_spec_id, index);
@@ -312,7 +322,10 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
   // time. Scan both admit surfaces, tagging which one was shadowed so the
   // diagnostic points at the right field.
   const scopeSupport = spec.scope?.support ?? [];
-  const admitSurfaces: ReadonlyArray<{ key: 'scope.in' | 'scope.support'; entries: readonly string[] }> = [
+  const admitSurfaces: ReadonlyArray<{
+    key: 'scope.in' | 'scope.support';
+    entries: readonly string[];
+  }> = [
     { key: 'scope.in', entries: scopeIn },
     { key: 'scope.support', entries: scopeSupport },
   ];
@@ -339,7 +352,7 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
                 scope_in: scopeIn,
                 scope_support: scopeSupport,
               },
-            }),
+            })
           );
         }
       }
@@ -366,7 +379,7 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
             subject: subjectBase,
             location: { pointer: `/evidence/${index}/criterion_id` },
             narrowRepair: `Use one of the declared AC ids: ${[...declaredAcIds].join(', ')}.`,
-          }),
+          })
         );
       }
       // (b) waiver_reason required iff status === 'waived'. An undocumented
@@ -385,7 +398,7 @@ export function validateSpecSemantics(spec: Spec, options: SemanticOptions = {})
             location: { pointer: `/evidence/${index}/waiver_reason` },
             narrowRepair:
               'Record why this AC is waived (--waiver-reason), or change the status to pass/fail/unchecked.',
-          }),
+          })
         );
       }
     }
