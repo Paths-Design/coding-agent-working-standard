@@ -46,6 +46,13 @@ acceptance:
     then: >-
       the observed process exit status equals the handler's returned code in every
       case; changing the delivery mechanism preserves every exit code exactly
+  - id: A4
+    given: 'a spawn with a generous timeout set on the child'
+    when: 'any of the above commands runs to completion'
+    then: >-
+      the child terminates on its own — the result carries no kill signal and no
+      timeout — proving a natural exit does not hang waiting on an unreferenced
+      handle
 non_functional: {}
 contracts:
   - name: 'exit-flush'
