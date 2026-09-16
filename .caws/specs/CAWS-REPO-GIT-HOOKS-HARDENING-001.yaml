@@ -66,3 +66,11 @@ evidence:
     command: npm run prepare
     exit_code: 0
     commit_sha: "1eaf6be3"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "T2a stages a deletion-only change (git rm --cached .caws/policy.yaml turbo.json, index-only) and asserts pre-commit exits 1 with the Guard 2 message 'policy.yaml is staged together with code changes'. Under the old ACM filter that set was empty and the hook exited 0 before Guard 2. T2b asserts the index is restored. The shim log independently shows the hook running BOTH 'diff --cached --name-only --diff-filter=ACMRD' and '--diff-filter=ACM'."
+    recorded_at: "2026-09-16T05:43:39.783Z"
+    command: bash .husky/tests/run.sh
+    exit_code: 0
+    artifact_path: .husky/tests/run.sh
+    commit_sha: "1eaf6be3"
