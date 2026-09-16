@@ -131,11 +131,49 @@ import type { LeaseReason } from '../kernel';
 
 export interface RegisterShellCommandsOptions {
   /**
-   * Exit hook used after every shell command. Default `process.exit`.
-   * Tests inject a recorder so they can assert exit codes without
-   * actually exiting the test process.
+   * Exit hook used after every shell command. Defaults to
+   * {@link defaultExitHook}, which sets `process.exitCode` rather than
+   * terminating. Tests inject a recorder so they can assert exit codes
+   * without affecting the test process.
    */
   readonly exit?: (code: number) => void;
+}
+
+/**
+ * Deliver a command's exit code WITHOUT discarding its output.
+ * (CAWS-CLI-EXIT-TRUNCATES-PIPED-STDOUT-001.)
+ *
+ * This used to be `process.exit(code)`, and that silently truncated every
+ * command whose output exceeded the OS pipe buffer. Node's `process.stdout` is
+ * a synchronous file descriptor only when it points at a file or a TTY; when it
+ * is a PIPE it is an async libuv stream, and `process.exit` tears the process
+ * down without draining it. Measured on this repo: `caws status --json` emitted
+ * 253831 bytes to a file and exactly 65536 bytes — cut mid-string — through a
+ * pipe, with exit status 0 both times.
+ *
+ * That is the worst failure class this codebase recognizes: a governed,
+ * read-only command reporting success while handing its consumer a partial
+ * answer. A parser errors out; a looser consumer silently believes it.
+ *
+ * Setting `process.exitCode` instead lets the command return normally. Node
+ * keeps the loop alive until the pending stdout writes drain, then exits with
+ * this code. Two properties make that safe here rather than merely hopeful:
+ *
+ *   - Every one of the hook's call sites already terminates its block (it is
+ *     either the last statement or is followed by `return`), so nothing that
+ *     previously could not run now runs.
+ *   - The shell and store layers are fully synchronous — no timers, watchers,
+ *     servers, or async handles — so there is nothing else holding the loop
+ *     open once output has drained. Termination stays prompt.
+ *
+ * Note this covers the exit path that follows a command's own output. The
+ * help/usage/unknown-command paths in `src/index.js` still call `process.exit`;
+ * their output is bounded at roughly 6 KiB (measured), an order of magnitude
+ * under the pipe buffer, and they rely on immediate termination to avoid
+ * double-reporting an error.
+ */
+export function defaultExitHook(code: number): void {
+  process.exitCode = code;
 }
 
 function renderEvidenceDataParseGuidance(kind: string | undefined): string {
@@ -386,7 +424,7 @@ export function registerShellCommands(
   program: Command,
   options: RegisterShellCommandsOptions = {}
 ): void {
-  const exit = options.exit ?? ((code: number) => process.exit(code));
+  const exit = options.exit ?? defaultExitHook;
 
   // -------------------------------------------------------------------
   // caws init
@@ -1730,7 +1768,13 @@ export function registerShellCommands(
       }) => {
         if (opts.state !== undefined && opts.status !== undefined) {
           console.error('caws worktree prune: use either --state or --status, not both.');
+          // `return` is load-bearing, not decoration. Without it this refusal
+          // fell through and ran the prune anyway — harmless only because
+          // `process.exit` killed the process first. Now that the hook sets
+          // `process.exitCode`, the missing return would both overwrite the 1
+          // with a 0 and execute a `--apply` mutation the caller was refused.
           exit(1);
+          return;
         }
         const state = parseCommaSeparatedList(opts.state ?? opts.status);
         const include = parseCommaSeparatedList(opts.include);
@@ -1760,7 +1804,10 @@ export function registerShellCommands(
       }) => {
         if (opts.state !== undefined && opts.status !== undefined) {
           console.error('caws worktree cleanup-plan: use either --state or --status, not both.');
+          // See the prune refusal above: the missing `return` let a refused
+          // invocation run the command anyway.
           exit(1);
+          return;
         }
         const state = parseCommaSeparatedList(opts.state ?? opts.status);
         const include = parseCommaSeparatedList(opts.include);
