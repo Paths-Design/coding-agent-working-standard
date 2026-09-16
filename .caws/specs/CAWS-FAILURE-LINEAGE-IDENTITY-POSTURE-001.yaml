@@ -16,7 +16,9 @@ scope:
     - 'docs/failure-lineage.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The mechanism is stated from evidence, not inference: CAWS_SESSION_ID (resolver tier 1.7, the documented generic escape hatch) accepts an arbitrary @-handle and buildActor copies it verbatim into actor.id/actor.session_id. The entry must not restate this as an open question.'
+  - 'The entry records forgeable attribution as an accepted posture with its reason, and must not be readable as prescribing an interactive credential prompt (keychain/sudo) in the agent path — the remedy the maintainer rejects as worse than the hole.'
+  - 'Any remedy the entry proposes must pass the falsifiability test already stated in Entry 43 doctrine: it produces an artifact a later stage can check and find wrong, not a self-asserted field.'
 acceptance:
   - id: A1
     given: 'Entry 43 as landed at 28181741, whose open item reads that agent-producible identity stamps are ''the finding worth carrying forward'''
