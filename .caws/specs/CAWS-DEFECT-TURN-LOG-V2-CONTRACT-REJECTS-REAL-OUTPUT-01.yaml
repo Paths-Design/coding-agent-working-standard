@@ -1,0 +1,38 @@
+id: CAWS-DEFECT-TURN-LOG-V2-CONTRACT-REJECTS-REAL-OUTPUT-01
+title: 'turn-log.v2 producer contract rejects the renderer output it governs'
+risk_tier: 3
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-16T03:42:57.704Z'
+updated_at: '2026-09-16T03:42:57.704Z'
+created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
+blast_radius:
+  modules:
+    - 'kernel telemetry schema (turn-log.v2.json) and its jest contract test'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/kernel/schemas/telemetry/turn-log.v2.json'
+    - 'packages/caws-cli/tests/kernel/telemetry-turn-log-schema.test.ts'
+  out: []
+invariants:
+  - 'The producer contract must accept every shape session_log_renderer.py actually emits; a fixture that cannot be produced by the renderer is not evidence'
+acceptance:
+  - id: A1
+    given: 'a turn rendered from a transcript whose reasoning never reaches the 80-char summary floor'
+    when: 'the payload is validated against turn-log.v2.json'
+    then: 'it validates, because turn_summary is nullable in the schema as it is in the renderer'
+  - id: A2
+    given: 'a turn rendered with transcript_lineage populated into context'
+    when: 'the payload is validated against turn-log.v2.json'
+    then: 'it validates, because turnContext declares lineage'
+  - id: A3
+    given: 'the jest contract fixtures'
+    when: 'they are inspected'
+    then: 'at least one fixture carries turn_summary null and one carries context.lineage, so the handcrafted set can no longer be green over shapes real output violates'
+non_functional: {}
+contracts:
+  - name: 'turn-log-v2'
+    type: schema
+    path: 'packages/caws-cli/src/kernel/schemas/telemetry/turn-log.v2.json'
