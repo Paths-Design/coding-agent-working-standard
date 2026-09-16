@@ -2,10 +2,11 @@ id: CAWS-REPO-GIT-HOOKS-DEAD-HOOKSPATH-001
 title: 'Restore this repo''s git hooks: fix core.hooksPath and rewrite the hooks onto the v11 surface'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: wt-hooks-verify2
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Rewrote the repo''s git hooks into the tracked .husky tree and corrected core.hooksPath from .husky/_ (which held only an exit-0 shim, so git found no hook by any name) to .husky. Code landed on main as fbdce732. commit-msg is new and tracked: dual-shape registry read, no filter on the status field v11 never persists, fails CLOSED on a malformed registry, lanes named from map keys. pre-commit drops ps-based message sniffing and the removed .caws/working-spec.yaml gate; pre-push drops a --no-verify loop that could never fire. post-commit dropped (called the removed caws provenance). NOT covered: the fail-closed path on a corrupt registry is verified by construction only, not executed, because inducing it would mean mutating the shared live registry; pre-commit guards 2 and 3 (policy/code separation, change_budget) are logic-reviewed but not execution-tested, since staging a governed file or a spec YAML was not safe here. Hooks are branch-dependent by construction: a checkout on a branch predating fbdce732 gets the old hooks and no commit-msg.'
 created_at: '2026-09-16T04:58:52.855Z'
-updated_at: '2026-09-16T05:05:58.708Z'
+updated_at: '2026-09-16T05:07:48.472Z'
 created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
 blast_radius:
   modules:
