@@ -8,7 +8,7 @@ updated_at: '2026-09-16T04:58:52.855Z'
 created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - '.husky (repo-local git hook tree; the only hooks git executes once core.hooksPath is corrected)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -20,7 +20,10 @@ scope:
     - '.husky/README.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A hook that cannot decide safely must fail CLOSED (non-zero), never exit 0 on a parse or lookup failure.'
+  - 'Hooks read the v11 flat-map .caws/worktrees.json shape and must not filter on a per-record status field, which v11 never persists.'
+  - 'Hooks must not invoke a caws subcommand that does not exist in the v11 surface, and must not gate on .caws/working-spec.yaml, .caws/parallel.json or .caws/sessions.json.'
+  - 'The base-branch commit restriction admits exactly merge(worktree):, wip(checkpoint):, chore(caws): and true git merge commits; every other message on the base branch with active lanes is refused.'
 acceptance:
   - id: A1
     given: 'core.hooksPath and the .husky tree after this change'
