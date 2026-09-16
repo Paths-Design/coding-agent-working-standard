@@ -1,0 +1,105 @@
+id: CAWS-SPECS-VERIFY-ACS-REDERIVE-001
+title: 'Re-derive acceptance evidence: restore verify-acs with three uncollapsed verdicts, verify-at-record, cite-at-close'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-09-16T18:52:32.338Z'
+updated_at: '2026-09-16T18:52:32.338Z'
+created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/src/kernel/evidence'
+    - 'packages/caws-cli/src/store'
+    - 'packages/caws-cli/src/shell'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/kernel/evidence/rederive.ts'
+    - 'packages/caws-cli/src/kernel/evidence/index.ts'
+    - 'packages/caws-cli/src/store/evidence-rederive.ts'
+    - 'packages/caws-cli/src/store/specs-writer.ts'
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/tests/kernel/unit/evidence-rederive.test.ts'
+    - 'packages/caws-cli/tests/store/evidence-rederive.test.js'
+    - 'packages/caws-cli/tests/store/specs-evidence-roundtrip.test.js'
+    - 'packages/caws-cli/tests/shell/specs-verify-acs.test.js'
+    - 'packages/caws-cli/tests/shell/specs-evidence-verify.test.js'
+    - 'packages/caws-cli/tests/shell/specs-close-rederive.test.js'
+    - 'docs/migration-v10-to-v11.md'
+  out: []
+invariants:
+  - 'No code path executes evidence[].command or acceptance[].test_command; both resolve to not_rederived with reason command_not_executed unconditionally, with no flag or opt-in.'
+  - 'The kernel rederive module imports no fs, child_process, process.env, Date.now or new Date; verdicts are computed from an injected ReDerivationReport, and an undefined report yields not_rederived for every criterion.'
+  - 'specs close and worktree merge spawn no test runner; only the non-executing citation (commit_sha) and artifact (artifact_path) classes run inside a lifecycle transaction, and the close gate stays warn-mode.'
+  - 'A criterion verdict is exactly one of verified, refuted, not_rederived; existence or collection of a check never maps to verified, and not_rederived is never counted as pass.'
+  - 'Every new subprocess call sets an explicit timeout, killSignal and maxBuffer; a timeout yields not_rederived, never refuted or verified. Test nodeids are passed as argv operands after a -- separator and refused if they begin with -.'
+acceptance:
+  - id: A1
+    given: 'a criterion whose test_nodeid names a real, collectable, failing test'
+    when: 'verify-acs runs in existence-only mode and then with --run'
+    then: 'existence-only reports not_rederived and --run reports refuted, and neither ever prints pass or verified (the v10.2 collect-equals-pass defect is pinned red first)'
+  - id: A2
+    given: 'a spec with one verified, one refuted and one not_rederived criterion'
+    when: 'verify-acs --json and the table summary render'
+    then: 'the counts are exactly 1/1/1 in both and never 2/1/0 (pure-kernel unit test plus one integration run asserting the exact summary line)'
+  - id: A3
+    given: 'four fabricated citations (nonexistent nodeid; artifact_path absent at the cited revision; commit_sha that is no object; commit_sha that exists but is unreachable from base)'
+    when: 'verify-acs runs'
+    then: 'each yields refuted with a distinct reason string'
+  - id: A4
+    given: 'evidence recorded pass with --verify against a green test, after which the test is broken'
+    when: 'specs close runs'
+    then: 'the close advisory names that criterion as refuted, proving re-derivation happens at close and not only at record time'
+  - id: A5
+    given: 'a spec carrying command: touch /tmp/caws-exec-probe-<pid>'
+    when: 'verify-acs, specs close and worktree merge each run'
+    then: 'no such file exists afterwards, the verdict reason is command_not_executed, and the slice diff contains no sh -c, shell: true, or execSync of agent data'
+  - id: A6
+    given: 'a fixture runner that hangs'
+    when: 'verify-acs --run invokes it'
+    then: 'the verdict is not_rederived with reason timeout within the configured bound and no orphan child remains'
+  - id: A7
+    given: 'nodeids --collect-only, -p no:cacheprovider, and a string containing ; rm -rf /tmp/x'
+    when: 'verify-acs --run processes them'
+    then: 'the first two are refused before any spawn and the third is forwarded as a literal operand after -- and reported not-found, never interpreted'
+  - id: A8
+    given: 'the new kernel evidence/rederive.ts module'
+    when: 'it is grepped for fs, child_process, process.env, Date.now and new Date( and caws specs validate <file> is run on the same spec from inside the repo and from a directory with no .caws'
+    then: 'the grep is empty and the two validate outputs are byte-identical'
+  - id: A9
+    given: 'a bound spec whose evidence names a test_nodeid'
+    when: 'worktree merge auto-closes it with execFile instrumented'
+    then: 'the only program spawned is git'
+  - id: A10
+    given: 'every hostile fixture from A3 and A4'
+    when: 'specs close runs'
+    then: 'the close still succeeds with exit 0 and the advisory present (warn-mode is actually warn)'
+  - id: A11
+    given: 'the same hostile spec'
+    when: 'it is closed once via specs close and once via worktree merge'
+    then: 'both print the same criterion name on stderr, proving outcome.warnings and outcome.data.evidence_warnings are both fed'
+  - id: A12
+    given: 'a criterion whose verdict derives from an agent-supplied evidence field'
+    when: 'verify-acs --json and the table render, and specs close runs'
+    then: 'the verdict carries self_reported: true, the table shows a visible marker, and the close summary prints the self-reported and narrative-only counts'
+  - id: A13
+    given: 'CAWS_GIT_BINARY=/nonexistent and no detectable runner'
+    when: 'verify-acs runs with and without --strict'
+    then: 'every verdict is not_rederived, the summary never says all passed, and --strict exits non-zero'
+  - id: A14
+    given: 'the built dist'
+    when: 'node dist/index.js specs evidence --help and specs verify-acs --help run and one real invocation per new flag is made through dist'
+    then: '--verify appears on evidence, --run --strict --json appear on verify-acs, and each invocation reaches the handler (not proven through handler unit tests alone)'
+  - id: A15
+    given: 'recordSpecEvidence called with all five mechanical fields (test_nodeid, command, exit_code, artifact_path, commit_sha)'
+    when: 'the spec YAML is read back through the compiled parser'
+    then: 'each field round-trips with its exact value (these fields currently have zero round-trip coverage)'
+non_functional: {}
+contracts:
+  - name: 'verify-acs-cli'
+    type: behavior
+  - name: 'evidence-rederive-kernel'
+    type: behavior
