@@ -41,3 +41,12 @@ non_functional: {}
 contracts:
   - name: 'scope-in-placeholder'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "9/9 pass. The headline test seeds a spec with no --scope-in (scope.in reads exactly [SCOPE_IN_PLACEHOLDER]), runs amendScopeSpec addIn:['src/a.ts'], and asserts scope.in reads exactly ['src/a.ts'] — before the fix it read [scaffold, 'src/a.ts']. The discharge is routed through patchScopeSequence's existing removal set so it inherits the quote-insensitive matcher from CAWS-CLI-AMEND-SCOPE-REMOVE-OUT-QUOTED-NOOP-001; that matters because create renders scope.in entries QUOTED, and a raw-text comparison would silently never match. ANTI-VACUITY: 'create WITH --scope-in writes no scaffold at all' proves the scaffold is the no-paths fallback rather than something create always emits; 'a second amend leaves declared scope untouched' proves the discharge is not over-eager; 'a bare --remove does not discharge the scaffold' pins that only a real add counts as a declaration; and 'amending a spec that never had a scaffold reports no removal' is the regression guard for routing through the removal set. AUDIT: the discharge is asserted on the hash-chained spec_scope_amended event (removed_in == [SCOPE_IN_PLACEHOLDER], added_in == ['src/a.ts'], resulting_scope_in == ['src/a.ts']), not on the returned outcome — an earlier revision asserted the outcome and FAILED, which is how I learned the diff lives in the event."
+    recorded_at: "2026-09-16T07:31:57.410Z"
+    command: npx jest tests/store/specs-scope-in-placeholder.test.js
+    exit_code: 0
+    artifact_path: packages/caws-cli/tests/store/specs-scope-in-placeholder.test.js
+    commit_sha: c9eca2c5
