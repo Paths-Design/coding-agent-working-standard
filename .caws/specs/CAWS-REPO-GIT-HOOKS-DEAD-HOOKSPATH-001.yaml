@@ -57,3 +57,7 @@ evidence:
     status: pass
     evidence_ref: "same harness on main: 'merge(worktree): wt-x' exit=0, 'chore(caws): author spec' exit=0, 'wip(checkpoint): save' exit=0; on lane branch wt-git-hooks-revive 'feat:' exit=0 (no lane targets that branch)"
     recorded_at: "2026-09-16T05:03:24.876Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "hook printed 'while 3 worktree lane(s) target it' and listed wt-merge-provenance-routing, wt-bash-guard-cross-repo, wt-git-hooks-revive from the flat-map keys, against a registry whose records carry no status field; the pre-fix predicate returned 0 for the same registry"
+    recorded_at: "2026-09-16T05:03:25.365Z"
