@@ -27,5 +27,11 @@ acceptance:
     then: >-
       exactly one acquires it and the rest are refused, proving mutual exclusion
       under real concurrency rather than sequential calls
+  - id: A2
+    given: 'the real .husky/pre-push with its four heavy stage commands stubbed on PATH'
+    when: 'it runs to completion, and separately when one stage fails'
+    then: >-
+      it takes and releases the lock, runs all four stages in order, exits 0 on
+      success and 1 on a failing stage
 non_functional: {}
 contracts: []
