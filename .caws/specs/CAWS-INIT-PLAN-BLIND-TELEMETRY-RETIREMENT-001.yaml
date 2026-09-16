@@ -53,3 +53,10 @@ evidence:
     command: npx jest tests/init/adapter-covered-telemetry-cut.test.js
     exit_code: 0
     commit_sha: e3d8ec6b
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Two halves, both pinned. Nothing-to-retire: test 'a repo with nothing to retire previews an empty retire set' asserts retire is [] and absent equals all four TELEMETRY_ROW_DEST_PATHS, so absence is reported as absence, never staleness. Non-covered surface: test 'a NON-covered surface reports no retirement even with rows on disk' asserts plan.telemetry_retirement is undefined for claude-code with a managed row present - the section is omitted entirely rather than emitted empty. That test also asserts the exit-1 managed_drift refusal on the same row so it cannot pass because the plan failed for an unrelated reason."
+    recorded_at: "2026-09-16T05:41:14.971Z"
+    command: npx jest tests/init/adapter-covered-telemetry-cut.test.js
+    exit_code: 0
+    commit_sha: e3d8ec6b
