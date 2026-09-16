@@ -94,3 +94,10 @@ evidence:
     command: npx jest
     exit_code: 0
     commit_sha: "31c190ac"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "jest tests/shell/worktree-lane-divergence.test.js 'A2: a branch at base tip reads 0/0 and does not trip the stale-lane footer'; store test 'a lane with its own commits but no base drift still contains base' separates containsBase from lane-emptiness (ahead=1 behind=0 containsBase=true)"
+    recorded_at: "2026-09-16T03:54:44.816Z"
+    command: npx jest
+    exit_code: 0
+    commit_sha: "31c190ac"
