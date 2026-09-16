@@ -38,3 +38,11 @@ non_functional: {}
 contracts:
   - name: 'init-plan-apply-parity'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Real CLI stdout (spawned dist/index.js, CAWS_HOME pinned to a temp dir) for 'init --agent-surface dsh --plan' against a git repo holding one managed row now renders: 'Telemetry rows (adapter-covered surface owns this plane): / would retire (delete 1): / - .caws/hooks/session-log.sh'. Before the fix that row appeared only under 'Unchanged'. Pinned by test 'the human-readable plan names each row it will unlink', which asserts the path appears AND /retire/i matches so it reads as a deletion, not an unchanged row."
+    recorded_at: "2026-09-16T05:40:54.330Z"
+    command: npx jest tests/init/adapter-covered-telemetry-cut.test.js
+    exit_code: 0
+    commit_sha: e3d8ec6b
