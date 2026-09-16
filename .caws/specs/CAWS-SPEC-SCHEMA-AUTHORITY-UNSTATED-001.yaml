@@ -2,9 +2,10 @@ id: CAWS-SPEC-SCHEMA-AUTHORITY-UNSTATED-001
 title: 'Project-local spec schema is dead but nothing says so: doctor misses the schemas/ copy and validate never names its authority'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-spec-schema-authority
 created_at: '2026-09-16T06:46:40.145Z'
-updated_at: '2026-09-16T06:46:40.145Z'
+updated_at: '2026-09-16T06:47:17.215Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
