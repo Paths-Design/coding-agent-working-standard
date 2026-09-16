@@ -1,0 +1,41 @@
+id: CAWS-REMEDIATION-NO-LABEL-ESCAPE-001
+title: 'Remediation text must not prescribe a label change as the repair'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-16T07:47:20.506Z'
+updated_at: '2026-09-16T07:47:20.506Z'
+created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/kernel/spec/validate-semantics.ts'
+    - 'packages/caws-cli/tests/kernel/unit/remediation-no-label-escape.test.ts'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'a tier-gated kernel rule fires'
+    when: 'its narrowRepair is read'
+    then: 'it names the substantive repair and does not prescribe lowering risk_tier or switching mode as an alternative'
+  - id: A2
+    given: 'a tier-1 spec with contracts: []'
+    when: 'validateSpecSemantics runs'
+    then: 'the tier1.contracts_required diagnostic still fires and its narrowRepair names adding a contract without naming risk_tier 3 or mode chore'
+  - id: A3
+    given: 'an author genuinely chooses risk_tier 3'
+    when: 'validateSpecSemantics runs'
+    then: 'validation passes, proving the capability was retained and only the prescription removed'
+  - id: A4
+    given: 'a non-tier-3 spec carrying experimental_mode'
+    when: 'the EXPERIMENTAL_MODE_TIER_RESTRICTED diagnostic fires'
+    then: 'its narrowRepair names removing experimental_mode and does not prescribe changing risk_tier'
+non_functional: {}
+contracts:
+  - name: 'kernel-spec-diagnostics'
+    type: behavior
