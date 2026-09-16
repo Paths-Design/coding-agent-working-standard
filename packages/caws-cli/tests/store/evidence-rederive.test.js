@@ -512,7 +512,9 @@ describe('runner detection and unavailable outcomes', () => {
       execFile: fn,
     });
     expect(o.A1[0].outcome).toBe('unavailable');
-    expect(o.A1[0].detail).toContain('runner vitest detected; re-derivation is not implemented');
+    expect(o.A1[0].detail).toContain(
+      'runner vitest detected; re-derivation does not execute this runner'
+    );
     expect(calls).toHaveLength(0);
   });
 });

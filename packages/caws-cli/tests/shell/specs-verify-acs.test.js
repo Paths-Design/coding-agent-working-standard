@@ -370,7 +370,7 @@ describe('no false green on infrastructure failure (A13)', () => {
     record(cawsDir, 'A1', { testNodeid: 'js/tests/sample.test.js::adds' });
     const r = runVerify(root, { run: true, runner: 'vitest' });
     expect(r.out).toContain(
-      'A1: not_rederived (runner_unavailable) — runner vitest detected; re-derivation is not implemented'
+      'A1: not_rederived (runner_unavailable) — runner vitest detected; re-derivation does not execute this runner'
     );
   });
 

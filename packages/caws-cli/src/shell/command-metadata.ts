@@ -29,7 +29,7 @@
 
 import { EVIDENCE_STATUSES, RISK_TIERS, SPEC_MODES, SPEC_RESOLUTIONS } from '../kernel';
 import { SPECS_LIST_STATUSES } from '../store/specs-writer';
-import { SELECTABLE_TEST_RUNNERS } from '../store/evidence-rederive';
+import { EXECUTABLE_TEST_RUNNERS, SELECTABLE_TEST_RUNNERS } from '../store/evidence-rederive';
 import { KNOWN_SURFACES } from '../init/hook-packs/register';
 
 /** A positional argument on a command. */
@@ -567,7 +567,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         {
           flag: '--verify',
           description:
-            "Re-derive the cited evidence before recording: run the cited test through the repository's own runner, check the cited artifact and commit. Refuses to record status pass when the citation is refuted and writes nothing; a citation that cannot be re-derived is recorded and named as self-reported. Requires at least one of --test-nodeid / --artifact-path / --commit-sha (a --command is recorded but never executed, so it cannot be verified)",
+            'Re-derive the cited evidence before recording: run the cited test through the detected runner (specs verify-acs --run documents which runners execute and how each is resolved), check the cited artifact and commit. Refuses to record status pass when the citation is refuted and writes nothing; a citation that cannot be re-derived is recorded and named as self-reported. Requires at least one of --test-nodeid / --artifact-path / --commit-sha (a --command is recorded but never executed, so it cannot be verified)',
         },
         DATA_OPTION,
       ],
@@ -586,7 +586,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         {
           flag: '--run',
           description:
-            "Execute cited tests through the repository's own runner (pytest or jest, resolved from the repo — never npx). Default: existence check only, which reports not_rederived, never pass",
+            "Execute cited tests instead of only checking they exist. jest is resolved from the repository's own node_modules/.bin, walking up to the repo root — never npx. pytest is not repo-resolved: it runs as python3 -m pytest against whatever python3 is first on PATH, so a different ambient interpreter can change the verdict. Default: existence check only, which reports not_rederived, never pass",
         },
         {
           flag: '--strict',
@@ -595,7 +595,10 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         },
         {
           flag: '--runner <name>',
-          description: 'Override test-runner detection',
+          // The executable/detected-only split is DERIVED from the same constant
+          // the dispatch reads, so a runner that gains an execution arm moves
+          // between these two lists without anyone remembering to edit prose.
+          description: `Override test-runner detection. Only ${EXECUTABLE_TEST_RUNNERS.join(', ')} execute under --run; naming ${SELECTABLE_TEST_RUNNERS.filter((r) => !EXECUTABLE_TEST_RUNNERS.includes(r)).join(', ')} reports unavailable and verifies nothing`,
           allowedValues: SELECTABLE_TEST_RUNNERS,
         },
         { flag: '--json', description: 'Emit the verify-acs.v1 report as JSON' },
