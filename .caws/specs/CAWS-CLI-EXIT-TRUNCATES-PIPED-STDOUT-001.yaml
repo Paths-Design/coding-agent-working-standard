@@ -25,9 +25,13 @@ invariants:
   - 'THE PROOF MUST CROSS A PROCESS BOUNDARY: this defect is invisible to any test that injects an out() sink, because the loss happens between the write and the pipe. Evidence is a real spawn with a real pipe and output larger than the OS pipe buffer.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      a CAWS repo whose 'caws status --json' payload exceeds the OS pipe buffer
+      (populated with enough lease records to push it past 64KiB)
+    when: 'the built CLI is spawned as a child process with stdout attached to a pipe'
+    then: >-
+      the captured stdout is complete and parses as JSON, its last non-whitespace
+      character is the closing brace, and the process exit status is 0
 non_functional: {}
 contracts:
   - name: 'exit-flush'
