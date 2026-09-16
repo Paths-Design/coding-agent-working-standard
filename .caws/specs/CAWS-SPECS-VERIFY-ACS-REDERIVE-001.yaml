@@ -123,3 +123,9 @@ evidence:
     recorded_at: "2026-09-16T22:24:56.296Z"
     test_nodeid: packages/caws-cli/tests/store/specs-evidence-roundtrip.test.js
     commit_sha: "967bce1b"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "tests/kernel/unit/evidence-rederive.test.ts pins one verified + one refuted + one not_rederived as exactly 1/1/1, and the asymmetric 1/2/3 fixture added after mutation testing proves the tally cannot swap two categories undetected; the shell test asserts the same counts on the printed summary line through dist"
+    recorded_at: "2026-09-16T22:25:33.220Z"
+    test_nodeid: packages/caws-cli/tests/kernel/unit/evidence-rederive.test.ts
+    commit_sha: "8f145b2c"
