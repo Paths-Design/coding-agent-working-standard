@@ -33,3 +33,11 @@ acceptance:
       OLD event set while reporting OK
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "CLAUDE.md 'Shared runtime and native configuration' now states the 3-step order, names scripts/install-cli-snapshot.mjs, and documents the stale-CLI OK-then-disagree failure; mirrored in AGENTS.md, CONTRIBUTING.md, docs/guides/hook-packs.md"
+    recorded_at: "2026-09-16T04:32:49.185Z"
+    command: git show --stat 9447f143b4ca
+    exit_code: 0
+    commit_sha: "9447f143b4ca"
