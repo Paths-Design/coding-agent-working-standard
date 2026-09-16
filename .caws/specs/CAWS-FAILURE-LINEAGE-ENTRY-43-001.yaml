@@ -2,10 +2,11 @@ id: CAWS-FAILURE-LINEAGE-ENTRY-43-001
 title: 'Failure-lineage Entry 43: five refusals reclassified as friction and solved; the decision was upstream of every gate'
 risk_tier: 3
 mode: doc
-lifecycle_state: active
-worktree: wt-lineage-entry-43
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-lineage-entry-43 at cfbe2ba63f43bf35d2778a43c62ede3c4ea3280c'
 created_at: '2026-09-16T08:57:55.964Z'
-updated_at: '2026-09-16T08:58:06.370Z'
+updated_at: '2026-09-16T09:00:32.666Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
