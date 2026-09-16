@@ -52,3 +52,11 @@ evidence:
     exit_code: 0
     artifact_path: .husky/tests/run.sh
     commit_sha: "8c740723"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "T6f greps npm's echoed script body for 'git config core.hooksPath .husky' in the output of 'npm run prepare --workspaces=false'. Before this change the assertion ran the caws-cli prepare (husky) and then read a core.hooksPath that was already correct — a pass with no execution behind it. T6f fails if npm did not echo the root body, which is the discriminator the old test lacked."
+    recorded_at: "2026-09-16T05:50:30.076Z"
+    command: bash .husky/tests/run.sh
+    exit_code: 0
+    artifact_path: .husky/tests/run.sh
+    commit_sha: "8c740723"
