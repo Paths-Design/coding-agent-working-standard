@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-help-drift
 created_at: '2026-09-16T23:33:40.123Z'
-updated_at: '2026-09-16T23:33:51.039Z'
+updated_at: '2026-09-16T23:42:51.387Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
@@ -22,6 +22,8 @@ scope:
     - 'packages/caws-cli/tests/shell/verify-acs-help-surface.test.js'
     - 'packages/caws-cli/CHANGELOG.md'
     - 'AGENTS.md'
+    - packages/caws-cli/tests/shell/specs-verify-acs.test.js
+    - packages/caws-cli/tests/store/evidence-rederive.test.js
   out: []
 invariants:
   - 'The set of runners re-derivation can execute is exported once; the dispatch switch and the --help description both derive from it, so implementing a new runner cannot leave the help stale.'
