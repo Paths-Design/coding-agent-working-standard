@@ -22,8 +22,10 @@ invariants:
   - 'A test that needs a wrong value to prove a repair must produce that wrong value in a redirected scratch location, never in shared repository state that concurrent sessions depend on.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'several OS processes starting at the same moment against one free lock'
+    when: 'each calls caws_prepush_lock_acquire'
+    then: >-
+      exactly one acquires it and the rest are refused, proving mutual exclusion
+      under real concurrency rather than sequential calls
 non_functional: {}
 contracts: []
