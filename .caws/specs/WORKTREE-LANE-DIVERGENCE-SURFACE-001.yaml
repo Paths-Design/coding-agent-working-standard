@@ -1,0 +1,40 @@
+id: WORKTREE-LANE-DIVERGENCE-SURFACE-001
+title: 'worktree list and status surface lane divergence (ahead/behind base) so a stale lane is visible without hand-running git'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-09-16T03:36:42.856Z'
+updated_at: '2026-09-16T03:36:42.856Z'
+created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/src/store/worktree-divergence.ts'
+    - 'packages/caws-cli/src/shell/commands/worktree.ts (list)'
+    - 'packages/caws-cli/src/shell/commands/status.ts + shell/render/status.ts'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/worktree-divergence.ts'
+    - 'packages/caws-cli/src/store/index.ts'
+    - 'packages/caws-cli/src/shell/commands/worktree.ts'
+    - 'packages/caws-cli/src/shell/commands/status.ts'
+    - 'packages/caws-cli/src/shell/render/status.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/tests/shell/worktree-lane-divergence.test.js'
+    - 'packages/caws-cli/tests/store/worktree-divergence.test.js'
+    - 'docs/command-reference.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'lane-divergence'
+    type: contract-test
+    path: 'packages/caws-cli/tests/shell/worktree-lane-divergence.test.js'
