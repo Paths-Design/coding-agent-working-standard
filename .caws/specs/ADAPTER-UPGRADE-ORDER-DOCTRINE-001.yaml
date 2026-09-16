@@ -2,10 +2,11 @@ id: ADAPTER-UPGRADE-ORDER-DOCTRINE-001
 title: 'Document the ordered CLI/runtime/native upgrade sequence in agent doctrine'
 risk_tier: 3
 mode: doc
-lifecycle_state: active
-worktree: wt-adapter-upgrade-order
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-adapter-upgrade-order at 2c20ae1fb6d028379252957ca500b9b82acdb001'
 created_at: '2026-09-16T04:28:53.318Z'
-updated_at: '2026-09-16T04:30:26.023Z'
+updated_at: '2026-09-16T04:33:00.278Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
