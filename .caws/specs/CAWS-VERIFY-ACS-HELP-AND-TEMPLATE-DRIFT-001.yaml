@@ -61,3 +61,9 @@ evidence:
     recorded_at: "2026-09-16T23:50:47.239Z"
     test_nodeid: "packages/caws-cli/tests/shell/verify-acs-help-surface.test.js::the description names each executable runner and each detected-only one"
     commit_sha: "671b70f322dcb03c3f24612ca0c2841e8fe2929b"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "The --run description previously claimed cited tests run through 'the repository's own runner (pytest or jest, resolved from the repo - never npx)'. Only jest is repo-resolved: findBin walks node_modules/.bin up to the repo root, while pytestOutcome calls execFile('python3', ['-m','pytest',...]) against ambient PATH. That asymmetry is not theoretical - it produced the CAWS-EVIDENCE-REDERIVE-A7-ENV-ORACLE-001 hotfix, where a sibling repository's virtualenv on my shell's PATH changed the verdict relative to the pre-push hook's leaner PATH. The description now states both mechanisms separately and warns that a different ambient interpreter can change the verdict; --verify's own description no longer implies repo-resolution either and defers to --run. The cited test asserts the four discriminating substrings."
+    recorded_at: "2026-09-16T23:51:00.118Z"
+    test_nodeid: "packages/caws-cli/tests/shell/verify-acs-help-surface.test.js::--run help does not claim pytest is resolved from the repository"
+    commit_sha: "671b70f322dcb03c3f24612ca0c2841e8fe2929b"
