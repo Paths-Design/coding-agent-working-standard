@@ -163,7 +163,8 @@ export interface CandidateTraceEntry {
   readonly admittedIds?: ReadonlyArray<string>;
 }
 
-export interface ResolveCandidatesOptions extends Pick<ResolveSessionOptions, 'agentProcessNames' | 'agentPidWalkFn'> {
+export interface ResolveCandidatesOptions
+  extends Pick<ResolveSessionOptions, 'agentProcessNames' | 'agentPidWalkFn'> {
   /** Reuse the caller already resolved for this invocation's actor. Prevents
    * a second PID-record read from changing identity between audit and admission. */
   readonly caller?: ResolvedSession;
@@ -228,5 +229,7 @@ export interface ResolveSessionOptions {
    * agent-PID tier. Returns the located agent PID + its start time, or null.
    * Injected for deterministic tests (the default walks `ps`).
    */
-  readonly agentPidWalkFn?: (names: readonly string[]) => { pid: number; startEpoch: number | null } | null;
+  readonly agentPidWalkFn?: (
+    names: readonly string[]
+  ) => { pid: number; startEpoch: number | null } | null;
 }

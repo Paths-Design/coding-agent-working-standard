@@ -73,7 +73,7 @@ function grant(repoRoot, extra = {}, env = HUMAN_ENV) {
   const err = [];
   const code = runReprieveGrantCommand({
     cwd: repoRoot,
-        homeDir: path.join(repoRoot, 'machine-home'),
+    homeDir: path.join(repoRoot, 'machine-home'),
     now: () => NOW,
     out: (l) => out.push(l),
     err: (l) => err.push(l),
@@ -89,7 +89,9 @@ function grant(repoRoot, extra = {}, env = HUMAN_ENV) {
 }
 
 function globalRecordExists(repoRoot) {
-  return fs.existsSync(path.join(repoRoot, 'machine-home/state/sessions', SESSION, `guard-reprieve-${SESSION}.json`));
+  return fs.existsSync(
+    path.join(repoRoot, 'machine-home/state/sessions', SESSION, `guard-reprieve-${SESSION}.json`)
+  );
 }
 
 function recordExistsIn(repoRoot, vendorDir) {
@@ -142,7 +144,7 @@ describe('CAWS-REPRIEVE-SURFACE-DETECTION-001: the lease decides (A1, A2)', () =
       const r = grant(repoRoot);
       expect(r.code).toBe(0);
       expect(globalRecordExists(repoRoot)).toBe(true);
-    expect(recordExistsIn(repoRoot, dir)).toBe(false);
+      expect(recordExistsIn(repoRoot, dir)).toBe(false);
       expect(recordExistsIn(repoRoot, '.claude')).toBe(false);
     }
   });
@@ -248,7 +250,9 @@ describe('CAWS-REPRIEVE-SURFACE-DETECTION-001: success names the surface (A7)', 
     const r = grant(repoRoot);
 
     expect(r.out).toContain('surface:  .codex');
-    expect(r.out).toContain('scope: session-global; machine dispatchers consult this record across projects.');
+    expect(r.out).toContain(
+      'scope: session-global; machine dispatchers consult this record across projects.'
+    );
     // Provenance is what lets an operator audit a wrong-dir grant from the
     // success message alone — the sterling case went unnoticed for 7 minutes.
     expect(r.out).toContain('the lease for session');

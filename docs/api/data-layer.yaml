@@ -251,7 +251,7 @@ components:
         sql:
           type: string
           description: SQL query to execute
-          example: "SELECT * FROM users WHERE active = $1"
+          example: 'SELECT * FROM users WHERE active = $1'
         params:
           type: array
           description: Query parameters for safe execution
@@ -326,7 +326,7 @@ components:
         type:
           type: string
           description: PostgreSQL type name
-          example: "varchar"
+          example: 'varchar'
         nullable:
           type: boolean
           description: Whether column can be null
@@ -348,17 +348,17 @@ components:
         table:
           type: string
           description: Table containing vector data
-          example: "document_embeddings"
+          example: 'document_embeddings'
         column:
           type: string
           description: Column containing vector data
-          example: "embedding"
+          example: 'embedding'
         filter:
           type: object
           description: Additional WHERE conditions
           additionalProperties: true
           example:
-            category: "documentation"
+            category: 'documentation'
             active: true
         limit:
           type: integer
@@ -520,7 +520,7 @@ components:
             - READ COMMITTED
             - REPEATABLE READ
             - SERIALIZABLE
-          default: "READ COMMITTED"
+          default: 'READ COMMITTED'
           description: Transaction isolation level
 
     TransactionResult:
@@ -610,7 +610,7 @@ components:
         code:
           type: string
           description: Error code identifier
-          example: "QUERY_TIMEOUT"
+          example: 'QUERY_TIMEOUT'
         message:
           type: string
           description: Human-readable error message

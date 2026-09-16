@@ -105,14 +105,10 @@ export interface GitignorePlanResult {
 /** Find the [start,end] line indices (inclusive) of an existing managed block,
  * or null if absent. Detection keys on the marker lines, not entry contents,
  * so a stale (different-version) block is still found and replaced. */
-function findManagedBlock(
-  lines: readonly string[]
-): { start: number; end: number } | null {
+function findManagedBlock(lines: readonly string[]): { start: number; end: number } | null {
   const start = lines.findIndex((l) => l.startsWith(BEGIN_MARKER_PREFIX));
   if (start === -1) return null;
-  const end = lines.findIndex(
-    (l, i) => i >= start && l.trim() === GITIGNORE_END_MARKER
-  );
+  const end = lines.findIndex((l, i) => i >= start && l.trim() === GITIGNORE_END_MARKER);
   if (end === -1) return null;
   return { start, end };
 }

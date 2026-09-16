@@ -71,11 +71,7 @@ module.exports = {
   // Jest reads coverage selection and thresholds from the global config,
   // not nested project objects. Include the built runtime (including init)
   // and source-tested kernel; source maps remap compiled TS back to src/.
-  collectCoverageFrom: [
-    'dist/**/*.js',
-    'src/kernel/**/*.ts',
-    '!src/kernel/**/*.d.ts',
-  ],
+  collectCoverageFrom: ['dist/**/*.js', 'src/kernel/**/*.ts', '!src/kernel/**/*.d.ts'],
   coverageReporters: ['text', 'json', 'json-summary', 'lcov', 'html'],
   coverageDirectory: 'coverage',
   coverageThreshold: {

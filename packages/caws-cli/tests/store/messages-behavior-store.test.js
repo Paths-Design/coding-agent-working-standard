@@ -72,7 +72,8 @@ function delivery(id, ts = '2026-09-04T11:30:00.000Z') {
 function writeLedger(dir, entries) {
   fs.writeFileSync(
     path.join(dir, 'messages.jsonl'),
-    entries.map((entry) => typeof entry === 'string' ? entry : JSON.stringify(entry)).join('\n') + '\n'
+    entries.map((entry) => (typeof entry === 'string' ? entry : JSON.stringify(entry))).join('\n') +
+      '\n'
   );
 }
 
@@ -97,13 +98,16 @@ function writeLeaseRecord(dir, sessionId, overrides = {}) {
 function readLedger(dir, filename = 'messages.jsonl') {
   const raw = fs.readFileSync(path.join(dir, filename), 'utf8');
   if (raw.length === 0) return [];
-  return raw.trim().split('\n').flatMap((line) => {
-    try {
-      return [JSON.parse(line)];
-    } catch {
-      return [];
-    }
-  });
+  return raw
+    .trim()
+    .split('\n')
+    .flatMap((line) => {
+      try {
+        return [JSON.parse(line)];
+      } catch {
+        return [];
+      }
+    });
 }
 
 describe('formatAge', () => {
@@ -145,18 +149,22 @@ describe('module-level message contracts', () => {
     });
     expect(sent.ok).toBe(true);
     expect(fs.existsSync(path.join(dir, 'messages.jsonl'))).toBe(true);
-    expect(fresh.sendMessage(dir, {
-      actor: { kind: 'agent', id: 'sender' },
-      to: '!leading-invalid',
-      text: 'no',
-      requireLive: false,
-    }).ok).toBe(false);
-    expect(fresh.sendMessage(dir, {
-      actor: { kind: 'agent', id: 'sender' },
-      to: 'trailing-invalid!',
-      text: 'no',
-      requireLive: false,
-    }).ok).toBe(false);
+    expect(
+      fresh.sendMessage(dir, {
+        actor: { kind: 'agent', id: 'sender' },
+        to: '!leading-invalid',
+        text: 'no',
+        requireLive: false,
+      }).ok
+    ).toBe(false);
+    expect(
+      fresh.sendMessage(dir, {
+        actor: { kind: 'agent', id: 'sender' },
+        to: 'trailing-invalid!',
+        text: 'no',
+        requireLive: false,
+      }).ok
+    ).toBe(false);
     expect(fresh.resolveRecipient(dir, 'wt:lane')).toEqual({
       ok: true,
       value: { sessionId: 'valid.peer:1', alias: 'wt:lane' },
@@ -167,11 +175,13 @@ describe('module-level message contracts', () => {
     });
 
     expect(fresh.pollMessage(dir, 'valid.peer:1').value.message.id).toBe(sent.value.message.id);
-    expect(fresh.pruneMessages(dir, {
-      status: 'delivered',
-      include: [sent.value.message.id],
-      apply: true,
-    }).ok).toBe(true);
+    expect(
+      fresh.pruneMessages(dir, {
+        status: 'delivered',
+        include: [sent.value.message.id],
+        apply: true,
+      }).ok
+    ).toBe(true);
     expect(fs.existsSync(path.join(dir, 'messages.jsonl.archive'))).toBe(true);
 
     writeLeaseRecord(dir, 'stale', {
@@ -263,10 +273,7 @@ describe('recipient liveness and send admission', () => {
     const dir = cawsDir();
     fs.writeFileSync(path.join(dir, 'leases'), 'not a directory');
 
-    for (const result of [
-      describeRecipientLiveness(dir, 'peer'),
-      isRecipientLive(dir, 'peer'),
-    ]) {
+    for (const result of [describeRecipientLiveness(dir, 'peer'), isRecipientLive(dir, 'peer')]) {
       expect(result.ok).toBe(false);
       expect(result.errors).not.toHaveLength(0);
     }
@@ -281,8 +288,9 @@ describe('recipient liveness and send admission', () => {
       expect(refused.ok).toBe(false);
       expect(refused.errors[0].rule).toBe('store.messages.recipient_invalid');
     }
-    expect(sendMessage(dir, { actor, to: 'ghost', text: 'live required' }).errors[0].rule)
-      .toBe('store.messages.recipient_not_live');
+    expect(sendMessage(dir, { actor, to: 'ghost', text: 'live required' }).errors[0].rule).toBe(
+      'store.messages.recipient_not_live'
+    );
 
     const plain = sendMessage(dir, {
       actor,
@@ -313,8 +321,9 @@ describe('recipient liveness and send admission', () => {
     expect(linked.value.message).toMatchObject({ reply_to: 'parent', urgency: 'critical' });
 
     writeLeaseRecord(dir, 'active-peer', { last_active: new Date().toISOString() });
-    expect(sendMessage(dir, { actor, to: 'active-peer', text: 'active' }).value.recipientIdle)
-      .toBe(false);
+    expect(sendMessage(dir, { actor, to: 'active-peer', text: 'active' }).value.recipientIdle).toBe(
+      false
+    );
   });
 
   test('surfaces append failures without claiming the message was sent', () => {
@@ -495,7 +504,11 @@ describe('polling and sender context', () => {
     expect(first.value.diagnostics[0].message).toBe(
       'messages.jsonl:1 is not valid JSON — skipped.'
     );
-    expect(readLedger(dir).filter((entry) => entry.record === 'delivery').at(-1)).toMatchObject({
+    expect(
+      readLedger(dir)
+        .filter((entry) => entry.record === 'delivery')
+        .at(-1)
+    ).toMatchObject({
       deliver_id: 'normal-11',
       mode: 'poll',
     });
@@ -608,11 +621,13 @@ describe('inbox count and repo-wide inbox', () => {
     const result = inboxAllMessages(dir);
 
     expect(result.ok).toBe(true);
-    expect(result.value.messages.map(({ message: entry, recipient, ageMs }) => ({
-      id: entry.id,
-      recipient,
-      ageMs,
-    }))).toEqual([
+    expect(
+      result.value.messages.map(({ message: entry, recipient, ageMs }) => ({
+        id: entry.id,
+        recipient,
+        ageMs,
+      }))
+    ).toEqual([
       { id: 'old', recipient: 'r1', ageMs: 3 * 60 * 60 * 1000 },
       { id: 'future', recipient: 'r2', ageMs: 0 },
       { id: 'invalid', recipient: 'r3', ageMs: 0 },
@@ -647,10 +662,7 @@ describe('mineQueued', () => {
     const result = mineQueued(dir, 'me', 60 * 60 * 1000);
 
     expect(result.ok).toBe(true);
-    expect(result.value.messages.map((entry) => entry.message.id)).toEqual([
-      'mine-3h',
-      'mine-2h',
-    ]);
+    expect(result.value.messages.map((entry) => entry.message.id)).toEqual(['mine-3h', 'mine-2h']);
     expect(result.value.messages.map((entry) => entry.ageMs)).toEqual([
       3 * 60 * 60 * 1000,
       2 * 60 * 60 * 1000,
@@ -718,23 +730,27 @@ describe('message retention planning and apply', () => {
       pruned_messages: 0,
       pruned_delivery_records: 0,
     });
-    expect(result.value.candidates).toEqual([{
-      id: 'candidate',
-      ts: candidate.ts,
-      from: 'actor-only',
-      to: 'peer',
-      channel: candidate.channel,
-      text: 'candidate',
-      delivered: true,
-      state: 'candidate',
-      reason: 'delivered',
-    }]);
-    expect(result.value.skipped.map(({ id, delivered: wasDelivered, state, reason }) => ({
-      id,
-      delivered: wasDelivered,
-      state,
-      reason,
-    }))).toEqual([
+    expect(result.value.candidates).toEqual([
+      {
+        id: 'candidate',
+        ts: candidate.ts,
+        from: 'actor-only',
+        to: 'peer',
+        channel: candidate.channel,
+        text: 'candidate',
+        delivered: true,
+        state: 'candidate',
+        reason: 'delivered',
+      },
+    ]);
+    expect(
+      result.value.skipped.map(({ id, delivered: wasDelivered, state, reason }) => ({
+        id,
+        delivered: wasDelivered,
+        state,
+        reason,
+      }))
+    ).toEqual([
       { id: 'undelivered', delivered: false, state: 'skipped', reason: 'undelivered' },
       { id: 'excluded', delivered: true, state: 'skipped', reason: 'excluded' },
       { id: 'not-included', delivered: true, state: 'skipped', reason: 'not-included' },
@@ -798,10 +814,7 @@ describe('message retention planning and apply', () => {
 
   test('an archive append failure leaves the live ledger byte-identical', () => {
     const dir = cawsDir();
-    writeLedger(dir, [
-      message('only', 'me', 'peer', '2026-09-04T09:00:00.000Z'),
-      delivery('only'),
-    ]);
+    writeLedger(dir, [message('only', 'me', 'peer', '2026-09-04T09:00:00.000Z'), delivery('only')]);
     const before = fs.readFileSync(path.join(dir, 'messages.jsonl'), 'utf8');
     fs.mkdirSync(path.join(dir, 'messages.jsonl.archive'));
 

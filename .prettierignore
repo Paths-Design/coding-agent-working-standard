@@ -156,3 +156,39 @@ local.*
 *.pdf
 *.zip
 *.tar.gz
+
+# ── CAWS governance state and managed runtime (byte-stable by design) ──────
+# .caws/ holds CLI-written, audit-chained governance state — specs, waivers,
+# policy, events — plus the live project-wired hook runtime. The CLI is the sole
+# writer of spec YAML; a formatter rewriting it bypasses the audit trail. Before
+# this entry, lint-staged reformatted any spec YAML that happened to be staged.
+.caws/
+
+# Hook-pack templates and their installed copies carry CAWS-MANAGED headers and
+# feed a pack fingerprint: sha256 over the sorted [relpath, contentHash] pairs,
+# compared against a recorded baseline. Any reflow shifts that fingerprint,
+# which forces a pack version bump and re-propagation to every consumer, so a
+# formatting pass must never reach them.
+packages/caws-cli/templates/hook-packs/
+.claude/hooks/
+.opencode/plugins/
+.kimi-code/AGENTS.md
+.opencode/AGENTS.md
+.qwen/CAWS-HOOKS.md
+
+# ── Generated artifacts (the generator owns their formatting) ──────────────
+# Each has a --check or conformance gate that byte-compares generator output
+# against the committed file; formatting them makes that gate fail.
+*.generated.ts
+docs/command-reference.md
+packages/caws-cli/docs/command-reference.md
+
+# Docs carrying populate-doc-markers.mjs generated blocks. The generator and
+# prettier do not converge: reformatting the injected block makes
+# `populate-doc-markers.mjs --check` report STALE, and re-running the generator
+# reproduces a block prettier wants to reflow again. The generator owns these
+# files until it emits prettier-stable output.
+packages/caws-cli/README.md
+packages/caws-cli/templates/CLAUDE.md
+packages/caws-cli/templates/agents.md
+docs/guides/agent-integration-guide.md

@@ -47,10 +47,13 @@ describe('CAWS_INSTRUCTION_FILES: derived per surface (agent-surface.sh)', () =>
     { surface: 'windsurf', expected: 'AGENTS.md' },
   ];
 
-  test.each(cases)('$surface derives CAWS_INSTRUCTION_FILES="$expected"', ({ surface, expected }) => {
-    const out = sourceUnderSurface(surface, 'printf "%s" "$CAWS_INSTRUCTION_FILES"');
-    expect(out.trim()).toBe(expected);
-  });
+  test.each(cases)(
+    '$surface derives CAWS_INSTRUCTION_FILES="$expected"',
+    ({ surface, expected }) => {
+      const out = sourceUnderSurface(surface, 'printf "%s" "$CAWS_INSTRUCTION_FILES"');
+      expect(out.trim()).toBe(expected);
+    }
+  );
 
   test('unknown surface falls through to BOTH common instruction files (fail-safe)', () => {
     const out = sourceUnderSurface('bogus-surface', 'printf "%s" "$CAWS_INSTRUCTION_FILES"');
@@ -93,7 +96,8 @@ describe('is_plan_file_path: vendor-derived, not hardcoded (session-log.sh)', ()
   // agent-surface.sh. We define the function inline (copied verbatim from the
   // shipped source) so the test exercises the EXACT logic without standing up
   // the full dispatcher + parse-input dependency chain.
-  const FUNCTION_BODY = fs.readFileSync(path.join(TEMPLATES, 'session-log.sh'), 'utf8')
+  const FUNCTION_BODY = fs
+    .readFileSync(path.join(TEMPLATES, 'session-log.sh'), 'utf8')
     .match(/is_plan_file_path\(\) \{[\s\S]*?^\}/m)[0];
 
   function planCheck(surface, filePath) {

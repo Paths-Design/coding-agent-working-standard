@@ -21,7 +21,8 @@ For current adoption, separate two operations:
    preview and explicit `caws init migrate apply --from <file>`. See
    [Legacy state migration](#legacy-state-migration) for the input contract.
 2. Install the machine runtime, configure the native harness, and retire old
-   project registration once. Follow [runtime adoption](guides/hook-packs.md#machine-adapter-installation).
+   project registration once. Follow
+   [runtime adoption](guides/hook-packs.md#machine-adapter-installation).
 
 Bridge claims, worktree prune/repair and session log retention now ship; leases
 remain visibility, not authority. Session lifecycle start/checkpoint/end and
@@ -32,9 +33,17 @@ parallel orchestration remain deferred. Record AC closure with `specs evidence`;
 
 ## What v11 is and is not
 
-**v11 is** a complete rewrite of the CAWS governance core onto the kernel/store/shell architecture. The early v11 line shipped fourteen command groups (`init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`, `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message`) — stable, hardened with lifecycle-transaction discipline, and operationally proven on the project's own self-hosted use.
+**v11 is** a complete rewrite of the CAWS governance core onto the
+kernel/store/shell architecture. The early v11 line shipped fourteen command
+groups (`init`, `doctor`, `status`, `scope`, `claim`, `gates`, `evidence`,
+`events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message`) —
+stable, hardened with lifecycle-transaction discipline, and operationally proven
+on the project's own self-hosted use.
 
-**v11.1 is not** a compatibility shim over v10.2. A meaningful fraction of the v10.2 surface has been removed without replacement; another fraction is deferred to v11.2 or v11.3+. If your team relies daily on the removed surfaces, this upgrade is operational work, not a version bump.
+**v11.1 is not** a compatibility shim over v10.2. A meaningful fraction of the
+v10.2 surface has been removed without replacement; another fraction is deferred
+to v11.2 or v11.3+. If your team relies daily on the removed surfaces, this
+upgrade is operational work, not a version bump.
 
 This guide is the operational doctrine for traversing that gap.
 
@@ -46,91 +55,114 @@ Every v10.2 command falls into exactly one of four buckets.
 
 ### Replaced (different name, equivalent or stronger capability)
 
-| v10.2 command | v11.1 replacement | Notes |
-|---|---|---|
-| `caws validate` / `caws verify` | `caws doctor && caws gates run --spec <id>` | `doctor` does drift detection over `.caws/` state; `gates run` does policy-driven quality gates. The v10.2 conflation of both into one command is gone. |
-| `caws diagnose` | `caws doctor` | Direct rename; same drift-detection responsibility. Exit codes: 0 clean, 1 findings, 2 composition failure. |
-| `caws hooks install` | `caws init --agent-surface claude-code` | Hook-pack adoption is now an init concern, not a separate command. The hook pack is the install surface; mid-session install requires a session restart to activate. |
-| `caws provenance` | `caws evidence record --type <test\|gate\|ac> --spec <id> --data <json>` + the hash-chained `.caws/events.jsonl` | The provenance shape changed. v10.2 scripts that read provenance command output will fail; the new audit surface is the events.jsonl chain. |
-| `caws scaffold` | `caws init` | Folded into `caws init`'s idempotent re-init flow. Previously misclassified under "Removed without replacement" — corrected by `CAWS-REMOVED-COMMAND-DIAGNOSTICS-001`. The matrix at `docs/v11-surface-matrix.yaml` always classified `scaffold` as `replaced`; this row reconciles the doc to the matrix. |
+| v10.2 command                   | v11.1 replacement                                                                                                | Notes                                                                                                                                                                                                                                                                                                      |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `caws validate` / `caws verify` | `caws doctor && caws gates run --spec <id>`                                                                      | `doctor` does drift detection over `.caws/` state; `gates run` does policy-driven quality gates. The v10.2 conflation of both into one command is gone.                                                                                                                                                    |
+| `caws diagnose`                 | `caws doctor`                                                                                                    | Direct rename; same drift-detection responsibility. Exit codes: 0 clean, 1 findings, 2 composition failure.                                                                                                                                                                                                |
+| `caws hooks install`            | `caws init --agent-surface claude-code`                                                                          | Hook-pack adoption is now an init concern, not a separate command. The hook pack is the install surface; mid-session install requires a session restart to activate.                                                                                                                                       |
+| `caws provenance`               | `caws evidence record --type <test\|gate\|ac> --spec <id> --data <json>` + the hash-chained `.caws/events.jsonl` | The provenance shape changed. v10.2 scripts that read provenance command output will fail; the new audit surface is the events.jsonl chain.                                                                                                                                                                |
+| `caws scaffold`                 | `caws init`                                                                                                      | Folded into `caws init`'s idempotent re-init flow. Previously misclassified under "Removed without replacement" — corrected by `CAWS-REMOVED-COMMAND-DIAGNOSTICS-001`. The matrix at `docs/v11-surface-matrix.yaml` always classified `scaffold` as `replaced`; this row reconciles the doc to the matrix. |
 
 ### Renamed (cosmetic; scripts will break on the old name)
 
-| v10.2 command | v11.1 name |
-|---|---|
-| `caws archive <id>` | `caws specs archive <id>` |
-| `caws waivers` (plural) | `caws waiver` (singular) |
+| v10.2 command           | v11.1 name                |
+| ----------------------- | ------------------------- |
+| `caws archive <id>`     | `caws specs archive <id>` |
+| `caws waivers` (plural) | `caws waiver` (singular)  |
 
-CI pipelines or scripts invoking the old names will fail with "unknown command." Update the call sites.
+CI pipelines or scripts invoking the old names will fail with "unknown command."
+Update the call sites.
 
 ### Removed without replacement (genuine capability loss in v11.1)
 
-The following v10.2 commands are **not present in v11.1 and have no v11.1 replacement**. v11.1 intentionally prioritizes governed lifecycle and release safety over advisory-report parity. Teams depending on these commands daily should either stay on v10.2.x, or treat replacement design as separate adoption work.
+The following v10.2 commands are **not present in v11.1 and have no v11.1
+replacement**. v11.1 intentionally prioritizes governed lifecycle and release
+safety over advisory-report parity. Teams depending on these commands daily
+should either stay on v10.2.x, or treat replacement design as separate adoption
+work.
 
-| v10.2 command | What it did | Recommendation |
-|---|---|---|
-| `caws sidecar drift` | Compared spec intent vs. current implementation | Stay on v10.2 OR rebuild as an external tool over the v11 events.jsonl |
-| `caws sidecar gaps` | Diagnosed quality gaps blocking gate passage | Use `caws gates run` output and trace the failed gate manually |
-| `caws sidecar provenance` | Summarized work history for merge readiness | Read `.caws/events.jsonl` directly (it is hash-chained and human-readable) |
-| `caws sidecar waiver-draft` | Generated pre-filled waiver template | `caws waiver create --help` provides the flag surface; no template generator |
-| `caws burnup` | Budget burn-up reports for scope visibility | Stay on v10.2 OR derive from `caws status` + spec `change_budget` manually |
-| `caws verify-acs` | Verified acceptance criteria have test evidence | Stay on v10.2 OR encode AC-evidence assertions in your test suite directly |
-| `caws evaluate` | Evaluated work against quality standards | `caws gates run` covers policy gates; quality-evaluation reports are not reproduced |
-| `caws iterate` | Iterative development guidance | Advisory-only; no v11 equivalent. Use the spec's acceptance criteria as guidance |
-| `caws workflow <type>` | Workflow-specific guidance | Documentation-driven now; no command surface |
-| `caws quality-monitor` | Real-time quality impact monitoring | Not present in v11.1 |
-| `caws test-analysis` | Statistical analysis for budget prediction | Not present in v11.1 |
-| `caws tool <id>` | Generic tool runner | Niche utility; not present in v11.1 |
-| `caws templates discover/manage` | Template discovery | Hook-pack install is now the only template surface |
-| `caws mode` | Complexity-tier management | Not present in v11.1 |
-| `caws tutorial` | Interactive guided learning | Doc-driven now |
-| `caws plan` | Implementation-plan generation | Not present in v11.1 |
+| v10.2 command                    | What it did                                     | Recommendation                                                                      |
+| -------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `caws sidecar drift`             | Compared spec intent vs. current implementation | Stay on v10.2 OR rebuild as an external tool over the v11 events.jsonl              |
+| `caws sidecar gaps`              | Diagnosed quality gaps blocking gate passage    | Use `caws gates run` output and trace the failed gate manually                      |
+| `caws sidecar provenance`        | Summarized work history for merge readiness     | Read `.caws/events.jsonl` directly (it is hash-chained and human-readable)          |
+| `caws sidecar waiver-draft`      | Generated pre-filled waiver template            | `caws waiver create --help` provides the flag surface; no template generator        |
+| `caws burnup`                    | Budget burn-up reports for scope visibility     | Stay on v10.2 OR derive from `caws status` + spec `change_budget` manually          |
+| `caws verify-acs`                | Verified acceptance criteria have test evidence | Stay on v10.2 OR encode AC-evidence assertions in your test suite directly          |
+| `caws evaluate`                  | Evaluated work against quality standards        | `caws gates run` covers policy gates; quality-evaluation reports are not reproduced |
+| `caws iterate`                   | Iterative development guidance                  | Advisory-only; no v11 equivalent. Use the spec's acceptance criteria as guidance    |
+| `caws workflow <type>`           | Workflow-specific guidance                      | Documentation-driven now; no command surface                                        |
+| `caws quality-monitor`           | Real-time quality impact monitoring             | Not present in v11.1                                                                |
+| `caws test-analysis`             | Statistical analysis for budget prediction      | Not present in v11.1                                                                |
+| `caws tool <id>`                 | Generic tool runner                             | Niche utility; not present in v11.1                                                 |
+| `caws templates discover/manage` | Template discovery                              | Hook-pack install is now the only template surface                                  |
+| `caws mode`                      | Complexity-tier management                      | Not present in v11.1                                                                |
+| `caws tutorial`                  | Interactive guided learning                     | Doc-driven now                                                                      |
+| `caws plan`                      | Implementation-plan generation                  | Not present in v11.1                                                                |
 
-**Policy statement:** v11.1 intentionally prioritizes governed lifecycle and release safety over advisory-report parity. Advisory tools removed from v10.2 are not compatibility shims in v11.1. Teams depending on them should either stay on v10.2.x or treat replacement design as separate adoption work.
+**Policy statement:** v11.1 intentionally prioritizes governed lifecycle and
+release safety over advisory-report parity. Advisory tools removed from v10.2
+are not compatibility shims in v11.1. Teams depending on them should either stay
+on v10.2.x or treat replacement design as separate adoption work.
 
-If the long-term decision is to rebuild any of these surfaces in v11.x, that work belongs in a separate spec (see `CAWS-ADVISORY-SURFACE-POLICY-001` if it is filed in the future). The migration guide does not resolve that decision.
+If the long-term decision is to rebuild any of these surfaces in v11.x, that
+work belongs in a separate spec (see `CAWS-ADVISORY-SURFACE-POLICY-001` if it is
+filed in the future). The migration guide does not resolve that decision.
 
 ### Deferred (planned for v11.2 or v11.3+)
 
-| v10.2 command | Status in v11.1 | Workaround |
-|---|---|---|
-| `caws session` | `prune`/`pickup` **shipped in v11.1.x**; the full lifecycle (`start`/`checkpoint`/`end`/`list`/`show`/`briefing`) is deferred to v11.3+ | Multi-agent session capsules (the full lifecycle) are deferred; per-worktree binding remains the v11 isolation primitive |
-| `caws parallel setup` | Deferred to v11.3+ | Loop `caws worktree create <name> --spec <id>` per spec; there is no orchestration command in v11.1 |
-| `caws worktree reconcile` | Planned for v11.2 | `caws status` shows worktree state; manual cleanup via `git worktree` directly. Note: `caws worktree prune` and `repair-sparse` **both shipped in v11.1** — only `reconcile` remains deferred. |
+| v10.2 command             | Status in v11.1                                                                                                                         | Workaround                                                                                                                                                                                     |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `caws session`            | `prune`/`pickup` **shipped in v11.1.x**; the full lifecycle (`start`/`checkpoint`/`end`/`list`/`show`/`briefing`) is deferred to v11.3+ | Multi-agent session capsules (the full lifecycle) are deferred; per-worktree binding remains the v11 isolation primitive                                                                       |
+| `caws parallel setup`     | Deferred to v11.3+                                                                                                                      | Loop `caws worktree create <name> --spec <id>` per spec; there is no orchestration command in v11.1                                                                                            |
+| `caws worktree reconcile` | Planned for v11.2                                                                                                                       | `caws status` shows worktree state; manual cleanup via `git worktree` directly. Note: `caws worktree prune` and `repair-sparse` **both shipped in v11.1** — only `reconcile` remains deferred. |
 
-> **Note:** The full `agents` group (`register/heartbeat/stop/list/show/prune`), the full `events` group (`migrate/rotate/verify-archive`), `caws worktree prune`, `caws claim --spec` (bridge claims), and the `claim_taken_over.v1` event are all **shipped in v11.1.x**, not deferred — they were earlier planned for v11.2 but landed ahead of schedule. See the "Shipped ahead of plan (v11.1.x)" section below. Only `caws worktree reconcile` remains genuinely unplanned/unshipped in the v11.2 line.
+> **Note:** The full `agents` group (`register/heartbeat/stop/list/show/prune`),
+> the full `events` group (`migrate/rotate/verify-archive`),
+> `caws worktree prune`, `caws claim --spec` (bridge claims), and the
+> `claim_taken_over.v1` event are all **shipped in v11.1.x**, not deferred —
+> they were earlier planned for v11.2 but landed ahead of schedule. See the
+> "Shipped ahead of plan (v11.1.x)" section below. Only
+> `caws worktree reconcile` remains genuinely unplanned/unshipped in the v11.2
+> line.
 
-**Multi-agent operators**: if you rely daily on the full `caws session` lifecycle (`start`/`checkpoint`/`end`) or `caws parallel`, defer the upgrade until those land (v11.3+). The full `agents` group, `session prune`/`pickup`, `worktree prune`, and bridge claims (`claim --spec`) already ship in v11.1.x, so none of those are a reason to defer. Single-agent users are unaffected.
+**Multi-agent operators**: if you rely daily on the full `caws session`
+lifecycle (`start`/`checkpoint`/`end`) or `caws parallel`, defer the upgrade
+until those land (v11.3+). The full `agents` group, `session prune`/`pickup`,
+`worktree prune`, and bridge claims (`claim --spec`) already ship in v11.1.x, so
+none of those are a reason to defer. Single-agent users are unaffected.
 
 ### Shipped ahead of plan (v11.1.x)
 
-The following surfaces were planned for v11.2 but shipped in v11.1.x. They are **not** deferred and must not be listed as such:
+The following surfaces were planned for v11.2 but shipped in v11.1.x. They are
+**not** deferred and must not be listed as such:
 
-| Surface | Shipped subcommands | Notes |
-|---|---|---|
-| `caws events` | `migrate`, `rotate`, `verify-archive` | Maintenance commands for `.caws/events.jsonl`. `migrate` converts v10-shape logs to v11 chain format; `rotate` archives and starts a fresh chain; `verify-archive` validates archive byte integrity. |
-| `caws agents` | `register`, `heartbeat`, `stop`, `list`, `show`, `prune` | Full agent liveness substrate. Operational cache only — never authority. Hook-invoked at SessionStart/PreToolUse/Stop; `prune` is operator-invoked with `--apply`. |
-| `caws specs recover` | — | Recovers an archived spec body from the event log + git history without mutating `.caws/specs/`. |
-| `caws specs prune-archive` | — | Migrates legacy archive tombstone bodies (CAWS-ARCHIVE-AS-TOMBSTONE-001). Dry-run by default; `--apply` executes. |
-| `caws specs migrate` | — | v10→v11 spec YAML migrator (CAWS-MIGRATE-V10-SPECS-001). |
-| `caws worktree migrate-registry` | — | Converts v10.2 legacy-envelope `.caws/worktrees.json` to v11 flat-map shape. Idempotent. |
-| `caws worktree repair-sparse` | — | Restores the `.caws/specs` sparse-checkout invariant on a linked worktree. Non-destructive. |
-| `caws worktree repair` | — | Governed half-state executor: prunes ghost registry entries and clears dead spec→worktree bindings for the unambiguous classes (PRUNE-REPAIR-WORKTREE-001). |
-| `caws worktree prune` / `cleanup-plan` | — | Dry-run-by-default doctor-evidence prune and physical worktree cleanup planning/apply. `reconcile` is the one item in this line still unshipped. |
-| `caws worktree ensure` | — | Idempotent create-or-admit affordance (WORKTREE-ENSURE-AFFORDANCE-001): absent lanes create via the full path, existing same-spec untouched lanes admit with no new events. |
-| `caws worktree review` | — | Read-only pre-merge gate (WORKTREE-REVIEW-SURFACE-001): commit list, per-commit scope-provenance table, lane diffstat, bound spec's AC evidence, owner's lease work_state. Never mutates. |
-| `caws claim --paths` | — | Declares working-tree ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001). |
-| `caws claim --spec` / `--release` | — | Bridge claims (AUTH-BINDING-BRIDGE-001): session↔spec authority binding for non-worktree contexts. Same `scope.in` admission surface as a worktree binding; emits `claim_bridged.v1` / `bridge_claim_taken_over.v1`. |
-| `caws claim --takeover` | — | Emits `claim_taken_over.v1` in the same transaction as the ownership patch — the audit gap this guide once described as forthcoming is closed. |
-| `caws session prune` / `pickup` | — | Dry-run-default retention for `.caws/sessions/` turn logs (SESSION-LOG-RETENTION-SCOPE-001), and a `manual_pickup` event when one session continues another's paused work (MULTI-AGENT-HANDOFF-EVENT-001). The full session lifecycle remains deferred to v11.3+. |
-| `caws working-tree check` / `ack` | — | Working-tree provenance advisory (WORKING-TREE-PROVENANCE-GUARD-001): uncommitted-overlap detection against another session's declared ownership. Visibility only. |
-| `caws handoff export` / `import` | — | Portable handoff briefs for session-to-session continuity (HANDOFF-EXPORT-IMPORT-001). Provenance only. |
+| Surface                                | Shipped subcommands                                      | Notes                                                                                                                                                                                                                                                             |
+| -------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `caws events`                          | `migrate`, `rotate`, `verify-archive`                    | Maintenance commands for `.caws/events.jsonl`. `migrate` converts v10-shape logs to v11 chain format; `rotate` archives and starts a fresh chain; `verify-archive` validates archive byte integrity.                                                              |
+| `caws agents`                          | `register`, `heartbeat`, `stop`, `list`, `show`, `prune` | Full agent liveness substrate. Operational cache only — never authority. Hook-invoked at SessionStart/PreToolUse/Stop; `prune` is operator-invoked with `--apply`.                                                                                                |
+| `caws specs recover`                   | —                                                        | Recovers an archived spec body from the event log + git history without mutating `.caws/specs/`.                                                                                                                                                                  |
+| `caws specs prune-archive`             | —                                                        | Migrates legacy archive tombstone bodies (CAWS-ARCHIVE-AS-TOMBSTONE-001). Dry-run by default; `--apply` executes.                                                                                                                                                 |
+| `caws specs migrate`                   | —                                                        | v10→v11 spec YAML migrator (CAWS-MIGRATE-V10-SPECS-001).                                                                                                                                                                                                          |
+| `caws worktree migrate-registry`       | —                                                        | Converts v10.2 legacy-envelope `.caws/worktrees.json` to v11 flat-map shape. Idempotent.                                                                                                                                                                          |
+| `caws worktree repair-sparse`          | —                                                        | Restores the `.caws/specs` sparse-checkout invariant on a linked worktree. Non-destructive.                                                                                                                                                                       |
+| `caws worktree repair`                 | —                                                        | Governed half-state executor: prunes ghost registry entries and clears dead spec→worktree bindings for the unambiguous classes (PRUNE-REPAIR-WORKTREE-001).                                                                                                       |
+| `caws worktree prune` / `cleanup-plan` | —                                                        | Dry-run-by-default doctor-evidence prune and physical worktree cleanup planning/apply. `reconcile` is the one item in this line still unshipped.                                                                                                                  |
+| `caws worktree ensure`                 | —                                                        | Idempotent create-or-admit affordance (WORKTREE-ENSURE-AFFORDANCE-001): absent lanes create via the full path, existing same-spec untouched lanes admit with no new events.                                                                                       |
+| `caws worktree review`                 | —                                                        | Read-only pre-merge gate (WORKTREE-REVIEW-SURFACE-001): commit list, per-commit scope-provenance table, lane diffstat, bound spec's AC evidence, owner's lease work_state. Never mutates.                                                                         |
+| `caws claim --paths`                   | —                                                        | Declares working-tree ownership metadata on the current session's lease (SESSION-OWNERSHIP-METADATA-001).                                                                                                                                                         |
+| `caws claim --spec` / `--release`      | —                                                        | Bridge claims (AUTH-BINDING-BRIDGE-001): session↔spec authority binding for non-worktree contexts. Same `scope.in` admission surface as a worktree binding; emits `claim_bridged.v1` / `bridge_claim_taken_over.v1`.                                             |
+| `caws claim --takeover`                | —                                                        | Emits `claim_taken_over.v1` in the same transaction as the ownership patch — the audit gap this guide once described as forthcoming is closed.                                                                                                                    |
+| `caws session prune` / `pickup`        | —                                                        | Dry-run-default retention for `.caws/sessions/` turn logs (SESSION-LOG-RETENTION-SCOPE-001), and a `manual_pickup` event when one session continues another's paused work (MULTI-AGENT-HANDOFF-EVENT-001). The full session lifecycle remains deferred to v11.3+. |
+| `caws working-tree check` / `ack`      | —                                                        | Working-tree provenance advisory (WORKING-TREE-PROVENANCE-GUARD-001): uncommitted-overlap detection against another session's declared ownership. Visibility only.                                                                                                |
+| `caws handoff export` / `import`       | —                                                        | Portable handoff briefs for session-to-session continuity (HANDOFF-EXPORT-IMPORT-001). Provenance only.                                                                                                                                                           |
 
 ---
 
 ## CI migration recipes
 
-Concrete before/after for the v10.2 commands most commonly invoked from CI pipelines.
+Concrete before/after for the v10.2 commands most commonly invoked from CI
+pipelines.
 
 ### Replacing `caws validate`
 
@@ -147,8 +179,10 @@ Concrete before/after for the v10.2 commands most commonly invoked from CI pipel
 ```
 
 Notes:
+
 - `caws doctor` exits 0 on clean, 1 on findings, 2 on composition failure.
-- `caws gates run` appends one `gate_evaluated` event per declared gate to `.caws/events.jsonl`.
+- `caws gates run` appends one `gate_evaluated` event per declared gate to
+  `.caws/events.jsonl`.
 - Wire each as a separate step so failures are localized.
 
 ### Replacing `caws waivers list`
@@ -173,7 +207,14 @@ Same applies to `caws waivers create/show/revoke`.
 - run: caws specs archive MY-FEATURE-001
 ```
 
-The v11 `caws specs archive` is a tombstone (CAWS-ARCHIVE-AS-TOMBSTONE-001): it deletes the closed spec's YAML from `.caws/specs/` and emits a hash-chained `spec_archived` event carrying the git `blob_sha` for recovery — it does NOT write a body to `.caws/specs/.archive/`. Recover an archived body with `caws specs recover <id>` (resolves via `git show <blob_sha>`). Archive requires the spec be `closed` first; a never-activated `draft` is retired instead via `caws specs retire-draft <id>` (same tombstone shape). Raw `git rm .caws/specs/<id>.yaml` is not the governed path for either.
+The v11 `caws specs archive` is a tombstone (CAWS-ARCHIVE-AS-TOMBSTONE-001): it
+deletes the closed spec's YAML from `.caws/specs/` and emits a hash-chained
+`spec_archived` event carrying the git `blob_sha` for recovery — it does NOT
+write a body to `.caws/specs/.archive/`. Recover an archived body with
+`caws specs recover <id>` (resolves via `git show <blob_sha>`). Archive requires
+the spec be `closed` first; a never-activated `draft` is retired instead via
+`caws specs retire-draft <id>` (same tombstone shape). Raw
+`git rm .caws/specs/<id>.yaml` is not the governed path for either.
 
 ### Replacing `caws diagnose`
 
@@ -185,11 +226,13 @@ The v11 `caws specs archive` is a tombstone (CAWS-ARCHIVE-AS-TOMBSTONE-001): it 
 - run: caws doctor
 ```
 
-`caws doctor` is the v11 drift-detection surface. Same exit semantics as v10.2's `diagnose` (0 clean, 1 findings).
+`caws doctor` is the v11 drift-detection surface. Same exit semantics as v10.2's
+`diagnose` (0 clean, 1 findings).
 
 ### Replacing `caws provenance`
 
-There is no direct command replacement. The v11 audit surface is `.caws/events.jsonl` (hash-chained). If your CI parsed `caws provenance` output:
+There is no direct command replacement. The v11 audit surface is
+`.caws/events.jsonl` (hash-chained). If your CI parsed `caws provenance` output:
 
 ```yaml
 # Before:
@@ -201,7 +244,9 @@ There is no direct command replacement. The v11 audit surface is `.caws/events.j
       .caws/events.jsonl
 ```
 
-The events.jsonl chain is the canonical provenance surface in v11. Each event has a hash linking to the previous event; tampering with prior events breaks the chain.
+The events.jsonl chain is the canonical provenance surface in v11. Each event
+has a hash linking to the previous event; tampering with prior events breaks the
+chain.
 
 ### Replacing `caws hooks install`
 
@@ -213,7 +258,8 @@ The events.jsonl chain is the canonical provenance surface in v11. Each event ha
 - run: caws init --agent-surface claude-code
 ```
 
-Note: v11's hook-pack install requires a session restart to activate. The pack is not loaded mid-session.
+Note: v11's hook-pack install requires a session restart to activate. The pack
+is not loaded mid-session.
 
 ---
 
@@ -221,9 +267,12 @@ Note: v11's hook-pack install requires a session restart to activate. The pack i
 
 ### The `.caws/working-spec.yaml` singleton
 
-v10.2 supported a single project-level working spec at `.caws/working-spec.yaml`. v11 does not. Every spec is per-feature at `.caws/specs/<id>.yaml`.
+v10.2 supported a single project-level working spec at
+`.caws/working-spec.yaml`. v11 does not. Every spec is per-feature at
+`.caws/specs/<id>.yaml`.
 
-Use the reviewed, dry-run-default governance migration before system hook adoption:
+Use the reviewed, dry-run-default governance migration before system hook
+adoption:
 
 ```bash
 caws init migrate --from /tmp/reviewed-governance.json
@@ -234,41 +283,53 @@ caws init adapters migrate --agent-surface codex --plan
 
 The JSON review has exactly `version: 1`, a nonempty `reason`, nonempty
 `requirementNotes` (array of strings), and `changes`. Each change has `path`,
-`beforeSha256` (SHA-256 of current UTF-8 bytes, or `null` only when absent),
-and `contents` (reviewed replacement YAML, or `null` to archive the original).
+`beforeSha256` (SHA-256 of current UTF-8 bytes, or `null` only when absent), and
+`contents` (reviewed replacement YAML, or `null` to archive the original).
 Allowed paths are the singleton and singleton schema, `policy.yaml`, and named
-YAML files under `specs/` and `waivers/`, all beneath `.caws/`. Singleton paths must be archived. Waivers can only be archived unchanged when revoked or provably expired; unexpired and ambiguous records are refused. A legacy waiver aggregate must contain only inert entries.
+YAML files under `specs/` and `waivers/`, all beneath `.caws/`. Singleton paths
+must be archived. Waivers can only be archived unchanged when revoked or
+provably expired; unexpired and ambiguous records are refused. A legacy waiver
+aggregate must contain only inert entries.
 
 Replacement policies must validate. Replacement specs must validate as unbound
 drafts without evidence or resolution. Existing modern policies and specs cannot
-be changed through this command. Every legacy spec and singleton must be reviewed.
-Prose scopes require path review before activation; migration proves no old ACs.
+be changed through this command. Every legacy spec and singleton must be
+reviewed. Prose scopes require path review before activation; migration proves
+no old ACs.
 
 Original source bytes remain versionable under `.caws/legacy/<plan-digest>/`.
-The full review receipt lives in the Git common directory as operational evidence.
-Preview writes nothing. Apply rejects stale hashes, unsafe paths, symlinks,
-conflicting archives, and concurrent migration. It archives originals before
-replacing files, retiring singleton paths last. An interrupted apply retains
-backups; inspect and regenerate the plan against current hashes before resuming.
-This command does not provide a multi-file rollback or commit files.
+The full review receipt lives in the Git common directory as operational
+evidence. Preview writes nothing. Apply rejects stale hashes, unsafe paths,
+symlinks, conflicting archives, and concurrent migration. It archives originals
+before replacing files, retiring singleton paths last. An interrupted apply
+retains backups; inspect and regenerate the plan against current hashes before
+resuming. This command does not provide a multi-file rollback or commit files.
 
-`requirementNotes` must account for requirements without a modern gate equivalent.
-Coverage, mutation, performance, model quality, and review thresholds remain
-project obligations: archiving their policy is **not a waiver** or proof of
-continued enforcement. Keep external checks and identify missing enforcement.
-Budgets can be mapped exactly; the command does not infer policy equivalence.
+`requirementNotes` must account for requirements without a modern gate
+equivalent. Coverage, mutation, performance, model quality, and review
+thresholds remain project obligations: archiving their policy is **not a
+waiver** or proof of continued enforcement. Keep external checks and identify
+missing enforcement. Budgets can be mapped exactly; the command does not infer
+policy equivalence.
 
 After reviewing and committing the conversion, initialize canonical state and
-retire each configured harness's project registration once. Subsequent stock hook
-updates happen in the user runtime; genuine project extensions remain explicit.
+retire each configured harness's project registration once. Subsequent stock
+hook updates happen in the user runtime; genuine project extensions remain
+explicit.
 
 ### `.caws/worktrees.json` shape
 
-The v11 CLI reads both shapes: v10 (`{"worktrees": {"<name>": {...}}}`) and v11 (`{"<name>": {...}}`). All v11 lifecycle commands (`caws worktree create/list/bind/destroy/merge`) write the v11 direct-key shape. The hook-pack helper (`session-caws-status.sh`'s `entriesOf`) also reads both.
+The v11 CLI reads both shapes: v10 (`{"worktrees": {"<name>": {...}}}`) and v11
+(`{"<name>": {...}}`). All v11 lifecycle commands
+(`caws worktree create/list/bind/destroy/merge`) write the v11 direct-key shape.
+The hook-pack helper (`session-caws-status.sh`'s `entriesOf`) also reads both.
 
 #### Asymmetry: v10.2 CANNOT read v11-shaped registries
 
-This is a one-way migration with respect to `caws worktree merge` (and the legacy worktree subcommands). Once a v11 CLI has written `.caws/worktrees.json` in the direct-key shape, the v10.2 CLI's `loadRegistry` will reject it. The failure surfaces as:
+This is a one-way migration with respect to `caws worktree merge` (and the
+legacy worktree subcommands). Once a v11 CLI has written `.caws/worktrees.json`
+in the direct-key shape, the v10.2 CLI's `loadRegistry` will reject it. The
+failure surfaces as:
 
 ```
 $ caws worktree merge <name> --dry-run
@@ -282,19 +343,25 @@ Worktree registry has schema violations: [
 Cannot read properties of undefined (reading '<name>')
 ```
 
-This is the documented failure mode behind `WORKTREE-MERGE-V11-SHAPE-001` and is a property of the legacy artifact, not the source tree.
+This is the documented failure mode behind `WORKTREE-MERGE-V11-SHAPE-001` and is
+a property of the legacy artifact, not the source tree.
 
-**If you see this output, your `which caws` is resolving to a v10.2 install.** The fix is to upgrade:
+**If you see this output, your `which caws` is resolving to a v10.2 install.**
+The fix is to upgrade:
 
 ```bash
 npm install -g @paths.design/caws-cli@latest
 ```
 
-The v11 CLI handles the same registry without error; the regression is locked by `packages/caws-cli/tests/store/worktree-merge-v11-shape.test.js`.
+The v11 CLI handles the same registry without error; the regression is locked by
+`packages/caws-cli/tests/store/worktree-merge-v11-shape.test.js`.
 
 ### `.caws/events.jsonl`
 
-v11's hash-chained events.jsonl is forward-compatible with v10.2's append-only log. v11 will read the existing log and continue appending. Pre-v11 events without hash links are tolerated; the chain begins from the first v11-emitted event.
+v11's hash-chained events.jsonl is forward-compatible with v10.2's append-only
+log. v11 will read the existing log and continue appending. Pre-v11 events
+without hash links are tolerated; the chain begins from the first v11-emitted
+event.
 
 If you want a clean chain start:
 
@@ -303,31 +370,54 @@ If you want a clean chain start:
 mv .caws/events.jsonl .caws/events-pre-v11.jsonl.bak
 ```
 
-(Tracked under `EVENTS-LEGACY-ARCHIVE-001` if a programmatic command is desired in the future.)
+(Tracked under `EVENTS-LEGACY-ARCHIVE-001` if a programmatic command is desired
+in the future.)
 
 ---
 
 ## Lite mode retirement (v11.1 hook pack v8+)
 
-**What lite mode was.** In v10.2, `caws init --mode lite` created a thinner alternative to the full per-feature spec workflow. Instead of `.caws/specs/*.yaml`, lite-mode projects had:
+**What lite mode was.** In v10.2, `caws init --mode lite` created a thinner
+alternative to the full per-feature spec workflow. Instead of
+`.caws/specs/*.yaml`, lite-mode projects had:
 
 - `.caws/mode.json` — `{ "current": "lite", "initialized": true }`
-- `.caws/scope.json` — a single project-wide allowlist/blocklist (`allowedDirectories`, `bannedPatterns.files`, `bannedPatterns.docs`, `maxNewFilesPerCommit`)
+- `.caws/scope.json` — a single project-wide allowlist/blocklist
+  (`allowedDirectories`, `bannedPatterns.files`, `bannedPatterns.docs`,
+  `maxNewFilesPerCommit`)
 
-The Claude Code hook pack's `scope-guard.sh` had a fallback branch: if no `.caws/specs/` directory existed AND `.caws/scope.json` did, the hook would enforce the lite-mode rules instead.
+The Claude Code hook pack's `scope-guard.sh` had a fallback branch: if no
+`.caws/specs/` directory existed AND `.caws/scope.json` did, the hook would
+enforce the lite-mode rules instead.
 
-**Why it was removed.** v11 has one governance model: per-feature specs under `.caws/specs/`. The lite-mode CLI surface (`caws lite`, `caws mode`, `caws scaffold`) was removed in v11.0. But the runtime hook pack kept silently enforcing `.caws/scope.json` rules through pack v7, creating a half-decommissioned state: the CLI couldn't create or manage lite-mode projects, but the hooks would still respect a legacy `.caws/scope.json` if one was on disk. That divergence ("the hook says lite is in effect; `caws doctor` says there are no specs") was the kind of authority-split this whole rewrite exists to prevent.
+**Why it was removed.** v11 has one governance model: per-feature specs under
+`.caws/specs/`. The lite-mode CLI surface (`caws lite`, `caws mode`,
+`caws scaffold`) was removed in v11.0. But the runtime hook pack kept silently
+enforcing `.caws/scope.json` rules through pack v7, creating a
+half-decommissioned state: the CLI couldn't create or manage lite-mode projects,
+but the hooks would still respect a legacy `.caws/scope.json` if one was on
+disk. That divergence ("the hook says lite is in effect; `caws doctor` says
+there are no specs") was the kind of authority-split this whole rewrite exists
+to prevent.
 
-Pack v8 finishes the retirement. `scope-guard.sh` no longer reads `.caws/scope.json`. Consumers with a legacy file get a doctor finding instead.
+Pack v8 finishes the retirement. `scope-guard.sh` no longer reads
+`.caws/scope.json`. Consumers with a legacy file get a doctor finding instead.
 
-**What to do with a legacy `.caws/mode.json`.** Delete it. v11 has no equivalent. The file is operational cache from v10; removing it has no behavioral effect on a v11 project that already has `.caws/specs/`.
+**What to do with a legacy `.caws/mode.json`.** Delete it. v11 has no
+equivalent. The file is operational cache from v10; removing it has no
+behavioral effect on a v11 project that already has `.caws/specs/`.
 
 ```bash
 # If you can confirm you no longer rely on lite-mode:
 rm .caws/mode.json
 ```
 
-**What to do with a legacy `.caws/scope.json`.** Assess case by case. Some Sterling-era projects use `.caws/scope.json` as a Python/Rust-friendly scope hint that pre-dates the `.caws/specs/scope.in` mechanism. v11 derives scope from `.caws/specs/<id>.yaml:scope.in` directly. If you have an active v11 project (`.caws/specs/*.yaml` exists), the `scope.json` file is now ignored by both the CLI and the hooks; it can be deleted or kept as historical reference.
+**What to do with a legacy `.caws/scope.json`.** Assess case by case. Some
+Sterling-era projects use `.caws/scope.json` as a Python/Rust-friendly scope
+hint that pre-dates the `.caws/specs/scope.in` mechanism. v11 derives scope from
+`.caws/specs/<id>.yaml:scope.in` directly. If you have an active v11 project
+(`.caws/specs/*.yaml` exists), the `scope.json` file is now ignored by both the
+CLI and the hooks; it can be deleted or kept as historical reference.
 
 ```bash
 # If .caws/specs/ exists and you are fully on v11 workflows:
@@ -340,12 +430,20 @@ git mv .caws/scope.json docs/historical/v10-scope.json
 **What is NOT changed by this retirement:**
 
 - v11 per-feature specs under `.caws/specs/` are unaffected.
-- `caws gates run`, `caws scope check`, `caws scope show` continue to work as before.
-- Existing Sterling-era projects with both `.caws/specs/` AND `.caws/scope.json` were already on the v11 path (the lite branch never fired when specs existed); the only change for them is potentially a doctor finding on `mode.json` if it is present on disk.
+- `caws gates run`, `caws scope check`, `caws scope show` continue to work as
+  before.
+- Existing Sterling-era projects with both `.caws/specs/` AND `.caws/scope.json`
+  were already on the v11 path (the lite branch never fired when specs existed);
+  the only change for them is potentially a doctor finding on `mode.json` if it
+  is present on disk.
 
 **What breaks if you actually depended on lite mode itself:**
 
-If your project relied on the lite-mode hook behavior (you don't have `.caws/specs/`, you only have `.caws/scope.json`), v8 will make scope-guard.sh exit silently. You will lose the lite-mode banned-pattern and allowed-directories enforcement. The migration path is to author per-feature specs:
+If your project relied on the lite-mode hook behavior (you don't have
+`.caws/specs/`, you only have `.caws/scope.json`), v8 will make scope-guard.sh
+exit silently. You will lose the lite-mode banned-pattern and
+allowed-directories enforcement. The migration path is to author per-feature
+specs:
 
 ```bash
 caws specs create FEAT-001 --title "Initial v11 spec" --mode chore --risk-tier 3
@@ -353,13 +451,18 @@ caws specs create FEAT-001 --title "Initial v11 spec" --mode chore --risk-tier 3
 # the directory list that was previously in .caws/scope.json:allowedDirectories.
 ```
 
-Sterling and full-stack-ds are not in this position; they have specs. A consumer that adopted v10 lite mode and never moved to specs would feel this change. The doctrine on this is intentional: lite mode could not survive into v11 because v11's authority model is per-spec, and the v10 lite shape has no equivalent.
+Sterling and full-stack-ds are not in this position; they have specs. A consumer
+that adopted v10 lite mode and never moved to specs would feel this change. The
+doctrine on this is intentional: lite mode could not survive into v11 because
+v11's authority model is per-spec, and the v10 lite shape has no equivalent.
 
 ---
 
 ## The rollback path
 
-If you upgrade and hit a blocker — a missing command, an unexpected gate failure, multi-agent observability you cannot live without — you can pin back to v10.2 immediately.
+If you upgrade and hit a blocker — a missing command, an unexpected gate
+failure, multi-agent observability you cannot live without — you can pin back to
+v10.2 immediately.
 
 ```bash
 npm install -g @paths.design/caws-cli@^10.2
@@ -367,18 +470,30 @@ npm install -g @paths.design/caws-cli@^10.2
 
 **Committed state survives the round trip.** Specifically:
 
-- `.caws/specs/*.yaml` files: v11 spec format is a superset of v10.2's; v10.2 will read v11-authored specs (with some warnings about unknown fields like the v11 `lifecycle_state` or `contracts` arrays).
+- `.caws/specs/*.yaml` files: v11 spec format is a superset of v10.2's; v10.2
+  will read v11-authored specs (with some warnings about unknown fields like the
+  v11 `lifecycle_state` or `contracts` arrays).
 - `.caws/events.jsonl`: append-only; v10.2 can read it.
-- `.caws/worktrees.json`: the v11 CLI reads both shapes. The v10.2 CLI accepts the v10 nested shape only — see the "Asymmetry" note above. If you have created any worktrees under v11, pin-back will require converting `.caws/worktrees.json` to the v10 nested shape (wrap entries in `{"version": 1, "worktrees": {...}}`) for v10.2 to read it. The forward direction does not require conversion.
+- `.caws/worktrees.json`: the v11 CLI reads both shapes. The v10.2 CLI accepts
+  the v10 nested shape only — see the "Asymmetry" note above. If you have
+  created any worktrees under v11, pin-back will require converting
+  `.caws/worktrees.json` to the v10 nested shape (wrap entries in
+  `{"version": 1, "worktrees": {...}}`) for v10.2 to read it. The forward
+  direction does not require conversion.
 - `.caws/policy.yaml`: schema-compatible.
-- `.caws/waivers/`: v11 uses singular `waiver`; the v10.2 plural `waivers` directory still works.
+- `.caws/waivers/`: v11 uses singular `waiver`; the v10.2 plural `waivers`
+  directory still works.
 
 What does NOT survive cleanly:
 
-- Specs authored with v11-only fields (e.g., `lifecycle_state: active`, `contracts: [...]`) will load in v10.2 but with field warnings. They remain readable.
-- Hash-chained events emitted by v11 are still valid JSONL lines in v10.2; v10.2 just won't verify the chain.
+- Specs authored with v11-only fields (e.g., `lifecycle_state: active`,
+  `contracts: [...]`) will load in v10.2 but with field warnings. They remain
+  readable.
+- Hash-chained events emitted by v11 are still valid JSONL lines in v10.2; v10.2
+  just won't verify the chain.
 
-If you pin back, no manual cleanup is required. You can re-upgrade to v11.1 later without data migration work.
+If you pin back, no manual cleanup is required. You can re-upgrade to v11.1
+later without data migration work.
 
 ---
 
@@ -421,120 +536,146 @@ one-liner. Committed state survives.
 
 ## Project doctrine drift: CLAUDE.md, agents.md, and hooks
 
-The CLI surface migration is necessary but not sufficient. Two failure
-modes show up in projects that initialized on caws-cli 10.x and then
-upgraded to 11.x:
+The CLI surface migration is necessary but not sufficient. Two failure modes
+show up in projects that initialized on caws-cli 10.x and then upgraded to 11.x:
 
-1. **Stale doctrine in project root.** `caws init` lays down a
-   `CLAUDE.md` and `agents.md` at project root from
-   `packages/caws-cli/templates/`. The 10.x templates referenced
-   `caws validate`, `caws iterate`, `caws verify-acs`, `caws burnup`,
-   `caws specs create --type feature` (removed v10 alias; v11 uses `--mode`), and `caws validate --spec-id <id>`
-   — all of which are removed or renamed in v11. Upgrading the CLI does
-   not rewrite those project files, and CLAUDE.md is exactly the surface
-   AI agents read first. Future agents in those projects will keep
-   citing v10 commands that no longer exist.
+1. **Stale doctrine in project root.** `caws init` lays down a `CLAUDE.md` and
+   `agents.md` at project root from `packages/caws-cli/templates/`. The 10.x
+   templates referenced `caws validate`, `caws iterate`, `caws verify-acs`,
+   `caws burnup`, `caws specs create --type feature` (removed v10 alias; v11
+   uses `--mode`), and `caws validate --spec-id <id>` — all of which are removed
+   or renamed in v11. Upgrading the CLI does not rewrite those project files,
+   and CLAUDE.md is exactly the surface AI agents read first. Future agents in
+   those projects will keep citing v10 commands that no longer exist.
 
 2. **Stale hook copies trapped inside linked worktrees.** v11
-   `caws init --agent-surface claude-code` installs the canonical hook
-   pack from `packages/caws-cli/templates/hook-packs/claude-code/`. But
-   a linked worktree gets a snapshot of `.claude/hooks/` at
-   worktree-create time. If the worktree was created before the upstream
-   hook fix landed, the worktree's hooks are frozen at the broken
-   shape — even after main is fixed. The worktree's session walks
-   `git rev-parse --git-common-dir` to find canonical CAWS state, but
-   it runs its own `.claude/hooks/*.sh` for tool-call admission, and
-   those don't get re-snapshotted.
+   `caws init --agent-surface claude-code` installs the canonical hook pack from
+   `packages/caws-cli/templates/hook-packs/claude-code/`. But a linked worktree
+   gets a snapshot of `.claude/hooks/` at worktree-create time. If the worktree
+   was created before the upstream hook fix landed, the worktree's hooks are
+   frozen at the broken shape — even after main is fixed. The worktree's session
+   walks `git rev-parse --git-common-dir` to find canonical CAWS state, but it
+   runs its own `.claude/hooks/*.sh` for tool-call admission, and those don't
+   get re-snapshotted.
 
 ### Symptom: scope-guard falls into union mode
 
-The most common signal is an agent inside a bound worktree getting
-strike-1 / strike-3 blocks against files that `caws scope show <path>`
-confirms are admitted. The kernel-side scope-show CLI reports
-`binding: bound`, but the bash hook still reports `Mode: union (no
-authoritative spec bound)` and applies an unrelated sibling spec's
-`scope.out` to the edit.
+The most common signal is an agent inside a bound worktree getting strike-1 /
+strike-3 blocks against files that `caws scope show <path>` confirms are
+admitted. The kernel-side scope-show CLI reports `binding: bound`, but the bash
+hook still reports `Mode: union (no authoritative spec bound)` and applies an
+unrelated sibling spec's `scope.out` to the edit.
 
-Root cause: the hook reads `.caws/worktrees.json` under v10 envelope
-shape `{worktrees: {<name>: {...}}}` while the registry has already
-been migrated to v11 flat-map `{<name>: {...}}` by
-`caws worktree migrate-registry`. The envelope lookup returns
-undefined, the registry-binding lookup fails silently, and the hook
-falls back to union mode.
+Root cause: the hook reads `.caws/worktrees.json` under v10 envelope shape
+`{worktrees: {<name>: {...}}}` while the registry has already been migrated to
+v11 flat-map `{<name>: {...}}` by `caws worktree migrate-registry`. The envelope
+lookup returns undefined, the registry-binding lookup fails silently, and the
+hook falls back to union mode.
 
 ### Migration recipe for downstream projects
 
-Sterling — the canonical reference downstream — landed this work in
-the following commit chain (`/Users/darianrosebrook/Desktop/Projects/sterling`):
+Sterling — the canonical reference downstream — landed this work in the
+following commit chain (`/Users/darianrosebrook/Desktop/Projects/sterling`):
 
-| Concern | Sterling commit prefix | What changed |
-|---|---|---|
-| policy.yaml + per-edit gates run | `chore(caws): land CAWS-1117-COMPAT-BOOTSTRAP-01` | policy.yaml gate-vocabulary; hook switches from removed `caws quality-gates` to v11 `caws gates run --spec <id> --context commit`; bootstrap-failure-vs-violation discipline. |
-| events.jsonl rotation | `chore(caws): land CAWS-1117-EVENT-LOG-COMPAT-RECON-01` | Truncate to empty + preserve old log at `.bak` and `.archive-<ts>`. v11's allowed event enum does not include `chain_rotated`; new chain starts at seq:1 with `prev_hash:null` on the next append. |
-| worktrees.json registry shape | `chore(caws): land CAWS-1117-WORKTREE-REGISTRY-CLEAN-01` | `caws worktree migrate-registry` from v10 envelope to v11 flat-map + disk cleanup of zombie destroyed-record directories. |
-| Waivers schema | `chore(caws): land CAWS-1117-WAIVER-SCHEMA-RECON-01` | Per-file `.caws/waivers/<WV-NNNN>.yaml` shape; expired waivers transitioned to `status: revoked` with `revocation:` records. |
-| Hook pack install (v11) | `chore(caws): land CAWS-1117-HOOK-PACK-INSTALL-01` | Removed legacy `.caws/working-spec.yaml`; ran `caws init --agent-surface claude-code --adopt`; patched `--delete-branch` flag refs. |
-| Hook dual-shape cascade | `chore(caws): land CAWS-1117-V11-HOOK-DRIFT-MERGE-01` | Repaired 6 `Object.values(reg.worktrees || {})` callsites across 4 hooks that silently went blind after the registry migration. |
-| Waiver gate vocabulary | `chore(caws): land CAWS-1117-WAIVER-GATE-VOCAB-RECON-01` | Mapped 10 waivers' 8 v10/Sterling-custom gate names to v11 enum. |
-| Spec schema bulk migrate | `chore(caws): land CAWS-1117-SPEC-SCHEMA-MIGRATE-01` | 67 of 68 specs migrated to v11: status→lifecycle_state, type→mode, acceptance_criteria→acceptance, change_budget removed, content preserved into closure_notes. |
-| Doctrine rewrite | `docs(caws): rewrite Sterling CAWS doctrine surfaces to v11.1.7` | Sterling's `CLAUDE.md`, `.claude/README.md`, `.claude/rules/worktree-isolation.md` rewritten — removes `--spec-id`, `caws validate`, `caws iterate`, `caws specs conflicts`, `caws parallel setup`, etc. |
+| Concern                          | Sterling commit prefix                                                        | What changed                                                                                                                                                                                                                 |
+| -------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | ------------------------------------------------------------------------------------ |
+| policy.yaml + per-edit gates run | `chore(caws): land CAWS-1117-COMPAT-BOOTSTRAP-01`                             | policy.yaml gate-vocabulary; hook switches from removed `caws quality-gates` to v11 `caws gates run --spec <id> --context commit`; bootstrap-failure-vs-violation discipline.                                                |
+| events.jsonl rotation            | `chore(caws): land CAWS-1117-EVENT-LOG-COMPAT-RECON-01`                       | Truncate to empty + preserve old log at `.bak` and `.archive-<ts>`. v11's allowed event enum does not include `chain_rotated`; new chain starts at seq:1 with `prev_hash:null` on the next append.                           |
+| worktrees.json registry shape    | `chore(caws): land CAWS-1117-WORKTREE-REGISTRY-CLEAN-01`                      | `caws worktree migrate-registry` from v10 envelope to v11 flat-map + disk cleanup of zombie destroyed-record directories.                                                                                                    |
+| Waivers schema                   | `chore(caws): land CAWS-1117-WAIVER-SCHEMA-RECON-01`                          | Per-file `.caws/waivers/<WV-NNNN>.yaml` shape; expired waivers transitioned to `status: revoked` with `revocation:` records.                                                                                                 |
+| Hook pack install (v11)          | `chore(caws): land CAWS-1117-HOOK-PACK-INSTALL-01`                            | Removed legacy `.caws/working-spec.yaml`; ran `caws init --agent-surface claude-code --adopt`; patched `--delete-branch` flag refs.                                                                                          |
+| Hook dual-shape cascade          | `chore(caws): land CAWS-1117-V11-HOOK-DRIFT-MERGE-01`                         | Repaired 6 `Object.values(reg.worktrees                                                                                                                                                                                      |     | {})` callsites across 4 hooks that silently went blind after the registry migration. |
+| Waiver gate vocabulary           | `chore(caws): land CAWS-1117-WAIVER-GATE-VOCAB-RECON-01`                      | Mapped 10 waivers' 8 v10/Sterling-custom gate names to v11 enum.                                                                                                                                                             |
+| Spec schema bulk migrate         | `chore(caws): land CAWS-1117-SPEC-SCHEMA-MIGRATE-01`                          | 67 of 68 specs migrated to v11: status→lifecycle_state, type→mode, acceptance_criteria→acceptance, change_budget removed, content preserved into closure_notes.                                                              |
+| Doctrine rewrite                 | `docs(caws): rewrite Sterling CAWS doctrine surfaces to v11.1.7`              | Sterling's `CLAUDE.md`, `.claude/README.md`, `.claude/rules/worktree-isolation.md` rewritten — removes `--spec-id`, `caws validate`, `caws iterate`, `caws specs conflicts`, `caws parallel setup`, etc.                     |
 | Lib extraction + scope-guard fix | `refactor(hooks): extract dual-shape CAWS state helpers to lib/caws-state.sh` | Factored the dual-shape reader and canonical-dir resolver into `.claude/hooks/lib/caws-state.sh`. Single source of truth for v10/v11 readers eliminates the "missed one of N callsites during a schema migration" bug class. |
 
-Roughly: assume one half-day of work per downstream project for the
-full migration. Smaller projects can skip the bulk-spec migration
-(specs that never break the v11 schema don't need rewrites).
+Roughly: assume one half-day of work per downstream project for the full
+migration. Smaller projects can skip the bulk-spec migration (specs that never
+break the v11 schema don't need rewrites).
 
 ### What this guide will NOT do for you
 
-The CAWS CLI does not currently rewrite project-level `CLAUDE.md` or
-`agents.md` on upgrade. If your project initialized on 10.x:
+The CAWS CLI does not currently rewrite project-level `CLAUDE.md` or `agents.md`
+on upgrade. If your project initialized on 10.x:
 
-- Re-running `caws init` will refuse on legacy residue (`.caws/working-spec.yaml`).
-- `caws init --agent-surface claude-code --adopt` will preserve your
-  existing hook customizations but will not touch root-level docs.
-- Manual rewrite is required for `CLAUDE.md`/`agents.md`. Sterling's
-  v11.1.7 doctrine commits (above) are a working reference.
+- Re-running `caws init` will refuse on legacy residue
+  (`.caws/working-spec.yaml`).
+- `caws init --agent-surface claude-code --adopt` will preserve your existing
+  hook customizations but will not touch root-level docs.
+- Manual rewrite is required for `CLAUDE.md`/`agents.md`. Sterling's v11.1.7
+  doctrine commits (above) are a working reference.
 
-A future surface (`caws init --refresh-doctrine` or `caws doctor
---doctrine-drift`) could automate this; it does not exist yet. If you
-want it, please file an issue against the upstream caws repo with the
+A future surface (`caws init --refresh-doctrine` or
+`caws doctor --doctrine-drift`) could automate this; it does not exist yet. If
+you want it, please file an issue against the upstream caws repo with the
 specific stale-command grep patterns your project encountered.
 
 ## Open follow-up work
 
-The following are tracked in `.caws/specs/` and may close additional gaps as they ship:
+The following are tracked in `.caws/specs/` and may close additional gaps as
+they ship:
 
-- `CAWS-CLI-BIN-EXECUTABLE-BIT-001` — workspace-install `chmod +x` defect (not user-facing in normal `npm install -g` flow).
-- `DANGER-LATCH-CALIBRATION-001` — calibrates the Claude Code hook pack's command classifier (only relevant if you adopted the hook pack via `caws init --agent-surface claude-code`).
-- `WORKTREE-MERGE-A2-FAULT-INJECTION-001` — adds an automated regression for the merge → spec-close honest-failure path (closes a manual-proof gap, not a behavior gap).
-- `PRUNE-REPAIR-WORKTREE-001` — **closed.** Restored `caws worktree repair` (the unambiguous-half-state executor) and `caws worktree prune`/`repair-sparse`, both shipped in v11.1. `caws worktree reconcile` was descoped from this spec's closure and has no currently active tracking spec — it remains the one genuinely unshipped item in this line.
-- `AUTH-BINDING-BRIDGE-001` — **closed.** Bridge claims (`caws claim --spec <id>` / `--release`) shipped in v11.1, alongside `caws claim --paths` (SESSION-OWNERSHIP-METADATA-001). Session↔spec authority for non-worktree contexts is fully live, not deferred.
+- `CAWS-CLI-BIN-EXECUTABLE-BIT-001` — workspace-install `chmod +x` defect (not
+  user-facing in normal `npm install -g` flow).
+- `DANGER-LATCH-CALIBRATION-001` — calibrates the Claude Code hook pack's
+  command classifier (only relevant if you adopted the hook pack via
+  `caws init --agent-surface claude-code`).
+- `WORKTREE-MERGE-A2-FAULT-INJECTION-001` — adds an automated regression for the
+  merge → spec-close honest-failure path (closes a manual-proof gap, not a
+  behavior gap).
+- `PRUNE-REPAIR-WORKTREE-001` — **closed.** Restored `caws worktree repair` (the
+  unambiguous-half-state executor) and `caws worktree prune`/`repair-sparse`,
+  both shipped in v11.1. `caws worktree reconcile` was descoped from this spec's
+  closure and has no currently active tracking spec — it remains the one
+  genuinely unshipped item in this line.
+- `AUTH-BINDING-BRIDGE-001` — **closed.** Bridge claims
+  (`caws claim --spec <id>` / `--release`) shipped in v11.1, alongside
+  `caws claim --paths` (SESSION-OWNERSHIP-METADATA-001). Session↔spec authority
+  for non-worktree contexts is fully live, not deferred.
 
-The full `agents` group (`register/heartbeat/stop/list/show/prune`), full `events` group (`migrate/rotate/verify-archive`), `caws worktree prune`, `caws claim --spec` bridge claims, and the `claim_taken_over.v1` event all shipped ahead of plan in v11.1.x. Only `caws worktree reconcile` remains genuinely unshipped in the v11.2 line (no active tracking spec as of this writing). v11.3+ scope includes the deferred `caws session` lifecycle (`start`/`checkpoint`/`end`) and `caws parallel` surfaces.
+The full `agents` group (`register/heartbeat/stop/list/show/prune`), full
+`events` group (`migrate/rotate/verify-archive`), `caws worktree prune`,
+`caws claim --spec` bridge claims, and the `claim_taken_over.v1` event all
+shipped ahead of plan in v11.1.x. Only `caws worktree reconcile` remains
+genuinely unshipped in the v11.2 line (no active tracking spec as of this
+writing). v11.3+ scope includes the deferred `caws session` lifecycle
+(`start`/`checkpoint`/`end`) and `caws parallel` surfaces.
 
-The full `agents` group is no longer a reason to wait — it ships in v11.1.x. If `caws session` or `caws parallel` is the blocker for your team, that is the v11.3+ line to wait for.
+The full `agents` group is no longer a reason to wait — it ships in v11.1.x. If
+`caws session` or `caws parallel` is the blocker for your team, that is the
+v11.3+ line to wait for.
 
 ---
 
 ## Reaching this guide from removed-command errors
 
-At the original cutover, running a removed v10.2 command on v11.1 produced a generic "unknown command" error. Current removed-command diagnostics redirect to supported commands. This guide is also reachable via:
+At the original cutover, running a removed v10.2 command on v11.1 produced a
+generic "unknown command" error. Current removed-command diagnostics redirect to
+supported commands. This guide is also reachable via:
 
 - The repo's `docs/migration-v10-to-v11.md` (this file).
 - The repo's CLAUDE.md (it links here).
 - The repo README (it should link here after this slice merges).
-- GitHub repo search: `gh search prs --repo Paths-Design/coding-agent-working-standard migration v10-to-v11`.
+- GitHub repo search:
+  `gh search prs --repo Paths-Design/coding-agent-working-standard migration v10-to-v11`.
 
 ---
 
 ## Provenance
 
-This guide was authored as part of `DOC-MIGRATION-V10-TO-V11-001`, an active tier-2 doc spec landed after `CAWS-RELEASE-TAG-DRIVEN-001` v1 (the tag-driven release rewrite). The readiness review that triggered this guide is recorded in the conversation log preceding the spec's activation.
+This guide was authored as part of `DOC-MIGRATION-V10-TO-V11-001`, an active
+tier-2 doc spec landed after `CAWS-RELEASE-TAG-DRIVEN-001` v1 (the tag-driven
+release rewrite). The readiness review that triggered this guide is recorded in
+the conversation log preceding the spec's activation.
 
-The four-bucket classification (Replaced / Renamed / Removed-without-replacement / Deferred) is intentional: it forces every v10.2 command into an explicit category, so no surface is unaddressed and no surface is overclaimed.
+The four-bucket classification (Replaced / Renamed / Removed-without-replacement
+/ Deferred) is intentional: it forces every v10.2 command into an explicit
+category, so no surface is unaddressed and no surface is overclaimed.
 
 Last verified against:
+
 - `@paths.design/caws-cli@11.1.6` (current npm latest as of 2026-05-28)
 - main branch HEAD `2e4b7ab` (post-release-tag-driven merge + spec closure)
-- Downstream reference: Sterling repo's CAWS-1117-* migration commit chain (2026-05-26)
-  documented in the "Project doctrine drift" section above.
+- Downstream reference: Sterling repo's CAWS-1117-\* migration commit chain
+  (2026-05-26) documented in the "Project doctrine drift" section above.

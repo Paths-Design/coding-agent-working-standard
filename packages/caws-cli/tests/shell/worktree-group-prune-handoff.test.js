@@ -41,20 +41,8 @@ describe('worktree group-level --prune handoff', () => {
       'wt-ghost': { branch: 'wt-ghost', baseBranch: 'main' },
     });
 
-    const group = runCli(root, [
-      'worktree',
-      '--prune',
-      '--status',
-      'ghost-registry',
-      '--json',
-    ]);
-    const leaf = runCli(root, [
-      'worktree',
-      'prune',
-      '--status',
-      'ghost-registry',
-      '--json',
-    ]);
+    const group = runCli(root, ['worktree', '--prune', '--status', 'ghost-registry', '--json']);
+    const leaf = runCli(root, ['worktree', 'prune', '--status', 'ghost-registry', '--json']);
 
     expect(group.status).toBe(0);
     expect(leaf.status).toBe(0);

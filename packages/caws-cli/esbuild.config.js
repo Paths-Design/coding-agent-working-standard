@@ -2,13 +2,13 @@
 
 /**
  * esbuild Configuration for CAWS CLI
- * 
+ *
  * Bundles the CLI into a single file to:
  * - Resolve ESM/CommonJS conflicts
  * - Reduce bundle size dramatically
  * - Eliminate node_modules dependency in production
  * - Enable tree-shaking to remove unused code
- * 
+ *
  * @author @darianrosebrook
  */
 
@@ -38,7 +38,7 @@ async function build() {
         // Node.js built-ins (automatically handled by esbuild)
         // Optional peer dependencies
         'fsevents',
-        
+
         // Keep these external as they may need dynamic resolution
         // (Remove if they cause issues - esbuild can bundle them)
       ],
@@ -76,4 +76,3 @@ if (require.main === module) {
 }
 
 module.exports = { build };
-

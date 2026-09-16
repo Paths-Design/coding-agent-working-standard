@@ -505,7 +505,8 @@ const LEGACY_COMMAND_MAP = Object.freeze([
     implementationProbe: { group: null },
     runtimeDiagnostic: {
       kind: 'removed',
-      message: 'caws mode was removed in v11. Per-feature specs replace complexity-tier management.',
+      message:
+        'caws mode was removed in v11. Per-feature specs replace complexity-tier management.',
     },
   }),
   entry({

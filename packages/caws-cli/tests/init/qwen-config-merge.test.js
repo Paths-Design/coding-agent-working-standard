@@ -101,9 +101,7 @@ describe('registration: qwen-code is a first-class surface', () => {
   });
 
   test('CANONICAL_QWEN_HOOK_ENTRIES covers all five events', () => {
-    expect(Object.keys(CANONICAL_QWEN_HOOK_ENTRIES).sort()).toEqual(
-      [...ALL_EVENTS].sort()
-    );
+    expect(Object.keys(CANONICAL_QWEN_HOOK_ENTRIES).sort()).toEqual([...ALL_EVENTS].sort());
   });
 
   test('every canonical command resolves the git root and no-ops without the shim', () => {
@@ -215,7 +213,10 @@ describe('mergeQwenSettings: merged (existing settings.json)', () => {
         {
           hooks: {
             PreToolUse: [
-              { matcher: 'run_shell_command', hooks: [{ type: 'command', command: 'echo user-hook' }] },
+              {
+                matcher: 'run_shell_command',
+                hooks: [{ type: 'command', command: 'echo user-hook' }],
+              },
             ],
           },
         },
@@ -233,11 +234,7 @@ describe('mergeQwenSettings: merged (existing settings.json)', () => {
   });
 
   test('a hand-pasted CAWS block counts as wired — no duplicate is appended', () => {
-    fs.writeFileSync(
-      settingsPathFor(repo),
-      `${CANONICAL_QWEN_SETTINGS_SNIPPET}\n`,
-      'utf8'
-    );
+    fs.writeFileSync(settingsPathFor(repo), `${CANONICAL_QWEN_SETTINGS_SNIPPET}\n`, 'utf8');
     const result = mergeQwenSettings(repo);
     expect(result.kind).toBe('unchanged');
   });
@@ -313,11 +310,7 @@ describe('mergeQwenSettings: in-place repair of stale CAWS entries (CAWS-QWEN-HO
       hooks[event] = [block];
     }
     hooks.PreToolUse = [userBlock, SECONDS_ERA_WIRING.PreToolUse];
-    fs.writeFileSync(
-      settingsPathFor(repo),
-      JSON.stringify({ hooks }, null, 2),
-      'utf8'
-    );
+    fs.writeFileSync(settingsPathFor(repo), JSON.stringify({ hooks }, null, 2), 'utf8');
     const result = mergeQwenSettings(repo);
     expect(result.kind).toBe('merged');
     expect(result.added).toHaveLength(0);
@@ -325,9 +318,7 @@ describe('mergeQwenSettings: in-place repair of stale CAWS entries (CAWS-QWEN-HO
     const parsed = JSON.parse(readSettings(repo));
     expect(parsed.hooks.PreToolUse).toHaveLength(2);
     expect(parsed.hooks.PreToolUse[0]).toEqual(userBlock);
-    expect(parsed.hooks.PreToolUse[1]).toEqual(
-      CANONICAL_QWEN_HOOK_ENTRIES.PreToolUse
-    );
+    expect(parsed.hooks.PreToolUse[1]).toEqual(CANONICAL_QWEN_HOOK_ENTRIES.PreToolUse);
   });
 
   test('a second run after repair is a byte-identical no-op (unchanged)', () => {
@@ -427,7 +418,9 @@ describe('inspectQwenSettings', () => {
     fs.mkdirSync(path.join(repo, '.qwen'), { recursive: true });
     fs.writeFileSync(
       settingsPathFor(repo),
-      JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: 'echo hi' }] }] } }),
+      JSON.stringify({
+        hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: 'echo hi' }] }] },
+      }),
       'utf8'
     );
     const status = inspectQwenSettings(repo);
@@ -461,10 +454,7 @@ describe('qwen settings example artifact', () => {
   test('the example content is itself detected as fully wired', () => {
     writeQwenSettingsExample(repo);
     // Copy the example over the live settings path: inspection must say wired.
-    fs.copyFileSync(
-      path.join(repo, '.qwen', 'settings.json.example'),
-      settingsPathFor(repo)
-    );
+    fs.copyFileSync(path.join(repo, '.qwen', 'settings.json.example'), settingsPathFor(repo));
     expect(inspectQwenSettings(repo)).toEqual({ kind: 'wired' });
   });
 });

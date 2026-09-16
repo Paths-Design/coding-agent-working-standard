@@ -78,10 +78,14 @@ function foldFirstInvariant(cawsDir, id) {
 }
 
 function amend(root, id, opts) {
-  const out = []; const err = [];
+  const out = [];
+  const err = [];
   const code = runSpecsAmendCommand({
-    id, cwd: root, env: { ...process.env },
-    out: (l) => out.push(l), err: (l) => err.push(l),
+    id,
+    cwd: root,
+    env: { ...process.env },
+    out: (l) => out.push(l),
+    err: (l) => err.push(l),
     ...opts,
   });
   return { code, out, err };
@@ -90,10 +94,15 @@ function amend(root, id, opts) {
 describe('specs-body-writer folded-entry support (CANONICAL-DRIFT-GUARDS-001)', () => {
   test('A1/A4: add beside folded entries — parseable, verbatim prose, scalar appended', () => {
     const { root, cawsDir } = mkRepo();
-    create(root, 'FOLD-001', ['first invariant with plenty of words to fold across several continuation lines']);
+    create(root, 'FOLD-001', [
+      'first invariant with plenty of words to fold across several continuation lines',
+    ]);
     foldFirstInvariant(cawsDir, 'FOLD-001');
     const before = fs.readFileSync(path.join(cawsDir, 'specs', 'FOLD-001.yaml'), 'utf8');
-    const foldedBefore = before.split('\n').filter((l) => l.includes('first invariant')).join('\n');
+    const foldedBefore = before
+      .split('\n')
+      .filter((l) => l.includes('first invariant'))
+      .join('\n');
 
     const r = amend(root, 'FOLD-001', { addInvariant: ['second scalar'] });
     expect(r.code).toBe(0);
@@ -120,7 +129,9 @@ describe('specs-body-writer folded-entry support (CANONICAL-DRIFT-GUARDS-001)', 
     create(root, 'FOLD-002', ['removable folded invariant text goes here', 'survivor scalar']);
     foldFirstInvariant(cawsDir, 'FOLD-002');
 
-    const r = amend(root, 'FOLD-002', { removeInvariant: ['removable folded invariant text goes here'] });
+    const r = amend(root, 'FOLD-002', {
+      removeInvariant: ['removable folded invariant text goes here'],
+    });
     expect(r.code).toBe(0);
 
     const loaded = loadSpecs(cawsDir);
@@ -133,13 +144,17 @@ describe('specs-body-writer folded-entry support (CANONICAL-DRIFT-GUARDS-001)', 
 
   test('A3: mixed scalar + folded round-trip keeps both shapes', () => {
     const { root, cawsDir } = mkRepo();
-    create(root, 'FOLD-003', ['plain scalar one', 'folded prose entry with many words to wrap around nicely']);
+    create(root, 'FOLD-003', [
+      'plain scalar one',
+      'folded prose entry with many words to wrap around nicely',
+    ]);
     // fold the SECOND invariant this time
     const file = path.join(cawsDir, 'specs', 'FOLD-003.yaml');
     let raw = fs.readFileSync(file, 'utf8');
     raw = raw.replace(
       /^(\s*)- 'folded prose entry with many words to wrap around nicely'$/m,
-      (m, pad2) => `${pad2}- >-\n${pad2}  folded prose entry with many\n${pad2}  words to wrap around nicely`
+      (m, pad2) =>
+        `${pad2}- >-\n${pad2}  folded prose entry with many\n${pad2}  words to wrap around nicely`
     );
     fs.writeFileSync(file, raw);
 

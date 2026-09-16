@@ -141,7 +141,8 @@ export function validateMutationPolicy({ root, policyFile }) {
 
   const surfaces = policy.surfaces && typeof policy.surfaces === 'object' ? policy.surfaces : {};
   const surfaceEntries = Object.entries(surfaces);
-  if (surfaceEntries.length === 0) errors.push('surfaces must define at least one mutation surface');
+  if (surfaceEntries.length === 0)
+    errors.push('surfaces must define at least one mutation surface');
   const targetSources = [];
 
   for (const [surfaceId, surface] of surfaceEntries) {
@@ -182,7 +183,8 @@ export function validateMutationPolicy({ root, policyFile }) {
       const source = normalize(target.source);
       targetPaths.push(source);
       targetSources.push(source);
-      if (!fs.existsSync(path.resolve(root, source))) errors.push(`missing mutation source: ${source}`);
+      if (!fs.existsSync(path.resolve(root, source)))
+        errors.push(`missing mutation source: ${source}`);
       if (!mutationFiles.includes(source)) {
         errors.push(`mutation target is not classified as mutation: ${source}`);
       }
@@ -190,7 +192,9 @@ export function validateMutationPolicy({ root, policyFile }) {
         target.threshold !== undefined &&
         (typeof target.threshold !== 'number' || target.threshold < 0 || target.threshold > 100)
       ) {
-        errors.push(`${label}.targets[${targetIndex}].threshold must be a number from 0 through 100`);
+        errors.push(
+          `${label}.targets[${targetIndex}].threshold must be a number from 0 through 100`
+        );
       }
     }
     validateSortedUnique(targetPaths, `${label}.targets`, errors);
@@ -202,7 +206,8 @@ export function validateMutationPolicy({ root, policyFile }) {
     if (count > 1) errors.push(`mutation source belongs to multiple surfaces: ${source}`);
   }
   for (const file of mutationFiles) {
-    if (!targetCounts.has(file)) errors.push(`mutation-classified source has no surface target: ${file}`);
+    if (!targetCounts.has(file))
+      errors.push(`mutation-classified source has no surface target: ${file}`);
   }
 
   return {
@@ -229,7 +234,9 @@ function main(argv) {
   }
 
   console.log(`PASS: ${result.sourceCount} source files accounted for exactly once`);
-  console.log(`PASS: ${result.targetCount} mutation targets across ${result.surfaceCount} surfaces`);
+  console.log(
+    `PASS: ${result.targetCount} mutation targets across ${result.surfaceCount} surfaces`
+  );
   return 0;
 }
 

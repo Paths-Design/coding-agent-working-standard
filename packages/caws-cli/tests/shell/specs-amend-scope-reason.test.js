@@ -138,7 +138,12 @@ function spawnCli(root, args) {
 function readSpecScopeIn(root, id) {
   const body = readBytes(path.join(root, '.caws', 'specs', `${id}.yaml`));
   const match = body.match(/scope:\n {2}in:\n((?: {4}- .*\n)+)/);
-  return match ? match[1].split('\n').filter(Boolean).map((l) => l.replace(/^ {4}- /, '').replace(/^'(.*)'$/, '$1')) : [];
+  return match
+    ? match[1]
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => l.replace(/^ {4}- /, '').replace(/^'(.*)'$/, '$1'))
+    : [];
 }
 
 describe('amend-scope excess positional arguments (full CLI parse path)', () => {
@@ -149,8 +154,12 @@ describe('amend-scope excess positional arguments (full CLI parse path)', () => 
     const before = readSpecScopeIn(root, 'EXCESS-ARGS-A1-001');
 
     const result = spawnCli(root, [
-      'specs', 'amend-scope', 'EXCESS-ARGS-A1-001',
-      '--add', 'docs/a.md', 'docs/b.md',
+      'specs',
+      'amend-scope',
+      'EXCESS-ARGS-A1-001',
+      '--add',
+      'docs/a.md',
+      'docs/b.md',
     ]);
     const output = `${result.stdout}${result.stderr}`;
 
@@ -171,8 +180,13 @@ describe('amend-scope excess positional arguments (full CLI parse path)', () => 
     writeActiveSpec(cawsDir, 'EXCESS-ARGS-A2-001');
 
     const result = spawnCli(root, [
-      'specs', 'amend-scope', 'EXCESS-ARGS-A2-001',
-      '--add', 'docs/a.md', '--add', 'docs/b.md',
+      'specs',
+      'amend-scope',
+      'EXCESS-ARGS-A2-001',
+      '--add',
+      'docs/a.md',
+      '--add',
+      'docs/b.md',
     ]);
 
     expect(result.status).toBe(0);

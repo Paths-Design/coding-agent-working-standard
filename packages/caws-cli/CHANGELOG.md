@@ -28,7 +28,6 @@ Second release candidate for the shared machine runtime; publishes to `next`.
   sterling's `tmp/caws_cli_defects.md` Defect 4). The only discharge for
   `doctor.hooks.pack_body_drift` / `installed_pack_version_lag` was
   `caws init --overwrite --force`, which destroys deliberate guard growth.
-
   - **Drift rows are classified against the pristine baselines the installer
     writes.** A file whose installed body differs from its recorded baseline
     is verified NEW local growth → new INFO rule
@@ -65,7 +64,6 @@ Second release candidate for the shared machine runtime; publishes to `next`.
   (`CAWS-DEFECT-DOCTOR-NO-DISCHARGE-WARNINGS-01`, recorded in
   sterling's `tmp/caws_cli_defects.md`). Two doctor findings demanded remedies
   no governed command can perform, training operators to ignore doctor.
-
   - **Verifiably-dead `worktree_created` event orphans downgrade to INFO.**
     `doctor.worktree.event_without_control_plane_binding` warned forever on
     creation events whose control-plane lifetime can never be closed
@@ -104,9 +102,8 @@ distribution tag; the stable `latest` install remains 12.1.0.
 
 - **Release-path integrity** (`CAWS-RELEASE-PATH-INTEGRITY-001`). Five defects
   found by pre-release review of the governed release and CI guard paths.
-
   - **Registry credentials are isolated from the OIDC publish child.** The
-    publish step selected trusted publishing by declining to *add* a token,
+    publish step selected trusted publishing by declining to _add_ a token,
     but built the child environment by merging over `process.env` — a merge
     can only add keys, so an inherited `NODE_AUTH_TOKEN` or `npm_config` auth
     var survived and preempted the id-token exchange, silently downgrading to
@@ -116,7 +113,7 @@ distribution tag; the stable `latest` install remains 12.1.0.
     `pr-checks.yml` silently dropped `/duplicate-`, `/backup-` and `.backup$`;
     nothing else blocked them, since `naming-check.sh` is advisory. The guard
     also now matches the `[-_](enhanced|new|final|copy)` suffix forms doctrine
-    actually prohibits, with an anchored allowlist for files that *detect* the
+    actually prohibits, with an anchored allowlist for files that _detect_ the
     anti-pattern. Version suffixes stay advisory — no lexical rule separates
     `handler-v2.ts` from `migrate-v10.ts`.
   - **Tag publication is gated on the per-file mutation floor.** The procedure
@@ -150,7 +147,7 @@ distribution tag; the stable `latest` install remains 12.1.0.
   Install once with `caws init adapters install`, configure each native harness
   with `caws init adapters configure --agent-surface <surface>`, then preview
   existing-project adoption with `caws init adapters migrate --agent-surface
-  <surface> --plan`. Review custom hooks before applying migration; use an
+<surface> --plan`. Review custom hooks before applying migration; use an
   explicit reviewed policy where required. Stock runtime updates then reach
   adopted projects from one machine installation. Project-specific overrides
   remain independently maintained. Native trust and fresh lifecycle, guard and
@@ -187,7 +184,6 @@ distribution tag; the stable `latest` install remains 12.1.0.
   `CAWS-DEFECT-MSG-REPLY-POSITIONAL-01` and
   `CAWS-DEFECT-WAIVER-SURFACE-UNCONSULTED-01`; merged `ae768884`, `d559674b`,
   `27ffc50b`, `780692ed`, `e5afd591`, `9ef53227`).
-
   - **Ledger completeness.** Refused sends are now ledgered as `refusal`
     records (classes `recipient_not_live`, `recipient_invalid`,
     `alias_unresolved`, `reply_to_self`, `message_not_found`,
@@ -219,17 +215,17 @@ distribution tag; the stable `latest` install remains 12.1.0.
     `pid` field (kept as a read-only fallback and never session identity).
     `caws agents heartbeat --session-kind` / `--forked-from` (hook
     passthrough via `CAWS_SESSION_KIND`/`CAWS_FORKED_FROM`). `caws agents
-    list` annotates same-host leases with overlapping activity windows (or
+list` annotates same-host leases with overlapping activity windows (or
     starts within 60 s) as a possible conjoined pair, and derives
     silent-platform engagement badges (>=5 inbound messages and
     outbound/inbound <= 0.2) — both display-only. The hook notice teaches
     the lease-id namespace boundary.
 
   - **Behavior surface.** `caws message status --mine --queued
-    --older-than-ms <ms>` lists the caller's dead letters; poll JSON carries
+--older-than-ms <ms>` lists the caller's dead letters; poll JSON carries
     `mine_queued_1h`; the heartbeat hook escalates aged undelivered sends
     with a throttled one-line notice (`.caws/leases/
-    heartbeat-escalation-state.json`), even when there is no inbound mail.
+heartbeat-escalation-state.json`), even when there is no inbound mail.
 
   - **Waiver surface delineated.** Verified no hook consults waivers
     (reprieves are the hook-consulted system; waivers only filter the
@@ -254,7 +250,7 @@ distribution tag; the stable `latest` install remains 12.1.0.
   possible provenance anchor.
 
 - **`caws message reply <message_id>` and `caws message status
-  <message_id>` positional forms are accepted again.** The hook injection
+<message_id>` positional forms are accepted again.** The hook injection
   text and the predecessor spec teach the positional form, but the message
   leaves declared options only, so `guardExcessArguments` refused every
   positional invocation ("unexpected extra argument(s)") while the docs kept
@@ -292,7 +288,7 @@ distribution tag; the stable `latest` install remains 12.1.0.
 
 - **`caws init diff` and `caws init port <path> --from <file>` are reachable
   again.** `INIT_COMMAND_META` documented both subcommands in `caws init
-  --help` but declared no positional arguments, so `guardExcessArguments`
+--help` but declared no positional arguments, so `guardExcessArguments`
   (the metadata-driven excess-positional refusal shipped in 12.0.0) computed
   zero declared positionals for `init` while register.ts separately bolted
   the two positionals onto the Command object with `.argument()` calls —
@@ -332,7 +328,7 @@ distribution tag; the stable `latest` install remains 12.1.0.
 ### Performance
 
 - **The `git` executable is resolved once per process instead of once per
-  spawn.** On macOS `posix_spawnp` walks `$PATH` *in the parent process*,
+  spawn.** On macOS `posix_spawnp` walks `$PATH` _in the parent process_,
   attempting a real spawn per entry, at a cost proportional to the parent's
   resident set — so a bare `execFileSync('git', ...)` measured **194 ms** from
   a 130 MB process versus **30 ms** by absolute path. Every git call site in
@@ -341,7 +337,7 @@ distribution tag; the stable `latest` install remains 12.1.0.
   This affects the shipped CLI, not only the test suite; every `caws` command
   was paying the walk on every git invocation.
 
-  Resolution never changes *which* git runs: it takes the first executable
+  Resolution never changes _which_ git runs: it takes the first executable
   regular file named `git` in `$PATH` order and falls back to the bare name
   when it finds none. `CAWS_GIT_BINARY` pins the binary explicitly. Nothing is
   persisted — the cache dies with the process, because a stale binary path is a
@@ -449,7 +445,7 @@ broad pass of governed discovery / planning / handoff commands across the CLI.
   `parse-input.sh` normalizes `tool_input.path` so path guards see kimi file
   edits, `run-handlers.sh` recognizes `deny` as priority-3. Declares
   `CAWS_SUPPORTS_UPDATED_INPUT=0`. Contract verified live against kimi
-  0.31.1. *(CAWS-HOOK-PACK-KIMI-CODE-001.)*
+  0.31.1. _(CAWS-HOOK-PACK-KIMI-CODE-001.)_
 - **Agent surface — qwen-code** (`caws init --agent-surface qwen-code`).
   Hook pack + repo-local wiring: five shim entries merged idempotently into
   `.qwen/settings.json` (user keys preserved, JSONC-commented files reported
@@ -460,7 +456,7 @@ broad pass of governed discovery / planning / handoff commands across the CLI.
   self-filters on; no emit override needed — Qwen's exit contract matches
   Claude Code's. Declares `CAWS_SUPPORTS_UPDATED_INPUT=0` (`updatedInput`
   documented but not enforced). Contract verified live against Qwen Code
-  0.21.4. *(CAWS-HOOK-PACK-QWEN-CODE-001.)*
+  0.21.4. _(CAWS-HOOK-PACK-QWEN-CODE-001.)_
 - **`CAWS_SUPPORTS_UPDATED_INPUT` capability flag** in `agent-surface.sh`.
   Surfaces whose harness does not enforce `hookSpecificOutput.updatedInput`
   declare `0`; the shared `quiet-merge.sh` then passes the command through
@@ -469,16 +465,16 @@ broad pass of governed discovery / planning / handoff commands across the CLI.
 - **Governed spec restore — `caws specs reopen <id>`.** A governed closed→active
   transition that reverses a premature auto-close from `caws worktree merge`
   (removes `resolution`/`closure_notes`). Replaces hand-editing the YAML.
-  *(CAWS-SPEC-REOPEN-001.)*
+  _(CAWS-SPEC-REOPEN-001.)_
 - **Structured successor declarations + close gate.** Specs may declare an
   optional top-level `successors` array (target spec id + disposition
   `required|declined|absorbed`); the close gate and a `spec_closed` event
   projection enforce/respect it, so a superseded `-01` resolves as superseded
-  rather than completed. *(CAWS-SPEC-SUCCESSOR-DECLARATION-CUSTODY-01; requires
-  the coupled kernel release below.)*
+  rather than completed. _(CAWS-SPEC-SUCCESSOR-DECLARATION-CUSTODY-01; requires
+  the coupled kernel release below.)_
 - **`caws agents prune --status legacy`** — age-based retention for status-less
   (v10 / early-v11) leases that fell through every existing prune mode.
-  *(CAWS-AGENTS-PRUNE-LEGACY-001.)*
+  _(CAWS-AGENTS-PRUNE-LEGACY-001.)_
 - **Force-gated `caws init hook-pack --overwrite`.** `--overwrite` alone now
   previews a unified diff per drifted/unmanaged file and exits 1 (no write);
   add `--force` to apply, `--adopt` to keep local versions, or target specific
@@ -497,63 +493,63 @@ broad pass of governed discovery / planning / handoff commands across the CLI.
 
 ### Changed
 
-- **`scope.in` now overrides the write allowlist.** The allowlist (docs/*,
-  .caws/*, etc.) previously fired unconditionally before the scope-contention
+- **`scope.in` now overrides the write allowlist.** The allowlist (docs/_,
+  .caws/_, etc.) previously fired unconditionally before the scope-contention
   check, so a worktree's `scope.in` claim on a doc-heavy path was silently
   ignored — the claim was a lie. Now `scope.in` is authoritative for allowlisted
-  paths in both the Write/Edit and Bash guards. *(CAWS-GUARD-SCOPE-PRIORITY-001.)*
+  paths in both the Write/Edit and Bash guards. _(CAWS-GUARD-SCOPE-PRIORITY-001.)_
 - **Shared write-allowlist helper, Bash guard synced to Edit guard.** The
   worktree-write-guard had an inlined allowlist; the bash-write-guard had none,
   so the same path+claim got two answers depending on which tool the agent
-  reached for. Consolidated behind one helper. *(CAWS-GUARD-ALLOWLIST-SYNC-001.)*
+  reached for. Consolidated behind one helper. _(CAWS-GUARD-ALLOWLIST-SYNC-001.)_
 - **Closure notes required on spec close.** `caws specs close` now requires
   resolution notes, so a premature auto-close leaves an audit trail.
 - **Managed-hook `edit_stance` rewritten invitation-first.** Force-gated,
   invitation-first wording replacing the prior stance.
-  *(HOOKPACK-EDIT-STANCE-TONE-001.)*
+  _(HOOKPACK-EDIT-STANCE-TONE-001.)_
 - **Shared-utils consolidation.** `runGit`, `realpathSafe`, `SPEC_ID_REGEX`, and
   related helpers deduplicated across the shell layer (kernel now exports
-  `SPEC_ID_REGEX`). *(CAWS-REFACTOR-SHARED-UTILS-001.)*
+  `SPEC_ID_REGEX`). _(CAWS-REFACTOR-SHARED-UTILS-001.)_
 
 ### Fixed
 
 - **Worktree merge is now lock-free (compare-and-swap).** `mergeWorktree` gained
   a CAS ref update (`git update-ref <ref> <new> <expected-old>`); losing a race
   recomputes against the new base and retries (bounded at 5) instead of
-  blocking on ambiguity. *(CAWS-WORKTREE-MERGE-LOCKFREE-CAS-001.)*
+  blocking on ambiguity. _(CAWS-WORKTREE-MERGE-LOCKFREE-CAS-001.)_
 - **Idempotent close step in `caws worktree merge`.** An already-closed spec no
-  longer errors the merge of a follow-up slice. *(CAWS-FIX-N5-MERGE-IDEMPOTENT-CLOSE-001.)*
+  longer errors the merge of a follow-up slice. _(CAWS-FIX-N5-MERGE-IDEMPOTENT-CLOSE-001.)_
 - **`caws worktree merge` deletes the merged branch** and refuses when the
   caller's cwd is inside the target worktree (no self-destruct).
-  *(CAWS-WORKTREE-MERGE-DELETE-BRANCH-001, CAWS-FIX-WORKTREE-MERGE-CWD-SELF-DESTRUCT-GUARD-001.)*
+  _(CAWS-WORKTREE-MERGE-DELETE-BRANCH-001, CAWS-FIX-WORKTREE-MERGE-CWD-SELF-DESTRUCT-GUARD-001.)_
 - **`caws claim --takeover` authority fix.** Takes over a foreign owner even
   when a fresh durable envelope admits it (the prior-owner audit was being
-  skipped). *(CAWS-FIX-N4-CLAIM-TAKEOVER-AUTHORITY-001.)*
+  skipped). _(CAWS-FIX-N4-CLAIM-TAKEOVER-AUTHORITY-001.)_
 - **Claim identity via cwd-independent candidate set.** `claim` resolves
   identity through a candidate set that does not depend on the working
   directory, so the rightful owner is recognized regardless of where the
-  session is rooted. *(SESSION-CAPSULE-WORKTREE-CWD-001.)*
+  session is rooted. _(SESSION-CAPSULE-WORKTREE-CWD-001.)_
 - **Retry worktree-create bind audit on concurrent `.git/index.lock`.** A
   concurrent index write no longer fails `caws worktree create`.
-  *(CAWS-FIX-N3-BIND-INDEX-LOCK-RETRY-001.)*
+  _(CAWS-FIX-N3-BIND-INDEX-LOCK-RETRY-001.)_
 - **`doctor` flags stale `dist/` relative to `src/`.** A new finding
   (`shell.build.dist_stale`, warning) fires when the compiled artifacts the
   running binary loads are older than their TypeScript sources — nothing
   previously signaled that the running `caws` lacked recently-edited behavior.
-  *(CAWS-GUARD-BUILD-FRESHNESS-001.)*
+  _(CAWS-GUARD-BUILD-FRESHNESS-001.)_
 - **`doctor` detects and guides recovery for wedged sessions.** A new finding
   (`shell.agent.cwd_gone`, error) fires for every running session whose
   recorded cwd no longer exists (deleted by a merge/destroy or crash mid-merge)
   — the wedge where every subsequent shell spawn fails ENOENT with no
-  self-recovery. *(CAWS-GUARD-CWD-RECOVERY-001.)*
+  self-recovery. _(CAWS-GUARD-CWD-RECOVERY-001.)_
 - **`callerCwd` threaded through `cleanup-plan --apply` and merge teardown.**
-  *(CAWS-FIX-CWD-GUARD-COVERAGE-001.)*
+  _(CAWS-FIX-CWD-GUARD-COVERAGE-001.)_
 - **Codex hooks JSON schema kept valid; shared-core hook commands rendered.**
-  *(CAWS-CODEX-HOOKS-JSON-SCHEMA-001, CAWS-CODEX-SHARED-CORE-FRESH-INSTALL-001.)*
+  _(CAWS-CODEX-HOOKS-JSON-SCHEMA-001, CAWS-CODEX-SHARED-CORE-FRESH-INSTALL-001.)_
 - **`lib/write-allowlist.sh` added to the shared manifest.** The
   CAWS-GUARD-ALLOWLIST-SYNC-001 helper shipped without a manifest entry, so
   consumers never received the file on install; the manifest now declares it.
-  *(CAWS-HOOK-PACK-QWEN-CODE-001.)*
+  _(CAWS-HOOK-PACK-QWEN-CODE-001.)_
 
 ### Removed
 
@@ -567,7 +563,7 @@ broad pass of governed discovery / planning / handoff commands across the CLI.
   stale comments. `release-guard-dry-run` actively threw
   (`release.yml has no push.paths trigger list`) because the workflow became
   tag-triggered. Stale references in `.github/workflows/release.yml` and
-  `docs/release-procedure.md` reconciled. *(CAWS-RELEASE-CUT-11-9-0-001.)*
+  `docs/release-procedure.md` reconciled. _(CAWS-RELEASE-CUT-11-9-0-001.)_
 
 ### Consumer upgrade notes
 
@@ -742,8 +738,8 @@ all surfaces benefit from. Live-verified end-to-end on the self-hosting repo.
 ## [11.5.0] (2026-06-20)
 
 Hook-pack growth-doctrine release. The shipped hooks are a starting point the
-consuming repo OWNS and grows — CAWS owns the *why/what* (the failure class and
-the invariant each guard enforces), the repo owns the *how*. This release makes
+consuming repo OWNS and grows — CAWS owns the _why/what_ (the failure class and
+the invariant each guard enforces), the repo owns the _how_. This release makes
 both the hook headers and `caws init`'s behavior tell that truth, where before
 they contradicted it. Shared hook pack bumped to **v6** (claude-code **v20**,
 codex **v9**), so `caws init` re-propagates the reframed headers and the new
@@ -772,15 +768,15 @@ install semantics to consumers.
   shared/vendor templates) is replaced with an `edit_stance:` block stating the
   repo owns and may grow the hook, that edits are preserved (`caws init` refuses
   to overwrite a changed managed hook; `--adopt` keeps yours, `--overwrite`
-  pulls upstream), and that the one out-of-bounds edit is one that *bypasses or
-  weakens* a guard. The machine-read marker keys (`CAWS-MANAGED-HOOK`,
+  pulls upstream), and that the one out-of-bounds edit is one that _bypasses or
+  weakens_ a guard. The machine-read marker keys (`CAWS-MANAGED-HOOK`,
   `hook_pack`, `hook_pack_version`, `caws_min_major`, `lineage_refs`) are
   unchanged, so the install layer still recognizes every template as managed.
   (`CAWS-HOOK-PACK-MANAGED-HEADER-GROWTH-DOCTRINE-001`)
 - **`caws init` refused-files output distinguishes a grown hook from a foreign
   collision.** A repo-edited managed hook (`managed_drift`) now renders as
   "Kept your edits — left in place" with growth framing (`init did NOT overwrite
-  them, so no growth was lost`), instead of the previous "were refused. To
+them, so no growth was lost`), instead of the previous "were refused. To
   resolve" problem framing. An unmanaged file at a managed path
   (`unmanaged_collision`) is still surfaced as a genuine refusal needing
   attention. (`CAWS-HOOK-PACK-MANAGED-HEADER-GROWTH-DOCTRINE-001`)
@@ -829,7 +825,7 @@ before this tag (see `docs/release-procedure.md`). Shared hook pack bumped to
     from `caws scope check`). (`CAWS-SCOPE-SHOW-JSON-CONTRACT-001`)
   - `worktree-write-guard.sh` — deletes its last inline `js-yaml` block (the
     cross-worktree contention scan); now delegates to `caws scope contention
-    --json`. The JSON-only `worktrees.json` reads are retained.
+--json`. The JSON-only `worktrees.json` reads are retained.
     (`CAWS-SCOPE-CONTENTION-CMD-001`)
   - Net effect: the kernel is the single scope/contention evaluator; consumer
     hooks are thin CLI callers. Re-run `caws init` in consumers to propagate.
@@ -845,7 +841,7 @@ kernel 1.3.0 must be published before this tag (see `docs/release-procedure.md`)
 
 ### Added
 
-- **`caws worktree repair`** — a governed executor for the *unambiguous*
+- **`caws worktree repair`** — a governed executor for the _unambiguous_
   worktree/spec half-states the doctor surfaces. It is a dispatcher over doctor
   evidence (`composeDoctorSnapshot` → `inspectProjectState` → the §1.4 decision
   matrix), not a second policy engine. It repairs only the matrix-unambiguous
@@ -881,7 +877,7 @@ kernel 1.3.0 must be published before this tag (see `docs/release-procedure.md`)
 ### Changed
 
 - **Event-orphan repair wording** is present-tense: automatic repair is
-  *intentionally refused* for the orphan class (immutable audit record; no safe
+  _intentionally refused_ for the orphan class (immutable audit record; no safe
   control-plane mutation), not "deferred to a later slice."
 
 ## [11.2.0] (2026-06-10)
@@ -956,7 +952,7 @@ kernel dependency stays `^1.2.0` (no kernel publish required).
 
 ### Added
 
-* **Curated consumer docs now ship in the npm package**
+- **Curated consumer docs now ship in the npm package**
   (`CAWS-DOCS-SHIP-CONSUMER-SET-001`). Installing `@paths.design/caws-cli` now
   delivers seven consumer-facing docs under `docs/`: a generated
   `command-reference.md`, the v10→v11 `migration` guide, and five guides
@@ -968,7 +964,7 @@ kernel dependency stays `^1.2.0` (no kernel publish required).
   `postpack`, so the package boundary stays clean while curation lives in one
   place.
 
-* **`docs/command-reference.md`, generated from the CLI surface**
+- **`docs/command-reference.md`, generated from the CLI surface**
   (`CAWS-DOCS-COMMAND-REFERENCE-GEN-001`). Every command group, subcommand,
   argument, and visible option is rendered from `COMMAND_SURFACE_METADATA` —
   the same typed metadata the CLI uses to build `--help` — so the reference
@@ -977,7 +973,7 @@ kernel dependency stays `^1.2.0` (no kernel publish required).
   removed `specs create --type`) are omitted; enum options render their allowed
   values.
 
-* **A hook-pack `README.md` ships in the Claude Code pack**
+- **A hook-pack `README.md` ships in the Claude Code pack**
   (`CAWS-HOOKPACK-SHIP-README-001`). `caws init --agent-surface claude-code`
   now installs an authoritative, human-facing hook inventory alongside the
   existing agent-doctrine `CLAUDE.md` — every dispatcher and handler mapped to
@@ -985,7 +981,7 @@ kernel dependency stays `^1.2.0` (no kernel publish required).
   `guard-strikes.sh`) correctly distinguished from wired handlers. It is a
   managed file, updated on re-install.
 
-* **Docs front-matter schema + validator** (`CAWS-DOCS-FRONTMATTER-VALIDATOR-001`).
+- **Docs front-matter schema + validator** (`CAWS-DOCS-FRONTMATTER-VALIDATOR-001`).
   `docs/DOCUMENTATION_STANDARDS.md` formalizes the front-matter convention
   (required fields, `authority`/`status`/`audience` enums, `superseded_by`
   rule). A validator enforces it over a declared strict set, fails closed on
@@ -993,7 +989,7 @@ kernel dependency stays `^1.2.0` (no kernel publish required).
 
 ### Fixed
 
-* **`protected-paths.sh` no longer blocks documentation under `.claude/hooks/`**
+- **`protected-paths.sh` no longer blocks documentation under `.claude/hooks/`**
   (`CAWS-PROTECTED-PATHS-DOCS-NOT-SCRIPTS-001`). The guard matched the whole
   `.claude/hooks/` directory, so it refused Write/Edit of `README.md` and
   `CLAUDE.md` — including the installer-managed `CLAUDE.md` it ships itself —
@@ -1012,7 +1008,7 @@ change; kernel dependency stays `^1.2.0` (no kernel publish required).
 
 ### Added
 
-* **`caws specs create --contract "name:type[:path]"`** (`FIX-SPECS-CONTRACT-ORIENTATION-001`).
+- **`caws specs create --contract "name:type[:path]"`** (`FIX-SPECS-CONTRACT-ORIENTATION-001`).
   Repeatable flag that authors a contract at creation time, so a tier-1/2 spec
   (which requires at least one contract) is created valid in ONE command instead
   of create-at-tier-3-then-hand-edit. `type` is validated against the closed enum
@@ -1020,7 +1016,7 @@ change; kernel dependency stays `^1.2.0` (no kernel publish required).
 
 ### Fixed
 
-* **Ownership oracle runs in ESM consumer repos** (`FIX-HOOKPACK-CONSUMER-INSTALL-001`).
+- **Ownership oracle runs in ESM consumer repos** (`FIX-HOOKPACK-CONSUMER-INSTALL-001`).
   `lib/worktree-claim-oracle` is CommonJS (`require()`) but shipped as `.js`. In a
   consumer repo whose `package.json` declares `"type":"module"`, Node loaded it as
   ESM and crashed (`require is not defined in ES module scope`), so both
@@ -1031,7 +1027,7 @@ change; kernel dependency stays `^1.2.0` (no kernel publish required).
   host package type); both guards, the install manifest, and the tests follow the
   rename. The fresh-install smoke now spawns the installed oracle under a
   `"type":"module"` scratch repo so this regression class is covered.
-* **Guard spawn errors are no longer swallowed** (`FIX-HOOKPACK-CONSUMER-INSTALL-001`,
+- **Guard spawn errors are no longer swallowed** (`FIX-HOOKPACK-CONSUMER-INSTALL-001`,
   test backfilled by `FIX-HOOKPACK-ORACLE-SPAWN-DIAGNOSTIC-TEST-001`).
   Both guard spawn sites discarded the oracle's stderr (`2>/dev/null`), so a node
   module-mode crash surfaced only as the opaque `oracle-spawn` sentinel. They now
@@ -1039,14 +1035,14 @@ change; kernel dependency stays `^1.2.0` (no kernel publish required).
   `error_fail_closed` detail; the happy-path decision parse is unchanged. A
   regression test forces the spawn-failure path and asserts the real cause is
   surfaced.
-* **`caws specs create` orients to the contract requirement in-context**
+- **`caws specs create` orients to the contract requirement in-context**
   (`FIX-SPECS-CONTRACT-ORIENTATION-001`). A tier-1/2 rejection now renders the
   contract shape (`{name, type: api|schema|contract-test|behavior, path?, description?}`)
   and a one-command `--contract` example alongside the existing repair text, and
   `--help` advertises the requirement. No consumer-facing output points at the
   unshipped `docs/guides/caws-contracts.md` any more. (The contract.type enum and
   the tier-contract requirement itself are unchanged.)
-* **Consumer-safe hook-pack doctrine + spec-authoring orientation**
+- **Consumer-safe hook-pack doctrine + spec-authoring orientation**
   (`FIX-HOOKPACK-CONSUMER-INSTALL-001`, `FIX-CONSUMER-AGENT-ORIENTATION-001`). The
   shipped template `CLAUDE.md` carried CAWS-internal failure-lineage doctrine
   ("every hook exists because of an incident" / read `docs/failure-lineage.md` /
@@ -1062,7 +1058,7 @@ change; kernel dependency stays `^1.2.0` (no kernel publish required).
   (`docs/guides/hook-packs.md`) removed. The `lineage_refs:` managed-header field
   is retained (load-bearing for install).
 
-* **Ownership oracle runs in ESM consumer repos** (`FIX-HOOKPACK-CONSUMER-INSTALL-001`).
+- **Ownership oracle runs in ESM consumer repos** (`FIX-HOOKPACK-CONSUMER-INSTALL-001`).
   `lib/worktree-claim-oracle` is CommonJS (`require()`) but shipped as `.js`. In a
   consumer repo whose `package.json` declares `"type":"module"`, Node loaded it as
   ESM and crashed (`require is not defined in ES module scope`), so both
@@ -1073,12 +1069,12 @@ change; kernel dependency stays `^1.2.0` (no kernel publish required).
   host package type); both guards, the install manifest, and the tests follow the
   rename. The fresh-install smoke now spawns the installed oracle under a
   `"type":"module"` scratch repo so this regression class is covered.
-* **Guard spawn errors are no longer swallowed** (`FIX-HOOKPACK-CONSUMER-INSTALL-001`).
+- **Guard spawn errors are no longer swallowed** (`FIX-HOOKPACK-CONSUMER-INSTALL-001`).
   Both guard spawn sites discarded the oracle's stderr (`2>/dev/null`), so a node
   module-mode crash surfaced only as the opaque `oracle-spawn` sentinel. They now
   merge stderr into the captured output and fold the real first-line cause into the
   `error_fail_closed` detail; the happy-path decision parse is unchanged.
-* **Consumer-safe hook-pack doctrine** (`FIX-HOOKPACK-CONSUMER-INSTALL-001`). The
+- **Consumer-safe hook-pack doctrine** (`FIX-HOOKPACK-CONSUMER-INSTALL-001`). The
   shipped template `CLAUDE.md` carried CAWS-internal failure-lineage doctrine
   ("every hook exists because of an incident" / read `docs/failure-lineage.md` /
   "name the lineage entry" before editing) and a lineage-entry-number column. In a
@@ -1098,41 +1094,41 @@ governed command surface unchanged (the thirteen v11.1 groups).
 
 ### Added
 
-* **Worktree-ownership oracle enforced at every mutation surface**
+- **Worktree-ownership oracle enforced at every mutation surface**
   (`WORKTREE-ISOLATION-HARDENING-001`). A single copied hook helper
   `lib/worktree-claim-oracle.js` (standalone node, lazy `js-yaml`, fail-closed)
   is shelled out to by both `worktree-write-guard.sh` (Write/Edit) and a new
   `bash-write-guard.sh` (Bash), so a foreign session's mutation of another
   worktree's payload blocks at the same boundary regardless of tool. Closes the
   proven side doors: `.caws/worktrees/<name>/` writes are routed through the
-  oracle *before* the broad `.caws/*` allowlist; Bash mutation forms
+  oracle _before_ the broad `.caws/*` allowlist; Bash mutation forms
   (redirection, `tee`, `sed -i`, `perl -pi`, `truncate`, `touch`, `rm`, `mv`,
   `cp`, `dd of=`, git path-restore) extract targets and check ownership;
   `caws worktree bind` refuses a foreign-owner steal without explicit
   `--steal --reason` (emits `worktree_ownership_seized`); the `git restore` /
   `git checkout -- <path>` / `git clean` path-restore synonym gap is closed in
   `worktree-guard.sh`, worded by the actual op.
-* **`caws specs create --scope-in <path>`** (`CAWS-SPECS-CREATE-SCOPE-IN-001`)
+- **`caws specs create --scope-in <path>`** (`CAWS-SPECS-CREATE-SCOPE-IN-001`)
   populates `scope.in` at creation time so a new spec is editable without a
   follow-up `amend-scope`.
-* **`scope.support` paths** (`WORKTREE-SUPPORT-SCOPE-001`): admitted like
+- **`scope.support` paths** (`WORKTREE-SUPPORT-SCOPE-001`): admitted like
   `scope.in` but never worktree-claimed; `caws specs amend-scope --add-support`
   manages them, and `amend-scope --add` of a root deliverable into a bound spec
   warns on the compose-trap and suggests `--add-support`
   (`WORKTREE-CLAIM-COMPOSE-WARN-001`).
-* **Capability-classifier engine** (`HOOK-CAPABILITY-ENGINE-002`): facts/facets/
+- **Capability-classifier engine** (`HOOK-CAPABILITY-ENGINE-002`): facts/facets/
   budget scaffolding proven shadow-equivalent across the full corpus (zero
   decision change), calibrated to the command-capability taxonomy doc.
-* **Guard legibility** (`HOOK-GUARD-LEGIBILITY-001`): guards self-identify and
+- **Guard legibility** (`HOOK-GUARD-LEGIBILITY-001`): guards self-identify and
   print literal remediation; the claimant block names **all** scope.in
   claimants when multiple worktrees contest a path
   (`CLASH-GUARD-CLAIMANT-LABELING-001`).
-* **`caws doctor` warns when the CAWS hook pack is installed but `.caws/` is
+- **`caws doctor` warns when the CAWS hook pack is installed but `.caws/` is
   absent** (`CAWS-DOCTOR-HOOKS-NO-CAWS-DRIFT-001`).
 
 ### Changed
 
-* **`caws agents prune --dead` is recency-primary; doctor learns the drift
+- **`caws agents prune --dead` is recency-primary; doctor learns the drift
   classes** (`AGENT-LIVENESS-DOCTOR-001`). A lease that heartbeated within the
   active TTL window is never pruned as dead on a stale PID alone (the prior PID
   oracle flagged 100% of healthy Claude Code sessions, whose per-call Bash PIDs
@@ -1140,63 +1136,63 @@ governed command surface unchanged (the thirteen v11.1 groups).
   `.caws/leases/`, cross-references `worktrees.json` owners, and surfaces
   orphaned-active-spec / missing-worktree / stale-owner drift. Doctrine:
   freshness gates cleanup, never authorizes ownership.
-* **Danger latch discriminates protected-state destination mutation from
+- **Danger latch discriminates protected-state destination mutation from
   source-only reference** (`DANGER-LATCH-TRIGGER-DISCRIMINATION-001`). Latches on
-  a redirect/in-place-mutator/`cp`/`mv` that writes *into* a protected guard
+  a redirect/in-place-mutator/`cp`/`mv` that writes _into_ a protected guard
   (citing the exact predicate), but no longer latches when a guard is only a
   read/copy **source** into a non-protected fixture. Pipe-to-shell and the rest
   of the catastrophic-deny corpus are byte-identical (unchanged). Reset remains
   human-only. Earlier in the line the latch was relaxed to catastrophic-only
   (`CAWS-DANGER-LATCH-CATASTROPHIC-ONLY-001`) and everyday git workflow
   (`git add`/`commit`/`checkout -b`/`switch`) was admitted.
-* **`caws status` no longer implies `--takeover` for a stale-but-not-abandoned
+- **`caws status` no longer implies `--takeover` for a stale-but-not-abandoned
   foreign owner** (`STATUS-STALE-OWNER-NO-TAKEOVER-001`); the inline doctor
   section suppresses takeover hints at the status call site (doctor itself
   unchanged). `status` also qualifies `unbound` with the union-mode enforcement
   caveat when active specs exist (`CAWS-STATUS-UNBOUND-ENFORCEMENT-CAVEAT-001`).
-* **`block-dangerous.sh` enforces the capability-derived ask**
+- **`block-dangerous.sh` enforces the capability-derived ask**
   (`HOOK-ASK-ENFORCEMENT-001`): the classifier emits additive `source` +
   `enforcement` fields; capability-ask becomes a blocking confirmation while
   legacy-ask stays advisory.
 
 ### Fixed
 
-* **`caws specs migrate --apply --partial` exits non-zero on an incomplete
+- **`caws specs migrate --apply --partial` exits non-zero on an incomplete
   migration** (`CAWS-CLI-EXIT-CODES-001`) — an `isOk`-but-bad-outcome (post-write
   validation failed, or partial+refused) no longer returns 0.
-* **`caws claim --takeover` refuses a cd-phantom claim** when the invoking
+- **`caws claim --takeover` refuses a cd-phantom claim** when the invoking
   session root is not the target worktree (`CLAIM-TAKEOVER-CD-PHANTOM-001`),
   closing the dual-ownership window the registry would otherwise record.
-* **Subshell-free claimant rendering** restores the `claimed:` token under the
+- **Subshell-free claimant rendering** restores the `claimed:` token under the
   guard runtime (hook JSON on stdin + `set -euo pipefail`) where a
   `printf | tr | while read` pipeline emitted nothing
   (`CLASH-GUARD-CLAIMANT-RENDER-HOTFIX-001`).
-* **Hook-pack classifier-spawn timeout parameterized** to eliminate false
+- **Hook-pack classifier-spawn timeout parameterized** to eliminate false
   full-suite failures under Jest worker contention; the timeout still fails loud
   (`HOOK-PACK-SUBPROCESS-TIMEOUT-RELIABILITY-001`).
-* **`shortcut-language-check` no longer flags TODO/FIXME/placeholder when the
+- **`shortcut-language-check` no longer flags TODO/FIXME/placeholder when the
   keyword is a referenced noun in prose**
   (`CAWS-SHORTCUT-LANG-DESCRIPTIVE-FALSE-POSITIVE-001`).
-* **Per-worktree strike state written under the gitdir, not `<wt>/tmp`**
+- **Per-worktree strike state written under the gitdir, not `<wt>/tmp`**
   (`CAWS-GUARD-STRIKE-FILE-OUT-OF-TREE-001`), so `git add -A` can never commit
   it and strikes never bleed across worktrees.
-* **Classifier calibration**: `git rm --cached`/`-n` classified as allow
+- **Classifier calibration**: `git rm --cached`/`-n` classified as allow
   (`CAWS-CLASSIFY-GIT-RM-CACHED-001`); multi-line Bash segmented on newline so an
   `rm` target is not lost (`CAWS-CLASSIFY-NEWLINE-SEGMENT-001`); read-only git
   plumbing (`merge-tree`/`cat-file`/`rev-list`/`check-ignore`) and
   `git worktree prune --dry-run` admitted.
-* **`caws init` recognizes legacy `dispatch/` wiring** and does not append a
+- **`caws init` recognizes legacy `dispatch/` wiring** and does not append a
   duplicate (`CAWS-INIT-LEGACY-DISPATCH-NO-DUP-001`).
-* **Coverage repointed at the compiled store/shell surface**
+- **Coverage repointed at the compiled store/shell surface**
   (`CAWS-CLI-COVERAGE-HONESTY-001`) with a real floor + threshold gate
   (`CAWS-CLI-COVERAGE-FLOOR-001`); Stryker runs out-of-process to break the
   nested-jest deadlock.
-* **Two unused-var lint errors removed** from hook-pack test files
+- **Two unused-var lint errors removed** from hook-pack test files
   (`CAWS-CLI-LINT-UNUSED-VARS-001`); workspace lint exits 0.
 
 ### Recon-only (no behavior change, recorded for provenance)
 
-* **`SUBAGENT-PHANTOM-LEASE-001` / `SUBAGENT-LEASE-IDENTITY-RECONCILE-001`** — the
+- **`SUBAGENT-PHANTOM-LEASE-001` / `SUBAGENT-LEASE-IDENTITY-RECONCILE-001`** — the
   run-002 "subagent phantom lease" finding was investigated and resolved as a
   **probe-log attribution error**: the suspected lease was a genuine top-level
   session (all four probe leases map 1:1 to four top-level transcripts; a
@@ -1205,7 +1201,7 @@ governed command surface unchanged (the thirteen v11.1 groups).
 
 ### Release readiness (test-only, non-user-facing)
 
-* Stale release-gate assertions left by this batch's own fixes were corrected so
+- Stale release-gate assertions left by this batch's own fixes were corrected so
   the gates pass against the packed 11.1.9 CLI — no product behavior change:
   the fresh-install smoke's dispatcher path (`dispatch/` → `caws_dispatch/`,
   renamed by `CAWS-INIT-SETTINGS-WIRING-001`) and its `migrate --apply --partial`
@@ -1216,7 +1212,7 @@ governed command surface unchanged (the thirteen v11.1 groups).
 
 ### Added (continued)
 
-* **`caws specs amend-scope` — governed scope amendment without `git cherry-pick`**
+- **`caws specs amend-scope` — governed scope amendment without `git cherry-pick`**
   (`CAWS-SCOPE-AMEND-COMMAND-001`). `caws specs amend-scope <id> --add <path>...`
   (plus `--remove`, `--add-out`, `--remove-out`, all repeatable) mutates an
   active/draft spec's `scope.in`/`scope.out` on the **canonical** control plane:
@@ -1234,7 +1230,7 @@ governed command surface unchanged (the thirteen v11.1 groups).
   cherry-pick that provably touches only `.caws/specs/*.yaml` (fail-closed on any
   uncertainty), so the residual fallback case also avoids the latch.
 
-* **`caws agents prune --dead` — PID-liveness ghost-lease cleanup**
+- **`caws agents prune --dead` — PID-liveness ghost-lease cleanup**
   (`WORKTREE-GUARD-RISK-SURFACE-001`). Removes `active`/`stopping` leases on
   THIS host whose owning process is dead (`process.kill(pid, 0)`: `EPERM` =
   alive, `ESRCH` = dead), collapsing the prior three-step verify-PID → stop →
@@ -1244,7 +1240,7 @@ governed command surface unchanged (the thirteen v11.1 groups).
   recorded pid is treated as dead (unverifiable). Mutually exclusive with
   `--status`; respects `--dry-run`/`--apply`/`--json`. `stopped` leases are
   out of scope (use `--status stopped --older-than-ms <ms>` for retention).
-* **Composite risk signal for the worktree write-guard**
+- **Composite risk signal for the worktree write-guard**
   (`WORKTREE-GUARD-RISK-SURFACE-001`). `caws_compose_risk` (hook lib) composes
   four signals — target-dir existence, active bound specs claiming live
   worktrees, active-agent count, lease staleness — surfaced as a full briefing
@@ -1254,7 +1250,7 @@ governed command surface unchanged (the thirteen v11.1 groups).
 
 ### Changed
 
-* **`worktree-write-guard.sh` blocks only on an active-bound-spec scope.in
+- **`worktree-write-guard.sh` blocks only on an active-bound-spec scope.in
   claim; everything else asks** (`WORKTREE-GUARD-RISK-SURFACE-001`). On the
   base branch the guard now HARD-BLOCKS (exit 2) ONLY when an **active** bound
   spec's `scope.in` claims the target file — the spec→worktree authority
@@ -1269,7 +1265,7 @@ governed command surface unchanged (the thirteen v11.1 groups).
   longer counts as an active worktree — killing the
   orphaned-registry-entry-walls-every-write bug.
 
-* **Per-session state relocated from repo-root `tmp/` to `.caws/sessions/`**
+- **Per-session state relocated from repo-root `tmp/` to `.caws/sessions/`**
   (`CAWS-SESSION-LOG-RELOCATE-001`). The claude-code hook pack's per-session
   state — turn logs, the durable `.session-envelope.json`
   (session-resolution authority), and the per-repo `.caller-session.json`
@@ -1288,7 +1284,7 @@ governed command surface unchanged (the thirteen v11.1 groups).
 
 ### Fixed
 
-* **Danger latch froze the whole session on one honest mistake; read-only
+- **Danger latch froze the whole session on one honest mistake; read-only
   inspection commands armed the latch they were meant to diagnose**
   (`DANGER-LATCH-APPROVAL-AND-FEEDBACK-001`). Three coupled hook-pack changes:
   (1) **warn-then-latch** — the FIRST flagged `ask`-class command in a session
@@ -1314,10 +1310,10 @@ governed command surface unchanged (the thirteen v11.1 groups).
   `danger-warn-*.json`), so a post-reset session gets a fresh first-strike
   grace. (failure-lineage Entry 34.)
 
-* **Published package shipped stray local session transcripts**
+- **Published package shipped stray local session transcripts**
   (`CAWS-SESSION-LOG-RELOCATE-001`, fixed by
   `CAWS-SESSION-LOG-PACK-LEAK-HOTFIX-001`). `package.json`'s `files:
-  ["templates/hook-packs/**"]` ships matched paths regardless of
+["templates/hook-packs/**"]` ships matched paths regardless of
   `.gitignore`, so the maintainer's local session-log dirs under
   `templates/hook-packs/claude-code/tmp/<session-id>/` leaked into the
   published tarball — `npm pack --dry-run` showed 27 stray files
@@ -1335,7 +1331,7 @@ governed command surface unchanged (the thirteen v11.1 groups).
   `files`-negation is removed, so it can no longer false-pass. (failure-
   lineage Entry 33.)
 
-* **hook-pack (danger latch): `reset-danger-latch.sh --current` could not
+- **hook-pack (danger latch): `reset-danger-latch.sh --current` could not
   clear the latch a session actually wrote** (`DANGER-LATCH-UX-001`). The
   latch is WRITTEN by `block-dangerous.sh` keyed to the stdin session id, but
   CLEARED by a human running the reset from a shell with no Claude session id
@@ -1348,7 +1344,7 @@ governed command surface unchanged (the thirteen v11.1 groups).
   `--session`/`--all`, never clearing ambiguously); (3) `block-dangerous.sh`'s
   replay message recommends `--session <id>` over `--current`. +6 tests;
   verified end-to-end against the exact deadlock.
-* **hook-pack (classify_command.py): recursive deletes under a system temp
+- **hook-pack (classify_command.py): recursive deletes under a system temp
   root no longer latch** (`DANGER-LATCH-UX-001`). `rm -rf /tmp/<x>`,
   `/private/tmp/<x>`, `/var/folders/<x>`, `$TMPDIR/<x>` classify as `allow`
   instead of engaging the latch — agents constantly create/tear-down fixtures
@@ -1360,7 +1356,7 @@ governed command surface unchanged (the thirteen v11.1 groups).
 
 ### Changed
 
-* **hook-pack (classify_command.py): admit read-only `git worktree` forms**
+- **hook-pack (classify_command.py): admit read-only `git worktree` forms**
   (`WORKTREE-LIST-CALIBRATION-001`). `git worktree list` and bare
   `git worktree` (prints usage) are read-only inspection but fell through
   the danger-latch classifier to "ask" (worktree was not on the read-only
@@ -1374,12 +1370,12 @@ governed command surface unchanged (the thirteen v11.1 groups).
   (`DANGER-LATCH-WORKFLOW-CALIBRATION-001`). +11 calibration tests
   (4 admit, 7 stay-governed); 112/112 pass.
 
-* **hook-pack (claude-code): extracted duplicated hook logic into shared
+- **hook-pack (claude-code): extracted duplicated hook logic into shared
   `lib/` and fixed two correctness drifts the duplication was hiding**
   (`HOOK-LIB-CONSOLIDATION-001`, Tier 1). The pack architecture (thin
   dispatchers → self-filtering handlers → `lib/`) was correct, but
   shared logic had been copy-pasted into per-hook `node -e` blocks and
-  had drifted into *disagreement*:
+  had drifted into _disagreement_:
   - **Single canonical scope-glob matcher** (`$CAWS_NODE_GLOB_TO_SCOPE_REGEXP`
     in `lib/caws-state.sh`). `scope-guard.sh` and `worktree-write-guard.sh`
     previously carried two different glob→regexp algorithms: scope-guard
@@ -1405,7 +1401,7 @@ governed command surface unchanged (the thirteen v11.1 groups).
     object shape. **Correctness fix:** the lib's `entriesOf` gated v11
     flat-map entries on `typeof v.status === 'string'`, but caws-cli
     11.1.7+ `worktree create` persists `{ branch, baseBranch, path,
-    spec_id }` and never writes a `status` field (status is synthesized at
+spec_id }` and never writes a `status` field (status is synthesized at
     render time). So `entriesOf` returned `[]` for every CLI-created
     registry — **silently disabling active-worktree detection in
     `worktree-guard`, `session-caws-status`, `worktree-write-guard`, and
@@ -1483,7 +1479,7 @@ governed command surface unchanged (the thirteen v11.1 groups).
     `lib/emit.sh` is the only definition (verified by grep across the pack;
     only `quiet-merge`'s `updatedInput` shape remains, by design).
 
-* **hook-pack (claude-code): reconciled the canonical pack into the union
+- **hook-pack (claude-code): reconciled the canonical pack into the union
   of three divergent forks** (`HOOK-PACK-DIVERGENCE-RECONCILE-001`). An
   audit of the shipped template against two consumer forks (a Sterling
   monorepo on pack v5, and the caws monorepo's own stale `.claude/hooks/`)
@@ -1517,11 +1513,11 @@ governed command surface unchanged (the thirteen v11.1 groups).
   - The caws monorepo's own `.claude/hooks/` was refreshed from the
     reconciled template (it had been running an obsolete regex-based
     `block-dangerous.sh` with the classifier commented out).
-  Pack version unchanged at v11; `caws init --overwrite` pulls the union.
+    Pack version unchanged at v11; `caws init --overwrite` pulls the union.
 
 ### Fixed
 
-* **hook-pack (claude-code): dangerous-command guard latched the CAWS
+- **hook-pack (claude-code): dangerous-command guard latched the CAWS
   happy path.** The `DANGER-LATCH-CALIBRATION-001` allow-list admitted
   only read-only git subcommands, so plain `git add` and `git commit`
   fell through to "unknown git subcommand → ask" — and an `ask` engages
@@ -1538,13 +1534,13 @@ governed command surface unchanged (the thirteen v11.1 groups).
   family (including flag-split variants) all keep their prior ask/deny
   decisions (22 new regression tests; 101/101 calibration tests pass).
   Two UX fixes ship alongside: the sticky-latch block message now names
-  which command *first* engaged the latch (agents were misattributing
+  which command _first_ engaged the latch (agents were misattributing
   the block to whatever they ran next), and it states explicitly that
   the reset is human-only. Pack version unchanged at v11 — `caws init`
   on a fresh repo gets the fix; existing installs pick it up via
   `caws init --overwrite`.
 
-* **hook-pack (claude-code): `reset-danger-latch.sh` was a no-op
+- **hook-pack (claude-code): `reset-danger-latch.sh` was a no-op
   wrapper.** Since pack v1 the shipped `reset-danger-latch.sh`
   delegated to `$PROJECT_DIR/packages/caws-cli/templates/.claude/hooks/reset-danger-latch.sh`
   — a path that exists in no consumer repo (and not in this monorepo
@@ -1568,24 +1564,24 @@ were removed in `CAWS-DEAD-TEST-CLEANUP-001`.
 
 ### Removed (no replacement; surfaces were retired in v11.0)
 
-* **src/commands:** removed 16 legacy command source files for
+- **src/commands:** removed 16 legacy command source files for
   commands retired in v11.0 and not planned for v11.2+: `archive`,
   `burnup`, `diagnose`, `evaluate`, `iterate`, `mode`, `parallel`,
   `plan`, `provenance`, `quality-monitor`, `sidecar`, `templates`,
   `tool`, `tutorial`, `validate`, `workflow`. The v11.1 command
   surface lives in `src/shell/commands/`.
-* **src/sidecars:** removed the entire directory (7 files). The
+- **src/sidecars:** removed the entire directory (7 files). The
   `caws sidecar` group is retired; equivalent telemetry now lives in
   `events.jsonl` (audit) and `caws status` (state).
-* **src/parallel/parallel-manager.js:** removed. `caws parallel` is
+- **src/parallel/parallel-manager.js:** removed. `caws parallel` is
   deferred to v11.3+; the `caws worktree create` loop is the
   multi-agent setup mechanism in v11.1.
-* **src/test-analysis.js:** removed. `caws test-analysis` was retired
+- **src/test-analysis.js:** removed. `caws test-analysis` was retired
   in v11.0.
 
 ### Retained (test-load-bearing through legacy code paths)
 
-* **src/utils/spec-resolver.js** and **src/commands/verify-acs.js**
+- **src/utils/spec-resolver.js** and **src/commands/verify-acs.js**
   were initially included in the deletion list but had to be restored
   mid-merge: they remain reachable through the surviving legacy
   command files (`src/commands/specs.js`, `src/commands/gates.js`,
@@ -1595,14 +1591,14 @@ were removed in `CAWS-DEAD-TEST-CLEANUP-001`.
   `tests/specs-archive*.test.js`, `tests/worktree-auto-close-spec.test.js`,
   etc.). Full retirement requires removing the legacy code paths first;
   that is a follow-on slice's scope.
-* **src/worktree/worktree-manager.js** was reverted to its pre-slice
+- **src/worktree/worktree-manager.js** was reverted to its pre-slice
   state. The `verify-acs` require in `autoCloseBoundSpec` stays.
 
 ### Notes
 
-* No version bump; releases are tag-driven and this slice doesn't
+- No version bump; releases are tag-driven and this slice doesn't
   change runtime behavior.
-* The 9 remaining `src/commands/*.js` files (`agents`, `gates`,
+- The 9 remaining `src/commands/*.js` files (`agents`, `gates`,
   `init`, `scope`, `session`, `specs`, `status`, `waivers`,
   `worktree`) are transitively dead from the v11.1 shell entry point
   but still reachable from tests via direct `require` of
@@ -1626,32 +1622,32 @@ so the durable `--help` authority ships here in 11.1.8 rather than 11.1.7.)
 
 ### Added
 
-* **`COMMAND_SURFACE_METADATA`** (`src/shell/command-metadata.ts`,
+- **`COMMAND_SURFACE_METADATA`** (`src/shell/command-metadata.ts`,
   CAWS-CLI-HELP-METADATA-AUTHORITY-001 + slices): a typed single source for all
   13 command groups' help — flat top-level commands (`init`/`doctor`/`status`/
   `claim`/`prepush`) and groups (`scope`/`gates`/`evidence`/`events`/`waiver`/
   `agents`/`specs`/`worktree`). `register.ts` consumes it via metadata helpers;
   no inline help-string literal remains.
-* **Kernel spec enums exported as const arrays** (`SPEC_MODES`,
+- **Kernel spec enums exported as const arrays** (`SPEC_MODES`,
   `SPEC_RESOLUTIONS`, `RISK_TIERS`, `SPEC_LIFECYCLE_STATES`, `CONTRACT_TYPES`):
   `--mode` / `--resolution` / `--risk-tier` help value-lists are derived from
   these and lock-tested for equality with the kernel/schema enums, eliminating
   the prior duplicate `VALID_MODES`/`VALID_RESOLUTIONS` arrays.
-* **Help-metadata lock test** (`tests/shell/help-metadata-lock.test.js`): L1
+- **Help-metadata lock test** (`tests/shell/help-metadata-lock.test.js`): L1
   (metadata names == registered groups), L3 (option `allowedValues` deep-equal
   kernel enums), L4 (non-empty descriptions), L5 (register.ts carries no inline
   help-string literals). Future help/behavior drift becomes a test failure.
 
 ### Fixed
 
-* **`specs archive` help** said "Moves the YAML file to `.caws/specs/.archive/`"
+- **`specs archive` help** said "Moves the YAML file to `.caws/specs/.archive/`"
   — false since archive became a tombstone. Now states the tombstone semantics
   (deletes the YAML, appends a recoverable `spec_archived` event with `blob_sha`).
-* **`worktree` group help** omitted `migrate-registry` and `repair-sparse` from
+- **`worktree` group help** omitted `migrate-registry` and `repair-sparse` from
   its subcommand list; now enumerates all seven subcommands.
-* **`gates run` help** was silent on exit codes 2 (hard composition error) and 3
+- **`gates run` help** was silent on exit codes 2 (hard composition error) and 3
   (evidence-integrity failure); both are now documented alongside 0/1.
-* **`specs create` help** now marks `--title` / `--mode` / `--risk-tier` as
+- **`specs create` help** now marks `--title` / `--mode` / `--risk-tier` as
   required (they were functionally required but presented as optional); the
   handler retains its guidance-on-omission diagnostic.
 
@@ -1666,17 +1662,17 @@ schema. Also folds in the dead-source cleanup recorded under
 
 ### Added
 
-* **`caws prepush`** (MULTI-AGENT-PUSH-RANGE-GUARD-001): governed pre-push
+- **`caws prepush`** (MULTI-AGENT-PUSH-RANGE-GUARD-001): governed pre-push
   range check. Classifies each outgoing commit's spec provenance and refuses
   commits not attributable to the current slice unless `--ack`'d. Diagnose/
   decide only — it does NOT run `git push`. v1 is opt-in (`prepush`-first; no
   raw `git push` interception).
-* **`caws specs retire-draft <id>`** (CAWS-SPECS-RETIRE-DRAFT-001): governed
+- **`caws specs retire-draft <id>`** (CAWS-SPECS-RETIRE-DRAFT-001): governed
   draft-only lifecycle exit via tombstone. Refuses active/closed/archived;
   appends a recoverable `spec_retired` event (recover via
   `caws specs show <id> --archived`). Closes the gap where a never-activated
   draft had no sanctioned CLI exit other than raw `git rm`.
-* **Four advisory PostToolUse hooks** in the Claude Code pack
+- **Four advisory PostToolUse hooks** in the Claude Code pack
   (QG-HOOKS-EXTRACT-001): `god-object-check`, `shortcut-language-check`
   (progressive warn→ask→block), `duplicate-export-check`, `loc-delta-check`.
   They reimplement the load-bearing quality-gates detection intent at edit
@@ -1685,26 +1681,26 @@ schema. Also folds in the dead-source cleanup recorded under
 
 ### Fixed
 
-* **Autocommit integrity** (CAWS-AUTOCOMMIT-INTEGRITY-001/002): lifecycle
+- **Autocommit integrity** (CAWS-AUTOCOMMIT-INTEGRITY-001/002): lifecycle
   audit commits are path-scoped (no longer sweep a sibling session's staged
   files from the shared index), and a `refused_dirty` outcome is surfaced as a
   warning rather than silently reported as success.
-* **Hook-pack header version drift** (CAWS-HOOK-PACK-HEADER-VERSION-RECONCILE-001):
+- **Hook-pack header version drift** (CAWS-HOOK-PACK-HEADER-VERSION-RECONCILE-001):
   all managed hook headers now match `CLAUDE_CODE_PACK_VERSION` (11), so the
   install reporter no longer force-updates unchanged files or shadows the
   managed-drift refusal.
-* **Pre-existing lint debt** (CAWS-LINT-DEBT-CLEANUP-001): cleared 13 eslint
+- **Pre-existing lint debt** (CAWS-LINT-DEBT-CLEANUP-001): cleared 13 eslint
   errors so the PR lint gate is green.
 
 ### Changed
 
-* **Kernel dependency pinned to `^1.1.4`** (CAWS-RELEASE-PREP-KERNEL-COUPLING-001):
+- **Kernel dependency pinned to `^1.1.4`** (CAWS-RELEASE-PREP-KERNEL-COUPLING-001):
   `caws specs retire-draft` validates the `spec_retired` event against the
   kernel's payload schemas at runtime; that schema is new in kernel 1.1.4.
   The previous `^1.1.0` range could resolve a registry-stale 1.1.3 that
   predates the schema and would reject the event. Publishing order is
   kernel-first (see `docs/release-procedure.md`).
-* **Surface/lifecycle/doc reconciliation** (CAWS-PRE-RELEASE-CLEANUP-001,
+- **Surface/lifecycle/doc reconciliation** (CAWS-PRE-RELEASE-CLEANUP-001,
   CAWS-DOC-SURFACE-RECONCILE-001, CAWS-V11-NONDOC-SURFACE-DRIFT-001): command-
   surface prose, `--help` descriptions, the `caws init` template CLAUDE.md, and
   failure-lineage (entries 28–31) reconciled to the shipped 13-group surface;
@@ -1721,7 +1717,7 @@ families (`git`, `gh`, `npm`).
 
 ### Features
 
-* **hook-packs/classify_command:** add explicit `ALLOW` configuration
+- **hook-packs/classify_command:** add explicit `ALLOW` configuration
   for read-only file inspection (`tail`, `head`, `cat`, `less`, `more`,
   `wc`, `stat`, `file`, `du`, `df`, `ls`, `tree`), read-only search
   (`grep`, `rg`, observational `find`), read-only `git` subcommands
@@ -1731,23 +1727,23 @@ families (`git`, `gh`, `npm`).
   plus `gh api` when the HTTP method is GET), and read-only `npm`
   subcommands (`view`, `whoami`, `config`, `ls`, `outdated`, `explain`,
   `pack --dry-run`).
-* **hook-packs/classify_command:** add hybrid fail-closed default for
+- **hook-packs/classify_command:** add hybrid fail-closed default for
   `git`, `gh`, `npm` families. An unknown subcommand (not on the
   allow-list and not matched by any deny or confirm pattern) now
   resolves to `ask` instead of the previous `allow` fall-through.
   Non-governed commands retain the existing default.
-* **hook-packs/classify_command:** add PATH-spoof protection. Hyphenated
+- **hook-packs/classify_command:** add PATH-spoof protection. Hyphenated
   variants like `gh-something`, `git-something`, `npm-something` are
   treated as suspicious shadowing of the governed families and
   resolve to `ask`. Closes the spec's anchoring invariant.
-* **hook-packs/classify_command:** add a generic pipe-to-shell deny
+- **hook-packs/classify_command:** add a generic pipe-to-shell deny
   pattern. Any executable command piped into a shell interpreter
   now resolves to `deny`, where previously only `curl`-and-`wget`
   specific variants did. Quote-safety is preserved by the existing
   `strip_quoted_regions` upstream pass, so dangerous fixture text
   inside quoted strings, heredoc bodies, or commit-message arguments
   does not false-positive.
-* **hook-packs/classify_command:** extend `classify_find_delete` to
+- **hook-packs/classify_command:** extend `classify_find_delete` to
   recognize `-execdir`, `-fprint`, `-fprintf`, `-fprint0`, `-ok`,
   and `-okdir` as mutating action flags in addition to the existing
   `-exec` and `-delete`.
@@ -1762,13 +1758,13 @@ classifier and asserts on parsed JSON output — no mocking.
 
 ### Out of scope
 
-* Universal fail-closed (flipping the classifier's global default
+- Universal fail-closed (flipping the classifier's global default
   from `allow` to `ask`) is deferred. Filed as
   `UNIVERSAL-FAIL-CLOSED-001` (concept; not yet created).
-* Stale v10 command references in `templates/CLAUDE.md` and
+- Stale v10 command references in `templates/CLAUDE.md` and
   `templates/.claude/rules/worktree-isolation.md` will be addressed
   by `TEMPLATES-V11-COMMAND-REFRESH-001` (concept; not yet created).
-* Maintainer-local `.claude/hooks/classify_command.py` is NOT
+- Maintainer-local `.claude/hooks/classify_command.py` is NOT
   modified by this slice — it is a maintainer surface that consumers
   do not see. The shipped template is the only target.
 
@@ -1780,7 +1776,7 @@ semantic-release, no branch-push trigger).
 
 ### Bug Fixes
 
-* **build:** set executable bit (0o755) on `dist/index.js` after build on
+- **build:** set executable bit (0o755) on `dist/index.js` after build on
   POSIX systems (`CAWS-CLI-BIN-EXECUTABLE-BIT-001`). Closes the
   workspace-install ergonomics gap where `node_modules/.bin/caws` was
   not directly executable, forcing `node packages/caws-cli/dist/index.js`
@@ -1796,37 +1792,35 @@ retrospectively for audit completeness.
 
 ### Bug Fixes
 
-* **store/yaml-patch:** byte-level removal of top-level `worktree:` scalar
+- **store/yaml-patch:** byte-level removal of top-level `worktree:` scalar
   on `closeSpec` (`WORKTREE-MERGE-CLEARS-SPEC-BINDING-001`). Preserves
   LIFECYCLE-MUTATION-001 raw-source-bytes invariant.
-* **store/worktrees-writer:** honest completion in `mergeWorktree` —
+- **store/worktrees-writer:** honest completion in `mergeWorktree` —
   inspects `closeResult.value.kind === 'success'` instead of treating
   `partial_failure_recovered` as success. Surfaces
   `LIFECYCLE_PARTIAL_FAILURE_UNRECOVERED` when the spec-close transaction
   rolls back; worktree is NOT destroyed and the bound spec remains active.
-* **schemas/events/spec_closed.v1:** add `prior_worktree` field for
+- **schemas/events/spec_closed.v1:** add `prior_worktree` field for
   audit-trail capture of the worktree binding cleared during close.
 
 ## [11.1.3](https://github.com/Paths-Design/coding-agent-working-standard/compare/v11.1.2...v11.1.3) (2026-05-20)
 
-
 ### Bug Fixes
 
-* **ci:** build workspace CLI before caws-gate doctor ([f5b3fba](https://github.com/Paths-Design/coding-agent-working-standard/commit/f5b3fba67b6d300c347c44322f13d7e6439db64e)), closes [#3](https://github.com/Paths-Design/coding-agent-working-standard/issues/3)
-* **ci:** invoke CLI via node to bypass executable-bit dependency ([f4c1bfe](https://github.com/Paths-Design/coding-agent-working-standard/commit/f4c1bfe7136a18510c8d6c83628d19d30911fd42))
-* **ci:** keep version-range pin; document npm workspace:* rejection ([2ed5736](https://github.com/Paths-Design/coding-agent-working-standard/commit/2ed573603d8d081f6e4e5fb8878b6a9d758ec773))
-* **ci:** pass coverage flags through turbo ([08c76a7](https://github.com/Paths-Design/coding-agent-working-standard/commit/08c76a7e0c4c130d635ca019251554f36ac033f9)), closes [#3](https://github.com/Paths-Design/coding-agent-working-standard/issues/3) [CI-PR-TEST-PASSTHROU#001](https://github.com/CI-PR-TEST-PASSTHROU/issues/001)
-* **ci:** resolve kernel typecheck via workspace protocol ([42ac717](https://github.com/Paths-Design/coding-agent-working-standard/commit/42ac7175ab04d879866e8e61534534ff71b587f4)), closes [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1) [#2](https://github.com/Paths-Design/coding-agent-working-standard/issues/2)
-* **ci:** rewrite caws-gate for v11 surface ([2f06d0d](https://github.com/Paths-Design/coding-agent-working-standard/commit/2f06d0db5227a65142aa6f1666a8f729da81b688)), closes [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1) [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1)
-* **cli:** remove removed-command suggestions from error handler ([fe9a265](https://github.com/Paths-Design/coding-agent-working-standard/commit/fe9a2659cfa18816a043752592653e17aa57f107))
-* **specs:** lower WORKTREE-CAWS-SHARED-STATE-001 risk_tier to 3 ([e9effde](https://github.com/Paths-Design/coding-agent-working-standard/commit/e9effde44cdb9c0f360ac1ae5f64231ca732a4f5))
+- **ci:** build workspace CLI before caws-gate doctor ([f5b3fba](https://github.com/Paths-Design/coding-agent-working-standard/commit/f5b3fba67b6d300c347c44322f13d7e6439db64e)), closes [#3](https://github.com/Paths-Design/coding-agent-working-standard/issues/3)
+- **ci:** invoke CLI via node to bypass executable-bit dependency ([f4c1bfe](https://github.com/Paths-Design/coding-agent-working-standard/commit/f4c1bfe7136a18510c8d6c83628d19d30911fd42))
+- **ci:** keep version-range pin; document npm workspace:\* rejection ([2ed5736](https://github.com/Paths-Design/coding-agent-working-standard/commit/2ed573603d8d081f6e4e5fb8878b6a9d758ec773))
+- **ci:** pass coverage flags through turbo ([08c76a7](https://github.com/Paths-Design/coding-agent-working-standard/commit/08c76a7e0c4c130d635ca019251554f36ac033f9)), closes [#3](https://github.com/Paths-Design/coding-agent-working-standard/issues/3) [CI-PR-TEST-PASSTHROU#001](https://github.com/CI-PR-TEST-PASSTHROU/issues/001)
+- **ci:** resolve kernel typecheck via workspace protocol ([42ac717](https://github.com/Paths-Design/coding-agent-working-standard/commit/42ac7175ab04d879866e8e61534534ff71b587f4)), closes [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1) [#2](https://github.com/Paths-Design/coding-agent-working-standard/issues/2)
+- **ci:** rewrite caws-gate for v11 surface ([2f06d0d](https://github.com/Paths-Design/coding-agent-working-standard/commit/2f06d0db5227a65142aa6f1666a8f729da81b688)), closes [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1) [#1](https://github.com/Paths-Design/coding-agent-working-standard/issues/1)
+- **cli:** remove removed-command suggestions from error handler ([fe9a265](https://github.com/Paths-Design/coding-agent-working-standard/commit/fe9a2659cfa18816a043752592653e17aa57f107))
+- **specs:** lower WORKTREE-CAWS-SHARED-STATE-001 risk_tier to 3 ([e9effde](https://github.com/Paths-Design/coding-agent-working-standard/commit/e9effde44cdb9c0f360ac1ae5f64231ca732a4f5))
 
 ## [11.1.2](https://github.com/Paths-Design/coding-agent-working-standard/compare/v11.1.1...v11.1.2) (2026-05-18)
 
-
 ### Bug Fixes
 
-* **quality-gates:** route CI/FIX mode banners through logHuman to preserve JSON stdout ([e562a0e](https://github.com/Paths-Design/coding-agent-working-standard/commit/e562a0e161f182482b550fe38b04b2cc8c4d22f8))
+- **quality-gates:** route CI/FIX mode banners through logHuman to preserve JSON stdout ([e562a0e](https://github.com/Paths-Design/coding-agent-working-standard/commit/e562a0e161f182482b550fe38b04b2cc8c4d22f8))
 
 # [11.1.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v11.1.0...v11.1.1) (2026-05-18)
 
@@ -1835,11 +1829,11 @@ fresh-install smoke gate so the regression class cannot ship again.
 
 ### Bug Fixes
 
-* **packaging:** restore `templates/hook-packs/**` to `package.json:files` (TEMPLATES-PUBLISH-REGRESSION-001). v11.1.0 published with `files: ["dist", "README.md"]`, which excluded the hook-pack templates that `caws init --agent-surface claude-code` reads at runtime. Every fresh install hit `ENOENT: no such file or directory, copyfile '…/templates/hook-packs/claude-code/scope-guard.sh'`. The narrow allowlist re-includes only the load-bearing subtree; dead scaffold surfaces slice 8b correctly excluded stay excluded.
+- **packaging:** restore `templates/hook-packs/**` to `package.json:files` (TEMPLATES-PUBLISH-REGRESSION-001). v11.1.0 published with `files: ["dist", "README.md"]`, which excluded the hook-pack templates that `caws init --agent-surface claude-code` reads at runtime. Every fresh install hit `ENOENT: no such file or directory, copyfile '…/templates/hook-packs/claude-code/scope-guard.sh'`. The narrow allowlist re-includes only the load-bearing subtree; dead scaffold surfaces slice 8b correctly excluded stay excluded.
 
 ### Tests
 
-* **smoke:** add `scripts/fresh-install-smoke.mjs` wired as `prepublishOnly`. Pipeline: `npm pack` → install tarball into a fresh temp project → load the *installed* manifest → assert every declared `sourcePath` exists in `templates/hook-packs/<pack-id>/` AND every `destPath` materializes after `caws init`. A red smoke blocks `npm publish`. Verified in both directions (current state passes in ~2.5s; sabotaged `files` allowlist fails with 19 named missing paths + exact remediation, exit 1).
+- **smoke:** add `scripts/fresh-install-smoke.mjs` wired as `prepublishOnly`. Pipeline: `npm pack` → install tarball into a fresh temp project → load the _installed_ manifest → assert every declared `sourcePath` exists in `templates/hook-packs/<pack-id>/` AND every `destPath` materializes after `caws init`. A red smoke blocks `npm publish`. Verified in both directions (current state passes in ~2.5s; sabotaged `files` allowlist fails with 19 named missing paths + exact remediation, exit 1).
 
 ### Postmortem
 
@@ -1859,42 +1853,42 @@ truthful for v11, and turns three previously-orphaned policy gates into real enf
 
 Published packages (in dependency order):
 
-* `@paths.design/caws-kernel@1.1.0` (shasum `bdc0373f…`)
-* `@paths.design/quality-gates@2.1.0` (shasum `2789da96…`)
-* `@paths.design/caws-cli@11.1.0` (shasum `3cc62c64…`)
+- `@paths.design/caws-kernel@1.1.0` (shasum `bdc0373f…`)
+- `@paths.design/quality-gates@2.1.0` (shasum `2789da96…`)
+- `@paths.design/caws-cli@11.1.0` (shasum `3cc62c64…`)
 
 ### Features
 
-* **specs:** restore `caws specs create | list | show | close | archive` on the v11 store/shell architecture (CLI-SPECS-001)
-* **worktree:** restore `caws worktree create | list | bind | destroy | merge` with auto-close on merge (CLI-WORKTREE-001)
-* **lifecycle:** lifecycle-mutation substrate — multi-file atomic writes under a single in-process lock (LIFECYCLE-MUTATION-001)
-* **gates:** local policy-gate evaluators for `budget_limit`, `scope_boundary`, `spec_completeness` (previously orphaned — declared but unenforced) plus mechanical aliases `god_objects→god_object` and `hidden-todo→todo_detection`
-* **init:** `caws init --agent-surface claude-code` installs durable hook pack with managed markers (INIT-HOOK-PACKS-001)
-* **claude-hooks:** dangerous-command session latch, semantic `git init` detection, trusted nonce escape, latch reset audit path (HOOK-SAFETY-001)
+- **specs:** restore `caws specs create | list | show | close | archive` on the v11 store/shell architecture (CLI-SPECS-001)
+- **worktree:** restore `caws worktree create | list | bind | destroy | merge` with auto-close on merge (CLI-WORKTREE-001)
+- **lifecycle:** lifecycle-mutation substrate — multi-file atomic writes under a single in-process lock (LIFECYCLE-MUTATION-001)
+- **gates:** local policy-gate evaluators for `budget_limit`, `scope_boundary`, `spec_completeness` (previously orphaned — declared but unenforced) plus mechanical aliases `god_objects→god_object` and `hidden-todo→todo_detection`
+- **init:** `caws init --agent-surface claude-code` installs durable hook pack with managed markers (INIT-HOOK-PACKS-001)
+- **claude-hooks:** dangerous-command session latch, semantic `git init` detection, trusted nonce escape, latch reset audit path (HOOK-SAFETY-001)
 
 ### Bug Fixes
 
-* **caws-cli:** share single baseline timestamp across composed `mergeWorktree` lifecycle so `ts` agrees with `seq` ordering; chain integrity was always correct via `prev_hash`
-* **quality-gates:** enforce JSON-only stdout contract — gate progress/result lines now suppressed under `--json`/quiet mode so caws-cli's strict `JSON.parse(stdout)` adapter never breaks on real-violation runs
-* **quality-gates:** per-cwd `docs-status/quality-gates.lock` (was install-dir-shared) — eliminates cross-project contention under parallel jest workers; preserves one-run-per-project semantics
-* **caws-cli:** unmatched subprocess violations surface in `unmatchedViolations` rather than being silently dropped; refused aliases documented as doctrine (code_freeze, naming, duplication, documentation, placeholders, simplification have no policy correspondent)
+- **caws-cli:** share single baseline timestamp across composed `mergeWorktree` lifecycle so `ts` agrees with `seq` ordering; chain integrity was always correct via `prev_hash`
+- **quality-gates:** enforce JSON-only stdout contract — gate progress/result lines now suppressed under `--json`/quiet mode so caws-cli's strict `JSON.parse(stdout)` adapter never breaks on real-violation runs
+- **quality-gates:** per-cwd `docs-status/quality-gates.lock` (was install-dir-shared) — eliminates cross-project contention under parallel jest workers; preserves one-run-per-project semantics
+- **caws-cli:** unmatched subprocess violations surface in `unmatchedViolations` rather than being silently dropped; refused aliases documented as doctrine (code_freeze, naming, duplication, documentation, placeholders, simplification have no policy correspondent)
 
 ### Tests
 
-* **legacy-test-reconcile:** explicit per-suite DELETE/REWRITE disposition (no blanket ignore patterns, no silent skips) — see `packages/caws-cli/docs-status/legacy-test-reconcile-001.md`
-* **opt-in perf budgets:** 8 load-sensitive tests gated behind `CAWS_RUN_PERF_BUDGETS=1` (7 perf-budget assertions + 1 gates-cli budget-block subprocess test) — default `npm test` is deterministic; CI sets the flag to enforce thresholds
-* Final default test surface: 95 suites / 1540 pass / 8 skip / 0 fail (296s)
+- **legacy-test-reconcile:** explicit per-suite DELETE/REWRITE disposition (no blanket ignore patterns, no silent skips) — see `packages/caws-cli/docs-status/legacy-test-reconcile-001.md`
+- **opt-in perf budgets:** 8 load-sensitive tests gated behind `CAWS_RUN_PERF_BUDGETS=1` (7 perf-budget assertions + 1 gates-cli budget-block subprocess test) — default `npm test` is deterministic; CI sets the flag to enforce thresholds
+- Final default test surface: 95 suites / 1540 pass / 8 skip / 0 fail (296s)
 
 ### Deferred
 
 The following items are tracked but NOT shipped in v11.1.0. Each becomes a governed
 spec in v11.1.x patches or v11.2.0:
 
-* **AUTH-BINDING-BRIDGE-001** — agent-session friction reduction for non-worktree contexts
-* **LOCK-INTERPROCESS-HARDEN-001** — cross-process semantics for the quality-gates lock (per-cwd is in; multi-process serialization on the same cwd is not regression-tested)
-* **LIFECYCLE-ROLLBACK-FAILURE-HARNESS-001** — adversarial fault-injection tests for partial-failure rollback in lifecycle transactions
-* **PRUNE-REPAIR-WORKTREE-001** — restore v10.2's `worktree prune | reconcile | repair` ergonomics on the v11 substrate
-* **CI-MATRIX-VALIDATION-001** — fresh-machine/multi-platform CI matrix for the published packages
+- **AUTH-BINDING-BRIDGE-001** — agent-session friction reduction for non-worktree contexts
+- **LOCK-INTERPROCESS-HARDEN-001** — cross-process semantics for the quality-gates lock (per-cwd is in; multi-process serialization on the same cwd is not regression-tested)
+- **LIFECYCLE-ROLLBACK-FAILURE-HARNESS-001** — adversarial fault-injection tests for partial-failure rollback in lifecycle transactions
+- **PRUNE-REPAIR-WORKTREE-001** — restore v10.2's `worktree prune | reconcile | repair` ergonomics on the v11 substrate
+- **CI-MATRIX-VALIDATION-001** — fresh-machine/multi-platform CI matrix for the published packages
 
 # [11.0.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v10.2.0...v11.0.0) (2026-05-17)
 
@@ -1907,151 +1901,146 @@ Projects needing v10 spec/worktree ergonomics should pin to `caws-cli@^10.2.x`.
 
 ### Features
 
-* **vNext architecture:** kernel / store / shell separation; pure kernel rules; I/O store; thin shell commands
-* **init:** v11 `caws init` — in-place bootstrap, refuses legacy single-spec residue, idempotent (no `--force`)
-* **doctor:** drift detection over `.caws/` state — exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure)
-* **status:** read-only dashboard panels (Spec, Scope, Claim, Gates, Recent Events) — never mutates `.caws/`
-* **scope:** `caws scope show` and `caws scope check` with binding-aware admission
-* **claim:** `caws claim` and `caws claim --takeover` with `prior_owners` audit
-* **gates:** `caws gates run --spec <id>` — policy-driven gate runner; appends one `gate_evaluated` event per declared gate
-* **evidence:** `caws evidence record --type <test|gate|ac>` typed append
-* **waiver:** singular `caws waiver create | list | show | revoke` (no plural alias)
-* **policy:** `policy.yaml` declares non-governed zones; `mode: block | warn | skip` per gate
+- **vNext architecture:** kernel / store / shell separation; pure kernel rules; I/O store; thin shell commands
+- **init:** v11 `caws init` — in-place bootstrap, refuses legacy single-spec residue, idempotent (no `--force`)
+- **doctor:** drift detection over `.caws/` state — exits 0 (clean) / 1 (findings or load errors) / 2 (composition failure)
+- **status:** read-only dashboard panels (Spec, Scope, Claim, Gates, Recent Events) — never mutates `.caws/`
+- **scope:** `caws scope show` and `caws scope check` with binding-aware admission
+- **claim:** `caws claim` and `caws claim --takeover` with `prior_owners` audit
+- **gates:** `caws gates run --spec <id>` — policy-driven gate runner; appends one `gate_evaluated` event per declared gate
+- **evidence:** `caws evidence record --type <test|gate|ac>` typed append
+- **waiver:** singular `caws waiver create | list | show | revoke` (no plural alias)
+- **policy:** `policy.yaml` declares non-governed zones; `mode: block | warn | skip` per gate
 
 ### Bug Fixes
 
-* **CLI-GATES-002:** declare `@paths.design/quality-gates` as a caws-cli runtime dependency
-* **CLI-GATES-003:** resolve quality-gates from the installed CLI package location (handles npm global, npx, pnpm)
-* **QG-001:** quality-gates emits valid JSON in `--json` mode and supports npm bin shims
-* **HOST-GOV-001:** migrate the CAWS repo's own `.caws/` governance state to v11 shape
+- **CLI-GATES-002:** declare `@paths.design/quality-gates` as a caws-cli runtime dependency
+- **CLI-GATES-003:** resolve quality-gates from the installed CLI package location (handles npm global, npx, pnpm)
+- **QG-001:** quality-gates emits valid JSON in `--json` mode and supports npm bin shims
+- **HOST-GOV-001:** migrate the CAWS repo's own `.caws/` governance state to v11 shape
 
 ### BREAKING CHANGES
 
-* Removed commands: `specs`, `worktree`, `validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `provenance`, `hooks`, `scaffold`, `agents`, `parallel`, `sidecar`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `session`, `templates`, `archive`. Pin to `caws-cli@^10.2.x` if you need them; v11.1.0 restores `specs` and `worktree`.
-* `caws init` no longer accepts `--force`. The v10 single-spec layout is refused outright; remove `working-spec.yaml` to migrate.
+- Removed commands: `specs`, `worktree`, `validate`, `verify-acs`, `evaluate`, `iterate`, `diagnose`, `burnup`, `provenance`, `hooks`, `scaffold`, `agents`, `parallel`, `sidecar`, `mode`, `tutorial`, `plan`, `workflow`, `quality-monitor`, `tool`, `test-analysis`, `session`, `templates`, `archive`. Pin to `caws-cli@^10.2.x` if you need them; v11.1.0 restores `specs` and `worktree`.
+- `caws init` no longer accepts `--force`. The v10 single-spec layout is refused outright; remove `working-spec.yaml` to migrate.
 
 # [10.2.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v10.1.0...v10.2.0) (2026-04-28)
 
-
 ### Bug Fixes
 
-* **agents:** wire assertWorktreeOwnership + refreshAgentClaim into bind/merge/create + status panel E2E test (CAWSFIX-32) ([f3340c7](https://github.com/Paths-Design/coding-agent-working-standard/commit/f3340c7d6575ba0fcdf99373dfa1271579ca9408))
-* **cli:** remove unused 'path' import in commands/agents.js ([df285ce](https://github.com/Paths-Design/coding-agent-working-standard/commit/df285ced098b48a9a07b95af678015841629f6cf))
-* **specs:** warn on caws specs create when id collides with archived spec (CAWSFIX-30) ([274f935](https://github.com/Paths-Design/coding-agent-working-standard/commit/274f935ab7e6032c780e07ae78ea5fe47931a4b6))
-* **types:** correct repository URL in caws-types package.json ([ea84c3e](https://github.com/Paths-Design/coding-agent-working-standard/commit/ea84c3eb0c10cd8cc677d476d89b15ed265331a0))
-* **worktree+validation:** D2 lowercase suffix, D7 ghost prune, D8 bind-local (CAWSFIX-25) ([b8828c7](https://github.com/Paths-Design/coding-agent-working-standard/commit/b8828c7578bb4293c75b6b9f655538f0395003f1))
-* **worktree:** auto-commit draft→active flip in auto-bind path (CAWSFIX-27) ([1ba4146](https://github.com/Paths-Design/coding-agent-working-standard/commit/1ba4146dd4fac2e48d84941111ad024865090ad5))
-* **worktree:** preserve baseline + idempotent YAML + post-merge close commit (CAWSFIX-24) ([74229e2](https://github.com/Paths-Design/coding-agent-working-standard/commit/74229e28ba9ad9758bfb30999866dddf19e64d16))
-
+- **agents:** wire assertWorktreeOwnership + refreshAgentClaim into bind/merge/create + status panel E2E test (CAWSFIX-32) ([f3340c7](https://github.com/Paths-Design/coding-agent-working-standard/commit/f3340c7d6575ba0fcdf99373dfa1271579ca9408))
+- **cli:** remove unused 'path' import in commands/agents.js ([df285ce](https://github.com/Paths-Design/coding-agent-working-standard/commit/df285ced098b48a9a07b95af678015841629f6cf))
+- **specs:** warn on caws specs create when id collides with archived spec (CAWSFIX-30) ([274f935](https://github.com/Paths-Design/coding-agent-working-standard/commit/274f935ab7e6032c780e07ae78ea5fe47931a4b6))
+- **types:** correct repository URL in caws-types package.json ([ea84c3e](https://github.com/Paths-Design/coding-agent-working-standard/commit/ea84c3eb0c10cd8cc677d476d89b15ed265331a0))
+- **worktree+validation:** D2 lowercase suffix, D7 ghost prune, D8 bind-local (CAWSFIX-25) ([b8828c7](https://github.com/Paths-Design/coding-agent-working-standard/commit/b8828c7578bb4293c75b6b9f655538f0395003f1))
+- **worktree:** auto-commit draft→active flip in auto-bind path (CAWSFIX-27) ([1ba4146](https://github.com/Paths-Design/coding-agent-working-standard/commit/1ba4146dd4fac2e48d84941111ad024865090ad5))
+- **worktree:** preserve baseline + idempotent YAML + post-merge close commit (CAWSFIX-24) ([74229e2](https://github.com/Paths-Design/coding-agent-working-standard/commit/74229e28ba9ad9758bfb30999866dddf19e64d16))
 
 ### Features
 
-* **agents:** session-id agent claim model with lifecycle refresh and session-log surfacing (CAWSFIX-31) ([c7227b0](https://github.com/Paths-Design/coding-agent-working-standard/commit/c7227b0c2e73a499d529bf70b72dcdf8ae49f3ba))
-* **policy+gates:** declare non-governed zones in policy.yaml (CAWSFIX-26) ([e365e76](https://github.com/Paths-Design/coding-agent-working-standard/commit/e365e765d9a8faaddbb9fe43ddaffd95c50d2c9a))
-* **specs:** caws specs archive command — canonical .archive/ directory (CAWSFIX-29) ([b8237d1](https://github.com/Paths-Design/coding-agent-working-standard/commit/b8237d1e01b82bc514ec20245c68da6c461a2b55))
-* **worktree:** spec lifecycle transitions on bind + merge (CAWSFIX-23) ([2cca474](https://github.com/Paths-Design/coding-agent-working-standard/commit/2cca474cda8ce988c1b4905579a00fd4fd1aa1ec))
+- **agents:** session-id agent claim model with lifecycle refresh and session-log surfacing (CAWSFIX-31) ([c7227b0](https://github.com/Paths-Design/coding-agent-working-standard/commit/c7227b0c2e73a499d529bf70b72dcdf8ae49f3ba))
+- **policy+gates:** declare non-governed zones in policy.yaml (CAWSFIX-26) ([e365e76](https://github.com/Paths-Design/coding-agent-working-standard/commit/e365e765d9a8faaddbb9fe43ddaffd95c50d2c9a))
+- **specs:** caws specs archive command — canonical .archive/ directory (CAWSFIX-29) ([b8237d1](https://github.com/Paths-Design/coding-agent-working-standard/commit/b8237d1e01b82bc514ec20245c68da6c461a2b55))
+- **worktree:** spec lifecycle transitions on bind + merge (CAWSFIX-23) ([2cca474](https://github.com/Paths-Design/coding-agent-working-standard/commit/2cca474cda8ce988c1b4905579a00fd4fd1aa1ec))
 
 # [10.1.0](https://github.com/Paths-Design/coding-agent-working-standard/compare/v10.0.1...v10.1.0) (2026-04-17)
 
-
 ### Bug Fixes
 
-* **budget:** sync derivation path + no-crash on absent change_budget (CAWSFIX-07) ([018188b](https://github.com/Paths-Design/coding-agent-working-standard/commit/018188b5a18756929e6362e8536076347f2ec65d))
-* **caws:** repoint dangling .caws/validate.js refs at bundled CLI (CAWSFIX-12) ([7f5d4ad](https://github.com/Paths-Design/coding-agent-working-standard/commit/7f5d4ad64f6c859ccfb6d8a519965796c2699278))
-* **gates:** budget-limit returns skipped (not pass) in CLI context [CAWSFIX-06] ([0bd49ac](https://github.com/Paths-Design/coding-agent-working-standard/commit/0bd49acc4ae7e977ca550381834edeeecfc771a6))
-* **gates:** point spec-completeness at real schema location (CAWSFIX-03) ([2893d83](https://github.com/Paths-Design/coding-agent-working-standard/commit/2893d83d400e1c4c12fa6971f0ac8ab052e58c2d))
-* **lint:** add ignoreRestSiblings, remove unused imports to pass CI lint ([7c7c901](https://github.com/Paths-Design/coding-agent-working-standard/commit/7c7c9016a7afc561339ed25caab1e1de9d01744d))
-* **lint:** resolve 3 errors and 4 warnings blocking CI ([3052a54](https://github.com/Paths-Design/coding-agent-working-standard/commit/3052a54cc023e05468aeca6ca6bda4ed889baa42))
-* **policy:** accept any subset of tiers 1-3 in validatePolicy (CAWSFIX-16) ([ad8ef0e](https://github.com/Paths-Design/coding-agent-working-standard/commit/ad8ef0ebab823890b86da3015e5e7f576000734b))
-* **schema+tests:** gates policy schema + fixture migration (CAWSFIX-22) ([59ff892](https://github.com/Paths-Design/coding-agent-working-standard/commit/59ff8921153ce9688065a944cad4e803db985686))
-* **schema:** resolver prefers flat .caws/<name>.schema.json over bundled (CAWSFIX-08) ([dbbbf0d](https://github.com/Paths-Design/coding-agent-working-standard/commit/dbbbf0d17a9c032fc97664aecee722ba97074344))
-* **schemas:** lift required version from scope.schema.json + document inline-block boundary (CAWSFIX-11) ([5376531](https://github.com/Paths-Design/coding-agent-working-standard/commit/5376531f5b914cb8e50608db2bcb6d81184f4899))
-* **schema:** sync template schemas to runtime + align id regex with validator (CAWSFIX-20+21) ([19d5e8c](https://github.com/Paths-Design/coding-agent-working-standard/commit/19d5e8c070e0c2cae0e46f211795534d180dc22d))
-* **schema:** tighten working-spec schema to match legacy validator (CAWSFIX-03) ([4771dcd](https://github.com/Paths-Design/coding-agent-working-standard/commit/4771dcd50118e864305546aeec698be144180026))
-* **specs:** one-line diff on close + gitignore agents.json (CAWSFIX-15) ([02c6447](https://github.com/Paths-Design/coding-agent-working-standard/commit/02c64475420c76ee990361d6545d6717ae1cf282))
-* **state:** fail-loud fence on undefined specId (CAWSFIX-02) ([e10e8f8](https://github.com/Paths-Design/coding-agent-working-standard/commit/e10e8f8baf2ab37bb3959feba1bb474d63c0979f))
-* **tests+schema:** add CAWSFIX-18 A2 commit-failure test, tighten policy gate schema ([5efeee5](https://github.com/Paths-Design/coding-agent-working-standard/commit/5efeee58eb85d672018d91117eaf3a144c8924e8))
-* **tests:** align test fixtures with post-CAWSFIX schema requirements ([e79692b](https://github.com/Paths-Design/coding-agent-working-standard/commit/e79692b87595b37428f4aad0fcf55ed66d777911))
-* **tests:** resolve 3 flaky test suites that failed under parallel Jest workers ([0759cbe](https://github.com/Paths-Design/coding-agent-working-standard/commit/0759cbe9e5e9babd7910b27f31a634dbf0ceda1f))
-* **validation:** accept modern acceptance_criteria shape as alias (CAWSFIX-09) ([d796b9e](https://github.com/Paths-Design/coding-agent-working-standard/commit/d796b9eff5a77589723d94ba317b405e09c5b606))
-* **validation:** accept multi-segment spec IDs like P03-IMPL-01 (CAWSFIX-10) ([3091ce0](https://github.com/Paths-Design/coding-agent-working-standard/commit/3091ce0a2fd6e8b2c3b6b40486573c8da753232b))
-* **waivers:** restructure active-waivers.yaml to conform to schema (CAWSFIX-04 A1) ([adf8b3f](https://github.com/Paths-Design/coding-agent-working-standard/commit/adf8b3f94726c83340612faeccf71f055e7b1cac))
-* **waivers:** sync template schema to modern shape + fix wrapping (CAWSFIX-17) ([df0840e](https://github.com/Paths-Design/coding-agent-working-standard/commit/df0840e07266a4ec69a57b26bf8ef448ecc30255))
-* **waivers:** validateWaiverStructure accepts modern schema shape (CAWSFIX-13) ([3c18681](https://github.com/Paths-Design/coding-agent-working-standard/commit/3c18681a54d104858192bf946028186c734a0da8))
-* **worktree:** auto-close bound spec on successful merge (CAWSFIX-14) ([6834372](https://github.com/Paths-Design/coding-agent-working-standard/commit/683437239c68759e2cdde55743f3938ca0d12779))
-* **worktree:** auto-commit .caws/worktrees.json after destroy (CAWSFIX-18) ([ff86ee5](https://github.com/Paths-Design/coding-agent-working-standard/commit/ff86ee5c75c07b17652b535f9deae8c1aadceaf0))
-
+- **budget:** sync derivation path + no-crash on absent change_budget (CAWSFIX-07) ([018188b](https://github.com/Paths-Design/coding-agent-working-standard/commit/018188b5a18756929e6362e8536076347f2ec65d))
+- **caws:** repoint dangling .caws/validate.js refs at bundled CLI (CAWSFIX-12) ([7f5d4ad](https://github.com/Paths-Design/coding-agent-working-standard/commit/7f5d4ad64f6c859ccfb6d8a519965796c2699278))
+- **gates:** budget-limit returns skipped (not pass) in CLI context [CAWSFIX-06] ([0bd49ac](https://github.com/Paths-Design/coding-agent-working-standard/commit/0bd49acc4ae7e977ca550381834edeeecfc771a6))
+- **gates:** point spec-completeness at real schema location (CAWSFIX-03) ([2893d83](https://github.com/Paths-Design/coding-agent-working-standard/commit/2893d83d400e1c4c12fa6971f0ac8ab052e58c2d))
+- **lint:** add ignoreRestSiblings, remove unused imports to pass CI lint ([7c7c901](https://github.com/Paths-Design/coding-agent-working-standard/commit/7c7c9016a7afc561339ed25caab1e1de9d01744d))
+- **lint:** resolve 3 errors and 4 warnings blocking CI ([3052a54](https://github.com/Paths-Design/coding-agent-working-standard/commit/3052a54cc023e05468aeca6ca6bda4ed889baa42))
+- **policy:** accept any subset of tiers 1-3 in validatePolicy (CAWSFIX-16) ([ad8ef0e](https://github.com/Paths-Design/coding-agent-working-standard/commit/ad8ef0ebab823890b86da3015e5e7f576000734b))
+- **schema+tests:** gates policy schema + fixture migration (CAWSFIX-22) ([59ff892](https://github.com/Paths-Design/coding-agent-working-standard/commit/59ff8921153ce9688065a944cad4e803db985686))
+- **schema:** resolver prefers flat .caws/<name>.schema.json over bundled (CAWSFIX-08) ([dbbbf0d](https://github.com/Paths-Design/coding-agent-working-standard/commit/dbbbf0d17a9c032fc97664aecee722ba97074344))
+- **schemas:** lift required version from scope.schema.json + document inline-block boundary (CAWSFIX-11) ([5376531](https://github.com/Paths-Design/coding-agent-working-standard/commit/5376531f5b914cb8e50608db2bcb6d81184f4899))
+- **schema:** sync template schemas to runtime + align id regex with validator (CAWSFIX-20+21) ([19d5e8c](https://github.com/Paths-Design/coding-agent-working-standard/commit/19d5e8c070e0c2cae0e46f211795534d180dc22d))
+- **schema:** tighten working-spec schema to match legacy validator (CAWSFIX-03) ([4771dcd](https://github.com/Paths-Design/coding-agent-working-standard/commit/4771dcd50118e864305546aeec698be144180026))
+- **specs:** one-line diff on close + gitignore agents.json (CAWSFIX-15) ([02c6447](https://github.com/Paths-Design/coding-agent-working-standard/commit/02c64475420c76ee990361d6545d6717ae1cf282))
+- **state:** fail-loud fence on undefined specId (CAWSFIX-02) ([e10e8f8](https://github.com/Paths-Design/coding-agent-working-standard/commit/e10e8f8baf2ab37bb3959feba1bb474d63c0979f))
+- **tests+schema:** add CAWSFIX-18 A2 commit-failure test, tighten policy gate schema ([5efeee5](https://github.com/Paths-Design/coding-agent-working-standard/commit/5efeee58eb85d672018d91117eaf3a144c8924e8))
+- **tests:** align test fixtures with post-CAWSFIX schema requirements ([e79692b](https://github.com/Paths-Design/coding-agent-working-standard/commit/e79692b87595b37428f4aad0fcf55ed66d777911))
+- **tests:** resolve 3 flaky test suites that failed under parallel Jest workers ([0759cbe](https://github.com/Paths-Design/coding-agent-working-standard/commit/0759cbe9e5e9babd7910b27f31a634dbf0ceda1f))
+- **validation:** accept modern acceptance_criteria shape as alias (CAWSFIX-09) ([d796b9e](https://github.com/Paths-Design/coding-agent-working-standard/commit/d796b9eff5a77589723d94ba317b405e09c5b606))
+- **validation:** accept multi-segment spec IDs like P03-IMPL-01 (CAWSFIX-10) ([3091ce0](https://github.com/Paths-Design/coding-agent-working-standard/commit/3091ce0a2fd6e8b2c3b6b40486573c8da753232b))
+- **waivers:** restructure active-waivers.yaml to conform to schema (CAWSFIX-04 A1) ([adf8b3f](https://github.com/Paths-Design/coding-agent-working-standard/commit/adf8b3f94726c83340612faeccf71f055e7b1cac))
+- **waivers:** sync template schema to modern shape + fix wrapping (CAWSFIX-17) ([df0840e](https://github.com/Paths-Design/coding-agent-working-standard/commit/df0840e07266a4ec69a57b26bf8ef448ecc30255))
+- **waivers:** validateWaiverStructure accepts modern schema shape (CAWSFIX-13) ([3c18681](https://github.com/Paths-Design/coding-agent-working-standard/commit/3c18681a54d104858192bf946028186c734a0da8))
+- **worktree:** auto-close bound spec on successful merge (CAWSFIX-14) ([6834372](https://github.com/Paths-Design/coding-agent-working-standard/commit/683437239c68759e2cdde55743f3938ca0d12779))
+- **worktree:** auto-commit .caws/worktrees.json after destroy (CAWSFIX-18) ([ff86ee5](https://github.com/Paths-Design/coding-agent-working-standard/commit/ff86ee5c75c07b17652b535f9deae8c1aadceaf0))
 
 ### Features
 
-* **evlog:** add append-only event log and pure renderer (EVLOG-001) ([25506a5](https://github.com/Paths-Design/coding-agent-working-standard/commit/25506a524e40df8abbb73a8e3c3f864ea87cfed6))
-* **evlog:** flip iterate.js to loadStateFromEvents (EVLOG-002 A1/A6) ([e280197](https://github.com/Paths-Design/coding-agent-working-standard/commit/e2801976df1f821de1986fb461df9ed3c6243e42))
-* **evlog:** flip sidecar.js + gates.js feedback enrichment (EVLOG-002 A3/A4) ([ecf0662](https://github.com/Paths-Design/coding-agent-working-standard/commit/ecf066274c842adc5173415cce0f7c7d696feab6))
-* **evlog:** flip status.js to loadStateFromEvents (EVLOG-002 A2) ([9cff551](https://github.com/Paths-Design/coding-agent-working-standard/commit/9cff551a41d47aee2a6e6d3eea37df169fa7a26c))
-* **evlog:** loadStateFromEvents returns null on no-events (EVLOG-002 A5) ([5109a15](https://github.com/Paths-Design/coding-agent-working-standard/commit/5109a151c35719cb4c989f794fa9531cf04939c1))
-* **evlog:** wire dual-write into 9 recorder and lifecycle call sites ([9564f5c](https://github.com/Paths-Design/coding-agent-working-standard/commit/9564f5c89671eae48635d30d78523820b6e8fabd))
-* **scope:** add binding-aware scope guard, `scope show`, and `worktree bind` ([3f41720](https://github.com/Paths-Design/coding-agent-working-standard/commit/3f41720ce243e3508bc0fbb0eb5d2db376d1056b))
-* **specs:** warn when feature spec is created with empty contracts [CAWSFIX-06] ([5e44e38](https://github.com/Paths-Design/coding-agent-working-standard/commit/5e44e38553b251db1f431a034bc5b943e14e3cb5))
-* **waivers:** add `caws waivers prune --expired` (CAWSFIX-04 A3-A6) ([5f1d263](https://github.com/Paths-Design/coding-agent-working-standard/commit/5f1d26399a492cc6909ce36cd33521c3da7adfca))
-* **worktree:** auto-bind specId from spec worktree field during create ([46ad82c](https://github.com/Paths-Design/coding-agent-working-standard/commit/46ad82c1e2fc6735cad254b1660fa370ae1dc9b9))
+- **evlog:** add append-only event log and pure renderer (EVLOG-001) ([25506a5](https://github.com/Paths-Design/coding-agent-working-standard/commit/25506a524e40df8abbb73a8e3c3f864ea87cfed6))
+- **evlog:** flip iterate.js to loadStateFromEvents (EVLOG-002 A1/A6) ([e280197](https://github.com/Paths-Design/coding-agent-working-standard/commit/e2801976df1f821de1986fb461df9ed3c6243e42))
+- **evlog:** flip sidecar.js + gates.js feedback enrichment (EVLOG-002 A3/A4) ([ecf0662](https://github.com/Paths-Design/coding-agent-working-standard/commit/ecf066274c842adc5173415cce0f7c7d696feab6))
+- **evlog:** flip status.js to loadStateFromEvents (EVLOG-002 A2) ([9cff551](https://github.com/Paths-Design/coding-agent-working-standard/commit/9cff551a41d47aee2a6e6d3eea37df169fa7a26c))
+- **evlog:** loadStateFromEvents returns null on no-events (EVLOG-002 A5) ([5109a15](https://github.com/Paths-Design/coding-agent-working-standard/commit/5109a151c35719cb4c989f794fa9531cf04939c1))
+- **evlog:** wire dual-write into 9 recorder and lifecycle call sites ([9564f5c](https://github.com/Paths-Design/coding-agent-working-standard/commit/9564f5c89671eae48635d30d78523820b6e8fabd))
+- **scope:** add binding-aware scope guard, `scope show`, and `worktree bind` ([3f41720](https://github.com/Paths-Design/coding-agent-working-standard/commit/3f41720ce243e3508bc0fbb0eb5d2db376d1056b))
+- **specs:** warn when feature spec is created with empty contracts [CAWSFIX-06] ([5e44e38](https://github.com/Paths-Design/coding-agent-working-standard/commit/5e44e38553b251db1f431a034bc5b943e14e3cb5))
+- **waivers:** add `caws waivers prune --expired` (CAWSFIX-04 A3-A6) ([5f1d263](https://github.com/Paths-Design/coding-agent-working-standard/commit/5f1d26399a492cc6909ce36cd33521c3da7adfca))
+- **worktree:** auto-bind specId from spec worktree field during create ([46ad82c](https://github.com/Paths-Design/coding-agent-working-standard/commit/46ad82c1e2fc6735cad254b1660fa370ae1dc9b9))
 
 ## [10.1.0] (2026-04-17)
 
 ### Features
 
-* **scope:** add `caws scope show` command to inspect effective scope boundaries and binding health
-* **worktree:** add `caws worktree bind <spec-id>` command to fix mutual spec-worktree binding
-* **worktree:** auto-bind specId from spec `worktree:` field during `caws worktree create`
-* **scope-guard:** distinguish authoritative mode (bound spec) from union mode (all specs) in block messages
-* **scope-guard:** include `caws scope show` and `caws worktree bind` fix instructions in block output
-* **templates:** add scope binding explanation, recovery checklist, and new commands to CLAUDE.md
-* **waivers:** `caws waivers prune --expired` command with `--apply`, `--dry-run`, and `--json` modes (CAWSFIX-04)
-* **worktree:** auto-close bound spec on successful merge (CAWSFIX-14) — eliminates the stale-`active` spec accumulation that followed merged worktrees
+- **scope:** add `caws scope show` command to inspect effective scope boundaries and binding health
+- **worktree:** add `caws worktree bind <spec-id>` command to fix mutual spec-worktree binding
+- **worktree:** auto-bind specId from spec `worktree:` field during `caws worktree create`
+- **scope-guard:** distinguish authoritative mode (bound spec) from union mode (all specs) in block messages
+- **scope-guard:** include `caws scope show` and `caws worktree bind` fix instructions in block output
+- **templates:** add scope binding explanation, recovery checklist, and new commands to CLAUDE.md
+- **waivers:** `caws waivers prune --expired` command with `--apply`, `--dry-run`, and `--json` modes (CAWSFIX-04)
+- **worktree:** auto-close bound spec on successful merge (CAWSFIX-14) — eliminates the stale-`active` spec accumulation that followed merged worktrees
 
 ### Bug Fixes
 
-* **validation:** unify spec validators — delete legacy `.caws/validate.js`, tighten JSON schema to match all required fields (CAWSFIX-03)
-* **ci:** validate all feature specs in PRs, not just `working-spec.yaml`; catch `*.backup` suffix files (CAWSFIX-05)
-* **gates:** `budget_limit` gate reports `status: skipped` (not `pass`) in CLI context for accuracy (CAWSFIX-06)
-* **specs:** warn when feature-mode specs have `contracts: []` (CAWSFIX-06)
-* **validation:** budget derivation no longer crashes when spec has no `change_budget` field — sync path added to resolve `await`-less call bug (CAWSFIX-07)
-* **validation:** accept modern `acceptance_criteria:` shape as an alias for legacy `acceptance:` (CAWSFIX-09)
-* **validation:** spec IDs with multi-segment prefixes like `P03-IMPL-01` and `ALG-001A-HARDEN-01` now validate (CAWSFIX-10)
-* **scope:** `version` field is optional on inline scope blocks; still required on standalone `.caws/scope.json` (CAWSFIX-11)
-* **scripts:** repoint `scripts/verify.sh` and `package.json:validate` at `caws validate` (the legacy `.caws/validate.js` is gone — CAWSFIX-12)
-* **waivers:** `validateWaiverStructure` accepts modern schema shape (`reason_code`, `delta`, `approvers: [{handle, approved_at}]`) — waivers conforming to `waiver.schema.json` are no longer silently dropped from budget derivation (CAWSFIX-13)
-* **schema:** resolver prefers flat `.caws/<name>.schema.json` over stale bundled template, making CAWSFIX-03's tightened repo schemas authoritative at runtime (CAWSFIX-08)
-* **specs:** `caws specs close <id>` produces a 2-line diff (status + updated_at) instead of a full YAML reshape (CAWSFIX-15)
-* **policy:** `validatePolicy` accepts any subset of tiers 1–3 instead of hard-requiring all three — single-tier policies no longer crash `loadPolicy` (CAWSFIX-16)
-* **waivers:** sync template `waivers.schema.json` to modern shape (`reason_code`, `delta`, `approvers`) and fix validation wrapping bug — `createWaiver` now validates the waiver object directly instead of wrapping in `{[id]: waiver}` (CAWSFIX-17)
-* **worktree:** `destroyWorktree` auto-commits `.caws/worktrees.json` so the working tree stays clean across sessions; uses `wip(checkpoint):` when other worktrees are active, `chore(worktree):` otherwise (CAWSFIX-18)
-* **schema:** sync template working-spec and policy schemas to runtime — `caws init` now scaffolds schemas identical to the ones enforced at runtime; fixes `$schema` draft version (draft-07), `additionalProperties`, required fields, and id regex (CAWSFIX-20)
-* **schema:** align `id` pattern regex in `.caws/working-spec.schema.json` with runtime validator (`^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+$`) — specs with valid modern IDs like `P03-TRUTH-001` no longer receive false compliance penalties (CAWSFIX-21)
-* **schema:** declare `thresholds` as explicit optional property on policy gate objects and restore `additionalProperties: false` — prevents arbitrary keys while supporting `god_object` and `todo_detection` threshold configs
-* **tests:** resolve 3 flaky test suites (`perf-budgets`, `gates-cli`, `event-log-read-parity`) — root causes: Jest default 5s timeout shorter than 30s subprocess timeout causing zombie cascades, `process.chdir` pollution between co-resident tests, wall-clock timing assertions meaningless under parallel CPU contention
+- **validation:** unify spec validators — delete legacy `.caws/validate.js`, tighten JSON schema to match all required fields (CAWSFIX-03)
+- **ci:** validate all feature specs in PRs, not just `working-spec.yaml`; catch `*.backup` suffix files (CAWSFIX-05)
+- **gates:** `budget_limit` gate reports `status: skipped` (not `pass`) in CLI context for accuracy (CAWSFIX-06)
+- **specs:** warn when feature-mode specs have `contracts: []` (CAWSFIX-06)
+- **validation:** budget derivation no longer crashes when spec has no `change_budget` field — sync path added to resolve `await`-less call bug (CAWSFIX-07)
+- **validation:** accept modern `acceptance_criteria:` shape as an alias for legacy `acceptance:` (CAWSFIX-09)
+- **validation:** spec IDs with multi-segment prefixes like `P03-IMPL-01` and `ALG-001A-HARDEN-01` now validate (CAWSFIX-10)
+- **scope:** `version` field is optional on inline scope blocks; still required on standalone `.caws/scope.json` (CAWSFIX-11)
+- **scripts:** repoint `scripts/verify.sh` and `package.json:validate` at `caws validate` (the legacy `.caws/validate.js` is gone — CAWSFIX-12)
+- **waivers:** `validateWaiverStructure` accepts modern schema shape (`reason_code`, `delta`, `approvers: [{handle, approved_at}]`) — waivers conforming to `waiver.schema.json` are no longer silently dropped from budget derivation (CAWSFIX-13)
+- **schema:** resolver prefers flat `.caws/<name>.schema.json` over stale bundled template, making CAWSFIX-03's tightened repo schemas authoritative at runtime (CAWSFIX-08)
+- **specs:** `caws specs close <id>` produces a 2-line diff (status + updated_at) instead of a full YAML reshape (CAWSFIX-15)
+- **policy:** `validatePolicy` accepts any subset of tiers 1–3 instead of hard-requiring all three — single-tier policies no longer crash `loadPolicy` (CAWSFIX-16)
+- **waivers:** sync template `waivers.schema.json` to modern shape (`reason_code`, `delta`, `approvers`) and fix validation wrapping bug — `createWaiver` now validates the waiver object directly instead of wrapping in `{[id]: waiver}` (CAWSFIX-17)
+- **worktree:** `destroyWorktree` auto-commits `.caws/worktrees.json` so the working tree stays clean across sessions; uses `wip(checkpoint):` when other worktrees are active, `chore(worktree):` otherwise (CAWSFIX-18)
+- **schema:** sync template working-spec and policy schemas to runtime — `caws init` now scaffolds schemas identical to the ones enforced at runtime; fixes `$schema` draft version (draft-07), `additionalProperties`, required fields, and id regex (CAWSFIX-20)
+- **schema:** align `id` pattern regex in `.caws/working-spec.schema.json` with runtime validator (`^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+$`) — specs with valid modern IDs like `P03-TRUTH-001` no longer receive false compliance penalties (CAWSFIX-21)
+- **schema:** declare `thresholds` as explicit optional property on policy gate objects and restore `additionalProperties: false` — prevents arbitrary keys while supporting `god_object` and `todo_detection` threshold configs
+- **tests:** resolve 3 flaky test suites (`perf-budgets`, `gates-cli`, `event-log-read-parity`) — root causes: Jest default 5s timeout shorter than 30s subprocess timeout causing zombie cascades, `process.chdir` pollution between co-resident tests, wall-clock timing assertions meaningless under parallel CPU contention
 
 ### Chores
 
-* **.gitignore:** ignore `.caws/agents.json` (per-CLI-invocation session state, not versioned — CAWSFIX-15)
-* **tests:** align test fixtures with post-CAWSFIX schema requirements (data_migration, non_functional, MCP removal, worktree binding)
-* **tests:** migrate gates.test.js and gates-cli.test.js policy fixtures to include `edit_rules` (CAWSFIX-22)
-* **tests:** add CAWSFIX-18 A2 test covering git commit failure path (pre-commit hook rejection)
+- **.gitignore:** ignore `.caws/agents.json` (per-CLI-invocation session state, not versioned — CAWSFIX-15)
+- **tests:** align test fixtures with post-CAWSFIX schema requirements (data_migration, non_functional, MCP removal, worktree binding)
+- **tests:** migrate gates.test.js and gates-cli.test.js policy fixtures to include `edit_rules` (CAWSFIX-22)
+- **tests:** add CAWSFIX-18 A2 test covering git commit failure path (pre-commit hook rejection)
 
 ## [10.0.1](https://github.com/Paths-Design/coding-agent-working-standard/compare/v10.0.0...v10.0.1) (2026-04-02)
 
-
 ### Bug Fixes
 
-* **ci:** clean up stale MCP trigger, audit fallback, minimatch guard ([866914c](https://github.com/Paths-Design/coding-agent-working-standard/commit/866914ca792587d4197e863926615edb50cbf1c0))
-* **ci:** remove catch-all release:false rules that blocked scoped commits ([39b9c52](https://github.com/Paths-Design/coding-agent-working-standard/commit/39b9c526b99b2c885fa3f9a4bbde2bb90ed25b9a))
-* **ci:** restore package-lock.json with semantic-release intact ([83eb116](https://github.com/Paths-Design/coding-agent-working-standard/commit/83eb11610efe09210e46e5f98792ff21180233c3))
-* **ci:** unblock release pipeline — audit warns instead of failing ([fcb6116](https://github.com/Paths-Design/coding-agent-working-standard/commit/fcb6116972f76b3cf74b67db4e496a97cbd55305))
-* **cli:** --spec-id now works correctly on status, evaluate, iterate, burnup ([64bec51](https://github.com/Paths-Design/coding-agent-working-standard/commit/64bec5199fddfd4a994a9f014018f9da30b2b122))
-* **cli:** await deriveBudget, fix setup.type, add command handler tests ([bfd9195](https://github.com/Paths-Design/coding-agent-working-standard/commit/bfd9195e99ca7fa4a05488cf847e42236c44c7d4))
-* **cli:** remove dead packages from release pipeline, unblock v10 publish ([e6bab56](https://github.com/Paths-Design/coding-agent-working-standard/commit/e6bab568e1ae05dbf033b687cc502501c1f2cb8c))
-* **cli:** schema violations warn instead of blocking all commands ([4e9d701](https://github.com/Paths-Design/coding-agent-working-standard/commit/4e9d70100050da38d475b7c224536af5df486673))
-* **cli:** suppress husky stdout that corrupts npm pack tarball path in CI ([823b154](https://github.com/Paths-Design/coding-agent-working-standard/commit/823b154d2da49d7d88d7205798c8220dd4bc625b))
-* **lint:** remove unused chalk import in burnup.test.js ([392c003](https://github.com/Paths-Design/coding-agent-working-standard/commit/392c00304cf8238b72ab189d8b8f9f96f481b521))
-* **lint:** remove unused yaml import blocking CI release pipeline ([93893af](https://github.com/Paths-Design/coding-agent-working-standard/commit/93893af754c6eaac07da3e59fbd4872812348203))
-* **lint:** resolve all 49 lint errors across src and tests ([6554261](https://github.com/Paths-Design/coding-agent-working-standard/commit/655426170ab84c50c04b675aa9846c73aa655e0b))
-* **sidecars:** handle minimatch v3 and v5+ export differences ([a14ee84](https://github.com/Paths-Design/coding-agent-working-standard/commit/a14ee845f098e22f3a95ad71909786022f796b3f))
+- **ci:** clean up stale MCP trigger, audit fallback, minimatch guard ([866914c](https://github.com/Paths-Design/coding-agent-working-standard/commit/866914ca792587d4197e863926615edb50cbf1c0))
+- **ci:** remove catch-all release:false rules that blocked scoped commits ([39b9c52](https://github.com/Paths-Design/coding-agent-working-standard/commit/39b9c526b99b2c885fa3f9a4bbde2bb90ed25b9a))
+- **ci:** restore package-lock.json with semantic-release intact ([83eb116](https://github.com/Paths-Design/coding-agent-working-standard/commit/83eb11610efe09210e46e5f98792ff21180233c3))
+- **ci:** unblock release pipeline — audit warns instead of failing ([fcb6116](https://github.com/Paths-Design/coding-agent-working-standard/commit/fcb6116972f76b3cf74b67db4e496a97cbd55305))
+- **cli:** --spec-id now works correctly on status, evaluate, iterate, burnup ([64bec51](https://github.com/Paths-Design/coding-agent-working-standard/commit/64bec5199fddfd4a994a9f014018f9da30b2b122))
+- **cli:** await deriveBudget, fix setup.type, add command handler tests ([bfd9195](https://github.com/Paths-Design/coding-agent-working-standard/commit/bfd9195e99ca7fa4a05488cf847e42236c44c7d4))
+- **cli:** remove dead packages from release pipeline, unblock v10 publish ([e6bab56](https://github.com/Paths-Design/coding-agent-working-standard/commit/e6bab568e1ae05dbf033b687cc502501c1f2cb8c))
+- **cli:** schema violations warn instead of blocking all commands ([4e9d701](https://github.com/Paths-Design/coding-agent-working-standard/commit/4e9d70100050da38d475b7c224536af5df486673))
+- **cli:** suppress husky stdout that corrupts npm pack tarball path in CI ([823b154](https://github.com/Paths-Design/coding-agent-working-standard/commit/823b154d2da49d7d88d7205798c8220dd4bc625b))
+- **lint:** remove unused chalk import in burnup.test.js ([392c003](https://github.com/Paths-Design/coding-agent-working-standard/commit/392c00304cf8238b72ab189d8b8f9f96f481b521))
+- **lint:** remove unused yaml import blocking CI release pipeline ([93893af](https://github.com/Paths-Design/coding-agent-working-standard/commit/93893af754c6eaac07da3e59fbd4872812348203))
+- **lint:** resolve all 49 lint errors across src and tests ([6554261](https://github.com/Paths-Design/coding-agent-working-standard/commit/655426170ab84c50c04b675aa9846c73aa655e0b))
+- **sidecars:** handle minimatch v3 and v5+ export differences ([a14ee84](https://github.com/Paths-Design/coding-agent-working-standard/commit/a14ee845f098e22f3a95ad71909786022f796b3f))

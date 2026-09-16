@@ -92,9 +92,7 @@ const PACKS = [
 /** Implemented surfaces with no fingerprint-pack entry. */
 function surfacesWithoutFingerprint(coveredIds) {
   const covered = new Set(coveredIds);
-  return [...IMPLEMENTED_SURFACES].filter(
-    (surface) => surface !== 'none' && !covered.has(surface)
-  );
+  return [...IMPLEMENTED_SURFACES].filter((surface) => surface !== 'none' && !covered.has(surface));
 }
 
 describe('pack-fingerprint guard: live template fingerprint matches the recorded baseline', () => {
@@ -181,9 +179,7 @@ describe('pack-fingerprint coverage lockstep: every implemented surface is cover
   });
 
   test('every covered pack has a recorded baseline entry', () => {
-    const missing = PACKS.filter((pack) => RECORDED[pack.id] === undefined).map(
-      (pack) => pack.id
-    );
+    const missing = PACKS.filter((pack) => RECORDED[pack.id] === undefined).map((pack) => pack.id);
     expect(missing).toEqual([]);
   });
 

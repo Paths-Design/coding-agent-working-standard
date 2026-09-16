@@ -149,11 +149,15 @@ describe('A1: an active, unbound spec demotes to draft with no closure claim', (
     // Not vacuous: prove the demoted body is genuinely a valid draft by driving
     // the real activate leg over it. A body that only *looks* like a draft
     // would fail here.
-    const activate = spawnSync(process.execPath, [CLI, 'specs', 'activate', 'DEACT-ROUNDTRIP-001'], {
-      cwd: root,
-      encoding: 'utf8',
-      env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'test-session' },
-    });
+    const activate = spawnSync(
+      process.execPath,
+      [CLI, 'specs', 'activate', 'DEACT-ROUNDTRIP-001'],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'test-session' },
+      }
+    );
     expect(activate.status).toBe(0);
     const yaml = fs.readFileSync(path.join(cawsDir, 'specs', 'DEACT-ROUNDTRIP-001.yaml'), 'utf8');
     expect(yaml).toContain('lifecycle_state: active');
@@ -165,7 +169,7 @@ describe('A2: a spec bound to a worktree is refused', () => {
     const { root, cawsDir, specPath } = setupRepo(
       'DEACT-BOUND-001',
       'active',
-      "worktree: wt-deact-bound\n"
+      'worktree: wt-deact-bound\n'
     );
     const before = fs.readFileSync(specPath, 'utf8');
 

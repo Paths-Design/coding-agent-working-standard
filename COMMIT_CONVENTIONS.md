@@ -1,6 +1,7 @@
 # Commit Message Conventions
 
-This repository uses [Conventional Commits](https://conventionalcommits.org/) for automated versioning and changelog generation.
+This repository uses [Conventional Commits](https://conventionalcommits.org/)
+for automated versioning and changelog generation.
 
 ## Format
 
@@ -17,7 +18,8 @@ This repository uses [Conventional Commits](https://conventionalcommits.org/) fo
 - **feat**: A new feature
 - **fix**: A bug fix
 - **docs**: Documentation only changes
-- **style**: Changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc)
+- **style**: Changes that do not affect the meaning of the code (white-space,
+  formatting, missing semi-colons, etc)
 - **refactor**: A code change that neither fixes a bug nor adds a feature
 - **perf**: A code change that improves performance
 - **test**: Adding missing tests or correcting existing tests
@@ -28,26 +30,31 @@ This repository uses [Conventional Commits](https://conventionalcommits.org/) fo
 ## Examples
 
 ### Feature
+
 ```
 feat: add user authentication system
 ```
 
 ### Bug Fix
+
 ```
 fix: resolve memory leak in data processing
 ```
 
 ### Documentation
+
 ```
 docs: update API documentation for new endpoints
 ```
 
 ### Refactoring
+
 ```
 refactor: extract user validation logic into separate module
 ```
 
 ### Breaking Change
+
 ```
 feat!: change API response format for user data
 
@@ -66,9 +73,9 @@ docs(cli): update installation instructions
 
 ## Releases are tag-driven, not commit-driven
 
-Commit types do **not** trigger releases or bump versions. Pushing to `main` never
-publishes. Releases are tag-driven (`CAWS-RELEASE-TAG-DRIVEN-001`): the maintainer
-manually bumps `packages/caws-cli/package.json`, authors the matching
+Commit types do **not** trigger releases or bump versions. Pushing to `main`
+never publishes. Releases are tag-driven (`CAWS-RELEASE-TAG-DRIVEN-001`): the
+maintainer manually bumps `packages/caws-cli/package.json`, authors the matching
 `packages/caws-cli/CHANGELOG.md` section, commits, and pushes a canonical
 `caws-cli-vX.Y.Z` tag. CI publishes that tagged content verbatim.
 
@@ -79,6 +86,7 @@ change) — but they are advisory inputs, not the publish trigger.
 ## CI/CD Integration
 
 The tag-driven release workflow (`.github/workflows/release.yml`):
+
 - Validates the tag matches `packages/caws-cli/package.json` version
 - Validates a `CHANGELOG.md` section exists for the version
 - Builds and runs the prepublish fresh-install smoke

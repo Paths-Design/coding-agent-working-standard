@@ -144,7 +144,11 @@ describe('applyRegistryPatch: takeover_claim (prior_owners is append-only)', () 
       prior_owner: priorOwner,
       when: '2026-06-13T14:00:00.000Z',
     });
-    const second = { session_id: 's-2', platform: 'codex', takenOver_at: '2026-06-13T15:00:00.000Z' };
+    const second = {
+      session_id: 's-2',
+      platform: 'codex',
+      takenOver_at: '2026-06-13T15:00:00.000Z',
+    };
     applyRegistryPatch(dir, {
       kind: 'takeover_claim',
       worktree_name: 'wt-a',

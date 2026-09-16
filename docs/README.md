@@ -1,6 +1,7 @@
 # CAWS Documentation
 
-This directory contains comprehensive documentation for the CAWS (Coding Agent Working Standard) framework.
+This directory contains comprehensive documentation for the CAWS (Coding Agent
+Working Standard) framework.
 
 ## Documentation Structure
 
@@ -44,12 +45,12 @@ docs/
 
 ### Quick Start Guide
 
-Start with [CLI installation and workflows](api/cli.md), then [machine runtime
-setup and adoption](guides/hook-packs.md#machine-adapter-installation). The
-[command reference](command-reference.md) explains live help and the generated
-package artifact. The CLI package, machine runtime, native registration, and
-project governance have separate update and verification boundaries.
-
+Start with [CLI installation and workflows](api/cli.md), then
+[machine runtime setup and adoption](guides/hook-packs.md#machine-adapter-installation).
+The [command reference](command-reference.md) explains live help and the
+generated package artifact. The CLI package, machine runtime, native
+registration, and project governance have separate update and verification
+boundaries.
 
 - **Setup**: Installation and configuration steps
 - **CLI Usage**: Basic commands and options
@@ -114,7 +115,8 @@ project governance have separate update and verification boundaries.
 - **File Names**: Use `kebab-case.md` (e.g., `agent-integration-guide.md`)
 - **Directory Names**: Use `kebab-case/` (e.g., `agent-workflows/`)
 - **Avoid**: SCREAMING_SNAKE_CASE, camelCase, or spaces in filenames
-- **Purpose-first**: Name files by their primary purpose, not implementation details
+- **Purpose-first**: Name files by their primary purpose, not implementation
+  details
 
 ### Formatting Standards
 
@@ -227,11 +229,16 @@ If you find documentation issues:
 
 ## External Resources
 
-- **GitHub Repository**: [caws/framework](https://github.com/Paths-Design/coding-agent-working-standard)
-- **Issues**: [Bug Reports & Features](https://github.com/Paths-Design/coding-agent-working-standard/issues)
-- **Discussions**: [Community Discussion](https://github.com/Paths-Design/coding-agent-working-standard/discussions)
-- **Releases**: [Release Notes](https://github.com/Paths-Design/coding-agent-working-standard/releases)
-- **Security**: [Security Policy](https://github.com/Paths-Design/coding-agent-working-standard/security)
+- **GitHub Repository**:
+  [caws/framework](https://github.com/Paths-Design/coding-agent-working-standard)
+- **Issues**:
+  [Bug Reports & Features](https://github.com/Paths-Design/coding-agent-working-standard/issues)
+- **Discussions**:
+  [Community Discussion](https://github.com/Paths-Design/coding-agent-working-standard/discussions)
+- **Releases**:
+  [Release Notes](https://github.com/Paths-Design/coding-agent-working-standard/releases)
+- **Security**:
+  [Security Policy](https://github.com/Paths-Design/coding-agent-working-standard/security)
 
 ## Contact
 
@@ -243,4 +250,5 @@ For documentation-related questions:
 
 ---
 
-This documentation is maintained by the CAWS community and is continuously improved based on user feedback and project evolution.
+This documentation is maintained by the CAWS community and is continuously
+improved based on user feedback and project evolution.

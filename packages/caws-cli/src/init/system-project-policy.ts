@@ -9,7 +9,11 @@ export interface SystemSurfacePolicy {
   handlers: Record<string, string>;
   libraries: Record<string, string>;
 }
-export function validateSystemPolicy(repo: string, policy: SystemSurfacePolicy, runtime?: { files: string[]; defaults: Record<Event, string[]> }): void {
+export function validateSystemPolicy(
+  repo: string,
+  policy: SystemSurfacePolicy,
+  runtime?: { files: string[]; defaults: Record<Event, string[]> }
+): void {
   if (
     !policy ||
     Object.keys(policy).sort().join(',') !== 'disabled,extensions,handlers,libraries' ||
@@ -61,8 +65,9 @@ export function validateSystemPolicy(repo: string, policy: SystemSurfacePolicy, 
   }
   if (runtime) {
     for (const event of Object.keys(MACHINE_EVENTS) as Event[]) {
-      const names = runtime.defaults[event].map(h => h.split(' ')[0] as string)
-        .filter(name => !policy.disabled[event]?.includes(name));
+      const names = runtime.defaults[event]
+        .map((h) => h.split(' ')[0] as string)
+        .filter((name) => !policy.disabled[event]?.includes(name));
       for (const extension of policy.extensions[event] ?? []) {
         const name = extension.handler.split(' ')[0] as string;
         if ((!policy.handlers[name] && !runtime.files.includes(name)) || names.includes(name))

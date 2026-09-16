@@ -69,7 +69,7 @@ function collectChainErrors(events: readonly ChainedEvent[]): ReturnType<typeof 
       continue;
     }
     const isGenesis = i === 0;
-    const prev = isGenesis ? null : events[i - 1] ?? null;
+    const prev = isGenesis ? null : (events[i - 1] ?? null);
 
     // seq shape
     if (typeof ev.seq !== 'number' || !Number.isInteger(ev.seq)) {

@@ -97,7 +97,6 @@ ${acceptance}
 non_functional: {}
 contracts: []
 `;
-
 }
 
 function writeSpec(cawsDir, id, opts) {
@@ -200,7 +199,12 @@ function loadCleanSpec(cawsDir, id) {
 }
 
 const TWO_ACS = [
-  { id: 'A1', given: 'the parser rejects an orphan evidence entry', when: 'a criterion is removed', then: 'its evidence entry is removed with it' },
+  {
+    id: 'A1',
+    given: 'the parser rejects an orphan evidence entry',
+    when: 'a criterion is removed',
+    then: 'its evidence entry is removed with it',
+  },
   { id: 'A2', given: 'fixture given two', when: 'fixture when two', then: 'fixture then two' },
 ];
 
@@ -247,7 +251,9 @@ describe('A1: --set-ac rewrites exactly the supplied fields and resets the crite
     const events = amendedEvents(cawsDir);
     expect(events).toHaveLength(1);
     expect(events[0].data.set_acceptance).toEqual([{ id: 'A1', fields: ['then'] }]);
-    expect(events[0].data.reset_evidence).toEqual([{ criterion_id: 'A1', previous_status: 'pass' }]);
+    expect(events[0].data.reset_evidence).toEqual([
+      { criterion_id: 'A1', previous_status: 'pass' },
+    ]);
     expect(events[0].data.reason).toBe('the original then described the old design');
     expect(events[0].data.previous_lifecycle_state).toBe('draft');
   });
@@ -299,7 +305,12 @@ describe('A2: --add-ac appends a criterion; A3: --remove-ac deletes criterion + 
     const events = amendedEvents(cawsDir);
     expect(events).toHaveLength(1);
     expect(events[0].data.added_acceptance).toEqual([
-      { id: 'A3', given: 'a new claim', when: 'the command runs', then: 'the criterion is declared and auditable' },
+      {
+        id: 'A3',
+        given: 'a new claim',
+        when: 'the command runs',
+        then: 'the criterion is declared and auditable',
+      },
     ]);
     // The new id is a declared criterion: evidence recording succeeds (the
     // orphan rule would refuse evidence against an undeclared id).
@@ -327,7 +338,9 @@ describe('A2: --add-ac appends a criterion; A3: --remove-ac deletes criterion + 
     const events = amendedEvents(cawsDir);
     expect(events).toHaveLength(1);
     expect(events[0].data.removed_acceptance).toEqual([TWO_ACS[0]]);
-    expect(events[0].data.removed_evidence).toEqual([{ criterion_id: 'A1', previous_status: 'pass' }]);
+    expect(events[0].data.removed_evidence).toEqual([
+      { criterion_id: 'A1', previous_status: 'pass' },
+    ]);
   });
 
   test('removing the last remaining criterion is refused (schema minItems 1)', () => {
@@ -468,7 +481,10 @@ describe('A4: closed specs — rewrite refused, scaffold discharge narrow', () =
   test('the discharge refuses when the criterion carries evidence (a closed evidence block is frozen)', () => {
     const { root, cawsDir } = mkRepo();
     writeSpec(cawsDir, 'ACC-009', {});
-    expect(recordEvidence(root, 'ACC-009', 'A1', 'waived', { waiverReason: 'not separately verified' }).code).toBe(0);
+    expect(
+      recordEvidence(root, 'ACC-009', 'A1', 'waived', { waiverReason: 'not separately verified' })
+        .code
+    ).toBe(0);
     closeThroughLifecycle(root, 'ACC-009');
     const before = readRaw(cawsDir, 'ACC-009');
 
@@ -492,11 +508,13 @@ describe('A5: one transaction, schema-valid event, auto-commit', () => {
     writeSpec(cawsDir, 'ACC-010', { acs: TWO_ACS });
     // Evidence recorded BEFORE the fixture commit, so the amend's audit
     // commit below captures the reset (a clean tree is what autoCommit needs).
-    expect(recordEvidence(root, 'ACC-010', 'A1', 'pass', {
-      evidenceRef: 'npm test',
-      command: 'npm test',
-      exitCode: 0,
-    }).code).toBe(0);
+    expect(
+      recordEvidence(root, 'ACC-010', 'A1', 'pass', {
+        evidenceRef: 'npm test',
+        command: 'npm test',
+        exitCode: 0,
+      }).code
+    ).toBe(0);
     // Commit the fixture so amend's autoCommit sees a clean tree (a dirty tree
     // makes the audit commit refuse, which is its own tested behavior).
     execFileSync('git', ['add', '.'], { cwd: root });
@@ -552,7 +570,9 @@ describe('A5: one transaction, schema-valid event, auto-commit', () => {
     // The folded rewrite DID reset evidence (text changed)…
     expect(amendedEvents(cawsDir)).toHaveLength(2);
     // …and the second amendment changed only `given`.
-    expect(amendedEvents(cawsDir)[1].data.set_acceptance).toEqual([{ id: 'A1', fields: ['given'] }]);
+    expect(amendedEvents(cawsDir)[1].data.set_acceptance).toEqual([
+      { id: 'A1', fields: ['given'] },
+    ]);
   });
 });
 
@@ -568,7 +588,10 @@ describe('set-ac multi-field survives folding (CAWS-CLI-SET-AC-STALE-BRACKET-001
     const { root, cawsDir } = mkRepo();
     writeSpec(cawsDir, 'ACC-001', { acs: TWO_ACS });
     const before = readRaw(cawsDir, 'ACC-001');
-    const siblingBefore = before.slice(before.indexOf('  - id: A2'), before.indexOf('non_functional:'));
+    const siblingBefore = before.slice(
+      before.indexOf('  - id: A2'),
+      before.indexOf('non_functional:')
+    );
 
     const r = amend(root, 'ACC-001', {
       setAc: 'A1',
@@ -587,17 +610,23 @@ describe('set-ac multi-field survives folding (CAWS-CLI-SET-AC-STALE-BRACKET-001
     expect(a1).toContain("    when: 'a multi-field rewrite folds the first value'");
     expect(a1).toContain("    then: 'the remaining fields still land on the named criterion'");
     // The sibling criterion is byte-preserved.
-    expect(after.slice(after.indexOf('  - id: A2'), after.indexOf('non_functional:'))).toBe(siblingBefore);
+    expect(after.slice(after.indexOf('  - id: A2'), after.indexOf('non_functional:'))).toBe(
+      siblingBefore
+    );
     // One amendment event naming exactly the supplied fields.
     const events = amendedEvents(cawsDir);
     expect(events).toHaveLength(1);
-    expect(events[0].data.set_acceptance).toEqual([{ id: 'A1', fields: ['given', 'when', 'then'] }]);
+    expect(events[0].data.set_acceptance).toEqual([
+      { id: 'A1', fields: ['given', 'when', 'then'] },
+    ]);
   });
 
   test('A2: shrinking back across multiple fields never spills into the sibling criterion', () => {
     const { root, cawsDir } = mkRepo();
     writeSpec(cawsDir, 'ACC-001', { acs: TWO_ACS });
-    expect(amend(root, 'ACC-001', { setAc: 'A1', given: LONG_GIVEN, reason: 'fold first' }).code).toBe(0);
+    expect(
+      amend(root, 'ACC-001', { setAc: 'A1', given: LONG_GIVEN, reason: 'fold first' }).code
+    ).toBe(0);
 
     const r = amend(root, 'ACC-001', {
       setAc: 'A1',

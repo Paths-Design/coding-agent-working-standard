@@ -87,7 +87,12 @@ test('A6: status prints no messages line when nothing is queued', () => {
   expect(sent.ok).toBe(true);
   fs.appendFileSync(
     path.join(caws, 'messages.jsonl'),
-    JSON.stringify({ record: 'delivery', deliver_id: sent.value.message.id, ts: new Date().toISOString(), mode: 'poll' }) + '\n'
+    JSON.stringify({
+      record: 'delivery',
+      deliver_id: sent.value.message.id,
+      ts: new Date().toISOString(),
+      mode: 'poll',
+    }) + '\n'
   );
   const out = [];
   const code = runStatusCommand({

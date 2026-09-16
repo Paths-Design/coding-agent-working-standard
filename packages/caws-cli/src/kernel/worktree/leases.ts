@@ -89,11 +89,7 @@ export type LeaseReason =
  * or message-liveness decision may read it. It never influences the
  * active/stale/stopped classification.
  */
-export type LeaseWorkState =
-  | 'working'
-  | 'blocked_awaiting_human'
-  | 'review_ready'
-  | 'done';
+export type LeaseWorkState = 'working' | 'blocked_awaiting_human' | 'review_ready' | 'done';
 
 /** Closed enum source (mirrors the LeaseReason pattern). */
 export const LEASE_WORK_STATES = [
@@ -347,7 +343,10 @@ function validateContext(context: LeaseContext): Result<LeaseContext> {
   if (context.forked_from !== undefined) {
     if (typeof context.forked_from !== 'string' || context.forked_from.length === 0) {
       return err(
-        diag(LEASE_RULES.CONTEXT_INVALID, 'LeaseContext.forked_from must be a non-empty session id.')
+        diag(
+          LEASE_RULES.CONTEXT_INVALID,
+          'LeaseContext.forked_from must be a non-empty session id.'
+        )
       );
     }
     if (context.harness_session_kind !== 'fork') {
@@ -407,19 +406,30 @@ export function registerAgentSession(
   // this the 15s-throttled PreToolUse heartbeat would wipe every explicit
   // declaration — a latent wipe the work-state slice closes for all three
   // fields. Explicit declarations survive liveness refreshes by design.
-  const carryForward = existing !== undefined ? {
-    ...(existing.claimed_paths !== undefined ? { claimed_paths: existing.claimed_paths } : {}),
-    ...(existing.last_modified_paths !== undefined ? { last_modified_paths: existing.last_modified_paths } : {}),
-    ...(existing.work_state !== undefined ? { work_state: existing.work_state } : {}),
-    ...(existing.work_state_note !== undefined ? { work_state_note: existing.work_state_note } : {}),
-    ...(existing.work_state_updated_at !== undefined ? { work_state_updated_at: existing.work_state_updated_at } : {}),
-    // CAWS-AGENTS-FORK-IDENTITY-001: the fork annotation must survive
-    // throttled heartbeats whose context cannot re-detect the fork.
-    ...(existing.harness_session_kind !== undefined
-      ? { harness_session_kind: existing.harness_session_kind }
-      : {}),
-    ...(existing.forked_from !== undefined ? { forked_from: existing.forked_from } : {}),
-  } : {};
+  const carryForward =
+    existing !== undefined
+      ? {
+          ...(existing.claimed_paths !== undefined
+            ? { claimed_paths: existing.claimed_paths }
+            : {}),
+          ...(existing.last_modified_paths !== undefined
+            ? { last_modified_paths: existing.last_modified_paths }
+            : {}),
+          ...(existing.work_state !== undefined ? { work_state: existing.work_state } : {}),
+          ...(existing.work_state_note !== undefined
+            ? { work_state_note: existing.work_state_note }
+            : {}),
+          ...(existing.work_state_updated_at !== undefined
+            ? { work_state_updated_at: existing.work_state_updated_at }
+            : {}),
+          // CAWS-AGENTS-FORK-IDENTITY-001: the fork annotation must survive
+          // throttled heartbeats whose context cannot re-detect the fork.
+          ...(existing.harness_session_kind !== undefined
+            ? { harness_session_kind: existing.harness_session_kind }
+            : {}),
+          ...(existing.forked_from !== undefined ? { forked_from: existing.forked_from } : {}),
+        }
+      : {};
 
   const lease: AgentLease = {
     lease_version: 1,
@@ -560,7 +570,9 @@ export function validateLeasePathMetadata(
 
   if (errors.length > 0) return err(errors);
 
-  const result: { -readonly [K in keyof ValidatedLeasePathMetadata]: ValidatedLeasePathMetadata[K] } = {};
+  const result: {
+    -readonly [K in keyof ValidatedLeasePathMetadata]: ValidatedLeasePathMetadata[K];
+  } = {};
 
   if (opts.claimed_paths !== undefined) {
     // Verbatim, in caller order. No truncation on claimed_paths —
@@ -575,9 +587,7 @@ export function validateLeasePathMetadata(
     } else {
       // Drop lowest-index overflow; preserve caller order among the
       // retained final LAST_MODIFIED_PATHS_MAX_ENTRIES.
-      result.last_modified_paths = src.slice(
-        src.length - LAST_MODIFIED_PATHS_MAX_ENTRIES
-      );
+      result.last_modified_paths = src.slice(src.length - LAST_MODIFIED_PATHS_MAX_ENTRIES);
     }
   }
 
@@ -748,8 +758,10 @@ export function setAgentLeaseWorkState(
   if (!clear && opts.work_state === undefined) {
     return bad('A work_state is required (or pass clear).');
   }
-  if (opts.work_state !== undefined
-    && !(LEASE_WORK_STATES as readonly string[]).includes(opts.work_state)) {
+  if (
+    opts.work_state !== undefined &&
+    !(LEASE_WORK_STATES as readonly string[]).includes(opts.work_state)
+  ) {
     return bad(
       `work_state "${String(opts.work_state)}" is not in the closed enum {${LEASE_WORK_STATES.join(', ')}}.`,
       { actual: String(opts.work_state) }
@@ -761,7 +773,9 @@ export function setAgentLeaseWorkState(
       return bad('work_state_note must be a non-empty string when provided.');
     }
     if (note.length > WORK_STATE_NOTE_MAX_CHARS) {
-      return bad(`work_state_note exceeds ${WORK_STATE_NOTE_MAX_CHARS} characters (got ${note.length}).`);
+      return bad(
+        `work_state_note exceeds ${WORK_STATE_NOTE_MAX_CHARS} characters (got ${note.length}).`
+      );
     }
     if (note.indexOf('\u0000') !== -1) {
       return bad('work_state_note contains a null byte (U+0000).');

@@ -24,14 +24,17 @@ Before publishing CAWS to npm, verify these requirements:
 
 ### 2. GitHub Environment Configured
 
-- [ ] The **Release** GitHub environment grants `id-token: write` (already set in `.github/workflows/release.yml`)
-- [ ] A trusted publisher is configured for `@paths.design/caws-cli` on npmjs.com, naming this exact repo, workflow file, and environment
-- [ ] `NPM_TOKEN` is **NOT** set in the Release environment — its presence, valid or not, preempts the OIDC exchange and breaks publishing
+- [ ] The **Release** GitHub environment grants `id-token: write` (already set
+      in `.github/workflows/release.yml`)
+- [ ] A trusted publisher is configured for `@paths.design/caws-cli` on
+      npmjs.com, naming this exact repo, workflow file, and environment
+- [ ] `NPM_TOKEN` is **NOT** set in the Release environment — its presence,
+      valid or not, preempts the OIDC exchange and breaks publishing
 
 > **Auth mechanism**: CI publishes via OIDC trusted publishing —
-> `id-token: write` + npm ≥ 11.5.1 + a trusted publisher configured on
-> npmjs.com for this repo and workflow file. The workflow uses
-> `npm publish --provenance`. `NPM_TOKEN` is deliberately not injected.
+> `id-token: write` + npm ≥ 11.5.1 + a trusted publisher configured on npmjs.com
+> for this repo and workflow file. The workflow uses `npm publish --provenance`.
+> `NPM_TOKEN` is deliberately not injected.
 
 ### 3. Package Configuration
 
@@ -43,13 +46,15 @@ Before publishing CAWS to npm, verify these requirements:
 
 ### 4. Tag-Driven Release Pre-flight
 
-- [ ] `packages/caws-cli/package.json` version matches the intended tag (e.g., `11.1.6`)
+- [ ] `packages/caws-cli/package.json` version matches the intended tag (e.g.,
+      `11.1.6`)
 - [ ] `packages/caws-cli/CHANGELOG.md` has a section for that version
-- [ ] Fresh-install smoke passes locally (`npm run smoke:fresh-install -w @paths.design/caws-cli`)
+- [ ] Fresh-install smoke passes locally
+      (`npm run smoke:fresh-install -w @paths.design/caws-cli`)
 
 > There is no `.releaserc.json` and semantic-release is not used. CI does not
-> bump versions or generate changelogs. The maintainer does both manually
-> before tagging.
+> bump versions or generate changelogs. The maintainer does both manually before
+> tagging.
 
 ---
 
@@ -74,10 +79,10 @@ npm org ls @paths.design
 > identities to the registry, and both are distinct from CI's OIDC auth (CI
 > publishing does not use a stored token at all — see Step 9). If your account
 > has 2FA enabled, interactive `npm publish` still requires an OTP
-> (`--otp=<code>`). A granular npm token with bypass-2FA works for manual
-> local publishes (Step 7) but does not carry over to `npm whoami` sessions.
-> If you see `EOTP` with a valid `npm whoami`, the token has 2FA-bypass and the
-> session does not — use the token via env (see Step 7 below).
+> (`--otp=<code>`). A granular npm token with bypass-2FA works for manual local
+> publishes (Step 7) but does not carry over to `npm whoami` sessions. If you
+> see `EOTP` with a valid `npm whoami`, the token has 2FA-bypass and the session
+> does not — use the token via env (see Step 7 below).
 
 ### Step 2: Verify Package Scope Access
 
@@ -184,10 +189,9 @@ The Release workflow is **tag-driven**. Pushing to `main` or any branch does
 `.github/workflows/release.yml`.
 
 To observe the workflow running without completing a real publish, push a
-refused-tag-pattern. The workflow fires on `caws-kernel-v*` and bare `v*`
-tags, immediately refuses them, deletes the tag from origin, and exits
-non-zero. This lets you confirm the workflow runs and the auth plumbing is
-wired correctly:
+refused-tag-pattern. The workflow fires on `caws-kernel-v*` and bare `v*` tags,
+immediately refuses them, deletes the tag from origin, and exits non-zero. This
+lets you confirm the workflow runs and the auth plumbing is wired correctly:
 
 ```bash
 # Push a refused-pattern tag to exercise the workflow.
@@ -214,8 +218,10 @@ git push origin caws-kernel-v0.0.0-test
 
 Check the workflow runs with valid credentials:
 
-- [ ] The **Release** GitHub environment grants `id-token: write` (workflow-level permission, no secret needed)
-- [ ] The trusted publisher on npmjs.com names this exact org/repo, workflow filename, and environment
+- [ ] The **Release** GitHub environment grants `id-token: write`
+      (workflow-level permission, no secret needed)
+- [ ] The trusted publisher on npmjs.com names this exact org/repo, workflow
+      filename, and environment
 - [ ] `NPM_TOKEN` is **absent** from the Release environment secrets
 
 Check workflow logs for:
@@ -309,12 +315,15 @@ echo "*.test.js" >> .npmignore
 Before pushing the release tag:
 
 - [ ] All pre-publish steps above passed
-- [ ] npm authentication verified (OIDC trusted publisher configured for this repo + workflow + environment; `NPM_TOKEN` absent from the Release environment)
+- [ ] npm authentication verified (OIDC trusted publisher configured for this
+      repo + workflow + environment; `NPM_TOKEN` absent from the Release
+      environment)
 - [ ] Package builds successfully
 - [ ] CLI works from tarball
 - [ ] `packages/caws-cli/package.json` version bumped manually (e.g., `11.1.6`)
 - [ ] `packages/caws-cli/CHANGELOG.md` section authored for the version
-- [ ] Fresh-install smoke passes: `npm run smoke:fresh-install -w @paths.design/caws-cli`
+- [ ] Fresh-install smoke passes:
+      `npm run smoke:fresh-install -w @paths.design/caws-cli`
 - [ ] Security audit clean
 - [ ] LICENSE file present
 - [ ] README.md current
@@ -425,7 +434,8 @@ A release is successful when:
 Questions about publishing?
 
 - **Email**: hello@paths.design
-- **GitHub Issues**: [Report issue](https://github.com/Paths-Design/coding-agent-working-standard/issues)
+- **GitHub Issues**:
+  [Report issue](https://github.com/Paths-Design/coding-agent-working-standard/issues)
 
 ---
 

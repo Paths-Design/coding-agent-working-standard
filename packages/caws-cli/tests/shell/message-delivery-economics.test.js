@@ -82,7 +82,8 @@ function extractRenderer() {
   // The template has TWO node -e blocks; anchor at the message-renderer's
   // telemetry env assignment, which only the message block uses (it may be
   // followed by the escalation-state env added in CAWS-MESSAGE-BEHAVIOR-001).
-  const envAnchor = 'HEARTBEAT_MSG_TELEMETRY="$PROJECT_DIR_FOR_CACHE/.caws/leases/heartbeat-message-telemetry.jsonl"';
+  const envAnchor =
+    'HEARTBEAT_MSG_TELEMETRY="$PROJECT_DIR_FOR_CACHE/.caws/leases/heartbeat-message-telemetry.jsonl"';
   const envStart = src.indexOf(envAnchor);
   if (envStart === -1) throw new Error('message renderer anchor not found in template');
   const marker = "node -e '";
@@ -105,24 +106,35 @@ function runRenderer(pollJson, env = {}) {
 }
 
 test('offer renderer returns the exact occurrence to the dispatcher without claiming it delivered', () => {
-  const offerFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-offer-render-')), 'offer.json');
+  const offerFile = path.join(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'caws-offer-render-')),
+    'offer.json'
+  );
   const message = {
-    record: 'message', id: 'm-1', actor: { kind: 'agent', id: 'peer' },
-    to: 'econ-test', channel: 'econ-test::peer', text: 'offered context',
+    record: 'message',
+    id: 'm-1',
+    actor: { kind: 'agent', id: 'peer' },
+    to: 'econ-test',
+    channel: 'econ-test::peer',
+    text: 'offered context',
     ts: new Date().toISOString(),
   };
-  const result = runRenderer({
-    message,
-    messages: [{ message }],
-    waiting: 1,
-    poll_ms: 2,
-    offer: { id: 'offer-1', recipient: 'econ-test', messageIds: ['m-1'] },
-  }, { CAWS_HANDLER_OFFER_FILE: offerFile });
+  const result = runRenderer(
+    {
+      message,
+      messages: [{ message }],
+      waiting: 1,
+      poll_ms: 2,
+      offer: { id: 'offer-1', recipient: 'econ-test', messageIds: ['m-1'] },
+    },
+    { CAWS_HANDLER_OFFER_FILE: offerFile }
+  );
   expect(result.status).toBe(0);
   expect(result.stdout).toContain('offered context');
   expect(result.stdout).not.toContain('1 more message');
   expect(JSON.parse(fs.readFileSync(offerFile, 'utf8'))).toEqual({
-    id: 'offer-1', recipient: 'econ-test',
+    id: 'offer-1',
+    recipient: 'econ-test',
   });
 });
 
@@ -130,9 +142,19 @@ test('A1: the oldest critical message polls first through the CLI', () => {
   const root = mkRepo();
   makeLive(root, 'econ-test');
   makeLive(root, 'peer');
-  expect(spawnCli(root, ['message', 'send', '--to', 'econ-test', '--text', 'old normal'], 'peer').status).toBe(0);
-  expect(spawnCli(root, ['message', 'send', '--to', 'econ-test', '--text', 'new normal'], 'peer').status).toBe(0);
-  expect(spawnCli(root, ['message', 'send', '--urgency', 'critical', '--to', 'econ-test', '--text', 'STOP'], 'peer').status).toBe(0);
+  expect(
+    spawnCli(root, ['message', 'send', '--to', 'econ-test', '--text', 'old normal'], 'peer').status
+  ).toBe(0);
+  expect(
+    spawnCli(root, ['message', 'send', '--to', 'econ-test', '--text', 'new normal'], 'peer').status
+  ).toBe(0);
+  expect(
+    spawnCli(
+      root,
+      ['message', 'send', '--urgency', 'critical', '--to', 'econ-test', '--text', 'STOP'],
+      'peer'
+    ).status
+  ).toBe(0);
   const r = spawnCli(root, ['message', 'poll', '--json']);
   expect(r.status).toBe(0);
   const parsed = JSON.parse(r.stdout);
@@ -144,9 +166,17 @@ test('A4: --urgency critical is ledgered; bogus is refused with a ledgered refus
   const root = mkRepo();
   makeLive(root, 'econ-test');
   makeLive(root, 'peer');
-  const ok = spawnCli(root, ['message', 'send', '--urgency', 'critical', '--to', 'econ-test', '--text', 'x'], 'peer');
+  const ok = spawnCli(
+    root,
+    ['message', 'send', '--urgency', 'critical', '--to', 'econ-test', '--text', 'x'],
+    'peer'
+  );
   expect(ok.status).toBe(0);
-  const bogus = spawnCli(root, ['message', 'send', '--urgency', 'bogus', '--to', 'econ-test', '--text', 'x'], 'peer');
+  const bogus = spawnCli(
+    root,
+    ['message', 'send', '--urgency', 'bogus', '--to', 'econ-test', '--text', 'x'],
+    'peer'
+  );
   expect(bogus.status).toBe(1);
   expect(bogus.stdout).toMatch(/not sent — invalid urgency/);
   const records = ledger(root);
@@ -159,7 +189,9 @@ test('A6: legacy records without urgency read clean through history --json', () 
   const root = mkRepo();
   makeLive(root, 'econ-test');
   makeLive(root, 'peer');
-  expect(spawnCli(root, ['message', 'send', '--to', 'econ-test', '--text', 'legacy'], 'peer').status).toBe(0);
+  expect(
+    spawnCli(root, ['message', 'send', '--to', 'econ-test', '--text', 'legacy'], 'peer').status
+  ).toBe(0);
   const r = spawnCli(root, ['message', 'history', '--with', 'peer', '--json']);
   expect(r.status).toBe(0);
   const parsed = JSON.parse(r.stdout);
@@ -168,7 +200,10 @@ test('A6: legacy records without urgency read clean through history --json', () 
 });
 
 test('A5: hook renderer emits the CRITICAL prefix for one urgent message', () => {
-  const telemetry = path.join(fs.mkdtempSync(path.join(require('os').tmpdir(), 'caws-econ-tel-')), 'tel.jsonl');
+  const telemetry = path.join(
+    fs.mkdtempSync(path.join(require('os').tmpdir(), 'caws-econ-tel-')),
+    'tel.jsonl'
+  );
   const pollJson = {
     message: {
       record: 'message',
@@ -204,7 +239,11 @@ test('A5: hook renderer emits the CRITICAL prefix for one urgent message', () =>
   expect(r.status).toBe(0);
   expect(r.stdout).toMatch(/CRITICAL MESSAGE from another Claude Code session \(id peer\)/);
   expect(r.stdout).toMatch(/not verified fact/);
-  const lines = fs.readFileSync(telemetry, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  const lines = fs
+    .readFileSync(telemetry, 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
   expect(lines).toHaveLength(1);
   expect(lines[0].injected_count).toBe(1);
   expect(lines[0].poll_ms).toBe(12);
@@ -212,7 +251,10 @@ test('A5: hook renderer emits the CRITICAL prefix for one urgent message', () =>
 });
 
 test('A5: hook renderer emits one digest block for a drained backlog', () => {
-  const telemetry = path.join(fs.mkdtempSync(path.join(require('os').tmpdir(), 'caws-econ-tel-')), 'tel.jsonl');
+  const telemetry = path.join(
+    fs.mkdtempSync(path.join(require('os').tmpdir(), 'caws-econ-tel-')),
+    'tel.jsonl'
+  );
   const mk = (id, text, urgency) => ({
     record: 'message',
     id,
@@ -225,7 +267,10 @@ test('A5: hook renderer emits one digest block for a drained backlog', () => {
   });
   const pollJson = {
     message: mk('m-1', 'first line of one', undefined),
-    messages: [{ message: mk('m-1', 'first line of one', undefined) }, { message: mk('m-2', 'urgent thing', 'critical') }],
+    messages: [
+      { message: mk('m-1', 'first line of one', undefined) },
+      { message: mk('m-2', 'urgent thing', 'critical') },
+    ],
     waiting: 1,
     poll_ms: 7,
   };
@@ -239,7 +284,11 @@ test('A5: hook renderer emits one digest block for a drained backlog', () => {
   expect(r.stdout).toMatch(/m-2 \[CRITICAL\] from peer: urgent thing/);
   expect(r.stdout).toMatch(/Full text: caws message status/);
   expect(r.stdout).toMatch(/1 more message\(s\) waiting/);
-  const lines = fs.readFileSync(telemetry, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  const lines = fs
+    .readFileSync(telemetry, 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
   expect(lines).toHaveLength(1);
   expect(lines[0].injected_count).toBe(2);
   expect(lines[0].waiting).toBe(1);

@@ -49,8 +49,7 @@ export const MIGRATION_RULES = {
   /** A5: shape detection — ambiguous mix of envelope and flat-map structure. */
   MIXED_SHAPE_REFUSED: 'store.worktrees_migration.mixed_shape_refused',
   /** A4: at least one destroyed record blocks omission (spec claims it OR path present). */
-  DESTROYED_RECORD_BLOCKS_OMISSION:
-    'store.worktrees_migration.destroyed_record_blocks_omission',
+  DESTROYED_RECORD_BLOCKS_OMISSION: 'store.worktrees_migration.destroyed_record_blocks_omission',
   /** A12: spec load failed in a way that makes the claim check unverifiable. */
   SPEC_LOAD_FAILED_POLICY_UNVERIFIABLE:
     'store.worktrees_migration.spec_load_failed_policy_unverifiable',
@@ -113,9 +112,7 @@ function migrationDiagnostic(
  * A12-relevant note: the classifier does NOT need spec input. The
  * spec-load policy check happens at the planner step.
  */
-export function detectWorktreesRegistryShape(
-  fileContents: string
-): Result<RegistryShape> {
+export function detectWorktreesRegistryShape(fileContents: string): Result<RegistryShape> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(fileContents);
@@ -130,10 +127,7 @@ export function detectWorktreesRegistryShape(
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return err(
-      migrationDiagnostic(
-        MIGRATION_RULES.READ_FAILED,
-        `worktrees.json is not a JSON object.`
-      )
+      migrationDiagnostic(MIGRATION_RULES.READ_FAILED, `worktrees.json is not a JSON object.`)
     );
   }
   const obj = parsed as Record<string, unknown>;
@@ -142,8 +136,7 @@ export function detectWorktreesRegistryShape(
     return ok({ kind: 'empty', reason: 'empty_object' });
   }
   const hasVersion =
-    Object.prototype.hasOwnProperty.call(obj, 'version') &&
-    typeof obj.version === 'number';
+    Object.prototype.hasOwnProperty.call(obj, 'version') && typeof obj.version === 'number';
   const hasWorktreesObject =
     Object.prototype.hasOwnProperty.call(obj, 'worktrees') &&
     typeof obj.worktrees === 'object' &&
@@ -290,9 +283,7 @@ export function classifyRecordsForMigration(
     }
 
     const recordedPath =
-      typeof record.path === 'string' && record.path.length > 0
-        ? record.path
-        : undefined;
+      typeof record.path === 'string' && record.path.length > 0 ? record.path : undefined;
     if (recordedPath !== undefined && pathExistsCheck(recordedPath)) {
       decisions.push({
         record: key,
@@ -357,9 +348,7 @@ export function isSpecLoadVerifiable(
   diagnostics: readonly Diagnostic[]
 ): boolean {
   if (specs.length > 0) return true;
-  const hasReadIoFailed = diagnostics.some(
-    (d) => d.rule === 'store.read.io_failed'
-  );
+  const hasReadIoFailed = diagnostics.some((d) => d.rule === 'store.read.io_failed');
   return !hasReadIoFailed;
 }
 
@@ -439,9 +428,7 @@ export function planMigration(
   const nested = parsed.worktrees;
 
   const decisions = classifyRecordsForMigration(nested, specs, pathExistsCheck);
-  const hasDestroyedRecords = decisions.some(
-    (d) => d.status === 'destroyed'
-  );
+  const hasDestroyedRecords = decisions.some((d) => d.status === 'destroyed');
 
   // A12: spec-load verifiability check fires ONLY when at least one
   // destroyed record exists (otherwise the claim check has no work).

@@ -32,10 +32,10 @@ function snapshot(cawsDir) {
   return {
     registry: readBytes(path.join(cawsDir, 'worktrees.json')),
     events: readBytes(path.join(cawsDir, 'events.jsonl')),
-    specs: fs.readdirSync(path.join(cawsDir, 'specs')).sort().map((name) => [
-      name,
-      readBytes(path.join(cawsDir, 'specs', name)),
-    ]),
+    specs: fs
+      .readdirSync(path.join(cawsDir, 'specs'))
+      .sort()
+      .map((name) => [name, readBytes(path.join(cawsDir, 'specs', name))]),
   };
 }
 
@@ -94,13 +94,15 @@ describe('caws worktree merge recovery guidance', () => {
         base_branch: 'main',
       },
     });
-    expect(payload.next_commands).toEqual(expect.arrayContaining([
-      'caws worktree merge wt-unready --dry-run --data',
-      'caws worktree list --data',
-      'caws worktree cleanup-plan --include wt-unready --json',
-      'git rev-list --left-right --count main...feature/wt-unready',
-      'git merge-tree --write-tree main feature/wt-unready',
-    ]));
+    expect(payload.next_commands).toEqual(
+      expect.arrayContaining([
+        'caws worktree merge wt-unready --dry-run --data',
+        'caws worktree list --data',
+        'caws worktree cleanup-plan --include wt-unready --json',
+        'git rev-list --left-right --count main...feature/wt-unready',
+        'git merge-tree --write-tree main feature/wt-unready',
+      ])
+    );
     expect(snapshot(cawsDir)).toEqual(before);
   });
 

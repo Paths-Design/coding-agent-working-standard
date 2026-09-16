@@ -1000,8 +1000,6 @@ export function sharedPackForSurface(surface: AgentSurface): HookPackV1 {
   const covered = new Set<string>(TELEMETRY_ROW_DEST_PATHS);
   return {
     ...SHARED_PACK,
-    installedFiles: SHARED_PACK.installedFiles.filter(
-      (f) => !covered.has(f.destPath)
-    ),
+    installedFiles: SHARED_PACK.installedFiles.filter((f) => !covered.has(f.destPath)),
   };
 }

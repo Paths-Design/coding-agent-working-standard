@@ -9,13 +9,24 @@ updated: 2026-05-15
 
 # Agent runtime hooks and workflow integration (v11.1.6)
 
-> Guide to integrating AI coding assistants (Cursor, Windsurf/Cascade, Copilot, MCP clients) with CAWS v11.1.6 quality and audit surfaces.
+> Guide to integrating AI coding assistants (Cursor, Windsurf/Cascade, Copilot,
+> MCP clients) with CAWS v11.1.6 quality and audit surfaces.
 
 ## Overview
 
-CAWS does not ship its own runtime hooks. The integration patterns below describe how *agent runtimes* should call out to v11 CAWS commands during their own hook lifecycles.
+CAWS does not ship its own runtime hooks. The integration patterns below
+describe how _agent runtimes_ should call out to v11 CAWS commands during their
+own hook lifecycles.
 
-> **v11 posture (A1).** The current v11 line ships seventeen command groups: `init`, `doctor`, `scope`, `status`, `claim`, `gates`, `evidence`, `events`, `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message`, `session`, `working-tree`, `handoff`. The hook examples that follow use the subset relevant to agent integration. References to removed v10 commands (`evaluate`, `iterate`, `validate`, `provenance`, `hooks install`, `scaffold`, `quality-gates`, `waivers` plural) have been replaced with v11 equivalents. Doctrine source: [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md).
+> **v11 posture (A1).** The current v11 line ships seventeen command groups:
+> `init`, `doctor`, `scope`, `status`, `claim`, `gates`, `evidence`, `events`,
+> `waiver`, `reprieve`, `specs`, `worktree`, `agents`, `message`, `session`,
+> `working-tree`, `handoff`. The hook examples that follow use the subset
+> relevant to agent integration. References to removed v10 commands (`evaluate`,
+> `iterate`, `validate`, `provenance`, `hooks install`, `scaffold`,
+> `quality-gates`, `waivers` plural) have been replaced with v11 equivalents.
+> Doctrine source:
+> [`docs/architecture/caws-vnext-command-surface.md`](../architecture/caws-vnext-command-surface.md).
 
 ## Integration Patterns
 
@@ -25,17 +36,18 @@ Cursor hooks provide instant feedback during AI-assisted coding sessions.
 
 #### Hook Types & Timing
 
-| Hook Type | Timing | Purpose | Example Use |
-|-----------|--------|---------|-------------|
-| **beforeShellExecution** | Pre-command | Block dangerous operations | Prevent `rm -rf /` |
-| **beforeReadFile** | Pre-read | Scan for secrets | Block reading `.env` files |
-| **afterFileEdit** | Post-save | Auto-format & validate | Run ESLint, check naming |
-| **beforeSubmitPrompt** | Pre-prompt | Scope validation | Check file attachments |
-| **beforeMCPExecution** | Pre-MCP call | Tool validation | Verify MCP tool safety |
+| Hook Type                | Timing       | Purpose                    | Example Use                |
+| ------------------------ | ------------ | -------------------------- | -------------------------- |
+| **beforeShellExecution** | Pre-command  | Block dangerous operations | Prevent `rm -rf /`         |
+| **beforeReadFile**       | Pre-read     | Scan for secrets           | Block reading `.env` files |
+| **afterFileEdit**        | Post-save    | Auto-format & validate     | Run ESLint, check naming   |
+| **beforeSubmitPrompt**   | Pre-prompt   | Scope validation           | Check file attachments     |
+| **beforeMCPExecution**   | Pre-MCP call | Tool validation            | Verify MCP tool safety     |
 
 #### Installation
 
-v11 does not ship `caws init --interactive` or `caws scaffold`. Set up Cursor hooks externally:
+v11 does not ship `caws init --interactive` or `caws scaffold`. Set up Cursor
+hooks externally:
 
 ```bash
 # 1. Initialize CAWS (no-arg in v11)
@@ -97,7 +109,8 @@ Cascade enables structured development workflows invoked via `/[workflow-name]`.
 
 ## Feature development with CAWS v11 quality gates
 
-**Purpose**: Guide agents through feature development with v11 quality validation.
+**Purpose**: Guide agents through feature development with v11 quality
+validation.
 
 1. **Author the spec**
    - Create `.caws/specs/<id>.yaml` directly (v11 ships no spec generator)
@@ -109,16 +122,19 @@ Cascade enables structured development workflows invoked via `/[workflow-name]`.
 3. **Implement core functionality (TDD)**
    - Write tests first, then implementation
    - Run project test suite as usual
-   - Record evidence: `caws evidence record --type test --spec <id> --data '{...}'`
+   - Record evidence:
+     `caws evidence record --type test --spec <id> --data '{...}'`
 
 4. **Quality gates**
    - Run: `caws gates run --spec <id>` (exit 0 = pass)
-   - For acceptable violations, open a waiver: `caws waiver create <id>-w --title "<title>" --gate <g> --reason "..." --approved-by "..." --expires-at <iso>`
+   - For acceptable violations, open a waiver:
+     `caws waiver create <id>-w --title "<title>" --gate <g> --reason "..." --approved-by "..." --expires-at <iso>`
 
 5. **Final validation**
    - `caws doctor` (drift)
    - `caws status` (dashboard)
-   - Record AC closures: `caws specs evidence <id> --ac A1 --status pass --evidence-ref "npm test"`
+   - Record AC closures:
+     `caws specs evidence <id> --ac A1 --status pass --evidence-ref "npm test"`
    - Ready for review/merge
 ```
 
@@ -140,28 +156,34 @@ GitHub Copilot extensions using Preview SDK for seamless tool integration.
 const cawsTools = {
   gates: {
     name: 'CAWS gates run',
-    handler: async (args) => {
-      const { exitCode, stdout } = await runCaws(['gates', 'run', '--spec', args.specId]);
+    handler: async args => {
+      const { exitCode, stdout } = await runCaws([
+        'gates',
+        'run',
+        '--spec',
+        args.specId,
+      ]);
       return {
         type: 'text',
-        text: exitCode === 0
-          ? '✅ All blocking gates pass.'
-          : `❌ Gate failure (exit ${exitCode}):\n${stdout}`,
+        text:
+          exitCode === 0
+            ? '✅ All blocking gates pass.'
+            : `❌ Gate failure (exit ${exitCode}):\n${stdout}`,
       };
-    }
+    },
   },
   doctor: {
     name: 'CAWS doctor',
     handler: async () => {
       const { exitCode, stdout } = await runCaws(['doctor']);
       return { type: 'text', text: `caws doctor exit ${exitCode}\n${stdout}` };
-    }
-  }
+    },
+  },
 };
 
 // Register with Preview SDK
 const server = new CopilotExtensionServer();
-server.setRequestHandler('tools/call', async (request) => {
+server.setRequestHandler('tools/call', async request => {
   const tool = cawsTools[request.params.name];
   if (tool) {
     return await tool.handler(request.params.arguments);
@@ -175,16 +197,18 @@ Standard git hooks for commit and push validation.
 
 #### Hook Timing Matrix
 
-| Hook Type | Timing | Speed Target | Purpose |
-|-----------|--------|--------------|---------|
-| **pre-commit** | Before commit | < 15s | Quick checks (lint, format, naming) |
-| **pre-push** | Before push | < 60s | Validation (CAWS spec, unit tests, contracts) |
-| **commit-msg** | After commit | < 5s | Message validation |
-| **pre-merge** | Before merge | < 30s | Integration checks |
+| Hook Type      | Timing        | Speed Target | Purpose                                       |
+| -------------- | ------------- | ------------ | --------------------------------------------- |
+| **pre-commit** | Before commit | < 15s        | Quick checks (lint, format, naming)           |
+| **pre-push**   | Before push   | < 60s        | Validation (CAWS spec, unit tests, contracts) |
+| **commit-msg** | After commit  | < 5s         | Message validation                            |
+| **pre-merge**  | Before merge  | < 30s        | Integration checks                            |
 
 #### Installation
 
-v11 does not ship git-hook installation (`caws hooks install` is removed). Set up hooks externally — `husky`, `pre-commit`, or hand-rolled shell scripts under `.git/hooks/`. Hook bodies should call out to v11 commands:
+v11 does not ship git-hook installation (`caws hooks install` is removed). Set
+up hooks externally — `husky`, `pre-commit`, or hand-rolled shell scripts under
+`.git/hooks/`. Hook bodies should call out to v11 commands:
 
 ```bash
 # .git/hooks/pre-commit
@@ -198,24 +222,27 @@ caws gates run --spec "$(git config caws.activeSpec || echo current)"
 
 ### Platform Comparison
 
-| Platform | Integration Method | Real-time | Structured Workflows | Tool Access |
-|----------|-------------------|-----------|---------------------|-------------|
-| **Cursor** | Native hooks | Yes (Instant) | No | Yes (Direct) |
-| **Windsurf** | Cascade workflows | Partial (Workflow-based) | Yes (Structured) | Yes (CLI) |
-| **GitHub Copilot** | Preview SDK | Partial (Chat-based) | No | Yes (SDK tools) |
-| **CLI Tools** | Direct API | No | Yes (Scripts) | Yes (Full API) |
+| Platform           | Integration Method | Real-time                | Structured Workflows | Tool Access     |
+| ------------------ | ------------------ | ------------------------ | -------------------- | --------------- |
+| **Cursor**         | Native hooks       | Yes (Instant)            | No                   | Yes (Direct)    |
+| **Windsurf**       | Cascade workflows  | Partial (Workflow-based) | Yes (Structured)     | Yes (CLI)       |
+| **GitHub Copilot** | Preview SDK        | Partial (Chat-based)     | No                   | Yes (SDK tools) |
+| **CLI Tools**      | Direct API         | No                       | Yes (Scripts)        | Yes (Full API)  |
 
 ### Choosing Integration Strategy
 
 #### For **Real-time Feedback**
+
 - **Primary**: Cursor hooks (instant, < 500ms)
 - **Fallback**: CLI polling
 
 #### For **Structured Workflows**
+
 - **Primary**: Cascade workflows (markdown-based, team shareable)
 - **Fallback**: CLI scripts
 
 #### For **Tool Integration**
+
 - **Primary**: CLI (direct invocation)
 - **Secondary**: Preview SDK (Copilot-specific)
 - **Fallback**: Direct API calls
@@ -302,38 +329,43 @@ class DriftAwareAgent {
 **Steps**:
 
 1. **Assess current state**
-   ```
-   caws doctor
-   caws status
-   ```
-   *Drift detection and dashboard. Exit 0 = clean.*
+```
+
+caws doctor caws status
+
+```
+*Drift detection and dashboard. Exit 0 = clean.*
 
 2. **Confirm scope**
-   ```
-   caws scope check <target-file>
-   ```
-   *Refuse out-of-scope edits. Update .caws/specs/<id>.yaml scope.in if a file should be in.*
+```
+
+caws scope check <target-file>
+
+```
+*Refuse out-of-scope edits. Update .caws/specs/<id>.yaml scope.in if a file should be in.*
 
 3. **Implement changes**
-   - Author tests first, then implementation.
-   - Use appropriate risk tier and quality standards from your spec.
-   - Run project test suite locally as usual.
+- Author tests first, then implementation.
+- Use appropriate risk tier and quality standards from your spec.
+- Run project test suite locally as usual.
 
 4. **Quality gates**
-   ```
-   caws gates run --spec <id>
-   ```
-   *Exit 0 = pass. Hash-chained gate_evaluated event recorded per declared gate.*
+```
+
+caws gates run --spec <id>
+
+```
+*Exit 0 = pass. Hash-chained gate_evaluated event recorded per declared gate.*
 
 5. **Address issues**
-   - Fix failing gates, OR
-   - Open a waiver: `caws waiver create <id>-w --title "<title>" --gate <g> --reason "..." --approved-by "..." --expires-at <iso>`
-   - Update spec if scope/requirements changed.
+- Fix failing gates, OR
+- Open a waiver: `caws waiver create <id>-w --title "<title>" --gate <g> --reason "..." --approved-by "..." --expires-at <iso>`
+- Update spec if scope/requirements changed.
 
 6. **Completion check**
-   - `caws gates run --spec <id>` returns 0.
-   - Record AC closures: `caws specs evidence <id> --ac A1 --status pass --evidence-ref "npm test"`.
-   - Final `caws doctor && caws status`. Ready for review.
+- `caws gates run --spec <id>` returns 0.
+- Record AC closures: `caws specs evidence <id> --ac A1 --status pass --evidence-ref "npm test"`.
+- Final `caws doctor && caws status`. Ready for review.
 
 **Agent decision points**:
 - `caws gates run` exits 1 → fix or waive; do not proceed without addressing.
@@ -359,14 +391,16 @@ class DriftAwareAgent {
 
 ### Integration Strategy
 
-1. **Layer Approaches**: Combine multiple integration methods for comprehensive coverage
+1. **Layer Approaches**: Combine multiple integration methods for comprehensive
+   coverage
 2. **Fail Gracefully**: Ensure one integration failure doesn't break others
 3. **Performance First**: Keep real-time hooks under 500ms
 4. **User Choice**: Allow developers to opt into different integration levels
 
 ### Agent Development Guidelines
 
-1. **Quality-First**: Always check CAWS evaluation before considering tasks complete
+1. **Quality-First**: Always check CAWS evaluation before considering tasks
+   complete
 2. **Iterative Approach**: Use CAWS guidance for systematic development
 3. **Risk Awareness**: Respect tier-based quality requirements
 4. **Documentation**: Maintain provenance through development process
@@ -376,6 +410,7 @@ class DriftAwareAgent {
 ### Common Issues
 
 #### Cursor Hooks Not Executing
+
 ```bash
 # Check hook permissions
 ls -la .cursor/hooks/*.sh
@@ -387,6 +422,7 @@ echo '{"file_path":"test.js"}' | .cursor/hooks/format.sh
 ```
 
 #### Cascade Workflow Not Found
+
 ```bash
 # Check workflow discovery
 find . -name "*.md" -path "*/workflows/*" | head -10
@@ -396,6 +432,7 @@ cat .windsurf/workflows/caws-feature-development.md
 ```
 
 #### VS Code Extension Not Loading
+
 ```bash
 # Check extension status
 code --list-extensions | grep caws
@@ -417,6 +454,7 @@ code --list-extensions | grep caws
 ### From Individual Hooks to Unified Strategy
 
 **Before**: Separate git hooks, Cursor hooks, manual workflows
+
 ```bash
 # Git hooks only
 npm run hooks:install
@@ -428,6 +466,7 @@ $EDITOR .cursor/hooks/validate-spec.sh
 ```
 
 **After (v11)**: explicit per-tool integration calling the v11 surface
+
 ```bash
 # Initialize CAWS state
 caws init
@@ -442,13 +481,19 @@ caws waiver create <id>-w --title "<title>" --gate <g> --reason "..." --approved
 
 ### Platform-Specific Migration
 
-- **Claude Code Users**: Install the Claude Code hook pack: `caws init --agent-surface claude-code`
-- **Codex Users**: Install the Codex project-local hook pack: `caws init --agent-surface codex`, then restart/reopen Codex and review/trust the project hooks with `/hooks`
-- **Cursor Users**: Cursor is a declared surface but does not have an implemented v11 hook pack yet
+- **Claude Code Users**: Install the Claude Code hook pack:
+  `caws init --agent-surface claude-code`
+- **Codex Users**: Install the Codex project-local hook pack:
+  `caws init --agent-surface codex`, then restart/reopen Codex and review/trust
+  the project hooks with `/hooks`
+- **Cursor Users**: Cursor is a declared surface but does not have an
+  implemented v11 hook pack yet
 - **VS Code Users**: Install CAWS extension from marketplace
 - **Windsurf Users**: Import CAWS Cascade workflows
 - **Copilot Users**: Use CAWS Preview SDK extensions
 
 ---
 
-**This unified approach enables agents to work seamlessly with CAWS quality assurance across all major AI coding platforms, providing consistent, high-quality development experiences regardless of the tools used.**
+**This unified approach enables agents to work seamlessly with CAWS quality
+assurance across all major AI coding platforms, providing consistent,
+high-quality development experiences regardless of the tools used.**

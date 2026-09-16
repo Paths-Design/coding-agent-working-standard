@@ -40,7 +40,12 @@ function mkRepo() {
   fs.mkdirSync(path.join(cawsDir, 'leases'), { recursive: true });
   fs.writeFileSync(
     path.join(cawsDir, 'leases', 'other-sess.json'),
-    JSON.stringify({ session_id: 'other-sess', platform: 'dsh', status: 'active', claimed_paths: ['packages/foo'] })
+    JSON.stringify({
+      session_id: 'other-sess',
+      platform: 'dsh',
+      status: 'active',
+      claimed_paths: ['packages/foo'],
+    })
   );
   return { root, cawsDir };
 }
@@ -48,7 +53,12 @@ function mkRepo() {
 function runCheck(root, opts = {}) {
   const out = [];
   const err = [];
-  const code = runWorkingTreeCheckCommand({ cwd: root, out: (l) => out.push(l), err: (l) => err.push(l), ...opts });
+  const code = runWorkingTreeCheckCommand({
+    cwd: root,
+    out: (l) => out.push(l),
+    err: (l) => err.push(l),
+    ...opts,
+  });
   return { code, out: out.join('\n'), err: err.join('\n') };
 }
 
@@ -100,7 +110,9 @@ describe('WORKING-TREE-PROVENANCE-GUARD-001 CLI', () => {
     });
     expect(r.code).toBe(0);
     expect(r.out).toContain('acked overlap for session other-sess');
-    const lease = JSON.parse(fs.readFileSync(path.join(cawsDir, 'leases', 'other-sess.json'), 'utf8'));
+    const lease = JSON.parse(
+      fs.readFileSync(path.join(cawsDir, 'leases', 'other-sess.json'), 'utf8')
+    );
     expect(Array.isArray(lease.prior_overlap_acks)).toBe(true);
     expect(lease.prior_overlap_acks).toHaveLength(1);
     expect(lease.prior_overlap_acks[0].acked_by_session).toBe('self-sess');

@@ -31,10 +31,10 @@ function snapshot(cawsDir) {
   return {
     registry: readBytes(path.join(cawsDir, 'worktrees.json')),
     events: readBytes(path.join(cawsDir, 'events.jsonl')),
-    specs: fs.readdirSync(path.join(cawsDir, 'specs')).sort().map((name) => [
-      name,
-      readBytes(path.join(cawsDir, 'specs', name)),
-    ]),
+    specs: fs
+      .readdirSync(path.join(cawsDir, 'specs'))
+      .sort()
+      .map((name) => [name, readBytes(path.join(cawsDir, 'specs', name))]),
     worktreeNames: fs.existsSync(path.join(cawsDir, 'worktrees'))
       ? fs.readdirSync(path.join(cawsDir, 'worktrees')).sort()
       : [],
@@ -121,7 +121,13 @@ function runCli(root, args) {
   return spawnSync(process.execPath, [CLI, ...args], {
     cwd: root,
     encoding: 'utf8',
-    env: { ...process.env, CAWS_SESSION_ID: 'fixture-session', CODEX_THREAD_ID: '', CLAUDE_SESSION_ID: '', CAWS_QUIET: '1' },
+    env: {
+      ...process.env,
+      CAWS_SESSION_ID: 'fixture-session',
+      CODEX_THREAD_ID: '',
+      CLAUDE_SESSION_ID: '',
+      CAWS_QUIET: '1',
+    },
   });
 }
 
@@ -152,9 +158,7 @@ describe('caws worktree destroy --force compatibility alias', () => {
     expect(refused.err).toContain(`Branch "${name}" is not merged into "main".`);
     // CAWS-DEFECT-MSG-ENRICHMENT-01 (DEFECT-03a): the rejection must state the
     // FULL recovery command, not just the bare flag name.
-    expect(refused.err).toContain(
-      `caws worktree destroy ${name} --abandon-unmerged`
-    );
+    expect(refused.err).toContain(`caws worktree destroy ${name} --abandon-unmerged`);
     expect(refused.err).not.toContain('Pass --abandon-unmerged to destroy anyway.');
     expect(snapshot(cawsDir)).toEqual(before);
     expect(fs.existsSync(wtPath)).toBe(true);
@@ -166,9 +170,7 @@ describe('caws worktree destroy --force compatibility alias', () => {
     expect(fs.existsSync(wtPath)).toBe(false);
     const registry = JSON.parse(readBytes(path.join(cawsDir, 'worktrees.json')));
     expect(registry[name]).toBeUndefined();
-    expect(readBytes(path.join(cawsDir, 'specs', `${specId}.yaml`))).not.toMatch(
-      /^worktree:/m
-    );
+    expect(readBytes(path.join(cawsDir, 'specs', `${specId}.yaml`))).not.toMatch(/^worktree:/m);
   });
 
   test('nested help lists force with narrowed compatibility semantics', () => {

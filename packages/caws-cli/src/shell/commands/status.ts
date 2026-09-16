@@ -64,7 +64,10 @@ import {
 import { resolveBinding } from '../binding/resolve-binding';
 import { renderDiagnostics } from '../render/diagnostic';
 import { renderShortStatus, renderStatus, type StatusPanel } from '../render/status';
-import { emitStaleTelemetryAdvisory, renderStaleTelemetryAdvisory } from '../render/stale-telemetry-advisory';
+import {
+  emitStaleTelemetryAdvisory,
+  renderStaleTelemetryAdvisory,
+} from '../render/stale-telemetry-advisory';
 import { resolveCallerSession } from '../session/resolve-session';
 
 const DEFAULT_LEASE_STALE_TTL_MS = 30 * 60 * 1000; // 30m
@@ -156,7 +159,9 @@ function selectedPanels(opts: StatusCommandOptions): readonly StatusPanel[] | un
   return panels.length > 0 ? panels : undefined;
 }
 
-function countByLifecycle(specs: readonly { readonly lifecycle_state: string }[]): Record<string, number> {
+function countByLifecycle(
+  specs: readonly { readonly lifecycle_state: string }[]
+): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const spec of specs) counts[spec.lifecycle_state] = (counts[spec.lifecycle_state] ?? 0) + 1;
   return counts;
@@ -306,7 +311,9 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
   // --session-id alone never triggers this.
   if (wantsHeartbeat) {
     if (sessionIdentity === null) {
-      err('caws status: --heartbeat requires resolvable session identity (set CLAUDE_SESSION_ID, use a capsule, or pass --session-id).');
+      err(
+        'caws status: --heartbeat requires resolvable session identity (set CLAUDE_SESSION_ID, use a capsule, or pass --session-id).'
+      );
       // Continue rendering — heartbeat failure is non-fatal.
     } else {
       const gitInfo = readGitDirInfo(cwd);
@@ -404,7 +411,7 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
   };
 
   if (opts.json === true) {
-    const jsonPanels = panels ?? ['specs', 'worktrees', 'agents', 'doctor'] as const;
+    const jsonPanels = panels ?? (['specs', 'worktrees', 'agents', 'doctor'] as const);
     const payload: Record<string, unknown> = {
       ok: true,
       read_only: !wantsHeartbeat,

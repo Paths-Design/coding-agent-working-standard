@@ -101,7 +101,9 @@ function scopeShow(root, p, env) {
   const out = [];
   const err = [];
   const code = runScopeCommand({
-    mode: 'show', path: p, json: true,
+    mode: 'show',
+    path: p,
+    json: true,
     cwd: root,
     env,
     out: (l) => out.push(l),
@@ -124,7 +126,14 @@ function readBridges(cawsDir) {
 // tier in tests (the live harness sets DSH_SESSION_ID, which outranks it).
 function sessEnv(id) {
   const env = { ...process.env };
-  for (const k of ['DSH_SESSION_ID', 'CLAUDE_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'CODEX_THREAD_ID', 'HOOK_SESSION_ID', 'CURSOR_TRACE_ID']) {
+  for (const k of [
+    'DSH_SESSION_ID',
+    'CLAUDE_SESSION_ID',
+    'CLAUDE_CODE_SESSION_ID',
+    'CODEX_THREAD_ID',
+    'HOOK_SESSION_ID',
+    'CURSOR_TRACE_ID',
+  ]) {
     delete env[k];
   }
   env.CAWS_SESSION_ID = id;
@@ -169,7 +178,10 @@ describe('AUTH-BINDING-BRIDGE-001 command surface', () => {
     fs.mkdirSync(wtPath, { recursive: true });
     writeRegistry(cawsDir, {
       'wt-held': {
-        branch: 'wt-held', baseBranch: 'main', specId: 'BR-902', path: wtPath,
+        branch: 'wt-held',
+        baseBranch: 'main',
+        specId: 'BR-902',
+        path: wtPath,
         owner: { session_id: 'owner-w', platform: 'claude-code' },
       },
     });
@@ -235,8 +247,15 @@ describe('AUTH-BINDING-BRIDGE-001 command surface', () => {
     // closed flip is schema-invalid and loadSpecs drops it).
     writeSpec(cawsDir, 'BR-906', 'active', ['src/**']);
     const specFile906 = path.join(cawsDir, 'specs', 'BR-906.yaml');
-    fs.writeFileSync(specFile906, fs.readFileSync(specFile906, 'utf8')
-      .replace('lifecycle_state: active', "lifecycle_state: closed\nresolution: abandoned\nclosure_notes: 'fixture: closed at birth for the bridge refusal test'"));
+    fs.writeFileSync(
+      specFile906,
+      fs
+        .readFileSync(specFile906, 'utf8')
+        .replace(
+          'lifecycle_state: active',
+          "lifecycle_state: closed\nresolution: abandoned\nclosure_notes: 'fixture: closed at birth for the bridge refusal test'"
+        )
+    );
     writeSpec(cawsDir, 'BR-907', 'active', ['lib/**']);
     expect(claim(root, { spec: 'BR-907', env: SESS_A }).code).toBe(0);
 
@@ -249,17 +268,27 @@ describe('AUTH-BINDING-BRIDGE-001 command surface', () => {
     // (Retire is read-side — we flip the YAML lifecycle directly in the
     // fixture to represent a later spec close by another lane.)
     const specFile = path.join(cawsDir, 'specs', 'BR-907.yaml');
-    fs.writeFileSync(specFile, fs.readFileSync(specFile, 'utf8').replace('lifecycle_state: active', 'lifecycle_state: closed'));
+    fs.writeFileSync(
+      specFile,
+      fs
+        .readFileSync(specFile, 'utf8')
+        .replace('lifecycle_state: active', 'lifecycle_state: closed')
+    );
     const stale = scopeShow(root, 'lib/foo.ts', SESS_A);
     expect(stale.json.decision).toBe('no_authority'); // retired = no authority
 
     // Prune lists the ghost; --apply removes it; no events.
-    const eventsBefore = countEvents(cawsDir, 'claim_released') + countEvents(cawsDir, 'claim_bridged');
+    const eventsBefore =
+      countEvents(cawsDir, 'claim_released') + countEvents(cawsDir, 'claim_bridged');
     const dry = (() => {
-      const out = []; const err = [];
+      const out = [];
+      const err = [];
       const code = runWorktreePruneCommand({
         env: SESS_A,
-        cwd: root, out: (l) => out.push(l), err: (l) => err.push(l), showData: false,
+        cwd: root,
+        out: (l) => out.push(l),
+        err: (l) => err.push(l),
+        showData: false,
       });
       return { code, text: out.join('\n') };
     })();
@@ -269,16 +298,22 @@ describe('AUTH-BINDING-BRIDGE-001 command surface', () => {
     expect(readBridges(cawsDir)['BR-907']).toBeDefined(); // untouched
 
     const applied = (() => {
-      const out = []; const err = [];
+      const out = [];
+      const err = [];
       const code = runWorktreePruneCommand({
         env: SESS_A,
-        cwd: root, apply: true, out: (l) => out.push(l), err: (l) => err.push(l), showData: false,
+        cwd: root,
+        apply: true,
+        out: (l) => out.push(l),
+        err: (l) => err.push(l),
+        showData: false,
       });
       return { code, text: out.join('\n') };
     })();
     expect(applied.code).toBe(0);
     expect(readBridges(cawsDir)['BR-907']).toBeUndefined();
-    const eventsAfter = countEvents(cawsDir, 'claim_released') + countEvents(cawsDir, 'claim_bridged');
+    const eventsAfter =
+      countEvents(cawsDir, 'claim_released') + countEvents(cawsDir, 'claim_bridged');
     expect(eventsAfter).toBe(eventsBefore); // eventless hygiene
   });
 
@@ -287,7 +322,8 @@ describe('AUTH-BINDING-BRIDGE-001 command surface', () => {
     writeSpec(cawsDir, 'BR-910', 'active', ['src/**']);
     expect(claim(root, { spec: 'BR-910', env: SESS_A }).code).toBe(0);
 
-    const out = []; const err = [];
+    const out = [];
+    const err = [];
     const code = runStatusCommand({
       cwd: root,
       env: SESS_A,

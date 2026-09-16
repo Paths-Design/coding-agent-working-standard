@@ -40,10 +40,7 @@ import { formatLaneCounts, type LaneDivergence } from '../../store';
 import type { ResolvedBinding } from '../binding/types';
 import type { ResolvedSession } from '../session/types';
 import { renderClaimPanel } from './claim';
-import {
-  countFindingSeverities,
-  renderFindings,
-} from './finding';
+import { countFindingSeverities, renderFindings } from './finding';
 
 export interface StatusRenderInput {
   readonly repoRoot: string;
@@ -112,8 +109,8 @@ export function renderShortStatus(input: StatusRenderInput): string {
     input.eventChainOk === undefined
       ? `${input.eventCount} events`
       : input.eventChainOk
-      ? `${input.eventCount} events chain=ok`
-      : `${input.eventCount} events chain=broken`;
+        ? `${input.eventCount} events chain=ok`
+        : `${input.eventCount} events chain=broken`;
   const activeSpecCount = lifecycle['active'] ?? 0;
   return [
     'CAWS Status (short)',
@@ -127,7 +124,9 @@ export function renderShortStatus(input: StatusRenderInput): string {
     // Absent outside a tracked worktree: a lane line with nothing to describe
     // would be noise, and a zero-filled one would be a lie.
     ...(input.lane !== undefined
-      ? [`  lane:      ${input.lane.branch} → ${input.lane.baseBranch}  ${formatLaneCounts(input.lane)}`]
+      ? [
+          `  lane:      ${input.lane.branch} → ${input.lane.baseBranch}  ${formatLaneCounts(input.lane)}`,
+        ]
       : []),
   ].join('\n');
 }
@@ -184,16 +183,10 @@ function renderLeaseRow(lease: AgentLease, selfSessionId: string | null, now: Da
   const age = formatAge(now.getTime() - Date.parse(lease.last_active));
   const branch = lease.branch ?? '-';
   const spec = lease.bound_spec_id ?? '-';
-  const wtTag =
-    lease.bound_worktree !== undefined
-      ? `wt=${lease.bound_worktree}`
-      : '';
+  const wtTag = lease.bound_worktree !== undefined ? `wt=${lease.bound_worktree}` : '';
   // LEASE-WORK-STATE-001: visibility-only annotation; absent field renders
   // nothing (no placeholder noise for leases that never declared state).
-  const stateTag =
-    lease.work_state !== undefined
-      ? `state=${lease.work_state}`
-      : '';
+  const stateTag = lease.work_state !== undefined ? `state=${lease.work_state}` : '';
   const parts = [
     lease.session_id,
     lease.platform,
@@ -237,7 +230,8 @@ function renderLaneLines(lane: LaneDivergence, worktreeName: string, lines: stri
     );
     return;
   }
-  const currency = lane.containsBase === true ? `contains ${lane.baseBranch}` : 'local refs, read just now';
+  const currency =
+    lane.containsBase === true ? `contains ${lane.baseBranch}` : 'local refs, read just now';
   lines.push(`  lane:        ${lane.branch} → ${lane.baseBranch}  ${counts}  (${currency})`);
   if (lane.containsBase === true) return;
   lines.push(
@@ -276,7 +270,7 @@ function describeBindingState(state: BindingState, _activeSpecCount: number): st
       // repair is to bind — not to go inspect N specs.
       // (Supersedes CAWS-STATUS-UNBOUND-ENFORCEMENT-CAVEAT-001's wording;
       // CAWS-SPEC-ACTIVATION-BINDS-001.)
-      return 'unbound (no write authority here — every governed path is refused for lack of a binding, not by any spec\'s scope.out; bind one to edit)';
+      return "unbound (no write authority here — every governed path is refused for lack of a binding, not by any spec's scope.out; bind one to edit)";
   }
 }
 
@@ -341,9 +335,7 @@ function renderAgentsPanel(input: StatusRenderInput, lines: string[]): void {
 function renderDoctorPanel(input: StatusRenderInput, lines: string[]): void {
   lines.push('Doctor');
   const counts = countFindingSeverities(input.doctorFindings);
-  lines.push(
-    `  Summary:   ${counts.errors}E / ${counts.warnings}W / ${counts.infos}I`
-  );
+  lines.push(`  Summary:   ${counts.errors}E / ${counts.warnings}W / ${counts.infos}I`);
   if (input.doctorFindings.length === 0) {
     lines.push('  (no findings)');
     return;
@@ -359,9 +351,7 @@ function renderDoctorPanel(input: StatusRenderInput, lines: string[]): void {
     .slice(0, cap);
   lines.push(renderFindings(top, { suppressTakeoverHints: true }));
   if (input.doctorFindings.length > cap) {
-    lines.push(
-      `  … ${input.doctorFindings.length - cap} more — run \`caws doctor\` for full list`
-    );
+    lines.push(`  … ${input.doctorFindings.length - cap} more — run \`caws doctor\` for full list`);
   }
 }
 
@@ -371,9 +361,7 @@ export function renderStatus(input: StatusRenderInput): string {
   lines.push('');
 
   const focusedPanels =
-    input.panels !== undefined && input.panels.length > 0
-      ? new Set(input.panels)
-      : null;
+    input.panels !== undefined && input.panels.length > 0 ? new Set(input.panels) : null;
   if (focusedPanels !== null) {
     const renderFocused = (panel: StatusPanel, render: () => void) => {
       if (!focusedPanels.has(panel)) return;
@@ -418,7 +406,7 @@ export function renderStatus(input: StatusRenderInput): string {
       unboundActive === 0
         ? `  in flight:   ${bound} of ${activeTotal} active bound to a worktree`
         : `  in flight:   ${bound} of ${activeTotal} active bound to a worktree; ` +
-          `${unboundActive} active with no worktree (see doctor)`
+            `${unboundActive} active with no worktree (see doctor)`
     );
   }
 
@@ -429,8 +417,8 @@ export function renderStatus(input: StatusRenderInput): string {
     input.eventChainOk === undefined
       ? `${input.eventCount} events`
       : input.eventChainOk
-      ? `${input.eventCount} events (chain OK)`
-      : `${input.eventCount} events (CHAIN BROKEN — see doctor)`;
+        ? `${input.eventCount} events (chain OK)`
+        : `${input.eventCount} events (CHAIN BROKEN — see doctor)`;
   lines.push(`  events:      ${eventLine}`);
 
   // -------- Current context --------
@@ -441,9 +429,7 @@ export function renderStatus(input: StatusRenderInput): string {
     lines.push(`  worktree:    ${input.binding.worktreeName}`);
   }
   const activeSpecCount = lifecycle['active'] ?? 0;
-  lines.push(
-    `  binding:     ${describeBindingState(input.binding.binding, activeSpecCount)}`
-  );
+  lines.push(`  binding:     ${describeBindingState(input.binding.binding, activeSpecCount)}`);
   if (input.binding.worktreeName !== undefined && input.lane !== undefined) {
     renderLaneLines(input.lane, input.binding.worktreeName, lines);
   }

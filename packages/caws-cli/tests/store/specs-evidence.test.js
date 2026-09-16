@@ -20,11 +20,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const {
-  createSpec,
-  recordSpecEvidence,
-  closeSpec,
-} = require('../../dist/store/specs-writer');
+const { createSpec, recordSpecEvidence, closeSpec } = require('../../dist/store/specs-writer');
 const { loadEvents } = require('../../dist/store/events-store');
 const { initProject } = require('../../dist/store/init-store');
 
@@ -57,13 +53,22 @@ function seedActiveSpec(caws, id, acIds) {
   const acceptance = acIds
     .map((ac) => `  - id: ${ac}\n    given: 'g'\n    when: 'w'\n    then: 't'`)
     .join('\n');
-  const r = createSpec(caws, { id, title: 'evidence fixture', mode: 'chore', riskTier: 3, actor: ACTOR });
+  const r = createSpec(caws, {
+    id,
+    title: 'evidence fixture',
+    mode: 'chore',
+    riskTier: 3,
+    actor: ACTOR,
+  });
   if (!r.ok || r.value.kind !== 'success') {
     throw new Error('seed spec failed: ' + JSON.stringify(r));
   }
   const specPath = path.join(caws, 'specs', `${id}.yaml`);
   let body = fs.readFileSync(specPath, 'utf8');
-  body = body.replace(/acceptance:[\s\S]*?non_functional:/, `acceptance:\n${acceptance}\nnon_functional:`);
+  body = body.replace(
+    /acceptance:[\s\S]*?non_functional:/,
+    `acceptance:\n${acceptance}\nnon_functional:`
+  );
   fs.writeFileSync(specPath, body);
 }
 
@@ -128,7 +133,13 @@ describe('recordSpecEvidence (CAWS-SPEC-AC-EVIDENCE-AUTHORITY-01)', () => {
       now: FIXED_NOW,
       actor: ACTOR,
     });
-    const closed = closeSpec(caws, { id: 'EV-CLOSED-001', reason: 'done', resolution: 'completed', now: FIXED_NOW, actor: ACTOR });
+    const closed = closeSpec(caws, {
+      id: 'EV-CLOSED-001',
+      reason: 'done',
+      resolution: 'completed',
+      now: FIXED_NOW,
+      actor: ACTOR,
+    });
     expect(closed.ok).toBe(true);
 
     const r = recordSpecEvidence(caws, {
@@ -203,7 +214,13 @@ describe('AC-evidence-completeness close gate — WARN MODE (CAWS-SPEC-AC-EVIDEN
   test('close PROCEEDS with a warning when a declared AC has no evidence', () => {
     const { caws } = mkRepo('close-nov-');
     seedActiveSpec(caws, 'CLOSE-NOV-001', ['A1', 'A2']);
-    const r = closeSpec(caws, { id: 'CLOSE-NOV-001', reason: 'done', resolution: 'completed', now: FIXED_NOW, actor: ACTOR });
+    const r = closeSpec(caws, {
+      id: 'CLOSE-NOV-001',
+      reason: 'done',
+      resolution: 'completed',
+      now: FIXED_NOW,
+      actor: ACTOR,
+    });
     expect(r.ok).toBe(true);
     const warnings = (r.value.kind === 'success' && r.value.warnings) || [];
     expect(warnings.join('\n')).toMatch(/acceptance criterion/);
@@ -216,9 +233,20 @@ describe('AC-evidence-completeness close gate — WARN MODE (CAWS-SPEC-AC-EVIDEN
     const { caws } = mkRepo('close-partial-');
     seedActiveSpec(caws, 'CLOSE-PART-001', ['A1', 'A2']);
     recordSpecEvidence(caws, {
-      id: 'CLOSE-PART-001', criterionId: 'A1', status: 'pass', evidenceRef: 'npm test', now: FIXED_NOW, actor: ACTOR,
+      id: 'CLOSE-PART-001',
+      criterionId: 'A1',
+      status: 'pass',
+      evidenceRef: 'npm test',
+      now: FIXED_NOW,
+      actor: ACTOR,
     });
-    const r = closeSpec(caws, { id: 'CLOSE-PART-001', reason: 'done', resolution: 'completed', now: FIXED_NOW, actor: ACTOR });
+    const r = closeSpec(caws, {
+      id: 'CLOSE-PART-001',
+      reason: 'done',
+      resolution: 'completed',
+      now: FIXED_NOW,
+      actor: ACTOR,
+    });
     expect(r.ok).toBe(true);
     const warnings = (r.value.kind === 'success' && r.value.warnings) || [];
     expect(warnings.join('\n')).toContain('A2');
@@ -228,10 +256,22 @@ describe('AC-evidence-completeness close gate — WARN MODE (CAWS-SPEC-AC-EVIDEN
   test('close ADMITS CLEANLY (no warning) when every AC has pass evidence', () => {
     const { caws } = mkRepo('close-pass-');
     seedActiveSpec(caws, 'CLOSE-PASS-001', ['A1', 'A2']);
-    const base = { id: 'CLOSE-PASS-001', status: 'pass', evidenceRef: 'npm test', now: FIXED_NOW, actor: ACTOR };
+    const base = {
+      id: 'CLOSE-PASS-001',
+      status: 'pass',
+      evidenceRef: 'npm test',
+      now: FIXED_NOW,
+      actor: ACTOR,
+    };
     recordSpecEvidence(caws, { ...base, criterionId: 'A1' });
     recordSpecEvidence(caws, { ...base, criterionId: 'A2' });
-    const r = closeSpec(caws, { id: 'CLOSE-PASS-001', reason: 'all ACs evidenced', resolution: 'completed', now: FIXED_NOW, actor: ACTOR });
+    const r = closeSpec(caws, {
+      id: 'CLOSE-PASS-001',
+      reason: 'all ACs evidenced',
+      resolution: 'completed',
+      now: FIXED_NOW,
+      actor: ACTOR,
+    });
     expect(r.ok).toBe(true);
     const warnings = (r.value.kind === 'success' && r.value.warnings) || [];
     expect(warnings.length).toBe(0);
@@ -241,12 +281,28 @@ describe('AC-evidence-completeness close gate — WARN MODE (CAWS-SPEC-AC-EVIDEN
     const { caws } = mkRepo('close-waiv-');
     seedActiveSpec(caws, 'CLOSE-WAIV-001', ['A1', 'A2']);
     recordSpecEvidence(caws, {
-      id: 'CLOSE-WAIV-001', criterionId: 'A1', status: 'pass', evidenceRef: 'npm test', now: FIXED_NOW, actor: ACTOR,
+      id: 'CLOSE-WAIV-001',
+      criterionId: 'A1',
+      status: 'pass',
+      evidenceRef: 'npm test',
+      now: FIXED_NOW,
+      actor: ACTOR,
     });
     recordSpecEvidence(caws, {
-      id: 'CLOSE-WAIV-001', criterionId: 'A2', status: 'waived', waiverReason: 'no automated test; manually verified', now: FIXED_NOW, actor: ACTOR,
+      id: 'CLOSE-WAIV-001',
+      criterionId: 'A2',
+      status: 'waived',
+      waiverReason: 'no automated test; manually verified',
+      now: FIXED_NOW,
+      actor: ACTOR,
     });
-    const r = closeSpec(caws, { id: 'CLOSE-WAIV-001', reason: 'A1 evidenced; A2 waived', resolution: 'completed', now: FIXED_NOW, actor: ACTOR });
+    const r = closeSpec(caws, {
+      id: 'CLOSE-WAIV-001',
+      reason: 'A1 evidenced; A2 waived',
+      resolution: 'completed',
+      now: FIXED_NOW,
+      actor: ACTOR,
+    });
     expect(r.ok).toBe(true);
     const warnings = (r.value.kind === 'success' && r.value.warnings) || [];
     expect(warnings.length).toBe(0);
@@ -256,9 +312,20 @@ describe('AC-evidence-completeness close gate — WARN MODE (CAWS-SPEC-AC-EVIDEN
     const { caws } = mkRepo('close-fail-');
     seedActiveSpec(caws, 'CLOSE-FAIL-001', ['A1']);
     recordSpecEvidence(caws, {
-      id: 'CLOSE-FAIL-001', criterionId: 'A1', status: 'fail', evidenceRef: 'npm test', now: FIXED_NOW, actor: ACTOR,
+      id: 'CLOSE-FAIL-001',
+      criterionId: 'A1',
+      status: 'fail',
+      evidenceRef: 'npm test',
+      now: FIXED_NOW,
+      actor: ACTOR,
     });
-    const r = closeSpec(caws, { id: 'CLOSE-FAIL-001', reason: 'done', resolution: 'completed', now: FIXED_NOW, actor: ACTOR });
+    const r = closeSpec(caws, {
+      id: 'CLOSE-FAIL-001',
+      reason: 'done',
+      resolution: 'completed',
+      now: FIXED_NOW,
+      actor: ACTOR,
+    });
     expect(r.ok).toBe(true);
     const warnings = (r.value.kind === 'success' && r.value.warnings) || [];
     expect(warnings.join('\n')).toContain('A1');

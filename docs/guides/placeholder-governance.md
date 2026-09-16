@@ -1,28 +1,29 @@
 # Placeholder Governance System
 
-> **Historical — the package this doc describes is deleted (2026-08-19).**
-> Every code example below imports from `@paths.design/caws-types`
-> (`AgentEnvelope`, `validatePlaceholderGovernance`,
-> `passesPlaceholderGovernance`, `assertNoBlockingPlaceholders`,
-> `calculateDebtScore`, `DEFAULT_PLACEHOLDER_CONFIG`,
-> `PlaceholderGovernanceConfig`). `packages/caws-types` was deleted in
-> `CAWS-ABSORB-KERNEL-01` — it has no `src/` or `package.json` and is
-> untracked by git; what's on disk is stale `dist/` build output. This doc
-> also describes a "placeholder governance gate" running as part of
-> `caws gates run`; the current gate set (`caws gates list`) is exactly
-> `budget_limit`, `spec_completeness`, `scope_boundary`, `god_object`,
-> `todo_detection` — there is no placeholder-governance gate. The closest
-> live equivalent for "no fake implementations / no silent placeholders" is
-> the edit-time `.caws/hooks/shortcut-language-check.sh` hook plus the
-> `todo_detection` gate, neither of which implements the envelope/schema
-> model documented below. Kept as a historical design record, not a current
-> reference.
+> **Historical — the package this doc describes is deleted (2026-08-19).** Every
+> code example below imports from `@paths.design/caws-types` (`AgentEnvelope`,
+> `validatePlaceholderGovernance`, `passesPlaceholderGovernance`,
+> `assertNoBlockingPlaceholders`, `calculateDebtScore`,
+> `DEFAULT_PLACEHOLDER_CONFIG`, `PlaceholderGovernanceConfig`).
+> `packages/caws-types` was deleted in `CAWS-ABSORB-KERNEL-01` — it has no
+> `src/` or `package.json` and is untracked by git; what's on disk is stale
+> `dist/` build output. This doc also describes a "placeholder governance gate"
+> running as part of `caws gates run`; the current gate set (`caws gates list`)
+> is exactly `budget_limit`, `spec_completeness`, `scope_boundary`,
+> `god_object`, `todo_detection` — there is no placeholder-governance gate. The
+> closest live equivalent for "no fake implementations / no silent placeholders"
+> is the edit-time `.caws/hooks/shortcut-language-check.sh` hook plus the
+> `todo_detection` gate, neither of which implements the envelope/schema model
+> documented below. Kept as a historical design record, not a current reference.
 
-**Explicit, bounded placeholder degradations with "no-surprises" contract enforcement.**
+**Explicit, bounded placeholder degradations with "no-surprises" contract
+enforcement.**
 
 ## Overview
 
-The placeholder governance system ensures that when agents must degrade output due to token budgets, missing dependencies, or time constraints, those degradations are:
+The placeholder governance system ensures that when agents must degrade output
+due to token budgets, missing dependencies, or time constraints, those
+degradations are:
 
 1. **Explicit** - Declared with full metadata
 2. **Bounded** - Scoped to specific sections
@@ -32,10 +33,12 @@ The placeholder governance system ensures that when agents must degrade output d
 ## Operating Principle
 
 **No Silent Placeholders.** Any elision must be:
+
 - (a) Declared
 - (b) Scoped
 - (c) Justified
-- (d) Paired with a concrete fallback that still satisfies the caller's acceptance
+- (d) Paired with a concrete fallback that still satisfies the caller's
+  acceptance
 
 ## When Placeholders Are Legitimate
 
@@ -44,9 +47,11 @@ Placeholders are acceptable when:
 - **Token/latency ceilings**: Must hit a fixed token budget or timebox
 - **Unavailable dependencies**: Missing library (e.g., `onnxruntime` for 3.14)
 - **Redaction/PII**: Information must be obscured
-- **Non-critical expansion**: Long narrative or examples that exceed target length
+- **Non-critical expansion**: Long narrative or examples that exceed target
+  length
 
 Placeholders are **not acceptable** for:
+
 - Required acceptance criteria (schema validity, executable code regions)
 - Safety disclaimers
 - Citations promised in spec
@@ -96,35 +101,43 @@ For prose responses (not JSON), encode the same data tersely:
 ```markdown
 ## Degradations
 
-- **[examples]** (token_budget): replaced with 3 summary bullets; see `PH-001` (non_blocking)
-- **[citations]** (timebox): citation keys included, quotes deferred; see `PH-002` (partial)
+- **[examples]** (token_budget): replaced with 3 summary bullets; see `PH-001`
+  (non_blocking)
+- **[citations]** (timebox): citation keys included, quotes deferred; see
+  `PH-002` (partial)
 ```
 
 ## Acceptance Gates
 
 ### Gate P0 - Schema Validity
 
-**Requirement**: Output must be syntactically valid (JSON, code compiles, doc builds) even if degraded.
+**Requirement**: Output must be syntactically valid (JSON, code compiles, doc
+builds) even if degraded.
 
 **Validation**:
+
 - All required fields present (`id`, `scope`, `reason`, `impact`, `fallback`)
 - Valid enum values for `impact` and `reason`
 - Proper structure
 
 ### Gate P1 - Placeholder Registry
 
-**Requirement**: If any placeholders exist, `status=degraded` and `placeholders[].impact != blocks_acceptance`.
+**Requirement**: If any placeholders exist, `status=degraded` and
+`placeholders[].impact != blocks_acceptance`.
 
 **Validation**:
+
 - If placeholders exist → status must be "degraded"
 - If status is "degraded" → placeholders array must exist
 - No placeholders with `impact="blocks_acceptance"`
 
 ### Gate P2 - Debt Budget
 
-**Requirement**: Max `N` open placeholders per artifact and total debt score ≤ threshold.
+**Requirement**: Max `N` open placeholders per artifact and total debt score ≤
+threshold.
 
 **Limits**:
+
 - Documents: ≤2 placeholders
 - Code files: ≤1 placeholder
 - JSON/config: ≤1 placeholder
@@ -132,6 +145,7 @@ For prose responses (not JSON), encode the same data tersely:
 - Tests: ≤1 placeholder
 
 **Debt Score Calculation**:
+
 - `non_blocking`: weight 1
 - `partial`: weight 3
 - `blocks_acceptance`: weight 10 (not allowed)
@@ -140,19 +154,24 @@ For prose responses (not JSON), encode the same data tersely:
 
 ### Gate P3 - No Dangling Promises
 
-**Requirement**: Reject if text includes "TODO", "TBD", "later", "see above" without matching placeholder entry.
+**Requirement**: Reject if text includes "TODO", "TBD", "later", "see above"
+without matching placeholder entry.
 
 **Patterns Detected**:
+
 - `TODO`, `TBD`, `later`, `see above`
 - `coming soon`, `will be implemented`, `to be added`
 
-**Exception**: If promise text appears in a placeholder's `debt_note` or near a placeholder ID reference, it's allowed.
+**Exception**: If promise text appears in a placeholder's `debt_note` or near a
+placeholder ID reference, it's allowed.
 
 ### Gate P4 - Safety/Attribution Non-Degradable
 
-**Requirement**: If acceptance includes "citations present" or "license headers present," placeholders are disallowed in that scope.
+**Requirement**: If acceptance includes "citations present" or "license headers
+present," placeholders are disallowed in that scope.
 
 **Non-degradable scopes**:
+
 - `code_region` - Critical code sections
 - `implementation` - Business logic implementation
 
@@ -187,7 +206,7 @@ const envelope: AgentEnvelope = {
 
 // Validate all gates
 const results = validatePlaceholderGovernance(envelope);
-const allPass = results.every((r) => r.passed);
+const allPass = results.every(r => r.passed);
 
 // Quick check
 if (passesPlaceholderGovernance(envelope)) {
@@ -201,15 +220,21 @@ assertNoBlockingPlaceholders(envelope); // Throws if blocking found
 ### Debt Score Calculation
 
 ```typescript
-import { calculateDebtScore, DEFAULT_PLACEHOLDER_CONFIG } from '@paths.design/caws-types';
+import {
+  calculateDebtScore,
+  DEFAULT_PLACEHOLDER_CONFIG,
+} from '@paths.design/caws-types';
 
 const debtScore = calculateDebtScore(envelope.placeholders || []);
-console.log(`Debt score: ${debtScore.total}/${DEFAULT_PLACEHOLDER_CONFIG.maxDebtScore}`);
+console.log(
+  `Debt score: ${debtScore.total}/${DEFAULT_PLACEHOLDER_CONFIG.maxDebtScore}`
+);
 ```
 
 ## Quality Gates Integration
 
-The placeholder governance gate runs automatically as part of CAWS quality gates:
+The placeholder governance gate runs automatically as part of CAWS quality
+gates:
 
 ```bash
 # Run all gates for a spec (policy-driven; gate selection from .caws/policy.yaml)
@@ -219,7 +244,9 @@ caws gates run --spec <id>
 caws gates run --spec <id> --context commit
 ```
 
-There is no `--gates=placeholders` filter flag. Gate selection is entirely policy-driven: enable or disable the placeholder gate by setting its `mode` in `.caws/policy.yaml` (`block`, `warn`, or `skip`).
+There is no `--gates=placeholders` filter flag. Gate selection is entirely
+policy-driven: enable or disable the placeholder gate by setting its `mode` in
+`.caws/policy.yaml` (`block`, `warn`, or `skip`).
 
 ### Gate Output
 
@@ -235,7 +262,7 @@ Checking placeholder governance...
     Enforcement level: BLOCK
    1 placeholder governance findings (block mode)
    ❌ BLOCKING VIOLATIONS (1) - COMMIT BLOCKED:
-   
+
 PLACEHOLDERS: BLOCKING_PLACEHOLDERS
    Found 1 placeholder(s) that block acceptance criteria
    File: docs/guide.md
@@ -247,19 +274,28 @@ PLACEHOLDERS: BLOCKING_PLACEHOLDERS
 
 Embed these constraints into agent system prompts:
 
-1. **Constraint**: If you can't deliver a required section within budget, *shrink fidelity* before eliding. Prefer compression (bullets, tables) over omission.
+1. **Constraint**: If you can't deliver a required section within budget,
+   _shrink fidelity_ before eliding. Prefer compression (bullets, tables) over
+   omission.
 
-2. **Constraint**: If you *must* omit, emit a **single** concise placeholder object per omitted scope; do not scatter ambiguous TODOs.
+2. **Constraint**: If you _must_ omit, emit a **single** concise placeholder
+   object per omitted scope; do not scatter ambiguous TODOs.
 
-3. **Constraint**: Provide an immediate **fallback** that preserves acceptance (e.g., "3 bullets summarizing the missing case study").
+3. **Constraint**: Provide an immediate **fallback** that preserves acceptance
+   (e.g., "3 bullets summarizing the missing case study").
 
-4. **Constraint**: Never placeholder critical sections: APIs, types, JSON keys, error handling, a11y notes, license/citation blocks.
+4. **Constraint**: Never placeholder critical sections: APIs, types, JSON keys,
+   error handling, a11y notes, license/citation blocks.
 
-5. **Output pattern**: Close with a **Degradations** section listing each placeholder in one line: `[scope] reason → fallback (impact)`.
+5. **Output pattern**: Close with a **Degradations** section listing each
+   placeholder in one line: `[scope] reason → fallback (impact)`.
 
 ### Minimal System Prompt Addition
 
-> If constrained by token/time, first convert rich text to compressed bullets; if still over budget, replace only non-critical sections with explicit placeholders including scope, reason, and fallback. Do not leave silent omissions. Never placeholder acceptance-critical items.
+> If constrained by token/time, first convert rich text to compressed bullets;
+> if still over budget, replace only non-critical sections with explicit
+> placeholders including scope, reason, and fallback. Do not leave silent
+> omissions. Never placeholder acceptance-critical items.
 
 ## Examples
 
@@ -270,14 +306,14 @@ Embed these constraints into agent system prompts:
 
 ... concise rules ...
 
-*Degradations:*
-• **Examples** (token_budget): replaced with 3 summary bullets; see `PH-001` (non_blocking).
+_Degradations:_ • **Examples** (token_budget): replaced with 3 summary bullets;
+see `PH-001` (non_blocking).
 ```
 
 ### Poor (Documentation)
 
 ```markdown
-"We'll fill in examples later."  ← No scope, no reason, no fallback.
+"We'll fill in examples later." ← No scope, no reason, no fallback.
 ```
 
 ### Good (Code)
@@ -287,8 +323,8 @@ export function parseConfig(src: string): Config {
   // Placeholder PH-002 (token_budget): strict schema validation replaced with basic shape check.
   // Fallback preserves runtime safety: unknown fields are rejected.
   const obj = JSON.parse(src);
-  if (!obj || typeof obj !== "object" || typeof obj.env !== "string") {
-    throw new Error("Invalid Config");
+  if (!obj || typeof obj !== 'object' || typeof obj.env !== 'string') {
+    throw new Error('Invalid Config');
   }
   // TODO(debt PH-002): add zod schema with defaults & unions by 2025-11-13
   return obj as Config;
@@ -306,12 +342,14 @@ return JSON.parse(src);
 
 ### Risk Tiering
 
-- **Tier 1**: Placeholders forbidden unless waiver cites ID, owner, expiry, and acceptance impact
+- **Tier 1**: Placeholders forbidden unless waiver cites ID, owner, expiry, and
+  acceptance impact
 - **Tier 2/3**: Placeholders allowed within debt budget limits
 
 ### Debt Ledger
 
-Aggregate `placeholders[].impact` into a numeric *debt score* surfaced in report cards; require a burn-down before promotion to release.
+Aggregate `placeholders[].impact` into a numeric _debt score_ surfaced in report
+cards; require a burn-down before promotion to release.
 
 ### Quality Gate Commands
 
@@ -325,13 +363,14 @@ caws gates run --spec <id>
 import { validatePlaceholderGovernance } from '@paths.design/caws-types';
 ```
 
-Gate selection is policy-driven via `.caws/policy.yaml`. There is no `--gates=placeholders` flag and no `caws quality-gates` command in v11.
+Gate selection is policy-driven via `.caws/policy.yaml`. There is no
+`--gates=placeholders` flag and no `caws quality-gates` command in v11.
 
 ## Telemetry & UX
 
 ### Section-Level Token Attribution
 
-Log *where* budgets are blown (section-level token attribution):
+Log _where_ budgets are blown (section-level token attribution):
 
 ```typescript
 telemetry: {
@@ -350,6 +389,7 @@ Predict tokens for planned outline before generation; down-scale early.
 ### Auto-Offer Compression Choices
 
 For interactive runs, offer choices:
+
 - "Keep examples, drop citations?"
 - "Keep citations, compress examples?"
 
@@ -362,7 +402,7 @@ import { PlaceholderGovernanceConfig } from '@paths.design/caws-types';
 
 const customConfig: PlaceholderGovernanceConfig = {
   maxPlaceholdersPerArtifact: {
-    doc: 3,  // Allow more in docs
+    doc: 3, // Allow more in docs
     code: 0, // Forbid in code
     // ...
   },
@@ -374,11 +414,19 @@ const customConfig: PlaceholderGovernanceConfig = {
   },
   allowTier1Placeholders: false,
   nonDegradableScopes: ['code_region', 'implementation', 'tests'],
-  requiredPlaceholderFields: ['id', 'scope', 'reason', 'impact', 'fallback', 'expiry'],
+  requiredPlaceholderFields: [
+    'id',
+    'scope',
+    'reason',
+    'impact',
+    'fallback',
+    'expiry',
+  ],
 };
 ```
 
 ## Bottom Line
 
-Keep placeholders, but make them contractual: explicit, scoped, justified, and paired with a safe fallback. Enforce the contract in CI and prompts, and you'll preserve trust *and* velocity even under tight budgets.
-
+Keep placeholders, but make them contractual: explicit, scoped, justified, and
+paired with a safe fallback. Enforce the contract in CI and prompts, and you'll
+preserve trust _and_ velocity even under tight budgets.

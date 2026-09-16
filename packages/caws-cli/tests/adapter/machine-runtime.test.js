@@ -49,7 +49,13 @@ function repository(name, handlers) {
   return repo;
 }
 
-function invoke(home, repo, session = 'machine-runtime-test', event = 'pre_tool_use', extraEnv = {}) {
+function invoke(
+  home,
+  repo,
+  session = 'machine-runtime-test',
+  event = 'pre_tool_use',
+  extraEnv = {}
+) {
   return spawnSync('python3', [path.join(home, 'bin/caws-hook'), 'codex', event], {
     cwd: repo,
     encoding: 'utf8',
@@ -66,8 +72,10 @@ test('two same-priority advisory handlers survive as one bounded adapter result'
   const home = path.join(root, 'home');
   installMachineRuntime({ home, templatesRoot });
   const repo = repository('composed-advisories', {
-    'first.sh': 'echo \'{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"first advisory"}}\'\n',
-    'second.sh': 'echo \'{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"second advisory"}}\'\n',
+    'first.sh':
+      'echo \'{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"first advisory"}}\'\n',
+    'second.sh':
+      'echo \'{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"second advisory"}}\'\n',
   });
   const result = invoke(home, repo);
   expect(result.status).toBe(0);
@@ -105,9 +113,11 @@ test('malformed and over-budget optional advisories are omitted without acquirin
   const home = path.join(root, 'home');
   installMachineRuntime({ home, templatesRoot });
   const repo = repository('bounded-advisories', {
-    'valid.sh': 'echo \'{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"kept"}}\'\n',
+    'valid.sh':
+      'echo \'{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"kept"}}\'\n',
     'malformed.sh': 'echo \'{"hookSpecificOutput":{"additionalContext":7}}\'\n',
-    'large.sh': 'echo \'{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"this card is too large"}}\'\n',
+    'large.sh':
+      'echo \'{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"this card is too large"}}\'\n',
   });
   const result = invoke(home, repo, 'machine-runtime-test', 'pre_tool_use', {
     CAWS_HOOK_ADVISORY_BUDGET_BYTES: '8',
@@ -124,8 +134,10 @@ test('advisory composition preserves an independently owned input rewrite', () =
   const home = path.join(root, 'home');
   installMachineRuntime({ home, templatesRoot });
   const repo = repository('rewrite-and-advisory', {
-    'advice.sh': 'echo \'{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"context survives"}}\'\n',
-    'rewrite.sh': 'echo \'{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"file_path":"safe.ts"}}}\'\n',
+    'advice.sh':
+      'echo \'{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"context survives"}}\'\n',
+    'rewrite.sh':
+      'echo \'{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"file_path":"safe.ts"}}}\'\n',
   });
   const result = invoke(home, repo);
   expect(result.status).toBe(0);
@@ -138,7 +150,8 @@ test('a block remains authoritative when an earlier advisory exists', () => {
   const home = path.join(root, 'home');
   installMachineRuntime({ home, templatesRoot });
   const repo = repository('block-and-advisory', {
-    'advice.sh': 'echo \'{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"optional"}}\'\n',
+    'advice.sh':
+      'echo \'{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"optional"}}\'\n',
     'block.sh': 'echo \'{"decision":"block","reason":"still denied"}\'\nexit 2\n',
   });
   const result = invoke(home, repo);
@@ -151,7 +164,9 @@ test('the adapter settles selected offers at handoff and releases omitted member
   installMachineRuntime({ home, templatesRoot });
   const settlementLog = path.join(root, 'settlements.log');
   const fakeCaws = path.join(root, 'fake-caws.sh');
-  fs.writeFileSync(fakeCaws, '#!/bin/bash\nprintf \'%s\\n\' "$*" >> "$SETTLEMENT_LOG"\n', { mode: 0o755 });
+  fs.writeFileSync(fakeCaws, '#!/bin/bash\nprintf \'%s\\n\' "$*" >> "$SETTLEMENT_LOG"\n', {
+    mode: 0o755,
+  });
   const offer = (id, context) =>
     `printf '%s\\n' '{"id":"${id}","recipient":"machine-runtime-test"}' > "$CAWS_HANDLER_OFFER_FILE"\n` +
     `printf '%s\\n' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"${context}"}}'\n`;
@@ -180,7 +195,9 @@ test('a later hard block releases an earlier selected offer', () => {
   installMachineRuntime({ home, templatesRoot });
   const settlementLog = path.join(root, 'blocked-settlements.log');
   const fakeCaws = path.join(root, 'fake-caws-block.sh');
-  fs.writeFileSync(fakeCaws, '#!/bin/bash\nprintf \'%s\\n\' "$*" >> "$SETTLEMENT_LOG"\n', { mode: 0o755 });
+  fs.writeFileSync(fakeCaws, '#!/bin/bash\nprintf \'%s\\n\' "$*" >> "$SETTLEMENT_LOG"\n', {
+    mode: 0o755,
+  });
   const repo = repository('blocked-offer', {
     'advice.sh':
       'printf \'%s\\n\' \'{"id":"offer-before-block","recipient":"machine-runtime-test"}\' > "$CAWS_HANDLER_OFFER_FILE"\n' +
@@ -202,7 +219,8 @@ test('a budget-omitted heartbeat message retries and delivers on the next adapte
   installMachineRuntime({ home, templatesRoot });
   const repo = repository('real-message-retry', {
     'agent-heartbeat.sh': 'exit 99\n',
-    'other.sh': 'echo \'{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"kept"}}\'\n',
+    'other.sh':
+      'echo \'{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"kept"}}\'\n',
   });
   fs.copyFileSync(
     path.join(templatesRoot, 'shared', 'agent-heartbeat.sh'),
@@ -223,9 +241,11 @@ test('a budget-omitted heartbeat message retries and delivers on the next adapte
     `#!/bin/bash\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(cli)} "$@"\n`,
     { mode: 0o755 }
   );
-  const registered = spawnSync(cawsBin, [
-    'agents', 'register', '--session-id', 'machine-runtime-test', '--platform', 'codex', '--json',
-  ], { cwd: repo, encoding: 'utf8' });
+  const registered = spawnSync(
+    cawsBin,
+    ['agents', 'register', '--session-id', 'machine-runtime-test', '--platform', 'codex', '--json'],
+    { cwd: repo, encoding: 'utf8' }
+  );
   expect(registered.status).toBe(0);
   const message = {
     record: 'message',
@@ -267,7 +287,9 @@ test('a budget-omitted heartbeat message retries and delivers on the next adapte
   // message must not be re-surfaced -- so an absent context satisfies it.
   expect(after.stdout).not.toContain(message.text);
   if (after.stdout.trim()) {
-    expect(JSON.parse(after.stdout).hookSpecificOutput.additionalContext ?? '').not.toContain(message.text);
+    expect(JSON.parse(after.stdout).hookSpecificOutput.additionalContext ?? '').not.toContain(
+      message.text
+    );
   }
 });
 
@@ -284,7 +306,10 @@ test('a settlement interruption remains uncertain and retries after offer expiry
   fs.chmodSync(path.join(repo, '.caws/hooks/agent-heartbeat.sh'), 0o755);
   fs.mkdirSync(path.join(repo, '.caws/hooks/lib'), { recursive: true });
   for (const name of ['parse-input.sh', 'agent-surface.sh']) {
-    fs.copyFileSync(path.join(templatesRoot, 'shared/lib', name), path.join(repo, '.caws/hooks/lib', name));
+    fs.copyFileSync(
+      path.join(templatesRoot, 'shared/lib', name),
+      path.join(repo, '.caws/hooks/lib', name)
+    );
   }
   const cli = path.resolve(__dirname, '../../dist/index.js');
   const failedOnce = path.join(root, 'settlement-failed-once');
@@ -300,14 +325,29 @@ test('a settlement interruption remains uncertain and retries after offer expiry
       `exec ${JSON.stringify(process.execPath)} ${JSON.stringify(cli)} "$@"\n`,
     { mode: 0o755 }
   );
-  expect(spawnSync(cawsBin, [
-    'agents', 'register', '--session-id', 'machine-runtime-test', '--platform', 'codex', '--json',
-  ], { cwd: repo, encoding: 'utf8', env: { ...process.env, FAIL_ONCE_FILE: failedOnce } }).status).toBe(0);
+  expect(
+    spawnSync(
+      cawsBin,
+      [
+        'agents',
+        'register',
+        '--session-id',
+        'machine-runtime-test',
+        '--platform',
+        'codex',
+        '--json',
+      ],
+      { cwd: repo, encoding: 'utf8', env: { ...process.env, FAIL_ONCE_FILE: failedOnce } }
+    ).status
+  ).toBe(0);
   const message = {
-    record: 'message', id: 'interrupted-message',
+    record: 'message',
+    id: 'interrupted-message',
     actor: { kind: 'agent', id: 'sender', session_id: 'sender' },
-    to: 'machine-runtime-test', channel: 'machine-runtime-test::sender',
-    text: 'RETRY AFTER SETTLEMENT INTERRUPTION', ts: new Date().toISOString(),
+    to: 'machine-runtime-test',
+    channel: 'machine-runtime-test::sender',
+    text: 'RETRY AFTER SETTLEMENT INTERRUPTION',
+    ts: new Date().toISOString(),
   };
   fs.writeFileSync(path.join(repo, '.caws/messages.jsonl'), JSON.stringify(message) + '\n');
   const env = {
@@ -322,8 +362,12 @@ test('a settlement interruption remains uncertain and retries after offer expiry
   expect(uncertain.stderr).toContain('deferred to expiry');
   expect(getMessageDeliveryState(path.join(repo, '.caws'), message.id).value.delivered).toBe(false);
 
-  const firstOffer = fs.readFileSync(path.join(repo, '.caws/messages.jsonl'), 'utf8')
-    .trim().split('\n').map((line) => JSON.parse(line)).find((line) => line.record === 'offer');
+  const firstOffer = fs
+    .readFileSync(path.join(repo, '.caws/messages.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line))
+    .find((line) => line.record === 'offer');
   const waitMs = Math.max(0, Date.parse(firstOffer.expires_at) - Date.now() + 25);
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, waitMs);
   const retried = invoke(home, repo, 'machine-runtime-test', 'pre_tool_use', env);

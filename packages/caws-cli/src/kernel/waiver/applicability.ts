@@ -47,9 +47,7 @@ export interface EffectiveWaiversInput {
  * waivering belongs to a later slice; doing it half-way here would lead
  * to silent over- or under-application.
  */
-export function effectiveWaiversForGate(
-  input: EffectiveWaiversInput
-): readonly Waiver[] {
+export function effectiveWaiversForGate(input: EffectiveWaiversInput): readonly Waiver[] {
   const out: Waiver[] = [];
   for (const w of input.waivers) {
     if (waiverEffectiveness(w, input.now) !== 'active') continue;

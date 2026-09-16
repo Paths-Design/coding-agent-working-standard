@@ -19,8 +19,8 @@ per-vendor adapters, replacing the prior per-agent-surface duplication.
 `CAWS-SYSTEM-RUNTIME-001` makes `~/.caws` the executable distribution home.
 `CAWS_HOME` can select another absolute path. The runtime contains stock guards,
 helpers, dispatchers, session renderers and harness adapters. Project governance
-(specs, scope, claims, policy, events) stays in canonical project `.caws/` state.
-Installing code confers no project authority.
+(specs, scope, claims, policy, events) stays in canonical project `.caws/`
+state. Installing code confers no project authority.
 
 ```
 ~/.caws/
@@ -39,21 +39,23 @@ Installing code confers no project authority.
 change selects the new guard AND renderer code in every migrated project. The
 stable bootstrap pins its selected digest in-process; concurrent updates cannot
 mix two snapshots. Verification rejects modified bytes and symlink escapes.
-Installation uses a lock; `--plan` writes nothing. Runtime versions remain useful
-for diagnosis, but no project pack upgrade is required to receive new stock code.
+Installation uses a lock; `--plan` writes nothing. Runtime versions remain
+useful for diagnosis, but no project pack upgrade is required to receive new
+stock code.
 
-`caws init adapters configure --agent-surface codex` registers the stable transport
-in the harness USER configuration. Codex uses `~/.codex/hooks.json`; registration
-and persisted native trust are distinct. User and project hooks are additive, so
-old project registrations must be retired once. The user transport carries an
-explicit `--system` mode and defers to a still-registered project CAWS chain.
-Cached adapter-only project entries continue working during the transition;
-after retirement they resolve the new machine settings. The centrally orchestrated
-`adapters migrate --projects-root <directory>` operation provides that migration;
-it never executes project shell while planning. Unrelated native hooks survive,
-exact bytes are backed up before mutation, and concurrent edits are not overwritten
-during application or rollback. An interrupted transaction leaves a visible lock
-and its before/after manifest for recovery.
+`caws init adapters configure --agent-surface codex` registers the stable
+transport in the harness USER configuration. Codex uses `~/.codex/hooks.json`;
+registration and persisted native trust are distinct. User and project hooks are
+additive, so old project registrations must be retired once. The user transport
+carries an explicit `--system` mode and defers to a still-registered project
+CAWS chain. Cached adapter-only project entries continue working during the
+transition; after retirement they resolve the new machine settings. The
+centrally orchestrated `adapters migrate --projects-root <directory>` operation
+provides that migration; it never executes project shell while planning.
+Unrelated native hooks survive, exact bytes are backed up before mutation, and
+concurrent edits are not overwritten during application or rollback. An
+interrupted transaction leaves a visible lock and its before/after manifest for
+recovery.
 
 Machine project settings contain only `disabled`, `extensions`, `handlers` and
 `libraries` maps per surface. They do not freeze the stock handler array. Stock
@@ -61,8 +63,9 @@ order is read from the selected snapshot each time; new stock handlers therefore
 reach existing projects. Extensions name an insertion anchor. A removed or
 explicitly disabled anchor fails visibly rather than silently moving a guard.
 Custom stock handler overrides remain explicitly local and require maintenance.
-Unknown local helper or dispatcher growth requires reviewed reconciliation before
-migration; executable copies are preserved even after their registration retires.
+Unknown local helper or dispatcher growth requires reviewed reconciliation
+before migration; executable copies are preserved even after their registration
+retires.
 
 New projects created by `caws init` on a configured system surface receive
 canonical governance state without local hook scripts or local native wiring.
@@ -72,40 +75,43 @@ no registered native chain fail visibly instead of silently discarding custom
 behavior. Legacy governance migration is a separate operation. Non-CAWS
 locations are quiet when the installed runtime is healthy.
 
-The execution root is the actual Git checkout; settings, extensions and governance
-resolve to its canonical root through Git's common directory. Inherited `GIT_*`
-variables cannot select another repository. Bash children preload the selected
-parser, session resolver and emitter. Project library declarations take priority
-over user adapter libraries, then packaged surface libraries, then shared defaults.
-Bootstrap libraries cannot be overridden. Explicit library entries apply at the
-`caws_source_lib` adapter seam; arbitrary directly sourced helper files require a
-reviewed handler override or an upstream fix.
+The execution root is the actual Git checkout; settings, extensions and
+governance resolve to its canonical root through Git's common directory.
+Inherited `GIT_*` variables cannot select another repository. Bash children
+preload the selected parser, session resolver and emitter. Project library
+declarations take priority over user adapter libraries, then packaged surface
+libraries, then shared defaults. Bootstrap libraries cannot be overridden.
+Explicit library entries apply at the `caws_source_lib` adapter seam; arbitrary
+directly sourced helper files require a reviewed handler override or an upstream
+fix.
 
 Codex maps exit 2 to a native refusal reason on stderr. Stop plain observations
 become a JSON `systemMessage`; structured decisions remain intact. The Codex
-`session-transcript.py` adapter translates visible rollout response items and tool
-records into the shared renderer's event model, without counting mirrored
-`event_msg` notifications twice or projecting private reasoning. Runtime dispatch
-selects the parser at machine scope. Fixture execution proves this transport;
-fresh native lifecycle/denial evidence proves activation in the installed harness.
-See the [native hook documentation](https://learn.chatgpt.com/docs/hooks).
+`session-transcript.py` adapter translates visible rollout response items and
+tool records into the shared renderer's event model, without counting mirrored
+`event_msg` notifications twice or projecting private reasoning. Runtime
+dispatch selects the parser at machine scope. Fixture execution proves this
+transport; fresh native lifecycle/denial evidence proves activation in the
+installed harness. See the
+[native hook documentation](https://learn.chatgpt.com/docs/hooks).
 
 Harness adapters belong to agents working in that harness. Shared CAWS defines
 the input/output, identity, extension and session-event contracts; the harness
-agent maintains native registration, payload normalization, emitters and transcript
-normalization. They must demonstrate native discovery/trust, SessionStart, a denied
-write whose file stays absent, Stop, and canonical/linked-root resolution. A shell
-fixture cannot establish another harness's live parity. JSON configuration helpers
-exist for Codex, Claude Code and Qwen Code; Kimi, ZCode, OpenCode and DSH require
-native registration work by their harness agents. Shipping their adapter libraries
-is not a claim of native activation.
+agent maintains native registration, payload normalization, emitters and
+transcript normalization. They must demonstrate native discovery/trust,
+SessionStart, a denied write whose file stays absent, Stop, and
+canonical/linked-root resolution. A shell fixture cannot establish another
+harness's live parity. JSON configuration helpers exist for Codex, Claude Code
+and Qwen Code; Kimi, ZCode, OpenCode and DSH require native registration work by
+their harness agents. Shipping their adapter libraries is not a claim of native
+activation.
 
 Doctor observes the selected digest, runtime integrity, explicit overrides and
-remaining project registrations. It stops prescribing pack refreshes for a system
-runtime. These are filesystem observations; native trust/execution is verified
-separately. Session-global reprieves continue to require a human grant with exact
-session/handler membership and expiry; global records shadow legacy records,
-including malformed, expired and revoked records.
+remaining project registrations. It stops prescribing pack refreshes for a
+system runtime. These are filesystem observations; native trust/execution is
+verified separately. Session-global reprieves continue to require a human grant
+with exact session/handler membership and expiry; global records shadow legacy
+records, including malformed, expired and revoked records.
 
 The earlier `adapters adopt` project-policy format remains a compatibility path.
 It moves adapter libraries only and retains project guard arrays; use system
@@ -123,8 +129,8 @@ managed header, the agent name in comments, the harness env-var name
 Consequences of the duplication:
 
 - A one-line fix to shared logic had to be applied to every tree, and the
-  version-fingerprint propagation guard forced a managed-header bump on *every*
-  file in *both* trees — a single logic change touching ~90 files.
+  version-fingerprint propagation guard forced a managed-header bump on _every_
+  file in _both_ trees — a single logic change touching ~90 files.
 - The two surfaces drifted: the codex pack ran many revisions behind the
   claude-code pack, so fixes that landed on one surface silently did not reach
   the other. Stale-copy rot accumulated (e.g. a legacy pre-managed-header
@@ -258,47 +264,51 @@ harness-specific env var directly. Harness specifics reach the shared core
 through an injected environment set by the vendor wiring at hook-invocation
 time:
 
-| Variable | Set by | Meaning |
-|----------|--------|---------|
-| `CAWS_PROJECT_DIR` | vendor wiring | absolute repo root (replaces `CLAUDE_PROJECT_DIR` / `CODEX_PROJECT_DIR` reads inside shared scripts) |
-| `CAWS_AGENT_SURFACE` | vendor wiring | the surface identity: `claude-code` \| `codex` \| ... |
+| Variable             | Set by        | Meaning                                                                                              |
+| -------------------- | ------------- | ---------------------------------------------------------------------------------------------------- |
+| `CAWS_PROJECT_DIR`   | vendor wiring | absolute repo root (replaces `CLAUDE_PROJECT_DIR` / `CODEX_PROJECT_DIR` reads inside shared scripts) |
+| `CAWS_AGENT_SURFACE` | vendor wiring | the surface identity: `claude-code` \| `codex` \| ...                                                |
 
 The shared core derives every other harness-dependent value from
 `CAWS_AGENT_SURFACE` via a single resolver in `lib/caws-state.sh` (or a small
 dedicated `lib/agent-surface.sh`):
 
-| Derived value | claude-code | codex | kimi-code | qwen-code | zcode | opencode |
-|---------------|-------------|-------|-----------|-----------|-------|----------|
-| vendor dir | `.claude` | `.codex` | `.kimi-code` | `.qwen` | `.zcode` | `.opencode` |
-| log dir | `$CAWS_PROJECT_DIR/.claude/logs` | `$CAWS_PROJECT_DIR/.codex/logs` | `$CAWS_PROJECT_DIR/.kimi-code/logs` | `$CAWS_PROJECT_DIR/.qwen/logs` | `$CAWS_PROJECT_DIR/.zcode/logs` | `$CAWS_PROJECT_DIR/.opencode/logs` |
-| `--platform` flag | `claude-code` | `codex` | `kimi-code` | `qwen-code` | `zcode` | `opencode` |
-| permission-decision vocab | `ask` supported | `ask` → `deny` (Codex has no PreToolUse `ask`) | `ask` → `deny` (Kimi's `ask` is non-blocking — verified live) | `ask` supported (interactive prompts; headless/background degrades to `deny` — verified live on 0.21.4) | `ask` → block (ZCode's hook runner has no non-blocking ask primitive) | `ask` → block (opencode's only block primitive is `throw` inside `tool.execute.before` — no PreToolUse `ask`, codex precedent) |
-| updatedInput rewrite | yes | yes | no (no documented contract; quiet-merge passes through) | no on the plain-CLI path (0.21.4 and 0.21.11 alike); the ACP/daemon surface applies it as of 0.21.11 — quiet-merge still passes through | yes, via the bridge shim re-wrapping dispatcher output | yes — `plugin.ts` mutates `output.args.command` before the tool runs |
-| non-2 non-zero hook exit | warning (max returned) | warning (max returned) | promoted to blocking exit 2 — Kimi does not enforce exit 1 (verified live) | warning (max returned) — Qwen enforces exit 2 blocking and treats exit 1 as a non-blocking error, same contract as Claude Code (verified live) | N/A — ZCode's hook runner requires strict JSON on stdout; the bridge re-wraps every shared-dispatcher exit into that contract | N/A — opencode interposition is in-process; `plugin.ts` throws directly rather than relying on a process exit code |
+| Derived value             | claude-code                      | codex                                          | kimi-code                                                                  | qwen-code                                                                                                                                      | zcode                                                                                                                         | opencode                                                                                                                       |
+| ------------------------- | -------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| vendor dir                | `.claude`                        | `.codex`                                       | `.kimi-code`                                                               | `.qwen`                                                                                                                                        | `.zcode`                                                                                                                      | `.opencode`                                                                                                                    |
+| log dir                   | `$CAWS_PROJECT_DIR/.claude/logs` | `$CAWS_PROJECT_DIR/.codex/logs`                | `$CAWS_PROJECT_DIR/.kimi-code/logs`                                        | `$CAWS_PROJECT_DIR/.qwen/logs`                                                                                                                 | `$CAWS_PROJECT_DIR/.zcode/logs`                                                                                               | `$CAWS_PROJECT_DIR/.opencode/logs`                                                                                             |
+| `--platform` flag         | `claude-code`                    | `codex`                                        | `kimi-code`                                                                | `qwen-code`                                                                                                                                    | `zcode`                                                                                                                       | `opencode`                                                                                                                     |
+| permission-decision vocab | `ask` supported                  | `ask` → `deny` (Codex has no PreToolUse `ask`) | `ask` → `deny` (Kimi's `ask` is non-blocking — verified live)              | `ask` supported (interactive prompts; headless/background degrades to `deny` — verified live on 0.21.4)                                        | `ask` → block (ZCode's hook runner has no non-blocking ask primitive)                                                         | `ask` → block (opencode's only block primitive is `throw` inside `tool.execute.before` — no PreToolUse `ask`, codex precedent) |
+| updatedInput rewrite      | yes                              | yes                                            | no (no documented contract; quiet-merge passes through)                    | no on the plain-CLI path (0.21.4 and 0.21.11 alike); the ACP/daemon surface applies it as of 0.21.11 — quiet-merge still passes through        | yes, via the bridge shim re-wrapping dispatcher output                                                                        | yes — `plugin.ts` mutates `output.args.command` before the tool runs                                                           |
+| non-2 non-zero hook exit  | warning (max returned)           | warning (max returned)                         | promoted to blocking exit 2 — Kimi does not enforce exit 1 (verified live) | warning (max returned) — Qwen enforces exit 2 blocking and treats exit 1 as a non-blocking error, same contract as Claude Code (verified live) | N/A — ZCode's hook runner requires strict JSON on stdout; the bridge re-wraps every shared-dispatcher exit into that contract | N/A — opencode interposition is in-process; `plugin.ts` throws directly rather than relying on a process exit code             |
 
 Backward-compatibility: the resolver falls back to the legacy env var
-(`CLAUDE_PROJECT_DIR` / `CODEX_PROJECT_DIR`) when `CAWS_PROJECT_DIR` is unset, so
-a not-yet-migrated wiring keeps working during the transition.
+(`CLAUDE_PROJECT_DIR` / `CODEX_PROJECT_DIR`) when `CAWS_PROJECT_DIR` is unset,
+so a not-yet-migrated wiring keeps working during the transition.
 
 ## Dispatcher resolution
 
 Vendor wiring points harness commands at the shared
-`.caws/hooks/dispatch/<event>.sh`, passing the injected env. Older installs
-used `<vendor>/hooks/caws_dispatch/<event>.sh`; current Codex wiring must not
+`.caws/hooks/dispatch/<event>.sh`, passing the injected env. Older installs used
+`<vendor>/hooks/caws_dispatch/<event>.sh`; current Codex wiring must not
 materialize that per-vendor dispatcher copy.
 
 claude-code `settings.json` (env-expansion form):
 
 ```jsonc
-{ "type": "command",
-  "command": "CAWS_AGENT_SURFACE=claude-code CAWS_PROJECT_DIR=\"$CLAUDE_PROJECT_DIR\" \"$CLAUDE_PROJECT_DIR\"/.caws/hooks/dispatch/pre_tool_use.sh" }
+{
+  "type": "command",
+  "command": "CAWS_AGENT_SURFACE=claude-code CAWS_PROJECT_DIR=\"$CLAUDE_PROJECT_DIR\" \"$CLAUDE_PROJECT_DIR\"/.caws/hooks/dispatch/pre_tool_use.sh",
+}
 ```
 
 codex `hooks.json` (runtime-root form):
 
 ```jsonc
-{ "type": "command",
-  "command": "REPO_ROOT=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)\"; CAWS_AGENT_SURFACE=codex CAWS_PROJECT_DIR=\"$REPO_ROOT\" CODEX_PROJECT_DIR=\"$REPO_ROOT\" \"$REPO_ROOT/.caws/hooks/dispatch/pre_tool_use.sh\"" }
+{
+  "type": "command",
+  "command": "REPO_ROOT=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)\"; CAWS_AGENT_SURFACE=codex CAWS_PROJECT_DIR=\"$REPO_ROOT\" CODEX_PROJECT_DIR=\"$REPO_ROOT\" \"$REPO_ROOT/.caws/hooks/dispatch/pre_tool_use.sh\"",
+}
 ```
 
 kimi-code user-level `config.toml` (shim-mediated form — the shim injects the
@@ -313,20 +323,26 @@ command = 'ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"; test -
 timeout = 45
 ```
 
-qwen-code repo-local `.qwen/settings.json` (shim-mediated form — like kimi,
-the shim injects the surface env and resolves the git root itself, because
-Qwen exports no env var that reliably names the repo root; matchers use
-Qwen's runtime tool ids, and a vendor `parse-input.sh` override normalizes
-them to the canonical guard names). Note the `timeout` unit: Qwen command
-hooks measure it in MILLISECONDS (default 60000), unlike Claude Code's
-seconds — the seconds-style values shipped in 11.9.0 SIGTERMed every hook
-before the shim ran and were repaired by CAWS-QWEN-HOOK-TIMEOUT-001:
+qwen-code repo-local `.qwen/settings.json` (shim-mediated form — like kimi, the
+shim injects the surface env and resolves the git root itself, because Qwen
+exports no env var that reliably names the repo root; matchers use Qwen's
+runtime tool ids, and a vendor `parse-input.sh` override normalizes them to the
+canonical guard names). Note the `timeout` unit: Qwen command hooks measure it
+in MILLISECONDS (default 60000), unlike Claude Code's seconds — the
+seconds-style values shipped in 11.9.0 SIGTERMed every hook before the shim ran
+and were repaired by CAWS-QWEN-HOOK-TIMEOUT-001:
 
 ```jsonc
-{ "matcher": "run_shell_command|write_file|edit|read_file|glob|grep_search|notebook_edit",
-  "hooks": [ { "type": "command",
-    "command": "ROOT=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)\"; test -x \"$ROOT/.qwen/hooks/caws-qwen-hook.sh\" && \"$ROOT/.qwen/hooks/caws-qwen-hook.sh\" PreToolUse || true",
-    "timeout": 45000 } ] }
+{
+  "matcher": "run_shell_command|write_file|edit|read_file|glob|grep_search|notebook_edit",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "ROOT=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)\"; test -x \"$ROOT/.qwen/hooks/caws-qwen-hook.sh\" && \"$ROOT/.qwen/hooks/caws-qwen-hook.sh\" PreToolUse || true",
+      "timeout": 45000,
+    },
+  ],
+}
 ```
 
 The shared dispatcher resolves its lib/handlers from its own location
@@ -358,46 +374,45 @@ genuine-divergence set (from the codex/claude-code comparison) is:
   surface resolver; prefer folding).
 - `dispatch/post_tool_use.sh` HANDLERS — codex disables `quality-check.sh`;
   model this as a per-surface HANDLERS list, not a forked vendor dispatcher.
-- `hooks/caws-kimi-hook.sh` — kimi-code only: a shim, not an override. Kimi
-  Code fires hooks from the user-level config for every project with cwd =
-  launch dir; the shim resolves the git root, injects the surface env, exits
-  0 silently outside CAWS repos, and maps events to shared dispatchers.
+- `hooks/caws-kimi-hook.sh` — kimi-code only: a shim, not an override. Kimi Code
+  fires hooks from the user-level config for every project with cwd = launch
+  dir; the shim resolves the git root, injects the surface env, exits 0 silently
+  outside CAWS repos, and maps events to shared dispatchers.
 - `lib/emit.sh` (kimi-code) — ask → deny (Kimi's `ask` is non-blocking),
-  block/ask reasons mirrored to stderr (the channel Kimi surfaces on exit 2),
-  no `emit_updated_input`.
-- `lib/run-handlers.sh` (kimi-code) — the codex-style `deny` priority arm,
-  plus promotion of any non-zero aggregate exit to the blocking exit 2 (Kimi
-  does not enforce exit 1; both verified live against 0.31.1).
-- `lib/parse-input.sh` (kimi-code) — field-name normalization: kimi file
-  tools carry `tool_input.path` (not the Claude `file_path`) and
-  `tool_call_id` (not `tool_use_id`). A thin wrapper over the shared parser
-  (snapshot + wrap), codex-override precedent. Without it every path-based
-  guard is blind on this surface (live dogfood escape, pack v2).
+  block/ask reasons mirrored to stderr (the channel Kimi surfaces on exit 2), no
+  `emit_updated_input`.
+- `lib/run-handlers.sh` (kimi-code) — the codex-style `deny` priority arm, plus
+  promotion of any non-zero aggregate exit to the blocking exit 2 (Kimi does not
+  enforce exit 1; both verified live against 0.31.1).
+- `lib/parse-input.sh` (kimi-code) — field-name normalization: kimi file tools
+  carry `tool_input.path` (not the Claude `file_path`) and `tool_call_id` (not
+  `tool_use_id`). A thin wrapper over the shared parser (snapshot + wrap),
+  codex-override precedent. Without it every path-based guard is blind on this
+  surface (live dogfood escape, pack v2).
 - `hooks/caws-qwen-hook.sh` — qwen-code only: a shim, not an override (same
   shape as the kimi shim). Repo-local wiring notwithstanding, Qwen exports no
   reliable repo-root env var, so the shim resolves the git root, injects the
   surface env, and exits 0 silently outside CAWS repos.
 - `lib/parse-input.sh` (qwen-code) — wraps the shared parser (no fork) and
-  normalizes Qwen runtime tool ids (`write_file`, `edit`,
-  `run_shell_command`, ...) to the canonical names (`Write`, `Edit`, `Bash`,
-  ...) every shared guard self-filters on, preserving the raw id in
-  `HOOK_ORIGINAL_TOOL_NAME`. No emit/run-handlers overrides: Qwen enforces
-  `deny` and exit-2 blocks natively and degrades `ask` to deny in
-  headless/background (probed live on 0.21.4, re-verified against the
-  0.21.11 runtime).
+  normalizes Qwen runtime tool ids (`write_file`, `edit`, `run_shell_command`,
+  ...) to the canonical names (`Write`, `Edit`, `Bash`, ...) every shared guard
+  self-filters on, preserving the raw id in `HOOK_ORIGINAL_TOOL_NAME`. No
+  emit/run-handlers overrides: Qwen enforces `deny` and exit-2 blocks natively
+  and degrades `ask` to deny in headless/background (probed live on 0.21.4,
+  re-verified against the 0.21.11 runtime).
 - `hooks/caws-bridge.sh` (zcode) — zcode only: a bridge shim, not a thin
   wrapper. ZCode's hook runner parses stdout as strict JSON against a schema
   (extra keys → reject, non-JSON → `hook.run.failed`); the shared dispatchers
-  already emit valid JSON for PreToolUse/PostToolUse/Stop via `emit.sh`, but
-  the SessionStart dispatcher's plain-text banners (free-form text under
-  Claude Code) are rejected by ZCode, so the bridge re-wraps that path.
+  already emit valid JSON for PreToolUse/PostToolUse/Stop via `emit.sh`, but the
+  SessionStart dispatcher's plain-text banners (free-form text under Claude
+  Code) are rejected by ZCode, so the bridge re-wraps that path.
 - `plugins/caws.ts` (opencode) — opencode only: not a shell override at all.
-  opencode's lifecycle interposition is an in-process TypeScript plugin
-  surface, not a process the shared dispatchers are invoked as; `plugin.ts`
-  translates opencode's plugin callbacks into calls to the same shared bash
-  dispatchers every other surface uses, reusing 100% of the guard/check
-  logic. It throws on block/ask in `tool.execute.before` (ask degrades to
-  block, codex precedent) and appends dispatcher-produced context via
+  opencode's lifecycle interposition is an in-process TypeScript plugin surface,
+  not a process the shared dispatchers are invoked as; `plugin.ts` translates
+  opencode's plugin callbacks into calls to the same shared bash dispatchers
+  every other surface uses, reusing 100% of the guard/check logic. It throws on
+  block/ask in `tool.execute.before` (ask degrades to block, codex precedent)
+  and appends dispatcher-produced context via
   `experimental.chat.system.transform` on the next model call (a direct
   `client.session.prompt` call from inside a tool hook silently no-ops).
 
@@ -439,8 +454,8 @@ surface resolver (injected context) wherever the difference is mechanical.
 ## Consumer migration
 
 A consumer on the old per-vendor layout (full hook tree under `.claude/hooks/`
-and/or `.codex/hooks/`) migrates by re-running `caws init --agent-surface
-<surface>`:
+and/or `.codex/hooks/`) migrates by re-running
+`caws init --agent-surface <surface>`:
 
 - The shared core is written to `.caws/hooks/`.
 - The vendor wiring is repointed to the shared dispatcher (non-destructive

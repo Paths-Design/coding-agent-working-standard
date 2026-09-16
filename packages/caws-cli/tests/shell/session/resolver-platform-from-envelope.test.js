@@ -213,9 +213,7 @@ describe('CAWS-RESOLVER-PLATFORM-FROM-ENVELOPE-001', () => {
         now: () => now,
       });
 
-      const envelopeCandidates = candidates.filter(
-        (c) => c.source === 'durable_hook_envelope'
-      );
+      const envelopeCandidates = candidates.filter((c) => c.source === 'durable_hook_envelope');
       expect(envelopeCandidates).toHaveLength(1);
 
       const byId = Object.fromEntries(

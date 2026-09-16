@@ -55,7 +55,12 @@ function runShadowGuard(changedPaths) {
   );
   return spawnSync('/bin/bash', ['-e', '-c', guard.run], {
     cwd: repoRoot,
-    env: { ...process.env, PATH: `${root}${path.delimiter}${process.env.PATH}`, BASE_REF: 'base', HEAD_REF: 'head' },
+    env: {
+      ...process.env,
+      PATH: `${root}${path.delimiter}${process.env.PATH}`,
+      BASE_REF: 'base',
+      HEAD_REF: 'head',
+    },
     encoding: 'utf8',
   });
 }
@@ -107,7 +112,10 @@ describe('shadow-file guard pattern coverage', () => {
   test('files that detect the anti-pattern are allowlisted, near-misses are not', () => {
     // These exist in-tree; the guard must not fire when they change.
     expect(runShadowGuard(['.caws/hooks/duplicate-export-check.sh']).status).toBe(0);
-    expect(runShadowGuard(['packages/caws-cli/templates/hook-packs/shared/duplicate-export-check.sh']).status).toBe(0);
+    expect(
+      runShadowGuard(['packages/caws-cli/templates/hook-packs/shared/duplicate-export-check.sh'])
+        .status
+    ).toBe(0);
     // The allowlist is anchored and exact: a real shadow file must not be
     // able to hide behind a legitimate neighbour's name.
     expect(runShadowGuard(['src/duplicate-export-check.sh']).status).toBe(1);
@@ -117,7 +125,11 @@ describe('shadow-file guard pattern coverage', () => {
   test('every tracked file passes the guard', () => {
     // A widened pattern that matches existing files would fail CI on any PR
     // touching them. This pins the guard against the real repository.
-    const tracked = spawnSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+    const tracked = spawnSync('git', ['ls-files'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      maxBuffer: 32 * 1024 * 1024,
+    });
     expect(tracked.status).toBe(0);
     const files = tracked.stdout.split('\n').filter(Boolean);
     expect(files.length).toBeGreaterThan(100);
@@ -234,9 +246,7 @@ describe('an unpublished tag is rolled back', () => {
     expect(disposition.id).toBe('disposition');
     const publish = step(release, 'release', 'Run tag-driven publish');
     // Both steps must agree on the marker path or the handoff is broken.
-    expect(disposition.env.CAWS_RELEASE_SCRIPT_MARKER).toBe(
-      publish.env.CAWS_RELEASE_SCRIPT_MARKER
-    );
+    expect(disposition.env.CAWS_RELEASE_SCRIPT_MARKER).toBe(publish.env.CAWS_RELEASE_SCRIPT_MARKER);
   });
 
   test.each([
@@ -252,7 +262,9 @@ describe('an unpublished tag is rolled back', () => {
   test('a failed release deletes the orphaned tag', () => {
     const result = runRollback({ deleteSucceeds: true, refStillExists: true });
     expect(result.status).toBe(0);
-    expect(result.calls).toContain('-X DELETE repos/fixture/repo/git/refs/tags/caws-cli-v12.2.0-rc.1');
+    expect(result.calls).toContain(
+      '-X DELETE repos/fixture/repo/git/refs/tags/caws-cli-v12.2.0-rc.1'
+    );
   });
 
   test('an already-absent tag is not an error', () => {
@@ -265,6 +277,8 @@ describe('an unpublished tag is rolled back', () => {
   test('a tag that survives a failed delete reports a repair command', () => {
     const result = runRollback({ deleteSucceeds: false, refStillExists: true });
     expect(result.status).toBe(1);
-    expect(result.stdout).toContain('gh api -X DELETE repos/fixture/repo/git/refs/tags/caws-cli-v12.2.0-rc.1');
+    expect(result.stdout).toContain(
+      'gh api -X DELETE repos/fixture/repo/git/refs/tags/caws-cli-v12.2.0-rc.1'
+    );
   });
 });

@@ -25,10 +25,7 @@ export interface ContentionClaimant {
 }
 
 /** Why contention could not be determined for a worktree (fail-closed signal). */
-export type ContentionUndeterminedReason =
-  | 'missing-specId'
-  | 'missing-spec'
-  | 'missing-scope';
+export type ContentionUndeterminedReason = 'missing-specId' | 'missing-spec' | 'missing-scope';
 
 /**
  * Result of a contention evaluation.

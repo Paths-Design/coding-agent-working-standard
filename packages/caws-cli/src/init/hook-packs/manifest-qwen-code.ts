@@ -57,14 +57,7 @@ export const QWEN_CODE_PACK: HookPackV1 = {
   // .qwen/settings.json is read at session start: a new qwen session is
   // required.
   activation: 'restart_required',
-  lifecycleEvents: [
-    'pre_bash',
-    'pre_write',
-    'pre_edit',
-    'session_start',
-    'pre_compact',
-    'stop',
-  ],
+  lifecycleEvents: ['pre_bash', 'pre_write', 'pre_edit', 'session_start', 'pre_compact', 'stop'],
   stateModel: {
     reads: [
       '.caws/specs/*.yaml',

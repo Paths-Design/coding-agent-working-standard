@@ -26,9 +26,10 @@ caws init adapters configure --agent-surface codex
 
 `install` selects a verified snapshot under `CAWS_HOME` (default `~/.caws`). It
 updates shared executables, dispatch, and renderers; it does not upgrade the CLI
-package. `configure` writes the native harness's user configuration. Native trust
-and execution require verification inside that harness. `--native-config-target`
-explicitly selects the resolved file when user configuration is symlink-managed.
+package. `configure` writes the native harness's user configuration. Native
+trust and execution require verification inside that harness.
+`--native-config-target` explicitly selects the resolved file when user
+configuration is symlink-managed.
 
 ## Existing projects
 
@@ -39,15 +40,17 @@ caws init adapters migrate --agent-surface codex
 
 Migration retires recognized project CAWS registrations after user registration
 exists. It preserves unrelated hooks and exact before/after backups. Custom
-behavior requires a reviewed `--from` surface-policy JSON object with `disabled`,
-`extensions`, `handlers`, and `libraries`. `--projects-root <directory>` applies
-independent transactions to direct Git project children; it cannot be combined
-with a single-project `--from` policy. Foreign worktree ownership is unchanged.
+behavior requires a reviewed `--from` surface-policy JSON object with
+`disabled`, `extensions`, `handlers`, and `libraries`.
+`--projects-root <directory>` applies independent transactions to direct Git
+project children; it cannot be combined with a single-project `--from` policy.
+Foreign worktree ownership is unchanged.
 
-New projects use `caws init --agent-surface codex` after machine setup and inherit
-the shared runtime without receiving local hook copies. `caws init --plan` and
-its `--dry-run` alias preview project state and ignore rules. Plain init writes
-idempotently. Unconfigured surfaces still support legacy pack initialization.
+New projects use `caws init --agent-surface codex` after machine setup and
+inherit the shared runtime without receiving local hook copies.
+`caws init --plan` and its `--dry-run` alias preview project state and ignore
+rules. Plain init writes idempotently. Unconfigured surfaces still support
+legacy pack initialization.
 
 ## Legacy governance conversion
 
@@ -58,9 +61,10 @@ caws init migrate apply --from reviewed-governance.json
 
 This `--from` schema is different from adapter policy: `version`, `reason`,
 `requirementNotes`, and hash-checked `changes`. The first command is read-only;
-only positional `apply` executes. See the [migration guide](../migration-v10-to-v11.md)
-for complete shape and preservation rules. No acceptance evidence or completed
-work is inferred from importing a legacy spec as a draft.
+only positional `apply` executes. See the
+[migration guide](../migration-v10-to-v11.md) for complete shape and
+preservation rules. No acceptance evidence or completed work is inferred from
+importing a legacy spec as a draft.
 
 ## Updates, rollback, and legacy maintenance
 
@@ -88,11 +92,13 @@ Project specs and bindings own authority. Leases and directed messages report
 activity, not permission. Record AC closure with `caws specs evidence`; typed
 `evidence record` supports tests, gates, and human decisions. Gates use project
 policy and waivers. Hook exceptions use human-granted session-global reprieves,
-under `~/.caws/state/sessions/<id>/`; `--surface` supplies harness provenance and
-legacy lookup, not a new per-vendor grant directory. See `caws reprieve grant --help`
-for required identity, handler, reason, approver, and expiry flags.
+under `~/.caws/state/sessions/<id>/`; `--surface` supplies harness provenance
+and legacy lookup, not a new per-vendor grant directory. See
+`caws reprieve grant --help` for required identity, handler, reason, approver,
+and expiry flags.
 
-Most commands use exit 0 for success, 1 for domain failure, and 2 for composition
-or usage errors. Some integrity gates have additional codes; consult their help.
-A lifecycle state write can succeed while its automatic Git commit fails: inspect
-stderr and verify the actual Git state before declaring source landed.
+Most commands use exit 0 for success, 1 for domain failure, and 2 for
+composition or usage errors. Some integrity gates have additional codes; consult
+their help. A lifecycle state write can succeed while its automatic Git commit
+fails: inspect stderr and verify the actual Git state before declaring source
+landed.

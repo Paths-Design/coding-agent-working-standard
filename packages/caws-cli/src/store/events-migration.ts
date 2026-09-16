@@ -44,8 +44,7 @@ export const MIGRATION_RULES = {
    *  parsed; unparseable implies none did), so the planner refuses.
    *  Mirrors STORE_RULES.EVENTS_ROTATE_PARTIAL_CORRUPTION in rotateEvents
    *  so dry-run and apply paths agree. */
-  PARTIAL_CORRUPTION_REFUSED:
-    'store.events.migration.partial_corruption_refused',
+  PARTIAL_CORRUPTION_REFUSED: 'store.events.migration.partial_corruption_refused',
   /** The shell could not scan .caws/specs/ for v10-shape YAMLs (directory
    *  missing, unreadable, or sparse-checkout-excluded). The half-upgrade
    *  refusal CANNOT be enforced without a complete scan, so the migration
@@ -58,28 +57,24 @@ export const MIGRATION_RULES = {
    *  drifted, or windowsSafeIso diverged between events-migration.ts
    *  and events-store.ts. Either way it is a programmer error, not an
    *  operator error; the shell surfaces it as an internal failure. */
-  INTERNAL_DRYRUN_APPLY_MISMATCH:
-    'store.events.migration.internal_dryrun_apply_mismatch',
+  INTERNAL_DRYRUN_APPLY_MISMATCH: 'store.events.migration.internal_dryrun_apply_mismatch',
   /** events migrate refused because the underlying log is fully
    *  unparseable. Migration cannot claim it found a v10 chain. The
    *  lower-level `caws events rotate` may still archive a fully
    *  unparseable log under the honest 'unparseable' status as evidence
    *  quarantine — that semantic is intentional and distinct from
    *  migration. */
-  MIGRATE_UNPARSEABLE_REFUSED:
-    'store.events.migration.unparseable_refused',
+  MIGRATE_UNPARSEABLE_REFUSED: 'store.events.migration.unparseable_refused',
   /** verify-archive: events.jsonl exists but contains no chain_rotated
    *  event. There is nothing to verify against. */
-  VERIFY_NO_ROTATION_EVENT:
-    'store.events.verify_archive.no_rotation_event',
+  VERIFY_NO_ROTATION_EVENT: 'store.events.verify_archive.no_rotation_event',
   /** verify-archive: the archive file named by the most recent
    *  chain_rotated event does not exist on disk. */
   VERIFY_ARCHIVE_MISSING: 'store.events.verify_archive.archive_missing',
   /** verify-archive: the current events.jsonl could not be loaded
    *  (e.g., malformed JSON line, invalid chain). The shell cannot
    *  determine the most recent chain_rotated event. */
-  VERIFY_CURRENT_CHAIN_INVALID:
-    'store.events.verify_archive.current_chain_invalid',
+  VERIFY_CURRENT_CHAIN_INVALID: 'store.events.verify_archive.current_chain_invalid',
 } as const;
 
 export type MigrationRule = (typeof MIGRATION_RULES)[keyof typeof MIGRATION_RULES];
@@ -133,9 +128,7 @@ export interface EventsLogShape {
  * strict validator rejects. JSON.parse + direct actor-shape inspection
  * is the entire contract.
  */
-export function detectEventsLogShape(
-  raw: string
-): Result<EventsLogShape> {
+export function detectEventsLogShape(raw: string): Result<EventsLogShape> {
   const trailingNewline = raw.endsWith('\n');
   const parts = raw.split('\n');
   const lines = trailingNewline ? parts.slice(0, -1) : parts;
@@ -265,9 +258,7 @@ export interface V10SpecsScanResult {
  * from packages/caws-kernel/src/spec/migrate-v10.ts when that ships,
  * but the refusal contract owned by this slice (A10) is named here.
  */
-export function detectV10SpecsPresent(
-  files: readonly SpecYamlInput[]
-): V10SpecsScanResult {
+export function detectV10SpecsPresent(files: readonly SpecYamlInput[]): V10SpecsScanResult {
   const v10Paths: string[] = [];
   const v11Paths: string[] = [];
   const unclassifiedPaths: string[] = [];
@@ -388,10 +379,7 @@ const ARCHIVE_PREFIX = 'events.jsonl.archive-';
  * If all checks pass, returns RotatePlan with the proposed archive
  * name and the inputs the shell will pass to rotateEvents.
  */
-export function planEventsRotation(
-  detection: EventsLogShape,
-  opts: PlanOptions
-): RotationPlan {
+export function planEventsRotation(detection: EventsLogShape, opts: PlanOptions): RotationPlan {
   // 1. unparseable_only — refuse outright; rotation here would archive
   //    a corrupt chain without operator inspection. The shell points
   //    at the file and asks the operator what to do.
@@ -417,12 +405,8 @@ export function planEventsRotation(
   //    escape in v11.2 scope; a future opt-in path may be added
   //    alongside a new 'partially_unparseable' enum value in a
   //    later slice.
-  if (
-    detection.stats.unparseable > 0 &&
-    detection.stats.unparseable < detection.lineCount
-  ) {
-    const parseable =
-      detection.stats.v10_string_actor + detection.stats.v11_object_actor;
+  if (detection.stats.unparseable > 0 && detection.stats.unparseable < detection.lineCount) {
+    const parseable = detection.stats.v10_string_actor + detection.stats.v11_object_actor;
     return {
       kind: 'refuse',
       cause: 'partial_corruption',
@@ -442,10 +426,7 @@ export function planEventsRotation(
   //    caller has supplied a v10Specs scan AND detected: true. The
   //    contract is "if you scanned and found v10 specs, the planner
   //    enforces; if you didn't scan, the planner trusts you."
-  if (
-    opts.v10Specs?.detected === true &&
-    opts.allowPartialUpgrade !== true
-  ) {
+  if (opts.v10Specs?.detected === true && opts.allowPartialUpgrade !== true) {
     return {
       kind: 'refuse',
       cause: 'v10_specs_require_allow_partial_upgrade',

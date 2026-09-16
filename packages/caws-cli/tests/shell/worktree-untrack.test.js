@@ -160,7 +160,10 @@ describe('caws worktree untrack', () => {
     const { repoRoot, caws, wtPath } = untrackRepo();
     const before = snapshotState(caws, ['UNTRACK-001'], wtPath);
 
-    const result = runUntrack(repoRoot, 'wt-keep', { reason: 'preserve for inspection', json: true });
+    const result = runUntrack(repoRoot, 'wt-keep', {
+      reason: 'preserve for inspection',
+      json: true,
+    });
 
     expect(result.code).toBe(0);
     const payload = JSON.parse(result.out);
@@ -193,7 +196,9 @@ describe('caws worktree untrack', () => {
 
     const registry = JSON.parse(readBytes(path.join(caws, 'worktrees.json')));
     expect(registry['wt-keep']).toBeUndefined();
-    expect(readBytes(path.join(caws, 'specs', 'UNTRACK-001.yaml'))).not.toMatch(/worktree: wt-keep/);
+    expect(readBytes(path.join(caws, 'specs', 'UNTRACK-001.yaml'))).not.toMatch(
+      /worktree: wt-keep/
+    );
     const events = eventsOfType(caws, 'worktree_untracked');
     expect(events).toHaveLength(1);
     expect(events[0].data.reason).toBe('preserve for inspection');

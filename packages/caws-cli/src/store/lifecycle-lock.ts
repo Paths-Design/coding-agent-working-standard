@@ -51,10 +51,7 @@ export interface AcquireLifecycleLockOptions {
   readonly retryDelayMs?: number;
 }
 
-function tryRecoverStaleLock(
-  lockPath: string,
-  staleThresholdMs: number
-): boolean {
+function tryRecoverStaleLock(lockPath: string, staleThresholdMs: number): boolean {
   try {
     const stat = fs.statSync(lockPath);
     const ageMs = Date.now() - stat.mtimeMs;

@@ -11,8 +11,8 @@ audience: contributor
 # Sterling machine runtime migration handoff
 
 Finish Sterling's adoption so one machine update supplies stock guards and
-session rendering, while Sterling retains its project-specific behavior.
-This guide does not certify or perform Sterling's migration. Recheck all dated
+session rendering, while Sterling retains its project-specific behavior. This
+guide does not certify or perform Sterling's migration. Recheck all dated
 observations before acting, and obtain authorization for the implementation
 scope in the receiving session.
 
@@ -28,10 +28,10 @@ previous: b0b02ea0c52e2c2415aa44292bc2cc06858a139e8ce112793425561374c2ad12
 CLI:      12.1.0, independent installed package snapshot
 ```
 
-The manifest hash and all 91 payload hashes verified. A repeated install
-preview returned `changed: false`. Codex and Claude configuration previews
-also returned `changed: false`. These are installation and configuration
-checks, not fresh native enforcement or rendering probes.
+The manifest hash and all 91 payload hashes verified. A repeated install preview
+returned `changed: false`. Codex and Claude configuration previews also returned
+`changed: false`. These are installation and configuration checks, not fresh
+native enforcement or rendering probes.
 
 CAWS itself has system policy for both surfaces with no explicit overrides.
 Sterling has only Codex system policy. Its `.codex/hooks.json` has no remaining
@@ -45,9 +45,9 @@ Custom dispatcher logic requires review; use --from with an explicit surface pol
 Sterling's Codex policy still overrides `block-dangerous.sh`,
 `bash-write-guard.sh`, `worktree-guard.sh`, and `session-log.sh`. The local
 logger loads its adjacent `session_log_renderer.py` and daemon client directly.
-Consequently, global renderer replacement alone does not update that path.
-Local copies being present is not itself a defect; remaining execution edges
-to stock copies are what prevent centralized updates.
+Consequently, global renderer replacement alone does not update that path. Local
+copies being present is not itself a defect; remaining execution edges to stock
+copies are what prevent centralized updates.
 
 ## 1. Establish authority and capture the actual starting state
 
@@ -70,15 +70,15 @@ caws init adapters migrate --agent-surface claude-code --plan --json
 
 At handoff Sterling contained unrelated untracked languagepack admission
 artifacts and a ghost/one-sided `ar-nfc-source` binding. Preserve foreign work;
-reconcile those findings under their own ownership and scope. A stale lease
-does not authorize takeover. Do not use a migration to repair governance.
+reconcile those findings under their own ownership and scope. A stale lease does
+not authorize takeover. Do not use a migration to repair governance.
 
 Create an appropriately scoped Sterling spec and bound worktree before editing
 source, tests, native settings, or a reviewed policy. Inspect Sterling's own
 instructions and use `caws claim` and `caws scope check` there. Include every
 helper reached by a retained local handler in the review scope. If a worktree
-needs canonical resources, use the repository-defined root environment
-variable; do not symlink languagepack components into the lane.
+needs canonical resources, use the repository-defined root environment variable;
+do not symlink languagepack components into the lane.
 
 Capture before-bytes of native registrations, effective project policy, runtime
 pointer, relevant local handlers/helpers and their Git revisions in an ignored
@@ -94,14 +94,14 @@ its current local implementation, and the current CAWS source/active snapshot.
 Do not treat an old pack stamp as proof a file is obsolete. Check these known
 differences and the tests/specs documenting them:
 
-| Surface | Behavior to preserve or reconcile | Intended destination |
-| --- | --- | --- |
-| Danger guard | Sterling's reset-command boundary checks; current machine recovery command and HOME handling | Shared guard after adversarial regression checks |
-| Bash write guard | Quoted arguments, chain separators, heredoc handling and foreign-repository containment | Shared guard/helpers where reusable |
-| Worktree guard | Quoted text versus commands, heredoc bodies, and copy/move name false positives | Shared guard/helpers where reusable |
-| Session logger/renderer | Warm daemon with fallback, transcript source precedence, user/interjection provenance, tool outcomes and denial attribution | Shared rendering or explicit harness adapter, with project extensions only where necessary |
-| CASR and repository checks | `casr-context.sh`, rg/test/gitignore guards, documentation checks | Explicit Sterling extensions |
-| Helpers | `lib/heredoc.sh`, daemon client, transcript converters, renderer dependencies | Review every actual load path before dropping a pin |
+| Surface                    | Behavior to preserve or reconcile                                                                                           | Intended destination                                                                       |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Danger guard               | Sterling's reset-command boundary checks; current machine recovery command and HOME handling                                | Shared guard after adversarial regression checks                                           |
+| Bash write guard           | Quoted arguments, chain separators, heredoc handling and foreign-repository containment                                     | Shared guard/helpers where reusable                                                        |
+| Worktree guard             | Quoted text versus commands, heredoc bodies, and copy/move name false positives                                             | Shared guard/helpers where reusable                                                        |
+| Session logger/renderer    | Warm daemon with fallback, transcript source precedence, user/interjection provenance, tool outcomes and denial attribution | Shared rendering or explicit harness adapter, with project extensions only where necessary |
+| CASR and repository checks | `casr-context.sh`, rg/test/gitignore guards, documentation checks                                                           | Explicit Sterling extensions                                                               |
+| Helpers                    | `lib/heredoc.sh`, daemon client, transcript converters, renderer dependencies                                               | Review every actual load path before dropping a pin                                        |
 
 The local logger currently names a vendor-local audit log while machine audit
 output lives under the machine project's log directory. Verify the effective
@@ -119,12 +119,12 @@ Reusable fixes require a separately authorized CAWS spec/worktree, source
 changes, meaningful regression tests and governed landing. Do not edit
 `~/.caws/lib/runtimes/<digest>`: snapshots are integrity checked. Install the
 updated standalone CLI and then the runtime through supported commands after
-upstream work lands. A Sterling-only agent must hand off that upstream work
-if it lacks authority in CAWS.
+upstream work lands. A Sterling-only agent must hand off that upstream work if
+it lacks authority in CAWS.
 
-Keep a core override until the replacement proves its required behavior.
-Record each retained override's reason, regression evidence and removal
-condition. This makes partial adoption explicit instead of declaring it done.
+Keep a core override until the replacement proves its required behavior. Record
+each retained override's reason, regression evidence and removal condition. This
+makes partial adoption explicit instead of declaring it done.
 
 ## 3. Author separate reviewed surface policies
 
@@ -147,17 +147,17 @@ policy onto Claude without comparing both chains.
 
 Event keys are `pre_tool_use`, `post_tool_use`, `session_start`, `stop`, and
 `pre_compact`. Extensions are ordered entries such as
-`{"handler":"casr-context.sh","before":"quiet-merge.sh"}`. Handler and
-library maps use canonical-project-relative paths. Handlers must exist and be
-executable. Bootstrap libraries `agent-surface.sh` and `runtime-paths.sh`
-cannot be overridden. An extension's anchor must survive the effective policy;
-do not duplicate an existing stock handler.
+`{"handler":"casr-context.sh","before":"quiet-merge.sh"}`. Handler and library
+maps use canonical-project-relative paths. Handlers must exist and be
+executable. Bootstrap libraries `agent-surface.sh` and `runtime-paths.sh` cannot
+be overridden. An extension's anchor must survive the effective policy; do not
+duplicate an existing stock handler.
 
 Review custom wrapper behavior too: environment setup, fallback cwd resolution,
 failure semantics, matchers, timeouts and ordering. `--from` is an explicit
-classification decision, not an automatic translation of arbitrary wrapper
-code. Preserve CASR's placement and keep `quiet-merge.sh` last where it emits
-updated input. Do not disable guards to make a migration or test pass.
+classification decision, not an automatic translation of arbitrary wrapper code.
+Preserve CASR's placement and keep `quiet-merge.sh` last where it emits updated
+input. Do not disable guards to make a migration or test pass.
 
 There is no guarantee that putting an arbitrary filename in `libraries` changes
 a consumer that directly opens a sibling file. In particular, check the logger's
@@ -178,14 +178,14 @@ caws init adapters migrate --agent-surface claude-code --from /absolute/path/cla
 Review exact before/after changes. The intended transaction changes the selected
 surface policy and retires recognized CAWS project registrations while retaining
 unrelated configuration. It must not alter governance, erase custom executable
-behavior, or rewrite another surface's policy. A prior successful Codex migration
-can legitimately need a new policy now to remove reconciled overrides.
+behavior, or rewrite another surface's policy. A prior successful Codex
+migration can legitimately need a new policy now to remove reconciled overrides.
 
 Once the concrete migration is authorized, run the same command without
 `--plan`, one surface at a time. It must run at the canonical root; the CLI
 refuses linked-worktree migration. Coordinate this canonical mutation with live
-owners and record/commit only the intended repo-owned configuration changes.
-Do not blanket-stage existing dirt or commit generated evidence artifacts.
+owners and record/commit only the intended repo-owned configuration changes. Do
+not blanket-stage existing dirt or commit generated evidence artifacts.
 
 Repeat each preview and require `changed: false`. Inspect exact transaction
 backups under the selected machine home's `state/adoption-backups`. Old local
@@ -198,13 +198,13 @@ Restart/reopen each harness as needed to discard cached project registrations.
 Review native hook trust when definitions change. For fresh Sterling Codex and
 Claude sessions, retain native output plus the rendered turn and verify:
 
-1. The selected runtime digest and canonical repository are correct, including
-   a linked-worktree case. Exactly one intended CAWS chain handles each event.
+1. The selected runtime digest and canonical repository are correct, including a
+   linked-worktree case. Exactly one intended CAWS chain handles each event.
 2. SessionStart and Stop execute; observe successful PostToolUse and PreCompact
    separately if claiming those events. Registration alone proves neither.
-3. One explicitly authorized controlled protected-write attempt is denied by
-   the native hook, with no target file created. Do not use a dangerous command
-   as the probe or clear a human danger latch from an agent.
+3. One explicitly authorized controlled protected-write attempt is denied by the
+   native hook, with no target file created. Do not use a dangerous command as
+   the probe or clear a human danger latch from an agent.
 4. The renderer retains the actual user request/interjection, real tool call,
    refusal and outcome once, excluding injected harness context as user speech.
    Establish which renderer/helper bytes actually executed.
@@ -225,10 +225,10 @@ adapter work. Keep their existing working integrations until separately proven.
 ## Recovery and completion boundary
 
 `caws init adapters rollback --plan --json` previews the previous machine
-snapshot; applying rollback changes the shared runtime for all adopters. It
-does not undo CLI installation, native configuration or project policies. Do
-not use it to repair a Sterling-only policy problem. Restore reviewed policy
-through `migrate --from`; restore native registration only through an explicitly
+snapshot; applying rollback changes the shared runtime for all adopters. It does
+not undo CLI installation, native configuration or project policies. Do not use
+it to repair a Sterling-only policy problem. Restore reviewed policy through
+`migrate --from`; restore native registration only through an explicitly
 reviewed recovery using exact transaction backups and current ownership.
 
 Completion means the selected Sterling surfaces receive stock runtime updates,

@@ -5,10 +5,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const {
-  runGatesExplainCommand,
-  runGatesListCommand,
-} = require('../../dist/shell');
+const { runGatesExplainCommand, runGatesListCommand } = require('../../dist/shell');
 const { initProject } = require('../../dist/store/init-store');
 
 const repos = [];
@@ -82,11 +79,7 @@ function tunePolicy(cawsDir) {
       ``,
     ].join('\n')
   );
-  raw += [
-    `waivers:`,
-    `  min_approvers_for_budget_raise: 2`,
-    ``,
-  ].join('\n');
+  raw += [`waivers:`, `  min_approvers_for_budget_raise: 2`, ``].join('\n');
   fs.writeFileSync(policyPath, raw);
 }
 

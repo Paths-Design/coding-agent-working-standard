@@ -240,7 +240,12 @@ function main(argv) {
   // repo-root-relative) won't match; honor an explicit --strict comma list, or
   // fall back to --all semantics for a custom dir so nothing is silently lenient.
   const strictOpt = readOption(argv, '--strict');
-  const strictSet = strictOpt ? strictOpt.split(',').map((s) => s.trim()).filter(Boolean) : STRICT_SET;
+  const strictSet = strictOpt
+    ? strictOpt
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : STRICT_SET;
   const report = runValidation({ all, docsDir, strictSet });
 
   if (asJson) {
@@ -257,9 +262,13 @@ function main(argv) {
       for (const m of v.messages) process.stderr.write(`          - ${m}\n`);
     }
     if (report.violations.length === 0) {
-      process.stderr.write(`OK — ${report.strictCount} strict-set doc(s) valid; ${report.warnings.length} lenient warning(s).\n`);
+      process.stderr.write(
+        `OK — ${report.strictCount} strict-set doc(s) valid; ${report.warnings.length} lenient warning(s).\n`
+      );
     } else {
-      process.stderr.write(`FAILED — ${report.violations.length} strict-set doc(s) violate the schema.\n`);
+      process.stderr.write(
+        `FAILED — ${report.violations.length} strict-set doc(s) violate the schema.\n`
+      );
     }
   }
   return report.violations.length === 0 ? 0 : 1;

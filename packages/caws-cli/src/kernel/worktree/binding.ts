@@ -41,8 +41,7 @@ export function deriveBindingState(
   const specHasWorktree = typeof specWorktree === 'string' && specWorktree.length > 0;
 
   const bothPoint = registryHasSpecId && specHasWorktree;
-  const bidirectional =
-    bothPoint && registrySpecId === spec.id && specWorktree === worktreeName;
+  const bidirectional = bothPoint && registrySpecId === spec.id && specWorktree === worktreeName;
 
   if (bidirectional) {
     return { kind: 'bound', spec, worktreeName };

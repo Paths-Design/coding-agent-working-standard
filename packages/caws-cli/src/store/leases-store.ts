@@ -93,11 +93,9 @@ export interface LoadLeasesResult {
 export function safeLeaseFilename(sessionId: unknown): Result<string> {
   if (typeof sessionId !== 'string') {
     return err(
-      storeDiagnostic(
-        STORE_RULES.LEASE_SESSION_ID_INVALID,
-        'Lease session_id must be a string.',
-        { data: { actual_type: typeof sessionId } }
-      )
+      storeDiagnostic(STORE_RULES.LEASE_SESSION_ID_INVALID, 'Lease session_id must be a string.', {
+        data: { actual_type: typeof sessionId },
+      })
     );
   }
   if (sessionId.length === 0) {
@@ -119,11 +117,13 @@ export function safeLeaseFilename(sessionId: unknown): Result<string> {
     );
   }
   if (HEARTBEAT_CACHE_SESSION_NAMES.has(sessionId)) {
-    return err(storeDiagnostic(
-      STORE_RULES.LEASE_SESSION_ID_INVALID,
-      `Lease session_id "${sessionId}" is reserved for heartbeat cache state.`,
-      { data: { session_id: sessionId } }
-    ));
+    return err(
+      storeDiagnostic(
+        STORE_RULES.LEASE_SESSION_ID_INVALID,
+        `Lease session_id "${sessionId}" is reserved for heartbeat cache state.`,
+        { data: { session_id: sessionId } }
+      )
+    );
   }
   if (!LEASE_FILENAME_RE.test(sessionId)) {
     return err(
@@ -222,11 +222,10 @@ export function loadLeases(cawsDir: string): Result<LoadLeasesResult> {
 
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
       diagnostics.push(
-        storeDiagnostic(
-          STORE_RULES.LEASE_FILE_MALFORMED,
-          'Lease file root is not a JSON object.',
-          { subject: filePath, data: { session_id: sessionId } }
-        )
+        storeDiagnostic(STORE_RULES.LEASE_FILE_MALFORMED, 'Lease file root is not a JSON object.', {
+          subject: filePath,
+          data: { session_id: sessionId },
+        })
       );
       continue;
     }
@@ -237,7 +236,10 @@ export function loadLeases(cawsDir: string): Result<LoadLeasesResult> {
         storeDiagnostic(
           STORE_RULES.LEASE_FILE_MALFORMED,
           `Lease file session_id "${obj['session_id'] as string}" does not match filename "${sessionId}".`,
-          { subject: filePath, data: { filename_session_id: sessionId, payload_session_id: obj['session_id'] } }
+          {
+            subject: filePath,
+            data: { filename_session_id: sessionId, payload_session_id: obj['session_id'] },
+          }
         )
       );
       continue;
@@ -468,7 +470,9 @@ export function applyLeasePatch(
     // refreshed (declaring work state is liveness evidence); the note is
     // replaced only when the patch carries one (undefined = leave existing).
     const { work_state, work_state_note, work_state_updated_at, ...priorRest } = prior;
-    void work_state; void work_state_note; void work_state_updated_at;
+    void work_state;
+    void work_state_note;
+    void work_state_updated_at;
     const updated: AgentLease = {
       ...priorRest,
       ...(patch.clear
@@ -565,10 +569,7 @@ export interface PruneResult {
   readonly diagnostics: ReadonlyArray<Diagnostic>;
 }
 
-export function pruneLeasesByStatus(
-  cawsDir: string,
-  opts: PruneOptions
-): Result<PruneResult> {
+export function pruneLeasesByStatus(cawsDir: string, opts: PruneOptions): Result<PruneResult> {
   const dryRun = opts.dryRun ?? true;
   const staleTtlMs = opts.staleTtlMs ?? 30 * 60 * 1000; // 30m default
 
@@ -586,9 +587,7 @@ export function pruneLeasesByStatus(
     if (opts.status === 'stopped') {
       if (lease.status !== 'stopped') continue;
       const stoppedAtMs = lease.stopped_at ? Date.parse(lease.stopped_at) : NaN;
-      const reference = Number.isFinite(stoppedAtMs)
-        ? stoppedAtMs
-        : Date.parse(lease.last_active);
+      const reference = Number.isFinite(stoppedAtMs) ? stoppedAtMs : Date.parse(lease.last_active);
       if (!Number.isFinite(reference)) continue;
       if (nowMs - reference > opts.retentionMs) candidates.push(lease.session_id);
     } else if (opts.status === 'legacy') {
@@ -720,10 +719,7 @@ export interface PruneDeadResult {
  * `stopped` leases are out of scope for --dead (they are already terminal;
  * use `prune --status stopped --older-than <ms>` for retention cleanup).
  */
-export function pruneDeadLeases(
-  cawsDir: string,
-  opts: PruneDeadOptions
-): Result<PruneDeadResult> {
+export function pruneDeadLeases(cawsDir: string, opts: PruneDeadOptions): Result<PruneDeadResult> {
   const dryRun = opts.dryRun ?? true;
   const currentHostname = opts.currentHostname ?? os.hostname();
   const isPidAlive = opts.isPidAlive ?? defaultIsPidAlive;

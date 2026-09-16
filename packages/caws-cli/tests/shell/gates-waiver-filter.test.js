@@ -16,10 +16,7 @@
  */
 
 const { filterWaivedViolations } = require('../../dist/shell/gates/waiver-filter');
-const {
-  effectiveWaiversForGate,
-  waiverEffectiveness,
-} = require('../../dist/kernel');
+const { effectiveWaiversForGate, waiverEffectiveness } = require('../../dist/kernel');
 
 const NOW = new Date('2026-06-13T12:00:00.000Z');
 const FUTURE = '2026-12-31T00:00:00.000Z';
@@ -103,10 +100,20 @@ describe('kernel effectiveWaiversForGate: gate + spec scoping', () => {
   test('a spec-scoped waiver applies only to the matching spec id', () => {
     const scoped = waiver({ scope: { spec_id: 'SPEC-1' } });
     expect(
-      effectiveWaiversForGate({ waivers: [scoped], gate: 'budget_limit', specId: 'SPEC-1', now: NOW })
+      effectiveWaiversForGate({
+        waivers: [scoped],
+        gate: 'budget_limit',
+        specId: 'SPEC-1',
+        now: NOW,
+      })
     ).toHaveLength(1);
     expect(
-      effectiveWaiversForGate({ waivers: [scoped], gate: 'budget_limit', specId: 'SPEC-2', now: NOW })
+      effectiveWaiversForGate({
+        waivers: [scoped],
+        gate: 'budget_limit',
+        specId: 'SPEC-2',
+        now: NOW,
+      })
     ).toHaveLength(0);
   });
 

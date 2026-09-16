@@ -42,7 +42,8 @@ function setup() {
     actor: ACTOR,
     scopeIn: ['payload.txt'],
   });
-  if (!spec.ok || spec.value.kind !== 'success') throw new Error(`spec failed: ${JSON.stringify(spec)}`);
+  if (!spec.ok || spec.value.kind !== 'success')
+    throw new Error(`spec failed: ${JSON.stringify(spec)}`);
   git(repo, ['add', '-A']);
   git(repo, ['commit', '--quiet', '--no-verify', '-m', 'seed caws']);
 

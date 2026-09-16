@@ -38,7 +38,10 @@ describe('doctor.leases.stranded_tmp (CAWS-DEFECT-LEASE-TMP-STRANDING-01)', () =
       input(
         fsObs({
           strandedLeaseTmpFiles: [
-            { name: '57dc83ce-9523-4a3d-baa0-8fe9ddd7a48d.json.tmp.47057.0', ageMs: 36 * 24 * 60 * 60 * 1000 },
+            {
+              name: '57dc83ce-9523-4a3d-baa0-8fe9ddd7a48d.json.tmp.47057.0',
+              ageMs: 36 * 24 * 60 * 60 * 1000,
+            },
           ],
         })
       )
@@ -47,7 +50,12 @@ describe('doctor.leases.stranded_tmp (CAWS-DEFECT-LEASE-TMP-STRANDING-01)', () =
     const finding = report.findings.find((f) => f.rule === DOCTOR_RULES.LEASES_STRANDED_TMP);
     expect(finding?.severity).toBe('warning');
     expect(finding?.data).toMatchObject({
-      stranded: [{ name: '57dc83ce-9523-4a3d-baa0-8fe9ddd7a48d.json.tmp.47057.0', age_ms: 36 * 24 * 60 * 60 * 1000 }],
+      stranded: [
+        {
+          name: '57dc83ce-9523-4a3d-baa0-8fe9ddd7a48d.json.tmp.47057.0',
+          age_ms: 36 * 24 * 60 * 60 * 1000,
+        },
+      ],
     });
     // The repair names the automatic sweep, never a manual hand-delete as the
     // primary path.

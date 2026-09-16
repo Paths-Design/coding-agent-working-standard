@@ -17,10 +17,7 @@
 // handle — but the human prose tells the user which repair to perform.
 
 import type { Decision } from '../../kernel';
-import type {
-  AuthorityContextCandidate,
-  ResolvedBinding,
-} from '../binding/types';
+import type { AuthorityContextCandidate, ResolvedBinding } from '../binding/types';
 
 export interface RenderDecisionOptions {
   /**
@@ -121,9 +118,9 @@ export function buildScopeDecisionJson(
       ? 'spec_context'
       : boundContext?.source === 'target_scope_in_claim'
         ? 'union'
-      : decision.bindingState === 'bound' || decision.bindingState === 'bridged'
-        ? 'authoritative'
-        : 'union';
+        : decision.bindingState === 'bound' || decision.bindingState === 'bridged'
+          ? 'authoritative'
+          : 'union';
 
   const boundSpecId = extractBoundSpecId(decision, boundContext);
   const matchedPattern = extractMatchedPattern(decision.data);
@@ -168,10 +165,7 @@ export function buildScopeDecisionJson(
 }
 
 /** Render the stable JSON contract as a single line for hook consumption. */
-export function renderDecisionJson(
-  decision: Decision,
-  boundContext?: ResolvedBinding
-): string {
+export function renderDecisionJson(decision: Decision, boundContext?: ResolvedBinding): string {
   return JSON.stringify(buildScopeDecisionJson(decision, boundContext));
 }
 
@@ -204,8 +198,7 @@ function extractMatchedPattern(
   data: Readonly<Record<string, unknown>> | undefined
 ): string | undefined {
   if (data === undefined) return undefined;
-  const candidate =
-    data['matchedPattern'] ?? data['matchedPrefix'] ?? data['matchedName'];
+  const candidate = data['matchedPattern'] ?? data['matchedPrefix'] ?? data['matchedName'];
   return typeof candidate === 'string' ? candidate : undefined;
 }
 
@@ -304,13 +297,13 @@ function authorityCandidateNotes(
     notes.unshift(
       claiming.length === 1
         ? `${one?.specId} claims this path via scope.in "${one?.matchedScopeInEntry}"` +
-          (one?.lifecycleState === 'draft'
-            ? ' and is a draft — creating or binding its worktree activates it.'
-            : '.')
+            (one?.lifecycleState === 'draft'
+              ? ' and is a draft — creating or binding its worktree activates it.'
+              : '.')
         : `${claiming.length} specs claim this path via scope.in; listed in id order` +
-          (claiming.some((c) => c.lifecycleState === 'draft')
-            ? ' (drafts among them activate on bind).'
-            : '.')
+            (claiming.some((c) => c.lifecycleState === 'draft')
+              ? ' (drafts among them activate on bind).'
+              : '.')
     );
   } else {
     notes.unshift(
@@ -340,8 +333,7 @@ export function buildScopeRemediation(
   ) {
     const wt = boundContext.worktreeName;
     return {
-      summary:
-        `Path is admitted by worktree ${wt}'s scope.in claim; enter that worktree before editing.`,
+      summary: `Path is admitted by worktree ${wt}'s scope.in claim; enter that worktree before editing.`,
       commands: [
         {
           command: 'caws worktree list --data',
@@ -359,9 +351,7 @@ export function buildScopeRemediation(
           mutates: false,
         },
       ],
-      notes: [
-        'A base-checkout write to this path can still be blocked by worktree-write-guard.',
-      ],
+      notes: ['A base-checkout write to this path can still be blocked by worktree-write-guard.'],
     };
   }
 
@@ -403,7 +393,8 @@ export function buildScopeRemediation(
         },
         {
           command: `caws specs amend-scope ${shellQuote(specId)} --add-support ${shellQuote(normPath)}`,
-          description: 'Add the path to scope.support, making it editable but not worktree-claimed.',
+          description:
+            'Add the path to scope.support, making it editable but not worktree-claimed.',
           mutates: true,
         },
       ],
@@ -426,7 +417,8 @@ export function buildScopeRemediation(
         },
         {
           command: `caws specs amend-scope ${shellQuote(specId)} --remove-out ${shellQuote(matched)}`,
-          description: 'Remove the matching scope.out exclusion if this path is intentionally in scope.',
+          description:
+            'Remove the matching scope.out exclusion if this path is intentionally in scope.',
           mutates: true,
         },
       ],
@@ -451,7 +443,8 @@ export function buildScopeRemediation(
       });
     }
     return {
-      summary: 'The worktree/spec binding is one-sided; repair the binding before evaluating scope.',
+      summary:
+        'The worktree/spec binding is one-sided; repair the binding before evaluating scope.',
       commands,
     };
   }
@@ -467,13 +460,11 @@ export function buildScopeRemediation(
         }),
       ];
       if (candidates.length === 0) {
-        commands.push(
-          {
-            command: `caws worktree bind ${shellQuote(boundContext.worktreeName)} --spec <spec-id>`,
-            description: 'Bind this existing worktree to the active spec that should own the edit.',
-            mutates: true,
-          }
-        );
+        commands.push({
+          command: `caws worktree bind ${shellQuote(boundContext.worktreeName)} --spec <spec-id>`,
+          description: 'Bind this existing worktree to the active spec that should own the edit.',
+          mutates: true,
+        });
       }
       return {
         summary: `Tracked worktree ${boundContext.worktreeName} is not bound to a spec; choose a spec authority before editing.`,
@@ -492,12 +483,14 @@ export function buildScopeRemediation(
     if (candidates.length === 0) {
       commands.push({
         command: 'caws worktree ensure <name> --spec <spec-id>',
-        description: 'Create-or-admit a governed worktree for the active spec that should own the edit.',
+        description:
+          'Create-or-admit a governed worktree for the active spec that should own the edit.',
         mutates: true,
       });
     }
     return {
-      summary: 'No worktree is bound for this context; choose a spec authority and create or enter its worktree before editing.',
+      summary:
+        'No worktree is bound for this context; choose a spec authority and create or enter its worktree before editing.',
       commands,
       notes:
         candidates.length > 0
@@ -530,10 +523,7 @@ const KIND_LABEL: Record<Decision['kind'], string> = {
   invalid_path: 'INVALID     ',
 };
 
-export function renderDecision(
-  decision: Decision,
-  opts: RenderDecisionOptions = {}
-): string {
+export function renderDecision(decision: Decision, opts: RenderDecisionOptions = {}): string {
   const lines: string[] = [];
   const remediation = buildScopeRemediation(decision, opts.boundContext);
   const label = KIND_LABEL[decision.kind];
@@ -541,10 +531,7 @@ export function renderDecision(
   const ruleLabel = nuance !== '' ? `${decision.rule} ${nuance}` : decision.rule;
   lines.push(`${label} ${ruleLabel}`);
   lines.push(`             path:    ${decision.path}`);
-  if (
-    typeof decision.normalizedPath === 'string' &&
-    decision.normalizedPath !== decision.path
-  ) {
+  if (typeof decision.normalizedPath === 'string' && decision.normalizedPath !== decision.path) {
     lines.push(`             normalized: ${decision.normalizedPath}`);
   }
   lines.push(`             message: ${decision.message}`);
@@ -573,9 +560,7 @@ export function renderDecision(
           candidate.worktreeName !== undefined
             ? `, worktree ${candidate.worktreeName}`
             : ', no worktree';
-        lines.push(
-          `               - ${candidate.specId} (${candidate.lifecycleState}${wt})`
-        );
+        lines.push(`               - ${candidate.specId} (${candidate.lifecycleState}${wt})`);
       }
     }
     for (const command of remediation.commands) {
@@ -595,10 +580,7 @@ export function renderDecision(
  * shell-side state produced the unbound decision. For every other kind,
  * return ''.
  */
-function unboundNuance(
-  decision: Decision,
-  boundContext: ResolvedBinding | undefined
-): string {
+function unboundNuance(decision: Decision, boundContext: ResolvedBinding | undefined): string {
   if (decision.kind !== 'no_authority') return '';
   if (decision.bindingState !== 'unbound') return '';
   if (boundContext === undefined) return '';

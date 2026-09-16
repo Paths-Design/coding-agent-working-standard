@@ -18,10 +18,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const {
-  writeFileAtomic,
-  listStrandedTmpSiblings,
-} = require('../../dist/store/atomic-write');
+const { writeFileAtomic, listStrandedTmpSiblings } = require('../../dist/store/atomic-write');
 
 function makeTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -128,10 +125,7 @@ describe('listStrandedTmpSiblings: the pattern is the boundary', () => {
 
       const found = freshlyLoadedList(path.join(dir, 'lease.json'), now);
 
-      expect(found.map((entry) => entry.ownerPid).sort((a, b) => a - b)).toEqual([
-        0,
-        999999,
-      ]);
+      expect(found.map((entry) => entry.ownerPid).sort((a, b) => a - b)).toEqual([0, 999999]);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -148,10 +142,7 @@ describe('listStrandedTmpSiblings: the pattern is the boundary', () => {
       const found = freshlyLoadedList(path.join(dir, 'lease.json'), now);
 
       expect(found.map((entry) => path.basename(entry.path)).sort()).toEqual(
-        [
-          'lease.json.tmp.999999.21',
-          `lease.json.tmp.${process.pid}.22`,
-        ].sort()
+        ['lease.json.tmp.999999.21', `lease.json.tmp.${process.pid}.22`].sort()
       );
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });

@@ -134,10 +134,7 @@ describe('H3 — one-sided spec -> registry (spec has worktree:, registry has no
       specs: [spec('S-H3C', { worktree: 'wt-h3c', lifecycle_state: 'closed' } as Partial<Spec>)],
       worktrees: {},
     };
-    const f = findingFor(
-      inspectProjectState(input),
-      DOCTOR_RULES.BINDING_SPEC_MISSING_REGISTRY
-    );
+    const f = findingFor(inspectProjectState(input), DOCTOR_RULES.BINDING_SPEC_MISSING_REGISTRY);
     expect(f?.severity).toBe('info');
   });
 });
@@ -173,10 +170,7 @@ describe('H5 — 3-way registry/spec contradiction (non-actionable repair)', () 
     // registry[name].specId === idB; spec idA claims name; spec idB lacks worktree.
     const input: DoctorInput = {
       now: NOW,
-      specs: [
-        spec('S-A', { worktree: 'wt-x' } as Partial<Spec>),
-        spec('S-B', {} as Partial<Spec>),
-      ],
+      specs: [spec('S-A', { worktree: 'wt-x' } as Partial<Spec>), spec('S-B', {} as Partial<Spec>)],
       worktrees: { 'wt-x': { specId: 'S-B' } },
     };
     const report = inspectProjectState(input);
@@ -223,9 +217,7 @@ describe('event-backed governance-half-state (A2/A6 — worktree_created orphan)
       events,
     };
     const report = inspectProjectState(input);
-    expect(rules(report)).toContain(
-      DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING
-    );
+    expect(rules(report)).toContain(DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING);
     const f = findingFor(report, DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING);
     expect(f?.subject).toBe('wt-orphan');
     expect(f?.severity).toBe('warning');
@@ -327,24 +319,14 @@ describe('event-orphan verifiable-tombstone downgrade (CAWS-DEFECT-DOCTOR-NO-DIS
     } as const;
   }
 
-  function orphanInput(
-    events: ChainedEvent[],
-    extra: Partial<DoctorInput>
-  ): DoctorInput {
+  function orphanInput(events: ChainedEvent[], extra: Partial<DoctorInput>): DoctorInput {
     return { now: NOW, specs: [], worktrees: {}, events, ...extra };
   }
 
   test('A1: verifiably-dead orphan downgrades to info with verified_dead evidence', () => {
-    const report = inspectProjectState(
-      orphanInput(orphanEvents(), tombstoneObservations())
-    );
-    expect(rules(report)).toContain(
-      DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING
-    );
-    const f = findingFor(
-      report,
-      DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING
-    );
+    const report = inspectProjectState(orphanInput(orphanEvents(), tombstoneObservations()));
+    expect(rules(report)).toContain(DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING);
+    const f = findingFor(report, DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING);
     expect(f?.severity).toBe('info');
     expect(f?.subject).toBe('wt-tomb');
     expect(f?.data?.verified_dead).toBe(true);
@@ -364,10 +346,7 @@ describe('event-orphan verifiable-tombstone downgrade (CAWS-DEFECT-DOCTOR-NO-DIS
         localBranchRefs: ['refs/heads/main', 'refs/heads/wt-tomb'],
       })
     );
-    const f = findingFor(
-      report,
-      DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING
-    );
+    const f = findingFor(report, DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING);
     expect(f?.severity).toBe('warning');
     expect(f?.data?.verified_dead).toBeUndefined();
   });
@@ -380,8 +359,7 @@ describe('event-orphan verifiable-tombstone downgrade (CAWS-DEFECT-DOCTOR-NO-DIS
       })
     );
     expect(
-      findingFor(report, DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING)
-        ?.severity
+      findingFor(report, DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING)?.severity
     ).toBe('warning');
   });
 
@@ -393,8 +371,7 @@ describe('event-orphan verifiable-tombstone downgrade (CAWS-DEFECT-DOCTOR-NO-DIS
       })
     );
     expect(
-      findingFor(report, DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING)
-        ?.severity
+      findingFor(report, DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING)?.severity
     ).toBe('warning');
   });
 
@@ -402,21 +379,35 @@ describe('event-orphan verifiable-tombstone downgrade (CAWS-DEFECT-DOCTOR-NO-DIS
     // "No observation" means the key is ABSENT, not present-as-undefined —
     // exactOptionalPropertyTypes enforces that distinction, and the kernel's
     // missing-vs-malformed doctrine wants absence anyway.
-    ['no localBranchRefs observation', (o: ReturnType<typeof tombstoneObservations>) => { const { localBranchRefs: _lbr, ...rest } = o; return rest; }],
-    ['name missing from the created-path map', (o: ReturnType<typeof tombstoneObservations>) => ({ ...o, filesystem: fsObs({ createdWorktreePathExistsByName: {} }) })],
-    ['no gitWorktrees observation', (o: ReturnType<typeof tombstoneObservations>) => { const { gitWorktrees: _gw, ...rest } = o; return rest; }],
-  ])(
-    'A4: %s keeps the warning — unobserved never downgrades',
-    (_label, mutate) => {
-      const report = inspectProjectState(
-        orphanInput(orphanEvents(), mutate(tombstoneObservations()))
-      );
-      expect(
-        findingFor(report, DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING)
-          ?.severity
-      ).toBe('warning');
-    }
-  );
+    [
+      'no localBranchRefs observation',
+      (o: ReturnType<typeof tombstoneObservations>) => {
+        const { localBranchRefs: _lbr, ...rest } = o;
+        return rest;
+      },
+    ],
+    [
+      'name missing from the created-path map',
+      (o: ReturnType<typeof tombstoneObservations>) => ({
+        ...o,
+        filesystem: fsObs({ createdWorktreePathExistsByName: {} }),
+      }),
+    ],
+    [
+      'no gitWorktrees observation',
+      (o: ReturnType<typeof tombstoneObservations>) => {
+        const { gitWorktrees: _gw, ...rest } = o;
+        return rest;
+      },
+    ],
+  ])('A4: %s keeps the warning — unobserved never downgrades', (_label, mutate) => {
+    const report = inspectProjectState(
+      orphanInput(orphanEvents(), mutate(tombstoneObservations()))
+    );
+    expect(
+      findingFor(report, DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING)?.severity
+    ).toBe('warning');
+  });
 
   test('A4b: a created-event without a recorded path never downgrades (nothing to stat)', () => {
     const events = chain([{ event: 'worktree_created', data: { name: 'wt-nopath' } }]);
@@ -428,8 +419,7 @@ describe('event-orphan verifiable-tombstone downgrade (CAWS-DEFECT-DOCTOR-NO-DIS
       })
     );
     expect(
-      findingFor(report, DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING)
-        ?.severity
+      findingFor(report, DOCTOR_RULES.WORKTREE_EVENT_WITHOUT_CONTROL_PLANE_BINDING)?.severity
     ).toBe('warning');
   });
 

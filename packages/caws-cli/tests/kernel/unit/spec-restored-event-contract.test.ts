@@ -48,13 +48,21 @@ describe('spec_restored event contract', () => {
   });
 
   test('rejects unknown data properties and invalid target states', () => {
-    expect(isErr(validateEventBody({
-      ...valid,
-      data: { ...valid.data, restored_lifecycle_state: 'closed' },
-    }))).toBe(true);
-    expect(isErr(validateEventBody({
-      ...valid,
-      data: { ...valid.data, extra: true },
-    }))).toBe(true);
+    expect(
+      isErr(
+        validateEventBody({
+          ...valid,
+          data: { ...valid.data, restored_lifecycle_state: 'closed' },
+        })
+      )
+    ).toBe(true);
+    expect(
+      isErr(
+        validateEventBody({
+          ...valid,
+          data: { ...valid.data, extra: true },
+        })
+      )
+    ).toBe(true);
   });
 });

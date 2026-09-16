@@ -40,7 +40,7 @@ const ERROR_CODES = {
  * @returns {string} Error category
  */
 function getErrorCategory(error) {
-  const errorMessage = typeof error === 'string' ? error : (error?.message || '');
+  const errorMessage = typeof error === 'string' ? error : error?.message || '';
   const errorCode = typeof error === 'object' && error?.code ? error.code : null;
 
   // Check error codes first
@@ -107,10 +107,7 @@ function getErrorCategory(error) {
     return ERROR_CATEGORIES.USER_INPUT;
   }
 
-  if (
-    lowerMessage.includes('dependency') ||
-    lowerMessage.includes('module not found')
-  ) {
+  if (lowerMessage.includes('dependency') || lowerMessage.includes('module not found')) {
     return ERROR_CATEGORIES.DEPENDENCY;
   }
 

@@ -26,9 +26,7 @@ function mkRepo() {
 }
 
 function writeSpec(cawsDir, id, state, opts = {}) {
-  const resolution = state === 'closed' || state === 'archived'
-    ? 'resolution: completed\n'
-    : '';
+  const resolution = state === 'closed' || state === 'archived' ? 'resolution: completed\n' : '';
   const createdAt = opts.createdAt ?? '2026-07-04T00:00:00.000Z';
   const updatedAt = opts.updatedAt ?? '2026-07-04T00:00:00.000Z';
   const worktreeLine = opts.worktree !== undefined ? `worktree: ${opts.worktree}\n` : '';
@@ -74,14 +72,17 @@ describe('selectClosedSpecsForArchive', () => {
     writeSpec(caws, 'ARCHIVE-BATCH-C-001', 'active');
 
     const selected = selectClosedSpecsForArchive(caws, {
-      include: ['ARCHIVE-BATCH-A-001', 'ARCHIVE-BATCH-B-001', 'ARCHIVE-BATCH-C-001', 'ARCHIVE-BATCH-MISSING-999'],
+      include: [
+        'ARCHIVE-BATCH-A-001',
+        'ARCHIVE-BATCH-B-001',
+        'ARCHIVE-BATCH-C-001',
+        'ARCHIVE-BATCH-MISSING-999',
+      ],
       exclude: ['ARCHIVE-BATCH-B-001'],
     });
 
     expect(selected.ok).toBe(true);
-    expect(selected.value.candidates.map((entry) => entry.id)).toEqual([
-      'ARCHIVE-BATCH-A-001',
-    ]);
+    expect(selected.value.candidates.map((entry) => entry.id)).toEqual(['ARCHIVE-BATCH-A-001']);
     expect(selected.value.skipped).toEqual([
       {
         id: 'ARCHIVE-BATCH-C-001',
@@ -126,9 +127,7 @@ describe('selectClosedSpecsForArchive', () => {
     });
 
     expect(selected.ok).toBe(true);
-    expect(selected.value.candidates.map((entry) => entry.id)).toEqual([
-      'ARCHIVE-BATCH-OLD-001',
-    ]);
+    expect(selected.value.candidates.map((entry) => entry.id)).toEqual(['ARCHIVE-BATCH-OLD-001']);
     expect(selected.value.candidates[0].timestamp).toBe('2026-06-01T00:00:00.000Z');
     expect(selected.value.candidates[0].age_ms).toBeGreaterThan(0);
     expect(selected.value.skipped.map((entry) => [entry.id, entry.reason])).toEqual([
@@ -136,7 +135,9 @@ describe('selectClosedSpecsForArchive', () => {
       ['ARCHIVE-BATCH-BOUND-001', 'has_worktree'],
       ['ARCHIVE-BATCH-FRESH-001', 'too_fresh'],
     ]);
-    expect(selected.value.skipped.find((entry) => entry.id === 'ARCHIVE-BATCH-BOUND-001').worktree).toBe('wt-bound');
+    expect(
+      selected.value.skipped.find((entry) => entry.id === 'ARCHIVE-BATCH-BOUND-001').worktree
+    ).toBe('wt-bound');
   });
 
   test('rejects invalid updated-before values', () => {
@@ -175,12 +176,14 @@ describe('archiveClosedSpecs', () => {
     expect(archived.value.failed).toEqual([]);
     expect(archived.value.data.audit_commit.kind).toBe('committed');
     expect(git(root, ['rev-list', '--count', `${beforeHead}..HEAD`])).toBe('1');
-    expect(git(root, ['log', '-1', '--pretty=%s'])).toBe(
-      'chore(caws): archive 2 closed specs'
-    );
+    expect(git(root, ['log', '-1', '--pretty=%s'])).toBe('chore(caws): archive 2 closed specs');
     expect(fs.existsSync(path.join(caws, 'specs', 'ARCHIVE-BATCH-A-001.yaml'))).toBe(false);
     expect(fs.existsSync(path.join(caws, 'specs', 'ARCHIVE-BATCH-B-001.yaml'))).toBe(false);
-    expect(fs.existsSync(path.join(caws, 'specs', '.archive', 'ARCHIVE-BATCH-A-001.yaml'))).toBe(true);
-    expect(fs.existsSync(path.join(caws, 'specs', '.archive', 'ARCHIVE-BATCH-B-001.yaml'))).toBe(true);
+    expect(fs.existsSync(path.join(caws, 'specs', '.archive', 'ARCHIVE-BATCH-A-001.yaml'))).toBe(
+      true
+    );
+    expect(fs.existsSync(path.join(caws, 'specs', '.archive', 'ARCHIVE-BATCH-B-001.yaml'))).toBe(
+      true
+    );
   });
 });

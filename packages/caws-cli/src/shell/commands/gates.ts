@@ -46,30 +46,16 @@ import {
   type Waiver,
 } from '../../kernel';
 
-import {
-  appendEvent,
-  composeStoreSnapshot,
-  loadWaivers,
-  resolveRepoRoot,
-} from '../../store';
+import { appendEvent, composeStoreSnapshot, loadWaivers, resolveRepoRoot } from '../../store';
 import { renderDiagnostics } from '../render/diagnostic';
 import { renderGatesRun } from '../render/gates';
 import { resolveSession } from '../session/resolve-session';
 import { buildActor } from '../session/actor';
 import { SHELL_RULES } from '../rules';
-import {
-  deriveDispositions,
-  type GateDisposition,
-} from '../gates/disposition';
+import { deriveDispositions, type GateDisposition } from '../gates/disposition';
 import { runLocalEvaluators } from '../gates/local-evaluators';
-import {
-  validateGatesReport,
-  type GatesReport,
-} from '../gates/gate-result-contract';
-import {
-  filterWaivedViolations,
-  type WaiverEvidence,
-} from '../gates/waiver-filter';
+import { validateGatesReport, type GatesReport } from '../gates/gate-result-contract';
+import { filterWaivedViolations, type WaiverEvidence } from '../gates/waiver-filter';
 
 export interface GatesRunCommandOptions {
   readonly cwd?: string;
@@ -237,15 +223,21 @@ export function runGatesListCommand(opts: GatesListCommandOptions = {}): number 
   });
 
   if (opts.json === true) {
-    out(JSON.stringify({
-      ok: true,
-      read_only: true,
-      spec_id: opts.specId ?? null,
-      gate_count: gates.length,
-      gates,
-      risk_tiers: loaded.policy.risk_tiers,
-      waiver_policy: loaded.policy.waivers ?? {},
-    }, null, 2));
+    out(
+      JSON.stringify(
+        {
+          ok: true,
+          read_only: true,
+          spec_id: opts.specId ?? null,
+          gate_count: gates.length,
+          gates,
+          risk_tiers: loaded.policy.risk_tiers,
+          waiver_policy: loaded.policy.waivers ?? {},
+        },
+        null,
+        2
+      )
+    );
     return 0;
   }
 
@@ -291,13 +283,19 @@ export function runGatesExplainCommand(opts: GatesExplainCommandOptions): number
   });
 
   if (opts.json === true) {
-    out(JSON.stringify({
-      ok: true,
-      read_only: true,
-      spec_id: opts.specId ?? null,
-      gate: summary,
-      waiver_policy: loaded.policy.waivers ?? {},
-    }, null, 2));
+    out(
+      JSON.stringify(
+        {
+          ok: true,
+          read_only: true,
+          spec_id: opts.specId ?? null,
+          gate: summary,
+          waiver_policy: loaded.policy.waivers ?? {},
+        },
+        null,
+        2
+      )
+    );
     return 0;
   }
 
@@ -323,18 +321,16 @@ function dispositionToEventBody(args: {
   specId: string;
   waiverEvidence?: WaiverEvidence;
 }): EventBody {
-  const violations = args.disposition.violations
-    .slice(0, MAX_EVENT_VIOLATIONS)
-    .map((v) => ({
-      rule: typeof v.type === 'string' ? v.type : 'unknown',
-      subject:
-        typeof v.file === 'string'
-          ? typeof v.line === 'number'
-            ? `${v.file}:${v.line}`
-            : v.file
-          : (v.gate ?? 'unknown'),
-      ...(v.message !== undefined ? { details: v.message } : {}),
-    }));
+  const violations = args.disposition.violations.slice(0, MAX_EVENT_VIOLATIONS).map((v) => ({
+    rule: typeof v.type === 'string' ? v.type : 'unknown',
+    subject:
+      typeof v.file === 'string'
+        ? typeof v.line === 'number'
+          ? `${v.file}:${v.line}`
+          : v.file
+        : (v.gate ?? 'unknown'),
+    ...(v.message !== undefined ? { details: v.message } : {}),
+  }));
 
   const ev = args.waiverEvidence;
   const waivedCount = ev?.waived_count ?? 0;
@@ -501,10 +497,7 @@ export function runGatesRunCommand(
   });
 
   // 6b. Policy-driven disposition on UNWAIVED violations only.
-  const dispositionResult = deriveDispositions(
-    waiverFilter.reportForDisposition,
-    policy
-  );
+  const dispositionResult = deriveDispositions(waiverFilter.reportForDisposition, policy);
 
   // 6c. Zero-disposition guard. A "run" that emits zero gate_evaluated
   //     events is a silent CI false-green: the dashboard goes green with

@@ -197,11 +197,7 @@ function parseDataOption(
   if (typeof raw !== 'string' || raw.length === 0) return {};
   try {
     const parsed = JSON.parse(raw);
-    if (
-      typeof parsed !== 'object' ||
-      parsed === null ||
-      Array.isArray(parsed)
-    ) {
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
       throw new TypeError('--data must be a JSON object');
     }
     return parsed as Record<string, unknown>;
@@ -239,10 +235,7 @@ function renderOptionDescription(opt: CommandOptionMeta): string {
 /** Commander value collector for repeatable string options — accumulates each
  * occurrence into an array, verbatim caller order, no normalization. Shared by
  * every `collect: true` metadata option (claim --paths, waiver create --gate). */
-function collectOption(
-  value: string,
-  previous: readonly string[] | undefined
-): string[] {
+function collectOption(value: string, previous: readonly string[] | undefined): string[] {
   return previous === undefined ? [value] : [...previous, value];
 }
 
@@ -267,8 +260,7 @@ function applyOptionMeta(cmd: Command, opt: CommandOptionMeta): void {
     // in metadata as defaultValue: [] (e.g. waiver --gate seeds so the value is
     // always an array; claim --paths omits the seed so an unsupplied option
     // stays `undefined`).
-    const seed =
-      opt.defaultValue !== undefined ? (opt.defaultValue as string[]) : undefined;
+    const seed = opt.defaultValue !== undefined ? (opt.defaultValue as string[]) : undefined;
     if (opt.required === true) {
       cmd.requiredOption(opt.flag, description, collectOption, seed ?? ([] as string[]));
     } else if (seed !== undefined) {
@@ -437,20 +429,32 @@ export function registerShellCommands(
   // src/index.js as part of slice 7b.
   // -------------------------------------------------------------------
   type InitOptions = {
-    data?: boolean; agentSurface?: string; overwrite?: boolean | string[];
-    force?: boolean; adopt?: boolean; plan?: boolean; dryRun?: boolean;
-    json?: boolean; wireUserConfig?: boolean; threeWay?: string; from?: string;
-    projectsRoot?: string; nativeConfigTarget?: string;
+    data?: boolean;
+    agentSurface?: string;
+    overwrite?: boolean | string[];
+    force?: boolean;
+    adopt?: boolean;
+    plan?: boolean;
+    dryRun?: boolean;
+    json?: boolean;
+    wireUserConfig?: boolean;
+    threeWay?: string;
+    from?: string;
+    projectsRoot?: string;
+    nativeConfigTarget?: string;
   };
-  const invokeInit = (opts: InitOptions, action?: 'diff' | 'port' | 'adapters' | 'migrate', actionArg?: string): void => {
+  const invokeInit = (
+    opts: InitOptions,
+    action?: 'diff' | 'port' | 'adapters' | 'migrate',
+    actionArg?: string
+  ): void => {
     // Commander hands back the raw string for agentSurface; the
     // runInitCommand validator rejects unknown values with exit 2.
     const runOpts: Parameters<typeof runInitCommand>[0] = {
       showData: opts.data === true,
     };
     if (opts.agentSurface !== undefined) {
-      (runOpts as { agentSurface?: string }).agentSurface =
-        opts.agentSurface;
+      (runOpts as { agentSurface?: string }).agentSurface = opts.agentSurface;
     }
     if (opts.overwrite !== undefined) {
       // `--overwrite [paths...]`: bare → true; with values → string[].
@@ -459,8 +463,7 @@ export function registerShellCommands(
       if (Array.isArray(opts.overwrite)) {
         (runOpts as { overwrite?: boolean }).overwrite = true;
         if (opts.overwrite.length > 0) {
-          (runOpts as { overwriteTargets?: readonly string[] }).overwriteTargets =
-        opts.overwrite;
+          (runOpts as { overwriteTargets?: readonly string[] }).overwriteTargets = opts.overwrite;
         }
       } else {
         (runOpts as { overwrite?: boolean }).overwrite = opts.overwrite;
@@ -479,8 +482,7 @@ export function registerShellCommands(
       (runOpts as { json?: boolean }).json = opts.json;
     }
     if (opts.wireUserConfig !== undefined) {
-      (runOpts as { wireUserConfig?: boolean }).wireUserConfig =
-        opts.wireUserConfig;
+      (runOpts as { wireUserConfig?: boolean }).wireUserConfig = opts.wireUserConfig;
     }
     if (action !== undefined) {
       (runOpts as { action?: 'diff' | 'port' | 'adapters' | 'migrate' }).action = action;
@@ -491,7 +493,8 @@ export function registerShellCommands(
     if (opts.threeWay !== undefined) {
       (runOpts as { threeWayPath?: string }).threeWayPath = opts.threeWay;
     }
-    if (opts.projectsRoot !== undefined) (runOpts as { projectsRoot?: string }).projectsRoot = opts.projectsRoot;
+    if (opts.projectsRoot !== undefined)
+      (runOpts as { projectsRoot?: string }).projectsRoot = opts.projectsRoot;
     if (opts.nativeConfigTarget !== undefined)
       (runOpts as { nativeConfigTarget?: string }).nativeConfigTarget = opts.nativeConfigTarget;
     if (opts.from !== undefined) {
@@ -499,7 +502,11 @@ export function registerShellCommands(
     }
     exit(runInitCommand(runOpts));
   };
-  const registerInit = (parent: Command, meta: LeafCommandMeta | GroupCommandMeta, route: string[]): void => {
+  const registerInit = (
+    parent: Command,
+    meta: LeafCommandMeta | GroupCommandMeta,
+    route: string[]
+  ): void => {
     const cmd = meta.kind === 'leaf' ? defineLeaf(parent, meta) : parent.command(meta.name);
     if (meta.kind === 'group') {
       applyGroupMeta(cmd, meta);
@@ -511,18 +518,28 @@ export function registerShellCommands(
     cmd.action((...args: unknown[]) => {
       const invoked = args[args.length - 1] as Command;
       if (meta.kind === 'group' && invoked.args.length) {
-        process.stderr.write(`caws init: unknown subcommand ${invoked.args.join(' ')}; nothing was applied.\n`);
-        exit(2); return;
+        process.stderr.write(
+          `caws init: unknown subcommand ${invoked.args.join(' ')}; nothing was applied.\n`
+        );
+        exit(2);
+        return;
       }
       const parsed = invoked.optsWithGlobals() as InitOptions;
-      const allowed = new Set(actionMeta.options.map(option => {
-        const name = /--([a-z-]+)/.exec(option.flag)?.[1] ?? '';
-        return name.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
-      }));
-      const incompatible = Object.keys(parsed).filter(key => parsed[key as keyof InitOptions] !== undefined && !allowed.has(key));
+      const allowed = new Set(
+        actionMeta.options.map((option) => {
+          const name = /--([a-z-]+)/.exec(option.flag)?.[1] ?? '';
+          return name.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
+        })
+      );
+      const incompatible = Object.keys(parsed).filter(
+        (key) => parsed[key as keyof InitOptions] !== undefined && !allowed.has(key)
+      );
       if (incompatible.length) {
-        process.stderr.write(`caws init ${route.join(' ')}: incompatible options: ${incompatible.join(', ')}; nothing was applied.\n`);
-        exit(2); return;
+        process.stderr.write(
+          `caws init ${route.join(' ')}: incompatible options: ${incompatible.join(', ')}; nothing was applied.\n`
+        );
+        exit(2);
+        return;
       }
       const operation = route[0] as 'diff' | 'port' | 'adapters' | 'migrate' | undefined;
       invokeInit(parsed, operation, operation === 'port' ? invoked.args[0] : route[1]);
@@ -533,15 +550,16 @@ export function registerShellCommands(
   // -------------------------------------------------------------------
   // caws doctor
   // -------------------------------------------------------------------
-  defineFlat(program, DOCTOR_COMMAND_META)
-    .action((opts: { data?: boolean; repairPlan?: boolean; json?: boolean }) => {
+  defineFlat(program, DOCTOR_COMMAND_META).action(
+    (opts: { data?: boolean; repairPlan?: boolean; json?: boolean }) => {
       const code = runDoctorCommand({
         showData: opts.data === true,
         repairPlan: opts.repairPlan === true,
         json: opts.json === true,
       });
       exit(code);
-    });
+    }
+  );
 
   // -------------------------------------------------------------------
   // caws scope show <path>   /   caws scope check <path>
@@ -550,8 +568,8 @@ export function registerShellCommands(
   const scopeCmd = program.command('scope');
   applyGroupMeta(scopeCmd, SCOPE_COMMAND_META);
 
-  defineLeaf(scopeCmd, leafMeta(SCOPE_COMMAND_META, 'show'))
-    .action((p: string, opts: { data?: boolean; json?: boolean; spec?: string }) => {
+  defineLeaf(scopeCmd, leafMeta(SCOPE_COMMAND_META, 'show')).action(
+    (p: string, opts: { data?: boolean; json?: boolean; spec?: string }) => {
       const code = runScopeCommand({
         path: p,
         mode: 'show',
@@ -560,10 +578,11 @@ export function registerShellCommands(
         ...(opts.spec !== undefined ? { specId: opts.spec } : {}),
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(scopeCmd, leafMeta(SCOPE_COMMAND_META, 'check'))
-    .action((p: string, opts: { data?: boolean; json?: boolean; spec?: string }) => {
+  defineLeaf(scopeCmd, leafMeta(SCOPE_COMMAND_META, 'check')).action(
+    (p: string, opts: { data?: boolean; json?: boolean; spec?: string }) => {
       const code = runScopeCommand({
         path: p,
         mode: 'check',
@@ -572,10 +591,17 @@ export function registerShellCommands(
         ...(opts.spec !== undefined ? { specId: opts.spec } : {}),
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(scopeCmd, leafMeta(SCOPE_COMMAND_META, 'plan'))
-    .action((opts: { path?: string[]; pathsFile?: string; json?: boolean; data?: boolean; spec?: string }) => {
+  defineLeaf(scopeCmd, leafMeta(SCOPE_COMMAND_META, 'plan')).action(
+    (opts: {
+      path?: string[];
+      pathsFile?: string;
+      json?: boolean;
+      data?: boolean;
+      spec?: string;
+    }) => {
       const code = runScopePlanCommand({
         paths: opts.path ?? [],
         ...(opts.pathsFile !== undefined ? { pathsFile: opts.pathsFile } : {}),
@@ -584,22 +610,24 @@ export function registerShellCommands(
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(scopeCmd, leafMeta(SCOPE_COMMAND_META, 'contention'))
-    .action((p: string, opts: { json?: boolean }) => {
+  defineLeaf(scopeCmd, leafMeta(SCOPE_COMMAND_META, 'contention')).action(
+    (p: string, opts: { json?: boolean }) => {
       const code = runScopeContentionCommand({
         path: p,
         json: opts.json === true,
       });
       exit(code);
-    });
+    }
+  );
 
   // -------------------------------------------------------------------
   // caws status — read-only dashboard (replaces legacy status)
   // -------------------------------------------------------------------
-  defineFlat(program, STATUS_COMMAND_META)
-    .action((opts: {
+  defineFlat(program, STATUS_COMMAND_META).action(
+    (opts: {
       data?: boolean;
       specs?: boolean;
       worktrees?: boolean;
@@ -618,38 +646,38 @@ export function registerShellCommands(
         json: opts.json === true,
       });
       exit(code);
-    });
+    }
+  );
 
   // -------------------------------------------------------------------
   // caws claim [--takeover] [--paths <path>...]
   // -------------------------------------------------------------------
-  defineFlat(program, CLAIM_COMMAND_META)
-    .action(
-      (opts: {
-        takeover?: boolean;
-        plan?: boolean;
-        json?: boolean;
-        releasePaths?: boolean;
-        apply?: boolean;
-        paths?: readonly string[];
-        spec?: string;
-        release?: boolean;
-        data?: boolean;
-      }) => {
-        const code = runClaimCommand({
-          takeover: opts.takeover === true,
-          plan: opts.plan === true,
-          json: opts.json === true,
-          releasePaths: opts.releasePaths === true,
-          apply: opts.apply === true,
-          showData: opts.data === true,
-          ...(opts.paths !== undefined ? { paths: opts.paths } : {}),
-          ...(opts.spec !== undefined ? { spec: opts.spec } : {}),
-          ...(opts.release === true ? { release: true } : {}),
-        });
-        exit(code);
-      }
-    );
+  defineFlat(program, CLAIM_COMMAND_META).action(
+    (opts: {
+      takeover?: boolean;
+      plan?: boolean;
+      json?: boolean;
+      releasePaths?: boolean;
+      apply?: boolean;
+      paths?: readonly string[];
+      spec?: string;
+      release?: boolean;
+      data?: boolean;
+    }) => {
+      const code = runClaimCommand({
+        takeover: opts.takeover === true,
+        plan: opts.plan === true,
+        json: opts.json === true,
+        releasePaths: opts.releasePaths === true,
+        apply: opts.apply === true,
+        showData: opts.data === true,
+        ...(opts.paths !== undefined ? { paths: opts.paths } : {}),
+        ...(opts.spec !== undefined ? { spec: opts.spec } : {}),
+        ...(opts.release === true ? { release: true } : {}),
+      });
+      exit(code);
+    }
+  );
 
   // -------------------------------------------------------------------
   // caws gates run --spec <id> [--context <ctx>]
@@ -658,18 +686,19 @@ export function registerShellCommands(
   const gatesCmd = program.command('gates');
   applyGroupMeta(gatesCmd, GATES_COMMAND_META);
 
-  defineLeaf(gatesCmd, leafMeta(GATES_COMMAND_META, 'list'))
-    .action((opts: { spec?: string; json?: boolean; data?: boolean }) => {
+  defineLeaf(gatesCmd, leafMeta(GATES_COMMAND_META, 'list')).action(
+    (opts: { spec?: string; json?: boolean; data?: boolean }) => {
       const code = runGatesListCommand({
         ...(opts.spec !== undefined ? { specId: opts.spec } : {}),
         json: opts.json === true,
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(gatesCmd, leafMeta(GATES_COMMAND_META, 'explain'))
-    .action((gate: string, opts: { spec?: string; json?: boolean; data?: boolean }) => {
+  defineLeaf(gatesCmd, leafMeta(GATES_COMMAND_META, 'explain')).action(
+    (gate: string, opts: { spec?: string; json?: boolean; data?: boolean }) => {
       const code = runGatesExplainCommand({
         gateId: gate,
         ...(opts.spec !== undefined ? { specId: opts.spec } : {}),
@@ -677,28 +706,28 @@ export function registerShellCommands(
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(gatesCmd, leafMeta(GATES_COMMAND_META, 'run'))
-    .action(
-      (specArg: string | undefined, opts: { spec?: string; context: string; data?: boolean }) => {
-        if (specArg !== undefined && opts.spec !== undefined) {
-          process.stderr.write(
-            'caws gates run: positional <spec> and --spec both name the spec id; supply only one.\n'
-          );
-          exit(1);
-          return;
-        }
-        const specId = opts.spec ?? specArg ?? '';
-        const code = runGatesRunCommand(
-          { specId },
-          {
-            showData: opts.data === true,
-          }
+  defineLeaf(gatesCmd, leafMeta(GATES_COMMAND_META, 'run')).action(
+    (specArg: string | undefined, opts: { spec?: string; context: string; data?: boolean }) => {
+      if (specArg !== undefined && opts.spec !== undefined) {
+        process.stderr.write(
+          'caws gates run: positional <spec> and --spec both name the spec id; supply only one.\n'
         );
-        exit(code);
+        exit(1);
+        return;
       }
-    );
+      const specId = opts.spec ?? specArg ?? '';
+      const code = runGatesRunCommand(
+        { specId },
+        {
+          showData: opts.data === true,
+        }
+      );
+      exit(code);
+    }
+  );
 
   // -------------------------------------------------------------------
   // caws evidence record
@@ -706,82 +735,76 @@ export function registerShellCommands(
   const evidenceCmd = program.command('evidence');
   applyGroupMeta(evidenceCmd, EVIDENCE_COMMAND_META);
 
-  defineLeaf(evidenceCmd, leafMeta(EVIDENCE_COMMAND_META, 'record'))
-    .action(
-      (opts: {
-        type: string;
-        spec: string;
-        data: string;
-        actorKind?: string;
-        actorId?: string;
-      }) => {
-        // Parse --data here; pass already-typed shape to the command.
-        let data: Record<string, unknown>;
-        try {
-          data = parseDataOption(opts.data, opts.type);
-        } catch (e) {
-          process.stderr.write(`${(e as Error).message}\n`);
-          exit(1);
-          return;
-        }
-        if (!isEvidenceKind(opts.type)) {
-          process.stderr.write(
-            `caws evidence record: invalid --type ${JSON.stringify(opts.type)}; expected test|gate|ac|human_decision.\n`
-          );
-          exit(1);
-          return;
-        }
-        const code = runEvidenceRecordCommand({
-          kind: opts.type,
-          specId: opts.spec,
-          data,
-          ...(opts.actorKind !== undefined
-            ? { actorKind: opts.actorKind as 'agent' | 'human' | 'system' | 'automation' }
-            : {}),
-          ...(opts.actorId !== undefined ? { actorId: opts.actorId } : {}),
-        });
-        exit(code);
+  defineLeaf(evidenceCmd, leafMeta(EVIDENCE_COMMAND_META, 'record')).action(
+    (opts: { type: string; spec: string; data: string; actorKind?: string; actorId?: string }) => {
+      // Parse --data here; pass already-typed shape to the command.
+      let data: Record<string, unknown>;
+      try {
+        data = parseDataOption(opts.data, opts.type);
+      } catch (e) {
+        process.stderr.write(`${(e as Error).message}\n`);
+        exit(1);
+        return;
       }
-    );
-
-  defineLeaf(evidenceCmd, leafMeta(EVIDENCE_COMMAND_META, 'list'))
-    .action(
-      (opts: { spec: string; type?: string; json?: boolean; data?: boolean }) => {
-        if (opts.type !== undefined && !isEvidenceKind(opts.type)) {
-          process.stderr.write(
-            `caws evidence list: invalid --type ${JSON.stringify(opts.type)}; expected test|gate|ac|human_decision.\n`
-          );
-          exit(1);
-          return;
-        }
-        const code = runEvidenceListCommand({
-          specId: opts.spec,
-          ...(opts.type !== undefined ? { kind: opts.type } : {}),
-          json: opts.json === true,
-          showData: opts.data === true,
-        });
-        exit(code);
+      if (!isEvidenceKind(opts.type)) {
+        process.stderr.write(
+          `caws evidence record: invalid --type ${JSON.stringify(opts.type)}; expected test|gate|ac|human_decision.\n`
+        );
+        exit(1);
+        return;
       }
-    );
+      const code = runEvidenceRecordCommand({
+        kind: opts.type,
+        specId: opts.spec,
+        data,
+        ...(opts.actorKind !== undefined
+          ? { actorKind: opts.actorKind as 'agent' | 'human' | 'system' | 'automation' }
+          : {}),
+        ...(opts.actorId !== undefined ? { actorId: opts.actorId } : {}),
+      });
+      exit(code);
+    }
+  );
 
-  defineLeaf(evidenceCmd, leafMeta(EVIDENCE_COMMAND_META, 'show'))
-    .action((eventRef: string, opts: { json?: boolean; data?: boolean }) => {
+  defineLeaf(evidenceCmd, leafMeta(EVIDENCE_COMMAND_META, 'list')).action(
+    (opts: { spec: string; type?: string; json?: boolean; data?: boolean }) => {
+      if (opts.type !== undefined && !isEvidenceKind(opts.type)) {
+        process.stderr.write(
+          `caws evidence list: invalid --type ${JSON.stringify(opts.type)}; expected test|gate|ac|human_decision.\n`
+        );
+        exit(1);
+        return;
+      }
+      const code = runEvidenceListCommand({
+        specId: opts.spec,
+        ...(opts.type !== undefined ? { kind: opts.type } : {}),
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
+
+  defineLeaf(evidenceCmd, leafMeta(EVIDENCE_COMMAND_META, 'show')).action(
+    (eventRef: string, opts: { json?: boolean; data?: boolean }) => {
       const code = runEvidenceShowCommand({
         ref: eventRef,
         json: opts.json === true,
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(evidenceCmd, leafMeta(EVIDENCE_COMMAND_META, 'schema'))
-    .action((opts: { type: string; json?: boolean }) => {
+  defineLeaf(evidenceCmd, leafMeta(EVIDENCE_COMMAND_META, 'schema')).action(
+    (opts: { type: string; json?: boolean }) => {
       const code = runEvidenceSchemaCommand({
         kind: opts.type as EvidenceKind,
         json: opts.json === true,
       });
       exit(code);
-    });
+    }
+  );
 
   // -------------------------------------------------------------------
   // caws events migrate / rotate / verify-archive
@@ -800,8 +823,8 @@ export function registerShellCommands(
   const eventsCmd = program.command('events');
   applyGroupMeta(eventsCmd, EVENTS_COMMAND_META);
 
-  defineLeaf(eventsCmd, leafMeta(EVENTS_COMMAND_META, 'list'))
-    .action((opts: { json?: boolean; limit?: string; data?: boolean }) => {
+  defineLeaf(eventsCmd, leafMeta(EVENTS_COMMAND_META, 'list')).action(
+    (opts: { json?: boolean; limit?: string; data?: boolean }) => {
       let limit: number | undefined;
       try {
         limit = parseOptionalNonNegativeInteger(opts.limit);
@@ -816,78 +839,77 @@ export function registerShellCommands(
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(eventsCmd, leafMeta(EVENTS_COMMAND_META, 'show'))
-    .action((eventRef: string, opts: { json?: boolean; data?: boolean }) => {
+  defineLeaf(eventsCmd, leafMeta(EVENTS_COMMAND_META, 'show')).action(
+    (eventRef: string, opts: { json?: boolean; data?: boolean }) => {
       const code = runEventsShowCommand({
         ref: eventRef,
         json: opts.json === true,
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(eventsCmd, leafMeta(EVENTS_COMMAND_META, 'migrate'))
-    .action(
-      (opts: {
-        from: string;
-        apply?: boolean;
-        reason?: string;
-        actorKind?: string;
-        actorId?: string;
-        allowPartialUpgrade?: boolean;
-      }) => {
-        if (opts.from !== 'v10') {
-          process.stderr.write(
-            `caws events migrate: only --from v10 is supported in v11.2; got ${JSON.stringify(opts.from)}.\n`
-          );
-          exit(1);
-          return;
-        }
-        const code = runEventsMigrateCommand({
-          from: 'v10',
-          ...(opts.apply === true ? { apply: true } : {}),
-          ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
-          ...(opts.actorKind !== undefined
-            ? { actorKind: opts.actorKind as 'agent' | 'human' | 'system' | 'automation' }
-            : {}),
-          ...(opts.actorId !== undefined ? { actorId: opts.actorId } : {}),
-          ...(opts.allowPartialUpgrade === true ? { allowPartialUpgrade: true } : {}),
-        });
-        exit(code);
+  defineLeaf(eventsCmd, leafMeta(EVENTS_COMMAND_META, 'migrate')).action(
+    (opts: {
+      from: string;
+      apply?: boolean;
+      reason?: string;
+      actorKind?: string;
+      actorId?: string;
+      allowPartialUpgrade?: boolean;
+    }) => {
+      if (opts.from !== 'v10') {
+        process.stderr.write(
+          `caws events migrate: only --from v10 is supported in v11.2; got ${JSON.stringify(opts.from)}.\n`
+        );
+        exit(1);
+        return;
       }
-    );
-
-  defineLeaf(eventsCmd, leafMeta(EVENTS_COMMAND_META, 'rotate'))
-    .action(
-      (opts: {
-        reason: string;
-        dryRun?: boolean;
-        json?: boolean;
-        actorKind?: string;
-        actorId?: string;
-        allowClean?: boolean;
-      }) => {
-        const code = runEventsRotateCommand({
-          reason: opts.reason,
-          ...(opts.actorKind !== undefined
-            ? { actorKind: opts.actorKind as 'agent' | 'human' | 'system' | 'automation' }
-            : {}),
-          ...(opts.actorId !== undefined ? { actorId: opts.actorId } : {}),
-          ...(opts.allowClean === true ? { allowClean: true } : {}),
-          dryRun: opts.dryRun === true,
-          json: opts.json === true,
-        });
-        exit(code);
-      }
-    );
-
-  defineLeaf(eventsCmd, leafMeta(EVENTS_COMMAND_META, 'verify-archive'))
-    .action(() => {
-      const code = runEventsVerifyArchiveCommand({});
+      const code = runEventsMigrateCommand({
+        from: 'v10',
+        ...(opts.apply === true ? { apply: true } : {}),
+        ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+        ...(opts.actorKind !== undefined
+          ? { actorKind: opts.actorKind as 'agent' | 'human' | 'system' | 'automation' }
+          : {}),
+        ...(opts.actorId !== undefined ? { actorId: opts.actorId } : {}),
+        ...(opts.allowPartialUpgrade === true ? { allowPartialUpgrade: true } : {}),
+      });
       exit(code);
-    });
+    }
+  );
+
+  defineLeaf(eventsCmd, leafMeta(EVENTS_COMMAND_META, 'rotate')).action(
+    (opts: {
+      reason: string;
+      dryRun?: boolean;
+      json?: boolean;
+      actorKind?: string;
+      actorId?: string;
+      allowClean?: boolean;
+    }) => {
+      const code = runEventsRotateCommand({
+        reason: opts.reason,
+        ...(opts.actorKind !== undefined
+          ? { actorKind: opts.actorKind as 'agent' | 'human' | 'system' | 'automation' }
+          : {}),
+        ...(opts.actorId !== undefined ? { actorId: opts.actorId } : {}),
+        ...(opts.allowClean === true ? { allowClean: true } : {}),
+        dryRun: opts.dryRun === true,
+        json: opts.json === true,
+      });
+      exit(code);
+    }
+  );
+
+  defineLeaf(eventsCmd, leafMeta(EVENTS_COMMAND_META, 'verify-archive')).action(() => {
+    const code = runEventsVerifyArchiveCommand({});
+    exit(code);
+  });
 
   // -------------------------------------------------------------------
   // caws waiver create / list / show / revoke
@@ -899,100 +921,90 @@ export function registerShellCommands(
   const waiverCmd = program.command('waiver');
   applyGroupMeta(waiverCmd, WAIVER_COMMAND_META);
 
-  defineLeaf(waiverCmd, leafMeta(WAIVER_COMMAND_META, 'create'))
-    .action(
-      (
-        id: string,
-        opts: {
-          title: string;
-          gate: string[];
-          reason: string;
-          approvedBy: string;
-          expiresAt: string;
-          spec?: string;
-          dryRun?: boolean;
-          json?: boolean;
-          data?: boolean;
-        }
-      ) => {
-        const code = runWaiverCreateCommand({
-          id,
-          title: opts.title,
-          gates: opts.gate,
-          reason: opts.reason,
-          approvedBy: opts.approvedBy,
-          expiresAt: opts.expiresAt,
-          ...(opts.spec !== undefined ? { specId: opts.spec } : {}),
-          dryRun: opts.dryRun === true,
-          json: opts.json === true,
-          showData: opts.data === true,
-        });
-        exit(code);
-      }
-    );
-
-  defineLeaf(waiverCmd, leafMeta(WAIVER_COMMAND_META, 'list'))
-    .action(
-      (opts: {
-        includeRevoked?: boolean;
-        includeExpired?: boolean;
+  defineLeaf(waiverCmd, leafMeta(WAIVER_COMMAND_META, 'create')).action(
+    (
+      id: string,
+      opts: {
+        title: string;
+        gate: string[];
+        reason: string;
+        approvedBy: string;
+        expiresAt: string;
+        spec?: string;
+        dryRun?: boolean;
+        json?: boolean;
         data?: boolean;
-      }) => {
-        const code = runWaiverListCommand({
-          includeRevoked: opts.includeRevoked === true,
-          includeExpired: opts.includeExpired === true,
-          showData: opts.data === true,
-        });
-        exit(code);
       }
-    );
+    ) => {
+      const code = runWaiverCreateCommand({
+        id,
+        title: opts.title,
+        gates: opts.gate,
+        reason: opts.reason,
+        approvedBy: opts.approvedBy,
+        expiresAt: opts.expiresAt,
+        ...(opts.spec !== undefined ? { specId: opts.spec } : {}),
+        dryRun: opts.dryRun === true,
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
 
-  defineLeaf(waiverCmd, leafMeta(WAIVER_COMMAND_META, 'show'))
-    .action((id: string, opts: { data?: boolean }) => {
+  defineLeaf(waiverCmd, leafMeta(WAIVER_COMMAND_META, 'list')).action(
+    (opts: { includeRevoked?: boolean; includeExpired?: boolean; data?: boolean }) => {
+      const code = runWaiverListCommand({
+        includeRevoked: opts.includeRevoked === true,
+        includeExpired: opts.includeExpired === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
+
+  defineLeaf(waiverCmd, leafMeta(WAIVER_COMMAND_META, 'show')).action(
+    (id: string, opts: { data?: boolean }) => {
       const code = runWaiverShowCommand({
         id,
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(waiverCmd, leafMeta(WAIVER_COMMAND_META, 'revoke'))
-    .action(
-      (
-        id: string,
-        opts: { revokedBy?: string; reason?: string; data?: boolean }
-      ) => {
-        const code = runWaiverRevokeCommand({
-          id,
-          ...(opts.revokedBy !== undefined ? { revokedBy: opts.revokedBy } : {}),
-          ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
-          showData: opts.data === true,
-        });
-        exit(code);
-      }
-    );
+  defineLeaf(waiverCmd, leafMeta(WAIVER_COMMAND_META, 'revoke')).action(
+    (id: string, opts: { revokedBy?: string; reason?: string; data?: boolean }) => {
+      const code = runWaiverRevokeCommand({
+        id,
+        ...(opts.revokedBy !== undefined ? { revokedBy: opts.revokedBy } : {}),
+        ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
 
-  defineLeaf(waiverCmd, leafMeta(WAIVER_COMMAND_META, 'prune'))
-    .action(
-      (opts: {
-        status: string;
-        apply?: boolean;
-        reason?: string;
-        revokedBy?: string;
-        json?: boolean;
-        data?: boolean;
-      }) => {
-        const code = runWaiverPruneCommand({
-          status: opts.status as 'expired',
-          apply: opts.apply === true,
-          ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
-          ...(opts.revokedBy !== undefined ? { revokedBy: opts.revokedBy } : {}),
-          json: opts.json === true,
-          showData: opts.data === true,
-        });
-        exit(code);
-      }
-    );
+  defineLeaf(waiverCmd, leafMeta(WAIVER_COMMAND_META, 'prune')).action(
+    (opts: {
+      status: string;
+      apply?: boolean;
+      reason?: string;
+      revokedBy?: string;
+      json?: boolean;
+      data?: boolean;
+    }) => {
+      const code = runWaiverPruneCommand({
+        status: opts.status as 'expired',
+        apply: opts.apply === true,
+        ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+        ...(opts.revokedBy !== undefined ? { revokedBy: opts.revokedBy } : {}),
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
 
   // -------------------------------------------------------------------
   // caws reprieve grant / show / revoke / list
@@ -1007,92 +1019,90 @@ export function registerShellCommands(
   const reprieveCmd = program.command('reprieve');
   applyGroupMeta(reprieveCmd, REPRIEVE_COMMAND_META);
 
-  defineLeaf(reprieveCmd, leafMeta(REPRIEVE_COMMAND_META, 'grant'))
-    .action(
-      (opts: {
-        handlers: string;
-        reason: string;
-        approvedBy: string;
-        expiresAt?: string;
-        for?: string;
-        current?: boolean;
-        session?: string;
-        surface?: string;
-        dryRun?: boolean;
-        json?: boolean;
-        data?: boolean;
-      }) => {
-        const code = runReprieveGrantCommand({
-          handlers: opts.handlers,
-          reason: opts.reason,
-          approvedBy: opts.approvedBy,
-          // Forward only what was supplied: the handler distinguishes "absent"
-          // from "present" to enforce exactly-one-of, so an explicit undefined
-          // key must not be introduced here.
-          ...(opts.expiresAt !== undefined ? { expiresAt: opts.expiresAt } : {}),
-          ...(opts.for !== undefined ? { for: opts.for } : {}),
-          current: opts.current !== false,
-          ...(opts.session !== undefined ? { session: opts.session } : {}),
-          ...(opts.surface !== undefined ? { surface: opts.surface } : {}),
-          dryRun: opts.dryRun === true,
-          json: opts.json === true,
-          showData: opts.data === true,
-        });
-        exit(code);
-      }
-    );
+  defineLeaf(reprieveCmd, leafMeta(REPRIEVE_COMMAND_META, 'grant')).action(
+    (opts: {
+      handlers: string;
+      reason: string;
+      approvedBy: string;
+      expiresAt?: string;
+      for?: string;
+      current?: boolean;
+      session?: string;
+      surface?: string;
+      dryRun?: boolean;
+      json?: boolean;
+      data?: boolean;
+    }) => {
+      const code = runReprieveGrantCommand({
+        handlers: opts.handlers,
+        reason: opts.reason,
+        approvedBy: opts.approvedBy,
+        // Forward only what was supplied: the handler distinguishes "absent"
+        // from "present" to enforce exactly-one-of, so an explicit undefined
+        // key must not be introduced here.
+        ...(opts.expiresAt !== undefined ? { expiresAt: opts.expiresAt } : {}),
+        ...(opts.for !== undefined ? { for: opts.for } : {}),
+        current: opts.current !== false,
+        ...(opts.session !== undefined ? { session: opts.session } : {}),
+        ...(opts.surface !== undefined ? { surface: opts.surface } : {}),
+        dryRun: opts.dryRun === true,
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
 
-  defineLeaf(reprieveCmd, leafMeta(REPRIEVE_COMMAND_META, 'show'))
-    .action(
-      (opts: {
-        current?: boolean;
-        session?: string;
-        surface?: string;
-        json?: boolean;
-        data?: boolean;
-      }) => {
-        const code = runReprieveShowCommand({
-          current: opts.current !== false,
-          ...(opts.session !== undefined ? { session: opts.session } : {}),
-          ...(opts.surface !== undefined ? { surface: opts.surface } : {}),
-          json: opts.json === true,
-          showData: opts.data === true,
-        });
-        exit(code);
-      }
-    );
+  defineLeaf(reprieveCmd, leafMeta(REPRIEVE_COMMAND_META, 'show')).action(
+    (opts: {
+      current?: boolean;
+      session?: string;
+      surface?: string;
+      json?: boolean;
+      data?: boolean;
+    }) => {
+      const code = runReprieveShowCommand({
+        current: opts.current !== false,
+        ...(opts.session !== undefined ? { session: opts.session } : {}),
+        ...(opts.surface !== undefined ? { surface: opts.surface } : {}),
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
 
-  defineLeaf(reprieveCmd, leafMeta(REPRIEVE_COMMAND_META, 'revoke'))
-    .action(
-      (opts: {
-        reason: string;
-        current?: boolean;
-        session?: string;
-        surface?: string;
-        json?: boolean;
-        data?: boolean;
-      }) => {
-        const code = runReprieveRevokeCommand({
-          reason: opts.reason,
-          current: opts.current !== false,
-          ...(opts.session !== undefined ? { session: opts.session } : {}),
-          ...(opts.surface !== undefined ? { surface: opts.surface } : {}),
-          json: opts.json === true,
-          showData: opts.data === true,
-        });
-        exit(code);
-      }
-    );
+  defineLeaf(reprieveCmd, leafMeta(REPRIEVE_COMMAND_META, 'revoke')).action(
+    (opts: {
+      reason: string;
+      current?: boolean;
+      session?: string;
+      surface?: string;
+      json?: boolean;
+      data?: boolean;
+    }) => {
+      const code = runReprieveRevokeCommand({
+        reason: opts.reason,
+        current: opts.current !== false,
+        ...(opts.session !== undefined ? { session: opts.session } : {}),
+        ...(opts.surface !== undefined ? { surface: opts.surface } : {}),
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
 
-  defineLeaf(reprieveCmd, leafMeta(REPRIEVE_COMMAND_META, 'list'))
-    .action((opts: { surface?: string; json?: boolean; data?: boolean }) => {
+  defineLeaf(reprieveCmd, leafMeta(REPRIEVE_COMMAND_META, 'list')).action(
+    (opts: { surface?: string; json?: boolean; data?: boolean }) => {
       const code = runReprieveListCommand({
         ...(opts.surface !== undefined ? { surface: opts.surface } : {}),
         json: opts.json === true,
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
   // -------------------------------------------------------------------
   // caws specs (CLI-SPECS-001)
@@ -1118,85 +1128,87 @@ export function registerShellCommands(
     exit(code);
   });
 
-  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'create'))
-    .action(
-      (
-        id: string | undefined,
-        opts: {
-          id?: string;
-          title?: string;
-          mode?: string;
-          riskTier?: string;
-          tier?: string;
-          scopeIn?: string[];
-          'scope.in'?: string[];
-          acceptance?: string[];
-          contract?: string[];
-          observability?: string[];
-          rollback?: string[];
-          security?: string[];
-          module?: string[];
-          invariant?: string[];
-          activate?: boolean;
-          type?: string;
-          plan?: boolean;
-          json?: boolean;
-          data?: boolean;
-          allowForeignBranch?: boolean;
-        }
-      ) => {
-        const code = runSpecsCreateCommand({
-          ...(id !== undefined ? { id } : {}),
-          ...(opts.id !== undefined ? { idOption: opts.id } : {}),
-          ...(opts.title !== undefined ? { title: opts.title } : {}),
-          ...(opts.mode !== undefined ? { mode: opts.mode } : {}),
-          ...(opts.riskTier !== undefined ? { riskTier: opts.riskTier } : {}),
-          ...(opts.tier !== undefined ? { tier: opts.tier } : {}),
-          ...(opts.scopeIn !== undefined ? { scopeIn: opts.scopeIn } : {}),
-          ...(opts['scope.in'] !== undefined ? { scopeInDot: opts['scope.in'] } : {}),
-          ...(opts.acceptance !== undefined ? { acceptance: opts.acceptance } : {}),
-          // FIX-SPECS-CONTRACT-ORIENTATION-001: forward the repeatable
-          // --contract values to the handler. Without this the flag is parsed
-          // by Commander (so --help shows it) but dropped at this hand-mapping
-          // layer, so a live `--contract` never reached the writer.
-          ...(opts.contract !== undefined ? { contract: opts.contract } : {}),
-          // CAWS-DEFECT-SPECS-CREATE-AUTHORING-01: same forwarding discipline as
-          // --contract above — Commander parsing a flag is NOT the same as the
-          // handler receiving it, and a handler-only test would pass over a
-          // dropped mapping here. The tier-1 trio is proven end-to-end through
-          // the spawned CLI for exactly that reason.
-          ...(opts.observability !== undefined ? { observability: opts.observability } : {}),
-          ...(opts.rollback !== undefined ? { rollback: opts.rollback } : {}),
-          ...(opts.security !== undefined ? { security: opts.security } : {}),
-          // Sterling ledger N16: same forwarding discipline. A dropped mapping
-          // here is invisible to every handler-level test.
-          ...(opts.module !== undefined ? { module: opts.module } : {}),
-          ...(opts.invariant !== undefined ? { invariant: opts.invariant } : {}),
-          // CAWS-SPEC-ACTIVATION-BINDS-001. Same forwarding discipline as the
-          // flags above: Commander parsing --activate is NOT the same as the
-          // handler receiving it, and a handler-level test cannot see a gap here.
-          activate: opts.activate === true,
-          ...(opts.type !== undefined ? { legacyType: opts.type } : {}),
-          plan: opts.plan === true,
-          json: opts.json === true,
-          showData: opts.data === true,
-          ...(opts.allowForeignBranch === true ? { allowForeignBranch: true } : {}),
-        });
-        exit(code);
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'create')).action(
+    (
+      id: string | undefined,
+      opts: {
+        id?: string;
+        title?: string;
+        mode?: string;
+        riskTier?: string;
+        tier?: string;
+        scopeIn?: string[];
+        'scope.in'?: string[];
+        acceptance?: string[];
+        contract?: string[];
+        observability?: string[];
+        rollback?: string[];
+        security?: string[];
+        module?: string[];
+        invariant?: string[];
+        activate?: boolean;
+        type?: string;
+        plan?: boolean;
+        json?: boolean;
+        data?: boolean;
+        allowForeignBranch?: boolean;
       }
-    );
+    ) => {
+      const code = runSpecsCreateCommand({
+        ...(id !== undefined ? { id } : {}),
+        ...(opts.id !== undefined ? { idOption: opts.id } : {}),
+        ...(opts.title !== undefined ? { title: opts.title } : {}),
+        ...(opts.mode !== undefined ? { mode: opts.mode } : {}),
+        ...(opts.riskTier !== undefined ? { riskTier: opts.riskTier } : {}),
+        ...(opts.tier !== undefined ? { tier: opts.tier } : {}),
+        ...(opts.scopeIn !== undefined ? { scopeIn: opts.scopeIn } : {}),
+        ...(opts['scope.in'] !== undefined ? { scopeInDot: opts['scope.in'] } : {}),
+        ...(opts.acceptance !== undefined ? { acceptance: opts.acceptance } : {}),
+        // FIX-SPECS-CONTRACT-ORIENTATION-001: forward the repeatable
+        // --contract values to the handler. Without this the flag is parsed
+        // by Commander (so --help shows it) but dropped at this hand-mapping
+        // layer, so a live `--contract` never reached the writer.
+        ...(opts.contract !== undefined ? { contract: opts.contract } : {}),
+        // CAWS-DEFECT-SPECS-CREATE-AUTHORING-01: same forwarding discipline as
+        // --contract above — Commander parsing a flag is NOT the same as the
+        // handler receiving it, and a handler-only test would pass over a
+        // dropped mapping here. The tier-1 trio is proven end-to-end through
+        // the spawned CLI for exactly that reason.
+        ...(opts.observability !== undefined ? { observability: opts.observability } : {}),
+        ...(opts.rollback !== undefined ? { rollback: opts.rollback } : {}),
+        ...(opts.security !== undefined ? { security: opts.security } : {}),
+        // Sterling ledger N16: same forwarding discipline. A dropped mapping
+        // here is invisible to every handler-level test.
+        ...(opts.module !== undefined ? { module: opts.module } : {}),
+        ...(opts.invariant !== undefined ? { invariant: opts.invariant } : {}),
+        // CAWS-SPEC-ACTIVATION-BINDS-001. Same forwarding discipline as the
+        // flags above: Commander parsing --activate is NOT the same as the
+        // handler receiving it, and a handler-level test cannot see a gap here.
+        activate: opts.activate === true,
+        ...(opts.type !== undefined ? { legacyType: opts.type } : {}),
+        plan: opts.plan === true,
+        json: opts.json === true,
+        showData: opts.data === true,
+        ...(opts.allowForeignBranch === true ? { allowForeignBranch: true } : {}),
+      });
+      exit(code);
+    }
+  );
 
-  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'list'))
-    .action((opts: {
-      status?: string;
-      lifecycle?: string;
-      state?: string;
-      active?: boolean;
-      draft?: boolean;
-      closed?: boolean;
-      archived?: boolean;
-      data?: boolean;
-    }, command: Command) => {
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'list')).action(
+    (
+      opts: {
+        status?: string;
+        lifecycle?: string;
+        state?: string;
+        active?: boolean;
+        draft?: boolean;
+        closed?: boolean;
+        archived?: boolean;
+        data?: boolean;
+      },
+      command: Command
+    ) => {
       const parentStatus = command.parent?.opts().status;
       const status =
         opts.status !== undefined
@@ -1215,30 +1227,33 @@ export function registerShellCommands(
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'show'))
-    .action((id: string, opts: { data?: boolean; archived?: boolean }) => {
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'show')).action(
+    (id: string, opts: { data?: boolean; archived?: boolean }) => {
       const code = runSpecsShowCommand({
         id,
         showData: opts.data === true,
         ...(opts.archived === true ? { archived: true } : {}),
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'recover'))
-    .action((id: string, opts: { data?: boolean; out?: string }) => {
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'recover')).action(
+    (id: string, opts: { data?: boolean; out?: string }) => {
       const code = runSpecsRecoverCommand({
         id,
         showData: opts.data === true,
         ...(typeof opts.out === 'string' && opts.out.length > 0 ? { outPath: opts.out } : {}),
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'restore'))
-    .action((id: string, opts: { as?: string; apply?: boolean; json?: boolean; data?: boolean }) => {
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'restore')).action(
+    (id: string, opts: { as?: string; apply?: boolean; json?: boolean; data?: boolean }) => {
       const code = runSpecsRestoreCommand({
         id,
         ...(opts.as !== undefined ? { targetState: opts.as } : {}),
@@ -1247,20 +1262,22 @@ export function registerShellCommands(
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'retire-draft'))
-    .action((id: string, opts: { reason?: string; data?: boolean }) => {
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'retire-draft')).action(
+    (id: string, opts: { reason?: string; data?: boolean }) => {
       const code = runSpecsRetireDraftCommand({
         id,
         ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'prune-drafts'))
-    .action((opts: {
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'prune-drafts')).action(
+    (opts: {
       olderThanMs?: string;
       include?: string;
       exclude?: string;
@@ -1283,306 +1300,294 @@ export function registerShellCommands(
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'activate'))
-    .action((id: string, opts: { data?: boolean; allowForeignBranch?: boolean }) => {
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'activate')).action(
+    (id: string, opts: { data?: boolean; allowForeignBranch?: boolean }) => {
       const code = runSpecsActivateCommand({
         id,
         showData: opts.data === true,
         ...(opts.allowForeignBranch === true ? { allowForeignBranch: true } : {}),
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'amend-scope'))
-    .action(
-      (
-        id: string,
-        opts: {
-          add?: string[];
-          remove?: string[];
-          addOut?: string[];
-          removeOut?: string[];
-          addSupport?: string[];
-          removeSupport?: string[];
-          reason?: string;
-          data?: boolean;
-          allowForeignBranch?: boolean;
-        }
-      ) => {
-        const code = runSpecsAmendScopeCommand({
-          id,
-          ...(opts.add !== undefined ? { addIn: opts.add } : {}),
-          ...(opts.remove !== undefined ? { removeIn: opts.remove } : {}),
-          ...(opts.addOut !== undefined ? { addOut: opts.addOut } : {}),
-          ...(opts.removeOut !== undefined ? { removeOut: opts.removeOut } : {}),
-          ...(opts.addSupport !== undefined ? { addSupport: opts.addSupport } : {}),
-          ...(opts.removeSupport !== undefined ? { removeSupport: opts.removeSupport } : {}),
-          ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
-          showData: opts.data === true,
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'amend-scope')).action(
+    (
+      id: string,
+      opts: {
+        add?: string[];
+        remove?: string[];
+        addOut?: string[];
+        removeOut?: string[];
+        addSupport?: string[];
+        removeSupport?: string[];
+        reason?: string;
+        data?: boolean;
+        allowForeignBranch?: boolean;
+      }
+    ) => {
+      const code = runSpecsAmendScopeCommand({
+        id,
+        ...(opts.add !== undefined ? { addIn: opts.add } : {}),
+        ...(opts.remove !== undefined ? { removeIn: opts.remove } : {}),
+        ...(opts.addOut !== undefined ? { addOut: opts.addOut } : {}),
+        ...(opts.removeOut !== undefined ? { removeOut: opts.removeOut } : {}),
+        ...(opts.addSupport !== undefined ? { addSupport: opts.addSupport } : {}),
+        ...(opts.removeSupport !== undefined ? { removeSupport: opts.removeSupport } : {}),
+        ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+        showData: opts.data === true,
         ...(opts.allowForeignBranch === true ? { allowForeignBranch: true } : {}),
-        });
-        exit(code);
-      }
-    );
+      });
+      exit(code);
+    }
+  );
 
-  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'close'))
-    .action(
-      (
-        id: string,
-        opts: {
-          resolution: string;
-          reason?: string;
-          closureNotes?: string;
-          notes?: string;
-          note?: string;
-          mergeCommit?: string;
-          supersededBy?: string;
-          data?: boolean;
-          allowForeignBranch?: boolean;
-        }
-      ) => {
-        const code = runSpecsCloseCommand({
-          id,
-          resolution: opts.resolution,
-          ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
-          ...(opts.closureNotes !== undefined
-            ? { closureNotes: opts.closureNotes }
-            : {}),
-          ...(opts.notes !== undefined ? { notes: opts.notes } : {}),
-          ...(opts.note !== undefined ? { note: opts.note } : {}),
-          ...(opts.mergeCommit !== undefined
-            ? { mergeCommit: opts.mergeCommit }
-            : {}),
-          ...(opts.supersededBy !== undefined
-            ? { supersededBy: opts.supersededBy }
-            : {}),
-          showData: opts.data === true,
-          ...(opts.allowForeignBranch === true ? { allowForeignBranch: true } : {}),
-        });
-        exit(code);
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'close')).action(
+    (
+      id: string,
+      opts: {
+        resolution: string;
+        reason?: string;
+        closureNotes?: string;
+        notes?: string;
+        note?: string;
+        mergeCommit?: string;
+        supersededBy?: string;
+        data?: boolean;
+        allowForeignBranch?: boolean;
       }
-    );
+    ) => {
+      const code = runSpecsCloseCommand({
+        id,
+        resolution: opts.resolution,
+        ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+        ...(opts.closureNotes !== undefined ? { closureNotes: opts.closureNotes } : {}),
+        ...(opts.notes !== undefined ? { notes: opts.notes } : {}),
+        ...(opts.note !== undefined ? { note: opts.note } : {}),
+        ...(opts.mergeCommit !== undefined ? { mergeCommit: opts.mergeCommit } : {}),
+        ...(opts.supersededBy !== undefined ? { supersededBy: opts.supersededBy } : {}),
+        showData: opts.data === true,
+        ...(opts.allowForeignBranch === true ? { allowForeignBranch: true } : {}),
+      });
+      exit(code);
+    }
+  );
 
-  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'evidence'))
-    .action(
-      (
-        id: string,
-        opts: {
-          ac: string;
-          status?: string;
-          evidenceRef?: string;
-          waiverReason?: string;
-          testNodeid?: string;
-          command?: string;
-          exitCode?: string;
-          artifactPath?: string;
-          commitSha?: string;
-          data?: boolean;
-        },
-        command: Command
-      ) => {
-        // Same parent-shadow class as CAWS-CLI-SPECS-ARCHIVE-STATUS-PARENT-SHADOW-001:
-        // the specs group declares a group-level `--status` (and `--data`), so a
-        // `--status` after the leaf name binds to the PARENT and `opts.status`
-        // here is always undefined on the real parse path. optsWithGlobals()
-        // surfaces the effective value regardless of which command it bound to.
-        // The handler owns the missing/invalid --status check (the option is
-        // deliberately not commander-required — see command-metadata.ts).
-        const globals = command.optsWithGlobals() as { status?: string; data?: boolean };
-        const code = runSpecsEvidenceCommand({
-          id,
-          ac: opts.ac,
-          status: globals.status as 'pass' | 'fail' | 'unchecked' | 'waived',
-          ...(opts.evidenceRef !== undefined ? { evidenceRef: opts.evidenceRef } : {}),
-          ...(opts.waiverReason !== undefined ? { waiverReason: opts.waiverReason } : {}),
-          ...(opts.testNodeid !== undefined ? { testNodeid: opts.testNodeid } : {}),
-          ...(opts.command !== undefined ? { command: opts.command } : {}),
-          ...(opts.exitCode !== undefined ? { exitCode: Number(opts.exitCode) } : {}),
-          ...(opts.artifactPath !== undefined ? { artifactPath: opts.artifactPath } : {}),
-          ...(opts.commitSha !== undefined ? { commitSha: opts.commitSha } : {}),
-          showData: globals.data === true,
-        });
-        exit(code);
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'evidence')).action(
+    (
+      id: string,
+      opts: {
+        ac: string;
+        status?: string;
+        evidenceRef?: string;
+        waiverReason?: string;
+        testNodeid?: string;
+        command?: string;
+        exitCode?: string;
+        artifactPath?: string;
+        commitSha?: string;
+        data?: boolean;
+      },
+      command: Command
+    ) => {
+      // Same parent-shadow class as CAWS-CLI-SPECS-ARCHIVE-STATUS-PARENT-SHADOW-001:
+      // the specs group declares a group-level `--status` (and `--data`), so a
+      // `--status` after the leaf name binds to the PARENT and `opts.status`
+      // here is always undefined on the real parse path. optsWithGlobals()
+      // surfaces the effective value regardless of which command it bound to.
+      // The handler owns the missing/invalid --status check (the option is
+      // deliberately not commander-required — see command-metadata.ts).
+      const globals = command.optsWithGlobals() as { status?: string; data?: boolean };
+      const code = runSpecsEvidenceCommand({
+        id,
+        ac: opts.ac,
+        status: globals.status as 'pass' | 'fail' | 'unchecked' | 'waived',
+        ...(opts.evidenceRef !== undefined ? { evidenceRef: opts.evidenceRef } : {}),
+        ...(opts.waiverReason !== undefined ? { waiverReason: opts.waiverReason } : {}),
+        ...(opts.testNodeid !== undefined ? { testNodeid: opts.testNodeid } : {}),
+        ...(opts.command !== undefined ? { command: opts.command } : {}),
+        ...(opts.exitCode !== undefined ? { exitCode: Number(opts.exitCode) } : {}),
+        ...(opts.artifactPath !== undefined ? { artifactPath: opts.artifactPath } : {}),
+        ...(opts.commitSha !== undefined ? { commitSha: opts.commitSha } : {}),
+        showData: globals.data === true,
+      });
+      exit(code);
+    }
+  );
+
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'reopen')).action(
+    (
+      id: string,
+      opts: {
+        reason?: string;
+        data?: boolean;
       }
-    );
+    ) => {
+      const code = runSpecsReopenCommand({
+        id,
+        ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
 
-  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'reopen'))
-    .action(
-      (
-        id: string,
-        opts: {
-          reason?: string;
-          data?: boolean;
-        }
-      ) => {
-        const code = runSpecsReopenCommand({
-          id,
-          ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
-          showData: opts.data === true,
-        });
-        exit(code);
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'amend')).action(
+    (
+      id: string,
+      opts: {
+        addModule?: string[];
+        removeModule?: string[];
+        addInvariant?: string[];
+        removeInvariant?: string[];
+        setAc?: string;
+        addAc?: string;
+        removeAc?: string;
+        given?: string;
+        when?: string;
+        then?: string;
+        reason?: string;
+        data?: boolean;
       }
-    );
+    ) => {
+      const code = runSpecsAmendCommand({
+        id,
+        ...(opts.addModule !== undefined ? { addModule: opts.addModule } : {}),
+        ...(opts.removeModule !== undefined ? { removeModule: opts.removeModule } : {}),
+        ...(opts.addInvariant !== undefined ? { addInvariant: opts.addInvariant } : {}),
+        ...(opts.removeInvariant !== undefined ? { removeInvariant: opts.removeInvariant } : {}),
+        ...(opts.setAc !== undefined ? { setAc: opts.setAc } : {}),
+        ...(opts.addAc !== undefined ? { addAc: opts.addAc } : {}),
+        ...(opts.removeAc !== undefined ? { removeAc: opts.removeAc } : {}),
+        ...(opts.given !== undefined ? { given: opts.given } : {}),
+        ...(opts.when !== undefined ? { when: opts.when } : {}),
+        ...(opts.then !== undefined ? { then: opts.then } : {}),
+        ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
 
-  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'amend'))
-    .action(
-      (
-        id: string,
-        opts: {
-          addModule?: string[];
-          removeModule?: string[];
-          addInvariant?: string[];
-          removeInvariant?: string[];
-          setAc?: string;
-          addAc?: string;
-          removeAc?: string;
-          given?: string;
-          when?: string;
-          then?: string;
-          reason?: string;
-          data?: boolean;
-        }
-      ) => {
-        const code = runSpecsAmendCommand({
-          id,
-          ...(opts.addModule !== undefined ? { addModule: opts.addModule } : {}),
-          ...(opts.removeModule !== undefined ? { removeModule: opts.removeModule } : {}),
-          ...(opts.addInvariant !== undefined ? { addInvariant: opts.addInvariant } : {}),
-          ...(opts.removeInvariant !== undefined ? { removeInvariant: opts.removeInvariant } : {}),
-          ...(opts.setAc !== undefined ? { setAc: opts.setAc } : {}),
-          ...(opts.addAc !== undefined ? { addAc: opts.addAc } : {}),
-          ...(opts.removeAc !== undefined ? { removeAc: opts.removeAc } : {}),
-          ...(opts.given !== undefined ? { given: opts.given } : {}),
-          ...(opts.when !== undefined ? { when: opts.when } : {}),
-          ...(opts.then !== undefined ? { then: opts.then } : {}),
-          ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
-          showData: opts.data === true,
-        });
-        exit(code);
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'deactivate')).action(
+    (
+      id: string,
+      opts: {
+        reason?: string;
+        data?: boolean;
       }
-    );
+    ) => {
+      const code = runSpecsDeactivateCommand({
+        id,
+        ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
 
-  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'deactivate'))
-    .action(
-      (
-        id: string,
-        opts: {
-          reason?: string;
-          data?: boolean;
-        }
-      ) => {
-        const code = runSpecsDeactivateCommand({
-          id,
-          ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
-          showData: opts.data === true,
-        });
-        exit(code);
-      }
-    );
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'archive')).action(
+    (
+      id: string | undefined,
+      opts: {
+        reason?: string;
+        status?: string;
+        include?: string;
+        exclude?: string;
+        olderThanMs?: string;
+        updatedBefore?: string;
+        withoutWorktree?: boolean;
+        apply?: boolean;
+        json?: boolean;
+        // `--replace` is a plain boolean, NOT a Commander negation: the flag
+        // name does not begin with `no-`, so it lands on `opts.replace` as
+        // written. (Contrast `--no-close` on `worktree merge`, which binds to
+        // `opts.close === false`.)
+        replace?: boolean;
+        data?: boolean;
+      },
+      command: Command
+    ) => {
+      const include = parseCommaSeparatedList(opts.include);
+      const exclude = parseCommaSeparatedList(opts.exclude);
+      // The parent `specs` command declares a group-level `--status` compat
+      // option (it powers `caws specs --status <s>` → `specs list`). Because
+      // the parent also declares `--status`, commander binds a `--status`
+      // that appears after the `archive` subcommand to the PARENT command,
+      // not to this leaf — so the leaf-local `opts.status` is undefined and
+      // the batch guard trips unconditionally. `optsWithGlobals()` surfaces
+      // the effective value regardless of which command it bound to, keeping
+      // the parent compat handoff intact while making the batch selector
+      // reachable. See CAWS-CLI-SPECS-ARCHIVE-STATUS-PARENT-SHADOW-001.
+      const effectiveStatus = (command.optsWithGlobals() as { status?: string }).status;
+      const status = effectiveStatus === 'closed' ? 'closed' : undefined;
+      const code = runSpecsArchiveCommand({
+        ...(id !== undefined ? { id } : {}),
+        ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+        ...(status !== undefined ? { status } : {}),
+        ...(include !== undefined ? { include } : {}),
+        ...(exclude !== undefined ? { exclude } : {}),
+        ...(opts.olderThanMs !== undefined ? { olderThanMs: opts.olderThanMs } : {}),
+        ...(opts.updatedBefore !== undefined ? { updatedBefore: opts.updatedBefore } : {}),
+        ...(opts.withoutWorktree === true ? { withoutWorktree: true } : {}),
+        ...(opts.apply === true ? { apply: true } : {}),
+        ...(opts.json === true ? { json: true } : {}),
+        ...(opts.replace === true ? { replace: true } : {}),
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
 
-  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'archive'))
-    .action(
-      (
-        id: string | undefined,
-        opts: {
-          reason?: string;
-          status?: string;
-          include?: string;
-          exclude?: string;
-          olderThanMs?: string;
-          updatedBefore?: string;
-          withoutWorktree?: boolean;
-          apply?: boolean;
-          json?: boolean;
-          // `--replace` is a plain boolean, NOT a Commander negation: the flag
-          // name does not begin with `no-`, so it lands on `opts.replace` as
-          // written. (Contrast `--no-close` on `worktree merge`, which binds to
-          // `opts.close === false`.)
-          replace?: boolean;
-          data?: boolean;
-        },
-        command: Command
-      ) => {
-        const include = parseCommaSeparatedList(opts.include);
-        const exclude = parseCommaSeparatedList(opts.exclude);
-        // The parent `specs` command declares a group-level `--status` compat
-        // option (it powers `caws specs --status <s>` → `specs list`). Because
-        // the parent also declares `--status`, commander binds a `--status`
-        // that appears after the `archive` subcommand to the PARENT command,
-        // not to this leaf — so the leaf-local `opts.status` is undefined and
-        // the batch guard trips unconditionally. `optsWithGlobals()` surfaces
-        // the effective value regardless of which command it bound to, keeping
-        // the parent compat handoff intact while making the batch selector
-        // reachable. See CAWS-CLI-SPECS-ARCHIVE-STATUS-PARENT-SHADOW-001.
-        const effectiveStatus = (
-          command.optsWithGlobals() as { status?: string }
-        ).status;
-        const status = effectiveStatus === 'closed' ? 'closed' : undefined;
-        const code = runSpecsArchiveCommand({
-          ...(id !== undefined ? { id } : {}),
-          ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
-          ...(status !== undefined ? { status } : {}),
-          ...(include !== undefined ? { include } : {}),
-          ...(exclude !== undefined ? { exclude } : {}),
-          ...(opts.olderThanMs !== undefined ? { olderThanMs: opts.olderThanMs } : {}),
-          ...(opts.updatedBefore !== undefined ? { updatedBefore: opts.updatedBefore } : {}),
-          ...(opts.withoutWorktree === true ? { withoutWorktree: true } : {}),
-          ...(opts.apply === true ? { apply: true } : {}),
-          ...(opts.json === true ? { json: true } : {}),
-          ...(opts.replace === true ? { replace: true } : {}),
-          showData: opts.data === true,
-        });
-        exit(code);
-      }
-    );
-
-  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'prune-archive'))
-    .action((opts: { apply?: boolean; data?: boolean }) => {
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'prune-archive')).action(
+    (opts: { apply?: boolean; data?: boolean }) => {
       const code = runSpecsPruneArchiveCommand({
         ...(opts.apply === true ? { apply: true } : {}),
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'migrate'))
-    .action(
-      (opts: {
-        from: string;
-        apply?: boolean;
-        partial?: boolean;
-        lifecycleMapping?: string;
-        json?: boolean;
-        data?: boolean;
-      }) => {
-        const code = runSpecsMigrateCommand({
-          from: opts.from,
-          apply: opts.apply === true,
-          partial: opts.partial === true,
-          ...(opts.lifecycleMapping !== undefined
-            ? { lifecycleMappingPath: opts.lifecycleMapping }
-            : {}),
-          json: opts.json === true,
-          showData: opts.data === true,
-        });
-        exit(code);
-      }
-    );
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'migrate')).action(
+    (opts: {
+      from: string;
+      apply?: boolean;
+      partial?: boolean;
+      lifecycleMapping?: string;
+      json?: boolean;
+      data?: boolean;
+    }) => {
+      const code = runSpecsMigrateCommand({
+        from: opts.from,
+        apply: opts.apply === true,
+        partial: opts.partial === true,
+        ...(opts.lifecycleMapping !== undefined
+          ? { lifecycleMappingPath: opts.lifecycleMapping }
+          : {}),
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
 
-  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'validate'))
-    .action((file: string, opts: { data?: boolean }) => {
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'validate')).action(
+    (file: string, opts: { data?: boolean }) => {
       const code = runSpecsValidateCommand({
         file,
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
   // CANONICAL-DRIFT-GUARDS-001: Entry 37 recovery verb.
-  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'relocate'))
-    .action((id: string, opts: { toBase?: boolean; apply?: boolean; data?: boolean }) => {
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'relocate')).action(
+    (id: string, opts: { toBase?: boolean; apply?: boolean; data?: boolean }) => {
       const code = runSpecsRelocateCommand({
         id,
         ...(opts.toBase === true ? { toBase: true } : {}),
@@ -1590,7 +1595,8 @@ export function registerShellCommands(
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
   // -------------------------------------------------------------------
   // caws worktree (CLI-WORKTREE-001)
@@ -1603,299 +1609,290 @@ export function registerShellCommands(
   const worktreeCmd = program.command('worktree');
   applyGroupMeta(worktreeCmd, WORKTREE_COMMAND_META);
 
-  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'create'))
-    .action(
-      (
-        name: string,
-        opts: {
-          spec: string;
-          baseBranch?: string;
-          branch?: string;
-          data?: boolean;
-        }
-      ) => {
-        const code = runWorktreeCreateCommand({
-          name,
-          specId: opts.spec,
-          ...(opts.baseBranch !== undefined ? { baseBranch: opts.baseBranch } : {}),
-          ...(opts.branch !== undefined ? { branch: opts.branch } : {}),
-          showData: opts.data === true,
-        });
-        exit(code);
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'create')).action(
+    (
+      name: string,
+      opts: {
+        spec: string;
+        baseBranch?: string;
+        branch?: string;
+        data?: boolean;
       }
-    );
+    ) => {
+      const code = runWorktreeCreateCommand({
+        name,
+        specId: opts.spec,
+        ...(opts.baseBranch !== undefined ? { baseBranch: opts.baseBranch } : {}),
+        ...(opts.branch !== undefined ? { branch: opts.branch } : {}),
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
 
   // WORKTREE-ENSURE-AFFORDANCE-001: create-or-admit composition verb.
-  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'ensure'))
-    .action((name: string, opts: { spec: string; data?: boolean }) => {
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'ensure')).action(
+    (name: string, opts: { spec: string; data?: boolean }) => {
       const code = runWorktreeEnsureCommand({
         name,
         specId: opts.spec,
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'list'))
-    .action((opts: { data?: boolean }) => {
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'list')).action(
+    (opts: { data?: boolean }) => {
       const code = runWorktreeListCommand({ showData: opts.data === true });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'bind'))
-    .action(
-      (
-        name: string,
-        opts: { spec: string; steal?: boolean; reason?: string; data?: boolean }
-      ) => {
-        const code = runWorktreeBindCommand({
-          name,
-          specId: opts.spec,
-          ...(opts.steal === true ? { steal: true } : {}),
-          ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
-          showData: opts.data === true,
-        });
-        exit(code);
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'bind')).action(
+    (name: string, opts: { spec: string; steal?: boolean; reason?: string; data?: boolean }) => {
+      const code = runWorktreeBindCommand({
+        name,
+        specId: opts.spec,
+        ...(opts.steal === true ? { steal: true } : {}),
+        ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
+
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'destroy')).action(
+    (name: string, opts: { abandonUnmerged?: boolean; force?: boolean; data?: boolean }) => {
+      const code = runWorktreeDestroyCommand({
+        name,
+        ...(opts.abandonUnmerged === true ? { abandonUnmerged: true } : {}),
+        ...(opts.force === true ? { force: true } : {}),
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
+
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'untrack')).action(
+    (name: string, opts: { reason: string; apply?: boolean; json?: boolean; data?: boolean }) => {
+      const code = runWorktreeUntrackCommand({
+        name,
+        reason: opts.reason,
+        apply: opts.apply === true,
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
+
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'merge')).action(
+    (
+      name: string,
+      opts: {
+        dryRun?: boolean;
+        apply?: boolean;
+        message?: string;
+        closureNotes?: string;
+        reason?: string;
+        notes?: string;
+        note?: string;
+        // CAWS-DEFECT-AC-EVIDENCE-WINDOW-01 (A3): Commander treats a
+        // `--no-<x>` flag as the NEGATION of `--<x>`, so `--no-close` does
+        // NOT produce `opts.noClose`. It defines `close` with an implicit
+        // default of true and sets it to false when the flag is present.
+        // Reading `opts.noClose` here would silently always be undefined and
+        // the flag would parse cleanly while doing nothing — the exact
+        // "reports success while doing nothing" class. Read `close === false`.
+        close?: boolean;
+        data?: boolean;
       }
-    );
+    ) => {
+      const code = runWorktreeMergeCommand({
+        name,
+        ...(opts.dryRun === true ? { dryRun: true } : {}),
+        ...(opts.apply === true ? { apply: true } : {}),
+        ...(opts.message !== undefined ? { message: opts.message } : {}),
+        ...(opts.closureNotes !== undefined ? { closureNotes: opts.closureNotes } : {}),
+        ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+        ...(opts.notes !== undefined ? { notes: opts.notes } : {}),
+        ...(opts.note !== undefined ? { note: opts.note } : {}),
+        ...(opts.close === false ? { noClose: true } : {}),
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
 
-  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'destroy'))
-    .action(
-      (name: string, opts: { abandonUnmerged?: boolean; force?: boolean; data?: boolean }) => {
-        const code = runWorktreeDestroyCommand({
-          name,
-          ...(opts.abandonUnmerged === true ? { abandonUnmerged: true } : {}),
-          ...(opts.force === true ? { force: true } : {}),
-          showData: opts.data === true,
-        });
-        exit(code);
-      }
-    );
-
-  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'untrack'))
-    .action(
-      (
-        name: string,
-        opts: { reason: string; apply?: boolean; json?: boolean; data?: boolean }
-      ) => {
-        const code = runWorktreeUntrackCommand({
-          name,
-          reason: opts.reason,
-          apply: opts.apply === true,
-          json: opts.json === true,
-          showData: opts.data === true,
-        });
-        exit(code);
-      }
-    );
-
-  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'merge'))
-    .action(
-      (
-        name: string,
-        opts: {
-          dryRun?: boolean;
-          apply?: boolean;
-          message?: string;
-          closureNotes?: string;
-          reason?: string;
-          notes?: string;
-          note?: string;
-          // CAWS-DEFECT-AC-EVIDENCE-WINDOW-01 (A3): Commander treats a
-          // `--no-<x>` flag as the NEGATION of `--<x>`, so `--no-close` does
-          // NOT produce `opts.noClose`. It defines `close` with an implicit
-          // default of true and sets it to false when the flag is present.
-          // Reading `opts.noClose` here would silently always be undefined and
-          // the flag would parse cleanly while doing nothing — the exact
-          // "reports success while doing nothing" class. Read `close === false`.
-          close?: boolean;
-          data?: boolean;
-        }
-      ) => {
-        const code = runWorktreeMergeCommand({
-          name,
-          ...(opts.dryRun === true ? { dryRun: true } : {}),
-          ...(opts.apply === true ? { apply: true } : {}),
-          ...(opts.message !== undefined ? { message: opts.message } : {}),
-          ...(opts.closureNotes !== undefined ? { closureNotes: opts.closureNotes } : {}),
-          ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
-          ...(opts.notes !== undefined ? { notes: opts.notes } : {}),
-          ...(opts.note !== undefined ? { note: opts.note } : {}),
-          ...(opts.close === false ? { noClose: true } : {}),
-          showData: opts.data === true,
-        });
-        exit(code);
-      }
-    );
-
-  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'migrate-registry'))
-    .action((opts: { dryRun?: boolean; data?: boolean }) => {
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'migrate-registry')).action(
+    (opts: { dryRun?: boolean; data?: boolean }) => {
       const code = runWorktreeMigrateRegistryCommand({
         ...(opts.dryRun === true ? { dryRun: true } : {}),
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'repair-sparse'))
-    .action((name: string, opts: { data?: boolean }) => {
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'repair-sparse')).action(
+    (name: string, opts: { data?: boolean }) => {
       const code = runWorktreeRepairSparseCommand({
         name,
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'repair'))
-    .action((opts: { dryRun?: boolean; data?: boolean }) => {
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'repair')).action(
+    (opts: { dryRun?: boolean; data?: boolean }) => {
       const code = runWorktreeRepairCommand({
         ...(opts.dryRun === true ? { dryRun: true } : {}),
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'prune'))
-    .action(
-      (opts: {
-        state?: string;
-        status?: string;
-        include?: string;
-        exclude?: string;
-        apply?: boolean;
-        json?: boolean;
-        data?: boolean;
-      }) => {
-        if (opts.state !== undefined && opts.status !== undefined) {
-          console.error('caws worktree prune: use either --state or --status, not both.');
-          // `return` is load-bearing, not decoration. Without it this refusal
-          // fell through and ran the prune anyway — harmless only because
-          // `process.exit` killed the process first. Now that the hook sets
-          // `process.exitCode`, the missing return would both overwrite the 1
-          // with a 0 and execute a `--apply` mutation the caller was refused.
-          exit(1);
-          return;
-        }
-        const state = parseCommaSeparatedList(opts.state ?? opts.status);
-        const include = parseCommaSeparatedList(opts.include);
-        const exclude = parseCommaSeparatedList(opts.exclude);
-        const code = runWorktreePruneCommand({
-          ...(state !== undefined ? { state } : {}),
-          ...(include !== undefined ? { include } : {}),
-          ...(exclude !== undefined ? { exclude } : {}),
-          apply: opts.apply === true,
-          json: opts.json === true,
-          showData: opts.data === true,
-        });
-        exit(code);
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'prune')).action(
+    (opts: {
+      state?: string;
+      status?: string;
+      include?: string;
+      exclude?: string;
+      apply?: boolean;
+      json?: boolean;
+      data?: boolean;
+    }) => {
+      if (opts.state !== undefined && opts.status !== undefined) {
+        console.error('caws worktree prune: use either --state or --status, not both.');
+        // `return` is load-bearing, not decoration. Without it this refusal
+        // fell through and ran the prune anyway — harmless only because
+        // `process.exit` killed the process first. Now that the hook sets
+        // `process.exitCode`, the missing return would both overwrite the 1
+        // with a 0 and execute a `--apply` mutation the caller was refused.
+        exit(1);
+        return;
       }
-    );
+      const state = parseCommaSeparatedList(opts.state ?? opts.status);
+      const include = parseCommaSeparatedList(opts.include);
+      const exclude = parseCommaSeparatedList(opts.exclude);
+      const code = runWorktreePruneCommand({
+        ...(state !== undefined ? { state } : {}),
+        ...(include !== undefined ? { include } : {}),
+        ...(exclude !== undefined ? { exclude } : {}),
+        apply: opts.apply === true,
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
 
-  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'cleanup-plan'))
-    .action(
-      (opts: {
-        state?: string;
-        status?: string;
-        include?: string;
-        exclude?: string;
-        apply?: boolean;
-        json?: boolean;
-        data?: boolean;
-      }) => {
-        if (opts.state !== undefined && opts.status !== undefined) {
-          console.error('caws worktree cleanup-plan: use either --state or --status, not both.');
-          // See the prune refusal above: the missing `return` let a refused
-          // invocation run the command anyway.
-          exit(1);
-          return;
-        }
-        const state = parseCommaSeparatedList(opts.state ?? opts.status);
-        const include = parseCommaSeparatedList(opts.include);
-        const exclude = parseCommaSeparatedList(opts.exclude);
-        const code = runWorktreePhysicalCleanupPlanCommand({
-          ...(state !== undefined ? { state } : {}),
-          ...(include !== undefined ? { include } : {}),
-          ...(exclude !== undefined ? { exclude } : {}),
-          apply: opts.apply === true,
-          json: opts.json === true,
-          showData: opts.data === true,
-        });
-        exit(code);
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'cleanup-plan')).action(
+    (opts: {
+      state?: string;
+      status?: string;
+      include?: string;
+      exclude?: string;
+      apply?: boolean;
+      json?: boolean;
+      data?: boolean;
+    }) => {
+      if (opts.state !== undefined && opts.status !== undefined) {
+        console.error('caws worktree cleanup-plan: use either --state or --status, not both.');
+        // See the prune refusal above: the missing `return` let a refused
+        // invocation run the command anyway.
+        exit(1);
+        return;
       }
-    );
+      const state = parseCommaSeparatedList(opts.state ?? opts.status);
+      const include = parseCommaSeparatedList(opts.include);
+      const exclude = parseCommaSeparatedList(opts.exclude);
+      const code = runWorktreePhysicalCleanupPlanCommand({
+        ...(state !== undefined ? { state } : {}),
+        ...(include !== undefined ? { include } : {}),
+        ...(exclude !== undefined ? { exclude } : {}),
+        apply: opts.apply === true,
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
 
   // WORKTREE-REVIEW-SURFACE-001: read-only human-review gate.
-  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'review'))
-    .action((name: string, opts: { json?: boolean; data?: boolean }) => {
+  defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'review')).action(
+    (name: string, opts: { json?: boolean; data?: boolean }) => {
       const code = runWorktreeReviewCommand({
         name,
         json: opts.json === true,
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
   // ─── caws agents (MULTI-AGENT-ACTIVITY-REGISTRY-001) ────────────────────
   const agentsCmd = program.command('agents');
   applyGroupMeta(agentsCmd, AGENTS_COMMAND_META);
 
-  defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'register'))
-    .action(
-      (opts: {
-        sessionId?: string;
-        platform?: string;
-        reason?: string;
-        json?: boolean;
-        includeActiveSummary?: boolean;
-        data?: boolean;
-      }) => {
-        const code = runAgentsRegisterCommand({
-          ...(opts.sessionId !== undefined ? { sessionId: opts.sessionId } : {}),
-          ...(opts.platform !== undefined ? { platform: opts.platform } : {}),
-          ...(opts.reason !== undefined ? { reason: opts.reason as LeaseReason } : {}),
-          json: opts.json === true,
-          includeActiveSummary: opts.includeActiveSummary === true,
-          showData: opts.data === true,
-        });
-        exit(code);
-      }
-    );
+  defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'register')).action(
+    (opts: {
+      sessionId?: string;
+      platform?: string;
+      reason?: string;
+      json?: boolean;
+      includeActiveSummary?: boolean;
+      data?: boolean;
+    }) => {
+      const code = runAgentsRegisterCommand({
+        ...(opts.sessionId !== undefined ? { sessionId: opts.sessionId } : {}),
+        ...(opts.platform !== undefined ? { platform: opts.platform } : {}),
+        ...(opts.reason !== undefined ? { reason: opts.reason as LeaseReason } : {}),
+        json: opts.json === true,
+        includeActiveSummary: opts.includeActiveSummary === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
 
-  defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'heartbeat'))
-    .action(
-      (opts: {
-        sessionId?: string;
-        platform?: string;
-        reason?: string;
-        throttle?: string;
-        json?: boolean;
-        includeActiveSummary?: boolean;
-        sessionKind?: string;
-        forkedFrom?: string;
-        data?: boolean;
-      }) => {
-        const throttleMs = opts.throttle !== undefined ? Number(opts.throttle) : 0;
-        const code = runAgentsHeartbeatCommand({
-          ...(opts.sessionId !== undefined ? { sessionId: opts.sessionId } : {}),
-          ...(opts.platform !== undefined ? { platform: opts.platform } : {}),
-          ...(opts.reason !== undefined ? { reason: opts.reason as LeaseReason } : {}),
-          ...(typeof opts.sessionKind === 'string' && opts.sessionKind.length > 0
-            ? { sessionKind: opts.sessionKind as 'main' | 'fork' | 'subagent' }
-            : {}),
-          ...(typeof opts.forkedFrom === 'string' && opts.forkedFrom.length > 0
-            ? { forkedFrom: opts.forkedFrom }
-            : {}),
-          throttleMs: Number.isFinite(throttleMs) && throttleMs > 0 ? throttleMs : 0,
-          json: opts.json === true,
-          includeActiveSummary: opts.includeActiveSummary === true,
-          showData: opts.data === true,
-        });
-        exit(code);
-      }
-    );
+  defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'heartbeat')).action(
+    (opts: {
+      sessionId?: string;
+      platform?: string;
+      reason?: string;
+      throttle?: string;
+      json?: boolean;
+      includeActiveSummary?: boolean;
+      sessionKind?: string;
+      forkedFrom?: string;
+      data?: boolean;
+    }) => {
+      const throttleMs = opts.throttle !== undefined ? Number(opts.throttle) : 0;
+      const code = runAgentsHeartbeatCommand({
+        ...(opts.sessionId !== undefined ? { sessionId: opts.sessionId } : {}),
+        ...(opts.platform !== undefined ? { platform: opts.platform } : {}),
+        ...(opts.reason !== undefined ? { reason: opts.reason as LeaseReason } : {}),
+        ...(typeof opts.sessionKind === 'string' && opts.sessionKind.length > 0
+          ? { sessionKind: opts.sessionKind as 'main' | 'fork' | 'subagent' }
+          : {}),
+        ...(typeof opts.forkedFrom === 'string' && opts.forkedFrom.length > 0
+          ? { forkedFrom: opts.forkedFrom }
+          : {}),
+        throttleMs: Number.isFinite(throttleMs) && throttleMs > 0 ? throttleMs : 0,
+        json: opts.json === true,
+        includeActiveSummary: opts.includeActiveSummary === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
 
-  defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'stop'))
-    .action((opts: { sessionId?: string; platform?: string; json?: boolean; data?: boolean }) => {
+  defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'stop')).action(
+    (opts: { sessionId?: string; platform?: string; json?: boolean; data?: boolean }) => {
       const code = runAgentsStopCommand({
         ...(opts.sessionId !== undefined ? { sessionId: opts.sessionId } : {}),
         ...(opts.platform !== undefined ? { platform: opts.platform } : {}),
@@ -1903,119 +1900,125 @@ export function registerShellCommands(
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'list'))
-    .action(
-      (opts: {
-        includeStale?: boolean;
-        includeStopped?: boolean;
-        active?: boolean;
-        staleTtlMs?: string;
-        json?: boolean;
-        data?: boolean;
-      }) => {
-        const ttl = opts.staleTtlMs !== undefined ? Number(opts.staleTtlMs) : undefined;
-        const code = runAgentsListCommand({
-          includeStale: opts.includeStale === true,
-          includeStopped: opts.includeStopped === true,
-          activeOnly: opts.active === true,
-          ...(ttl !== undefined && Number.isFinite(ttl) ? { staleTtlMs: ttl } : {}),
-          json: opts.json === true,
-          showData: opts.data === true,
-        });
-        exit(code);
-      }
-    );
+  defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'list')).action(
+    (opts: {
+      includeStale?: boolean;
+      includeStopped?: boolean;
+      active?: boolean;
+      staleTtlMs?: string;
+      json?: boolean;
+      data?: boolean;
+    }) => {
+      const ttl = opts.staleTtlMs !== undefined ? Number(opts.staleTtlMs) : undefined;
+      const code = runAgentsListCommand({
+        includeStale: opts.includeStale === true,
+        includeStopped: opts.includeStopped === true,
+        activeOnly: opts.active === true,
+        ...(ttl !== undefined && Number.isFinite(ttl) ? { staleTtlMs: ttl } : {}),
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
 
-  defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'show'))
-    .action((id: string, opts: { json?: boolean; data?: boolean }) => {
+  defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'show')).action(
+    (id: string, opts: { json?: boolean; data?: boolean }) => {
       const code = runAgentsShowCommand({
         id,
         json: opts.json === true,
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
   // LEASE-WORK-STATE-001: visibility-only work-state annotation.
-  defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'work-state'))
-    .action(
-      (opts: { set?: string; clear?: boolean; note?: string; sessionId?: string; json?: boolean; data?: boolean }) => {
-        const code = runAgentsWorkStateCommand({
-          ...(opts.set !== undefined ? { set: opts.set } : {}),
-          ...(opts.clear === true ? { clear: true } : {}),
-          ...(opts.note !== undefined ? { note: opts.note } : {}),
-          ...(opts.sessionId !== undefined ? { sessionId: opts.sessionId } : {}),
-          json: opts.json === true,
-          showData: opts.data === true,
-        });
-        exit(code);
-      }
-    );
+  defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'work-state')).action(
+    (opts: {
+      set?: string;
+      clear?: boolean;
+      note?: string;
+      sessionId?: string;
+      json?: boolean;
+      data?: boolean;
+    }) => {
+      const code = runAgentsWorkStateCommand({
+        ...(opts.set !== undefined ? { set: opts.set } : {}),
+        ...(opts.clear === true ? { clear: true } : {}),
+        ...(opts.note !== undefined ? { note: opts.note } : {}),
+        ...(opts.sessionId !== undefined ? { sessionId: opts.sessionId } : {}),
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
 
-  defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'prune'))
-    .action(
-      (opts: {
-        dead?: boolean;
-        status?: string;
-        olderThanMs?: string;
-        staleTtlMs?: string;
-        apply?: boolean;
-        json?: boolean;
-        data?: boolean;
-      }) => {
-        // PID-liveness mode: --dead is mutually exclusive with --status.
-        if (opts.dead === true) {
-          if (opts.status !== undefined || opts.olderThanMs !== undefined) {
-            process.stderr.write(
-              'caws agents prune: --dead cannot be combined with --status / --older-than-ms.\n'
-            );
-            exit(1);
-            return;
-          }
-          const code = runAgentsPruneCommand({
-            dead: true,
-            apply: opts.apply === true,
-            json: opts.json === true,
-            showData: opts.data === true,
-          });
-          exit(code);
-          return;
-        }
-
-        // Retention mode: --status + --older-than-ms required.
-        //
-        // The admitted set is declared once and the usage text is derived from
-        // it. Holding those apart is what made `--status legacy` unreachable:
-        // the handler, its option type, and --help all accepted legacy while
-        // this validator silently coerced it to null.
-        const RETENTION_STATUSES = ['stopped', 'stale', 'legacy'] as const;
-        type RetentionStatus = (typeof RETENTION_STATUSES)[number];
-        const isRetentionStatus = (value: string | undefined): value is RetentionStatus =>
-          RETENTION_STATUSES.includes(value as RetentionStatus);
-
-        const status = isRetentionStatus(opts.status) ? opts.status : null;
-        const olderThanMs = Number(opts.olderThanMs);
-        if (status === null || !Number.isFinite(olderThanMs)) {
+  defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'prune')).action(
+    (opts: {
+      dead?: boolean;
+      status?: string;
+      olderThanMs?: string;
+      staleTtlMs?: string;
+      apply?: boolean;
+      json?: boolean;
+      data?: boolean;
+    }) => {
+      // PID-liveness mode: --dead is mutually exclusive with --status.
+      if (opts.dead === true) {
+        if (opts.status !== undefined || opts.olderThanMs !== undefined) {
           process.stderr.write(
-            `caws agents prune: pass --dead, or --status <${RETENTION_STATUSES.join('|')}> with a numeric --older-than-ms.\n`
+            'caws agents prune: --dead cannot be combined with --status / --older-than-ms.\n'
           );
           exit(1);
           return;
         }
-        const staleTtl = opts.staleTtlMs !== undefined ? Number(opts.staleTtlMs) : undefined;
         const code = runAgentsPruneCommand({
-          status,
-          olderThanMs,
-          ...(staleTtl !== undefined && Number.isFinite(staleTtl) ? { staleTtlMs: staleTtl } : {}),
+          dead: true,
           apply: opts.apply === true,
           json: opts.json === true,
           showData: opts.data === true,
         });
         exit(code);
+        return;
       }
-    );
+
+      // Retention mode: --status + --older-than-ms required.
+      //
+      // The admitted set is declared once and the usage text is derived from
+      // it. Holding those apart is what made `--status legacy` unreachable:
+      // the handler, its option type, and --help all accepted legacy while
+      // this validator silently coerced it to null.
+      const RETENTION_STATUSES = ['stopped', 'stale', 'legacy'] as const;
+      type RetentionStatus = (typeof RETENTION_STATUSES)[number];
+      const isRetentionStatus = (value: string | undefined): value is RetentionStatus =>
+        RETENTION_STATUSES.includes(value as RetentionStatus);
+
+      const status = isRetentionStatus(opts.status) ? opts.status : null;
+      const olderThanMs = Number(opts.olderThanMs);
+      if (status === null || !Number.isFinite(olderThanMs)) {
+        process.stderr.write(
+          `caws agents prune: pass --dead, or --status <${RETENTION_STATUSES.join('|')}> with a numeric --older-than-ms.\n`
+        );
+        exit(1);
+        return;
+      }
+      const staleTtl = opts.staleTtlMs !== undefined ? Number(opts.staleTtlMs) : undefined;
+      const code = runAgentsPruneCommand({
+        status,
+        olderThanMs,
+        ...(staleTtl !== undefined && Number.isFinite(staleTtl) ? { staleTtlMs: staleTtl } : {}),
+        apply: opts.apply === true,
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
 
   // -------------------------------------------------------------------
   // caws message send / poll
@@ -2028,8 +2031,8 @@ export function registerShellCommands(
   const messageCmd = program.command(MESSAGE_COMMAND_META.name);
   applyGroupMeta(messageCmd, MESSAGE_COMMAND_META);
 
-  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'send'))
-    .action((opts: {
+  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'send')).action(
+    (opts: {
       to?: string;
       text?: string;
       allowDead?: boolean;
@@ -2041,7 +2044,9 @@ export function registerShellCommands(
         to: opts.to ?? '',
         text: opts.text ?? '',
         ...(opts.allowDead === true ? { allowDead: true } : {}),
-        ...(typeof opts.replyTo === 'string' && opts.replyTo.length > 0 ? { replyTo: opts.replyTo } : {}),
+        ...(typeof opts.replyTo === 'string' && opts.replyTo.length > 0
+          ? { replyTo: opts.replyTo }
+          : {}),
         // The command validates the value; pass any provided string through.
         ...(typeof opts.urgency === 'string' && opts.urgency.length > 0
           ? { urgency: opts.urgency as 'critical' | 'normal' }
@@ -2049,22 +2054,29 @@ export function registerShellCommands(
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'reply'))
-    .action((messageId: string | undefined, opts: { id?: string; text?: string; allowDead?: boolean; data?: boolean }) => {
+  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'reply')).action(
+    (
+      messageId: string | undefined,
+      opts: { id?: string; text?: string; allowDead?: boolean; data?: boolean }
+    ) => {
       const code = runMessageReplyCommand({
         id: opts.id ?? '',
-        ...(typeof messageId === 'string' && messageId.length > 0 ? { positionalId: messageId } : {}),
+        ...(typeof messageId === 'string' && messageId.length > 0
+          ? { positionalId: messageId }
+          : {}),
         text: opts.text ?? '',
         ...(opts.allowDead === true ? { allowDead: true } : {}),
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'poll'))
-    .action((opts: {
+  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'poll')).action(
+    (opts: {
       me?: string;
       wait?: string;
       peek?: boolean;
@@ -2090,15 +2102,19 @@ export function registerShellCommands(
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'settle'))
-    .action((offerId: string | undefined, opts: {
-      me?: string;
-      outcome?: string;
-      json?: boolean;
-      data?: boolean;
-    }) => {
+  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'settle')).action(
+    (
+      offerId: string | undefined,
+      opts: {
+        me?: string;
+        outcome?: string;
+        json?: boolean;
+        data?: boolean;
+      }
+    ) => {
       const code = runMessageSettleCommand({
         offerId: offerId ?? '',
         ...(opts.me !== undefined ? { me: opts.me } : {}),
@@ -2107,10 +2123,11 @@ export function registerShellCommands(
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'inbox'))
-    .action((opts: { me?: string; limit?: string; json?: boolean; all?: boolean; data?: boolean }) => {
+  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'inbox')).action(
+    (opts: { me?: string; limit?: string; json?: boolean; all?: boolean; data?: boolean }) => {
       const limit = opts.limit !== undefined ? Number(opts.limit) : undefined;
       const code = runMessageInboxCommand({
         ...(opts.me !== undefined ? { me: opts.me } : {}),
@@ -2120,10 +2137,11 @@ export function registerShellCommands(
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'history'))
-    .action((opts: { me?: string; with?: string; limit?: string; json?: boolean; data?: boolean }) => {
+  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'history')).action(
+    (opts: { me?: string; with?: string; limit?: string; json?: boolean; data?: boolean }) => {
       const limit = opts.limit !== undefined ? Number(opts.limit) : undefined;
       const code = runMessageHistoryCommand({
         ...(opts.me !== undefined ? { me: opts.me } : {}),
@@ -2133,21 +2151,27 @@ export function registerShellCommands(
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'status'))
-    .action((messageId: string | undefined, opts: {
-      id?: string;
-      json?: boolean;
-      mine?: boolean;
-      queued?: boolean;
-      olderThanMs?: string;
-      data?: boolean;
-    }) => {
+  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'status')).action(
+    (
+      messageId: string | undefined,
+      opts: {
+        id?: string;
+        json?: boolean;
+        mine?: boolean;
+        queued?: boolean;
+        olderThanMs?: string;
+        data?: boolean;
+      }
+    ) => {
       const olderThanMs = opts.olderThanMs !== undefined ? Number(opts.olderThanMs) : undefined;
       const code = runMessageStatusCommand({
         id: opts.id ?? '',
-        ...(typeof messageId === 'string' && messageId.length > 0 ? { positionalId: messageId } : {}),
+        ...(typeof messageId === 'string' && messageId.length > 0
+          ? { positionalId: messageId }
+          : {}),
         ...(opts.mine === true ? { mine: true } : {}),
         ...(opts.queued === true ? { queued: true } : {}),
         ...(olderThanMs !== undefined && Number.isFinite(olderThanMs) ? { olderThanMs } : {}),
@@ -2155,10 +2179,11 @@ export function registerShellCommands(
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'prune'))
-    .action((opts: {
+  defineLeaf(messageCmd, leafMeta(MESSAGE_COMMAND_META, 'prune')).action(
+    (opts: {
       status?: string;
       olderThanMs?: string;
       include?: string;
@@ -2167,7 +2192,10 @@ export function registerShellCommands(
       json?: boolean;
       data?: boolean;
     }) => {
-      const olderThanMs = opts.olderThanMs !== undefined ? parseOptionalNonNegativeInteger(opts.olderThanMs) : undefined;
+      const olderThanMs =
+        opts.olderThanMs !== undefined
+          ? parseOptionalNonNegativeInteger(opts.olderThanMs)
+          : undefined;
       const include = parseCommaSeparatedList(opts.include);
       const exclude = parseCommaSeparatedList(opts.exclude);
       const code = runMessagePruneCommand({
@@ -2180,7 +2208,8 @@ export function registerShellCommands(
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
   // ─── caws session (SESSION-LOG-RETENTION-SCOPE-001) ─────────────────────
   // Session-log retention (operational cache). The session LIFECYCLE
@@ -2188,10 +2217,12 @@ export function registerShellCommands(
   const sessionCmd = program.command(SESSION_COMMAND_META.name);
   applyGroupMeta(sessionCmd, SESSION_COMMAND_META);
 
-  defineLeaf(sessionCmd, leafMeta(SESSION_COMMAND_META, 'prune'))
-    .action((opts: { olderThanMs?: string; apply?: boolean; json?: boolean; data?: boolean }) => {
+  defineLeaf(sessionCmd, leafMeta(SESSION_COMMAND_META, 'prune')).action(
+    (opts: { olderThanMs?: string; apply?: boolean; json?: boolean; data?: boolean }) => {
       const olderThanMs =
-        opts.olderThanMs !== undefined ? parseOptionalNonNegativeInteger(opts.olderThanMs) : undefined;
+        opts.olderThanMs !== undefined
+          ? parseOptionalNonNegativeInteger(opts.olderThanMs)
+          : undefined;
       const code = runSessionPruneCommand({
         ...(olderThanMs !== undefined ? { olderThanMs } : {}),
         apply: opts.apply === true,
@@ -2199,15 +2230,19 @@ export function registerShellCommands(
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
   // MULTI-AGENT-HANDOFF-EVENT-001 A4: explicit manual handoff record.
-  defineLeaf(sessionCmd, leafMeta(SESSION_COMMAND_META, 'pickup'))
-    .action((opts: { from: string; paths?: string | string[]; reason?: string; data?: boolean }) => {
+  defineLeaf(sessionCmd, leafMeta(SESSION_COMMAND_META, 'pickup')).action(
+    (opts: { from: string; paths?: string | string[]; reason?: string; data?: boolean }) => {
       const rawPaths = Array.isArray(opts.paths)
         ? opts.paths
         : typeof opts.paths === 'string'
-          ? opts.paths.split(',').map((s) => s.trim()).filter(Boolean)
+          ? opts.paths
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
           : [];
       const code = runSessionPickupCommand({
         fromSessionId: opts.from,
@@ -2216,58 +2251,64 @@ export function registerShellCommands(
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
   // ─── caws working-tree (WORKING-TREE-PROVENANCE-GUARD-001) ─────────────
   const workingTreeCmd = program.command(WORKING_TREE_COMMAND_META.name);
   applyGroupMeta(workingTreeCmd, WORKING_TREE_COMMAND_META);
 
-  defineLeaf(workingTreeCmd, leafMeta(WORKING_TREE_COMMAND_META, 'check'))
-    .action((opts: { json?: boolean; data?: boolean }) => {
+  defineLeaf(workingTreeCmd, leafMeta(WORKING_TREE_COMMAND_META, 'check')).action(
+    (opts: { json?: boolean; data?: boolean }) => {
       const code = runWorkingTreeCheckCommand({
         json: opts.json === true,
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(workingTreeCmd, leafMeta(WORKING_TREE_COMMAND_META, 'ack'))
-    .action(
-      (opts: { session: string; paths?: string | string[]; target?: string; data?: boolean }) => {
-        const rawPaths = Array.isArray(opts.paths)
+  defineLeaf(workingTreeCmd, leafMeta(WORKING_TREE_COMMAND_META, 'ack')).action(
+    (opts: { session: string; paths?: string | string[]; target?: string; data?: boolean }) => {
+      const rawPaths = Array.isArray(opts.paths)
+        ? opts.paths
+        : typeof opts.paths === 'string'
           ? opts.paths
-          : typeof opts.paths === 'string'
-            ? opts.paths.split(',').map((s) => s.trim()).filter(Boolean)
-            : [];
-        const code = runWorkingTreeAckCommand({
-          sessionId: opts.session,
-          paths: rawPaths,
-          ...(opts.target !== undefined ? { target: opts.target } : {}),
-          showData: opts.data === true,
-        });
-        exit(code);
-      }
-    );
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : [];
+      const code = runWorkingTreeAckCommand({
+        sessionId: opts.session,
+        paths: rawPaths,
+        ...(opts.target !== undefined ? { target: opts.target } : {}),
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
 
   // ─── caws handoff (HANDOFF-EXPORT-IMPORT-001) ──────────────────────────
   const handoffCmd = program.command(HANDOFF_COMMAND_META.name);
   applyGroupMeta(handoffCmd, HANDOFF_COMMAND_META);
 
-  defineLeaf(handoffCmd, leafMeta(HANDOFF_COMMAND_META, 'export'))
-    .action((opts: { session?: string; data?: boolean }) => {
+  defineLeaf(handoffCmd, leafMeta(HANDOFF_COMMAND_META, 'export')).action(
+    (opts: { session?: string; data?: boolean }) => {
       const code = runHandoffExportCommand({
         ...(opts.session !== undefined ? { session: opts.session } : {}),
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 
-  defineLeaf(handoffCmd, leafMeta(HANDOFF_COMMAND_META, 'import'))
-    .action((opts: { file: string; data?: boolean }) => {
+  defineLeaf(handoffCmd, leafMeta(HANDOFF_COMMAND_META, 'import')).action(
+    (opts: { file: string; data?: boolean }) => {
       const code = runHandoffImportCommand({
         file: opts.file,
         showData: opts.data === true,
       });
       exit(code);
-    });
+    }
+  );
 }

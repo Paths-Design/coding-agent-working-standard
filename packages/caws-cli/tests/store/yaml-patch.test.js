@@ -44,7 +44,13 @@ describe('quoted multiline scalar removal', () => {
     }
   });
 
-  test.each(["'unclosed\n  more", "'unclosed\nnext: 'separate value'", '"unclosed\\"\n  more', "'closed' garbage", '"closed"garbage'])('refuses incomplete or ambiguous quoted value %s', (value) => {
+  test.each([
+    "'unclosed\n  more",
+    "'unclosed\nnext: 'separate value'",
+    '"unclosed\\"\n  more',
+    "'closed' garbage",
+    '"closed"garbage',
+  ])('refuses incomplete or ambiguous quoted value %s', (value) => {
     const source = 'closure_notes: ' + value + '\nnext: kept\n';
     expect(expectErr(removeTopLevelScalar(source, 'closure_notes')).rule).toBe(AMBIGUOUS);
   });
@@ -470,7 +476,7 @@ describe('yaml-patch: inline-comment prev-char boundary + quote state', () => {
     expect(out).toContain('#c');
   });
 
-  test("a # inside a SINGLE-quoted value is not a comment", () => {
+  test('a # inside a SINGLE-quoted value is not a comment', () => {
     const out = expectOk(setTopLevelScalar("v: 'a # b'  # real\n", 'v', 'new'));
     // The in-quote ' # b' is value; only the trailing '# real' is the comment.
     expect(out).toContain('# real');

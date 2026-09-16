@@ -5,11 +5,15 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const CLI = path.resolve(__dirname, '../../dist/index.js');
 let root;
-beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-init-help-')); });
+beforeEach(() => {
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-init-help-'));
+});
 afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 function cli(args) {
   return spawnSync(process.execPath, [CLI, 'init', ...args], {
-    cwd: root, encoding: 'utf8', env: { ...process.env, CAWS_HOME: path.join(root, 'machine') },
+    cwd: root,
+    encoding: 'utf8',
+    env: { ...process.env, CAWS_HOME: path.join(root, 'machine') },
   });
 }
 test.each([
@@ -36,7 +40,7 @@ test.each([
   ['adapters', 'rollback', '--projects-root', '/unused-projects'],
   ['adapters', 'unknown'],
 ])('incompatible invocation %j cannot create machine or project state', (...args) => {
-  const result = cli(args.filter(value => value !== undefined));
+  const result = cli(args.filter((value) => value !== undefined));
   expect(result.status).not.toBe(0);
   expect(fs.readdirSync(root)).toEqual([]);
 });

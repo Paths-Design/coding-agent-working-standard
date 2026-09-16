@@ -12,8 +12,5 @@ export type { WaiverRule } from './rules';
 
 export { validateWaiver } from './validate';
 
-export {
-  effectiveWaiversForGate,
-  waiverEffectiveness,
-} from './applicability';
+export { effectiveWaiversForGate, waiverEffectiveness } from './applicability';
 export type { EffectiveWaiversInput } from './applicability';

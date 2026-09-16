@@ -135,9 +135,7 @@ function initializeLanguageSupport() {
   } catch (error) {
     console.warn(chalk.yellow('Language support tools not available'));
     console.warn(chalk.blue('This may limit language-specific configuration features'));
-    console.warn(
-      chalk.blue('For full functionality, ensure caws-template package is available')
-    );
+    console.warn(chalk.blue('For full functionality, ensure caws-template package is available'));
   }
 
   return languageSupport;

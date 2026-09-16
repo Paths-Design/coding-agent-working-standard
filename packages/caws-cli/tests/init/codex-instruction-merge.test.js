@@ -116,7 +116,9 @@ describe('Codex project instruction merge', () => {
 
     expect(applied.target).toBe('AGENTS.override.md');
     expect(fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf8')).toBe(agents);
-    expect(fs.readFileSync(path.join(root, 'AGENTS.override.md'), 'utf8').endsWith(override)).toBe(true);
+    expect(fs.readFileSync(path.join(root, 'AGENTS.override.md'), 'utf8').endsWith(override)).toBe(
+      true
+    );
   });
 
   test('a whitespace-only override is skipped, so AGENTS.md remains the active target', () => {

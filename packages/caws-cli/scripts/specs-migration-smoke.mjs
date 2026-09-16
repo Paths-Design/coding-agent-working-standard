@@ -94,15 +94,27 @@ function step(msg) {
 // ─── Cleanup ─────────────────────────────────────────────────────────────
 
 const cleanupPaths = new Set();
-function registerCleanup(path) { cleanupPaths.add(path); }
+function registerCleanup(path) {
+  cleanupPaths.add(path);
+}
 function cleanup() {
   for (const path of cleanupPaths) {
-    try { rmSync(path, { recursive: true, force: true }); } catch { /* best-effort: nothing to clean up */ }
+    try {
+      rmSync(path, { recursive: true, force: true });
+    } catch {
+      /* best-effort: nothing to clean up */
+    }
   }
 }
 process.on('exit', cleanup);
-process.on('SIGINT', () => { cleanup(); process.exit(130); });
-process.on('SIGTERM', () => { cleanup(); process.exit(143); });
+process.on('SIGINT', () => {
+  cleanup();
+  process.exit(130);
+});
+process.on('SIGTERM', () => {
+  cleanup();
+  process.exit(143);
+});
 
 // ─── Pack + tarball inspection ───────────────────────────────────────────
 
@@ -111,10 +123,10 @@ function packPackage(packageRoot, packageName) {
   const packDir = mkdtempSync(join(tmpdir(), 'caws-specs-pack-'));
   registerCleanup(packDir);
 
-  const result = spawnSync(
-    'npm', ['pack', '--pack-destination', packDir, '--json'],
-    { cwd: packageRoot, encoding: 'utf8' },
-  );
+  const result = spawnSync('npm', ['pack', '--pack-destination', packDir, '--json'], {
+    cwd: packageRoot,
+    encoding: 'utf8',
+  });
   if (result.status !== 0) {
     fail(`npm pack ${packageName} failed`, {
       exitCode: result.status,
@@ -167,25 +179,23 @@ function installTarballs(cliTarball) {
 
   writeFileSync(
     join(projectDir, 'package.json'),
-    JSON.stringify({
-      name: 'caws-specs-migration-smoke',
-      version: '0.0.0',
-      private: true,
-    }, null, 2),
+    JSON.stringify(
+      {
+        name: 'caws-specs-migration-smoke',
+        version: '0.0.0',
+        private: true,
+      },
+      null,
+      2
+    )
   );
 
   // The kernel is absorbed into the CLI tarball (CAWS-ABSORB-KERNEL-01);
   // a single install models exactly what a consumer gets.
   const installResult = spawnSync(
     'npm',
-    [
-      'install',
-      '--no-audit',
-      '--no-fund',
-      '--ignore-scripts',
-      cliTarball,
-    ],
-    { cwd: projectDir, encoding: 'utf8' },
+    ['install', '--no-audit', '--no-fund', '--ignore-scripts', cliTarball],
+    { cwd: projectDir, encoding: 'utf8' }
   );
   if (installResult.status !== 0) {
     fail('npm install of tarball failed', {
@@ -243,7 +253,9 @@ function setupScratchRepo(parentDir) {
   mkdirSync(join(cawsDir, 'specs'), { recursive: true });
 
   // Spec 1 — happy: every safe rename + risk_tier coercion + bare-date.
-  writeFileSync(join(cawsDir, 'specs', 'SMOKE-HAPPY-001.yaml'), `id: SMOKE-HAPPY-001
+  writeFileSync(
+    join(cawsDir, 'specs', 'SMOKE-HAPPY-001.yaml'),
+    `id: SMOKE-HAPPY-001
 title: smoke happy path
 status: active
 type: feature
@@ -267,10 +279,13 @@ non_functional:
 contracts: []
 invariants:
   - smoke fixture invariant
-`);
+`
+  );
 
   // Spec 2 — refused: blast_radius.modules: [].
-  writeFileSync(join(cawsDir, 'specs', 'SMOKE-REFUSED-001.yaml'), `id: SMOKE-REFUSED-001
+  writeFileSync(
+    join(cawsDir, 'specs', 'SMOKE-REFUSED-001.yaml'),
+    `id: SMOKE-REFUSED-001
 title: smoke refused (empty modules)
 status: active
 type: feature
@@ -286,10 +301,13 @@ non_functional: {}
 contracts: []
 invariants:
   - smoke fixture invariant
-`);
+`
+  );
 
   // Spec 3 — lifecycle-mapped: refused without mapping, migrates with it.
-  writeFileSync(join(cawsDir, 'specs', 'SMOKE-LIFECYCLE-001.yaml'), `id: SMOKE-LIFECYCLE-001
+  writeFileSync(
+    join(cawsDir, 'specs', 'SMOKE-LIFECYCLE-001.yaml'),
+    `id: SMOKE-LIFECYCLE-001
 title: smoke lifecycle mapped
 status: superseded
 type: feature
@@ -311,20 +329,25 @@ non_functional: {}
 contracts: []
 invariants:
   - smoke lifecycle mapping fixture
-`);
+`
+  );
 
   // Operator mapping file (lives OUTSIDE .caws/specs/ so it does not
   // appear as a non_yaml observation in the scan).
   const mappingPath = join(repoDir, 'lifecycle-mapping.json');
   writeFileSync(
     mappingPath,
-    JSON.stringify({
-      'SMOKE-LIFECYCLE-001': {
-        lifecycle_state: 'archived',
-        resolution: 'superseded',
-        closure_notes: 'superseded by SMOKE-HAPPY-001 (smoke test)',
+    JSON.stringify(
+      {
+        'SMOKE-LIFECYCLE-001': {
+          lifecycle_state: 'archived',
+          resolution: 'superseded',
+          closure_notes: 'superseded by SMOKE-HAPPY-001 (smoke test)',
+        },
       },
-    }, null, 2),
+      null,
+      2
+    )
   );
 
   ok(`scratch repo at ${repoDir}; 3 specs + mapping.json on disk`);
@@ -376,7 +399,9 @@ function runEndToEndSmoke(cawsBin, repoDir, cawsDir, mappingPath) {
   // Step c — apply WITHOUT --partial refuses.
   step('caws specs migrate --from v10 --apply (no --partial: refuse on any refused)');
   const applyNoPartial = runCaws(
-    cawsBin, ['specs', 'migrate', '--from', 'v10', '--apply'], repoDir,
+    cawsBin,
+    ['specs', 'migrate', '--from', 'v10', '--apply'],
+    repoDir
   );
   assertExit(applyNoPartial, 1, 'apply no-partial');
   if (readSpec(cawsDir, 'SMOKE-HAPPY-001.yaml') !== happyBefore)
@@ -388,7 +413,9 @@ function runEndToEndSmoke(cawsBin, repoDir, cawsDir, mappingPath) {
   // Step d — apply --partial writes happy, skips refused.
   step('caws specs migrate --from v10 --apply --partial');
   const applyPartial = runCaws(
-    cawsBin, ['specs', 'migrate', '--from', 'v10', '--apply', '--partial'], repoDir,
+    cawsBin,
+    ['specs', 'migrate', '--from', 'v10', '--apply', '--partial'],
+    repoDir
   );
   // CAWS-CLI-EXIT-CODES-001: --apply --partial with refused>0 is an INCOMPLETE
   // migration and exits 1 (non-zero), even though happy.yaml was written. The
@@ -417,8 +444,7 @@ function runEndToEndSmoke(cawsBin, repoDir, cawsDir, mappingPath) {
 
   // Verify report on disk.
   const reportsDir = join(cawsDir, 'migrations', 'v10-specs');
-  if (!existsSync(reportsDir))
-    fail('apply --partial did not create .caws/migrations/v10-specs/');
+  if (!existsSync(reportsDir)) fail('apply --partial did not create .caws/migrations/v10-specs/');
   const reports = readdirSync(reportsDir);
   if (reports.length !== 1)
     fail(`expected exactly 1 report file, found ${reports.length}`, {
@@ -455,12 +481,16 @@ function runEndToEndSmoke(cawsBin, repoDir, cawsDir, mappingPath) {
   const applyMapped = runCaws(
     cawsBin,
     [
-      'specs', 'migrate',
-      '--from', 'v10',
-      '--apply', '--partial',
-      '--lifecycle-mapping', mappingPath,
+      'specs',
+      'migrate',
+      '--from',
+      'v10',
+      '--apply',
+      '--partial',
+      '--lifecycle-mapping',
+      mappingPath,
     ],
-    repoDir,
+    repoDir
   );
   // CAWS-CLI-EXIT-CODES-001: still refused=1 under --partial → incomplete → exit 1.
   assertExit(applyMapped, 1, 'apply --partial with mapping');
@@ -480,9 +510,7 @@ function runEndToEndSmoke(cawsBin, repoDir, cawsDir, mappingPath) {
 
   // Step f — --json mode emits parseable JSON with the contract shape.
   step('caws specs migrate --from v10 --json (JSON output shape)');
-  const jsonResult = runCaws(
-    cawsBin, ['specs', 'migrate', '--from', 'v10', '--json'], repoDir,
-  );
+  const jsonResult = runCaws(cawsBin, ['specs', 'migrate', '--from', 'v10', '--json'], repoDir);
   assertExit(jsonResult, 0, 'specs migrate --json');
   let parsed;
   try {
@@ -493,12 +521,9 @@ function runEndToEndSmoke(cawsBin, repoDir, cawsDir, mappingPath) {
       stdoutHead: jsonResult.stdout.slice(0, 500),
     });
   }
-  if (parsed.ok !== true)
-    fail('--json output ok field is not true', { got: parsed.ok });
-  if (parsed.report?.schema_version !== 1)
-    fail('--json output report.schema_version != 1');
-  if (!Array.isArray(parsed.report?.entries))
-    fail('--json output report.entries is not an array');
+  if (parsed.ok !== true) fail('--json output ok field is not true', { got: parsed.ok });
+  if (parsed.report?.schema_version !== 1) fail('--json output report.schema_version != 1');
+  if (!Array.isArray(parsed.report?.entries)) fail('--json output report.entries is not an array');
   ok('--json output: parseable, schema_version=1, entries array present');
 }
 
@@ -513,16 +538,20 @@ try {
   // absorbed kernel's transformer at dist/kernel/. If any of these are
   // missing from the tarball, install will succeed but the command will
   // fail at runtime — exactly the regression class this smoke prevents.
-  assertTarballContains(cliTarball, [
-    'dist/kernel/spec/migrate-v10.js',
-    'dist/kernel/spec/migrate-v10.d.ts',
-    'dist/kernel/spec/index.js',
-    'dist/kernel/spec/index.d.ts',
-    'dist/store/specs-migration.js',
-    'dist/store/specs-migration.d.ts',
-    'dist/shell/commands/specs.js',
-    'dist/shell/index.js',
-  ], 'CLI');
+  assertTarballContains(
+    cliTarball,
+    [
+      'dist/kernel/spec/migrate-v10.js',
+      'dist/kernel/spec/migrate-v10.d.ts',
+      'dist/kernel/spec/index.js',
+      'dist/kernel/spec/index.d.ts',
+      'dist/store/specs-migration.js',
+      'dist/store/specs-migration.d.ts',
+      'dist/shell/commands/specs.js',
+      'dist/shell/index.js',
+    ],
+    'CLI'
+  );
 
   // Install + run.
   const { projectDir, cawsBin } = installTarballs(cliTarball);
@@ -530,9 +559,11 @@ try {
   runEndToEndSmoke(cawsBin, repoDir, cawsDir, mappingPath);
 
   const elapsedMs = Date.now() - startMs;
-  log(colors.green(
-    `\n[specs-migration-smoke] PASS in ${elapsedMs}ms — published tarballs contain the migrator and run end-to-end from install`,
-  ));
+  log(
+    colors.green(
+      `\n[specs-migration-smoke] PASS in ${elapsedMs}ms — published tarballs contain the migrator and run end-to-end from install`
+    )
+  );
 } catch (err) {
   fail('unexpected error', { message: err.message, stack: err.stack?.slice(0, 1000) });
 }

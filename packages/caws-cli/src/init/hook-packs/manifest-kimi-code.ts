@@ -59,14 +59,7 @@ export const KIMI_CODE_PACK: HookPackV1 = {
     'merged separately under --wire-user-config.',
   // config.toml is read at session start: a new kimi session is required.
   activation: 'restart_required',
-  lifecycleEvents: [
-    'pre_bash',
-    'pre_write',
-    'pre_edit',
-    'session_start',
-    'pre_compact',
-    'stop',
-  ],
+  lifecycleEvents: ['pre_bash', 'pre_write', 'pre_edit', 'session_start', 'pre_compact', 'stop'],
   stateModel: {
     reads: [
       '.caws/specs/*.yaml',

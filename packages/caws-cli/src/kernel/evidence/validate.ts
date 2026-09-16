@@ -685,7 +685,8 @@ function ajvErrorToDiagnostic(e: ErrorObject): Diagnostic {
     rule = EVIDENCE_RULES.EVENT_SPEC_ID_INVALID;
   if (pointer.startsWith('/actor')) {
     if (pointer === '/actor' && e.keyword === 'required') rule = EVIDENCE_RULES.ACTOR_MISSING;
-    else if (pointer === '/actor/kind' && e.keyword === 'enum') rule = EVIDENCE_RULES.ACTOR_KIND_INVALID;
+    else if (pointer === '/actor/kind' && e.keyword === 'enum')
+      rule = EVIDENCE_RULES.ACTOR_KIND_INVALID;
     else if (pointer === '/actor/id') rule = EVIDENCE_RULES.ACTOR_ID_EMPTY;
     else if (pointer === '/actor/session_id') rule = EVIDENCE_RULES.ACTOR_SESSION_ID_EMPTY;
     else if (pointer === '/actor/platform') rule = EVIDENCE_RULES.ACTOR_PLATFORM_EMPTY;

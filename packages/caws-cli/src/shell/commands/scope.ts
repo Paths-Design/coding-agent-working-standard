@@ -39,10 +39,7 @@ import { composeStoreSnapshot, loadBridges, resolveRepoRoot } from '../../store'
 import { resolveCallerSession } from '../session/resolve-session';
 import type { StoreSnapshot } from '../../store/types';
 import { resolveBinding } from '../binding/resolve-binding';
-import type {
-  AuthorityContextCandidate,
-  ResolvedBinding,
-} from '../binding/types';
+import type { AuthorityContextCandidate, ResolvedBinding } from '../binding/types';
 import {
   buildScopeDecisionJson,
   renderDecision,
@@ -112,7 +109,9 @@ function renderExplicitSpecContextNote(spec: Spec): string[] {
     '  This answers whether the path fits that spec; it does not prove the current checkout owns write authority.',
   ];
   if (spec.worktree !== undefined) {
-    lines.push(`  For write authority, use the bound worktree: cd .caws/worktrees/${spec.worktree}`);
+    lines.push(
+      `  For write authority, use the bound worktree: cd .caws/worktrees/${spec.worktree}`
+    );
   } else {
     lines.push('  For write authority, create or bind a worktree for the spec before editing.');
   }
@@ -194,9 +193,7 @@ function buildAuthorityContextCandidates(
   const bindable = specs.filter(
     (spec) => spec.lifecycle_state === 'active' || spec.lifecycle_state === 'draft'
   );
-  const claiming = bindable
-    .map(toCandidate)
-    .filter((c) => c.matchedScopeInEntry !== undefined);
+  const claiming = bindable.map(toCandidate).filter((c) => c.matchedScopeInEntry !== undefined);
   if (claiming.length > 0) {
     return claiming.sort((a, b) => a.specId.localeCompare(b.specId));
   }
@@ -214,7 +211,6 @@ function withAuthorityContext(
   if (candidates.length === 0) return binding;
   return { ...binding, authorityCandidates: candidates };
 }
-
 
 /**
  * AUTH-BINDING-BRIDGE-001: best-effort bridge context for the bare (no
@@ -277,15 +273,16 @@ export function runScopeCommand(opts: ScopeCommandOptions): number {
   const authorityCandidates = buildAuthorityContextCandidates(snapshot.specs, opts.path);
   const bctx = explicitSpec === undefined ? bridgeContext(cawsDir, cwd, env) : {};
   const bound = withAuthorityContext(
-    explicitSpec?.binding ?? resolveBinding({
-      repoRoot,
-      cwd,
-      targetPath: opts.path,
-      registry: snapshot.worktrees,
-      specs: snapshot.specs,
-      ...(bctx.bridges !== undefined ? { bridges: bctx.bridges } : {}),
-      ...(bctx.sessionId !== undefined ? { sessionId: bctx.sessionId } : {}),
-    }),
+    explicitSpec?.binding ??
+      resolveBinding({
+        repoRoot,
+        cwd,
+        targetPath: opts.path,
+        registry: snapshot.worktrees,
+        specs: snapshot.specs,
+        ...(bctx.bridges !== undefined ? { bridges: bctx.bridges } : {}),
+        ...(bctx.sessionId !== undefined ? { sessionId: bctx.sessionId } : {}),
+      }),
     authorityCandidates
   );
 
@@ -332,17 +329,22 @@ export function runScopeCommand(opts: ScopeCommandOptions): number {
       `  ${claimants.length} active bound specs claim this path via scope.in; CAWS will not guess which governs:`
     );
     for (const c of claimants) {
-      const here = cwdClaimant !== undefined && c.specId === cwdClaimant.specId ? ' (current cwd/session)' : '';
-      err(`    - ${c.specId} (worktree ${c.worktreeName}) via scope.in "${c.matchedScopeInEntry}"${here}`);
+      const here =
+        cwdClaimant !== undefined && c.specId === cwdClaimant.specId
+          ? ' (current cwd/session)'
+          : '';
+      err(
+        `    - ${c.specId} (worktree ${c.worktreeName}) via scope.in "${c.matchedScopeInEntry}"${here}`
+      );
     }
     err('  Inspect each claimant:');
     for (const c of claimants) {
       err(`    caws specs show ${c.specId}`);
     }
     err('  Resolve by EITHER:');
-    err('    (a) narrowing one spec\'s scope.in so only one claims this path, OR');
+    err("    (a) narrowing one spec's scope.in so only one claims this path, OR");
     err('    (b) routing the edit through the single worktree that should own it');
-    err('        and removing the path from the other spec\'s scope.in.');
+    err("        and removing the path from the other spec's scope.in.");
     err('  Next commands:');
     for (const c of claimants) {
       err(`    caws specs show ${c.specId}`);
@@ -403,12 +405,8 @@ export function runScopeCommand(opts: ScopeCommandOptions): number {
     typeof bound.worktreeName === 'string'
   ) {
     const wt = bound.worktreeName;
-    out(
-      `  claimed by worktree '${wt}' — edit it there: cd .caws/worktrees/${wt}`
-    );
-    out(
-      '  (a base-checkout write to this path is blocked by worktree-write-guard;'
-    );
+    out(`  claimed by worktree '${wt}' — edit it there: cd .caws/worktrees/${wt}`);
+    out('  (a base-checkout write to this path is blocked by worktree-write-guard;');
     out("   the path's scope.in entry is a worktree claim, not a free pass here.)");
   }
 
@@ -464,7 +462,9 @@ function collectPlanPaths(
     try {
       body = readFileSync(pathsFile, 'utf8');
     } catch (e) {
-      err(`caws scope plan: failed to read --paths-file ${opts.pathsFile}: ${(e as Error).message}`);
+      err(
+        `caws scope plan: failed to read --paths-file ${opts.pathsFile}: ${(e as Error).message}`
+      );
       return null;
     }
     for (const line of body.split(/\r?\n/)) {
@@ -493,7 +493,9 @@ function groupedCommandForPath(
       command: `caws specs amend-scope ${specId} --add ${shellQuote(path)}`,
     };
   }
-  const addSupportMatch = command.command.match(/^caws specs amend-scope ([^ ]+) --add-support (.+)$/);
+  const addSupportMatch = command.command.match(
+    /^caws specs amend-scope ([^ ]+) --add-support (.+)$/
+  );
   if (addSupportMatch !== null) {
     const specId = addSupportMatch[1]!;
     return {
@@ -556,10 +558,13 @@ export function groupScopePlanRemediations(
   });
 }
 
-function ambiguousPlanPayload(targetPath: string, claimants: readonly {
-  readonly specId: string;
-  readonly worktreeName: string;
-}[]): ScopePlanPathResult {
+function ambiguousPlanPayload(
+  targetPath: string,
+  claimants: readonly {
+    readonly specId: string;
+    readonly worktreeName: string;
+  }[]
+): ScopePlanPathResult {
   return {
     decision: 'no_authority',
     rule: 'scope.no_authority.ambiguous_binding',
@@ -632,15 +637,16 @@ export function runScopePlanCommand(opts: ScopePlanOptions): number {
   const results: ScopePlanPathResult[] = [];
   for (const p of paths) {
     const bound = withAuthorityContext(
-      explicitSpec?.binding ?? resolveBinding({
-        repoRoot,
-        cwd,
-        targetPath: p,
-        registry: snapshot.worktrees,
-        specs: snapshot.specs,
-        ...(bctxPlan.bridges !== undefined ? { bridges: bctxPlan.bridges } : {}),
-        ...(bctxPlan.sessionId !== undefined ? { sessionId: bctxPlan.sessionId } : {}),
-      }),
+      explicitSpec?.binding ??
+        resolveBinding({
+          repoRoot,
+          cwd,
+          targetPath: p,
+          registry: snapshot.worktrees,
+          specs: snapshot.specs,
+          ...(bctxPlan.bridges !== undefined ? { bridges: bctxPlan.bridges } : {}),
+          ...(bctxPlan.sessionId !== undefined ? { sessionId: bctxPlan.sessionId } : {}),
+        }),
       buildAuthorityContextCandidates(snapshot.specs, p)
     );
     if (bound.ambiguous !== undefined) {
@@ -663,14 +669,20 @@ export function runScopePlanCommand(opts: ScopePlanOptions): number {
   const remediationGroups = groupScopePlanRemediations(results);
 
   if (asJson) {
-    out(JSON.stringify({
-      ok: true,
-      read_only: true,
-      count: results.length,
-      counts,
-      paths: results,
-      remediation_groups: remediationGroups,
-    }, null, 2));
+    out(
+      JSON.stringify(
+        {
+          ok: true,
+          read_only: true,
+          count: results.length,
+          counts,
+          paths: results,
+          remediation_groups: remediationGroups,
+        },
+        null,
+        2
+      )
+    );
     return 0;
   }
 

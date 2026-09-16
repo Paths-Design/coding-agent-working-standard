@@ -31,10 +31,7 @@ import { DOCTOR_RULES, inspectProjectState } from '../../kernel';
 import { detectGitignoreDrift } from '../../init/gitignore-drift';
 import { detectBuildStaleness } from '../build-freshness';
 import { AGENT_CWD_GONE_RULE, detectWedgedSessions } from '../cwd-recovery';
-import {
-  composeDoctorSnapshot,
-  resolveRepoRoot,
-} from '../../store';
+import { composeDoctorSnapshot, resolveRepoRoot } from '../../store';
 import {
   countFindingSeverities,
   countSeverities,
@@ -104,10 +101,7 @@ function genericPlanItem(
             'No automatic repair command is declared for this finding; inspect the finding before mutating.',
         }
       : {}),
-    next_command:
-      input.nextCommand ??
-      finding.narrowRepair ??
-      'caws doctor --data',
+    next_command: input.nextCommand ?? finding.narrowRepair ?? 'caws doctor --data',
     ...(Object.keys(data).length > 0 ? { details: data } : {}),
   };
 }
@@ -129,7 +123,8 @@ function doctorRepairPlanItem(finding: DoctorFinding): DoctorRepairPlanItem {
     case DOCTOR_RULES.WORKTREE_GHOST_REGISTRY_ENTRY:
       return genericPlanItem(finding, {
         stateClass: 'ghost-registry',
-        allowedMutation: 'prune registry entry and append worktree_pruned via caws worktree prune --apply',
+        allowedMutation:
+          'prune registry entry and append worktree_pruned via caws worktree prune --apply',
         nextCommand: 'caws worktree prune --state ghost-registry --apply',
       });
 
@@ -192,7 +187,6 @@ function doctorRepairPlanItem(finding: DoctorFinding): DoctorRepairPlanItem {
           'Immutable event history references a worktree without live control-plane binding; reconcile authority manually.',
       });
 
-
     case DOCTOR_RULES.WORKTREE_OWNER_LEASE_MISSING:
       return genericPlanItem(finding, {
         stateClass: 'owner-lease-missing-refused',
@@ -208,14 +202,15 @@ function doctorRepairPlanItem(finding: DoctorFinding): DoctorRepairPlanItem {
         stateClass: 'agent-cwd-gone-refused',
         nextCommand: finding.narrowRepair ?? 'cd <repo-root>',
         refusalReason:
-          'CAWS will not change a live session\'s shell cwd. The operator must reset it (cd to repo_root, or restart the session rooted at the repo root).',
+          "CAWS will not change a live session's shell cwd. The operator must reset it (cd to repo_root, or restart the session rooted at the repo root).",
       });
 
     case DOCTOR_RULES.WAIVER_EXPIRED_ACTIVE:
       return genericPlanItem(finding, {
         stateClass: 'expired-waiver',
         allowedMutation: 'revoke expired active waivers via caws waiver prune --apply',
-        nextCommand: 'caws waiver prune --status expired --apply --reason <reason> --revoked-by <actor>',
+        nextCommand:
+          'caws waiver prune --status expired --apply --reason <reason> --revoked-by <actor>',
       });
 
     case DOCTOR_RULES.POLICY_MISSING:
@@ -247,7 +242,10 @@ function countsByState(items: readonly DoctorRepairPlanItem[]): Record<string, n
   return counts;
 }
 
-function renderRepairPlan(items: readonly DoctorRepairPlanItem[], out: (line: string) => void): void {
+function renderRepairPlan(
+  items: readonly DoctorRepairPlanItem[],
+  out: (line: string) => void
+): void {
   out(`caws doctor repair-plan: ${items.length} finding(s), read-only`);
   if (items.length === 0) {
     out('  (no repair-plan items)');
@@ -334,23 +332,29 @@ export function runDoctorCommand(opts: DoctorCommandOptions = {}): number {
   if (opts.repairPlan === true) {
     const items = findings.map(doctorRepairPlanItem);
     if (opts.json === true) {
-      out(JSON.stringify({
-        ok: !hasErrors,
-        dry_run: true,
-        read_only: true,
-        counts: {
-          findings: items.length,
-          errors: findingCounts.errors,
-          warnings: findingCounts.warnings,
-          infos: findingCounts.infos,
-          load_errors: loadCounts.errors,
-          load_warnings: loadCounts.warnings,
-          load_infos: loadCounts.infos,
-        },
-        counts_by_state: countsByState(items),
-        items,
-        load_diagnostics: loadDiagnostics,
-      }, null, 2));
+      out(
+        JSON.stringify(
+          {
+            ok: !hasErrors,
+            dry_run: true,
+            read_only: true,
+            counts: {
+              findings: items.length,
+              errors: findingCounts.errors,
+              warnings: findingCounts.warnings,
+              infos: findingCounts.infos,
+              load_errors: loadCounts.errors,
+              load_warnings: loadCounts.warnings,
+              load_infos: loadCounts.infos,
+            },
+            counts_by_state: countsByState(items),
+            items,
+            load_diagnostics: loadDiagnostics,
+          },
+          null,
+          2
+        )
+      );
     } else {
       renderRepairPlan(items, out);
       if (loadDiagnostics.length > 0) {

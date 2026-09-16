@@ -221,7 +221,11 @@ describe('caws worktree cleanup-plan', () => {
     );
     expectUnchanged(
       before,
-      snapshotState(caws, ['READY-001', 'DIRTY-001', 'UNMERGED-001', 'ACTIVE-001', 'FOREIGN-001'], paths)
+      snapshotState(
+        caws,
+        ['READY-001', 'DIRTY-001', 'UNMERGED-001', 'ACTIVE-001', 'FOREIGN-001'],
+        paths
+      )
     );
   });
 
@@ -276,7 +280,11 @@ describe('caws worktree cleanup-plan', () => {
     expect(result.out).toBe('');
     expectUnchanged(
       before,
-      snapshotState(caws, ['READY-001', 'DIRTY-001', 'UNMERGED-001', 'ACTIVE-001', 'FOREIGN-001'], paths)
+      snapshotState(
+        caws,
+        ['READY-001', 'DIRTY-001', 'UNMERGED-001', 'ACTIVE-001', 'FOREIGN-001'],
+        paths
+      )
     );
   });
 

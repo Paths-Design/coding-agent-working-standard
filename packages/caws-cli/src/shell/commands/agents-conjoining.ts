@@ -88,7 +88,8 @@ export function deriveConjoiningTelemetry(leases: LeaseRegistry, now: Date): Con
     const [aId, x] = recentEntries[i] as [string, AgentLease];
     for (let j = i + 1; j < recentEntries.length; j++) {
       const [bId, y] = recentEntries[j] as [string, AgentLease];
-      if (typeof x.hostname !== 'string' || x.hostname.length === 0 || x.hostname !== y.hostname) continue;
+      if (typeof x.hostname !== 'string' || x.hostname.length === 0 || x.hostname !== y.hostname)
+        continue;
       if (x.repo_root !== y.repo_root || !hasOverlappingActivity(x, y)) continue;
       const key = [aId, bId].sort().join('\0');
       if (confirmedKeys.has(key)) continue;
@@ -103,7 +104,9 @@ export function deriveConjoiningTelemetry(leases: LeaseRegistry, now: Date): Con
     }
   }
 
-  const classifiedLeases = recentEntries.filter(([, lease]) => hasCompleteForkIdentity(lease)).length;
+  const classifiedLeases = recentEntries.filter(([, lease]) =>
+    hasCompleteForkIdentity(lease)
+  ).length;
   return {
     confirmed,
     unresolved,

@@ -181,7 +181,9 @@ describe('mutation policy topology contract', () => {
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('missing mutation source: src/kernel/does-not-exist.ts');
-    expect(result.stderr).toContain('missing mutation test: tests/kernel/unit/does-not-exist.test.ts');
+    expect(result.stderr).toContain(
+      'missing mutation test: tests/kernel/unit/does-not-exist.test.ts'
+    );
   });
 
   test('store mutation recomputes evidence using only in-process store contracts', () => {
@@ -194,25 +196,31 @@ describe('mutation policy topology contract', () => {
     expect(config.testFiles).toContain('tests/store/messages-dead-recipient-prune.test.js');
   });
 
-  test.each(['kernel', 'store', 'shell'])('%s sandbox excludes sibling runs while retaining source and tests', (surface) => {
-    const dir = makeTempDir();
-    const required = ['src/init/runtime.ts', 'src/store/required.ts', 'tests/store/required.test.js'];
-    const generated = [
-      '.stryker-kernel-tmp/sandbox/temporary.ts',
-      '.stryker-store-tmp/sandbox/temporary.ts',
-      '.stryker-shell-tmp/sandbox/temporary.ts',
-      'reports/mutation-store/mutation-report.json',
-      'coverage/coverage.json',
-    ];
-    for (const file of [...required, ...generated]) {
-      const destination = path.join(dir, file);
-      fs.mkdirSync(path.dirname(destination), { recursive: true });
-      fs.writeFileSync(destination, 'fixture');
-    }
-    // Exercise the installed Stryker reader that actually selects sandbox
-    // inputs; matching patterns ourselves would not prove its semantics.
-    const core = path.dirname(require.resolve('@stryker-mutator/core/package.json'));
-    const script = `
+  test.each(['kernel', 'store', 'shell'])(
+    '%s sandbox excludes sibling runs while retaining source and tests',
+    (surface) => {
+      const dir = makeTempDir();
+      const required = [
+        'src/init/runtime.ts',
+        'src/store/required.ts',
+        'tests/store/required.test.js',
+      ];
+      const generated = [
+        '.stryker-kernel-tmp/sandbox/temporary.ts',
+        '.stryker-store-tmp/sandbox/temporary.ts',
+        '.stryker-shell-tmp/sandbox/temporary.ts',
+        'reports/mutation-store/mutation-report.json',
+        'coverage/coverage.json',
+      ];
+      for (const file of [...required, ...generated]) {
+        const destination = path.join(dir, file);
+        fs.mkdirSync(path.dirname(destination), { recursive: true });
+        fs.writeFileSync(destination, 'fixture');
+      }
+      // Exercise the installed Stryker reader that actually selects sandbox
+      // inputs; matching patterns ourselves would not prove its semantics.
+      const core = path.dirname(require.resolve('@stryker-mutator/core/package.json'));
+      const script = `
       import fs from 'node:fs/promises';
       import path from 'node:path';
       import { pathToFileURL } from 'node:url';
@@ -223,13 +231,16 @@ describe('mutation policy topology contract', () => {
       const files = await reader.resolveInputFileNames();
       console.log(JSON.stringify(files.map(file => path.relative(process.cwd(), file)).sort()));
     `;
-    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
-      cwd: dir, encoding: 'utf8', timeout: 10000,
-    });
-    expect(result.stderr).toBe('');
-    expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout)).toEqual(required);
-  });
+      const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+        cwd: dir,
+        encoding: 'utf8',
+        timeout: 10000,
+      });
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual(required);
+    }
+  );
 });
 
 describe('per-file mutation report contract', () => {
@@ -244,10 +255,7 @@ describe('per-file mutation report contract', () => {
   });
 
   test('a zero-mutant target fails instead of receiving a perfect empty score', () => {
-    const result = runReportAssertion(
-      mutationPolicy(['dist/a.js']),
-      report({ 'dist/a.js': [] })
-    );
+    const result = runReportAssertion(mutationPolicy(['dist/a.js']), report({ 'dist/a.js': [] }));
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('FAIL dist/a.js has zero valid mutants');
@@ -311,13 +319,28 @@ describe('active workflow topology contract', () => {
     const prChecks = yaml.load(
       fs.readFileSync(path.join(REPO_ROOT, '.github/workflows/pr-checks.yml'), 'utf8')
     );
-    const step = prChecks.jobs.sanity.steps.find((item) => item.name === 'Block shadow file patterns');
+    const step = prChecks.jobs.sanity.steps.find(
+      (item) => item.name === 'Block shadow file patterns'
+    );
     expect(step).toHaveProperty('run');
-    const result = spawnSync('/bin/bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c',
-      step.run.replaceAll('${{ github.base_ref }}', 'main')], {
-      cwd: makeTempDir(), encoding: 'utf8', timeout: 10000,
-      env: { ...process.env, BASE_REF: 'missing-base', HEAD_REF: 'missing-head', LC_ALL: 'C' },
-    });
+    const result = spawnSync(
+      '/bin/bash',
+      [
+        '--noprofile',
+        '--norc',
+        '-e',
+        '-o',
+        'pipefail',
+        '-c',
+        step.run.replaceAll('${{ github.base_ref }}', 'main'),
+      ],
+      {
+        cwd: makeTempDir(),
+        encoding: 'utf8',
+        timeout: 10000,
+        env: { ...process.env, BASE_REF: 'missing-base', HEAD_REF: 'missing-head', LC_ALL: 'C' },
+      }
+    );
     expect(result.status).not.toBe(0);
     expect(result.stderr).toMatch(/not a git repository/i);
   });
@@ -345,7 +368,10 @@ describe('active workflow topology contract', () => {
   });
 
   test('the mutation workflow uses current caws-cli surfaces and retains evidence', () => {
-    const workflow = fs.readFileSync(path.join(REPO_ROOT, '.github/workflows/mutation.yml'), 'utf8');
+    const workflow = fs.readFileSync(
+      path.join(REPO_ROOT, '.github/workflows/mutation.yml'),
+      'utf8'
+    );
 
     expect(workflow).not.toContain('packages/caws-kernel');
     expect(workflow).toMatch(/surface:\s*\[kernel, store, shell\]/);

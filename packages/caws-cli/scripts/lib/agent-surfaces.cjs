@@ -71,7 +71,8 @@ function renderReadmeInstallBlock(implemented) {
     'caws init --agent-surface codex',
     '```',
     '',
-    'Pack templates exist for ' + renderImplemented(implemented) +
+    'Pack templates exist for ' +
+      renderImplemented(implemented) +
       '. Template availability does not establish native activation; verify in the target harness.',
   ].join('\n');
 }
@@ -88,7 +89,11 @@ function renderGuideSurfaceProse(known, implemented) {
   const implClause = impl + ' ' + (implemented.length === 1 ? 'is' : 'are') + ' implemented';
   const declaredCount = declared ? declared.split(', ').length : 0;
   const declaredClause = declaredCount
-    ? '; ' + declared + ' ' + (declaredCount === 1 ? 'is a declared surface' : 'are declared surfaces') + ' but not implemented'
+    ? '; ' +
+      declared +
+      ' ' +
+      (declaredCount === 1 ? 'is a declared surface' : 'are declared surfaces') +
+      ' but not implemented'
     : '';
   return (
     'Use `caws init --agent-surface <' +
@@ -136,7 +141,11 @@ function fillMarkers(text, fills) {
     const m = out.match(re);
     if (!m) {
       throw new Error(
-        'marker pair <!-- ' + name + ':start --> / <!-- ' + name + ':end --> not found. ' +
+        'marker pair <!-- ' +
+          name +
+          ':start --> / <!-- ' +
+          name +
+          ':end --> not found. ' +
           'Add the pair to the doc or remove it from the populator registry.'
       );
     }

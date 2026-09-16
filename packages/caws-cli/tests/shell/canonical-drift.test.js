@@ -30,7 +30,9 @@ afterAll(() => {
 });
 
 function git(root, args) {
-  return execFileSync(resolveGitBinary(), ['-C', root, ...args], { encoding: 'utf8' }).toString().trim();
+  return execFileSync(resolveGitBinary(), ['-C', root, ...args], { encoding: 'utf8' })
+    .toString()
+    .trim();
 }
 
 function mkRepo() {
@@ -45,15 +47,26 @@ function parkCanonical(root, cawsDir) {
   git(root, ['checkout', '-q', '-b', 'feat/other']);
   const wtPath = path.join(cawsDir, 'worktrees', 'wt-demo');
   fs.mkdirSync(wtPath, { recursive: true });
-  fs.writeFileSync(path.join(cawsDir, 'worktrees.json'), JSON.stringify({
-    'wt-demo': {
-      branch: 'wt-demo', baseBranch: 'main', specId: 'SPEC-001', path: wtPath,
-    },
-  }, null, 2) + '\n');
+  fs.writeFileSync(
+    path.join(cawsDir, 'worktrees.json'),
+    JSON.stringify(
+      {
+        'wt-demo': {
+          branch: 'wt-demo',
+          baseBranch: 'main',
+          specId: 'SPEC-001',
+          path: wtPath,
+        },
+      },
+      null,
+      2
+    ) + '\n'
+  );
 }
 
 function create(root, extra = {}) {
-  const out = []; const err = [];
+  const out = [];
+  const err = [];
   const code = runSpecsCreateCommand({
     id: 'CD-001',
     title: 'Canonical drift test spec',
@@ -76,7 +89,8 @@ describe('CANONICAL-DRIFT-GUARDS-001 command surface', () => {
     const { root, cawsDir } = mkRepo();
     parkCanonical(root, cawsDir);
 
-    const out1 = []; const err1 = [];
+    const out1 = [];
+    const err1 = [];
     runDoctorCommand({ cwd: root, out: (l) => out1.push(l), err: (l) => err1.push(l) });
     const text1 = [...out1, ...err1].join('\n');
     expect(text1).toContain('doctor.canonical.mis_parked_head');
@@ -84,7 +98,8 @@ describe('CANONICAL-DRIFT-GUARDS-001 command surface', () => {
 
     // Un-park: back on main => no finding.
     git(root, ['checkout', '-q', 'main']);
-    const out2 = []; const err2 = [];
+    const out2 = [];
+    const err2 = [];
     runDoctorCommand({ cwd: root, out: (l) => out2.push(l), err: (l) => err2.push(l) });
     expect([...out2, ...err2].join('\n')).not.toContain('doctor.canonical.mis_parked_head');
   });
@@ -110,7 +125,9 @@ describe('CANONICAL-DRIFT-GUARDS-001 command surface', () => {
     const r = create(root, { allowForeignBranch: true });
     expect(r.code).toBe(0);
     // The spec landed on the parked branch.
-    expect(git(root, ['ls-tree', '--name-only', 'HEAD', '--', '.caws/specs/CD-001.yaml'])).toContain('CD-001.yaml');
+    expect(
+      git(root, ['ls-tree', '--name-only', 'HEAD', '--', '.caws/specs/CD-001.yaml'])
+    ).toContain('CD-001.yaml');
   });
 
   test('A5: relocate dry-run then apply — object plumbing only, base CAS lands', () => {
@@ -121,10 +138,13 @@ describe('CANONICAL-DRIFT-GUARDS-001 command surface', () => {
 
     // Dry-run: names source/target, mutates nothing.
     const dry = (() => {
-      const out = []; const err = [];
+      const out = [];
+      const err = [];
       const code = runSpecsRelocateCommand({
-        id: 'CD-002', cwd: root,
-        out: (l) => out.push(l), err: (l) => err.push(l),
+        id: 'CD-002',
+        cwd: root,
+        out: (l) => out.push(l),
+        err: (l) => err.push(l),
       });
       return { code, text: out.join('\n') + err.join('\n') };
     })();
@@ -136,10 +156,14 @@ describe('CANONICAL-DRIFT-GUARDS-001 command surface', () => {
 
     const mainBefore = git(root, ['rev-parse', 'main']);
     const applied = (() => {
-      const out = []; const err = [];
+      const out = [];
+      const err = [];
       const code = runSpecsRelocateCommand({
-        id: 'CD-002', apply: true, cwd: root,
-        out: (l) => out.push(l), err: (l) => err.push(l),
+        id: 'CD-002',
+        apply: true,
+        cwd: root,
+        out: (l) => out.push(l),
+        err: (l) => err.push(l),
       });
       return { code, text: out.join('\n') + err.join('\n') };
     })();
@@ -148,11 +172,15 @@ describe('CANONICAL-DRIFT-GUARDS-001 command surface', () => {
 
     // Base advanced and now carries the spec; canonical working tree untouched.
     expect(git(root, ['rev-parse', 'main'])).not.toBe(mainBefore);
-    expect(git(root, ['ls-tree', '--name-only', 'main', '--', '.caws/specs/CD-002.yaml'])).toContain('CD-002.yaml');
+    expect(
+      git(root, ['ls-tree', '--name-only', 'main', '--', '.caws/specs/CD-002.yaml'])
+    ).toContain('CD-002.yaml');
     expect(git(root, ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe('feat/other');
     expect(fs.existsSync(path.join(cawsDir, 'specs', 'CD-002.yaml'))).toBe(true);
     // No temp index residue under .git.
-    expect(fs.readdirSync(path.join(root, '.git')).filter((f) => f.startsWith('caws-relocate-'))).toEqual([]);
+    expect(
+      fs.readdirSync(path.join(root, '.git')).filter((f) => f.startsWith('caws-relocate-'))
+    ).toEqual([]);
   });
 
   test('A5b: relocate on-base is the healthy no-op', () => {
@@ -160,14 +188,25 @@ describe('CANONICAL-DRIFT-GUARDS-001 command surface', () => {
     const cawsDir = path.join(root, '.caws');
     const wtPath = path.join(cawsDir, 'worktrees', 'wt-demo');
     fs.mkdirSync(wtPath, { recursive: true });
-    fs.writeFileSync(path.join(cawsDir, 'worktrees.json'), JSON.stringify({
-      'wt-demo': { branch: 'wt-demo', baseBranch: 'main', specId: 'SPEC-001', path: wtPath },
-    }, null, 2) + '\n');
+    fs.writeFileSync(
+      path.join(cawsDir, 'worktrees.json'),
+      JSON.stringify(
+        {
+          'wt-demo': { branch: 'wt-demo', baseBranch: 'main', specId: 'SPEC-001', path: wtPath },
+        },
+        null,
+        2
+      ) + '\n'
+    );
     // canonical stays on main
     const r = (() => {
-      const out = []; const err = [];
+      const out = [];
+      const err = [];
       const code = runSpecsRelocateCommand({
-        id: 'CD-003', cwd: root, out: (l) => out.push(l), err: (l) => err.push(l),
+        id: 'CD-003',
+        cwd: root,
+        out: (l) => out.push(l),
+        err: (l) => err.push(l),
       });
       return { code, text: out.join('\n') + err.join('\n') };
     })();
@@ -179,9 +218,16 @@ describe('CANONICAL-DRIFT-GUARDS-001 command surface', () => {
     const { root, cawsDir } = mkRepo();
     const wtPath = path.join(cawsDir, 'worktrees', 'wt-demo');
     fs.mkdirSync(wtPath, { recursive: true });
-    fs.writeFileSync(path.join(cawsDir, 'worktrees.json'), JSON.stringify({
-      'wt-demo': { branch: 'wt-demo', baseBranch: 'main', specId: 'SPEC-001', path: wtPath },
-    }, null, 2) + '\n');
+    fs.writeFileSync(
+      path.join(cawsDir, 'worktrees.json'),
+      JSON.stringify(
+        {
+          'wt-demo': { branch: 'wt-demo', baseBranch: 'main', specId: 'SPEC-001', path: wtPath },
+        },
+        null,
+        2
+      ) + '\n'
+    );
     const r = create(root);
     expect(r.code).toBe(0);
     expect(r.err.join('\n')).not.toContain('--allow-foreign-branch');

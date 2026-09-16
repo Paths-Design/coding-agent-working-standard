@@ -503,7 +503,7 @@ components:
         priority:
           type: string
           enum: [low, normal, high, critical]
-          default: "normal"
+          default: 'normal'
           description: Task priority
         requirements:
           type: object
@@ -578,7 +578,7 @@ components:
         query:
           type: string
           description: Search query text
-          example: "user authentication preferences"
+          example: 'user authentication preferences'
         tenantIds:
           type: array
           items:
@@ -687,7 +687,7 @@ components:
         model:
           type: string
           description: Preferred model (auto-selected if not specified)
-          example: "gemma-3n"
+          example: 'gemma-3n'
         parameters:
           type: object
           description: Model-specific parameters
@@ -760,7 +760,7 @@ components:
           items:
             type: string
             enum: [tests, coverage, mutation, contract, lint, security, performance]
-          default: ["tests", "coverage", "lint"]
+          default: ['tests', 'coverage', 'lint']
           description: Quality checks to run
 
     PlatformAssessmentResult:
@@ -814,7 +814,7 @@ components:
         code:
           type: string
           description: Error code identifier
-          example: "PLATFORM_UNAVAILABLE"
+          example: 'PLATFORM_UNAVAILABLE'
         message:
           type: string
           description: Human-readable error message

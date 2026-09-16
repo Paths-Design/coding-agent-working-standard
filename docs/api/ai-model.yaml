@@ -344,11 +344,11 @@ components:
         id:
           type: string
           description: Unique model identifier
-          example: "gemma-3n"
+          example: 'gemma-3n'
         name:
           type: string
           description: Human-readable model name
-          example: "Gemma 3N 4B"
+          example: 'Gemma 3N 4B'
         provider:
           type: string
           enum:
@@ -357,7 +357,7 @@ components:
             - anthropic
             - local
           description: Model provider/platform
-          example: "ollama"
+          example: 'ollama'
         type:
           type: string
           enum:
@@ -365,7 +365,7 @@ components:
             - embedding
             - multimodal
           description: Model type/capability
-          example: "text-generation"
+          example: 'text-generation'
         status:
           $ref: '#/components/schemas/ModelStatus'
         parameters:
@@ -397,7 +397,7 @@ components:
         - error
         - unavailable
       description: Model operational status
-      example: "ready"
+      example: 'ready'
 
     ModelPerformance:
       type: object
@@ -431,11 +431,11 @@ components:
         modelId:
           type: string
           description: Model to use for inference
-          example: "gemma-3n"
+          example: 'gemma-3n'
         prompt:
           type: string
           description: Input prompt for generation
-          example: "Explain quantum computing in simple terms"
+          example: 'Explain quantum computing in simple terms'
         parameters:
           $ref: '#/components/schemas/InferenceParameters'
         context:
@@ -445,7 +445,7 @@ components:
             properties:
               role:
                 type: string
-                enum: ["system", "user", "assistant"]
+                enum: ['system', 'user', 'assistant']
               content:
                 type: string
           description: Conversation context for chat models
@@ -558,7 +558,7 @@ components:
         name:
           type: string
           description: Criterion name
-          example: "factual_accuracy"
+          example: 'factual_accuracy'
         type:
           type: string
           enum:
@@ -623,7 +623,7 @@ components:
         problem:
           type: string
           description: Problem statement to solve
-          example: "Generate a user authentication system"
+          example: 'Generate a user authentication system'
         constraints:
           type: array
           items:
@@ -669,7 +669,7 @@ components:
             - must
             - should
             - nice_to_have
-          default: "should"
+          default: 'should'
           description: Constraint priority
         parameters:
           type: object
@@ -737,7 +737,7 @@ components:
             - low
             - normal
             - high
-          default: "normal"
+          default: 'normal'
           description: Load priority (affects resource allocation)
         preloadData:
           type: boolean
@@ -885,7 +885,7 @@ components:
         code:
           type: string
           description: Error code identifier
-          example: "MODEL_NOT_FOUND"
+          example: 'MODEL_NOT_FOUND'
         message:
           type: string
           description: Human-readable error message

@@ -82,10 +82,7 @@ function writeRegistry(root, entries) {
       path: wtPath,
     };
   }
-  fs.writeFileSync(
-    path.join(cawsDir(root), 'worktrees.json'),
-    JSON.stringify(registry, null, 2)
-  );
+  fs.writeFileSync(path.join(cawsDir(root), 'worktrees.json'), JSON.stringify(registry, null, 2));
 }
 
 function writeSpec(root, id, worktree) {

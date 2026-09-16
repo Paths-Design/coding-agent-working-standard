@@ -10,5 +10,9 @@ export function diagnostic(d: Omit<Diagnostic, 'severity'> & { severity?: Severi
 export function isDiagnostic(value: unknown): value is Diagnostic {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
-  return typeof v['rule'] === 'string' && typeof v['authority'] === 'string' && typeof v['message'] === 'string';
+  return (
+    typeof v['rule'] === 'string' &&
+    typeof v['authority'] === 'string' &&
+    typeof v['message'] === 'string'
+  );
 }

@@ -40,9 +40,7 @@ import type {
 
 function isAncestorOrEqual(maybeAncestor: string, descendant: string): boolean {
   if (maybeAncestor === descendant) return true;
-  const withSep = maybeAncestor.endsWith(path.sep)
-    ? maybeAncestor
-    : maybeAncestor + path.sep;
+  const withSep = maybeAncestor.endsWith(path.sep) ? maybeAncestor : maybeAncestor + path.sep;
   return descendant.startsWith(withSep);
 }
 
@@ -109,10 +107,7 @@ function findRegistryMatch(
     const recordReal = realpathSafe(record.path);
     if (!isAncestorOrEqual(recordReal, cwdReal)) continue;
     const depth = recordReal.split(path.sep).length;
-    if (
-      depth > bestDepth ||
-      (depth === bestDepth && best !== null && name < best.name)
-    ) {
+    if (depth > bestDepth || (depth === bestDepth && best !== null && name < best.name)) {
       best = { name, path: recordReal };
       bestDepth = depth;
     }
@@ -168,10 +163,7 @@ export function scopeEntryMatches(entry: string, target: string): boolean {
  * Returns one claimant per matching spec, naming the spec, its worktree, and
  * the exact scope.in entry that matched (for the actionable refusal).
  */
-function findScopeInClaimants(
-  targetPath: string,
-  input: ResolveBindingInput
-): BindingClaimant[] {
+function findScopeInClaimants(targetPath: string, input: ResolveBindingInput): BindingClaimant[] {
   const claimants: BindingClaimant[] = [];
   for (const [name, record] of Object.entries(input.registry)) {
     const specId = record?.specId;
@@ -223,10 +215,7 @@ export function resolveBinding(input: ResolveBindingInput): ResolvedBinding {
       if (porcelainReal !== repoRootReal) {
         // Look up registry entry by path equality.
         for (const [name, record] of Object.entries(input.registry)) {
-          if (
-            typeof record?.path === 'string' &&
-            realpathSafe(record.path) === porcelainReal
-          ) {
+          if (typeof record?.path === 'string' && realpathSafe(record.path) === porcelainReal) {
             candidate = { name, path: porcelainReal };
             source = 'git_porcelain_match';
             break;
@@ -307,9 +296,8 @@ export function resolveBinding(input: ResolveBindingInput): ResolvedBinding {
           typeof input.targetPath === 'string' &&
           input.targetPath.length > 0
         ) {
-          const claiming = held.filter(
-            (s) =>
-              (s.scope?.in ?? []).some((e) => scopeEntryMatches(e, input.targetPath!))
+          const claiming = held.filter((s) =>
+            (s.scope?.in ?? []).some((e) => scopeEntryMatches(e, input.targetPath!))
           );
           if (claiming.length === 1) chosen = claiming[0];
         }

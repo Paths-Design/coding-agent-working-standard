@@ -30,14 +30,18 @@ function writeLegacyLease(cawsDir, sessionId, lastActiveIso) {
   fs.mkdirSync(leasesDir, { recursive: true });
   fs.writeFileSync(
     path.join(leasesDir, `${sessionId}.json`),
-    JSON.stringify({
-      lease_version: 1,
-      session_id: sessionId,
-      platform: 'claude-code',
-      started_at: lastActiveIso,
-      last_active: lastActiveIso,
-      repo_root: path.dirname(cawsDir),
-    }, null, 2) + '\n'
+    JSON.stringify(
+      {
+        lease_version: 1,
+        session_id: sessionId,
+        platform: 'claude-code',
+        started_at: lastActiveIso,
+        last_active: lastActiveIso,
+        repo_root: path.dirname(cawsDir),
+      },
+      null,
+      2
+    ) + '\n'
   );
 }
 

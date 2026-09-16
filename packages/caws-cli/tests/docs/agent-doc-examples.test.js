@@ -105,9 +105,9 @@ describe('caws evidence record examples in agent-facing docs are runnable', () =
   });
 
   test('every example names a real evidence type', () => {
-    const bad = ALL_EXAMPLES.filter(
-      (e) => !e.type || !EVIDENCE_SCHEMA_BY_TYPE[e.type]
-    ).map((e) => `${e.rel}: --type ${e.type}`);
+    const bad = ALL_EXAMPLES.filter((e) => !e.type || !EVIDENCE_SCHEMA_BY_TYPE[e.type]).map(
+      (e) => `${e.rel}: --type ${e.type}`
+    );
     expect(bad).toEqual([]);
   });
 
@@ -158,9 +158,7 @@ describe('caws specs create examples satisfy the tier/contract rule', () => {
   test('no documented tier-1/2 create omits --contract', () => {
     const failures = [];
     for (const rel of DOC_SURFACES) {
-      const body = fs
-        .readFileSync(path.join(ROOT, rel), 'utf8')
-        .replace(/\\\n\s*/g, ' ');
+      const body = fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/\\\n\s*/g, ' ');
       let m;
       CREATE_RE.lastIndex = 0;
       while ((m = CREATE_RE.exec(body)) !== null) {

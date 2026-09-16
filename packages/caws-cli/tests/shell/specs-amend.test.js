@@ -25,10 +25,7 @@ const { spawnSync } = require('child_process');
 
 const { initProject } = require('../../dist/store/init-store');
 const { runSpecsAmendCommand } = require('../../dist/shell/commands/specs');
-const {
-  MODULES_PLACEHOLDER,
-  INVARIANTS_PLACEHOLDER,
-} = require('../../dist/store/specs-writer');
+const { MODULES_PLACEHOLDER, INVARIANTS_PLACEHOLDER } = require('../../dist/store/specs-writer');
 const { cleanupAll, makeTempRepo } = require('../helpers/git-repo-factory');
 
 const CLI = path.resolve(__dirname, '..', '..', 'dist', 'index.js');
@@ -227,7 +224,7 @@ describe('A5: a closed spec may have a blank filled, never a claim rewritten', (
       'closed',
       ['packages/real'],
       ['a real invariant'],
-      "resolution: completed\n"
+      'resolution: completed\n'
     );
     const before = fs.readFileSync(specPath, 'utf8');
 
@@ -249,7 +246,7 @@ describe('A5: a closed spec may have a blank filled, never a claim rewritten', (
       'closed',
       ['packages/a', 'packages/b'],
       ['inv'],
-      "resolution: completed\n"
+      'resolution: completed\n'
     );
     const before = fs.readFileSync(specPath, 'utf8');
 
@@ -305,11 +302,22 @@ describe('the Commander wiring is real, not just the handler', () => {
     const run = spawnSync(
       process.execPath,
       [
-        CLI, 'specs', 'amend', 'AMEND-CLI-001',
-        '--add-module', 'packages/one', '--add-module', 'packages/two',
-        '--add-invariant', 'holds under load',
+        CLI,
+        'specs',
+        'amend',
+        'AMEND-CLI-001',
+        '--add-module',
+        'packages/one',
+        '--add-module',
+        'packages/two',
+        '--add-invariant',
+        'holds under load',
       ],
-      { cwd: root, encoding: 'utf8', env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'test-session' } }
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'test-session' },
+      }
     );
     expect(run.status).toBe(0);
     expect(run.stdout).toContain('amended AMEND-CLI-001');
@@ -332,7 +340,11 @@ describe('the Commander wiring is real, not just the handler', () => {
     const validate = spawnSync(
       process.execPath,
       [CLI, 'specs', 'validate', '.caws/specs/AMEND-CLI-002.yaml'],
-      { cwd: root, encoding: 'utf8', env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'test-session' } }
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'test-session' },
+      }
     );
     expect(validate.status).toBe(0);
     expect(validate.stdout).toContain('is valid');
@@ -351,10 +363,22 @@ describe('acceptance-criteria flags reach the writer through the CLI hop (CAWS-S
     const run = spawnSync(
       process.execPath,
       [
-        CLI, 'specs', 'amend', 'AMEND-AC-001',
-        '--set-ac', 'A1', '--then', 'the corrected claim', '--reason', 'the original then was wrong',
+        CLI,
+        'specs',
+        'amend',
+        'AMEND-AC-001',
+        '--set-ac',
+        'A1',
+        '--then',
+        'the corrected claim',
+        '--reason',
+        'the original then was wrong',
       ],
-      { cwd: root, encoding: 'utf8', env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'test-session' } }
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'test-session' },
+      }
     );
     expect(run.status).toBe(0);
     expect(run.stdout).toContain('amended AMEND-AC-001');
@@ -377,7 +401,11 @@ describe('acceptance-criteria flags reach the writer through the CLI hop (CAWS-S
     const run = spawnSync(
       process.execPath,
       [CLI, 'specs', 'amend', 'AMEND-AC-002', '--set-ac', 'A1', '--remove-ac', 'A2', '--then', 'x'],
-      { cwd: root, encoding: 'utf8', env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'test-session' } }
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'test-session' },
+      }
     );
     expect(run.status).toBe(1);
     expect(run.stderr).toContain('mutually exclusive');
@@ -386,13 +414,21 @@ describe('acceptance-criteria flags reach the writer through the CLI hop (CAWS-S
   test('amend --help advertises the acceptance flags', () => {
     const { root } = setupRepo('AMEND-AC-003', 'active', [MODULES_PLACEHOLDER], ['inv']);
 
-    const run = spawnSync(
-      process.execPath,
-      [CLI, 'specs', 'amend', '--help'],
-      { cwd: root, encoding: 'utf8', env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'test-session' } }
-    );
+    const run = spawnSync(process.execPath, [CLI, 'specs', 'amend', '--help'], {
+      cwd: root,
+      encoding: 'utf8',
+      env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'test-session' },
+    });
     expect(run.status).toBe(0);
-    for (const flag of ['--set-ac', '--add-ac', '--remove-ac', '--given', '--when', '--then', '--reason']) {
+    for (const flag of [
+      '--set-ac',
+      '--add-ac',
+      '--remove-ac',
+      '--given',
+      '--when',
+      '--then',
+      '--reason',
+    ]) {
       expect(run.stdout).toContain(flag);
     }
   });
@@ -405,7 +441,11 @@ describe('acceptance-criteria flags reach the writer through the CLI hop (CAWS-S
     const validate = spawnSync(
       process.execPath,
       [CLI, 'specs', 'validate', '.caws/specs/AMEND-AC-004.yaml'],
-      { cwd: root, encoding: 'utf8', env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'test-session' } }
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'test-session' },
+      }
     );
     expect(validate.status).toBe(0);
     expect(validate.stdout).toContain('is valid');

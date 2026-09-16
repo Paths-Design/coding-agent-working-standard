@@ -177,9 +177,7 @@ describe('caws specs prune-drafts', () => {
     expect(fs.existsSync(path.join(caws, 'specs', 'DRAFT-OLD-B-001.yaml'))).toBe(false);
     expect(fs.existsSync(path.join(caws, 'specs', 'DRAFT-FRESH-001.yaml'))).toBe(true);
     expect(fs.readFileSync(eventsPath(caws), 'utf8')).toContain('spec_retired');
-    expect(git(root, ['log', '-1', '--pretty=%s'])).toBe(
-      'chore(caws): retire 2 draft specs'
-    );
+    expect(git(root, ['log', '-1', '--pretty=%s'])).toBe('chore(caws): retire 2 draft specs');
   });
 
   test('apply requires explicit selection and refuses bound drafts without mutation', () => {
@@ -192,7 +190,9 @@ describe('caws specs prune-drafts', () => {
     const unfiltered = runPrune(root, { apply: true, json: true });
 
     expect(unfiltered.code).toBe(1);
-    expect(unfiltered.err).toContain('--apply requires --include or an explicit --older-than-ms selector');
+    expect(unfiltered.err).toContain(
+      '--apply requires --include or an explicit --older-than-ms selector'
+    );
     expect(git(root, ['rev-parse', 'HEAD'])).toBe(beforeHead);
     expect(fs.existsSync(path.join(caws, 'specs', 'DRAFT-OLD-001.yaml'))).toBe(true);
     expect(fs.existsSync(eventsPath(caws))).toBe(false);

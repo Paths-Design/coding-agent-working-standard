@@ -67,10 +67,7 @@ describe('authority policy lock: forbidden/ambiguous classes carry NO repair com
   test('H5 (3-way contradiction) repair is a doctrine pointer, not a command', () => {
     const input: DoctorInput = {
       now: NOW,
-      specs: [
-        spec('S-A', { worktree: 'wt-x' } as Partial<Spec>),
-        spec('S-B', {} as Partial<Spec>),
-      ],
+      specs: [spec('S-A', { worktree: 'wt-x' } as Partial<Spec>), spec('S-B', {} as Partial<Spec>)],
       worktrees: { 'wt-x': { specId: 'S-B' } },
     };
     const f = findingFor(

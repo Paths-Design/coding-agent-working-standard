@@ -47,9 +47,7 @@ function input(fs: FsObs): DoctorInput {
 
 describe('doctor.hooks.stale_telemetry_pack (CAWS-HARNESS-TELEMETRY-ADAPTER-001)', () => {
   test('rule id is the stable string the docs and remediation text name', () => {
-    expect(DOCTOR_RULES.HOOKS_STALE_TELEMETRY_PACK).toBe(
-      'doctor.hooks.stale_telemetry_pack'
-    );
+    expect(DOCTOR_RULES.HOOKS_STALE_TELEMETRY_PACK).toBe('doctor.hooks.stale_telemetry_pack');
   });
 
   test('managed rows + installed dsh marker fires the warning with rows and surfaces in data', () => {
@@ -62,9 +60,7 @@ describe('doctor.hooks.stale_telemetry_pack (CAWS-HARNESS-TELEMETRY-ADAPTER-001)
     const report = inspectProjectState(input(fs));
     expect(rules(report)).toContain(DOCTOR_RULES.HOOKS_STALE_TELEMETRY_PACK);
 
-    const finding = report.findings.find(
-      (f) => f.rule === DOCTOR_RULES.HOOKS_STALE_TELEMETRY_PACK
-    );
+    const finding = report.findings.find((f) => f.rule === DOCTOR_RULES.HOOKS_STALE_TELEMETRY_PACK);
     expect(finding?.severity).toBe('warning');
     expect(finding?.data).toMatchObject({
       stale_rows: ALL_ROWS,
@@ -80,9 +76,7 @@ describe('doctor.hooks.stale_telemetry_pack (CAWS-HARNESS-TELEMETRY-ADAPTER-001)
       adapterPackSurfaceMarkers: ['dsh'],
     });
     const report = inspectProjectState(input(fs));
-    const finding = report.findings.find(
-      (f) => f.rule === DOCTOR_RULES.HOOKS_STALE_TELEMETRY_PACK
-    );
+    const finding = report.findings.find((f) => f.rule === DOCTOR_RULES.HOOKS_STALE_TELEMETRY_PACK);
     expect(finding?.data).toMatchObject({
       stale_rows: ['.caws/hooks/session-log.sh'],
     });

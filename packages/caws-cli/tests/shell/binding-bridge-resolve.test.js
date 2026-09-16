@@ -135,10 +135,7 @@ describe('resolveBinding bridge authority', () => {
         SECOND: bridge(SESSION_A),
       },
       sessionId: SESSION_A,
-      specs: [
-        spec('FIRST', [scopeEntries[0]]),
-        spec('SECOND', [scopeEntries[1]]),
-      ],
+      specs: [spec('FIRST', [scopeEntries[0]]), spec('SECOND', [scopeEntries[1]])],
       targetPath,
     });
 
@@ -156,11 +153,7 @@ describe('resolveBinding bridge authority', () => {
         CLOSED: bridge(SESSION_A),
       },
       sessionId: SESSION_A,
-      specs: [
-        eligible,
-        spec('FOREIGN', ['src/**']),
-        spec('CLOSED', ['src/**'], 'closed'),
-      ],
+      specs: [eligible, spec('FOREIGN', ['src/**']), spec('CLOSED', ['src/**'], 'closed')],
       targetPath: 'not/in/any/scope.txt',
     });
 

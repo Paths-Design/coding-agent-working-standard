@@ -42,7 +42,11 @@ function spawnCli(root, args) {
   return spawnSync(process.execPath, [CLI, ...args], {
     cwd: root,
     encoding: 'utf8',
-    env: { ...process.env, CAWS_HOME: path.join(root, 'machine-home'), CLAUDE_CODE_SESSION_ID: 'init-action-positionals-test' },
+    env: {
+      ...process.env,
+      CAWS_HOME: path.join(root, 'machine-home'),
+      CLAUDE_CODE_SESSION_ID: 'init-action-positionals-test',
+    },
   });
 }
 
@@ -58,7 +62,7 @@ describe('caws init action positionals (full CLI parse path)', () => {
     expect(output).toContain('Hook pack diff');
   });
 
-  test('A2: `init port <path>` without --from reaches port\'s own usage error, not the excess-args refusal', () => {
+  test("A2: `init port <path>` without --from reaches port's own usage error, not the excess-args refusal", () => {
     const root = mkRepo();
     const result = spawnCli(root, ['init', 'port', '.caws/hooks/scope-guard.sh']);
     const output = `${result.stdout}${result.stderr}`;
@@ -88,7 +92,6 @@ describe('caws init action positionals (full CLI parse path)', () => {
     expect(output).toContain('This command takes no positional arguments');
   });
 });
-
 
 test('machine adapter operations reach the actual CLI parser and reject incompatible options without writes', () => {
   const fs = require('node:fs');

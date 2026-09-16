@@ -234,8 +234,16 @@ describe('A3: --no-close lands the merge and leaves the bound spec active', () =
     const recorded = spawnSync(
       process.execPath,
       [
-        CLI, 'specs', 'evidence', SPEC,
-        '--ac', 'A1', '--status', 'pass', '--evidence-ref', 'npx jest worktree-merge-no-close',
+        CLI,
+        'specs',
+        'evidence',
+        SPEC,
+        '--ac',
+        'A1',
+        '--status',
+        'pass',
+        '--evidence-ref',
+        'npx jest worktree-merge-no-close',
       ],
       {
         cwd: repo,
@@ -251,8 +259,14 @@ describe('A3: --no-close lands the merge and leaves the bound spec active', () =
     const closed = spawnSync(
       process.execPath,
       [
-        CLI, 'specs', 'close', SPEC,
-        '--resolution', 'completed', '--reason', 'evidence recorded post-merge',
+        CLI,
+        'specs',
+        'close',
+        SPEC,
+        '--resolution',
+        'completed',
+        '--reason',
+        'evidence recorded post-merge',
       ],
       {
         cwd: repo,
@@ -316,7 +330,9 @@ describe('A3: the shell states that the spec was NOT closed and names the close'
     seedBoundableSpec(caws, SPEC);
     commitCaws(repo, 'seed spec');
     seedLane(caws, 'wt-acwin-conflict', SPEC);
-    const baseBefore = execFileSync('git', ['-C', repo, 'rev-parse', 'main'], { encoding: 'utf8' }).trim();
+    const baseBefore = execFileSync('git', ['-C', repo, 'rev-parse', 'main'], {
+      encoding: 'utf8',
+    }).trim();
 
     const result = runMergeCommand(repo, 'wt-acwin-conflict', {
       noClose: true,
@@ -326,7 +342,9 @@ describe('A3: the shell states that the spec was NOT closed and names the close'
     expect(result.code).toBe(1);
     expect(result.err).toContain('mutually exclusive');
     // "Before any git operation" is the claim; prove it by the base not moving.
-    const baseAfter = execFileSync('git', ['-C', repo, 'rev-parse', 'main'], { encoding: 'utf8' }).trim();
+    const baseAfter = execFileSync('git', ['-C', repo, 'rev-parse', 'main'], {
+      encoding: 'utf8',
+    }).trim();
     expect(baseAfter).toBe(baseBefore);
     expect(readSpec(caws, SPEC)).toContain('lifecycle_state: active');
   });

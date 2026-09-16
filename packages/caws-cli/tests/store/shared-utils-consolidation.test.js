@@ -37,7 +37,11 @@ function mkRepo(prefix) {
 }
 afterAll(() => {
   for (const r of repos) {
-    try { fs.rmSync(r, { recursive: true, force: true }); } catch { /* best effort */ }
+    try {
+      fs.rmSync(r, { recursive: true, force: true });
+    } catch {
+      /* best effort */
+    }
   }
 });
 
@@ -169,7 +173,11 @@ describe('CAWS-REFACTOR-SHARED-UTILS-001 — consolidation invariants (no privat
 
   test('no private repoRootFromCawsDir definitions remain outside repo-root.ts', () => {
     const readSrc = (rel) => fs.readFileSync(path.join(__dirname, '../../src', rel), 'utf8');
-    for (const f of ['store/worktrees-writer.ts', 'store/specs-writer.ts', 'store/specs-migration.ts']) {
+    for (const f of [
+      'store/worktrees-writer.ts',
+      'store/specs-writer.ts',
+      'store/specs-migration.ts',
+    ]) {
       expect(readSrc(f)).not.toMatch(/function\s+repoRootFromCawsDir\s*\(/);
     }
   });
@@ -220,7 +228,9 @@ describe('CAWS-REFACTOR-SHARED-UTILS-001 — consolidation invariants (no privat
     // semantics from the simple realpathSafe), and the ancestor-walk
     // realpathOrLiteral (required for the cwd-self-destruct guard on macOS).
     const readSrc = (rel) => fs.readFileSync(path.join(__dirname, '../../src', rel), 'utf8');
-    expect(readSrc('shell/gates/local-evaluators/diff-helpers.ts')).toMatch(/function\s+runGit\s*\(/);
+    expect(readSrc('shell/gates/local-evaluators/diff-helpers.ts')).toMatch(
+      /function\s+runGit\s*\(/
+    );
     // claim.ts keeps its path.resolve-fallback safeRealpath (different semantics).
     expect(readSrc('shell/commands/claim.ts')).toMatch(/function\s+safeRealpath\s*\(/);
     // worktrees-writer.ts keeps the ancestor-walk realpathOrLiteral (required for the

@@ -41,11 +41,7 @@ const FRESH = '2026-06-15T11:59:00.000Z';
  */
 const STALE_DISPLAY_ONLY = 'doctor.agent.stale_display_only';
 
-function lease(
-  sessionId: string,
-  status: 'active' | 'stopping' | 'stopped',
-  lastActive: string
-) {
+function lease(sessionId: string, status: 'active' | 'stopping' | 'stopped', lastActive: string) {
   return {
     lease_version: 1,
     session_id: sessionId,

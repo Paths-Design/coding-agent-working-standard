@@ -120,9 +120,7 @@ describe('caws specs archive batch mode', () => {
       'ARCHIVE-BATCH-A-001',
       'ARCHIVE-BATCH-B-001',
     ]);
-    expect(git(root, ['log', '-1', '--pretty=%s'])).toBe(
-      'chore(caws): archive 2 closed specs'
-    );
+    expect(git(root, ['log', '-1', '--pretty=%s'])).toBe('chore(caws): archive 2 closed specs');
     expect(fs.existsSync(path.join(caws, 'specs', 'ARCHIVE-BATCH-A-001.yaml'))).toBe(false);
   });
 

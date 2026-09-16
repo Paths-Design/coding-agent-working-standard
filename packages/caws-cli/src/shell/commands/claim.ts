@@ -223,10 +223,10 @@ function detectPhantomSessionRoot(
   return null;
 }
 
-function identityPayload(session: {
+function identityPayload(session: { readonly session_id: string; readonly platform?: string }): {
   readonly session_id: string;
   readonly platform?: string;
-}): { readonly session_id: string; readonly platform?: string } {
+} {
   return {
     session_id: session.session_id,
     ...(session.platform !== undefined ? { platform: session.platform } : {}),
@@ -243,9 +243,7 @@ function renderClaimPlan(plan: ClaimPlanDocument): string {
   lines.push(`worktree: ${plan.worktree_name}`);
   lines.push(`mode: ${plan.mode}`);
   lines.push(`current session: ${plan.current_session.session_id}`);
-  lines.push(
-    `current owner: ${plan.current_owner ? plan.current_owner.session_id : 'unowned'}`
-  );
+  lines.push(`current owner: ${plan.current_owner ? plan.current_owner.session_id : 'unowned'}`);
   lines.push(`ownership: ${plan.ownership_relation}`);
   if (plan.refusal) lines.push(`refusal: ${plan.refusal}`);
 
@@ -257,9 +255,7 @@ function renderClaimPlan(plan: ClaimPlanDocument): string {
       `  prior owners: ${plan.takeover.prior_owner_count_before} -> ${plan.takeover.prior_owner_count_after}`
     );
     if (plan.takeover.prior_owner_to_append) {
-      lines.push(
-        `  prior owner to append: ${plan.takeover.prior_owner_to_append.session_id}`
-      );
+      lines.push(`  prior owner to append: ${plan.takeover.prior_owner_to_append.session_id}`);
     }
     lines.push(`  resulting owner: ${plan.takeover.resulting_owner.session_id}`);
   }
@@ -336,7 +332,13 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
   // a bridge claim is session↔spec authority with no worktree in play.
   if (opts.spec !== undefined || opts.release === true) {
     return runClaimBridgeDispatch(opts, {
-      cwd, nowFn, env, out, err, showData, json: opts.json === true,
+      cwd,
+      nowFn,
+      env,
+      out,
+      err,
+      showData,
+      json: opts.json === true,
     });
   }
 
@@ -411,9 +413,7 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
     // This should not happen if resolveBinding said we are in a tracked
     // worktree — but be defensive: if the registry lost the entry
     // between the bound resolution and now, treat as a composition error.
-    err(
-      `caws claim: worktree '${worktreeName}' not in worktrees.json (registry race).`
-    );
+    err(`caws claim: worktree '${worktreeName}' not in worktrees.json (registry race).`);
     return 2;
   }
 
@@ -444,8 +444,7 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
         repo_root: repoRoot,
         worktree_name: worktreeName,
         current_session: identityPayload(session),
-        current_owner:
-          record.owner !== undefined ? identityPayload(record.owner) : null,
+        current_owner: record.owner !== undefined ? identityPayload(record.owner) : null,
         ownership_relation: classifyOwnership(record, session),
         refusal: ownershipResult.errors.map((d) => d.message).join('; '),
       };
@@ -478,8 +477,7 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
     if (patch !== null) {
       const phantomRoot = detectPhantomSessionRoot(env, record.path);
       if (phantomRoot !== null) {
-        refusal =
-          `phantom-root takeover: ${phantomRoot.varName}=${phantomRoot.root} is not worktree '${worktreeName}'`;
+        refusal = `phantom-root takeover: ${phantomRoot.varName}=${phantomRoot.root} is not worktree '${worktreeName}'`;
       }
     }
     const priorCount = record.prior_owners?.length ?? 0;
@@ -631,8 +629,7 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
       const ownerLine = renderClaimPanel({
         worktreeName,
         worktreeRecord: record,
-        ...(record.owner !== undefined &&
-        snapshot.agents[record.owner.session_id] !== undefined
+        ...(record.owner !== undefined && snapshot.agents[record.owner.session_id] !== undefined
           ? { agentRecord: snapshot.agents[record.owner.session_id]! }
           : {}),
         currentSession: session,
@@ -656,8 +653,7 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
     //
     // Placed AFTER the phantom-root refusal above so a refused takeover leaves
     // no audit implying it happened.
-    const priorOwnerRecord =
-      patch.kind === 'takeover_claim' ? patch.prior_owner : undefined;
+    const priorOwnerRecord = patch.kind === 'takeover_claim' ? patch.prior_owner : undefined;
     const applyResult = applyTakeoverWithAudit(cawsDir, {
       name: worktreeName,
       patch,
@@ -691,7 +687,9 @@ export function runClaimCommand(opts: ClaimCommandOptions = {}): number {
     takeoverApplied = true;
     // Ownership and its audit are committed now. Surface the actual caller
     // before any operational-cache failure can bypass the continuation.
-    out(`Ownership transferred for worktree '${worktreeName}' to ${session.session_id}; audit event recorded.`);
+    out(
+      `Ownership transferred for worktree '${worktreeName}' to ${session.session_id}; audit event recorded.`
+    );
     surfaceMintedContinuation(sessionResult.value, out);
   }
 
@@ -822,10 +820,7 @@ interface BridgeDispatchCtx {
  * the worktree owner. Non-active specs refuse with their lifecycle
  * handoffs. Exit codes follow the uniform convention (0/1/2).
  */
-function runClaimBridgeDispatch(
-  opts: ClaimCommandOptions,
-  ctx: BridgeDispatchCtx
-): number {
+function runClaimBridgeDispatch(opts: ClaimCommandOptions, ctx: BridgeDispatchCtx): number {
   const { out, err, showData, json } = ctx;
 
   if (opts.release === true && opts.takeover === true) {
@@ -894,13 +889,19 @@ function runClaimBridgeDispatch(
     return 1;
   }
   if (spec.lifecycle_state !== 'active') {
-    err(`caws claim --spec: spec "${specId}" is ${spec.lifecycle_state} — a bridge confers authority only for an ACTIVE spec.`);
+    err(
+      `caws claim --spec: spec "${specId}" is ${spec.lifecycle_state} — a bridge confers authority only for an ACTIVE spec.`
+    );
     if (spec.lifecycle_state === 'closed') {
       err(`  Resume the work: caws specs reopen ${specId}`);
     } else if (spec.lifecycle_state === 'archived') {
-      err(`  Archived body: caws specs show ${specId} --archived  |  recover: caws specs recover ${specId}`);
+      err(
+        `  Archived body: caws specs show ${specId} --archived  |  recover: caws specs recover ${specId}`
+      );
     } else {
-      err(`  Activate it first: caws specs activate ${specId}  (or bind a worktree: caws worktree ensure <name> --spec ${specId}).`);
+      err(
+        `  Activate it first: caws specs activate ${specId}  (or bind a worktree: caws worktree ensure <name> --spec ${specId}).`
+      );
     }
     return 1;
   }
@@ -915,11 +916,15 @@ function runClaimBridgeDispatch(
   }
   for (const [name, record] of Object.entries(registryResult.value)) {
     if (record?.specId === specId) {
-      err(`caws claim --spec: spec "${specId}" is held by worktree "${name}" — worktree bindings WIN over bridges (one authority holder per spec).`);
+      err(
+        `caws claim --spec: spec "${specId}" is held by worktree "${name}" — worktree bindings WIN over bridges (one authority holder per spec).`
+      );
       err(`  Enter the lane instead: cd .caws/worktrees/${name}`);
       const owner = record.owner?.session_id;
       if (owner !== undefined) {
-        err(`  Worktree owner: ${owner} (read their session log before any takeover consideration).`);
+        err(
+          `  Worktree owner: ${owner} (read their session log before any takeover consideration).`
+        );
       }
       return 1;
     }
@@ -939,12 +944,18 @@ function runClaimBridgeDispatch(
       return 1;
     }
     if (json) {
-      out(JSON.stringify({
-        ok: true, spec_id: specId,
-        prior_owner: t.value.priorOwnerSessionId, session_id: session.session_id,
-      }));
+      out(
+        JSON.stringify({
+          ok: true,
+          spec_id: specId,
+          prior_owner: t.value.priorOwnerSessionId,
+          session_id: session.session_id,
+        })
+      );
     } else {
-      out(`bridge for ${specId} taken over from ${t.value.priorOwnerSessionId} (prior_owners audit appended; bridge_claim_taken_over event recorded).`);
+      out(
+        `bridge for ${specId} taken over from ${t.value.priorOwnerSessionId} (prior_owners audit appended; bridge_claim_taken_over event recorded).`
+      );
       surfaceMintedContinuation(sessionResult.value, out);
     }
     return 0;
@@ -963,16 +974,26 @@ function runClaimBridgeDispatch(
     return 1;
   }
   if (json) {
-    out(JSON.stringify({
-      ok: true, spec_id: specId, session_id: session.session_id,
-      refreshed: a.value.refreshed,
-    }));
+    out(
+      JSON.stringify({
+        ok: true,
+        spec_id: specId,
+        session_id: session.session_id,
+        refreshed: a.value.refreshed,
+      })
+    );
   } else {
-    out(a.value.refreshed
-      ? `refreshed bridge for ${specId} (session ${session.session_id})`
-      : `bridged ${specId} to session ${session.session_id} (.caws/claims/bridge.json; claim_bridged event recorded).`);
-    out("  Scope admission now flows from this binding: the spec's scope.in is your write surface —");
-    out('  exactly as a worktree binding enforces it, nothing wider (bridge is authority, not scope expansion).');
+    out(
+      a.value.refreshed
+        ? `refreshed bridge for ${specId} (session ${session.session_id})`
+        : `bridged ${specId} to session ${session.session_id} (.caws/claims/bridge.json; claim_bridged event recorded).`
+    );
+    out(
+      "  Scope admission now flows from this binding: the spec's scope.in is your write surface —"
+    );
+    out(
+      '  exactly as a worktree binding enforces it, nothing wider (bridge is authority, not scope expansion).'
+    );
     out(`  Release with: caws claim --release --spec ${specId}`);
     surfaceMintedContinuation(sessionResult.value, out);
   }

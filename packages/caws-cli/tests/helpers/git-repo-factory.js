@@ -168,10 +168,13 @@ function makeTempRepo(opts = {}) {
       templateObjectsPresent: fs.existsSync(path.join(template, '.git/objects')),
       destinationObjectsPresent: fs.existsSync(path.join(repoDir, '.git/objects')),
     };
-    const failure = Object.assign(new Error(
-      `Git fixture copy failed: ${cause.message}; context=${JSON.stringify(fixtureContext)}`,
-      { cause }
-    ), { code: cause.code, fixtureContext });
+    const failure = Object.assign(
+      new Error(
+        `Git fixture copy failed: ${cause.message}; context=${JSON.stringify(fixtureContext)}`,
+        { cause }
+      ),
+      { code: cause.code, fixtureContext }
+    );
     try {
       cleanupRepo(repoDir);
     } catch (cleanupError) {

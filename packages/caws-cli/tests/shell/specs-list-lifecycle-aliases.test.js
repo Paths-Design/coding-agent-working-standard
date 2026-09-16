@@ -60,7 +60,10 @@ function readBytes(file) {
 function snapshot(cawsDir) {
   const specsDir = path.join(cawsDir, 'specs');
   return {
-    specs: fs.readdirSync(specsDir).sort().map((name) => [name, readBytes(path.join(specsDir, name))]),
+    specs: fs
+      .readdirSync(specsDir)
+      .sort()
+      .map((name) => [name, readBytes(path.join(specsDir, name))]),
     events: readBytes(path.join(cawsDir, 'events.jsonl')),
     worktrees: readBytes(path.join(cawsDir, 'worktrees.json')),
   };

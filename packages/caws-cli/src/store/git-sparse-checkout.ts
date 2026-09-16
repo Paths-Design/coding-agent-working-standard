@@ -51,7 +51,7 @@ import { runGit } from './repo-root';
  * already-checked-out `.caws/specs/` files.
  */
 export function configureWorktreeSparseCheckout(
-  wtPath: string,
+  wtPath: string
 ): { ok: true } | { ok: false; reason: string; step: 'init' | 'set' | 'checkout' } {
   // 1) Initialize sparse-checkout in non-cone mode.
   const initResult = runGit(['sparse-checkout', 'init', '--no-cone'], wtPath);
@@ -63,21 +63,14 @@ export function configureWorktreeSparseCheckout(
   //    anchors the exclusion to the worktree root (not subdirectories
   //    named .caws/specs/ further down — there are none in this
   //    project, but the anchor is correct discipline).
-  const setResult = runGit([
-    'sparse-checkout',
-    'set',
-    '--no-cone',
-    '/*',
-    '!/.caws/specs/',
-  ], wtPath);
+  const setResult = runGit(['sparse-checkout', 'set', '--no-cone', '/*', '!/.caws/specs/'], wtPath);
   if (!setResult.ok) return { ok: false, reason: setResult.reason, step: 'set' };
 
   // 3) Materialize the included files. `git worktree add --no-checkout`
   //    leaves the worktree empty; this populates everything sparse-
   //    checkout admits.
   const checkoutResult = runGit(['checkout'], wtPath);
-  if (!checkoutResult.ok)
-    return { ok: false, reason: checkoutResult.reason, step: 'checkout' };
+  if (!checkoutResult.ok) return { ok: false, reason: checkoutResult.reason, step: 'checkout' };
 
   return { ok: true };
 }

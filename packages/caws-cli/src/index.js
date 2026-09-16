@@ -31,10 +31,7 @@ const { handleCliError, findSimilarCommand } = require('./error-handler');
 // stale hand-maintained VALID_COMMANDS list) and the legacy-command
 // diagnostic surface (CAWS-REMOVED-COMMAND-DIAGNOSTICS-001).
 const { REGISTERED_COMMAND_GROUPS } = require('./shell/registered-command-groups');
-const {
-  classifyLegacyCommand,
-  formatLegacyDiagnostic,
-} = require('./shell/legacy-command-map');
+const { classifyLegacyCommand, formatLegacyDiagnostic } = require('./shell/legacy-command-map');
 
 // v11.0.0 entrypoint. The CLI surface is registered exclusively
 // through `registerShellCommands(program)` further down. All legacy
@@ -120,9 +117,7 @@ function reportUnknownCommand(commandName) {
 // the actionable --help + docs pointers, once. Both call sites delegate here so
 // the logic lives in exactly one place. Always exits 1.
 function reportUnknownOption(commandName) {
-  console.error(
-    chalk.yellow(`\nTry: caws ${commandName || ''} --help for available options`)
-  );
+  console.error(chalk.yellow(`\nTry: caws ${commandName || ''} --help for available options`));
   console.error(
     chalk.blue(
       '\nDocumentation: https://github.com/Paths-Design/coding-agent-working-standard/blob/main/docs/api/cli.md'

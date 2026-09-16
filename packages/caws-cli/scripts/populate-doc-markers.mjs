@@ -78,7 +78,15 @@ function canonicalRegisterPath() {
       encoding: 'utf8',
     }).trim();
     const canonicalRoot = path.dirname(path.resolve(PKG_ROOT, commonDir));
-    return path.join(canonicalRoot, 'packages', 'caws-cli', 'dist', 'init', 'hook-packs', 'register.js');
+    return path.join(
+      canonicalRoot,
+      'packages',
+      'caws-cli',
+      'dist',
+      'init',
+      'hook-packs',
+      'register.js'
+    );
   } catch {
     return null;
   }
@@ -159,7 +167,9 @@ function docTargets(surfaces, groups) {
   return [
     {
       path: path.join(PKG_ROOT, 'README.md'),
-      fills: [{ name: 'agent-surfaces-install', content: renderReadmeInstallBlock(surfaces.implemented) }],
+      fills: [
+        { name: 'agent-surfaces-install', content: renderReadmeInstallBlock(surfaces.implemented) },
+      ],
     },
     // The SHIPPED templates. `caws init` copies these into every consumer
     // project, where they become the agent's primary operating doctrine — yet
@@ -234,7 +244,9 @@ function main(argv) {
     }
     if (check) {
       stale = true;
-      process.stderr.write(`${rel}: STALE. Re-run: node packages/caws-cli/scripts/populate-doc-markers.mjs\n`);
+      process.stderr.write(
+        `${rel}: STALE. Re-run: node packages/caws-cli/scripts/populate-doc-markers.mjs\n`
+      );
       continue;
     }
     fs.writeFileSync(target.path, next);
@@ -253,10 +265,7 @@ export function renderSnippetFile({ known, implemented }) {
   ];
   return (
     blocks
-      .map(
-        ([name, body]) =>
-          `<!-- ${name}:start -->\n${body}\n<!-- ${name}:end -->`
-      )
+      .map(([name, body]) => `<!-- ${name}:start -->\n${body}\n<!-- ${name}:end -->`)
       .join('\n') + '\n'
   );
 }

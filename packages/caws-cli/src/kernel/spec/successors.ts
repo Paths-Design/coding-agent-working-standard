@@ -106,7 +106,7 @@ export interface SuccessorResolver {
  * target instead of silently downgrading to local-only validation.
  */
 export function createSuccessorResolver(
-  entries: readonly SpecCorpusEntry[] | undefined,
+  entries: readonly SpecCorpusEntry[] | undefined
 ): SuccessorResolver {
   if (entries === undefined) {
     return {
@@ -154,9 +154,7 @@ export function createSuccessorResolver(
       // and cannot fix. The caller surfaces `ambiguous_sources` as a warning.
       const ambiguousSources =
         found.length > 1
-          ? found.map(
-              (e, i) => e.source ?? `${e.archived ? 'archive' : 'live'}[${i}]`,
-            )
+          ? found.map((e, i) => e.source ?? `${e.archived ? 'archive' : 'live'}[${i}]`)
           : undefined;
 
       // Prefer the live entry when reporting standing: it is the copy the
@@ -178,9 +176,7 @@ export function createSuccessorResolver(
         outcome: 'AUTHORED',
         target_spec_id: specId,
         standing,
-        ...(ambiguousSources !== undefined
-          ? { ambiguous_sources: ambiguousSources }
-          : {}),
+        ...(ambiguousSources !== undefined ? { ambiguous_sources: ambiguousSources } : {}),
       };
     },
   };
@@ -216,7 +212,7 @@ export interface UnresolvedObligation {
  */
 export function findUnresolvedObligations(
   successors: readonly Successor[] | undefined,
-  resolver: SuccessorResolver,
+  resolver: SuccessorResolver
 ): UnresolvedObligation[] {
   if (successors === undefined) return [];
 

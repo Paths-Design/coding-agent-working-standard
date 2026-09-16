@@ -18,7 +18,10 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const { initProject } = require('../../dist/store/init-store');
-const { runSpecsCreateCommand, runSpecsActivateCommand } = require('../../dist/shell/commands/specs');
+const {
+  runSpecsCreateCommand,
+  runSpecsActivateCommand,
+} = require('../../dist/shell/commands/specs');
 const { createSpec, planCreateSpec } = require('../../dist/store/specs-writer');
 const { parseAndValidateSpec } = require('../../dist/kernel/spec');
 const { SPEC_RULES } = require('../../dist/kernel/spec');
@@ -85,7 +88,11 @@ describe('specs create stamps created_by_session', () => {
   test('the session id the resolver picked is rendered into the spec body', () => {
     const { root, cawsDir } = setupRepo();
 
-    const result = runCreate(root, 'PROV-STAMP-001', envWith({ CLAUDE_CODE_SESSION_ID: 'sess_test_creator' }));
+    const result = runCreate(
+      root,
+      'PROV-STAMP-001',
+      envWith({ CLAUDE_CODE_SESSION_ID: 'sess_test_creator' })
+    );
 
     expect(result.code).toBe(0);
     expect(specBody(cawsDir, 'PROV-STAMP-001')).toContain(
@@ -96,7 +103,11 @@ describe('specs create stamps created_by_session', () => {
   test('the written spec still validates, and the field round-trips through the kernel', () => {
     const { root, cawsDir } = setupRepo();
 
-    const result = runCreate(root, 'PROV-VALID-002', envWith({ CLAUDE_CODE_SESSION_ID: 'sess_round_trip' }));
+    const result = runCreate(
+      root,
+      'PROV-VALID-002',
+      envWith({ CLAUDE_CODE_SESSION_ID: 'sess_round_trip' })
+    );
     expect(result.code).toBe(0);
 
     const parsed = parseAndValidateSpec(specBody(cawsDir, 'PROV-VALID-002'));
@@ -123,9 +134,16 @@ describe('specs create stamps created_by_session', () => {
     const result = spawnSync(
       process.execPath,
       [
-        CLI, 'specs', 'create', 'PROV-SPAWN-004',
-        '--title', 'spawned provenance fixture',
-        '--mode', 'chore', '--risk-tier', '3',
+        CLI,
+        'specs',
+        'create',
+        'PROV-SPAWN-004',
+        '--title',
+        'spawned provenance fixture',
+        '--mode',
+        'chore',
+        '--risk-tier',
+        '3',
       ],
       {
         cwd: root,
@@ -161,7 +179,9 @@ describe('the field is optional and strictness is unchanged', () => {
   test('stripping the line from a stamped spec yields a still-valid body (pre-existing specs)', () => {
     const { root, cawsDir } = setupRepo();
 
-    expect(runCreate(root, 'PROV-STRIP-006', envWith({ CLAUDE_CODE_SESSION_ID: 'sess_strip' })).code).toBe(0);
+    expect(
+      runCreate(root, 'PROV-STRIP-006', envWith({ CLAUDE_CODE_SESSION_ID: 'sess_strip' })).code
+    ).toBe(0);
 
     const withoutField = specBody(cawsDir, 'PROV-STRIP-006')
       .split('\n')
@@ -173,7 +193,9 @@ describe('the field is optional and strictness is unchanged', () => {
   test('a near-miss provenance field name is still rejected as a schema violation', () => {
     const { root, cawsDir } = setupRepo();
 
-    expect(runCreate(root, 'PROV-STRICT-007', envWith({ CLAUDE_CODE_SESSION_ID: 'sess_strict' })).code).toBe(0);
+    expect(
+      runCreate(root, 'PROV-STRICT-007', envWith({ CLAUDE_CODE_SESSION_ID: 'sess_strict' })).code
+    ).toBe(0);
 
     const smuggled = specBody(cawsDir, 'PROV-STRICT-007') + '\ncreated_by_sessio: sess_typo\n';
     const parsed = parseAndValidateSpec(smuggled);
@@ -188,7 +210,9 @@ describe('provenance survives the spec lifecycle and matches the dry run', () =>
   test('activate patches lifecycle_state and preserves the created_by_session bytes', () => {
     const { root, cawsDir } = setupRepo();
 
-    expect(runCreate(root, 'PROV-LIFE-008', envWith({ CLAUDE_CODE_SESSION_ID: 'sess_lifecycle' })).code).toBe(0);
+    expect(
+      runCreate(root, 'PROV-LIFE-008', envWith({ CLAUDE_CODE_SESSION_ID: 'sess_lifecycle' })).code
+    ).toBe(0);
 
     const out = [];
     const err = [];

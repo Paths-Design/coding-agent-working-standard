@@ -99,8 +99,14 @@ describe('caws specs create --risk-tier 1 is satisfiable from the CLI', () => {
 
     expect(result.code).toBe(0);
     const spec = readSpec(cawsDir, 'TIER1-002');
-    for (const v of ['first observability', 'second observability', 'first rollback',
-      'second rollback', 'first security', 'second security']) {
+    for (const v of [
+      'first observability',
+      'second observability',
+      'first rollback',
+      'second rollback',
+      'first security',
+      'second security',
+    ]) {
       expect(spec).toContain(v);
     }
     expect(spec.indexOf('first security')).toBeLessThan(spec.indexOf('second security'));
@@ -132,14 +138,24 @@ describe('caws specs create --risk-tier 1 is satisfiable from the CLI', () => {
     const created = spawnSync(
       process.execPath,
       [
-        CLI, 'specs', 'create', 'TIER1-004',
-        '--title', 'full parse path',
-        '--mode', 'feature',
-        '--risk-tier', '1',
-        '--contract', 'core-api:api',
-        '--observability', 'obs via CLI',
-        '--rollback', 'rb via CLI',
-        '--security', 'sec via CLI',
+        CLI,
+        'specs',
+        'create',
+        'TIER1-004',
+        '--title',
+        'full parse path',
+        '--mode',
+        'feature',
+        '--risk-tier',
+        '1',
+        '--contract',
+        'core-api:api',
+        '--observability',
+        'obs via CLI',
+        '--rollback',
+        'rb via CLI',
+        '--security',
+        'sec via CLI',
       ],
       {
         cwd: root,
@@ -198,14 +214,24 @@ describe('--plan prints a create command that actually works', () => {
     const planned = spawnSync(
       process.execPath,
       [
-        CLI, 'specs', 'create', 'TIER1-201',
-        '--title', 'plan preview',
-        '--mode', 'feature',
-        '--risk-tier', '1',
-        '--contract', 'core-api:api',
-        '--observability', 'obs item',
-        '--rollback', 'rb item',
-        '--security', 'sec item',
+        CLI,
+        'specs',
+        'create',
+        'TIER1-201',
+        '--title',
+        'plan preview',
+        '--mode',
+        'feature',
+        '--risk-tier',
+        '1',
+        '--contract',
+        'core-api:api',
+        '--observability',
+        'obs item',
+        '--rollback',
+        'rb item',
+        '--security',
+        'sec item',
         '--plan',
       ],
       { cwd: root, encoding: 'utf8', env: { ...process.env, CAWS_QUIET: '1' } }
@@ -224,14 +250,24 @@ describe('--plan prints a create command that actually works', () => {
     const planned = spawnSync(
       process.execPath,
       [
-        CLI, 'specs', 'create', 'TIER1-202',
-        '--title', 'roundtrip',
-        '--mode', 'feature',
-        '--risk-tier', '1',
-        '--contract', 'core-api:api',
-        '--observability', 'obs roundtrip',
-        '--rollback', 'rb roundtrip',
-        '--security', 'sec roundtrip',
+        CLI,
+        'specs',
+        'create',
+        'TIER1-202',
+        '--title',
+        'roundtrip',
+        '--mode',
+        'feature',
+        '--risk-tier',
+        '1',
+        '--contract',
+        'core-api:api',
+        '--observability',
+        'obs roundtrip',
+        '--rollback',
+        'rb roundtrip',
+        '--security',
+        'sec roundtrip',
         '--plan',
       ],
       { cwd: root, encoding: 'utf8', env: { ...process.env, CAWS_QUIET: '1' } }
@@ -248,7 +284,13 @@ describe('--plan prints a create command that actually works', () => {
     // quoting the preview gets wrong is the same defect as a flag it omits.
     const replay = spawnSync(
       'bash',
-      ['-c', previewLine.replace(/^caws /, `${JSON.stringify(process.execPath)} ${JSON.stringify(CLI)} `)],
+      [
+        '-c',
+        previewLine.replace(
+          /^caws /,
+          `${JSON.stringify(process.execPath)} ${JSON.stringify(CLI)} `
+        ),
+      ],
       {
         cwd: root,
         encoding: 'utf8',

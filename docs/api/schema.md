@@ -11,13 +11,21 @@ updated: 2026-08-19
 
 ## Overview
 
-CAWS uses JSON Schema for validation and TypeScript interfaces for type safety. This document provides complete specifications for all CAWS schemas and data structures.
+CAWS uses JSON Schema for validation and TypeScript interfaces for type safety.
+This document provides complete specifications for all CAWS schemas and data
+structures.
 
 ## Feature Specification Schema
 
-> **Note:** vNext is multi-spec only. Specs live at `.caws/specs/<id>.yaml`. There is no legacy single-file `working-spec.yaml`. The kernel's canonical JSON Schema lives at `packages/caws-cli/src/kernel/schemas/spec.v1.json` with `additionalProperties: false` — it rejects any field not listed in that schema (including `change_budget`, `acceptance_criteria`, `status`, and any v10 aliases).
+> **Note:** vNext is multi-spec only. Specs live at `.caws/specs/<id>.yaml`.
+> There is no legacy single-file `working-spec.yaml`. The kernel's canonical
+> JSON Schema lives at `packages/caws-cli/src/kernel/schemas/spec.v1.json` with
+> `additionalProperties: false` — it rejects any field not listed in that schema
+> (including `change_budget`, `acceptance_criteria`, `status`, and any v10
+> aliases).
 
-The feature specification defines a single feature's requirements and constraints.
+The feature specification defines a single feature's requirements and
+constraints.
 
 ### JSON Schema
 
@@ -107,10 +115,19 @@ The feature specification defines a single feature's requirements and constraint
         "additionalProperties": false,
         "required": ["target_spec_id", "disposition"],
         "properties": {
-          "target_spec_id": { "type": "string", "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$" },
-          "disposition": { "type": "string", "enum": ["required", "declined", "absorbed"] },
+          "target_spec_id": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$"
+          },
+          "disposition": {
+            "type": "string",
+            "enum": ["required", "declined", "absorbed"]
+          },
           "rationale": { "type": "string", "minLength": 1 },
-          "absorbed_by": { "type": "string", "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$" }
+          "absorbed_by": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\\d+[a-z]*$"
+          }
         }
       }
     },
@@ -280,80 +297,97 @@ The feature specification defines a single feature's requirements and constraint
 }
 ```
 
-> **Removed in v11:** `change_budget` (with `max_files`/`max_loc`) is rejected by the kernel. File and LOC budgets now derive from `.caws/policy.yaml` risk-tier thresholds; the spec never encodes them directly.
+> **Removed in v11:** `change_budget` (with `max_files`/`max_loc`) is rejected
+> by the kernel. File and LOC budgets now derive from `.caws/policy.yaml`
+> risk-tier thresholds; the spec never encodes them directly.
 
-> **Rejected fields (kernel returns `spec.schema.violation`):** `change_budget`, `acceptance_criteria`, `scope.include`, `scope.exclude`, `status` (use `lifecycle_state`), `migrations`, `human_override`, `ai_assessment`, `git_config`, `threats`, `notes`, `non_goals`, `bounded_claim`, `dependencies`, `type` (top-level), `description` (top-level).
+> **Rejected fields (kernel returns `spec.schema.violation`):** `change_budget`,
+> `acceptance_criteria`, `scope.include`, `scope.exclude`, `status` (use
+> `lifecycle_state`), `migrations`, `human_override`, `ai_assessment`,
+> `git_config`, `threats`, `notes`, `non_goals`, `bounded_claim`,
+> `dependencies`, `type` (top-level), `description` (top-level).
 
 #### `scope.in` matching
 
-Each entry is read one of two ways. An entry containing any of `* ? [ ] ( ) { } ! @ + |` is a **glob**, matched by picomatch with `dot: true`. Every other entry is a **boundary-safe directory prefix** — it admits itself and its descendants, and nothing else.
+Each entry is read one of two ways. An entry containing any of
+`* ? [ ] ( ) { } ! @ + |` is a **glob**, matched by picomatch with `dot: true`.
+Every other entry is a **boundary-safe directory prefix** — it admits itself and
+its descendants, and nothing else.
 
-| Entry | Admits | Does not admit |
-|---|---|---|
-| `packages/caws-cli/src` | `packages/caws-cli/src`, `packages/caws-cli/src/shell/x.ts` | `packages/caws-cli/srcx/y.ts` |
-| `packages/*` | `packages/a` | `packages/a/b.ts` |
-| `packages/**` | `packages`, `packages/a/b/c.ts` | — |
-| `src/a?c.ts` | `src/abc.ts` | `src/a/c.ts` |
-| `docs/{api,agents}/x.md` | `docs/api/x.md`, `docs/agents/x.md` | `docs/other/x.md` |
-| `src/[abc]/x.ts` | `src/b/x.ts` | `src/d/x.ts` |
+| Entry                    | Admits                                                      | Does not admit                |
+| ------------------------ | ----------------------------------------------------------- | ----------------------------- |
+| `packages/caws-cli/src`  | `packages/caws-cli/src`, `packages/caws-cli/src/shell/x.ts` | `packages/caws-cli/srcx/y.ts` |
+| `packages/*`             | `packages/a`                                                | `packages/a/b.ts`             |
+| `packages/**`            | `packages`, `packages/a/b/c.ts`                             | —                             |
+| `src/a?c.ts`             | `src/abc.ts`                                                | `src/a/c.ts`                  |
+| `docs/{api,agents}/x.md` | `docs/api/x.md`, `docs/agents/x.md`                         | `docs/other/x.md`             |
+| `src/[abc]/x.ts`         | `src/b/x.ts`                                                | `src/d/x.ts`                  |
 
 Two consequences are worth stating because both have caused real mistakes:
 
-- **`*` does not cross a path separator; `**` does.** `packages/*` claims the immediate children of `packages/` and nothing below them. If you mean the subtree, write `packages/**` — or, more simply, write the bare directory `packages`, which is a prefix and admits the whole subtree.
-- **`**` also matches the directory it names**, so `docs/**` admits `docs` itself, not only its contents.
+- **`*` does not cross a path separator;
+  `**`does.**`packages/\*`claims the immediate children of`packages/`and nothing below them. If you mean the subtree, write`packages/\*\*`— or, more simply, write the bare directory`packages`,
+  which is a prefix and admits the whole subtree.
+- **`**`also matches the directory it names**, so`docs/\*\*`admits`docs` itself,
+  not only its contents.
 
-`dot: true` means a leading dot is not special: `*` matches `.caws`, and `.caws/**` matches `.caws/specs/x.yaml`.
+`dot: true` means a leading dot is not special: `*` matches `.caws`, and
+`.caws/**` matches `.caws/specs/x.yaml`.
 
-This is one function — `matchGlob` in the scope kernel — and both the admission decision (`caws scope check`) and every surface that explains or ranks scope fit (`caws scope show --json` authority candidates) call it. A second implementation of these rules is a defect even when it agrees on the common cases.
+This is one function — `matchGlob` in the scope kernel — and both the admission
+decision (`caws scope check`) and every surface that explains or ranks scope fit
+(`caws scope show --json` authority candidates) call it. A second implementation
+of these rules is a defect even when it agrees on the common cases.
 
-`scope.out` is different: the schema rejects globs there outright, and entries are matched as boundary-safe prefixes only.
+`scope.out` is different: the schema rejects globs there outright, and entries
+are matched as boundary-safe prefixes only.
 
 ### TypeScript Interface
 
 ```typescript
 interface CawsSpec {
   // Required fields (11)
-  id: string;                        // Pattern: ^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+[a-z]*$
+  id: string; // Pattern: ^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-\d+[a-z]*$
   title: string;
   risk_tier: 1 | 2 | 3;
   mode: 'feature' | 'refactor' | 'fix' | 'doc' | 'chore';
   lifecycle_state: 'draft' | 'active' | 'closed' | 'archived';
   blast_radius: BlastRadius;
   scope: SpecScope;
-  invariants: string[];              // minItems: 1
-  acceptance: AcceptanceCriteria[];  // minItems: 1
+  invariants: string[]; // minItems: 1
+  acceptance: AcceptanceCriteria[]; // minItems: 1
   non_functional: NonFunctional;
   contracts: ContractSpec[];
 
   // Optional fields
   resolution?: 'completed' | 'superseded' | 'abandoned';
   blockers?: Blocker[];
-  supersedes?: string;               // spec id pattern
-  superseded_by?: string;            // spec id pattern
-  successors?: Successor[];          // structured successor declarations
-  worktree?: string;                 // bound worktree name
+  supersedes?: string; // spec id pattern
+  superseded_by?: string; // spec id pattern
+  successors?: Successor[]; // structured successor declarations
+  worktree?: string; // bound worktree name
   operational_rollback_slo?: string; // e.g. "5m", "1h" — required for Tier 1 via semantic check
-  observability?: string[];          // required for Tier 1 via semantic check
-  rollback?: string[];               // required non-empty for Tier 1 via semantic check
+  observability?: string[]; // required for Tier 1 via semantic check
+  rollback?: string[]; // required non-empty for Tier 1 via semantic check
   experimental_mode?: ExperimentalMode; // Tier 3 only
-  created_at?: string;               // ISO 8601
-  updated_at?: string;               // ISO 8601
+  created_at?: string; // ISO 8601
+  updated_at?: string; // ISO 8601
   owner?: string;
   closure_notes?: string;
 }
 
 interface BlastRadius {
-  modules: string[];       // Non-empty list of affected modules
+  modules: string[]; // Non-empty list of affected modules
   data_migration?: boolean; // Optional; not required
 }
 
 interface SpecScope {
-  in: string[];            // Required, non-empty; directory prefix or picomatch glob
-  out?: string[];          // Optional; directory paths only, no glob patterns
+  in: string[]; // Required, non-empty; directory prefix or picomatch glob
+  out?: string[]; // Optional; directory paths only, no glob patterns
 }
 
 interface AcceptanceCriteria {
-  id: string;              // Pattern: ^A\d+$
+  id: string; // Pattern: ^A\d+$
   given: string;
   when: string;
   then: string;
@@ -368,26 +402,26 @@ interface NonFunctional {
   performance?: string[];
   security?: string[];
   accessibility?: string[];
-  reliability?: string[];  // Use for observability concerns too
+  reliability?: string[]; // Use for observability concerns too
 }
 
 interface ContractSpec {
-  name: string;                                          // Required
+  name: string; // Required
   type: 'api' | 'schema' | 'contract-test' | 'behavior'; // Required
   path?: string;
   description?: string;
 }
 
 interface Blocker {
-  reason: string;          // Required
+  reason: string; // Required
   waiting_on?: string;
-  since?: string;          // ISO 8601
+  since?: string; // ISO 8601
 }
 
 interface ExperimentalMode {
   enabled: boolean;
   rationale: string;
-  expires_at: string;      // ISO 8601
+  expires_at: string; // ISO 8601
 }
 ```
 
@@ -395,7 +429,7 @@ interface ExperimentalMode {
 
 ```yaml
 id: CAWS-AUTH-001
-title: "Add OAuth2 token refresh endpoint"
+title: 'Add OAuth2 token refresh endpoint'
 risk_tier: 2
 mode: feature
 lifecycle_state: active
@@ -411,44 +445,44 @@ scope:
     - .caws/policy.yaml
     - CODEOWNERS
 invariants:
-  - "Existing auth tokens remain valid after this change"
-  - "No new top-level commands added to the CLI surface"
+  - 'Existing auth tokens remain valid after this change'
+  - 'No new top-level commands added to the CLI surface'
 acceptance:
   - id: A1
-    given: "A valid refresh token exists"
-    when: "the user runs caws auth refresh"
-    then: "a new access token is issued and the old one is revoked"
+    given: 'A valid refresh token exists'
+    when: 'the user runs caws auth refresh'
+    then: 'a new access token is issued and the old one is revoked'
   - id: A2
-    given: "An expired refresh token is presented"
-    when: "the user runs caws auth refresh"
-    then: "the command exits non-zero with a structured error message"
+    given: 'An expired refresh token is presented'
+    when: 'the user runs caws auth refresh'
+    then: 'the command exits non-zero with a structured error message'
 non_functional:
   security:
-    - "Refresh tokens must be single-use; reuse returns 401"
-    - "Tokens stored at rest must be encrypted"
+    - 'Refresh tokens must be single-use; reuse returns 401'
+    - 'Tokens stored at rest must be encrypted'
   reliability:
-    - "Refresh endpoint must return within 500ms at p95"
+    - 'Refresh endpoint must return within 500ms at p95'
   performance: []
   accessibility: []
 contracts:
-  - name: "auth-token-api"
+  - name: 'auth-token-api'
     type: api
     path: docs/api/auth-token.yaml
-    description: "Token refresh endpoint contract"
-created_at: "2026-05-28T00:00:00Z"
-updated_at: "2026-05-28T00:00:00Z"
-owner: "darianrosebrook"
+    description: 'Token refresh endpoint contract'
+created_at: '2026-05-28T00:00:00Z'
+updated_at: '2026-05-28T00:00:00Z'
+owner: 'darianrosebrook'
 ```
 
 ### Example: Tier-1 Spec (with required Tier-1 fields)
 
 ```yaml
 id: CAWS-INFRA-001
-title: "Migrate events.jsonl to append-only store"
+title: 'Migrate events.jsonl to append-only store'
 risk_tier: 1
 mode: refactor
 lifecycle_state: active
-operational_rollback_slo: "5m"
+operational_rollback_slo: '5m'
 blast_radius:
   modules:
     - packages/caws-cli/src/kernel/store
@@ -458,40 +492,48 @@ scope:
     - packages/caws-cli/src/kernel/store
     - packages/caws-cli/tests/store
 invariants:
-  - "events.jsonl remains hash-chained after migration"
-  - "All existing event types validate against their v1 schemas"
+  - 'events.jsonl remains hash-chained after migration'
+  - 'All existing event types validate against their v1 schemas'
 acceptance:
   - id: A1
-    given: "An existing events.jsonl file"
-    when: "the migration runs"
-    then: "all events are re-validated and the chain is intact"
+    given: 'An existing events.jsonl file'
+    when: 'the migration runs'
+    then: 'all events are re-validated and the chain is intact'
 non_functional:
   reliability:
-    - "Migration must be atomic — partial write leaves the store in original state"
+    - 'Migration must be atomic — partial write leaves the store in original
+      state'
   performance:
-    - "Migration completes in under 30s for a 10k-event log"
+    - 'Migration completes in under 30s for a 10k-event log'
   security: []
   accessibility: []
 contracts:
-  - name: "events-jsonl-append-only"
+  - name: 'events-jsonl-append-only'
     type: schema
     path: packages/caws-cli/src/kernel/schemas/events
 observability:
-  - "Emit migration_started and migration_completed events"
-  - "Log event count and chain-hash before and after"
+  - 'Emit migration_started and migration_completed events'
+  - 'Log event count and chain-hash before and after'
 rollback:
-  - "git revert the migration commit"
-  - "Restore events.jsonl from pre-migration backup at .caws/events.jsonl.bak"
-created_at: "2026-05-28T00:00:00Z"
-updated_at: "2026-05-28T00:00:00Z"
-owner: "darianrosebrook"
+  - 'git revert the migration commit'
+  - 'Restore events.jsonl from pre-migration backup at .caws/events.jsonl.bak'
+created_at: '2026-05-28T00:00:00Z'
+updated_at: '2026-05-28T00:00:00Z'
+owner: 'darianrosebrook'
 ```
 
 ## Audit Surface: .caws/events.jsonl
 
-The `caws provenance` command was removed in v11 and there is no provenance schema in the kernel. The audit surface is the hash-chained `.caws/events.jsonl` file, which receives typed event records appended by lifecycle commands (`caws gates run`, `caws specs close`, `caws specs archive`, `caws worktree create`, etc.). Each event record carries a `prev_hash` field that chains to the previous entry. The event schemas live at `packages/caws-cli/src/kernel/schemas/events/*.v1.json`.
+The `caws provenance` command was removed in v11 and there is no provenance
+schema in the kernel. The audit surface is the hash-chained `.caws/events.jsonl`
+file, which receives typed event records appended by lifecycle commands
+(`caws gates run`, `caws specs close`, `caws specs archive`,
+`caws worktree create`, etc.). Each event record carries a `prev_hash` field
+that chains to the previous entry. The event schemas live at
+`packages/caws-cli/src/kernel/schemas/events/*.v1.json`.
 
-Users needing an audit trail wire their own hooks against `caws gates run` output; they do not consume a provenance manifest.
+Users needing an audit trail wire their own hooks against `caws gates run`
+output; they do not consume a provenance manifest.
 
 ## Tier Policy Configuration
 
@@ -541,18 +583,20 @@ Users needing an audit trail wire their own hooks against `caws gates run` outpu
 }
 ```
 
-> **Note:** `max_files` and `max_loc` are no longer part of the tier policy schema. Change budgets were removed from the spec schema in v11; budget enforcement derives entirely from `.caws/policy.yaml` risk-tier configuration.
+> **Note:** `max_files` and `max_loc` are no longer part of the tier policy
+> schema. Change budgets were removed from the spec schema in v11; budget
+> enforcement derives entirely from `.caws/policy.yaml` risk-tier configuration.
 
 ### TypeScript Interface
 
 ```typescript
 interface TierPolicy {
   [tier: string]: {
-    min_branch: number;                // 0-1
-    min_mutation: number;              // 0-1
-    requires_contracts: boolean;       // Contract requirement
-    requires_manual_review?: boolean;  // Manual review needed
-    allowed_modes: Mode[];             // Allowed project modes
+    min_branch: number; // 0-1
+    min_mutation: number; // 0-1
+    requires_contracts: boolean; // Contract requirement
+    requires_manual_review?: boolean; // Manual review needed
+    allowed_modes: Mode[]; // Allowed project modes
   };
 }
 
@@ -584,7 +628,9 @@ type ToolAllowlist = string[];
 
 ## Waivers
 
-In v11, waivers are per-file records at `.caws/waivers/<id>.yaml`. They are created, listed, and revoked via the `caws waiver` command group (singular — there is no `caws waivers` alias).
+In v11, waivers are per-file records at `.caws/waivers/<id>.yaml`. They are
+created, listed, and revoked via the `caws waiver` command group (singular —
+there is no `caws waivers` alias).
 
 ### v11 Waiver File Schema
 
@@ -593,11 +639,11 @@ Each `.caws/waivers/<id>.yaml` file has the following shape:
 ```yaml
 id: WAIVER-001
 gate: coverage
-reason: "Bootstrapping phase — coverage gate not yet wired for this package"
-approved_by: "darianrosebrook"
-expires_at: "2026-08-01T00:00:00Z"
-spec_id: CAWS-AUTH-001   # optional: scope waiver to a specific spec
-created_at: "2026-05-28T00:00:00Z"
+reason: 'Bootstrapping phase — coverage gate not yet wired for this package'
+approved_by: 'darianrosebrook'
+expires_at: '2026-08-01T00:00:00Z'
+spec_id: CAWS-AUTH-001 # optional: scope waiver to a specific spec
+created_at: '2026-05-28T00:00:00Z'
 ```
 
 ### Creating a Waiver
@@ -610,19 +656,21 @@ caws waiver create <id> \
   --expires-at <iso8601>
 ```
 
-Gate names are policy-defined (configured in `.caws/policy.yaml`). Waivers filter violations; they do not change the gate's `mode` (block/warn/skip). The reason field is free-text — no closed enum.
+Gate names are policy-defined (configured in `.caws/policy.yaml`). Waivers
+filter violations; they do not change the gate's `mode` (block/warn/skip). The
+reason field is free-text — no closed enum.
 
 ### TypeScript Interface
 
 ```typescript
 interface WaiverRecord {
-  id: string;             // Waiver identifier
-  gate: string;           // Policy-defined gate name (free-text; not a closed enum)
-  reason: string;         // Free-text rationale
-  approved_by: string;    // Approver identifier
-  expires_at: string;     // ISO 8601
-  spec_id?: string;       // Optional: scope waiver to a specific spec
-  created_at?: string;    // ISO 8601
+  id: string; // Waiver identifier
+  gate: string; // Policy-defined gate name (free-text; not a closed enum)
+  reason: string; // Free-text rationale
+  approved_by: string; // Approver identifier
+  expires_at: string; // ISO 8601
+  spec_id?: string; // Optional: scope waiver to a specific spec
+  created_at?: string; // ISO 8601
 }
 ```
 
@@ -727,7 +775,7 @@ interface SPDXDocument {
 }
 
 interface CreationInfo {
-  created: string;  // ISO 8601
+  created: string; // ISO 8601
   creators: string[];
 }
 
@@ -757,16 +805,19 @@ interface Relationship {
 All schemas are validated using:
 
 ### JSON Schema Validation
+
 - **Library**: Ajv (Another JSON Schema Validator)
 - **Version**: Draft 2020-12
 - **Features**: Full schema validation with detailed error messages
 
 ### TypeScript Type Checking
+
 - **Compiler**: TypeScript 5.0+
 - **Strict Mode**: Enabled for type safety
 - **Interfaces**: Complete type definitions for all schemas
 
 ### Runtime Validation
+
 ```typescript
 import Ajv from 'ajv';
 import specSchema from './schemas/spec.v1.json';
@@ -782,9 +833,9 @@ if (!isValid) {
 
 ## Successor declarations
 
-A spec records work it hands onward in the structured `successors` array
-rather than in `closure_notes` prose, so the obligation is queryable data
-that schema validation and lifecycle tooling can act on.
+A spec records work it hands onward in the structured `successors` array rather
+than in `closure_notes` prose, so the obligation is queryable data that schema
+validation and lifecycle tooling can act on.
 
 ```yaml
 successors:
@@ -795,73 +846,81 @@ successors:
 
 ### Two axes, never conflated
 
-`disposition` records a **source-side decision** — what the closing spec
-decided about the obligation. It is one of:
+`disposition` records a **source-side decision** — what the closing spec decided
+about the obligation. It is one of:
 
-| disposition | Meaning | Requires |
-|---|---|---|
-| `required` | The target carries the obligation onward and must resolve before this spec can close. | `target_spec_id` resolves |
-| `declined` | No successor will be authored. | non-empty `rationale` |
-| `absorbed` | The obligation was discharged elsewhere. | `absorbed_by` resolves |
+| disposition | Meaning                                                                               | Requires                  |
+| ----------- | ------------------------------------------------------------------------------------- | ------------------------- |
+| `required`  | The target carries the obligation onward and must resolve before this spec can close. | `target_spec_id` resolves |
+| `declined`  | No successor will be authored.                                                        | non-empty `rationale`     |
+| `absorbed`  | The obligation was discharged elsewhere.                                              | `absorbed_by` resolves    |
 
-**Target standing is derived at query time, never stored.** Whether the
-target is `draft`, `active`, `closed`, or `archived` — and with what
-`resolution` — is read from the target spec itself. Copying it into the
-declaring spec would let the copy drift from the target's real state, which
-is the failure this field exists to prevent. There is deliberately no
-schema property for it.
+**Target standing is derived at query time, never stored.** Whether the target
+is `draft`, `active`, `closed`, or `archived` — and with what `resolution` — is
+read from the target spec itself. Copying it into the declaring spec would let
+the copy drift from the target's real state, which is the failure this field
+exists to prevent. There is deliberately no schema property for it.
 
-"The target does not exist" is likewise **not** a disposition. It is a
-query result about the corpus, not a decision by the author.
+"The target does not exist" is likewise **not** a disposition. It is a query
+result about the corpus, not a decision by the author.
 
 ### Close-time resolution: custody, not completion
 
 Closing a spec resolves each `required` entry's `target_spec_id` and each
-`absorbed` entry's `absorbed_by` by exact id against live and archived
-specs. An unresolved reference **refuses the close** with a typed diagnostic
-and writes nothing — no YAML mutation, no event.
+`absorbed` entry's `absorbed_by` by exact id against live and archived specs. An
+unresolved reference **refuses the close** with a typed diagnostic and writes
+nothing — no YAML mutation, no event.
 
-The gate asks whether the obligation was made *governable*, not whether the
-work is finished. An authored target in **any** lifecycle state satisfies
-it, including one closed as `abandoned`: someone decided, and the decision
-is on record. Requiring the target be closed first would invert the ordinary
-sequence, where a predecessor closes and its successor then runs.
+The gate asks whether the obligation was made _governable_, not whether the work
+is finished. An authored target in **any** lifecycle state satisfies it,
+including one closed as `abandoned`: someone decided, and the decision is on
+record. Requiring the target be closed first would invert the ordinary sequence,
+where a predecessor closes and its successor then runs.
 
-Resolution is exact-id only — no prefix, case-insensitive, or fuzzy
-matching. An id found in both the live set and the archive resolves normally
-with an ambiguity warning; corpus drift is reported to the operator rather
-than charged to the closing spec.
+Resolution is exact-id only — no prefix, case-insensitive, or fuzzy matching. An
+id found in both the live set and the archive resolves normally with an
+ambiguity warning; corpus drift is reported to the operator rather than charged
+to the closing spec.
 
-Validation layering matters here: `caws specs validate <file>` performs
-**no** referential resolution, so it returns the same verdict for the same
-bytes regardless of ambient `.caws` state. A spec naming an unauthored
-successor is *valid* but cannot *close*.
+Validation layering matters here: `caws specs validate <file>` performs **no**
+referential resolution, so it returns the same verdict for the same bytes
+regardless of ambient `.caws` state. A spec naming an unauthored successor is
+_valid_ but cannot _close_.
 
 ### Audit record
 
 The `spec_closed` event preserves the complete declaration array verbatim —
 every entry, in order, with `disposition`, `rationale`, and `absorbed_by`
-intact. Target standing is not projected, for the same reason it is not
-stored.
+intact. Target standing is not projected, for the same reason it is not stored.
 
 ## Extensions
 
 ### Custom Schemas
+
 Users can extend CAWS schemas with care:
-- The spec schema uses `additionalProperties: false` — unknown top-level fields cause validation failure
-- Policy and gate configuration in `.caws/policy.yaml` is the extension point for budget and threshold customization
-- The events schema (`packages/caws-cli/src/kernel/schemas/events/*.v1.json`) must be updated before new fields can appear in event payloads
+
+- The spec schema uses `additionalProperties: false` — unknown top-level fields
+  cause validation failure
+- Policy and gate configuration in `.caws/policy.yaml` is the extension point
+  for budget and threshold customization
+- The events schema (`packages/caws-cli/src/kernel/schemas/events/*.v1.json`)
+  must be updated before new fields can appear in event payloads
 
 ### Schema Evolution
+
 - The kernel schema is the single source of truth; this document tracks it
-- Breaking changes (field removal, enum narrowing) require a spec and a changelog entry
-- Deprecated fields emit `spec.schema.violation` immediately — there is no grace period
+- Breaking changes (field removal, enum narrowing) require a spec and a
+  changelog entry
+- Deprecated fields emit `spec.schema.violation` immediately — there is no grace
+  period
 
 ## References
 
-- [`packages/caws-cli/src/kernel/schemas/spec.v1.json`](../../packages/caws-cli/src/kernel/schemas/spec.v1.json) — canonical spec schema (authority)
+- [`packages/caws-cli/src/kernel/schemas/spec.v1.json`](../../packages/caws-cli/src/kernel/schemas/spec.v1.json)
+  — canonical spec schema (authority)
 - [JSON Schema Specification](https://json-schema.org/)
 - [SPDX Specification](https://spdx.github.io/spdx-spec/)
 - [SLSA Specification](https://slsa.dev/spec/v0.1/)
 
-For questions about schema validation or extension, see the [CAWS Documentation](../README.md) or create a GitHub issue.
+For questions about schema validation or extension, see the
+[CAWS Documentation](../README.md) or create a GitHub issue.

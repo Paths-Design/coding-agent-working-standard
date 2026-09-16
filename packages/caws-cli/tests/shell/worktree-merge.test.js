@@ -59,7 +59,14 @@ function seedSpec(caws, id, scopeIn = ['work.txt']) {
   // REWORK-001's merge-time lane check verifies every lane-branch commit
   // against the bound spec's scope.in, so fixtures must declare scope or
   // their own 'branch work' commit reads as foreign.
-  const r = createSpec(caws, { id, title: 'apply fixture', mode: 'chore', riskTier: 3, actor: ACTOR, scopeIn });
+  const r = createSpec(caws, {
+    id,
+    title: 'apply fixture',
+    mode: 'chore',
+    riskTier: 3,
+    actor: ACTOR,
+    scopeIn,
+  });
   if (!r.ok || r.value.kind !== 'success') {
     throw new Error('seed spec failed: ' + JSON.stringify(r));
   }
@@ -178,8 +185,13 @@ function readSpecYaml(caws, id) {
 
 describe('caws worktree merge --closure-notes (CAWS-FEAT-WORKTREE-MERGE-CLOSURE-NOTES-FLAG-01)', () => {
   test('B1: --closure-notes writes the operator notes to the bound spec on auto-close', () => {
-    const { repo, caws, wtPath } = setupReadyWorktree('merge-notes-b1-', 'wt-b1', 'MERGE-NOTES-B1-001');
-    const notes = 'Closed via merge: two-process replay verified, parity exact, LOCAL_ONLY retained.';
+    const { repo, caws, wtPath } = setupReadyWorktree(
+      'merge-notes-b1-',
+      'wt-b1',
+      'MERGE-NOTES-B1-001'
+    );
+    const notes =
+      'Closed via merge: two-process replay verified, parity exact, LOCAL_ONLY retained.';
     const result = runMerge(repo, 'wt-b1', { closureNotes: notes });
 
     expect(result.code).toBe(0);
@@ -207,7 +219,11 @@ describe('caws worktree merge --closure-notes (CAWS-FEAT-WORKTREE-MERGE-CLOSURE-
   });
 
   test('B3: passing two note aliases is a usage error (exit 2, no merge, no spec close)', () => {
-    const { repo, wtPath, caws } = setupReadyWorktree('merge-notes-b3-', 'wt-b3', 'MERGE-NOTES-B3-001');
+    const { repo, wtPath, caws } = setupReadyWorktree(
+      'merge-notes-b3-',
+      'wt-b3',
+      'MERGE-NOTES-B3-001'
+    );
     const result = runMerge(repo, 'wt-b3', { closureNotes: 'one', reason: 'two' });
 
     expect(result.code).toBe(2);
@@ -220,7 +236,11 @@ describe('caws worktree merge --closure-notes (CAWS-FEAT-WORKTREE-MERGE-CLOSURE-
   });
 
   test('B4: --closure-notes on an already-closed spec warns and points at reopen-then-close, but the merge still succeeds', () => {
-    const { repo, caws, wtPath } = setupReadyWorktree('merge-notes-b4-', 'wt-b4', 'MERGE-NOTES-B4-001');
+    const { repo, caws, wtPath } = setupReadyWorktree(
+      'merge-notes-b4-',
+      'wt-b4',
+      'MERGE-NOTES-B4-001'
+    );
     const preCloseNotes = 'pre-closed by hand before the merge';
     // Pre-close the spec via caws specs close (the documented escape). The merge
     // then hits its already-closed fast path and skips closeSpec.
@@ -264,14 +284,19 @@ describe('caws worktree merge — lane provenance (CAWS-PREPUSH-PROVENANCE-REWOR
     const { repo, caws, wtPath } = setupReadyWorktree('prov-p1-', 'wt-p1', 'PROV-P1-001');
     const registry = JSON.parse(fs.readFileSync(path.join(caws, 'worktrees.json'), 'utf8'));
     const branch = registry['wt-p1'].branch;
-    const laneTip = execFileSync('git', ['-C', repo, 'rev-parse', branch], { encoding: 'utf8' }).trim();
+    const laneTip = execFileSync('git', ['-C', repo, 'rev-parse', branch], {
+      encoding: 'utf8',
+    }).trim();
 
     const result = runMerge(repo, 'wt-p1');
     expect(result.code).toBe(0);
     expect(fs.existsSync(wtPath)).toBe(false); // teardown ran
 
-    const events = fs.readFileSync(path.join(caws, 'events.jsonl'), 'utf8')
-      .trim().split('\n').map((l) => JSON.parse(l));
+    const events = fs
+      .readFileSync(path.join(caws, 'events.jsonl'), 'utf8')
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l));
     const merged = events.filter((e) => e.event === 'worktree_merged').pop();
     expect(merged).toBeDefined();
     expect(merged.data.lane_tip).toBe(laneTip);
@@ -281,7 +306,10 @@ describe('caws worktree merge — lane provenance (CAWS-PREPUSH-PROVENANCE-REWOR
       'git',
       ['-C', repo, 'rev-list', `${merged.data.base_before}..${merged.data.lane_tip}`],
       { encoding: 'utf8' }
-    ).trim().split('\n').filter(Boolean);
+    )
+      .trim()
+      .split('\n')
+      .filter(Boolean);
     expect(range.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -289,7 +317,14 @@ describe('caws worktree merge — lane provenance (CAWS-PREPUSH-PROVENANCE-REWOR
     const { repo, caws, wtPath } = setupReadyWorktree('prov-p2-', 'wt-p2', 'PROV-P2-001');
     fs.writeFileSync(path.join(wtPath, 'foreign.txt'), 'not lane work\n');
     execFileSync('git', ['-C', wtPath, 'add', 'foreign.txt']);
-    execFileSync('git', ['-C', wtPath, 'commit', '--quiet', '-m', 'foreign work swept into the lane']);
+    execFileSync('git', [
+      '-C',
+      wtPath,
+      'commit',
+      '--quiet',
+      '-m',
+      'foreign work swept into the lane',
+    ]);
 
     const beforeEvents = fs.readFileSync(path.join(caws, 'events.jsonl'), 'utf8');
     const result = runMerge(repo, 'wt-p2');
@@ -350,10 +385,16 @@ describe('caws worktree merge — lane provenance (CAWS-PREPUSH-PROVENANCE-REWOR
     fs.appendFileSync(path.join(wtPath, 'work.txt'), 'more lane work\n');
     execFileSync('git', ['-C', wtPath, 'add', 'work.txt']);
     execFileSync('git', [
-      '-C', wtPath,
-      '-c', 'user.name=OtherSession',
-      '-c', 'user.email=other@t.com',
-      'commit', '--quiet', '-m', 'lane work from a second session (takeover chain)',
+      '-C',
+      wtPath,
+      '-c',
+      'user.name=OtherSession',
+      '-c',
+      'user.email=other@t.com',
+      'commit',
+      '--quiet',
+      '-m',
+      'lane work from a second session (takeover chain)',
     ]);
 
     const result = runMerge(repo, 'wt-p4');

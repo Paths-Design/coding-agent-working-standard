@@ -10,9 +10,11 @@ audience: consumer
 
 # CAWS Developer Guide
 
-> Purpose: make every change predictable. Pick a **mode**, generate scaffolds, run gates, deliver a PR bundle.
+> Purpose: make every change predictable. Pick a **mode**, generate scaffolds,
+> run gates, deliver a PR bundle.
 
 ## 0) Pick a Mode
+
 - **feature**: adds behavior, may change contracts & migrations.
 - **refactor**: behavior-preserving, API stable. In-place codemods only.
 - **fix**: reproduce with a failing test, then make it green. Scope minimal.
@@ -40,7 +42,10 @@ caws doctor
 caws gates run --spec FEAT-1234
 ```
 
-> Note: `npm run caws:start`, `npm run caws:validate`, and `npm run caws:verify` are project-local wrapper scripts. If your project defines them, they may wrap the commands above. The canonical v11.1 commands are `caws specs create`, `caws doctor`, and `caws gates run --spec <id>`.
+> Note: `npm run caws:start`, `npm run caws:validate`, and `npm run caws:verify`
+> are project-local wrapper scripts. If your project defines them, they may wrap
+> the commands above. The canonical v11.1 commands are `caws specs create`,
+> `caws doctor`, and `caws gates run --spec <id>`.
 
 ## 2) Spec Layout Convention
 
@@ -55,48 +60,48 @@ docs/FEAT-1234/
   codemod/                          # refactor mode only
 ```
 
-> v11 has no project-level root spec. `caws init` refuses legacy `.caws/<spec-id>.yaml` layouts. All specs live under `.caws/specs/`.
+> v11 has no project-level root spec. `caws init` refuses legacy
+> `.caws/<spec-id>.yaml` layouts. All specs live under `.caws/specs/`.
 
-**When to split a feature spec?**
-Single domain → one `specs/FEAT-…yaml`. Cross-cutting or architectural → multiple specs with non-overlapping `scope.in`.
+**When to split a feature spec?** Single domain → one `specs/FEAT-…yaml`.
+Cross-cutting or architectural → multiple specs with non-overlapping `scope.in`.
 
 ## 3) Checklists (copy into PR)
 
 ### Feature
 
-* [ ] Contracts updated first (OpenAPI/GraphQL/Proto) and verified
-* [ ] Unit + contract + integration + E2E smoke written before impl
-* [ ] Feature flag + reversible migration + rollback plan
-* [ ] Observability: logs/metrics/traces named & asserted
-* [ ] A11y/perf budgets met
+- [ ] Contracts updated first (OpenAPI/GraphQL/Proto) and verified
+- [ ] Unit + contract + integration + E2E smoke written before impl
+- [ ] Feature flag + reversible migration + rollback plan
+- [ ] Observability: logs/metrics/traces named & asserted
+- [ ] A11y/perf budgets met
 
 ### Refactor
 
-* [ ] Codemod added in `docs/<ID>/codemod/` with dry-run & apply
-* [ ] No public API change; golden frames unchanged
-* [ ] Mutation score ≥ baseline; coverage not reduced
-* [ ] No duplicate/"enhanced-*.ts" files
+- [ ] Codemod added in `docs/<ID>/codemod/` with dry-run & apply
+- [ ] No public API change; golden frames unchanged
+- [ ] Mutation score ≥ baseline; coverage not reduced
+- [ ] No duplicate/"enhanced-\*.ts" files
 
 ### Fix
 
-* [ ] Minimal failing test reproduces bug
-* [ ] Root cause noted; guard test added
-* [ ] Risk tier confirmed; scope confined to `scope.in`
+- [ ] Minimal failing test reproduces bug
+- [ ] Root cause noted; guard test added
+- [ ] Risk tier confirmed; scope confined to `scope.in`
 
 ---
 
 ## Mode Contract
 
 refactor:
-  - Public API: MUST NOT change
-  - New files: discouraged; if splitting, provide codemod and 1:1 export mapping
-  - Required artifacts: codemod script + semantic diff report
-  - Golden frames: unchanged within tolerance
-feature:
-  - Contracts: MUST be updated first & verified
-  - Migrations: forwards-compatible + dry-run; feature flag required
-fix:
-  - Repro: failing test first; minimal diff; root cause note
+
+- Public API: MUST NOT change
+- New files: discouraged; if splitting, provide codemod and 1:1 export mapping
+- Required artifacts: codemod script + semantic diff report
+- Golden frames: unchanged within tolerance feature:
+- Contracts: MUST be updated first & verified
+- Migrations: forwards-compatible + dry-run; feature flag required fix:
+- Repro: failing test first; minimal diff; root cause note
 
 ---
 
@@ -114,13 +119,13 @@ fix:
 
 ## Mode Matrix (copy into test-plan.md)
 
-| Test Class | feature | refactor | fix |
-|------------|---------|----------|-----|
-| Unit | mandatory | mandatory | mandatory |
-| Contract | mandatory | mandatory | optional* |
-| Integration | mandatory | optional | optional* |
-| E2E smoke | mandatory | optional | optional* |
-| Mutation | mandatory | mandatory | mandatory |
-| A11y/Perf | mandatory | optional | optional* |
+| Test Class  | feature   | refactor  | fix        |
+| ----------- | --------- | --------- | ---------- |
+| Unit        | mandatory | mandatory | mandatory  |
+| Contract    | mandatory | mandatory | optional\* |
+| Integration | mandatory | optional  | optional\* |
+| E2E smoke   | mandatory | optional  | optional\* |
+| Mutation    | mandatory | mandatory | mandatory  |
+| A11y/Perf   | mandatory | optional  | optional\* |
 
-*Only if scope impacts these areas
+\*Only if scope impacts these areas

@@ -60,7 +60,7 @@ describe('CLI error paths render without the chalk ESM crash', () => {
 
     expect(output).not.toContain('chalk.red is not a function');
     expect(output).not.toContain('TypeError');
-    expect(output).toContain("--spec");
+    expect(output).toContain('--spec');
     expect(result.status).not.toBe(0);
   });
 

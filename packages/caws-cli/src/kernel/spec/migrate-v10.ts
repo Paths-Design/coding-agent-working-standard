@@ -81,9 +81,12 @@ export const NF_SUBKEY_RENAMES: ReadonlyArray<{ from: string; to: string }> = [
  * v11 requires integer 1/2/3.
  */
 export const RISK_TIER_COERCIONS: ReadonlyMap<string, 1 | 2 | 3> = new Map([
-  ['T1', 1], ['1', 1],
-  ['T2', 2], ['2', 2],
-  ['T3', 3], ['3', 3],
+  ['T1', 1],
+  ['1', 1],
+  ['T2', 2],
+  ['2', 2],
+  ['T3', 3],
+  ['3', 3],
 ]);
 
 /**
@@ -91,7 +94,11 @@ export const RISK_TIER_COERCIONS: ReadonlyMap<string, 1 | 2 | 3> = new Map([
  * and `type → mode` fallback.
  */
 export const V11_MODES: ReadonlySet<string> = new Set([
-  'feature', 'refactor', 'fix', 'doc', 'chore',
+  'feature',
+  'refactor',
+  'fix',
+  'doc',
+  'chore',
 ]);
 
 /**
@@ -100,7 +107,10 @@ export const V11_MODES: ReadonlySet<string> = new Set([
  * forbidden (invariant 6).
  */
 export const V11_LIFECYCLE_STATES: ReadonlySet<string> = new Set([
-  'draft', 'active', 'closed', 'archived',
+  'draft',
+  'active',
+  'closed',
+  'archived',
 ]);
 
 /**
@@ -225,10 +235,7 @@ export interface RefusedOutcome {
   readonly spec_id: string | null;
 }
 
-export type MigrateOutcome =
-  | MigratedOutcome
-  | MigratedWithWarningsOutcome
-  | RefusedOutcome;
+export type MigrateOutcome = MigratedOutcome | MigratedWithWarningsOutcome | RefusedOutcome;
 
 // --- Detection -------------------------------------------------------------
 
@@ -288,7 +295,7 @@ export function detectSpecVersion(parsed: unknown): 'v10' | 'v11' | 'unknown' {
 export function migrateSpecV10(
   parsed: unknown,
   source: MigrateSource = {},
-  options: MigrateOptions = {},
+  options: MigrateOptions = {}
 ): Result<MigrateOutcome> {
   // --- A7: idempotency guard --------------------------------------------
   const version = detectSpecVersion(parsed);
@@ -303,8 +310,7 @@ export function migrateSpecV10(
             'Input is already a v11-shape spec; migration is a no-op refusal (not a silent transformation).',
           ...(source.path !== undefined && { subject: source.path }),
           severity: 'info',
-          narrowRepair:
-            'No action needed; the spec is already in the v11 shape.',
+          narrowRepair: 'No action needed; the spec is already in the v11 shape.',
         }),
       ],
       spec_id: extractSpecId(parsed),
@@ -317,11 +323,10 @@ export function migrateSpecV10(
       diagnostic({
         rule: MIGRATE_RULES.NOT_AN_OBJECT,
         authority: 'kernel/spec',
-        message:
-          'Spec input is not a plain object; the transformer requires an object root.',
+        message: 'Spec input is not a plain object; the transformer requires an object root.',
         ...(source.path !== undefined && { subject: source.path }),
         narrowRepair: 'Provide a parsed YAML mapping (not a scalar or array).',
-      }),
+      })
     );
   }
 
@@ -342,13 +347,10 @@ export function migrateSpecV10(
         message: 'Spec is missing an id field.',
         ...(source.path !== undefined && { subject: source.path }),
         narrowRepair: 'Author must add a top-level `id` field.',
-      }),
+      })
     );
   }
-  if (
-    typeof inputObj['title'] !== 'string' ||
-    inputObj['title'].length === 0
-  ) {
+  if (typeof inputObj['title'] !== 'string' || inputObj['title'].length === 0) {
     refusals.push(
       diagnostic({
         rule: MIGRATE_RULES.MISSING_TITLE,
@@ -356,7 +358,7 @@ export function migrateSpecV10(
         message: 'Spec is missing a non-empty title.',
         ...(source.path !== undefined && { subject: source.path }),
         narrowRepair: 'Author must add a top-level `title` string.',
-      }),
+      })
     );
   }
 
@@ -395,7 +397,7 @@ export function migrateSpecV10(
             ...(source.path !== undefined && { subject: source.path }),
             severity: 'warning',
             data: { from, to, value_preserved: false, conflict: 'mixed_shape' },
-          }),
+          })
         );
       } else {
         output[to] = output[from];
@@ -409,7 +411,7 @@ export function migrateSpecV10(
             ...(source.path !== undefined && { subject: source.path }),
             severity: 'warning',
             data: { from, to, value_preserved: true },
-          }),
+          })
         );
       }
     }
@@ -436,7 +438,7 @@ export function migrateSpecV10(
           ...(source.path !== undefined && { subject: source.path }),
           severity: 'warning',
           data: { from: createdAt, to: coerced },
-        }),
+        })
       );
     }
   }
@@ -457,8 +459,12 @@ export function migrateSpecV10(
               message: `Mixed-shape: non_functional.${from} and non_functional.${to} both present; preserved v11, recorded v10 in report.`,
               ...(source.path !== undefined && { subject: source.path }),
               severity: 'warning',
-              data: { from: `non_functional.${from}`, to: `non_functional.${to}`, conflict: 'mixed_shape' },
-            }),
+              data: {
+                from: `non_functional.${from}`,
+                to: `non_functional.${to}`,
+                conflict: 'mixed_shape',
+              },
+            })
           );
         } else {
           nf[to] = nf[from];
@@ -471,8 +477,12 @@ export function migrateSpecV10(
               message: `Renamed non_functional.${from} to non_functional.${to}.`,
               ...(source.path !== undefined && { subject: source.path }),
               severity: 'warning',
-              data: { from: `non_functional.${from}`, to: `non_functional.${to}`, value_preserved: true },
-            }),
+              data: {
+                from: `non_functional.${from}`,
+                to: `non_functional.${to}`,
+                value_preserved: true,
+              },
+            })
           );
         }
       }
@@ -492,7 +502,7 @@ export function migrateSpecV10(
         narrowRepair:
           'Author must set risk_tier to integer 1, 2, or 3 (or string "T1"/"T2"/"T3" which coerce).',
         data: { raw: output['risk_tier'] },
-      }),
+      })
     );
   } else if (tierResult.kind === 'coerced') {
     coercions.push({
@@ -509,7 +519,7 @@ export function migrateSpecV10(
         ...(source.path !== undefined && { subject: source.path }),
         severity: 'warning',
         data: { from: tierResult.from, to: tierResult.to },
-      }),
+      })
     );
   }
   // tierResult.kind === 'already_int' → no change, no warning.
@@ -524,10 +534,9 @@ export function migrateSpecV10(
         authority: 'kernel/spec',
         message: `Cannot resolve a v11 mode from mode=${JSON.stringify(output['mode'])} type=${JSON.stringify(output['type'])}.`,
         ...(source.path !== undefined && { subject: source.path }),
-        narrowRepair:
-          'Author must set `mode` to one of feature/refactor/fix/doc/chore.',
+        narrowRepair: 'Author must set `mode` to one of feature/refactor/fix/doc/chore.',
         data: { mode: output['mode'], type: output['type'] },
-      }),
+      })
     );
   } else {
     modeSource = modeResult.source;
@@ -545,7 +554,7 @@ export function migrateSpecV10(
             resolved_mode: modeResult.value,
             source: 'type',
           },
-        }),
+        })
       );
     } else if (modeResult.source === 'mode' && modeResult.typeDisagreed) {
       warnings.push(
@@ -556,7 +565,7 @@ export function migrateSpecV10(
           ...(source.path !== undefined && { subject: source.path }),
           severity: 'warning',
           data: { mode: modeResult.value, type: output['type'] },
-        }),
+        })
       );
     }
   }
@@ -572,7 +581,7 @@ export function migrateSpecV10(
   const lifecycleResult = resolveLifecycle(
     output['lifecycle_state'],
     specId,
-    options.lifecycleMapping,
+    options.lifecycleMapping
   );
   let lifecycleMappingUsed: LifecycleMapping[string] | null = null;
   if (lifecycleResult.kind === 'unmapped') {
@@ -585,7 +594,7 @@ export function migrateSpecV10(
         narrowRepair:
           'Operator must supply --lifecycle-mapping <path> with an entry for this spec id, OR re-author the spec with one of {draft, active, closed, archived}.',
         data: { value: lifecycleResult.value, spec_id: specId },
-      }),
+      })
     );
   } else if (lifecycleResult.kind === 'mapped') {
     output['lifecycle_state'] = lifecycleResult.mapping.lifecycle_state;
@@ -608,7 +617,7 @@ export function migrateSpecV10(
           source: 'mapping',
           mapping: lifecycleResult.mapping,
         },
-      }),
+      })
     );
   }
   // lifecycleResult.kind === 'already_valid' or 'missing' → no change.
@@ -631,7 +640,7 @@ export function migrateSpecV10(
           ...(source.path !== undefined && { subject: source.path }),
           severity: 'warning',
           data: { field: key },
-        }),
+        })
       );
       delete output[key];
     }
@@ -681,7 +690,7 @@ function extractSpecId(parsed: unknown): string | null {
 
 function checkBlastRadiusModules(
   inputObj: Record<string, unknown>,
-  source: MigrateSource,
+  source: MigrateSource
 ): Diagnostic | null {
   const br = inputObj['blast_radius'];
   if (typeof br !== 'object' || br === null || Array.isArray(br)) {
@@ -709,8 +718,7 @@ function checkBlastRadiusModules(
     return diagnostic({
       rule: MIGRATE_RULES.BLAST_RADIUS_MODULES_EMPTY,
       authority: 'kernel/spec',
-      message:
-        'blast_radius.modules is an empty array; v11 requires at least one module.',
+      message: 'blast_radius.modules is an empty array; v11 requires at least one module.',
       ...(source.path !== undefined && { subject: source.path }),
       narrowRepair:
         'Author must declare blast_radius.modules; auto-synthesis from scope.in is intentionally refused.',
@@ -719,10 +727,7 @@ function checkBlastRadiusModules(
   return null;
 }
 
-function checkScopeIn(
-  inputObj: Record<string, unknown>,
-  source: MigrateSource,
-): Diagnostic | null {
+function checkScopeIn(inputObj: Record<string, unknown>, source: MigrateSource): Diagnostic | null {
   const scope = inputObj['scope'];
   if (typeof scope !== 'object' || scope === null || Array.isArray(scope)) {
     return diagnostic({
@@ -801,15 +806,20 @@ function coerceRiskTier(raw: unknown): RiskTierCoercion {
 }
 
 type ModeResolution =
-  | { kind: 'resolved'; value: string; source: 'mode'; originalMode?: unknown; typeDisagreed: boolean }
+  | {
+      kind: 'resolved';
+      value: string;
+      source: 'mode';
+      originalMode?: unknown;
+      typeDisagreed: boolean;
+    }
   | { kind: 'resolved'; value: string; source: 'type'; originalMode: unknown; typeDisagreed: false }
   | { kind: 'unresolvable' };
 
 function resolveMode(rawMode: unknown, rawType: unknown): ModeResolution {
   // Case 1: spec.mode is in v11 enum → use it.
   if (typeof rawMode === 'string' && V11_MODES.has(rawMode)) {
-    const typeIsAlsoValid =
-      typeof rawType === 'string' && V11_MODES.has(rawType);
+    const typeIsAlsoValid = typeof rawType === 'string' && V11_MODES.has(rawType);
     const typeDisagreed = typeIsAlsoValid && rawType !== rawMode;
     return {
       kind: 'resolved',
@@ -846,7 +856,7 @@ type LifecycleResolution =
 function resolveLifecycle(
   raw: unknown,
   specId: string | null,
-  mapping: LifecycleMapping | undefined,
+  mapping: LifecycleMapping | undefined
 ): LifecycleResolution {
   if (raw === undefined || raw === null) {
     return { kind: 'missing' };

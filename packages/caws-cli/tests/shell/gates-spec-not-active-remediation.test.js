@@ -12,7 +12,9 @@
  * draft is the COMMON way to reach this violation, not a corner case.
  */
 
-const { evaluateSpecCompleteness } = require('../../dist/shell/gates/local-evaluators/spec-completeness');
+const {
+  evaluateSpecCompleteness,
+} = require('../../dist/shell/gates/local-evaluators/spec-completeness');
 
 function violationFor(lifecycleState) {
   const result = evaluateSpecCompleteness({

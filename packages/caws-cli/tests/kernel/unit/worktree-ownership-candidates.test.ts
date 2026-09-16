@@ -21,10 +21,7 @@
 import { assertOwnership } from '../../../src/kernel/worktree/ownership';
 import { WORKTREE_RULES } from '../../../src/kernel/worktree/rules';
 import { isOk, isErr } from '../../../src/kernel/result/construct';
-import type {
-  SessionIdentity,
-  WorktreeRegistry,
-} from '../../../src/kernel/worktree/types';
+import type { SessionIdentity, WorktreeRegistry } from '../../../src/kernel/worktree/types';
 
 const NOW = new Date('2026-07-30T12:00:00Z');
 
@@ -53,9 +50,15 @@ describe('SESSION-CAPSULE-WORKTREE-CWD-001 — assertOwnership candidate admissi
     // direct sameSession check fails. The candidate set — the cwd-independent
     // resolution — contains the owner, so same-session is satisfied.
     const reg = registryWithOwner(OWNER);
-    const result = assertOwnership(reg, 'wt-demo', FRESH_MINT, {
-      sessionCandidates: [FRESH_MINT, OWNER],
-    }, NOW);
+    const result = assertOwnership(
+      reg,
+      'wt-demo',
+      FRESH_MINT,
+      {
+        sessionCandidates: [FRESH_MINT, OWNER],
+      },
+      NOW
+    );
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
@@ -68,9 +71,15 @@ describe('SESSION-CAPSULE-WORKTREE-CWD-001 — assertOwnership candidate admissi
     // This is the cwd-independent capsule read: the owner's capsule is found
     // even though the actor resolved to a different id.
     const reg = registryWithOwner(OWNER);
-    const result = assertOwnership(reg, 'wt-demo', FRESH_MINT, {
-      sessionCandidates: [OTHER_AGENT, OWNER],
-    }, NOW);
+    const result = assertOwnership(
+      reg,
+      'wt-demo',
+      FRESH_MINT,
+      {
+        sessionCandidates: [OTHER_AGENT, OWNER],
+      },
+      NOW
+    );
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) expect(result.value).toBeNull();
@@ -90,9 +99,15 @@ describe('SESSION-CAPSULE-WORKTREE-CWD-001 — assertOwnership candidate admissi
 
   test('A4: sessionCandidates empty array => prior behavior', () => {
     const reg = registryWithOwner(OWNER);
-    const result = assertOwnership(reg, 'wt-demo', FRESH_MINT, {
-      sessionCandidates: [],
-    }, NOW);
+    const result = assertOwnership(
+      reg,
+      'wt-demo',
+      FRESH_MINT,
+      {
+        sessionCandidates: [],
+      },
+      NOW
+    );
 
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
@@ -105,9 +120,15 @@ describe('SESSION-CAPSULE-WORKTREE-CWD-001 — assertOwnership candidate admissi
     // the safety property: the candidate set is trusted because the resolver's
     // tier-2.5 corroboration gate only admits this process's own identities.
     const reg = registryWithOwner(OWNER);
-    const result = assertOwnership(reg, 'wt-demo', FRESH_MINT, {
-      sessionCandidates: [OTHER_AGENT, FRESH_MINT],
-    }, NOW);
+    const result = assertOwnership(
+      reg,
+      'wt-demo',
+      FRESH_MINT,
+      {
+        sessionCandidates: [OTHER_AGENT, FRESH_MINT],
+      },
+      NOW
+    );
 
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
@@ -119,10 +140,16 @@ describe('SESSION-CAPSULE-WORKTREE-CWD-001 — assertOwnership candidate admissi
     // Takeover still works and still audits when authorized, even with the
     // candidate set populated and not admitting the owner.
     const reg = registryWithOwner(OWNER);
-    const result = assertOwnership(reg, 'wt-demo', FRESH_MINT, {
-      takeover: true,
-      sessionCandidates: [FRESH_MINT],
-    }, NOW);
+    const result = assertOwnership(
+      reg,
+      'wt-demo',
+      FRESH_MINT,
+      {
+        takeover: true,
+        sessionCandidates: [FRESH_MINT],
+      },
+      NOW
+    );
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {

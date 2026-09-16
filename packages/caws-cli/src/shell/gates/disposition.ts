@@ -92,10 +92,7 @@ function gateConfigFor(
   // through a string-indexable view so policy-declared gates beyond the
   // canonical set are reachable (CAWS-GATES-POLICY-DISPOSITION-DRIFT-001).
   // The shape of each value (enabled, mode) is unchanged.
-  const gates = policy.gates as Record<
-    string,
-    { enabled: boolean; mode: string } | undefined
-  >;
+  const gates = policy.gates as Record<string, { enabled: boolean; mode: string } | undefined>;
   const cfg = gates[gateId];
   if (cfg === undefined) return undefined;
   return { enabled: cfg.enabled, mode: cfg.mode as GateMode };
@@ -129,10 +126,7 @@ function orderedPolicyGateIds(policy: Policy): string[] {
   return ordered;
 }
 
-export function deriveDispositions(
-  report: GatesReport,
-  policy: Policy
-): DispositionResult {
+export function deriveDispositions(report: GatesReport, policy: Policy): DispositionResult {
   // Group violations by canonical gate name (applying mechanical aliases).
   const byGate = new Map<string, GatesViolation[]>();
   for (const v of report.violations) {

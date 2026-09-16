@@ -4,10 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { initProject } = require('../../dist/store/init-store');
-const {
-  runScopeCommand,
-  runScopePlanCommand,
-} = require('../../dist/shell/index');
+const { runScopeCommand, runScopePlanCommand } = require('../../dist/shell/index');
 const { cleanupAll, makeTempRepo } = require('../helpers/git-repo-factory');
 
 afterAll(() => {
@@ -120,7 +117,8 @@ describe('scope target-scope-claim authority handoff', () => {
         boundSpecId: 'OWNER-001',
         worktreeName: 'owned-wt',
         remediation: {
-          summary: "Path is admitted by worktree owned-wt's scope.in claim; enter that worktree before editing.",
+          summary:
+            "Path is admitted by worktree owned-wt's scope.in claim; enter that worktree before editing.",
           commands: [
             {
               command: 'caws worktree list --data',

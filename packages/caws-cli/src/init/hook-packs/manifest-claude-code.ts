@@ -215,14 +215,7 @@ export const CLAUDE_CODE_PACK: HookPackV1 = {
     'Claude Code vendor adapter: surface doc and README. ' +
     'Shared hook logic is in the `shared` pack under .caws/hooks/.',
   activation: 'restart_required',
-  lifecycleEvents: [
-    'pre_bash',
-    'pre_write',
-    'pre_edit',
-    'session_start',
-    'stop',
-    'session_end',
-  ],
+  lifecycleEvents: ['pre_bash', 'pre_write', 'pre_edit', 'session_start', 'stop', 'session_end'],
   stateModel: {
     // Reads/writes are now the union of what the shared core (installed
     // alongside) and the settings.json wiring touch. Kept here as

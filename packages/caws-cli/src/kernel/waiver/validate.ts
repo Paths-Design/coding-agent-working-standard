@@ -47,9 +47,7 @@ function isStatus(value: unknown): value is WaiverStatus {
  */
 export function validateWaiver(input: unknown): Result<Waiver> {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
-    return err(
-      waiverDiag(WAIVER_RULES.WAIVER_INVALID_ID, 'Waiver must be a YAML/JSON object.')
-    );
+    return err(waiverDiag(WAIVER_RULES.WAIVER_INVALID_ID, 'Waiver must be a YAML/JSON object.'));
   }
   const v = input as Record<string, unknown>;
 
@@ -101,18 +99,12 @@ export function validateWaiver(input: unknown): Result<Waiver> {
   const gates = v['gates'].slice() as string[];
 
   if (typeof v['reason'] !== 'string' || v['reason'].trim().length < 3) {
-    return err(
-      waiverDiag(WAIVER_RULES.WAIVER_INVALID_REASON, 'Waiver reason is required.', id)
-    );
+    return err(waiverDiag(WAIVER_RULES.WAIVER_INVALID_REASON, 'Waiver reason is required.', id));
   }
 
   if (typeof v['approved_by'] !== 'string' || v['approved_by'].trim().length === 0) {
     return err(
-      waiverDiag(
-        WAIVER_RULES.WAIVER_INVALID_APPROVED_BY,
-        'Waiver approved_by is required.',
-        id
-      )
+      waiverDiag(WAIVER_RULES.WAIVER_INVALID_APPROVED_BY, 'Waiver approved_by is required.', id)
     );
   }
 
@@ -139,11 +131,7 @@ export function validateWaiver(input: unknown): Result<Waiver> {
   // Optional scope
   let scope: Waiver['scope'];
   if (v['scope'] !== undefined) {
-    if (
-      typeof v['scope'] !== 'object' ||
-      v['scope'] === null ||
-      Array.isArray(v['scope'])
-    ) {
+    if (typeof v['scope'] !== 'object' || v['scope'] === null || Array.isArray(v['scope'])) {
       return err(
         waiverDiag(
           WAIVER_RULES.WAIVER_INVALID_GATES,

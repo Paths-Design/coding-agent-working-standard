@@ -68,10 +68,7 @@ describe('doctor unbound-active backlog aggregate', () => {
   test('the aggregate escalates to error at the configured count and says why', () => {
     const specs = Array.from({ length: 10 }, (_, i) => spec(`SPEC-${i}`));
 
-    const aggregate = findings(
-      report({ specs }),
-      DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG
-    );
+    const aggregate = findings(report({ specs }), DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG);
 
     expect(aggregate).toHaveLength(1);
     expect(aggregate[0]?.severity).toBe('error');
@@ -84,10 +81,7 @@ describe('doctor unbound-active backlog aggregate', () => {
   test('nine is still a warning — the escalation boundary is at, not below, the count', () => {
     const specs = Array.from({ length: 9 }, (_, i) => spec(`SPEC-${i}`));
 
-    const aggregate = findings(
-      report({ specs }),
-      DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG
-    );
+    const aggregate = findings(report({ specs }), DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG);
 
     expect(aggregate[0]?.severity).toBe('warning');
   });
@@ -102,14 +96,9 @@ describe('doctor unbound-active backlog aggregate', () => {
   });
 
   test('the truncated message never truncates data.spec_ids', () => {
-    const specs = Array.from({ length: 12 }, (_, i) =>
-      spec(`SPEC-${String(i).padStart(2, '0')}`)
-    );
+    const specs = Array.from({ length: 12 }, (_, i) => spec(`SPEC-${String(i).padStart(2, '0')}`));
 
-    const aggregate = findings(
-      report({ specs }),
-      DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG
-    )[0];
+    const aggregate = findings(report({ specs }), DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG)[0];
 
     expect(aggregate?.message).toContain('+7 more');
     expect(aggregate?.message).toContain('full list in data.spec_ids');

@@ -130,7 +130,9 @@ test('A2: a conflicting canonical edit is preserved and the stale state is audit
   expect(result.ok).toBe(true);
   expect(result.value.kind).toBe('success');
   expect(result.value.data.canonical_checkout_state).toBe('stale');
-  expect(result.value.data.canonical_checkout_sync_error).toMatch(/would be overwritten|not uptodate/i);
+  expect(result.value.data.canonical_checkout_sync_error).toMatch(
+    /would be overwritten|not uptodate/i
+  );
   expect(result.value.data.canonical_checkout_repair_command).toMatch(
     /^git read-tree -u -m [0-9a-f]{40} [0-9a-f]{40}$/
   );

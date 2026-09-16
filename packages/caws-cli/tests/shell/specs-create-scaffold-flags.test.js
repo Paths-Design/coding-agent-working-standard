@@ -102,7 +102,11 @@ describe('A1: the flags populate the fields the template scaffolds', () => {
     const validate = spawnSync(
       process.execPath,
       [CLI, 'specs', 'validate', '.caws/specs/SCAFFOLD-A1-002.yaml'],
-      { cwd: root, encoding: 'utf8', env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'test-session' } }
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'test-session' },
+      }
     );
     expect(validate.status).toBe(0);
     expect(validate.stdout).toContain('is valid');
@@ -214,12 +218,28 @@ describe('the Commander wiring is real, not just the handler', () => {
     const run = spawnSync(
       process.execPath,
       [
-        CLI, 'specs', 'create', 'SCAFFOLD-CLI-001',
-        '--title', 'cli path', '--mode', 'chore', '--risk-tier', '3',
-        '--module', 'packages/from-cli', '--module', 'packages/second',
-        '--invariant', 'invariant from cli',
+        CLI,
+        'specs',
+        'create',
+        'SCAFFOLD-CLI-001',
+        '--title',
+        'cli path',
+        '--mode',
+        'chore',
+        '--risk-tier',
+        '3',
+        '--module',
+        'packages/from-cli',
+        '--module',
+        'packages/second',
+        '--invariant',
+        'invariant from cli',
       ],
-      { cwd: root, encoding: 'utf8', env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'test-session' } }
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: { ...process.env, CLAUDE_CODE_SESSION_ID: 'test-session' },
+      }
     );
     expect(run.status).toBe(0);
 

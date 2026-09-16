@@ -18,10 +18,10 @@ for `packages/caws-cli/scripts/validate-docs.mjs`.
 
 Front-matter makes a doc's identity, authority, lifecycle, and **audience**
 machine-readable. The audience field in particular lets the npm-package
-ship-list be *derived* from the docs themselves (`audience: consumer`) rather
+ship-list be _derived_ from the docs themselves (`audience: consumer`) rather
 than hand-maintained — so a doc declares once whether consumers should receive
-it, and tooling does the rest. This mirrors the proven convention in the
-sibling Sterling project.
+it, and tooling does the rest. This mirrors the proven convention in the sibling
+Sterling project.
 
 ## The schema
 
@@ -41,14 +41,14 @@ audience: consumer
 
 ### Required fields
 
-| Field | Meaning |
-|---|---|
-| `doc_id` | Stable kebab-case identifier, unique within `docs/`. |
-| `authority` | The doc's normative weight (enum below). |
-| `status` | Lifecycle state (enum below). |
-| `title` | Human-readable title. |
-| `owner` | Who maintains it. |
-| `updated` | ISO date (`YYYY-MM-DD`) of last substantive update. |
+| Field       | Meaning                                              |
+| ----------- | ---------------------------------------------------- |
+| `doc_id`    | Stable kebab-case identifier, unique within `docs/`. |
+| `authority` | The doc's normative weight (enum below).             |
+| `status`    | Lifecycle state (enum below).                        |
+| `title`     | Human-readable title.                                |
+| `owner`     | Who maintains it.                                    |
+| `updated`   | ISO date (`YYYY-MM-DD`) of last substantive update.  |
 
 ### `authority` enum
 
@@ -65,7 +65,7 @@ carry a `superseded_by:` field naming its replacement's `doc_id`.
 `consumer` — written for someone who installs and uses `@paths.design/caws-cli`.
 These docs are candidates for the npm-package ship-list.
 
-`maintainer` — written for someone working *on* CAWS (architecture, failure
+`maintainer` — written for someone working _on_ CAWS (architecture, failure
 lineage, release procedure, internal reports). Not shipped to consumers.
 
 ## Enforcement: the strict set and the toggle
@@ -73,9 +73,9 @@ lineage, release procedure, internal reports). Not shipped to consumers.
 The validator (`packages/caws-cli/scripts/validate-docs.mjs`) does **not** yet
 enforce the schema across all of `docs/`. It enforces a declared **strict set**
 — the consumer-facing docs plus this standards doc — and treats every other doc
-as a non-failing warning. The strict set is a plain data array in the
-validator (`STRICT_SET`), so widening enforcement repo-wide is a one-line edit,
-or a `--all` run:
+as a non-failing warning. The strict set is a plain data array in the validator
+(`STRICT_SET`), so widening enforcement repo-wide is a one-line edit, or a
+`--all` run:
 
 ```bash
 # Enforce the strict set (default; what CI runs today):
@@ -93,13 +93,13 @@ violations; `2` = usage/IO error. The validator **fails closed** — a strict-se
 doc whose front-matter block is unparseable YAML is a violation, not a skip.
 
 This staged design lets the consumer-doc surface be enforced immediately while
-the ~30 maintainer docs are migrated incrementally. When every doc carries
-valid front-matter, flip the strict set to all of `docs/` (or wire `--all` into
-CI) and delete the narrow list.
+the ~30 maintainer docs are migrated incrementally. When every doc carries valid
+front-matter, flip the strict set to all of `docs/` (or wire `--all` into CI)
+and delete the narrow list.
 
 ## Adding a new doc
 
 1. Add the front-matter block with all required fields and an `audience`.
-2. If it is consumer-facing, set `audience: consumer` and (in a later slice)
-   it will be picked up by the package ship-list automatically.
+2. If it is consumer-facing, set `audience: consumer` and (in a later slice) it
+   will be picked up by the package ship-list automatically.
 3. Run `node packages/caws-cli/scripts/validate-docs.mjs` before committing.

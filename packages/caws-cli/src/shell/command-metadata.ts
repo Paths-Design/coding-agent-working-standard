@@ -27,12 +27,7 @@
 //     push"). The lock test cannot verify prose accuracy — co-location +
 //     same-slice scope.in is the discipline that keeps it honest.
 
-import {
-  EVIDENCE_STATUSES,
-  RISK_TIERS,
-  SPEC_MODES,
-  SPEC_RESOLUTIONS,
-} from '../kernel';
+import { EVIDENCE_STATUSES, RISK_TIERS, SPEC_MODES, SPEC_RESOLUTIONS } from '../kernel';
 import { SPECS_LIST_STATUSES } from '../store/specs-writer';
 import { KNOWN_SURFACES } from '../init/hook-packs/register';
 
@@ -150,8 +145,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
   options: [
     {
       flag: '--status <status>',
-      description:
-        'Compatibility handoff to caws specs list --status <status>',
+      description: 'Compatibility handoff to caws specs list --status <status>',
       allowedValues: SPECS_LIST_STATUSES,
     },
     DATA_OPTION,
@@ -264,8 +258,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         },
         {
           flag: '--type <type>',
-          description:
-            'Removed v10 alias; use --mode <feature|refactor|fix|doc|chore> instead',
+          description: 'Removed v10 alias; use --mode <feature|refactor|fix|doc|chore> instead',
           // CAWS-SPECS-CREATE-HIDE-LEGACY-TYPE-001: keep --type parseable (so a v10
           // `--type` invocation hits the handler's "use --mode" migration error,
           // not Commander's generic "unknown option"), but hide it from --help so
@@ -334,7 +327,11 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
     {
       kind: 'leaf',
       name: 'restore',
-      argument: { name: 'id', required: true, description: 'Archived or retired spec id to restore' },
+      argument: {
+        name: 'id',
+        required: true,
+        description: 'Archived or retired spec id to restore',
+      },
       description:
         'Restore a recoverable archived/retired spec body back to .caws/specs/<id>.yaml as draft or active. Dry-run by default; --apply writes the validated body and appends spec_restored. Restore refuses to overwrite an existing canonical spec and clears stale terminal lifecycle/worktree fields.',
       options: [
@@ -379,11 +376,13 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         },
         {
           flag: '--include-bound',
-          description: 'Allow bound draft specs to appear as candidates; default refuses bound drafts',
+          description:
+            'Allow bound draft specs to appear as candidates; default refuses bound drafts',
         },
         {
           flag: '--apply',
-          description: 'Retire selected candidate drafts. Requires --include or explicit --older-than-ms.',
+          description:
+            'Retire selected candidate drafts. Requires --include or explicit --older-than-ms.',
         },
         {
           flag: '--reason <text>',
@@ -413,7 +412,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
       name: 'amend-scope',
       argument: { name: 'id', required: true, description: 'Active or draft spec id to amend' },
       description:
-        'Amend a spec\'s scope.in/scope.out/scope.support on the canonical control plane (active/draft only). The sanctioned way to add a path you need to edit — no git cherry-pick, no danger latch. Writes only canonical .caws/specs/<id>; scope check from a linked worktree admits the added path immediately. Comment-preserving; validate-before-write; appends spec_scope_amended.',
+        "Amend a spec's scope.in/scope.out/scope.support on the canonical control plane (active/draft only). The sanctioned way to add a path you need to edit — no git cherry-pick, no danger latch. Writes only canonical .caws/specs/<id>; scope check from a linked worktree admits the added path immediately. Comment-preserving; validate-before-write; appends spec_scope_amended.",
       options: [
         {
           flag: '--allow-foreign-branch',
@@ -421,13 +420,45 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
             'CANONICAL-DRIFT-GUARDS-001: deliberately author this lifecycle commit on a foreign (parked) branch. Without it, the command refuses when the canonical HEAD is off-base while worktrees are active.',
         },
 
-        { flag: '--add <path>', description: 'Add a scope.in path — editable AND worktree-claimed (repeatable)', collect: true },
-        { flag: '--remove <path>', description: 'Remove a matching scope.in path — file or directory, matched by logical value regardless of quoting (repeatable)', collect: true },
-        { flag: '--add-out <path>', description: 'Add a scope.out path. NOTE: the no-glob rule is an ADD-time schema constraint (file or directory paths only); removal has no such restriction (repeatable)', collect: true },
-        { flag: '--remove-out <path>', description: 'Remove a matching scope.out path — file or directory, matched by logical value regardless of quoting (repeatable)', collect: true },
-        { flag: '--add-support <path>', description: 'Add a scope.support path — editable like scope.in but NOT worktree-claimed (use for repo-root deliverables; repeatable)', collect: true },
-        { flag: '--remove-support <path>', description: 'Remove a matching scope.support path — matched by logical value regardless of quoting (repeatable)', collect: true },
-        { flag: '--reason <text>', description: 'Optional operator rationale recorded on the spec_scope_amended event' },
+        {
+          flag: '--add <path>',
+          description: 'Add a scope.in path — editable AND worktree-claimed (repeatable)',
+          collect: true,
+        },
+        {
+          flag: '--remove <path>',
+          description:
+            'Remove a matching scope.in path — file or directory, matched by logical value regardless of quoting (repeatable)',
+          collect: true,
+        },
+        {
+          flag: '--add-out <path>',
+          description:
+            'Add a scope.out path. NOTE: the no-glob rule is an ADD-time schema constraint (file or directory paths only); removal has no such restriction (repeatable)',
+          collect: true,
+        },
+        {
+          flag: '--remove-out <path>',
+          description:
+            'Remove a matching scope.out path — file or directory, matched by logical value regardless of quoting (repeatable)',
+          collect: true,
+        },
+        {
+          flag: '--add-support <path>',
+          description:
+            'Add a scope.support path — editable like scope.in but NOT worktree-claimed (use for repo-root deliverables; repeatable)',
+          collect: true,
+        },
+        {
+          flag: '--remove-support <path>',
+          description:
+            'Remove a matching scope.support path — matched by logical value regardless of quoting (repeatable)',
+          collect: true,
+        },
+        {
+          flag: '--reason <text>',
+          description: 'Optional operator rationale recorded on the spec_scope_amended event',
+        },
         DATA_OPTION,
       ],
     },
@@ -468,8 +499,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         },
         {
           flag: '--merge-commit <sha>',
-          description:
-            'Optional merge commit SHA (e.g., when closure follows a worktree merge)',
+          description: 'Optional merge commit SHA (e.g., when closure follows a worktree merge)',
         },
         {
           flag: '--superseded-by <id>',
@@ -481,11 +511,19 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
     {
       kind: 'leaf',
       name: 'evidence',
-      argument: { name: 'id', required: true, description: 'Active or draft spec id to record evidence for' },
+      argument: {
+        name: 'id',
+        required: true,
+        description: 'Active or draft spec id to record evidence for',
+      },
       description:
         "Record per-criterion verified status (AC evidence) on the spec's evidence: block — the CLOSURE AUTHORITY read by the close gate. Dual-writes: patches the spec block AND appends an ac_recorded event in one transaction. This is the ONLY command that writes the block (`caws evidence record --type ac` is refused and redirects here). The close gate WARNS when a declared AC lacks pass/waived evidence and names the criteria on close and merge; it does not currently refuse the close (warn-mode). Active/draft only (a closed/archived spec's evidence is frozen).",
       options: [
-        { flag: '--ac <id>', description: 'Acceptance criterion id (e.g. A1); must match a declared acceptance[].id', required: true },
+        {
+          flag: '--ac <id>',
+          description: 'Acceptance criterion id (e.g. A1); must match a declared acceptance[].id',
+          required: true,
+        },
         {
           flag: '--status <s>',
           // Semantically required, but NOT commander-required: the specs group
@@ -496,22 +534,35 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
           // missing/invalid check and emits rich guidance; register.ts routes
           // the value via optsWithGlobals(). Same shadow class as
           // CAWS-CLI-SPECS-ARCHIVE-STATUS-PARENT-SHADOW-001.
-          description: 'Verified status (required). pass/waived satisfy the close gate; fail/unchecked are recorded for audit but do not satisfy closure',
+          description:
+            'Verified status (required). pass/waived satisfy the close gate; fail/unchecked are recorded for audit but do not satisfy closure',
           allowedValues: EVIDENCE_STATUSES,
         },
         {
           flag: '--evidence-ref <ref>',
-          description: 'Reference to the evidence (test command, artifact path, or waiver id). Required unless --status waived (where --waiver-reason supplies it)',
+          description:
+            'Reference to the evidence (test command, artifact path, or waiver id). Required unless --status waived (where --waiver-reason supplies it)',
         },
         {
           flag: '--waiver-reason <text>',
-          description: 'Mandatory when --status waived — an undocumented waiver is indistinguishable from an oversight',
+          description:
+            'Mandatory when --status waived — an undocumented waiver is indistinguishable from an oversight',
         },
-        { flag: '--test-nodeid <id>', description: 'Optional: specific test node id (jest/vitest/pytest) when status was determined by test execution' },
+        {
+          flag: '--test-nodeid <id>',
+          description:
+            'Optional: specific test node id (jest/vitest/pytest) when status was determined by test execution',
+        },
         { flag: '--command <cmd>', description: 'Optional: the command run to determine status' },
         { flag: '--exit-code <n>', description: 'Optional: exit code of the command run' },
-        { flag: '--artifact-path <path>', description: 'Optional: artifact path evidencing the criterion' },
-        { flag: '--commit-sha <sha>', description: 'Optional: commit sha (7-40 hex chars) evidencing the criterion' },
+        {
+          flag: '--artifact-path <path>',
+          description: 'Optional: artifact path evidencing the criterion',
+        },
+        {
+          flag: '--commit-sha <sha>',
+          description: 'Optional: commit sha (7-40 hex chars) evidencing the criterion',
+        },
         DATA_OPTION,
       ],
     },
@@ -524,7 +575,8 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
       options: [
         {
           flag: '--reason <text>',
-          description: 'Optional reason recorded on the spec_reopened event (e.g. work determined incomplete)',
+          description:
+            'Optional reason recorded on the spec_reopened event (e.g. work determined incomplete)',
         },
         DATA_OPTION,
       ],
@@ -536,17 +588,61 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
       description:
         "Amend a spec's blast_radius.modules, invariants, or acceptance criteria. The first two are schema-required non-empty, so create writes a scaffolded default when no flag supplies one; this is how an already-created spec replaces that default without a hand edit that bypasses the audit trail. Acceptance flags (--set-ac/--add-ac/--remove-ac) amend a criterion's Given/When/Then text — exactly one AC op per invocation — and reset that criterion's recorded evidence in the same transaction, because a rewritten claim must never keep the proof of the old text. Appends spec_body_amended. Draft and active specs allow add, remove, and rewrite. A CLOSED spec allows only filling a field still holding its scaffolded default (for acceptance: all three fields, and only while the criterion carries no evidence) — a concluded record may have a blank filled, never a claim rewritten. Archived specs are refused (restore first). For scope, use caws specs amend-scope.",
       options: [
-        { flag: '--add-module <text>', description: 'Add a blast_radius.modules entry (repeatable). Replaces the scaffolded default when that is the only entry.', collect: true },
-        { flag: '--remove-module <text>', description: 'Remove a blast_radius.modules entry (repeatable); matches the logical value regardless of quoting.', collect: true },
-        { flag: '--add-invariant <text>', description: 'Add an invariants entry (repeatable). Replaces the scaffolded default when that is the only entry.', collect: true },
-        { flag: '--remove-invariant <text>', description: 'Remove an invariants entry (repeatable); matches the logical value regardless of quoting.', collect: true },
-        { flag: '--set-ac <id>', description: "Rewrite an existing acceptance criterion's text (e.g. A2). Pair with --given/--when/--then; fields not supplied keep their wording. Resets the criterion's evidence to unchecked." },
-        { flag: '--add-ac <id>', description: 'Declare a NEW acceptance criterion. Requires --given, --when, and --then. Refuses an id that already exists (use --set-ac to rewrite).' },
-        { flag: '--remove-ac <id>', description: "Remove an acceptance criterion and its evidence entry. Refused when it is the only criterion (schema minItems 1)." },
-        { flag: '--given <text>', description: "Criterion's Given text (with --set-ac or --add-ac)." },
-        { flag: '--when <text>', description: "Criterion's When text (with --set-ac or --add-ac)." },
-        { flag: '--then <text>', description: "Criterion's Then text (with --set-ac or --add-ac)." },
-        { flag: '--reason <text>', description: 'Optional rationale recorded verbatim on the spec_body_amended event.' },
+        {
+          flag: '--add-module <text>',
+          description:
+            'Add a blast_radius.modules entry (repeatable). Replaces the scaffolded default when that is the only entry.',
+          collect: true,
+        },
+        {
+          flag: '--remove-module <text>',
+          description:
+            'Remove a blast_radius.modules entry (repeatable); matches the logical value regardless of quoting.',
+          collect: true,
+        },
+        {
+          flag: '--add-invariant <text>',
+          description:
+            'Add an invariants entry (repeatable). Replaces the scaffolded default when that is the only entry.',
+          collect: true,
+        },
+        {
+          flag: '--remove-invariant <text>',
+          description:
+            'Remove an invariants entry (repeatable); matches the logical value regardless of quoting.',
+          collect: true,
+        },
+        {
+          flag: '--set-ac <id>',
+          description:
+            "Rewrite an existing acceptance criterion's text (e.g. A2). Pair with --given/--when/--then; fields not supplied keep their wording. Resets the criterion's evidence to unchecked.",
+        },
+        {
+          flag: '--add-ac <id>',
+          description:
+            'Declare a NEW acceptance criterion. Requires --given, --when, and --then. Refuses an id that already exists (use --set-ac to rewrite).',
+        },
+        {
+          flag: '--remove-ac <id>',
+          description:
+            'Remove an acceptance criterion and its evidence entry. Refused when it is the only criterion (schema minItems 1).',
+        },
+        {
+          flag: '--given <text>',
+          description: "Criterion's Given text (with --set-ac or --add-ac).",
+        },
+        {
+          flag: '--when <text>',
+          description: "Criterion's When text (with --set-ac or --add-ac).",
+        },
+        {
+          flag: '--then <text>',
+          description: "Criterion's Then text (with --set-ac or --add-ac).",
+        },
+        {
+          flag: '--reason <text>',
+          description: 'Optional rationale recorded verbatim on the spec_body_amended event.',
+        },
         DATA_OPTION,
       ],
     },
@@ -559,7 +655,8 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
       options: [
         {
           flag: '--reason <text>',
-          description: 'Optional reason recorded on the spec_deactivated event (e.g. activated against the wrong id)',
+          description:
+            'Optional reason recorded on the spec_deactivated event (e.g. activated against the wrong id)',
         },
         DATA_OPTION,
       ],
@@ -586,15 +683,18 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         },
         {
           flag: '--older-than-ms <ms>',
-          description: 'Batch selector: archive only closed specs whose updated_at/created_at age is at least this many milliseconds',
+          description:
+            'Batch selector: archive only closed specs whose updated_at/created_at age is at least this many milliseconds',
         },
         {
           flag: '--updated-before <timestamp>',
-          description: 'Batch selector: archive only closed specs whose updated_at/created_at timestamp is before this cutoff',
+          description:
+            'Batch selector: archive only closed specs whose updated_at/created_at timestamp is before this cutoff',
         },
         {
           flag: '--without-worktree',
-          description: 'Batch selector: archive only closed specs that do not still carry a worktree binding',
+          description:
+            'Batch selector: archive only closed specs that do not still carry a worktree binding',
         },
         {
           flag: '--replace',
@@ -649,20 +749,34 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
     {
       kind: 'leaf',
       name: 'validate',
-      argument: { name: 'file', required: true, description: 'Path to the spec YAML file to validate' },
+      argument: {
+        name: 'file',
+        required: true,
+        description: 'Path to the spec YAML file to validate',
+      },
       description:
-        'Validate a spec YAML FILE on disk using the CLI\'s own bundled parser and the kernel parse->shape->semantics pipeline. Path-shaped (takes a file path, not a spec id); does NOT resolve .caws/, read canonical state, or mutate anything. Exits 0 when valid, non-zero with a rendered diagnostic when invalid or unreadable. Lets hooks/CI validate spec YAML without carrying their own parser dependency — works for any consumer project regardless of language.',
+        "Validate a spec YAML FILE on disk using the CLI's own bundled parser and the kernel parse->shape->semantics pipeline. Path-shaped (takes a file path, not a spec id); does NOT resolve .caws/, read canonical state, or mutate anything. Exits 0 when valid, non-zero with a rendered diagnostic when invalid or unreadable. Lets hooks/CI validate spec YAML without carrying their own parser dependency — works for any consumer project regardless of language.",
       options: [DATA_OPTION],
     },
     {
       kind: 'leaf',
       name: 'relocate',
-      argument: { name: 'id', required: true, description: 'Spec id whose YAML should move to base' },
+      argument: {
+        name: 'id',
+        required: true,
+        description: 'Spec id whose YAML should move to base',
+      },
       description:
         'CANONICAL-DRIFT-GUARDS-001 (Entry 37 recovery): move a spec YAML from a mis-parked canonical branch onto the base branch WITHOUT touching any working tree — object-db plumbing (read the parked copy, graft onto base via a private temp index, commit-tree, compare-and-swap the base ref; bounded retry on contention). Dry-run by default; --apply performs. The audit is the commit on base itself. Base branch resolves from the worktree registry (unique baseBranch required).',
       options: [
-        { flag: '--to-base', description: 'Accepted for explicitness; to-base is the only v1 target.' },
-        { flag: '--apply', description: 'Perform the relocation (default is a read-only dry-run plan).' },
+        {
+          flag: '--to-base',
+          description: 'Accepted for explicitness; to-base is the only v1 target.',
+        },
+        {
+          flag: '--apply',
+          description: 'Perform the relocation (default is a read-only dry-run plan).',
+        },
         DATA_OPTION,
       ],
     },
@@ -687,7 +801,11 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
       description:
         'Create a new git worktree under .caws/worktrees/<name> bound to an active spec. Also links recognized git-ignored dependency/cache artifacts (node_modules, .pnpm-store, Python venvs, Rust target, Swift .build) from the canonical checkout into the worktree as relative symlinks, reported under an "Artifacts:" block with unlink/install guidance. Linking is advisory (create never fails on it), skips paths that already exist in the worktree, and skips on lock/manifest divergence. A linked artifact shares the canonical directory: run the printed unlink command before installing if the worktree branch changes dependency manifests.',
       options: [
-        { flag: '--spec <id>', required: true, description: 'Active spec id to bind the worktree to' },
+        {
+          flag: '--spec <id>',
+          required: true,
+          description: 'Active spec id to bind the worktree to',
+        },
         {
           flag: '--base-branch <branch>',
           description: 'Base branch to start from (default: current branch)',
@@ -699,7 +817,8 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
     {
       kind: 'leaf',
       name: 'list',
-      description: 'List registered worktrees with branch, lane divergence from base (ahead/behind), spec binding, and owner.',
+      description:
+        'List registered worktrees with branch, lane divergence from base (ahead/behind), spec binding, and owner.',
       options: [DATA_OPTION],
     },
     {
@@ -785,7 +904,10 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
       description:
         'Merge a worktree branch into its base. Auto-closes the bound spec via caws specs close.',
       options: [
-        { flag: '--dry-run', description: 'Validate prerequisites only; no git, no file writes, no events' },
+        {
+          flag: '--dry-run',
+          description: 'Validate prerequisites only; no git, no file writes, no events',
+        },
         {
           flag: '--apply',
           description:
@@ -835,7 +957,10 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
       description:
         'Repair the unambiguous worktree/spec half-states the doctor surfaces: prune a ghost registry entry (H1) and clear a dead spec->worktree binding (H4 ghost, H3 dormant). Consumes the doctor diagnostics + §1.4 decision matrix as authority; never re-derives policy. Refuses ambiguous/forbidden classes (H2, H3-active, H5, H6, event-orphan) with a doctrine pointer and zero mutation. NEVER creates or deletes a git worktree directory.',
       options: [
-        { flag: '--dry-run', description: 'Report each H-class, subject, planned mutation, and event; write nothing.' },
+        {
+          flag: '--dry-run',
+          description: 'Report each H-class, subject, planned mutation, and event; write nothing.',
+        },
         DATA_OPTION,
       ],
     },
@@ -922,64 +1047,204 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
 // LeafCommandMeta entries at the top of COMMAND_SURFACE_METADATA. register.ts
 // consumes them via the defineFlat helper.
 
-const INIT_PLAN: CommandOptionMeta = { flag: '--plan', description: 'Read-only preview; do not apply changes.' };
-const INIT_DRY_RUN: CommandOptionMeta = { flag: '--dry-run', description: 'Compatibility alias for --plan; never writes.' };
-const INIT_JSON: CommandOptionMeta = { flag: '--json', description: 'Emit the result or preview as JSON.' };
-const INIT_SURFACE: CommandOptionMeta = { flag: '--agent-surface <name>', description: 'Select the native harness; a configured system surface inherits machine hooks without project copies', allowedValues: KNOWN_SURFACES };
+const INIT_PLAN: CommandOptionMeta = {
+  flag: '--plan',
+  description: 'Read-only preview; do not apply changes.',
+};
+const INIT_DRY_RUN: CommandOptionMeta = {
+  flag: '--dry-run',
+  description: 'Compatibility alias for --plan; never writes.',
+};
+const INIT_JSON: CommandOptionMeta = {
+  flag: '--json',
+  description: 'Emit the result or preview as JSON.',
+};
+const INIT_SURFACE: CommandOptionMeta = {
+  flag: '--agent-surface <name>',
+  description:
+    'Select the native harness; a configured system surface inherits machine hooks without project copies',
+  allowedValues: KNOWN_SURFACES,
+};
 const INIT_PREVIEW = [INIT_PLAN, INIT_DRY_RUN, INIT_JSON, DATA_OPTION];
-const INIT_POLICY: CommandOptionMeta = { flag: '--from <file>', description: 'Read a reviewed surface-policy JSON file: disabled, extensions, handlers, libraries. Single project only; preserves classified custom behavior.' };
-const INIT_GOVERNANCE: CommandOptionMeta = { flag: '--from <file>', description: 'Read a reviewed governance-conversion JSON plan: version, reason, requirementNotes, changes. Original source hashes are verified before application.' };
+const INIT_POLICY: CommandOptionMeta = {
+  flag: '--from <file>',
+  description:
+    'Read a reviewed surface-policy JSON file: disabled, extensions, handlers, libraries. Single project only; preserves classified custom behavior.',
+};
+const INIT_GOVERNANCE: CommandOptionMeta = {
+  flag: '--from <file>',
+  description:
+    'Read a reviewed governance-conversion JSON plan: version, reason, requirementNotes, changes. Original source hashes are verified before application.',
+};
 const INIT_INSTALL: LeafCommandMeta = {
-  kind: 'leaf', name: 'install',
-  description: 'Install or update the shared runtime under CAWS_HOME (default ~/.caws). Applies by default; --plan previews. Does not upgrade the CLI package or register a native harness. Example: caws init adapters install --plan --json',
+  kind: 'leaf',
+  name: 'install',
+  description:
+    'Install or update the shared runtime under CAWS_HOME (default ~/.caws). Applies by default; --plan previews. Does not upgrade the CLI package or register a native harness. Example: caws init adapters install --plan --json',
   options: INIT_PREVIEW,
 };
 const INIT_MIGRATE_PREVIEW: LeafCommandMeta = {
-  kind: 'leaf', name: 'migrate',
-  description: 'Preview reviewed legacy governance conversion without writes. Example: caws init migrate --from reviewed-governance.json. Use migrate apply to execute.',
+  kind: 'leaf',
+  name: 'migrate',
+  description:
+    'Preview reviewed legacy governance conversion without writes. Example: caws init migrate --from reviewed-governance.json. Use migrate apply to execute.',
   options: [INIT_GOVERNANCE, ...INIT_PREVIEW],
 };
 const INIT_BOOTSTRAP: LeafCommandMeta = {
-  kind: 'leaf', name: 'init',
-  description: 'Initialize project-owned .caws governance and managed ignore rules. Configured harnesses inherit the shared runtime. Unconfigured harnesses retain legacy pack installation compatibility. Example: caws init --agent-surface codex --plan',
+  kind: 'leaf',
+  name: 'init',
+  description:
+    'Initialize project-owned .caws governance and managed ignore rules. Configured harnesses inherit the shared runtime. Unconfigured harnesses retain legacy pack installation compatibility. Example: caws init --agent-surface codex --plan',
   options: [
-    { ...INIT_PLAN, description: 'Preview canonical state, managed ignore rules and effective harness configuration without writing anything.' },
-    { ...INIT_DRY_RUN, description: 'Compatibility alias for --plan; previews init changes without writing anything.' },
+    {
+      ...INIT_PLAN,
+      description:
+        'Preview canonical state, managed ignore rules and effective harness configuration without writing anything.',
+    },
+    {
+      ...INIT_DRY_RUN,
+      description:
+        'Compatibility alias for --plan; previews init changes without writing anything.',
+    },
     { ...INIT_JSON, description: 'Emit the read-only init plan as JSON with --plan or --dry-run.' },
-    DATA_OPTION, INIT_SURFACE,
-    { flag: '--overwrite [paths...]', description: 'Legacy packs only: preview replacement of selected drifted files (all when bare). --force applies the reviewed replacement.' },
-    { flag: '--force', description: 'Legacy packs only: apply --overwrite replacements. Invalid without --overwrite; never overrides governance migration.' },
-    { flag: '--adopt', description: 'Legacy packs only: retain local files and stop tracking pack drift for those paths.' },
-    { flag: '--wire-user-config', description: 'Legacy kimi-code only: append reviewed hook registration to user config.toml.' },
+    DATA_OPTION,
+    INIT_SURFACE,
+    {
+      flag: '--overwrite [paths...]',
+      description:
+        'Legacy packs only: preview replacement of selected drifted files (all when bare). --force applies the reviewed replacement.',
+    },
+    {
+      flag: '--force',
+      description:
+        'Legacy packs only: apply --overwrite replacements. Invalid without --overwrite; never overrides governance migration.',
+    },
+    {
+      flag: '--adopt',
+      description:
+        'Legacy packs only: retain local files and stop tracking pack drift for those paths.',
+    },
+    {
+      flag: '--wire-user-config',
+      description: 'Legacy kimi-code only: append reviewed hook registration to user config.toml.',
+    },
   ],
 };
 export const INIT_COMMAND_META: GroupCommandMeta = {
-  kind: 'group', name: 'init',
-  description: 'Project initialization and global runtime setup. Use adapters for machine installation and native configuration, migrate for legacy governance conversion, and diff/port for legacy pack maintenance.',
+  kind: 'group',
+  name: 'init',
+  description:
+    'Project initialization and global runtime setup. Use adapters for machine installation and native configuration, migrate for legacy governance conversion, and diff/port for legacy pack maintenance.',
   options: INIT_BOOTSTRAP.options,
   defaultAction: INIT_BOOTSTRAP,
   subcommands: [
     {
-      kind: 'group', name: 'adapters',
-      description: 'Machine runtime operations: install, configure, migrate, rollback and legacy adopt. With no operation, install is the compatibility default (applies unless --plan).',
+      kind: 'group',
+      name: 'adapters',
+      description:
+        'Machine runtime operations: install, configure, migrate, rollback and legacy adopt. With no operation, install is the compatibility default (applies unless --plan).',
       options: INIT_PREVIEW,
       defaultAction: { ...INIT_INSTALL, name: 'adapters' },
       subcommands: [
         INIT_INSTALL,
-        { kind: 'leaf', name: 'configure', description: 'Register the installed runtime in harness user configuration. Applies by default; --plan previews. Requires --agent-surface. Restart and verify native trust and execution separately. Example: caws init adapters configure --agent-surface codex --plan',
-          options: [INIT_SURFACE, ...INIT_PREVIEW, { flag: '--native-config-target <path>', description: 'Explicit resolved target of a user-managed native-config symlink inside the user home. Preserve the symlink and update only that target.' }] },
-        { kind: 'leaf', name: 'migrate', description: 'Retire legacy project native registrations once, after system configuration exists. Applies by default; --plan previews. Requires --agent-surface. Preserves unrelated hooks and exact backups; never migrates governance. Example: caws init adapters migrate --agent-surface codex --plan --json',
-          options: [INIT_SURFACE, INIT_POLICY, ...INIT_PREVIEW, { flag: '--projects-root <path>', description: 'Process direct Git project children independently. Incompatible with --from; projects needing review are reported without undoing successful migrations.' }] },
-        { kind: 'leaf', name: 'rollback', description: 'Restore the previous verified shared runtime through an atomic pointer swap. Applies by default; --plan previews. Does not roll back the CLI package, project policy, or native registration.', options: INIT_PREVIEW },
-        { kind: 'leaf', name: 'adopt', description: 'Legacy adapter-only compatibility operation. Applies by default; --plan previews. Requires --agent-surface. Does not globalize stock hooks or renderers; prefer configure followed by migrate.', options: [INIT_SURFACE, INIT_POLICY, ...INIT_PREVIEW] },
+        {
+          kind: 'leaf',
+          name: 'configure',
+          description:
+            'Register the installed runtime in harness user configuration. Applies by default; --plan previews. Requires --agent-surface. Restart and verify native trust and execution separately. Example: caws init adapters configure --agent-surface codex --plan',
+          options: [
+            INIT_SURFACE,
+            ...INIT_PREVIEW,
+            {
+              flag: '--native-config-target <path>',
+              description:
+                'Explicit resolved target of a user-managed native-config symlink inside the user home. Preserve the symlink and update only that target.',
+            },
+          ],
+        },
+        {
+          kind: 'leaf',
+          name: 'migrate',
+          description:
+            'Retire legacy project native registrations once, after system configuration exists. Applies by default; --plan previews. Requires --agent-surface. Preserves unrelated hooks and exact backups; never migrates governance. Example: caws init adapters migrate --agent-surface codex --plan --json',
+          options: [
+            INIT_SURFACE,
+            INIT_POLICY,
+            ...INIT_PREVIEW,
+            {
+              flag: '--projects-root <path>',
+              description:
+                'Process direct Git project children independently. Incompatible with --from; projects needing review are reported without undoing successful migrations.',
+            },
+          ],
+        },
+        {
+          kind: 'leaf',
+          name: 'rollback',
+          description:
+            'Restore the previous verified shared runtime through an atomic pointer swap. Applies by default; --plan previews. Does not roll back the CLI package, project policy, or native registration.',
+          options: INIT_PREVIEW,
+        },
+        {
+          kind: 'leaf',
+          name: 'adopt',
+          description:
+            'Legacy adapter-only compatibility operation. Applies by default; --plan previews. Requires --agent-surface. Does not globalize stock hooks or renderers; prefer configure followed by migrate.',
+          options: [INIT_SURFACE, INIT_POLICY, ...INIT_PREVIEW],
+        },
       ],
     },
-    { kind: 'group', name: 'migrate', description: INIT_MIGRATE_PREVIEW.description,
-      options: INIT_MIGRATE_PREVIEW.options, defaultAction: INIT_MIGRATE_PREVIEW,
-      subcommands: [{ kind: 'leaf', name: 'apply', description: 'Apply a reviewed legacy-governance conversion plan after preview. Original hashes must still match. Archives originals before installing validated draft governance. Example: caws init migrate apply --from reviewed-governance.json', options: [INIT_GOVERNANCE, INIT_JSON, DATA_OPTION] }],
+    {
+      kind: 'group',
+      name: 'migrate',
+      description: INIT_MIGRATE_PREVIEW.description,
+      options: INIT_MIGRATE_PREVIEW.options,
+      defaultAction: INIT_MIGRATE_PREVIEW,
+      subcommands: [
+        {
+          kind: 'leaf',
+          name: 'apply',
+          description:
+            'Apply a reviewed legacy-governance conversion plan after preview. Original hashes must still match. Archives originals before installing validated draft governance. Example: caws init migrate apply --from reviewed-governance.json',
+          options: [INIT_GOVERNANCE, INIT_JSON, DATA_OPTION],
+        },
+      ],
     },
-    { kind: 'leaf', name: 'diff', description: 'Read-only LEGACY project-pack drift comparison. System projects update their runtime once with adapters install.', options: [INIT_SURFACE, DATA_OPTION, { flag: '--three-way <path>', description: 'Compare installed bytes with their pristine baseline and current template, separating local growth from upstream changes.' }] },
-    { kind: 'leaf', name: 'port', argument: { name: 'path', required: true, description: 'Managed legacy pack destination path.' }, description: 'Apply reviewed content to one LEGACY project-pack path through the managed installer. Does not edit immutable machine runtime snapshots.', options: [INIT_SURFACE, DATA_OPTION, { flag: '--from <file>', description: 'Reviewed replacement content in a staging file outside the protected hook tree.' }] },
+    {
+      kind: 'leaf',
+      name: 'diff',
+      description:
+        'Read-only LEGACY project-pack drift comparison. System projects update their runtime once with adapters install.',
+      options: [
+        INIT_SURFACE,
+        DATA_OPTION,
+        {
+          flag: '--three-way <path>',
+          description:
+            'Compare installed bytes with their pristine baseline and current template, separating local growth from upstream changes.',
+        },
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'port',
+      argument: {
+        name: 'path',
+        required: true,
+        description: 'Managed legacy pack destination path.',
+      },
+      description:
+        'Apply reviewed content to one LEGACY project-pack path through the managed installer. Does not edit immutable machine runtime snapshots.',
+      options: [
+        INIT_SURFACE,
+        DATA_OPTION,
+        {
+          flag: '--from <file>',
+          description:
+            'Reviewed replacement content in a staging file outside the protected hook tree.',
+        },
+      ],
+    },
   ],
 };
 
@@ -1000,8 +1265,7 @@ export const DOCTOR_COMMAND_META: LeafCommandMeta = {
 export const STATUS_COMMAND_META: LeafCommandMeta = {
   kind: 'leaf',
   name: 'status',
-  description:
-    'Read-only dashboard: project, current context, claim, and doctor findings',
+  description: 'Read-only dashboard: project, current context, claim, and doctor findings',
   options: [
     { flag: '--data', description: 'Show structured data block on rendered diagnostics' },
     { flag: '--specs', description: 'Render only the focused specs panel' },
@@ -1041,8 +1305,7 @@ export const CLAIM_COMMAND_META: LeafCommandMeta = {
     },
     {
       flag: '--json',
-      description:
-        'Emit the read-only claim plan or release-paths result as JSON.',
+      description: 'Emit the read-only claim plan or release-paths result as JSON.',
     },
     {
       flag: '--release-paths',
@@ -1133,8 +1396,7 @@ export const SCOPE_COMMAND_META: GroupCommandMeta = {
         },
         {
           flag: '--json',
-          description:
-            'Emit per-path decisions, counts, and grouped remediation commands as JSON',
+          description: 'Emit per-path decisions, counts, and grouped remediation commands as JSON',
         },
         { flag: '--data', description: 'Show structured data block on diagnostics' },
       ],
@@ -1142,7 +1404,11 @@ export const SCOPE_COMMAND_META: GroupCommandMeta = {
     {
       kind: 'leaf',
       name: 'contention',
-      argument: { name: 'path', required: true, description: 'File path to check for cross-worktree claims' },
+      argument: {
+        name: 'path',
+        required: true,
+        description: 'File path to check for cross-worktree claims',
+      },
       description:
         'Report which other active worktrees (same base branch) have a bound spec whose scope.in claims <path>; always exits 0',
       options: [
@@ -1170,7 +1436,10 @@ export const GATES_COMMAND_META: GroupCommandMeta = {
         'List policy-declared gates, modes, thresholds, risk-tier budgets, and effective waiver ids. Read-only; does not run evaluators or append gate_evaluated events.',
       options: [
         { flag: '--spec <id>', description: 'Optional spec id for spec-scoped waiver matching' },
-        { flag: '--json', description: 'Emit gate summaries, risk tiers, and waiver policy as JSON.' },
+        {
+          flag: '--json',
+          description: 'Emit gate summaries, risk tiers, and waiver policy as JSON.',
+        },
         DATA_OPTION,
       ],
     },
@@ -1197,7 +1466,10 @@ export const GATES_COMMAND_META: GroupCommandMeta = {
       description:
         'Run CAWS-local policy evaluators and apply policy.gates[gate].mode to decide block/warn/skip. Appends one gate_evaluated event per policy-declared gate. Exit codes: 0/1 on gate disposition; 2 on hard composition error (no policy / report-contract failure); 3 on evidence-integrity failure (a gate_evaluated event failed to append or validate).',
       options: [
-        { flag: '--spec <id>', description: 'Spec id this gate run is about; aliases positional <spec>' },
+        {
+          flag: '--spec <id>',
+          description: 'Spec id this gate run is about; aliases positional <spec>',
+        },
         {
           flag: '--context <ctx>',
           description: 'Compatibility no-op retained from the former external quality package path',
@@ -1225,10 +1497,15 @@ export const EVIDENCE_COMMAND_META: GroupCommandMeta = {
         {
           flag: '--type <kind>',
           required: true,
-          description: 'Evidence kind: test | gate | human_decision (ac is refused — use `caws specs evidence`)',
+          description:
+            'Evidence kind: test | gate | human_decision (ac is refused — use `caws specs evidence`)',
         },
         { flag: '--spec <id>', required: true, description: 'Spec id this evidence is about' },
-        { flag: '--data <json>', required: true, description: 'Event payload as a JSON object string' },
+        {
+          flag: '--data <json>',
+          required: true,
+          description: 'Event payload as a JSON object string',
+        },
         {
           flag: '--actor-kind <kind>',
           description: 'Actor kind: agent | human | system | automation',
@@ -1243,8 +1520,15 @@ export const EVIDENCE_COMMAND_META: GroupCommandMeta = {
       description:
         'Read typed evidence events for a spec from the hash-chained events log. Read-only; verifies the event chain before listing. Filters to test|gate|ac|human_decision evidence and can narrow by --type.',
       options: [
-        { flag: '--spec <id>', required: true, description: 'Spec id whose evidence should be listed' },
-        { flag: '--type <kind>', description: 'Optional evidence kind filter: test | gate | ac | human_decision' },
+        {
+          flag: '--spec <id>',
+          required: true,
+          description: 'Spec id whose evidence should be listed',
+        },
+        {
+          flag: '--type <kind>',
+          description: 'Optional evidence kind filter: test | gate | ac | human_decision',
+        },
         { flag: '--json', description: 'Emit the evidence list as JSON.' },
         DATA_OPTION,
       ],
@@ -1259,10 +1543,7 @@ export const EVIDENCE_COMMAND_META: GroupCommandMeta = {
       },
       description:
         'Show one event from the hash-chained events log by sequence number, exact event hash, or unique event-hash prefix. Read-only; verifies the event chain before resolving the reference.',
-      options: [
-        { flag: '--json', description: 'Emit the matched event as JSON.' },
-        DATA_OPTION,
-      ],
+      options: [{ flag: '--json', description: 'Emit the matched event as JSON.' }, DATA_OPTION],
     },
     {
       kind: 'leaf',
@@ -1270,8 +1551,15 @@ export const EVIDENCE_COMMAND_META: GroupCommandMeta = {
       description:
         'Print the kernel-derived payload schema and a copy-pasteable example command for one evidence kind. Read-only; does not read or write .caws/events.jsonl. For test|gate|human_decision the example is a `caws evidence record` call; for ac it is the `caws specs evidence` call that actually writes the closure authority.',
       options: [
-        { flag: '--type <kind>', required: true, description: 'Evidence kind: test | gate | ac | human_decision' },
-        { flag: '--json', description: 'Emit schema, required fields, and example command as JSON.' },
+        {
+          flag: '--type <kind>',
+          required: true,
+          description: 'Evidence kind: test | gate | ac | human_decision',
+        },
+        {
+          flag: '--json',
+          description: 'Emit schema, required fields, and example command as JSON.',
+        },
       ],
     },
   ],
@@ -1281,8 +1569,7 @@ export const EVIDENCE_COMMAND_META: GroupCommandMeta = {
 export const EVENTS_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'events',
-  description:
-    'Read and maintain .caws/events.jsonl (list/show/rotate/migrate/verify-archive)',
+  description: 'Read and maintain .caws/events.jsonl (list/show/rotate/migrate/verify-archive)',
   subcommands: [
     {
       kind: 'leaf',
@@ -1290,7 +1577,10 @@ export const EVENTS_COMMAND_META: GroupCommandMeta = {
       description:
         'Summarize the current hash-chained events log. Read-only; verifies the chain, reports counts, latest event, recent events, and chain_rotated archive status.',
       options: [
-        { flag: '--json', description: 'Emit chain summary, rotations, and recent events as JSON.' },
+        {
+          flag: '--json',
+          description: 'Emit chain summary, rotations, and recent events as JSON.',
+        },
         {
           flag: '--limit <n>',
           description: 'Number of recent events to include (default: 20; use 0 for summary only)',
@@ -1357,7 +1647,8 @@ export const EVENTS_COMMAND_META: GroupCommandMeta = {
         },
         {
           flag: '--dry-run',
-          description: 'Preview archive path, digest, stats, and genesis event without mutating events.jsonl.',
+          description:
+            'Preview archive path, digest, stats, and genesis event without mutating events.jsonl.',
         },
         { flag: '--json', description: 'Emit the dry-run plan as JSON.' },
         {
@@ -1366,7 +1657,10 @@ export const EVENTS_COMMAND_META: GroupCommandMeta = {
           defaultValue: 'agent',
         },
         { flag: '--actor-id <id>', description: 'Override actor id (defaults to session id)' },
-        { flag: '--allow-clean', description: 'Allow rotation of a clean v11 chain (friction flag)' },
+        {
+          flag: '--allow-clean',
+          description: 'Allow rotation of a clean v11 chain (friction flag)',
+        },
       ],
     },
     {
@@ -1499,7 +1793,11 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
           required: true,
           description: 'Comma-separated handler basenames to skip (e.g. protected-paths.sh)',
         },
-        { flag: '--reason <text>', required: true, description: 'Why this reprieve is safe; recorded' },
+        {
+          flag: '--reason <text>',
+          required: true,
+          description: 'Why this reprieve is safe; recorded',
+        },
         { flag: '--approved-by <id>', required: true, description: 'Approver identity' },
         {
           flag: '--for <duration>',
@@ -1513,7 +1811,11 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
         },
         { flag: '--current', description: 'Resolve the session from env (default)' },
         { flag: '--session <id>', description: 'Explicit session id (overrides --current)' },
-        { flag: '--surface <name>', description: 'Harness provenance and legacy lookup context (default: detect); new grants use the machine session store' },
+        {
+          flag: '--surface <name>',
+          description:
+            'Harness provenance and legacy lookup context (default: detect); new grants use the machine session store',
+        },
         { flag: '--dry-run', description: 'Validate and report without writing the state file' },
         { flag: '--json', description: 'Emit the result as JSON.' },
         DATA_OPTION,
@@ -1522,11 +1824,16 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
     {
       kind: 'leaf',
       name: 'show',
-      description: 'Show the reprieve for the current (or named) session, if any, including its derived active/expired state.',
+      description:
+        'Show the reprieve for the current (or named) session, if any, including its derived active/expired state.',
       options: [
         { flag: '--current', description: 'Resolve the session from env (default)' },
         { flag: '--session <id>', description: 'Explicit session id (overrides --current)' },
-        { flag: '--surface <name>', description: 'Harness provenance and legacy lookup context (default: detect); new grants use the machine session store' },
+        {
+          flag: '--surface <name>',
+          description:
+            'Harness provenance and legacy lookup context (default: detect); new grants use the machine session store',
+        },
         { flag: '--json', description: 'Emit the record as JSON.' },
         DATA_OPTION,
       ],
@@ -1534,12 +1841,21 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
     {
       kind: 'leaf',
       name: 'revoke',
-      description: 'Revoke (delete) the reprieve for the current (or named) session. The guard resumes normal enforcement immediately. --reason is mandatory and is recorded in the audit log.',
+      description:
+        'Revoke (delete) the reprieve for the current (or named) session. The guard resumes normal enforcement immediately. --reason is mandatory and is recorded in the audit log.',
       options: [
-        { flag: '--reason <text>', required: true, description: 'Why the reprieve is being cleared; recorded' },
+        {
+          flag: '--reason <text>',
+          required: true,
+          description: 'Why the reprieve is being cleared; recorded',
+        },
         { flag: '--current', description: 'Resolve the session from env (default)' },
         { flag: '--session <id>', description: 'Explicit session id (overrides --current)' },
-        { flag: '--surface <name>', description: 'Harness provenance and legacy lookup context (default: detect); new grants use the machine session store' },
+        {
+          flag: '--surface <name>',
+          description:
+            'Harness provenance and legacy lookup context (default: detect); new grants use the machine session store',
+        },
         { flag: '--json', description: 'Emit the result as JSON.' },
         DATA_OPTION,
       ],
@@ -1547,9 +1863,14 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
     {
       kind: 'leaf',
       name: 'list',
-      description: 'List active guard reprieves across sessions, with each one\'s handlers, expiry, and derived active/expired state.',
+      description:
+        "List active guard reprieves across sessions, with each one's handlers, expiry, and derived active/expired state.",
       options: [
-        { flag: '--surface <name>', description: 'Harness provenance and legacy lookup context (default: detect); new grants use the machine session store' },
+        {
+          flag: '--surface <name>',
+          description:
+            'Harness provenance and legacy lookup context (default: detect); new grants use the machine session store',
+        },
         { flag: '--json', description: 'Emit the list as JSON.' },
         DATA_OPTION,
       ],
@@ -1571,11 +1892,18 @@ export const AGENTS_COMMAND_META: GroupCommandMeta = {
       options: [
         {
           flag: '--session-id <id>',
-          description: 'Explicit session id (required for hook-invoked usage; overrides resolveSession)',
+          description:
+            'Explicit session id (required for hook-invoked usage; overrides resolveSession)',
         },
         { flag: '--platform <p>', description: 'Platform tag (e.g., claude-code, cursor, manual)' },
-        { flag: '--reason <r>', description: 'session_start | pre_tool_use | manual_register | claim | status' },
-        { flag: '--json', description: 'Emit CAWS-native JSON to stdout (never hookSpecificOutput)' },
+        {
+          flag: '--reason <r>',
+          description: 'session_start | pre_tool_use | manual_register | claim | status',
+        },
+        {
+          flag: '--json',
+          description: 'Emit CAWS-native JSON to stdout (never hookSpecificOutput)',
+        },
         {
           flag: '--include-active-summary',
           description: 'Include active_agent_count + active_agents in JSON output',
@@ -1588,7 +1916,10 @@ export const AGENTS_COMMAND_META: GroupCommandMeta = {
       name: 'heartbeat',
       description: "Refresh this session's lease. Hook-invoked at PreToolUse. Throttle-aware.",
       options: [
-        { flag: '--session-id <id>', description: 'Explicit session id (required for hook-invoked usage)' },
+        {
+          flag: '--session-id <id>',
+          description: 'Explicit session id (required for hook-invoked usage)',
+        },
         { flag: '--platform <p>', description: 'Platform tag' },
         { flag: '--reason <r>', description: 'pre_tool_use | claim | status | manual_register' },
         {
@@ -1599,7 +1930,7 @@ export const AGENTS_COMMAND_META: GroupCommandMeta = {
         {
           flag: '--forked-from <session_id>',
           description:
-            "Parent session id — only meaningful with --session-kind fork; refused otherwise (CAWS-AGENTS-FORK-IDENTITY-001).",
+            'Parent session id — only meaningful with --session-kind fork; refused otherwise (CAWS-AGENTS-FORK-IDENTITY-001).',
         },
         {
           flag: '--throttle <ms>',
@@ -1616,7 +1947,8 @@ export const AGENTS_COMMAND_META: GroupCommandMeta = {
     {
       kind: 'leaf',
       name: 'stop',
-      description: "Mark this session's lease stopped. Hook-invoked at Stop. Warn no-op if no prior lease.",
+      description:
+        "Mark this session's lease stopped. Hook-invoked at Stop. Warn no-op if no prior lease.",
       options: [
         { flag: '--session-id <id>', description: 'Explicit session id' },
         { flag: '--platform <p>', description: 'Platform tag' },
@@ -1633,9 +1965,13 @@ export const AGENTS_COMMAND_META: GroupCommandMeta = {
         { flag: '--include-stopped', description: 'Include stopped records' },
         {
           flag: '--active',
-          description: 'Active-only (overrides --include-* flags); TTL-classified active, not raw status field',
+          description:
+            'Active-only (overrides --include-* flags); TTL-classified active, not raw status field',
         },
-        { flag: '--stale-ttl-ms <ms>', description: 'TTL for stale classification (default: 1800000 = 30m)' },
+        {
+          flag: '--stale-ttl-ms <ms>',
+          description: 'TTL for stale classification (default: 1800000 = 30m)',
+        },
         { flag: '--json', description: 'Emit CAWS-native JSON to stdout' },
         DATA_OPTION,
       ],
@@ -1645,10 +1981,7 @@ export const AGENTS_COMMAND_META: GroupCommandMeta = {
       name: 'show',
       argument: { name: 'id', required: true, description: 'Session id of the lease to show' },
       description: 'Show one lease by session id. Read-only.',
-      options: [
-        { flag: '--json', description: 'Emit CAWS-native JSON to stdout' },
-        DATA_OPTION,
-      ],
+      options: [{ flag: '--json', description: 'Emit CAWS-native JSON to stdout' }, DATA_OPTION],
     },
     {
       kind: 'leaf',
@@ -1661,8 +1994,14 @@ export const AGENTS_COMMAND_META: GroupCommandMeta = {
           description: 'Set the state: working | blocked_awaiting_human | review_ready | done',
         },
         { flag: '--clear', description: 'Remove the work-state annotation entirely' },
-        { flag: '--note <text>', description: 'Optional bounded note (max 200 chars) accompanying --set' },
-        { flag: '--session-id <id>', description: 'Explicit session id (overrides resolveSession)' },
+        {
+          flag: '--note <text>',
+          description: 'Optional bounded note (max 200 chars) accompanying --set',
+        },
+        {
+          flag: '--session-id <id>',
+          description: 'Explicit session id (overrides resolveSession)',
+        },
         { flag: '--json', description: 'Emit CAWS-native JSON to stdout' },
         DATA_OPTION,
       ],
@@ -1678,8 +2017,15 @@ export const AGENTS_COMMAND_META: GroupCommandMeta = {
           description:
             'Remove leases whose owning process is dead (active/stopping, this host, pid not alive). Mutually exclusive with --status. Foreign-host leases are never touched.',
         },
-        { flag: '--status <s>', description: 'stopped | stale | legacy (required unless --dead). legacy is status-agnostic — selects by last_active age alone, reaching records with no status field.' },
-        { flag: '--older-than-ms <ms>', description: 'Retention threshold in milliseconds (required with --status)' },
+        {
+          flag: '--status <s>',
+          description:
+            'stopped | stale | legacy (required unless --dead). legacy is status-agnostic — selects by last_active age alone, reaching records with no status field.',
+        },
+        {
+          flag: '--older-than-ms <ms>',
+          description: 'Retention threshold in milliseconds (required with --status)',
+        },
         {
           flag: '--stale-ttl-ms <ms>',
           description: 'TTL for stale classification (used with --status stale; default 30m)',
@@ -1696,13 +2042,13 @@ export const WORKING_TREE_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'working-tree',
   description:
-    'Working-tree overlap advisory surface (WORKING-TREE-PROVENANCE-GUARD-001): `check` reports whether another active session\'s claimed/modified paths overlap the current dirty tree (read-only, non-mutating); `ack` records the operator\'s explicit per-session, per-path acknowledgement that cleans up that overlap. Never authority — neither command changes scope, claim, ownership, or lifecycle state.',
+    "Working-tree overlap advisory surface (WORKING-TREE-PROVENANCE-GUARD-001): `check` reports whether another active session's claimed/modified paths overlap the current dirty tree (read-only, non-mutating); `ack` records the operator's explicit per-session, per-path acknowledgement that cleans up that overlap. Never authority — neither command changes scope, claim, ownership, or lifecycle state.",
   subcommands: [
     {
       kind: 'leaf',
       name: 'check',
       description:
-        'Report working-tree overlap with OTHER active sessions, read-only. Consumes the same predicate the PreToolUse guard uses. Exit 0 if no overlap, exit 1 if another session\'s claimed_paths / last_modified_paths overlap the dirty tree (scriptable precondition). Never mutates the tree or any .caws/ state.',
+        "Report working-tree overlap with OTHER active sessions, read-only. Consumes the same predicate the PreToolUse guard uses. Exit 0 if no overlap, exit 1 if another session's claimed_paths / last_modified_paths overlap the dirty tree (scriptable precondition). Never mutates the tree or any .caws/ state.",
       options: [
         { flag: '--json', description: 'Emit the overlap report as machine-readable JSON.' },
         DATA_OPTION,
@@ -1712,15 +2058,22 @@ export const WORKING_TREE_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'ack',
       description:
-        'Record the operator\'s explicit acknowledgement that they are cleaning up work claimed by another session. Writes a durable prior_overlap_acks audit entry on the TARGET session\'s lease (operational cache — never authority). Only records the acknowledgement; the cleanup is the operator\'s own action.',
+        "Record the operator's explicit acknowledgement that they are cleaning up work claimed by another session. Writes a durable prior_overlap_acks audit entry on the TARGET session's lease (operational cache — never authority). Only records the acknowledgement; the cleanup is the operator's own action.",
       options: [
-        { flag: '--session <id>', required: true, description: 'The other session whose overlap is being cleaned up' },
+        {
+          flag: '--session <id>',
+          required: true,
+          description: 'The other session whose overlap is being cleaned up',
+        },
         {
           flag: '--paths <path>',
           description: 'Overlapping path(s) being acknowledged (comma-separated or repeatable)',
           collect: true,
         },
-        { flag: '--target <command>', description: 'The cleanup command this ack covers (e.g. "git stash")' },
+        {
+          flag: '--target <command>',
+          description: 'The cleanup command this ack covers (e.g. "git stash")',
+        },
         DATA_OPTION,
       ],
     },
@@ -1737,11 +2090,12 @@ export const HANDOFF_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'export',
       description:
-        'Build and write the metadata-only handoff brief for a session. The brief carries session identity, lease work_state, claimed_paths (secret-bearing paths redacted to name-only per the scan-secrets pattern class), the worktree/spec binding, and prior handoff events from the audit chain — never file contents or turn transcripts. Written to .caws/handoffs/<id>.json (content-hashed snapshot). Self-export by default; `--session <id>` exports a PEER\'s brief and records the operator as the exporting authority.',
+        "Build and write the metadata-only handoff brief for a session. The brief carries session identity, lease work_state, claimed_paths (secret-bearing paths redacted to name-only per the scan-secrets pattern class), the worktree/spec binding, and prior handoff events from the audit chain — never file contents or turn transcripts. Written to .caws/handoffs/<id>.json (content-hashed snapshot). Self-export by default; `--session <id>` exports a PEER's brief and records the operator as the exporting authority.",
       options: [
         {
           flag: '--session <id>',
-          description: 'Export a PEER session\'s brief (consent-gated: the operator is recorded as the exporting authority)',
+          description:
+            "Export a PEER session's brief (consent-gated: the operator is recorded as the exporting authority)",
         },
         DATA_OPTION,
       ],
@@ -1749,9 +2103,13 @@ export const HANDOFF_COMMAND_META: GroupCommandMeta = {
     {
       kind: 'leaf',
       name: 'import',
-      argument: { name: 'file', required: true, description: 'Brief file path (absolute or .caws/handoffs/<name> shorthand)' },
+      argument: {
+        name: 'file',
+        required: true,
+        description: 'Brief file path (absolute or .caws/handoffs/<name> shorthand)',
+      },
       description:
-        'Read and shape-validate a handoff brief, surface its context (source session, work_state, claimed_paths, prior handoffs), and append exactly ONE manual_pickup event binding the brief\'s source session to the importing session. Import never mutates claims, leases, scope, or lifecycle state — provenance, never authority. A malformed brief is refused with nothing appended.',
+        "Read and shape-validate a handoff brief, surface its context (source session, work_state, claimed_paths, prior handoffs), and append exactly ONE manual_pickup event binding the brief's source session to the importing session. Import never mutates claims, leases, scope, or lifecycle state — provenance, never authority. A malformed brief is refused with nothing appended.",
       options: [DATA_OPTION],
     },
   ],
@@ -1784,7 +2142,11 @@ export const SESSION_COMMAND_META: GroupCommandMeta = {
       description:
         'Record an explicit manual handoff (MULTI-AGENT-HANDOFF-EVENT-001): the operator declares "I am continuing session X\'s work". Appends one manual_pickup event to the hash-chained audit log naming source_session, receiving_session, and the paths picked up. Use when no automated trigger (stash restore, overlap ack, claim takeover) fired but the handoff still deserves a durable record. Provenance, never authority: no lease, claim, scope, or lifecycle mutation.',
       options: [
-        { flag: '--from <session-id>', required: true, description: 'The session whose work is being picked up' },
+        {
+          flag: '--from <session-id>',
+          required: true,
+          description: 'The session whose work is being picked up',
+        },
         {
           flag: '--paths <path>',
           description: 'Path(s) being picked up (comma-separated or repeatable)',
@@ -1827,7 +2189,8 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
         },
         {
           flag: '--allow-dead',
-          description: 'Send even if the recipient is not live in the registry (escape hatch; default off)',
+          description:
+            'Send even if the recipient is not live in the registry (escape hatch; default off)',
         },
         DATA_OPTION,
       ],
@@ -1840,14 +2203,19 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
       argument: {
         name: 'message_id',
         required: false,
-        description: 'Id of the message being replied to (primary positional form; --id is the alias)',
+        description:
+          'Id of the message being replied to (primary positional form; --id is the alias)',
       },
       options: [
-        { flag: '--id <message_id>', description: 'Id of the message being replied to (alias for the positional)' },
+        {
+          flag: '--id <message_id>',
+          description: 'Id of the message being replied to (alias for the positional)',
+        },
         { flag: '--text <message>', description: 'Reply body (required, non-empty)' },
         {
           flag: '--allow-dead',
-          description: 'Send even if the recipient is not live in the registry (escape hatch; default off)',
+          description:
+            'Send even if the recipient is not live in the registry (escape hatch; default off)',
         },
         DATA_OPTION,
       ],
@@ -1858,12 +2226,19 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
       description:
         'Pull the next undelivered message addressed to you. Deliver-once. The result carries registry-derived sender context (worktree/spec/branch) when the sender has a lease. Defaults --me to this session id.',
       options: [
-        { flag: '--me <session_id>', description: 'Endpoint to poll for (default: this session id)' },
+        {
+          flag: '--me <session_id>',
+          description: 'Endpoint to poll for (default: this session id)',
+        },
         {
           flag: '--wait <ms>',
-          description: 'Block up to <ms> for a message before returning (long-poll; capped at 60000)',
+          description:
+            'Block up to <ms> for a message before returning (long-poll; capped at 60000)',
         },
-        { flag: '--peek', description: 'Show the next message without consuming it (no delivery record)' },
+        {
+          flag: '--peek',
+          description: 'Show the next message without consuming it (no delivery record)',
+        },
         {
           flag: '--receipt <auto|poll>',
           description:
@@ -1876,13 +2251,18 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
         },
         {
           flag: '--offer',
-          description: 'Reserve automatic-delivery candidates for later settlement instead of consuming on poll',
+          description:
+            'Reserve automatic-delivery candidates for later settlement instead of consuming on poll',
         },
         {
           flag: '--offer-ttl-ms <ms>',
           description: 'Offer lifetime in milliseconds (bounded to 1..300000; default 30000)',
         },
-        { flag: '--json', description: 'Emit JSON ({message, messages, sender?, waiting, poll_ms}) instead of human text' },
+        {
+          flag: '--json',
+          description:
+            'Emit JSON ({message, messages, sender?, waiting, poll_ms}) instead of human text',
+        },
         DATA_OPTION,
       ],
     },
@@ -1897,8 +2277,14 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
         description: 'Exact offer occurrence id returned by message poll --offer',
       },
       options: [
-        { flag: '--me <session_id>', description: 'Recipient bound into the offer (default: this session id)' },
-        { flag: '--outcome <delivered|released>', description: 'Settlement outcome (default: delivered)' },
+        {
+          flag: '--me <session_id>',
+          description: 'Recipient bound into the offer (default: this session id)',
+        },
+        {
+          flag: '--outcome <delivered|released>',
+          description: 'Settlement outcome (default: delivered)',
+        },
         { flag: '--json', description: 'Emit JSON ({ok, settlement})' },
         DATA_OPTION,
       ],
@@ -1909,7 +2295,10 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
       description:
         'List undelivered messages addressed to you without consuming them. Read-only; poll remains the delivery-consuming command.',
       options: [
-        { flag: '--me <session_id>', description: 'Endpoint inbox to list (default: this session id; ignored with --all)' },
+        {
+          flag: '--me <session_id>',
+          description: 'Endpoint inbox to list (default: this session id; ignored with --all)',
+        },
         { flag: '--limit <n>', description: 'Maximum messages to print from the waiting queue' },
         {
           flag: '--all',
@@ -1928,7 +2317,10 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
       options: [
         { flag: '--me <session_id>', description: 'This endpoint (default: this session id)' },
         { flag: '--with <session_id>', description: 'Other endpoint in the channel (required)' },
-        { flag: '--limit <n>', description: 'Maximum recent messages to print, preserving log order' },
+        {
+          flag: '--limit <n>',
+          description: 'Maximum recent messages to print, preserving log order',
+        },
         { flag: '--json', description: 'Emit JSON ({ok, read_only, channel, total, messages})' },
         DATA_OPTION,
       ],
@@ -1937,14 +2329,17 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'status',
       description:
-        "Observe one message's delivery state (queued vs delivered, with timestamps) — lets a sender distinguish \"queued\" from \"seen\" without polling the recipient. Read-only.",
+        'Observe one message\'s delivery state (queued vs delivered, with timestamps) — lets a sender distinguish "queued" from "seen" without polling the recipient. Read-only.',
       argument: {
         name: 'message_id',
         required: false,
         description: 'Id of the message to observe (primary positional form; --id is the alias)',
       },
       options: [
-        { flag: '--id <message_id>', description: 'Id of the message to observe (alias for the positional)' },
+        {
+          flag: '--id <message_id>',
+          description: 'Id of the message to observe (alias for the positional)',
+        },
         {
           flag: '--mine',
           description:
@@ -1952,13 +2347,18 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
         },
         {
           flag: '--queued',
-          description: 'With --mine: restrict to still-undelivered sends (required pairing for the dead-letter view).',
+          description:
+            'With --mine: restrict to still-undelivered sends (required pairing for the dead-letter view).',
         },
         {
           flag: '--older-than-ms <ms>',
-          description: 'With --mine --queued: only list sends queued at least this long (default 3600000 = 1h).',
+          description:
+            'With --mine --queued: only list sends queued at least this long (default 3600000 = 1h).',
         },
-        { flag: '--json', description: 'Emit JSON ({ok, read_only, message, delivered, delivered_at?})' },
+        {
+          flag: '--json',
+          description: 'Emit JSON ({ok, read_only, message, delivered, delivered_at?})',
+        },
         DATA_OPTION,
       ],
     },
@@ -1990,7 +2390,8 @@ export const MESSAGE_COMMAND_META: GroupCommandMeta = {
         },
         {
           flag: '--apply',
-          description: 'Rewrite .caws/messages.jsonl to remove selected messages (archived first to .caws/messages.jsonl.archive with a selector marker)',
+          description:
+            'Rewrite .caws/messages.jsonl to remove selected messages (archived first to .caws/messages.jsonl.archive with a selector marker)',
         },
         { flag: '--json', description: 'Emit JSON prune plan/result' },
         DATA_OPTION,

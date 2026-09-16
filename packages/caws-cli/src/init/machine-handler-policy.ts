@@ -24,8 +24,11 @@ export function extractMachineHandlers(text: string, reference: string): string[
   for (const flags of ['', ' --short-circuit-on-block']) {
     const invocation = `run_handlers${flags} "\${HANDLERS[@]}"`;
     const guarded = [
-      'if (( ${#HANDLERS[@]} > 0 )); then', invocation,
-      'else', `run_handlers${flags}`, 'fi',
+      'if (( ${#HANDLERS[@]} > 0 )); then',
+      invocation,
+      'else',
+      `run_handlers${flags}`,
+      'fi',
     ].join('\n');
     if (currentSkeleton.endsWith(guarded))
       previousSkeleton = currentSkeleton.slice(0, -guarded.length) + invocation;

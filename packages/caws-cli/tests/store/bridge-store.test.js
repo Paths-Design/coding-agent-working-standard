@@ -72,8 +72,11 @@ describe('bridge-store (AUTH-BINDING-BRIDGE-001)', () => {
     expect(loadBridges(cawsDir).value.present).toBe(false); // absent = empty
 
     const r = acquireBridge(cawsDir, {
-      specId: 'BR-001', session: { session_id: 'sess-a', platform: 'test' },
-      actor: ACTOR, now: NOW(), contextCwd: '/repo',
+      specId: 'BR-001',
+      session: { session_id: 'sess-a', platform: 'test' },
+      actor: ACTOR,
+      now: NOW(),
+      contextCwd: '/repo',
     });
     expect(r.ok).toBe(true);
     expect(r.value.refreshed).toBe(false);
@@ -86,8 +89,10 @@ describe('bridge-store (AUTH-BINDING-BRIDGE-001)', () => {
 
     // Owner re-acquire: refresh, not a second holder.
     const r2 = acquireBridge(cawsDir, {
-      specId: 'BR-001', session: { session_id: 'sess-a', platform: 'test' },
-      actor: ACTOR, now: new Date('2026-08-24T13:00:00.000Z'),
+      specId: 'BR-001',
+      session: { session_id: 'sess-a', platform: 'test' },
+      actor: ACTOR,
+      now: new Date('2026-08-24T13:00:00.000Z'),
     });
     expect(r2.ok).toBe(true);
     expect(r2.value.refreshed).toBe(true);
@@ -99,19 +104,28 @@ describe('bridge-store (AUTH-BINDING-BRIDGE-001)', () => {
   test('A2: foreign acquire refuses; takeover audits; self/nothing takeovers refuse', () => {
     const { cawsDir } = mkRepo();
     acquireBridge(cawsDir, {
-      specId: 'BR-002', session: { session_id: 'sess-a' }, actor: ACTOR, now: NOW(),
+      specId: 'BR-002',
+      session: { session_id: 'sess-a' },
+      actor: ACTOR,
+      now: NOW(),
     });
 
     const foreign = acquireBridge(cawsDir, {
-      specId: 'BR-002', session: { session_id: 'sess-b' }, actor: ACTOR_B, now: NOW(),
+      specId: 'BR-002',
+      session: { session_id: 'sess-b' },
+      actor: ACTOR_B,
+      now: NOW(),
     });
     expect(foreign.ok).toBe(false);
     expect(foreign.errors[0].rule).toBe('store.claims.bridge_foreign_owner');
     expect(countEvents(cawsDir, 'claim_bridged')).toBe(1); // unchanged
 
     const t = takeoverBridge(cawsDir, {
-      specId: 'BR-002', session: { session_id: 'sess-b' }, actor: ACTOR_B,
-      now: NOW(), reason: 'handoff: A finished scouting',
+      specId: 'BR-002',
+      session: { session_id: 'sess-b' },
+      actor: ACTOR_B,
+      now: NOW(),
+      reason: 'handoff: A finished scouting',
     });
     expect(t.ok).toBe(true);
     expect(t.value.priorOwnerSessionId).toBe('sess-a');
@@ -122,32 +136,59 @@ describe('bridge-store (AUTH-BINDING-BRIDGE-001)', () => {
     expect(countEvents(cawsDir, 'bridge_claim_taken_over')).toBe(1);
 
     const self = takeoverBridge(cawsDir, {
-      specId: 'BR-002', session: { session_id: 'sess-b' }, actor: ACTOR_B,
-      now: NOW(), reason: 'x',
+      specId: 'BR-002',
+      session: { session_id: 'sess-b' },
+      actor: ACTOR_B,
+      now: NOW(),
+      reason: 'x',
     });
     expect(self.ok).toBe(false);
     const nothing = takeoverBridge(cawsDir, {
-      specId: 'BR-404', session: { session_id: 'sess-b' }, actor: ACTOR_B,
-      now: NOW(), reason: 'x',
+      specId: 'BR-404',
+      session: { session_id: 'sess-b' },
+      actor: ACTOR_B,
+      now: NOW(),
+      reason: 'x',
     });
     expect(nothing.ok).toBe(false);
   });
 
   test('A3: named and bare release semantics', () => {
     const { cawsDir } = mkRepo();
-    acquireBridge(cawsDir, { specId: 'BR-003', session: { session_id: 'sess-a' }, actor: ACTOR, now: NOW() });
-    acquireBridge(cawsDir, { specId: 'BR-004', session: { session_id: 'sess-a' }, actor: ACTOR, now: NOW() });
-    acquireBridge(cawsDir, { specId: 'BR-005', session: { session_id: 'sess-b' }, actor: ACTOR_B, now: NOW() });
+    acquireBridge(cawsDir, {
+      specId: 'BR-003',
+      session: { session_id: 'sess-a' },
+      actor: ACTOR,
+      now: NOW(),
+    });
+    acquireBridge(cawsDir, {
+      specId: 'BR-004',
+      session: { session_id: 'sess-a' },
+      actor: ACTOR,
+      now: NOW(),
+    });
+    acquireBridge(cawsDir, {
+      specId: 'BR-005',
+      session: { session_id: 'sess-b' },
+      actor: ACTOR_B,
+      now: NOW(),
+    });
 
     // Foreign named release refuses.
     const foreign = releaseBridge(cawsDir, {
-      specId: 'BR-003', session: { session_id: 'sess-b' }, actor: ACTOR_B, now: NOW(),
+      specId: 'BR-003',
+      session: { session_id: 'sess-b' },
+      actor: ACTOR_B,
+      now: NOW(),
     });
     expect(foreign.ok).toBe(false);
 
     // Named release by owner.
     const named = releaseBridge(cawsDir, {
-      specId: 'BR-003', session: { session_id: 'sess-a' }, actor: ACTOR, now: NOW(),
+      specId: 'BR-003',
+      session: { session_id: 'sess-a' },
+      actor: ACTOR,
+      now: NOW(),
     });
     expect(named.ok).toBe(true);
     expect(named.value.released).toEqual(['BR-003']);
@@ -156,7 +197,9 @@ describe('bridge-store (AUTH-BINDING-BRIDGE-001)', () => {
 
     // Bare release frees every OWNED binding (BR-004, not BR-005).
     const bare = releaseBridge(cawsDir, {
-      session: { session_id: 'sess-a' }, actor: ACTOR, now: NOW(),
+      session: { session_id: 'sess-a' },
+      actor: ACTOR,
+      now: NOW(),
     });
     expect(bare.ok).toBe(true);
     expect(bare.value.released.sort()).toEqual(['BR-004']);
@@ -165,7 +208,9 @@ describe('bridge-store (AUTH-BINDING-BRIDGE-001)', () => {
 
     // Release-of-nothing refuses.
     const none = releaseBridge(cawsDir, {
-      session: { session_id: 'sess-a' }, actor: ACTOR, now: NOW(),
+      session: { session_id: 'sess-a' },
+      actor: ACTOR,
+      now: NOW(),
     });
     expect(none.ok).toBe(false);
   });
@@ -173,24 +218,59 @@ describe('bridge-store (AUTH-BINDING-BRIDGE-001)', () => {
   test('A4: prune — retired bridges are candidates; dry-run default; no events', () => {
     const { cawsDir } = mkRepo();
     // Canonical spec-id pattern (numeric tail) — the events chain enforces it.
-    acquireBridge(cawsDir, { specId: 'BR-006', session: { session_id: 'sess-a' }, actor: ACTOR, now: NOW() }); // closed
-    acquireBridge(cawsDir, { specId: 'BR-007', session: { session_id: 'sess-a' }, actor: ACTOR, now: NOW() }); // missing
-    acquireBridge(cawsDir, { specId: 'BR-008', session: { session_id: 'sess-a' }, actor: ACTOR, now: NOW() }); // archived
-    acquireBridge(cawsDir, { specId: 'BR-009', session: { session_id: 'sess-a' }, actor: ACTOR, now: NOW() }); // active
-    const eventsBefore = countEvents(cawsDir, 'claim_released') + countEvents(cawsDir, 'claim_bridged');
+    acquireBridge(cawsDir, {
+      specId: 'BR-006',
+      session: { session_id: 'sess-a' },
+      actor: ACTOR,
+      now: NOW(),
+    }); // closed
+    acquireBridge(cawsDir, {
+      specId: 'BR-007',
+      session: { session_id: 'sess-a' },
+      actor: ACTOR,
+      now: NOW(),
+    }); // missing
+    acquireBridge(cawsDir, {
+      specId: 'BR-008',
+      session: { session_id: 'sess-a' },
+      actor: ACTOR,
+      now: NOW(),
+    }); // archived
+    acquireBridge(cawsDir, {
+      specId: 'BR-009',
+      session: { session_id: 'sess-a' },
+      actor: ACTOR,
+      now: NOW(),
+    }); // active
+    const eventsBefore =
+      countEvents(cawsDir, 'claim_released') + countEvents(cawsDir, 'claim_bridged');
 
     const specStates = { 'BR-006': 'closed', 'BR-008': 'archived', 'BR-009': 'active' }; // BR-007 missing
     const dry = pruneBridgeGhosts(cawsDir, { activeSpecIds: ['BR-009'], specStates, apply: false });
     expect(dry.ok).toBe(true);
-    expect(dry.value.candidates.map((c) => c.specId).sort()).toEqual(['BR-006', 'BR-007', 'BR-008']);
+    expect(dry.value.candidates.map((c) => c.specId).sort()).toEqual([
+      'BR-006',
+      'BR-007',
+      'BR-008',
+    ]);
     expect(dry.value.removed).toEqual([]);
-    expect(Object.keys(readBridges(cawsDir)).sort()).toEqual(['BR-006', 'BR-007', 'BR-008', 'BR-009']); // untouched
+    expect(Object.keys(readBridges(cawsDir)).sort()).toEqual([
+      'BR-006',
+      'BR-007',
+      'BR-008',
+      'BR-009',
+    ]); // untouched
 
-    const applied = pruneBridgeGhosts(cawsDir, { activeSpecIds: ['BR-009'], specStates, apply: true });
+    const applied = pruneBridgeGhosts(cawsDir, {
+      activeSpecIds: ['BR-009'],
+      specStates,
+      apply: true,
+    });
     expect(applied.ok).toBe(true);
     expect(applied.value.removed.sort()).toEqual(['BR-006', 'BR-007', 'BR-008']);
     expect(Object.keys(readBridges(cawsDir))).toEqual(['BR-009']);
-    const eventsAfter = countEvents(cawsDir, 'claim_released') + countEvents(cawsDir, 'claim_bridged');
+    const eventsAfter =
+      countEvents(cawsDir, 'claim_released') + countEvents(cawsDir, 'claim_bridged');
     expect(eventsAfter).toBe(eventsBefore); // hygiene appends nothing
   });
 
@@ -202,7 +282,10 @@ describe('bridge-store (AUTH-BINDING-BRIDGE-001)', () => {
     expect(bad.ok).toBe(false);
     expect(bad.errors[0].rule).toBe('store.claims.bridge_file_invalid');
     const acquire = acquireBridge(cawsDir, {
-      specId: 'BR-006', session: { session_id: 'sess-a' }, actor: ACTOR, now: NOW(),
+      specId: 'BR-006',
+      session: { session_id: 'sess-a' },
+      actor: ACTOR,
+      now: NOW(),
     });
     expect(acquire.ok).toBe(false); // fail closed — no mutation off a corrupt store
   });

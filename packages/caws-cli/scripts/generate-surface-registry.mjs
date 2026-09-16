@@ -7,9 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const registry = JSON.parse(
-  readFileSync(join(here, '..', 'surfaces', 'registry.json'), 'utf8')
-);
+const registry = JSON.parse(readFileSync(join(here, '..', 'surfaces', 'registry.json'), 'utf8'));
 const entries = Object.entries(registry.surfaces);
 
 const union = entries.map(([id]) => `'${id}'`).join(' | ');
@@ -22,9 +20,7 @@ const pinVars = entries
   .map(([id, s]) => `  '${id}': '${s.pinVar}',`)
   .join('\n');
 const gated = entries.filter(([, s]) => s.trustGated === true).map(([id]) => `'${id}'`);
-const mechanisms = entries
-  .map(([id, s]) => `  '${id}': '${s.hookMechanism}',`)
-  .join('\n');
+const mechanisms = entries.map(([id, s]) => `  '${id}': '${s.hookMechanism}',`).join('\n');
 const sentinel = entries.find(([, s]) => s.sentinel === true)?.[0] ?? 'none';
 
 const out = `// @generated — DO NOT EDIT.
@@ -84,18 +80,27 @@ ${entries.map(([id, s]) => `    ${id}) printf '%s\\n' '${s.vendorDir}' ;;`).join
 }
 _caws_surface_pin_var() {
   case "\${1:-}" in
-${entries.filter(([, s]) => s.pinVar).map(([id, s]) => `    ${id}) printf '%s\\n' '${s.pinVar}' ;;`).join('\n')}
+${entries
+  .filter(([, s]) => s.pinVar)
+  .map(([id, s]) => `    ${id}) printf '%s\\n' '${s.pinVar}' ;;`)
+  .join('\n')}
     *) return 1 ;;
   esac
 }
 _caws_surface_env_vars() {
   case "\${1:-}" in
-${entries.filter(([, s]) => (s.envVars ?? []).length > 0).map(([id, s]) => `    ${id}) printf '%s\\n' '${(s.envVars ?? []).join(' ')}' ;;`).join('\n')}
+${entries
+  .filter(([, s]) => (s.envVars ?? []).length > 0)
+  .map(([id, s]) => `    ${id}) printf '%s\\n' '${(s.envVars ?? []).join(' ')}' ;;`)
+  .join('\n')}
     *) return 1 ;;
   esac
 }
 `;
-writeFileSync(join(here, '..', 'templates', 'hook-packs', 'shared', 'lib', 'surfaces-registry.sh'), shellOut);
+writeFileSync(
+  join(here, '..', 'templates', 'hook-packs', 'shared', 'lib', 'surfaces-registry.sh'),
+  shellOut
+);
 console.log('shell snippet emitted: templates/hook-packs/shared/lib/surfaces-registry.sh');
 
 console.log('surface registry generated: src/init/hook-packs/surfaces.generated.ts');

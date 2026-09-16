@@ -89,7 +89,9 @@ describe('caws specs create --scope.in alias', () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('created SCOPE-DOT-001');
     expect(result.stdout).toContain('scope.in is set from create-time scope flags');
-    expect(readBytes(specPath(root, 'SCOPE-DOT-001'))).toContain("scope:\n  in:\n    - 'README.md'");
+    expect(readBytes(specPath(root, 'SCOPE-DOT-001'))).toContain(
+      "scope:\n  in:\n    - 'README.md'"
+    );
     expect(readBytes(eventsPath(root))).toContain('spec_created');
   });
 
