@@ -58,3 +58,10 @@ evidence:
     command: node packages/caws-cli/dist/index.js specs create PROBE-1 --mode feature --risk-tier 2 --plan
     exit_code: 0
     commit_sha: "3c7c3f02"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Tests 'an author who genuinely chooses tier 3 still validates' and 'an author who genuinely chooses mode: chore still validates at tier 2' (tests/kernel/unit/remediation-no-label-escape.test.ts). Both drive the real validateSpecSemantics over the same fixture with only risk_tier/mode changed, and assert isOk. This is the non-vacuity control for the whole slice: it proves we removed the PRESCRIPTION, not the CAPABILITY. Without it, A1/A2 could be satisfied by simply refusing tier 3 outright, which would be a different and worse change. Full CLI suite 229 suites / 2851 tests pass against a clean tree at 3c7c3f02 (git status --porcelain empty), so dist and committed source agree - this matters because lint-staged reformatted sources AFTER the first build and a stale dist would have tested the wrong bytes."
+    recorded_at: "2026-09-16T07:58:03.350Z"
+    command: npx jest (full CLI suite)
+    exit_code: 0
+    commit_sha: "3c7c3f02"
