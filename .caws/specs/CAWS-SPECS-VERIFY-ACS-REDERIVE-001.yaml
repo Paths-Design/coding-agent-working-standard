@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-verify-acs
 created_at: '2026-09-16T18:52:32.338Z'
-updated_at: '2026-09-16T19:16:54.989Z'
+updated_at: '2026-09-16T19:25:55.805Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
@@ -34,6 +34,7 @@ scope:
     - packages/caws-cli/tests/shell/legacy-validation-diagnostics.test.js
     - docs/v11-surface-matrix.yaml
     - docs/architecture/caws-vnext-command-surface.md
+    - packages/caws-cli/src/shell/index.ts
   out: []
 invariants:
   - 'No code path executes evidence[].command or acceptance[].test_command; both resolve to not_rederived with reason command_not_executed unconditionally, with no flag or opt-in.'
