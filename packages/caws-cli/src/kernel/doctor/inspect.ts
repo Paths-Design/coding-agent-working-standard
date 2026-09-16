@@ -1578,16 +1578,23 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
         )
       );
     }
-    if (input.initResidue.workingSpecSchemaJson) {
+    // CAWS-SPEC-SCHEMA-AUTHORITY-UNSTATED-001: fire per path actually found,
+    // so the message and the repair name the file on disk rather than the
+    // canonical location. Falls back to the root-only boolean when the
+    // richer observation is absent, which keeps an older snapshot writer
+    // producing exactly the finding it produced before.
+    const legacySpecSchemaPaths =
+      input.initResidue.legacySpecSchemaPaths ??
+      (input.initResidue.workingSpecSchemaJson ? ['.caws/working-spec.schema.json'] : []);
+    for (const relPath of legacySpecSchemaPaths) {
       findings.push(
         finding(
           DOCTOR_RULES.INIT_LEGACY_WORKING_SPEC_SCHEMA_PRESENT,
           'error',
-          '.caws/working-spec.schema.json is present. vNext does not consume this schema; it is legacy single-spec residue.',
+          `${relPath} is present. vNext does not consume this schema; it is legacy single-spec residue.`,
           {
-            subject: '.caws/working-spec.schema.json',
-            narrowRepair:
-              'Remove or archive .caws/working-spec.schema.json. vNext validates specs through the kernel, not a project-local JSON schema.',
+            subject: relPath,
+            narrowRepair: `Remove or archive ${relPath}. vNext validates specs through the kernel, not a project-local JSON schema.`,
           }
         )
       );

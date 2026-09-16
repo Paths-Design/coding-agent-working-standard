@@ -165,6 +165,18 @@ export interface DoctorInput {
   readonly initResidue?: {
     readonly workingSpecYaml: boolean;
     readonly workingSpecSchemaJson: boolean;
+    /**
+     * CAWS-SPEC-SCHEMA-AUTHORITY-UNSTATED-001: every path at which a legacy
+     * project-local spec schema was found (repo-relative, posix separators)
+     * — today `.caws/working-spec.schema.json` and
+     * `.caws/schemas/working-spec.schema.json`. The kernel is the validator,
+     * so a file at any of these paths is dead authority a reader can still
+     * mistake for the governing schema. Supersedes `workingSpecSchemaJson`,
+     * which sees only the root path; that field is retained so an older
+     * snapshot writer stays valid, and the rule falls back to it when this
+     * list is undefined (unobserved, not "none found").
+     */
+    readonly legacySpecSchemaPaths?: readonly string[];
   };
 
   /**

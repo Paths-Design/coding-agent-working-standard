@@ -176,6 +176,16 @@ function observeInitResidue(cawsDir: string): StoreSnapshot['initResidue'] {
   return {
     workingSpecYaml: isFile(path.join(cawsDir, 'working-spec.yaml')),
     workingSpecSchemaJson: isFile(path.join(cawsDir, 'working-spec.schema.json')),
+    // CAWS-SPEC-SCHEMA-AUTHORITY-UNSTATED-001: the legacy project-local spec
+    // schema is dead wherever it sits, so observe every location it is
+    // plausibly placed, not just the canonical one. Tidying the root copy
+    // into a schemas/ subdirectory is the most likely way an operator
+    // produces the variant, and detecting only the root path silently
+    // blesses it. Reported as repo-relative posix paths so the finding can
+    // name the file that actually exists.
+    legacySpecSchemaPaths: LEGACY_SPEC_SCHEMA_RELPATHS.filter((rel) =>
+      isFile(path.join(cawsDir, ...rel))
+    ).map((rel) => ['.caws', ...rel].join('/')),
   };
 }
 
@@ -208,6 +218,19 @@ const OBSERVED_TELEMETRY_ROWS = TELEMETRY_ROW_DEST_PATHS;
 /** Marker file name per adapter-covered surface that identifies that
  *  surface's harness pack as installed (`.dsh/AGENTS.md` for dsh — the
  *  marker contract the bundle-side adapter spec pins). */
+/**
+ * CAWS-SPEC-SCHEMA-AUTHORITY-UNSTATED-001: every location a legacy
+ * project-local spec schema is found, relative to `.caws/`. vNext validates
+ * specs through the kernel, so a file at ANY of these paths is dead
+ * authority that can still mislead a reader into reconciling spec shapes
+ * against it. Path segments, joined per-platform for the stat and with `/`
+ * for reporting.
+ */
+const LEGACY_SPEC_SCHEMA_RELPATHS: readonly (readonly string[])[] = [
+  ['working-spec.schema.json'],
+  ['schemas', 'working-spec.schema.json'],
+];
+
 const ADAPTER_SURFACE_MARKER_FILE: Record<string, string> = {
   dsh: 'AGENTS.md',
 };

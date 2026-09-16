@@ -28,11 +28,13 @@ import {
   type Diagnostic,
 } from '../../kernel';
 
-import { composeDoctorSnapshot, loadWorktrees, resolveRepoRoot, runSpecsMigrateApply } from '../../store';
-import type {
-  MigrationReport,
-  SpecsMigrateApplyResult,
+import {
+  composeDoctorSnapshot,
+  loadWorktrees,
+  resolveRepoRoot,
+  runSpecsMigrateApply,
 } from '../../store';
+import type { MigrationReport, SpecsMigrateApplyResult } from '../../store';
 import {
   activateSpec,
   amendScopeSpec,
@@ -317,7 +319,9 @@ function parseContractFlags(
     const typeRaw = (secondColon === -1 ? rest : rest.slice(0, secondColon)).trim();
     const path = secondColon === -1 ? undefined : rest.slice(secondColon + 1).trim();
     if (name.length === 0) {
-      return { error: `invalid --contract "${entry}": contract name is empty. ${CONTRACT_SHAPE_HINT}` };
+      return {
+        error: `invalid --contract "${entry}": contract name is empty. ${CONTRACT_SHAPE_HINT}`,
+      };
     }
     if (!CONTRACT_TYPES.includes(typeRaw as ContractType)) {
       return {
@@ -369,7 +373,11 @@ function parseStructuredAcceptance(
   // a delimiter.
   const anchors: { key: 'given' | 'when' | 'then'; bodyStart: number; matchStart: number }[] = [];
   ACCEPTANCE_LABEL_ANCHOR.lastIndex = 0;
-  for (let m = ACCEPTANCE_LABEL_ANCHOR.exec(value); m !== null; m = ACCEPTANCE_LABEL_ANCHOR.exec(value)) {
+  for (
+    let m = ACCEPTANCE_LABEL_ANCHOR.exec(value);
+    m !== null;
+    m = ACCEPTANCE_LABEL_ANCHOR.exec(value)
+  ) {
     anchors.push({
       key: m[1]!.toLowerCase() as 'given' | 'when' | 'then',
       bodyStart: m.index + m[0].length,
@@ -396,7 +404,8 @@ function parseStructuredAcceptance(
     });
     // Text before the first label is unlabeled leader prose — still a
     // malformation, and still refused.
-    const hasLeader = anchors.length > 0 && value.slice(0, anchors[0]!.matchStart).trim().length > 0;
+    const hasLeader =
+      anchors.length > 0 && value.slice(0, anchors[0]!.matchStart).trim().length > 0;
     if (missing.length > 0 || hasLeader) {
       return {
         error:
@@ -500,14 +509,9 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-const SPEC_PARSE_RULE_PREFIXES = [
-  'spec.yaml.',
-  'spec.schema.',
-] as const;
+const SPEC_PARSE_RULE_PREFIXES = ['spec.yaml.', 'spec.schema.'] as const;
 
-function hasSpecParseOrSchemaDiagnostics(
-  diagnostics: readonly Diagnostic[]
-): boolean {
+function hasSpecParseOrSchemaDiagnostics(diagnostics: readonly Diagnostic[]): boolean {
   return diagnostics.some((d) =>
     SPEC_PARSE_RULE_PREFIXES.some((prefix) => d.rule.startsWith(prefix))
   );
@@ -533,7 +537,10 @@ function renderSpecParseGuidance(filePath: string): string {
 }
 
 function semanticFieldsFromPlanDiagnostics(
-  diagnostics: readonly { readonly data?: Readonly<Record<string, unknown>>; readonly message: string }[]
+  diagnostics: readonly {
+    readonly data?: Readonly<Record<string, unknown>>;
+    readonly message: string;
+  }[]
 ): string[] {
   const fields = diagnostics
     .map((d) => d.data?.['source_pointer'])
@@ -542,11 +549,7 @@ function semanticFieldsFromPlanDiagnostics(
 }
 
 const SEMANTIC_FIELD_EXAMPLES: Readonly<Record<string, readonly string[]>> = Object.freeze({
-  '/contracts': [
-    'contracts:',
-    "  - name: 'core-api'",
-    '    type: behavior',
-  ],
+  '/contracts': ['contracts:', "  - name: 'core-api'", '    type: behavior'],
   '/observability': [
     'observability:',
     "  - 'Log the decision path and refusal reason for each governed operation.'",
@@ -562,7 +565,9 @@ const SEMANTIC_FIELD_EXAMPLES: Readonly<Record<string, readonly string[]>> = Obj
   ],
 });
 
-function semanticFieldExamples(missingFields: readonly string[]): Record<string, readonly string[]> {
+function semanticFieldExamples(
+  missingFields: readonly string[]
+): Record<string, readonly string[]> {
   const examples: Record<string, readonly string[]> = {};
   for (const field of missingFields) {
     const example = SEMANTIC_FIELD_EXAMPLES[field];
@@ -591,7 +596,6 @@ function diagnosticJson(
   }));
 }
 
-
 // ─── CANONICAL-DRIFT-GUARDS-001: lifecycle auto-commit target check ────────
 
 /**
@@ -608,7 +612,11 @@ function lifecycleCommitTargetAdmits(
   err: (line: string) => void
 ): boolean {
   if (opts.allowForeignBranch === true) return true;
-  const snapshot = composeDoctorSnapshot({ repoRoot: ctx.repoRoot, cawsDir: ctx.cawsDir, now: new Date() });
+  const snapshot = composeDoctorSnapshot({
+    repoRoot: ctx.repoRoot,
+    cawsDir: ctx.cawsDir,
+    now: new Date(),
+  });
   const cbo = snapshot.doctorInput.canonicalBranchObservation;
   if (cbo === undefined) return true; // observation unavailable -> inert
   if (cbo.currentBranch === cbo.baseBranch) return true; // healthy state
@@ -621,7 +629,9 @@ function lifecycleCommitTargetAdmits(
       if (record?.branch === cbo.currentBranch) {
         // The parked branch IS a governed lane's branch; a lifecycle commit
         // onto another lane is exactly the Entry 37 cross-contamination.
-        err(`caws specs: refusing — canonical HEAD is parked on "${cbo.currentBranch}" (base is "${cbo.baseBranch}"), and that branch belongs to a CAWS worktree lane.`);
+        err(
+          `caws specs: refusing — canonical HEAD is parked on "${cbo.currentBranch}" (base is "${cbo.baseBranch}"), and that branch belongs to a CAWS worktree lane.`
+        );
         err('  Spec lifecycle auto-commits would land on this lane, not the base branch.');
         err('  Fix: un-park the checkout (owner merges/switches it back to base), or');
         err('  pass --allow-foreign-branch to deliberately author on this branch.');
@@ -629,7 +639,9 @@ function lifecycleCommitTargetAdmits(
       }
     }
   }
-  err(`caws specs: refusing — canonical HEAD is parked on "${cbo.currentBranch}" (base is "${cbo.baseBranch}"); lifecycle auto-commits would land there.`);
+  err(
+    `caws specs: refusing — canonical HEAD is parked on "${cbo.currentBranch}" (base is "${cbo.baseBranch}"); lifecycle auto-commits would land there.`
+  );
   err('  Fix: un-park the checkout (switch it back to the base branch), or pass');
   err('  --allow-foreign-branch to deliberately author on this branch.');
   return false;
@@ -678,7 +690,12 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   }
 
   const rawRiskTier = opts.riskTier ?? opts.tier;
-  if (specId === undefined || title === undefined || mode === undefined || rawRiskTier === undefined) {
+  if (
+    specId === undefined ||
+    title === undefined ||
+    mode === undefined ||
+    rawRiskTier === undefined
+  ) {
     err('caws specs create: missing required options.');
     err(SPECS_CREATE_USAGE);
     return 1;
@@ -691,18 +708,12 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   const scopeIn = opts.scopeIn ?? opts.scopeInDot;
 
   if (!VALID_MODES.includes(mode as ValidMode)) {
-    err(
-      `caws specs create: invalid --mode "${mode}". Expected one of: ${VALID_MODES.join(', ')}.`
-    );
+    err(`caws specs create: invalid --mode "${mode}". Expected one of: ${VALID_MODES.join(', ')}.`);
     return 1;
   }
-  const riskTier = typeof rawRiskTier === 'string'
-    ? Number.parseInt(rawRiskTier, 10)
-    : rawRiskTier;
+  const riskTier = typeof rawRiskTier === 'string' ? Number.parseInt(rawRiskTier, 10) : rawRiskTier;
   if (riskTier !== 1 && riskTier !== 2 && riskTier !== 3) {
-    err(
-      `caws specs create: invalid risk tier "${rawRiskTier}". Expected 1, 2, or 3.`
-    );
+    err(`caws specs create: invalid risk tier "${rawRiskTier}". Expected 1, 2, or 3.`);
     return 1;
   }
 
@@ -710,7 +721,14 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   if (ctx === null) return 2;
 
   const actor = buildActorOrError(
-    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'create'
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'create'
   );
   if (actor === null) return 2;
 
@@ -750,9 +768,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     ...(actor.session_id !== undefined && actor.session_id.length > 0
       ? { createdBySession: actor.session_id }
       : {}),
-    ...(scopeIn !== undefined && scopeIn.length > 0
-      ? { scopeIn }
-      : {}),
+    ...(scopeIn !== undefined && scopeIn.length > 0 ? { scopeIn } : {}),
     ...(parsedAcceptance !== undefined && parsedAcceptance.length > 0
       ? { acceptance: parsedAcceptance }
       : {}),
@@ -763,18 +779,12 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     ...(opts.observability !== undefined && opts.observability.length > 0
       ? { observability: opts.observability }
       : {}),
-    ...(opts.rollback !== undefined && opts.rollback.length > 0
-      ? { rollback: opts.rollback }
-      : {}),
-    ...(opts.security !== undefined && opts.security.length > 0
-      ? { security: opts.security }
-      : {}),
+    ...(opts.rollback !== undefined && opts.rollback.length > 0 ? { rollback: opts.rollback } : {}),
+    ...(opts.security !== undefined && opts.security.length > 0 ? { security: opts.security } : {}),
     // Sterling ledger N16: the two scaffolded fields. Both are schema-required
     // non-empty, so before these flags the renderer had to invent a value and
     // no flag could replace it.
-    ...(opts.module !== undefined && opts.module.length > 0
-      ? { modules: opts.module }
-      : {}),
+    ...(opts.module !== undefined && opts.module.length > 0 ? { modules: opts.module } : {}),
     ...(opts.invariant !== undefined && opts.invariant.length > 0
       ? { invariants: opts.invariant }
       : {}),
@@ -801,9 +811,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
       title,
       mode: mode as ValidMode,
       riskTier: riskTier as 1 | 2 | 3,
-      ...(scopeIn !== undefined && scopeIn.length > 0
-        ? { scopeIn }
-        : {}),
+      ...(scopeIn !== undefined && scopeIn.length > 0 ? { scopeIn } : {}),
       ...(opts.acceptance !== undefined && opts.acceptance.length > 0
         ? { acceptance: opts.acceptance }
         : {}),
@@ -844,7 +852,9 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
         command,
       });
     } else {
-      out(`caws specs create --plan: ${plan.value.valid ? 'valid' : 'needs changes'} candidate for ${plan.value.id}`);
+      out(
+        `caws specs create --plan: ${plan.value.valid ? 'valid' : 'needs changes'} candidate for ${plan.value.id}`
+      );
       out(`  target: ${relSpecPath}`);
       out('  read_only: true');
       out(`  would_write: ${plan.value.valid ? 'yes' : 'no'}`);
@@ -888,7 +898,9 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
       'spec.semantic.tier2.contracts_required',
     ]);
     const rejectedForMissingContracts = result.errors.some(
-      (d) => typeof d.data?.source_rule === 'string' && TIER_CONTRACT_RULES.has(d.data.source_rule as string)
+      (d) =>
+        typeof d.data?.source_rule === 'string' &&
+        TIER_CONTRACT_RULES.has(d.data.source_rule as string)
     );
     if ((riskTier === 1 || riskTier === 2) && rejectedForMissingContracts) {
       err('');
@@ -992,10 +1004,8 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   // edits on main are NOT rejected by scope-guard. scope.in enforcement is
   // authoritative inside the spec's bound worktree; base-branch writes are
   // governed by the worktree-write-guard, not scope-guard. State that truth.
-  const scopeInWasPopulated =
-    scopeIn !== undefined && scopeIn.length > 0;
-  const acceptanceWasPopulated =
-    parsedAcceptance !== undefined && parsedAcceptance.length > 0;
+  const scopeInWasPopulated = scopeIn !== undefined && scopeIn.length > 0;
+  const acceptanceWasPopulated = parsedAcceptance !== undefined && parsedAcceptance.length > 0;
   const invariantsWasPopulated = opts.invariant !== undefined && opts.invariant.length > 0;
   const modulesWasPopulated = opts.module !== undefined && opts.module.length > 0;
   const remainingToFill = [
@@ -1003,9 +1013,7 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
     ...(acceptanceWasPopulated ? [] : ['acceptance']),
   ];
   const fillGuidance =
-    remainingToFill.length === 0
-      ? 'Review the body'
-      : `Fill in ${remainingToFill.join(' + ')}`;
+    remainingToFill.length === 0 ? 'Review the body' : `Fill in ${remainingToFill.join(' + ')}`;
 
   // Sterling ledger N16 (A3): report the fields still carrying a scaffolded
   // default, and name the flags that would have filled them.
@@ -1076,16 +1084,16 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
         outcome.id +
         ' --add <path> --add <path>   (writes canonical, appends an audit event)'
     );
-    out(`  2. ${fillGuidance}, then inspect with \`caws specs show ` +
+    out(
+      `  2. ${fillGuidance}, then inspect with \`caws specs show ` +
         outcome.id +
-        '` (or `caws doctor`).');
+        '` (or `caws doctor`).'
+    );
     out(`  3. ${commitStep}`);
     out(
       `  4. caws worktree create <name> --spec ${outcome.id}   (activates the draft and binds it)`
     );
-    out(
-      '  (scope.in is authoritative inside that worktree; base-branch writes are'
-    );
+    out('  (scope.in is authoritative inside that worktree; base-branch writes are');
     out('  governed by the worktree-write-guard, not scope.in.)');
   }
   surfaceAuditCommit(outcome.data?.audit_commit, err);
@@ -1113,9 +1121,7 @@ export interface SpecsListOptions extends BaseCommandOptions {
 
 function parseSpecsListStatus(raw: string | undefined): SpecsListStatus | undefined | null {
   if (raw === undefined) return undefined;
-  return (SPECS_LIST_STATUSES as readonly string[]).includes(raw)
-    ? (raw as SpecsListStatus)
-    : null;
+  return (SPECS_LIST_STATUSES as readonly string[]).includes(raw) ? (raw as SpecsListStatus) : null;
 }
 
 function renderSpecsStatusError(status: string, err: (line: string) => void): void {
@@ -1188,9 +1194,10 @@ export function runSpecsListCommand(opts: SpecsListOptions = {}): number {
     out('');
     out('-- archived (recoverable from history) --');
     for (const entry of archived) {
-      const blobDisplay = entry.blob_sha !== null
-        ? `blob ${entry.blob_sha.slice(0, 8)}`
-        : 'legacy (no blob_sha; use git log --follow)';
+      const blobDisplay =
+        entry.blob_sha !== null
+          ? `blob ${entry.blob_sha.slice(0, 8)}`
+          : 'legacy (no blob_sha; use git log --follow)';
       out(`${entry.id.padEnd(28)} archived ${entry.archived_at}  ${blobDisplay}`);
       out(`  recover: caws specs recover ${entry.id}`);
     }
@@ -1320,11 +1327,7 @@ export function runSpecsRecoverCommand(opts: SpecsRecoverOptions): number {
  * one body has existed for that id, silence about the others is what turns a
  * visible divergence into an invisible one.
  */
-function warnSupersededSnapshots(
-  cawsDir: string,
-  id: string,
-  err: (line: string) => void
-): void {
+function warnSupersededSnapshots(cawsDir: string, id: string, err: (line: string) => void): void {
   const snapshots = supersededArchiveSnapshots(cawsDir, id);
   if (snapshots.length === 0) return;
   err(
@@ -1345,15 +1348,7 @@ export interface SpecsRestoreOptions extends BaseCommandOptions {
 }
 
 function restoreCommandPreview(id: string, targetState: 'draft' | 'active'): string {
-  return [
-    'caws',
-    'specs',
-    'restore',
-    shellQuote(id),
-    '--as',
-    targetState,
-    '--apply',
-  ].join(' ');
+  return ['caws', 'specs', 'restore', shellQuote(id), '--as', targetState, '--apply'].join(' ');
 }
 
 export function runSpecsRestoreCommand(opts: SpecsRestoreOptions): number {
@@ -1368,7 +1363,14 @@ export function runSpecsRestoreCommand(opts: SpecsRestoreOptions): number {
   if (ctx === null) return 2;
 
   const actor = buildActorOrError(
-    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'restore'
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'restore'
   );
   if (actor === null) return 2;
 
@@ -1429,7 +1431,9 @@ export function runSpecsRestoreCommand(opts: SpecsRestoreOptions): number {
     out(`    ${command}`);
     out('  No files, events, or worktree registry entries were written.');
   } else {
-    out(`restored ${plan.id} to ${plan.restoredPath} (lifecycle_state: ${plan.targetLifecycleState})`);
+    out(
+      `restored ${plan.id} to ${plan.restoredPath} (lifecycle_state: ${plan.targetLifecycleState})`
+    );
   }
 
   if (result.value.kind === 'applied') {
@@ -1490,7 +1494,14 @@ export function runSpecsPruneDraftsCommand(opts: SpecsPruneDraftsOptions = {}): 
 
   if (opts.apply === true) {
     const actor = buildActorOrError(
-      ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'prune-drafts'
+      ctx.cawsDir,
+      cwd,
+      env,
+      nowFn,
+      opts.actorKind,
+      err,
+      showData,
+      'prune-drafts'
     );
     if (actor === null) return 2;
 
@@ -1625,7 +1636,14 @@ export function runSpecsActivateCommand(opts: SpecsActivateOptions): number {
   if (!lifecycleCommitTargetAdmits(ctx, opts, err)) return 1;
 
   const actor = buildActorOrError(
-    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'activate'
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'activate'
   );
   if (actor === null) return 2;
 
@@ -1700,7 +1718,14 @@ export function runSpecsEvidenceCommand(opts: SpecsEvidenceOptions): number {
   if (ctx === null) return 2;
 
   const actor = buildActorOrError(
-    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'evidence'
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'evidence'
   );
   if (actor === null) return 2;
 
@@ -1761,7 +1786,14 @@ export function runSpecsAmendScopeCommand(opts: SpecsAmendScopeOptions): number 
   if (!lifecycleCommitTargetAdmits(ctx, opts, err)) return 1;
 
   const actor = buildActorOrError(
-    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'amend-scope'
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'amend-scope'
   );
   if (actor === null) return 2;
 
@@ -1867,7 +1899,14 @@ export function runSpecsCloseCommand(opts: SpecsCloseOptions): number {
   }
 
   const actor = buildActorOrError(
-    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'close'
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'close'
   );
   if (actor === null) return 2;
 
@@ -1878,8 +1917,10 @@ export function runSpecsCloseCommand(opts: SpecsCloseOptions): number {
     actor,
   };
   if (closureNotes !== undefined) (input as { reason?: string }).reason = closureNotes;
-  if (opts.mergeCommit !== undefined) (input as { mergeCommit?: string }).mergeCommit = opts.mergeCommit;
-  if (opts.supersededBy !== undefined) (input as { supersededBy?: string }).supersededBy = opts.supersededBy;
+  if (opts.mergeCommit !== undefined)
+    (input as { mergeCommit?: string }).mergeCommit = opts.mergeCommit;
+  if (opts.supersededBy !== undefined)
+    (input as { supersededBy?: string }).supersededBy = opts.supersededBy;
 
   const result = closeSpec(ctx.cawsDir, input);
   if (!isOk(result)) {
@@ -1926,7 +1967,14 @@ export function runSpecsReopenCommand(opts: SpecsReopenOptions): number {
   if (ctx === null) return 2;
 
   const actor = buildActorOrError(
-    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'reopen'
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'reopen'
   );
   if (actor === null) return 2;
 
@@ -1990,7 +2038,14 @@ export function runSpecsAmendCommand(opts: SpecsAmendOptions): number {
   if (ctx === null) return 2;
 
   const actor = buildActorOrError(
-    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'amend'
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'amend'
   );
   if (actor === null) return 2;
 
@@ -2045,7 +2100,14 @@ export function runSpecsDeactivateCommand(opts: SpecsDeactivateOptions): number 
   if (ctx === null) return 2;
 
   const actor = buildActorOrError(
-    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'deactivate'
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'deactivate'
   );
   if (actor === null) return 2;
 
@@ -2114,7 +2176,9 @@ export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
     opts.json === true;
   if (opts.id !== undefined && batchFlagsPresent) {
     err('caws specs archive: <id> cannot be combined with batch flags.');
-    err('  Use `caws specs archive <id>` for one spec, or `caws specs archive --status closed` for batch dry-run.');
+    err(
+      '  Use `caws specs archive <id>` for one spec, or `caws specs archive --status closed` for batch dry-run.'
+    );
     return 1;
   }
 
@@ -2173,25 +2237,34 @@ export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
           out(`  would-archive ${candidate.id}`);
         }
         for (const skipped of selected.value.skipped) {
-          const state = skipped.lifecycle_state !== undefined ? ` (${skipped.lifecycle_state})` : '';
+          const state =
+            skipped.lifecycle_state !== undefined ? ` (${skipped.lifecycle_state})` : '';
           out(`  skipped ${skipped.id}: ${skipped.reason}${state}`);
         }
         const includeArg =
           selector.include.length > 0 ? ` --include ${selector.include.join(',')}` : '';
         const excludeArg =
           selector.exclude.length > 0 ? ` --exclude ${selector.exclude.join(',')}` : '';
-        const olderArg =
-          olderThanMs !== undefined ? ` --older-than-ms ${olderThanMs}` : '';
+        const olderArg = olderThanMs !== undefined ? ` --older-than-ms ${olderThanMs}` : '';
         const updatedBeforeArg =
           opts.updatedBefore !== undefined ? ` --updated-before ${opts.updatedBefore}` : '';
         const withoutWorktreeArg = opts.withoutWorktree === true ? ' --without-worktree' : '';
-        out(`apply: caws specs archive --status closed${includeArg}${excludeArg}${olderArg}${updatedBeforeArg}${withoutWorktreeArg} --apply`);
+        out(
+          `apply: caws specs archive --status closed${includeArg}${excludeArg}${olderArg}${updatedBeforeArg}${withoutWorktreeArg} --apply`
+        );
       }
       return selected.value.skipped.length === 0 ? 0 : 1;
     }
 
     const actor = buildActorOrError(
-      ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'archive'
+      ctx.cawsDir,
+      cwd,
+      env,
+      nowFn,
+      opts.actorKind,
+      err,
+      showData,
+      'archive'
     );
     if (actor === null) return 2;
 
@@ -2244,7 +2317,14 @@ export function runSpecsArchiveCommand(opts: SpecsArchiveOptions): number {
   }
 
   const actor = buildActorOrError(
-    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'archive'
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'archive'
   );
   if (actor === null) return 2;
 
@@ -2283,16 +2363,21 @@ export interface SpecsRetireDraftOptions extends BaseCommandOptions {
   readonly reason?: string;
 }
 
-export function runSpecsRetireDraftCommand(
-  opts: SpecsRetireDraftOptions
-): number {
+export function runSpecsRetireDraftCommand(opts: SpecsRetireDraftOptions): number {
   const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
 
   const ctx = resolveCawsCtx(cwd, err, showData, 'retire-draft');
   if (ctx === null) return 2;
 
   const actor = buildActorOrError(
-    ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'retire-draft'
+    ctx.cawsDir,
+    cwd,
+    env,
+    nowFn,
+    opts.actorKind,
+    err,
+    showData,
+    'retire-draft'
   );
   if (actor === null) return 2;
 
@@ -2360,7 +2445,7 @@ export function runSpecsMigrateCommand(opts: SpecsMigrateOptions): number {
   // --from must be exactly 'v10' (matches caws events migrate semantics).
   if (opts.from !== 'v10') {
     err(
-      `caws specs migrate: only --from v10 is supported in v11.2; got ${JSON.stringify(opts.from)}.`,
+      `caws specs migrate: only --from v10 is supported in v11.2; got ${JSON.stringify(opts.from)}.`
     );
     return 1;
   }
@@ -2405,8 +2490,8 @@ export function runSpecsMigrateCommand(opts: SpecsMigrateOptions): number {
             })),
           },
           null,
-          2,
-        ),
+          2
+        )
       );
     } else {
       err('caws specs migrate: failed.');
@@ -2445,7 +2530,7 @@ export function runSpecsMigrateCommand(opts: SpecsMigrateOptions): number {
 }
 
 function loadLifecycleMappingFile(
-  filePath: string,
+  filePath: string
 ): { ok: true; mapping: LifecycleMapping } | { ok: false; message: string } {
   let raw: string;
   try {
@@ -2465,7 +2550,7 @@ function loadLifecycleMappingFile(
     return {
       ok: false,
       message: renderLifecycleMappingFileFailure(
-        `Cannot parse ${filePath} as JSON: ${cause.message ?? 'unknown error'}.`,
+        `Cannot parse ${filePath} as JSON: ${cause.message ?? 'unknown error'}.`
       ),
     };
   }
@@ -2473,7 +2558,7 @@ function loadLifecycleMappingFile(
     return {
       ok: false,
       message: renderLifecycleMappingFileFailure(
-        `Lifecycle mapping file ${filePath} must be a JSON object keyed by spec id; got ${typeof parsed === 'object' ? 'array' : typeof parsed}.`,
+        `Lifecycle mapping file ${filePath} must be a JSON object keyed by spec id; got ${typeof parsed === 'object' ? 'array' : typeof parsed}.`
       ),
     };
   }
@@ -2485,7 +2570,7 @@ function loadLifecycleMappingFile(
       return {
         ok: false,
         message: renderLifecycleMappingFileFailure(
-          `Lifecycle mapping entry "${specId}" is not an object.`,
+          `Lifecycle mapping entry "${specId}" is not an object.`
         ),
       };
     }
@@ -2494,7 +2579,7 @@ function loadLifecycleMappingFile(
       return {
         ok: false,
         message: renderLifecycleMappingFileFailure(
-          `Lifecycle mapping entry "${specId}" is missing required string field "lifecycle_state".`,
+          `Lifecycle mapping entry "${specId}" is missing required string field "lifecycle_state".`
         ),
       };
     }
@@ -2533,13 +2618,13 @@ function renderApplyHuman(
   result: SpecsMigrateApplyResult,
   repoRoot: string,
   applied: boolean,
-  out: (line: string) => void,
+  out: (line: string) => void
 ): void {
   const tag = applied ? '[apply]' : '[dry-run]';
   const r: MigrationReport = result.report;
   out(`${tag} caws specs migrate --from v10`);
   out(
-    `  distribution: migrated=${r.distribution.migrated} migrated_with_warnings=${r.distribution.migrated_with_warnings} refused=${r.distribution.refused} post_write_validation_failed=${r.distribution.post_write_validation_failed} total=${r.distribution.total}`,
+    `  distribution: migrated=${r.distribution.migrated} migrated_with_warnings=${r.distribution.migrated_with_warnings} refused=${r.distribution.refused} post_write_validation_failed=${r.distribution.post_write_validation_failed} total=${r.distribution.total}`
   );
   if (r.non_yaml_observations.length > 0) {
     out(`  non_yaml observations:`);
@@ -2586,10 +2671,7 @@ function entryTag(verdict: string): string {
   }
 }
 
-function renderApplyJson(
-  result: SpecsMigrateApplyResult,
-  out: (line: string) => void,
-): void {
+function renderApplyJson(result: SpecsMigrateApplyResult, out: (line: string) => void): void {
   // Preserve the store's report shape verbatim (per the contract
   // spec-v10-migration-output). Do not invent a second report shape.
   out(
@@ -2602,8 +2684,8 @@ function renderApplyJson(
         report: result.report,
       },
       null,
-      2,
-    ),
+      2
+    )
   );
 }
 
@@ -2626,7 +2708,9 @@ export function runSpecsPruneArchiveCommand(opts: SpecsPruneArchiveOptions): num
 
   void opts.apply;
   void ctx;
-  out('caws specs prune-archive: no-op. Archived spec bodies under .caws/specs/.archive/ are canonical again and are not pruned by CAWS.');
+  out(
+    'caws specs prune-archive: no-op. Archived spec bodies under .caws/specs/.archive/ are canonical again and are not pruned by CAWS.'
+  );
   out('  To archive closed specs: caws specs archive --status closed');
   out('  To restore an archived spec: caws specs restore <id> --as draft');
   out('  To recover the archived body: caws specs recover <id> --out <path>');
@@ -2648,6 +2732,22 @@ export function runSpecsPruneArchiveCommand(opts: SpecsPruneArchiveOptions): num
 // and does NOT mutate anything. Exit code is the verdict (0 valid / non-zero
 // invalid|unreadable). A missing/unreadable file produces an honest error —
 // never a false "YAML syntax error" for a file that was never parsed.
+
+/**
+ * CAWS-SPEC-SCHEMA-AUTHORITY-UNSTATED-001: the authority this command
+ * applied, printed with every verdict.
+ *
+ * A bare "is valid" arbitrates nothing when the project also carries a
+ * legacy `working-spec.schema.json`: the operator sees a passing verdict
+ * and a local schema that rejects the same shape, and has no way to learn
+ * which one governs. Naming the schema on BOTH the pass and the fail path
+ * matters — a failure is where someone is most likely to blame the wrong
+ * authority and start "fixing" a spec against a dead file.
+ */
+const SPEC_SCHEMA_AUTHORITY_NOTE =
+  'Authority: the kernel spec schema (spec.v1). Project-local schema files ' +
+  'under .caws/ (e.g. working-spec.schema.json) are legacy residue and are ' +
+  'NOT consulted.';
 
 export interface SpecsValidateOptions extends BaseCommandOptions {
   readonly file: string;
@@ -2674,6 +2774,7 @@ export function runSpecsValidateCommand(opts: SpecsValidateOptions): number {
   const result = parseAndValidateSpec(source, { sourcePath: filePath });
   if (!isOk(result)) {
     err(`caws specs validate: ${filePath} is invalid.`);
+    err(`  ${SPEC_SCHEMA_AUTHORITY_NOTE}`);
     err(renderDiagnostics(result.errors, { showData }));
     if (hasSpecParseOrSchemaDiagnostics(result.errors)) {
       err(renderSpecParseGuidance(filePath));
@@ -2682,6 +2783,7 @@ export function runSpecsValidateCommand(opts: SpecsValidateOptions): number {
   }
 
   out(`caws specs validate: ${filePath} is valid (${result.value.id}).`);
+  out(`  ${SPEC_SCHEMA_AUTHORITY_NOTE}`);
   return 0;
 }
 
@@ -2726,11 +2828,15 @@ export function runSpecsRelocateCommand(opts: SpecsRelocateOptions): number {
     if (record && typeof record.baseBranch === 'string') baseBranches.add(record.baseBranch);
   }
   if (baseBranches.size === 0) {
-    err('caws specs relocate: no registered worktrees — cannot infer the base branch. Relocation targets base by definition.');
+    err(
+      'caws specs relocate: no registered worktrees — cannot infer the base branch. Relocation targets base by definition.'
+    );
     return 1;
   }
   if (baseBranches.size > 1) {
-    err(`caws specs relocate: worktrees declare multiple base branches (${Array.from(baseBranches).join(', ')}); CAWS will not guess.`);
+    err(
+      `caws specs relocate: worktrees declare multiple base branches (${Array.from(baseBranches).join(', ')}); CAWS will not guess.`
+    );
     return 1;
   }
   const baseBranch = Array.from(baseBranches)[0]!;
@@ -2750,19 +2856,27 @@ export function runSpecsRelocateCommand(opts: SpecsRelocateOptions): number {
   const o = result.value;
 
   if (o.alreadyOnBase) {
-    out(`caws specs relocate: ${opts.id} — canonical HEAD already sits on the base branch "${o.baseBranch}"; nothing to relocate.`);
+    out(
+      `caws specs relocate: ${opts.id} — canonical HEAD already sits on the base branch "${o.baseBranch}"; nothing to relocate.`
+    );
     return 0;
   }
   if (!o.applied) {
     out(`caws specs relocate: ${opts.id} (dry-run)`);
     out(`  source branch: ${o.sourceBranch} (canonical HEAD is parked here)`);
     out(`  target branch: ${o.baseBranch}`);
-    out('  planned: read the parked copy, graft it onto base, commit "chore(caws): relocate ...", CAS the base ref.');
+    out(
+      '  planned: read the parked copy, graft it onto base, commit "chore(caws): relocate ...", CAS the base ref.'
+    );
     out('  Working trees are never touched. Pass --apply to perform.');
     return 0;
   }
-  out(`caws specs relocate: ${opts.id} relocated onto ${o.baseBranch} (commit ${o.relocatedCommit}).`);
-  out(`  The parked checkout "${o.sourceBranch}" still shows the file (its tree is untouched); base now carries it too.`);
+  out(
+    `caws specs relocate: ${opts.id} relocated onto ${o.baseBranch} (commit ${o.relocatedCommit}).`
+  );
+  out(
+    `  The parked checkout "${o.sourceBranch}" still shows the file (its tree is untouched); base now carries it too.`
+  );
   out('  Audit: the relocation commit on base names the spec, the source branch, and this slice.');
   return 0;
 }
