@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-remediation-escape
 created_at: '2026-09-16T07:47:20.506Z'
-updated_at: '2026-09-16T07:47:29.629Z'
+updated_at: '2026-09-16T07:48:13.536Z'
 created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
 blast_radius:
   modules:
@@ -16,6 +16,7 @@ scope:
   in:
     - 'packages/caws-cli/src/kernel/spec/validate-semantics.ts'
     - 'packages/caws-cli/tests/kernel/unit/remediation-no-label-escape.test.ts'
+    - packages/caws-cli/src/shell/commands/specs.ts
   out: []
 invariants:
   - 'TODO: describe one invariant this spec guarantees.'
