@@ -41,6 +41,14 @@ acceptance:
       the wt-demo row reports ahead=2 behind=3 (branch-only commits then base-only
       commits, matching git rev-list --left-right --count main...wt-demo), and exits
       0
+  - id: A2
+    given: >-
+      a registered worktree wt-fresh whose branch ref was created at the current tip
+      of main and has no commits of its own
+    when: 'caws worktree list runs'
+    then: >-
+      the wt-fresh row reports ahead=0 behind=0 and is marked as containing base,
+      distinguishing an up-to-date empty lane from a lane that merely has no commits
 non_functional: {}
 contracts:
   - name: 'lane-divergence'
