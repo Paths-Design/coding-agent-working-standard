@@ -24,3 +24,10 @@ acceptance:
     then: 'the test asserts the exact outcome for the environment it is in and still proves the hostile nodeid was never interpreted, passing both with and without an importable pytest'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Reproduced the pre-push failure and fixed it, proven in both environments on the same commit. ENV A (ambient python3 carries pytest): 25 passed, 0 skipped, asserting outcome missing. ENV B (PATH=nvm-bin:/usr/bin:/bin:/usr/sbin:/sbin so python3 is /usr/bin/python3 and reports No module named pytest): previously 1 failed / 2 skipped, now 23 passed / 2 skipped / 0 failed, asserting outcome unavailable and detail matching No module named pytest. The 2 skips are the pre-existing describeWithPytest block and match the hook run exactly. The oracle asserts one exact outcome per environment rather than a set, so it can still fail for the right reason in either. The runtime was correct and is unchanged."
+    recorded_at: "2026-09-16T22:55:53.987Z"
+    test_nodeid: packages/caws-cli/tests/store/evidence-rederive.test.js
+    commit_sha: bc9e65d2
