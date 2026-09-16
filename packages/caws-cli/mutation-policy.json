@@ -13,6 +13,7 @@
       "rationale": "Pure safety and authority decisions are held to an explicit per-file mutation floor.",
       "files": [
         "src/kernel/evidence/canonical-json.ts",
+        "src/kernel/evidence/rederive.ts",
         "src/kernel/evidence/verify.ts",
         "src/kernel/policy/derive-budget.ts",
         "src/kernel/result/combinators.ts",
@@ -147,6 +148,7 @@
         "src/store/bridge-store.ts",
         "src/store/doctor-snapshot.ts",
         "src/store/events-migration.ts",
+        "src/store/evidence-rederive.ts",
         "src/store/git-autocommit.ts",
         "src/store/git-binary.ts",
         "src/store/git-sparse-checkout.ts",
@@ -185,6 +187,7 @@
       "coverageAnalysis": "perTest",
       "targets": [
         { "source": "src/kernel/evidence/canonical-json.ts" },
+        { "source": "src/kernel/evidence/rederive.ts" },
         { "source": "src/kernel/evidence/verify.ts" },
         { "source": "src/kernel/policy/derive-budget.ts" },
         { "source": "src/kernel/result/combinators.ts" },
@@ -197,6 +200,7 @@
       ],
       "tests": [
         "tests/kernel/unit/evidence-canonical-json.test.ts",
+        "tests/kernel/unit/evidence-rederive.test.ts",
         "tests/kernel/unit/policy-derive-budget.test.ts",
         "tests/kernel/unit/result-combinators.test.ts",
         "tests/kernel/unit/scope-evaluate.test.ts",

@@ -111,7 +111,7 @@ LCOV reports in a commit-named artifact, including when a threshold fails. The
 init/machine-runtime surface requires 85% statements, 70% branches, 90%
 functions and 85% lines. After subtracting that group, the remaining runtime
 requires 60% statements, 50% branches, 60% functions and 60% lines. These are
-regression floors, not correctness proof; the 19 per-file mutation targets keep
+regression floors, not correctness proof; the 20 per-file mutation targets keep
 their separate 80% floors. CLI entry points exercised only in child processes
 remain zero in Jest's in-process report; installed-artifact fixtures supply
 their behavioral evidence rather than manufacturing coverage hits.

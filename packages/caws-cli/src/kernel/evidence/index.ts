@@ -38,3 +38,29 @@ export { SPEC_ID_REGEX } from './validate';
 export { prepareAppend } from './prepare';
 
 export { verifyChain } from './verify';
+
+export {
+  CHECK_CLASSES,
+  CHECK_OUTCOMES,
+  CHECK_SOURCES,
+  REDERIVATION_REASONS,
+  REDERIVATION_VERDICTS,
+  classifyRederivation,
+  planRederivation,
+  summarizeRederivation,
+} from './rederive';
+export type {
+  CheckClass,
+  CheckOutcome,
+  CheckOutcomeKind,
+  CheckSource,
+  CheckVerdict,
+  CriterionPlan,
+  CriterionVerdict,
+  DeclaredCheck,
+  RederivationPlan,
+  RederivationReason,
+  RederivationReport,
+  RederivationSummary,
+  RederivationVerdict,
+} from './rederive';

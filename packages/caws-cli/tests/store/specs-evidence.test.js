@@ -253,7 +253,7 @@ describe('AC-evidence-completeness close gate — WARN MODE (CAWS-SPEC-AC-EVIDEN
     expect(warnings.join('\n')).not.toMatch(/A1: no evidence/);
   });
 
-  test('close ADMITS CLEANLY (no warning) when every AC has pass evidence', () => {
+  test('close carries ONLY the re-derivation summary when every AC has pass evidence (no missing-evidence advisory)', () => {
     const { caws } = mkRepo('close-pass-');
     seedActiveSpec(caws, 'CLOSE-PASS-001', ['A1', 'A2']);
     const base = {
@@ -274,10 +274,16 @@ describe('AC-evidence-completeness close gate — WARN MODE (CAWS-SPEC-AC-EVIDEN
     });
     expect(r.ok).toBe(true);
     const warnings = (r.value.kind === 'success' && r.value.warnings) || [];
-    expect(warnings.length).toBe(0);
+    // A narrative-only pass satisfies the completeness gate but is a
+    // self-assertion; the close names it as such (counted, never refuted).
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(
+      'Evidence at close for "CLOSE-PASS-001": 2 criteria — verified 0, refuted 0, not_rederived 2 (self-reported 0, narrative-only 2, command declared 0)'
+    );
+    expect(warnings[0]).not.toContain('lacking satisfying evidence');
   });
 
-  test('close ADMITS CLEANLY (no warning) when unsatisfied ACs are waived with a reason', () => {
+  test('close carries ONLY the re-derivation summary when unsatisfied ACs are waived with a reason', () => {
     const { caws } = mkRepo('close-waiv-');
     seedActiveSpec(caws, 'CLOSE-WAIV-001', ['A1', 'A2']);
     recordSpecEvidence(caws, {
@@ -305,7 +311,12 @@ describe('AC-evidence-completeness close gate — WARN MODE (CAWS-SPEC-AC-EVIDEN
     });
     expect(r.ok).toBe(true);
     const warnings = (r.value.kind === 'success' && r.value.warnings) || [];
-    expect(warnings.length).toBe(0);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(
+      /^Evidence at close for "CLOSE-WAIV-001": 2 criteria — verified 0, refuted 0, not_rederived 2/
+    );
+    expect(warnings[0]).not.toContain('lacking satisfying evidence');
+    expect(warnings[0]).not.toContain('A2');
   });
 
   test('close PROCEEDS with a warning when an AC has fail evidence (fail does not satisfy closure)', () => {

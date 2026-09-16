@@ -95,6 +95,7 @@ import {
   runSpecsMigrateCommand,
   runSpecsRelocateCommand,
   runSpecsShowCommand,
+  runSpecsVerifyAcsCommand,
   runSpecsValidateCommand,
   runStatusCommand,
   runWaiverCreateCommand,
@@ -1389,6 +1390,7 @@ export function registerShellCommands(
         exitCode?: string;
         artifactPath?: string;
         commitSha?: string;
+        verify?: boolean;
         data?: boolean;
       },
       command: Command
@@ -1412,7 +1414,25 @@ export function registerShellCommands(
         ...(opts.exitCode !== undefined ? { exitCode: Number(opts.exitCode) } : {}),
         ...(opts.artifactPath !== undefined ? { artifactPath: opts.artifactPath } : {}),
         ...(opts.commitSha !== undefined ? { commitSha: opts.commitSha } : {}),
+        ...(opts.verify === true ? { verify: true } : {}),
         showData: globals.data === true,
+      });
+      exit(code);
+    }
+  );
+
+  defineLeaf(specsCmd, leafMeta(SPECS_COMMAND_META, 'verify-acs')).action(
+    (
+      id: string,
+      opts: { run?: boolean; strict?: boolean; json?: boolean; runner?: string; data?: boolean }
+    ) => {
+      const code = runSpecsVerifyAcsCommand({
+        id,
+        ...(opts.run === true ? { run: true } : {}),
+        ...(opts.strict === true ? { strict: true } : {}),
+        ...(opts.json === true ? { json: true } : {}),
+        ...(typeof opts.runner === 'string' ? { runner: opts.runner } : {}),
+        showData: opts.data === true,
       });
       exit(code);
     }

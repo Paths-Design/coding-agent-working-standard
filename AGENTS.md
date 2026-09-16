@@ -389,10 +389,12 @@ trail shows when and why a guard was skipped. A foreign session is never covered
 
 **Problem**: Tried to run `caws validate` / `caws iterate` / `caws diagnose` /
 `caws verify-acs` / `caws evaluate` / `caws burnup`. **Cause**: Reading a stale
-doc that pre-dates v11.0 cutover. **Fix**: Those commands were removed in v11.0
-and are not planned to return. Use `caws doctor` (drift / structure) and
-`caws gates run --spec <id>` (policy / quality) as the validation surface.
-`caws specs create` was restored in v11.1.
+doc that pre-dates v11.0 cutover. **Fix**: Those commands were removed in v11.0.
+Use `caws doctor` (drift / structure) and `caws gates run --spec <id>` (policy /
+quality) as the validation surface. `caws specs create` was restored in v11.1;
+`caws verify-acs` returned as `caws specs verify-acs <id>` in 12.2 (re-derives
+recorded evidence; `--run` executes cited tests; a collected-but- unexecuted
+test reports `not_rederived`, never pass). The rest are not planned to return.
 
 **Problem**: `caws init` refuses to run. **Cause**: Legacy
 `.caws/working-spec.yaml` residue from v10.x. **Fix**: Migrate that file's

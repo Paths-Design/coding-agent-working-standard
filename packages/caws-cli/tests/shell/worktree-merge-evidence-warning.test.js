@@ -138,7 +138,7 @@ describe('mergeWorktree carries the auto-close AC-evidence advisory in its outco
     expect(warnings.join('\n')).toContain(`caws specs evidence ${SPEC} --ac A1`);
   });
 
-  test('a fully-evidenced spec merges with no evidence_warnings key at all', () => {
+  test('a fully-evidenced spec merges with evidence_warnings carrying only the re-derivation summary', () => {
     const caws = setupCaws(mkRepo('acmerge-clean-'));
     const repo = path.dirname(caws);
     const SPEC = 'ACMERGE-CLEAN-001';
@@ -165,9 +165,15 @@ describe('mergeWorktree carries the auto-close AC-evidence advisory in its outco
 
     expect(result.ok).toBe(true);
     expect(result.value.kind).toBe('success');
-    // Absent, not empty: a clean merge must not carry a vestigial key, or the
-    // "did this close warn?" question needs a length check at every reader.
-    expect(result.value.data).not.toHaveProperty('evidence_warnings');
+    // The missing-evidence advisory is absent. The per-close re-derivation
+    // summary is present because evidence was recorded: a narrative-only pass
+    // is a self-assertion and the merge renderer must be able to say so.
+    const warnings = result.value.data.evidence_warnings;
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(
+      `Evidence at close for "${SPEC}": 1 criteria — verified 0, refuted 0, not_rederived 1 (self-reported 0, narrative-only 1, command declared 0)`
+    );
+    expect(warnings[0]).not.toContain('lacking satisfying evidence');
   });
 });
 
@@ -192,7 +198,7 @@ describe('caws worktree merge prints the advisory', () => {
     expect(result.err).toContain(`caws specs evidence ${SPEC} --ac A1 --status pass`);
   });
 
-  test('a fully-evidenced spec merges with no advisory on stderr', () => {
+  test('a fully-evidenced spec merges with no missing-evidence advisory on stderr, only the re-derivation summary', () => {
     const caws = setupCaws(mkRepo('acmerge-shell-clean-'));
     const repo = path.dirname(caws);
     const SPEC = 'ACMERGE-SHELL-002';
@@ -215,6 +221,9 @@ describe('caws worktree merge prints the advisory', () => {
     expect(result.code).toBe(0);
     expect(result.out).toContain('merged wt-acm-shell-clean');
     expect(result.err).not.toContain('lacking satisfying evidence');
-    expect(result.err).not.toContain('caws advisory (non-blocking)');
+    expect(result.err).not.toContain(`caws specs evidence ${SPEC}`);
+    expect(result.err).toContain(
+      `caws advisory (non-blocking): Evidence at close for "${SPEC}": 1 criteria — verified 0, refuted 0, not_rederived 1`
+    );
   });
 });

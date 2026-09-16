@@ -21,8 +21,9 @@ AI-assisted development.
 > `session`, `working-tree`, `handoff` (plus the auto-generated `help`). Run
 > `caws --help` for the authoritative list. Removed commands (`validate`,
 > `iterate`, `evaluate`, `diagnose`, `provenance`, `scaffold`, `parallel`,
-> `mode`, `verify-acs`, `burnup`, `sidecar`, `test-analysis`, `templates`,
-> `prepush`, legacy `hooks install`) are not registered with the CLI. Do NOT pin
+> `mode`, `burnup`, `sidecar`, `test-analysis`, `templates`, `prepush`, legacy
+> `hooks install`) are not registered with the CLI; the top-level `verify-acs`
+> lives under `specs` as `caws specs verify-acs <id>` (12.2+). Do NOT pin
 > `caws-cli@^10.2.x`; v11.1+ ships the full spec/worktree/agents/session
 > surface.
 >

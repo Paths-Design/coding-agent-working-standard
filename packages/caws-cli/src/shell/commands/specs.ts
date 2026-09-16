@@ -61,7 +61,13 @@ import {
   type SpecsListStatus,
 } from '../../store/specs-writer';
 import { amendSpecBody } from '../../store/specs-body-writer';
-import type { LifecycleMapping } from '../../kernel';
+import {
+  describeVerdict,
+  rederiveSpecEvidence,
+  SELECTABLE_TEST_RUNNERS,
+  type TestRunner,
+} from '../../store/evidence-rederive';
+import type { LifecycleMapping, RederivationSummary, Spec } from '../../kernel';
 import { EVIDENCE_STATUSES, SPEC_MODES, SPEC_RESOLUTIONS, type EvidenceStatus } from '../../kernel';
 import * as fs from 'node:fs';
 import { buildActor } from '../session/actor';
@@ -1698,10 +1704,69 @@ export interface SpecsEvidenceOptions extends BaseCommandOptions {
   readonly exitCode?: number;
   readonly artifactPath?: string;
   readonly commitSha?: string;
+  /** Re-derive the cited evidence before recording; refuse a refuted `pass`. */
+  readonly verify?: boolean;
 }
 
 function isEvidenceStatus(value: unknown): value is EvidenceStatus {
   return typeof value === 'string' && (EVIDENCE_STATUSES as readonly string[]).includes(value);
+}
+
+// ─── --verify: re-derive before recording ─────────────────────────────────
+//
+// The record-time half of CAWS-SPECS-VERIFY-ACS-REDERIVE-001. The expensive
+// path (running the cited test) belongs here — the operation is already
+// deliberate and single-criterion, and it is the moment the claim is made.
+// A `pass` whose citation is refuted is refused and nothing is written. A
+// citation that cannot be re-derived is still recorded, but named as
+// self-reported on stderr so the ledger never reads it as verified.
+
+type PendingEvidence = NonNullable<Spec['evidence']>[number];
+
+type VerifyGate =
+  | { readonly kind: 'refuse'; readonly lines: readonly string[] }
+  | { readonly kind: 'verified'; readonly lines: readonly string[] }
+  | { readonly kind: 'unverifiable'; readonly lines: readonly string[] };
+
+function verifyPendingEvidence(repoRoot: string, spec: Spec, pending: PendingEvidence): VerifyGate {
+  // Project the entry being recorded over the spec as it will be after the
+  // write, so re-derivation targets exactly this claim.
+  const others = (spec.evidence ?? []).filter((e) => e.criterion_id !== pending.criterion_id);
+  const projected: Spec = { ...spec, evidence: [...others, pending] };
+  const result = rederiveSpecEvidence(repoRoot, projected, {
+    classes: ['citation', 'artifact', 'test'],
+    runTests: true,
+  });
+  const verdict = result.verdicts.find((v) => v.id === pending.criterion_id);
+  if (verdict === undefined) {
+    return {
+      kind: 'refuse',
+      lines: [
+        `caws specs evidence --verify: ${pending.criterion_id} is not a declared acceptance criterion of ${spec.id}.`,
+      ],
+    };
+  }
+  const line = `  ${describeVerdict(verdict)}`;
+  if (verdict.verdict === 'refuted' && pending.status === 'pass') {
+    return {
+      kind: 'refuse',
+      lines: [
+        `caws specs evidence --verify: refusing to record status pass for ${pending.criterion_id} — the cited evidence does not re-derive.`,
+        line,
+        '  Nothing was written. Fix the citation (or the code it cites) and record again; use --status fail if the criterion genuinely fails.',
+      ],
+    };
+  }
+  if (verdict.verdict === 'verified') {
+    return { kind: 'verified', lines: ['verified before recording:', line] };
+  }
+  return {
+    kind: 'unverifiable',
+    lines: [
+      `caws specs evidence --verify: ${pending.criterion_id} could not be mechanically re-derived; recording as self-reported.`,
+      line,
+    ],
+  };
 }
 
 export function runSpecsEvidenceCommand(opts: SpecsEvidenceOptions): number {
@@ -1730,6 +1795,43 @@ export function runSpecsEvidenceCommand(opts: SpecsEvidenceOptions): number {
     'evidence'
   );
   if (actor === null) return 2;
+
+  if (opts.verify === true) {
+    if (
+      opts.testNodeid === undefined &&
+      opts.artifactPath === undefined &&
+      opts.commitSha === undefined
+    ) {
+      err(
+        'caws specs evidence --verify: nothing to verify. Supply at least one of --test-nodeid, --artifact-path, --commit-sha ' +
+          '(a --command is recorded but never executed, so it cannot be verified).'
+      );
+      return 1;
+    }
+    const shown = showSpec(ctx.cawsDir, opts.id);
+    if (!isOk(shown)) {
+      err('caws specs evidence: failed.');
+      err(renderDiagnostics(shown.errors, { showData }));
+      return 1;
+    }
+    const pending: PendingEvidence = {
+      criterion_id: opts.ac,
+      status: opts.status,
+      recorded_at: nowFn().toISOString(),
+      ...(opts.evidenceRef !== undefined ? { evidence_ref: opts.evidenceRef } : {}),
+      ...(opts.testNodeid !== undefined ? { test_nodeid: opts.testNodeid } : {}),
+      ...(opts.command !== undefined ? { command: opts.command } : {}),
+      ...(opts.exitCode !== undefined ? { exit_code: opts.exitCode } : {}),
+      ...(opts.artifactPath !== undefined ? { artifact_path: opts.artifactPath } : {}),
+      ...(opts.commitSha !== undefined ? { commit_sha: opts.commitSha } : {}),
+    };
+    const gate = verifyPendingEvidence(ctx.repoRoot, shown.value.spec, pending);
+    if (gate.kind === 'refuse') {
+      for (const l of gate.lines) err(l);
+      return 1;
+    }
+    for (const l of gate.lines) (gate.kind === 'verified' ? out : err)(l);
+  }
 
   const result = recordSpecEvidence(ctx.cawsDir, {
     id: opts.id,
@@ -1761,6 +1863,127 @@ export function runSpecsEvidenceCommand(opts: SpecsEvidenceOptions): number {
   );
   surfaceAuditCommit(outcome.data?.audit_commit, err);
   return 0;
+}
+
+// ─── caws specs verify-acs ───────────────────────────────────────────────
+//
+// CAWS-SPECS-VERIFY-ACS-REDERIVE-001. Re-derives the spec's recorded
+// acceptance evidence against reality instead of trusting its `status`
+// field. Read-only: writes no spec bytes and appends no event. The kernel
+// decides what to check and how to read the outcomes, the store executes,
+// this command renders.
+//
+// Three verdicts, never collapsed. v10.2's verify-acs mapped "the test was
+// collected" straight to PASS; here a collected-but-unexecuted test is
+// `not_rederived`, and existence-only mode (the default) can never print
+// verified. The summary keeps v10.2's honest qualifier — "all
+// mechanically-verifiable ACs passed" — with the unverifiable count printed
+// beside it, never folded in.
+
+export const VERIFY_ACS_SCHEMA = 'verify-acs.v1';
+
+export interface SpecsVerifyAcsOptions extends BaseCommandOptions {
+  readonly id: string;
+  /** Execute cited tests. Default: existence check only, which reports not_rederived. */
+  readonly run?: boolean;
+  /** Exit 1 on any not_rederived criterion. Default: exit 1 only on refuted. */
+  readonly strict?: boolean;
+  readonly json?: boolean;
+  readonly runner?: string;
+}
+
+function isSelectableRunner(value: string): value is TestRunner {
+  return (SELECTABLE_TEST_RUNNERS as readonly string[]).includes(value);
+}
+
+export function verifyAcsExitCode(summary: RederivationSummary, strict: boolean): number {
+  if (summary.refuted > 0) return 1;
+  if (strict && summary.not_rederived > 0) return 1;
+  return 0;
+}
+
+/**
+ * The one-line verdict. Says "passed" only when something was verified and
+ * nothing was refuted, and always prints the unverifiable count beside it.
+ */
+export function verifyAcsVerdictLine(summary: RederivationSummary): string {
+  const unverifiable = `unverifiable: ${summary.not_rederived} (not counted as pass)`;
+  if (summary.refuted > 0) {
+    return `verdict: REFUTED — ${summary.refuted} criterion/criteria cite evidence that does not re-derive; ${unverifiable}`;
+  }
+  if (summary.verified === 0) {
+    return `verdict: nothing was mechanically verified; ${unverifiable}`;
+  }
+  return `verdict: all mechanically-verifiable ACs passed (${summary.verified} verified); ${unverifiable}`;
+}
+
+export function runSpecsVerifyAcsCommand(opts: SpecsVerifyAcsOptions): number {
+  const { cwd, out, err, showData } = setupIO(opts);
+
+  if (opts.runner !== undefined && !isSelectableRunner(opts.runner)) {
+    err(
+      `caws specs verify-acs: invalid --runner. Got ${JSON.stringify(opts.runner)}; expected one of ${SELECTABLE_TEST_RUNNERS.join('|')}.`
+    );
+    return 1;
+  }
+
+  const ctx = resolveCawsCtx(cwd, err, showData, 'verify-acs');
+  if (ctx === null) return 2;
+
+  const shown = showSpec(ctx.cawsDir, opts.id);
+  if (!isOk(shown)) {
+    err('caws specs verify-acs: failed.');
+    err(renderDiagnostics(shown.errors, { showData }));
+    return 1;
+  }
+
+  const run = opts.run === true;
+  const strict = opts.strict === true;
+  const result = rederiveSpecEvidence(ctx.repoRoot, shown.value.spec, {
+    classes: ['citation', 'artifact', 'test'],
+    runTests: run,
+    ...(opts.runner !== undefined && isSelectableRunner(opts.runner)
+      ? { runner: opts.runner }
+      : {}),
+  });
+  const code = verifyAcsExitCode(result.summary, strict);
+
+  if (opts.json === true) {
+    emitJson(out, {
+      schema: VERIFY_ACS_SCHEMA,
+      id: opts.id,
+      mode: run ? 'run' : 'exists',
+      strict,
+      exit_code: code,
+      summary: result.summary,
+      criteria: result.verdicts,
+    });
+    return code;
+  }
+
+  out(
+    `caws specs verify-acs ${opts.id} (mode: ${
+      run
+        ? 'run — cited tests executed'
+        : 'exists — cited tests located, not executed; pass --run to execute'
+    })`
+  );
+  for (const v of result.verdicts) out(`  ${describeVerdict(v)}`);
+  const s = result.summary;
+  out(
+    `summary: ${s.total} criteria — verified ${s.verified}, refuted ${s.refuted}, not_rederived ${s.not_rederived} ` +
+      `(narrative-only ${s.narrative_only}, self-reported ${s.self_reported}, command declared ${s.command_declared})`
+  );
+  out(verifyAcsVerdictLine(s));
+  if (strict && s.not_rederived > 0) {
+    out(`strict: ${s.not_rederived} not_rederived criterion/criteria → exit 1`);
+  }
+  if (s.command_declared > 0) {
+    out(
+      `note: ${s.command_declared} criterion/criteria declare a command; a recorded command is never executed by CAWS`
+    );
+  }
+  return code;
 }
 
 // ─── caws specs amend-scope ──────────────────────────────────────────────

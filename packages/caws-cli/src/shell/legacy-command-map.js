@@ -363,16 +363,17 @@ const LEGACY_COMMAND_MAP = Object.freeze([
   }),
   entry({
     command: 'verify-acs',
-    disposition: 'removed',
-    v11Status: 'intentionally_absent',
-    replacement: null,
-    since: null,
-    sourceDocs: ['docs/migration-v10-to-v11.md#removed-without-replacement'],
-    implementationProbe: { group: null },
+    disposition: 'replaced',
+    v11Status: 'shipped',
+    replacement: 'caws specs verify-acs <id>',
+    since: '12.2',
+    sourceDocs: ['docs/migration-v10-to-v11.md#replaced'],
+    implementationProbe: { group: 'specs', subcommand: 'verify-acs' },
     runtimeDiagnostic: {
-      kind: 'removed',
+      kind: 'replaced',
       message:
-        'caws verify-acs was removed in v11. Encode AC-evidence assertions in your test suite directly.',
+        'caws verify-acs moved to caws specs verify-acs in v12.2; a collected-but-unexecuted test is reported as not_rederived, never as passing.',
+      use: ['caws specs verify-acs <id>', 'caws specs verify-acs <id> --run'],
     },
   }),
   entry({

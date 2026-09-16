@@ -141,8 +141,8 @@ describe('mutation policy topology contract', () => {
     // mutation target must reconcile policy AND this pin in the same change
     // (6abff54f reconciled the policy for agents-conjoining.ts but not the
     // pin — the pin is the forcing function, so bump it consciously).
-    expect(result.stdout).toMatch(/PASS: 146 source files accounted for exactly once/);
-    expect(result.stdout).toMatch(/19 mutation targets across 3 surfaces/);
+    expect(result.stdout).toMatch(/PASS: 148 source files accounted for exactly once/);
+    expect(result.stdout).toMatch(/20 mutation targets across 3 surfaces/);
   });
 
   test('an unclassified production source is a hard failure', () => {

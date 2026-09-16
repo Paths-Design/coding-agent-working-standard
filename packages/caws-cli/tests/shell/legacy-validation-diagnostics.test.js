@@ -24,12 +24,22 @@ describe('validation-era legacy command diagnostics', () => {
     }
   });
 
+  // CAWS-SPECS-VERIFY-ACS-REDERIVE-001: verify-acs is restored under `specs`.
+  // The top-level name must hand off to the new home, not report a removal.
+  test('verify-acs hands off to caws specs verify-acs', () => {
+    const diagnostic = diagnosticFor(['verify-acs']);
+
+    expect(diagnostic).toContain('caws verify-acs moved to caws specs verify-acs');
+    expect(diagnostic).toContain('never as passing');
+    expect(diagnostic).toContain('Use instead:');
+    expect(diagnostic).toContain('caws specs verify-acs <id>');
+    expect(diagnostic).toContain('caws specs verify-acs <id> --run');
+    expect(diagnostic).toContain('docs/migration-v10-to-v11.md#replaced');
+    expect(diagnostic).not.toContain('Encode AC-evidence assertions in your test suite directly.');
+  });
+
   test('removed validation-era commands preserve command-specific guidance', () => {
     const cases = [
-      {
-        argv: ['verify-acs'],
-        expected: 'Encode AC-evidence assertions in your test suite directly.',
-      },
       {
         argv: ['evaluate'],
         expected:

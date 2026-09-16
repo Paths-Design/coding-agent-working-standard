@@ -29,6 +29,7 @@
 
 import { EVIDENCE_STATUSES, RISK_TIERS, SPEC_MODES, SPEC_RESOLUTIONS } from '../kernel';
 import { SPECS_LIST_STATUSES } from '../store/specs-writer';
+import { SELECTABLE_TEST_RUNNERS } from '../store/evidence-rederive';
 import { KNOWN_SURFACES } from '../init/hook-packs/register';
 
 /** A positional argument on a command. */
@@ -141,7 +142,7 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'specs',
   description:
-    'Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend/amend-scope/evidence/close/reopen/archive/prune-archive/migrate/validate/relocate)',
+    'Manage CAWS spec lifecycle (create/list/show/recover/restore/retire-draft/prune-drafts/activate/deactivate/amend/amend-scope/evidence/verify-acs/close/reopen/archive/prune-archive/migrate/validate/relocate)',
   options: [
     {
       flag: '--status <status>',
@@ -563,6 +564,41 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
           flag: '--commit-sha <sha>',
           description: 'Optional: commit sha (7-40 hex chars) evidencing the criterion',
         },
+        {
+          flag: '--verify',
+          description:
+            "Re-derive the cited evidence before recording: run the cited test through the repository's own runner, check the cited artifact and commit. Refuses to record status pass when the citation is refuted and writes nothing; a citation that cannot be re-derived is recorded and named as self-reported. Requires at least one of --test-nodeid / --artifact-path / --commit-sha (a --command is recorded but never executed, so it cannot be verified)",
+        },
+        DATA_OPTION,
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'verify-acs',
+      argument: {
+        name: 'id',
+        required: true,
+        description: 'Spec id whose recorded acceptance evidence to re-derive',
+      },
+      description:
+        "Re-derive the spec's recorded acceptance evidence against reality instead of trusting its status field. Per criterion: the cited commit_sha must exist and be reachable from a ref, the cited artifact_path must be present at that revision, and the cited test_nodeid must exist (or, with --run, execute and pass). Three verdicts, never collapsed: verified (the check ran and passed), refuted (it ran and failed, or the citation names nothing), not_rederived (nothing mechanical was declared, or the check could not run). A criterion with only narrative evidence is not_rederived, and every verdict derived from an agent-supplied field is marked self-reported — re-derivation proves a citation is real, not that it is relevant. Read-only: writes nothing. A recorded command is never executed. Exit 1 when any criterion is refuted; with --strict, also when any is not_rederived.",
+      options: [
+        {
+          flag: '--run',
+          description:
+            "Execute cited tests through the repository's own runner (pytest or jest, resolved from the repo — never npx). Default: existence check only, which reports not_rederived, never pass",
+        },
+        {
+          flag: '--strict',
+          description:
+            'Exit 1 when any criterion is not_rederived (default: exit 1 only on refuted)',
+        },
+        {
+          flag: '--runner <name>',
+          description: 'Override test-runner detection',
+          allowedValues: SELECTABLE_TEST_RUNNERS,
+        },
+        { flag: '--json', description: 'Emit the verify-acs.v1 report as JSON' },
         DATA_OPTION,
       ],
     },
