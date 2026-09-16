@@ -8,6 +8,9 @@
     "packages/*"
   ],
   "scripts": {
+    "// Git hooks: point git at the tracked .husky tree. Deliberately NOT husky's own CLI, which sets core.hooksPath to .husky/_ and once left this repo with no hooks at all.": "",
+    "prepare": "git config core.hooksPath .husky",
+    "test:hooks": "bash .husky/tests/run.sh",
     "// Core turbo scripts (delegated to individual packages)": "",
     "build": "turbo run build",
     "dev": "turbo run dev",

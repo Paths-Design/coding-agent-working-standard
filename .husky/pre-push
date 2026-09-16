@@ -4,11 +4,10 @@
 # Mirrors the CI pipeline so a push cannot fail in CI for something reproducible
 # locally. Deliberately strict: there is no environment-variable escape hatch.
 #
-# Removed from the previous version: a loop over "$@" looking for --no-verify.
-# git passes a pre-push hook <remote-name> <remote-url> and nothing else — the
-# user's flags never appear there, so that check could never fire. Worse, git
-# does not run this hook at all under --no-verify, so a hook can never police
-# its own bypass. The real control is review + branch protection.
+# Note on --no-verify: git passes a pre-push hook <remote-name> <remote-url> and
+# nothing else, so the user's flags never appear in "$@"; and git does not run
+# this hook at all under --no-verify. A hook can never police its own bypass.
+# The real control is review + branch protection.
 
 # git hooks run with a minimal PATH; restore the usual locations.
 export PATH="/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:$PATH"
@@ -22,7 +21,20 @@ fi
 
 set -uo pipefail
 
-# Portable timeout: macOS has neither GNU timeout nor gtimeout by default.
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Fail CLOSED if the lock library is missing. A guard that silently proceeds
+# without its concurrency control is worse than one that refuses: it is the
+# `source <missing> || true` pattern this repo bans outright.
+if [ ! -f "$HOOK_DIR/lib/prepush-lock.sh" ]; then
+  echo "pre-push: $HOOK_DIR/lib/prepush-lock.sh is missing — refusing." >&2
+  echo "  Without it two concurrent pushes would build against the shared turbo cache." >&2
+  exit 1
+fi
+# shellcheck source=lib/prepush-lock.sh
+. "$HOOK_DIR/lib/prepush-lock.sh"
+
+# Portable timeout: macOS ships neither GNU timeout nor gtimeout by default.
 # Returns the command's own status, or 124 on timeout.
 run_with_timeout() {
   local seconds="$1"; shift
@@ -42,6 +54,26 @@ run_with_timeout() {
 }
 
 [ -f package.json ] && [ -f turbo.json ] || exit 0
+
+# ── Serialise the heavy stages across every worktree of this repository ───
+LOCK_DIR=$(caws_prepush_lock_dir) || LOCK_DIR=""
+if [ -z "$LOCK_DIR" ]; then
+  echo "pre-push: could not resolve the git common dir to place the build lock — refusing." >&2
+  exit 1
+fi
+
+if ! caws_prepush_lock_acquire "$LOCK_DIR" 1800 5; then
+  HOLDER=$(cat "$LOCK_DIR/pid" 2>/dev/null || echo "unknown")
+  echo "pre-push: another pre-push (pid $HOLDER) has been running the build/test" >&2
+  echo "  stages in this repository for over 30 minutes. Refusing to start a second" >&2
+  echo "  concurrent build — they share node_modules and the turbo cache, so running" >&2
+  echo "  both corrupts each other's artifacts." >&2
+  echo "  Wait for it to finish and push again, or if that process is gone, remove:" >&2
+  echo "    $LOCK_DIR" >&2
+  exit 1
+fi
+# Release on every exit path, including a failed stage or an interrupt.
+trap 'caws_prepush_lock_release "$LOCK_DIR"' EXIT INT TERM
 
 FAILED=false
 

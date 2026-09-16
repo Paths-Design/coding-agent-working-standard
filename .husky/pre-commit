@@ -2,7 +2,7 @@
 # CAWS pre-commit hook — repo-local to the caws monorepo.
 #
 # Scope note: the base-branch commit-message policy is NOT enforced here. A
-# pre-commit hook cannot see the commit message; the previous version tried to
+# pre-commit hook cannot see the commit message; an earlier version tried to
 # recover it by reading its parent process's argv (ps -o args= -p $PPID), which
 # silently mis-detects under any wrapper. That policy lives in .husky/commit-msg,
 # which git hands the actual message.
@@ -22,11 +22,15 @@ if command -v git >/dev/null 2>&1; then
 fi
 
 # ── Guard 1: refuse --amend while any lane is registered ──────────────────
-# Best-effort by construction: git exposes no signal to a hook that the commit
-# is an amend, so this reads the parent process's argv. Absence of `ps`, or an
-# invocation through a wrapper, means the amend is simply not detected — this
-# guard is defence in depth behind .claude/rules/worktree-isolation.md and the
+# Best-effort detection by construction: git exposes no signal to a hook that
+# the commit is an amend, so this reads the parent process's argv. Absence of
+# `ps`, or an invocation through a wrapper, means the amend is simply not
+# detected — defence in depth behind .claude/rules/worktree-isolation.md and the
 # agent-side danger latch, not the primary control.
+#
+# The *decision*, once an amend IS detected, fails CLOSED: empty output from
+# node is indistinguishable from a crash, so it must refuse rather than coerce
+# to a permissive 0.
 if [ -f "$CAWS_ROOT/.caws/worktrees.json" ] && command -v node >/dev/null 2>&1 && command -v ps >/dev/null 2>&1; then
   PARENT_ARGS=$(ps -o args= -p $PPID 2>/dev/null || echo "")
   case "$PARENT_ARGS" in
@@ -39,11 +43,13 @@ if [ -f "$CAWS_ROOT/.caws/worktrees.json" ] && command -v node >/dev/null 2>&1 &
           console.log((entries && typeof entries === "object") ? Object.keys(entries).length : 0);
         } catch (e) { console.log("ERR"); }
       ' "$CAWS_ROOT/.caws/worktrees.json" 2>/dev/null)
-      if [ "$LANE_COUNT" = "ERR" ]; then
-        echo "BLOCKED: --amend detected but .caws/worktrees.json is unreadable; refusing rather than guessing." >&2
+      if [ -z "$LANE_COUNT" ] || [ "$LANE_COUNT" = "ERR" ]; then
+        echo "BLOCKED: --amend detected but the lane count could not be determined" >&2
+        echo "  (.caws/worktrees.json unreadable, or node produced no output)." >&2
+        echo "  Refusing rather than guessing. Inspect with: caws worktree list" >&2
         exit 1
       fi
-      if [ "${LANE_COUNT:-0}" -gt 0 ] 2>/dev/null; then
+      if [ "$LANE_COUNT" -gt 0 ] 2>/dev/null; then
         echo "BLOCKED: git commit --amend while $LANE_COUNT worktree lane(s) are registered." >&2
         echo "  Amending rewrites history other lanes forked from. Make a new commit instead." >&2
         exit 1
@@ -52,14 +58,25 @@ if [ -f "$CAWS_ROOT/.caws/worktrees.json" ] && command -v node >/dev/null 2>&1 &
   esac
 fi
 
-STAGED=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || echo "")
-[ -n "$STAGED" ] || exit 0
+# Staged paths, two views:
+#   GUARDED — includes D (delete) and R (rename). A staged DELETION is a change:
+#     filtering it out let `git rm .caws/policy.yaml` bypass Guard 2 entirely,
+#     and a deletion-only commit skipped every guard below via the empty-set
+#     early exit.
+#   LINTABLE — ACM only, because lint-staged cannot lint a path that is gone.
+GUARDED=$(git diff --cached --name-only --diff-filter=ACMRD 2>/dev/null || echo "")
+LINTABLE=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || echo "")
+if [ -z "$GUARDED" ] && [ -z "$LINTABLE" ]; then
+  exit 0
+fi
 
 # ── Guard 2: policy edits may not ride along with code changes ────────────
 # .caws/policy.yaml owns gate mode (block/warn/skip); mixing it into a code
 # commit hides a governance change inside a diff nobody reviews as one.
-POLICY_CHANGES=$(printf '%s\n' "$STAGED" | grep -E '^\.caws/policy\.yaml$' || true)
-CODE_CHANGES=$(printf '%s\n' "$STAGED" | grep -vE '^\.caws/' || true)
+# Deleting policy.yaml is the most severe possible policy edit, so GUARDED
+# (not LINTABLE) is the correct input here.
+POLICY_CHANGES=$(printf '%s\n' "$GUARDED" | grep -E '^\.caws/policy\.yaml$' || true)
+CODE_CHANGES=$(printf '%s\n' "$GUARDED" | grep -vE '^\.caws/' | grep -v '^$' || true)
 if [ -n "$POLICY_CHANGES" ] && [ -n "$CODE_CHANGES" ]; then
   echo "BLOCKED: .caws/policy.yaml is staged together with code changes." >&2
   echo "  Commit the policy change on its own so it is reviewable as a governance change." >&2
@@ -70,10 +87,12 @@ if [ -n "$POLICY_CHANGES" ] && [ -n "$CODE_CHANGES" ]; then
 fi
 
 # ── Guard 3: change_budget belongs in policy, never in a spec ─────────────
-STAGED_SPECS=$(printf '%s\n' "$STAGED" | grep -E '^\.caws/specs/.+\.ya?ml$' || true)
+STAGED_SPECS=$(printf '%s\n' "$GUARDED" | grep -E '^\.caws/specs/.+\.ya?ml$' || true)
 if [ -n "$STAGED_SPECS" ]; then
   while IFS= read -r spec; do
     [ -n "$spec" ] || continue
+    # Only added lines matter; a deletion diff carries no '+' lines, so a
+    # removed spec cannot false-positive here.
     if git diff --cached -- "$spec" | grep -qE '^\+[[:space:]]*change_budget'; then
       echo "BLOCKED: $spec adds a change_budget key." >&2
       echo "  Budgets are policy, not spec content. Use a waiver:" >&2
@@ -85,7 +104,9 @@ if [ -n "$STAGED_SPECS" ]; then
 
   # Validate staged spec YAML through the CLI's own parser. `caws specs validate`
   # is path-shaped and read-only: it resolves nothing from .caws/ and mutates
-  # nothing, which is exactly why it is safe to call from a hook.
+  # nothing, which is why it is safe to call from a hook. A spec that is being
+  # DELETED, or one not materialised in a sparse lane checkout, has no file to
+  # validate and is skipped.
   if command -v caws >/dev/null 2>&1; then
     while IFS= read -r spec; do
       [ -n "$spec" ] || continue
@@ -100,10 +121,23 @@ if [ -n "$STAGED_SPECS" ]; then
 fi
 
 # ── lint-staged: eslint --fix + prettier --write per .lintstagedrc.json ───
-if [ -f "$CAWS_ROOT/package.json" ] && command -v npx >/dev/null 2>&1; then
-  if ! npx --no-install lint-staged; then
+#
+# --no-stash is load-bearing, not a preference. lint-staged's default backup
+# takes a git stash, and refs/stash lives in the COMMON git dir — it is shared
+# by every linked worktree (it is not one of git's per-worktree refs: HEAD,
+# refs/bisect, refs/worktree, refs/rewritten). lint-staged then resolves that
+# backup by INDEX (`git stash list` -> findIndex -> `git stash drop <n>`), so a
+# sibling worktree pushing a stash between those two calls shifts every index
+# and lint-staged drops — or on its rollback path APPLIES — the wrong entry.
+# With concurrent agents committing constantly, that is cross-agent work loss.
+# This repo's own doctrine forbids touching the shared stash stack for exactly
+# this reason.
+if [ -n "$LINTABLE" ] && [ -f "$CAWS_ROOT/package.json" ] && command -v npx >/dev/null 2>&1; then
+  if ! npx --no-install lint-staged --no-stash; then
     echo "BLOCKED: lint-staged failed." >&2
     echo "  Fix the reported lint/format errors, then re-stage." >&2
+    echo "  Note: --no-stash means there is no automatic backup; your working tree" >&2
+    echo "  is left exactly as the tasks left it." >&2
     exit 1
   fi
 fi
