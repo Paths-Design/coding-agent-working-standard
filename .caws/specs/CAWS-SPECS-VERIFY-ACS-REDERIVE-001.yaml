@@ -171,3 +171,9 @@ evidence:
     recorded_at: "2026-09-16T22:32:09.395Z"
     test_nodeid: packages/caws-cli/tests/kernel/unit/evidence-rederive.test.ts
     commit_sha: "5c580242"
+  - criterion_id: A13
+    status: pass
+    evidence_ref: "tests/store/evidence-rederive.test.js runs with CAWS_GIT_BINARY=/nonexistent and with no runner detectable: every verdict is not_rederived, the summary reports unverifiable rather than all passed, and --strict exits non-zero. Proven in-process and through dist."
+    recorded_at: "2026-09-16T22:33:38.557Z"
+    test_nodeid: packages/caws-cli/tests/store/evidence-rederive.test.js
+    commit_sha: "01dc84ca"
