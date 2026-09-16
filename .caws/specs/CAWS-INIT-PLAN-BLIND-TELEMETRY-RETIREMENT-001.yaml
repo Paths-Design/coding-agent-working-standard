@@ -1,0 +1,38 @@
+id: CAWS-INIT-PLAN-BLIND-TELEMETRY-RETIREMENT-001
+title: 'caws init --plan cannot preview the telemetry-row retirement it will perform'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-16T05:27:59.949Z'
+updated_at: '2026-09-16T05:27:59.949Z'
+created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
+blast_radius:
+  modules:
+    - 'caws-cli init plan/apply parity'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/init.ts'
+    - 'packages/caws-cli/tests/init/adapter-covered-telemetry-cut.test.js'
+  out: []
+invariants:
+  - 'A read-only preview must enumerate every mutation the corresponding apply will perform; silence in a plan means no change, never an unmodelled change.'
+  - 'Deletions are the highest-consequence class to omit from a preview, because the operator cannot recover what they did not know was at risk.'
+acceptance:
+  - id: A1
+    given: 'a repo where an adapter-covered surface pack is installed and managed shared telemetry rows are present on disk'
+    when: 'the operator runs caws init --agent-surface dsh --plan'
+    then: 'the plan output names each telemetry row that apply would unlink, rather than listing them as Unchanged or omitting them'
+  - id: A2
+    given: 'the same repo'
+    when: 'the operator runs caws init --agent-surface dsh --plan --json'
+    then: 'the plan document carries a structured field enumerating the rows to be retired, so the JSON consumer sees the deletions too'
+  - id: A3
+    given: 'a repo with no managed telemetry rows on disk, or a non-covered surface'
+    when: 'the operator runs caws init --plan'
+    then: 'no retirement is reported, because absence is not staleness and a non-covered surface retires nothing'
+non_functional: {}
+contracts:
+  - name: 'init-plan-apply-parity'
+    type: behavior
