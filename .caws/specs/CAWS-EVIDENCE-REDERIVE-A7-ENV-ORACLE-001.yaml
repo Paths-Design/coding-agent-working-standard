@@ -2,9 +2,11 @@ id: CAWS-EVIDENCE-REDERIVE-A7-ENV-ORACLE-001
 title: 'A7 argv-injection oracle must not depend on an ambient pytest'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'A7''s shell-metacharacter oracle asserted outcome missing unconditionally, which only holds where the ambient python3 can import pytest. Under the pre-push hook''s leaner PATH the executor correctly returned unavailable and the test failed, blocking the push. Fixed by branching on the HAS_PYTEST guard the file already carried for this exact reason, asserting an exact outcome and detail per environment. Runtime unchanged - unavailable is A13 behaviour working.'
 created_at: '2026-09-16T22:53:48.363Z'
-updated_at: '2026-09-16T22:53:58.002Z'
+updated_at: '2026-09-16T22:56:02.665Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
