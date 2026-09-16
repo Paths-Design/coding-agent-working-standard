@@ -108,3 +108,10 @@ evidence:
     command: npx jest
     exit_code: 0
     commit_sha: "31c190ac"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "jest tests/shell/worktree-lane-divergence.test.js 'A4' — lane + reconcile lines asserted verbatim; worktrees.json bytes and events.jsonl length unchanged across the run. Live corroboration: caws status inside wt-lane-divergence rendered 'lane: wt-lane-divergence → main ahead=0 behind=2' and the reconcile line"
+    recorded_at: "2026-09-16T03:54:45.873Z"
+    command: npx jest
+    exit_code: 0
+    commit_sha: "31c190ac"
