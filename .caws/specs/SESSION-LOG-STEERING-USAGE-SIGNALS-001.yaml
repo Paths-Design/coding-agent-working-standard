@@ -118,3 +118,11 @@ evidence:
     command: python3 -m pytest tests/hooks/pytest -q
     exit_code: 0
     commit_sha: "579182dcf25b"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "tests/hooks/pytest/test_session_log_renderer.py::TestSessionEndSealing (6 tests)"
+    recorded_at: "2026-09-16T04:17:18.427Z"
+    test_nodeid: "tests/hooks/pytest/test_session_log_renderer.py::TestSessionEndSealing"
+    command: python3 -m pytest tests/hooks/pytest -q
+    exit_code: 0
+    commit_sha: "579182dcf25b"
