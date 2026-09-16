@@ -1,0 +1,26 @@
+id: CAWS-FAILURE-LINEAGE-ENTRY-42-001
+title: 'Failure-lineage Entry 42: a gate that inspects a label gets the label renamed'
+risk_tier: 3
+mode: doc
+lifecycle_state: draft
+created_at: '2026-09-16T07:38:49.139Z'
+updated_at: '2026-09-16T07:38:49.139Z'
+created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/failure-lineage.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'the contract-denial retry data and the shortcut-language specimen'
+    when: 'a maintainer reads docs/failure-lineage.md'
+    then: 'Entry 42 records both specimens, the prescribed-bypass root cause with verified source line citations, and what was not verified'
+non_functional: {}
+contracts: []
