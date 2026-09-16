@@ -116,3 +116,10 @@ contracts:
     type: behavior
   - name: 'evidence-rederive-kernel'
     type: behavior
+evidence:
+  - criterion_id: A15
+    status: pass
+    evidence_ref: "packages/caws-cli/tests/store/specs-evidence-roundtrip.test.js records all five mechanical fields through dist and reads the YAML back, asserting each exact value"
+    recorded_at: "2026-09-16T22:24:56.296Z"
+    test_nodeid: packages/caws-cli/tests/store/specs-evidence-roundtrip.test.js
+    commit_sha: "967bce1b"
