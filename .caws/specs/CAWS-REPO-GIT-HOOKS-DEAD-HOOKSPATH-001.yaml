@@ -48,3 +48,8 @@ acceptance:
     then: 'no reference remains to caws parallel, caws waivers, caws provenance, caws validate <working-spec>, .caws/working-spec.yaml, .caws/parallel.json or .caws/sessions.json'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "GIT_DIR/GIT_WORK_TREE-pinned invocation of .husky/commit-msg on main with 3 registered lanes: 'feat: add a thing' exit=1, 'fix: something' exit=1; refusal text names merge(worktree):/wip(checkpoint):/chore(caws): and the 3 lanes"
+    recorded_at: "2026-09-16T05:03:24.391Z"
