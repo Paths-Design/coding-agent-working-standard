@@ -72,3 +72,11 @@ evidence:
     command: npx jest tests/init/adapter-covered-telemetry-cut.test.js
     exit_code: 0
     commit_sha: "5785158d"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "A file at a telemetry dest path WITHOUT a 'hook_pack: shared' header is classified unmanaged under BOTH surface configurations (dsh alone, and dsh + qwen-code) — the test loops over both so the guarantee cannot hold for only one branch. Asserted on all three lists: it appears in plan.unmanaged and in NEITHER plan.retire nor plan.retained, and after retireStaleTelemetryRows its bytes are unchanged (content compare against the original body). The claim check runs AFTER the managed-header check on purpose, so local growth stays untouchable regardless of which surfaces are installed. NON-VACUOUS: moving the claim check BEFORE the unmanaged check — a pure reordering that changes no list membership except reclassifying local growth as retained-as-ours — turns ONLY this test RED."
+    recorded_at: "2026-09-16T06:03:41.664Z"
+    test_nodeid: "CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001: retirement is surface-aware > A4: an unmanaged row is never retired and never retained-as-ours"
+    command: npx jest tests/init/adapter-covered-telemetry-cut.test.js
+    exit_code: 0
+    commit_sha: "5785158d"
