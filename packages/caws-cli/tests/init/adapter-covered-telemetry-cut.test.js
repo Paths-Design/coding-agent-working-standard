@@ -427,3 +427,167 @@ describe('CAWS-INIT-PLAN-BLIND-TELEMETRY-RETIREMENT-001: --plan previews the ret
     }
   });
 });
+
+/**
+ * CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001 — retirement must read the
+ * whole repo, not just the surface being installed.
+ *
+ * The rows under .caws/hooks/ are shared: every NON-covered surface's install
+ * set still contains them and its dispatchers exec them directly. Retiring
+ * them because ONE covered surface was initialized strips a live telemetry
+ * plane from every co-installed surface — and because run_handlers treats a
+ * missing handler as `missing` + `continue`, the loss is silent.
+ */
+describe('CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001: retirement is surface-aware', () => {
+  const { resolveHookPack } = require('../../dist/init/hook-packs/register');
+  const { observeInstalledPackSurfaces } = require('../../dist/init/hook-install');
+
+  /** A managed file body stamped for an arbitrary pack id — the shape
+   *  observeInstalledPackSurfaces reads to decide a pack is installed. */
+  function managedVendorBody(packId) {
+    return [
+      '#!/usr/bin/env bash',
+      '# CAWS-MANAGED-HOOK',
+      `# hook_pack: ${packId}`,
+      '# hook_pack_version: 52',
+      '# caws_min_major: 11',
+      '# lineage_refs: 1',
+      '# do_not_edit_directly: update via `caws init --agent-surface <id>`',
+      'echo vendor',
+      '',
+    ].join('\n');
+  }
+
+  /** Install a surface's pack marker by writing its FIRST managed file from
+   *  the real manifest, so the fixture cannot drift from what init installs. */
+  function installVendorMarker(repoRoot, surface) {
+    const resolution = resolveHookPack(surface);
+    if (resolution.kind !== 'pack') throw new Error(`no pack for ${surface}`);
+    const file = resolution.pack.installedFiles.find((f) => f.managed);
+    if (!file) throw new Error(`no managed file in pack ${surface}`);
+    const abs = path.join(repoRoot, file.destPath);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, managedVendorBody(resolution.pack.id));
+    return file.destPath;
+  }
+
+  /** A git repo with all four telemetry rows present as shared-pack-managed
+   *  installs — the only state in which retirement has anything to do. */
+  function repoWithAllTelemetryRows() {
+    const repoRoot = makeTempRepo();
+    fs.mkdirSync(path.join(repoRoot, '.caws', 'hooks'), { recursive: true });
+    for (const relPath of TELEMETRY_ROW_DEST_PATHS) {
+      fs.writeFileSync(path.join(repoRoot, relPath), managedScriptBody());
+    }
+    return repoRoot;
+  }
+
+  test('a pack counts as installed only when a managed header names it', () => {
+    const repoRoot = repoWithAllTelemetryRows();
+
+    // A vendor directory alone is not a CAWS install: any project may carry
+    // .qwen/. Writing the pack's own dest path WITHOUT a header must not
+    // register the surface, or an unrelated tree would veto every retirement.
+    const destPath = resolveHookPack('qwen-code').pack.installedFiles.find(
+      (f) => f.managed
+    ).destPath;
+    const abs = path.join(repoRoot, destPath);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, '#!/usr/bin/env bash\necho not ours\n');
+    expect([...observeInstalledPackSurfaces(repoRoot)]).toEqual([]);
+
+    // The same path WITH the pack's header does register it.
+    fs.writeFileSync(abs, managedVendorBody('qwen-code'));
+    expect([...observeInstalledPackSurfaces(repoRoot)]).toEqual(['qwen-code']);
+  });
+
+  test('A1: a co-installed non-covered surface keeps every telemetry row', () => {
+    const repoRoot = repoWithAllTelemetryRows();
+    installVendorMarker(repoRoot, 'dsh');
+    installVendorMarker(repoRoot, 'qwen-code');
+
+    const plan = planTelemetryRetirement(repoRoot);
+    expect([...plan.retire]).toEqual([]);
+    expect([...plan.retained]).toEqual([...TELEMETRY_ROW_DEST_PATHS]);
+    expect([...plan.retainedFor]).toEqual(['qwen-code']);
+
+    // Apply must agree with the preview AND leave the bytes on disk.
+    const result = retireStaleTelemetryRows(repoRoot);
+    expect([...result.retired]).toEqual([]);
+    expect([...result.retained]).toEqual([...TELEMETRY_ROW_DEST_PATHS]);
+    for (const relPath of TELEMETRY_ROW_DEST_PATHS) {
+      expect(fs.readFileSync(path.join(repoRoot, relPath), 'utf8')).toBe(managedScriptBody());
+    }
+  });
+
+  test('A3: a repo with only adapter-covered surfaces still retires every row', () => {
+    const repoRoot = repoWithAllTelemetryRows();
+    installVendorMarker(repoRoot, 'dsh');
+
+    const plan = planTelemetryRetirement(repoRoot);
+    expect([...plan.retire]).toEqual([...TELEMETRY_ROW_DEST_PATHS]);
+    expect([...plan.retained]).toEqual([]);
+    // No retention, so no reason is asserted.
+    expect([...plan.retainedFor]).toEqual([]);
+
+    const result = retireStaleTelemetryRows(repoRoot);
+    expect([...result.retired]).toEqual([...TELEMETRY_ROW_DEST_PATHS]);
+    for (const relPath of TELEMETRY_ROW_DEST_PATHS) {
+      expect(fs.existsSync(path.join(repoRoot, relPath))).toBe(false);
+    }
+  });
+
+  test('A4: an unmanaged row is never retired and never retained-as-ours', () => {
+    for (const coInstalled of [[], ['qwen-code']]) {
+      const repoRoot = repoWithAllTelemetryRows();
+      const local = '.caws/hooks/session-log.sh';
+      fs.writeFileSync(path.join(repoRoot, local), unmanagedScriptBody());
+      installVendorMarker(repoRoot, 'dsh');
+      for (const surface of coInstalled) installVendorMarker(repoRoot, surface);
+
+      const plan = planTelemetryRetirement(repoRoot);
+      expect([...plan.unmanaged]).toEqual([local]);
+      expect([...plan.retire]).not.toContain(local);
+      expect([...plan.retained]).not.toContain(local);
+
+      retireStaleTelemetryRows(repoRoot);
+      // Byte-identical: local growth survives both configurations intact.
+      expect(fs.readFileSync(path.join(repoRoot, local), 'utf8')).toBe(unmanagedScriptBody());
+    }
+  });
+
+  test('A2: doctor stops calling the rows stale once a surface claims them', () => {
+    function repairRules(repoRoot) {
+      const result = runCliIsolated(repoRoot, ['doctor', '--repair-plan', '--json']);
+      const payload = JSON.parse(result.stdout);
+      return payload.items.map((item) => item.source_rule);
+    }
+
+    const onlyCovered = repoWithAllTelemetryRows();
+    installVendorMarker(onlyCovered, 'dsh');
+    const mixed = repoWithAllTelemetryRows();
+    installVendorMarker(mixed, 'dsh');
+    installVendorMarker(mixed, 'zcode');
+
+    // Contrast half: with nothing claiming the rows the finding MUST fire,
+    // so the assertion below cannot pass because doctor went quiet for an
+    // unrelated reason (empty plan, crash, changed JSON shape).
+    expect(repairRules(onlyCovered)).toContain('doctor.hooks.stale_telemetry_pack');
+    expect(repairRules(mixed)).not.toContain('doctor.hooks.stale_telemetry_pack');
+  });
+
+  test('the plan preview names the rows it keeps and who keeps them', () => {
+    const repoRoot = repoWithAllTelemetryRows();
+    installVendorMarker(repoRoot, 'dsh');
+    installVendorMarker(repoRoot, 'opencode');
+
+    const result = runCliIsolated(repoRoot, ['init', '--agent-surface', 'dsh', '--plan']);
+    expect(result.stdout).toContain('kept, still installed by opencode');
+    expect(result.stdout).toContain('.caws/hooks/session-log.sh');
+    expect(result.stdout).toContain('would retire: none');
+    // Read-only: the preview must not have performed the retirement.
+    for (const relPath of TELEMETRY_ROW_DEST_PATHS) {
+      expect(fs.existsSync(path.join(repoRoot, relPath))).toBe(true);
+    }
+  });
+});

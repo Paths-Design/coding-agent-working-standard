@@ -105,8 +105,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     input.unboundActiveThresholdMs ?? DEFAULT_UNBOUND_ACTIVE_THRESHOLD_MS;
   const unboundActiveErrorCount =
     input.unboundActiveErrorCount ?? DEFAULT_UNBOUND_ACTIVE_ERROR_COUNT;
-  const priorOwnersThreshold =
-    input.priorOwnersGrowthThreshold ?? DEFAULT_PRIOR_OWNERS_THRESHOLD;
+  const priorOwnersThreshold = input.priorOwnersGrowthThreshold ?? DEFAULT_PRIOR_OWNERS_THRESHOLD;
 
   // -------------------------------------------------------------------------
   // 1. Spec lifecycle: active+unbound, thresholded.
@@ -128,8 +127,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   for (const spec of specs) {
     if (spec.lifecycle_state !== 'active') continue;
     const hasRegistryBinding = registrySpecIds.has(spec.id);
-    const hasSpecPointer =
-      typeof spec.worktree === 'string' && spec.worktree.length > 0;
+    const hasSpecPointer = typeof spec.worktree === 'string' && spec.worktree.length > 0;
     if (hasRegistryBinding || hasSpecPointer) {
       // Either side claims a binding — binding-integrity checks below handle
       // the asymmetric and orphan cases. unbound_active only fires when
@@ -357,9 +355,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
       // terminal). Unknown lifecycle_state values default to ERROR per the
       // fail-safe rule: treat unknown as governance-relevant.
       const missingRegistrySeverity: FindingSeverity =
-        spec.lifecycle_state === 'closed' || spec.lifecycle_state === 'archived'
-          ? 'info'
-          : 'error';
+        spec.lifecycle_state === 'closed' || spec.lifecycle_state === 'archived' ? 'info' : 'error';
       findings.push(
         finding(
           DOCTOR_RULES.BINDING_SPEC_MISSING_REGISTRY,
@@ -448,9 +444,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   const gitWorktrees = input.gitWorktrees;
   if (worktreeDirByName !== undefined) {
     const gitWorktreePaths =
-      gitWorktrees !== undefined
-        ? new Set<string>(gitWorktrees.map((w) => w.path))
-        : undefined;
+      gitWorktrees !== undefined ? new Set<string>(gitWorktrees.map((w) => w.path)) : undefined;
     for (const [worktreeName, record] of Object.entries(registry)) {
       // Defensive: skip entries that aren't plain object records. A
       // legacy v10.2-format worktrees.json wraps entries inside a
@@ -462,11 +456,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
       // no specId gate (legitimate ghosts can lack one), so we filter
       // explicitly on record shape. Real ghosts always have an
       // object-shaped record.
-      if (
-        record === null ||
-        typeof record !== 'object' ||
-        Array.isArray(record)
-      ) {
+      if (record === null || typeof record !== 'object' || Array.isArray(record)) {
         continue;
       }
       // Skip entries where the dir IS present — those are not ghosts.
@@ -507,8 +497,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
               canonical_dir_present: false,
               // null (not false) when git observation was unavailable — the
               // refinement could not run, the flag is on the dir fact alone.
-              git_worktree_listed:
-                gitWorktreePaths === undefined ? null : false,
+              git_worktree_listed: gitWorktreePaths === undefined ? null : false,
             },
           }
         )
@@ -536,7 +525,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   //     -001 was superseded by the Decide slice).
   // -------------------------------------------------------------------------
 
-  const specsByWorktreeClaim = new Map<string, Array<typeof specs[number]>>();
+  const specsByWorktreeClaim = new Map<string, Array<(typeof specs)[number]>>();
   for (const s of specs) {
     if (typeof s.worktree === 'string' && s.worktree.length > 0) {
       const list = specsByWorktreeClaim.get(s.worktree) ?? [];
@@ -612,8 +601,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
         `Canonical checkout HEAD is parked on "${cbo.currentBranch}" (not the base branch "${cbo.baseBranch}") while ${activeWorktreeCount} CAWS worktree(s) are active — spec lifecycle auto-commits will land on the parked branch.`,
         {
           subject: cbo.currentBranch,
-          narrowRepair:
-            `Un-park before lifecycle writes: have the branch's owner merge/switch it back, or relocate an already-mis-landed spec with \`caws specs relocate <id> --to-base\`. To deliberately author on this branch, pass --allow-foreign-branch to the lifecycle command. The canonical checkout is the base branch's home; feature work lives in worktrees.`,
+          narrowRepair: `Un-park before lifecycle writes: have the branch's owner merge/switch it back, or relocate an already-mis-landed spec with \`caws specs relocate <id> --to-base\`. To deliberately author on this branch, pass --allow-foreign-branch to the lifecycle command. The canonical checkout is the base branch's home; feature work lives in worktrees.`,
           data: {
             current_branch: cbo.currentBranch,
             base_branch: cbo.baseBranch,
@@ -714,8 +702,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
       // absent — the §2f degrade-elsewhere pattern). A linked worktree still
       // listed at the recorded path (un-pruned git metadata for a directory
       // that is gone) also keeps the warning: something physical remains.
-      const recordedBranch =
-        typeof d?.branch === 'string' && d.branch.length > 0 ? d.branch : name;
+      const recordedBranch = typeof d?.branch === 'string' && d.branch.length > 0 ? d.branch : name;
       const recordedPath = typeof d?.path === 'string' && d.path.length > 0 ? d.path : undefined;
       const branchObservedAbsent =
         input.localBranchRefs !== undefined &&
@@ -726,8 +713,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
         input.filesystem.createdWorktreePathExistsByName[name] === false;
       const noLinkedWorktreeAtRecordedPath =
         input.gitWorktrees !== undefined &&
-        (recordedPath === undefined ||
-          !input.gitWorktrees.some((wt) => wt.path === recordedPath));
+        (recordedPath === undefined || !input.gitWorktrees.some((wt) => wt.path === recordedPath));
       const verifiablyDead =
         recordedPath !== undefined &&
         branchObservedAbsent &&
@@ -793,18 +779,14 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   //     ghosts."
   // -------------------------------------------------------------------------
 
-  if (
-    typeof input.gitObservationFailure === 'string' &&
-    input.gitObservationFailure.length > 0
-  ) {
+  if (typeof input.gitObservationFailure === 'string' && input.gitObservationFailure.length > 0) {
     findings.push(
       finding(
         DOCTOR_RULES.WORKTREE_GIT_OBSERVATION_UNAVAILABLE,
         'info',
         'git worktree observation unavailable; H1/H6 half-state detection skipped.',
         {
-          narrowRepair:
-            'Verify git is installed and the repository is intact; rerun caws doctor.',
+          narrowRepair: 'Verify git is installed and the repository is intact; rerun caws doctor.',
           data: { reason: input.gitObservationFailure },
         }
       )
@@ -1012,16 +994,11 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   } else if (input.policyWarnings && input.policyWarnings.length > 0) {
     for (const w of input.policyWarnings) {
       findings.push(
-        finding(
-          DOCTOR_RULES.POLICY_VALID_WITH_WARNINGS,
-          'warning',
-          w.message,
-          {
-            ...(w.subject !== undefined ? { subject: w.subject } : {}),
-            ...(w.narrowRepair !== undefined ? { narrowRepair: w.narrowRepair } : {}),
-            data: { source_rule: w.rule, ...(w.data ?? {}) },
-          }
-        )
+        finding(DOCTOR_RULES.POLICY_VALID_WITH_WARNINGS, 'warning', w.message, {
+          ...(w.subject !== undefined ? { subject: w.subject } : {}),
+          ...(w.narrowRepair !== undefined ? { narrowRepair: w.narrowRepair } : {}),
+          data: { source_rule: w.rule, ...(w.data ?? {}) },
+        })
       );
     }
   }
@@ -1034,12 +1011,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     for (const t of input.templates) {
       pushTemplateDiagnostics(findings, t, t.errors, DOCTOR_RULES.TEMPLATE_DRIFT);
       if (t.warnings && t.warnings.length > 0) {
-        pushTemplateDiagnostics(
-          findings,
-          t,
-          t.warnings,
-          DOCTOR_RULES.TEMPLATE_WARNING
-        );
+        pushTemplateDiagnostics(findings, t, t.warnings, DOCTOR_RULES.TEMPLATE_WARNING);
       }
     }
   }
@@ -1140,20 +1112,15 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     for (const d of input.waiverDiagnostics) {
       const severity: FindingSeverity = d.severity ?? 'error';
       findings.push(
-        finding(
-          DOCTOR_RULES.WAIVER_MALFORMED_LOADED,
-          severity,
-          d.message,
-          {
-            ...(d.subject !== undefined ? { subject: d.subject } : {}),
-            ...(d.narrowRepair !== undefined ? { narrowRepair: d.narrowRepair } : {}),
-            data: {
-              source_rule: d.rule,
-              source_authority: d.authority,
-              ...(d.data ?? {}),
-            },
-          }
-        )
+        finding(DOCTOR_RULES.WAIVER_MALFORMED_LOADED, severity, d.message, {
+          ...(d.subject !== undefined ? { subject: d.subject } : {}),
+          ...(d.narrowRepair !== undefined ? { narrowRepair: d.narrowRepair } : {}),
+          data: {
+            source_rule: d.rule,
+            source_authority: d.authority,
+            ...(d.data ?? {}),
+          },
+        })
       );
     }
   }
@@ -1269,11 +1236,19 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   // "unobserved" (silent) — matching the hookPackInstalled convention.
   const staleTelemetryRows = input.filesystem?.managedTelemetryRowPaths;
   const adapterSurfaces = input.filesystem?.adapterPackSurfaceMarkers;
+  // CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001: a co-installed surface
+  // whose install set still contains these rows makes them load-bearing,
+  // not stale — its dispatchers invoke them. Firing anyway would prescribe
+  // a repair that deletes a live surface's telemetry. Undefined is
+  // "unobserved" and preserves the prior behavior, matching the
+  // hookPackInstalled convention used throughout this file.
+  const telemetryClaimants = input.filesystem?.telemetryRowClaimantSurfaces;
   if (
     staleTelemetryRows !== undefined &&
     staleTelemetryRows.length > 0 &&
     adapterSurfaces !== undefined &&
-    adapterSurfaces.length > 0
+    adapterSurfaces.length > 0 &&
+    (telemetryClaimants === undefined || telemetryClaimants.length === 0)
   ) {
     findings.push(
       finding(
@@ -1329,17 +1304,37 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   // newer-installed versions are silent.
   const systemRuntime = input.filesystem?.systemRuntime;
   if (systemRuntime) {
-    findings.push(finding(
-      systemRuntime.error ? DOCTOR_RULES.HOOKS_SYSTEM_RUNTIME_INVALID : DOCTOR_RULES.HOOKS_SYSTEM_RUNTIME,
-      systemRuntime.error ? 'error' : 'info',
-      systemRuntime.error ? `System runtime configuration failure: ${systemRuntime.error}` : `System runtime ${systemRuntime.digest} configured for ${systemRuntime.surfaces.join(', ')}; ${systemRuntime.overrides.length} explicit extension/override entries. Native activation is verified separately.`,
-      { subject: '~/.caws', data: { ...systemRuntime }, narrowRepair: 'Inspect caws init adapters install --plan and configure/migrate previews. Update the machine runtime once; native hook trust and execution require harness verification.' }
-    ));
-    if (systemRuntime.legacySurfaces.length > 0) findings.push(finding(
-      DOCTOR_RULES.HOOKS_SYSTEM_LEGACY_WIRING, 'warning',
-      `Project CAWS hook registrations remain for ${systemRuntime.legacySurfaces.join(', ')}; these surfaces still need one-time system migration.`,
-      { subject: '.caws/hooks', data: { surfaces: [...systemRuntime.legacySurfaces] }, narrowRepair: 'Use caws init adapters migrate --agent-surface <surface> --plan after configuring that native harness. Preserve reviewed extensions; do not refresh copied packs.' }
-    ));
+    findings.push(
+      finding(
+        systemRuntime.error
+          ? DOCTOR_RULES.HOOKS_SYSTEM_RUNTIME_INVALID
+          : DOCTOR_RULES.HOOKS_SYSTEM_RUNTIME,
+        systemRuntime.error ? 'error' : 'info',
+        systemRuntime.error
+          ? `System runtime configuration failure: ${systemRuntime.error}`
+          : `System runtime ${systemRuntime.digest} configured for ${systemRuntime.surfaces.join(', ')}; ${systemRuntime.overrides.length} explicit extension/override entries. Native activation is verified separately.`,
+        {
+          subject: '~/.caws',
+          data: { ...systemRuntime },
+          narrowRepair:
+            'Inspect caws init adapters install --plan and configure/migrate previews. Update the machine runtime once; native hook trust and execution require harness verification.',
+        }
+      )
+    );
+    if (systemRuntime.legacySurfaces.length > 0)
+      findings.push(
+        finding(
+          DOCTOR_RULES.HOOKS_SYSTEM_LEGACY_WIRING,
+          'warning',
+          `Project CAWS hook registrations remain for ${systemRuntime.legacySurfaces.join(', ')}; these surfaces still need one-time system migration.`,
+          {
+            subject: '.caws/hooks',
+            data: { surfaces: [...systemRuntime.legacySurfaces] },
+            narrowRepair:
+              'Use caws init adapters migrate --agent-surface <surface> --plan after configuring that native harness. Preserve reviewed extensions; do not refresh copied packs.',
+          }
+        )
+      );
   }
   const installedPack = input.filesystem?.installedSharedPackVersion;
   const shippingPack = input.filesystem?.shippingSharedPackVersion;
@@ -1507,9 +1502,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     // entries. If a future CLI generation writes ~/.caws/sessions again, it
     // belongs in `known`, not here.
     const recognizedLegacy = new Set(['sessions']);
-    const foreign = globalHome.entries.filter(
-      (e) => !known.has(e) && !recognizedLegacy.has(e)
-    );
+    const foreign = globalHome.entries.filter((e) => !known.has(e) && !recognizedLegacy.has(e));
     const legacy = globalHome.entries.filter((e) => recognizedLegacy.has(e));
     if (globalHome.runtime.status === 'invalid') {
       findings.push(
@@ -1668,20 +1661,15 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     for (const d of input.registryDiagnostics) {
       const severity: FindingSeverity = d.severity ?? 'error';
       findings.push(
-        finding(
-          DOCTOR_RULES.REGISTRY_MALFORMED_LOADED,
-          severity,
-          d.message,
-          {
-            ...(d.subject !== undefined ? { subject: d.subject } : {}),
-            ...(d.narrowRepair !== undefined ? { narrowRepair: d.narrowRepair } : {}),
-            data: {
-              source_rule: d.rule,
-              source_authority: d.authority,
-              ...(d.data ?? {}),
-            },
-          }
-        )
+        finding(DOCTOR_RULES.REGISTRY_MALFORMED_LOADED, severity, d.message, {
+          ...(d.subject !== undefined ? { subject: d.subject } : {}),
+          ...(d.narrowRepair !== undefined ? { narrowRepair: d.narrowRepair } : {}),
+          data: {
+            source_rule: d.rule,
+            source_authority: d.authority,
+            ...(d.data ?? {}),
+          },
+        })
       );
     }
   }
@@ -1702,7 +1690,9 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     //      `policy/rules.ts:CRITICAL_GATES` — kept in lockstep by reusing
     //      that constant rather than duplicating.
     for (const gateId of CRITICAL_GATES) {
-      const cfg = (input.policy.gates as Record<string, { enabled: boolean; mode: string } | undefined>)[gateId];
+      const cfg = (
+        input.policy.gates as Record<string, { enabled: boolean; mode: string } | undefined>
+      )[gateId];
       if (cfg === undefined) {
         // Required-by-schema; if it's missing the schema validator already
         // refused. Skip silently — doctor doesn't double-report schema
@@ -1729,19 +1719,15 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     //      no clever subsumption, just exact-match. Severity escalates to
     //      error when `non_governed_zones_force === true` because the
     //      operator has explicitly armed the dangerous pattern.
-    const DANGEROUS_NON_GOVERNED_PATTERNS = [
-      '*',
-      '**',
-      '**/*',
-      '.',
-      './',
-      '/',
-      '/*',
-    ] as const;
+    const DANGEROUS_NON_GOVERNED_PATTERNS = ['*', '**', '**/*', '.', './', '/', '/*'] as const;
     const zones = input.policy.non_governed_zones ?? [];
     const force = input.policy.non_governed_zones_force === true;
     for (const z of zones) {
-      if (DANGEROUS_NON_GOVERNED_PATTERNS.includes(z as typeof DANGEROUS_NON_GOVERNED_PATTERNS[number])) {
+      if (
+        DANGEROUS_NON_GOVERNED_PATTERNS.includes(
+          z as (typeof DANGEROUS_NON_GOVERNED_PATTERNS)[number]
+        )
+      ) {
         findings.push(
           finding(
             DOCTOR_RULES.POLICY_NON_GOVERNED_ZONE_BROAD,
@@ -1793,11 +1779,7 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
   // would be noise in either count.
   // -------------------------------------------------------------------------
 
-  if (
-    input.waivers !== undefined &&
-    input.waivers.length > 0 &&
-    input.policy !== undefined
-  ) {
+  if (input.waivers !== undefined && input.waivers.length > 0 && input.policy !== undefined) {
     const cap = input.policy.waivers?.max_active_waivers_per_gate;
     if (typeof cap === 'number' && cap >= 0) {
       // Tally effective waivers per gate id they cover.

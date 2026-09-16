@@ -235,6 +235,23 @@ export interface DoctorInput {
      */
     readonly adapterPackSurfaceMarkers?: readonly string[];
     /**
+     * CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001: the installed surfaces
+     * whose install set STILL CONTAINS the vendored telemetry rows (e.g.
+     * `['qwen-code', 'zcode']` when those packs are installed alongside an
+     * adapter-covered surface). Non-empty means the rows under .caws/hooks/
+     * are load-bearing for a co-installed surface — its dispatchers invoke
+     * them and its own init would reinstall them — so they are NOT stale
+     * dual-writers and `HOOKS_STALE_TELEMETRY_PACK` must stay silent.
+     *
+     * Without this, the finding fires on every mixed-surface repo and its
+     * prescribed repair (`caws init --agent-surface <covered>`) deletes
+     * telemetry another live surface depends on: a remediation that disarms
+     * a working plane is worse than the drift it discharges. Optional; when
+     * undefined the observation is unavailable and the rule falls back to
+     * its prior behavior (unobserved, not "nobody claims them").
+     */
+    readonly telemetryRowClaimantSurfaces?: readonly string[];
+    /**
      * CAWS-GATED-SURFACE-SCOPE-GUARD-001: the trust-gated surfaces
      * (qwen-code, zcode) with USER-scope CAWS hook wiring on this machine
      * (observed from the user-scope configs; missing/unparseable = not

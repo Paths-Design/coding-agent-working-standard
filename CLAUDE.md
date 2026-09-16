@@ -409,18 +409,24 @@ Three consequences:
   Treat that warning as real; refresh with
   `caws init --agent-surface <an-already-wired-surface>` so the shared core
   updates without re-registering a machine-routed surface.
-- **The install set is per surface, so `init` for one surface can undo `init`
-  for another.** `ADAPTER_COVERED_SURFACES` (today: `dsh`) omits the four
-  telemetry rows — `agent-heartbeat.sh`, `agent-stop.sh`, `session-log.sh`,
+- **The install set is per surface, and retirement reads the whole repo.**
+  `ADAPTER_COVERED_SURFACES` (today: `dsh`) omits the four telemetry rows —
+  `agent-heartbeat.sh`, `agent-stop.sh`, `session-log.sh`,
   `session_log_renderer.py` — because that harness's own adapter owns
-  `.caws/sessions/` and `.caws/leases/`; init for a covered surface additionally
-  _unlinks_ managed copies (`retireStaleTelemetryRows`). Init for any
-  non-covered surface reinstalls them. So **an absent telemetry row is not
-  evidence of version lag** — check `git log --diff-filter=D` on the path before
-  restoring it, and pick the refresh surface deliberately. `--plan` shows you
-  which rows apply would unlink, under "Telemetry rows (adapter-covered surface
-  owns this plane)" and as `telemetry_retirement` in `--plan --json`; read that
-  section before applying.
+  `.caws/sessions/` and `.caws/leases/`. Init for a covered surface also retires
+  managed copies, but **only rows no co-installed surface still claims**: a row
+  stays if any installed pack's install set contains it (`sharedPackForSurface`
+  decides, so the rule needs no update when the covered set changes). The
+  general invariant is that init never removes a file another installed surface
+  still installs — without it, initializing one surface silently strips the
+  telemetry plane from every project-wired surface sharing
+  `.caws/hooks/dispatch`, and `run_handlers` treats the missing handlers as
+  `missing` + `continue`, so nothing reports the loss. An absent telemetry row
+  is therefore **not** evidence of version lag — check `git log --diff-filter=D`
+  on the path before restoring it. `--plan` shows both halves under "Telemetry
+  rows (adapter-covered surface owns this plane)" — what it would unlink, and
+  what it keeps and for whom — and as `telemetry_retirement` (`retire` /
+  `retained` / `retainedFor`) in `--plan --json`.
 
 Reprieves are human-granted session-global exceptions in
 `~/.caws/state/sessions/<session>/`. `--surface` records harness identity and
