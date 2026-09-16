@@ -1,0 +1,35 @@
+id: MULTI-AGENT-CANONICAL-BRANCH-SWITCH-001
+title: 'Doctrine: never create or switch a branch in the canonical checkout while peers are active'
+risk_tier: 3
+mode: doc
+lifecycle_state: draft
+created_at: '2026-09-16T05:17:37.121Z'
+updated_at: '2026-09-16T05:17:37.121Z'
+created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
+blast_radius:
+  modules:
+    - 'repo doctrine'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'CLAUDE.md'
+    - '.claude/rules/worktree-isolation.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'an agent about to do non-slice work in a repo with active peer sessions'
+    when: 'it reads the worktree-isolation rule'
+    then: 'the rule states that git checkout -b in the canonical checkout switches the shared working tree and captures every peer''s CAWS lifecycle auto-commits onto that branch'
+  - id: A2
+    given: 'the same rule'
+    when: 'an agent reads why this is worse than an ordinary misplaced commit'
+    then: 'it names the canonical-only spec interaction - a governed worktree merge computes against main''s spec copy, so peer evidence recorded while canonical was parked is dropped at merge time'
+  - id: A3
+    given: 'an agent that needs an isolated branch anyway'
+    when: 'it consults the doctrine'
+    then: 'it is directed to caws worktree create, which confers write authority without moving the canonical HEAD'
+non_functional: {}
+contracts: []
