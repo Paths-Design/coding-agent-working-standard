@@ -177,3 +177,9 @@ evidence:
     recorded_at: "2026-09-16T22:33:38.557Z"
     test_nodeid: packages/caws-cli/tests/store/evidence-rederive.test.js
     commit_sha: "01dc84ca"
+  - criterion_id: A9
+    status: pass
+    evidence_ref: "tests/shell/specs-close-rederive.test.js instruments the jest binary with a shim that appends its argv to runner-calls.log, then drives worktree merge on a spec whose evidence names a test nodeid. The log is empty after the merge: the close gate re-derives only the non-executing citation and artifact classes, so no runner is spawned inside the lifecycle transaction."
+    recorded_at: "2026-09-16T22:35:35.549Z"
+    test_nodeid: packages/caws-cli/tests/shell/specs-close-rederive.test.js
+    commit_sha: "686dd33d"
