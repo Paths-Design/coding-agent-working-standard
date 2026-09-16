@@ -49,6 +49,14 @@ acceptance:
     then: >-
       the wt-fresh row reports ahead=0 behind=0 and is marked as containing base,
       distinguishing an up-to-date empty lane from a lane that merely has no commits
+  - id: A3
+    given: >-
+      a registry entry whose branch ref does not exist (deleted branch, or the
+      'unknown' placeholder a legacy record carries)
+    when: 'caws worktree list runs'
+    then: >-
+      that row renders an explicit unknown divergence marker naming the unresolvable
+      ref, every other row still renders its real counts, and the command exits 0
 non_functional: {}
 contracts:
   - name: 'lane-divergence'
