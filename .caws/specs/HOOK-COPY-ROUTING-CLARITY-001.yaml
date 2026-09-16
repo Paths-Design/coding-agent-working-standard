@@ -20,8 +20,12 @@ invariants:
   - 'The doc states that .caws/hooks is live for project-wired surfaces and inert for machine-routed ones, and that editing it is never a no-op'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'an agent in any harness about to edit a file under .caws/hooks/'
+    when: 'it consults CLAUDE.md'
+    then: >-
+      the doc names which surfaces execute .caws/hooks/ directly (qwen-code,
+      kimi-code, opencode, zcode, dsh) versus which route through ~/.caws
+      (claude-code, codex), and states that an edit there is never a no-op even when
+      the editing agent's own guards are unaffected
 non_functional: {}
 contracts: []
