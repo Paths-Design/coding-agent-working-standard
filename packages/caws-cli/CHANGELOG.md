@@ -1,6 +1,44 @@
-## [12.2.0-rc.2] (2026-09-13)
+## [12.2.0-rc.2] (2026-09-16)
 
 Second release candidate for the shared machine runtime; publishes to `next`.
+
+### Acceptance evidence is re-derived, not trusted
+
+`CAWS-SPECS-VERIFY-ACS-REDERIVE-001`. The five machine-checkable evidence
+fields (`test_nodeid`, `command`, `exit_code`, `artifact_path`, `commit_sha`)
+were recorded and never read; a hand-written `status: pass` satisfied the
+whole close gate. They now have readers, with three verdicts that are never
+collapsed: `verified` (the declared check was executed and passed), `refuted`
+(it was executed and failed, or the cited artifact/commit does not exist), and
+`not_rederived` (nothing mechanical was declared, or the check could not be
+run). Existence of a check is not execution, and execution is not passing.
+
+- **`caws specs verify-acs <id>` is restored under `specs`** (the top-level
+  v10.2 command is a `replaced` legacy diagnostic pointing here). Default mode
+  locates cited tests without executing them and reports them `not_rederived`;
+  `--run` executes them; `--strict` exits non-zero on any `not_rederived`;
+  `--json` emits a `verify-acs.v1` envelope; `--runner` overrides detection.
+  A verdict derived from an agent-supplied field is marked `self_reported`.
+  The v10.2 defect where a collected-but-unexecuted test printed PASS is
+  pinned red.
+- **`caws specs evidence --verify`** re-derives the citation at record time and
+  refuses to record `status: pass` when it is refuted, writing nothing.
+  Unverifiable citations record with a self-reported notice.
+- **Close names refuted passes.** `caws specs close` and the merge auto-close
+  re-derive the non-executing classes (cited commit, cited artifact) and, in
+  warn-mode, list every `pass` whose citation does not re-derive with the
+  reopen/re-record remediation. Test runners are never spawned at close.
+- **Behavior change on stderr:** every close or merge of a spec with recorded
+  evidence now prints one summary advisory
+  (`Evidence at close for "<id>": N criteria — verified V, refuted R,
+not_rederived U (self-reported S, narrative-only N, command declared C)`),
+  so a narrative-only pass reads as the self-assertion it is. Closes with no
+  recorded evidence are unchanged.
+- A recorded `command` / `test_command` is never executed, under any flag.
+  Every runner subprocess is bounded (timeout, SIGKILL, output cap); nodeids
+  are passed after `--` and refused if they begin with `-`.
+- The kernel classifier `src/kernel/evidence/rederive.ts` joins the per-file
+  mutation targets (20 across three surfaces).
 
 ### Hooks and release qualification
 
