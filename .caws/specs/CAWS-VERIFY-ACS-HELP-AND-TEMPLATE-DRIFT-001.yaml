@@ -67,3 +67,9 @@ evidence:
     recorded_at: "2026-09-16T23:51:00.118Z"
     test_nodeid: "packages/caws-cli/tests/shell/verify-acs-help-surface.test.js::--run help does not claim pytest is resolved from the repository"
     commit_sha: "671b70f322dcb03c3f24612ca0c2841e8fe2929b"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "AGENTS.md's quickstart now records AC evidence with --verify: it states that --verify re-derives the citation BEFORE writing and refuses to record status pass when refuted (nothing written, failing detail printed), that without it status is a self-assertion no later stage can disagree with, gives a --test-nodeid example, notes the nodeid is pytest-style <file>::<test name> for jest as well as pytest, and points at caws specs verify-acs --run for read-only inspection. HONEST LIMIT OF THIS CITATION: the artifact class proves only that AGENTS.md is present at the cited revision, not that it contains those sentences - no test pins this prose, so the content claim is self-reported and should be read as such. The refusal path is separately demonstrated by runtime rather than assertion: recording A1 of this very spec was REFUSED ('refuting: test_failed, jest exit 1 ... Nothing was written') because canonical's dist was stale and lacked EXECUTABLE_TEST_RUNNERS; it recorded only after a rebuild made the cited test pass."
+    recorded_at: "2026-09-16T23:51:12.317Z"
+    artifact_path: AGENTS.md
+    commit_sha: "671b70f322dcb03c3f24612ca0c2841e8fe2929b"
