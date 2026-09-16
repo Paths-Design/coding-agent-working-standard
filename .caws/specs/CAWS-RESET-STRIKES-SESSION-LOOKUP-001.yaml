@@ -1,0 +1,47 @@
+id: CAWS-RESET-STRIKES-SESSION-LOOKUP-001
+title: 'reset-strikes --session cannot reach the live session-global store'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-16T08:04:40.978Z'
+updated_at: '2026-09-16T08:04:40.978Z'
+created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/reset-strikes.sh'
+    - 'packages/caws-cli/tests/hooks/bats/reset-strikes.bats'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'strikes exist at HOME/.caws/state/sessions/<sid>/strikes.json'
+    when: 'reset-strikes.sh --session <sid> runs'
+    then: 'that file is reset, where today the command exits 1 with ''No strike file found for session'''
+  - id: A2
+    given: 'a legacy repo-local guard-strikes-<sid>.json'
+    when: '--session <sid> runs'
+    then: 'it is still reset, proving the fix widened the match rather than moving it'
+  - id: A3
+    given: 'a live session-global strike file'
+    when: 'the default listing runs'
+    then: 'it is labelled with the real session id, not the literal ''strikes'' parsed from the filename'
+  - id: A4
+    given: 'a session id with no strike file'
+    when: '--session runs'
+    then: 'it still fails, and the message names the session ids that do have strikes instead of leaving the operator to guess'
+  - id: A5
+    given: 'the shared template changed'
+    when: 'the pack is installed'
+    then: 'SHARED_PACK_VERSION is bumped and pack-fingerprints.json updated, so the fix actually propagates to consumers rather than sitting in-repo'
+non_functional: {}
+contracts:
+  - name: 'reset-strikes-cli'
+    type: behavior
