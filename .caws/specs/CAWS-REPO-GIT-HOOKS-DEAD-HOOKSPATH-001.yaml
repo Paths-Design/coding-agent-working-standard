@@ -2,10 +2,11 @@ id: CAWS-REPO-GIT-HOOKS-DEAD-HOOKSPATH-001
 title: 'Restore this repo''s git hooks: fix core.hooksPath and rewrite the hooks onto the v11 surface'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: wt-git-hooks-revive
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Rewrote the repo''s git hooks into the tracked .husky tree and corrected core.hooksPath from .husky/_ (which held only an exit-0 shim, so git found no hook by any name) to .husky. Code landed on main as fbdce732. commit-msg is new and tracked: dual-shape registry read, no filter on the status field v11 never persists, fails CLOSED on a malformed registry, lanes named from map keys. pre-commit drops ps-based message sniffing and the removed .caws/working-spec.yaml gate; pre-push drops a --no-verify loop that could never fire. post-commit dropped (called the removed caws provenance). NOT covered: the fail-closed path on a corrupt registry is verified by construction only, not executed, because inducing it would mean mutating the shared live registry; pre-commit guards 2 and 3 (policy/code separation, change_budget) are logic-reviewed but not execution-tested, since staging a governed file or a spec YAML was not safe here. Hooks are branch-dependent by construction: a checkout on a branch predating fbdce732 gets the old hooks and no commit-msg.'
 created_at: '2026-09-16T04:58:52.855Z'
-updated_at: '2026-09-16T04:59:27.091Z'
+updated_at: '2026-09-16T05:07:48.472Z'
 created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
 blast_radius:
   modules:
@@ -48,3 +49,24 @@ acceptance:
     then: 'no reference remains to caws parallel, caws waivers, caws provenance, caws validate <working-spec>, .caws/working-spec.yaml, .caws/parallel.json or .caws/sessions.json'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "GIT_DIR/GIT_WORK_TREE-pinned invocation of .husky/commit-msg on main with 3 registered lanes: 'feat: add a thing' exit=1, 'fix: something' exit=1; refusal text names merge(worktree):/wip(checkpoint):/chore(caws): and the 3 lanes"
+    recorded_at: "2026-09-16T05:03:24.391Z"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "same harness on main: 'merge(worktree): wt-x' exit=0, 'chore(caws): author spec' exit=0, 'wip(checkpoint): save' exit=0; on lane branch wt-git-hooks-revive 'feat:' exit=0 (no lane targets that branch)"
+    recorded_at: "2026-09-16T05:03:24.876Z"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "hook printed 'while 3 worktree lane(s) target it' and listed wt-merge-provenance-routing, wt-bash-guard-cross-repo, wt-git-hooks-revive from the flat-map keys, against a registry whose records carry no status field; the pre-fix predicate returned 0 for the same registry"
+    recorded_at: "2026-09-16T05:03:25.365Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "grep over .husky/{commit-msg,pre-commit,pre-push} for 'caws parallel','caws waivers','caws provenance','working-spec.yaml','parallel.json','sessions.json' -> 0 files each"
+    recorded_at: "2026-09-16T05:03:25.846Z"
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "core.hooksPath changed .husky/_ -> .husky. On a lane based on main (contains fbdce732), 'git hook run' finds pre-commit, commit-msg and pre-push; before the change all four names returned 'error: cannot find a hook named <name>'. 'git hook run commit-msg' executed the new script and emitted its own fail-closed refusal, proving execution not just discovery."
+    recorded_at: "2026-09-16T05:07:28.116Z"

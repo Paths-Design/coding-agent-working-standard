@@ -382,7 +382,7 @@ opencode plugin exec `$ROOT/.caws/hooks/dispatch/<event>.sh` directly, and the
 opencode plugin **fails OPEN** when that tree is absent or incomplete. So an
 "inert" experiment there can silently disarm another harness's guard plane.
 
-Two consequences:
+Three consequences:
 
 - **Never delete or prune `.caws/hooks/` as dead weight.** It is live runtime
   code for five surfaces here, and it hosts the human-only escape hatches
@@ -393,6 +393,17 @@ Two consequences:
   Claude never reads that copy. Treat that warning as real; refresh with
   `caws init --agent-surface <an-already-wired-surface>` so the shared core
   updates without re-registering a machine-routed surface.
+- **The install set is per surface, so `init` for one surface can undo `init`
+  for another.** `ADAPTER_COVERED_SURFACES` (today: `dsh`) omits the four
+  telemetry rows — `agent-heartbeat.sh`, `agent-stop.sh`, `session-log.sh`,
+  `session_log_renderer.py` — because that harness's own adapter owns
+  `.caws/sessions/` and `.caws/leases/`; init for a covered surface additionally
+  *unlinks* managed copies (`retireStaleTelemetryRows`). Init for any
+  non-covered surface reinstalls them. So **an absent telemetry row is not
+  evidence of version lag** — check `git log --diff-filter=D` on the path before
+  restoring it, and pick the refresh surface deliberately. `--plan` cannot warn
+  you: the retirement is apply-only and absent from the plan document, so a
+  preview that says "no changes made" still precedes four deletions.
 
 Reprieves are human-granted session-global exceptions in
 `~/.caws/state/sessions/<session>/`. `--surface` records harness identity and
