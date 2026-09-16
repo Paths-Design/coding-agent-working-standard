@@ -1,25 +1,98 @@
-#!/bin/sh
-. "$(dirname "$0")/_/husky.sh"
+#!/bin/bash
+# CAWS pre-push hook — repo-local to the caws monorepo.
+#
+# Mirrors the CI pipeline so a push cannot fail in CI for something reproducible
+# locally. Deliberately strict: there is no environment-variable escape hatch.
+#
+# Removed from the previous version: a loop over "$@" looking for --no-verify.
+# git passes a pre-push hook <remote-name> <remote-url> and nothing else — the
+# user's flags never appear there, so that check could never fire. Worse, git
+# does not run this hook at all under --no-verify, so a hook can never police
+# its own bypass. The real control is review + branch protection.
 
-# Pre-push checks that mirror CI/CD pipeline
-# This prevents pushing code that will fail in CI
+# git hooks run with a minimal PATH; restore the usual locations.
+export PATH="/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:$PATH"
+if [ -s "$HOME/.nvm/nvm.sh" ]; then
+  # shellcheck disable=SC1091
+  . "$HOME/.nvm/nvm.sh"
+elif [ -s "/usr/local/opt/nvm/nvm.sh" ]; then
+  # shellcheck disable=SC1091
+  . "/usr/local/opt/nvm/nvm.sh"
+fi
 
-echo "Running pre-push checks..."
+set -uo pipefail
 
-# 1. Lint (fast, catches syntax errors)
-echo "  [1/4] Linting..."
-npm run lint || exit 1
+# Portable timeout: macOS has neither GNU timeout nor gtimeout by default.
+# Returns the command's own status, or 124 on timeout.
+run_with_timeout() {
+  local seconds="$1"; shift
+  local timeout_cmd=""
+  if command -v timeout >/dev/null 2>&1; then
+    timeout_cmd="timeout"
+  elif command -v gtimeout >/dev/null 2>&1; then
+    timeout_cmd="gtimeout"
+  fi
+  if [ -n "$timeout_cmd" ]; then
+    "$timeout_cmd" "$seconds" "$@"
+    return $?
+  fi
+  # No timeout binary available: run unbounded rather than skipping the check.
+  "$@"
+  return $?
+}
 
-# 2. Security audit (critical only - high has unfixable transitive deps)
-echo "  [2/4] Security audit..."
-npm audit --audit-level=critical || exit 1
+[ -f package.json ] && [ -f turbo.json ] || exit 0
 
-# 3. Build (ensures TypeScript compiles)
-echo "  [3/4] Building..."
-npm run build || exit 1
+FAILED=false
 
-# 4. Tests (most comprehensive check)
-echo "  [4/4] Running tests..."
-npm test || exit 1
+echo "pre-push: mirroring CI (lint, audit, build, test)"
 
-echo "Pre-push checks passed!"
+# 1. Lint
+echo "  [1/4] lint"
+run_with_timeout 600 npx turbo run lint
+LINT_EXIT=$?
+if [ $LINT_EXIT -eq 124 ]; then
+  echo "  lint timed out after 10m" >&2; FAILED=true
+elif [ $LINT_EXIT -ne 0 ]; then
+  echo "  lint failed (exit $LINT_EXIT) — reproduce with: npx turbo run lint" >&2; FAILED=true
+fi
+
+# 2. Security audit (critical only; high has unfixable transitive deps)
+echo "  [2/4] audit"
+if ! npm audit --audit-level=critical; then
+  echo "  audit failed — reproduce with: npm audit --audit-level=critical" >&2; FAILED=true
+fi
+
+# 3. Build
+echo "  [3/4] build"
+run_with_timeout 900 npm run build
+BUILD_EXIT=$?
+if [ $BUILD_EXIT -eq 124 ]; then
+  echo "  build timed out after 15m" >&2; FAILED=true
+elif [ $BUILD_EXIT -ne 0 ]; then
+  echo "  build failed (exit $BUILD_EXIT) — reproduce with: npm run build" >&2; FAILED=true
+fi
+
+# 4. Full test suite. Log to a unique file: a fixed /tmp path races between
+# concurrent pushes from sibling worktrees and truncates the other's output.
+echo "  [4/4] test (full suite)"
+TEST_LOG=$(mktemp "${TMPDIR:-/tmp}/caws-pre-push-test.XXXXXX")
+run_with_timeout 900 npm test 2>&1 | tee "$TEST_LOG"
+TEST_EXIT=${PIPESTATUS[0]}
+if [ "$TEST_EXIT" -eq 124 ]; then
+  echo "  test suite timed out after 15m" >&2; FAILED=true
+elif [ "$TEST_EXIT" -ne 0 ]; then
+  echo "  test suite failed (exit $TEST_EXIT); last 100 lines:" >&2
+  tail -100 "$TEST_LOG" >&2
+  FAILED=true
+fi
+rm -f "$TEST_LOG"
+
+if [ "$FAILED" = true ]; then
+  echo "" >&2
+  echo "pre-push: refusing the push — the checks above must pass." >&2
+  exit 1
+fi
+
+echo "pre-push: all checks passed"
+exit 0
