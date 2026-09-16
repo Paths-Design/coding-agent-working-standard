@@ -2,10 +2,11 @@ id: CAWS-REMEDIATION-NO-LABEL-ESCAPE-001
 title: 'Remediation text must not prescribe a label change as the repair'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-remediation-escape
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-remediation-escape at 38777b050adf2b0c6e5a74f895f469d32260e3c8'
 created_at: '2026-09-16T07:47:20.506Z'
-updated_at: '2026-09-16T07:53:37.480Z'
+updated_at: '2026-09-16T07:58:38.709Z'
 created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
 blast_radius:
   modules:
