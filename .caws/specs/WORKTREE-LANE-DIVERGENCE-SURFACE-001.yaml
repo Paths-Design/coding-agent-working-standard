@@ -115,3 +115,10 @@ evidence:
     command: npx jest
     exit_code: 0
     commit_sha: "31c190ac"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "jest tests/shell/worktree-lane-divergence.test.js 'A5' — canonical cwd renders no /^\\s*lane:/ line and no 'ahead=' anywhere; 'A5b' pins --short both ways. Live corroboration: caws status from the canonical checkout shows no lane line"
+    recorded_at: "2026-09-16T03:54:46.400Z"
+    command: npx jest
+    exit_code: 0
+    commit_sha: "31c190ac"
