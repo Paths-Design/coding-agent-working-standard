@@ -442,29 +442,283 @@ evidence:
 // ─── purity (A8, kernel half) ────────────────────────────────────────────────
 
 describe('the module is pure', () => {
-  test('rederive.ts imports nothing impure and touches no clock', () => {
-    const src = fs.readFileSync(
-      path.join(__dirname, '../../../src/kernel/evidence/rederive.ts'),
-      'utf8'
-    );
-    // Strip comments so prose mentioning these names does not trip the check.
-    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-    for (const forbidden of [
-      "from 'fs'",
-      'from "fs"',
-      'child_process',
-      'process.env',
-      'process.cwd',
-      'Date.now',
-      'new Date(',
-      'require(',
-    ]) {
-      expect(code).not.toContain(forbidden);
+  // This is a source-TEXT assertion. Inside the Stryker sandbox the file on
+  // disk is the instrumented copy (it reads process.env for the active
+  // mutant), so the grep would fail for a reason unrelated to purity. The
+  // behavioral tests above are what mutation testing scores; this one runs
+  // only against the pristine tree.
+  const onPristineSource = !/[\\/]\.stryker[^\\/]*[\\/]/.test(__dirname);
+  (onPristineSource ? test : test.skip)(
+    'rederive.ts imports nothing impure and touches no clock',
+    () => {
+      const src = fs.readFileSync(
+        path.join(__dirname, '../../../src/kernel/evidence/rederive.ts'),
+        'utf8'
+      );
+      // Strip comments so prose mentioning these names does not trip the check.
+      const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+      for (const forbidden of [
+        "from 'fs'",
+        'from "fs"',
+        'child_process',
+        'process.env',
+        'process.cwd',
+        'Date.now',
+        'new Date(',
+        'require(',
+      ]) {
+        expect(code).not.toContain(forbidden);
+      }
+      // The only import is a type-only import from the spec types.
+      const imports = code.match(/^import .*$/gm) ?? [];
+      expect(imports).toEqual([
+        "import type { EvidenceRecord, EvidenceStatus, Spec } from '../spec/types';",
+      ]);
     }
-    // The only import is a type-only import from the spec types.
-    const imports = code.match(/^import .*$/gm) ?? [];
-    expect(imports).toEqual([
-      "import type { EvidenceRecord, EvidenceStatus, Spec } from '../spec/types';",
+  );
+});
+
+// ─── counts a symmetric fixture cannot distinguish (A2, A12) ─────────────────
+
+describe('the summary tallies each category separately', () => {
+  test('refuted and not_rederived are counted apart, and the tally is asymmetric', () => {
+    // One of each is the fixture that proves nothing: swapping two categories
+    // leaves 1/1/1 unchanged. These counts are 1 verified / 2 refuted /
+    // 3 not_rederived so that any reassignment between them shows up.
+    const spec = specWith(
+      [ac('A1'), ac('A2'), ac('A3'), ac('A4'), ac('A5'), ac('A6')],
+      [
+        ev('A1', { commit_sha: 'sha-ok' }),
+        ev('A2', { artifact_path: 'gone-a.md' }),
+        ev('A3', { artifact_path: 'gone-b.md' }),
+        ev('A4', { test_nodeid: 't::unrun' }),
+        // A command beside a citation: the criterion declares a command AND a
+        // check of another class, so "declares a command" cannot be read as
+        // "every check is a command".
+        ev('A5', { commit_sha: 'sha-ok-2', command: 'make check' }),
+        ev('A6'),
+      ]
+    );
+    const verdicts = run(
+      spec,
+      report({
+        A1: [{ class: 'citation', target: 'sha-ok', outcome: 'passed' }],
+        A2: [{ class: 'artifact', target: 'gone-a.md', outcome: 'missing' }],
+        A3: [{ class: 'artifact', target: 'gone-b.md', outcome: 'missing' }],
+        A4: [{ class: 'test', target: 't::unrun', outcome: 'not_run' }],
+        A5: [{ class: 'citation', target: 'sha-ok-2', outcome: 'passed' }],
+      })
+    );
+
+    expect(verdicts.map((v) => v.verdict)).toEqual([
+      'verified',
+      'refuted',
+      'refuted',
+      'not_rederived',
+      'not_rederived',
+      'not_rederived',
+    ]);
+    // A narrative-only criterion asserts nothing mechanical, so it is neither
+    // self-reported nor verifiable.
+    expect(verdicts[5].reason).toBe('no_mechanical_field');
+    expect(verdicts[5].self_reported).toBe(false);
+    expect(summarizeRederivation(verdicts)).toEqual({
+      total: 6,
+      verified: 1,
+      refuted: 2,
+      not_rederived: 3,
+      narrative_only: 1,
+      self_reported: 5,
+      command_declared: 1,
+    });
+  });
+
+  test('a criterion with no checks at all declares no command', () => {
+    // "Declares a command" must mean at least one command check, not "no check
+    // contradicts it" — an empty check list satisfies the second reading
+    // vacuously and would report narrative-only criteria as command-bearing.
+    const spec = specWith([ac('A1'), ac('A2')], [ev('A1'), ev('A2')]);
+    expect(summarizeRederivation(run(spec, undefined))).toEqual({
+      total: 2,
+      verified: 0,
+      refuted: 0,
+      not_rederived: 2,
+      narrative_only: 2,
+      self_reported: 0,
+      command_declared: 0,
+    });
+  });
+});
+
+// ─── the weakest check decides, and names the reason ─────────────────────────
+
+describe('a criterion takes the verdict of its weakest check', () => {
+  test('the deciding check is the weakest one, not the first and not the last', () => {
+    const spec = specWith(
+      [ac('A1')],
+      [ev('A1', { commit_sha: 'sha', artifact_path: 'p', test_nodeid: 't::x' })]
+    );
+    const [v] = run(
+      spec,
+      report({
+        A1: [
+          { class: 'citation', target: 'sha', outcome: 'passed' },
+          { class: 'artifact', target: 'p', outcome: 'missing' },
+          { class: 'test', target: 't::x', outcome: 'passed' },
+        ],
+      })
+    );
+    expect(v.checks.map((c) => c.verdict)).toEqual(['verified', 'refuted', 'verified']);
+    expect(v.verdict).toBe('refuted');
+    expect(v.reason).toBe('artifact_missing');
+  });
+
+  test('among equally weak checks the first one supplies the reason', () => {
+    const spec = specWith([ac('A1')], [ev('A1', { commit_sha: 'nope', artifact_path: 'gone.md' })]);
+    const [v] = run(
+      spec,
+      report({
+        A1: [
+          { class: 'citation', target: 'nope', outcome: 'missing' },
+          { class: 'artifact', target: 'gone.md', outcome: 'missing' },
+        ],
+      })
+    );
+    expect(v.verdict).toBe('refuted');
+    expect(v.reason).toBe('object_missing');
+  });
+});
+
+// ─── an outcome belongs to exactly one check ─────────────────────────────────
+
+describe('a store outcome is matched on the (class, target) pair', () => {
+  test('two test checks take their own outcomes, not the first one reported', () => {
+    // The failing nodeid is cited by the evidence; the passing one is declared
+    // by the acceptance contract and reported FIRST. Matching on class alone
+    // would hand the evidence check the passing outcome.
+    const spec = specWith(
+      [ac('A1', { test_nodeids: ['t::passing'] })],
+      [ev('A1', { test_nodeid: 't::failing' })]
+    );
+    const [v] = run(
+      spec,
+      report({
+        A1: [
+          { class: 'test', target: 't::passing', outcome: 'passed' },
+          { class: 'test', target: 't::failing', outcome: 'failed' },
+        ],
+      })
+    );
+    expect(v.checks.map((c) => [c.target, c.verdict])).toEqual([
+      ['t::failing', 'refuted'],
+      ['t::passing', 'verified'],
+    ]);
+    expect(v.verdict).toBe('refuted');
+    expect(v.reason).toBe('test_failed');
+  });
+
+  test('one target reused across two classes does not cross-wire', () => {
+    const spec = specWith([ac('A1')], [ev('A1', { commit_sha: 'dup', artifact_path: 'dup' })]);
+    const [v] = run(
+      spec,
+      report({
+        A1: [
+          { class: 'artifact', target: 'dup', outcome: 'missing' },
+          { class: 'citation', target: 'dup', outcome: 'passed' },
+        ],
+      })
+    );
+    expect(v.checks.map((c) => [c.class, c.verdict, c.reason])).toEqual([
+      ['citation', 'verified', 'passed'],
+      ['artifact', 'refuted', 'artifact_missing'],
+    ]);
+  });
+
+  test('a report that omits the criterion is outcome_missing, not a crash', () => {
+    const spec = specWith(
+      [ac('A1'), ac('A2')],
+      [ev('A1', { commit_sha: 'a' }), ev('A2', { commit_sha: 'b' })]
+    );
+    const [, a2] = run(
+      spec,
+      report({ A1: [{ class: 'citation', target: 'a', outcome: 'passed' }] })
+    );
+    expect(a2.verdict).toBe('not_rederived');
+    expect(a2.reason).toBe('outcome_missing');
+  });
+});
+
+// ─── divergence is read from the declaring criterion ─────────────────────────
+
+describe('divergence is bound to the criterion that declared the nodeid', () => {
+  test('a later criterion does not inherit the first criterion declaration', () => {
+    const spec = specWith(
+      [ac('A1'), ac('A2', { test_nodeids: ['t::declared'] })],
+      [ev('A1', { test_nodeid: 't::a1' }), ev('A2', { test_nodeid: 't::substituted' })]
+    );
+    const [a1, a2] = run(spec, undefined);
+    expect(a1.divergence).toBeUndefined();
+    expect(a2.divergence).toEqual({ declared: ['t::declared'], reported: 't::substituted' });
+  });
+
+  test('a declared nodeid with no evidence-sourced test check is not a divergence', () => {
+    const spec = specWith(
+      [ac('A1', { test_nodeids: ['t::declared'] })],
+      [ev('A1', { artifact_path: 'docs/p.md' })]
+    );
+    const [v] = run(spec, undefined);
+    expect(v.checks.map((c) => [c.class, c.source])).toEqual([
+      ['artifact', 'evidence'],
+      ['test', 'acceptance'],
+    ]);
+    expect(v.divergence).toBeUndefined();
+  });
+
+  test('an empty declared list is not a divergence', () => {
+    const spec = specWith([ac('A1', { test_nodeids: [] })], [ev('A1', { test_nodeid: 't::x' })]);
+    expect(run(spec, undefined)[0].divergence).toBeUndefined();
+  });
+
+  test('a plan naming a criterion the spec does not carry degrades, never throws', () => {
+    // The classifier takes spec and plan as separate arguments, so a caller can
+    // hand it a plan built from a different revision of the spec. That must
+    // withhold the divergence, not crash the close gate that called it.
+    const planned = specWith(
+      [ac('A1', { test_nodeids: ['t::declared'] })],
+      [ev('A1', { test_nodeid: 't::substituted' })]
+    );
+    const stale = specWith([ac('B9')]);
+    const [v] = classifyRederivation(stale, planRederivation(planned), undefined);
+    expect(v.id).toBe('A1');
+    expect(v.divergence).toBeUndefined();
+  });
+});
+
+// ─── the acceptance-level surface, with no evidence entry at all ─────────────
+
+describe('a check declared only by the acceptance contract', () => {
+  test('is acceptance-sourced and still marks the criterion self-reported', () => {
+    // No evidence[] entry exists, so the ONLY check comes from the contract the
+    // same agent authored — self-reported is about who supplied the field, not
+    // which array it landed in.
+    const spec = specWith([ac('A1', { test_nodeids: ['t::declared'] })]);
+    const [v] = run(spec, undefined);
+    expect(v.checks.map((c) => [c.class, c.target, c.source])).toEqual([
+      ['test', 't::declared', 'acceptance'],
+    ]);
+    expect(v.self_reported).toBe(true);
+    expect(v.verdict).toBe('not_rederived');
+  });
+
+  test('a nodeid the evidence already cites is not planned twice', () => {
+    const spec = specWith(
+      [ac('A1', { test_nodeids: ['t::same'] })],
+      [ev('A1', { commit_sha: 'sha', test_nodeid: 't::same' })]
+    );
+    const plan = planRederivation(spec);
+    expect(plan.criteria[0].checks.map((c) => [c.class, c.target, c.source])).toEqual([
+      ['citation', 'sha', 'evidence'],
+      ['test', 't::same', 'evidence'],
     ]);
   });
 });
