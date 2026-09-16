@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-session-log-steering-usage
 created_at: '2026-09-16T03:16:58.677Z'
-updated_at: '2026-09-16T03:16:59.667Z'
+updated_at: '2026-09-16T03:25:09.436Z'
 created_by_session: '0ba2a3c1-b541-466a-90cb-d18d2272e80f'
 blast_radius:
   modules:
@@ -27,6 +27,14 @@ scope:
     - 'packages/caws-cli/tests/hooks/pytest/test_session_log_renderer.py'
     - 'packages/caws-cli/tests/kernel/telemetry-turn-log-schema.test.ts'
     - 'packages/caws-cli/templates/hook-packs/claude-code/README.md'
+    - packages/caws-cli/templates/hook-packs/shared/dispatch/session_end.sh
+    - packages/caws-cli/src/init/hook-install.ts
+    - packages/caws-cli/src/init/native-hook-identification.ts
+    - packages/caws-cli/src/init/machine-adapters.ts
+    - packages/caws-cli/src/init/hook-packs/types.ts
+    - packages/caws-cli/src/init/hook-packs/manifest-claude-code.ts
+    - packages/caws-cli/src/store/system-runtime-observation.ts
+    - packages/caws-cli/tests/hooks/pytest/test_machine_hook_selection.py
   out: []
 invariants:
   - 'Session logs stay operational cache: this slice adds no events.jsonl event kind and the kernel never reads usage data for scope, ownership, or claim decisions'
