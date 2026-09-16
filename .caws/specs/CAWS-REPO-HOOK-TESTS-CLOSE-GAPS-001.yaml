@@ -63,8 +63,8 @@ evidence:
     commit_sha: "2f98d3c2"
   - criterion_id: A3
     status: pass
-    evidence_ref: "The --workspaces=false flag is load-bearing: the root .npmrc sets workspaces=true, which makes a bare npm run prepare resolve against the workspaces instead of the root script. T6f separately asserts npm echoed the ROOT script body, which is what makes T9 a real execution rather than a read-back of an already-correct value."
-    recorded_at: "2026-09-16T06:08:40.658Z"
+    evidence_ref: "T9 builds a scratch GIT_DIR (mkdir -p objects refs; printf 'ref: refs/heads/main' > HEAD), sets core.hooksPath to the deliberately wrong value .husky-WRONG inside it, runs GIT_DIR=<scratch> npm run prepare --workspaces=false, and reads the value back. T9a asserts the wrong value was actually installed first, so a no-op prepare cannot pass; T9b asserts it reads back as .husky (repair, not idempotence); T9c asserts the REAL repository config was never touched — artifact: 'T9c the real repository config was never touched (still .husky)'. The scratch GIT_DIR is what keeps a test that NEEDS a wrong value from writing that wrong value into shared repo state, which is exactly how this session previously reproduced the ten-month hooks outage live. --workspaces=false is load-bearing: the root .npmrc sets workspaces=true, so a bare npm run prepare resolves against the workspaces and never reaches the root script; T6f separately asserts npm echoed the ROOT script body. NOT EXERCISED: the npm-install-time lifecycle invocation of prepare — only the script body. A linked worktree cannot run npm install without destroying its node_modules symlinks, so that branch is deliberately out of reach here."
+    recorded_at: "2026-09-16T06:09:04.422Z"
     command: bash .husky/tests/run.sh
     exit_code: 0
     artifact_path: package.json
