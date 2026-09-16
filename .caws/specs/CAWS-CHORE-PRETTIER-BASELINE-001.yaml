@@ -5,7 +5,7 @@ mode: chore
 lifecycle_state: active
 worktree: wt-prettier-baseline
 created_at: '2026-09-16T07:53:45.081Z'
-updated_at: '2026-09-16T07:53:57.676Z'
+updated_at: '2026-09-16T08:14:50.405Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
@@ -32,6 +32,7 @@ scope:
     - 'QWEN.md'
     - 'SECURITY.md'
     - 'jest.config.js'
+    - .lintstagedrc.json
   out: []
 invariants:
   - 'The slice changes formatting only: no source file changes meaning, proven by the full CLI suite passing at the same counts as the pre-slice baseline.'
