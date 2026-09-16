@@ -2,10 +2,11 @@ id: CAWS-SPEC-SCOPE-IN-PLACEHOLDER-CONTRACT-001
 title: 'Bring scope.in''s create scaffold into the single-sourced placeholder contract: replace on amend, refuse at bind'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-scope-placeholder
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-scope-placeholder at f7f93e182dfc5c9ffacafb6c6b2eb2af9251de4d'
 created_at: '2026-09-16T07:02:16.611Z'
-updated_at: '2026-09-16T07:23:48.550Z'
+updated_at: '2026-09-16T07:32:39.619Z'
 created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
 blast_radius:
   modules:
