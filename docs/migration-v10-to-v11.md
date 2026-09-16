@@ -505,9 +505,10 @@ Is your project new (no existing .caws/ state)?
   NO  → Continue.
 
 Does your team rely DAILY on any of:
-  caws sidecar / burnup / verify-acs / evaluate / test-analysis ?
+  caws sidecar / burnup / evaluate / test-analysis ?
   YES → Stay on v10.2.x for now. There is no v11.1 replacement.
         File a feature request if you want them rebuilt.
+        (verify-acs is back as `caws specs verify-acs <id>` from 12.2.)
   NO  → Continue.
 
 Does your team rely DAILY on multi-agent commands:
