@@ -183,3 +183,9 @@ evidence:
     recorded_at: "2026-09-16T22:35:35.549Z"
     test_nodeid: packages/caws-cli/tests/shell/specs-close-rederive.test.js
     commit_sha: "686dd33d"
+  - criterion_id: A10
+    status: pass
+    evidence_ref: "tests/shell/specs-close-rederive.test.js closes specs carrying refuted citations (artifact_missing and object_missing fixtures) and asserts exit 0 with the advisory present on stderr. Warn-mode is proven to be warn, not block."
+    recorded_at: "2026-09-16T22:37:29.825Z"
+    test_nodeid: packages/caws-cli/tests/shell/specs-close-rederive.test.js
+    commit_sha: "686dd33d"
