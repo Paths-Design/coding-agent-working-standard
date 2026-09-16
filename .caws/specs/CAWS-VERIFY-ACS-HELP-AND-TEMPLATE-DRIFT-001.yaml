@@ -23,7 +23,8 @@ scope:
     - 'AGENTS.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The set of runners re-derivation can execute is exported once; the dispatch switch and the --help description both derive from it, so implementing a new runner cannot leave the help stale.'
+  - 'No command named in a shipped template''s removed-commands list may be registered on the live command surface; a test enforces this against COMMAND_SURFACE_METADATA.'
 acceptance:
   - id: A1
     given: 'the shipped templates list removed v10 commands'
