@@ -322,6 +322,18 @@ function performHookPackStep(
         '\n'
     );
   }
+  // CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001: say so when rows were kept
+  // BECAUSE another surface still installs them. Silence here would read as
+  // "nothing to retire" and hide the reason the plane survived.
+  if (telemetryRetire && telemetryRetire.retained.length > 0) {
+    process.stdout.write(
+      'Kept telemetry rows still installed by ' +
+        telemetryRetire.retainedFor.join(', ') +
+        ' (CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001): ' +
+        telemetryRetire.retained.join(', ') +
+        '\n'
+    );
+  }
   // A failed unlink is a loud per-path degradation, never an abort: init
   // finished its installs; the row stays managed on disk and the next run
   // (or a permission fix) retries it. Doctor keeps flagging the drift.
@@ -803,6 +815,12 @@ function renderInitPlan(plan: InitPlanDocument): string {
     } else {
       lines.push(`  would retire (delete ${retire.retire.length}):`);
       for (const relPath of retire.retire) lines.push(`    - ${relPath}`);
+    }
+    if (retire.retained.length > 0) {
+      lines.push(
+        `  kept, still installed by ${retire.retainedFor.join(', ')} (${retire.retained.length}):`
+      );
+      for (const relPath of retire.retained) lines.push(`    - ${relPath}`);
     }
     if (retire.unmanaged.length > 0) {
       lines.push(`  left alone, not CAWS-managed: ${retire.unmanaged.join(', ')}`);

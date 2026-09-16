@@ -45,7 +45,13 @@ import type {
   ManagedHeader,
 } from './hook-packs/types';
 import type { SharedPackDriftRow } from '../kernel/doctor/types';
-import { SHARED_PACK, TELEMETRY_ROW_DEST_PATHS } from './hook-packs/manifest-shared';
+import type { AgentSurface } from './hook-packs/types';
+import {
+  SHARED_PACK,
+  TELEMETRY_ROW_DEST_PATHS,
+  sharedPackForSurface,
+} from './hook-packs/manifest-shared';
+import { KNOWN_SURFACES, resolveHookPack } from './hook-packs/register';
 
 /** Location of the pack templates relative to the caws-cli package root.
  *  Resolved at runtime from __dirname so it works both in dev (running
@@ -758,6 +764,93 @@ export function installHookPack(
 
 // ─── Telemetry row retirement (CAWS-HARNESS-TELEMETRY-ADAPTER-001) ────────
 
+/**
+ * CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001: the surfaces whose vendor
+ * pack is installed in THIS project.
+ *
+ * There is no persisted receipt of which surfaces `caws init` has run for,
+ * so installation is inferred the way doctor already infers adapter
+ * coverage: a pack counts as installed when at least one of its managed
+ * files is on disk carrying that pack's own `hook_pack:` header. Reading
+ * the header (not merely statting the vendor directory) is what keeps an
+ * unrelated `.claude/` or `.zcode/` directory from being mistaken for a
+ * CAWS install.
+ *
+ * Derived from the pack manifests rather than a hand-maintained list, so a
+ * newly registered surface cannot leave this detector silently stale.
+ * Pure observation: never writes, never throws.
+ */
+export function observeInstalledPackSurfaces(repoRoot: string): readonly AgentSurface[] {
+  const installed: AgentSurface[] = [];
+  for (const surface of KNOWN_SURFACES) {
+    const resolution = resolveHookPack(surface);
+    // 'none' and declared-but-unimplemented surfaces install nothing.
+    if (resolution.kind !== 'pack') continue;
+    const pack = resolution.pack;
+    const present = pack.installedFiles.some((file) => {
+      if (!file.managed) return false;
+      let content: string;
+      try {
+        content = fs.readFileSync(path.join(repoRoot, file.destPath), 'utf8');
+      } catch {
+        return false;
+      }
+      const header = parseManagedHeader(content);
+      return header !== null && header.hookPack === pack.id;
+    });
+    if (present) installed.push(surface);
+  }
+  return installed;
+}
+
+/**
+ * Which telemetry rows are still claimed by an installed surface, and by
+ * whom.
+ *
+ * A row is claimed when `sharedPackForSurface` for any installed surface
+ * still lists it. That single question subsumes the surface taxonomy: for a
+ * non-covered surface the shared pack keeps the telemetry rows (so its
+ * dispatchers invoke them and its own init would reinstall them), and for an
+ * adapter-covered surface the pack omits them. Asking the manifest rather
+ * than testing surface identity means the rule needs no update when
+ * ADAPTER_COVERED_SURFACES changes.
+ *
+ * This is the invariant in general form: init must never remove a file that
+ * another installed surface's install set still contains.
+ */
+/**
+ * The installed surfaces that still claim the vendored telemetry rows.
+ *
+ * Doctor's single observation for CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001:
+ * a non-empty list means the rows on disk are LOAD-BEARING for a co-installed
+ * surface, not stale dual-writers, and `HOOKS_STALE_TELEMETRY_PACK` must stay
+ * silent. Exported from the install module on purpose — the same reason
+ * doctor-snapshot imports observeSharedPackBodyDrift from here: re-deriving
+ * "who needs these rows" in the store would create a second source of truth
+ * and let the advisory prescribe a repair the installer would not perform.
+ */
+export function observeTelemetryRowClaimants(repoRoot: string): readonly string[] {
+  return telemetryRowsClaimedBy(observeInstalledPackSurfaces(repoRoot)).claimants;
+}
+
+function telemetryRowsClaimedBy(surfaces: readonly AgentSurface[]): {
+  readonly rows: ReadonlySet<string>;
+  readonly claimants: readonly string[];
+} {
+  const telemetry = new Set<string>(TELEMETRY_ROW_DEST_PATHS);
+  const rows = new Set<string>();
+  const claimants: string[] = [];
+  for (const surface of surfaces) {
+    const claimed = sharedPackForSurface(surface).installedFiles.filter((file) =>
+      telemetry.has(file.destPath)
+    );
+    if (claimed.length === 0) continue;
+    claimants.push(surface);
+    for (const file of claimed) rows.add(file.destPath);
+  }
+  return { rows, claimants };
+}
+
 /** Outcome of retiring the vendored telemetry rows for an adapter-covered
  *  surface. Absence is reported, never treated as staleness; local growth is
  *  never touched; a failed deletion is reported and never thrown. The four
@@ -766,6 +859,12 @@ export function installHookPack(
 export interface TelemetryRetireResult {
   /** Managed `hook_pack: shared` rows removed from disk. */
   readonly retired: readonly string[];
+  /** Managed rows deliberately KEPT because another installed surface's
+   *  install set still contains them
+   *  (CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001). */
+  readonly retained: readonly string[];
+  /** The installed surfaces that claimed the retained rows. */
+  readonly retainedFor: readonly string[];
   /** Dest paths that did not exist. */
   readonly absent: readonly string[];
   /** Files present at a telemetry dest path WITHOUT a shared-pack managed
@@ -803,6 +902,14 @@ export interface TelemetryRetirePlan {
   readonly retire: readonly string[];
   readonly absent: readonly string[];
   readonly unmanaged: readonly string[];
+  /** Managed rows NOT retired because another installed surface's install
+   *  set still contains them — that surface's dispatchers invoke these rows
+   *  and its init would reinstall them
+   *  (CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001). */
+  readonly retained: readonly string[];
+  /** The installed surfaces that claimed the retained rows. Empty when
+   *  nothing was retained, so the reason is never asserted without effect. */
+  readonly retainedFor: readonly string[];
 }
 
 /**
@@ -817,9 +924,13 @@ export interface TelemetryRetirePlan {
  * writes, so it is safe to call from any read-only path.
  */
 export function planTelemetryRetirement(repoRoot: string): TelemetryRetirePlan {
+  const { rows: claimedRows, claimants } = telemetryRowsClaimedBy(
+    observeInstalledPackSurfaces(repoRoot)
+  );
   const retire: string[] = [];
   const absent: string[] = [];
   const unmanaged: string[] = [];
+  const retained: string[] = [];
   for (const relPath of TELEMETRY_ROW_DEST_PATHS) {
     let content: string;
     try {
@@ -834,9 +945,23 @@ export function planTelemetryRetirement(repoRoot: string): TelemetryRetirePlan {
       unmanaged.push(relPath);
       continue;
     }
+    // Ours, but still claimed by a co-installed surface: keep it. Checked
+    // AFTER the unmanaged test so local growth stays untouchable regardless
+    // of which surfaces are installed, and the four lists stay disjoint.
+    if (claimedRows.has(relPath)) {
+      retained.push(relPath);
+      continue;
+    }
     retire.push(relPath);
   }
-  return { retire, absent, unmanaged };
+  return {
+    retire,
+    absent,
+    unmanaged,
+    retained,
+    // Only claim a reason when it had an effect.
+    retainedFor: retained.length > 0 ? claimants : [],
+  };
 }
 
 export function retireStaleTelemetryRows(repoRoot: string): TelemetryRetireResult {
@@ -853,7 +978,14 @@ export function retireStaleTelemetryRows(repoRoot: string): TelemetryRetireResul
       failed.push(relPath);
     }
   }
-  return { retired, absent: plan.absent, unmanaged: plan.unmanaged, failed };
+  return {
+    retired,
+    retained: plan.retained,
+    retainedFor: plan.retainedFor,
+    absent: plan.absent,
+    unmanaged: plan.unmanaged,
+    failed,
+  };
 }
 
 /** Read-only hook-pack preview. Uses the same file-state evaluator as install

@@ -52,7 +52,7 @@ import { loadWaivers } from './waivers-store';
 // site below is additionally guarded so a throw can never wedge doctor.
 import { parseManagedHeader } from '../init/hook-packs/managed-header';
 import { SHARED_PACK_VERSION, TELEMETRY_ROW_DEST_PATHS } from '../init/hook-packs/manifest-shared';
-import { observeSharedPackBodyDrift } from '../init/hook-install';
+import { observeSharedPackBodyDrift, observeTelemetryRowClaimants } from '../init/hook-install';
 import { listStrandedTmpSiblings } from './atomic-write';
 import { ADAPTER_COVERED_SURFACES } from '../init/hook-packs/types';
 import { observeSystemRuntime } from './system-runtime-observation';
@@ -108,10 +108,7 @@ export function composeStoreSnapshot(options: ComposeOptions): StoreSnapshot {
       ? { createdWorktreePathExistsByName }
       : {}),
   };
-  const registryDiagnostics = collectRegistryDiagnostics(
-    worktreesResult,
-    agentsResult
-  );
+  const registryDiagnostics = collectRegistryDiagnostics(worktreesResult, agentsResult);
 
   // WORKTREE-DOCTOR-HALF-STATE-001 — observe git worktree state.
   // Non-fatal: on failure, gitWorktrees is undefined and
@@ -178,9 +175,7 @@ function isDir(p: string): boolean {
 function observeInitResidue(cawsDir: string): StoreSnapshot['initResidue'] {
   return {
     workingSpecYaml: isFile(path.join(cawsDir, 'working-spec.yaml')),
-    workingSpecSchemaJson: isFile(
-      path.join(cawsDir, 'working-spec.schema.json')
-    ),
+    workingSpecSchemaJson: isFile(path.join(cawsDir, 'working-spec.schema.json')),
   };
 }
 
@@ -193,10 +188,7 @@ function observeInitResidue(cawsDir: string): StoreSnapshot['initResidue'] {
  * installed. Kept narrow on purpose — a bare `.claude/hooks/` directory
  * is NOT evidence of CAWS.
  */
-const CAWS_HOOK_PACK_MARKERS = [
-  'scope-guard.sh',
-  'worktree-write-guard.sh',
-] as const;
+const CAWS_HOOK_PACK_MARKERS = ['scope-guard.sh', 'worktree-write-guard.sh'] as const;
 
 function observeHookPackInstalled(repoRoot: string): boolean {
   const hooksDir = path.join(repoRoot, '.claude', 'hooks');
@@ -275,10 +267,7 @@ function observeAdapterPackSurfaceMarkers(repoRoot: string): string[] {
     if (markerFile === undefined) continue;
     let content: string;
     try {
-      content = fs.readFileSync(
-        path.join(repoRoot, `.${surface}`, markerFile),
-        'utf8'
-      );
+      content = fs.readFileSync(path.join(repoRoot, `.${surface}`, markerFile), 'utf8');
     } catch {
       continue; // marker absent — surface pack not installed here
     }
@@ -317,9 +306,7 @@ function observeFilesystem(
     if (Object.prototype.hasOwnProperty.call(specClaimedWorktreeDirByName, name)) {
       continue;
     }
-    specClaimedWorktreeDirByName[name] = isDir(
-      path.join(cawsDir, 'worktrees', name)
-    );
+    specClaimedWorktreeDirByName[name] = isDir(path.join(cawsDir, 'worktrees', name));
   }
   return {
     cawsDirExists: isDir(cawsDir),
@@ -332,12 +319,24 @@ function observeFilesystem(
     // CAWS-DOCTOR-HOOKS-NO-CAWS-DRIFT-001: observe the hook pack so doctor
     // can flag the hooks-present/substrate-absent split-brain.
     hookPackInstalled: observeHookPackInstalled(repoRoot),
-    ...(() => { const systemRuntime = observeSystemRuntime(repoRoot); return systemRuntime ? { systemRuntime } : {}; })(),
+    ...(() => {
+      const systemRuntime = observeSystemRuntime(repoRoot);
+      return systemRuntime ? { systemRuntime } : {};
+    })(),
     // CAWS-HARNESS-TELEMETRY-ADAPTER-001: observe managed telemetry rows and
     // installed adapter-pack surfaces so doctor can flag stale dual-writers.
     managedTelemetryRowPaths: observeManagedTelemetryRows(repoRoot),
-    globalHomeObservation: observeGlobalHome(process.env.CAWS_HOME || path.join(os.homedir(), '.caws')),
+    globalHomeObservation: observeGlobalHome(
+      process.env.CAWS_HOME || path.join(os.homedir(), '.caws')
+    ),
     adapterPackSurfaceMarkers: observeAdapterPackSurfaceMarkers(repoRoot),
+    // CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001: which installed surfaces
+    // still CLAIM those rows. Delegated to the install module for the same
+    // reason as observeSharedPackBodyDrift above: the installer's own notion
+    // of "whose install set contains this row" is the only correct answer,
+    // and re-deriving it here would let doctor prescribe a repair init
+    // would not perform.
+    telemetryRowClaimantSurfaces: observeTelemetryRowClaimants(repoRoot),
     // CAWS-DEFECT-LEASE-TMP-STRANDING-01: stranded atomic-write tmps in the
     // leases dir, observed through the atomic-write lister itself (the same
     // pattern the sweep uses — one source of truth for what counts as ours).
@@ -378,7 +377,10 @@ function observeFilesystem(
     })(),
     // CAWS-GATED-SURFACE-SCOPE-GUARD-001: both sides of the dual-wiring
     // hazard, observed read-only (user home + project configs).
-    ...((): { userScopeCawsWiringBySurface: readonly string[]; gatedProjectHookEntriesBySurface: readonly string[] } => {
+    ...((): {
+      userScopeCawsWiringBySurface: readonly string[];
+      gatedProjectHookEntriesBySurface: readonly string[];
+    } => {
       const observed = observeGatedSurfaceWiring(repoRoot);
       return {
         userScopeCawsWiringBySurface: observed.userScope,
@@ -443,11 +445,9 @@ type GitObservationResult =
 function observeGitWorktrees(repoRoot: string): GitObservationResult {
   let result;
   try {
-    result = spawnSync(
-      resolveGitBinary(),
-      ['-C', repoRoot, 'worktree', 'list', '--porcelain'],
-      { encoding: 'utf8' }
-    );
+    result = spawnSync(resolveGitBinary(), ['-C', repoRoot, 'worktree', 'list', '--porcelain'], {
+      encoding: 'utf8',
+    });
   } catch (e) {
     // spawnSync throws for some platform errors (e.g. ENOENT on git)
     // depending on Node version / option flags. Treat all throws as
@@ -637,9 +637,7 @@ export function composeDoctorSnapshot(options: ComposeDoctorOptions): ComposeDoc
   // branch comes from the registry (a unique baseBranch). Absent on git
   // failure or base ambiguity — the kernel finding silently skips
   // (missing != malformed).
-  let canonicalBranchObservation:
-    | { currentBranch: string; baseBranch: string }
-    | undefined;
+  let canonicalBranchObservation: { currentBranch: string; baseBranch: string } | undefined;
   {
     const baseBranches = new Set<string>();
     for (const record of Object.values(snapshot.worktrees ?? {})) {
@@ -683,12 +681,8 @@ export function composeDoctorSnapshot(options: ComposeDoctorOptions): ComposeDoc
     initResidue: snapshot.initResidue,
     filesystem: snapshot.filesystem,
     registryDiagnostics: snapshot.registryDiagnostics,
-    ...(snapshot.gitWorktrees !== undefined
-      ? { gitWorktrees: snapshot.gitWorktrees }
-      : {}),
-    ...(canonicalBranchObservation !== undefined
-      ? { canonicalBranchObservation }
-      : {}),
+    ...(snapshot.gitWorktrees !== undefined ? { gitWorktrees: snapshot.gitWorktrees } : {}),
+    ...(canonicalBranchObservation !== undefined ? { canonicalBranchObservation } : {}),
     // CAWS-DEFECT-DOCTOR-NO-DISCHARGE-WARNINGS-01: tombstone observation for
     // §2e — undefined stays undefined (unobserved, no downgrade).
     ...(snapshot.localBranchRefs !== undefined
@@ -698,9 +692,7 @@ export function composeDoctorSnapshot(options: ComposeDoctorOptions): ComposeDoc
       ? { gitObservationFailure: snapshot.gitObservationFailure }
       : {}),
     now: options.now,
-    ...(options.staleAgentTtlMs !== undefined
-      ? { staleAgentTtlMs: options.staleAgentTtlMs }
-      : {}),
+    ...(options.staleAgentTtlMs !== undefined ? { staleAgentTtlMs: options.staleAgentTtlMs } : {}),
     ...(options.unboundActiveThresholdMs !== undefined
       ? { unboundActiveThresholdMs: options.unboundActiveThresholdMs }
       : {}),

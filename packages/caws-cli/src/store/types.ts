@@ -176,6 +176,16 @@ export interface StoreSnapshot {
      */
     readonly adapterPackSurfaceMarkers?: readonly string[];
     /**
+     * CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001: the installed surfaces
+     * whose install set STILL CONTAINS the vendored telemetry rows. Non-empty
+     * means those rows are load-bearing for a co-installed surface (its
+     * dispatchers invoke them, its own init reinstalls them), so they are not
+     * stale dual-writers and `HOOKS_STALE_TELEMETRY_PACK` stays silent.
+     * Mirrors the kernel-side field in kernel/doctor/types.ts. Optional; when
+     * undefined the observation is unavailable (unobserved, not "unclaimed").
+     */
+    readonly telemetryRowClaimantSurfaces?: readonly string[];
+    /**
      * CAWS-GATED-SURFACE-SCOPE-GUARD-001: gated surfaces with user-scope
      * CAWS wiring / project-scope CAWS hook entries (observed via the
      * user-scope-wiring leaf). Optional; combined they feed
