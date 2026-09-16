@@ -165,3 +165,9 @@ evidence:
     recorded_at: "2026-09-16T22:30:53.415Z"
     test_nodeid: packages/caws-cli/tests/kernel/unit/evidence-rederive.test.ts
     commit_sha: "5c580242"
+  - criterion_id: A12
+    status: pass
+    evidence_ref: "tests/kernel/unit/evidence-rederive.test.ts asserts self_reported true on every verdict derived from an agent-supplied field and false for a narrative-only criterion, and pins the summary counts self_reported 5 of 6 with narrative_only 1 on an asymmetric fixture. The close and merge advisories print the self-reported, narrative-only and command-declared counts on stderr."
+    recorded_at: "2026-09-16T22:32:09.395Z"
+    test_nodeid: packages/caws-cli/tests/kernel/unit/evidence-rederive.test.ts
+    commit_sha: "5c580242"
