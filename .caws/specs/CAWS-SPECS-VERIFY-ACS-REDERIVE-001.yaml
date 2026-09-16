@@ -129,3 +129,9 @@ evidence:
     recorded_at: "2026-09-16T22:25:33.220Z"
     test_nodeid: packages/caws-cli/tests/kernel/unit/evidence-rederive.test.ts
     commit_sha: "8f145b2c"
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "tests/shell/specs-verify-acs.test.js drives dist: a collectable test reports not_rederived in existence-only mode and refuted under --run; neither path can print pass or verified. The v10.2 collect-equals-pass defect is pinned red by the kernel test that maps outcome not_run to not_rederived."
+    recorded_at: "2026-09-16T22:26:01.692Z"
+    test_nodeid: packages/caws-cli/tests/shell/specs-verify-acs.test.js
+    commit_sha: "01dc84ca"
