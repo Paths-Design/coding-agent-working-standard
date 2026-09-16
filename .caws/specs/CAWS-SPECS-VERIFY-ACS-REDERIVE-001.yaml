@@ -153,3 +153,9 @@ evidence:
     recorded_at: "2026-09-16T22:28:23.779Z"
     test_nodeid: packages/caws-cli/tests/store/evidence-rederive.test.js
     commit_sha: f77060e5
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "tests/store/evidence-rederive.test.js refuses the nodeids --collect-only and -p no:cacheprovider before any spawn (target_refused), and forwards a nodeid containing shell metacharacters as a literal operand after the -- separator, which the runner reports as not found rather than interpreting."
+    recorded_at: "2026-09-16T22:29:32.760Z"
+    test_nodeid: packages/caws-cli/tests/store/evidence-rederive.test.js
+    commit_sha: f77060e5
