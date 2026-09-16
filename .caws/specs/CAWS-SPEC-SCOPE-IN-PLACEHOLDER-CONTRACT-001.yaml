@@ -1,0 +1,40 @@
+id: CAWS-SPEC-SCOPE-IN-PLACEHOLDER-CONTRACT-001
+title: 'Bring scope.in''s create scaffold into the single-sourced placeholder contract: replace on amend, refuse at bind'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-16T07:02:16.611Z'
+updated_at: '2026-09-16T07:02:16.611Z'
+created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/src/store — spec scaffold placeholder contract and worktree bind preconditions'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/specs-writer.ts'
+    - 'packages/caws-cli/src/store/worktrees-writer.ts'
+    - 'packages/caws-cli/tests/store/specs-scope-in-placeholder.test.js'
+    - 'packages/caws-cli/tests/store/worktree-bind-scope-placeholder.test.js'
+  out: []
+invariants:
+  - 'A scaffold placeholder has exactly one definition; every surface that writes, reports, replaces or refuses it reads that constant, so changing the text cannot silently disarm a guard.'
+  - 'Binding a worktree confers write authority, so a spec whose scope.in is still an unfilled scaffold must be refused at bind rather than accepted and rejected one path at a time.'
+acceptance:
+  - id: A1
+    given: 'a spec whose scope.in is only the create scaffold placeholder'
+    when: 'caws specs amend-scope --add <real path> runs'
+    then: 'the placeholder is replaced rather than appended to, matching the shipped --add-module semantics'
+  - id: A2
+    given: 'a spec whose scope.in still contains the scaffold placeholder'
+    when: 'caws worktree create --spec <id> or caws worktree bind runs'
+    then: 'it refuses with a diagnostic naming amend-scope as the remediation, and no worktree or binding is written'
+  - id: A3
+    given: 'the scope.in scaffold text'
+    when: 'the codebase is searched for it'
+    then: 'it exists as exactly one exported constant that the renderer, isScaffoldPlaceholder, placeholderFields and the bind guard all read'
+non_functional: {}
+contracts:
+  - name: 'scope-in-placeholder'
+    type: behavior
