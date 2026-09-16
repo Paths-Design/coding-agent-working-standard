@@ -3,7 +3,7 @@
 # hook_pack: shared
 # hook_pack_version: 78
 # caws_min_major: 11
-# lineage_refs: 4,11
+# lineage_refs: 19
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
 #   to your repo: tune thresholds, add checks, remove what does not fit. Your edits
 #   are preserved: caws init treats a changed hook as intended growth and will not
@@ -14,30 +14,31 @@
 #   edit to avoid: gutting a guard to dodge a block instead of fixing the cause. Grow
 #   everything else freely.
 #
-# CAWS SessionStart status check.
-# Surfaces inherited-dirty-state, foreign-claim soft-block, and version-skew
-# to the agent at session start.
+# Stop handler — marks the current session's lease stopped via
+# `caws agents stop` (MULTI-AGENT-ACTIVITY-REGISTRY-001).
 
-set -euo pipefail
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # shellcheck source=lib/parse-input.sh
-source "$SCRIPT_DIR/lib/parse-input.sh"
-# shellcheck source=lib/caws-state.sh
-source "$SCRIPT_DIR/lib/caws-state.sh" 2>/dev/null || true
+source "$SCRIPT_DIR/lib/parse-input.sh" 2>/dev/null || exit 0
 # shellcheck source=lib/agent-surface.sh
 source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
+parse_hook_input || exit 0
 
-if [ ! -d "${CAWS_PROJECT_DIR:-.}/.caws" ]; then
+if [[ -z "${HOOK_SESSION_ID:-}" || "$HOOK_SESSION_ID" == "unknown" ]]; then
   exit 0
 fi
 
-cd "${CAWS_PROJECT_DIR:-.}"
-
-if ! command -v caws >/dev/null 2>&1; then
+CAWS_BIN="${CAWS_BIN:-caws}"
+if ! command -v "$CAWS_BIN" >/dev/null 2>&1; then
   exit 0
 fi
 
-caws status 2>/dev/null || true
+caws_run_cli agents stop \
+  --session-id "$HOOK_SESSION_ID" \
+  --platform "$CAWS_PLATFORM_FLAG" \
+  2>/dev/null || true
 
 exit 0
