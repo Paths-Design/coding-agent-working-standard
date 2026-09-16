@@ -38,6 +38,14 @@ acceptance:
     then: >-
       the two byte counts are equal, proving the output is not channel-dependent —
       which is the precise shape of this defect, since the file path never truncated
+  - id: A3
+    given: >-
+      commands whose handlers return 0, 1, and 2 respectively (a successful status,
+      a refused lifecycle op, and a usage error)
+    when: 'each is spawned with piped stdio'
+    then: >-
+      the observed process exit status equals the handler's returned code in every
+      case; changing the delivery mechanism preserves every exit code exactly
 non_functional: {}
 contracts:
   - name: 'exit-flush'
