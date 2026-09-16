@@ -122,3 +122,10 @@ evidence:
     command: npx jest
     exit_code: 0
     commit_sha: "31c190ac"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "jest tests/shell/worktree-lane-divergence.test.js 'A6' — payload.lane deep-equals {ahead:2,behind:3,contains_base:false,unknown_reason:null} and is asserted EQUAL to the worktree list row's counts by interpolation, not by a second literal; 'A6b' pins focused-panel omission"
+    recorded_at: "2026-09-16T03:54:47.082Z"
+    command: npx jest
+    exit_code: 0
+    commit_sha: "31c190ac"
