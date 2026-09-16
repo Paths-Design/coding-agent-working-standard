@@ -56,3 +56,10 @@ evidence:
     command: npx jest tests/store/doctor-snapshot-legacy-spec-schema.test.js tests/kernel/unit/doctor-legacy-spec-schema.test.ts
     exit_code: 0
     commit_sha: fd4c2108
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Root-path detection is unchanged and not duplicated. Store e2e: a repo with .caws/working-spec.schema.json yields exactly one finding whose subject is that path. Kernel unit: with the path visible through BOTH the new list and the legacy boolean, exactly ONE finding is emitted (toHaveLength(1)) - widening detection must not double-report. A separate test pins the back-compat path: an older snapshot writer that supplies only workingSpecSchemaJson still produces the original root finding, so upgrading cannot silently drop an error. NON-VACUOUS: replacing the boolean fallback with [] turns that back-compat test RED and leaves the other 14 green."
+    recorded_at: "2026-09-16T06:57:18.133Z"
+    command: npx jest tests/store/doctor-snapshot-legacy-spec-schema.test.js tests/kernel/unit/doctor-legacy-spec-schema.test.ts
+    exit_code: 0
+    commit_sha: fd4c2108
