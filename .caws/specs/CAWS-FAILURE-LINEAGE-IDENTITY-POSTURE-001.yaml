@@ -2,9 +2,10 @@ id: CAWS-FAILURE-LINEAGE-IDENTITY-POSTURE-001
 title: 'Entry 43/40: record forgeable attribution as accepted posture, not an open gap'
 risk_tier: 3
 mode: doc
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-identity-posture
 created_at: '2026-09-16T15:34:38.606Z'
-updated_at: '2026-09-16T15:34:38.606Z'
+updated_at: '2026-09-16T15:36:23.885Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
