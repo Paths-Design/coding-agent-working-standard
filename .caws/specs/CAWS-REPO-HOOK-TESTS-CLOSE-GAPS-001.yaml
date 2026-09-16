@@ -33,5 +33,11 @@ acceptance:
     then: >-
       it takes and releases the lock, runs all four stages in order, exits 0 on
       success and 1 on a failing stage
+  - id: A3
+    given: >-
+      a git config whose core.hooksPath holds a wrong value, in a scratch GIT_DIR so
+      the shared repository config is never touched
+    when: 'the root prepare command runs against it'
+    then: 'core.hooksPath reads .husky afterwards, proving repair and not merely idempotence'
 non_functional: {}
 contracts: []
