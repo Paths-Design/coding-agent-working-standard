@@ -89,3 +89,10 @@ evidence:
     command: npx jest
     exit_code: 0
     commit_sha: b1197f0f
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "jest … A3 (0/1/2 via spawn) plus a live old-vs-new comparison over ten command classes (status, status --short, status --json, doctor, worktree list, specs list, worktree review refusal, unknown command, --help, scope show): every exit code identical between the pre-change and post-change builds"
+    recorded_at: "2026-09-16T04:38:25.377Z"
+    command: npx jest
+    exit_code: 0
+    commit_sha: b1197f0f
