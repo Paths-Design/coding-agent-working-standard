@@ -2,9 +2,10 @@ id: CAWS-RESET-STRIKES-SESSION-LOOKUP-001
 title: 'reset-strikes --session cannot reach the live session-global store'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-reset-strikes
 created_at: '2026-09-16T08:04:40.978Z'
-updated_at: '2026-09-16T08:04:40.978Z'
+updated_at: '2026-09-16T08:04:50.504Z'
 created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
 blast_radius:
   modules:
