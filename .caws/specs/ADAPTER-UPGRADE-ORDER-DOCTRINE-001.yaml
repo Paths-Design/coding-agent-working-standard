@@ -21,8 +21,12 @@ invariants:
   - 'The three upgrade steps are stated as an ordered sequence, not an unordered command list'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'an agent reading CLAUDE.md before upgrading the shared runtime or native harness wiring'
+    when: 'it follows the ''Shared runtime and native configuration'' section'
+    then: >-
+      the section states the ordered sequence (CLI package snapshot, then adapters
+      install, then adapters configure), names scripts/install-cli-snapshot.mjs as
+      the CLI step, and says that skipping the CLI step makes configure write the
+      OLD event set while reporting OK
 non_functional: {}
 contracts: []
