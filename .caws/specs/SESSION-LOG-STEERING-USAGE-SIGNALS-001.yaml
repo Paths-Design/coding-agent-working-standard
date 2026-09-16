@@ -1,0 +1,77 @@
+id: SESSION-LOG-STEERING-USAGE-SIGNALS-001
+title: 'Session log records per-request usage, rewinds, and interrupt kind as diagnostic quality signals'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-09-16T03:16:58.677Z'
+updated_at: '2026-09-16T03:16:58.677Z'
+created_by_session: '0ba2a3c1-b541-466a-90cb-d18d2272e80f'
+blast_radius:
+  modules:
+    - 'hook-pack session-log renderer (session_log_renderer.py accumulate_turns and session artifact)'
+    - 'harness adapters (harness_claude.py normalize_claude_row; harness_common canonical row kinds)'
+    - 'hook-pack runtime dispatcher (caws-hook.py EVENTS) and session-log.sh event handling'
+    - 'shared hook-pack manifest version stamp'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/harness_claude.py'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/harness_common.py'
+    - 'packages/caws-cli/templates/hook-packs/shared/session_log_renderer.py'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/session-log.schema.json'
+    - 'packages/caws-cli/templates/hook-packs/shared/session-log.sh'
+    - 'packages/caws-cli/templates/hook-packs/runtime/caws-hook.py'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/hooks/pytest/test_session_log_renderer.py'
+    - 'packages/caws-cli/tests/kernel/telemetry-turn-log-schema.test.ts'
+    - 'packages/caws-cli/templates/hook-packs/claude-code/README.md'
+  out: []
+invariants:
+  - 'Session logs stay operational cache: this slice adds no events.jsonl event kind and the kernel never reads usage data for scope, ownership, or claim decisions'
+  - 'Exactly one api_request per unique (message id, request id): multi-block assistant rows and fork or resume copies are never double counted'
+  - 'Turn and session artifacts rendered before this slice still validate against the bumped schema; every new field is optional'
+  - 'A harness whose transcript carries no usage renders the usage block as absent, never zero-filled'
+  - 'The session_end handler seals existing artifacts only; it never blocks harness exit and never renders new turns'
+acceptance:
+  - id: A1
+    given: 'a Claude transcript whose assistant reply is three rows sharing one message id and requestId with one usage block, plus a fork-copied duplicate of those rows'
+    when: 'the renderer accumulates the turn'
+    then: 'turn.usage.requests equals 1, turn.usage token classes (input, cache_read, cache_write, output) equal that single usage block, and turn.usage.models lists the row model once'
+  - id: A2
+    given: 'a Claude transcript with a user row containing "[Request interrupted by user for tool use]" and another turn with "[Request interrupted by user]"'
+    when: 'rendered'
+    then: 'the first turn has ended_by user_interrupt_tool and the second has ended_by user_interrupt_generation, and the legacy value user_interrupt is no longer emitted'
+  - id: A3
+    given: 'a Claude transcript where a second typed human prompt shares its parentUuid with an earlier typed prompt (the rewind fingerprint), once with identical text and once with edited text'
+    when: 'rendered'
+    then: 'each later turn carries rewound_from naming the earlier turn number and rewind_kind of same_prompt or edited_prompt, and the earlier turn status is rewound; parallel tool_use fan-out and compaction-boundary duplicates produce no rewound_from'
+  - id: A4
+    given: 'a SessionEnd hook payload with reason other and an existing session artifact with rendered turns'
+    when: 'caws-hook claude-code session_end dispatches session-log.sh'
+    then: 'session.json gains ended.reason and ended.ts and a usage block equal to the sum of turn usage blocks, the handler exits 0, and no new turn artifact is written'
+  - id: A5
+    given: 'the existing pre-change turn artifact fixture in the schema test'
+    when: 'validated against the bumped session-log schema'
+    then: 'it validates, and the schema test additionally pins usage, rewound_from, rewind_kind, and the two ended_by values so a loosening mutation fails'
+  - id: A6
+    given: 'a real main-session Claude transcript from ~/.claude/projects rendered end to end'
+    when: 'session usage totals are compared with an independent dedup count over the same file keyed on (message id, requestId)'
+    then: 'request count and each token class match exactly'
+  - id: A7
+    given: 'the shared hook-pack templates changed in this slice'
+    when: 'the manifest is inspected'
+    then: 'SHARED_PACK_VERSION is incremented by exactly one relative to the base revision'
+observability:
+  - 'session.json usage block (requests, tokens by class, models seen) and ended.reason'
+  - 'turn-NNN.json ended_by, rewound_from, rewind_kind, usage'
+rollback:
+  - 'Revert the slice commits; artifacts already written are additive and validate against the prior schema, so no migration of .caws/sessions is needed'
+non_functional: {}
+contracts:
+  - name: 'session-log-turn-schema'
+    type: schema
+    path: 'packages/caws-cli/templates/hook-packs/shared/lib/session-log.schema.json'
+  - name: 'renderer-behavior'
+    type: contract-test
+    path: 'packages/caws-cli/tests/hooks/pytest/test_session_log_renderer.py'
