@@ -8,7 +8,7 @@ updated_at: '2026-09-16T06:00:29.815Z'
 created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - '.husky/tests/run.sh — the hook suite''s own verification coverage'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -18,7 +18,8 @@ scope:
     - .husky/README.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A declared verification gap is an obligation, not a disclaimer: if the check is mechanically cheap, it gets written rather than documented away.'
+  - 'A test that needs a wrong value to prove a repair must produce that wrong value in a redirected scratch location, never in shared repository state that concurrent sessions depend on.'
 acceptance:
   - id: A1
     given: 'TODO'
