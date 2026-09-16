@@ -61,3 +61,11 @@ evidence:
     exit_code: 0
     artifact_path: .husky/pre-push
     commit_sha: "2f98d3c2"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "The --workspaces=false flag is load-bearing: the root .npmrc sets workspaces=true, which makes a bare npm run prepare resolve against the workspaces instead of the root script. T6f separately asserts npm echoed the ROOT script body, which is what makes T9 a real execution rather than a read-back of an already-correct value."
+    recorded_at: "2026-09-16T06:08:40.658Z"
+    command: bash .husky/tests/run.sh
+    exit_code: 0
+    artifact_path: package.json
+    commit_sha: "2f98d3c2"
