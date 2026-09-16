@@ -159,3 +159,9 @@ evidence:
     recorded_at: "2026-09-16T22:29:32.760Z"
     test_nodeid: packages/caws-cli/tests/store/evidence-rederive.test.js
     commit_sha: f77060e5
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "tests/kernel/unit/evidence-rederive.test.ts reads its own module source and asserts rederive.ts imports nothing impure (no fs, child_process, process.env, Date.now, new Date) and its only import is a type-only import from ../spec/types. The test skips inside a Stryker sandbox because the instrumented copy is not the authored source."
+    recorded_at: "2026-09-16T22:30:53.415Z"
+    test_nodeid: packages/caws-cli/tests/kernel/unit/evidence-rederive.test.ts
+    commit_sha: "5c580242"
