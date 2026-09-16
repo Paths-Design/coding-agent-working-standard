@@ -2,9 +2,10 @@ id: CAWS-INIT-PLAN-BLIND-TELEMETRY-RETIREMENT-001
 title: 'caws init --plan cannot preview the telemetry-row retirement it will perform'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-init-plan-telemetry
 created_at: '2026-09-16T05:27:59.949Z'
-updated_at: '2026-09-16T05:27:59.949Z'
+updated_at: '2026-09-16T05:30:55.555Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
