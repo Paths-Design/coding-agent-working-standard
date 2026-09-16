@@ -65,3 +65,7 @@ evidence:
     status: pass
     evidence_ref: "grep over .husky/{commit-msg,pre-commit,pre-push} for 'caws parallel','caws waivers','caws provenance','working-spec.yaml','parallel.json','sessions.json' -> 0 files each"
     recorded_at: "2026-09-16T05:03:25.846Z"
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "core.hooksPath changed .husky/_ -> .husky. On a lane based on main (contains fbdce732), 'git hook run' finds pre-commit, commit-msg and pre-push; before the change all four names returned 'error: cannot find a hook named <name>'. 'git hook run commit-msg' executed the new script and emitted its own fail-closed refusal, proving execution not just discovery."
+    recorded_at: "2026-09-16T05:07:28.116Z"
