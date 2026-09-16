@@ -62,8 +62,18 @@ if [ -z "$LOCK_DIR" ]; then
   exit 1
 fi
 
-if ! caws_prepush_lock_acquire "$LOCK_DIR" 1800 5; then
-  HOLDER=$(cat "$LOCK_DIR/pid" 2>/dev/null || echo "unknown")
+caws_prepush_lock_acquire "$LOCK_DIR" 1800 5
+LOCK_STATUS=$?
+if [ "$LOCK_STATUS" -eq 2 ]; then
+  echo "pre-push: could not create the build lock at" >&2
+  echo "    $LOCK_DIR" >&2
+  echo "  and nothing is holding it, so this is not contention — the filesystem" >&2
+  echo "  refused the symlink. Refusing rather than running unlocked, which would" >&2
+  echo "  let a sibling worktree build against the same turbo cache." >&2
+  exit 1
+fi
+if [ "$LOCK_STATUS" -ne 0 ]; then
+  HOLDER=$(caws_prepush_lock_owner "$LOCK_DIR" || echo "unknown")
   echo "pre-push: another pre-push (pid $HOLDER) has been running the build/test" >&2
   echo "  stages in this repository for over 30 minutes. Refusing to start a second" >&2
   echo "  concurrent build — they share node_modules and the turbo cache, so running" >&2

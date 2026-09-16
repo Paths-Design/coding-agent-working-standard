@@ -117,13 +117,27 @@ files in the working tree, recoverable with `git diff`.
 
 All four stages write to the shared turbo cache and to `dist/`. Two pushes from
 sibling worktrees running at once interleave those writes and produce failures
-that reproduce nowhere. `lib/prepush-lock.sh` serialises them with an atomic
-`mkdir` on the common git dir, records the holder's pid, reclaims the lock if
-that pid is gone, and refuses to release a lock this process does not own. It
-waits up to 30 minutes, then refuses rather than proceeding unlocked. If the
-lock library is missing, `pre-push` **refuses** — a guard that proceeds without
-its concurrency control is the `source <missing> || true` pattern this repo
-bans.
+that reproduce nowhere. `lib/prepush-lock.sh` serialises them on the common git
+dir: it reclaims the lock if the holder's pid is gone, refuses to release a lock
+this process does not own, waits up to 30 minutes, and then refuses rather than
+proceeding unlocked. If the lock library is missing, `pre-push` **refuses** — a
+guard that proceeds without its concurrency control is the
+`source <missing> || true` pattern this repo bans.
+
+**The primitive is `ln -s <pid> <lock>`, not `mkdir`, and the difference is a
+bug that shipped.** Both syscalls are atomic, but `mkdir` only makes _existence_
+atomic — the owner's pid has to be written in a second step. A contender
+arriving between those two steps finds a lock with no pid, concludes the holder
+is dead, and deletes a lock that is very much alive. Sequential tests cannot see
+this; 16 processes racing the `mkdir` version produced **9 simultaneous
+winners**. A symlink carries its payload inside the atomic operation, so the
+lock never exists without its owner (T7b, T4g).
+
+`caws_prepush_lock_acquire` therefore has three outcomes, not two: `0` acquired,
+`1` contended, `2` the lock could not be created at all. The third exists
+because `ln -s` reports "someone holds it" and "this filesystem will not take a
+symlink" identically, and treating the second as contention would spin until the
+30-minute deadline and wedge every push in the repo (T4f).
 
 ## Running the root scripts at all
 
@@ -155,24 +169,31 @@ directory.
 
 Stated explicitly so the pass count is not mistaken for a proof:
 
-- **`prepare` repairing a wrong `core.hooksPath`.** T6a pins the script text,
-  T6b runs it, T6f proves it really executed — but none of them start from a
-  wrong value. Deliberately setting `core.hooksPath` to a bogus value would
-  leave every concurrent session in this repo committing with no hooks for that
-  window, which is the outage this tree exists to prevent. The repair path was
-  nonetheless observed once for real, on 2026-09-16: `npm run prepare` from the
-  repo root ran the caws-cli `husky` prepare, `core.hooksPath` became `.husky/_`
-  (a directory that does not exist), and `git config core.hooksPath .husky`
-  restored it 33 seconds later. No commit landed inside that window.
-- **`pre-push` end to end.** The lock primitive is tested directly; the four
-  stages are not run, because doing so is a 15-minute build per test run.
-- **Real contention between two OS processes racing `mkdir`.** The lock tests
-  are sequential; they prove the protocol, not the kernel's `mkdir` atomicity
-  (which is POSIX-guaranteed and not this repo's to test).
+- **The real `timeout` path in `pre-push`.** T8 runs the real hook with the four
+  stage commands replaced by exported shell functions. Functions are used rather
+  than a stub directory because `pre-push` prepends `/usr/local/bin` to `PATH`
+  itself, so no stub directory can ever win; and `timeout` has to be replaced
+  too, because the real one is a separate process that would `exec` past the
+  functions. So the `124` timeout branch and the real `run_with_timeout` are not
+  exercised. T8a fails loudly if the functions do not reach the child shell,
+  rather than silently starting a 15-minute build.
+- **A real `npm install`.** T9 proves `prepare` repairs a wrong
+  `core.hooksPath`, but it runs the script directly against a scratch `GIT_DIR`.
+  The install-time lifecycle hook itself is not exercised; that cannot be run
+  from a linked worktree without destroying the `node_modules` symlinks.
 - **The `--amend` detection itself.** `ps -o args= -p $PPID` is best-effort by
   construction — git gives a hook no amend signal. The tests drive the guard's
   logic through a stubbed `node`; they do not prove a real `git commit --amend`
-  is detected under every wrapper.
+  is detected under every wrapper. This one cannot be closed by a test here:
+  `git commit --amend` is refused by the CAWS agent guards before it reaches
+  git, so the scenario is unreachable from an agent session. This hook is
+  defence in depth behind that refusal, not the primary control.
+
+A gap in this list is an obligation, not a disclaimer. Three of the five entries
+that were here after the hardening slice have since been closed by tests (T7b
+real contention, T8 pre-push end to end, T9 prepare repair) — and the first of
+those found a live bug in the lock. If a check is mechanically cheap, write it
+rather than documenting around it.
 
 ## Deliberate non-goals
 
