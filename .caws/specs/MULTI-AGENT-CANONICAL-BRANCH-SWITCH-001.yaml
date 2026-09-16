@@ -41,3 +41,8 @@ evidence:
     evidence_ref: "worktree-isolation.md:71-76 (commit da9c6cdf) states canonical HEAD is shared state and that every session's CAWS lifecycle auto-commit (specs evidence, specs close, worktree bind/destroy) lands on whatever branch canonical has checked out regardless of which session created it; the forbidden-ops list gains 'git checkout -b in the canonical checkout'. CLAUDE.md Worktree discipline carries the same rule as its first bullet."
     recorded_at: "2026-09-16T05:20:23.931Z"
     commit_sha: da9c6cdf
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "worktree-isolation.md:78-84 (commit da9c6cdf): names .caws/specs/ as canonical-only by design, states a peer's evidence then exists only in canonical, and that a governed caws worktree merge computes git merge-tree against the base branch whose spec copy never received it - auto-closing over the evidence-free copy, dropping the proof while the merge reports success. Reproduced live this session: main's CAWS-REPO-GIT-HOOKS-DEAD-HOOKSPATH-001.yaml had 0 evidence entries while the branch copy had A2-A5."
+    recorded_at: "2026-09-16T05:20:32.969Z"
+    commit_sha: da9c6cdf
