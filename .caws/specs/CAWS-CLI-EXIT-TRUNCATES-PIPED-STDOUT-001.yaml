@@ -74,3 +74,11 @@ contracts:
   - name: 'exit-flush'
     type: contract-test
     path: 'packages/caws-cli/tests/shell/exit-flushes-piped-stdout.test.js'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "jest tests/shell/exit-flushes-piped-stdout.test.js A1 — 300-lease repo, real spawn with piped stdout: payload >64KiB, ends in '}', JSON.parse succeeds, payload.doctor present (tail arrived), exit 0. Pre-fix this test failed with stdout.length capped at exactly 65536"
+    recorded_at: "2026-09-16T04:38:24.199Z"
+    command: npx jest
+    exit_code: 0
+    commit_sha: b1197f0f
