@@ -2,9 +2,11 @@ id: CAWS-VERIFY-ACS-HELP-AND-TEMPLATE-DRIFT-001
 title: 'Derive the executable-runner split into --help, correct the pytest resolution claim, and unstale the shipped removed-command templates'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed in 671b70f3 (commits cb88eae3, 8cc08392). --runner''s five accepted values now split into executable (pytest, jest) and detected-only (vitest, cargo, go) from ONE exported constant, EXECUTABLE_TEST_RUNNERS, that both testOutcome''s dispatch and the --runner help text read; a reader wiring --runner go into CI previously got a gate reporting success while checking nothing. Two false prose claims corrected: --run said cited tests run through the repo''s own runner ''resolved from the repo'', but only jest is (node_modules/.bin, never npx) while pytest is ambient python3 -m pytest; --verify carried the same implication and now defers to --run. templates/CLAUDE.md and templates/agents.md no longer list verify-acs among commands ''not coming back'' after its 12.2 restoration, and annotate validate with caws specs validate <file>. New tests/shell/verify-acs-help-surface.test.js (11 tests) pins the partition, drives all five selectable runners through the real compiled executor asserting detected-only ones spawn NOTHING, parses the rendered description back out and compares it to the constants, and asserts against node dist/index.js help. Full suite 2972/2972 after rebuild (the single doctor-plan failure was shell.build.dist_stale from lint-staged reformatting source after the build, not a regression). NOT CLAIMED: no test pins AGENTS.md prose (A4''s artifact citation proves presence at the revision only, self-reported for content); the template pin is scoped to caws specs leaves, so a removed v10 name colliding with a leaf in another group is not detected - a whole-surface scan was tried and rejected because caws scope plan shares a word with v10''s unrelated caws plan.'
 created_at: '2026-09-16T23:33:40.123Z'
-updated_at: '2026-09-16T23:42:51.387Z'
+updated_at: '2026-09-16T23:51:34.787Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
