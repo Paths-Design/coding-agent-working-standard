@@ -67,7 +67,9 @@ export type LifecycleEvent =
   | 'pre_edit'
   | 'session_start'
   | 'pre_compact'
-  | 'stop';
+  | 'stop'
+  /** Session teardown. Distinct from `stop`, which fires once per turn. */
+  | 'session_end';
 
 /** A single file the pack installs, relative to the repo root. */
 export interface HookPackFile {

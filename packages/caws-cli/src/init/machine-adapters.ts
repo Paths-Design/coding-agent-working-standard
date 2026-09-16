@@ -110,7 +110,14 @@ function runtimeFiles(templatesRoot: string): Map<string, Buffer> {
     }
   }
   const defaults: Record<string, string[]> = {};
-  for (const event of ['pre_tool_use', 'post_tool_use', 'session_start', 'stop', 'pre_compact']) {
+  for (const event of [
+    'pre_tool_use',
+    'post_tool_use',
+    'session_start',
+    'stop',
+    'pre_compact',
+    'session_end',
+  ]) {
     const dispatcher = fs.readFileSync(
       path.join(templatesRoot, 'shared/dispatch', `${event}.sh`),
       'utf8'

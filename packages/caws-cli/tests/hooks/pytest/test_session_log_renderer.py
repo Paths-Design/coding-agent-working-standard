@@ -909,6 +909,187 @@ class TestRenderedPayloadsSatisfyBothContracts:
             jsonschema.validate(payload, schema)
 
 
+class TestSessionEndSealing:
+    """A4: SessionEnd seals .meta.json; it never renders.
+
+    Drives the real session-log.sh, not a Python reimplementation of it —
+    a handler that is only ever exercised by a mock proves nothing about the
+    shell that actually runs at teardown.
+    """
+
+    @staticmethod
+    def _session_dir(tmp_root, session_id="sess-end-test"):
+        log_dir = Path(tmp_root) / ".caws" / "sessions" / session_id
+        log_dir.mkdir(parents=True)
+        return log_dir
+
+    @staticmethod
+    def _write_turn(log_dir, number, usage):
+        payload = {"schema_version": 2, "turn": number, "ts_start": None,
+                   "ts_end": None, "user": "x", "user_ts": None,
+                   "turn_summary": None, "status": "ok", "timeline": []}
+        if usage is not None:
+            payload["usage"] = usage
+        (log_dir / f"turn-{number:03d}.json").write_text(
+            json.dumps(payload, indent=2), encoding="utf-8")
+
+    @staticmethod
+    def _run_session_end(root, session_id, reason):
+        import subprocess
+
+        payload = json.dumps({
+            "session_id": session_id,
+            "cwd": str(root),
+            "hook_event_name": "SessionEnd",
+            "reason": reason,
+            "transcript_path": "",
+        })
+        env = dict(os.environ)
+        env.pop("CAWS_TRANSCRIPT_DATABASE", None)
+        return subprocess.run(
+            ["bash", str(_SHARED / "session-log.sh")],
+            input=payload, capture_output=True, text=True, env=env, cwd=str(root),
+        )
+
+    def test_seals_meta_with_reason_and_summed_usage_without_new_turns(self):
+        root = Path(tempfile.mkdtemp(prefix="caws-session-end-"))
+        log_dir = self._session_dir(root)
+        meta = log_dir / ".meta.json"
+        meta.write_text(json.dumps({
+            "session_id": "sess-end-test", "started_at": "2026-09-15T00:00:00Z",
+            "local_time": "2026-09-15 00:00:00 PDT", "model": "claude-opus-5",
+            "source": "startup", "branch": "main", "head_sha": "abc1234",
+            "dirty_files": "0", "project": "caws", "transcript_path": "",
+        }), encoding="utf-8")
+        self._write_turn(log_dir, 1, {"requests": 1, "input": 10, "cache_read": 100,
+                                      "cache_write": 5, "output": 50,
+                                      "models": ["claude-opus-5"]})
+        self._write_turn(log_dir, 2, {"requests": 2, "input": 20, "cache_read": 200,
+                                      "cache_write": 7, "output": 70,
+                                      "models": ["claude-haiku-4-5", "claude-opus-5"]})
+        before = sorted(p.name for p in log_dir.glob("turn-*.json"))
+
+        result = self._run_session_end(root, "sess-end-test", "other")
+
+        assert result.returncode == 0, result.stderr
+        sealed = json.loads(meta.read_text(encoding="utf-8"))
+        assert sealed["ended"]["reason"] == "other"
+        assert sealed["ended"]["ts"].endswith("Z")
+        assert sealed["usage"] == {
+            "requests": 3, "input": 30, "cache_read": 300,
+            "cache_write": 12, "output": 120,
+            # First-seen order across turns, not sorted.
+            "models": ["claude-opus-5", "claude-haiku-4-5"],
+        }
+        # Sealing must not render: the turn set is untouched.
+        assert sorted(p.name for p in log_dir.glob("turn-*.json")) == before
+        # Session-start fields survive the seal.
+        assert sealed["model"] == "claude-opus-5"
+        assert sealed["session_id"] == "sess-end-test"
+
+    def test_records_the_harness_reason_verbatim(self):
+        # Not mapped to a known-value enum: a harness that adds a new reason
+        # must have it preserved rather than collapsed into "other".
+        for reason in ("clear", "logout", "prompt_input_exit", "some_future_reason"):
+            root = Path(tempfile.mkdtemp(prefix="caws-session-end-"))
+            log_dir = self._session_dir(root)
+            (log_dir / ".meta.json").write_text(
+                json.dumps({"session_id": "sess-end-test"}), encoding="utf-8")
+            result = self._run_session_end(root, "sess-end-test", reason)
+            assert result.returncode == 0, result.stderr
+            sealed = json.loads((log_dir / ".meta.json").read_text(encoding="utf-8"))
+            assert sealed["ended"]["reason"] == reason
+
+    def test_seals_without_a_usage_block_when_no_turn_recorded_usage(self):
+        root = Path(tempfile.mkdtemp(prefix="caws-session-end-"))
+        log_dir = self._session_dir(root)
+        (log_dir / ".meta.json").write_text(
+            json.dumps({"session_id": "sess-end-test"}), encoding="utf-8")
+        self._write_turn(log_dir, 1, None)
+
+        result = self._run_session_end(root, "sess-end-test", "other")
+
+        assert result.returncode == 0, result.stderr
+        sealed = json.loads((log_dir / ".meta.json").read_text(encoding="utf-8"))
+        assert sealed["ended"]["reason"] == "other"
+        assert "usage" not in sealed
+
+    def test_never_renders_even_when_a_transcript_is_available(self):
+        # Invariant 5, made falsifiable. With no transcript, a stray render is
+        # a no-op and the "turn set unchanged" check above would pass anyway.
+        # Here a REAL transcript is reachable and disagrees with what is on
+        # disk: rendering it would rewrite turn-001 and delete turn-002. If
+        # those survive byte-for-byte, session_end genuinely did not render.
+        import subprocess
+
+        root = Path(tempfile.mkdtemp(prefix="caws-session-end-"))
+        log_dir = self._session_dir(root)
+        (log_dir / ".meta.json").write_text(
+            json.dumps({"session_id": "sess-end-test"}), encoding="utf-8")
+        self._write_turn(log_dir, 1, None)
+        self._write_turn(log_dir, 2, None)
+        before = {p.name: p.read_text(encoding="utf-8")
+                  for p in log_dir.glob("turn-*.json")}
+
+        transcript = root / "transcript.jsonl"
+        transcript.write_text(
+            "".join(json.dumps(row) + "\n" for row in
+                    [_user_row("only one real turn here", "u1")]
+                    + _assistant_rows("msg_A", "req_A", _reply("rendered answer"))),
+            encoding="utf-8")
+
+        payload = json.dumps({
+            "session_id": "sess-end-test", "cwd": str(root),
+            "hook_event_name": "SessionEnd", "reason": "other",
+            "transcript_path": str(transcript),
+        })
+        env = dict(os.environ)
+        env.pop("CAWS_TRANSCRIPT_DATABASE", None)
+        result = subprocess.run(
+            ["bash", str(_SHARED / "session-log.sh")],
+            input=payload, capture_output=True, text=True, env=env, cwd=str(root))
+
+        assert result.returncode == 0, result.stderr
+        after = {p.name: p.read_text(encoding="utf-8")
+                 for p in log_dir.glob("turn-*.json")}
+        assert after == before
+        # Control: the same transcript through the Stop path DOES render, so
+        # the assertion above is about session_end's behavior, not about the
+        # transcript being unrenderable.
+        stop_payload = json.loads(payload)
+        stop_payload["hook_event_name"] = "Stop"
+        subprocess.run(["bash", str(_SHARED / "session-log.sh")],
+                       input=json.dumps(stop_payload), capture_output=True,
+                       text=True, env=env, cwd=str(root))
+        rendered = {p.name for p in log_dir.glob("turn-*.json")}
+        assert rendered == {"turn-001.json"}
+
+    def test_missing_meta_is_not_an_error(self):
+        # A resumed session has no .meta.json. Teardown must not fail on it.
+        root = Path(tempfile.mkdtemp(prefix="caws-session-end-"))
+        self._session_dir(root)
+        result = self._run_session_end(root, "sess-end-test", "other")
+        assert result.returncode == 0, result.stderr
+
+    def test_sealing_is_idempotent(self):
+        # SessionEnd can fire more than once (resume then exit); a second seal
+        # must overwrite the first, never append a second `ended` or double
+        # the usage totals.
+        root = Path(tempfile.mkdtemp(prefix="caws-session-end-"))
+        log_dir = self._session_dir(root)
+        (log_dir / ".meta.json").write_text(
+            json.dumps({"session_id": "sess-end-test"}), encoding="utf-8")
+        self._write_turn(log_dir, 1, {"requests": 1, "input": 10, "cache_read": 100,
+                                      "cache_write": 5, "output": 50,
+                                      "models": ["claude-opus-5"]})
+        self._run_session_end(root, "sess-end-test", "clear")
+        self._run_session_end(root, "sess-end-test", "logout")
+        sealed = json.loads((log_dir / ".meta.json").read_text(encoding="utf-8"))
+        assert sealed["ended"]["reason"] == "logout"
+        assert sealed["usage"]["requests"] == 1
+        assert sealed["usage"]["output"] == 50
+
+
 class TestRealTranscriptUsageParity:
     """A6: rendered session usage matches an independent dedup over the file."""
 
