@@ -30,5 +30,9 @@ acceptance:
     then: >-
       core.hooksPath still resolves to .husky and every hook-named file is still
       found; no lifecycle script repoints it at .husky/_
+  - id: A2
+    given: 'the documented entry point npm run test:hooks and a root .npmrc carrying workspaces=true'
+    when: 'it is invoked from the repo root'
+    then: 'the root script runs rather than npm resolving the name against a workspace that does not define it'
 non_functional: {}
 contracts: []
