@@ -48,9 +48,14 @@ acceptance:
     when: 'rendered'
     then: 'each later turn carries rewound_from naming the earlier turn number and rewind_kind of same_prompt or edited_prompt, and the earlier turn status is rewound; parallel tool_use fan-out and compaction-boundary duplicates produce no rewound_from'
   - id: A4
-    given: 'a SessionEnd hook payload with reason other and an existing session artifact with rendered turns'
+    given: >-
+      a SessionEnd hook payload with reason other, a session log dir holding
+      rendered turn artifacts, and the .meta.json written at session start
     when: 'caws-hook claude-code session_end dispatches session-log.sh'
-    then: 'session.json gains ended.reason and ended.ts and a usage block equal to the sum of turn usage blocks, the handler exits 0, and no new turn artifact is written'
+    then: >-
+      .meta.json gains ended.reason and ended.ts and a usage block equal to the sum
+      of the rendered turn usage blocks, the handler exits 0, and no new turn
+      artifact is written
   - id: A5
     given: 'the existing pre-change turn artifact fixture in the schema test'
     when: 'validated against the bumped session-log schema'
