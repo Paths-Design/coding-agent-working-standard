@@ -51,3 +51,25 @@ acceptance:
     then: 'prettier reports it ignored, so the CLI remains the sole writer of spec YAML'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "At commit 32bd8e24: 'git ls-files -z | xargs -0 ./node_modules/.bin/prettier --list-different' returns 0 files, down from 580 at slice start. Measured on the COMMITTED state after lint-staged ran, and the working tree was clean afterwards — proving lint-staged found nothing further to reformat, which is the specific trap this slice closes (the Entry 42 commit carried 925 reflowed lines of a file it never edited). dist verified fresh against committed src via 'find packages/caws-cli/src -name *.ts -newer packages/caws-cli/dist/index.js' returning empty. IMPORTANT measurement note: use --list-different, not --check, over a raw git ls-files list — --check errors on 109 .sh/.py files for which no parser can be inferred, which is not a formatting failure."
+    recorded_at: "2026-09-16T08:12:13.838Z"
+    command: "git ls-files -z | xargs -0 ./node_modules/.bin/prettier --list-different | wc -l"
+    exit_code: 0
+    artifact_path: .prettierignore
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "178 CAWS-MANAGED/@generated/DO-NOT-EDIT files were sha256-hashed before the pass. After formatting AND after a full 'npm run build' (which regenerates surfaces.generated.ts and templates/hook-packs/shared/lib/surfaces-registry.sh), scanning 'git diff --name-only' for any path whose first 12 lines carry a managed or generated marker returned ZERO hits, and 'git diff --name-only | grep ^.caws/' returned none. Pack fingerprint test passes unchanged inside the 229/2851 green suite, so no pack version bump and no consumer re-propagation is forced. Three files matched the managed-marker grep only because they CONTAIN the string (the header-writing code in hook-install.ts/managed-header.ts and test assertions) and were verified as false positives before being left formattable; CHANGELOG.md and templates/CLAUDE.md matched on prose mentions of semantic-release and managed headers, and templates/CLAUDE.md was confirmed to sit in no fingerprinted pack dir."
+    recorded_at: "2026-09-16T08:12:24.370Z"
+    command: "git diff --name-only | while read f; do head -12 $f | grep -q 'CAWS-MANAGED|@generated|DO NOT EDIT' && echo VIOLATION $f; done"
+    exit_code: 0
+    artifact_path: packages/caws-cli/tests/init/pack-fingerprint.test.js
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "prettier --file-info now reports {\"ignored\":true} for .caws/specs/CAWS-CHORE-PRETTIER-BASELINE-001.yaml, .caws/policy.yaml and .caws/waivers/WV-0001.yaml; before the slice .caws/specs/*.yaml reported {\"ignored\":false,\"inferredParser\":\"yaml\"}, so lint-staged (which runs prettier --write on staged *.yaml) reformatted governed spec YAML whenever one was staged — with caws specs the only sanctioned writer of that file. Repo-owned files remain formattable, verified by .claude/rules/git-safety.md and packages/caws-cli/src/store/specs-store.ts still reporting ignored:false, so the fence is targeted rather than blanket. NOT VERIFIED: this proves prettier's own ignore resolution via the local binary. It does NOT hold for 'npx prettier', which in this repo bypasses .prettierignore entirely because .npmrc sets workspaces=true — 'npm_config_workspaces=false npx prettier' restores it. Anyone running 'npx prettier --write .' here would still reformat all of .caws/. That is a separate live defect, unfiled."
+    recorded_at: "2026-09-16T08:12:35.559Z"
+    command: ./node_modules/.bin/prettier --file-info .caws/specs/CAWS-CHORE-PRETTIER-BASELINE-001.yaml
+    exit_code: 0
+    artifact_path: .prettierignore

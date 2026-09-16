@@ -1,10 +1,4 @@
 {
-  "*.{js,jsx,ts,tsx}": [
-    "eslint --fix",
-    "prettier --write"
-  ],
-  "*.{json,md,yaml,yml}": [
-    "prettier --write"
-  ]
+  "*.{js,jsx,ts,tsx}": ["eslint --fix", "prettier --write --no-error-on-unmatched-pattern"],
+  "*.{json,md,yaml,yml}": ["prettier --write --no-error-on-unmatched-pattern"]
 }
-

@@ -192,3 +192,9 @@ packages/caws-cli/README.md
 packages/caws-cli/templates/CLAUDE.md
 packages/caws-cli/templates/agents.md
 docs/guides/agent-integration-guide.md
+
+# Peer-contributed harness dirs (CAWS-RESET-STRIKES lane): agent scratch and
+# archive trees that are never ours to format.
+.dsh/
+.codex/
+.archive/
