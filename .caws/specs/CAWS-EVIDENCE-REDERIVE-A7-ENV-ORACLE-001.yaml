@@ -3,7 +3,6 @@ title: 'A7 argv-injection oracle must not depend on an ambient pytest'
 risk_tier: 3
 mode: fix
 lifecycle_state: active
-worktree: wt-a7-oracle
 created_at: '2026-09-16T22:53:48.363Z'
 updated_at: '2026-09-16T22:53:58.002Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
