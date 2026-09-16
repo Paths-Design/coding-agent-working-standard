@@ -101,3 +101,10 @@ evidence:
     command: npx jest
     exit_code: 0
     commit_sha: "31c190ac"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "jest tests/shell/worktree-lane-divergence.test.js 'A3: an unresolvable branch ref degrades alone; sibling rows keep real counts' — wt-ghost renders ahead=? behind=? plus \"branch ref 'wt-deleted' does not resolve\", wt-demo still ahead=2 behind=3, exit 0"
+    recorded_at: "2026-09-16T03:54:45.347Z"
+    command: npx jest
+    exit_code: 0
+    commit_sha: "31c190ac"
