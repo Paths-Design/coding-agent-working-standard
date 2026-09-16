@@ -71,6 +71,13 @@ acceptance:
     then: >-
       no lane line is rendered at all — no placeholder, no zero-fill — and the rest
       of the dashboard is byte-identical to the pre-change baseline
+  - id: A6
+    given: 'a session inside tracked worktree wt-demo and the same repo state'
+    when: 'caws status --json runs and caws worktree list runs'
+    then: >-
+      the JSON lane object's ahead/behind/contains_base equal the counts the
+      worktree list row prints for wt-demo, proving both surfaces read one
+      computation
 non_functional: {}
 contracts:
   - name: 'lane-divergence'
