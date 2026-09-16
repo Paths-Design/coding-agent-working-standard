@@ -156,3 +156,9 @@ local.*
 *.pdf
 *.zip
 *.tar.gz
+
+# Agent harness files
+.caws/
+.dsh/
+.codex/
+.archive/
