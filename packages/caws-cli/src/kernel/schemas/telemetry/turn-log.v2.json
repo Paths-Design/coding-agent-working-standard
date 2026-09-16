@@ -36,8 +36,42 @@
     "user_ts": { "type": "string" },
     "turn_summary": { "type": "string" },
     "status": {
-      "enum": ["ok", "error", "blocked"],
-      "description": "ok = normal completion; error = the turn ended in an error state; blocked = a blocking_issue stopped the turn (renderer: session_log_renderer.py line ~886)."
+      "enum": ["ok", "error", "blocked", "rewound"],
+      "description": "ok = normal completion; error = the turn ended in an error state; blocked = a blocking_issue stopped the turn; rewound = the user rewound past this turn and re-sent, so whatever it produced was discarded. rewound outranks the other three: a turn that errored and was then rewound past reports rewound, because that error belongs to abandoned work."
+    },
+    "usage": {
+      "type": "object",
+      "description": "API cost of this turn. requests counts UNIQUE (message id, request id) pairs, not transcript rows: a producer that writes one row per assistant content block repeats the same usage block on each, so a row count roughly doubles every figure. OMITTED ENTIRELY when the harness records no usage — a zero-filled block would assert the turn cost nothing rather than that nothing was measured.",
+      "required": [
+        "requests",
+        "input",
+        "cache_read",
+        "cache_write",
+        "output",
+        "models"
+      ],
+      "properties": {
+        "requests": { "type": "integer", "minimum": 0 },
+        "input": { "type": "integer", "minimum": 0 },
+        "cache_read": { "type": "integer", "minimum": 0 },
+        "cache_write": { "type": "integer", "minimum": 0 },
+        "output": { "type": "integer", "minimum": 0 },
+        "models": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Distinct models seen, in first-seen order."
+        }
+      },
+      "additionalProperties": false
+    },
+    "rewound_from": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "The turn number this turn replaced: the user rewound past it and re-sent on the same conversational slot. Absent unless this turn is a rewind."
+    },
+    "rewind_kind": {
+      "enum": ["same_prompt", "edited_prompt"],
+      "description": "Whether the re-sent prompt was byte-identical to the one it replaced, or edited. Present exactly when rewound_from is."
     },
     "ended_by": {
       "type": ["string", "null"],

@@ -149,6 +149,25 @@ const minimalDegradedPayload: TurnLogFixture = {
   timeline: [],
 };
 
+/** A turn carrying the steering/usage signals
+ *  (SESSION-LOG-STEERING-USAGE-SIGNALS-001): the user vetoed a proposed tool
+ *  call, and later rewound past this turn and re-sent an edited prompt. */
+const steeringSignalsPayload: TurnLogFixture = {
+  ...minimalDegradedPayload,
+  status: 'rewound',
+  ended_by: 'user_interrupt_tool',
+  rewound_from: 3,
+  rewind_kind: 'edited_prompt',
+  usage: {
+    requests: 2,
+    input: 24,
+    cache_read: 60000,
+    cache_write: 1400,
+    output: 982,
+    models: ['claude-opus-5'],
+  },
+};
+
 // --- the contract ------------------------------------------------------------
 
 describe('turn-log.v2 schema (CAWS-HARNESS-TELEMETRY-ADAPTER-001 A5)', () => {
@@ -188,7 +207,31 @@ describe('turn-log.v2 schema (CAWS-HARNESS-TELEMETRY-ADAPTER-001 A5)', () => {
         'ok',
         'error',
         'blocked',
+        'rewound',
       ]);
+    });
+
+    it('pins the rewind_kind vocabulary to the two classifications', () => {
+      expect(turnLogSchema.properties.rewind_kind.enum).toEqual([
+        'same_prompt',
+        'edited_prompt',
+      ]);
+    });
+
+    it('closes the usage object so an unaccounted token class cannot slip in', () => {
+      const usage = turnLogSchema.properties.usage;
+      expect(usage.additionalProperties).toBe(false);
+      expect([...usage.required].sort()).toEqual(
+        ['requests', 'input', 'cache_read', 'cache_write', 'output', 'models'].sort()
+      );
+    });
+
+    it('leaves usage, rewound_from and rewind_kind OUT of required', () => {
+      // All three are signals a producer may not have. Requiring usage would
+      // force a harness with no token accounting to invent zeroes.
+      for (const key of ['usage', 'rewound_from', 'rewind_kind']) {
+        expect([...turnLogSchema.required]).not.toContain(key);
+      }
     });
 
     it('leaves timeline items open on per-kind detail but pinned on the core', () => {
@@ -234,9 +277,42 @@ describe('turn-log.v2 schema (CAWS-HARNESS-TELEMETRY-ADAPTER-001 A5)', () => {
     });
 
     it('accepts every enum-visible status value', () => {
-      for (const status of ['ok', 'error', 'blocked']) {
+      for (const status of ['ok', 'error', 'blocked', 'rewound']) {
         expect(validate({ ...minimalDegradedPayload, status })).toBe(true);
       }
+    });
+
+    it('accepts a turn carrying usage, rewind, and interrupt-kind signals', () => {
+      const valid = validate(steeringSignalsPayload);
+      if (!valid) {
+        throw new Error(
+          'steering payload rejected: ' +
+            (validate.errors || [])
+              .map((e) => `${e.instancePath} ${e.message}`)
+              .join('; ')
+        );
+      }
+    });
+
+    it('accepts both interrupt kinds and the legacy collapsed value', () => {
+      // The legacy value stays READABLE so artifacts written before the split
+      // keep validating; the renderer no longer emits it.
+      for (const endedBy of [
+        'user_interrupt_tool',
+        'user_interrupt_generation',
+        'user_interrupt',
+      ]) {
+        expect(
+          validate({ ...minimalDegradedPayload, ended_by: endedBy })
+        ).toBe(true);
+      }
+    });
+
+    it('accepts a turn with no usage block at all', () => {
+      // Absent, not zero-filled: a harness that records no usage must not be
+      // forced to claim the turn cost nothing.
+      expect(validate(minimalDegradedPayload)).toBe(true);
+      expect('usage' in minimalDegradedPayload).toBe(false);
     });
   });
 
@@ -274,6 +350,59 @@ describe('turn-log.v2 schema (CAWS-HARNESS-TELEMETRY-ADAPTER-001 A5)', () => {
         { ...minimalDegradedPayload, telemetry_extra: true },
         '',
         'additionalProperties'
+      );
+    });
+
+    it('rejects an unaccounted token class inside usage', () => {
+      expectRejected(
+        validate,
+        {
+          ...steeringSignalsPayload,
+          usage: { ...(steeringSignalsPayload.usage as object), reasoning: 40 },
+        },
+        '/usage',
+        'additionalProperties'
+      );
+    });
+
+    it('rejects a usage block missing a token class rather than defaulting it', () => {
+      const { output: _dropped, ...partial } =
+        steeringSignalsPayload.usage as Record<string, unknown>;
+      expectRejected(
+        validate,
+        { ...steeringSignalsPayload, usage: partial },
+        '/usage',
+        'required'
+      );
+    });
+
+    it('rejects a negative token count', () => {
+      expectRejected(
+        validate,
+        {
+          ...steeringSignalsPayload,
+          usage: { ...(steeringSignalsPayload.usage as object), output: -1 },
+        },
+        '/usage/output',
+        'minimum'
+      );
+    });
+
+    it('rejects a rewind_kind outside the two classifications', () => {
+      expectRejected(
+        validate,
+        { ...steeringSignalsPayload, rewind_kind: 'branch_switch' },
+        '/rewind_kind',
+        'enum'
+      );
+    });
+
+    it('rejects rewound_from pointing at turn 0 — turns are 1-indexed', () => {
+      expectRejected(
+        validate,
+        { ...steeringSignalsPayload, rewound_from: 0 },
+        '/rewound_from',
+        'minimum'
       );
     });
 

@@ -848,6 +848,67 @@ class TestRewindDetection:
         assert all("rewound_from" not in turn for turn in turns)
 
 
+class TestRenderedPayloadsSatisfyBothContracts:
+    """The jest schema tests use handcrafted fixtures. These validate what the
+    renderer ACTUALLY emits, so a fixture that drifts from real output cannot
+    keep both contracts green while artifacts on disk violate them."""
+
+    _KERNEL = (Path(__file__).resolve().parents[3] / "src" / "kernel"
+               / "schemas" / "telemetry" / "turn-log.v2.json")
+    _HOOK_PACK = _SHARED / "lib" / "session-log.schema.json"
+
+    @staticmethod
+    def _steering_payloads():
+        interrupted = _assistant_rows("msg_A", "req_A", [
+            {"type": "text", "text": "about to run it"},
+            {"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "rm -rf /"}},
+        ])
+        return _render(
+            [_user_row("clean the build", "u1", parent="close-1")] + interrupted
+            + [_user_row("[Request interrupted by user for tool use]", "i1")]
+            + [_user_row("clean the build safely", "u2", parent="close-1")]
+            + _assistant_rows("msg_B", "req_B", _reply("used the script instead"))
+        )
+
+    def test_rendered_turns_validate_against_the_kernel_producer_contract(self):
+        import jsonschema
+
+        schema = json.loads(self._KERNEL.read_text(encoding="utf-8"))
+        payloads = self._steering_payloads()
+        # Guard against a vacuous pass: the scenario must actually carry the
+        # new signals, or this validates a payload that exercises nothing.
+        assert payloads[0]["ended_by"] == "user_interrupt_tool"
+        assert payloads[0]["status"] == "rewound"
+        assert payloads[1]["rewound_from"] == 1
+        assert payloads[1]["rewind_kind"] == "edited_prompt"
+        assert payloads[0]["usage"]["requests"] == 1
+
+        # Two violations in this contract predate this slice and are filed as
+        # CAWS-DEFECT-TURN-LOG-V2-CONTRACT-REJECTS-REAL-OUTPUT-01: the schema
+        # types turn_summary as a non-null string the renderer nulls, and its
+        # turnContext omits the lineage key the renderer always writes. They
+        # are excluded by exact path so they cannot mask a violation THIS
+        # slice introduces; when that defect lands, the exclusion list empties
+        # and this assertion tightens on its own.
+        known_pre_existing = {("turn_summary",), ("context",)}
+        validator = jsonschema.Draft202012Validator(schema)
+        errors = []
+        for payload in payloads:
+            for error in validator.iter_errors(payload):
+                path = tuple(error.absolute_path)
+                if path in known_pre_existing:
+                    continue
+                errors.append((list(path), error.validator, error.message))
+        assert errors == [], f"this slice's fields violate the producer contract: {errors}"
+
+    def test_rendered_turns_validate_against_the_hook_pack_schema(self):
+        import jsonschema
+
+        schema = json.loads(self._HOOK_PACK.read_text(encoding="utf-8"))
+        for payload in self._steering_payloads():
+            jsonschema.validate(payload, schema)
+
+
 class TestRealTranscriptUsageParity:
     """A6: rendered session usage matches an independent dedup over the file."""
 
