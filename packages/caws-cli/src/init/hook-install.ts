@@ -118,8 +118,7 @@ function stripPackVersion(content: string): string {
     .replace(/(hook_pack_version=)\d+/, '$1#');
 }
 
-const GENERATED_SURFACES_REGISTRY_DEST =
-  '.caws/hooks/lib/surfaces-registry.sh';
+const GENERATED_SURFACES_REGISTRY_DEST = '.caws/hooks/lib/surfaces-registry.sh';
 const GENERATED_PROJECTION_SENTINEL = '# @generated — DO NOT EDIT.';
 
 /**
@@ -144,13 +143,8 @@ function isExactLegacyGeneratedProjection(
     return false;
   }
 
-  const incomingBodyOffset = incomingContent.indexOf(
-    GENERATED_PROJECTION_SENTINEL
-  );
-  return (
-    incomingBodyOffset >= 0 &&
-    localContent === incomingContent.slice(incomingBodyOffset)
-  );
+  const incomingBodyOffset = incomingContent.indexOf(GENERATED_PROJECTION_SENTINEL);
+  return incomingBodyOffset >= 0 && localContent === incomingContent.slice(incomingBodyOffset);
 }
 
 const CODEX_EVENT_DISPATCHERS: Record<string, string> = {
@@ -184,17 +178,10 @@ function normalizeCodexHooksJson(content: string): string | null {
   return JSON.stringify(parsed);
 }
 
-function codexHooksJsonEquivalentIgnoringManagedDescription(
-  left: string,
-  right: string
-): boolean {
+function codexHooksJsonEquivalentIgnoringManagedDescription(left: string, right: string): boolean {
   const normalizedLeft = normalizeCodexHooksJson(left);
   const normalizedRight = normalizeCodexHooksJson(right);
-  return (
-    normalizedLeft !== null &&
-    normalizedRight !== null &&
-    normalizedLeft === normalizedRight
-  );
+  return normalizedLeft !== null && normalizedRight !== null && normalizedLeft === normalizedRight;
 }
 
 function parseCodexHooksJsonManagedHeader(content: string): ManagedHeader | null {
@@ -285,9 +272,7 @@ function renderPackFileBytes(
       __CAWS_CODEX_STOP_COMMAND__: codexCommand(repoRoot, 'stop.sh'),
     };
     for (const [token, value] of Object.entries(replacements)) {
-      rendered = rendered
-        .split(token)
-        .join(value.replace(/\\/g, '\\\\').replace(/"/g, '\\"'));
+      rendered = rendered.split(token).join(value.replace(/\\/g, '\\\\').replace(/"/g, '\\"'));
     }
   }
 
@@ -327,19 +312,9 @@ function evaluateFileState(
 
   if (!header) {
     if (rawSourceBytes !== null) {
-      const sourceBytes = renderPackFileBytes(
-        rawSourceBytes,
-        repoRoot,
-        file,
-        packVersion
-      );
+      const sourceBytes = renderPackFileBytes(rawSourceBytes, repoRoot, file, packVersion);
       if (
-        isExactLegacyGeneratedProjection(
-          packId,
-          file,
-          localContent,
-          sourceBytes.toString('utf8')
-        )
+        isExactLegacyGeneratedProjection(packId, file, localContent, sourceBytes.toString('utf8'))
       ) {
         // Version zero is an internal migration sentinel: the legacy generated
         // projection predates managed headers, while exact body equality proves
@@ -381,12 +356,7 @@ function evaluateFileState(
   // branch overwrite edited content on essentially every re-init).
   //
   // CAWS-HOOK-PACK-MANAGED-HEADER-GROWTH-DOCTRINE-001.
-  const sourceBytes = renderPackFileBytes(
-    rawSourceBytes,
-    repoRoot,
-    file,
-    packVersion
-  );
+  const sourceBytes = renderPackFileBytes(rawSourceBytes, repoRoot, file, packVersion);
   if (bytesEqual(localBytes, sourceBytes)) {
     // Byte-identical to the (version-stamped) current template. Whether or not
     // the recorded header version was behind, there is no edit to preserve, so
@@ -464,9 +434,7 @@ function evaluateFileState(
  * comparisons use the same stripPackVersion normalization evaluateFileState
  * uses, so stamp-only differences never count as growth or upstream change.
  */
-export function observeSharedPackBodyDrift(
-  repoRoot: string
-): readonly SharedPackDriftRow[] {
+export function observeSharedPackBodyDrift(repoRoot: string): readonly SharedPackDriftRow[] {
   const packRoot = packTemplateRoot(SHARED_PACK.id);
   const drifted: SharedPackDriftRow[] = [];
   for (const file of SHARED_PACK.installedFiles) {
@@ -553,19 +521,14 @@ interface InstallContext {
   readonly adopt: boolean;
 }
 
-function contextFromOptions(
-  pack: HookPackV1,
-  options: HookPackInstallOptions
-): InstallContext {
+function contextFromOptions(pack: HookPackV1, options: HookPackInstallOptions): InstallContext {
   return {
     repoRoot: options.repoRoot,
     packRoot: options.packRootOverride ?? packTemplateRoot(pack.id),
     pack,
     overwrite: options.overwrite === true,
     overwriteTargets:
-      options.overwriteTargets !== undefined
-        ? new Set(options.overwriteTargets)
-        : null,
+      options.overwriteTargets !== undefined ? new Set(options.overwriteTargets) : null,
     force: options.force === true,
     adopt: options.adopt === true,
   };
@@ -594,19 +557,8 @@ function ensureDir(target: string): void {
 // via EPHEMERAL_CAWS_ENTRIES), current install only — writing a new
 // baseline retires the old one (same path, atomic write).
 
-export function pristinePathFor(
-  repoRoot: string,
-  packId: string,
-  destPath: string
-): string {
-  return path.join(
-    repoRoot,
-    '.caws',
-    'hooks',
-    '.pristine',
-    packId,
-    ...destPath.split('/')
-  );
+export function pristinePathFor(repoRoot: string, packId: string, destPath: string): string {
+  return path.join(repoRoot, '.caws', 'hooks', '.pristine', packId, ...destPath.split('/'));
 }
 
 function writePristineBaseline(
@@ -640,12 +592,7 @@ function writeFile(ctx: InstallContext, file: HookPackFile): void {
   if (sourceBytes === null) {
     throw new Error(`template file missing: ${sourceAbs}`);
   }
-  const rendered = renderPackFileBytes(
-    sourceBytes,
-    ctx.repoRoot,
-    file,
-    ctx.pack.packVersion
-  );
+  const rendered = renderPackFileBytes(sourceBytes, ctx.repoRoot, file, ctx.pack.packVersion);
   fs.writeFileSync(destAbs, rendered);
   writePristineBaseline(ctx.repoRoot, ctx.pack.id, file, rendered);
   if (file.executable) {
@@ -657,10 +604,7 @@ function writeFile(ctx: InstallContext, file: HookPackFile): void {
   }
 }
 
-function applyOne(
-  ctx: InstallContext,
-  file: HookPackFile
-): HookPackFileAction {
+function applyOne(ctx: InstallContext, file: HookPackFile): HookPackFileAction {
   const state = evaluateFileState(
     ctx.repoRoot,
     ctx.packRoot,
@@ -705,12 +649,7 @@ function incomingDiff(ctx: InstallContext, file: HookPackFile): string {
   if (rawSourceBytes === null) {
     return `(pack template missing at ${file.sourcePath}; no diff available)`;
   }
-  const incoming = renderPackFileBytes(
-    rawSourceBytes,
-    ctx.repoRoot,
-    file,
-    ctx.pack.packVersion
-  );
+  const incoming = renderPackFileBytes(rawSourceBytes, ctx.repoRoot, file, ctx.pack.packVersion);
   return unifiedDiff(
     `local: ${file.destPath}`,
     `incoming: ${ctx.pack.id} v${ctx.pack.packVersion} template`,
@@ -755,10 +694,7 @@ function resolveCollision(
   };
 }
 
-function planOne(
-  ctx: InstallContext,
-  file: HookPackFile
-): HookPackFileAction {
+function planOne(ctx: InstallContext, file: HookPackFile): HookPackFileAction {
   const state = evaluateFileState(
     ctx.repoRoot,
     ctx.packRoot,
@@ -792,10 +728,7 @@ function outcomeForActions(
   if (allUnchanged) {
     return 'already_installed';
   }
-  if (
-    actions.some((a) => a.action === 'updated') &&
-    !actions.some((a) => a.action === 'created')
-  ) {
+  if (actions.some((a) => a.action === 'updated') && !actions.some((a) => a.action === 'created')) {
     return 'updated';
   }
   return 'installed';
@@ -860,16 +793,37 @@ export interface TelemetryRetireResult {
  * for a non-covered surface reinstalls the rows, because for that surface
  * they are still in the pack.
  */
-export function retireStaleTelemetryRows(repoRoot: string): TelemetryRetireResult {
-  const retired: string[] = [];
+/** What retirement WOULD do, computed without touching the filesystem.
+ *  `retire` is the set apply will unlink; `absent` and `unmanaged` are the
+ *  per-path reasons a row is left alone. Disjoint, and together they cover
+ *  every TELEMETRY_ROW_DEST_PATHS entry exactly once — same as
+ *  TelemetryRetireResult minus `failed`, which only an actual unlink can
+ *  discover. */
+export interface TelemetryRetirePlan {
+  readonly retire: readonly string[];
+  readonly absent: readonly string[];
+  readonly unmanaged: readonly string[];
+}
+
+/**
+ * CAWS-INIT-PLAN-BLIND-TELEMETRY-RETIREMENT-001: the read-only half of
+ * retirement, so `caws init --plan` can enumerate the deletions apply will
+ * perform. `retireStaleTelemetryRows` is defined in terms of this function —
+ * one classifier, so a preview cannot promise a different set than apply
+ * removes (the same "one place so apply and plan cannot drift" rule the
+ * hook-pack policy options already follow).
+ *
+ * Pure observation: opens each row to read its managed header and never
+ * writes, so it is safe to call from any read-only path.
+ */
+export function planTelemetryRetirement(repoRoot: string): TelemetryRetirePlan {
+  const retire: string[] = [];
   const absent: string[] = [];
   const unmanaged: string[] = [];
-  const failed: string[] = [];
   for (const relPath of TELEMETRY_ROW_DEST_PATHS) {
-    const abs = path.join(repoRoot, relPath);
     let content: string;
     try {
-      content = fs.readFileSync(abs, 'utf8');
+      content = fs.readFileSync(path.join(repoRoot, relPath), 'utf8');
     } catch {
       // Missing ≠ stale (MISSING-NOT-STALE invariant): nothing to retire.
       absent.push(relPath);
@@ -880,8 +834,18 @@ export function retireStaleTelemetryRows(repoRoot: string): TelemetryRetireResul
       unmanaged.push(relPath);
       continue;
     }
+    retire.push(relPath);
+  }
+  return { retire, absent, unmanaged };
+}
+
+export function retireStaleTelemetryRows(repoRoot: string): TelemetryRetireResult {
+  const plan = planTelemetryRetirement(repoRoot);
+  const retired: string[] = [];
+  const failed: string[] = [];
+  for (const relPath of plan.retire) {
     try {
-      fs.unlinkSync(abs);
+      fs.unlinkSync(path.join(repoRoot, relPath));
       retired.push(relPath);
     } catch {
       // The row is provably ours but the platform refuses the delete.
@@ -889,7 +853,7 @@ export function retireStaleTelemetryRows(repoRoot: string): TelemetryRetireResul
       failed.push(relPath);
     }
   }
-  return { retired, absent, unmanaged, failed };
+  return { retired, absent: plan.absent, unmanaged: plan.unmanaged, failed };
 }
 
 /** Read-only hook-pack preview. Uses the same file-state evaluator as install
@@ -948,22 +912,14 @@ export function diffHookPack(
   const out: HookPackFileDiff[] = [];
 
   for (const file of pack.installedFiles) {
-    const state = evaluateFileState(
-      ctx.repoRoot,
-      ctx.packRoot,
-      pack.id,
-      pack.packVersion,
-      file
-    );
+    const state = evaluateFileState(ctx.repoRoot, ctx.packRoot, pack.id, pack.packVersion, file);
     const destAbs = path.join(ctx.repoRoot, file.destPath);
     const local = readBytes(destAbs)?.toString('utf8') ?? '';
     const raw = readBytes(path.join(ctx.packRoot, file.sourcePath));
     const incoming =
       raw === null
         ? null
-        : renderPackFileBytes(raw, ctx.repoRoot, file, pack.packVersion).toString(
-            'utf8'
-          );
+        : renderPackFileBytes(raw, ctx.repoRoot, file, pack.packVersion).toString('utf8');
 
     const twoWayDiff =
       incoming === null
@@ -982,11 +938,7 @@ export function diffHookPack(
         reason: 'unmanaged pack file — no baseline is kept',
       };
     } else {
-      const baseline = readPristineBaseline(
-        ctx.repoRoot,
-        pack.id,
-        file.destPath
-      );
+      const baseline = readPristineBaseline(ctx.repoRoot, pack.id, file.destPath);
       if (baseline === null) {
         threeWay = {
           available: false,
@@ -1057,10 +1009,7 @@ export type HookPackPortResult =
  *  atomically, records the pristine baseline, and thereby RESUMES drift
  *  tracking (unlike --adopt, which ends it): the landed file is the new
  *  managed baseline. The caller owns the audit commit. */
-export function portHookFile(
-  pack: HookPackV1,
-  options: HookPackPortOptions
-): HookPackPortResult {
+export function portHookFile(pack: HookPackV1, options: HookPackPortOptions): HookPackPortResult {
   const file = pack.installedFiles.find((f) => f.destPath === options.destPath);
   if (file === undefined) {
     return {
@@ -1137,10 +1086,7 @@ export function portHookFile(
   // Re-stamp at the current pack version: the agent ports CONTENT; the
   // version stamp is pack state, owned here. This is what resumes drift
   // tracking against the current version.
-  const rendered = Buffer.from(
-    stampPackVersion(candidate, pack.packVersion),
-    'utf8'
-  );
+  const rendered = Buffer.from(stampPackVersion(candidate, pack.packVersion), 'utf8');
   const destAbs = path.join(ctx.repoRoot, file.destPath);
   ensureDir(path.dirname(destAbs));
   fs.writeFileSync(destAbs, rendered);
@@ -1182,9 +1128,7 @@ export type SettingsWiringStatus =
  * settings.json — this function just surfaces the state so the CLI can
  * tell the user exactly what to add.
  */
-export function inspectClaudeSettings(
-  repoRoot: string
-): SettingsWiringStatus {
+export function inspectClaudeSettings(repoRoot: string): SettingsWiringStatus {
   const settingsPath = path.join(repoRoot, '.claude', 'settings.json');
   if (!fs.existsSync(settingsPath)) {
     return { kind: 'absent' };
@@ -1215,9 +1159,7 @@ export function inspectClaudeSettings(
     }
     // A canonical entry has a hook whose command path references any of
     // the known CAWS dispatch tails (shared-core or legacy).
-    const snake = key
-      .replace(/([a-z])([A-Z])/g, '$1_$2')
-      .toLowerCase();
+    const snake = key.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase();
     const sharedCoreTail = `.caws/hooks/dispatch/${snake}.sh`;
     const legacyCawsDispatchTail = `.claude/hooks/caws_dispatch/${snake}.sh`;
     const legacyDispatchTail = `.claude/hooks/dispatch/${snake}.sh`;
@@ -1256,9 +1198,7 @@ export function inspectClaudeSettings(
  *  .claude/hooks/caws_dispatch/<event>.sh and .claude/hooks/dispatch/<event>.sh
  *  are recognized by arrayHasCawsEntry as already-wired CAWS entries so
  *  re-running init does not duplicate entries for consumers on the old wiring. */
-export const CANONICAL_HOOK_ENTRIES: Readonly<
-  Record<string, Record<string, unknown>>
-> = {
+export const CANONICAL_HOOK_ENTRIES: Readonly<Record<string, Record<string, unknown>>> = {
   PreToolUse: {
     matcher: 'Bash|Read|Write|Edit|Glob|Grep|NotebookEdit',
     hooks: [
@@ -1327,11 +1267,7 @@ function canonicalSettingsObject(): { hooks: Record<string, unknown[]> } {
 
 /** Canonical settings.json wiring snippet, returned as a JSON string
  *  ready to print or copy. Mirrors the snippet in CLAUDE.md. */
-export const CANONICAL_SETTINGS_SNIPPET = JSON.stringify(
-  canonicalSettingsObject(),
-  null,
-  2
-);
+export const CANONICAL_SETTINGS_SNIPPET = JSON.stringify(canonicalSettingsObject(), null, 2);
 
 // ─── settings.json merge (write / append / idempotent / never-clobber) ───
 
@@ -1470,19 +1406,13 @@ export function mergeClaudeSettings(repoRoot: string): SettingsMergeResult {
   }
 
   root.hooks = hooks;
-  fs.writeFileSync(
-    settingsPath,
-    `${JSON.stringify(root, null, 2)}\n`,
-    'utf8'
-  );
+  fs.writeFileSync(settingsPath, `${JSON.stringify(root, null, 2)}\n`, 'utf8');
   return { kind: 'merged', path: settingsPath, added };
 }
 
 /** Read-only counterpart to mergeClaudeSettings. Computes the same created /
  * merged / unchanged / invalid outcome without writing settings.json. */
-export function planClaudeSettingsMerge(
-  repoRoot: string
-): SettingsMergePlanResult {
+export function planClaudeSettingsMerge(repoRoot: string): SettingsMergePlanResult {
   const settingsPath = path.join(repoRoot, '.claude', 'settings.json');
 
   if (!fs.existsSync(settingsPath)) {
@@ -1532,22 +1462,14 @@ export function planClaudeSettingsMerge(
  *  Idempotent (always writes the same bytes). This is the reference
  *  artifact for users who decline the in-place merge. */
 export function writeSettingsExample(repoRoot: string): string {
-  const examplePath = path.join(
-    repoRoot,
-    '.claude',
-    'settings.json.example'
-  );
+  const examplePath = path.join(repoRoot, '.claude', 'settings.json.example');
   ensureDir(path.dirname(examplePath));
   fs.writeFileSync(examplePath, `${CANONICAL_SETTINGS_SNIPPET}\n`, 'utf8');
   return examplePath;
 }
 
 export function planSettingsExample(repoRoot: string): SettingsExamplePlanResult {
-  const examplePath = path.join(
-    repoRoot,
-    '.claude',
-    'settings.json.example'
-  );
+  const examplePath = path.join(repoRoot, '.claude', 'settings.json.example');
   const desired = `${CANONICAL_SETTINGS_SNIPPET}\n`;
   let existing: string | null = null;
   try {
@@ -1558,11 +1480,7 @@ export function planSettingsExample(repoRoot: string): SettingsExamplePlanResult
   return {
     path: examplePath,
     action:
-      existing === null
-        ? 'would_create'
-        : existing === desired
-          ? 'unchanged'
-          : 'would_update',
+      existing === null ? 'would_create' : existing === desired ? 'unchanged' : 'would_update',
     readOnly: true,
   };
 }
@@ -1635,9 +1553,7 @@ function ZCODE_BRIDGE_REF_DEFAULT_DISPATCHER(dispatcher: string): string {
 /** The canonical CAWS hook wiring for ZCode, as the structured entries that
  *  go under `hooks.events.<Event>`. Single source of truth for both the
  *  in-place merge and the printed/emitted example. */
-export const CANONICAL_ZCODE_HOOK_ENTRIES: Readonly<
-  Record<string, Record<string, unknown>>
-> = {
+export const CANONICAL_ZCODE_HOOK_ENTRIES: Readonly<Record<string, Record<string, unknown>>> = {
   PreToolUse: {
     matcher: ZCODE_PRETOOLUSE_MATCHER,
     hooks: [
@@ -1691,11 +1607,7 @@ function canonicalZcodeConfigObject(): {
 
 /** Canonical .zcode/config.json wiring snippet, as a JSON string ready to
  *  print or copy. */
-export const CANONICAL_ZCODE_CONFIG_SNIPPET = JSON.stringify(
-  canonicalZcodeConfigObject(),
-  null,
-  2
-);
+export const CANONICAL_ZCODE_CONFIG_SNIPPET = JSON.stringify(canonicalZcodeConfigObject(), null, 2);
 
 /** Does this event's entry array already contain a CAWS-owned entry? Matches a
  *  hook whose command references the `/.zcode/hooks/caws-bridge.sh` path, so
@@ -1772,11 +1684,7 @@ export function mergeZcodeConfig(repoRoot: string, homeDir?: string): SettingsMe
   const root = parsed as Record<string, unknown>;
   // Ensure root.hooks is an object; force hooks.enabled = true.
   let hooks: Record<string, unknown>;
-  if (
-    root.hooks &&
-    typeof root.hooks === 'object' &&
-    !Array.isArray(root.hooks)
-  ) {
+  if (root.hooks && typeof root.hooks === 'object' && !Array.isArray(root.hooks)) {
     hooks = root.hooks as Record<string, unknown>;
   } else {
     hooks = {};
@@ -1786,11 +1694,7 @@ export function mergeZcodeConfig(repoRoot: string, homeDir?: string): SettingsMe
   hooks.enabled = true;
   // Ensure hooks.events is an object.
   let events: Record<string, unknown>;
-  if (
-    hooks.events &&
-    typeof hooks.events === 'object' &&
-    !Array.isArray(hooks.events)
-  ) {
+  if (hooks.events && typeof hooks.events === 'object' && !Array.isArray(hooks.events)) {
     events = hooks.events as Record<string, unknown>;
   } else {
     events = {};
@@ -1821,10 +1725,7 @@ export function mergeZcodeConfig(repoRoot: string, homeDir?: string): SettingsMe
 
 /** Read-only counterpart to mergeZcodeConfig. Computes the same created /
  *  merged / unchanged / invalid outcome without writing config.json. */
-export function planZcodeConfigMerge(
-  repoRoot: string,
-  homeDir?: string
-): SettingsMergePlanResult {
+export function planZcodeConfigMerge(repoRoot: string, homeDir?: string): SettingsMergePlanResult {
   const configPath = path.join(repoRoot, '.zcode', 'config.json');
 
   // CAWS-GATED-SURFACE-SCOPE-GUARD-001: plan reports the skip the perform
@@ -1869,9 +1770,7 @@ export function planZcodeConfigMerge(
       ? (root.hooks as Record<string, unknown>)
       : {};
   const events =
-    hooks.events &&
-    typeof hooks.events === 'object' &&
-    !Array.isArray(hooks.events)
+    hooks.events && typeof hooks.events === 'object' && !Array.isArray(hooks.events)
       ? (hooks.events as Record<string, unknown>)
       : {};
 
@@ -1941,9 +1840,7 @@ export function writeZcodeConfigExample(repoRoot: string): string {
   return examplePath;
 }
 
-export function planZcodeConfigExample(
-  repoRoot: string
-): SettingsExamplePlanResult {
+export function planZcodeConfigExample(repoRoot: string): SettingsExamplePlanResult {
   const examplePath = path.join(repoRoot, '.zcode', 'config.json.example');
   const desired = `${CANONICAL_ZCODE_CONFIG_SNIPPET}\n`;
   let existing: string | null = null;
@@ -1955,11 +1852,7 @@ export function planZcodeConfigExample(
   return {
     path: examplePath,
     action:
-      existing === null
-        ? 'would_create'
-        : existing === desired
-          ? 'unchanged'
-          : 'would_update',
+      existing === null ? 'would_create' : existing === desired ? 'unchanged' : 'would_update',
     readOnly: true,
   };
 }
@@ -2069,15 +1962,15 @@ function kimiBlockEndMarker(event: string): string {
  *  TOML literal string (single quotes): it contains double quotes for the
  *  shell but never a single quote, so no escaping is needed. */
 function renderKimiHookBlock(entry: KimiHookEntry): string {
-  const lines = [
-    kimiBlockBeginMarker(entry.event),
-    '[[hooks]]',
-    `event = "${entry.event}"`,
-  ];
+  const lines = [kimiBlockBeginMarker(entry.event), '[[hooks]]', `event = "${entry.event}"`];
   if (entry.matcher !== undefined) {
     lines.push(`matcher = "${entry.matcher}"`);
   }
-  lines.push(`command = '${entry.command}'`, `timeout = ${entry.timeout}`, kimiBlockEndMarker(entry.event));
+  lines.push(
+    `command = '${entry.command}'`,
+    `timeout = ${entry.timeout}`,
+    kimiBlockEndMarker(entry.event)
+  );
   return lines.join('\n');
 }
 
@@ -2088,9 +1981,7 @@ export const CANONICAL_KIMI_CONFIG_SNIPPET =
 
 /** Resolve the user-level kimi config path: $KIMI_CODE_HOME/config.toml when
  *  the env var is set and non-blank, else ~/.kimi-code/config.toml. */
-export function kimiUserConfigPath(
-  env: NodeJS.ProcessEnv = process.env
-): string {
+export function kimiUserConfigPath(env: NodeJS.ProcessEnv = process.env): string {
   const override = env.KIMI_CODE_HOME;
   const home =
     typeof override === 'string' && override.trim().length > 0
@@ -2136,9 +2027,9 @@ function kimiConfigHasEvent(content: string, event: string): boolean {
 /** Compute which canonical events are not yet wired in `content` (empty
  *  string = absent file). Exported for the plan-mode preview. */
 export function missingKimiHookEvents(content: string): readonly string[] {
-  return CANONICAL_KIMI_HOOK_ENTRIES.filter(
-    (e) => !kimiConfigHasEvent(content, e.event)
-  ).map((e) => e.event);
+  return CANONICAL_KIMI_HOOK_ENTRIES.filter((e) => !kimiConfigHasEvent(content, e.event)).map(
+    (e) => e.event
+  );
 }
 
 /**
@@ -2151,9 +2042,7 @@ export function missingKimiHookEvents(content: string): readonly string[] {
  * Caller gates this on the explicit --wire-user-config flag; it writes
  * OUTSIDE the consumer repo into user-level state.
  */
-export function mergeKimiUserConfig(
-  opts: { env?: NodeJS.ProcessEnv } = {}
-): SettingsMergeResult {
+export function mergeKimiUserConfig(opts: { env?: NodeJS.ProcessEnv } = {}): SettingsMergeResult {
   const configPath = kimiUserConfigPath(opts.env);
 
   let existing: string | null = null;
@@ -2168,9 +2057,9 @@ export function mergeKimiUserConfig(
     return { kind: 'unchanged', path: configPath };
   }
 
-  const blocks = CANONICAL_KIMI_HOOK_ENTRIES.filter((e) =>
-    missing.includes(e.event)
-  ).map(renderKimiHookBlock);
+  const blocks = CANONICAL_KIMI_HOOK_ENTRIES.filter((e) => missing.includes(e.event)).map(
+    renderKimiHookBlock
+  );
 
   if (existing === null) {
     ensureDir(path.dirname(configPath));
@@ -2185,11 +2074,7 @@ export function mergeKimiUserConfig(
   // Append after existing content with exactly one blank-line separator.
   const trimmedEnd = existing.replace(/\n*$/, '');
   const separator = trimmedEnd.length > 0 ? '\n\n' : '';
-  fs.writeFileSync(
-    configPath,
-    `${trimmedEnd}${separator}${blocks.join('\n\n')}\n`,
-    'utf8'
-  );
+  fs.writeFileSync(configPath, `${trimmedEnd}${separator}${blocks.join('\n\n')}\n`, 'utf8');
   return { kind: 'merged', path: configPath, added: missing };
 }
 
@@ -2237,24 +2122,14 @@ export function inspectKimiUserConfig(
  *  who decline the user-level merge (or whose init ran without
  *  --wire-user-config). */
 export function writeKimiConfigExample(repoRoot: string): string {
-  const examplePath = path.join(
-    repoRoot,
-    '.kimi-code',
-    'caws-hooks.toml.example'
-  );
+  const examplePath = path.join(repoRoot, '.kimi-code', 'caws-hooks.toml.example');
   ensureDir(path.dirname(examplePath));
   fs.writeFileSync(examplePath, CANONICAL_KIMI_CONFIG_SNIPPET, 'utf8');
   return examplePath;
 }
 
-export function planKimiConfigExample(
-  repoRoot: string
-): SettingsExamplePlanResult {
-  const examplePath = path.join(
-    repoRoot,
-    '.kimi-code',
-    'caws-hooks.toml.example'
-  );
+export function planKimiConfigExample(repoRoot: string): SettingsExamplePlanResult {
+  const examplePath = path.join(repoRoot, '.kimi-code', 'caws-hooks.toml.example');
   const desired = CANONICAL_KIMI_CONFIG_SNIPPET;
   let existing: string | null = null;
   try {
@@ -2265,11 +2140,7 @@ export function planKimiConfigExample(
   return {
     path: examplePath,
     action:
-      existing === null
-        ? 'would_create'
-        : existing === desired
-          ? 'unchanged'
-          : 'would_update',
+      existing === null ? 'would_create' : existing === desired ? 'unchanged' : 'would_update',
     readOnly: true,
   };
 }
@@ -2311,12 +2182,9 @@ function qwenShimCommand(event: string): string {
  *  the same field is seconds. Seconds-era values (45/60/30) made every
  *  hook SIGTERM before the ~3s shim completed, silently disabling every
  *  guard (CAWS-QWEN-HOOK-TIMEOUT-001). */
-export const CANONICAL_QWEN_HOOK_ENTRIES: Readonly<
-  Record<string, Record<string, unknown>>
-> = {
+export const CANONICAL_QWEN_HOOK_ENTRIES: Readonly<Record<string, Record<string, unknown>>> = {
   PreToolUse: {
-    matcher:
-      'run_shell_command|write_file|edit|read_file|glob|grep_search|notebook_edit',
+    matcher: 'run_shell_command|write_file|edit|read_file|glob|grep_search|notebook_edit',
     hooks: [
       {
         type: 'command',
@@ -2497,11 +2365,7 @@ export function mergeQwenSettings(repoRoot: string, homeDir?: string): SettingsM
   }
 
   root.hooks = hooks;
-  fs.writeFileSync(
-    settingsPath,
-    `${JSON.stringify(root, null, 2)}\n`,
-    'utf8'
-  );
+  fs.writeFileSync(settingsPath, `${JSON.stringify(root, null, 2)}\n`, 'utf8');
   return {
     kind: 'merged',
     path: settingsPath,
@@ -2512,10 +2376,7 @@ export function mergeQwenSettings(repoRoot: string, homeDir?: string): SettingsM
 
 /** Read-only counterpart to mergeQwenSettings. Computes the same created /
  * merged / unchanged / invalid outcome without writing settings.json. */
-export function planQwenSettingsMerge(
-  repoRoot: string,
-  homeDir?: string
-): SettingsMergePlanResult {
+export function planQwenSettingsMerge(repoRoot: string, homeDir?: string): SettingsMergePlanResult {
   const settingsPath = path.join(repoRoot, '.qwen', 'settings.json');
 
   // CAWS-GATED-SURFACE-SCOPE-GUARD-001: plan reports the skip the perform
@@ -2569,10 +2430,7 @@ export function planQwenSettingsMerge(
       for (const block of existing as unknown[]) {
         if (!isCawsQwenBlock(block)) continue;
         sawCawsEntry = true;
-        if (
-          JSON.stringify(block) !== JSON.stringify(entry) &&
-          !repaired.includes(key)
-        ) {
+        if (JSON.stringify(block) !== JSON.stringify(entry) && !repaired.includes(key)) {
           repaired.push(key);
         }
       }
@@ -2649,18 +2507,12 @@ export function inspectQwenSettings(repoRoot: string): SettingsWiringStatus {
 export function writeQwenSettingsExample(repoRoot: string): string {
   const examplePath = path.join(repoRoot, '.qwen', 'settings.json.example');
   ensureDir(path.dirname(examplePath));
-  fs.writeFileSync(
-    examplePath,
-    `${CANONICAL_QWEN_SETTINGS_SNIPPET}\n`,
-    'utf8'
-  );
+  fs.writeFileSync(examplePath, `${CANONICAL_QWEN_SETTINGS_SNIPPET}\n`, 'utf8');
   return examplePath;
 }
 
 /** Read-only counterpart to writeQwenSettingsExample. */
-export function planQwenSettingsExample(
-  repoRoot: string
-): SettingsExamplePlanResult {
+export function planQwenSettingsExample(repoRoot: string): SettingsExamplePlanResult {
   const examplePath = path.join(repoRoot, '.qwen', 'settings.json.example');
   const desired = `${CANONICAL_QWEN_SETTINGS_SNIPPET}\n`;
   let existing: string | null = null;
@@ -2672,11 +2524,7 @@ export function planQwenSettingsExample(
   return {
     path: examplePath,
     action:
-      existing === null
-        ? 'would_create'
-        : existing === desired
-          ? 'unchanged'
-          : 'would_update',
+      existing === null ? 'would_create' : existing === desired ? 'unchanged' : 'would_update',
     readOnly: true,
   };
 }
@@ -2690,8 +2538,7 @@ export function planQwenSettingsExample(
 // adapter reference at .codex/CAWS.md.
 
 export const CODEX_INSTRUCTION_BLOCK_VERSION = 1;
-export const CODEX_INSTRUCTION_BEGIN_MARKER =
-  `<!-- >>> caws codex instructions (managed, v${CODEX_INSTRUCTION_BLOCK_VERSION}) >>> -->`;
+export const CODEX_INSTRUCTION_BEGIN_MARKER = `<!-- >>> caws codex instructions (managed, v${CODEX_INSTRUCTION_BLOCK_VERSION}) >>> -->`;
 export const CODEX_INSTRUCTION_END_MARKER = '<!-- <<< caws codex instructions <<< -->';
 const CODEX_INSTRUCTION_BEGIN_PREFIX = '<!-- >>> caws codex instructions';
 
@@ -2714,7 +2561,7 @@ export const CODEX_INSTRUCTION_BLOCK = [
   '  record acceptance evidence, then use `caws worktree review` and the',
   '  governed merge surface.',
   '- Preserve unrelated dirty state. A foreign or inherited doctor finding is',
-  '  evidence to report, not authority to rewrite another owner\'s work.',
+  "  evidence to report, not authority to rewrite another owner's work.",
   '- If a dangerous-command guard blocks or asks, stop at the human boundary;',
   '  do not rephrase the command to bypass it.',
   '',
@@ -2823,18 +2670,13 @@ function computeCodexInstructionMerge(existing: string | null):
     }
   | {
       readonly kind: 'refused';
-      readonly reason:
-        | 'malformed_managed_block'
-        | 'duplicate_managed_block';
+      readonly reason: 'malformed_managed_block' | 'duplicate_managed_block';
     } {
   if (existing === null) {
     return { kind: 'created', content: `${CODEX_INSTRUCTION_BLOCK}\n` };
   }
 
-  const beginCount = countOccurrences(
-    existing,
-    CODEX_INSTRUCTION_BEGIN_PREFIX
-  );
+  const beginCount = countOccurrences(existing, CODEX_INSTRUCTION_BEGIN_PREFIX);
   const endCount = countOccurrences(existing, CODEX_INSTRUCTION_END_MARKER);
   if (beginCount > 1 || endCount > 1) {
     return { kind: 'refused', reason: 'duplicate_managed_block' };
@@ -2852,10 +2694,7 @@ function computeCodexInstructionMerge(existing: string | null):
 
   const begin = existing.indexOf(CODEX_INSTRUCTION_BEGIN_PREFIX);
   const beginLineEnd = existing.indexOf(newline, begin);
-  const beginLine = existing.slice(
-    begin,
-    beginLineEnd === -1 ? existing.length : beginLineEnd
-  );
+  const beginLine = existing.slice(begin, beginLineEnd === -1 ? existing.length : beginLineEnd);
   if (
     (begin > 0 && existing[begin - 1] !== '\n') ||
     !/^<!-- >>> caws codex instructions \(managed, v\d+\) >>> -->$/.test(beginLine)
@@ -2882,9 +2721,10 @@ function computeCodexInstructionMerge(existing: string | null):
   };
 }
 
-function inspectCodexProjectInstructions(
-  repoRoot: string
-): { result: CodexInstructionMergeResult; content: string | null } {
+function inspectCodexProjectInstructions(repoRoot: string): {
+  result: CodexInstructionMergeResult;
+  content: string | null;
+} {
   const selected = selectCodexInstructionFile(repoRoot);
   if (selected.kind === 'refused') {
     return { result: selected, content: null };
@@ -2912,17 +2752,13 @@ function inspectCodexProjectInstructions(
 }
 
 /** Preview the active root instruction merge without writing any file. */
-export function planCodexProjectInstructions(
-  repoRoot: string
-): CodexInstructionPlanResult {
+export function planCodexProjectInstructions(repoRoot: string): CodexInstructionPlanResult {
   const { result } = inspectCodexProjectInstructions(repoRoot);
   return { ...result, readOnly: true };
 }
 
 /** Merge the bounded CAWS block into the root instruction file Codex selects. */
-export function mergeCodexProjectInstructions(
-  repoRoot: string
-): CodexInstructionMergeResult {
+export function mergeCodexProjectInstructions(repoRoot: string): CodexInstructionMergeResult {
   const inspected = inspectCodexProjectInstructions(repoRoot);
   if (inspected.result.kind === 'refused' || inspected.result.kind === 'unchanged') {
     return inspected.result;
@@ -2950,10 +2786,8 @@ export function mergeCodexProjectInstructions(
 // it every session. The block is fenced with markers; the merge appends it
 // when missing and is a byte-identical no-op when present.
 
-const QWEN_IMPORT_MARKER_BEGIN =
-  '<!-- >>> caws qwen-code doctrine import (managed, v1) >>> -->';
-const QWEN_IMPORT_MARKER_END =
-  '<!-- <<< caws qwen-code doctrine import (managed, v1) <<< -->';
+const QWEN_IMPORT_MARKER_BEGIN = '<!-- >>> caws qwen-code doctrine import (managed, v1) >>> -->';
+const QWEN_IMPORT_MARKER_END = '<!-- <<< caws qwen-code doctrine import (managed, v1) <<< -->';
 const QWEN_IMPORT_BLOCK = `${QWEN_IMPORT_MARKER_BEGIN}\n@.qwen/CAWS-HOOKS.md\n${QWEN_IMPORT_MARKER_END}`;
 
 /** Outcome of the root QWEN.md doctrine-import merge. */
@@ -2976,9 +2810,7 @@ function qwenInstructionImportPath(repoRoot: string): string {
 /** Merge the CAWS-managed doctrine import into the root QWEN.md. Creates the
  *  file when absent; appends the fenced block when missing; idempotent. The
  *  user's own QWEN.md content is never rewritten. */
-export function mergeQwenInstructionImport(
-  repoRoot: string
-): InstructionImportResult {
+export function mergeQwenInstructionImport(repoRoot: string): InstructionImportResult {
   const qwenMdPath = qwenInstructionImportPath(repoRoot);
 
   if (!fs.existsSync(qwenMdPath)) {
@@ -3003,9 +2835,7 @@ export function mergeQwenInstructionImport(
 }
 
 /** Read-only counterpart to mergeQwenInstructionImport. */
-export function planQwenInstructionImport(
-  repoRoot: string
-): InstructionImportPlanResult {
+export function planQwenInstructionImport(repoRoot: string): InstructionImportPlanResult {
   const qwenMdPath = qwenInstructionImportPath(repoRoot);
 
   if (!fs.existsSync(qwenMdPath)) {

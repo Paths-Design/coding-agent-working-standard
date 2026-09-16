@@ -31,7 +31,44 @@ const {
   planHookPackInstall,
   installHookPack,
   retireStaleTelemetryRows,
+  planTelemetryRetirement,
 } = require('../../dist/init/hook-install');
+const { spawnSync } = require('child_process');
+const { cleanupAll, makeTempRepo } = require('../helpers/git-repo-factory');
+
+const CLI = path.resolve(__dirname, '..', '..', 'dist', 'index.js');
+
+afterAll(() => {
+  cleanupAll();
+});
+
+/** Spawn the real CLI with CAWS_HOME pinned to a throwaway dir. Without the
+ *  pin the child reads this machine's ~/.caws/surfaces/*, so a developer with
+ *  configured surfaces gets a different verdict than CI — the failure class in
+ *  tests/shell/init-dry-run-alias.test.js. */
+function runCliIsolated(root, args) {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'caws-telemetry-home-'));
+  try {
+    return spawnSync(process.execPath, [CLI, ...args], {
+      cwd: root,
+      encoding: 'utf8',
+      env: { ...process.env, CAWS_QUIET: '1', CAWS_HOME: home },
+    });
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+}
+
+/** A GIT repo with `.caws/` present and one managed telemetry row on disk —
+ *  the state in which an adapter-covered init retires something. The CLI
+ *  resolves its repo root through git, so a bare mkdtemp exits 2 with
+ *  store.repo_root.not_a_git_repo before ever reaching the plan. */
+function repoWithManagedTelemetryRow() {
+  const repoRoot = makeTempRepo();
+  fs.mkdirSync(path.join(repoRoot, '.caws', 'hooks'), { recursive: true });
+  fs.writeFileSync(path.join(repoRoot, '.caws/hooks/session-log.sh'), managedScriptBody());
+  return repoRoot;
+}
 
 function makeTempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'caws-telemetry-cut-'));
@@ -63,7 +100,15 @@ describe('telemetry cut: the manifest shape (A1)', () => {
   test('dsh is the sole adapter-covered surface', () => {
     expect([...ADAPTER_COVERED_SURFACES]).toEqual(['dsh']);
     expect(isAdapterCoveredSurface('dsh')).toBe(true);
-    for (const s of ['claude-code', 'codex', 'opencode', 'zcode', 'kimi-code', 'qwen-code', 'none']) {
+    for (const s of [
+      'claude-code',
+      'codex',
+      'opencode',
+      'zcode',
+      'kimi-code',
+      'qwen-code',
+      'none',
+    ]) {
       expect(isAdapterCoveredSurface(s)).toBe(false);
     }
   });
@@ -101,7 +146,9 @@ describe('telemetry cut: the manifest shape (A1)', () => {
     for (const dest of TELEMETRY_ROW_DEST_PATHS) {
       expect(cutDests).not.toContain(dest);
     }
-    expect(cutDests.length).toBe(SHARED_PACK.installedFiles.length - TELEMETRY_ROW_DEST_PATHS.length);
+    expect(cutDests.length).toBe(
+      SHARED_PACK.installedFiles.length - TELEMETRY_ROW_DEST_PATHS.length
+    );
   });
 
   test('install PLAN for a dsh repo proposes no action on any telemetry row', () => {
@@ -123,7 +170,17 @@ describe('telemetry cut: the manifest shape (A1)', () => {
 
 describe('telemetry cut: non-covered surfaces unchanged (A2)', () => {
   test('every non-covered surface resolves to SHARED_PACK itself', () => {
-    for (const surface of ['claude-code', 'codex', 'opencode', 'zcode', 'kimi-code', 'qwen-code', 'none', 'cursor', 'windsurf']) {
+    for (const surface of [
+      'claude-code',
+      'codex',
+      'opencode',
+      'zcode',
+      'kimi-code',
+      'qwen-code',
+      'none',
+      'cursor',
+      'windsurf',
+    ]) {
       expect(sharedPackForSurface(surface)).toBe(SHARED_PACK);
     }
   });
@@ -159,10 +216,7 @@ describe('telemetry cut: re-init retires stale managed rows (repair path)', () =
     try {
       fs.mkdirSync(path.join(repoRoot, '.caws', 'hooks'), { recursive: true });
       // Managed stale row (has the shared-pack header).
-      fs.writeFileSync(
-        path.join(repoRoot, '.caws/hooks/session-log.sh'),
-        managedScriptBody()
-      );
+      fs.writeFileSync(path.join(repoRoot, '.caws/hooks/session-log.sh'), managedScriptBody());
       // Unmanaged file at a telemetry dest path (local growth).
       fs.writeFileSync(
         path.join(repoRoot, '.caws/hooks/session_log_renderer.py'),
@@ -179,9 +233,9 @@ describe('telemetry cut: re-init retires stale managed rows (repair path)', () =
 
       expect(fs.existsSync(path.join(repoRoot, '.caws/hooks/session-log.sh'))).toBe(false);
       // Local growth survives untouched.
-      expect(fs.readFileSync(path.join(repoRoot, '.caws/hooks/session_log_renderer.py'), 'utf8')).toBe(
-        unmanagedScriptBody()
-      );
+      expect(
+        fs.readFileSync(path.join(repoRoot, '.caws/hooks/session_log_renderer.py'), 'utf8')
+      ).toBe(unmanagedScriptBody());
     } finally {
       fs.rmSync(repoRoot, { recursive: true, force: true });
     }
@@ -194,14 +248,8 @@ describe('telemetry cut: re-init retires stale managed rows (repair path)', () =
       fs.mkdirSync(hooksDir, { recursive: true });
       // Two managed rows; the read-only directory will make both unlinks
       // fail AFTER both reads succeed — exactly the guard's scenario.
-      fs.writeFileSync(
-        path.join(repoRoot, '.caws/hooks/session-log.sh'),
-        managedScriptBody()
-      );
-      fs.writeFileSync(
-        path.join(repoRoot, '.caws/hooks/agent-stop.sh'),
-        managedScriptBody()
-      );
+      fs.writeFileSync(path.join(repoRoot, '.caws/hooks/session-log.sh'), managedScriptBody());
+      fs.writeFileSync(path.join(repoRoot, '.caws/hooks/agent-stop.sh'), managedScriptBody());
       fs.chmodSync(hooksDir, 0o500); // readable, not writable → unlink EPERM
 
       const retire = retireStaleTelemetryRows(repoRoot);
@@ -232,10 +280,7 @@ describe('telemetry cut: re-init retires stale managed rows (repair path)', () =
       // pack's install set does not contain it, so install neither rewrites
       // nor resurrects it — removal is the separate retire step, wired at the
       // init command layer (proven by the CLI e2e in the slice evidence).
-      fs.writeFileSync(
-        path.join(repoRoot, '.caws/hooks/agent-stop.sh'),
-        managedScriptBody()
-      );
+      fs.writeFileSync(path.join(repoRoot, '.caws/hooks/agent-stop.sh'), managedScriptBody());
       const result = installHookPack(sharedPackForSurface('dsh'), {
         repoRoot,
         adopt: true,
@@ -247,6 +292,136 @@ describe('telemetry cut: re-init retires stale managed rows (repair path)', () =
       for (const action of result.actions) {
         expect(TELEMETRY_ROW_DEST_PATHS).not.toContain(action.destPath);
       }
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('CAWS-INIT-PLAN-BLIND-TELEMETRY-RETIREMENT-001: --plan previews the retirement', () => {
+  test('planTelemetryRetirement classifies every row and deletes nothing', () => {
+    const repoRoot = makeTempDir();
+    try {
+      fs.mkdirSync(path.join(repoRoot, '.caws', 'hooks'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, '.caws/hooks/session-log.sh'), managedScriptBody());
+      fs.writeFileSync(
+        path.join(repoRoot, '.caws/hooks/session_log_renderer.py'),
+        unmanagedScriptBody()
+      );
+
+      const preview = planTelemetryRetirement(repoRoot);
+
+      expect([...preview.retire]).toEqual(['.caws/hooks/session-log.sh']);
+      expect([...preview.unmanaged]).toEqual(['.caws/hooks/session_log_renderer.py']);
+      expect([...preview.absent].sort()).toEqual(
+        ['.caws/hooks/agent-heartbeat.sh', '.caws/hooks/agent-stop.sh'].sort()
+      );
+      // The whole point: a preview mutates nothing.
+      expect(fs.existsSync(path.join(repoRoot, '.caws/hooks/session-log.sh'))).toBe(true);
+      expect(
+        fs.readFileSync(path.join(repoRoot, '.caws/hooks/session_log_renderer.py'), 'utf8')
+      ).toBe(unmanagedScriptBody());
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  test('the preview names exactly the rows apply then unlinks (plan/apply parity)', () => {
+    const repoRoot = makeTempDir();
+    try {
+      fs.mkdirSync(path.join(repoRoot, '.caws', 'hooks'), { recursive: true });
+      // Two managed rows, one unmanaged, one absent — all four outcomes.
+      fs.writeFileSync(path.join(repoRoot, '.caws/hooks/session-log.sh'), managedScriptBody());
+      fs.writeFileSync(path.join(repoRoot, '.caws/hooks/agent-stop.sh'), managedScriptBody());
+      fs.writeFileSync(
+        path.join(repoRoot, '.caws/hooks/session_log_renderer.py'),
+        unmanagedScriptBody()
+      );
+
+      const preview = planTelemetryRetirement(repoRoot);
+      const applied = retireStaleTelemetryRows(repoRoot);
+
+      // Parity is the invariant this slice exists to restore: what the
+      // preview promised is exactly what apply did.
+      expect([...preview.retire].sort()).toEqual([...applied.retired].sort());
+      expect([...preview.unmanaged].sort()).toEqual([...applied.unmanaged].sort());
+      expect([...preview.absent].sort()).toEqual([...applied.absent].sort());
+      // Non-vacuous: the fixture really did have rows to retire.
+      expect(preview.retire.length).toBe(2);
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  test('a repo with nothing to retire previews an empty retire set', () => {
+    const repoRoot = makeTempDir();
+    try {
+      fs.mkdirSync(path.join(repoRoot, '.caws', 'hooks'), { recursive: true });
+      const preview = planTelemetryRetirement(repoRoot);
+      expect(preview.retire).toEqual([]);
+      expect([...preview.absent].sort()).toEqual([...TELEMETRY_ROW_DEST_PATHS].sort());
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  test('init --plan --json for an adapter-covered surface enumerates the deletions', () => {
+    const repoRoot = repoWithManagedTelemetryRow();
+    try {
+      const res = runCliIsolated(repoRoot, ['init', '--agent-surface', 'dsh', '--plan', '--json']);
+      expect(res.status).toBe(0);
+      const plan = JSON.parse(res.stdout);
+      expect(plan.read_only).toBe(true);
+      expect(plan.telemetry_retirement).toBeDefined();
+      expect(plan.telemetry_retirement.retire).toContain('.caws/hooks/session-log.sh');
+      // The row is still on disk: --plan promised a deletion, it did not do one.
+      expect(fs.existsSync(path.join(repoRoot, '.caws/hooks/session-log.sh'))).toBe(true);
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  test('the human-readable plan names each row it will unlink', () => {
+    const repoRoot = repoWithManagedTelemetryRow();
+    try {
+      const res = runCliIsolated(repoRoot, ['init', '--agent-surface', 'dsh', '--plan']);
+      expect(res.status).toBe(0);
+      expect(res.stdout).toContain('.caws/hooks/session-log.sh');
+      // It must read as a deletion, not as an unchanged row.
+      expect(res.stdout).toMatch(/retire/i);
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  test('a NON-covered surface reports no retirement even with rows on disk', () => {
+    const repoRoot = repoWithManagedTelemetryRow();
+    try {
+      const res = runCliIsolated(repoRoot, [
+        'init',
+        '--agent-surface',
+        'claude-code',
+        '--plan',
+        '--json',
+      ]);
+      const plan = JSON.parse(res.stdout);
+      // claude-code is not adapter-covered: it retires nothing, so the
+      // section must be absent rather than an empty-but-present promise.
+      expect(plan.telemetry_retirement).toBeUndefined();
+      // The same row that dsh would RETIRE is an INSTALL target here, and the
+      // fixture pins it at an older pack version — so the plan refuses it as
+      // managed drift and exits 1. Asserted rather than ignored, so this test
+      // cannot pass because the plan failed for some unrelated new reason.
+      expect(res.status).toBe(1);
+      expect(plan.hook_pack.actions.filter((a) => a.action === 'refused')).toEqual([
+        {
+          destPath: '.caws/hooks/session-log.sh',
+          action: 'refused',
+          refusalReason: 'managed_drift',
+        },
+      ]);
+      // And the refusal is non-destructive: the row is still on disk.
+      expect(fs.existsSync(path.join(repoRoot, '.caws/hooks/session-log.sh'))).toBe(true);
     } finally {
       fs.rmSync(repoRoot, { recursive: true, force: true });
     }
