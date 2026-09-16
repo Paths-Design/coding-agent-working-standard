@@ -5,7 +5,7 @@ mode: chore
 lifecycle_state: active
 worktree: wt-hook-test-gaps
 created_at: '2026-09-16T06:00:28.191Z'
-updated_at: '2026-09-16T06:00:55.374Z'
+updated_at: '2026-09-16T06:03:32.854Z'
 created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
 blast_radius:
   modules:
@@ -17,6 +17,8 @@ scope:
     - 'TODO: list the file(s) or directories this spec authorizes.'
     - .husky/tests/run.sh
     - .husky/README.md
+    - .husky/lib/prepush-lock.sh
+    - .husky/pre-push
   out: []
 invariants:
   - 'A declared verification gap is an obligation, not a disclaimer: if the check is mechanically cheap, it gets written rather than documented away.'
