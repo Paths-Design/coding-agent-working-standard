@@ -1,0 +1,26 @@
+id: CAWS-EVIDENCE-REDERIVE-A7-ENV-ORACLE-001
+title: 'A7 argv-injection oracle must not depend on an ambient pytest'
+risk_tier: 3
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-16T22:53:48.363Z'
+updated_at: '2026-09-16T22:53:48.363Z'
+created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/src/store'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/store/evidence-rederive.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'the A7 shell-metacharacter test runs on a machine whose ambient python3 cannot import pytest, as under the pre-push hook'
+    when: 'the executor reports unavailable rather than missing'
+    then: 'the test asserts the exact outcome for the environment it is in and still proves the hostile nodeid was never interpreted, passing both with and without an importable pytest'
+non_functional: {}
+contracts: []
