@@ -1,0 +1,31 @@
+id: CAWS-CLI-EXIT-TRUNCATES-PIPED-STDOUT-001
+title: 'caws command exit must flush piped stdout: process.exit discards the buffer, so any >64KB output is silently truncated at exit 0'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-16T04:25:16.428Z'
+updated_at: '2026-09-16T04:25:16.428Z'
+created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/src/shell/register.ts (shared exit hook for all 97 command exits)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/index.js'
+    - 'packages/caws-cli/tests/shell/exit-flushes-piped-stdout.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'exit-flush'
+    type: contract-test
+    path: 'packages/caws-cli/tests/shell/exit-flushes-piped-stdout.test.js'
