@@ -15,8 +15,8 @@
  *  - the executable/detected-only split in `--runner` help is DERIVED from
  *    EXECUTABLE_TEST_RUNNERS, the same constant the dispatch reads, and the
  *    real `--help` output carries it;
- *  - no template's removed-command list names a command the surface still
- *    registers, unless that line also gives the surviving full path.
+ *  - no template's removed-command list names a live `caws specs` leaf without
+ *    also giving that leaf's full path on the same line.
  */
 
 const fs = require('fs');
