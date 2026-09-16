@@ -96,3 +96,10 @@ evidence:
     command: npx jest
     exit_code: 0
     commit_sha: b1197f0f
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "jest … A4 — spawnSync with a 120s timeout reports result.signal === null and result.error undefined, so the natural exit is not waiting on an unreferenced handle. Full suite wall time unchanged (139s vs 124s baseline, within noise)"
+    recorded_at: "2026-09-16T04:38:25.938Z"
+    command: npx jest
+    exit_code: 0
+    commit_sha: b1197f0f
