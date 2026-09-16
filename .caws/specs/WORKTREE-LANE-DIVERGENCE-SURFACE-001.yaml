@@ -27,7 +27,10 @@ scope:
     - 'docs/command-reference.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'READ-ONLY, ALWAYS: divergence is computed with read-only git plumbing (rev-list --count, merge-base --is-ancestor). Neither surface checks out a ref, mutates a working tree, writes .caws/, or appends an event. caws status keeps its default-purity guarantee.'
+  - 'DEGRADE, NEVER FAIL: a missing branch ref, a missing base ref, an unborn base, or any git failure renders an explicit unknown marker naming the reason. Divergence is never fabricated as 0/0, and a divergence failure never changes the exit code of worktree list or status.'
+  - 'FRESHNESS IS DISCLOSED, NOT IMPLIED: the rendered counts are a point-in-time read of LOCAL refs shared across the worktrees. The surface states the reconcile command when the lane does not contain base, and never presents the number as a merge-time guarantee — the CAS in worktree merge is what reconciles.'
+  - 'ONE COMPUTATION, TWO SURFACES: worktree list and status read the same store-layer function over the same (base, branch) pair, so the two surfaces can never disagree about how far a lane has diverged.'
 acceptance:
   - id: A1
     given: 'TODO'
