@@ -68,3 +68,10 @@ evidence:
     command: npx bats tests/hooks/bats/reset-strikes.bats
     exit_code: 0
     commit_sha: "4e7cf268"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "bats A4 asserts a genuinely-unknown session STILL exits non-zero and still prints 'No strike file found' (the fix must not turn a typo into a silent no-op success), AND that the message now names the session ids that do have strike state. A4b covers the empty case: with no strike files at all it refuses without inventing candidates. Observed live during development against the real store, the new refusal printed 'Sessions with strike state:' followed by 28 real session ids - which is also how I discovered the test-isolation defect below."
+    recorded_at: "2026-09-16T08:16:35.334Z"
+    command: npx bats tests/hooks/bats/reset-strikes.bats
+    exit_code: 0
+    commit_sha: "4e7cf268"
