@@ -2,10 +2,11 @@ id: CAWS-CHORE-PRETTIER-BASELINE-001
 title: 'Repo-wide prettier baseline: stop unrelated reflow riding every commit; stop lint-staged reformatting governed spec YAML'
 risk_tier: 2
 mode: chore
-lifecycle_state: active
-worktree: wt-prettier-baseline
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-prettier-baseline at 3aec6fb2de705a25fb9ef515d248d15d29a0d83a'
 created_at: '2026-09-16T07:53:45.081Z'
-updated_at: '2026-09-16T08:14:50.405Z'
+updated_at: '2026-09-16T08:17:39.484Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
