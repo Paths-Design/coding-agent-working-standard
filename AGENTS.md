@@ -10,10 +10,21 @@ under `~/.caws` (or absolute `CAWS_HOME`). The CLI includes its kernel. Run
 the historical v11 architecture names do not pin the current package version.
 The doctrine source is [the command-surface contract](docs/architecture/caws-vnext-command-surface.md).
 
-Set up the machine with `caws init adapters install`, then configure the native
-harness with `caws init adapters configure --agent-surface <surface>`. Both apply
-by default; preview with `--plan`. An agent in that harness must verify native
-trust, lifecycle execution, a guarded-write refusal, and session rendering.
+Machine setup is an **ordered** three-step sequence, and the order is
+load-bearing — each step is performed by the CLI installed in the step before it:
+
+1. **CLI package** — `node scripts/install-cli-snapshot.mjs --package
+   packages/caws-cli --bin "$(command -v caws)"` (only when running a development
+   build; a released install gets this from npm).
+2. **Shared runtime** — `caws init adapters install`.
+3. **Native harness** — `caws init adapters configure --agent-surface <surface>`.
+
+Steps 2 and 3 apply by default; preview with `--plan`. Running them against a
+stale CLI is the trap: `configure` writes the event set *that CLI* knows and
+reports `OK`, so a newer build then reports `System surface settings and native
+registration disagree` and re-running `configure` cannot fix it. Upgrade the CLI
+first. An agent in that harness must verify native trust, lifecycle execution, a
+guarded-write refusal, and session rendering.
 Retire existing project registration once with `caws init adapters migrate` after
 reviewing custom hooks. New projects inherit the configured runtime through
 `caws init --agent-surface <surface>`. Future stock updates require one machine

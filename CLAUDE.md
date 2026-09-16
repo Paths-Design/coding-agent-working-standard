@@ -327,10 +327,38 @@ Full list: `.claude/rules/worktree-isolation.md`.
 ## Shared runtime and native configuration
 
 Project `.caws/` owns governance; `~/.caws` owns shared executable snapshots,
-dispatch, renderers and harness adapters. Use `caws init adapters install` once
-per machine and `configure --agent-surface claude-code` for native user wiring.
+dispatch, renderers and harness adapters.
+
+**These have separate lifecycles and the upgrade order is load-bearing: CLI
+package → shared runtime → native registration.** Each step is carried out by
+the CLI installed in the step before it, so a stale CLI silently poisons the
+steps after it.
+
+1. **CLI package.** The `caws` on your PATH is a *pinned snapshot* under
+   `~/.caws/lib/cli/<release>/`, not a link into this checkout's `dist/` (a link
+   would break every project each time you rebuild). A local build therefore does
+   NOT change the `caws` command. After `npm run build`, activate it with
+   `node scripts/install-cli-snapshot.mjs --package packages/caws-cli --bin
+   "$(command -v caws)"` — it packs, installs, smoke-checks in an isolated
+   project, and only then swaps the symlink atomically, keeping prior snapshots
+   for rollback.
+2. **Shared runtime.** `caws init adapters install` (once per machine).
+3. **Native registration.** `caws init adapters configure --agent-surface
+   claude-code` for native user wiring.
+
 Preview each with `--plan`. Migrate existing project registrations once with
 `adapters migrate --agent-surface claude-code`, preserving custom behavior.
+
+**The failure this ordering prevents:** `configure` wires the lifecycle events
+*the CLI running it* knows about. Run it from a stale CLI and it reports `OK`
+while writing the old event set; a newer build then refuses with `System surface
+settings and native registration disagree; run caws init adapters configure`,
+and following that instruction cannot fix it — the remediation names the step
+*after* the one that is actually stale. Verify with content, not version
+strings: two builds can both say `12.2.0-rc.2` and differ (`grep -c session_end
+"$(dirname "$(readlink -f "$(which caws)")")/init/native-hook-identification.js"`).
+Adding an event to `MACHINE_EVENTS` invalidates every configured surface on the
+machine, so plan that re-configure as part of the change.
 Verify native SessionStart, protected-write refusal, Stop and session rendering
 inside Claude before claiming activation. Template availability is not proof.
 New projects inherit configured machine behavior; legacy packs use diff/port.
