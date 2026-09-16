@@ -103,3 +103,10 @@ evidence:
     command: npx jest
     exit_code: 0
     commit_sha: b1197f0f
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "jest … A5 — registerShellCommands with NO injected exit override, process.exit stubbed to throw: zero calls recorded and process.exitCode is a number. Pre-fix this threw 'process.exit(0) called by the default exit hook' at src/shell/register.ts:389"
+    recorded_at: "2026-09-16T04:38:26.518Z"
+    command: npx jest
+    exit_code: 0
+    commit_sha: b1197f0f
