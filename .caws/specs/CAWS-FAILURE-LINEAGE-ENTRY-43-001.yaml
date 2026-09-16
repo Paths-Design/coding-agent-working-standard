@@ -1,0 +1,27 @@
+id: CAWS-FAILURE-LINEAGE-ENTRY-43-001
+title: 'Failure-lineage Entry 43: five refusals reclassified as friction and solved; the decision was upstream of every gate'
+risk_tier: 3
+mode: doc
+lifecycle_state: draft
+created_at: '2026-09-16T08:57:55.964Z'
+updated_at: '2026-09-16T08:57:55.964Z'
+created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
+blast_radius:
+  modules:
+    - 'docs/failure-lineage.md'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/failure-lineage.md'
+  out: []
+invariants:
+  - 'Every quantitative claim in Entry 43 is reproducible from the two cited turn records or the repo''s own audit artifacts, and every timestamp and quoted reasoning line resolves in the session record it is attributed to.'
+  - 'Entry 43 states that sterling''s outcome was correct, so no reader mistakes the entry for a claim that the deletion was wrong; the finding is about the process carrying no signal either way.'
+acceptance:
+  - id: A1
+    given: 'the sterling burn timeline and the caws deletion incident'
+    when: 'a maintainer reads docs/failure-lineage.md'
+    then: 'Entry 43 records both specimens with verified timestamps and quoted agent reasoning, names the upstream decision point in each, and states what was not verified'
+non_functional: {}
+contracts: []
