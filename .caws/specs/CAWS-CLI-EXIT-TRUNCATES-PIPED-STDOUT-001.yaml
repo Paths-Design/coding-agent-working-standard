@@ -32,6 +32,12 @@ acceptance:
     then: >-
       the captured stdout is complete and parses as JSON, its last non-whitespace
       character is the closing brace, and the process exit status is 0
+  - id: A2
+    given: 'the same repo and the same command'
+    when: 'stdout is captured once through a pipe and once redirected to a file'
+    then: >-
+      the two byte counts are equal, proving the output is not channel-dependent —
+      which is the precise shape of this defect, since the file path never truncated
 non_functional: {}
 contracts:
   - name: 'exit-flush'
