@@ -66,3 +66,10 @@ evidence:
     command: "git diff --name-only | while read f; do head -12 $f | grep -q 'CAWS-MANAGED|@generated|DO NOT EDIT' && echo VIOLATION $f; done"
     exit_code: 0
     artifact_path: packages/caws-cli/tests/init/pack-fingerprint.test.js
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "prettier --file-info now reports {\"ignored\":true} for .caws/specs/CAWS-CHORE-PRETTIER-BASELINE-001.yaml, .caws/policy.yaml and .caws/waivers/WV-0001.yaml; before the slice .caws/specs/*.yaml reported {\"ignored\":false,\"inferredParser\":\"yaml\"}, so lint-staged (which runs prettier --write on staged *.yaml) reformatted governed spec YAML whenever one was staged — with caws specs the only sanctioned writer of that file. Repo-owned files remain formattable, verified by .claude/rules/git-safety.md and packages/caws-cli/src/store/specs-store.ts still reporting ignored:false, so the fence is targeted rather than blanket. NOT VERIFIED: this proves prettier's own ignore resolution via the local binary. It does NOT hold for 'npx prettier', which in this repo bypasses .prettierignore entirely because .npmrc sets workspaces=true — 'npm_config_workspaces=false npx prettier' restores it. Anyone running 'npx prettier --write .' here would still reformat all of .caws/. That is a separate live defect, unfiled."
+    recorded_at: "2026-09-16T08:12:35.559Z"
+    command: ./node_modules/.bin/prettier --file-info .caws/specs/CAWS-CHORE-PRETTIER-BASELINE-001.yaml
+    exit_code: 0
+    artifact_path: .prettierignore
