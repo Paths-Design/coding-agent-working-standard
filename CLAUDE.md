@@ -417,9 +417,10 @@ Three consequences:
   _unlinks_ managed copies (`retireStaleTelemetryRows`). Init for any
   non-covered surface reinstalls them. So **an absent telemetry row is not
   evidence of version lag** — check `git log --diff-filter=D` on the path before
-  restoring it, and pick the refresh surface deliberately. `--plan` cannot warn
-  you: the retirement is apply-only and absent from the plan document, so a
-  preview that says "no changes made" still precedes four deletions.
+  restoring it, and pick the refresh surface deliberately. `--plan` shows you
+  which rows apply would unlink, under "Telemetry rows (adapter-covered surface
+  owns this plane)" and as `telemetry_retirement` in `--plan --json`; read that
+  section before applying.
 
 Reprieves are human-granted session-global exceptions in
 `~/.caws/state/sessions/<session>/`. `--surface` records harness identity and
