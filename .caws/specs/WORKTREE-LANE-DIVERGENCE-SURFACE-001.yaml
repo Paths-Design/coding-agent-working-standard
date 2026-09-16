@@ -65,6 +65,12 @@ acceptance:
       base, ahead=2, behind=3, and the reconcile command to run because the lane
       does not contain base; the byte-identical run mutates nothing under .caws/ and
       appends no event
+  - id: A5
+    given: 'a session whose cwd is the canonical checkout (no tracked worktree match)'
+    when: 'caws status runs'
+    then: >-
+      no lane line is rendered at all — no placeholder, no zero-fill — and the rest
+      of the dashboard is byte-identical to the pre-change baseline
 non_functional: {}
 contracts:
   - name: 'lane-divergence'
