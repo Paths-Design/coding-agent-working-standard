@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-lane-divergence
 created_at: '2026-09-16T03:36:42.856Z'
-updated_at: '2026-09-16T03:37:45.326Z'
+updated_at: '2026-09-16T03:50:54.970Z'
 created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
 blast_radius:
   modules:
@@ -26,6 +26,8 @@ scope:
     - 'packages/caws-cli/tests/shell/worktree-lane-divergence.test.js'
     - 'packages/caws-cli/tests/store/worktree-divergence.test.js'
     - 'docs/command-reference.md'
+    - packages/caws-cli/mutation-policy.json
+    - packages/caws-cli/tests/ci/mutation-contract.test.js
   out: []
 invariants:
   - 'READ-ONLY, ALWAYS: divergence is computed with read-only git plumbing (rev-list --count, merge-base --is-ancestor). Neither surface checks out a ref, mutates a working tree, writes .caws/, or appends an event. caws status keeps its default-purity guarantee.'
