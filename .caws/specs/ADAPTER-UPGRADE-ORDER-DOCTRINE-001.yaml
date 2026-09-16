@@ -18,7 +18,7 @@ scope:
     - docs/guides/hook-packs.md
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The three upgrade steps are stated as an ordered sequence, not an unordered command list'
 acceptance:
   - id: A1
     given: 'TODO'
