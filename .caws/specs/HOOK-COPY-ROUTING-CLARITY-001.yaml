@@ -2,10 +2,11 @@ id: HOOK-COPY-ROUTING-CLARITY-001
 title: 'Document which hook copy governs which surface'
 risk_tier: 3
 mode: doc
-lifecycle_state: active
-worktree: wt-hook-copy-routing
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-hook-copy-routing at 53ed8892ca216b7bf1465ce7f68ac29eff723029'
 created_at: '2026-09-16T04:43:16.740Z'
-updated_at: '2026-09-16T04:43:27.379Z'
+updated_at: '2026-09-16T04:44:04.424Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
