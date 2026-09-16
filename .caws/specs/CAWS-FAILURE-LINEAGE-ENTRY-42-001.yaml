@@ -8,7 +8,7 @@ updated_at: '2026-09-16T07:38:49.139Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'docs/failure-lineage.md'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -16,7 +16,8 @@ scope:
     - 'docs/failure-lineage.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Every quantitative claim in Entry 42 is reproducible from the archived transcripts or the on-disk spec corpus, and every source citation names a file and line that resolves in the current tree.'
+  - 'Entry 42 states what was not verified, so a later reader does not mistake its counts for an audit of the specs they describe.'
 acceptance:
   - id: A1
     given: 'the contract-denial retry data and the shortcut-language specimen'
