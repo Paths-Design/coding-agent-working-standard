@@ -17,7 +17,8 @@ scope:
     - '.claude/rules/worktree-isolation.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The canonical checkout''s HEAD is shared state: every session''s CAWS lifecycle auto-commit lands on whatever branch canonical currently has checked out, regardless of which session created that branch.'
+  - 'Doctrine changes describe the hazard and the sanctioned alternative; they never instruct an agent to work around a guard.'
 acceptance:
   - id: A1
     given: 'an agent about to do non-slice work in a repo with active peer sessions'
