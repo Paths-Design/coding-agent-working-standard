@@ -44,3 +44,12 @@ acceptance:
     then: 'core.hooksPath reads .husky afterwards, proving repair and not merely idempotence'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "T7b starts 16 processes that block on a shared start-gate file and call caws_prepush_lock_acquire the instant it appears; exactly 1 acquires. This test FAILED on first run against the shipped mkdir-based lock with 9 simultaneous winners, and stderr named the mechanism: '.husky/lib/prepush-lock.sh: line 49: .../racelock/pid: No such file or directory' — losers rm -rf'd the winner's lock during the window between mkdir and the pid write. Fixed by making the claim a single ln -s <pid> <lock>. T7a is the liveness control (all 16 wrote a verdict), so a run where processes died cannot masquerade as mutual exclusion. T4g separately asserts the lock carries its owner's pid."
+    recorded_at: "2026-09-16T06:07:32.662Z"
+    command: bash .husky/tests/run.sh
+    exit_code: 0
+    artifact_path: .husky/tests/run.sh
+    commit_sha: "2f98d3c2"
