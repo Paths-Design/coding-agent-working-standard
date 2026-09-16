@@ -112,8 +112,19 @@ SHIM
 chmod +x "$SCRATCH/bin-gitshim/git"
 
 # Vacuity precondition: lint-staged only runs when a file matching
-# .lintstagedrc.json is staged. Without one the hook skips it and T3b would pass
-# by never reaching the code under test.
+# .lintstagedrc.json is staged. On a clean tree there is none, the hook skips
+# lint-staged entirely, and T3b would pass without reaching the code under test.
+# So the test stages its own fixture rather than depending on the caller's index.
+# The path is written literally on purpose: the agent bash-write-guard refuses a
+# parameter-resolved write target, since ownership cannot be decided from text.
+printf '# lint-staged fixture\n\ntransient;   removed   by   run.sh\n' > .husky/tests/.lintfixture.md
+git add .husky/tests/.lintfixture.md >/dev/null 2>&1
+t3_fixture_cleanup() {
+  git rm --cached --quiet --force .husky/tests/.lintfixture.md >/dev/null 2>&1
+  rm -f .husky/tests/.lintfixture.md
+}
+trap 't3_fixture_cleanup; cleanup' EXIT
+
 T3STAGED=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | grep -E '\.(js|jsx|ts|tsx|json|md|ya?ml)$' || true)
 
 : > "$GITLOG"
@@ -146,6 +157,15 @@ fi
 printf '        pre-commit exit=%s, output at %s\n' "$t3_hook_exit" "$T3OUT"
 cp "$T3OUT" "${TMPDIR:-/tmp}/caws-hooktest-precommit.out" 2>/dev/null
 cp "$GITLOG" "${TMPDIR:-/tmp}/caws-hooktest-git-calls.log" 2>/dev/null
+
+t3_fixture_cleanup
+trap cleanup EXIT
+t3_residue=$(git status --porcelain -- .husky/tests/.lintfixture.md | wc -l | tr -d ' ')
+if [ "$t3_residue" = "0" ]; then
+  ok "T3e lint fixture removed from index and disk (no residue)"
+else
+  bad "T3e lint fixture removed from index and disk" "still present in git status"
+fi
 
 if grep -q -- '--no-stash' .husky/pre-commit; then
   ok "T3c pre-commit invokes lint-staged with --no-stash"
