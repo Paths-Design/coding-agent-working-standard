@@ -1,0 +1,26 @@
+id: CAWS-REPO-HUSKY-PREPARE-HOOKSPATH-KILL-001
+title: 'caws-cli prepare runs husky, silently repointing core.hooksPath at a nonexistent .husky/_ and killing every git hook'
+risk_tier: 3
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-16T05:46:15.442Z'
+updated_at: '2026-09-16T05:46:15.442Z'
+created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts: []
