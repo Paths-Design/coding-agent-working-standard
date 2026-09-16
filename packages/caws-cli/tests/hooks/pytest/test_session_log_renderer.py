@@ -12,6 +12,7 @@ templates/hook-packs/shared dir.
 """
 
 import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -569,3 +570,369 @@ class TestKimiTranscript:
         ])
         events = slr.parse_transcript_events(path)
         assert [e["ev"] for e in events] == ["user_text"]
+
+
+# --- Steering + usage signals (SESSION-LOG-STEERING-USAGE-SIGNALS-001) -------
+
+# One usage block, repeated verbatim on every row of a multi-block reply, as
+# Claude Code actually writes it.
+_USAGE = {
+    "input_tokens": 12,
+    "cache_read_input_tokens": 30000,
+    "cache_creation_input_tokens": 700,
+    "output_tokens": 491,
+}
+
+
+def _user_row(text, uuid_, parent=None, ts="2026-09-15T00:00:00Z"):
+    return {"type": "user", "uuid": uuid_, "parentUuid": parent,
+            "timestamp": ts, "message": {"content": text}}
+
+
+def _assistant_rows(message_id, request_id, blocks, usage=_USAGE,
+                    model="claude-opus-5", ts="2026-09-15T00:00:01Z"):
+    """Claude Code writes ONE row per content block, each repeating message+usage."""
+    rows = []
+    for index, block in enumerate(blocks):
+        message = {"id": message_id, "model": model, "content": [block]}
+        if usage is not None:
+            message["usage"] = usage
+        rows.append({"type": "assistant", "uuid": f"{message_id}-{index}",
+                     "parentUuid": None, "timestamp": ts,
+                     "requestId": request_id, "message": message})
+    return rows
+
+
+def _reply(text="done"):
+    return [{"type": "text", "text": text}]
+
+
+def _render(rows):
+    """Render rows end to end and return the turn payloads written to disk."""
+    directory = Path(tempfile.mkdtemp(prefix="caws-slr-render-"))
+    transcript = directory / "transcript.jsonl"
+    transcript.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
+    )
+    slr._render_session_unlocked(
+        log_dir=str(directory), cwd="/repo", session_id="sess-steering",
+        started_at="2026-09-15 00:00:00 PDT", model="claude-opus-5",
+        branch="main", head_sha="abc1234", dirty_count="0", start_sha="abc1234",
+        transcript_path=str(transcript),
+    )
+    return [json.loads(path.read_text(encoding="utf-8"))
+            for path in sorted(directory.glob("turn-*.json"))]
+
+
+class TestTurnUsageAccounting:
+    """A1: exactly one api_request per unique (message id, request id)."""
+
+    def test_multi_block_reply_and_fork_copy_count_as_one_request(self):
+        reply = _assistant_rows("msg_A", "req_A", [
+            {"type": "thinking", "thinking": "..."},
+            {"type": "text", "text": "here is the answer"},
+            {"type": "tool_use", "id": "t1", "name": "Read", "input": {}},
+        ])
+        # A fork or resume copies the same rows verbatim; they must not be
+        # counted a second time.
+        turns = _render([_user_row("do the thing", "u1")] + reply + reply)
+        assert len(turns) == 1
+        assert turns[0]["usage"] == {
+            "requests": 1,
+            "input": 12,
+            "cache_read": 30000,
+            "cache_write": 700,
+            "output": 491,
+            "models": ["claude-opus-5"],
+        }
+
+    def test_fork_copy_in_a_later_turn_is_not_counted_again(self):
+        reply = _assistant_rows("msg_A", "req_A", _reply("first answer"))
+        turns = _render(
+            [_user_row("first", "u1")] + reply
+            + [_user_row("second", "u2")] + reply
+        )
+        assert len(turns) == 2
+        assert turns[0]["usage"]["requests"] == 1
+        # Second turn saw only the duplicate, so it records no usage at all
+        # rather than a zero-filled block.
+        assert "usage" not in turns[1]
+
+    def test_distinct_requests_in_one_turn_sum(self):
+        turns = _render(
+            [_user_row("do the thing", "u1")]
+            + _assistant_rows("msg_A", "req_A", _reply("step one"))
+            + _assistant_rows("msg_B", "req_B", _reply("step two"))
+        )
+        assert turns[0]["usage"]["requests"] == 2
+        assert turns[0]["usage"]["output"] == 982
+        assert turns[0]["usage"]["input"] == 24
+
+    def test_same_message_id_under_a_new_request_id_counts_twice(self):
+        # The dedup key is the PAIR. A retry reuses the message id but is a
+        # second billed request, so keying on message id alone would undercount.
+        turns = _render(
+            [_user_row("do the thing", "u1")]
+            + _assistant_rows("msg_A", "req_A", _reply("attempt"))
+            + _assistant_rows("msg_A", "req_RETRY", _reply("attempt"))
+        )
+        assert turns[0]["usage"]["requests"] == 2
+
+    def test_models_are_listed_once_each_in_first_seen_order(self):
+        turns = _render(
+            [_user_row("do the thing", "u1")]
+            + _assistant_rows("msg_A", "req_A", _reply("a"), model="claude-opus-5")
+            + _assistant_rows("msg_B", "req_B", _reply("b"), model="claude-haiku-4-5")
+            + _assistant_rows("msg_C", "req_C", _reply("c"), model="claude-opus-5")
+        )
+        assert turns[0]["usage"]["models"] == ["claude-opus-5", "claude-haiku-4-5"]
+
+    def test_transcript_without_usage_renders_no_usage_block(self):
+        # Invariant: absent, never zero-filled — a zero block would read as
+        # "this turn was free" instead of "this harness records nothing".
+        turns = _render(
+            [_user_row("do the thing", "u1")]
+            + _assistant_rows("msg_A", "req_A", _reply("answer"), usage=None)
+        )
+        assert len(turns) == 1
+        assert "usage" not in turns[0]
+
+
+class TestInterruptKind:
+    """A2: the two interrupt shapes are distinct steering acts."""
+
+    def test_tool_interrupt_and_generation_interrupt_are_distinguished(self):
+        turns = _render(
+            [_user_row("first prompt", "u1")]
+            + _assistant_rows("msg_A", "req_A", _reply("about to run rm -rf"))
+            + [_user_row("[Request interrupted by user for tool use]", "i1")]
+            + [_user_row("second prompt", "u2")]
+            + _assistant_rows("msg_B", "req_B", _reply("a long ramble"))
+            + [_user_row("[Request interrupted by user]", "i2")]
+        )
+        assert [turn["ended_by"] for turn in turns] == [
+            "user_interrupt_tool",
+            "user_interrupt_generation",
+        ]
+
+    def test_legacy_collapsed_value_is_never_emitted(self):
+        turns = _render(
+            [_user_row("first prompt", "u1")]
+            + _assistant_rows("msg_A", "req_A", _reply("working"))
+            + [_user_row("[Request interrupted by user]", "i1")]
+        )
+        assert "user_interrupt" not in {turn["ended_by"] for turn in turns}
+
+    def test_uninterrupted_turn_reports_no_ended_by(self):
+        turns = _render(
+            [_user_row("first prompt", "u1")]
+            + _assistant_rows("msg_A", "req_A", _reply("finished cleanly"))
+        )
+        assert turns[0]["ended_by"] is None
+
+
+class TestRewindDetection:
+    """A3: a second turn-opening prompt on one parent means the user rewound."""
+
+    def test_same_text_and_edited_text_rewinds_are_classified(self):
+        turns = _render(
+            [_user_row("analyze the module", "u1", parent="close-1")]
+            + _assistant_rows("msg_A", "req_A", _reply("first attempt"))
+            + [_user_row("analyze the module", "u2", parent="close-1")]
+            + _assistant_rows("msg_B", "req_B", _reply("second attempt"))
+            + [_user_row("summarize the module", "u3", parent="close-2")]
+            + _assistant_rows("msg_C", "req_C", _reply("third attempt"))
+            + [_user_row("summarize the module briefly", "u4", parent="close-2")]
+            + _assistant_rows("msg_D", "req_D", _reply("fourth attempt"))
+        )
+        assert len(turns) == 4
+        assert (turns[1]["rewound_from"], turns[1]["rewind_kind"]) == (1, "same_prompt")
+        assert (turns[3]["rewound_from"], turns[3]["rewind_kind"]) == (3, "edited_prompt")
+        # The abandoned branches report that their work no longer counts.
+        assert [turn["status"] for turn in turns] == ["rewound", "ok", "rewound", "ok"]
+
+    def test_a_third_attempt_points_at_the_attempt_it_replaced(self):
+        turns = _render(
+            [_user_row("try", "u1", parent="close-1")]
+            + _assistant_rows("msg_A", "req_A", _reply("one"))
+            + [_user_row("try again", "u2", parent="close-1")]
+            + _assistant_rows("msg_B", "req_B", _reply("two"))
+            + [_user_row("try once more", "u3", parent="close-1")]
+            + _assistant_rows("msg_C", "req_C", _reply("three"))
+        )
+        assert turns[1]["rewound_from"] == 1
+        assert turns[2]["rewound_from"] == 2
+        assert [turn["status"] for turn in turns] == ["rewound", "rewound", "ok"]
+
+    def test_rewound_outranks_the_outcome_status(self):
+        # A turn whose last tool errored AND was then rewound past must report
+        # "rewound": the error belongs to work the user discarded, so surfacing
+        # it as the turn's status would put a dead branch's failure on the log.
+        errored = _assistant_rows("msg_A", "req_A", [
+            {"type": "text", "text": "trying"},
+            {"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "false"}},
+        ])
+        failure = {"type": "user", "uuid": "r1", "parentUuid": "msg_A-1",
+                   "timestamp": "2026-09-15T00:00:02Z",
+                   "message": {"content": [{"type": "tool_result", "tool_use_id": "t1",
+                                            "content": "boom", "is_error": True}]}}
+        turns = _render(
+            [_user_row("run it", "u1", parent="close-1")] + errored + [failure]
+            + [_user_row("run it differently", "u2", parent="close-1")]
+            + _assistant_rows("msg_B", "req_B", _reply("worked"))
+        )
+        assert turns[0]["status"] == "rewound"
+        assert turns[1]["rewound_from"] == 1
+
+    def test_parallel_tool_fan_out_is_not_a_rewind(self):
+        # A message issuing two tool calls fans out parentUuid exactly as a
+        # rewind does, but tool rows never open a turn.
+        fan_out = _assistant_rows("msg_A", "req_A", [
+            {"type": "text", "text": "reading both"},
+            {"type": "tool_use", "id": "t1", "name": "Read", "input": {}},
+            {"type": "tool_use", "id": "t2", "name": "Read", "input": {}},
+        ])
+        results = [
+            {"type": "user", "uuid": "r1", "parentUuid": "msg_A-2",
+             "timestamp": "2026-09-15T00:00:02Z",
+             "message": {"content": [{"type": "tool_result", "tool_use_id": "t1",
+                                      "content": "file one"}]}},
+            {"type": "user", "uuid": "r2", "parentUuid": "msg_A-2",
+             "timestamp": "2026-09-15T00:00:02Z",
+             "message": {"content": [{"type": "tool_result", "tool_use_id": "t2",
+                                      "content": "file two"}]}},
+        ]
+        turns = _render([_user_row("read both files", "u1", parent="close-1")]
+                        + fan_out + results)
+        assert len(turns) == 1
+        assert "rewound_from" not in turns[0]
+        assert turns[0]["status"] != "rewound"
+
+    def test_noise_row_sharing_a_parent_is_not_a_rewind(self):
+        # Observed live: running a local command after a prompt re-parents a
+        # <local-command-caveat> row onto the same turn-closing record.
+        caveat = ("<local-command-caveat>Caveat: The messages below were "
+                  "generated by the user while running local commands.")
+        turns = _render(
+            [_user_row("continue", "u1", parent="close-1")]
+            + _assistant_rows("msg_A", "req_A", _reply("continuing"))
+            + [_user_row(caveat, "u2", parent="close-1")]
+        )
+        assert len(turns) == 1
+        assert "rewound_from" not in turns[0]
+
+    def test_root_parented_prompts_are_not_rewinds_of_each_other(self):
+        # parentUuid null is the transcript root, not lineage. A resumed
+        # session can carry several, and treating null as a shared parent
+        # would report every one of them as a rewind of the first.
+        turns = _render(
+            [_user_row("first", "u1", parent=None)]
+            + _assistant_rows("msg_A", "req_A", _reply("one"))
+            + [_user_row("second", "u2", parent=None)]
+            + _assistant_rows("msg_B", "req_B", _reply("two"))
+        )
+        assert len(turns) == 2
+        assert all("rewound_from" not in turn for turn in turns)
+        assert all(turn["status"] == "ok" for turn in turns)
+
+    def test_interrupt_row_does_not_claim_a_conversational_slot(self):
+        # Interrupts carry a parentUuid too, but they are session events, not
+        # prompts — a later prompt on that parent is a normal turn.
+        turns = _render(
+            [_user_row("do it", "u1", parent="close-1")]
+            + _assistant_rows("msg_A", "req_A", _reply("working"))
+            + [_user_row("[Request interrupted by user]", "i1", parent="close-1")]
+            + [_user_row("try differently", "u2", parent="close-2")]
+            + _assistant_rows("msg_B", "req_B", _reply("ok"))
+        )
+        assert all("rewound_from" not in turn for turn in turns)
+
+
+class TestRealTranscriptUsageParity:
+    """A6: rendered session usage matches an independent dedup over the file."""
+
+    @staticmethod
+    def _transcript():
+        override = os.environ.get("CAWS_SESSION_LOG_PARITY_TRANSCRIPT")
+        if override:
+            return Path(override)
+        root = Path.home() / ".claude" / "projects"
+        if not root.is_dir():
+            return None
+        candidates = [p for p in root.glob("*/*.jsonl") if p.stat().st_size > 200_000]
+        return max(candidates, key=lambda p: p.stat().st_size) if candidates else None
+
+    @staticmethod
+    def _oracle(path):
+        """Count requests and tokens WITHOUT the renderer's adapter.
+
+        Deliberately independent: it reads the raw JSONL and keys on
+        (message.id, requestId) itself, so a defect shared with the adapter
+        cannot make both sides agree.
+        """
+        seen = {}
+        with path.open(encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(row, dict) or row.get("type") != "assistant":
+                    continue
+                message = row.get("message")
+                if not isinstance(message, dict):
+                    continue
+                usage = message.get("usage")
+                message_id = message.get("id")
+                if not isinstance(usage, dict) or not isinstance(message_id, str):
+                    continue
+                request_id = row.get("requestId")
+                key = (message_id, request_id if isinstance(request_id, str) else None)
+                seen.setdefault(key, usage)
+        totals = {"requests": len(seen), "input": 0, "cache_read": 0,
+                  "cache_write": 0, "output": 0}
+        source = {"input": "input_tokens", "cache_read": "cache_read_input_tokens",
+                  "cache_write": "cache_creation_input_tokens", "output": "output_tokens"}
+        for usage in seen.values():
+            for target, field in source.items():
+                value = usage.get(field)
+                if isinstance(value, int) and not isinstance(value, bool):
+                    totals[target] += value
+        return totals
+
+    def test_session_totals_match_an_independent_dedup_count(self):
+        import pytest
+
+        path = self._transcript()
+        if path is None or not path.is_file():
+            pytest.skip("no local Claude transcript available for parity")
+
+        directory = Path(tempfile.mkdtemp(prefix="caws-slr-parity-"))
+        slr._render_session_unlocked(
+            log_dir=str(directory), cwd="/repo", session_id=path.stem,
+            started_at="2026-09-15 00:00:00 PDT", model="claude-opus-5",
+            branch="main", head_sha="abc1234", dirty_count="0", start_sha="abc1234",
+            transcript_path=str(path),
+        )
+        payloads = [json.loads(p.read_text(encoding="utf-8"))
+                    for p in sorted(directory.glob("turn-*.json"))]
+        rendered = {"requests": 0, "input": 0, "cache_read": 0,
+                    "cache_write": 0, "output": 0}
+        for payload in payloads:
+            usage = payload.get("usage")
+            if not usage:
+                continue
+            for field in rendered:
+                rendered[field] += usage[field]
+
+        oracle = self._oracle(path)
+        # Captured by pytest unless the test fails, where it is the diagnostic.
+        print(f"parity source={path} turns={len(payloads)} "
+              f"rendered={rendered} oracle={oracle} "
+              f"rewinds={[(p['turn'], p['rewound_from'], p['rewind_kind']) for p in payloads if 'rewound_from' in p]} "
+              f"interrupts={[(p['turn'], p['ended_by']) for p in payloads if p['ended_by']]}")
+        assert oracle["requests"] > 0, f"{path} carries no usage to compare"
+        assert rendered == oracle
