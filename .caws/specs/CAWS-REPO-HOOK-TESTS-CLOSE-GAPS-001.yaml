@@ -2,10 +2,11 @@ id: CAWS-REPO-HOOK-TESTS-CLOSE-GAPS-001
 title: 'Close the three mechanically-checkable gaps the hook suite declared: real lock contention, pre-push end to end, and prepare repairing a wrong core.hooksPath'
 risk_tier: 3
 mode: chore
-lifecycle_state: active
-worktree: wt-hook-test-gaps
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-hook-test-gaps at e259d5e472ce2113a26bf4d3732c9597ecae2e0f'
 created_at: '2026-09-16T06:00:28.191Z'
-updated_at: '2026-09-16T06:03:32.854Z'
+updated_at: '2026-09-16T06:09:39.134Z'
 created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
 blast_radius:
   modules:
