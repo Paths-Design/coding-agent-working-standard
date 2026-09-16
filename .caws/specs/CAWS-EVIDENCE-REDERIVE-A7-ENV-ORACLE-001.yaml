@@ -16,7 +16,7 @@ scope:
     - 'packages/caws-cli/tests/store/evidence-rederive.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The A7 oracle asserts an exact outcome derived from whether the ambient python3 can import pytest; it never accepts a set of outcomes, and it proves in both environments that the hostile nodeid reached the runner as a single literal operand and was never interpreted by a shell.'
 acceptance:
   - id: A1
     given: 'the A7 shell-metacharacter test runs on a machine whose ambient python3 cannot import pytest, as under the pre-push hook'
