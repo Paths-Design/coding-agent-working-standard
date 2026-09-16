@@ -48,3 +48,11 @@ non_functional: {}
 contracts:
   - name: 'spec-schema-authority'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "END-TO-END through the real filesystem and real CLI, not an in-memory fixture: a temp git repo is initialized via 'caws init', a legacy schema is written to .caws/schemas/working-spec.schema.json, and 'caws doctor --repair-plan --json' reports items[].source_rule 'doctor.init.legacy_working_spec_schema_present' with subject equal to that exact path. This is the test that fails against the pre-fix code. NON-VACUOUS AND CRITICAL: restoring the pre-fix observation (LEGACY_SPEC_SCHEMA_RELPATHS reduced to the root entry only) turns 3 store tests RED while ALL 9 kernel+shell tests stay GREEN - so the kernel unit tests alone were structurally blind to the actual defect, which lived in the store observation rather than the rule."
+    recorded_at: "2026-09-16T06:57:06.281Z"
+    command: npx jest tests/store/doctor-snapshot-legacy-spec-schema.test.js tests/kernel/unit/doctor-legacy-spec-schema.test.ts
+    exit_code: 0
+    commit_sha: fd4c2108
