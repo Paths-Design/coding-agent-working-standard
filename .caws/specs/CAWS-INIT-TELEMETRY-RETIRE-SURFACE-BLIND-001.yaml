@@ -1,0 +1,45 @@
+id: CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001
+title: 'Telemetry-row retirement is surface-blind and strips telemetry from non-covered surfaces sharing the project dispatchers'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-16T05:28:15.983Z'
+updated_at: '2026-09-16T05:28:15.983Z'
+created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
+blast_radius:
+  modules:
+    - 'caws-cli telemetry retirement + doctor advisory'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/init/hook-install.ts'
+    - 'packages/caws-cli/src/shell/commands/init.ts'
+    - 'packages/caws-cli/src/kernel/doctor/inspect.ts'
+    - 'packages/caws-cli/src/store/doctor-snapshot.ts'
+    - 'packages/caws-cli/tests/init/adapter-covered-telemetry-cut.test.js'
+  out: []
+invariants:
+  - 'A repair a guard prescribes must never remove capability that another installed surface still depends on; a remediation that disarms a live guard plane is worse than the drift it discharges.'
+  - 'Dual-writer is a claim about two writers over the SAME state, not about two surfaces that each write their own session''s state; the distinction decides whether retirement is correct.'
+acceptance:
+  - id: A1
+    given: 'a repo where an adapter-covered surface (dsh) and a non-covered surface that routes through .caws/hooks/dispatch (qwen-code, zcode or opencode) both have packs installed'
+    when: 'caws init runs for the covered surface'
+    then: 'the shared telemetry rows are retained, because the non-covered surface''s dispatchers still invoke them and its telemetry is not owned by any harness adapter'
+  - id: A2
+    given: 'the same mixed-surface repo'
+    when: 'caws doctor evaluates doctor.hooks.stale_telemetry_pack'
+    then: 'the finding does not fire, because the rows are not stale while a non-covered surface depends on them'
+  - id: A3
+    given: 'a repo where ONLY adapter-covered surfaces are installed'
+    when: 'caws init runs for the covered surface'
+    then: 'the managed shared telemetry rows are still retired, preserving the existing CAWS-HARNESS-TELEMETRY-ADAPTER-001 behavior for the single-surface case'
+  - id: A4
+    given: 'a file at a telemetry dest path without a hook_pack shared managed header'
+    when: 'retirement runs under any surface configuration'
+    then: 'the file is never touched, preserving the unmanaged-growth guarantee'
+non_functional: {}
+contracts:
+  - name: 'telemetry-retirement-scope'
+    type: behavior
