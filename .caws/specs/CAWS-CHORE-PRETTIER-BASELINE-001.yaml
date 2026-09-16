@@ -1,0 +1,52 @@
+id: CAWS-CHORE-PRETTIER-BASELINE-001
+title: 'Repo-wide prettier baseline: stop unrelated reflow riding every commit; stop lint-staged reformatting governed spec YAML'
+risk_tier: 2
+mode: chore
+lifecycle_state: draft
+created_at: '2026-09-16T07:53:45.081Z'
+updated_at: '2026-09-16T07:53:45.081Z'
+created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
+blast_radius:
+  modules:
+    - 'repo-wide formatting baseline'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - '.prettierignore'
+    - 'docs'
+    - 'scripts'
+    - 'codemod'
+    - 'packages/caws-cli'
+    - 'packages/caws-cli/src/kernel'
+    - '.claude'
+    - '.github'
+    - 'AGENTS.md'
+    - 'README.md'
+    - 'CHANGELOG.md'
+    - 'CONTRIBUTING.md'
+    - 'CODE_OF_CONDUCT.md'
+    - 'COMMIT_CONVENTIONS.md'
+    - 'MANUAL_RELEASE.md'
+    - 'QWEN.md'
+    - 'SECURITY.md'
+    - 'jest.config.js'
+  out: []
+invariants:
+  - 'The slice changes formatting only: no source file changes meaning, proven by the full CLI suite passing at the same counts as the pre-slice baseline.'
+  - 'Governed CAWS state (.caws/) and every CAWS-MANAGED or @generated artifact is excluded from formatting and byte-identical after the slice, so no pack fingerprint shifts and no consumer re-propagation is forced.'
+acceptance:
+  - id: A1
+    given: 'a repo where prettier reports 580 tracked files as unformatted'
+    when: 'the baseline slice lands'
+    then: 'prettier --list-different over tracked files reports zero, so a later commit touching one file no longer carries unrelated reflow'
+  - id: A2
+    given: 'the hook-pack fingerprint baseline and the generated-artifact checks'
+    when: 'the baseline slice lands'
+    then: 'every CAWS-MANAGED and @generated file is byte-identical to its pre-slice content and the pack fingerprint test passes unchanged'
+  - id: A3
+    given: 'lint-staged reformatting whatever is staged'
+    when: 'a governed .caws/specs/*.yaml is staged after this slice'
+    then: 'prettier reports it ignored, so the CLI remains the sole writer of spec YAML'
+non_functional: {}
+contracts: []
