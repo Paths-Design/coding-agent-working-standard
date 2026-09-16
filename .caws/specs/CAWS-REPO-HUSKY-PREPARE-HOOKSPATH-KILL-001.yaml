@@ -8,7 +8,7 @@ updated_at: '2026-09-16T05:46:32.605Z'
 created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'packages/caws-cli/package.json (prepare lifecycle script) and the repo-root hook wiring it silently overrides'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -20,7 +20,9 @@ scope:
     - .husky/tests/run.sh
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'No lifecycle script may reconfigure core.hooksPath as a silenced side effect; a command that can disable every git hook must fail loudly or not run at all.'
+  - 'A guard''s delivery mechanism must be reachable by the command that documents it. If npm run <script> does not reach the root script, the script is not installed.'
+  - 'Silencing output and forcing the exit code (>/dev/null 2>&1 || true) turns a failure into an invisible state change, and is banned for anything that mutates git configuration.'
 acceptance:
   - id: A1
     given: 'TODO'
