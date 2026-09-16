@@ -2,9 +2,10 @@ id: CAWS-REPO-GIT-HOOKS-DEAD-HOOKSPATH-001
 title: 'Restore this repo''s git hooks: fix core.hooksPath and rewrite the hooks onto the v11 surface'
 risk_tier: 3
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-git-hooks-revive
 created_at: '2026-09-16T04:58:52.855Z'
-updated_at: '2026-09-16T04:58:52.855Z'
+updated_at: '2026-09-16T04:59:27.091Z'
 created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
 blast_radius:
   modules:
