@@ -82,3 +82,11 @@ evidence:
     exit_code: 0
     artifact_path: .husky/tests/run.sh
     commit_sha: "1eaf6be3"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "T4a-T4e exercise the lock primitive against a scratch lock dir: acquire on free lock succeeds; a second acquire from a separate process is refused while the holder lives; release by the owner removes it; a lock held by a dead pid is reclaimed rather than wedging pushes; release by a non-owner is a no-op. T5 asserts pre-push exits 1 when lib/prepush-lock.sh is absent (fails closed, not silently unlocked). NOT verified: the four CI stages end to end (a 15-minute build per run) and a real two-process mkdir race."
+    recorded_at: "2026-09-16T05:43:46.248Z"
+    command: bash .husky/tests/run.sh
+    exit_code: 0
+    artifact_path: .husky/lib/prepush-lock.sh
+    commit_sha: "1eaf6be3"
