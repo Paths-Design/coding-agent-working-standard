@@ -37,7 +37,7 @@ it unmanaged; only deleting the header does.) See [`CLAUDE.md`](./CLAUDE.md)
 
 ## How the pack runs
 
-Claude Code reads `.claude/settings.json` at session start and invokes four
+Claude Code reads `.claude/settings.json` at session start and invokes five
 dispatchers under `caws_dispatch/`. Each reads stdin once via
 `lib/parse-input.sh`, then fans out to a registered handler list via
 `lib/run-handlers.sh`.
@@ -48,6 +48,7 @@ dispatchers under `caws_dispatch/`. Each reads stdin once via
 | `caws_dispatch/post_tool_use.sh` | `PostToolUse` | Write, Edit, Bash, ExitPlanMode | 60 s |
 | `caws_dispatch/session_start.sh` | `SessionStart` | — | 30 s |
 | `caws_dispatch/stop.sh` | `Stop` | — | 30 s |
+| `caws_dispatch/session_end.sh` | `SessionEnd` | — | 10 s |
 
 `session-log.sh` is additionally wired on `PreCompact` so transcripts survive
 context compaction.
@@ -94,7 +95,7 @@ out** of the PostToolUse handler list (opt-in), and `worktree-pin-guard.sh` is
 worktree pin is a repo policy choice; see failure-lineage Entry 41). Wire them
 in `dispatch/post_tool_use.sh` / `dispatch/pre_tool_use.sh` if you want them.
 
-## SessionStart / Stop handlers
+## SessionStart / Stop / SessionEnd handlers
 
 | Handler | Event | What it does |
 |---|---|---|
@@ -102,10 +103,30 @@ in `dispatch/post_tool_use.sh` / `dispatch/pre_tool_use.sh` if you want them.
 | `agent-register.sh` | SessionStart | Registers the session into the `.caws/leases/` liveness substrate via `caws agents register`. Non-blocking. |
 | `agent-stop.sh` | Stop | Marks the lease stopped on clean exit via `caws agents stop`. Best-effort — a crashed session never reaches Stop; heartbeat TTL is the primary liveness signal. |
 | `plan-transcript-finalize.sh` | Stop | Overwrites each pending plan snapshot with the final turn-end transcript. |
+| `session-log.sh` | SessionEnd | Seals `.meta.json` with `ended: {reason, ts}` and the session's aggregate token usage. |
 
 `audit.sh` runs on both PreToolUse and PostToolUse, appending a per-tool-call
 audit entry. `session-log.sh` runs on PostToolUse and `PreCompact`, writing the
 per-turn narrative and structured transcripts via `session_log_renderer.py`.
+
+## Session-log diagnostic signals
+
+The renderer records three signals that describe *how* a turn ran, on top of
+what it did. They are diagnostic, not governance — nothing gates on them:
+
+| Field | Where | Meaning |
+|---|---|---|
+| `usage` | turn + `.meta.json` | Per-turn `{requests, input, cache_read, cache_write, output, models}`, one entry per API response, deduplicated by `(message_id, request_id)` across the whole session. Summed into `.meta.json` at SessionEnd. |
+| `rewound_from` / `rewind_kind` | turn | The earlier turn number this prompt replaced, and whether the retry was a `same_prompt` or an `edited_prompt`. The superseded turn's `status` becomes `rewound`. |
+| `ended_by` | turn | Splits a user interrupt into `user_interrupt_tool` (stopped a tool call) vs `user_interrupt_generation` (stopped the reply). |
+
+Absent is meaningful: a harness that reports no usage renders **no** `usage`
+key rather than a zero-filled one, so "not measured" stays distinguishable from
+"measured zero".
+
+These live in `.caws/sessions/` because raw harness transcripts are not durable
+— Claude Code's `cleanupPeriodDays` purges them on its own schedule, and a purge
+takes the only record of a session's cost and steering history with it.
 
 ## Shared libraries (`lib/`) — sourced, not wired
 
@@ -114,7 +135,7 @@ These are **not** handlers in any dispatcher list. Other hooks `source` them.
 | Library | Sourced by | Provides |
 |---|---|---|
 | `lib/parse-input.sh` | every handler / dispatcher | parses the tool-call JSON into `HOOK_*` env vars |
-| `lib/run-handlers.sh` | the four dispatchers | the handler fan-out loop + exit-code aggregation |
+| `lib/run-handlers.sh` | the five dispatchers | the handler fan-out loop + exit-code aggregation |
 | `lib/caws-state.sh` | state-reading hooks | v10/v11 dual-shape registry + canonical-root resolution |
 | `lib/emit.sh` | hooks that emit envelopes | the three Claude Code hook-output envelope shapes |
 | `lib/guard-message.sh` | the write/exec guards | stable, greppable guard-identity + remediation strings |

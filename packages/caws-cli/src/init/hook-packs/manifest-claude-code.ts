@@ -199,7 +199,12 @@ import type { HookPackV1 } from './types';
 // `edit_stance:` growth framing (repo owns/grows the hook; edits preserved;
 // only editing-to-bypass is out of bounds). Bump re-propagates the reframed
 // header to consumers on next caws init.
-export const CLAUDE_CODE_PACK_VERSION = 22;
+// Version 23: SESSION-LOG-STEERING-USAGE-SIGNALS-001. The surface gains a fifth
+// dispatcher (`SessionEnd`) in `lifecycleEvents`, and README.md documents it
+// alongside the session-log's usage / rewind / interrupt-kind signals. Without
+// the bump a consumer already on v22 keeps four wired dispatchers and never
+// receives the SessionEnd seal.
+export const CLAUDE_CODE_PACK_VERSION = 23;
 
 export const CLAUDE_CODE_PACK: HookPackV1 = {
   id: 'claude-code',
