@@ -1,0 +1,45 @@
+id: CAWS-SPEC-SCHEMA-AUTHORITY-UNSTATED-001
+title: 'Project-local spec schema is dead but nothing says so: doctor misses the schemas/ copy and validate never names its authority'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-16T06:46:40.145Z'
+updated_at: '2026-09-16T06:46:40.145Z'
+created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
+blast_radius:
+  modules:
+    - 'caws-cli specs validate + doctor init residue'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/doctor-snapshot.ts'
+    - 'packages/caws-cli/src/kernel/doctor/inspect.ts'
+    - 'packages/caws-cli/src/kernel/doctor/rules.ts'
+    - 'packages/caws-cli/src/kernel/doctor/types.ts'
+    - 'packages/caws-cli/src/store/types.ts'
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'a project with a legacy spec schema at .caws/schemas/working-spec.schema.json and none at the .caws/ root'
+    when: 'caws doctor runs'
+    then: 'the legacy-schema finding fires naming that path, because the file is the same dead authority one directory down'
+  - id: A2
+    given: 'a project with the legacy schema at the .caws/ root'
+    when: 'caws doctor runs'
+    then: 'the existing root-path finding still fires unchanged, so widening detection does not regress or duplicate the original rule'
+  - id: A3
+    given: 'any valid spec file'
+    when: 'caws specs validate <file> succeeds'
+    then: 'the output names the schema authority it validated against, so an operator holding a project-local schema learns which one governs instead of having to reconcile two'
+  - id: A4
+    given: 'a project with NO legacy schema at either path'
+    when: 'caws doctor runs'
+    then: 'no legacy-schema finding fires, so the widened check cannot manufacture a false positive'
+non_functional: {}
+contracts:
+  - name: 'spec-schema-authority'
+    type: behavior
