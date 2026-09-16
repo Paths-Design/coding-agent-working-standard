@@ -55,8 +55,8 @@ evidence:
     commit_sha: "2f98d3c2"
   - criterion_id: A2
     status: pass
-    evidence_ref: "Anti-vacuity: T8f flips exactly one stage to failure and demands a different exit code and message, so a hook that ignored stage results could not pass both T8b and T8f."
-    recorded_at: "2026-09-16T06:08:30.191Z"
+    evidence_ref: "T8 executes the REAL .husky/pre-push (not a reimplementation) with npm/npx/timeout replaced by EXPORTED SHELL FUNCTIONS, because pre-push itself prepends /usr/local/bin to PATH so no stub directory can ever win. Stage-log artifact: '1 npx turbo run lint lock=held | 2 npm audit --audit-level=critical lock=held | 3 npm run build lock=held | 4 npm test lock=held'. Hook stdout: 'pre-push: mirroring CI (lint, audit, build, test) / [1/4] lint / [2/4] audit / [3/4] build / [4/4] test (full suite) / pre-push: all checks passed', exit 0 (T8b). T8c pins stage ORDER; T8d pins that the lock symlink is held during every stage; T8e that it is released on exit; T8f that CAWS_STAGE_FAIL=audit yields exit 1 plus 'refusing the push'; T8g that the real lock path resolves onto the common git dir (/Users/darianrosebrook/Desktop/Projects/caws/.git/caws-prepush.lock). ANTI-VACUITY: T8a is a gate asserting type -t npm/npx/timeout == function,function,function inside a child shell replaying pre-push's own PATH/nvm preamble, and it REFUSES to run the hook otherwise — it failed twice for real (stub dir lost to nvm's PATH prepend, then to /usr/local/bin) rather than silently launching a 15-minute build. T8f flips exactly one stage to failure and demands a different exit code and message, so a hook that ignored stage results could not pass both T8b and T8f. NOT EXERCISED: the real run_with_timeout and its 124 timeout branch, since timeout is itself one of the stubbed functions."
+    recorded_at: "2026-09-16T06:09:03.329Z"
     command: bash .husky/tests/run.sh
     exit_code: 0
     artifact_path: .husky/pre-push
