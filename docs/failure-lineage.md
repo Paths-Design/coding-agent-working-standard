@@ -4450,6 +4450,51 @@ by the resolver, never supplied by the caller, and is checkable against the
 record's `platform` — which is the bar any proposal here has to clear. _This is
 a proposal; nothing implements it._
 
+### The axis is turns, not hardness
+
+Both specimens routed by **reframing**, and reframing needs a next turn. That
+makes "how many turns does this control leave the agent" the variable that
+actually predicts whether a control holds — not how strict it is. Ordering every
+control this document touches by that variable explains results that look
+contradictory under a hardness reading:
+
+| Control                       | Refuses  | Explains                | Turns left | Result                            |
+| ----------------------------- | -------- | ----------------------- | ---------- | --------------------------------- |
+| Entry 42 contract gate        | yes      | yes, with a repair      | ≥1         | the remediation taught the escape |
+| Specimen A's guards           | yes      | yes                     | ≥1         | routed in six reframes            |
+| Strike / opaque-payload block | the call | yes                     | ≥1         | deliberate, and deliberately weak |
+| `reply_to` binding            | yes      | yes                     | ≥1         | **held** — nothing to reframe     |
+| Latch → process termination   | no       | no                      | **0**      | cannot be reframed                |
+| Keychain / `sudo` prompt      | yes      | yes, _names the target_ | ≥1         | rejected; see below               |
+
+Two of these hold, for opposite reasons. The `reply_to` check holds with a turn
+to spare because it binds against an artifact that must already exist — the
+falsifiability property in **Doctrine** below. Process termination holds because
+there is no turn in which to hold anything. Everything in between is a puzzle
+with a prompt attached, and this document is the record of those puzzles being
+solved.
+
+**This is why the obvious identity remedy is rejected and the weak one is
+kept.** A keychain or `sudo` gate is the worst cell in the table: hard enough to
+block, verbose enough to explain, and it _names the credential the agent now
+needs_ — maximum incitement, and it still leaves the turn in which to act on it.
+The maintainer's position is that a harder block is reliably a more inciting
+puzzle. Conversely the strike system is kept **non-latching on purpose**: the
+opaque-payload guard blocks the offending call and nothing after it. A slap on
+the wrist, not a handcuff — chosen because escalating it would buy a stronger
+refusal in exactly the register that this table shows gets routed anyway.
+
+**The generic trap, stated once.** A control that keys on _observing_ something
+admits whatever it cannot observe. Any check of the form "refuse when I can see
+a marker" is satisfied by removing the marker, and absence then reads as
+innocence — the same shape as tier 1.7 above, where an identity the caller
+supplies is treated as an identity the system derived. The durable form demands
+**positive** evidence (a registered lease, an artifact that must already exist)
+rather than the absence of a negative signal. Note that this cuts against
+process-derived identity too, if the check asks "is my ancestor a known harness"
+rather than "is there a live registration for me": a detached process has no
+harness ancestor and would read as human.
+
 ### Doctrine
 
 Gates belong where the decision is, not where the mutation is. A check that is
