@@ -45,9 +45,18 @@ Two failure modes worth knowing, because the repo has hit both:
   recreates exactly that state. If hooks stop firing, read
   `git config --local core.hooksPath` first.
 
+That second mode is not hypothetical, and it was not a one-off human mistake:
+`packages/caws-cli/package.json` carried
+`"prepare": "husky >/dev/null 2>&1 || true"`, so **any `npm install` in this
+repo silently disabled every git hook** — the redirect hid the output and
+`|| true` hid the failure. That is the entire mechanism of the ten-month outage.
+It is removed, and `.husky/tests/run.sh` (T6d/T6g) fails if any `package.json`
+script invokes `husky` again.
+
 Verify the wiring without executing anything:
 
 ```bash
+git config --get core.hooksPath             # expect: .husky
 git rev-parse --git-path hooks/commit-msg   # expect: .husky/commit-msg
 ```
 
@@ -116,22 +125,45 @@ lock library is missing, `pre-push` **refuses** — a guard that proceeds withou
 its concurrency control is the `source <missing> || true` pattern this repo
 bans.
 
+## Running the root scripts at all
+
+The root `.npmrc` sets `workspaces=true`. That makes `npm run <name>` resolve
+`<name>` **against the workspaces**, so it never reaches a root script:
+
+```bash
+npm run test:hooks                    # npm error Missing script: "test:hooks"
+                                      #   workspace @paths.design/caws-cli
+npm run test:hooks --workspaces=false # runs the root script
+```
+
+`npm install` is unaffected — it runs the root `prepare` lifecycle script
+normally. Only explicit `npm run` is shadowed. This bit the hook suite itself:
+its `prepare` assertion originally ran the _caws-cli_ `prepare` (which was
+`husky`) and then read `core.hooksPath`, passing because the value was already
+correct rather than because anything set it. T6f now asserts npm echoed the root
+script body, so the test cannot pass without an execution.
+
 ## Tests
 
-`npm run test:hooks` (`.husky/tests/run.sh`). They run against this repository —
-there is no `git init` of a fixture repo, because that pattern arms the agent
-danger latch. Every mutation is index-only (`git rm --cached`, restored with
-`git add`) or confined to a `mktemp` scratch directory.
+`npm run test:hooks --workspaces=false`, or just `bash .husky/tests/run.sh`.
+They run against this repository — there is no `git init` of a fixture repo,
+because that pattern arms the agent danger latch. Every mutation is index-only
+(`git rm --cached`, restored with `git add`) or confined to a `mktemp` scratch
+directory.
 
 ### What these tests do not cover
 
 Stated explicitly so the pass count is not mistaken for a proof:
 
-- **`prepare` repairing a wrong `core.hooksPath`.** The test asserts the
-  script's exact text and its post-state. Proving repair means setting
-  `core.hooksPath` to a bogus value first, and for that window every concurrent
-  session in this repo would commit with no hooks at all. Reviewed as a
-  one-command script instead.
+- **`prepare` repairing a wrong `core.hooksPath`.** T6a pins the script text,
+  T6b runs it, T6f proves it really executed — but none of them start from a
+  wrong value. Deliberately setting `core.hooksPath` to a bogus value would
+  leave every concurrent session in this repo committing with no hooks for that
+  window, which is the outage this tree exists to prevent. The repair path was
+  nonetheless observed once for real, on 2026-09-16: `npm run prepare` from the
+  repo root ran the caws-cli `husky` prepare, `core.hooksPath` became `.husky/_`
+  (a directory that does not exist), and `git config core.hooksPath .husky`
+  restored it 33 seconds later. No commit landed inside that window.
 - **`pre-push` end to end.** The lock primitive is tested directly; the four
   stages are not run, because doing so is a 15-minute build per test run.
 - **Real contention between two OS processes racing `mkdir`.** The lock tests

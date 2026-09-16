@@ -252,13 +252,28 @@ else
   bad "T6a prepare script is exactly: git config core.hooksPath .husky" "got: ${t6_script:-<missing>}"
 fi
 
-npm run prepare >/dev/null 2>&1
+# --workspaces=false is load-bearing, not tidiness. Root .npmrc sets
+# workspaces=true, so a bare `npm run prepare` resolves the name against the
+# workspaces and runs THEIR prepare, never the root one. That is how the
+# original version of this test passed vacuously: it asserted core.hooksPath
+# was ".husky" after running a script that had not touched it.
+T6OUT="$SCRATCH/prepare.out"
+npm run prepare --workspaces=false > "$T6OUT" 2>&1
 t6_exit=$?
 t6_value=$(git config --get core.hooksPath 2>/dev/null)
 if [ "$t6_exit" = "0" ] && [ "$t6_value" = ".husky" ]; then
-  ok "T6b npm run prepare exits 0 and core.hooksPath reads '.husky'"
+  ok "T6b npm run prepare --workspaces=false exits 0 and core.hooksPath reads '.husky'"
 else
-  bad "T6b npm run prepare exits 0 and core.hooksPath reads '.husky'" "exit=$t6_exit value=${t6_value:-<unset>}"
+  bad "T6b npm run prepare --workspaces=false exits 0 and core.hooksPath reads '.husky'" "exit=$t6_exit value=${t6_value:-<unset>}"
+fi
+
+# Anti-vacuity for T6b: npm echoes the script body it is about to run. Seeing
+# the body proves the ROOT script executed, rather than the assertion passing
+# because core.hooksPath already held the right value.
+if grep -q 'git config core.hooksPath .husky' "$T6OUT"; then
+  ok "T6f npm echoed the root script body — T6b observed an execution, not a pre-existing value"
+else
+  bad "T6f npm echoed the root script body" "not in output; T6b cannot distinguish 'prepare ran' from 'value was already right'. Output: $(tr '\n' '|' < "$T6OUT")"
 fi
 
 # The value is worthless if git does not actually find the hooks there. This is
@@ -272,6 +287,63 @@ if [ -z "$t6_missing" ]; then
   ok "T6c all three hook-named files exist and are executable under .husky/"
 else
   bad "T6c all three hook-named files exist and are executable under .husky/" "missing or non-executable:$t6_missing"
+fi
+
+# The regression guard for the outage itself. husky's CLI repoints
+# core.hooksPath at .husky/_ ; packages/caws-cli carried
+# `"prepare": "husky >/dev/null 2>&1 || true"`, so any npm install silently
+# killed every hook in the repo, and the redirect hid it. No package here may
+# invoke husky from a script again, under any lifecycle name.
+T6HUSKY=$(git ls-files '*package.json' ':!:**/node_modules/**' | while IFS= read -r f; do
+  node -e '
+    var fs = require("fs");
+    try {
+      var s = (JSON.parse(fs.readFileSync(process.argv[1], "utf8")).scripts) || {};
+      Object.keys(s).forEach(function (k) {
+        // Match husky as a COMMAND token. A looser word boundary matches the
+        // "husky" inside the path .husky/tests/run.sh, which is this repo\x27s
+        // own hook tree and the opposite of the thing being banned.
+        if (/(^|[\s;&|(])husky([\s;&|)]|$)/.test(String(s[k]))) {
+          console.log(process.argv[1] + " -> " + k + ": " + s[k]);
+        }
+      });
+    } catch (e) { console.log(process.argv[1] + " -> UNREADABLE: " + e.message); }
+  ' "$f"
+done)
+if [ -z "$T6HUSKY" ]; then
+  ok "T6d no package.json script invokes husky (it repoints core.hooksPath at .husky/_)"
+else
+  bad "T6d no package.json script invokes husky" "$(printf '%s' "$T6HUSKY" | tr '\n' ';')"
+fi
+
+# T6d passes trivially once the offending script is gone, so the detector needs
+# its own oracle. This pins it against the exact string the repo carried
+# ("husky >/dev/null 2>&1 || true") and against the paths it must NOT flag.
+T6DETECT=$(node -e '
+  var re = /(^|[\s;&|(])husky([\s;&|)]|$)/;
+  var cases = [
+    ["husky >/dev/null 2>&1 || true", true],
+    ["husky install", true],
+    ["npm run build && husky", true],
+    ["git config core.hooksPath .husky", false],
+    ["bash .husky/tests/run.sh", false],
+    ["node ./huskyish.js", false]
+  ];
+  var bad = cases.filter(function (c) { return re.test(c[0]) !== c[1]; });
+  console.log(bad.length ? bad.map(function (c) { return c[0]; }).join(" | ") : "");
+')
+if [ -z "$T6DETECT" ]; then
+  ok "T6g the husky detector flags the historical offending script and not .husky paths"
+else
+  bad "T6g the husky detector flags the historical offending script and not .husky paths" "misclassified: $T6DETECT"
+fi
+
+# T6d only means something if the scanner actually read package.json files.
+T6SCANNED=$(git ls-files '*package.json' ':!:**/node_modules/**' | wc -l | tr -d ' ')
+if [ "$T6SCANNED" -ge 2 ]; then
+  ok "T6e husky scan covered $T6SCANNED package.json file(s) (scanner is live)"
+else
+  bad "T6e husky scan covers the repo's package.json files" "only $T6SCANNED found — T6d would pass vacuously"
 fi
 
 echo
