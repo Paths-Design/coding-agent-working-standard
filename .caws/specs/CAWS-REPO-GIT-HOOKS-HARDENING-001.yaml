@@ -8,7 +8,7 @@ updated_at: '2026-09-16T05:35:28.654Z'
 created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - '.husky (repo-local git hook tree; the only hooks git executes) and package.json (prepare wiring)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -21,7 +21,11 @@ scope:
     - 'package.json'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A hook must never mutate shared cross-worktree state (refs/stash is shared by every linked worktree) as a side effect of validating a commit.'
+  - 'A guard that cannot determine its input must fail CLOSED; empty output from a helper is indistinguishable from failure and must refuse, not coerce to a permissive default.'
+  - 'Staged deletions are changes: any guard computing a staged-path set must include D and R, or it can be bypassed by deleting the governed file.'
+  - 'Hook activation must survive a fresh clone; local-only git config is not a delivery mechanism.'
+  - 'Concurrent pre-push runs in one repository must not execute concurrent builds against the shared node_modules/turbo cache.'
 acceptance:
   - id: A1
     given: 'pre-commit invoking lint-staged'
