@@ -141,3 +141,9 @@ evidence:
     recorded_at: "2026-09-16T22:26:33.263Z"
     test_nodeid: packages/caws-cli/tests/store/evidence-rederive.test.js
     commit_sha: "01dc84ca"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "tests/shell/specs-close-rederive.test.js plants command: touch <probe> on a spec and drives verify-acs, specs close and worktree merge; the probe file is absent afterwards, the reason is command_not_executed, and the instrumented runner log is empty. A separate fixed-string grep over the three new source files returns zero hits for sh, -c, shell:, shell: true, execSync( and spawnSync with shell."
+    recorded_at: "2026-09-16T22:27:26.704Z"
+    test_nodeid: packages/caws-cli/tests/shell/specs-close-rederive.test.js
+    commit_sha: "686dd33d"
