@@ -61,3 +61,7 @@ evidence:
     status: pass
     evidence_ref: "hook printed 'while 3 worktree lane(s) target it' and listed wt-merge-provenance-routing, wt-bash-guard-cross-repo, wt-git-hooks-revive from the flat-map keys, against a registry whose records carry no status field; the pre-fix predicate returned 0 for the same registry"
     recorded_at: "2026-09-16T05:03:25.365Z"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "grep over .husky/{commit-msg,pre-commit,pre-push} for 'caws parallel','caws waivers','caws provenance','working-spec.yaml','parallel.json','sessions.json' -> 0 files each"
+    recorded_at: "2026-09-16T05:03:25.846Z"
