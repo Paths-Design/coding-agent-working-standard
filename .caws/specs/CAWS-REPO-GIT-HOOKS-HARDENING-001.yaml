@@ -59,3 +59,10 @@ evidence:
     exit_code: 0
     artifact_path: .husky/tests/run.sh
     commit_sha: "1eaf6be3"
+  - criterion_id: A2
+    status: unchecked
+    evidence_ref: "PARTIAL. T6a asserts scripts.prepare is exactly 'git config core.hooksPath .husky'; T6b runs it (exit 0) and reads back core.hooksPath=.husky; T6c asserts all three hook-named files exist and are executable there. NOT verified: the stated given, a clone with core.hooksPath unset. Proving repair requires setting core.hooksPath to a bogus value first, which would leave every concurrent session in this repo committing with no hooks for that window. Declined deliberately; recorded as unchecked rather than overstated as pass."
+    recorded_at: "2026-09-16T05:43:37.192Z"
+    command: npm run prepare
+    exit_code: 0
+    commit_sha: "1eaf6be3"
