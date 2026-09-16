@@ -58,3 +58,11 @@ evidence:
     exit_code: 0
     artifact_path: packages/caws-cli/src/store/worktrees-writer.ts
     commit_sha: c9eca2c5
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Full CLI suite green after rebuilding dist from the COMMITTED source: 228 suites, 2839 tests, 0 failures. SCOPE_IN_PLACEHOLDER is now exported from the placeholder-scaffold module at specs-writer.ts alongside MODULES_PLACEHOLDER/INVARIANTS_PLACEHOLDER/ACCEPTANCE_PLACEHOLDER, and the four consumers all read it: the create renderer (was an inline literal), isScaffoldPlaceholder, placeholderFields (new 'scope.in' entry), and the bind guard in worktrees-writer.ts, which imports it rather than re-spelling it. DRIFT PROOF: the test 'create with no --scope-in writes exactly the exported constant' compares create's rendered YAML against the imported constant, so a renderer that kept its own copy while the constant changed FAILS — that is the single-source guarantee the other three surfaces depend on. Every assertion in both new suites references the constant rather than spelling the text out; a test hardcoding its own copy could not detect exactly this drift. HONESTY NOTE: an earlier full-suite green run was against a dist built BEFORE lint-staged reformatted the sources, so it did not test the committed bytes. The committed state initially failed one test (shell.build.dist_stale, stale_files: 4) which correctly detected that staleness; the 2839/2839 above is after rebuilding. NOT VERIFIED: no mutation-score run for the new code, and no test pins the scaffold's literal text against the ten on-disk specs that already carry it — if the constant's VALUE were changed, amend would stop discharging those and nothing here would catch it."
+    recorded_at: "2026-09-16T07:32:20.899Z"
+    command: npx jest
+    exit_code: 0
+    artifact_path: packages/caws-cli/src/store/specs-writer.ts
+    commit_sha: c9eca2c5
