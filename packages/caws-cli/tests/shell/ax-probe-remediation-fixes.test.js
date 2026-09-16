@@ -149,9 +149,7 @@ describe('D2: activate is offered as an exception, not a coequal shortcut', () =
       ],
     });
 
-    const perSpec = report.findings.find(
-      (f) => f.rule === DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_STALE
-    );
+    const perSpec = report.findings.find((f) => f.rule === DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_STALE);
     const aggregate = report.findings.find(
       (f) => f.rule === DOCTOR_RULES.SPEC_UNBOUND_ACTIVE_BACKLOG
     );
@@ -243,10 +241,14 @@ contracts: []
 describe('D4: the bind announces the lifecycle transition it performed', () => {
   test('creating a worktree for a draft says the spec was activated', () => {
     const { root, caws } = mkRepo();
-    runCreate(root, 'AX-D4-001');
-    expect(
-      fs.readFileSync(path.join(caws, 'specs', 'AX-D4-001.yaml'), 'utf8')
-    ).toContain('lifecycle_state: draft');
+    // scopeIn is declared at creation because binding refuses a spec whose
+    // scope.in is still the create scaffold
+    // (CAWS-SPEC-SCOPE-IN-PLACEHOLDER-CONTRACT-001). The behavior under test
+    // here is the lifecycle announcement on bind, not scope admission.
+    runCreate(root, 'AX-D4-001', { scopeIn: ['src/owned'] });
+    expect(fs.readFileSync(path.join(caws, 'specs', 'AX-D4-001.yaml'), 'utf8')).toContain(
+      'lifecycle_state: draft'
+    );
 
     const out = [];
     const code = runWorktreeCreateCommand({
