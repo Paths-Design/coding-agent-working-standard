@@ -1,0 +1,47 @@
+id: CAWS-REPO-GIT-HOOKS-HARDENING-001
+title: 'Harden the repo git hooks: shared-stash race, clone propagation, deletion bypass, fail-open amend guard, concurrent pre-push'
+risk_tier: 3
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-16T05:35:28.654Z'
+updated_at: '2026-09-16T05:35:28.654Z'
+created_by_session: '0d83351d-d384-4100-8148-a3f40dbc6b7a'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - '.husky/pre-commit'
+    - '.husky/pre-push'
+    - '.husky/README.md'
+    - '.husky/lib/prepush-lock.sh'
+    - '.husky/tests/run.sh'
+    - 'package.json'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'pre-commit invoking lint-staged'
+    when: 'a commit runs with files staged'
+    then: 'the shared refs/stash stack is not mutated (entry count before == after) because lint-staged runs with --no-stash'
+  - id: A2
+    given: 'a clone with core.hooksPath unset'
+    when: 'the package prepare script runs'
+    then: 'core.hooksPath is set to .husky so hooks fire without manual configuration'
+  - id: A3
+    given: 'a commit whose staged changes are deletions only'
+    when: 'pre-commit computes its guard input'
+    then: 'the deleted paths are visible to the policy and spec guards rather than producing an empty set that exits 0'
+  - id: A4
+    given: 'node present but emitting no output while an amend is detected'
+    when: 'the pre-commit amend guard evaluates the lane count'
+    then: 'it refuses (fail closed) rather than coercing empty to zero and allowing the amend'
+  - id: A5
+    given: 'a pre-push already running its heavy stages'
+    when: 'a second concurrent pre-push starts in the same repository'
+    then: 'the second does not run a concurrent build/test and reports the contention instead'
+non_functional: {}
+contracts: []
