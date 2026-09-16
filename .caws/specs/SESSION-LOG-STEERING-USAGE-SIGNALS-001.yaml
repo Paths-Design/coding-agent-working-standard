@@ -110,3 +110,11 @@ evidence:
     command: python3 -m pytest tests/hooks/pytest -q
     exit_code: 0
     commit_sha: "579182dcf25b"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "tests/hooks/pytest/test_session_log_renderer.py::TestRewindDetection (7 tests)"
+    recorded_at: "2026-09-16T04:17:17.947Z"
+    test_nodeid: "tests/hooks/pytest/test_session_log_renderer.py::TestRewindDetection"
+    command: python3 -m pytest tests/hooks/pytest -q
+    exit_code: 0
+    commit_sha: "579182dcf25b"
