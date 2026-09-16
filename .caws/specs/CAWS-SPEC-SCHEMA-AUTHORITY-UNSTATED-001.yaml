@@ -21,7 +21,8 @@ scope:
     - 'packages/caws-cli/src/shell/commands/specs.ts'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A dead authority must be detectable wherever it is placed, not only at one canonical path: the same file one directory down is the same defect, and a check that only knows the canonical location grants silent tolerance to the variant an operator is most likely to create while tidying up.'
+  - 'A validator that reports a verdict without naming the authority it applied leaves a conflicting local authority standing. When two candidate schemas exist, ''valid'' arbitrates nothing; the verdict must carry its provenance so the operator learns which one governs.'
 acceptance:
   - id: A1
     given: 'a project with a legacy spec schema at .caws/schemas/working-spec.schema.json and none at the .caws/ root'
