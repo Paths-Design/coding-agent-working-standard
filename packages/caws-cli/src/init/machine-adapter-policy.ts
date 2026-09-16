@@ -408,11 +408,17 @@ export function adoptMachineAdapter(options: AdoptMachineAdapterOptions): {
         `Multiple CAWS handlers for ${native}; review duplicate wiring before adoption`
       );
     if (selected.events[event as Event] && replaced === 0) {
+      // A surface's own entry table is the authority on which events it
+      // supports, and MACHINE_EVENTS is the union across surfaces — so a
+      // lookup miss means "this surface has no such event", not a broken
+      // template. Both branches must yield undefined and fall through to the
+      // `if (defaults)` guard below; codex indexing [0] eagerly would throw
+      // instead (qwen already relies on this, declaring only 2 of the events).
       const defaults =
         surface === 'codex'
           ? JSON.parse(fs.readFileSync(path.join(templatesRoot, 'codex/hooks.json'), 'utf8')).hooks[
               native
-            ][0]
+            ]?.[0]
           : (surface === 'claude-code' ? CANONICAL_HOOK_ENTRIES : CANONICAL_QWEN_HOOK_ENTRIES)[
               native
             ];
