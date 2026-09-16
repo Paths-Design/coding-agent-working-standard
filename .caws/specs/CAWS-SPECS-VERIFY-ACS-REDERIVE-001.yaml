@@ -189,3 +189,9 @@ evidence:
     recorded_at: "2026-09-16T22:37:29.825Z"
     test_nodeid: packages/caws-cli/tests/shell/specs-close-rederive.test.js
     commit_sha: "686dd33d"
+  - criterion_id: A11
+    status: pass
+    evidence_ref: "tests/shell/specs-close-rederive.test.js closes the same hostile spec through specs close and through worktree merge. Captured merge stderr: caws advisory (non-blocking): ... - A1: refuted (artifact_missing) - docs/nope.md not found at HEAD [self-reported]. The store-level test asserts the same text arrives in data.evidence_warnings, proving outcome.warnings and outcome.data.evidence_warnings are both fed."
+    recorded_at: "2026-09-16T22:39:34.341Z"
+    test_nodeid: packages/caws-cli/tests/shell/specs-close-rederive.test.js
+    commit_sha: "686dd33d"
