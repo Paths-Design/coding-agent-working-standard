@@ -46,3 +46,11 @@ non_functional: {}
 contracts:
   - name: 'reset-strikes-cli'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "A/B against REAL machine state, dry-run so nothing was mutated. Real file: ~/.caws/state/sessions/0d83351d-d384-4100-8148-a3f40dbc6b7a/strikes.json containing {\"shortcut_language\": 4}. OLD (installed pack v78, ./.caws/hooks/reset-strikes.sh --dry-run --session 0d83351d-...): 'No strike file found for session: 0d83351d-d384-4100-8148-a3f40dbc6b7a'. NEW (template v79, bash ./packages/caws-cli/templates/hook-packs/shared/reset-strikes.sh, same flags): '[dry-run] would delete /Users/darianrosebrook/.caws/state/sessions/0d83351d-.../strikes.json (was: {\"shortcut_language\": 4})'. Same session id, same real file, opposite verdicts. File re-read afterwards and unchanged, so --dry-run was honoured. Also bats A1 'session resets the LIVE session-global store' against an isolated HOME."
+    recorded_at: "2026-09-16T08:15:39.807Z"
+    command: bash packages/caws-cli/templates/hook-packs/shared/reset-strikes.sh --dry-run --session 0d83351d-d384-4100-8148-a3f40dbc6b7a
+    exit_code: 0
+    commit_sha: "4e7cf268"
