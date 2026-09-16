@@ -56,3 +56,11 @@ evidence:
     command: npx jest tests/init/adapter-covered-telemetry-cut.test.js
     exit_code: 0
     commit_sha: "5785158d"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Real CLI 'doctor --repair-plan --json' (CAWS_HOME pinned to a temp dir so a developer's configured surfaces cannot change the verdict) over two fixtures. items[].source_rule contains 'doctor.hooks.stale_telemetry_pack' for the dsh-only repo and does NOT contain it for the dsh+zcode repo. The firing half is asserted DELIBERATELY as a contrast so the passing half cannot succeed because doctor went quiet for an unrelated reason (empty plan, crash, changed JSON shape). Doctor reads the claim through observeTelemetryRowClaimants exported from hook-install, the same single-source pattern as observeSharedPackBodyDrift, so the advisory cannot prescribe a repair the installer would not perform. NON-VACUOUS: replacing the new gate clause with 'true' in inspect.ts turns this test RED and leaves all other 20 green, proving it pins the doctor path specifically."
+    recorded_at: "2026-09-16T06:03:28.674Z"
+    test_nodeid: "CAWS-INIT-TELEMETRY-RETIRE-SURFACE-BLIND-001: retirement is surface-aware > A2: doctor stops calling the rows stale once a surface claims them"
+    command: npx jest tests/init/adapter-covered-telemetry-cut.test.js
+    exit_code: 0
+    commit_sha: "5785158d"
