@@ -32,6 +32,16 @@ acceptance:
       CI uses, and refuses the push. ts-jest does not gate on diagnostics, so this
       class is invisible to the test stage; it is why main accepted
       red-qualification commits for two days with no local signal
+  - id: A2
+    given: >-
+      the T8 end-to-end test in .husky/tests/run.sh stubs the heavy stage commands
+      and asserts the stage sequence and lock custody
+    when: 'the suite runs after the new stage lands'
+    then: >-
+      T8 asserts five stages in order with the lock held across all five, and pins
+      the first logged invocation as npm run typecheck -w @paths.design/caws-cli —
+      the workspace flag specifically, since a bare npm run typecheck would silently
+      resolve against the workspaces and never reach the intended script
 non_functional: {}
 contracts:
   - name: 'prepush-stage-sequence'
