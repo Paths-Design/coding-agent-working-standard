@@ -74,3 +74,9 @@ evidence:
     exit_code: 0
     artifact_path: packages/caws-cli/tests/hooks/bats/agent-surface.bats
     commit_sha: "6499179d"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "bats 'agent-surface: the attestation disarms the kill and clears the surface target (A2)' asserts the marker exists, the resolved plane is exactly 0| (kill default off AND no resolvable target — two independent holds), and that the lib emitted no refusal text on this ordinary path. Full hook-guard suite 293/293 exit 0."
+    recorded_at: "2026-09-17T12:03:50.820Z"
+    artifact_path: packages/caws-cli/tests/hooks/bats/agent-surface.bats
+    commit_sha: "6499179d"
