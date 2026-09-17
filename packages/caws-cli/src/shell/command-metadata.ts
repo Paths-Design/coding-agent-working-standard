@@ -31,6 +31,8 @@ import { EVIDENCE_STATUSES, RISK_TIERS, SPEC_MODES, SPEC_RESOLUTIONS } from '../
 import { SPECS_LIST_STATUSES } from '../store/specs-writer';
 import { EXECUTABLE_TEST_RUNNERS, SELECTABLE_TEST_RUNNERS } from '../store/evidence-rederive';
 import { KNOWN_SURFACES } from '../init/hook-packs/register';
+import { MIGRATABLE_SOURCE_VERSIONS } from '../store/migration-versions';
+import { WORKTREE_PHYSICAL_CLEANUP_STATES, WORKTREE_PRUNE_STATES } from './commands/worktree';
 
 /** A positional argument on a command. */
 export interface CommandArgMeta {
@@ -768,7 +770,8 @@ export const SPECS_COMMAND_META: GroupCommandMeta = {
         {
           flag: '--from <version>',
           required: true,
-          description: 'Source schema version (only v10 is supported in v11.2)',
+          description: 'Source schema version to migrate from',
+          allowedValues: MIGRATABLE_SOURCE_VERSIONS,
         },
         { flag: '--apply', description: 'Write migrated YAMLs to disk (default: dry-run)' },
         {
@@ -1011,8 +1014,9 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
       options: [
         {
           flag: '--state <classes>',
-          description:
-            'Comma-separated state-class filter (for example: ghost-registry,closed-spec-residue,event-orphan-refused).',
+          // Derived from the array this command dispatches on, so a new state
+          // class is filterable and documented in the same edit.
+          description: `Comma-separated state-class filter. Accepted classes: ${WORKTREE_PRUNE_STATES.join(', ')}`,
         },
         {
           flag: '--status <classes>',
@@ -1043,8 +1047,9 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
       options: [
         {
           flag: '--state <classes>',
-          description:
-            'Comma-separated state-class filter (for example: destroy-ready,dirty-refused,foreign-owned-refused,unregistered-physical-refused).',
+          // Derived from the array cleanup-plan validates against, so the help
+          // cannot advertise fewer classes than the command accepts.
+          description: `Comma-separated state-class filter. Accepted classes: ${WORKTREE_PHYSICAL_CLEANUP_STATES.join(', ')}`,
         },
         {
           flag: '--status <classes>',
@@ -1652,7 +1657,8 @@ export const EVENTS_COMMAND_META: GroupCommandMeta = {
         {
           flag: '--from <version>',
           required: true,
-          description: 'Source schema version (only v10 supported in v11.2)',
+          description: 'Source schema version to migrate from',
+          allowedValues: MIGRATABLE_SOURCE_VERSIONS,
         },
         { flag: '--apply', description: 'Execute the rotation (default is dry-run)' },
         {

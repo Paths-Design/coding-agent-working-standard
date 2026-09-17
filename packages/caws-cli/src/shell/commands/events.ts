@@ -58,6 +58,10 @@ import {
   planEventsRotation,
   type SpecYamlInput,
 } from '../../store/events-migration';
+import {
+  describeMigratableSourceVersions,
+  isMigratableSourceVersion,
+} from '../../store/migration-versions';
 import { buildActor } from '../session/actor';
 import { resolveSession } from '../session/resolve-session';
 import { renderDiagnostics } from '../render/diagnostic';
@@ -166,8 +170,11 @@ function scanSpecsDirectory(cawsDir: string): SpecScanResult {
 // ---------------------------------------------------------------------------
 
 export interface EventsMigrateCommandOptions extends BaseCommandOptions {
-  /** Must be 'v10'. Required (Commander enforces). */
-  readonly from: 'v10';
+  /** Required (Commander enforces presence). Typed as the raw string the
+   *  caller supplied: the value is validated against MIGRATABLE_SOURCE_VERSIONS
+   *  at runtime, and typing it as the narrow union here would let the guard
+   *  read as dead code to a reader who trusts the type. */
+  readonly from: string;
   /** Default true (dry-run mode). When false, --apply is in effect. */
   readonly dryRun?: boolean;
   /** Triggers the apply path. Mutually exclusive with dryRun explicitly true. */
@@ -513,9 +520,11 @@ export function runEventsMigrateCommand(opts: EventsMigrateCommandOptions): numb
   const isApply = opts.apply === true;
   const isDryRun = !isApply; // default
 
-  if (opts.from !== 'v10') {
+  // Shares MIGRATABLE_SOURCE_VERSIONS with the `--from` help and with
+  // caws specs migrate, so the two migrators cannot diverge on what they take.
+  if (!isMigratableSourceVersion(opts.from)) {
     err(
-      `caws events migrate: only --from v10 is supported in v11.2; got ${JSON.stringify(opts.from)}.`
+      `caws events migrate: --from accepts ${describeMigratableSourceVersions()}; got ${JSON.stringify(opts.from)}.`
     );
     return 1;
   }

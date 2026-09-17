@@ -62,6 +62,10 @@ import {
 } from '../../store/specs-writer';
 import { amendSpecBody } from '../../store/specs-body-writer';
 import {
+  describeMigratableSourceVersions,
+  isMigratableSourceVersion,
+} from '../../store/migration-versions';
+import {
   describeVerdict,
   rederiveSpecEvidence,
   SELECTABLE_TEST_RUNNERS,
@@ -2643,7 +2647,7 @@ export function runSpecsRetireDraftCommand(opts: SpecsRetireDraftOptions): numbe
 // not auto-default.
 //
 // Per the spec (CAWS-MIGRATE-V10-SPECS-001 A12 / Sterling smoke):
-//   - --from v10 is the only supported source in v11.2.
+//   - --from accepts exactly the versions in MIGRATABLE_SOURCE_VERSIONS.
 //   - default is dry-run (no writes); --apply opts into mutation.
 //   - --apply alone refuses on any 'refused' verdict.
 //   - --apply --partial writes migratable, skips refused, emits report.
@@ -2667,10 +2671,11 @@ export interface SpecsMigrateOptions extends BaseCommandOptions {
 export function runSpecsMigrateCommand(opts: SpecsMigrateOptions): number {
   const { cwd, nowFn, out, err, showData } = setupIO(opts);
 
-  // --from must be exactly 'v10' (matches caws events migrate semantics).
-  if (opts.from !== 'v10') {
+  // The accepted set comes from MIGRATABLE_SOURCE_VERSIONS, which the `--from`
+  // help reads too, so this guard cannot refuse a value the help advertises.
+  if (!isMigratableSourceVersion(opts.from)) {
     err(
-      `caws specs migrate: only --from v10 is supported in v11.2; got ${JSON.stringify(opts.from)}.`
+      `caws specs migrate: --from accepts ${describeMigratableSourceVersions()}; got ${JSON.stringify(opts.from)}.`
     );
     return 1;
   }

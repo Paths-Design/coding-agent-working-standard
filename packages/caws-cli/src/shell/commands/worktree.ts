@@ -1153,7 +1153,13 @@ interface PhysicalGitWorktree {
   readonly branch?: string;
 }
 
-const WORKTREE_PHYSICAL_CLEANUP_STATES: readonly WorktreePhysicalCleanupStateClass[] = [
+/**
+ * The closed set `cleanup-plan --state` filters on, and the set it REFUSES
+ * against below. Exported so the option's help lists all of them: it used to
+ * name four as a "for example" while the guard rejected the other seven by
+ * name, which reads to a caller as an open set that mysteriously refuses.
+ */
+export const WORKTREE_PHYSICAL_CLEANUP_STATES: readonly WorktreePhysicalCleanupStateClass[] = [
   'destroy-ready',
   'unbound-clean-candidate',
   'dirty-refused',
@@ -2199,7 +2205,13 @@ export function decideRepair(finding: DoctorFinding): RepairDecision {
   }
 }
 
-const WORKTREE_PRUNE_STATES: readonly WorktreePruneStateClass[] = [
+/**
+ * The closed set `--state` / `--status` filter on. Exported so the option's
+ * help reads the same list this module dispatches on: the description used to
+ * carry three values as a hand-written "for example", which told a reader
+ * neither what else was accepted nor that the set was closed at all.
+ */
+export const WORKTREE_PRUNE_STATES: readonly WorktreePruneStateClass[] = [
   'ghost-registry',
   'dead-binding',
   'closed-spec-residue',

@@ -47,6 +47,34 @@ not_rederived U (self-reported S, narrative-only N, command declared C)`),
 - The kernel classifier `src/kernel/evidence/rederive.ts` joins the per-file
   mutation targets (20 across three surfaces).
 
+### Option value sets are declared in code, not described in help prose
+
+`CAWS-HELP-CLAIM-DECLARED-NOT-DESCRIBED-001`. A pre-release audit read every
+option description that names a mechanism — a binary, a path, an exit code, an
+accepted value set. The exit-code and behavioural claims held and are now
+pinned. Three options stated a **closed** accepted set in prose, so nothing
+tied the wording to the code that enforces it:
+
+- **`caws specs migrate --from` and `caws events migrate --from`** said "only
+  v10 is supported in v11.2" while the package shipped `12.2.0-rc.2`. The
+  accepted set is now `MIGRATABLE_SOURCE_VERSIONS`, read by both `--help`
+  (as `allowedValues`) and both rejection messages, and no user-facing string
+  names a release number any more.
+- **`caws events migrate` rejected `--from` twice.** A duplicate guard in
+  `register.ts` shadowed the handler's own check and forwarded a hardcoded
+  `v10` regardless, so the handler's validation was unreachable and its message
+  never reached a caller. The parse-layer copy is removed; the handler owns the
+  rule.
+- **`caws worktree prune --state` and `caws worktree cleanup-plan --state`**
+  advertised three and four state classes respectively as a hand-written "for
+  example". `cleanup-plan` refuses against all eleven, so the help named four
+  of the values its own guard enforces. Both lists now derive from the exported
+  arrays the commands dispatch on.
+
+`tests/shell/help-claim-integrity.test.js` holds the class rather than the
+three instances: no option description may name a CAWS version, and any
+description phrased as a closed set must carry `allowedValues`.
+
 ### Hooks and release qualification
 
 - Apply kernel scope rules to top-level files and evaluate edits in their target
