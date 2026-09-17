@@ -125,3 +125,9 @@ evidence:
     recorded_at: "2026-09-17T08:29:43.250Z"
     test_nodeid: "packages/caws-cli/tests/init/drift-discharge-discoverability.test.js::A1: the applied-install refusal names port and separates it from --adopt"
     commit_sha: "2bb4822614157483261061d0a589b6709166781b"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Reads 'caws init --help' and 'caws init port --help' by spawning the built dist in an isolated CAWS_HOME, not by calling a handler, so it cannot pass over a flag that Commander never forwards (the register.ts opt-forward false-confidence class). Asserts the absence of both false scopings ('Legacy packs only', 'LEGACY project-pack') AND the presence of the property that makes port the right choice ('non-destructive discharge') — omitting the false claim without stating the true one would leave the surface silent rather than correct. Falsified by reinstating 'LEGACY project-pack' in command-metadata.ts: the failure printed the real Commander banner 'Usage: caws init port [options] <path>', confirming the assertion reads live CLI output. The legacy claim was independently disproved at runtime on 2026-09-16 when 'caws init --agent-surface dsh --overwrite .caws/hooks/reset-strikes.sh --force' refreshed a CURRENT dsh v3 pack file in this repo."
+    recorded_at: "2026-09-17T08:29:56.233Z"
+    test_nodeid: "packages/caws-cli/tests/init/drift-discharge-discoverability.test.js::A2: no discharge surface claims a legacy-only scope the code does not enforce"
+    commit_sha: "2bb4822614157483261061d0a589b6709166781b"
