@@ -67,3 +67,9 @@ evidence:
     recorded_at: "2026-09-17T12:23:19.293Z"
     artifact_path: .husky/pre-push
     commit_sha: "10df026b"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "bash .husky/tests/run.sh => 41 passed, 0 failed. T8c logged 'npm run,npx turbo,npm audit,npm run,npm test,' (five stages, ordered); T8d 'held=5 free=0'; T8c2 pinned the first invocation verbatim as 'npm run typecheck -w @paths.design/caws-cli lock=held'. T8c2 exists because T8c cuts to two fields, where typecheck and build are both 'npm run' and indistinguishable — and it asserts the -w flag specifically, since a bare npm run typecheck would log identically while resolving against the workspaces and checking nothing."
+    recorded_at: "2026-09-17T12:23:20.808Z"
+    artifact_path: .husky/tests/run.sh
+    commit_sha: "10df026b"
