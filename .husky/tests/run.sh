@@ -416,7 +416,7 @@ fi
 rm -f "$T7LOCK"
 
 # ─────────────────────────────────────────────────────────────────────────
-# T8  pre-push end to end, with the four heavy stage commands stubbed.
+# T8  pre-push end to end, with the five heavy stage commands stubbed.
 #     Running the real stages is a 15-minute build, so the stages are stubbed
 #     while the hook itself stays the real file. GIT_DIR points at a scratch git
 #     dir so the lock lands there rather than on the real common dir, which a
@@ -443,7 +443,14 @@ _caws_stage_stub() {
   local lock="free"
   if [ -n "${CAWS_STAGE_LOCK:-}" ] && [ -L "$CAWS_STAGE_LOCK" ]; then lock="held"; fi
   printf '%s %s lock=%s\n' "$name" "$*" "$lock" >> "$CAWS_STAGE_LOG"
-  if [ -n "${CAWS_STAGE_FAIL:-}" ] && [ "$1" = "$CAWS_STAGE_FAIL" ]; then return 1; fi
+  # Prefix match on the full argument string, not equality on $1. Typecheck and
+  # build are both `npm run`, so matching $1 alone cannot single out either —
+  # CAWS_STAGE_FAIL="run" would fail both and prove neither.
+  if [ -n "${CAWS_STAGE_FAIL:-}" ]; then
+    case "$*" in
+      "$CAWS_STAGE_FAIL"*) return 1 ;;
+    esac
+  fi
   return 0
 }
 npm() { _caws_stage_stub npm "$@"; }
@@ -479,17 +486,32 @@ if [ -z "$T8SKIP" ]; then
   cp "$SCRATCH/prepush.out" "${TMPDIR:-/tmp}/caws-hooktest-prepush.out" 2>/dev/null
 
   if [ "$t8_exit" = "0" ]; then
-    ok "T8b pre-push exits 0 when all four stages pass"
+    ok "T8b pre-push exits 0 when all five stages pass"
   else
-    bad "T8b pre-push exits 0 when all four stages pass" "exit=$t8_exit; output: $(tr '\n' '|' < "$SCRATCH/prepush.out")"
+    bad "T8b pre-push exits 0 when all five stages pass" "exit=$t8_exit; output: $(tr '\n' '|' < "$SCRATCH/prepush.out")"
   fi
 
   t8_order=$(cut -d' ' -f1-2 "$T8LOG" | tr '\n' ',')
-  if [ "$t8_order" = "npx turbo,npm audit,npm run,npm test," ]; then
-    ok "T8c all four stages ran in order: $t8_order"
+  if [ "$t8_order" = "npm run,npx turbo,npm audit,npm run,npm test," ]; then
+    ok "T8c all five stages ran in order: $t8_order"
   else
-    bad "T8c all four stages ran in order" "got: ${t8_order:-<nothing logged>} (expected 'npx turbo,npm audit,npm run,npm test,')"
+    bad "T8c all five stages ran in order" "got: ${t8_order:-<nothing logged>} (expected 'npm run,npx turbo,npm audit,npm run,npm test,')"
   fi
+
+  # T8c cuts to two fields, so typecheck and build are both "npm run" there and
+  # the order assertion alone cannot tell them apart. Pin the first invocation
+  # in full. The -w flag is the load-bearing part: root .npmrc sets
+  # workspaces=true, so a bare `npm run typecheck` resolves against the
+  # workspaces and never reaches the intended script — it would log identically
+  # here while checking nothing.
+  t8_first=$(head -1 "$T8LOG")
+  case "$t8_first" in
+    "npm run typecheck -w @paths.design/caws-cli lock="*)
+      ok "T8c2 stage 1 is the workspace-targeted typecheck: $t8_first" ;;
+    *)
+      bad "T8c2 stage 1 is the workspace-targeted typecheck" \
+          "got: ${t8_first:-<nothing logged>} (expected 'npm run typecheck -w @paths.design/caws-cli lock=...')" ;;
+  esac
 
   # The point of the lock is that it is HELD while the stages run, not merely
   # created and removed around them.
@@ -497,10 +519,10 @@ if [ -z "$T8SKIP" ]; then
   t8_held=$(printf '%s' "${t8_held:-0}" | head -1)
   t8_free=$(grep -c 'lock=free' "$T8LOG" 2>/dev/null)
   t8_free=$(printf '%s' "${t8_free:-0}" | head -1)
-  if [ "$t8_held" = "4" ] && [ "$t8_free" = "0" ]; then
-    ok "T8d the lock was held during all 4 stages (held=$t8_held free=$t8_free)"
+  if [ "$t8_held" = "5" ] && [ "$t8_free" = "0" ]; then
+    ok "T8d the lock was held during all 5 stages (held=$t8_held free=$t8_free)"
   else
-    bad "T8d the lock was held during all 4 stages" "held=$t8_held free=$t8_free"
+    bad "T8d the lock was held during all 5 stages" "held=$t8_held free=$t8_free"
   fi
 
   if [ ! -L "$T8GIT/caws-prepush.lock" ]; then
@@ -520,6 +542,32 @@ if [ -z "$T8SKIP" ]; then
     ok "T8f a failing stage makes pre-push refuse the push (exit 1)"
   else
     bad "T8f a failing stage makes pre-push refuse the push" "exit=$t8_fail_exit; output: $(tr '\n' '|' < "$SCRATCH/prepush-fail.out")"
+  fi
+
+  # The typecheck stage specifically. T8f only proves the audit stage's exit
+  # code is inspected; a stage added but run-and-ignored would still pass it.
+  # This is the whole point of the stage, so it gets its own falsification.
+  : > "$T8LOG"
+  GIT_DIR="$T8GIT" \
+    CAWS_STAGE_LOG="$T8LOG" CAWS_STAGE_LOCK="$T8GIT/caws-prepush.lock" CAWS_STAGE_FAIL="run typecheck" \
+    bash .husky/pre-push origin https://example.invalid/repo.git > "$SCRATCH/prepush-tc-fail.out" 2>&1
+  t8_tc_exit=$?
+  if [ "$t8_tc_exit" = "1" ] \
+     && grep -q 'refusing the push' "$SCRATCH/prepush-tc-fail.out" \
+     && grep -q 'typecheck failed' "$SCRATCH/prepush-tc-fail.out"; then
+    ok "T8f2 a failing typecheck refuses the push and names itself"
+  else
+    bad "T8f2 a failing typecheck refuses the push and names itself" \
+        "exit=$t8_tc_exit; output: $(tr '\n' '|' < "$SCRATCH/prepush-tc-fail.out")"
+  fi
+
+  # ...and the build stage must NOT be collateral damage of that match: both are
+  # `npm run`, so a sloppy matcher would fail build too and T8f2 would pass for
+  # the wrong reason.
+  if grep -q '^npm run build' "$T8LOG"; then
+    ok "T8f3 the build stage still ran — the typecheck failure did not match it"
+  else
+    bad "T8f3 the build stage still ran" "build absent from: $(tr '\n' '|' < "$T8LOG")"
   fi
 
   # The real lock path is deliberately not exercised above (GIT_DIR was
