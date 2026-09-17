@@ -2,9 +2,11 @@ id: CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01
 title: 'init drift refusal cannot tell a stale copy from grown code, so --force is the only discharge for both'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'The install path now classifies a drifted managed hook against the pristine baseline the installer itself records, so an un-received upstream change is no longer reported as consumer growth. Fails closed: a missing or unreadable baseline yields unobserved, never the permissive upstream_only. The write gate is unchanged -- every file that required --overwrite --force still does, proven by a test that re-runs the real installer for all three classes and asserts the bytes on disk are untouched. upstream_only is stated as a narrowed investigation, not a safety verdict, because the port path re-baselines a ported body; the guidance routes to caws init diff and never claims the refresh is safe. observeSharedPackBodyDrift now reads the same classification instead of holding a second copy of the rule, which is what let the two surfaces disagree. 4/4 ACs verified; full suite 2991/2991.'
 created_at: '2026-09-17T03:54:41.621Z'
-updated_at: '2026-09-17T03:57:02.735Z'
+updated_at: '2026-09-17T04:09:16.572Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
