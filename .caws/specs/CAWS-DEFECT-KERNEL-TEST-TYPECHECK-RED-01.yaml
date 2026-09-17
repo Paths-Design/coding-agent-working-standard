@@ -51,3 +51,9 @@ evidence:
     recorded_at: "2026-09-17T12:15:12.622Z"
     artifact_path: packages/caws-cli/tests/kernel/unit/evidence-rederive.test.ts
     commit_sha: "71c0808f"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Every indexed read goes through at<T>(xs, i), which throws 'expected an element at index i, got length N' when the element is absent, plus run1/run2 wrappers returning fixed-arity tuples. No non-null assertion (!) and no tsconfig loosening was used: noUncheckedIndexedAccess is the flag that makes these reads honest, so silencing it would have removed the check instead of satisfying it. A test that stops producing the verdict it asserts on now fails with a named error rather than reading undefined."
+    recorded_at: "2026-09-17T12:15:14.553Z"
+    artifact_path: packages/caws-cli/tests/kernel/unit/evidence-rederive.test.ts
+    commit_sha: "71c0808f"
