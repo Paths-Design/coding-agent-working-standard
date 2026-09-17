@@ -37,6 +37,7 @@ import { spawnSync } from 'child_process';
 
 import { unifiedDiff } from './unified-diff';
 import type {
+  HookPackDriftClass,
   HookPackFile,
   HookPackFileAction,
   HookPackInstallResult,
@@ -290,6 +291,42 @@ function bytesEqual(a: Buffer, b: Buffer): boolean {
   return a.compare(b) === 0;
 }
 
+/**
+ * Decide WHICH SIDE moved for a body that differs from the shipping template.
+ *
+ * A two-way comparison (installed vs template) proves only that they differ.
+ * It cannot attribute the difference, because consumer growth and upstream
+ * growth are the same inequality viewed from opposite ends. The installer
+ * records the as-installed body under `.caws/hooks/.pristine/`, and comparing
+ * against that third point separates them:
+ *
+ *   installed !== baseline  → the repo edited it            → local_growth
+ *   installed === baseline  → only the template moved       → upstream_only
+ *   no readable baseline    → cannot be told apart          → unobserved
+ *
+ * Fails closed in every direction it cannot see: an unreadable or missing
+ * baseline yields `unobserved`, never `upstream_only`. Mislabelling growth as
+ * a stale copy is the one error here that ends in destroyed work, so the
+ * uncertain case must never land on the permissive label.
+ *
+ * Uses the same `stripPackVersion` normalization as `evaluateFileState`, so a
+ * version-stamp-only difference never reads as either kind of growth.
+ *
+ * CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01 A1/A2/A3.
+ */
+function classifyDrift(
+  repoRoot: string,
+  packId: string,
+  file: HookPackFile,
+  localBytes: Buffer
+): HookPackDriftClass {
+  const pristine = readPristineBaseline(repoRoot, packId, file.destPath);
+  if (pristine === null) return 'unobserved';
+  const localBody = stripPackVersion(localBytes.toString('utf8'));
+  const pristineBody = stripPackVersion(pristine);
+  return localBody === pristineBody ? 'upstream_only' : 'local_growth';
+}
+
 function evaluateFileState(
   repoRoot: string,
   packRoot: string,
@@ -349,8 +386,10 @@ function evaluateFileState(
 
   if (rawSourceBytes === null) {
     // Source template missing — this is a bug in the install, not a
-    // collision. Surface as drift so we don't silently no-op.
-    return { kind: 'managed_drift', header };
+    // collision. Surface as drift so we don't silently no-op. With no
+    // template there is nothing to attribute the difference to, so the
+    // class is unobserved rather than a guess in either direction.
+    return { kind: 'managed_drift', header, driftClass: 'unobserved' };
   }
 
   // Content is the authority for "did the consumer edit this"; the header
@@ -407,11 +446,22 @@ function evaluateFileState(
     return { kind: 'managed_clean', header };
   }
 
-  // The body genuinely differs — the consumer grew this hook. Preserve it: the
-  // applyOne handler refuses (drift) unless --overwrite/--adopt. A version bump
-  // alone never silently clobbers an edited hook.
+  // The body genuinely differs. Preserve it: the applyOne handler refuses
+  // (drift) unless --overwrite/--adopt. A version bump alone never silently
+  // clobbers an edited hook.
   // CAWS-HOOK-PACK-MANAGED-HEADER-GROWTH-DOCTRINE-001.
-  return { kind: 'managed_drift', header };
+  //
+  // WHICH side moved is a separate question from WHETHER to refuse. This used
+  // to assume the consumer grew the hook, but upstream growth the consumer has
+  // not received produces the identical inequality — so the assumption made a
+  // purely stale copy unreportable as stale, and pushed the operator toward
+  // --force, the same flag that discards real growth.
+  // CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01.
+  return {
+    kind: 'managed_drift',
+    header,
+    driftClass: classifyDrift(repoRoot, packId, file, localBytes),
+  };
 }
 
 /**
@@ -444,19 +494,13 @@ export function observeSharedPackBodyDrift(repoRoot: string): readonly SharedPac
   const packRoot = packTemplateRoot(SHARED_PACK.id);
   const drifted: SharedPackDriftRow[] = [];
   for (const file of SHARED_PACK.installedFiles) {
-    let kind: InstallFileState['kind'];
+    let state: InstallFileState;
     try {
-      kind = evaluateFileState(
-        repoRoot,
-        packRoot,
-        SHARED_PACK.id,
-        SHARED_PACK.packVersion,
-        file
-      ).kind;
+      state = evaluateFileState(repoRoot, packRoot, SHARED_PACK.id, SHARED_PACK.packVersion, file);
     } catch {
       continue;
     }
-    if (kind !== 'managed_drift') continue;
+    if (state.kind !== 'managed_drift') continue;
 
     // Built mutable, classified below, then pushed as the frozen row shape.
     const row: {
@@ -470,18 +514,22 @@ export function observeSharedPackBodyDrift(repoRoot: string): readonly SharedPac
       localGrowth: false,
       upstreamChange: false,
     };
-    const localBytes = readBytes(path.join(repoRoot, file.destPath));
+    // localGrowth is READ from the classification evaluateFileState already
+    // made rather than recomputed here. Two surfaces deciding the same
+    // question from the same inputs must not hold two copies of the rule —
+    // that is how the install path came to attribute upstream growth to the
+    // consumer while this audit path classified it correctly.
+    // (CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01.)
     const pristine = readPristineBaseline(repoRoot, SHARED_PACK.id, file.destPath);
-    if (localBytes !== null && pristine !== null) {
+    if (pristine !== null) {
       row.baselinePresent = true;
-      const localBody = stripPackVersion(localBytes.toString('utf8'));
+      row.localGrowth = state.driftClass === 'local_growth';
       const pristineBody = stripPackVersion(pristine);
       const sourceBytes = readBytes(path.join(packRoot, file.sourcePath));
       if (sourceBytes !== null) {
         const templateBody = stripPackVersion(
           renderPackFileBytes(sourceBytes, repoRoot, file, SHARED_PACK.packVersion).toString('utf8')
         );
-        row.localGrowth = localBody !== pristineBody;
         row.upstreamChange = pristineBody !== templateBody;
       }
       // Template unreadable: leave both flags false but baselinePresent true —
@@ -637,7 +685,7 @@ function applyOne(ctx: InstallContext, file: HookPackFile): HookPackFileAction {
       return { destPath: file.destPath, action: 'updated', restampOnly: true };
 
     case 'managed_drift':
-      return resolveCollision(ctx, file, 'managed_drift', true);
+      return resolveCollision(ctx, file, 'managed_drift', true, state.driftClass);
 
     case 'unmanaged_collision':
       return resolveCollision(ctx, file, 'unmanaged_collision', true);
@@ -671,7 +719,8 @@ function resolveCollision(
   ctx: InstallContext,
   file: HookPackFile,
   reason: 'managed_drift' | 'unmanaged_collision',
-  apply: boolean
+  apply: boolean,
+  driftClass?: HookPackDriftClass
 ): HookPackFileAction {
   if (overwriteSelects(ctx, file)) {
     if (ctx.force) {
@@ -686,6 +735,7 @@ function resolveCollision(
       destPath: file.destPath,
       action: 'refused',
       refusalReason: reason,
+      ...(driftClass === undefined ? {} : { driftClass }),
       forceRequired: true,
       diff: incomingDiff(ctx, file),
     };
@@ -697,6 +747,7 @@ function resolveCollision(
     destPath: file.destPath,
     action: 'refused',
     refusalReason: reason,
+    ...(driftClass === undefined ? {} : { driftClass }),
   };
 }
 
@@ -716,7 +767,7 @@ function planOne(ctx: InstallContext, file: HookPackFile): HookPackFileAction {
     case 'managed_old_version':
       return { destPath: file.destPath, action: 'updated', restampOnly: true };
     case 'managed_drift':
-      return resolveCollision(ctx, file, 'managed_drift', false);
+      return resolveCollision(ctx, file, 'managed_drift', false, state.driftClass);
     case 'unmanaged_collision':
       return resolveCollision(ctx, file, 'unmanaged_collision', false);
   }

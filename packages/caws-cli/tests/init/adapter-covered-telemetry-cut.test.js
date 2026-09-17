@@ -418,6 +418,11 @@ describe('CAWS-INIT-PLAN-BLIND-TELEMETRY-RETIREMENT-001: --plan previews the ret
           destPath: '.caws/hooks/session-log.sh',
           action: 'refused',
           refusalReason: 'managed_drift',
+          // The fixture writes this row by hand, so no pristine baseline was
+          // ever recorded for it and the install path cannot attribute the
+          // difference to either side. Unobserved is the fail-closed answer.
+          // (CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01.)
+          driftClass: 'unobserved',
         },
       ]);
       // And the refusal is non-destructive: the row is still on disk.

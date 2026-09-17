@@ -72,6 +72,14 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
   // actually wants attention. Framing them identically as a problem to
   // "resolve" is what trains agents to treat their own growth as an error.
   const drifted: string[] = [];
+  // Drift where the installed body still matches the baseline this installer
+  // wrote: the template moved, not the repo. Framing these as "your edits"
+  // told the operator something untrue and pointed them at --force.
+  // (CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01.)
+  const staleCopies: string[] = [];
+  // Drift with no recorded baseline: genuinely undecidable, so it is reported
+  // as undecided rather than folded into either confident bucket.
+  const unclassifiedDrift: string[] = [];
   const collided: string[] = [];
   // Overwrite selected these files but --force was absent: the replacement
   // was withheld and each refusal carries the diff of what --force would do.
@@ -91,7 +99,13 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
         if (a.forceRequired === true) {
           withheld.push({ destPath: a.destPath, diff: a.diff ?? '' });
         } else if (a.refusalReason === 'managed_drift') {
-          drifted.push(a.destPath);
+          if (a.driftClass === 'upstream_only') {
+            staleCopies.push(a.destPath);
+          } else if (a.driftClass === 'unobserved') {
+            unclassifiedDrift.push(a.destPath);
+          } else {
+            drifted.push(a.destPath);
+          }
         } else {
           collided.push(a.destPath);
         }
@@ -127,6 +141,35 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
     lines.push('                  (shows a diff per file; nothing is written). Add --force');
     lines.push('                  to apply — only that path discards local edits. Target');
     lines.push('                  specific files with --overwrite <path...>.');
+  }
+
+  if (staleCopies.length > 0) {
+    lines.push(`  Template moved — no local edit recorded (${staleCopies.length}):`);
+    for (const p of staleCopies) lines.push(`    ↥ ${p}`);
+    lines.push('');
+    lines.push('  These match the body this installer last wrote, byte for byte. The');
+    lines.push('  template grew and this copy did not, so the difference is upstream');
+    lines.push('  work you have not received — not growth of your own. init still did');
+    lines.push('  NOT overwrite them, because a matching baseline narrows the question');
+    lines.push('  rather than settling it: the port path re-baselines a ported body, so');
+    lines.push('  a file whose growth was absorbed by an earlier port looks identical to');
+    lines.push('  a never-edited one. Read the delta, then decide:');
+    lines.push('    caws init diff                              Show what upstream added.');
+    lines.push('    --overwrite <path...> --force               Refresh the paths you have');
+    lines.push('                                               confirmed are stale copies.');
+    lines.push('    --adopt                                    Keep this version and stop');
+    lines.push('                                               reporting it as drift.');
+  }
+
+  if (unclassifiedDrift.length > 0) {
+    lines.push(`  Drift unclassified — no recorded baseline (${unclassifiedDrift.length}):`);
+    for (const p of unclassifiedDrift) lines.push(`    ? ${p}`);
+    lines.push('');
+    lines.push('  These differ from the template, but no pristine baseline was recorded');
+    lines.push('  for them, so init cannot tell your growth from an un-received upstream');
+    lines.push('  change. It refuses rather than guess — guessing "stale" is the error');
+    lines.push('  that destroys work. Inspect with `caws init diff` and treat the result');
+    lines.push('  as growth unless you can show otherwise.');
   }
 
   if (collided.length > 0) {
