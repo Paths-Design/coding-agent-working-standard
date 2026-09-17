@@ -16,7 +16,8 @@ scope:
     - 'TODO: list the file(s) or directories this spec authorizes.'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A hook-execution row must let an operator distinguish ''the handler ran and found nothing'', ''the handler failed'', and ''the harness tore the chain down'' — three states that currently all appear as a bare exit_code.'
+  - 'Evidence: session 1ee72137, 2243 naming-check.sh invocations — 2161 exit 0, 70 exit 141 (SIGPIPE, identical count across all seven PostToolUse handlers, i.e. chain-wide), 17-18 exit 1. Every nonzero row had empty stdout AND stderr. The blocking plane was unaffected: bash-write-guard.sh exit 2 x14 and worktree-guard.sh exit 2 x2 carried full remediation text.'
 acceptance:
   - id: A1
     given: 'a PostToolUse handler that exits nonzero with empty stdout and stderr'
