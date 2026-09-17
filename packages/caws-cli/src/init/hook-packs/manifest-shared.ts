@@ -468,7 +468,15 @@ import { isAdapterCoveredSurface } from './types';
 // marker lives under .caws/hooks/ because protected-paths.sh refuses agent
 // writes there and `caws init` never emits it, so it cannot be minted inside a
 // governed repo to disarm a real session's escalation.
-export const SHARED_PACK_VERSION = 80;
+// v81: session-log.sh sealed usage.models in whatever order find(1) handed back
+// the turn files. That order is a filesystem property, not a session property —
+// APFS returns hash order (turn-001, turn-007, turn-011, ...), ext4 returns its
+// own — so identical turn files sealed to different models lists on a developer
+// machine and in CI. The token sums are order-independent and were always
+// correct; only models carried the defect. The sealer now sorts the turn files
+// by name before concatenating them, matching the renderer's own
+// sorted(directory.glob("turn-*.json")).
+export const SHARED_PACK_VERSION = 81;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
