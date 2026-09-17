@@ -137,3 +137,9 @@ evidence:
     recorded_at: "2026-09-17T08:30:10.138Z"
     test_nodeid: "packages/caws-cli/tests/init/drift-discharge-discoverability.test.js::A3: following the printed advice actually discharges the drift"
     commit_sha: "2bb4822614157483261061d0a589b6709166781b"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Asserts the baseline a port writes is the UPSTREAM body: not equal to what landed, and containing neither the repo growth nor the reconciled upstream line — then that the classifier reports local_growth. Falsified by restoring the one-line prior behavior (writePristineBaseline(..., rendered)): A4 and A3 both went red with 'Expected: local_growth / Received: upstream_only', reproducing the defect on demand. Second oracle, independent of my own test: packages/caws-cli/tests/init/init-upgrade-retrofit.test.js 'A5: port validates, lands, records the baseline, and resumes drift tracking' previously asserted readPristineBaseline(...) === landed. That assertion contradicted its own test name and the three-way test above it — a baseline equal to what landed reports zero LOCAL GROWTH on a file that just had growth ported in — so the oracle was corrected from the requirement, not bent to match the code, and now pins threeWay.available plus localGrowthDiff containing the ported line. The unreadable-template arm writes no baseline, so the path classifies unobserved and refuses rather than classifying confidently from a wrong third point."
+    recorded_at: "2026-09-17T08:30:26.135Z"
+    test_nodeid: "packages/caws-cli/tests/init/drift-discharge-discoverability.test.js::A4: a port baselines the template, so reconciled work is never called upstream_only"
+    commit_sha: "2bb4822614157483261061d0a589b6709166781b"
