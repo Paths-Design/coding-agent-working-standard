@@ -65,3 +65,9 @@ evidence:
     recorded_at: "2026-09-17T01:42:14.345Z"
     test_nodeid: "packages/caws-cli/tests/shell/help-claim-integrity.test.js::specs validate: 0 when valid, non-zero when invalid or unreadable"
     commit_sha: "4ee762dfe8f1245b926db73d2a1f04dd9a0eee2a"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "The lint holds the CLASS rather than the three instances, which is what makes the fix durable instead of a one-time cleanup. Two rules over every option on every command in COMMAND_SURFACE_METADATA: no description may match /\\\\bv\\\\d+\\\\.\\\\d+/, and any description phrased as a closed set (/only \\\\S+ (is|are)? supported/i) must carry allowedValues. Both regexes match the exact strings this slice removed - 'only v10 is supported in v11.2' satisfies each - so they would have gone red before the fix and are not vacuous now. Failure output names the offending command path and flag, so the next author gets the location rather than a bare boolean. SCOPE LIMIT: the lint catches a set stated with the word 'supported' or a version number; a closed set described some other way (an unphrased enumeration) still passes, so it narrows the class rather than closing it."
+    recorded_at: "2026-09-17T01:42:30.211Z"
+    test_nodeid: "packages/caws-cli/tests/shell/help-claim-integrity.test.js::no option description names a CAWS version"
+    commit_sha: "4ee762dfe8f1245b926db73d2a1f04dd9a0eee2a"
