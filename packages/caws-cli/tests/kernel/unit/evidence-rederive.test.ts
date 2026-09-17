@@ -19,6 +19,7 @@ import {
   planRederivation,
   summarizeRederivation,
   type CheckOutcome,
+  type CriterionVerdict,
   type RederivationReport,
 } from '../../../src/kernel/evidence/rederive';
 import { parseAndValidateSpec } from '../../../src/kernel/spec';
@@ -62,12 +63,42 @@ function run(spec: Spec, rep: RederivationReport | undefined) {
   return classifyRederivation(spec, plan, rep);
 }
 
+/**
+ * `noUncheckedIndexedAccess` (tsconfig.kernel-test.json) types every indexed
+ * read as `T | undefined`, which is correct: nothing guarantees the element is
+ * there. These helpers discharge that obligation by CHECKING rather than
+ * asserting it away — a `!` would compile and then read `undefined` at runtime.
+ * If the classifier stops emitting a verdict the test is written around, the
+ * failure names the arity instead of surfacing as a confusing property error.
+ */
+function at<T>(xs: readonly T[], i: number): T {
+  const x = xs[i];
+  if (x === undefined)
+    throw new Error(`expected an element at index ${i}, got length ${xs.length}`);
+  return x;
+}
+
+/** run() for a spec with exactly one criterion under test. */
+function run1(spec: Spec, rep: RederivationReport | undefined): [CriterionVerdict] {
+  const vs = run(spec, rep);
+  return [at(vs, 0)];
+}
+
+/** run() for a spec with two criteria under test. */
+function run2(
+  spec: Spec,
+  rep: RederivationReport | undefined
+): [CriterionVerdict, CriterionVerdict] {
+  const vs = run(spec, rep);
+  return [at(vs, 0), at(vs, 1)];
+}
+
 // ─── the ancestral bug (A1) ──────────────────────────────────────────────────
 
 describe('a found-but-unrun check is never verified (A1)', () => {
   test('outcome not_run -> not_rederived / not_run, never verified', () => {
     const spec = specWith([ac('A1')], [ev('A1', { test_nodeid: 'tests/t.py::test_x' })]);
-    const [v] = run(
+    const [v] = run1(
       spec,
       report({ A1: [{ class: 'test', target: 'tests/t.py::test_x', outcome: 'not_run' }] })
     );
@@ -78,7 +109,7 @@ describe('a found-but-unrun check is never verified (A1)', () => {
 
   test('outcome failed -> refuted / test_failed', () => {
     const spec = specWith([ac('A1')], [ev('A1', { test_nodeid: 'tests/t.py::test_x' })]);
-    const [v] = run(
+    const [v] = run1(
       spec,
       report({
         A1: [
@@ -93,12 +124,12 @@ describe('a found-but-unrun check is never verified (A1)', () => {
     );
     expect(v.verdict).toBe('refuted');
     expect(v.reason).toBe('test_failed');
-    expect(v.checks[0].detail).toBe('assert 1 == 2');
+    expect(at(v.checks, 0).detail).toBe('assert 1 == 2');
   });
 
   test('only outcome passed yields verified', () => {
     const spec = specWith([ac('A1')], [ev('A1', { test_nodeid: 'tests/t.py::test_x' })]);
-    const [v] = run(
+    const [v] = run1(
       spec,
       report({ A1: [{ class: 'test', target: 'tests/t.py::test_x', outcome: 'passed' }] })
     );
@@ -177,7 +208,7 @@ describe('each fabrication class refutes with its own reason (A3)', () => {
   ];
   test.each(cases)('%s -> refuted / %s', (_label, fields, outcome, reason) => {
     const spec = specWith([ac('A1')], [ev('A1', fields)]);
-    const [v] = run(spec, report({ A1: [outcome] }));
+    const [v] = run1(spec, report({ A1: [outcome] }));
     expect(v.verdict).toBe('refuted');
     expect(v.reason).toBe(reason);
   });
@@ -197,7 +228,7 @@ describe('command checks are planned non-executable and never trusted', () => {
       [ev('A1', { command: 'touch /tmp/probe' })]
     );
     const plan = planRederivation(spec);
-    const cmds = plan.criteria[0].checks.filter((c) => c.class === 'command');
+    const cmds = at(plan.criteria, 0).checks.filter((c) => c.class === 'command');
     expect(cmds).toHaveLength(2);
     for (const c of cmds) expect(c.executable).toBe(false);
     expect(cmds.map((c) => c.source).sort()).toEqual(['acceptance', 'evidence']);
@@ -205,7 +236,7 @@ describe('command checks are planned non-executable and never trusted', () => {
 
   test('a store that wrongly reports passed for a command is ignored: command_not_executed', () => {
     const spec = specWith([ac('A1')], [ev('A1', { command: 'touch /tmp/probe' })]);
-    const [v] = run(
+    const [v] = run1(
       spec,
       report({ A1: [{ class: 'command', target: 'touch /tmp/probe', outcome: 'passed' }] })
     );
@@ -216,7 +247,7 @@ describe('command checks are planned non-executable and never trusted', () => {
 
   test('a passing citation beside a command still yields not_rederived, not verified', () => {
     const spec = specWith([ac('A1')], [ev('A1', { commit_sha: 'abc', command: 'x' })]);
-    const [v] = run(
+    const [v] = run1(
       spec,
       report({ A1: [{ class: 'citation', target: 'abc', outcome: 'passed' }] })
     );
@@ -243,7 +274,7 @@ describe('an unavailable report never reads as clean', () => {
 
   test('narrative-only entry -> no_mechanical_field; no entry -> no_evidence', () => {
     const spec = specWith([ac('A1'), ac('A2')], [ev('A1', { evidence_ref: 'ran it, trust me' })]);
-    const [a1, a2] = run(spec, report({}));
+    const [a1, a2] = run2(spec, report({}));
     expect(a1.reason).toBe('no_mechanical_field');
     expect(a1.self_reported).toBe(false);
     expect(a2.reason).toBe('no_evidence');
@@ -253,7 +284,7 @@ describe('an unavailable report never reads as clean', () => {
 
   test('an executable check the store did not report -> outcome_missing', () => {
     const spec = specWith([ac('A1')], [ev('A1', { commit_sha: 'abc' })]);
-    const [v] = run(spec, report({ A1: [] }));
+    const [v] = run1(spec, report({ A1: [] }));
     expect(v.reason).toBe('outcome_missing');
     expect(v.verdict).toBe('not_rederived');
   });
@@ -263,7 +294,7 @@ describe('an unavailable report never reads as clean', () => {
       [ac('A1'), ac('A2')],
       [ev('A1', { test_nodeid: 'a' }), ev('A2', { test_nodeid: 'b' })]
     );
-    const [a1, a2] = run(
+    const [a1, a2] = run2(
       spec,
       report({
         A1: [{ class: 'test', target: 'a', outcome: 'timeout' }],
@@ -280,7 +311,7 @@ describe('an unavailable report never reads as clean', () => {
 describe('a criterion is verified only when every check holds', () => {
   test('passed citation + unrun test -> not_rederived', () => {
     const spec = specWith([ac('A1')], [ev('A1', { commit_sha: 'abc', test_nodeid: 't::x' })]);
-    const [v] = run(
+    const [v] = run1(
       spec,
       report({
         A1: [
@@ -296,7 +327,7 @@ describe('a criterion is verified only when every check holds', () => {
 
   test('passed citation + failed test -> refuted', () => {
     const spec = specWith([ac('A1')], [ev('A1', { commit_sha: 'abc', test_nodeid: 't::x' })]);
-    const [v] = run(
+    const [v] = run1(
       spec,
       report({
         A1: [
@@ -314,7 +345,7 @@ describe('a criterion is verified only when every check holds', () => {
       [ac('A1')],
       [ev('A1', { commit_sha: 'abc', artifact_path: 'p', test_nodeid: 't::x' })]
     );
-    const [v] = run(
+    const [v] = run1(
       spec,
       report({
         A1: [
@@ -334,7 +365,7 @@ describe('a criterion is verified only when every check holds', () => {
 describe('self_reported and divergence', () => {
   test('any mechanical field marks the criterion self_reported', () => {
     const spec = specWith([ac('A1'), ac('A2')], [ev('A1', { artifact_path: 'p' }), ev('A2')]);
-    const [a1, a2] = run(
+    const [a1, a2] = run2(
       spec,
       report({ A1: [{ class: 'artifact', target: 'p', outcome: 'passed' }] })
     );
@@ -348,7 +379,7 @@ describe('self_reported and divergence', () => {
       [ev('A1', { test_nodeid: 't::same' })]
     );
     const plan = planRederivation(spec);
-    const tests = plan.criteria[0].checks.filter((c) => c.class === 'test');
+    const tests = at(plan.criteria, 0).checks.filter((c) => c.class === 'test');
     expect(tests.map((c) => [c.target, c.source])).toEqual([
       ['t::same', 'evidence'],
       ['t::other', 'acceptance'],
@@ -361,7 +392,7 @@ describe('self_reported and divergence', () => {
       [ac('A1', { test_nodeids: ['t::declared'] })],
       [ev('A1', { test_nodeid: 't::substituted' })]
     );
-    const [v] = run(spec, undefined);
+    const [v] = run1(spec, undefined);
     expect(v.divergence).toEqual({ declared: ['t::declared'], reported: 't::substituted' });
   });
 
@@ -371,8 +402,8 @@ describe('self_reported and divergence', () => {
       [ev('A1', { test_nodeid: 't::a' })]
     );
     const none = specWith([ac('A1')], [ev('A1', { test_nodeid: 't::a' })]);
-    expect(run(within, undefined)[0].divergence).toBeUndefined();
-    expect(run(none, undefined)[0].divergence).toBeUndefined();
+    expect(at(run(within, undefined), 0).divergence).toBeUndefined();
+    expect(at(run(none, undefined), 0).divergence).toBeUndefined();
   });
 });
 
@@ -415,7 +446,7 @@ evidence:
     expect(isOk(parsed)).toBe(true);
     if (!isOk(parsed)) return;
     const plan = planRederivation(parsed.value);
-    expect(plan.criteria[0].checks).toEqual([
+    expect(at(plan.criteria, 0).checks).toEqual([
       { class: 'citation', target: 'd7f2267d90', source: 'evidence', executable: true },
       {
         class: 'artifact',
@@ -520,8 +551,8 @@ describe('the summary tallies each category separately', () => {
     ]);
     // A narrative-only criterion asserts nothing mechanical, so it is neither
     // self-reported nor verifiable.
-    expect(verdicts[5].reason).toBe('no_mechanical_field');
-    expect(verdicts[5].self_reported).toBe(false);
+    expect(at(verdicts, 5).reason).toBe('no_mechanical_field');
+    expect(at(verdicts, 5).self_reported).toBe(false);
     expect(summarizeRederivation(verdicts)).toEqual({
       total: 6,
       verified: 1,
@@ -558,7 +589,7 @@ describe('a criterion takes the verdict of its weakest check', () => {
       [ac('A1')],
       [ev('A1', { commit_sha: 'sha', artifact_path: 'p', test_nodeid: 't::x' })]
     );
-    const [v] = run(
+    const [v] = run1(
       spec,
       report({
         A1: [
@@ -575,7 +606,7 @@ describe('a criterion takes the verdict of its weakest check', () => {
 
   test('among equally weak checks the first one supplies the reason', () => {
     const spec = specWith([ac('A1')], [ev('A1', { commit_sha: 'nope', artifact_path: 'gone.md' })]);
-    const [v] = run(
+    const [v] = run1(
       spec,
       report({
         A1: [
@@ -600,7 +631,7 @@ describe('a store outcome is matched on the (class, target) pair', () => {
       [ac('A1', { test_nodeids: ['t::passing'] })],
       [ev('A1', { test_nodeid: 't::failing' })]
     );
-    const [v] = run(
+    const [v] = run1(
       spec,
       report({
         A1: [
@@ -619,7 +650,7 @@ describe('a store outcome is matched on the (class, target) pair', () => {
 
   test('one target reused across two classes does not cross-wire', () => {
     const spec = specWith([ac('A1')], [ev('A1', { commit_sha: 'dup', artifact_path: 'dup' })]);
-    const [v] = run(
+    const [v] = run1(
       spec,
       report({
         A1: [
@@ -639,7 +670,7 @@ describe('a store outcome is matched on the (class, target) pair', () => {
       [ac('A1'), ac('A2')],
       [ev('A1', { commit_sha: 'a' }), ev('A2', { commit_sha: 'b' })]
     );
-    const [, a2] = run(
+    const [, a2] = run2(
       spec,
       report({ A1: [{ class: 'citation', target: 'a', outcome: 'passed' }] })
     );
@@ -656,7 +687,7 @@ describe('divergence is bound to the criterion that declared the nodeid', () => 
       [ac('A1'), ac('A2', { test_nodeids: ['t::declared'] })],
       [ev('A1', { test_nodeid: 't::a1' }), ev('A2', { test_nodeid: 't::substituted' })]
     );
-    const [a1, a2] = run(spec, undefined);
+    const [a1, a2] = run2(spec, undefined);
     expect(a1.divergence).toBeUndefined();
     expect(a2.divergence).toEqual({ declared: ['t::declared'], reported: 't::substituted' });
   });
@@ -666,7 +697,7 @@ describe('divergence is bound to the criterion that declared the nodeid', () => 
       [ac('A1', { test_nodeids: ['t::declared'] })],
       [ev('A1', { artifact_path: 'docs/p.md' })]
     );
-    const [v] = run(spec, undefined);
+    const [v] = run1(spec, undefined);
     expect(v.checks.map((c) => [c.class, c.source])).toEqual([
       ['artifact', 'evidence'],
       ['test', 'acceptance'],
@@ -676,7 +707,7 @@ describe('divergence is bound to the criterion that declared the nodeid', () => 
 
   test('an empty declared list is not a divergence', () => {
     const spec = specWith([ac('A1', { test_nodeids: [] })], [ev('A1', { test_nodeid: 't::x' })]);
-    expect(run(spec, undefined)[0].divergence).toBeUndefined();
+    expect(at(run(spec, undefined), 0).divergence).toBeUndefined();
   });
 
   test('a plan naming a criterion the spec does not carry degrades, never throws', () => {
@@ -688,7 +719,7 @@ describe('divergence is bound to the criterion that declared the nodeid', () => 
       [ev('A1', { test_nodeid: 't::substituted' })]
     );
     const stale = specWith([ac('B9')]);
-    const [v] = classifyRederivation(stale, planRederivation(planned), undefined);
+    const v = at(classifyRederivation(stale, planRederivation(planned), undefined), 0);
     expect(v.id).toBe('A1');
     expect(v.divergence).toBeUndefined();
   });
@@ -702,7 +733,7 @@ describe('a check declared only by the acceptance contract', () => {
     // same agent authored — self-reported is about who supplied the field, not
     // which array it landed in.
     const spec = specWith([ac('A1', { test_nodeids: ['t::declared'] })]);
-    const [v] = run(spec, undefined);
+    const [v] = run1(spec, undefined);
     expect(v.checks.map((c) => [c.class, c.target, c.source])).toEqual([
       ['test', 't::declared', 'acceptance'],
     ]);
@@ -716,7 +747,7 @@ describe('a check declared only by the acceptance contract', () => {
       [ev('A1', { commit_sha: 'sha', test_nodeid: 't::same' })]
     );
     const plan = planRederivation(spec);
-    expect(plan.criteria[0].checks.map((c) => [c.class, c.target, c.source])).toEqual([
+    expect(at(plan.criteria, 0).checks.map((c) => [c.class, c.target, c.source])).toEqual([
       ['citation', 'sha', 'evidence'],
       ['test', 't::same', 'evidence'],
     ]);

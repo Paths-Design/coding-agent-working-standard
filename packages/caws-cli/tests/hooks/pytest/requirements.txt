@@ -3,3 +3,8 @@
 # the `test:pytest` npm script — the system python is PEP-668 externally-managed
 # and must not be pip-installed into.
 pytest==8.3.4
+# test_session_log_renderer.py validates rendered turns against both the kernel
+# producer contract and the hook-pack schema. Without this the two contract
+# tests raise ModuleNotFoundError; making the import conditional instead would
+# let them skip silently, which proves nothing while reporting green.
+jsonschema==4.23.0

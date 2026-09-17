@@ -48,6 +48,19 @@ function schemaFindings(report: ReturnType<typeof inspectProjectState>) {
   return report.findings.filter((f) => f.rule === RULE);
 }
 
+/**
+ * `noUncheckedIndexedAccess` types every indexed read as `T | undefined`. This
+ * checks rather than asserts: if a rule stops emitting the finding a test is
+ * written around, the failure names the arity instead of surfacing as a
+ * confusing property access on undefined.
+ */
+function at<T>(xs: readonly T[], i: number): T {
+  const x = xs[i];
+  if (x === undefined)
+    throw new Error(`expected an element at index ${i}, got length ${xs.length}`);
+  return x;
+}
+
 describe('doctor.init.legacy_working_spec_schema_present (CAWS-SPEC-SCHEMA-AUTHORITY-UNSTATED-001)', () => {
   test('rule id is the stable string remediation text and docs name', () => {
     expect(DOCTOR_RULES.INIT_LEGACY_WORKING_SPEC_SCHEMA_PRESENT).toBe(RULE);
@@ -59,14 +72,14 @@ describe('doctor.init.legacy_working_spec_schema_present (CAWS-SPEC-SCHEMA-AUTHO
     );
     const found = schemaFindings(report);
     expect(found).toHaveLength(1);
-    expect(found[0].severity).toBe('error');
+    expect(at(found, 0).severity).toBe('error');
     // The finding must name the file that actually exists: a message or
     // repair pointing at the root path would tell the operator to remove a
     // file that is not there.
-    expect(found[0].subject).toBe(NESTED_PATH);
-    expect(found[0].message).toContain(NESTED_PATH);
-    expect(found[0].narrowRepair).toContain(NESTED_PATH);
-    expect(found[0].narrowRepair).not.toContain(`Remove or archive ${ROOT_PATH}`);
+    expect(at(found, 0).subject).toBe(NESTED_PATH);
+    expect(at(found, 0).message).toContain(NESTED_PATH);
+    expect(at(found, 0).narrowRepair).toContain(NESTED_PATH);
+    expect(at(found, 0).narrowRepair).not.toContain(`Remove or archive ${ROOT_PATH}`);
   });
 
   test('A2: the root path still fires exactly one unchanged error', () => {
@@ -77,9 +90,9 @@ describe('doctor.init.legacy_working_spec_schema_present (CAWS-SPEC-SCHEMA-AUTHO
     // Exactly one: widening detection must not double-report the path that
     // is now visible through both the boolean and the list.
     expect(found).toHaveLength(1);
-    expect(found[0].severity).toBe('error');
-    expect(found[0].subject).toBe(ROOT_PATH);
-    expect(found[0].message).toContain('legacy single-spec residue');
+    expect(at(found, 0).severity).toBe('error');
+    expect(at(found, 0).subject).toBe(ROOT_PATH);
+    expect(at(found, 0).message).toContain('legacy single-spec residue');
   });
 
   test('both copies present fire one finding each, naming each path', () => {
@@ -108,7 +121,7 @@ describe('doctor.init.legacy_working_spec_schema_present (CAWS-SPEC-SCHEMA-AUTHO
     const legacyWriterWithFile = inspectProjectState(input({ workingSpecSchemaJson: true }));
     const found = schemaFindings(legacyWriterWithFile);
     expect(found).toHaveLength(1);
-    expect(found[0].subject).toBe(ROOT_PATH);
+    expect(at(found, 0).subject).toBe(ROOT_PATH);
 
     const legacyWriterClean = inspectProjectState(input({ workingSpecSchemaJson: false }));
     expect(schemaFindings(legacyWriterClean)).toHaveLength(0);
