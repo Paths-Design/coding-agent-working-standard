@@ -73,3 +73,9 @@ evidence:
     recorded_at: "2026-09-17T12:23:20.808Z"
     artifact_path: .husky/tests/run.sh
     commit_sha: "10df026b"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "T8f2 'a failing typecheck refuses the push and names itself' PASSED: with CAWS_STAGE_FAIL='run typecheck' the hook exits 1, prints 'refusing the push' AND 'typecheck failed'. T8f3 is its non-vacuity control and also passed: the build stage still appears in the log, proving the failure was matched to typecheck alone rather than to every 'npm run'. This required changing the stub from equality on $1 to a prefix match on the full argument string — the old form could not distinguish typecheck from build, so CAWS_STAGE_FAIL='run' would have failed both and proven neither."
+    recorded_at: "2026-09-17T12:23:32.428Z"
+    artifact_path: .husky/tests/run.sh
+    commit_sha: "10df026b"
