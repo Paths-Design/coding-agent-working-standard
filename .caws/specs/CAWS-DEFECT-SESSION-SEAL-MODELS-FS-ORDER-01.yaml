@@ -19,7 +19,8 @@ scope:
     - 'packages/caws-cli/tests/hooks/pytest/test_session_log_renderer.py'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A sealed .meta.json is a function of the turn files'' CONTENT and turn numbers only — never of the order the filesystem happens to return directory entries in.'
+  - 'The shell sealer and the Python renderer must agree on turn ordering; session_log_renderer.py already uses sorted(glob), so the shell path sorts too.'
 acceptance:
   - id: A1
     given: 'a session dir whose turn-NNN.json files are returned by the filesystem in an order other than turn order'
