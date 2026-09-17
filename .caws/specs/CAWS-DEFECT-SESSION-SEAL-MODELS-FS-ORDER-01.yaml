@@ -2,9 +2,11 @@ id: CAWS-DEFECT-SESSION-SEAL-MODELS-FS-ORDER-01
 title: 'Seal session usage.models in turn order, not filesystem order'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'session-log.sh sealed usage.models in find(1) directory order, a filesystem property rather than a session property: CI''s ext4 returned turn-002 before turn-001 and inverted the models list for byte-identical inputs, failing Release Qualification on fd87f810 while macOS stayed green. The sealer now sorts turn files by name before concatenating, matching session_log_renderer.py''s own sorted(glob). Token sums were never affected (order-independent under jq add) and are now pinned as the discriminator. Two regression tests, both red first: a behavioral one using twelve descending-created turns (pre-fix APFS produced model-01,07,11,10,06,05,09,08,04,12,03,02 -- neither creation nor lexical order) and a structural drift guard that holds on every filesystem. SHARED_PACK_VERSION 80->81 + fingerprint so installed packs receive the fix. Verified in-lane: pytest 302 passed exit 0 (300 before the new tests), init 257/257, bats 293/293 with 0 not-ok, pack-fingerprint 14/14.'
 created_at: '2026-09-17T12:42:27.452Z'
-updated_at: '2026-09-17T12:43:02.445Z'
+updated_at: '2026-09-17T12:55:43.262Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
