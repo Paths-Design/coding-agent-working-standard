@@ -60,3 +60,10 @@ contracts:
   - name: 'prepush-stage-sequence'
     type: behavior
     path: '.husky/tests/run.sh'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "pre-push now runs 'npm run typecheck -w @paths.design/caws-cli' as stage [1/5], the same invocation .github/workflows/release-qualification.yml runs. Verified green both from canonical root and from a linked worktree root (exit 0, 0 'error TS' lines) — the worktree case matters because node_modules there is a symlink to canonical and most pushes originate from a lane. Placed first rather than in CI's exact slot because it is the cheapest stage; it still precedes lint as CI does."
+    recorded_at: "2026-09-17T12:23:19.293Z"
+    artifact_path: .husky/pre-push
+    commit_sha: "10df026b"
