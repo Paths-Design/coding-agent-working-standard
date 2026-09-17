@@ -666,9 +666,18 @@ function renderActionList(actions: readonly HookPackInstallResult['actions'][num
     unchanged: [],
     refused: [],
   };
+  // Refusals are split by WHICH SIDE moved. A bare "Would refuse" cannot tell
+  // an operator whether the file holds edits worth preserving or is simply a
+  // stale copy, so both used to route to --overwrite --force — the flag that
+  // discards growth. (CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01.)
+  groups.refused_upstream_only = [];
+  groups.refused_local_growth = [];
+  groups.refused_unobserved = [];
   for (const action of actions) {
     if (action.action === 'updated' && action.restampOnly === true) {
       groups.restamped?.push(action.destPath);
+    } else if (action.action === 'refused' && action.driftClass !== undefined) {
+      groups[`refused_${action.driftClass}`]?.push(action.destPath);
     } else {
       groups[action.action]?.push(action.destPath);
     }
@@ -679,12 +688,33 @@ function renderActionList(actions: readonly HookPackInstallResult['actions'][num
     restamped: 'Would re-stamp (version-only, content identical)',
     unchanged: 'Unchanged',
     refused: 'Would refuse',
+    refused_local_growth: 'Would refuse — edited here since install (growth to preserve)',
+    refused_upstream_only: 'Would refuse — template moved; no local edit recorded over baseline',
+    refused_unobserved: 'Would refuse — drift unclassified (no recorded baseline)',
   };
-  for (const key of ['created', 'updated', 'restamped', 'unchanged', 'refused']) {
+  for (const key of [
+    'created',
+    'updated',
+    'restamped',
+    'unchanged',
+    'refused',
+    'refused_local_growth',
+    'refused_upstream_only',
+    'refused_unobserved',
+  ]) {
     const values = groups[key] ?? [];
     if (values.length === 0) continue;
     lines.push(`  ${labels[key]} (${values.length}):`);
     for (const value of values) lines.push(`    - ${value}`);
+  }
+  if ((groups.refused_upstream_only ?? []).length > 0) {
+    lines.push('');
+    lines.push('  The upstream-only files match the body this installer last wrote, so no');
+    lines.push('  local edit is recorded against them — the template grew and this copy');
+    lines.push('  did not. Read the delta before refreshing anyway: the port path also');
+    lines.push('  re-baselines a ported body, so a matching baseline narrows the question');
+    lines.push('  without answering it. Inspect with `caws init diff`, then refresh the');
+    lines.push('  confirmed-stale paths with `caws init --overwrite <path...> --force`.');
   }
   return lines;
 }

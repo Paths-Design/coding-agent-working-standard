@@ -121,6 +121,30 @@ export interface HookPackV1 {
   readonly activation: 'immediate' | 'restart_required' | 'unknown';
 }
 
+/** Why a managed file's body differs from the shipping template.
+ *
+ * A body difference alone cannot say WHO changed the file: the consumer may
+ * have grown it, or upstream may have grown the template while this copy sat
+ * still. Both produce the same two-way inequality. The installer records the
+ * as-installed body at `.caws/hooks/.pristine/<packId>/<destPath>`, and that
+ * third point is what separates them.
+ *
+ * `upstream_only` is a NARROWED INVESTIGATION, not a safety verdict. The port
+ * path re-baselines a ported body, so a body equal to its baseline may still
+ * be growth that an earlier port absorbed. It says "no local edit is recorded
+ * over the baseline" — never "refreshing is safe".
+ *
+ * CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01.
+ */
+export type HookPackDriftClass =
+  /** Installed body differs from its recorded baseline: the repo edited it. */
+  | 'local_growth'
+  /** Installed body equals its baseline; only the template moved. */
+  | 'upstream_only'
+  /** No baseline recorded (or it is unreadable), so the two cannot be told
+   *  apart. Always refused — absence of evidence is not evidence of safety. */
+  | 'unobserved';
+
 /** Managed-file header fields. Used by install for parse/emit. */
 export interface ManagedHeader {
   readonly hookPack: string;
@@ -146,7 +170,14 @@ export type InstallFileState =
     }
   /** Managed file at destPath matching this pack/version but content
    *  differs from bundled. Refuses without --adopt or --overwrite. */
-  | { readonly kind: 'managed_drift'; readonly header: ManagedHeader }
+  | {
+      readonly kind: 'managed_drift';
+      readonly header: ManagedHeader;
+      /** Which side moved, decided against the recorded pristine baseline.
+       *  Diagnostic only: every class still refuses without --adopt or
+       *  --overwrite. */
+      readonly driftClass: HookPackDriftClass;
+    }
   /** File at destPath without a managed header. Refuses without
    *  --adopt or --overwrite. */
   | { readonly kind: 'unmanaged_collision' };
@@ -172,6 +203,12 @@ export interface HookPackFileAction {
   readonly action: 'created' | 'updated' | 'unchanged' | 'refused';
   /** When action === 'refused', the reason. */
   readonly refusalReason?: 'unmanaged_collision' | 'managed_drift';
+  /** When refusalReason === 'managed_drift', which side moved. Carried as its
+   *  own field rather than widening `refusalReason`, so consumers already
+   *  matching 'managed_drift' keep working. Absent for unmanaged collisions,
+   *  which have no baseline to compare against.
+   *  (CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01 A4.) */
+  readonly driftClass?: HookPackDriftClass;
   /** True when --overwrite selected this file but --force was absent: the
    *  replacement was withheld pending explicit confirmation. The renderer
    *  surfaces `diff` and the --overwrite --force remediation. */
