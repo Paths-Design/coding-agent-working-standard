@@ -46,3 +46,10 @@ acceptance:
     then: 'no option description references a CAWS version number, and any option naming a closed accepted set carries allowedValues'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "MIGRATABLE_SOURCE_VERSIONS (src/store/migration-versions.ts) now holds the accepted set. Both --from options carry it as allowedValues, and both rejection messages read describeMigratableSourceVersions(), so help and guard cannot disagree. No user-facing string names a release number: 'only v10 is supported in v11.2' shipped in four of them while the package was at 12.2.0-rc.2. THIRD COPY FOUND ONLY BY INVOKING DIST: register.ts:868 carried a duplicate --from guard that shadowed the handler's check AND forwarded a hardcoded 'v10', so the handler's validation was unreachable and its message never reached a caller - fixing the handler alone changed nothing observable. That is the register.ts opt-forward class; a handler unit test goes green over it. The parse-layer copy is removed. Runtime after the fix: 'caws specs migrate: --from accepts v10; got \"v11\".' and 'caws events migrate: --from accepts v10; got \"v9\".'"
+    recorded_at: "2026-09-17T01:41:33.455Z"
+    test_nodeid: packages/caws-cli/tests/shell/help-claim-integrity.test.js
+    commit_sha: "4ee762dfe8f1245b926db73d2a1f04dd9a0eee2a"
