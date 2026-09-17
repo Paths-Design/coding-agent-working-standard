@@ -1280,7 +1280,33 @@ export function portHookFile(pack: HookPackV1, options: HookPackPortOptions): Ho
       // chmod can fail on some filesystems (Windows). Non-fatal.
     }
   }
-  writePristineBaseline(options.repoRoot, pack.id, file, rendered);
+  // The baseline records the UPSTREAM body this path was last synced to, not
+  // whatever landed on top of it. A port lands a RECONCILED body — template
+  // plus the repo's own growth — so baselining the candidate made
+  // `installed === baseline` true for a file that is mostly local work, and the
+  // drift classifier then read it as `upstream_only`: "no local edit recorded"
+  // about the one shape guaranteed to hold local edits. That is the label that
+  // makes `--overwrite --force` look safe on reconciled work.
+  //
+  // Baselining the TEMPLATE instead keeps `installed - baseline = local growth`
+  // true by construction on both write paths, which is what the baseline was
+  // introduced to mean. It also dissolves the ambiguity doctor's
+  // pack_body_drift row documents ("the port path re-baselines the ported
+  // body") at its source, rather than describing it forever.
+  //
+  // If the template cannot be read we write NO baseline: an absent baseline
+  // classifies `unobserved` and refuses, whereas a wrong one classifies
+  // confidently. Fail closed.
+  // CAWS-DEFECT-DRIFT-DISCHARGE-UNDISCOVERABLE-01.
+  const templateBytes = readBytes(path.join(ctx.packRoot, file.sourcePath));
+  if (templateBytes !== null) {
+    writePristineBaseline(
+      options.repoRoot,
+      pack.id,
+      file,
+      renderPackFileBytes(templateBytes, ctx.repoRoot, file, pack.packVersion)
+    );
+  }
 
   return {
     ok: true,

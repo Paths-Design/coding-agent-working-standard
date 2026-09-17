@@ -106,16 +106,67 @@ description phrased as a closed set must carry `allowedValues`.
     is verified NEW local growth → new INFO rule
     `doctor.hooks.pack_local_growth` (refresh would destroy it; the retrofit
     is the reconciliation). Baseline-clean drift keeps the WARNING — worded
-    as AMBIGUOUS, because the `caws init port` path re-baselines the ported
-    body, so growth that went through a port looks baseline-clean too
-    (proven live: sterling's `post_tool_use.sh` carries its REPO-LOCAL banner
-    in both the installed file and the baseline). The version-lag finding
-    downgrades to INFO only when every drifted file has verified new growth.
+    as AMBIGUOUS, because `caws init port` in 12.0.0 and 12.1.0 baselined the
+    reconciled body it landed, so growth that went through a port under those
+    versions looks baseline-clean too (proven live: sterling's
+    `post_tool_use.sh` carries its REPO-LOCAL banner in both the installed
+    file and the baseline). Ports from this version no longer do — see the
+    drift-discharge entry below — but an already-absorbed baseline is not
+    healed retroactively, so the caveat stands for those repos. The
+    version-lag finding downgrades to INFO only when every drifted file has
+    verified new growth.
   - **The bare `caws init --adopt` no-op no longer claims governance is
     disabled.** A run that installs nothing now states exactly that: nothing
     was written, any already-installed pack remains in effect, and `--adopt`
     only decides collision handling during an install. Repair texts no
     longer offer `--adopt` as a doctor discharge.
+
+- **Hook-pack drift refusals say who changed the file, instead of only that it
+  differs** (`CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01`). An
+  installed-vs-template comparison proves the two differ; it cannot attribute
+  the difference, so every refusal read the same whether the repo had grown the
+  hook or upstream had moved. The installer's pristine baseline is the third
+  point that separates them, and refusals now carry a `driftClass`:
+  - `local_growth` — the installed body differs from its recorded baseline, so
+    the repo edited it. Refreshing destroys work.
+  - `upstream_only` — the installed body matches its baseline, so only the
+    template moved. This is a NARROWED INVESTIGATION, not a safety verdict; it
+    says "no local edit is recorded over the baseline", never "refreshing is
+    safe".
+  - `unobserved` — no readable baseline, so nothing can be attributed.
+    Classification fails CLOSED: a missing or unreadable baseline is never
+    reported as `upstream_only`.
+
+  The plan preview and the applied-install output group refusals by class and
+  print different guidance per class, rather than one undifferentiated list.
+
+- **The non-destructive drift discharge is named where the block is read**
+  (`CAWS-DEFECT-DRIFT-DISCHARGE-UNDISCOVERABLE-01`). Every drift refusal
+  offered exactly two exits — `--overwrite --force` (discard local edits) and
+  `--adopt` (keep them and stop tracking drift). Neither reconciles.
+  `caws init port <path> --from <staging-file>` already did both, but no
+  refusal named it, and refusal text is the only surface an agent reads at the
+  moment of a block.
+  - **Five help descriptions claimed a legacy-only scope the code does not
+    enforce.** `--overwrite`, `--force`, `--adopt`, `init diff` and `init port`
+    were described as "Legacy packs only" / "LEGACY project-pack";
+    `resolvePacks` returns the current shared pack for both diff and port, and
+    `overwriteSelects` has no legacy branch. An agent reading "legacy"
+    concludes the discharge is not for its pack and takes a destructive exit.
+  - **`caws init port` now baselines the upstream template, not the body it
+    landed.** A ported body is template plus local growth, so baselining it
+    made `installed == baseline` true for the one file shape guaranteed to hold
+    local edits, and the classifier above then reported `upstream_only` — "no
+    local edit recorded" — about reconciled work. That is precisely the label
+    that makes `--overwrite --force` look safe. If the template cannot be read,
+    no baseline is written at all, so the path classifies `unobserved` and
+    refuses rather than classifying confidently from a wrong third point.
+  - **Baselines written by 12.0.0 and 12.1.0 are not corrected retroactively.**
+    A repo that ran `caws init port` on those versions still reads
+    `upstream_only` on that path; re-porting it under this version clears it.
+    The `doctor.hooks.pack_body_drift` repair now says so, and names
+    `caws init port` alongside `--overwrite --force` instead of offering only
+    the destructive exit.
 
 - **Undelivered messages to dead sessions gain a retention path**
   (`CAWS-DEFECT-MESSAGE-PRUNE-DEAD-RECIPIENT-01`, recorded in sterling's

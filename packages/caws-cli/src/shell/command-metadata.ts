@@ -1156,17 +1156,17 @@ const INIT_BOOTSTRAP: LeafCommandMeta = {
     {
       flag: '--overwrite [paths...]',
       description:
-        'Legacy packs only: preview replacement of selected drifted files (all when bare). --force applies the reviewed replacement.',
+        'Preview replacing drifted managed files with the shipped template (all when bare, or name paths). Withholds the write and prints a diff; --force applies it and discards local edits. To keep local edits while taking upstream, use caws init port.',
     },
     {
       flag: '--force',
       description:
-        'Legacy packs only: apply --overwrite replacements. Invalid without --overwrite; never overrides governance migration.',
+        'Apply the --overwrite replacements, discarding local edits at those paths. Invalid without --overwrite; never overrides governance migration.',
     },
     {
       flag: '--adopt',
       description:
-        'Legacy packs only: retain local files and stop tracking pack drift for those paths.',
+        'Retain the local files and stop tracking pack drift for those paths. This ends drift reporting rather than reconciling it; caws init port lands reconciled content and resumes tracking.',
     },
     {
       flag: '--wire-user-config',
@@ -1258,7 +1258,7 @@ export const INIT_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'diff',
       description:
-        'Read-only LEGACY project-pack drift comparison. System projects update their runtime once with adapters install.',
+        'Read-only drift comparison for the installed project pack (the shared pack, plus the detected surface pack). Machine runtime snapshots update separately via adapters install.',
       options: [
         INIT_SURFACE,
         DATA_OPTION,
@@ -1275,10 +1275,10 @@ export const INIT_COMMAND_META: GroupCommandMeta = {
       argument: {
         name: 'path',
         required: true,
-        description: 'Managed legacy pack destination path.',
+        description: 'Managed pack destination path (list them with caws init diff).',
       },
       description:
-        'Apply reviewed content to one LEGACY project-pack path through the managed installer. Does not edit immutable machine runtime snapshots.',
+        'Land reviewed content at one managed pack path through the installer: it validates, version-stamps, records a new pristine baseline and audit-commits, so drift tracking resumes. This is the non-destructive discharge for a drifted hook — unlike --overwrite --force it keeps what you reconciled. Requires --from; does not edit immutable machine runtime snapshots.',
       options: [
         INIT_SURFACE,
         DATA_OPTION,

@@ -711,10 +711,28 @@ function renderActionList(actions: readonly HookPackInstallResult['actions'][num
     lines.push('');
     lines.push('  The upstream-only files match the body this installer last wrote, so no');
     lines.push('  local edit is recorded against them — the template grew and this copy');
-    lines.push('  did not. Read the delta before refreshing anyway: the port path also');
-    lines.push('  re-baselines a ported body, so a matching baseline narrows the question');
-    lines.push('  without answering it. Inspect with `caws init diff`, then refresh the');
+    lines.push('  did not. Read the delta before refreshing anyway: `caws init port` in');
+    lines.push('  12.0.0 and 12.1.0 baselined the body it landed, so a path ported by');
+    lines.push('  those versions still reads this way. Ports from this version do not.');
+    lines.push('  Inspect with `caws init diff`, then refresh the');
     lines.push('  confirmed-stale paths with `caws init --overwrite <path...> --force`.');
+  }
+  const driftRefusals =
+    (groups.refused_local_growth ?? []).length +
+    (groups.refused_upstream_only ?? []).length +
+    (groups.refused_unobserved ?? []).length;
+  if (driftRefusals > 0) {
+    // The refusal is the only surface read at the moment of the block, so the
+    // non-destructive discharge has to be named HERE. Without it the menu is
+    // "destroy your edits" or "stop tracking drift", and neither reconciles.
+    // (CAWS-DEFECT-DRIFT-DISCHARGE-UNDISCOVERABLE-01.)
+    lines.push('');
+    lines.push('  To take upstream WITHOUT discarding local edits, reconcile the two into');
+    lines.push('  a staging file outside the hooks tree and land it:');
+    lines.push('    caws init port <path> --from <staging-file>');
+    lines.push('  That validates, version-stamps, records a new baseline and audit-commits,');
+    lines.push('  so drift tracking resumes on the path. `--adopt` is the opposite trade:');
+    lines.push('  it keeps your file and stops tracking drift there.');
   }
   return lines;
 }

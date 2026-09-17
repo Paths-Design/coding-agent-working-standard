@@ -129,12 +129,19 @@ export interface HookPackV1 {
  * as-installed body at `.caws/hooks/.pristine/<packId>/<destPath>`, and that
  * third point is what separates them.
  *
- * `upstream_only` is a NARROWED INVESTIGATION, not a safety verdict. The port
- * path re-baselines a ported body, so a body equal to its baseline may still
- * be growth that an earlier port absorbed. It says "no local edit is recorded
- * over the baseline" — never "refreshing is safe".
+ * `upstream_only` is a NARROWED INVESTIGATION, not a safety verdict. It says
+ * "no local edit is recorded over the baseline" — never "refreshing is safe".
  *
- * CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01.
+ * The residual doubt is now historical rather than structural. `caws init port`
+ * in 12.0.0 and 12.1.0 baselined the RECONCILED body it landed, absorbing the
+ * repo's growth into the very record meant to expose it, so a grown file that
+ * was ported by those versions still reads `upstream_only` today. Ports from
+ * this version baseline the upstream template instead, which is what keeps
+ * `installed - baseline = local growth` true. A baseline written by an older
+ * CLI is not healed retroactively — re-port the path to correct it.
+ *
+ * CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01,
+ * CAWS-DEFECT-DRIFT-DISCHARGE-UNDISCOVERABLE-01.
  */
 export type HookPackDriftClass =
   /** Installed body differs from its recorded baseline: the repo edited it. */
