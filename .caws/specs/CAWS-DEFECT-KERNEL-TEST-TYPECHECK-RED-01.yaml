@@ -1,0 +1,31 @@
+id: CAWS-DEFECT-KERNEL-TEST-TYPECHECK-RED-01
+title: 'Restore a green kernel-test typecheck so Release Qualification can pass'
+risk_tier: 3
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-17T09:08:53.363Z'
+updated_at: '2026-09-17T09:08:53.363Z'
+created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
+blast_radius:
+  modules:
+    - 'packages/caws-cli kernel unit tests'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/kernel/unit/evidence-rederive.test.ts'
+    - 'packages/caws-cli/tests/kernel/unit/doctor-legacy-spec-schema.test.ts'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'tsconfig.kernel-test.json sets noUncheckedIndexedAccess, so every indexed read is T | undefined, and two kernel unit test files index classifier and finding arrays directly'
+    when: 'npm run typecheck -w @paths.design/caws-cli runs'
+    then: 'it exits 0. It currently emits 76 errors (67 in evidence-rederive.test.ts, 9 in doctor-legacy-spec-schema.test.ts) and is the FIRST failing step of Release Qualification, which has failed on every push to main since at least 2026-09-16 and blocks publication entirely'
+  - id: A2
+    given: 'the errors are absence-of-element errors, which a non-null assertion would silence without checking'
+    when: 'the fix is applied'
+    then: 'each indexed read goes through a helper that throws a named error when the element is absent, so a test that stops producing the verdict or finding it asserts on fails loudly rather than reading undefined. Loosening the tsconfig flag is refused: it is the flag that makes these reads honest'
+non_functional: {}
+contracts: []
