@@ -82,3 +82,9 @@ evidence:
     recorded_at: "2026-09-17T04:08:18.096Z"
     test_nodeid: "packages/caws-cli/tests/init/install-drift-classification.test.js::A1: an installed body equal to its baseline is reported as upstream_only, not growth"
     commit_sha: "61d229ad585fc247615c056d645de0d379794d8f"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Positive control for the narrowing. The fixture edits ONLY the installed file, leaving the baseline as installed, so installed != baseline and the classifier must still say local_growth and still refuse. Without this case A1 could be satisfied by labelling everything upstream_only. Paired with the shared no-auto-update assertion, which re-runs the real installHookPack for all three classes and asserts action refused, forceRequired undefined and byte-identical file content afterwards, pinning that the write gate did not move."
+    recorded_at: "2026-09-17T04:08:31.587Z"
+    test_nodeid: "packages/caws-cli/tests/init/install-drift-classification.test.js::A2: a body edited since install is still classified as local growth"
+    commit_sha: "61d229ad585fc247615c056d645de0d379794d8f"
