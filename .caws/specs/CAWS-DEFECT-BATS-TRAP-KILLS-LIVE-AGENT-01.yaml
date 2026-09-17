@@ -36,6 +36,15 @@ acceptance:
     then: >-
       CAWS_TRAP_KILL defaults to 0 and CAWS_AGENT_PROCESS_NAMES resolves empty, so
       trap_resolve_agent_identity holds every kill
+  - id: A3
+    given: 'a fixture repo carrying the .test-harness marker'
+    when: >-
+      a caller presets CAWS_AGENT_PROCESS_NAMES to a live agent-surface name such as
+      'claude' or 'codex', with CAWS_TRAP_KILL=1
+    then: >-
+      the live name is filtered out of the resolved target list, so no live agent
+      process can be aimed at even by an explicit preset; a sacrificial non-surface
+      name such as python3 is preserved
 non_functional: {}
 contracts:
   - name: 'hook-test-harness-attestation'
