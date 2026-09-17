@@ -2,9 +2,11 @@ id: CAWS-DEFECT-DRIFT-DISCHARGE-UNDISCOVERABLE-01
 title: 'Hook-drift refusals never name caws init port, and help scopes every discharge to legacy packs it does not apply to'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'The non-destructive discharge already existed; it was undiscoverable. caws init port <path> --from <staging-file> is now named in every drift refusal on both renderers, distinguished from --adopt by outcome (RESUMES vs STOPS drift tracking), and in the doctor pack_body_drift repair. Five help descriptions that scoped the discharge flags to ''Legacy packs only'' were removed — resolvePacks returns the current shared pack for diff and port, disproved at runtime on a live dsh v3 file. The positive-control test (A3) caught a defect in my own prior slice: portHookFile baselined the reconciled body it landed, so installed == baseline held for the one file shape guaranteed to hold local edits and the classifier reported upstream_only about reconciled work — the label that makes --overwrite --force look safe. Port now baselines the upstream template, and writes no baseline at all when the template is unreadable so the path refuses as unobserved rather than classifying from a wrong third point. That behavior change made four surfaces state a present-tense falsehood; each is now past-tense and scoped to 12.0.0/12.1.0, which is where portHookFile shipped, because absorbed baselines in those repos are NOT healed retroactively. Full suite 239 suites / 2996 tests / exit 0. KNOWN GAP, not closed here: only the doctor surface has an assertion pinning the corrected caveat; the two renderer sections were verified by grep but are not test-pinned, and they are the surfaces an agent actually reads at block time.'
 created_at: '2026-09-17T08:08:55.857Z'
-updated_at: '2026-09-17T08:27:08.156Z'
+updated_at: '2026-09-17T08:31:13.513Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
