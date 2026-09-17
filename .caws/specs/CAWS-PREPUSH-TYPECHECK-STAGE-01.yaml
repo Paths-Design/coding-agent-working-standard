@@ -42,6 +42,12 @@ acceptance:
       the first logged invocation as npm run typecheck -w @paths.design/caws-cli —
       the workspace flag specifically, since a bare npm run typecheck would silently
       resolve against the workspaces and never reach the intended script
+  - id: A3
+    given: 'T8 already proves a failing stage refuses the push, but only for the audit stage'
+    when: 'the typecheck stage is the one that fails'
+    then: >-
+      pre-push exits 1 and prints 'refusing the push', proving the new stage's exit
+      code is actually inspected rather than run-and-ignored
 non_functional: {}
 contracts:
   - name: 'prepush-stage-sequence'
