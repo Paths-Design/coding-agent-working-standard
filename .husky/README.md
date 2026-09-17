@@ -115,7 +115,7 @@ files in the working tree, recoverable with `git diff`.
 
 ### Why `pre-push` takes a lock
 
-All four stages write to the shared turbo cache and to `dist/`. Two pushes from
+All five stages write to the shared turbo cache and to `dist/`. Two pushes from
 sibling worktrees running at once interleave those writes and produce failures
 that reproduce nowhere. `lib/prepush-lock.sh` serialises them on the common git
 dir: it reclaims the lock if the holder's pid is gone, refuses to release a lock

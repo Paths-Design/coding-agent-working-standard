@@ -87,10 +87,29 @@ trap 'caws_prepush_lock_release "$LOCK_DIR"' EXIT INT TERM
 
 FAILED=false
 
-echo "pre-push: mirroring CI (lint, audit, build, test)"
+echo "pre-push: mirroring CI (typecheck, lint, audit, build, test)"
 
-# 1. Lint
-echo "  [1/4] lint"
+# 1. Typecheck. FIRST because it is the cheapest stage by an order of magnitude
+# and the one whose absence actually cost us: ts-jest does not gate on
+# diagnostics, so a type error in a test file is invisible to stage 5 and
+# surfaces only in Release Qualification — which nobody reads until a release is
+# attempted. Main accepted red-qualification commits for two days on that gap.
+#
+# The -w flag is load-bearing, not stylistic. Root .npmrc sets workspaces=true,
+# so a bare `npm run typecheck` resolves against the workspaces and never
+# reaches the intended script. This is the exact invocation
+# .github/workflows/release-qualification.yml runs.
+echo "  [1/5] typecheck"
+run_with_timeout 600 npm run typecheck -w @paths.design/caws-cli
+TYPECHECK_EXIT=$?
+if [ $TYPECHECK_EXIT -eq 124 ]; then
+  echo "  typecheck timed out after 10m" >&2; FAILED=true
+elif [ $TYPECHECK_EXIT -ne 0 ]; then
+  echo "  typecheck failed (exit $TYPECHECK_EXIT) — reproduce with: npm run typecheck -w @paths.design/caws-cli" >&2; FAILED=true
+fi
+
+# 2. Lint
+echo "  [2/5] lint"
 run_with_timeout 600 npx turbo run lint
 LINT_EXIT=$?
 if [ $LINT_EXIT -eq 124 ]; then
@@ -99,14 +118,14 @@ elif [ $LINT_EXIT -ne 0 ]; then
   echo "  lint failed (exit $LINT_EXIT) — reproduce with: npx turbo run lint" >&2; FAILED=true
 fi
 
-# 2. Security audit (critical only; high has unfixable transitive deps)
-echo "  [2/4] audit"
+# 3. Security audit (critical only; high has unfixable transitive deps)
+echo "  [3/5] audit"
 if ! npm audit --audit-level=critical; then
   echo "  audit failed — reproduce with: npm audit --audit-level=critical" >&2; FAILED=true
 fi
 
-# 3. Build
-echo "  [3/4] build"
+# 4. Build
+echo "  [4/5] build"
 run_with_timeout 900 npm run build
 BUILD_EXIT=$?
 if [ $BUILD_EXIT -eq 124 ]; then
@@ -115,9 +134,9 @@ elif [ $BUILD_EXIT -ne 0 ]; then
   echo "  build failed (exit $BUILD_EXIT) — reproduce with: npm run build" >&2; FAILED=true
 fi
 
-# 4. Full test suite. Log to a unique file: a fixed /tmp path races between
+# 5. Full test suite. Log to a unique file: a fixed /tmp path races between
 # concurrent pushes from sibling worktrees and truncates the other's output.
-echo "  [4/4] test (full suite)"
+echo "  [5/5] test (full suite)"
 TEST_LOG=$(mktemp "${TMPDIR:-/tmp}/caws-pre-push-test.XXXXXX")
 run_with_timeout 900 npm test 2>&1 | tee "$TEST_LOG"
 TEST_EXIT=${PIPESTATUS[0]}
