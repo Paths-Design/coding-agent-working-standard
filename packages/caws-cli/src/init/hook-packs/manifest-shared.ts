@@ -452,7 +452,23 @@ import { isAdapterCoveredSurface } from './types';
 // that DO have strike state instead of leaving the operator guessing a uuid.
 // Bump re-propagates: 28 of 28 runtime snapshots under ~/.caws/lib/runtimes
 // carry the old filter, and installed copies are copied, not linked.
-export const SHARED_PACK_VERSION = 79;
+// v80 (CAWS-DEFECT-BATS-TRAP-KILLS-LIVE-AGENT-01): the danger-latch kill plane
+// could aim at the agent running the hook test suite. agent-surface.sh derives
+// CAWS_TRAP_KILL=1 + CAWS_AGENT_PROCESS_NAMES="claude" for the claude-code
+// surface on the premise — stated in its own comment — that the hook env is
+// harness-owned and the guard's ancestors are the session's processes. Under
+// bats both premises invert: the guard is exec'd as a child of the agent's own
+// Bash tool, so the ancestor walk resolves the LIVE agent, and a latch armed by
+// one test escalates in the next into a real SIGTERM against the developer's
+// session. Temp-dir isolation does not cover it — that scopes where the latch
+// sentinel lands, not whose PID the walk returns. agent-surface.sh now honors a
+// test-harness attestation (.caws/hooks/.test-harness) that defaults the kill
+// off AND filters every live agent-surface name out of the resolved target, so
+// a fixture can only ever aim the trap at a process it spawned itself. The
+// marker lives under .caws/hooks/ because protected-paths.sh refuses agent
+// writes there and `caws init` never emits it, so it cannot be minted inside a
+// governed repo to disarm a real session's escalation.
+export const SHARED_PACK_VERSION = 80;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

@@ -184,3 +184,110 @@ pwd > "$CAPTURE_FILE"'
   # unset (§1 above), so caws_run_cli's "." branch is what fires here.
   [ "$(cat "$capture")" = "$inherited_real" ]
 }
+
+# ---------------------------------------------------------------------------
+# CAWS-DEFECT-BATS-TRAP-KILLS-LIVE-AGENT-01 — test-harness attestation.
+#
+# Under bats the guard is a CHILD OF THE AGENT'S OWN BASH TOOL, so the trap's
+# ancestor walk resolves the live `claude` process running the suite, and the
+# claude-code surface enables the kill by default. A latch armed in one test
+# plus a denied attempt in the next then SIGTERMs the developer's session.
+# The attestation marker (.caws/hooks/.test-harness, written by helpers.bash)
+# disarms the kill plane for fixtures only; .caws/hooks/ is a protected path,
+# so an agent cannot mint it inside a governed repo.
+# ---------------------------------------------------------------------------
+
+# Sets TRAP_PLANE (stdout, exactly "<CAWS_TRAP_KILL>|<CAWS_AGENT_PROCESS_NAMES>")
+# and TRAP_STDERR (a file holding the lib's diagnostics), after sourcing the
+# installed lib against the given project dir with the given extra env.
+# Splitting the streams keeps both assertable: a --partial match on merged
+# output cannot distinguish "1|python3" from "1|python3 codex".
+_resolve_trap_plane() {
+  local project_dir="$1"; shift
+  TRAP_STDERR="$BATS_TEST_TMPDIR/trap-stderr.$$"
+  TRAP_PLANE="$(env -u CLAUDE_CODE_SESSION_ID "$@" \
+    CAWS_PROJECT_DIR="$project_dir" \
+    CAWS_AGENT_SURFACE="claude-code" \
+    bash -c "source '$project_dir/.caws/hooks/lib/agent-surface.sh' >/dev/null; \
+             printf '%s|%s' \"\${CAWS_TRAP_KILL:-}\" \"\${CAWS_AGENT_PROCESS_NAMES:-}\"" \
+    2>"$TRAP_STDERR")"
+}
+
+# A copy of the fixture .caws tree with the attestation marker REMOVED — i.e.
+# what a real consumer repo looks like.
+_unattested_repo() {
+  local dir
+  dir="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-unattested-XXXXXX")"
+  cp -R "$CAWS_TEST_REPO/.caws" "$dir/.caws"
+  rm -f "$dir/.caws/hooks/.test-harness"
+  printf '%s' "$dir"
+}
+
+@test "agent-surface: without the attestation the claude-code kill plane is armed (A1)" {
+  # The falsification control for A2/A3: production behavior must be untouched.
+  # If this ever goes green-by-default the attestation has leaked into real repos.
+  local plain; plain="$(_unattested_repo)"
+  [ ! -f "$plain/.caws/hooks/.test-harness" ]
+  _resolve_trap_plane "$plain"
+  rm -rf "$plain"
+  [ "$TRAP_PLANE" = "1|claude" ]
+}
+
+@test "agent-surface: the attestation disarms the kill and clears the surface target (A2)" {
+  [ -f "$CAWS_TEST_HOOKS_DIR/.test-harness" ]
+  _resolve_trap_plane "$CAWS_TEST_REPO"
+  # Kill default off AND no resolvable target: two independent holds, so a test
+  # that presets CAWS_TRAP_KILL=1 still cannot reach a live agent process.
+  [ "$TRAP_PLANE" = "0|" ]
+  # Silence is load-bearing, not cosmetic: bats merges a guard's stderr into the
+  # same capture its decision envelope lands in, so a diagnostic emitted on this
+  # ordinary path prepends itself to every JSON assertion in the suite (it broke
+  # quiet-merge and scan-secrets exactly this way). Clearing the surface default
+  # is the expected case and must say nothing.
+  refute grep -q 'refusing live agent process name' "$TRAP_STDERR"
+}
+
+@test "agent-surface: the attestation refuses a live agent name even when preset (A3)" {
+  # The hostile path: a test (or a stale env) explicitly aims the trap at the
+  # live harness process while forcing kill mode on.
+  _resolve_trap_plane "$CAWS_TEST_REPO" \
+    CAWS_TRAP_KILL=1 CAWS_AGENT_PROCESS_NAMES="claude python3 codex"
+  # The sacrificial name survives; both live-surface names are dropped. Exact
+  # equality, not a substring: "1|python3" must not be satisfied by
+  # "1|python3 codex" — that would pass while a live name was still aimable.
+  [ "$TRAP_PLANE" = "1|python3" ]
+  grep -q 'refusing live agent process name as trap target: claude' "$TRAP_STDERR"
+  grep -q 'refusing live agent process name as trap target: codex' "$TRAP_STDERR"
+}
+
+@test "agent-surface: every surface arm's process names are covered by the live-name set (A4)" {
+  # Drift guard: a new surface arm whose process name is absent from
+  # CAWS_AGENT_LIVE_PROCESS_NAMES would be aimable at under the attestation,
+  # silently re-opening the hazard. Enumerate the arms from the installed lib.
+  local lib="$CAWS_TEST_HOOKS_DIR/lib/agent-surface.sh"
+  local live
+  live="$(env -u CLAUDE_CODE_SESSION_ID CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
+    CAWS_AGENT_SURFACE="claude-code" \
+    bash -c "source '$lib' >/dev/null 2>&1; printf '%s' \"\$CAWS_AGENT_LIVE_PROCESS_NAMES\"")"
+  [ -n "$live" ]
+
+  # Case-arm assignments are indented inside the `case` block; the shared
+  # constant and the preserve-block assignment are at column 0.
+  local arm_names
+  # Literal assignments only: the preserve block assigns from a variable
+  # ("$_CAWS_AGENT_PROCESS_NAMES_PRESET"), which names no surface.
+  arm_names="$(grep -E '^[[:space:]]+CAWS_AGENT_PROCESS_NAMES="[^$]' "$lib" \
+    | sed -E 's/^[[:space:]]*CAWS_AGENT_PROCESS_NAMES="([^"]*)".*/\1/')"
+
+  local found=0 name
+  for name in $arm_names; do
+    found=$((found + 1))
+    case " $live " in
+      *" $name "*) ;;
+      *) fail "surface process name '$name' is missing from CAWS_AGENT_LIVE_PROCESS_NAMES" ;;
+    esac
+  done
+  # Guards the extraction itself: a regex that matched nothing would pass the
+  # loop vacuously. Surfaces today contribute well over ten distinct names.
+  [ "$found" -ge 10 ]
+}

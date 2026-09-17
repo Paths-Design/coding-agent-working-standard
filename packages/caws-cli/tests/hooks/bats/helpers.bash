@@ -54,6 +54,13 @@ caws_install_pack_once() {
   fi
   export CAWS_TEST_REPO CAWS_TEST_HOME
   export CAWS_TEST_HOOKS_DIR="$CAWS_TEST_REPO/.caws/hooks"
+  # A synthetic session identity for the fixture. Without it the guards resolve
+  # the REAL CLAUDE_CODE_SESSION_ID of whoever runs the suite, so latch and
+  # strike state keys to a live session and results depend on who ran the tests
+  # (CAWS-DEFECT-BATS-TRAP-KILLS-LIVE-AGENT-01). Unsetting it instead is not
+  # equivalent — several guards need SOME resolvable session id, and an absent
+  # one changes their envelope rather than isolating it.
+  export CAWS_TEST_SESSION_ID="caws-bats-fixture-$$"
   # HOME controls native harness config; CAWS_HOME controls runtime adoption.
   # Isolating only one still lets inherited machine state affect the fixture.
   if init_output="$(
@@ -67,6 +74,15 @@ caws_install_pack_once() {
     CI=true NO_COLOR=1 node "$CLI_DIST_ENTRY" init --agent-surface "$surface" 2>&1
   )"; then
     if [[ -x "$CAWS_TEST_HOOKS_DIR/dispatch/pre_tool_use.sh" ]]; then
+      # CAWS-DEFECT-BATS-TRAP-KILLS-LIVE-AGENT-01: attest that these guards are
+      # running under a test harness, not a real session. Without it the
+      # claude-code surface resolves CAWS_TRAP_KILL=1 + names="claude", and a
+      # latch armed by one test escalates in the next against the live `claude`
+      # process running bats — the guard is a child of the agent's own Bash
+      # tool, so the ancestor walk finds the developer's session. The marker
+      # lives under .caws/hooks/ because protected-paths.sh refuses agent
+      # writes there, so it cannot be minted inside a governed repo.
+      : > "$CAWS_TEST_HOOKS_DIR/.test-harness"
       return 0
     fi
     init_status=1
@@ -86,7 +102,7 @@ caws_teardown_pack() {
   if [[ -n "${CAWS_TEST_HOME:-}" && -d "$CAWS_TEST_HOME" ]]; then
     rm -rf "$CAWS_TEST_HOME"
   fi
-  unset CAWS_TEST_REPO CAWS_TEST_HOME CAWS_TEST_HOOKS_DIR
+  unset CAWS_TEST_REPO CAWS_TEST_HOME CAWS_TEST_HOOKS_DIR CAWS_TEST_SESSION_ID
 }
 
 # Build a hook-input envelope JSON. Usage: hook_envelope <tool> <file_path> <command>
@@ -111,7 +127,7 @@ hook_envelope_content() {
 # Populates bats' $status and $output (stdout+stderr merged by `run`).
 run_guard() {
   local guard="$1" envelope="$2"
-  run env \
+  run env CLAUDE_CODE_SESSION_ID="$CAWS_TEST_SESSION_ID" \
     CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$CAWS_TEST_REPO" \
@@ -137,7 +153,7 @@ run_guard_missing_lib() {
   cp -R "$CAWS_TEST_REPO/.caws" "$broken_repo/.caws"
   broken_hooks="$broken_repo/.caws/hooks"
   rm -f "$broken_hooks/lib/$missing_lib"
-  run env \
+  run env CLAUDE_CODE_SESSION_ID="$CAWS_TEST_SESSION_ID" \
     CAWS_PROJECT_DIR="$broken_repo" \
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$broken_repo" \
@@ -160,7 +176,7 @@ run_dispatcher_missing_lib() {
   cp -R "$CAWS_TEST_REPO/.caws" "$broken_repo/.caws"
   broken_hooks="$broken_repo/.caws/hooks"
   rm -f "$broken_hooks/lib/$missing_lib"
-  run env \
+  run env CLAUDE_CODE_SESSION_ID="$CAWS_TEST_SESSION_ID" \
     CAWS_PROJECT_DIR="$broken_repo" \
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$broken_repo" \
