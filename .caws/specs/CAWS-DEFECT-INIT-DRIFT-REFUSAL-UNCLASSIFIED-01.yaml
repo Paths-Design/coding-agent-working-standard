@@ -62,9 +62,11 @@ acceptance:
     given: 'a drifted managed hook in any of the three classes'
     when: 'caws init --plan --json emits the structured envelope'
     then: >-
-      refusalReason carries the class in the JSON, not only in the human table,
-      because an agent reading --json must reach the same verdict as a human reading
-      the rendered output and the text rendering is not a machine contract
+      the structured envelope carries the drift class as its own field alongside the
+      existing refusalReason, which keeps its current value. An agent reading --json
+      must reach the same verdict as a human reading the rendered table, and
+      widening refusalReason itself would break every consumer already matching
+      managed_drift
 non_functional: {}
 contracts:
   - name: 'hook-pack-file-action'
