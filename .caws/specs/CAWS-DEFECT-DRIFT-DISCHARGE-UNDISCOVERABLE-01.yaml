@@ -91,6 +91,28 @@ acceptance:
       at its source instead of describing it forever. If the template is unreadable
       no baseline is written at all, because an absent baseline refuses as
       unobserved while a wrong one classifies confidently
+  - id: A5
+    given: >-
+      the four surfaces that justified refusing a baseline-clean file by asserting,
+      in the present tense, that the port path re-baselines a ported body: the
+      HookPackDriftClass contract doc, the applied-install stale-copies section, the
+      plan upstream-only note, and the doctor pack_body_drift finding
+    when: >-
+      A4 changes the port path to baseline the upstream template, making that
+      assertion false of this version
+    then: >-
+      every one of the four states the caveat in the past tense and names the
+      versions it is true of (12.0.0 and 12.1.0, where portHookFile and pristine
+      baselines shipped in 8ca7ed21). That claim is the sole justification these
+      surfaces give for refusing to call the file refreshable, so the two failure
+      modes are asymmetric and both real: left in the present tense it turns a
+      resolved caveat into a permanent brake on a safe refresh, and deleted outright
+      it tells a consumer holding an absorbed baseline that refreshing is safe,
+      which destroys growth this fix does not heal retroactively. The doctor
+      narrowRepair additionally names caws init port <path> --from <staging-file>
+      and states that re-porting clears an absorbed baseline, because it previously
+      offered only --overwrite --force in the one surface a consumer reads when
+      deciding whether to refresh — the same omission this spec exists to fix
 non_functional: {}
 contracts:
   - name: 'hook-drift-discharge-guidance'
