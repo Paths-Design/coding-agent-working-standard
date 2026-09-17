@@ -236,10 +236,23 @@ describe('CAWS-HOOKPACK-UPGRADE-RETROFIT-001', () => {
     const landed = fs.readFileSync(path.join(repoRoot, AUDIT), 'utf8');
     expect(landed).toContain('# ported growth');
     expect(landed).toMatch(new RegExp(`^# hook_pack_version: ${SHARED_PACK.packVersion}$`, 'm'));
-    expect(readPristineBaseline(repoRoot, 'shared', AUDIT)).toBe(landed);
+
+    // The baseline records the UPSTREAM body this path was last synced to, NOT
+    // what landed. A ported body is template + local growth, so baselining it
+    // would make `installed - baseline` empty for the one file shape guaranteed
+    // to hold local edits — and the three-way diff asserted above would then
+    // report no LOCAL GROWTH on a file that just had growth ported into it.
+    const baseline = readPristineBaseline(repoRoot, 'shared', AUDIT);
+    expect(baseline).not.toBe(landed);
+    expect(baseline).not.toContain('# ported growth');
+
     const after = diffHookPack(SHARED_PACK, { repoRoot }).find((d) => d.destPath === AUDIT);
     expect(after.kind).toBe('managed_drift');
     expect(after.installedVersion).toBe(SHARED_PACK.packVersion);
+    // Drift tracking RESUMED means the baseline is usable again: the three-way
+    // decomposition is available and still attributes the growth locally.
+    expect(after.threeWay.available).toBe(true);
+    expect(after.threeWay.localGrowthDiff).toContain('# ported growth');
     fs.rmSync(staging, { force: true });
   });
 

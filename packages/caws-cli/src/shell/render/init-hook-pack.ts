@@ -135,8 +135,15 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
     lines.push('  init did NOT overwrite them, so no growth was lost. Your options:');
     lines.push('    (default)     Do nothing — keep your edits. This is the right choice');
     lines.push('                  when you intended to grow these hooks.');
-    lines.push('    --adopt       Same outcome made explicit: keep your version and stop');
-    lines.push('                  reporting it as drift on future runs.');
+    lines.push('    caws init port <path> --from <staging-file>');
+    lines.push('                  Take upstream AND keep your edits. Reconcile the two by');
+    lines.push('                  hand into a staging file outside the hooks tree, then');
+    lines.push('                  port it: init validates, version-stamps, records a new');
+    lines.push('                  baseline and audit-commits, so drift tracking RESUMES.');
+    lines.push('                  See what upstream changed first with `caws init diff`.');
+    lines.push('    --adopt       Keep your version and STOP tracking drift on these paths.');
+    lines.push('                  This silences the report; it does not reconcile, so later');
+    lines.push('                  upstream fixes will not be offered for them again.');
     lines.push('    --overwrite   Preview replacing your version with the upstream template');
     lines.push('                  (shows a diff per file; nothing is written). Add --force');
     lines.push('                  to apply — only that path discards local edits. Target');
@@ -154,11 +161,16 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
     lines.push('  rather than settling it: the port path re-baselines a ported body, so');
     lines.push('  a file whose growth was absorbed by an earlier port looks identical to');
     lines.push('  a never-edited one. Read the delta, then decide:');
-    lines.push('    caws init diff                              Show what upstream added.');
-    lines.push('    --overwrite <path...> --force               Refresh the paths you have');
-    lines.push('                                               confirmed are stale copies.');
-    lines.push('    --adopt                                    Keep this version and stop');
-    lines.push('                                               reporting it as drift.');
+    lines.push('    caws init diff                 Show what upstream added.');
+    lines.push('    --overwrite <path...> --force  Refresh the paths you confirmed are');
+    lines.push('                                   stale copies. Discards anything local.');
+    lines.push('    caws init port <path> --from <staging-file>');
+    lines.push('                                   Use this instead when the delta turns');
+    lines.push('                                   out to hold work worth keeping: land a');
+    lines.push('                                   reconciled body, re-baseline, and keep');
+    lines.push('                                   drift tracking on.');
+    lines.push('    --adopt                        Keep this version and STOP tracking');
+    lines.push('                                   drift — silences it without reconciling.');
   }
 
   if (unclassifiedDrift.length > 0) {
@@ -169,7 +181,10 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
     lines.push('  for them, so init cannot tell your growth from an un-received upstream');
     lines.push('  change. It refuses rather than guess — guessing "stale" is the error');
     lines.push('  that destroys work. Inspect with `caws init diff` and treat the result');
-    lines.push('  as growth unless you can show otherwise.');
+    lines.push('  as growth unless you can show otherwise. The discharge that assumes the');
+    lines.push('  least is `caws init port <path> --from <staging-file>`: reconcile the two');
+    lines.push('  bodies yourself, land the result, and a fresh baseline is recorded so the');
+    lines.push('  next upgrade can classify this path instead of guessing again.');
   }
 
   if (collided.length > 0) {
