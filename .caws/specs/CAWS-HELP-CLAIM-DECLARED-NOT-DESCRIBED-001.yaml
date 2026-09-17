@@ -53,3 +53,9 @@ evidence:
     recorded_at: "2026-09-17T01:41:33.455Z"
     test_nodeid: packages/caws-cli/tests/shell/help-claim-integrity.test.js
     commit_sha: "4ee762dfe8f1245b926db73d2a1f04dd9a0eee2a"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "WORKTREE_PRUNE_STATES and WORKTREE_PHYSICAL_CLEANUP_STATES are exported from shell/commands/worktree.ts and both --state descriptions derive from them. cleanup-plan is the sharper case: worktree.ts:1502 REFUSES any class not in WORKTREE_PHYSICAL_CLEANUP_STATES, yet the help named four of the eleven as a hand-written 'for example' - an open set that mysteriously rejects. Built help now lists all eleven: destroy-ready, unbound-clean-candidate, dirty-refused, unmerged-refused, active-bound-refused, foreign-owned-refused, missing-directory-refused, not-git-worktree-refused, unknown-spec-refused, unregistered-physical-refused, git-observation-unavailable. The per-command tests assert the FULL list by equality, not containment, because a description dropping one class while keeping the phrase would still satisfy a per-name loop; a sibling test asserts the two sets differ so neither passes by coincidence. FILE-LEVEL NODEID ON PURPOSE: the two per-command tests are parameterised, so their titles are template literals and no literal title exists to cite - my first attempt cited the resolved string and --verify refuted it as test_not_found, which is the gate working."
+    recorded_at: "2026-09-17T01:41:58.947Z"
+    test_nodeid: packages/caws-cli/tests/shell/help-claim-integrity.test.js
+    commit_sha: "4ee762dfe8f1245b926db73d2a1f04dd9a0eee2a"
