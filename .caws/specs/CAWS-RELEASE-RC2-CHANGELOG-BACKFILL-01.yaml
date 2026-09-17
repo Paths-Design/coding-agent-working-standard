@@ -28,3 +28,10 @@ acceptance:
     then: 'this is accurate rather than revisionist, because rc.2 has never shipped'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "45 lines added under the rc.2 '### Bug Fixes' heading covering CAWS-DEFECT-BATS-TRAP-KILLS-LIVE-AGENT-01, CAWS-DEFECT-SESSION-SEAL-MODELS-FS-ORDER-01, CAWS-DEFECT-KERNEL-TEST-TYPECHECK-RED-01 and CAWS-PREPUSH-TYPECHECK-STAGE-01. docs:check reports command-reference.md, README.md, templates/CLAUDE.md, templates/agents.md and agent-integration-guide.md all up to date."
+    recorded_at: "2026-09-17T13:45:54.191Z"
+    artifact_path: packages/caws-cli/CHANGELOG.md
+    commit_sha: "4e0765f7"
