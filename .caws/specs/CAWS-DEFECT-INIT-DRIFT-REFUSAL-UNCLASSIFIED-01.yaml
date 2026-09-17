@@ -57,6 +57,13 @@ acceptance:
       it refuses as unclassified rather than being assumed upstream-only, because a
       file whose provenance was never recorded is exactly the one where guessing
       safe destroys grown code
+  - id: A4
+    given: 'a drifted managed hook in any of the three classes'
+    when: 'caws init --plan --json emits the structured envelope'
+    then: >-
+      refusalReason carries the class in the JSON, not only in the human table,
+      because an agent reading --json must reach the same verdict as a human reading
+      the rendered output and the text rendering is not a machine contract
 non_functional: {}
 contracts:
   - name: 'hook-pack-file-action'
