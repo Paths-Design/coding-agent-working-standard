@@ -2,9 +2,10 @@ id: CAWS-DEFECT-SESSION-SEAL-MODELS-FS-ORDER-01
 title: 'Seal session usage.models in turn order, not filesystem order'
 risk_tier: 3
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-seal-order
 created_at: '2026-09-17T12:42:27.452Z'
-updated_at: '2026-09-17T12:42:27.452Z'
+updated_at: '2026-09-17T12:43:02.445Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
