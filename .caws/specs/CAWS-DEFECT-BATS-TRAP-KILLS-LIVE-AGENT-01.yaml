@@ -78,3 +78,9 @@ evidence:
     recorded_at: "2026-09-17T12:03:50.820Z"
     artifact_path: packages/caws-cli/tests/hooks/bats/agent-surface.bats
     commit_sha: "6499179d"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "bats 'agent-surface: the attestation refuses a live agent name even when preset (A3)' presets CAWS_AGENT_PROCESS_NAMES='claude python3 codex' with CAWS_TRAP_KILL=1 and asserts the resolved plane is EXACTLY 1|python3 (equality, not substring — '1|python3' must not be satisfied by '1|python3 codex'), plus a refusal line naming each dropped live name on stderr. block-dangerous.bats A7, which SIGTERMs a real sacrificial python3, still passes — so the filter is selective, not a blanket disable."
+    recorded_at: "2026-09-17T12:04:13.249Z"
+    artifact_path: packages/caws-cli/tests/hooks/bats/agent-surface.bats
+    commit_sha: "6499179d"
