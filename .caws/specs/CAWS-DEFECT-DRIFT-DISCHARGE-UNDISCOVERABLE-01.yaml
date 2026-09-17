@@ -39,6 +39,17 @@ acceptance:
       refusal offered only destroy (--overwrite --force) or give up (--adopt), so
       the one path that preserves growth AND takes upstream was invisible at the
       only moment an agent reads
+  - id: A2
+    given: >-
+      the COMMAND_SURFACE_METADATA descriptions for --overwrite, --force, --adopt,
+      init diff and init port, which today all scope themselves to LEGACY packs
+    when: 'caws init --help and caws init port --help are read off the built dist'
+    then: >-
+      no description claims a legacy-only scope that the code does not enforce.
+      resolvePacks returns SHARED_PACK for diff and port and overwriteSelects has no
+      legacy gate; disproved at runtime on 2026-09-16 when caws init --agent-surface
+      dsh --overwrite .caws/hooks/reset-strikes.sh --force refreshed a current dsh
+      v3 pack file and cleared two doctor findings
 non_functional: {}
 contracts:
   - name: 'hook-drift-discharge-guidance'
