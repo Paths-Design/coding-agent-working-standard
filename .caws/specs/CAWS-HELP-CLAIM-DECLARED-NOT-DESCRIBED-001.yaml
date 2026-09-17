@@ -2,9 +2,11 @@ id: CAWS-HELP-CLAIM-DECLARED-NOT-DESCRIBED-001
 title: 'Option value sets and version claims are declared in code, not described in help prose'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Landed in 4ee762df (commit d2556c80). Pre-release audit of the 34 mechanism-claiming help descriptions. Exit-code and behavioural claims all held and are now pinned; path claims are accurate but not reifiable without a store-wide refactor (''events.jsonl'' is a repeated literal across 7+ call sites with no central constants module) and were deliberately left. Three options declared a CLOSED accepted set in prose: both migrate --from options said ''only v10 is supported in v11.2'' while shipping 12.2.0-rc.2, and both worktree --state options named a subset as a ''for example'' while cleanup-plan REFUSES against all eleven classes. MIGRATABLE_SOURCE_VERSIONS, WORKTREE_PRUNE_STATES and WORKTREE_PHYSICAL_CLEANUP_STATES now single-source help and guard. The sharpest find was reachable only by invoking dist: register.ts:868 carried a duplicate --from guard that shadowed the handler''s check and forwarded a hardcoded ''v10'', so the handler''s validation was unreachable and fixing it changed nothing observable - the register.ts opt-forward class, which handler unit tests go green over. Full suite 2983/2983. NOT CLAIMED: the lint narrows the class rather than closing it (it catches a version number or the word ''supported'', not every way a closed set can be described); working-tree check''s exit-1-on-overlap arm is unpinned because no fixture creates a second live session; the new store module joined the contract proof group, so it has no per-file mutation floor. PROCESS NOTE: adding one store source broke the mutation policy''s per-source accounting and the pinned count moved 148 -> 149, which that test''s comment asks to be bumped consciously; and --verify refuted one of my own citations (test_not_found on a parameterised title that is a template literal, not a literal string in the file) before it could be written.'
 created_at: '2026-09-17T01:28:02.638Z'
-updated_at: '2026-09-17T01:37:35.077Z'
+updated_at: '2026-09-17T01:42:54.824Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
