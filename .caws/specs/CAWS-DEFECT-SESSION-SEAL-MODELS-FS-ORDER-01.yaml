@@ -40,3 +40,10 @@ acceptance:
     then: 'requests/input/cache_read/cache_write/output are unchanged, confirming only models was order-sensitive'
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Twelve turns, one distinct model each, created in DESCENDING turn order so creation, hash and turn order all differ. Pre-fix on APFS the sealer produced ['model-01','model-07','model-11','model-10','model-06','model-05','model-09','model-08','model-04','model-12','model-03','model-02'] -- neither creation nor lexical order, i.e. a pure filesystem artifact. Post-fix it produces model-01..model-12 in turn order. CI (ext4) exhibited the same class on the pre-existing sealing case: sealed ['claude-haiku-4-5','claude-opus-5'] where turn order gives ['claude-opus-5','claude-haiku-4-5']. Full pytest tier 302 passed exit 0 in the lane; 300 before the two new tests."
+    recorded_at: "2026-09-17T12:54:22.514Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_session_log_renderer.py::TestSessionEndSealing::test_seals_models_in_turn_order_regardless_of_directory_order"
+    commit_sha: "87be9215"
