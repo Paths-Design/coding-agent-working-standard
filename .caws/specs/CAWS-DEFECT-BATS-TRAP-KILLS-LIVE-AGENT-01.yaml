@@ -30,6 +30,12 @@ acceptance:
     then: >-
       CAWS_TRAP_KILL defaults to 1 and CAWS_AGENT_PROCESS_NAMES defaults to 'claude'
       — production escalation behavior is unchanged by this slice
+  - id: A2
+    given: 'a fixture repo carrying .caws/hooks/.test-harness, on the claude-code surface'
+    when: 'agent-surface.sh resolves the kill plane'
+    then: >-
+      CAWS_TRAP_KILL defaults to 0 and CAWS_AGENT_PROCESS_NAMES resolves empty, so
+      trap_resolve_agent_identity holds every kill
 non_functional: {}
 contracts:
   - name: 'hook-test-harness-attestation'
