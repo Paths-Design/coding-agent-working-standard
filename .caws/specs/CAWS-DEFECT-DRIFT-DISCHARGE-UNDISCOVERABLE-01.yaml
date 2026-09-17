@@ -118,3 +118,10 @@ contracts:
   - name: 'hook-drift-discharge-guidance'
     type: behavior
     path: 'packages/caws-cli/src/shell/render/init-hook-pack.ts'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Two tests cover A1's two renderers, which have separate sources: the applied-install path (render/init-hook-pack.ts) and the plan path (commands/init.ts renderActionList; test 'A1: the plan refusal names port for a drift class', same file). Both assert the staging shape 'caws init port <path> --from <staging-file>' AND the outcome contrast that keeps port distinguishable from --adopt ('drift tracking RESUMES' vs 'STOP tracking drift'). Falsified independently: mutating only render/init-hook-pack.ts reddened the applied-install test while the plan test stayed green, and mutating only commands/init.ts did the reverse, proving neither is a proxy for the other. Runtime artifact captured this session: the rendered refusal now lists four genuinely different operations (do nothing / port / adopt / overwrite) where it previously offered only destroy or give up."
+    recorded_at: "2026-09-17T08:29:43.250Z"
+    test_nodeid: "packages/caws-cli/tests/init/drift-discharge-discoverability.test.js::A1: the applied-install refusal names port and separates it from --adopt"
+    commit_sha: "2bb4822614157483261061d0a589b6709166781b"
