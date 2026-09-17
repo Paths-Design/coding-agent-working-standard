@@ -95,6 +95,51 @@ description phrased as a closed set must carry `allowedValues`.
 
 ### Bug Fixes
 
+- **The Bats hook suite could SIGTERM the agent session running it**
+  (`CAWS-DEFECT-BATS-TRAP-KILLS-LIVE-AGENT-01`). `agent-surface.sh` derives
+  `CAWS_TRAP_KILL=1` and `CAWS_AGENT_PROCESS_NAMES="claude"` for the
+  `claude-code` surface on a premise its own comment states: the hook env is
+  harness-owned and the guard's ancestors are the session's own processes.
+  Under Bats both invert — the guard is exec'd as a child of the agent's Bash
+  tool, so the env is agent-reachable and the ancestor walk resolves the LIVE
+  agent. The file's header claimed temp-dir isolation covered this; that
+  reasoning is about where the latch sentinel lands, not whose PID the walk
+  returns. `agent-surface.sh` now honors a test-harness attestation at
+  `.caws/hooks/.test-harness`: under it the kill default flips off AND every
+  live agent-surface name is filtered out of the resolved target, so a fixture
+  can only aim the trap at a process it spawned itself. The marker lives under
+  `.caws/hooks/` because `protected-paths.sh` refuses agent writes there and
+  `caws init` never emits it, so it cannot be minted inside a governed repo to
+  disarm a real session. The SIGTERM-the-agent Bats case still passes:
+  escalation still fires, it just cannot aim at a live session.
+
+- **Session usage was sealed in filesystem order, not turn order**
+  (`CAWS-DEFECT-SESSION-SEAL-MODELS-FS-ORDER-01`). `session-log.sh` read the
+  turn files with a bare `find -name 'turn-*.json' -exec cat {} +`. `find(1)`
+  returns directory order, which is a property of the filesystem rather than
+  of the session, so identical turn files sealed to different `usage.models`
+  lists on different machines — APFS returns hash order, ext4 its own. The
+  file's comment asserted the contract it did not implement ("models keeps
+  first-seen order rather than sorting"); "first-seen" is only meaningful
+  against a defined read order, and there was none. The token sums are
+  order-independent and were always correct. The sealer now sorts turn files
+  by name before concatenating, matching the renderer's own
+  `sorted(directory.glob("turn-*.json"))`.
+
+- **Kernel test typechecking was red and the pytest tier could not import its
+  contract dependency** (`CAWS-DEFECT-KERNEL-TEST-TYPECHECK-RED-01`).
+  Typechecking reported 76 errors, and two `test_session_log_renderer.py`
+  contract cases raised `ModuleNotFoundError: jsonschema`. Making those
+  imports conditional would have let them skip silently, which proves nothing
+  while reporting green, so `jsonschema` is pinned in the pytest
+  requirements instead.
+
+- **`.husky/pre-push` did not mirror CI's typecheck stage**
+  (`CAWS-PREPUSH-TYPECHECK-STAGE-01`). The hook ran lint, audit, build and the
+  Jest suite but not typechecking, so `main` accepted commits that failed
+  qualification with no local signal. Typecheck is now stage 1 of 5, with the
+  same timeout and reproduce-command reporting as the other stages.
+
 - **Hook-pack drift findings now distinguish verified local growth from
   ambiguous copies, and `--adopt` output stops lying**
   (`CAWS-DEFECT-HOOK-DRIFT-NO-NONDESTRUCTIVE-DISCHARGE-01`, recorded in
