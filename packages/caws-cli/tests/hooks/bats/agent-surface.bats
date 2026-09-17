@@ -239,6 +239,12 @@ _unattested_repo() {
   # Kill default off AND no resolvable target: two independent holds, so a test
   # that presets CAWS_TRAP_KILL=1 still cannot reach a live agent process.
   [ "$TRAP_PLANE" = "0|" ]
+  # Silence is load-bearing, not cosmetic: bats merges a guard's stderr into the
+  # same capture its decision envelope lands in, so a diagnostic emitted on this
+  # ordinary path prepends itself to every JSON assertion in the suite (it broke
+  # quiet-merge and scan-secrets exactly this way). Clearing the surface default
+  # is the expected case and must say nothing.
+  refute grep -q 'refusing live agent process name' "$TRAP_STDERR"
 }
 
 @test "agent-surface: the attestation refuses a live agent name even when preset (A3)" {

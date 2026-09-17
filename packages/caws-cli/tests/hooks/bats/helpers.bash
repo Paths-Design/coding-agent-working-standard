@@ -54,6 +54,13 @@ caws_install_pack_once() {
   fi
   export CAWS_TEST_REPO CAWS_TEST_HOME
   export CAWS_TEST_HOOKS_DIR="$CAWS_TEST_REPO/.caws/hooks"
+  # A synthetic session identity for the fixture. Without it the guards resolve
+  # the REAL CLAUDE_CODE_SESSION_ID of whoever runs the suite, so latch and
+  # strike state keys to a live session and results depend on who ran the tests
+  # (CAWS-DEFECT-BATS-TRAP-KILLS-LIVE-AGENT-01). Unsetting it instead is not
+  # equivalent — several guards need SOME resolvable session id, and an absent
+  # one changes their envelope rather than isolating it.
+  export CAWS_TEST_SESSION_ID="caws-bats-fixture-$$"
   # HOME controls native harness config; CAWS_HOME controls runtime adoption.
   # Isolating only one still lets inherited machine state affect the fixture.
   if init_output="$(
@@ -95,7 +102,7 @@ caws_teardown_pack() {
   if [[ -n "${CAWS_TEST_HOME:-}" && -d "$CAWS_TEST_HOME" ]]; then
     rm -rf "$CAWS_TEST_HOME"
   fi
-  unset CAWS_TEST_REPO CAWS_TEST_HOME CAWS_TEST_HOOKS_DIR
+  unset CAWS_TEST_REPO CAWS_TEST_HOME CAWS_TEST_HOOKS_DIR CAWS_TEST_SESSION_ID
 }
 
 # Build a hook-input envelope JSON. Usage: hook_envelope <tool> <file_path> <command>
@@ -120,7 +127,7 @@ hook_envelope_content() {
 # Populates bats' $status and $output (stdout+stderr merged by `run`).
 run_guard() {
   local guard="$1" envelope="$2"
-  run env -u CLAUDE_CODE_SESSION_ID \
+  run env CLAUDE_CODE_SESSION_ID="$CAWS_TEST_SESSION_ID" \
     CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$CAWS_TEST_REPO" \
@@ -146,7 +153,7 @@ run_guard_missing_lib() {
   cp -R "$CAWS_TEST_REPO/.caws" "$broken_repo/.caws"
   broken_hooks="$broken_repo/.caws/hooks"
   rm -f "$broken_hooks/lib/$missing_lib"
-  run env -u CLAUDE_CODE_SESSION_ID \
+  run env CLAUDE_CODE_SESSION_ID="$CAWS_TEST_SESSION_ID" \
     CAWS_PROJECT_DIR="$broken_repo" \
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$broken_repo" \
@@ -169,7 +176,7 @@ run_dispatcher_missing_lib() {
   cp -R "$CAWS_TEST_REPO/.caws" "$broken_repo/.caws"
   broken_hooks="$broken_repo/.caws/hooks"
   rm -f "$broken_hooks/lib/$missing_lib"
-  run env -u CLAUDE_CODE_SESSION_ID \
+  run env CLAUDE_CODE_SESSION_ID="$CAWS_TEST_SESSION_ID" \
     CAWS_PROJECT_DIR="$broken_repo" \
     CAWS_AGENT_SURFACE="claude-code" \
     HOOK_CWD="$broken_repo" \

@@ -342,24 +342,33 @@ if [[ -n "${_CAWS_AGENT_PROCESS_NAMES_PRESET:-}" ]]; then
   CAWS_AGENT_PROCESS_NAMES="$_CAWS_AGENT_PROCESS_NAMES_PRESET"
 fi
 
-# Under the attestation, drop every live agent-surface name from the resolved
-# target list — including one an explicit preset supplied. A test may aim the
-# trap only at a sacrificial process it spawned itself; the surface default
-# ("claude" et al) resolves to empty, and trap_resolve_agent_identity treats
-# empty as "identity unresolvable, hold the kill".
-if [[ "$_CAWS_TEST_HARNESS" == "1" && -n "${CAWS_AGENT_PROCESS_NAMES:-}" ]]; then
-  _CAWS_SAFE_NAMES=""
-  for _caws_name in $CAWS_AGENT_PROCESS_NAMES; do
-    case " $CAWS_AGENT_LIVE_PROCESS_NAMES " in
-      *" $_caws_name "*)
-        printf '[agent-surface.sh] test harness: refusing live agent process name as trap target: %s\n' \
-          "$_caws_name" >&2
-        ;;
-      *) _CAWS_SAFE_NAMES="${_CAWS_SAFE_NAMES:+$_CAWS_SAFE_NAMES }$_caws_name" ;;
-    esac
-  done
-  CAWS_AGENT_PROCESS_NAMES="$_CAWS_SAFE_NAMES"
-  unset _CAWS_SAFE_NAMES _caws_name
+# Under the attestation, no live agent-surface name may remain a kill target.
+# A test may aim the trap only at a sacrificial process it spawned itself;
+# trap_resolve_agent_identity treats an empty list as "identity unresolvable,
+# hold the kill".
+#
+# The two arms differ only in loudness, and deliberately. Clearing the SURFACE
+# DEFAULT is the ordinary attested case, so it is silent: guards emit their
+# decision envelope on stdout while bats merges stderr into the same capture,
+# and a chatty lib here corrupts every JSON assertion in the suite. Dropping a
+# name an explicit PRESET supplied is a caller being overruled, so it says so.
+if [[ "$_CAWS_TEST_HARNESS" == "1" ]]; then
+  if [[ -z "${_CAWS_AGENT_PROCESS_NAMES_PRESET:-}" ]]; then
+    CAWS_AGENT_PROCESS_NAMES=""
+  elif [[ -n "${CAWS_AGENT_PROCESS_NAMES:-}" ]]; then
+    _CAWS_SAFE_NAMES=""
+    for _caws_name in $CAWS_AGENT_PROCESS_NAMES; do
+      case " $CAWS_AGENT_LIVE_PROCESS_NAMES " in
+        *" $_caws_name "*)
+          printf '[agent-surface.sh] test harness: refusing live agent process name as trap target: %s\n' \
+            "$_caws_name" >&2
+          ;;
+        *) _CAWS_SAFE_NAMES="${_CAWS_SAFE_NAMES:+$_CAWS_SAFE_NAMES }$_caws_name" ;;
+      esac
+    done
+    CAWS_AGENT_PROCESS_NAMES="$_CAWS_SAFE_NAMES"
+    unset _CAWS_SAFE_NAMES _caws_name
+  fi
 fi
 export CAWS_AGENT_PROCESS_NAMES CAWS_AGENT_LIVE_PROCESS_NAMES
 
