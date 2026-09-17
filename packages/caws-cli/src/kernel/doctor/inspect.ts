@@ -1410,11 +1410,11 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
         finding(
           DOCTOR_RULES.HOOKS_PACK_BODY_DRIFT,
           'warning',
-          `${stalePaths.length} installed CAWS shared hook file(s) differ from the shipping template while showing no edit over their recorded baseline: ${named}${remainder}. This shape is AMBIGUOUS: it is either a refreshable stale copy, or a file whose local growth was absorbed into its baseline by an earlier port (the port path re-baselines the ported body). Refreshing before distinguishing the two would destroy growth in the second case.`,
+          `${stalePaths.length} installed CAWS shared hook file(s) differ from the shipping template while showing no edit over their recorded baseline: ${named}${remainder}. This shape is AMBIGUOUS: it is either a refreshable stale copy, or a file whose local growth was absorbed into its baseline by a port run under CLI 12.0.0 or 12.1.0, which baselined the reconciled body it landed. Ports from 12.2.0 onward baseline the upstream template instead, so newly ported paths report growth correctly — but an already-absorbed baseline is not healed retroactively. Refreshing before distinguishing the two would destroy growth in the second case.`,
           {
             subject: '.caws/hooks',
             narrowRepair:
-              'Run `caws init diff` and READ the deltas before refreshing: content that looks repo-specific (banners, repo-named handlers) is growth even when the baseline matches. Only refresh with `caws init --overwrite --force` once every listed file is confirmed template-stale. Files with baseline-verified NEW growth are reported separately as informational.',
+              'Run `caws init diff` and READ the deltas before refreshing: content that looks repo-specific (banners, repo-named handlers) is growth even when the baseline matches. Only refresh with `caws init --overwrite --force` once every listed file is confirmed template-stale — that discards local content. Where the delta turns out to hold work worth keeping, reconcile by hand into a staging file outside the hooks tree and land it with `caws init port <path> --from <staging-file>`: it keeps both sides, rewrites the baseline from the current template and resumes drift tracking, which also clears an absorbed baseline left by an older port. Files with baseline-verified NEW growth are reported separately as informational.',
             data: {
               drift_count: staleRows.length,
               drift_paths: stalePaths,

@@ -158,9 +158,10 @@ export function renderHookPackInstall(result: HookPackInstallResult): string {
     lines.push('  template grew and this copy did not, so the difference is upstream');
     lines.push('  work you have not received — not growth of your own. init still did');
     lines.push('  NOT overwrite them, because a matching baseline narrows the question');
-    lines.push('  rather than settling it: the port path re-baselines a ported body, so');
-    lines.push('  a file whose growth was absorbed by an earlier port looks identical to');
-    lines.push('  a never-edited one. Read the delta, then decide:');
+    lines.push('  rather than settling it: `caws init port` in 12.0.0 and 12.1.0 wrote');
+    lines.push('  the reconciled body it landed into the baseline, so a file ported by');
+    lines.push('  those versions looks identical to a never-edited one. Ports from this');
+    lines.push('  version do not. Read the delta, then decide:');
     lines.push('    caws init diff                 Show what upstream added.');
     lines.push('    --overwrite <path...> --force  Refresh the paths you confirmed are');
     lines.push('                                   stale copies. Discards anything local.');

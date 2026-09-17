@@ -284,9 +284,13 @@ export const DOCTOR_RULES = {
    * CAWS-DEFECT-HOOK-DRIFT-NO-NONDESTRUCTIVE-DISCHARGE-01: this rule now fires
    * ONLY over rows WITHOUT verified new growth — no baseline, or the installed
    * body matches its baseline. That shape is AMBIGUOUS rather than refreshable:
-   * the port path re-baselines the ported body, so a growth file that went
-   * through a port shows "no edit over baseline" too. Severity: warning, with a
-   * repair that demands reading the diff before any refresh. Rows whose
+   * a port run under CLI 12.0.0 or 12.1.0 baselined the reconciled body it
+   * landed, so a growth file that went through one of those ports shows "no
+   * edit over baseline" too. CAWS-DEFECT-DRIFT-DISCHARGE-UNDISCOVERABLE-01
+   * changed port to baseline the upstream template, which removes the ambiguity
+   * for new ports but does not heal baselines already written. Severity:
+   * warning, with a repair that demands reading the diff before any refresh
+   * and names `caws init port` for deltas worth keeping. Rows whose
    * baseline PROVES new growth (installed differs from baseline) render as
    * HOOKS_PACK_LOCAL_GROWTH (info) instead.
    */

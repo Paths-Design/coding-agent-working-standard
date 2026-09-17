@@ -711,9 +711,10 @@ function renderActionList(actions: readonly HookPackInstallResult['actions'][num
     lines.push('');
     lines.push('  The upstream-only files match the body this installer last wrote, so no');
     lines.push('  local edit is recorded against them — the template grew and this copy');
-    lines.push('  did not. Read the delta before refreshing anyway: the port path also');
-    lines.push('  re-baselines a ported body, so a matching baseline narrows the question');
-    lines.push('  without answering it. Inspect with `caws init diff`, then refresh the');
+    lines.push('  did not. Read the delta before refreshing anyway: `caws init port` in');
+    lines.push('  12.0.0 and 12.1.0 baselined the body it landed, so a path ported by');
+    lines.push('  those versions still reads this way. Ports from this version do not.');
+    lines.push('  Inspect with `caws init diff`, then refresh the');
     lines.push('  confirmed-stale paths with `caws init --overwrite <path...> --force`.');
   }
   const driftRefusals =

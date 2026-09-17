@@ -88,11 +88,20 @@ describe('doctor.hooks.pack_local_growth (CAWS-DEFECT-HOOK-DRIFT-NO-NONDESTRUCTI
       drift_count: 2,
       drift_paths: ['.caws/hooks/audit.sh', '.caws/hooks/validate-spec.sh'],
     });
-    // Baseline-clean drift is AMBIGUOUS (a port can absorb growth into the
-    // baseline — proven live on sterling's post_tool_use.sh), so the warning
-    // must never offer refresh as unconditionally safe.
+    // Baseline-clean drift is AMBIGUOUS (a port under 12.0.0/12.1.0 absorbed
+    // growth into the baseline — proven live on sterling's post_tool_use.sh),
+    // so the warning must never offer refresh as unconditionally safe.
     expect(drift?.message).toContain('AMBIGUOUS');
     expect(drift?.narrowRepair).toContain('READ the deltas');
+    // The ambiguity is HISTORICAL, not a standing property of port. Stating it
+    // in the present tense outlives its truth and turns a resolved caveat into
+    // a permanent brake on a safe refresh.
+    expect(drift?.message).toContain('12.0.0');
+    expect(drift?.message).not.toMatch(/the port path re-baselines/);
+    // A refusal that names only the destructive exit is the defect this rule
+    // participates in: `--overwrite --force` discards local content, so the
+    // repair must also name the discharge that keeps both sides.
+    expect(drift?.narrowRepair).toContain('caws init port <path> --from <staging-file>');
     // Mixed rows: the lag is NOT fully explained -> stays a warning.
     expect(findingFor(report, DOCTOR_RULES.HOOKS_INSTALLED_PACK_VERSION_LAG)?.severity).toBe(
       'warning'
