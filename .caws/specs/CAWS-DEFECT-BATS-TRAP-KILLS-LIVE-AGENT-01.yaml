@@ -58,8 +58,8 @@ acceptance:
     when: 'caws_install_pack_once completes'
     then: >-
       the .test-harness marker exists under the fixture .caws/hooks/, and the
-      run_guard helpers invoke guards with CLAUDE_CODE_SESSION_ID unset so a
-      sid-less envelope cannot key latch state to the live session
+      run_guard helpers pass a synthetic CAWS_TEST_SESSION_ID so guards never
+      resolve the live session identity of whoever runs the suite
 non_functional: {}
 contracts:
   - name: 'hook-test-harness-attestation'
