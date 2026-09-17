@@ -2,9 +2,9 @@ id: CAWS-SESSION-IDENTITY-INVERSION-001
 title: 'CAWS_SESSION_ID becomes CAWS-assigned registry-backed identity; harness vars demote to discovery inputs'
 risk_tier: 2
 mode: refactor
-lifecycle_state: active
+lifecycle_state: draft
 created_at: '2026-07-26T02:31:46.299Z'
-updated_at: '2026-07-26T02:31:46.299Z'
+updated_at: '2026-09-17T02:24:10.165Z'
 blast_radius:
   modules:
     - 'caws-cli/shell session identity resolution'
