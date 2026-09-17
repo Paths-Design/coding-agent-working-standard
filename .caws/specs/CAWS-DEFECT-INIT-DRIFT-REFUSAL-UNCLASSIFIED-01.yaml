@@ -48,6 +48,15 @@ acceptance:
       with --force. The narrowing must not weaken the growth guard, and this is
       proven by a positive control rather than only by the absence of mislabelled
       rows
+  - id: A3
+    given: >-
+      an installed managed hook that differs from the shipping template and has NO
+      recorded pristine baseline, the unobserved case
+    when: 'caws init --plan runs'
+    then: >-
+      it refuses as unclassified rather than being assumed upstream-only, because a
+      file whose provenance was never recorded is exactly the one where guessing
+      safe destroys grown code
 non_functional: {}
 contracts:
   - name: 'hook-pack-file-action'
