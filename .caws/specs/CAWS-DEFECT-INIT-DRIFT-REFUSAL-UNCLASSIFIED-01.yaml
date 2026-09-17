@@ -38,6 +38,16 @@ acceptance:
       template against the installed file — the exact investigation
       .caws/hooks/reset-strikes.sh forced on 2026-09-16, where evaluateFileState
       attributed a pure upstream addition to consumer growth
+  - id: A2
+    given: >-
+      an installed managed hook whose body differs from BOTH the shipping template
+      and its recorded pristine baseline, meaning the consumer grew it
+    when: 'caws init --plan runs'
+    then: >-
+      it still refuses as consumer growth and still requires --overwrite together
+      with --force. The narrowing must not weaken the growth guard, and this is
+      proven by a positive control rather than only by the absence of mislabelled
+      rows
 non_functional: {}
 contracts:
   - name: 'hook-pack-file-action'
