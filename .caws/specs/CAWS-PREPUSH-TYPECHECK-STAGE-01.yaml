@@ -2,9 +2,10 @@ id: CAWS-PREPUSH-TYPECHECK-STAGE-01
 title: 'Add typecheck to the pre-push hook so it actually mirrors CI'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-prepush-typecheck
 created_at: '2026-09-17T12:20:03.066Z'
-updated_at: '2026-09-17T12:20:03.066Z'
+updated_at: '2026-09-17T12:20:44.250Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
