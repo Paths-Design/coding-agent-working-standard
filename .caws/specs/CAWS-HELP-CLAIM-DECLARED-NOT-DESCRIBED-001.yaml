@@ -22,7 +22,8 @@ scope:
     - 'packages/caws-cli/CHANGELOG.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A closed accepted-value set is declared once as an exported constant; help text and runtime validation both read it, so neither can name a set the other refuses'
+  - 'No user-facing string (help description or error message) names a CAWS version number; version references go stale silently and nothing checks them'
 acceptance:
   - id: A1
     given: '--from <version> on specs migrate and events migrate accepts exactly v10'
