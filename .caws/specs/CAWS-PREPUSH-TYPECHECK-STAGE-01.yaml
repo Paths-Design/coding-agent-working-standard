@@ -48,6 +48,12 @@ acceptance:
     then: >-
       pre-push exits 1 and prints 'refusing the push', proving the new stage's exit
       code is actually inspected rather than run-and-ignored
+  - id: A4
+    given: '.husky/README.md line 118 states ''All four stages write to the shared turbo cache'''
+    when: 'the stage count changes'
+    then: >-
+      the README reflects the real stage list, so the documented contract does not
+      contradict the executable one
 non_functional: {}
 contracts:
   - name: 'prepush-stage-sequence'
