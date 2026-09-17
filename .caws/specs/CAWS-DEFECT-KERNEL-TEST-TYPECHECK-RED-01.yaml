@@ -44,3 +44,10 @@ acceptance:
       skips when its validator is absent proves nothing while reporting green
 non_functional: {}
 contracts: []
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "npm run typecheck (tsc -p tsconfig.vnext.test.json && tsc -p tsconfig.kernel-test.json) now exits 0 with 0 'error TS' lines, re-run in the lane after the fix. Baseline was 76 errors (67 in evidence-rederive.test.ts, 9 in doctor-legacy-spec-schema.test.ts). Exit code captured without a pipe, since a trailing | tail reports the pipe's status and hides the verdict."
+    recorded_at: "2026-09-17T12:15:12.622Z"
+    artifact_path: packages/caws-cli/tests/kernel/unit/evidence-rederive.test.ts
+    commit_sha: "71c0808f"
