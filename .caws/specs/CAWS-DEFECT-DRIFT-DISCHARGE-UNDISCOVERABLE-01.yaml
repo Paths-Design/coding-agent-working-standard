@@ -131,3 +131,9 @@ evidence:
     recorded_at: "2026-09-17T08:29:56.233Z"
     test_nodeid: "packages/caws-cli/tests/init/drift-discharge-discoverability.test.js::A2: no discharge surface claims a legacy-only scope the code does not enforce"
     commit_sha: "2bb4822614157483261061d0a589b6709166781b"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "The positive control: it follows the advice the refusal prints, end to end, on a CURRENT shared-pack file with committed local growth — install, grow, commit, reconcile into a staging file outside the hooks tree, then spawn the real 'caws init port <path> --from <staging-file>' on dist. Asserts the landed body keeps BOTH the local growth and the upstream line taken (the property --overwrite --force cannot provide), and that the path REMAINS classified local_growth, because a reconciled body permanently differs from the template. This test is what caught the portHookFile baseline defect: it failed with driftClass 'upstream_only' against my own prior slice, which is why A4 exists. Its original then-clause said the drift would clear; that was wrong on the facts and the criterion text was amended to say so explicitly rather than quietly re-scoped."
+    recorded_at: "2026-09-17T08:30:10.138Z"
+    test_nodeid: "packages/caws-cli/tests/init/drift-discharge-discoverability.test.js::A3: following the printed advice actually discharges the drift"
+    commit_sha: "2bb4822614157483261061d0a589b6709166781b"
