@@ -53,3 +53,9 @@ evidence:
     recorded_at: "2026-09-17T12:54:35.324Z"
     test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_session_log_renderer.py::TestSessionEndSealing::test_sealer_reads_turn_files_in_an_explicitly_ordered_traversal"
     commit_sha: "87be9215"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "The behavioral test pins the sums alongside the order: requests == 12 and output == 12 across twelve turns contributing 1 each. Those assertions held BOTH pre-fix (while models was scrambled) and post-fix, which is the discriminator: the sums are computed by jq's add over the same multiset regardless of concatenation order, so only models was order-sensitive. A future regression in these assertions therefore means the read SET changed, not the order."
+    recorded_at: "2026-09-17T12:54:53.658Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_session_log_renderer.py::TestSessionEndSealing::test_seals_models_in_turn_order_regardless_of_directory_order"
+    commit_sha: "87be9215"
