@@ -47,3 +47,9 @@ evidence:
     recorded_at: "2026-09-17T12:54:22.514Z"
     test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_session_log_renderer.py::TestSessionEndSealing::test_seals_models_in_turn_order_regardless_of_directory_order"
     commit_sha: "87be9215"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Structural drift guard: greps session-log.sh for a turn-*.json aggregation line and refuses a bare 'find -exec cat'. It went red pre-fix naming the offending line verbatim, and holds on every platform, unlike the behavioral test whose outcome depends on the filesystem's directory order. Live source now reads: find ... | LC_ALL=C sort | while IFS= read -r turn_file; do cat \"$turn_file\"; done | jq -s."
+    recorded_at: "2026-09-17T12:54:35.324Z"
+    test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_session_log_renderer.py::TestSessionEndSealing::test_sealer_reads_turn_files_in_an_explicitly_ordered_traversal"
+    commit_sha: "87be9215"
