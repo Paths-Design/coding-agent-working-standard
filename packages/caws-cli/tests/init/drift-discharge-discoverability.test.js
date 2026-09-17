@@ -71,6 +71,28 @@ function repoWithCommittedGrowth() {
   return { repo, grown };
 }
 
+/** A path in the `upstream_only` class: installed body equals its recorded
+ *  baseline, and both differ from the shipping template. Nothing was edited
+ *  here since install, so the only thing that can have moved is the template.
+ *  This is the bucket whose guidance carries the re-baseline caveat. */
+function repoInUpstreamOnly() {
+  const repo = makeTempRepo();
+  installHookPack(SHARED_PACK, { repoRoot: repo });
+
+  const edited = `${fs.readFileSync(path.join(repo, DEST), 'utf8')}\n# body change that is not a version stamp\n`;
+  fs.writeFileSync(path.join(repo, DEST), edited);
+  fs.writeFileSync(baselineAbs(repo), edited);
+
+  git(repo, ['add', '-A']);
+  git(repo, ['commit', '-m', 'install shared hook pack', '--no-verify']);
+  return repo;
+}
+
+/** The present-tense form the caveat must never revert to. Both renderers
+ *  carried it verbatim before CAWS-DEFECT-DRIFT-DISCHARGE-UNDISCOVERABLE-01
+ *  changed port to baseline the template. */
+const PRESENT_TENSE_CAVEAT = /re-baselines a ported body/;
+
 describe('drift discharge is discoverable (CAWS-DEFECT-DRIFT-DISCHARGE-UNDISCOVERABLE-01)', () => {
   test('A1: the applied-install refusal names port and separates it from --adopt', () => {
     const { repo } = repoWithCommittedGrowth();
@@ -179,5 +201,68 @@ describe('drift discharge is discoverable (CAWS-DEFECT-DRIFT-DISCHARGE-UNDISCOVE
     } finally {
       fs.rmSync(stagingDir, { recursive: true, force: true });
     }
+  });
+});
+
+/**
+ * CAWS-DEFECT-DRIFT-CAVEAT-RENDERERS-UNPINNED-01.
+ *
+ * The caveat above ("a baseline-clean file may still be growth an earlier port
+ * absorbed") is the SOLE justification both renderers give for refusing to call
+ * an upstream_only path refreshable. Changing port to baseline the template
+ * made its present-tense form false, so it was rewritten to name the versions
+ * it holds for — 12.0.0 and 12.1.0, where portHookFile and pristine baselines
+ * shipped (8ca7ed21).
+ *
+ * Both failure modes are live, which is why both halves are asserted:
+ *   - left present-tense, a resolved caveat becomes a permanent brake on a
+ *     refresh that is now provably safe;
+ *   - deleted outright, a consumer still holding a baseline absorbed by a
+ *     12.0.0/12.1.0 port is told refreshing is safe, and loses growth this fix
+ *     does not heal retroactively.
+ *
+ * The discharge slice pinned only doctor's pack_body_drift finding and recorded
+ * the omission in its closure notes. These two renderers are the surfaces an
+ * agent actually reads at the moment of a block.
+ */
+describe('the re-baseline caveat stays version-scoped (CAWS-DEFECT-DRIFT-CAVEAT-RENDERERS-UNPINNED-01)', () => {
+  test('the applied-install stale-copies section names the version boundary', () => {
+    const rendered = renderHookPackInstall(
+      installHookPack(SHARED_PACK, { repoRoot: repoInUpstreamOnly() })
+    );
+
+    // Precondition: this is the stale-copies bucket, not a drift bucket. If the
+    // fixture stopped producing upstream_only the assertions below would pass
+    // vacuously against a section that was never rendered.
+    expect(rendered).toContain('Template moved — no local edit recorded');
+
+    expect(rendered).toContain('12.0.0 and 12.1.0');
+    expect(rendered).toContain('Ports from this');
+    expect(rendered).not.toMatch(PRESENT_TENSE_CAVEAT);
+    // The bucket must still name the discharge that keeps both sides; the
+    // caveat exists precisely because refreshing here can destroy growth.
+    expect(rendered).toContain('caws init port <path> --from <staging-file>');
+  });
+
+  test('the plan upstream-only note names the version boundary', () => {
+    const res = runCliIsolated(repoInUpstreamOnly(), ['init', '--agent-surface', 'dsh', '--plan']);
+    // A plan holding refused paths exits NON-zero and says so: the preview is
+    // reporting that `caws init` would not apply cleanly, which is what makes
+    // it usable as a gate. Pinned here so the caveat's surroundings cannot
+    // quietly become advisory.
+    expect(res.status).toBe(1);
+    expect(res.stdout).toContain('Plan refused; resolve the refusal above before applying init.');
+    // Same anti-vacuity guard as above: assert the upstream-only bucket is the
+    // one being rendered, so the caveat check cannot pass against some other
+    // section that happens to carry the version string.
+    expect(res.stdout).toContain(
+      'The upstream-only files match the body this installer last wrote'
+    );
+
+    // Separate source from the renderer above (commands/init.ts
+    // renderActionList), so neither test is a proxy for the other.
+    expect(res.stdout).toContain('12.0.0 and 12.1.0');
+    expect(res.stdout).toContain('Ports from this');
+    expect(res.stdout).not.toMatch(PRESENT_TENSE_CAVEAT);
   });
 });
