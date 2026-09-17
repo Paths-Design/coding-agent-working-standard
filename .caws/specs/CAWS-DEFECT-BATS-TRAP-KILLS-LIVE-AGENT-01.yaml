@@ -52,6 +52,13 @@ acceptance:
       each value is a member of the live-name set the attestation filters, so adding
       a surface without extending that set fails the suite rather than silently
       re-opening the hazard
+  - id: A5
+    given: 'helpers.bash installing a hook pack into a mktemp fixture repo'
+    when: 'caws_install_pack_once completes'
+    then: >-
+      the .test-harness marker exists under the fixture .caws/hooks/, and the
+      run_guard helpers invoke guards with CLAUDE_CODE_SESSION_ID unset so a
+      sid-less envelope cannot key latch state to the live session
 non_functional: {}
 contracts:
   - name: 'hook-test-harness-attestation'
