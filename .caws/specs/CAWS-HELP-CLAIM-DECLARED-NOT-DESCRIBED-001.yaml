@@ -59,3 +59,9 @@ evidence:
     recorded_at: "2026-09-17T01:41:58.947Z"
     test_nodeid: packages/caws-cli/tests/shell/help-claim-integrity.test.js
     commit_sha: "4ee762dfe8f1245b926db73d2a1f04dd9a0eee2a"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "The audit drove every exit-code claim against the built CLI before writing any test: specs validate (0 valid / 1 invalid / 1 unreadable), verify-acs (0 default with not_rederived present, 1 with --strict), working-tree check (0 no overlap), scope plan (0 with a refusal in the plan), specs prune-archive (genuinely a no-op, exit 0). All held - this criterion pins accuracy that already existed rather than repairing a defect. The scope plan pin needed two corrections of my own: it first asserted only exit 0, which its own comment said would be vacuous, and it was environment-dependent (a bound worktree rejects an out-of-scope path; an unbound checkout reports no_authority for every path). It now parses the summary counts and asserts reject+no_authority+invalid_path > 0, which is the claim's substance - exit 0 despite a decision the caller did not get - and is deterministic in both checkouts. NOT CLAIMED: working-tree check's exit-1-on-overlap arm is unpinned; it needs a second live session and no fixture here creates one."
+    recorded_at: "2026-09-17T01:42:14.345Z"
+    test_nodeid: "packages/caws-cli/tests/shell/help-claim-integrity.test.js::specs validate: 0 when valid, non-zero when invalid or unreadable"
+    commit_sha: "4ee762dfe8f1245b926db73d2a1f04dd9a0eee2a"
