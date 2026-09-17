@@ -57,3 +57,9 @@ evidence:
     recorded_at: "2026-09-17T12:15:14.553Z"
     artifact_path: packages/caws-cli/tests/kernel/unit/evidence-rederive.test.ts
     commit_sha: "71c0808f"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "npm run test:pytest exits 0 with '300 passed, 17 warnings in 289.25s', re-run in the lane after the fix; baseline was 2 failing on ModuleNotFoundError: No module named 'jsonschema'. jsonschema==4.23.0 is pinned in requirements.txt rather than making the import conditional, because a contract test that skips when its validator is absent proves nothing while reporting green. The 17 warnings are a pre-existing datetime.utcfromtimestamp DeprecationWarning in harness_common.py:86, unrelated to this slice and not introduced by it."
+    recorded_at: "2026-09-17T12:15:25.731Z"
+    artifact_path: packages/caws-cli/tests/hooks/pytest/requirements.txt
+    commit_sha: "71c0808f"
