@@ -1,0 +1,35 @@
+id: CAWS-DEFECT-DRIFT-DISCHARGE-UNDISCOVERABLE-01
+title: 'Hook-drift refusals never name caws init port, and help scopes every discharge to legacy packs it does not apply to'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-17T08:08:55.857Z'
+updated_at: '2026-09-17T08:08:55.857Z'
+created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/src/shell/render/init-hook-pack.ts (per-class drift refusal guidance)'
+    - 'packages/caws-cli/src/shell/commands/init.ts (plan refusal guidance; port handler)'
+    - 'packages/caws-cli/src/shell/command-metadata.ts (discharge flag/subcommand descriptions)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/render/init-hook-pack.ts'
+    - 'packages/caws-cli/src/shell/commands/init.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/tests/init/drift-discharge-discoverability.test.js'
+    - 'packages/caws-cli/tests/init/install-drift-classification.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'hook-drift-discharge-guidance'
+    type: behavior
+    path: 'packages/caws-cli/src/shell/render/init-hook-pack.ts'
