@@ -29,5 +29,18 @@ acceptance:
     given: 'the errors are absence-of-element errors, which a non-null assertion would silence without checking'
     when: 'the fix is applied'
     then: 'each indexed read goes through a helper that throws a named error when the element is absent, so a test that stops producing the verdict or finding it asserts on fails loudly rather than reading undefined. Loosening the tsconfig flag is refused: it is the flag that makes these reads honest'
+  - id: A3
+    given: >-
+      tests/hooks/pytest/test_session_log_renderer.py imports jsonschema for the two
+      turn-contract validation tests, added in c5185a98, while
+      tests/hooks/pytest/requirements.txt pins only pytest
+    when: 'npm run test:pytest builds its dedicated venv from that requirements file and runs'
+    then: >-
+      all 300 cases pass. Today 2 fail with ModuleNotFoundError: No module named
+      'jsonschema' — a SECOND independent Release Qualification blocker, not a
+      cascade of the typecheck one: those steps carry if-always and ran despite the
+      earlier failure. The dependency is declared in the requirements file rather
+      than the import being made conditional, because a contract test that silently
+      skips when its validator is absent proves nothing while reporting green
 non_functional: {}
 contracts: []
