@@ -2,9 +2,11 @@ id: CAWS-DEFECT-DRIFT-CAVEAT-RENDERERS-UNPINNED-01
 title: 'Pin the version-scoped re-baseline caveat on the two renderers agents read at block time'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Closes the coverage gap CAWS-DEFECT-DRIFT-DISCHARGE-UNDISCOVERABLE-01 declared in its own closure notes. The re-baseline caveat is the sole justification both renderers give for refusing to call an upstream_only path refreshable; it was rewritten to name 12.0.0 and 12.1.0 but pinned only on doctor''s pack_body_drift finding. These two renderers are the surfaces an agent reads at the moment of a block. Both halves are now asserted on both surfaces and falsified separately, and both tests carry an anti-vacuity precondition proven by downgrading the fixture to local_growth. Incidentally pins that a plan holding refused paths exits 1 — discovered by asserting exit 0 and being wrong, so the contract is now recorded rather than the assertion dropped. Test-only slice; no runtime behavior changed.'
 created_at: '2026-09-17T08:55:03.656Z'
-updated_at: '2026-09-17T08:55:22.369Z'
+updated_at: '2026-09-17T09:01:45.592Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
