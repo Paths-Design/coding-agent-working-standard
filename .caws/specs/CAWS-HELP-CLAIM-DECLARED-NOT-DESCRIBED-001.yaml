@@ -1,0 +1,44 @@
+id: CAWS-HELP-CLAIM-DECLARED-NOT-DESCRIBED-001
+title: 'Option value sets and version claims are declared in code, not described in help prose'
+risk_tier: 3
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-17T01:28:02.638Z'
+updated_at: '2026-09-17T01:28:02.638Z'
+created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
+blast_radius:
+  modules:
+    - 'caws-cli shell command surface'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/src/shell/commands/events.ts'
+    - 'packages/caws-cli/src/shell/commands/worktree.ts'
+    - 'packages/caws-cli/src/store/migration-versions.ts'
+    - 'packages/caws-cli/tests/shell/help-claim-integrity.test.js'
+    - 'packages/caws-cli/CHANGELOG.md'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: '--from <version> on specs migrate and events migrate accepts exactly v10'
+    when: 'a reader consults --help or triggers the rejection error'
+    then: 'the accepted set and both error messages derive from one exported constant, and no user-facing string names a CAWS version'
+  - id: A2
+    given: 'worktree prune --state accepts a closed set already held in WORKTREE_PRUNE_STATES'
+    when: 'a reader consults --help'
+    then: 'the description''s value list derives from that exported constant rather than a hand-written example'
+  - id: A3
+    given: 'four help descriptions claim specific exit codes'
+    when: 'the built CLI is invoked for each claimed condition'
+    then: 'the observed exit code matches the claim'
+  - id: A4
+    given: 'help prose that names a CAWS version goes stale silently'
+    when: 'the option surface is linted'
+    then: 'no option description references a CAWS version number, and any option naming a closed accepted set carries allowedValues'
+non_functional: {}
+contracts: []
