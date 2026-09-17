@@ -68,6 +68,24 @@ acceptance:
       wrong on the facts. Guidance naming a command that does not work on the reader
       pack would be worse than naming nothing, so the control is on the ADVICE, not
       the text
+  - id: A4
+    given: >-
+      a pristine baseline written by the port path, which lands a RECONCILED body
+      (template plus the repo growth) rather than a template
+    when: >-
+      the drift classifier from CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01
+      decomposes that path on a later run
+    then: >-
+      it reports local_growth, never upstream_only. Baselining the ported body made
+      installed == baseline true for the one file shape guaranteed to hold local
+      edits, so the classifier said "no local edit recorded" about reconciled work —
+      the label that makes --overwrite --force look safe. The baseline must record
+      the UPSTREAM body last synced to, so that installed minus baseline equals
+      local growth by construction on BOTH write paths. This dissolves the ambiguity
+      doctor pack_body_drift documents (the port path re-baselines the ported body)
+      at its source instead of describing it forever. If the template is unreadable
+      no baseline is written at all, because an absent baseline refuses as
+      unobserved while a wrong one classifies confidently
 non_functional: {}
 contracts:
   - name: 'hook-drift-discharge-guidance'
