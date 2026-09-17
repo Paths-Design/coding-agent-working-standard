@@ -75,3 +75,10 @@ contracts:
   - name: 'hook-pack-file-action'
     type: schema
     path: 'packages/caws-cli/src/init/hook-packs/types.ts'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "classifyDrift() reads the installer-written baseline at .caws/hooks/.pristine/shared/<destPath>; when the installed body equals it the difference is attributed to the template rather than the consumer. The fixture writes the same edited body to installed AND baseline, which is what an un-received upstream change looks like from inside the repo, and installs via the real installHookPack so the baseline is the shipping installer output. Falsified, not merely run: collapsing the classifier back to its old always-local_growth answer fails this case with Expected upstream_only / Received local_growth."
+    recorded_at: "2026-09-17T04:08:18.096Z"
+    test_nodeid: "packages/caws-cli/tests/init/install-drift-classification.test.js::A1: an installed body equal to its baseline is reported as upstream_only, not growth"
+    commit_sha: "61d229ad585fc247615c056d645de0d379794d8f"
