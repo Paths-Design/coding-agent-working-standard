@@ -2,10 +2,11 @@ id: CAWS-DEFECT-KERNEL-TEST-TYPECHECK-RED-01
 title: 'Restore a green kernel-test typecheck so Release Qualification can pass'
 risk_tier: 3
 mode: fix
-lifecycle_state: active
-worktree: wt-typecheck-green
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-typecheck-green at e6e6ccba0e1f235d0b82bea2e1bd0d4a050e9bc0'
 created_at: '2026-09-17T09:08:53.363Z'
-updated_at: '2026-09-17T09:21:31.972Z'
+updated_at: '2026-09-17T12:15:36.129Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
