@@ -79,3 +79,9 @@ evidence:
     recorded_at: "2026-09-17T12:23:32.428Z"
     artifact_path: .husky/tests/run.sh
     commit_sha: "10df026b"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "README line 118 changed from 'All four stages write to the shared turbo cache and to dist/' to 'All five stages ...', so the documented stage count matches the executable one. No other stage-count claim exists in the file (grepped for 1/4, 4/4, 'four stages' and the stage list)."
+    recorded_at: "2026-09-17T12:23:34.010Z"
+    artifact_path: .husky/README.md
+    commit_sha: "10df026b"
