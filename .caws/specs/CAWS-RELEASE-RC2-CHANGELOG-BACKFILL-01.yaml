@@ -16,7 +16,7 @@ scope:
     - 'packages/caws-cli/CHANGELOG.md'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A shipped CHANGELOG section must describe every fix in the tag it names; CI publishes the section verbatim, so an omission is permanent for that version.'
 acceptance:
   - id: A1
     given: 'the unpublished 12.2.0-rc.2 CHANGELOG section, authored 2026-09-16'
