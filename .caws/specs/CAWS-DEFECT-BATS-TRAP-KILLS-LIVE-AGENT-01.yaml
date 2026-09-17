@@ -68,10 +68,8 @@ contracts:
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "bats 'agent-surface: without the attestation the claude-code kill plane is armed (A1)' asserts the resolved plane is exactly 1|claude against a copy of the fixture .caws tree with .test-harness removed — the falsification control proving production escalation is unchanged. Full file 12/12; full hook-guard suite 293/293 exit 0."
-    recorded_at: "2026-09-17T12:03:31.793Z"
-    command: npx bats tests/hooks/bats/agent-surface.bats
-    exit_code: 0
+    evidence_ref: "bats 'agent-surface: without the attestation the claude-code kill plane is armed (A1)' asserts the resolved plane is exactly 1|claude against a copy of the fixture .caws tree with .test-harness removed — the falsification control proving production escalation is unchanged by this slice. Full hook-guard suite 293/293 exit 0."
+    recorded_at: "2026-09-17T12:04:01.457Z"
     artifact_path: packages/caws-cli/tests/hooks/bats/agent-surface.bats
     commit_sha: "6499179d"
   - criterion_id: A2
