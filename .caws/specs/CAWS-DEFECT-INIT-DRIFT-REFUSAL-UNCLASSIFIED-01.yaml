@@ -21,7 +21,10 @@ scope:
     - 'packages/caws-cli/tests/init/init-hook-pack-render.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'This slice changes classification and diagnostics only. Every file that required --overwrite plus --force before still requires it afterward, and nothing is newly auto-updated. A change that improves a refusal message while also loosening the write gate cannot be reviewed as a message change.'
+  - 'Baseline absence fails closed. A drifted file with no recorded pristine baseline is classified unobserved and refused; it is never promoted into the upstream-only class. Absence of evidence is not evidence of safety, and guessing safe is the single error that silently destroys grown code.'
+  - 'Baseline equality is evidence, never proof. The port path re-baselines a ported body, so no-local-edit-over-baseline narrows the operator investigation without authorizing an unattended overwrite. The refusal reports what was observed and never asserts that refreshing is safe.'
+  - 'planOne and applyOne classify through the shared resolveCollision, so a preview can never promise an outcome the write path contradicts.'
 acceptance:
   - id: A1
     given: 'TODO'
