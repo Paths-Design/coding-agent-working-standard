@@ -16,7 +16,7 @@ scope:
     - 'packages/caws-cli/tests/init/drift-discharge-discoverability.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A caveat stated in the present tense outlives its truth. Where guard text justifies a refusal with a claim about CLI behavior, that claim must name the versions it holds for, and a test must pin both halves: that the version boundary is stated, and that the unscoped form does not return.'
 acceptance:
   - id: A1
     given: 'the applied-install stale-copies section and the plan upstream-only note, whose re-baseline caveat CAWS-DEFECT-DRIFT-DISCHARGE-UNDISCOVERABLE-01 rewrote from a present-tense claim to one scoped to 12.0.0 and 12.1.0'
