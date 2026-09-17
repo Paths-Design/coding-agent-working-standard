@@ -54,20 +54,20 @@ acceptance:
       dsh --overwrite .caws/hooks/reset-strikes.sh --force refreshed a current dsh
       v3 pack file and cleared two doctor findings
   - id: A3
-    given: >-
-      a CURRENT (non-legacy) shared-pack file that has been grown locally and is
-      therefore refused as local_growth
+    given: 'a CURRENT (non-legacy) shared-pack file with committed local growth, refused as local_growth'
     when: >-
-      the advice the refusal now prints is actually followed end to end: stage
-      reconciled content outside the hooks tree, then run caws init port <path>
-      --from <staging-file>
+      the advice the refusal now prints is followed end to end: reconcile into a
+      staging file outside the hooks tree, then caws init port <path> --from
+      <staging-file>
     then: >-
-      the port lands, the file is version-stamped to the current pack, a new
-      pristine baseline is recorded, and the file no longer classifies as drift.
-      This is a positive control on the ADVICE, not on the text: guidance that names
-      a command which does not work on the reader pack would be a worse failure than
-      naming nothing, because it spends the agent trust that makes refusals
-      followable
+      the port lands the reconciled body keeping BOTH the local growth and the
+      upstream lines taken, version-stamps it to the current pack, records a fresh
+      baseline and audit-commits. The path REMAINS tracked as drift, because a
+      reconciled body permanently differs from the template — this corrects the
+      original wording of this criterion, which said the drift would clear and was
+      wrong on the facts. Guidance naming a command that does not work on the reader
+      pack would be worse than naming nothing, so the control is on the ADVICE, not
+      the text
 non_functional: {}
 contracts:
   - name: 'hook-drift-discharge-guidance'
