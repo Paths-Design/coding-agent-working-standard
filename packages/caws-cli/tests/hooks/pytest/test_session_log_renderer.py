@@ -987,6 +987,55 @@ class TestSessionEndSealing:
         assert sealed["model"] == "claude-opus-5"
         assert sealed["session_id"] == "sess-end-test"
 
+    def test_seals_models_in_turn_order_regardless_of_directory_order(self):
+        # The sealed usage.models order must be a function of the turn NUMBERS,
+        # never of the order the filesystem returns directory entries in. The
+        # turn files are created in descending order and each turn contributes
+        # one distinct model, so a traversal that follows creation/hash order
+        # rather than turn order produces a visibly different sequence.
+        root = Path(tempfile.mkdtemp(prefix="caws-session-end-order-"))
+        log_dir = self._session_dir(root)
+        (log_dir / ".meta.json").write_text(
+            json.dumps({"session_id": "sess-end-test"}), encoding="utf-8")
+
+        models = [f"model-{n:02d}" for n in range(1, 13)]
+        for number in range(len(models), 0, -1):
+            self._write_turn(log_dir, number, {
+                "requests": 1, "input": 1, "cache_read": 0, "cache_write": 0,
+                "output": 1, "models": [models[number - 1]],
+            })
+
+        result = self._run_session_end(root, "sess-end-test", "other")
+
+        assert result.returncode == 0, result.stderr
+        sealed = json.loads((log_dir / ".meta.json").read_text(encoding="utf-8"))
+        assert sealed["usage"]["models"] == models, (
+            "usage.models followed directory order, not turn order: "
+            f"{sealed['usage']['models']}"
+        )
+        # Sums are order-independent; they must be untouched by the ordering
+        # fix, so a regression here means the read set changed, not the order.
+        assert sealed["usage"]["requests"] == len(models)
+        assert sealed["usage"]["output"] == len(models)
+
+    def test_sealer_reads_turn_files_in_an_explicitly_ordered_traversal(self):
+        # Structural companion to the behavioral test above. Directory order
+        # happens to match turn order on some filesystems, so the behavioral
+        # assertion can pass on a developer machine while the contract is
+        # unenforced. This one holds on every platform: the aggregation must
+        # not be fed by a bare find(1), whose output order is unspecified.
+        source = (_SHARED / "session-log.sh").read_text(encoding="utf-8")
+        aggregation = [
+            line for line in source.splitlines()
+            if "turn-*.json" in line and "wc -l" not in line
+        ]
+        assert aggregation, "no turn-file aggregation found in session-log.sh"
+        for line in aggregation:
+            assert "-exec cat" not in line, (
+                "turn files are catted straight out of find(1); its traversal "
+                f"order is unspecified: {line.strip()}"
+            )
+
     def test_records_the_harness_reason_verbatim(self):
         # Not mapped to a known-value enum: a harness that adds a new reason
         # must have it preserved rather than collapsed into "other".

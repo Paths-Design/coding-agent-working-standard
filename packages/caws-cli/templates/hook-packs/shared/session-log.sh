@@ -271,7 +271,20 @@ handle_session_end() {
     # Session usage is the sum of what was rendered, so it can never
     # contradict the turn files a reader has in front of them. models keeps
     # first-seen order rather than sorting, matching the per-turn contract.
-    usage=$(find "$LOG_DIR" -maxdepth 1 -name 'turn-*.json' -exec cat {} + 2>/dev/null | jq -s '
+    #
+    # "First-seen" is only meaningful against a defined read order, so the
+    # turn files are sorted by name before they are concatenated. find(1)
+    # returns directory order, which is a property of the filesystem, not of
+    # the session: APFS hands back hash order (turn-001, turn-007, turn-011,
+    # ...), ext4 another. Without the sort the sealed models list differed
+    # between a developer's machine and CI for identical inputs. The token
+    # sums are order-independent; models is not. Zero-padded turn numbers make
+    # the byte sort the turn order, and this matches the renderer's own
+    # sorted(directory.glob("turn-*.json")) in session_log_renderer.py.
+    usage=$(find "$LOG_DIR" -maxdepth 1 -name 'turn-*.json' 2>/dev/null \
+      | LC_ALL=C sort \
+      | while IFS= read -r turn_file; do cat "$turn_file" 2>/dev/null; done \
+      | jq -s '
       [ .[] | .usage // empty ]
       | if length == 0 then null
         else {
