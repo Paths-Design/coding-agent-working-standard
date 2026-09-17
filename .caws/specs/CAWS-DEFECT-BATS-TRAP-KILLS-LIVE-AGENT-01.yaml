@@ -25,9 +25,11 @@ invariants:
   - 'The attestation is only honored from a marker inside .caws/hooks/, a path protected-paths.sh refuses agent writes to.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a repo with no .caws/hooks/.test-harness marker, on the claude-code surface'
+    when: 'agent-surface.sh resolves the kill plane'
+    then: >-
+      CAWS_TRAP_KILL defaults to 1 and CAWS_AGENT_PROCESS_NAMES defaults to 'claude'
+      — production escalation behavior is unchanged by this slice
 non_functional: {}
 contracts:
   - name: 'hook-test-harness-attestation'
