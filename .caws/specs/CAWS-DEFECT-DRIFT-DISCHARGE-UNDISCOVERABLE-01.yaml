@@ -28,9 +28,17 @@ invariants:
   - 'This slice changes guidance and descriptions only. No flag gains or loses effect, no refusal becomes an apply, and the drift classification from CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01 is unchanged.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      a managed hook refused as drift in any of the three classes (local_growth,
+      upstream_only, unobserved)
+    when: 'init renders the refusal, in both the plan preview and the applied-install output'
+    then: >-
+      the guidance names caws init port with its staging shape, and distinguishes it
+      from --adopt by outcome: port lands reconciled content and RESUMES drift
+      tracking, adopt keeps the local file and STOPS it. Before this change every
+      refusal offered only destroy (--overwrite --force) or give up (--adopt), so
+      the one path that preserves growth AND takes upstream was invisible at the
+      only moment an agent reads
 non_functional: {}
 contracts:
   - name: 'hook-drift-discharge-guidance'
