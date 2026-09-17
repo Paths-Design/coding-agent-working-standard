@@ -90,3 +90,9 @@ evidence:
     recorded_at: "2026-09-17T12:04:14.919Z"
     artifact_path: packages/caws-cli/tests/hooks/bats/agent-surface.bats
     commit_sha: "6499179d"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "caws_install_pack_once writes .caws/hooks/.test-harness after a verified install and exports a synthetic CAWS_TEST_SESSION_ID, which all three run_guard helpers pass. Every one of the 31 bats files routes through this installer (verified: no file lacks caws_install_pack_once, none defines a custom setup_file), so the attestation covers the whole suite. Proven end-to-end by the full hook-guard suite at 293/293 exit 0, and specifically by the A2 test asserting the marker's existence. The synthetic id replaced an 'env -u CLAUDE_CODE_SESSION_ID' attempt that broke quiet-merge x3 and scan-secrets x1 — several guards need a resolvable session id."
+    recorded_at: "2026-09-17T12:04:25.679Z"
+    artifact_path: packages/caws-cli/tests/hooks/bats/helpers.bash
+    commit_sha: "6499179d"
