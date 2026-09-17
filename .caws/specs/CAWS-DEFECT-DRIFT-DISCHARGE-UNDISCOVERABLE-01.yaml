@@ -22,7 +22,10 @@ scope:
     - 'packages/caws-cli/tests/init/install-drift-classification.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Guard and refusal text is the only surface read at the moment of a block. A discharge that exists but is not named there does not exist for the agent hitting it, so naming the sanctioned path in the refusal is the fix — documenting it elsewhere is not.'
+  - 'A help description must not narrow a general mechanism to a subset it does not actually check. resolvePacks returns SHARED_PACK for diff and port, and overwriteSelects has no legacy gate, so calling these legacy-only is a claim the code does not make and it suppresses the non-destructive path.'
+  - 'port and adopt are opposite outcomes and must never read as alternatives to each other: adopt KEEPS the local file and STOPS drift tracking, port LANDS reconciled content and RESUMES it. Text that lists them as two ways to quiet the same warning teaches an agent to stop tracking instead of to reconcile.'
+  - 'This slice changes guidance and descriptions only. No flag gains or loses effect, no refusal becomes an apply, and the drift classification from CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01 is unchanged.'
 acceptance:
   - id: A1
     given: 'TODO'
