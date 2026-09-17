@@ -84,3 +84,9 @@ evidence:
     recorded_at: "2026-09-17T12:04:13.249Z"
     artifact_path: packages/caws-cli/tests/hooks/bats/agent-surface.bats
     commit_sha: "6499179d"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "bats 'agent-surface: every surface arm's process names are covered by the live-name set (A4)' extracts every literal CAWS_AGENT_PROCESS_NAMES assignment from the INSTALLED lib and fails if any name is absent from CAWS_AGENT_LIVE_PROCESS_NAMES, with a found>=10 floor so a regex matching nothing cannot pass the loop vacuously. It caught a real extraction bug during authoring (it matched the preserve block's variable assignment '$_CAWS_AGENT_PROCESS_NAMES_PRESET')."
+    recorded_at: "2026-09-17T12:04:14.919Z"
+    artifact_path: packages/caws-cli/tests/hooks/bats/agent-surface.bats
+    commit_sha: "6499179d"
