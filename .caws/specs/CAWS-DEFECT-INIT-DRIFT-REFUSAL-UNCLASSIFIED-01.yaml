@@ -1,0 +1,34 @@
+id: CAWS-DEFECT-INIT-DRIFT-REFUSAL-UNCLASSIFIED-01
+title: 'init drift refusal cannot tell a stale copy from grown code, so --force is the only discharge for both'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-17T03:54:41.621Z'
+updated_at: '2026-09-17T03:54:41.621Z'
+created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/src/init/hook-install.ts (evaluateFileState drift classification; pristine baseline read)'
+    - 'packages/caws-cli/src/shell/render/init-hook-pack.ts (refusal rendering per drift class)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/init/hook-install.ts'
+    - 'packages/caws-cli/src/init/hook-packs/types.ts'
+    - 'packages/caws-cli/src/shell/render/init-hook-pack.ts'
+    - 'packages/caws-cli/tests/init/install-drift-classification.test.js'
+    - 'packages/caws-cli/tests/init/init-hook-pack-render.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'hook-pack-file-action'
+    type: schema
+    path: 'packages/caws-cli/src/init/hook-packs/types.ts'
