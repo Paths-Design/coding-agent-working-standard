@@ -35,3 +35,9 @@ evidence:
     recorded_at: "2026-09-17T13:45:54.191Z"
     artifact_path: packages/caws-cli/CHANGELOG.md
     commit_sha: "4e0765f7"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "npm view @paths.design/caws-cli dist-tags returned {latest: 12.1.0, next: 12.2.0-rc.1} and the published versions list ends at 12.2.0-rc.1 — 12.2.0-rc.2 has never been published, so the rc.2 section is still unshipped text and editing it in place is accurate."
+    recorded_at: "2026-09-17T13:45:55.716Z"
+    artifact_path: packages/caws-cli/CHANGELOG.md
+    commit_sha: "4e0765f7"
