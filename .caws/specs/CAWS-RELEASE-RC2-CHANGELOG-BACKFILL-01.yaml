@@ -2,9 +2,10 @@ id: CAWS-RELEASE-RC2-CHANGELOG-BACKFILL-01
 title: 'Record the four fixes landed after the rc.2 CHANGELOG section was authored'
 risk_tier: 3
 mode: doc
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-rc2-changelog
 created_at: '2026-09-17T13:44:15.227Z'
-updated_at: '2026-09-17T13:44:15.227Z'
+updated_at: '2026-09-17T13:44:28.403Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
