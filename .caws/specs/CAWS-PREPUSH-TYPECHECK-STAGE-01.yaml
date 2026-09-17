@@ -1,0 +1,32 @@
+id: CAWS-PREPUSH-TYPECHECK-STAGE-01
+title: 'Add typecheck to the pre-push hook so it actually mirrors CI'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-17T12:20:03.066Z'
+updated_at: '2026-09-17T12:20:03.066Z'
+created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
+blast_radius:
+  modules:
+    - 'git hooks (.husky)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - '.husky/pre-push'
+    - '.husky/tests/run.sh'
+    - '.husky/README.md'
+  out: []
+invariants:
+  - 'The pre-push hook''s stated contract is that a push cannot fail in CI for something reproducible locally; every CI step it omits is a way for main to accept a commit that CI will reject.'
+  - 'Root .npmrc sets workspaces=true, so a bare npm run <name> resolves against the workspaces and never reaches a root script. Any stage added here must target the workspace explicitly, as CI does.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'prepush-stage-sequence'
+    type: behavior
+    path: '.husky/tests/run.sh'
