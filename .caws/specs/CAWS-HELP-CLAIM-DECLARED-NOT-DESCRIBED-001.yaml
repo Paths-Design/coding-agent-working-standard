@@ -2,9 +2,10 @@ id: CAWS-HELP-CLAIM-DECLARED-NOT-DESCRIBED-001
 title: 'Option value sets and version claims are declared in code, not described in help prose'
 risk_tier: 3
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-help-claims
 created_at: '2026-09-17T01:28:02.638Z'
-updated_at: '2026-09-17T01:28:02.638Z'
+updated_at: '2026-09-17T01:28:36.178Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
