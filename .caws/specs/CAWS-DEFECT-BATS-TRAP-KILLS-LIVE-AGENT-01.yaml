@@ -45,6 +45,13 @@ acceptance:
       the live name is filtered out of the resolved target list, so no live agent
       process can be aimed at even by an explicit preset; a sacrificial non-surface
       name such as python3 is preserved
+  - id: A4
+    given: 'the per-surface case arms in agent-surface.sh'
+    when: 'a drift test enumerates every arm''s default CAWS_AGENT_PROCESS_NAMES value'
+    then: >-
+      each value is a member of the live-name set the attestation filters, so adding
+      a surface without extending that set fails the suite rather than silently
+      re-opening the hazard
 non_functional: {}
 contracts:
   - name: 'hook-test-harness-attestation'
