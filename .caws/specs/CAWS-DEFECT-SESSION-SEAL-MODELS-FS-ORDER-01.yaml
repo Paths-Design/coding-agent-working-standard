@@ -1,0 +1,41 @@
+id: CAWS-DEFECT-SESSION-SEAL-MODELS-FS-ORDER-01
+title: 'Seal session usage.models in turn order, not filesystem order'
+risk_tier: 3
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-17T12:42:27.452Z'
+updated_at: '2026-09-17T12:42:27.452Z'
+created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
+blast_radius:
+  modules:
+    - 'hook-packs/shared/session-log'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/session-log.sh'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/hooks/pytest/test_session_log_renderer.py'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'a session dir whose turn-NNN.json files are returned by the filesystem in an order other than turn order'
+    when: 'SessionEnd seals .meta.json'
+    then: 'usage.models carries first-seen order across turns by ASCENDING TURN NUMBER, identical on every filesystem'
+  - id: A2
+    given: 'the sealer''s turn-file read in session-log.sh'
+    when: 'the source is inspected'
+    then: 'the iteration is explicitly ordered, with no bare find(1) traversal feeding the aggregation'
+  - id: A3
+    given: 'a shared hook-pack template change'
+    when: 'the slice lands'
+    then: 'SHARED_PACK_VERSION is bumped and the recorded fingerprint matches, so installed packs receive the fix'
+  - id: A4
+    given: 'the sealed usage totals'
+    when: 'turn files are read in any order'
+    then: 'requests/input/cache_read/cache_write/output are unchanged, confirming only models was order-sensitive'
+non_functional: {}
+contracts: []
