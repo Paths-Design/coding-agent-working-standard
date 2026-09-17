@@ -94,3 +94,9 @@ evidence:
     recorded_at: "2026-09-17T04:08:35.279Z"
     test_nodeid: "packages/caws-cli/tests/init/install-drift-classification.test.js::A3: drift with no recorded baseline is unobserved, never upstream_only"
     commit_sha: "61d229ad585fc247615c056d645de0d379794d8f"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Proven by spawning dist through `caws init --agent-surface dsh --plan --json` with CAWS_HOME pinned to a throwaway dir, not through the handler: the serialize layer is exactly where an added field silently fails to reach the consumer a JSON contract exists for (the register.ts opt-forward class). Asserts driftClass upstream_only AND that refusalReason keeps its existing managed_drift value, pinning that the class was added as a sibling field rather than by widening the enum, which would break every consumer already matching managed_drift. A paired text-rendering case asserts the plan prints the class-specific heading and routes to `caws init diff` rather than promising the refresh is safe."
+    recorded_at: "2026-09-17T04:08:49.252Z"
+    test_nodeid: "packages/caws-cli/tests/init/install-drift-classification.test.js::A4: init --plan --json carries driftClass through the real CLI"
+    commit_sha: "61d229ad585fc247615c056d645de0d379794d8f"
