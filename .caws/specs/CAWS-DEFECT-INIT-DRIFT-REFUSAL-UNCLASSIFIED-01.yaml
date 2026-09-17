@@ -27,9 +27,17 @@ invariants:
   - 'planOne and applyOne classify through the shared resolveCollision, so a preview can never promise an outcome the write path contradicts.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      an installed managed hook whose body differs from the shipping template but is
+      byte-identical to its recorded pristine baseline, meaning upstream grew the
+      template and the consumer edited nothing
+    when: 'caws init --plan runs for a surface whose install set contains that file'
+    then: >-
+      the refusal names the upstream-only case distinctly from consumer growth, so
+      an operator can tell a stale copy from grown code without hand-diffing the
+      template against the installed file — the exact investigation
+      .caws/hooks/reset-strikes.sh forced on 2026-09-16, where evaluateFileState
+      attributed a pure upstream addition to consumer growth
 non_functional: {}
 contracts:
   - name: 'hook-pack-file-action'
