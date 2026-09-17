@@ -88,3 +88,9 @@ evidence:
     recorded_at: "2026-09-17T04:08:31.587Z"
     test_nodeid: "packages/caws-cli/tests/init/install-drift-classification.test.js::A2: a body edited since install is still classified as local growth"
     commit_sha: "61d229ad585fc247615c056d645de0d379794d8f"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Fixture deletes the pristine baseline and edits the installed body, so nothing can attribute the difference. classifyDrift returns unobserved on a null baseline read before any body comparison. The test asserts the class is unobserved AND separately asserts it is not upstream_only, because the fail-closed property is that the permissive label must be unreachable when the classifier cannot see, not merely that some other label was chosen."
+    recorded_at: "2026-09-17T04:08:35.279Z"
+    test_nodeid: "packages/caws-cli/tests/init/install-drift-classification.test.js::A3: drift with no recorded baseline is unobserved, never upstream_only"
+    commit_sha: "61d229ad585fc247615c056d645de0d379794d8f"
