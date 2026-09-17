@@ -22,9 +22,16 @@ invariants:
   - 'Root .npmrc sets workspaces=true, so a bare npm run <name> resolves against the workspaces and never reaches a root script. Any stage added here must target the workspace explicitly, as CI does.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: >-
+      the pre-push hook ran lint, audit, build and test but never typecheck, while
+      Release Qualification runs npm run typecheck -w @paths.design/caws-cli as its
+      step before lint
+    when: 'a push is attempted with a type error in a test file'
+    then: >-
+      the hook runs typecheck as its FIRST stage using the workspace-targeted form
+      CI uses, and refuses the push. ts-jest does not gate on diagnostics, so this
+      class is invisible to the test stage; it is why main accepted
+      red-qualification commits for two days with no local signal
 non_functional: {}
 contracts:
   - name: 'prepush-stage-sequence'
