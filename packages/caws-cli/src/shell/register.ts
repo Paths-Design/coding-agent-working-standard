@@ -863,15 +863,13 @@ export function registerShellCommands(
       actorId?: string;
       allowPartialUpgrade?: boolean;
     }) => {
-      if (opts.from !== 'v10') {
-        process.stderr.write(
-          `caws events migrate: only --from v10 is supported in v11.2; got ${JSON.stringify(opts.from)}.\n`
-        );
-        exit(1);
-        return;
-      }
+      // The --from rule lives in runEventsMigrateCommand, which validates
+      // against MIGRATABLE_SOURCE_VERSIONS. A duplicate guard here used to
+      // shadow it and forward a hardcoded 'v10' regardless, so the handler's
+      // own check was unreachable and its message never shipped — fixing the
+      // handler changed nothing a caller could see.
       const code = runEventsMigrateCommand({
-        from: 'v10',
+        from: opts.from,
         ...(opts.apply === true ? { apply: true } : {}),
         ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
         ...(opts.actorKind !== undefined

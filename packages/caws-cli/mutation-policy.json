@@ -75,6 +75,7 @@
         "src/shell/rules.ts",
         "src/shell/session/types.ts",
         "src/store/index.ts",
+        "src/store/migration-versions.ts",
         "src/store/rules.ts",
         "src/store/types.ts"
       ]
