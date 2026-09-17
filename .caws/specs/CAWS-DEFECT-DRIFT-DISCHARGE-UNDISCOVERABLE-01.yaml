@@ -143,3 +143,9 @@ evidence:
     recorded_at: "2026-09-17T08:30:26.135Z"
     test_nodeid: "packages/caws-cli/tests/init/drift-discharge-discoverability.test.js::A4: a port baselines the template, so reconciled work is never called upstream_only"
     commit_sha: "2bb4822614157483261061d0a589b6709166781b"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "The cited test pins the doctor surface, which is the only one of the four that is machine-checkable: message contains '12.0.0' (version-scoped), does NOT match /the port path re-baselines/ (the present-tense form cannot return), and narrowRepair contains 'caws init port <path> --from <staging-file>'. Both new assertions falsified separately, because they share a test() and the first failure short-circuits: reverting the message alone gave 'Expected substring 12.0.0' against the old text verbatim; reverting only the repair phrasing gave 'Expected substring caws init port <path> --from <staging-file>'. This was worth adding precisely because the pre-existing assertions ('AMBIGUOUS', 'READ the deltas') both survived the rewrite unchanged, so the message could have regressed silently. NOT COVERED BY TEST: the other three surfaces (HookPackDriftClass doc comment, applied-install stale-copies section, plan upstream-only note) were corrected and verified by grep — 'no present-tense claims remain in src/' — but only the doctor one has an assertion. The doc comment is a comment and untestable; the two renderer sections are reachable by test and are not pinned. That is a real coverage gap in this criterion, stated rather than papered over."
+    recorded_at: "2026-09-17T08:30:43.660Z"
+    test_nodeid: "packages/caws-cli/tests/kernel/unit/doctor-hook-growth-classification.test.ts::A2: growth rows render as info; stale rows keep the body-drift warning naming only themselves"
+    commit_sha: "2bb4822614157483261061d0a589b6709166781b"
