@@ -3,7 +3,6 @@ title: 'Option value sets and version claims are declared in code, not described
 risk_tier: 3
 mode: fix
 lifecycle_state: active
-worktree: wt-help-claims
 created_at: '2026-09-17T01:28:02.638Z'
 updated_at: '2026-09-17T01:37:35.077Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
