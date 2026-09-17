@@ -59,3 +59,9 @@ evidence:
     recorded_at: "2026-09-17T12:54:53.658Z"
     test_nodeid: "packages/caws-cli/tests/hooks/pytest/test_session_log_renderer.py::TestSessionEndSealing::test_seals_models_in_turn_order_regardless_of_directory_order"
     commit_sha: "87be9215"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "SHARED_PACK_VERSION 80 -> 81 in manifest-shared.ts with the recorded baseline moved to c8125112d3d10a79af9c32c3c19364b3247f8e4b1ff0d0f027c8003a0bff44f1 (was 3dcd7665605ac6c9e73ebec76981ee6cc26e755386b65e93af919b55f54ebf01). The guard is two-armed: it first asserts recorded.version === manifest version, then the live tree fingerprint. Both arms were exercised -- a version-only bump failed with 'Expected: 81 Received: 80', then the fingerprint arm printed the live value. 14/14 in pack-fingerprint.test.js and 257/257 across the init suite, so the bump introduced no managed-header drift. Note the first --verify attempt here REFUTED against canonical's stale dist (still reporting 80): merged is not governing until dist is rebuilt, and the gate caught it."
+    recorded_at: "2026-09-17T12:55:20.280Z"
+    test_nodeid: packages/caws-cli/tests/init/pack-fingerprint.test.js
+    commit_sha: "87be9215"
