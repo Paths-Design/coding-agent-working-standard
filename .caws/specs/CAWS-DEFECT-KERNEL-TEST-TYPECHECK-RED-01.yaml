@@ -17,7 +17,7 @@ scope:
     - 'packages/caws-cli/tests/kernel/unit/doctor-legacy-spec-schema.test.ts'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A suite that is green under jest but red under tsc is not green. ts-jest does not gate on diagnostics, so type errors in test files are invisible to the test run and surface only in Release Qualification, which nobody reads until a release is attempted.'
 acceptance:
   - id: A1
     given: 'tsconfig.kernel-test.json sets noUncheckedIndexedAccess, so every indexed read is T | undefined, and two kernel unit test files index classifier and finding arrays directly'
