@@ -2,9 +2,10 @@ id: CAWS-DEFECT-BATS-TRAP-KILLS-LIVE-AGENT-01
 title: 'bats hook-guard suite can SIGTERM the live agent session running it'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-bats-trap-safety
 created_at: '2026-09-17T11:39:49.977Z'
-updated_at: '2026-09-17T11:39:49.977Z'
+updated_at: '2026-09-17T11:40:47.475Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
