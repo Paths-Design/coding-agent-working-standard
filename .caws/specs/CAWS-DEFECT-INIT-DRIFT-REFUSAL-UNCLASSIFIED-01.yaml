@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-init-drift-class
 created_at: '2026-09-17T03:54:41.621Z'
-updated_at: '2026-09-17T03:55:36.742Z'
+updated_at: '2026-09-17T03:57:02.735Z'
 created_by_session: '1ee72137-dc4a-41c0-a002-23f2c51c90f9'
 blast_radius:
   modules:
@@ -20,6 +20,10 @@ scope:
     - 'packages/caws-cli/src/shell/render/init-hook-pack.ts'
     - 'packages/caws-cli/tests/init/install-drift-classification.test.js'
     - 'packages/caws-cli/tests/init/init-hook-pack-render.test.js'
+    - packages/caws-cli/src/shell/commands/init.ts
+    - packages/caws-cli/tests/init/adapter-covered-telemetry-cut.test.js
+    - packages/caws-cli/tests/init/hook-install-layout.test.js
+    - packages/caws-cli/tests/init/pack-body-drift-observation.test.js
   out: []
 invariants:
   - 'This slice changes classification and diagnostics only. Every file that required --overwrite plus --force before still requires it afterward, and nothing is newly auto-updated. A change that improves a refusal message while also loosening the write gate cannot be reviewed as a message change.'
