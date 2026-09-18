@@ -1,0 +1,51 @@
+id: CAWS-GOAL-AC-STOP-GATE-01
+title: 'Hold a session to its bound spec''s acceptance criteria with a blocking stop gate'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-09-18T23:49:52.986Z'
+updated_at: '2026-09-18T23:49:52.986Z'
+created_by_session: '34188473-6516-4d12-a4e5-df7ff5132232'
+blast_radius:
+  modules:
+    - 'hooks'
+    - 'cli-goal'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/goal-ac-gate.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/dispatch/stop.sh'
+    - 'packages/caws-cli/src/shell/commands/goal.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/tests/hooks/bats/goal-ac-gate.bats'
+    - 'packages/caws-cli/tests/shell/goal.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'a session bound to spec S where at least one acceptance criterion has no recorded pass verdict, and the agent has run ''caws goal set S'''
+    when: 'the Stop hook fires'
+    then: 'goal-ac-gate.sh writes a {"decision":"block","reason":...} control decision to stdout whose reason names each unmet criterion id and its verify-acs status verbatim'
+  - id: A2
+    given: 'a session bound to spec S where every acceptance criterion has a recorded pass verdict and a goal binding is set'
+    when: 'the Stop hook fires'
+    then: 'goal-ac-gate.sh writes no control decision, exits 0, and the session stops normally'
+  - id: A3
+    given: 'a session with no goal binding'
+    when: 'the Stop hook fires'
+    then: 'goal-ac-gate.sh exits 0 with empty stdout and the observable stop-chain behavior is byte-identical to the pre-feature chain'
+  - id: A4
+    given: 'a goal binding naming a spec whose verify-acs invocation fails for a reason other than unmet criteria (missing spec, malformed YAML, non-zero exit)'
+    when: 'the Stop hook fires'
+    then: 'the gate blocks with a reason that names the failure and includes the literal escape command ''caws goal clear'', rather than passing the stop silently'
+  - id: A5
+    given: 'a goal binding that has already blocked N consecutive stops with no new evidence recorded between them'
+    when: 'the Stop hook fires again'
+    then: 'the gate stops blocking, emits a loud non-blocking warning naming the still-unmet criteria, and the session is permitted to stop - a goal can never trap a session indefinitely'
+non_functional: {}
+contracts:
+  - name: 'stop-gate'
+    type: behavior
