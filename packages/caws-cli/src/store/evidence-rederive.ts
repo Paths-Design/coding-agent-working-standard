@@ -54,7 +54,7 @@ import {
   type Spec,
 } from '../kernel';
 
-export const TEST_RUNNERS = ['pytest', 'jest', 'vitest', 'cargo', 'go', 'unknown'] as const;
+export const TEST_RUNNERS = ['pytest', 'jest', 'node', 'vitest', 'cargo', 'go', 'unknown'] as const;
 export type TestRunner = (typeof TEST_RUNNERS)[number];
 /** Runners a caller may name as an override; `unknown` is a detection result, not a choice. */
 export const SELECTABLE_TEST_RUNNERS: readonly TestRunner[] = TEST_RUNNERS.filter(
@@ -71,7 +71,7 @@ export const SELECTABLE_TEST_RUNNERS: readonly TestRunner[] = TEST_RUNNERS.filte
  * into CI got a gate that reports success while checking nothing — the failure
  * class this repository's release stance names as the most dangerous.
  */
-export const EXECUTABLE_TEST_RUNNERS: readonly TestRunner[] = ['pytest', 'jest'];
+export const EXECUTABLE_TEST_RUNNERS: readonly TestRunner[] = ['pytest', 'jest', 'node'];
 
 function isExecutableRunner(runner: TestRunner): boolean {
   return EXECUTABLE_TEST_RUNNERS.includes(runner);
@@ -342,6 +342,35 @@ function fileContains(filePath: string, needle: string): boolean {
   }
 }
 
+/**
+ * `node --test` has no config file, so the only honest signal is an npm script
+ * that actually invokes it. Matched structurally rather than by substring:
+ * `node` followed by its own flags and then a bare `--test`.
+ *
+ * `node scripts/build.js --test` must NOT match — the flag belongs to the
+ * script, not to node's test runner — and `--test-name-pattern` alone must not
+ * either, which is why `--test` has to end at a word boundary that is not `-`.
+ */
+function hasNodeTestScript(dir: string): boolean {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(path.join(dir, 'package.json'), 'utf8');
+  } catch {
+    return false;
+  }
+  let scripts: unknown;
+  try {
+    scripts = (JSON.parse(raw) as { scripts?: unknown }).scripts;
+  } catch {
+    return false;
+  }
+  if (typeof scripts !== 'object' || scripts === null) return false;
+  const invokesNodeTest = /(^|[\s&|;(])node\s+(?:--[\w-]+(?:=\S+)?\s+)*--test(\s|$)/;
+  return Object.values(scripts as Record<string, unknown>).some(
+    (s) => typeof s === 'string' && invokesNodeTest.test(s)
+  );
+}
+
 /** Detect the runner configured in one directory (lifted from v10.2 verify-acs). */
 export function detectTestRunner(dir: string): TestRunner {
   const has = (name: string): boolean => fs.existsSync(path.join(dir, name));
@@ -351,6 +380,10 @@ export function detectTestRunner(dir: string): TestRunner {
   if (['jest.config.js', 'jest.config.ts', 'jest.config.mjs', 'jest.config.cjs'].some(has))
     return 'jest';
   if (fileContains(path.join(dir, 'package.json'), '"jest"')) return 'jest';
+  // After every framework probe: a project carrying a jest or vitest config may
+  // also run something through `node --test`, and re-routing it here would
+  // change which runner an existing project is verified with.
+  if (hasNodeTestScript(dir)) return 'node';
   if (has('Cargo.toml')) return 'cargo';
   if (has('go.mod')) return 'go';
   return 'unknown';
@@ -568,6 +601,97 @@ function jestOutcome(
   );
 }
 
+/**
+ * Does the TAP stream carry a result line for exactly `description`?
+ *
+ * This is the whole reason the node runner cannot read its exit code alone.
+ * `node --test --test-name-pattern=<x>` where nothing matches exits 0 and
+ * prints `# pass 1` — the PASS is the file, reported as its own subtest
+ * (`ok 1 - tests/sample.test.js`) around an empty inner plan (`1..0`). The same
+ * shape appears for a file containing no tests. Both would read as a verified
+ * criterion, which is the "reports success while checking nothing" class this
+ * module exists to prevent.
+ *
+ * TAP escapes `#` and `\` in descriptions, so a name containing either can fail
+ * to match here and report `missing`. That direction is deliberate: an
+ * unmatched name under-claims, and this function must never be the reason a
+ * citation reads as verified.
+ */
+function tapHasResultFor(output: string, description: string): boolean {
+  return new RegExp(`^\\s*(?:not )?ok \\d+ - ${escapeRegex(description)}\\s*(?:#.*)?$`, 'm').test(
+    output
+  );
+}
+
+/** Any TAP result line whose description is not the file itself. */
+function tapRanSomethingBesides(output: string, relFile: string): boolean {
+  const lines = output.split('\n');
+  const result = /^\s*(?:not )?ok \d+ - (.*?)\s*(?:#.*)?$/;
+  return lines.some((line) => {
+    const m = result.exec(line);
+    return m !== null && m[1] !== undefined && m[1].trim() !== relFile;
+  });
+}
+
+function nodeOutcome(
+  exec: ExecFileSyncLike,
+  ctx: RunnerContext,
+  repoRoot: string,
+  nodeid: string,
+  runTests: boolean,
+  t: TestTimeouts
+): CheckOutcome {
+  const base = { class: 'test' as const, target: nodeid };
+  const [file, ...rest] = nodeid.split('::');
+  const absFile = path.resolve(repoRoot, file ?? '');
+  const testName = rest.length > 0 ? rest[rest.length - 1] : undefined;
+
+  if (!fs.existsSync(absFile))
+    return { ...base, outcome: 'missing', detail: `test file not found: ${file}` };
+  if (testName !== undefined && !fileContains(absFile, testName)) {
+    return {
+      ...base,
+      outcome: 'missing',
+      detail: `test name ${JSON.stringify(testName)} not found in ${file}`,
+    };
+  }
+  if (!runTests)
+    return { ...base, outcome: 'not_run', detail: 'test file and name present; not executed' };
+
+  const relFile = path.relative(ctx.cwd, absFile);
+  const args = ['--test'];
+  if (testName !== undefined) args.push(`--test-name-pattern=${escapeRegex(testName)}`);
+  args.push(relFile);
+  // process.execPath, not 'node': re-derivation must run under the same runtime
+  // the CLI itself was launched with, and it must never reach a shell.
+  const run = spawnBounded(exec, process.execPath, args, ctx.cwd, t.run);
+
+  if (run.kind === 'timeout')
+    return { ...base, outcome: 'timeout', detail: `node --test ${nodeid} exceeded its time bound` };
+  if (run.kind === 'enoent')
+    return { ...base, outcome: 'unavailable', detail: 'node binary not found' };
+  if (run.kind === 'error') return { ...base, outcome: 'unavailable', detail: run.message };
+
+  const out = run.kind === 'ok' ? run.stdout : `${run.stdout}\n${run.stderr}`;
+  if (testName !== undefined && !tapHasResultFor(out, testName)) {
+    return {
+      ...base,
+      outcome: 'missing',
+      detail: `node --test reported no result for ${JSON.stringify(testName)} in ${file}; a --test-name-pattern matching nothing still exits 0 with the file counted as the pass`,
+    };
+  }
+  if (testName === undefined && !tapRanSomethingBesides(out, relFile)) {
+    return {
+      ...base,
+      outcome: 'missing',
+      detail: `node --test ran no test in ${file}; the only TAP result was the file itself`,
+    };
+  }
+  return run.kind === 'ok'
+    ? { ...base, outcome: 'passed', detail: `node --test ${nodeid} passed` }
+    : { ...base, outcome: 'failed', detail: `node --test exit ${run.status}: ${tail(out)}` };
+}
+
 function testOutcome(
   exec: ExecFileSyncLike,
   repoRoot: string,
@@ -590,12 +714,13 @@ function testOutcome(
       outcome: 'unavailable',
       detail:
         ctx.runner === 'unknown'
-          ? 'no test runner detected (pytest.ini/conftest.py, jest.config.*, vitest.config.*, Cargo.toml, go.mod)'
+          ? 'no test runner detected (pytest.ini/conftest.py, jest.config.*, vitest.config.*, a package.json script invoking node --test, Cargo.toml, go.mod)'
           : `runner ${ctx.runner} detected; re-derivation does not execute this runner — run the test yourself and cite the resulting commit or artifact`,
     };
   }
   if (ctx.runner === 'pytest') return pytestOutcome(exec, ctx, repoRoot, nodeid, opts.runTests, t);
   if (ctx.runner === 'jest') return jestOutcome(exec, ctx, repoRoot, nodeid, opts.runTests, t);
+  if (ctx.runner === 'node') return nodeOutcome(exec, ctx, repoRoot, nodeid, opts.runTests, t);
   // Declared executable with no dispatch arm. That is a programming error, and
   // it must not read as a verdict about the citation.
   return {
