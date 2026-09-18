@@ -245,7 +245,14 @@ def repo_configuration(canonical, surface):
     # accepted or rejected as a whole, so a repo cannot discover a malformed
     # block only once someone runs the harness it belongs to.
     parsed = {name: _repo_surface(block, f'surfaces.{name}') for name, block in surfaces.items()}
-    base, named = parsed.get('default', empty), parsed.get(surface, empty)
+    # `default` IS the base, so it must never be layered over itself: the
+    # additive keys concatenate, and apply_tier fails closed on a handler that
+    # is already in the chain. No harness is named 'default' today, so this is
+    # a guard against the shape rather than a live path — but the CLI resolves
+    # for 'default' on the project-wired plane, and the two validators must
+    # answer identically or the document means two things.
+    base = parsed.get('default', empty)
+    named = empty if surface == 'default' else parsed.get(surface, empty)
     merged = {'disabled': {}, 'extensions': {}, 'handlers': {}, 'libraries': {}}
     for key in ('disabled', 'extensions'):
         for event in set(base[key]) | set(named[key]):

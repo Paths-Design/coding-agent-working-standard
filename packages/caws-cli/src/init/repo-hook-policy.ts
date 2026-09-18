@@ -450,7 +450,17 @@ export function effectiveRepoSurfacePolicy(
   surface: string
 ): RepoSurfacePolicy {
   const base = policy.surfaces.default ?? emptyRepoSurfacePolicy();
-  const named = policy.surfaces[surface] ?? emptyRepoSurfacePolicy();
+  // `default` is already the base, so asking for it must not layer it over
+  // itself. It resolves that way in practice: the project-wired plane has one
+  // dispatcher tree, so `caws hooks compile` and `hooks list --surface default`
+  // both resolve for 'default'. Concatenating the additive keys would then
+  // double every entry, and `resolveChain` fails closed on a duplicate — a
+  // legitimate policy refused by the governed command, which is precisely the
+  // pressure that sends an agent to hand-edit the sidecar instead.
+  const named =
+    surface === 'default'
+      ? emptyRepoSurfacePolicy()
+      : (policy.surfaces[surface] ?? emptyRepoSurfacePolicy());
   const merged = emptyRepoSurfacePolicy();
   for (const event of new Set([...Object.keys(base.disabled), ...Object.keys(named.disabled)])) {
     merged.disabled[event] = [...(base.disabled[event] ?? []), ...(named.disabled[event] ?? [])];

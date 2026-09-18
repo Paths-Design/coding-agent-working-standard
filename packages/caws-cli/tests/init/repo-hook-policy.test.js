@@ -968,3 +968,68 @@ describe('a mutation leaves its input untouched and its output readable', () => 
     expect(REPO_HOOK_POLICY_PATH).toBe('.caws/hooks/hook-policy.json');
   });
 });
+
+describe('resolving for `default` must not layer `default` over itself', () => {
+  // Regression: `effectiveRepoSurfacePolicy` merged surfaces.default over
+  // surfaces[surface] unconditionally, so asking for 'default' concatenated
+  // the additive keys with themselves. resolveChain then failed closed on the
+  // duplicate, and `caws hooks compile` — which resolves for 'default',
+  // because the project-wired plane has ONE dispatcher tree — refused every
+  // policy declaring an extension. A governed command refusing a legitimate
+  // document is what sends an agent to hand-edit the artifact instead.
+  const document = {
+    default: {
+      disabled: {
+        pre_tool_use: [{ handler: 'cwd-guard.sh', reason: 'no worktrees in this repo' }],
+      },
+      extensions: {
+        pre_tool_use: [
+          { handler: 'marker.sh', before: 'scope-guard.sh', reason: 'native/ layout' },
+        ],
+      },
+      handlers: { 'marker.sh': '.caws/hooks/ext/marker.sh' },
+    },
+  };
+
+  test('each entry appears exactly once', () => {
+    const surface = parsedSurface(document, 'default');
+    expect(surface.extensions.pre_tool_use).toHaveLength(1);
+    expect(surface.disabled.pre_tool_use).toHaveLength(1);
+  });
+
+  test('the chain resolves instead of failing closed on a phantom duplicate', () => {
+    const resolved = resolveChain({
+      event: 'pre_tool_use',
+      stock: [...STOCK, 'cwd-guard.sh'],
+      repo: parsedSurface(document, 'default'),
+    });
+    expect(resolved.ok).toBe(true);
+    expect(resolved.handlers).toEqual([
+      'block-dangerous.sh',
+      'protected-paths.sh',
+      'marker.sh',
+      'scope-guard.sh',
+      'agent-register.sh --quiet',
+    ]);
+  });
+
+  test('a NAMED surface still layers over default — the fix did not disable merging', () => {
+    // Discrimination control: without it, returning the empty surface for
+    // every name would pass both arms above.
+    const surface = parsedSurface(
+      {
+        ...document,
+        codex: {
+          extensions: {
+            pre_tool_use: [{ handler: 'codex-only.sh', before: null, reason: 'codex needs this' }],
+          },
+        },
+      },
+      'codex'
+    );
+    expect(surface.extensions.pre_tool_use.map((e) => e.handler)).toEqual([
+      'marker.sh',
+      'codex-only.sh',
+    ]);
+  });
+});

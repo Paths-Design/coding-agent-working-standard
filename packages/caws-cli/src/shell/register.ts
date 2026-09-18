@@ -76,8 +76,13 @@ import {
   runGatesRunCommand,
   runInitCommand,
   runScopeCommand,
+  runHooksAddCommand,
   runHooksCompileCheckCommand,
+  runHooksCompileCommand,
+  runHooksDisableCommand,
   runHooksListCommand,
+  runHooksReplaceCommand,
+  runHooksRestoreCommand,
   runHooksValidateCommand,
   runScopeContentionCommand,
   runScopePlanCommand,
@@ -567,11 +572,12 @@ export function registerShellCommands(
   );
 
   // -------------------------------------------------------------------
-  // caws hooks list | validate | compile --check
-  // The read-only half of the repo-local hook policy surface. `compile`
-  // without --check is refused here rather than silently writing: the
-  // mutating verb lands in its own slice, and a verb that half-exists is
-  // worse than one that is plainly not there yet.
+  // caws hooks list | validate | compile | add | disable | replace | restore
+  // The repo-local hook policy surface. The read-only verbs (list, validate,
+  // compile --check) open nothing for writing, so "I only looked" is a claim
+  // the command surface can back. The mutating verbs write exactly one file
+  // each — the policy document, or the chain sidecars — and refuse before any
+  // write rather than half-applying.
   // -------------------------------------------------------------------
   const hooksCmd = program.command('hooks');
   applyGroupMeta(hooksCmd, HOOKS_COMMAND_META);
@@ -600,19 +606,82 @@ export function registerShellCommands(
 
   defineLeaf(hooksCmd, leafMeta(HOOKS_COMMAND_META, 'compile')).action(
     (opts: { check?: boolean; event?: string; json?: boolean; data?: boolean }) => {
-      if (opts.check !== true) {
-        process.stdout.write(
-          'caws hooks compile: writing the chain sidecars is not available yet; only ' +
-            '`--check` (read-only) is implemented in this release.\n' +
-            '  Run: caws hooks compile --check\n'
-        );
-        exit(1);
-        return;
+      const code =
+        opts.check === true
+          ? runHooksCompileCheckCommand({
+              ...(opts.event !== undefined ? { event: opts.event } : {}),
+              json: opts.json === true,
+              showData: opts.data === true,
+            })
+          : runHooksCompileCommand({
+              ...(opts.event !== undefined ? { event: opts.event } : {}),
+              json: opts.json === true,
+            });
+      exit(code);
+    }
+  );
+
+  defineLeaf(hooksCmd, leafMeta(HOOKS_COMMAND_META, 'add')).action(
+    (
+      handler: string,
+      opts: {
+        event?: string;
+        before?: string;
+        path?: string;
+        reason?: string;
+        surface?: string;
+        json?: boolean;
       }
-      const code = runHooksCompileCheckCommand({
+    ) => {
+      const code = runHooksAddCommand(handler, {
         ...(opts.event !== undefined ? { event: opts.event } : {}),
+        ...(opts.before !== undefined ? { before: opts.before } : {}),
+        ...(opts.path !== undefined ? { path: opts.path } : {}),
+        ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+        ...(opts.surface !== undefined ? { surface: opts.surface } : {}),
         json: opts.json === true,
-        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
+
+  defineLeaf(hooksCmd, leafMeta(HOOKS_COMMAND_META, 'disable')).action(
+    (
+      handler: string,
+      opts: { event?: string; reason?: string; surface?: string; json?: boolean }
+    ) => {
+      const code = runHooksDisableCommand(handler, {
+        ...(opts.event !== undefined ? { event: opts.event } : {}),
+        ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+        ...(opts.surface !== undefined ? { surface: opts.surface } : {}),
+        json: opts.json === true,
+      });
+      exit(code);
+    }
+  );
+
+  defineLeaf(hooksCmd, leafMeta(HOOKS_COMMAND_META, 'replace')).action(
+    (
+      handler: string,
+      opts: { with?: string; reason?: string; approver?: string; surface?: string; json?: boolean }
+    ) => {
+      const code = runHooksReplaceCommand(handler, {
+        ...(opts.with !== undefined ? { with: opts.with } : {}),
+        ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+        ...(opts.approver !== undefined ? { approver: opts.approver } : {}),
+        ...(opts.surface !== undefined ? { surface: opts.surface } : {}),
+        json: opts.json === true,
+      });
+      exit(code);
+    }
+  );
+
+  defineLeaf(hooksCmd, leafMeta(HOOKS_COMMAND_META, 'restore')).action(
+    (handler: string, opts: { event?: string; surface?: string; json?: boolean }) => {
+      const code = runHooksRestoreCommand(handler, {
+        ...(opts.event !== undefined ? { event: opts.event } : {}),
+        ...(opts.surface !== undefined ? { surface: opts.surface } : {}),
+        json: opts.json === true,
       });
       exit(code);
     }
