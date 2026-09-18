@@ -69,3 +69,10 @@ evidence:
     test_nodeid: packages/caws-cli/tests/hooks/pytest/test_machine_hook_selection.py
     exit_code: 0
     commit_sha: "57f2471d"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "pytest tests/hooks/pytest/test_machine_hook_selection.py::test_repo_resolves_before_machine_and_a_cross_tier_duplicate_fails_closed — with the same handler declared in BOTH tiers the launcher exits non-zero naming it, rather than splicing it twice (a guard that runs twice returns two verdicts for one call). With distinct handlers the chain is asserted as an exact sequence, stock + repo entry + machine entry, and the two entries report tier 'repo-policy' and 'machine-policy' respectively — which is what pins the ORDER rather than just co-presence. ::test_the_machine_tier_may_still_disable_a_floor_handler proves the floor binds the repo tier only, so the operator escape hatch survives."
+    recorded_at: "2026-09-18T22:02:23.223Z"
+    test_nodeid: packages/caws-cli/tests/hooks/pytest/test_machine_hook_selection.py
+    exit_code: 0
+    commit_sha: "57f2471d"
