@@ -114,6 +114,7 @@
         "src/shell/commands/evidence.ts",
         "src/shell/commands/gates.ts",
         "src/shell/commands/handoff.ts",
+        "src/shell/commands/hooks.ts",
         "src/shell/commands/init.ts",
         "src/shell/commands/message.ts",
         "src/shell/commands/reprieve.ts",

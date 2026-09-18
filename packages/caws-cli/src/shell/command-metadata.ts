@@ -1466,6 +1466,65 @@ export const SCOPE_COMMAND_META: GroupCommandMeta = {
   ],
 };
 
+// ─── hooks group (repo-local hook policy: read-only verbs) ────────────────
+// The three verbs here are strictly read-only. `compile` without --check
+// (which writes the sidecars) and the mutating policy verbs land separately;
+// keeping the inspection surface separable means a repo can be diagnosed
+// without any command in the group being able to change what runs.
+export const HOOKS_COMMAND_META: GroupCommandMeta = {
+  kind: 'group',
+  name: 'hooks',
+  description: 'Inspect the effective hook chain and the repo-local hook policy',
+  subcommands: [
+    {
+      kind: 'leaf',
+      name: 'list',
+      description:
+        'Show the effective handler chain per event, each row tagged with the tier that put it there (stock, repo-policy, machine-policy). Shells the launcher so what it prints is what executes. Always exits 0.',
+      options: [
+        { flag: '--event <event>', description: 'Limit to one lifecycle event' },
+        {
+          flag: '--surface <surface>',
+          description: 'Resolve for a named agent surface (default: the current session surface)',
+        },
+        { flag: '--json', description: 'Emit the resolved chain as a single-line JSON contract' },
+        { flag: '--data', description: 'Show structured data block on diagnostics' },
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'validate',
+      description:
+        'Validate .caws/hooks/hook-policy.json against the schema and the repo policy floor. Exits 0 when valid OR absent (a repo that never opts in is not in error), 1 when the document is rejected.',
+      options: [
+        { flag: '--json', description: 'Emit the validation result as JSON' },
+        { flag: '--data', description: 'Show structured data block on diagnostics' },
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'compile',
+      description:
+        'Compile the per-event chain sidecars read by project-wired surfaces. --check compares what is on disk against what would be compiled and WRITES NOTHING, exiting 1 when any event is stale.',
+      options: [
+        {
+          flag: '--check',
+          description:
+            'Read-only staleness check: name every stale event and exit 1, or exit 0 when all agree. Writes nothing.',
+        },
+        { flag: '--event <event>', description: 'Limit to one lifecycle event' },
+        // No --surface here on purpose. Every project-wired surface execs the
+        // same .caws/hooks/dispatch/<event>.sh, so there is one chain per
+        // event and it resolves from surfaces.default. A --surface flag would
+        // be accepted and then ignored, which is the accept-and-discard shape
+        // this command surface exists to refuse.
+        { flag: '--json', description: 'Emit the per-event result as JSON' },
+        { flag: '--data', description: 'Show structured data block on diagnostics' },
+      ],
+    },
+  ],
+};
+
 // ─── gates group (W4: exit-code contract documented) ──────────────────────
 export const GATES_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
@@ -2462,6 +2521,7 @@ export const COMMAND_SURFACE_METADATA: readonly CommandMeta[] = Object.freeze([
   DOCTOR_COMMAND_META,
   STATUS_COMMAND_META,
   SCOPE_COMMAND_META,
+  HOOKS_COMMAND_META,
   CLAIM_COMMAND_META,
   GATES_COMMAND_META,
   EVIDENCE_COMMAND_META,
