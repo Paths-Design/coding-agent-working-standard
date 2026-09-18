@@ -674,3 +674,73 @@ _edit_env() { jq -nc --arg s "$1" --arg f "$2" '{tool_name:"Edit",tool_input:{fi
   grep -q 'agent pid unresolved' "$CAWS_TEST_REPO/.claude/logs/danger-latch-escalations.log"
   [ "$(jq -r '.trap_dryrun_pid // ""' "$sentinel")" = "" ]
 }
+
+# --- CAWS-QUARANTINE-MESSAGE-NAMES-THIS-SURFACE-01 --------------------------
+#
+# The quarantine refusal used to describe surfaces in general ("on surfaces
+# with kill escalation enabled, the first such attempt ends this session's
+# process"), leaving an agent unable to tell whether the sentence was about
+# it. These pin that the message names THIS surface's disposition — and that
+# the disabled wording never reads as reassurance, because the quarantine
+# itself is surface-independent: only the SIGTERM is gated.
+
+@test "quarantine message: a kill-enabled surface says the escalation applies to THIS surface" {
+  local sid="qmsg-on-$$"
+  _arm_trap "$sid"
+  run env CAWS_PROJECT_DIR="$CAWS_TEST_REPO" CAWS_AGENT_SURFACE="claude-code" \
+    CAWS_TRAP_KILL=1 CAWS_AGENT_PROCESS_NAMES="nonexistent-agent-proc" HOOK_CWD="$CAWS_TEST_REPO" \
+    bash -c "printf '%s' '$(_cmd_envelope_sid "$sid" 'git commit -m x')' | bash '$CAWS_TEST_HOOKS_DIR/block-dangerous.sh'"
+  assert_output --partial '"decision": "block"'
+  assert_output --partial 'On THIS surface the first such attempt also ends this session'
+  # The stale general-surface phrasing must not come back.
+  refute_output --partial 'on surfaces with kill escalation enabled'
+}
+
+@test "quarantine message: a kill-disabled surface says THIS surface does not process-kill" {
+  local sid="qmsg-off-$$"
+  _arm_trap "$sid"
+  # CAWS_TRAP_KILL=0 IS the dsh/opencode/IDE-host disposition (agent-surface.sh
+  # defaults every non-listed surface to 0). The surface NAME is not varied here
+  # because the latch sentinel is keyed under CAWS_VENDOR_DIR — arming as
+  # claude-code (.claude) and checking as dsh (.dsh) finds no sentinel and the
+  # session is simply not quarantined. The message keys on the disposition.
+  run env CAWS_PROJECT_DIR="$CAWS_TEST_REPO" CAWS_AGENT_SURFACE="claude-code" \
+    CAWS_TRAP_KILL=0 HOOK_CWD="$CAWS_TEST_REPO" \
+    bash -c "printf '%s' '$(_cmd_envelope_sid "$sid" 'git commit -m x')' | bash '$CAWS_TEST_HOOKS_DIR/block-dangerous.sh'"
+  assert_output --partial '"decision": "block"'
+  assert_output --partial 'THIS surface does not process-kill'
+  # It must NOT promise a kill that will not happen...
+  refute_output --partial 'ends this session'
+  # ...and must NOT read as "no consequence": the quarantine is unchanged.
+  assert_output --partial 'changes nothing about the quarantine'
+  assert_output --partial 'stays denied and recorded until a human clears it'
+  # The surface-independent parts are untouched.
+  assert_output --partial 'QUARANTINED'
+  assert_output --partial 'human-only'
+}
+
+@test "quarantine message: dryrun never claims the process is ended" {
+  local sid="qmsg-dry-$$"
+  _arm_trap "$sid"
+  run env CAWS_PROJECT_DIR="$CAWS_TEST_REPO" CAWS_AGENT_SURFACE="claude-code" \
+    CAWS_TRAP_KILL=dryrun CAWS_AGENT_PROCESS_NAMES="nonexistent-agent-proc" HOOK_CWD="$CAWS_TEST_REPO" \
+    bash -c "printf '%s' '$(_cmd_envelope_sid "$sid" 'git commit -m x')' | bash '$CAWS_TEST_HOOKS_DIR/block-dangerous.sh'"
+  assert_output --partial '"decision": "block"'
+  assert_output --partial 'kill escalation is in dry-run'
+  assert_output --partial 'no signal is sent'
+  refute_output --partial 'ends this session'
+}
+
+@test "quarantine message: the file-tool trap carries the same surface-specific clause" {
+  local sid="qmsg-file-$$"
+  _arm_trap "$sid"
+  local envelope
+  envelope="$(jq -nc --arg sid "$sid" --arg p "$CAWS_TEST_REPO/probe.txt" \
+    '{session_id:$sid,tool_name:"Write",tool_input:{file_path:$p,content:"x"}}')"
+  run env CAWS_PROJECT_DIR="$CAWS_TEST_REPO" CAWS_AGENT_SURFACE="claude-code" \
+    CAWS_TRAP_KILL=0 HOOK_CWD="$CAWS_TEST_REPO" \
+    bash -c "printf '%s' '$envelope' | bash '$CAWS_TEST_HOOKS_DIR/block-dangerous.sh'"
+  assert_output --partial '"decision": "block"'
+  assert_output --partial 'THIS surface does not process-kill'
+  refute_output --partial 'on surfaces with kill escalation enabled'
+}
