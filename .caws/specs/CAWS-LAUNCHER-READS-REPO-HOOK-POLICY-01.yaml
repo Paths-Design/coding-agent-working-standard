@@ -55,3 +55,10 @@ evidence:
     test_nodeid: packages/caws-cli/tests/hooks/pytest/test_machine_hook_selection.py
     exit_code: 0
     commit_sha: "57f2471d"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "pytest tests/hooks/pytest/test_machine_hook_selection.py::test_a_committed_policy_disables_and_splices_with_no_machine_entry — machine state is emptied first so the effect is attributable to the committed file alone. The policy disables a non-floor stock guard and splices marker.sh before a named anchor. Asserted: the disabled guard is absent, marker.sh is present, its INDEX is exactly one before the anchor (position, not mere membership — a guard spliced into the wrong place adjudicates against different state than the one it must precede), its tier is 'repo-policy', and its resolved path is the repo's own marker.sh. Companion arm test_a_named_surface_merges_over_default_rather_than_replacing_it proves default and a named surface merge per key; test_a_policy_for_a_different_surface_does_not_apply_here proves surface scoping actually scopes."
+    recorded_at: "2026-09-18T21:58:09.743Z"
+    test_nodeid: packages/caws-cli/tests/hooks/pytest/test_machine_hook_selection.py
+    exit_code: 0
+    commit_sha: "57f2471d"
