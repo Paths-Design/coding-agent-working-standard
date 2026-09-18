@@ -13,16 +13,37 @@ blast_radius:
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - 'packages/caws-cli/templates/hook-packs/runtime/caws-hook.py'
+    - 'packages/caws-cli/tests/hooks/pytest/test_machine_hook_selection.py'
   out: []
 invariants:
   - 'The repo tier resolves before the machine tier, so an operator can locally silence a team extension but a committed team file cannot reach into an operator''s local additions.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'a repo with no .caws/hooks/hook-policy.json'
+    when: 'the launcher selects handlers for an event'
+    then: 'the selection is byte-identical to the selection made before this change, so a repo that never opts in is unaffected'
+  - id: A2
+    given: 'a committed hook-policy.json that disables a non-floor guard and splices an extension before an anchor'
+    when: 'the launcher selects handlers'
+    then: 'the disabled guard is absent and the extension runs at the declared position, without any machine-state entry'
+  - id: A3
+    given: 'a hook-policy.json that is malformed, over-authority, or names a REPO_POLICY_FLOOR handler under disabled or handlers'
+    when: 'the launcher selects handlers'
+    then: 'it raises, the existing __main__ handler emits a block decision and exits 2, and the policy file is named in the diagnostic'
+  - id: A4
+    given: 'both a repo policy and machine state carrying entries for the same event'
+    when: 'the launcher resolves the chain'
+    then: 'repo disable/extensions apply first and machine second, and a handler present in both tiers fails closed rather than being spliced twice'
+  - id: A5
+    given: 'any selection'
+    when: 'describe_selection reports it'
+    then: 'each handler carries a tier of stock, repo-policy or machine-policy, so what is shown is provably what executes'
+non_functional:
+  reliability:
+    - 'An absent policy file costs a single stat; it must not add a parse or a subprocess to any dispatch.'
+  security:
+    - 'The floor and the fail-closed posture are the authority boundary: a repo-authored document must not reduce the guard set below the handlers that keep the policy reviewable.'
 contracts:
   - name: 'repo-hook-policy-tier-1-selection'
     type: behavior
