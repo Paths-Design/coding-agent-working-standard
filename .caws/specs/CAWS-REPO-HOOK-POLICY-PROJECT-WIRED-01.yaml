@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-local-chain
 created_at: '2026-09-18T22:06:36.709Z'
-updated_at: '2026-09-18T22:07:00.028Z'
+updated_at: '2026-09-18T22:14:26.667Z'
 created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
 blast_radius:
   modules:
@@ -21,6 +21,7 @@ scope:
     - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
     - 'packages/caws-cli/tests/init/pack-fingerprints.json'
     - 'packages/caws-cli/tests/hooks/bats/local-chain.bats'
+    - packages/caws-cli/tests/init/machine-handler-policy.test.js
   out: []
 invariants:
   - 'An absent .chain sidecar costs one stat and leaves the stock HANDLERS array in force, so a repo that never opts in is byte-identically unaffected.'
