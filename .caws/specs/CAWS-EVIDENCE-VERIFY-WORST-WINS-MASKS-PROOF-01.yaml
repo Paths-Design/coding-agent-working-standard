@@ -1,0 +1,40 @@
+id: CAWS-EVIDENCE-VERIFY-WORST-WINS-MASKS-PROOF-01
+title: 'Richer AC citations must not produce a worse re-derivation verdict'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-18T22:46:09.674Z'
+updated_at: '2026-09-18T22:46:09.674Z'
+created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/src/kernel/evidence'
+    - 'packages/caws-cli/src/store'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/kernel/evidence/rederive.ts'
+    - 'packages/caws-cli/src/store/evidence-rederive.ts'
+    - 'packages/caws-cli/tests/kernel/evidence'
+  out: []
+invariants:
+  - 'An AC''s re-derivation verdict never degrades when an additional citation is supplied; adding a citation can only hold the verdict or improve it.'
+  - 'A check that is not re-derivable IN THE CURRENT MODE (a recorded --command, or a cited test under ''exists'' mode) is reported as not-applicable for that mode, never as a not_rederived check that outranks a sibling check which did re-derive.'
+acceptance:
+  - id: A1
+    given: 'an AC citing a reachable --commit-sha AND a recorded --command'
+    when: 'specs evidence --verify records it'
+    then: 'the criterion verdict is verified, not not_rederived(command_not_executed) — a command that is never executed by design is not evidence that failed to re-derive'
+  - id: A2
+    given: 'an AC citing a reachable --commit-sha AND a --test-nodeid, evaluated in ''exists'' mode (the mode the close gate uses)'
+    when: 'verify-acs runs without --run'
+    then: 'the criterion is verified on its commit check rather than not_rederived(not_run), because the test check is merely inapplicable in that mode'
+  - id: A3
+    given: 'an AC whose cited test genuinely FAILS under --run'
+    when: 'verify-acs --run evaluates it'
+    then: 'the criterion is still refuted — worst-wins is preserved for checks that actually ran and disproved the claim'
+non_functional: {}
+contracts:
+  - name: 'ac-rederivation'
+    type: behavior
