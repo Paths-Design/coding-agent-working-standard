@@ -91,3 +91,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/store/evidence-rederive.test.js::without --run a located node citation is not_run, never passed"
     artifact_path: packages/caws-cli/tests/store/evidence-rederive.test.js
     commit_sha: "1312c6f0"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "Covers BOTH jest detection routes because they sit apart in the chain: a jest.config.js package, and a package whose only jest signal is \"jest\" in package.json — the latter being the row immediately above the node probe. Mutation M3 (hoisting the node probe above the package.json check) SURVIVED the original single-route test and is killed by this one with Expected \"jest\", Received \"node\". The second route was added because the mutation found the gap, not because it was designed in."
+    recorded_at: "2026-09-18T23:30:50.726Z"
+    test_nodeid: "packages/caws-cli/tests/store/evidence-rederive.test.js::jest still wins over a node --test script, by config file AND by package.json"
+    artifact_path: packages/caws-cli/tests/store/evidence-rederive.test.js
+    commit_sha: "1312c6f0"
