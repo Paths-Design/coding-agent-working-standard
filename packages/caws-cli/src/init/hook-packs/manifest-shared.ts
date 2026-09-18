@@ -485,7 +485,15 @@ import { isAdapterCoveredSurface } from './types';
 // protects one filename under the vendor dir, not the pack's install dir). A
 // guard could therefore be disarmed by choosing a different tool. Both channels
 // now run one adjudication over one matcher, so they cannot diverge.
-export const SHARED_PACK_VERSION = 82;
+// v83: project-wired surfaces (qwen-code, kimi-code, opencode, zcode, dsh) exec
+// dispatch/<event>.sh directly with a literal HANDLERS array baked in at init,
+// so a repo's committed hook-policy.json governed only the two machine-routed
+// surfaces and silently not the other five. Every shared dispatcher now reads a
+// compiled dispatch/<event>.chain sidecar through the new lib/local-chain.sh.
+// The stock array is left intact rather than regenerated: rewriting it would
+// hold the dispatcher permanently in managed_drift and make caws init refuse
+// every future upstream fix to it.
+export const SHARED_PACK_VERSION = 83;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
@@ -733,6 +741,16 @@ export const SHARED_PACK: HookPackV1 = {
     {
       destPath: '.caws/hooks/lib/run-handlers.sh',
       sourcePath: 'lib/run-handlers.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      // Parses the compiled dispatch/<event>.chain sidecar for project-wired
+      // surfaces. Sourced best-effort by every shared dispatcher behind a
+      // `declare -F` guard, so a pack that predates it degrades to the stock
+      // handler array rather than failing.
+      destPath: '.caws/hooks/lib/local-chain.sh',
+      sourcePath: 'lib/local-chain.sh',
       executable: false,
       managed: true,
     },
