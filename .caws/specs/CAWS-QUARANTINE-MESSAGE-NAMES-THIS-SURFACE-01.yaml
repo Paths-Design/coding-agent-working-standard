@@ -60,3 +60,9 @@ evidence:
     recorded_at: "2026-09-18T22:26:46.528Z"
     artifact_path: packages/caws-cli/tests/hooks/bats/block-dangerous.bats
     commit_sha: "70d12142"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "block-dangerous.bats 'the file-tool trap carries the same surface-specific clause' (a real Write envelope, not Bash) plus the A2 test asserting QUARANTINED and 'human-only' survive unchanged. The single $_TRAP_ESCALATION_NOTE feeds _LATCH_SCOPE_NOTE (7 call sites) and both inline trap messages; grep confirms no 'on surfaces with kill escalation enabled' / 'where kill escalation is enabled' remains. Full block-dangerous bats suite 44/44 exit 0."
+    recorded_at: "2026-09-18T22:26:47.951Z"
+    artifact_path: packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh
+    commit_sha: "70d12142"
