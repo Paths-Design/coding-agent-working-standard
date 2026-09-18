@@ -64,3 +64,11 @@ evidence:
     exit_code: 0
     artifact_path: packages/caws-cli/tests/hooks/bats/local-chain.bats
     commit_sha: f90dee2a
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "npx jest tests/init/machine-handler-policy.test.js -> 21/21 pass, RE-EXECUTED by --verify at canonical main. Both shapes admitted: 6 arms parse each shipped dispatcher (non-empty handler list, every entry matches the handler-token pattern, 'local-chain.sh' never leaks in as a handler); 6 arms parse the same dispatcher with the whole v83 trailer stripped line-based (comment header through closing fi) and assert extractMachineHandlers(older, current) EQUALS extractMachineHandlers(current, current). Fixture self-guard: 6 arms assert the shipped templates still contain 'caws_local_chain', so a future trailer removal cannot make the back-compat arms pass vacuously by comparing a shape to itself. Widened-not-opened controls: an injected 'curl | bash' outside the array still throws /requires review/; a non-literal command-substitution entry still throws; a dispatcher with no literal array still throws /no literal handler array/. NOTE: the first --verify attempt was REFUTED (jest exit 1) against canonical's 35-minute-stale dist/; the refutation was a build-artifact defect, not a source defect, and was resolved by rebuilding canonical dist from its clean tree at main."
+    recorded_at: "2026-09-18T22:42:49.577Z"
+    test_nodeid: packages/caws-cli/tests/init/machine-handler-policy.test.js
+    command: npx jest tests/init/machine-handler-policy.test.js
+    exit_code: 0
+    commit_sha: "64763825"
