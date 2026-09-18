@@ -2,9 +2,21 @@ id: CAWS-REDERIVE-EXECUTES-NODE-TEST-01
 title: 'verify-acs executes node --test citations, and a name that matches nothing is missing, not verified'
 risk_tier: 1
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'verify-acs detected only pytest/jest/vitest/cargo/go, so every node --test project reported runner_unavailable for every criterion while caws specs evidence --verify still recorded status pass and merely annotated the downgrade — a spec could close 5/5 pass with verify-acs reporting verified 0.
+
+node is now a detected and executable runner. Detection has no config file to key on, so it reads package.json scripts structurally and runs after every framework probe, so an existing jest or vitest project keeps its runner.
+
+The execution path deliberately does not trust node''s exit code. Probed against node v22.19.0: ''node --test --test-name-pattern=<matches nothing>'' exits 0 and prints ''# pass 1'', because the FILE is counted as the passing subtest (ok 1 - tests/sample.test.js) around an empty inner plan (1..0); a file with no tests produces the same shape. Either would have verified a citation naming a test that does not exist. A result is therefore established from the TAP stream — an ''ok N - <name>'' line for the cited name, or for a file-only citation at least one result line that is not the file itself — and only then does the exit code decide passed vs failed.
+
+End-to-end against the real caws-dsh-bundle repo: detectTestRunner returns node; a real test passes; a name absent from the file is missing via the pre-check; and a name present only as a section COMMENT (so the pre-check passes and the runner is reached) is missing via the TAP guard — the real-world vacuity case.
+
+Mutation-verified: M1 (tapHasResultFor always true) kills the vacuity test; M2 (accepting the file''s own result line) kills the empty-file test; M4 (substring detection regex) kills the detection test. M3 (hoisting the node probe above the package.json jest check) SURVIVED the original test and exposed a genuine gap — the fixture''s jest package has a jest.config.js matched earlier in the chain, so the adjacent route was never covered. The test was strengthened to cover both routes and now kills M3.
+
+Full suite 241 suites / 3066 tests, exit 0. All 6 ACs mechanically verified (verify-acs --run: verified 6, refuted 0, not_rederived 0) against the landed revision via the --no-close path.'
 created_at: '2026-09-18T23:11:14.859Z'
-updated_at: '2026-09-18T23:11:31.400Z'
+updated_at: '2026-09-18T23:31:12.297Z'
 created_by_session: '1aa3f0bd-7f1f-4ee7-be67-f8f9ee019fbb'
 blast_radius:
   modules:
