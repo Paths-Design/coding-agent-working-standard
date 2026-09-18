@@ -3,7 +3,6 @@ title: 'Repo-local hook-policy: schema, validator and merge resolver (unwired)'
 risk_tier: 2
 mode: feature
 lifecycle_state: active
-worktree: wt-hook-policy-resolver
 created_at: '2026-09-18T21:29:18.341Z'
 updated_at: '2026-09-18T21:33:28.048Z'
 created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
