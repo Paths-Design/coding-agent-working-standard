@@ -54,3 +54,9 @@ evidence:
     recorded_at: "2026-09-18T22:26:34.744Z"
     artifact_path: packages/caws-cli/tests/hooks/bats/block-dangerous.bats
     commit_sha: "70d12142"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "block-dangerous.bats 'dryrun never claims the process is ended' — real hook run with CAWS_TRAP_KILL=dryrun asserts 'kill escalation is in dry-run' and 'no signal is sent' and REFUTES 'ends this session'. Before this change dryrun fell under the enabled wording and promised a kill that stops at the signal boundary by construction (DANGER-LATCH-TRAP-KILL-DRYRUN-001)."
+    recorded_at: "2026-09-18T22:26:46.528Z"
+    artifact_path: packages/caws-cli/tests/hooks/bats/block-dangerous.bats
+    commit_sha: "70d12142"
