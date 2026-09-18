@@ -1,0 +1,56 @@
+id: CAWS-REDERIVE-EXECUTES-NODE-TEST-01
+title: 'verify-acs executes node --test citations, and a name that matches nothing is missing, not verified'
+risk_tier: 1
+mode: feature
+lifecycle_state: draft
+created_at: '2026-09-18T23:11:14.859Z'
+updated_at: '2026-09-18T23:11:14.859Z'
+created_by_session: '1aa3f0bd-7f1f-4ee7-be67-f8f9ee019fbb'
+blast_radius:
+  modules:
+    - 'evidence-rederive'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/evidence-rederive.ts'
+    - 'packages/caws-cli/tests/store/evidence-rederive.test.js'
+    - 'packages/caws-cli/tests/shell/specs-verify-acs.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'a repo whose package.json test script runs ''node --test'''
+    when: 'detectTestRunner walks to it'
+    then: 'it returns the node runner rather than unknown, so cited node ids stop reporting runner_unavailable'
+  - id: A2
+    given: 'a cited test name that exists nowhere in the file'
+    when: 're-derivation runs it under --run'
+    then: 'the outcome is missing, NOT passed — node --test exits 0 with ''# pass 1'' for a name pattern matching nothing, because the file itself is counted as the passing subtest'
+  - id: A3
+    given: 'a cited test name that exists and passes'
+    when: 're-derivation runs it under --run'
+    then: 'the outcome is passed, established from a TAP ''ok N - <name>'' line for the CITED name, not from the exit code alone'
+  - id: A4
+    given: 'a cited test name that exists and fails'
+    when: 're-derivation runs it under --run'
+    then: 'the outcome is failed, so the criterion is refuted rather than not_rederived'
+  - id: A5
+    given: 'no --run (exists mode)'
+    when: 'a node citation is planned'
+    then: 'the outcome is not_run, never passed — a located-but-unexecuted test is not verified'
+  - id: A6
+    given: 'a repo with jest.config.js AND a node --test script'
+    when: 'detection runs'
+    then: 'jest still wins, so adding node detection cannot silently re-route an existing jest project'
+observability:
+  - 'Every node-runner outcome carries a detail string naming what was observed (the TAP line found, the counters, or the reason the citation was not located), so a not_rederived or missing verdict can be read back without re-running.'
+rollback:
+  - 'Revert the implementation commit; detection falls back to unknown and node citations report runner_unavailable again, which is the pre-change behavior and verifies nothing rather than verifying wrongly.'
+non_functional:
+  security:
+    - 'The runner is invoked as the node binary with an argv array and never through a shell; the cited test name reaches --test-name-pattern only after regex escaping, so a crafted test name cannot inject an argument or a pattern.'
+contracts:
+  - name: 'rederive-node-runner'
+    type: behavior
