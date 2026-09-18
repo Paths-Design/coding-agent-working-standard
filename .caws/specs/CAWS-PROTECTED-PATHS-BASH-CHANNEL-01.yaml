@@ -57,3 +57,11 @@ evidence:
     exit_code: 0
     artifact_path: packages/caws-cli/tests/hooks/bats/protected-paths.bats
     commit_sha: "1220c0cd"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "bats tests/hooks/bats/protected-paths.bats: 'a Bash write to a *.md under the hooks dir is admitted (docs-not-scripts parity)' (echo x > .caws/hooks/README.md) exits 0, matching the Write/Edit arms on the same path ('a *.md doc under .caws/hooks/ is still admitted', 'a *.md doc under .claude/hooks/ is ADMITTED'). Parity holds because both channels call one _protected_adjudicate over one matcher rather than each carrying its own path logic. The carve-out uses return 0, not exit 0, so a command naming a doc alongside a guard script is still adjudicated to completion — pinned by the multi-operand arm cited in A1. Full run 17/17 ok, BATS_EXIT=0."
+    recorded_at: "2026-09-18T21:28:07.069Z"
+    command: npx bats tests/hooks/bats/protected-paths.bats
+    exit_code: 0
+    artifact_path: packages/caws-cli/tests/hooks/bats/protected-paths.bats
+    commit_sha: "1220c0cd"
