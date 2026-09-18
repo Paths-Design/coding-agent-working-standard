@@ -80,3 +80,11 @@ evidence:
     exit_code: 0
     artifact_path: packages/caws-cli/tests/hooks/bats/local-chain.bats
     commit_sha: "64763825"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "npx bats tests/hooks/bats/local-chain.bats -> 18/18 ok at f90dee2a. Each refusal class has its own arm, all asserting exit 2: arm 6 no version header ('caws hook chain v1'), arm 7 malformed handler token (also asserts the emitted JSON carries \"decision\":\"block\"), arm 8 ABSOLUTE override target, arm 9 TRAVERSING target, arm 10 GLOB target, arm 11 stray comment. E2E arm 16 proves the refusal reaches the DISPATCHER, not just the lib: a malformed .chain makes dispatch/pre_tool_use.sh exit 2 and emit a block decision rather than quietly falling back to stock and reporting success. 'Applying no part of the sidecar' is pinned by e2e arm 18, which puts a VALID override line FIRST and a malformed line second, then asserts exit 2, a block decision, AND that the valid line's marker log does NOT exist — a parser that spliced accepted lines before blocking would satisfy every other arm here. MUTATION-CHECKED: changing the refusal from 'exit 2' to 'return 1' (the fail-open shape, where the caller would keep its stock array) kills 8 arms — 6, 7, 8, 9, 10, 11, 16 and 18 — and correctly leaves arm 17 alive, since that arm exercises the absent-lib path and not the refusal path. NOT CLAIMED: the absolute/traversing/glob rejections are proven against the parser's own validation, not against a live attempt to execute an off-tree target."
+    recorded_at: "2026-09-18T22:43:17.167Z"
+    command: npx bats tests/hooks/bats/local-chain.bats
+    exit_code: 0
+    artifact_path: packages/caws-cli/tests/hooks/bats/local-chain.bats
+    commit_sha: f90dee2a
