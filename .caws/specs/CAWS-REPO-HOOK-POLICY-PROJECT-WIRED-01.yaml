@@ -2,9 +2,21 @@ id: CAWS-REPO-HOOK-POLICY-PROJECT-WIRED-01
 title: 'Project-wired surfaces honor a compiled repo hook-policy chain'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Project-wired surfaces now honor the repo hook policy through a compiled, committed dispatch/<event>.chain sidecar read by lib/local-chain.sh, closing the gap where a committed policy governed claude-code and codex but silently not qwen-code, kimi-code, opencode, zcode or dsh.
+
+The fail posture is deliberately asymmetric and both halves are pinned: an ABSENT sidecar costs one stat and the dispatcher keeps its stock array; a MALFORMED sidecar blocks with exit 2 and applies no part of itself. The dispatcher trailer sits after the HANDLERS literal so extractMachineHandlers still finds the stock list, and machine-handler-policy.ts admits the pre-trailer shape so a pack bump does not demand --from from consumers who changed nothing. SHARED_PACK_VERSION 82 -> 83.
+
+Landed across three merges: 20bf0fb5 (implementation), e264e3e4 (fingerprint reconciliation), 6e8c7d7e (two acceptance arms found missing by an audit against the criteria).
+
+Evidence: jest 3057/3057 across 241 suites, bats 323 ok / 0 not ok, pytest 350 passed + 89 subtests, all at the landed revision. Mutation-checked rather than assumed: ''exit 2'' -> ''return 1'' in the refusal kills 8 arms; ''if true'' for the dispatcher''s [[ -f ]] guard kills the absent-lib arm only after it was strengthened to assert stderr silence.
+
+Two findings worth carrying forward. (1) A5 went genuinely RED at main: this slice and CAWS-QUARANTINE-MESSAGE-NAMES-THIS-SURFACE-01 both changed the shared pack on separate branches, the latter without a version bump; the fingerprint is content-addressed over the whole pack, so no branch had ever hashed the union and each was green alone. Concurrent shared-pack slices always owe a post-merge fingerprint reconciliation. (2) Passing --command to ''specs evidence --verify'' silently makes the criterion unverifiable: the non-executable command check ranks not_rederived and, under worst-wins aggregation, masks an executable citation that passed. All five ACs reported not_rederived until --command was dropped, then verified. Filed as a control-plane defect to fix.
+
+NOT CLAIMED: no installed consumer pack was upgraded to v83 and observed receiving the change, and the per-dispatch cost of the added stat was never measured (plan open item 1).'
 created_at: '2026-09-18T22:06:36.709Z'
-updated_at: '2026-09-18T22:14:26.667Z'
+updated_at: '2026-09-18T22:45:33.148Z'
 created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
 blast_radius:
   modules:
