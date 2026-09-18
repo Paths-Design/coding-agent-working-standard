@@ -48,3 +48,9 @@ evidence:
     recorded_at: "2026-09-18T22:26:33.496Z"
     artifact_path: packages/caws-cli/tests/hooks/bats/block-dangerous.bats
     commit_sha: "70d12142"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "block-dangerous.bats 'a kill-disabled surface says THIS surface does not process-kill' — real hook run with CAWS_TRAP_KILL=0 (the dsh/opencode/IDE-host default) asserts 'THIS surface does not process-kill', REFUTES 'ends this session' (no false threat), and asserts both 'changes nothing about the quarantine' and 'stays denied and recorded until a human clears it' so the wording cannot read as reassurance."
+    recorded_at: "2026-09-18T22:26:34.744Z"
+    artifact_path: packages/caws-cli/tests/hooks/bats/block-dangerous.bats
+    commit_sha: "70d12142"
