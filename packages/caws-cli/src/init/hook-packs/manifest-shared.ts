@@ -493,7 +493,7 @@ import { isAdapterCoveredSurface } from './types';
 // The stock array is left intact rather than regenerated: rewriting it would
 // hold the dispatcher permanently in managed_drift and make caws init refuse
 // every future upstream fix to it.
-export const SHARED_PACK_VERSION = 83;
+export const SHARED_PACK_VERSION = 84;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
@@ -947,6 +947,15 @@ export const SHARED_PACK: HookPackV1 = {
     {
       destPath: '.caws/hooks/agent-register.sh',
       sourcePath: 'agent-register.sh',
+      executable: true,
+      managed: true,
+    },
+    // CAWS-GOAL-AC-STOP-GATE-01: policy plane, not telemetry. Opt-in via a
+    // per-session goal binding; inert with no binding, so every surface can
+    // carry it without changing stop behavior until a goal is set.
+    {
+      destPath: '.caws/hooks/goal-ac-gate.sh',
+      sourcePath: 'goal-ac-gate.sh',
       executable: true,
       managed: true,
     },

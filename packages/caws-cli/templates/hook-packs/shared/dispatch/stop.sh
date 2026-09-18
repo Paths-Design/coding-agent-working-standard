@@ -46,6 +46,12 @@ caws_source_lib run-handlers.sh 2>/dev/null || exit 0
 HANDLERS=(
   # "audit.sh stop"
   # "stop-worktree-check.sh"
+  # CAWS-GOAL-AC-STOP-GATE-01: the one handler here that may emit a hard
+  # control decision. Inert unless `caws goal set <spec-id>` wrote a binding
+  # for this session; then it blocks the stop while any acceptance criterion
+  # of the bound spec is unmet. Runs first so its decision is on stdout
+  # before the finalizers append advisory context.
+  "goal-ac-gate.sh"
   "plan-transcript-finalize.sh"
   "session-log.sh"
   # MULTI-AGENT-ACTIVITY-REGISTRY-001: mark our lease as stopped so other
