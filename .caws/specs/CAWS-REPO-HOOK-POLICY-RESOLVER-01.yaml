@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-hook-policy-resolver
 created_at: '2026-09-18T21:29:18.341Z'
-updated_at: '2026-09-18T21:30:11.167Z'
+updated_at: '2026-09-18T21:33:28.048Z'
 created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
 blast_radius:
   modules:
@@ -16,6 +16,7 @@ scope:
   in:
     - 'packages/caws-cli/src/init/repo-hook-policy.ts'
     - 'packages/caws-cli/tests/init/repo-hook-policy.test.js'
+    - packages/caws-cli/tsconfig.vnext.json
   out: []
 invariants:
   - 'A repo-tier policy can never remove, no-op or replace a handler on REPO_POLICY_FLOOR. Replacing a floor handler with a stub is observationally equivalent to disabling it, so the floor gates disabled and handlers alike.'
