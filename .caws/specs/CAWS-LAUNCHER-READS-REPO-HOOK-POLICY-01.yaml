@@ -47,3 +47,11 @@ non_functional:
 contracts:
   - name: 'repo-hook-policy-tier-1-selection'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "pytest tests/hooks/pytest/test_machine_hook_selection.py::test_absent_policy_leaves_the_stock_chain_and_every_tier_reads_stock — the no-opt-in regression lock, run against a REAL installed machine runtime (setUp installs it via dist/init/machine-adapters into a temp CAWS_HOME and git repo, then invokes bin/caws-hook <surface> pre_tool_use --system --describe). With the machine tier emptied and no .caws/hooks/hook-policy.json on disk, the described chain equals system-policy.json events.pre_tool_use element-for-element and every handler reports tier 'stock'. Whole file 27 passed; full pytest plane 350 passed exit 0."
+    recorded_at: "2026-09-18T21:57:05.228Z"
+    test_nodeid: packages/caws-cli/tests/hooks/pytest/test_machine_hook_selection.py
+    exit_code: 0
+    commit_sha: "57f2471d"
