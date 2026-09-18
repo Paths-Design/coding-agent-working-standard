@@ -84,3 +84,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/store/evidence-rederive.test.js::a cited name that exists and fails -> failed, so the criterion is refuted"
     artifact_path: packages/caws-cli/tests/store/evidence-rederive.test.js
     commit_sha: "6d6f37cc"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "With runTests false the outcome is not_run and notToBe passed, and the recording spy shows ZERO spawns — existence mode locates the citation without executing it. This is the ancestral bug the module names: a check that was found but never executed is not verified."
+    recorded_at: "2026-09-18T23:30:44.024Z"
+    test_nodeid: "packages/caws-cli/tests/store/evidence-rederive.test.js::without --run a located node citation is not_run, never passed"
+    artifact_path: packages/caws-cli/tests/store/evidence-rederive.test.js
+    commit_sha: "1312c6f0"
