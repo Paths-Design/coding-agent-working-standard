@@ -1,0 +1,30 @@
+id: CAWS-REPO-HOOK-POLICY-PROJECT-WIRED-01
+title: 'Project-wired surfaces honor a compiled repo hook-policy chain'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-09-18T22:06:36.709Z'
+updated_at: '2026-09-18T22:06:36.709Z'
+created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
+blast_radius:
+  modules:
+    - 'caws-cli/hook-packs/shared/dispatch'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'An absent .chain sidecar costs one stat and leaves the stock HANDLERS array in force, so a repo that never opts in is byte-identically unaffected.'
+  - 'A malformed .chain line fails CLOSED with a block decision and exit 2; a sidecar that cannot be trusted must never silently degrade to a partial chain.'
+  - 'The compiled sidecar is never sourced or evaluated as shell — it is parsed with builtins only, because sourcing a generated file would make the guard plane arbitrarily programmable from a committed artifact.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'compiled-chain-sidecar'
+    type: schema
