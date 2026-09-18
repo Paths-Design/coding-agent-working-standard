@@ -31,9 +31,12 @@ acceptance:
     when: 'doctor classifies the lag'
     then: 'the finding stays info, because refreshing would destroy repo-owned growth and nothing is owed'
   - id: A3
-    given: 'a lag finding that is not fully explained by growth'
-    when: 'the finding data payload is read'
-    then: 'it reports how many drifted rows carry upstream movement, so the operator can see why the lag is not explained'
+    given: 'a repo with forked hook files whose upstream templates have moved'
+    when: 'the fork finding''s data payload and remediation are read'
+    then: >-
+      it names how many files are affected and which ones, and its repair prescribes
+      the three-way port while explicitly prohibiting caws init --overwrite --force,
+      because that refresh discards the growth
 non_functional: {}
 contracts:
   - name: 'doctor-lag-severity'
