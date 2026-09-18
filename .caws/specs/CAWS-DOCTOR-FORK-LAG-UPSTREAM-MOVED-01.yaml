@@ -17,7 +17,8 @@ scope:
     - 'packages/caws-cli/tests/kernel/unit/doctor-hook-growth-classification.test.ts'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'Forking a guard must never silence the signal that the guard is stale: local growth explains a pack-version lag only while the upstream template it forked from has not moved.'
+  - 'Severity is derived from the recorded drift observation, never from the absence of one — an unobserved or baseline-less row keeps the warning.'
 acceptance:
   - id: A1
     given: 'a drift row that is baseline-verified local growth whose upstream template ALSO moved since the baseline was recorded'
