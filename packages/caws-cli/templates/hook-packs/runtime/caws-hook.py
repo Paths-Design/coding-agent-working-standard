@@ -141,15 +141,33 @@ def _repo_surface(raw, where):
                          'handlers, libraries and forks')
     parsed = {'disabled': {}, 'extensions': {}, 'handlers': {}, 'libraries': {}}
     for event, values in (raw.get('disabled') or {}).items():
-        if event not in EVENTS or not isinstance(values, list) or any(
-                not isinstance(v, str) or not re.fullmatch(HANDLER_NAME, v) for v in values):
+        if event not in EVENTS or not isinstance(values, list):
             raise ValueError(f'{REPO_HOOK_POLICY}: {where}.disabled.{event} must be a list of handler names')
+        # Two admissible spellings: a bare name, and {handler, reason}. The
+        # object form is what `caws hooks disable` writes, so the answer to "why
+        # is this guard off here?" lives in the reviewed document rather than
+        # only in a commit message. The launcher validates the reason and then
+        # drops it: enforcement needs the name, review needs the reason.
+        names = []
         for value in values:
+            if isinstance(value, str):
+                names.append(value)
+                continue
+            if not isinstance(value, dict) or not set(value).issubset({'handler', 'reason'}):
+                raise ValueError(f'{REPO_HOOK_POLICY}: {where}.disabled.{event} entries are a '
+                                 'handler name or {handler, reason}')
+            if not isinstance(value.get('reason'), str) or len(value['reason'].strip()) < 12:
+                raise ValueError(f'{REPO_HOOK_POLICY}: {where}.disabled.{event} requires a reason '
+                                 'of at least 12 characters')
+            names.append(value.get('handler'))
+        if any(not isinstance(v, str) or not re.fullmatch(HANDLER_NAME, v) for v in names):
+            raise ValueError(f'{REPO_HOOK_POLICY}: {where}.disabled.{event} must be a list of handler names')
+        for value in names:
             if value in REPO_POLICY_FLOOR:
                 raise ValueError(f'{REPO_HOOK_POLICY}: {where}.disabled.{event} may not disable '
                                  f'{value}: it is on the repo-policy floor, the set of handlers that '
                                  'keep this policy reviewable and its staleness observable')
-        parsed['disabled'][event] = list(values)
+        parsed['disabled'][event] = names
     for event, extensions in (raw.get('extensions') or {}).items():
         if event not in EVENTS or not isinstance(extensions, list):
             raise ValueError(f'{REPO_HOOK_POLICY}: {where}.extensions.{event} must be a list')

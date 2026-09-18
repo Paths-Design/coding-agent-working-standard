@@ -84,6 +84,31 @@ export interface PolicyFork {
 }
 
 /**
+ * One subtraction from the chain.
+ *
+ * The document admits two spellings: a bare `"handler.sh"` and the object form
+ * `{handler, reason}`. Both parse; only the object form carries a
+ * justification, and it is the only form `caws hooks disable` writes.
+ *
+ * The asymmetry that motivates it: `extensions` has always REQUIRED a reason,
+ * while `disabled` — the key that REDUCES enforcement — accepted none. The
+ * operation more in need of a recorded justification was the one with nowhere
+ * to record it. Admitting both spellings keeps every already-valid document
+ * valid while giving the governed verb a place to put the answer to "why is
+ * this guard off in this repo?" that survives into every clone.
+ */
+export interface DisabledEntry {
+  handler: string;
+  /** null for the bare-string spelling, which records no justification. */
+  reason: string | null;
+}
+
+/** Project disabled entries down to the handler names the resolver subtracts. */
+export function disabledHandlers(entries: readonly DisabledEntry[]): string[] {
+  return entries.map((entry) => entry.handler);
+}
+
+/**
  * Named `Repo…` to stay distinct from machine-adapter-policy.ts's
  * `SurfacePolicy`, which is the LEGACY `{events: {<event>: {hooks_dir,
  * handlers[]}}}` shape this design supersedes. They are different shapes with
@@ -91,7 +116,7 @@ export interface PolicyFork {
  * name.
  */
 export interface RepoSurfacePolicy {
-  disabled: Record<string, string[]>;
+  disabled: Record<string, DisabledEntry[]>;
   extensions: Record<string, PolicyExtension[]>;
   handlers: Record<string, string>;
   libraries: Record<string, string>;
@@ -206,22 +231,51 @@ function parseSurface(surfaceName: string, raw: unknown): SurfaceResult {
     if (!isPlainObject(raw.disabled)) {
       return { ok: false, error: `${where}.disabled must be an object` };
     }
-    for (const [event, names] of Object.entries(raw.disabled)) {
+    for (const [event, values] of Object.entries(raw.disabled)) {
       if (!POLICY_EVENTS.includes(event)) {
         return { ok: false, error: `${where}.disabled names an unknown event: ${event}` };
       }
-      if (
-        !Array.isArray(names) ||
-        names.some((n) => typeof n !== 'string' || !HANDLER_NAME.test(n))
-      ) {
+      if (!Array.isArray(values)) {
         return { ok: false, error: `${where}.disabled.${event} must be a list of handler names` };
       }
-      for (const name of names as string[]) {
-        if (REPO_POLICY_FLOOR.includes(name)) {
-          return { ok: false, error: floorMessage(`${where}.disabled.${event}`, name, 'disable') };
+      const parsedEntries: DisabledEntry[] = [];
+      for (const value of values) {
+        if (typeof value === 'string') {
+          if (!HANDLER_NAME.test(value)) {
+            return {
+              ok: false,
+              error: `${where}.disabled.${event} must be a list of handler names`,
+            };
+          }
+          parsedEntries.push({ handler: value, reason: null });
+          continue;
+        }
+        if (!isPlainObject(value) || !exactKeys(value, ['handler', 'reason'])) {
+          return {
+            ok: false,
+            error: `${where}.disabled.${event} entries are a handler name or {handler, reason}`,
+          };
+        }
+        if (typeof value.handler !== 'string' || !HANDLER_NAME.test(value.handler)) {
+          return { ok: false, error: `${where}.disabled.${event} must be a list of handler names` };
+        }
+        if (typeof value.reason !== 'string' || value.reason.trim().length < 12) {
+          return {
+            ok: false,
+            error: `${where}.disabled.${event} requires a reason of at least 12 characters`,
+          };
+        }
+        parsedEntries.push({ handler: value.handler, reason: value.reason });
+      }
+      for (const entry of parsedEntries) {
+        if (REPO_POLICY_FLOOR.includes(entry.handler)) {
+          return {
+            ok: false,
+            error: floorMessage(`${where}.disabled.${event}`, entry.handler, 'disable'),
+          };
         }
       }
-      surface.disabled[event] = [...(names as string[])];
+      surface.disabled[event] = parsedEntries;
     }
   }
 
@@ -499,7 +553,12 @@ export function resolveChain(input: ResolveInput): ResolveResult {
     return null;
   };
 
-  const repoError = applyTier(input.repo.disabled, input.repo.extensions, 'repo');
+  const repoDisabled: Record<string, string[]> = {};
+  for (const [event, entries] of Object.entries(input.repo.disabled)) {
+    repoDisabled[event] = disabledHandlers(entries);
+  }
+
+  const repoError = applyTier(repoDisabled, input.repo.extensions, 'repo');
   if (repoError) return { ok: false, error: repoError };
   const machineError = applyTier(machine.disabled, machine.extensions, 'machine');
   if (machineError) return { ok: false, error: machineError };
@@ -510,4 +569,361 @@ export function resolveChain(input: ResolveInput): ResolveResult {
     handlerOverrides: { ...input.repo.handlers, ...machine.handlers },
     libraries: { ...input.repo.libraries, ...machine.libraries },
   };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Writing a policy
+//
+// Everything above reads a document someone else authored. Everything below
+// authors one. The two halves live in one module on purpose: the writer's only
+// correctness argument is that the reader accepts what it emits, and `settle`
+// below makes that argument mechanically on every mutation rather than leaving
+// it to each call site to remember.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** A mutation's outcome. `changed` describes what moved, for the caller to echo. */
+export type PolicyMutation =
+  | { ok: true; policy: RepoHookPolicy; changed: string[] }
+  | { ok: false; error: string };
+
+/** Minimum justification length, matching `extensions` and `forks`. */
+const MIN_REASON = 12;
+
+/** `default` reads first in a document because every other surface layers over it. */
+function surfaceOrder(a: string, b: string): number {
+  if (a === b) return 0;
+  if (a === 'default') return -1;
+  if (b === 'default') return 1;
+  return a < b ? -1 : 1;
+}
+
+function sortedEntries<T>(record: Record<string, T>): [string, T][] {
+  return Object.keys(record)
+    .sort()
+    .map((key) => [key, record[key]] as [string, T]);
+}
+
+function renderSurface(surface: RepoSurfacePolicy): Record<string, unknown> | null {
+  const out: Record<string, unknown> = {};
+
+  const disabled: Record<string, unknown[]> = {};
+  for (const [event, entries] of sortedEntries(surface.disabled)) {
+    if (entries.length === 0) continue;
+    disabled[event] = entries.map((entry) =>
+      entry.reason === null ? entry.handler : { handler: entry.handler, reason: entry.reason }
+    );
+  }
+  if (Object.keys(disabled).length > 0) out.disabled = disabled;
+
+  const extensions: Record<string, unknown[]> = {};
+  for (const [event, entries] of sortedEntries(surface.extensions)) {
+    if (entries.length === 0) continue;
+    extensions[event] = entries.map((entry) => ({
+      handler: entry.handler,
+      before: entry.before,
+      reason: entry.reason,
+    }));
+  }
+  if (Object.keys(extensions).length > 0) out.extensions = extensions;
+
+  for (const key of ['handlers', 'libraries'] as const) {
+    const rendered: Record<string, string> = {};
+    for (const [name, target] of sortedEntries(surface[key])) rendered[name] = target;
+    if (Object.keys(rendered).length > 0) out[key] = rendered;
+  }
+
+  const forks: Record<string, PolicyFork> = {};
+  for (const [name, fork] of sortedEntries(surface.forks)) forks[name] = fork;
+  if (Object.keys(forks).length > 0) out.forks = forks;
+
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/**
+ * Render a policy for `.caws/hooks/hook-policy.json`.
+ *
+ * Empty containers are OMITTED and every key is sorted. Both matter for review
+ * rather than for the parser: a repo that declares one extension should get a
+ * file whose entire body is that extension, and re-running a mutation should
+ * produce a diff the size of the decision it encodes, not a reordering.
+ */
+export function serializeRepoHookPolicy(policy: RepoHookPolicy): string {
+  const surfaces: Record<string, unknown> = {};
+  for (const name of Object.keys(policy.surfaces).sort(surfaceOrder)) {
+    const surface = policy.surfaces[name];
+    const rendered = surface ? renderSurface(surface) : null;
+    if (rendered) surfaces[name] = rendered;
+  }
+  const document: Record<string, unknown> = { version: policy.version };
+  if (Object.keys(surfaces).length > 0) document.surfaces = surfaces;
+  if (Object.keys(policy.guards).length > 0) document.guards = policy.guards;
+  return `${JSON.stringify(document, null, 2)}\n`;
+}
+
+function clonePolicy(policy: RepoHookPolicy): RepoHookPolicy {
+  return JSON.parse(JSON.stringify(policy)) as RepoHookPolicy;
+}
+
+function mutableSurface(policy: RepoHookPolicy, surface: string): RepoSurfacePolicy {
+  if (!policy.surfaces[surface]) policy.surfaces[surface] = emptyRepoSurfacePolicy();
+  return policy.surfaces[surface];
+}
+
+/**
+ * Close out a mutation by proving the reader accepts it.
+ *
+ * Serialize, parse back, and return the RE-PARSED policy — so a caller that
+ * writes `serializeRepoHookPolicy(result.policy)` is writing bytes this build
+ * has already read successfully. A mutator can therefore introduce no document
+ * the launcher would refuse; the failure surfaces here, before any write, where
+ * it costs an error message instead of a guard plane that blocks every tool
+ * call from a file the agent is not permitted to repair.
+ */
+function settle(policy: RepoHookPolicy, changed: string[]): PolicyMutation {
+  const parsed = parseRepoHookPolicy(serializeRepoHookPolicy(policy));
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: `refusing to write a policy this build cannot read back: ${parsed.error}`,
+    };
+  }
+  return { ok: true, policy: parsed.policy, changed };
+}
+
+function invalidReason(reason: unknown, flag: string): string | null {
+  if (typeof reason !== 'string' || reason.trim().length < MIN_REASON) {
+    return `${flag} must be at least ${MIN_REASON} characters: it is the recorded answer to "why is the guard plane different in this repo?", and it propagates to every clone`;
+  }
+  return null;
+}
+
+function unknownEvent(event: string): string | null {
+  return POLICY_EVENTS.includes(event)
+    ? null
+    : `unknown event: ${event} (expected one of ${POLICY_EVENTS.join(', ')})`;
+}
+
+/** The basename of a chain entry, dropping any arguments. */
+function entryName(entry: string): string {
+  return entry.split(' ')[0] ?? entry;
+}
+
+export interface AddExtensionInput {
+  surface: string;
+  event: string;
+  /** A chain entry: basename, optionally followed by arguments. */
+  handler: string;
+  /** Anchor basename to splice before; null appends. */
+  before: string | null;
+  reason: string;
+  /** Repo-relative path the handler lives at, for a handler the pack does not ship. */
+  path?: string;
+}
+
+/** Splice a handler into one event's chain. Additive: it removes nothing. */
+export function policyAddExtension(
+  policy: RepoHookPolicy,
+  input: AddExtensionInput
+): PolicyMutation {
+  const eventError = unknownEvent(input.event);
+  if (eventError) return { ok: false, error: eventError };
+  if (!HANDLER_ENTRY.test(input.handler)) {
+    return { ok: false, error: `malformed handler entry: ${input.handler}` };
+  }
+  if (input.before !== null && !HANDLER_NAME.test(input.before)) {
+    return { ok: false, error: `malformed anchor: ${input.before}` };
+  }
+  const reasonError = invalidReason(input.reason, '--reason');
+  if (reasonError) return { ok: false, error: reasonError };
+
+  const name = entryName(input.handler);
+  if (input.path !== undefined) {
+    const targetError = invalidTarget(input.path);
+    if (targetError) return { ok: false, error: `--path ${targetError}` };
+    if (REPO_POLICY_FLOOR.includes(name)) {
+      return { ok: false, error: floorMessage('handlers', name, 'replace') };
+    }
+  }
+
+  const next = clonePolicy(policy);
+  const surface = mutableSurface(next, input.surface);
+  const existing = surface.extensions[input.event] ?? [];
+  if (existing.some((entry) => entryName(entry.handler) === name)) {
+    // Refusing beats overwriting: the second invocation is either a typo or an
+    // intent to change the anchor, and silently rewriting the first entry would
+    // discard a reason someone recorded.
+    return {
+      ok: false,
+      error: `${name} is already an extension for ${input.event} in surfaces.${input.surface}; restore it first to change its anchor`,
+    };
+  }
+  surface.extensions[input.event] = [
+    ...existing,
+    { handler: input.handler, before: input.before, reason: input.reason },
+  ];
+  const changed = [
+    `+ surfaces.${input.surface}.extensions.${input.event}: ${input.handler} ${
+      input.before === null ? '(appended)' : `before ${input.before}`
+    }`,
+  ];
+  if (input.path !== undefined) {
+    surface.handlers[name] = input.path;
+    changed.push(`+ surfaces.${input.surface}.handlers.${name} -> ${input.path}`);
+  }
+  return settle(next, changed);
+}
+
+export interface DisableInput {
+  surface: string;
+  event: string;
+  handler: string;
+  reason: string;
+}
+
+/** Subtract a handler from one event's chain. Enforcement-reducing: reason required. */
+export function policyDisableHandler(policy: RepoHookPolicy, input: DisableInput): PolicyMutation {
+  const eventError = unknownEvent(input.event);
+  if (eventError) return { ok: false, error: eventError };
+  if (!HANDLER_NAME.test(input.handler)) {
+    return { ok: false, error: `malformed handler name: ${input.handler}` };
+  }
+  if (REPO_POLICY_FLOOR.includes(input.handler)) {
+    return { ok: false, error: floorMessage('disabled', input.handler, 'disable') };
+  }
+  const reasonError = invalidReason(input.reason, '--reason');
+  if (reasonError) return { ok: false, error: reasonError };
+
+  const next = clonePolicy(policy);
+  const surface = mutableSurface(next, input.surface);
+  const existing = surface.disabled[input.event] ?? [];
+  if (existing.some((entry) => entry.handler === input.handler)) {
+    return {
+      ok: false,
+      error: `${input.handler} is already disabled for ${input.event} in surfaces.${input.surface}`,
+    };
+  }
+  surface.disabled[input.event] = [...existing, { handler: input.handler, reason: input.reason }];
+  return settle(next, [
+    `- surfaces.${input.surface}.disabled.${input.event}: ${input.handler} (${input.reason})`,
+  ]);
+}
+
+export interface ReplaceInput {
+  surface: string;
+  handler: string;
+  /** Repo-relative path of the replacement. */
+  path: string;
+  reason: string;
+  approver: string;
+  /** Provenance of the shipped file being forked. */
+  forkedFrom: { pack: string; pack_version: number; sha256: string };
+}
+
+/**
+ * Point a shipped handler's basename at a repo-local file.
+ *
+ * Always writes the `forks` record alongside, never optionally: the provenance
+ * is what lets doctor say "you forked this at pack 67 and it has moved 16
+ * times since". A replacement recorded without it is a fork whose staleness
+ * nothing can observe, which is the failure this whole design exists to end.
+ */
+export function policyReplaceHandler(policy: RepoHookPolicy, input: ReplaceInput): PolicyMutation {
+  if (!HANDLER_NAME.test(input.handler)) {
+    return { ok: false, error: `malformed handler name: ${input.handler}` };
+  }
+  if (REPO_POLICY_FLOOR.includes(input.handler)) {
+    return { ok: false, error: floorMessage('handlers', input.handler, 'replace') };
+  }
+  const targetError = invalidTarget(input.path);
+  if (targetError) return { ok: false, error: `--with ${targetError}` };
+  const reasonError = invalidReason(input.reason, '--reason');
+  if (reasonError) return { ok: false, error: reasonError };
+  if (typeof input.approver !== 'string' || input.approver.trim().length === 0) {
+    return { ok: false, error: '--approver must name who accepted the fork' };
+  }
+  if (!Number.isInteger(input.forkedFrom.pack_version)) {
+    return { ok: false, error: 'fork provenance requires an integer pack_version' };
+  }
+  if (!/^[0-9a-f]{64}$/.test(input.forkedFrom.sha256)) {
+    return { ok: false, error: 'fork provenance requires a sha256 of the forked file' };
+  }
+
+  const next = clonePolicy(policy);
+  const surface = mutableSurface(next, input.surface);
+  surface.handlers[input.handler] = input.path;
+  surface.forks[input.handler] = {
+    forked_from: { ...input.forkedFrom },
+    reason: input.reason,
+    approver: input.approver,
+  };
+  return settle(next, [
+    `~ surfaces.${input.surface}.handlers.${input.handler} -> ${input.path}`,
+    `~ surfaces.${input.surface}.forks.${input.handler}: ${input.forkedFrom.pack}@${input.forkedFrom.pack_version} (${input.approver})`,
+  ]);
+}
+
+export interface RestoreInput {
+  surface: string;
+  handler: string;
+  /** Scope the removal to one event; omit to sweep every event. */
+  event?: string;
+}
+
+/**
+ * Drop every repo-tier entry naming a handler, returning it to stock.
+ *
+ * Refuses when nothing referenced it. A restore that reported success over an
+ * unchanged document would leave the caller believing a guard came back when
+ * the name they typed never appeared in the file — the "confirms while doing
+ * nothing" class, applied to the verb whose whole job is undoing.
+ */
+export function policyRestoreHandler(policy: RepoHookPolicy, input: RestoreInput): PolicyMutation {
+  if (!HANDLER_NAME.test(input.handler)) {
+    return { ok: false, error: `malformed handler name: ${input.handler}` };
+  }
+  if (input.event !== undefined) {
+    const eventError = unknownEvent(input.event);
+    if (eventError) return { ok: false, error: eventError };
+  }
+
+  const next = clonePolicy(policy);
+  const surface = next.surfaces[input.surface];
+  if (!surface) {
+    return { ok: false, error: `surfaces.${input.surface} declares no policy` };
+  }
+  const events = input.event === undefined ? POLICY_EVENTS : [input.event];
+  const changed: string[] = [];
+
+  for (const event of events) {
+    const disabled = surface.disabled[event];
+    if (disabled?.some((entry) => entry.handler === input.handler)) {
+      surface.disabled[event] = disabled.filter((entry) => entry.handler !== input.handler);
+      changed.push(`restored surfaces.${input.surface}.disabled.${event}: ${input.handler}`);
+    }
+    const extensions = surface.extensions[event];
+    if (extensions?.some((entry) => entryName(entry.handler) === input.handler)) {
+      surface.extensions[event] = extensions.filter(
+        (entry) => entryName(entry.handler) !== input.handler
+      );
+      changed.push(`removed surfaces.${input.surface}.extensions.${event}: ${input.handler}`);
+    }
+  }
+  if (surface.handlers[input.handler] !== undefined) {
+    delete surface.handlers[input.handler];
+    changed.push(`removed surfaces.${input.surface}.handlers.${input.handler}`);
+  }
+  if (surface.forks[input.handler] !== undefined) {
+    delete surface.forks[input.handler];
+    changed.push(`removed surfaces.${input.surface}.forks.${input.handler}`);
+  }
+
+  if (changed.length === 0) {
+    return {
+      ok: false,
+      error: `surfaces.${input.surface} has no entry for ${input.handler}${
+        input.event === undefined ? '' : ` under ${input.event}`
+      }; nothing to restore`,
+    };
+  }
+  return settle(next, changed);
 }

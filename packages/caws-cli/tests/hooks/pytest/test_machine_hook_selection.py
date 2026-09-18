@@ -415,6 +415,48 @@ class MachineHookSelection(unittest.TestCase):
         selection = self.described('non-floor-disable')
         self.assertNotIn(victim, [entry.split()[0] for entry in self.entries(selection)])
 
+    def test_the_object_spelling_of_a_disable_subtracts_the_same_handler(self):
+        # `disabled` admits a bare name and {handler, reason}. Both must remove
+        # the same guard: the reason is review metadata the launcher validates
+        # and drops, never an input to selection.
+        self.stock_machine_tier()
+        stock = list(self.defaults['pre_tool_use'])
+        victim = next(h.split()[0] for h in stock if h.split()[0] not in (
+            'protected-paths.sh', 'block-dangerous.sh', 'agent-register.sh'))
+        self.write_policy(self.surfaces({'disabled': {'pre_tool_use': [
+            {'handler': victim, 'reason': 'this repo has no tracked worktrees'}]}}))
+        selection = self.described('object-disable')
+        entries = [entry.split()[0] for entry in self.entries(selection)]
+        self.assertNotIn(victim, entries)
+        # The remainder must be untouched: a spelling change may not reorder or
+        # drop anything else.
+        self.assertEqual(entries, [h.split()[0] for h in stock if h.split()[0] != victim])
+
+    def test_the_object_spelling_cannot_smuggle_a_floor_handler_past_the_check(self):
+        # The bypass this arm exists for: the floor is checked over the NAMES
+        # extracted from both spellings, so adding the object form must not open
+        # a second door to disabling protected-paths.sh.
+        self.stock_machine_tier()
+        self.write_policy(self.surfaces({'disabled': {'pre_tool_use': [
+            {'handler': 'protected-paths.sh',
+             'reason': 'a justification does not confer this authority'}]}}))
+        result = self.invoke('object-floor-refusal', '--describe')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('repo-policy floor', result.stderr.decode())
+
+    def test_the_object_spelling_requires_a_substantive_reason(self):
+        # A disable is the enforcement-REDUCING operation. An object form whose
+        # reason is a placeholder records nothing, so it is refused rather than
+        # accepted as documented.
+        self.stock_machine_tier()
+        for bad in ({'handler': 'cwd-guard.sh', 'reason': 'wip'},
+                    {'handler': 'cwd-guard.sh'},
+                    {'handler': 'cwd-guard.sh', 'reason': 'ok', 'approver': 'me'}):
+            self.write_policy(self.surfaces({'disabled': {'pre_tool_use': [bad]}}))
+            result = self.invoke('object-reason-refusal', '--describe')
+            self.assertNotEqual(result.returncode, 0, f'accepted {bad}')
+            self.assertIn('hook-policy.json', result.stderr.decode())
+
     def test_a_malformed_or_over_authority_policy_fails_closed(self):
         # A3. Every rejection names the policy file, so the diagnostic points at
         # the document rather than at the guard that happened to notice.
