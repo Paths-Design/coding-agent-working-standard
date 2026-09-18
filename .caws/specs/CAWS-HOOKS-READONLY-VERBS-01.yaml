@@ -55,3 +55,10 @@ non_functional: {}
 contracts:
   - name: 'hooks-readonly-surface'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "npx jest tests/shell/hooks-readonly.test.js -> 28/28 pass at 6a3eabfd (landed bb56785b). 'hooks list' shells the launcher rather than reimplementing selection; the suite drives a REAL launcher process (a stub python script at $CAWS_HOME/bin/caws-hook emitting a caws.hook_selection.v1 document), reached through the production path because machineHome() already reads CAWS_HOME — no test-only seam was added to the command. Arms: rows carry the tier the launcher reported (repo-policy and machine-policy both rendered, and a REPO_POLICY_FLOOR handler is marked [floor]); a launcher that OMITS tier renders 'unknown', never the string 'undefined', and names 'caws init adapters install'; no machine runtime at all is reported as unavailable while list still exits 0; --json emits caws.hooks_list.v1 with surface=codex, which also proves --surface reached the handler. The missing-tier arm is not hypothetical: the installed ~/.caws runtime on this machine predates Step 3's tier field, so the first live run of 'caws hooks list --event pre_tool_use' printed '(undefined)' on all ten rows — that was the defect this arm now pins. NOT CLAIMED: the remediation it prints was not executed, so 'caws init adapters install' restoring tier reporting is reasoned from the Step-3 template change, not observed end to end."
+    recorded_at: "2026-09-18T23:25:29.639Z"
+    artifact_path: packages/caws-cli/tests/shell/hooks-readonly.test.js
+    commit_sha: "6a3eabfd"
