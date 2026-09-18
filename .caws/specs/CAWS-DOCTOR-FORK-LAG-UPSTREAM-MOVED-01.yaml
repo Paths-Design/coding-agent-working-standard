@@ -53,10 +53,8 @@ evidence:
   - criterion_id: A2
     status: pass
     evidence_ref: "A6b is the discrimination control: two growth rows with upstreamChange false produce NO pack_fork_upstream_moved finding and summary.warnings === 0. A6c separates the adjacent class: a row with upstreamChange true but localGrowth false (an un-edited stale copy) reports as pack_body_drift warning and NOT as a fork. A3 (fixture corrected to pure growth) still pins that the version lag stays info at 0 warnings. PROOF THE CONTROL IS NOT VACUOUS: mutating the fire condition from 'upstreamAlso.length > 0' to 'growthPaths.length > 0' in inspect.ts was killed by exactly A6b and A3 (2 failed, 6 passed); mutation reverted, 99/99 across 12 doctor suites pass. Note A6b/A6c also passed BEFORE the rule existed, vacuously -- the mutation run is what establishes they now discriminate."
-    recorded_at: "2026-09-18T21:07:05.990Z"
+    recorded_at: "2026-09-18T21:07:43.190Z"
     test_nodeid: packages/caws-cli/tests/kernel/unit/doctor-hook-growth-classification.test.ts
-    command: npx jest tests/kernel/unit/doctor
-    exit_code: 0
     commit_sha: "136798d1"
   - criterion_id: A3
     status: pass
