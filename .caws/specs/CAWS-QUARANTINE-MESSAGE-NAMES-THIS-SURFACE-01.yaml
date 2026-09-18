@@ -1,0 +1,42 @@
+id: CAWS-QUARANTINE-MESSAGE-NAMES-THIS-SURFACE-01
+title: 'The quarantine message states THIS surface''s escalation disposition instead of describing surfaces in general'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-18T22:20:59.577Z'
+updated_at: '2026-09-18T22:20:59.577Z'
+created_by_session: '1aa3f0bd-7f1f-4ee7-be67-f8f9ee019fbb'
+blast_radius:
+  modules:
+    - 'block-dangerous'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh'
+    - 'packages/caws-cli/tests/hooks/bats/block-dangerous.bats'
+  out: []
+invariants:
+  - 'The disabled-escalation wording never reads as reassurance: it must state in the same breath that the quarantine is unchanged and fully in force'
+  - 'dryrun is never described as ending the process, because no signal is sent'
+acceptance:
+  - id: A1
+    given: 'a quarantined session on a surface with CAWS_TRAP_KILL=1'
+    when: 'a denied Bash command or file mutation produces the refusal message'
+    then: 'the message says the escalation applies to this surface, not that it applies on surfaces in general'
+  - id: A2
+    given: 'a quarantined session on a surface with kill escalation disabled (CAWS_TRAP_KILL=0, e.g. dsh)'
+    when: 'the refusal message is produced'
+    then: 'it states that this surface does not process-kill AND that the quarantine still denies every further Bash command and file mutation until a human clears it'
+  - id: A3
+    given: 'a quarantined session with CAWS_TRAP_KILL=dryrun'
+    when: 'the refusal message is produced'
+    then: 'it does not claim the process will be ended, because dryrun stops at the signal boundary'
+  - id: A4
+    given: 'any of the three dispositions'
+    when: 'the message is rendered'
+    then: 'the human-only reset instruction and the do-not-route-around directive are unchanged, because those are surface-independent'
+non_functional: {}
+contracts:
+  - name: 'quarantine-agent-message'
+    type: behavior
