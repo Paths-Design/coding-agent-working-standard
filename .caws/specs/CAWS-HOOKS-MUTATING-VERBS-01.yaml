@@ -1,0 +1,59 @@
+id: CAWS-HOOKS-MUTATING-VERBS-01
+title: 'caws hooks add | disable | replace | restore | compile (governed writes)'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-09-18T23:29:05.819Z'
+updated_at: '2026-09-18T23:29:05.819Z'
+created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/src/shell'
+    - 'packages/caws-cli/src/init'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/hooks.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/index.ts'
+    - 'packages/caws-cli/src/init/repo-hook-policy.ts'
+    - 'packages/caws-cli/src/init/hook-chain.ts'
+    - 'packages/caws-cli/tests/shell/hooks-mutating.test.js'
+    - 'packages/caws-cli/tests/init/repo-hook-policy.test.js'
+  out: []
+invariants:
+  - 'Every mutating verb is all-or-nothing: a verb that refuses leaves .caws/ byte-identical, so a half-written guard policy is unrepresentable.'
+  - 'A verb that REDUCES enforcement (disable, replace) refuses without a recorded human justification, and that justification is persisted in the committed document rather than in a session-scoped store — it propagates to every clone and has no expiry, unlike a reprieve.'
+  - 'No mutating verb can remove a REPO_POLICY_FLOOR handler by any route, including replacing it with a no-op, because replace-with-a-no-op is observationally identical to disable.'
+  - 'compile never writes a sidecar that local-chain.sh would refuse; the renderer throws first, so a compile cannot manufacture an outage on every tool call from a file the agent may not edit.'
+acceptance:
+  - id: A1
+    given: 'a repo with no hook-policy.json'
+    when: 'caws hooks add rg-replace-guard.sh --event pre_tool_use --before scope-guard.sh runs'
+    then: 'the file is created containing that extension under surfaces.default, caws hooks validate exits 0 on it, and the handler appears in the resolved chain immediately before its anchor'
+  - id: A2
+    given: 'caws hooks disable <handler> --event <e> or caws hooks replace <stock> --with <rel> invoked WITHOUT --reason'
+    when: 'the command runs'
+    then: 'it refuses with exit 1, writes nothing, and names --reason — and when a reason IS supplied it is persisted in the document and echoed back by caws hooks list'
+  - id: A3
+    given: 'a REPO_POLICY_FLOOR handler such as protected-paths.sh'
+    when: 'caws hooks disable or caws hooks replace targets it, even with a valid --reason and --approver'
+    then: 'both refuse with exit 1 and write nothing, because a policy that can authorize its own amendment is not a policy'
+  - id: A4
+    given: 'a policy declaring an extension and an override'
+    when: 'caws hooks compile runs'
+    then: 'it writes dispatch/<event>.chain for every installed dispatcher, a following caws hooks compile --check exits 0, and the emitted file parses under the real local-chain.sh rather than merely matching a regex'
+  - id: A5
+    given: 'any mutating verb that fails partway — an unwritable target, an invalid resulting document, or a chain the renderer refuses'
+    when: 'the command exits non-zero'
+    then: 'a recursive content hash of .caws/ is unchanged from before the invocation'
+  - id: A6
+    given: 'a handler previously added, disabled or replaced'
+    when: 'caws hooks restore <handler> --event <e> runs'
+    then: 'the corresponding entry is removed from the document, the resolved chain returns to what it was before that verb, and the document remains valid'
+non_functional: {}
+contracts:
+  - name: 'hooks-policy-writer'
+    type: behavior
