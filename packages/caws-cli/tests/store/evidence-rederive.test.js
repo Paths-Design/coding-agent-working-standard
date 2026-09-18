@@ -579,15 +579,35 @@ describe('the node --test runner executes, and never verifies what it did not ru
     expect(detectTestRunner(dir)).toBe('node');
   });
 
-  test('jest still wins over a node --test script in the same package', () => {
+  /**
+   * Both jest detection routes, because they are separated in the chain: a
+   * `jest.config.*` file, and `"jest"` inside package.json for a project with no
+   * config file. Only the second is adjacent to the node probe, so a test that
+   * covered the config route alone would not notice the node probe being
+   * hoisted above it.
+   */
+  test('jest still wins over a node --test script, by config file AND by package.json', () => {
     const { root } = mkFixtureRepo();
-    // The jest package gains a node --test script; detection must not move.
+
+    // Route 1: jest.config.js present, plus a node --test script.
     write(
       root,
       'js/package.json',
       JSON.stringify({ scripts: { 'test:unit': 'node --test tests/' } })
     );
     expect(detectTestRunner(path.join(root, 'js'))).toBe('jest');
+
+    // Route 2: no jest config file at all — jest is known only from
+    // package.json, in the same file that carries the node --test script.
+    write(
+      root,
+      'jestdep/package.json',
+      JSON.stringify({
+        scripts: { test: 'node --test tests/' },
+        devDependencies: { jest: '^29.0.0' },
+      })
+    );
+    expect(detectTestRunner(path.join(root, 'jestdep'))).toBe('jest');
   });
 
   test('a cited name that exists and passes -> passed', () => {
