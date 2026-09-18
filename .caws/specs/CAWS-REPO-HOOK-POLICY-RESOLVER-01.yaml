@@ -2,9 +2,11 @@ id: CAWS-REPO-HOOK-POLICY-RESOLVER-01
 title: 'Repo-local hook-policy: schema, validator and merge resolver (unwired)'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Ships the repo-local hook-policy document shape, its fail-closed validator and the two-tier chain resolver, deliberately unwired: the launcher and CLI verbs adopt it in later slices, and keeping the semantics in one reviewed place is what stops the two routing planes from drifting into two answers for one document. REPO_POLICY_FLOOR gates disabled and handlers alike and binds the repo tier only. Validation is all-or-nothing. All three top-level keys are admitted in v1 so a later guards implementation cannot hard-block a pinned runtime. Proof: 35 targeted tests, full suite 240 suites / 3036 tests / exit 0, typecheck 0, and a mutation check on the handlers-side floor branch that killed exactly the 4 dependent arms. Note on evidence: verify-acs re-derived commit reachability, not test execution — the executed proof is the jest run cited above. Also fixed tsconfig.vnext.json, which reached src/init only transitively, so a module staged ahead of its consumers was never emitted to dist.'
 created_at: '2026-09-18T21:29:18.341Z'
-updated_at: '2026-09-18T21:33:28.048Z'
+updated_at: '2026-09-18T21:39:42.323Z'
 created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
 blast_radius:
   modules:
