@@ -78,7 +78,43 @@ caws_source_lib emit.sh 2>/dev/null || true
 # blocks, is recorded as a strike, and the first such attempt escalates to
 # terminating the session's agent process (identity-verified SIGTERM, on
 # surfaces where CAWS_TRAP_KILL is enabled; see agent-surface.sh).
-_LATCH_SCOPE_NOTE="the session is QUARANTINED: only fixed read-only commands and the reset itself run; every other Bash attempt is blocked, recorded as a strike, and the first one ends this session's process (identity-verified SIGTERM) where kill escalation is enabled"
+
+# Render the escalation disposition of THE SURFACE THIS SESSION IS ON.
+#
+# The message used to describe surfaces in general ("on surfaces with kill
+# escalation enabled, the first such attempt ends this session's process"),
+# which left every agent unable to tell whether the sentence was about them. On
+# a shared-process host — dsh, IDE hosts, opencode — it never is, because the
+# pid there names the host, not the offender. An agent that reads a threat
+# meant for someone else is miscalibrated in one direction; one that reads
+# "no kill" as "no consequence" is miscalibrated far worse.
+#
+# So the disabled wording states the quarantine's full force in the same
+# breath. That is not softening: the quarantine is surface-INDEPENDENT. Only
+# the SIGTERM is gated (see trap_escalate below). Deny-by-default, the
+# read-only allowlist, strike recording and the human-only reset run
+# everywhere, and cover the file tools as well as Bash.
+#
+# CAWS_TRAP_KILL is resolved by agent-surface.sh, sourced above, so the value
+# is already settled here.
+trap_escalation_note() {
+  case "${CAWS_TRAP_KILL:-0}" in
+    1)
+      printf '%s' "On THIS surface the first such attempt also ends this session's process (identity-verified SIGTERM to the agent pid)."
+      ;;
+    dryrun)
+      # dryrun runs the whole verification path and stops at the signal
+      # boundary, so promising an ended process would be a lie.
+      printf '%s' "On THIS surface kill escalation is in dry-run: the agent process is identified and logged, but no signal is sent."
+      ;;
+    *)
+      printf '%s' "THIS surface does not process-kill (kill escalation is disabled here), which changes nothing about the quarantine: every further Bash command and file mutation stays denied and recorded until a human clears it."
+      ;;
+  esac
+}
+
+_TRAP_ESCALATION_NOTE="$(trap_escalation_note)"
+_LATCH_SCOPE_NOTE="the session is QUARANTINED: only fixed read-only commands and the reset itself run; every other Bash attempt is blocked and recorded as a strike. $_TRAP_ESCALATION_NOTE"
 
 danger_state_dir() {
   local project_dir="${CAWS_PROJECT_DIR:-.}"
@@ -482,7 +518,7 @@ case "$TOOL_NAME" in
       if [[ -f "$WRITE_LATCH_FILE" ]]; then
         WRITE_PATH="$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // .tool_input.path // ""')"
         trap_record_strike "$WRITE_LATCH_FILE" "$TOOL_NAME $WRITE_PATH"
-        REASON="CAWS command-safety: this session is QUARANTINED (danger trap) and file mutations are refused — the trap covers Bash AND the file tools, so there is no read-only Write/Edit. The attempt to $TOOL_NAME '$WRITE_PATH' was recorded as a strike — on surfaces with kill escalation enabled, the first such attempt ends this session's process (identity-verified SIGTERM to the agent pid). This is a human-review boundary: do not retry the write, do not route it through another tool, and do not ask another agent to make it. You, the agent, CANNOT clear this in-band: the reset is human-only by design. Ask the USER to run, from their own shell: $(danger_recovery_command "$SESSION_ID")  (or --all to clear every latch). Sentinel: $WRITE_LATCH_FILE"
+        REASON="CAWS command-safety: this session is QUARANTINED (danger trap) and file mutations are refused — the trap covers Bash AND the file tools, so there is no read-only Write/Edit. The attempt to $TOOL_NAME '$WRITE_PATH' was recorded as a strike. $_TRAP_ESCALATION_NOTE This is a human-review boundary: do not retry the write, do not route it through another tool, and do not ask another agent to make it. You, the agent, CANNOT clear this in-band: the reset is human-only by design. Ask the USER to run, from their own shell: $(danger_recovery_command "$SESSION_ID")  (or --all to clear every latch). Sentinel: $WRITE_LATCH_FILE"
         emit_block_json "$REASON"
         trap_escalate "$WRITE_LATCH_FILE" "$SESSION_ID" "$TOOL_NAME $WRITE_PATH"
       fi
@@ -548,7 +584,7 @@ if [[ -f "$LATCH_FILE" ]]; then
     fi
     TRIGGER_NOTE="$TRIGGER_NOTE — NOT by the command you just ran. The trap is sticky: only fixed read-only commands and the reset itself run."
   fi
-  REASON="CAWS command-safety: this session is QUARANTINED. $TRIGGER_NOTE$TRAP_INTERSECTION_NOTE This command is not admissible while trapped — trapped admission requires BOTH the fixed read-only allowlist AND a classifier allow — so it is blocked and the attempt was recorded as a strike — on surfaces with kill escalation enabled, the first such attempt ends this session's process (identity-verified SIGTERM to the agent pid). This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke anything to get around it, and do not ask another agent to run it for you. You, the agent, CANNOT clear this in-band: the reset is human-only by design. Ask the USER to run, from their own shell (use --session with THIS session id, not --current): $RECOVERY_COMMAND  (or --all to clear every latch). Sentinel: $LATCH_FILE"
+  REASON="CAWS command-safety: this session is QUARANTINED. $TRIGGER_NOTE$TRAP_INTERSECTION_NOTE This command is not admissible while trapped — trapped admission requires BOTH the fixed read-only allowlist AND a classifier allow — so it is blocked and the attempt was recorded as a strike. $_TRAP_ESCALATION_NOTE This is a human-review boundary, not a retryable syntax error. Do not rephrase, wrap, reorder, alias, or indirectly invoke anything to get around it, and do not ask another agent to run it for you. You, the agent, CANNOT clear this in-band: the reset is human-only by design. Ask the USER to run, from their own shell (use --session with THIS session id, not --current): $RECOVERY_COMMAND  (or --all to clear every latch). Sentinel: $LATCH_FILE"
   emit_block_json "$REASON"
   trap_escalate "$LATCH_FILE" "$SESSION_ID" "$COMMAND"
   exit 0
