@@ -8,21 +8,47 @@ updated_at: '2026-09-18T21:29:18.341Z'
 created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli/init/repo-hook-policy'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - 'packages/caws-cli/src/init/repo-hook-policy.ts'
+    - 'packages/caws-cli/tests/init/repo-hook-policy.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A repo-tier policy can never remove, no-op or replace a handler on REPO_POLICY_FLOOR. Replacing a floor handler with a stub is observationally equivalent to disabling it, so the floor gates disabled and handlers alike.'
+  - 'The floor binds the repo tier only. Machine state keeps its existing unrestricted power, because an operator changing their own machine is the sanctioned escape hatch; a committed team file that reaches every clone is not.'
+  - 'A malformed, over-authority or floor-violating document yields zero applied entries, never a partial application. Ignoring a repo policy is always the stricter direction, so fail-closed costs nothing in enforcement.'
+  - 'An absent policy file is {}, not an error: a repo that never opts in must resolve byte-identically to the stock chain.'
+  - 'Repo entries resolve before machine entries, so an operator can locally silence a team extension but a committed team file cannot reach into an operator local addition.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'a repo hook-policy document naming a handler on REPO_POLICY_FLOOR under surfaces.<s>.disabled, or remapping that basename under surfaces.<s>.handlers'
+    when: 'the validator runs over the document'
+    then: 'both forms are rejected by the same floor check and no entry from the document is applied'
+  - id: A2
+    given: 'no .caws/hooks/hook-policy.json on disk'
+    when: 'the loader runs'
+    then: 'it returns an empty policy and the resolver output is byte-identical to the stock chain, so a repo that never opts in is unaffected'
+  - id: A3
+    given: 'a document that is unparseable JSON, carries an unknown top-level key, or declares one valid and one invalid entry'
+    when: 'the validator runs'
+    then: 'it fails closed and applies zero entries rather than the valid subset, so a partially-authored policy cannot silently half-apply'
+  - id: A4
+    given: 'a repo policy and a machine policy that both disable and extend the same event'
+    when: 'the resolver merges them'
+    then: 'the repo tier resolves first and the machine tier second, and a handler duplicated across the two tiers fails closed rather than being spliced twice'
+  - id: A5
+    given: 'a v1 document that declares the guards key while the resolver implements only surfaces'
+    when: 'the validator runs'
+    then: 'the document validates, because all three top-level keys are admitted in v1 so a later guards implementation cannot hard-block a repo pinned to this runtime'
+non_functional:
+  reliability:
+    - 'Absent-file cost is a single stat; an absent policy must not add a parse or a subprocess to any dispatch.'
+  security:
+    - 'The floor and the fail-closed posture are the authority boundary: a repo-authored document must not be able to reduce the guard set below the handlers that make the policy reviewable and its staleness observable.'
 contracts:
   - name: 'hook-policy-document'
     type: schema
+    description: 'The v1 .caws/hooks/hook-policy.json document shape: version, surfaces (disabled/extensions/handlers/libraries/forks per surface, with a default surface), and guards. additionalProperties false throughout.'
