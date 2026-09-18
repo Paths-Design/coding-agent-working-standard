@@ -41,3 +41,10 @@ non_functional: {}
 contracts:
   - name: 'quarantine-agent-message'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "block-dangerous.bats 'a kill-enabled surface says the escalation applies to THIS surface' — real hook run with CAWS_TRAP_KILL=1 asserts 'On THIS surface the first such attempt also ends this session' AND refutes the stale 'on surfaces with kill escalation enabled' phrasing, so the general-surface wording cannot regress."
+    recorded_at: "2026-09-18T22:26:33.496Z"
+    artifact_path: packages/caws-cli/tests/hooks/bats/block-dangerous.bats
+    commit_sha: "70d12142"
