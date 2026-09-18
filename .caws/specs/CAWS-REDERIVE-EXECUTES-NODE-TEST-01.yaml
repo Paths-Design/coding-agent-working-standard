@@ -55,3 +55,11 @@ non_functional:
 contracts:
   - name: 'rederive-node-runner'
     type: behavior
+evidence:
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "The test asserts node's REAL behaviour first — it spawns node --test --test-name-pattern=ghost and asserts the output carries \"# pass 1\" and \"ok 1 - tests/sample.test.js\" — and only then asserts the outcome is missing and notToBe passed. The cited name is written into the fixture as a COMMENT so the cheap fileContains pre-check passes and the runner is actually reached; without that the test would pass for the wrong reason. Mutation M1 (making tapHasResultFor always true) kills exactly this test and nothing else."
+    recorded_at: "2026-09-18T23:30:03.689Z"
+    test_nodeid: "packages/caws-cli/tests/store/evidence-rederive.test.js::a name absent from the run exits 0 with \"# pass 1\" and is still missing, never passed"
+    artifact_path: packages/caws-cli/tests/store/evidence-rederive.test.js
+    commit_sha: "0063b034"
