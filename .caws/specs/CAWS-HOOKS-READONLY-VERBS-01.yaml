@@ -1,0 +1,53 @@
+id: CAWS-HOOKS-READONLY-VERBS-01
+title: 'caws hooks list | validate | compile --check (read-only surface)'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-09-18T22:47:52.353Z'
+updated_at: '2026-09-18T22:47:52.353Z'
+created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
+blast_radius:
+  modules:
+    - 'packages/caws-cli/src/shell'
+    - 'packages/caws-cli/src/init'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/hooks.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/index.ts'
+    - 'packages/caws-cli/src/init/hook-chain.ts'
+    - 'packages/caws-cli/tests/shell/hooks-readonly.test.js'
+    - 'packages/caws-cli/tests/init/hook-chain.test.js'
+  out: []
+invariants:
+  - 'The three verbs are strictly read-only: no file under .caws/ is created, modified or deleted by any of them, including compile --check.'
+  - 'hooks list never reimplements handler selection; it shells the launcher''s --describe so what it prints is provably what executes.'
+  - 'A repo with no hook-policy.json is valid, not an error: validate exits 0 and list renders the stock chain.'
+acceptance:
+  - id: A1
+    given: 'a repo whose hook-policy.json declares an extension and a handler override for an event'
+    when: 'caws hooks list --event <e> --json runs'
+    then: 'every row carries a tier of stock, repo-policy or machine-policy, and the emitted sequence equals what caws-hook <surface> <e> --describe reports for the same repo, so the listing cannot drift from the selection that actually executes'
+  - id: A2
+    given: 'a hook-policy.json that is malformed JSON, violates the schema, or disables a REPO_POLICY_FLOOR handler'
+    when: 'caws hooks validate runs'
+    then: 'it exits non-zero, names .caws/hooks/hook-policy.json and the specific violation, and applies nothing — while a valid file and an ABSENT file both exit 0'
+  - id: A3
+    given: 'an on-disk dispatch/<event>.chain whose content differs from what the current policy and pack version would compile'
+    when: 'caws hooks compile --check runs'
+    then: 'it exits non-zero and names each stale event, exits 0 when every event agrees, and in neither case writes any file'
+  - id: A4
+    given: 'any of the three verbs run against a repo'
+    when: 'the command completes'
+    then: 'a recursive hash of .caws/ taken before and after is unchanged, proving read-only by observation rather than by inspection of the code'
+  - id: A5
+    given: 'the new hooks group registered through Commander'
+    when: 'the BUILT dist CLI is invoked (not the handler function directly)'
+    then: 'caws hooks --help lists list, validate and compile, and each declared flag reaches its handler — because handler-level tests bypass Commander and have previously stayed green over dead routing and a parent option shadowing a leaf option'
+non_functional: {}
+contracts:
+  - name: 'hooks-readonly-surface'
+    type: behavior
