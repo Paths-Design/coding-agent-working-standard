@@ -68,3 +68,9 @@ evidence:
     recorded_at: "2026-09-18T23:25:41.758Z"
     artifact_path: packages/caws-cli/tests/shell/hooks-readonly.test.js
     commit_sha: "6a3eabfd"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "npx jest tests/shell/hooks-readonly.test.js tests/init/hook-chain.test.js -> 51/51 pass at 6a3eabfd. compile --check arms: a policy with no compiled sidecar exits 1 naming the event and 'no compiled chain on disk'; a sidecar compiled against pack 1 is named as a pack lag ('compiled against pack 1, shipping N'); an invalid policy exits 1 rather than compiling against a partial document; --json reports wrote:false; compile WITHOUT --check refuses with exit 1 and writes nothing, because a verb that half-exists is worse than one plainly not there yet. A repo with no policy AND no sidecar is FRESH, not stale — compiling a sidecar that merely restates the dispatcher's own stock array would add a file to keep in sync for no behavioral gain. Staleness is decided on BYTES, not the header: the arm named 'THE DANGEROUS CASE' constructs two chains whose parsed headers are EQUAL (asserted) but whose bodies differ — the stock chain moving under an unchanged policy, i.e. a pack upgrade that added or reordered a guard — and pins that it reports stale. A header comparison would call that fresh and the repo would keep running a chain that no longer matches what ships. The stock chain is read out of the installed dispatcher via extractMachineHandlers rather than kept as a second copy, so a hand-modified dispatcher surfaces as an explicit failure instead of being silently compiled against. NOT CLAIMED: no arm exercises a chain whose staleness arises from a REAL pack upgrade; the pack-lag case is synthesised by writing pack=1."
+    recorded_at: "2026-09-18T23:25:56.233Z"
+    artifact_path: packages/caws-cli/src/init/hook-chain.ts
+    commit_sha: "6a3eabfd"
