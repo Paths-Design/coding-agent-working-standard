@@ -2,9 +2,10 @@ id: CAWS-REDERIVE-EXECUTES-NODE-TEST-01
 title: 'verify-acs executes node --test citations, and a name that matches nothing is missing, not verified'
 risk_tier: 1
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-rederive-node-test
 created_at: '2026-09-18T23:11:14.859Z'
-updated_at: '2026-09-18T23:11:14.859Z'
+updated_at: '2026-09-18T23:11:31.400Z'
 created_by_session: '1aa3f0bd-7f1f-4ee7-be67-f8f9ee019fbb'
 blast_radius:
   modules:
