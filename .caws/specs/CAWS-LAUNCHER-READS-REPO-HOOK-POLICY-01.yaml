@@ -62,3 +62,10 @@ evidence:
     test_nodeid: packages/caws-cli/tests/hooks/pytest/test_machine_hook_selection.py
     exit_code: 0
     commit_sha: "57f2471d"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "pytest tests/hooks/pytest/test_machine_hook_selection.py::test_a_floor_handler_cannot_be_disabled_or_replaced_by_the_repo_tier plus ::test_a_malformed_or_over_authority_policy_fails_closed plus ::test_unparseable_json_fails_closed_rather_than_resolving_to_stock. The floor arm drives BOTH forms (disabled and handlers) against protected-paths.sh and requires exit != 0 with 'repo-policy floor' AND 'hook-policy.json' in stderr. The malformed arm drives six documents — unknown top-level key, wrong version, absolute target, traversing target, sub-12-char reason, and a bootstrap-cycle library override of agent-surface.sh — each requiring a non-zero exit, its specific diagnostic, and the policy file named. The unparseable arm covers the dangerous near-miss: treating a broken document as 'absent' would silently drop a team's whole guard configuration and report success. Discrimination control ::test_a_non_floor_guard_may_still_be_disabled proves the floor arm is not passing on an implementation that refuses every disabled entry."
+    recorded_at: "2026-09-18T22:00:06.761Z"
+    test_nodeid: packages/caws-cli/tests/hooks/pytest/test_machine_hook_selection.py
+    exit_code: 0
+    commit_sha: "57f2471d"
