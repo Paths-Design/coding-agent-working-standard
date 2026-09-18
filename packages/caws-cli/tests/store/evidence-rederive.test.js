@@ -89,6 +89,23 @@ function mkFixtureRepo() {
       '',
     ].join('\n')
   );
+  // node --test package: detected from the script, not a config file. `empty`
+  // and the absent-name case are the vacuity fixtures — node reports both as
+  // `ok 1 - <file>` with exit 0.
+  write(root, 'node/package.json', JSON.stringify({ scripts: { test: 'node --test tests/' } }));
+  write(
+    root,
+    'node/tests/sample.test.js',
+    [
+      "const test = require('node:test');",
+      "const assert = require('node:assert');",
+      "test('adds', () => { assert.equal(1 + 1, 2); });",
+      "test('fails on purpose', () => { assert.equal(1, 2); });",
+      '',
+    ].join('\n')
+  );
+  write(root, 'node/tests/empty.test.js', '// no tests in this file\n');
+
   write(root, 'plain/tests/orphan.test.js', "test('x', () => {});\n");
   git(root, ['add', '-A']);
   git(root, ['commit', '--quiet', '--no-verify', '-m', 'c1']);
@@ -490,6 +507,7 @@ describe('runner detection and unavailable outcomes', () => {
     const { root } = mkFixtureRepo();
     expect(detectTestRunner(path.join(root, 'js'))).toBe('jest');
     expect(detectTestRunner(path.join(root, 'py'))).toBe('pytest');
+    expect(detectTestRunner(path.join(root, 'node'))).toBe('node');
     expect(detectTestRunner(path.join(root, 'plain'))).toBe('unknown');
     expect(detectTestRunner(root)).toBe('unknown');
   });
@@ -516,6 +534,159 @@ describe('runner detection and unavailable outcomes', () => {
       'runner vitest detected; re-derivation does not execute this runner'
     );
     expect(calls).toHaveLength(0);
+  });
+});
+
+// ─── node --test (CAWS-REDERIVE-EXECUTES-NODE-TEST-01) ───────────────────────
+
+/**
+ * The cases that decide correctness here spawn the REAL node runner against the
+ * REAL fixture, because the defect being guarded against is a property of
+ * node's own exit code and cannot be observed through a spy.
+ */
+describe('the node --test runner executes, and never verifies what it did not run', () => {
+  const nodeSpec = (nodeid) => spec({ A1: { test_nodeid: nodeid } });
+
+  test('a script invoking node --test is detected; a script merely passing --test to a program is not', () => {
+    const { root } = mkFixtureRepo();
+    const dir = path.join(root, 'probe');
+
+    write(root, 'probe/package.json', JSON.stringify({ scripts: { test: 'node --test tests/' } }));
+    expect(detectTestRunner(dir)).toBe('node');
+
+    // The flag belongs to the script here, not to node's test runner.
+    write(
+      root,
+      'probe/package.json',
+      JSON.stringify({ scripts: { check: 'node scripts/build.js --test' } })
+    );
+    expect(detectTestRunner(dir)).toBe('unknown');
+
+    // --test-name-pattern alone does not run tests.
+    write(
+      root,
+      'probe/package.json',
+      JSON.stringify({ scripts: { t: 'node --test-name-pattern=x foo.js' } })
+    );
+    expect(detectTestRunner(dir)).toBe('unknown');
+
+    // Reached through a chain, which is how a real `test` script is written.
+    write(
+      root,
+      'probe/package.json',
+      JSON.stringify({ scripts: { test: 'npm run build && node --test tests/*.test.js' } })
+    );
+    expect(detectTestRunner(dir)).toBe('node');
+  });
+
+  test('jest still wins over a node --test script in the same package', () => {
+    const { root } = mkFixtureRepo();
+    // The jest package gains a node --test script; detection must not move.
+    write(
+      root,
+      'js/package.json',
+      JSON.stringify({ scripts: { 'test:unit': 'node --test tests/' } })
+    );
+    expect(detectTestRunner(path.join(root, 'js'))).toBe('jest');
+  });
+
+  test('a cited name that exists and passes -> passed', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(root, nodeSpec('node/tests/sample.test.js::adds'), { runTests: true });
+    expect(o.A1[0].outcome).toBe('passed');
+  });
+
+  test('a cited name that exists and fails -> failed, so the criterion is refuted', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(root, nodeSpec('node/tests/sample.test.js::fails on purpose'), {
+      runTests: true,
+    });
+    expect(o.A1[0].outcome).toBe('failed');
+    expect(o.A1[0].detail).toContain('node --test exit');
+  });
+
+  /**
+   * The defect this runner is shaped around. `node --test
+   * --test-name-pattern=<nothing>` exits 0 and prints `# pass 1`, because the
+   * FILE is counted as the passing subtest around an empty inner plan. Reading
+   * the exit code would verify a criterion whose cited test does not exist.
+   *
+   * The name is written into the file as a comment so the cheap `fileContains`
+   * pre-check passes and execution is actually reached — without that, this
+   * would pass for the wrong reason and prove nothing about the runner.
+   */
+  test('a name absent from the run exits 0 with "# pass 1" and is still missing, never passed', () => {
+    const { root } = mkFixtureRepo();
+    write(
+      root,
+      'node/tests/sample.test.js',
+      [
+        "const test = require('node:test');",
+        "const assert = require('node:assert');",
+        '// ghost only ever appears here, never as a real test',
+        "test('adds', () => { assert.equal(1 + 1, 2); });",
+        '',
+      ].join('\n')
+    );
+
+    // What node itself reports for that pattern: exit 0, one pass, and the only
+    // TAP result is the file.
+    const raw = execFileSync(
+      process.execPath,
+      ['--test', '--test-name-pattern=ghost', 'tests/sample.test.js'],
+      { cwd: path.join(root, 'node'), encoding: 'utf8' }
+    );
+    expect(raw).toMatch(/^# pass 1$/m);
+    expect(raw).toMatch(/^ok 1 - tests\/sample\.test\.js$/m);
+
+    const o = outcomesFor(root, nodeSpec('node/tests/sample.test.js::ghost'), { runTests: true });
+    expect(o.A1[0].outcome).toBe('missing');
+    expect(o.A1[0].outcome).not.toBe('passed');
+    expect(o.A1[0].detail).toContain('no result for');
+  });
+
+  test('a file whose only TAP result is itself is missing, not passed', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(root, nodeSpec('node/tests/empty.test.js'), { runTests: true });
+    expect(o.A1[0].outcome).toBe('missing');
+    expect(o.A1[0].detail).toContain('ran no test');
+  });
+
+  test('a cited file that does not exist is missing, and nothing is spawned', () => {
+    const { root } = mkFixtureRepo();
+    const { fn, calls } = spyExec();
+    const o = outcomesFor(root, nodeSpec('node/tests/absent.test.js::x'), {
+      runTests: true,
+      execFile: fn,
+    });
+    expect(o.A1[0].outcome).toBe('missing');
+    expect(calls).toHaveLength(0);
+  });
+
+  test('without --run a located node citation is not_run, never passed', () => {
+    const { root } = mkFixtureRepo();
+    const { fn, calls } = spyExec();
+    const o = outcomesFor(root, nodeSpec('node/tests/sample.test.js::adds'), {
+      runTests: false,
+      execFile: fn,
+    });
+    expect(o.A1[0].outcome).toBe('not_run');
+    expect(o.A1[0].outcome).not.toBe('passed');
+    expect(calls).toHaveLength(0);
+  });
+
+  test('the cited name reaches node as an escaped pattern in argv, never through a shell', () => {
+    const { root } = mkFixtureRepo();
+    const { fn, calls } = spyExec();
+    outcomesFor(root, nodeSpec('node/tests/sample.test.js::fails on purpose'), {
+      runTests: true,
+      execFile: fn,
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].file).toBe(process.execPath);
+    expect(calls[0].args).toContain('--test');
+    expect(calls[0].args).toContain('--test-name-pattern=fails on purpose');
+    expect(calls[0].options.shell).toBeFalsy();
   });
 });
 
