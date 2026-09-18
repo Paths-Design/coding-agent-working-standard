@@ -53,3 +53,11 @@ contracts:
   - name: 'hook-policy-document'
     type: schema
     description: 'The v1 .caws/hooks/hook-policy.json document shape: version, surfaces (disabled/extensions/handlers/libraries/forks per surface, with a default surface), and guards. additionalProperties false throughout.'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "jest tests/init/repo-hook-policy.test.js, describe 'A1: a repo policy cannot remove or no-op a floor handler' — 8 arms. Both forms are rejected by the SAME floor check: 3 test.each arms over REPO_POLICY_FLOOR for surfaces.default.disabled, and 3 more for surfaces.default.handlers, because replace-with-a-stub is observationally equivalent to disable and gating only disabled would leave the bypass one key away. A membership arm pins the floor to exactly agent-register.sh, block-dangerous.sh, protected-paths.sh and asserts scope-guard.sh is NOT on it. A discrimination control disables and remaps a NON-floor guard expecting ok:true — without it every arm above would pass on an implementation that rejected all disabled/handlers entries outright. MUTATION-VERIFIED: negating the handlers-side floor check to 'if (false && ...)' turned exactly 4 tests red (the 3 remapping arms plus A3's all-or-nothing arm, whose fixture is a floor violation) and left the other 31 green, so the arms discriminate that branch rather than passing on ambient behavior. Full file 35/35; full suite 240 suites / 3036 tests; typecheck 0."
+    recorded_at: "2026-09-18T21:38:52.033Z"
+    test_nodeid: packages/caws-cli/tests/init/repo-hook-policy.test.js
+    exit_code: 0
+    commit_sha: a513b365
