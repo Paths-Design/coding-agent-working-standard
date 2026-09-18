@@ -76,3 +76,10 @@ evidence:
     test_nodeid: packages/caws-cli/tests/hooks/pytest/test_machine_hook_selection.py
     exit_code: 0
     commit_sha: "57f2471d"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "pytest tests/hooks/pytest/test_machine_hook_selection.py::test_a_guards_key_validates_but_does_not_affect_the_chain — a document carrying a populated guards key validates and leaves the resolved chain exactly equal to stock, so the key is admitted in v1 without being consumed. This is the forward-compatibility decision that cannot be deferred: runtime validators assert EXACT key sets, so introducing guards later would hard-block every repo pinned to an older runtime. Tier reporting itself is covered across the arms above, every one of which asserts the tier field; the anchor-absent diagnostic is pinned per tier by ::test_missing_anchor_is_a_visible_failure_before_execution and ::test_a_repo_tier_missing_anchor_is_attributed_to_the_repo_tier."
+    recorded_at: "2026-09-18T22:05:20.619Z"
+    test_nodeid: packages/caws-cli/tests/hooks/pytest/test_machine_hook_selection.py
+    exit_code: 0
+    commit_sha: "57f2471d"
