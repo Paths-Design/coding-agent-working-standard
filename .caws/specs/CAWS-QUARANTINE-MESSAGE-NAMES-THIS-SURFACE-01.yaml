@@ -2,9 +2,10 @@ id: CAWS-QUARANTINE-MESSAGE-NAMES-THIS-SURFACE-01
 title: 'The quarantine message states THIS surface''s escalation disposition instead of describing surfaces in general'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-quarantine-surface-message
 created_at: '2026-09-18T22:20:59.577Z'
-updated_at: '2026-09-18T22:20:59.577Z'
+updated_at: '2026-09-18T22:21:08.207Z'
 created_by_session: '1aa3f0bd-7f1f-4ee7-be67-f8f9ee019fbb'
 blast_radius:
   modules:
