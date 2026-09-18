@@ -18,7 +18,8 @@ scope:
     - 'packages/caws-cli/tests/shell/specs-verify-acs.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A located-but-unexecuted citation is never verified: node --test''s exit code alone must not decide the outcome, because it is 0 for a name pattern that matches nothing.'
+  - 'Detection order is stable for existing projects: a repo already detected as pytest, vitest, jest, cargo, or go must keep that runner after node detection is added.'
 acceptance:
   - id: A1
     given: 'a repo whose package.json test script runs ''node --test'''
