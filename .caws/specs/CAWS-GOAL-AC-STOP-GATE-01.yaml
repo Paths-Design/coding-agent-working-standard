@@ -23,7 +23,11 @@ scope:
     - 'packages/caws-cli/tests/shell/goal.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The gate is opt-in: with no goal binding for the session it is a no-op, and the stock stop chain behaves exactly as it did before this feature'
+  - 'The gate only READS acceptance state via caws specs verify-acs; it never writes evidence, so caws specs evidence remains the single writer of acceptance truth'
+  - 'Every blocking reason names a human escape (caws goal clear) so a blocked stop is always recoverable without editing guard state'
+  - 'A goal can never trap a session indefinitely: consecutive blocks without new evidence are bounded, after which the gate degrades to a loud warning'
+  - 'The gate never becomes an authority path: it cannot mark a criterion pass, close a spec, or alter a scope or lifecycle decision'
 acceptance:
   - id: A1
     given: 'a session bound to spec S where at least one acceptance criterion has no recorded pass verdict, and the agent has run ''caws goal set S'''
