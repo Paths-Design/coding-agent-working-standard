@@ -62,3 +62,9 @@ evidence:
     recorded_at: "2026-09-18T23:25:29.639Z"
     artifact_path: packages/caws-cli/tests/shell/hooks-readonly.test.js
     commit_sha: "6a3eabfd"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "npx jest tests/shell/hooks-readonly.test.js -> 28/28 pass at 6a3eabfd. validate arms, all driven through the BUILT dist CLI: malformed JSON exits 1, prints REJECTED and 'Nothing was applied' (the document is read all-or-nothing; a partially applied guard policy is how a guard silently stops running); disabling protected-paths.sh — a REPO_POLICY_FLOOR handler — exits 1 and names the handler, because a policy that can authorize its own amendment is not a policy; an ABSENT policy exits 0 with 'absent', since a repo that never opts in is governed by the stock chain and is not in an error state; a well-formed policy exits 0; --json carries the same verdict as the exit code (caws.hooks_validate.v1 with valid:false, present:true and a string error). DISCRIMINATION CONTROL: disabling quiet-merge.sh, a NON-floor handler, exits 0 — without that arm a validator that rejected every 'disabled' entry would look correct. Additionally, a policy naming a project-wired surface is WARNED rather than rejected: the document is legal but only surfaces.default can reach the compiled chain, because all five project-wired surfaces exec the same dispatcher. NOT CLAIMED: the floor enforcement itself lives in parseRepoHookPolicy (landed under CAWS-REPO-HOOK-POLICY-RESOLVER-01 and covered by its own 35 arms); these arms prove the CLI surfaces that refusal, not that the floor logic is complete."
+    recorded_at: "2026-09-18T23:25:41.758Z"
+    artifact_path: packages/caws-cli/tests/shell/hooks-readonly.test.js
+    commit_sha: "6a3eabfd"
