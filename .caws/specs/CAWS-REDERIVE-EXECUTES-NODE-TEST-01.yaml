@@ -70,3 +70,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/store/evidence-rederive.test.js::a script invoking node --test is detected; a script merely passing --test to a program is not"
     artifact_path: packages/caws-cli/tests/store/evidence-rederive.test.js
     commit_sha: "6d6f37cc"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Spawns the REAL node runner against the REAL fixture package and asserts outcome passed. Paired with A2: passed is reached only after a TAP result line for the cited name is found, so this criterion and A2 together pin that the exit code is necessary but not sufficient."
+    recorded_at: "2026-09-18T23:30:22.680Z"
+    test_nodeid: "packages/caws-cli/tests/store/evidence-rederive.test.js::a cited name that exists and passes -> passed"
+    artifact_path: packages/caws-cli/tests/store/evidence-rederive.test.js
+    commit_sha: "6d6f37cc"
