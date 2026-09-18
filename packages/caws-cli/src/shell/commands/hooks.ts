@@ -1,12 +1,14 @@
-// `caws hooks list | validate | compile --check` — the read-only half of the
-// repo-local hook policy surface (CAWS-HOOKS-READONLY-VERBS-01).
+// `caws hooks list | validate | compile | add | disable | replace | restore`
+// — the repo-local hook policy surface (CAWS-HOOKS-READONLY-VERBS-01,
+// CAWS-HOOKS-MUTATING-VERBS-01).
 //
 // Three properties shape this file:
 //
-//  1. **Read-only means read-only.** Nothing here opens a file for writing,
-//     including `compile --check`. The diagnosis surface must be usable on a
-//     repo you do not want to change — and separable from the verb that does
-//     change it, so "I only looked" is a claim the command surface can back.
+//  1. **The read-only verbs are read-only.** `list`, `validate` and
+//     `compile --check` open nothing for writing. The diagnosis surface must be
+//     usable on a repo you do not want to change — and separable from the verbs
+//     that do change it, so "I only looked" is a claim the command surface can
+//     back. The mutating half lives below its own banner for the same reason.
 //
 //  2. **`list` does not reimplement selection.** It shells the launcher's
 //     `--describe`, which resolves the same chain execution resolves. A second

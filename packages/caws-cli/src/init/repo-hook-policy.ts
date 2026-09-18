@@ -1,7 +1,7 @@
 /**
- * Repo-local hook policy: document shape, validator and chain resolver.
+ * Repo-local hook policy: document shape, validator, chain resolver and writer.
  *
- * CAWS-REPO-HOOK-POLICY-RESOLVER-01.
+ * CAWS-REPO-HOOK-POLICY-RESOLVER-01, CAWS-HOOKS-MUTATING-VERBS-01.
  *
  * A consumer repo that needs one behavior change in a shipped guard has one
  * move today: copy the whole guard into `.caws/hooks/<guard>.sh`, edit it, and
@@ -17,10 +17,12 @@
  * cannot author the paper. `.caws/` root would NOT do — write-allowlist.sh
  * returns an unconditional allow for `.caws/*`.
  *
- * This module is deliberately UNWIRED: it owns the shape and the merge
- * semantics, and the launcher (python) and CLI verbs adopt it in later slices.
- * Keeping the semantics in one reviewed place is what stops the two planes from
- * drifting into two different answers for the same document.
+ * This module owns the shape, the merge semantics and the writer. Both planes
+ * adopt it: the launcher (python) mirrors the validation, and the `caws hooks`
+ * verbs mutate through it. Keeping the semantics in one reviewed place is what
+ * stops the two planes from drifting into two different answers for the same
+ * document — and the writer sits beside the reader so every mutation can be
+ * proven readable before it reaches disk.
  */
 
 /** The document version this runtime understands. */
