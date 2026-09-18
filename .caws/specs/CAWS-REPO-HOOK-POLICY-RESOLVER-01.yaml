@@ -82,3 +82,10 @@ evidence:
     test_nodeid: packages/caws-cli/tests/init/repo-hook-policy.test.js
     exit_code: 0
     commit_sha: a513b365
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "jest tests/init/repo-hook-policy.test.js, describe 'A5: all three top-level keys are admitted in v1' — 3 arms. A document declaring guards validates even though the resolver ignores it, and its content does not leak into the resolved chain in this slice (the chain still equals STOCK exactly). Runtime validators assert EXACT key sets, so introducing guards later would hard-block every repo pinned to this runtime; admitting it now is the decision that cannot be deferred. A third arm keeps the key typed — an array or scalar guards value is still rejected — so forward-compatibility does not become an unchecked hole."
+    recorded_at: "2026-09-18T21:39:16.958Z"
+    test_nodeid: packages/caws-cli/tests/init/repo-hook-policy.test.js
+    exit_code: 0
+    commit_sha: a513b365
