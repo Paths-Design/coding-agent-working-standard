@@ -55,3 +55,12 @@ non_functional:
 contracts:
   - name: 'compiled-chain-sidecar'
     type: schema
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "npx bats tests/hooks/bats/local-chain.bats -> 18/18 ok at f90dee2a (landed 6e8c7d7e). Stock-path preservation: arm 1 'an ABSENT sidecar returns non-zero so the caller keeps its stock array'; arm 12 'a chain for ANOTHER event does not leak into this one'; e2e arm 15 'WITHOUT a chain the same marker never runs' (discrimination control for arm 14). System-level corroboration: full bats plane 323 ok / 0 not ok with no .chain present anywhere, so every pre-existing guard verdict is unchanged. Missing-lib clause: e2e arm 17 moves lib/local-chain.sh aside WITH a valid chain present, so the lib is the only variable; asserts exit 0, override marker absent, and no 'local-chain.sh: No such file' on the stream. MUTATION-CHECKED: replacing the dispatcher's [[ -f ]] test with 'if true' leaves exit-0 and marker-absent GREEN (sourcing a missing file under set -uo pipefail continues; declare -F alone delivers the degradation) but FAILS the silence assertion, because bash then prints 'No such file or directory' on every tool call. NOT CLAIMED: the per-dispatch cost of the added stat was never measured."
+    recorded_at: "2026-09-18T22:42:00.281Z"
+    command: npx bats tests/hooks/bats/local-chain.bats
+    exit_code: 0
+    artifact_path: packages/caws-cli/tests/hooks/bats/local-chain.bats
+    commit_sha: f90dee2a
