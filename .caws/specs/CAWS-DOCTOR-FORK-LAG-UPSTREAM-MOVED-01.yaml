@@ -2,10 +2,11 @@ id: CAWS-DOCTOR-FORK-LAG-UPSTREAM-MOVED-01
 title: 'A guard fork whose upstream moved must not silence the pack-lag warning'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-doctor-fork-lag
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-doctor-fork-lag at bead176b6070ede15cdfd39122c19c66052d112b'
 created_at: '2026-09-18T20:57:12.631Z'
-updated_at: '2026-09-18T20:58:45.848Z'
+updated_at: '2026-09-18T21:09:09.202Z'
 created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
 blast_radius:
   modules:
