@@ -114,9 +114,13 @@ describe('doctor.hooks.pack_local_growth (CAWS-DEFECT-HOOK-DRIFT-NO-NONDESTRUCTI
         fsObs({
           installedSharedPackVersion: 67,
           shippingSharedPackVersion: 68,
+          // PURE growth: no row's upstream has moved. The upstream-moved case
+          // is a different obligation with its own rule and its own warning —
+          // see A6 — so keeping it out of this fixture lets the assertions
+          // below mean exactly what this test's name says.
           installedSharedPackBodyDrift: [
             growthRow('.caws/hooks/bash-write-guard.sh'),
-            growthRow('.caws/hooks/agent-register.sh', true),
+            growthRow('.caws/hooks/agent-register.sh'),
           ],
         })
       )
@@ -183,6 +187,79 @@ describe('doctor.hooks.pack_local_growth (CAWS-DEFECT-HOOK-DRIFT-NO-NONDESTRUCTI
       'warning'
     );
     expect(rules(report)).not.toContain(DOCTOR_RULES.HOOKS_PACK_LOCAL_GROWTH);
+  });
+
+  test('A6: a fork whose upstream moved raises its own warning, with a PORT remediation', () => {
+    // The sterling shape: every drifted row is deliberate growth, so the
+    // version lag stays info — but the templates those forks were taken from
+    // have since moved, which is an outstanding obligation nothing reported.
+    const report = inspectProjectState(
+      input(
+        fsObs({
+          installedSharedPackVersion: 67,
+          shippingSharedPackVersion: 81,
+          installedSharedPackBodyDrift: [
+            growthRow('.caws/hooks/scope-guard.sh', true),
+            growthRow('.caws/hooks/lib/write-allowlist.sh', true),
+            growthRow('.caws/hooks/audit.sh'),
+          ],
+        })
+      )
+    );
+
+    const fork = findingFor(report, DOCTOR_RULES.HOOKS_PACK_FORK_UPSTREAM_MOVED);
+    expect(fork?.severity).toBe('warning');
+    expect(fork?.data).toMatchObject({
+      fork_count: 2,
+      fork_paths: ['.caws/hooks/scope-guard.sh', '.caws/hooks/lib/write-allowlist.sh'],
+    });
+    // The remediation must name the non-destructive discharge, and must name
+    // the destructive refresh ONLY to prohibit it — silence would leave the
+    // operator free to reach for the command that deletes the fork.
+    expect(fork?.narrowRepair).toContain('caws init port');
+    expect(fork?.narrowRepair).toMatch(/Do NOT run `caws init --overwrite --force`/);
+
+    // The lag rule keeps its own, narrower meaning: refresh is still unsafe
+    // here, so it must stay info rather than absorbing the fork obligation.
+    expect(findingFor(report, DOCTOR_RULES.HOOKS_INSTALLED_PACK_VERSION_LAG)?.severity).toBe(
+      'info'
+    );
+  });
+
+  test('A6b: growth whose upstream has NOT moved raises no fork warning', () => {
+    // The discrimination control. Identical shape to A6 except upstreamChange;
+    // without this, A6 would pass for any growth row at all.
+    const report = inspectProjectState(
+      input(
+        fsObs({
+          installedSharedPackVersion: 67,
+          shippingSharedPackVersion: 81,
+          installedSharedPackBodyDrift: [
+            growthRow('.caws/hooks/scope-guard.sh'),
+            growthRow('.caws/hooks/lib/write-allowlist.sh'),
+          ],
+        })
+      )
+    );
+    expect(rules(report)).not.toContain(DOCTOR_RULES.HOOKS_PACK_FORK_UPSTREAM_MOVED);
+    expect(report.summary.warnings).toBe(0);
+  });
+
+  test('A6c: a moved upstream on a row that is NOT growth is drift, not a fork', () => {
+    // cleanBaselineRow carries upstreamChange=true with localGrowth=false —
+    // an un-edited stale copy. That is the body-drift/refresh class, and must
+    // not be reported as a fork owing a port.
+    const report = inspectProjectState(
+      input(
+        fsObs({
+          installedSharedPackVersion: 67,
+          shippingSharedPackVersion: 81,
+          installedSharedPackBodyDrift: [cleanBaselineRow('.caws/hooks/validate-spec.sh')],
+        })
+      )
+    );
+    expect(rules(report)).not.toContain(DOCTOR_RULES.HOOKS_PACK_FORK_UPSTREAM_MOVED);
+    expect(findingFor(report, DOCTOR_RULES.HOOKS_PACK_BODY_DRIFT)?.severity).toBe('warning');
   });
 
   test('A5: deep-frozen classified rows survive inspection unmutated', () => {
