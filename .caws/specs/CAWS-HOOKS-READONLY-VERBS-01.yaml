@@ -74,3 +74,9 @@ evidence:
     recorded_at: "2026-09-18T23:25:56.233Z"
     artifact_path: packages/caws-cli/src/init/hook-chain.ts
     commit_sha: "6a3eabfd"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "npx jest tests/shell/hooks-readonly.test.js -> 28/28 pass at 6a3eabfd. Read-only is proven by OBSERVATION, not by reading the code: a recursive content hash of .caws/ (every file's path plus its base64 bytes, sorted, sha256'd) is taken before and after each verb and asserted unchanged, for list, validate and compile --check. The interesting arm is 'compile --check leaves .caws/ untouched even when it reports STALE' — the command has just decided a file is wrong and must still not fix it; a helpful implementation that repaired what it diagnosed would pass every other arm in the suite. DISCRIMINATION CONTROL: 'the tree hash can actually observe a change' writes one byte into the dispatch dir and asserts the hash differs — without it, every read-only arm would pass against a hash function that returned a constant. The same property is enforced structurally: nothing in src/shell/commands/hooks.ts opens a file for writing, and 'compile' without --check refuses rather than writing. NOT CLAIMED: the hash covers .caws/ only, so a verb writing outside .caws/ (to ~/.caws, or to the vendor dirs) would not be caught by these arms. list does spawn the launcher, which the launcher's own contract says may append execution records — that path is not exercised here because the stub launcher only prints."
+    recorded_at: "2026-09-18T23:26:13.909Z"
+    artifact_path: packages/caws-cli/tests/shell/hooks-readonly.test.js
+    commit_sha: "6a3eabfd"
