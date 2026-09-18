@@ -2,9 +2,21 @@ id: CAWS-HOOKS-READONLY-VERBS-01
 title: 'caws hooks list | validate | compile --check (read-only surface)'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Ships the read-only half of the repo-local hook policy surface: caws hooks list | validate | compile --check, plus src/init/hook-chain.ts (the chain renderer and staleness comparator) and src/shell/commands/hooks.ts.
+
+list shells the launcher''s --describe rather than reimplementing selection, so what it prints is provably what executes. hook-chain.ts refuses to emit anything local-chain.sh would reject, because that parser is fail-closed: an over-permissive renderer produces an outage on every tool call for every project-wired surface, from a file the agent may not edit. Staleness compares bytes, not headers, so a stock chain that moved under an unchanged policy is caught.
+
+Evidence at the landed revision: jest 3108/3108 across 243 suites, bats 323 ok / 0 not ok, pytest 350 passed + 89 subtests. 51 new arms (28 CLI, 23 renderer), 4 of which run the REAL bash parser over real rendered bytes rather than asserting two copies of a regex agree.
+
+Two defects were found and fixed inside the slice rather than shipped. (1) hooks list printed ''(undefined)'' for every row against this machine''s installed runtime, which predates Step 3''s tier field; it now renders ''unknown'' and names caws init adapters install. (2) compile --surface was declared in metadata and destructured in the action but never used — the exact accept-and-discard class A5 exists to catch. It cannot be honored (one dispatcher tree means one chain per event, resolved from surfaces.default), so it was removed and an arm now pins that it is refused. validate warns for the same reason when a policy names a project-wired surface.
+
+A process note worth carrying: two adapter suites appeared to regress and did not. An unanchored ''sed -i "" s|...(opts.surface ...)||'' run during mutation testing blanked that line at ALL FOUR sites in register.ts, not just the one under test, silently disarming --surface for the whole reprieve group. It presented as a design regression in unrelated tests. Restoring register.ts from HEAD and re-applying the three intended edits fixed it. Mutation edits need a line anchor, and the classification rule (re-run against unmodified main) is what kept it from being waved through as pre-existing.
+
+NOT CLAIMED: the remediation hooks list prints was not executed, so ''caws init adapters install'' restoring tier reporting is reasoned from the Step-3 template change rather than observed end to end; and no arm exercises staleness arising from a real pack upgrade (the pack-lag case is synthesised).'
 created_at: '2026-09-18T22:47:52.353Z'
-updated_at: '2026-09-18T23:13:28.911Z'
+updated_at: '2026-09-18T23:27:05.535Z'
 created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
 blast_radius:
   modules:
