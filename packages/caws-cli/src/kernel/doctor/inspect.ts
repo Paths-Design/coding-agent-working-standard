@@ -1450,6 +1450,34 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
           }
         )
       );
+      // CAWS-DOCTOR-FORK-LAG-UPSTREAM-MOVED-01: growth alone is a discharged
+      // state; growth whose upstream ALSO moved is an outstanding obligation —
+      // the fork is running without fixes the template has since received, and
+      // before this rule existed nothing said so above INFO. Deliberately a
+      // separate rule rather than an escalation of the version lag: that rule's
+      // warning branch prescribes `caws init --overwrite --force`, which would
+      // destroy the very growth this names.
+      if (upstreamAlso.length > 0) {
+        const forkNamed = upstreamAlso.slice(0, MAX_NAMED).join(', ');
+        const forkRemainder =
+          upstreamAlso.length > MAX_NAMED ? ` (+${upstreamAlso.length - MAX_NAMED} more)` : '';
+        findings.push(
+          finding(
+            DOCTOR_RULES.HOOKS_PACK_FORK_UPSTREAM_MOVED,
+            'warning',
+            `${upstreamAlso.length} locally grown CAWS hook file(s) were forked from a template that has since moved upstream: ${forkNamed}${forkRemainder}. The growth is deliberate, but these guards are running without the upstream changes made after their baseline was recorded — a fork does not stop aging, and customizing a guard must not be the thing that hides its staleness.`,
+            {
+              subject: '.caws/hooks',
+              narrowRepair:
+                'Discharge with a three-way port, never a refresh: `caws init diff` to read each delta, then `caws init port <path> --from <staging-file>` to land the upstream change on top of your growth and re-baseline. Do NOT run `caws init --overwrite --force` for these paths — it discards the local growth instead of reconciling it.',
+              data: {
+                fork_count: upstreamAlso.length,
+                fork_paths: upstreamAlso,
+              },
+            }
+          )
+        );
+      }
     }
   }
 

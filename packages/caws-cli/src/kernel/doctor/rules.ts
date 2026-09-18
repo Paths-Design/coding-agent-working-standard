@@ -310,6 +310,22 @@ export const DOCTOR_RULES = {
   HOOKS_PACK_LOCAL_GROWTH: 'doctor.hooks.pack_local_growth',
 
   /**
+   * CAWS-DOCTOR-FORK-LAG-UPSTREAM-MOVED-01: a locally grown hook file whose
+   * UPSTREAM template has also moved since its baseline was recorded. Growth
+   * alone is a standing, discharged state (HOOKS_PACK_LOCAL_GROWTH, info);
+   * growth whose upstream moved is an outstanding obligation — the fork is
+   * running without upstream fixes it never received.
+   *
+   * This is deliberately NOT folded into HOOKS_INSTALLED_PACK_VERSION_LAG.
+   * That rule's warning branch prescribes `caws init --overwrite --force`,
+   * which DESTROYS a fork; escalating a fork into it would aim the operator
+   * at the one command that loses the work. Severity: WARNING with a PORT
+   * remediation — the obligation is real, and the safe discharge is
+   * `caws init port`, never a wholesale refresh.
+   */
+  HOOKS_PACK_FORK_UPSTREAM_MOVED: 'doctor.hooks.pack_fork_upstream_moved',
+
+  /**
    * CAWS-DEFECT-LEASE-TMP-STRANDING-01: stranded atomic-write tmp files in
    * .caws/leases/ — a lease write crashed between tmp creation and rename,
    * littering the directory invisibly (the loader already ignores non-.json
