@@ -112,6 +112,151 @@ def settle_message_offers(manifest_path, env, cwd, adapter_handoff, blocked):
                   str(error), file=sys.stderr)
 
 
+REPO_HOOK_POLICY = '.caws/hooks/hook-policy.json'
+
+# Handlers a REPO-tier policy may never disable or remap. Membership is earned
+# by being load-bearing for the policy's own reviewability: protected-paths.sh
+# is what keeps hook-policy.json agent-unwritable (a policy able to authorize
+# its own amendment is not a policy), block-dangerous.sh closes the same
+# circularity through the Bash channel (it can DESTROY the tree it must not
+# EDIT), and agent-register.sh carries the drift advisory that reports a stale
+# policy. scope-guard.sh is deliberately absent — it is the guard repos
+# legitimately need to extend, and fencing it is what pushes them to fork.
+#
+# The floor binds the REPO tier only. Machine state keeps its unrestricted
+# power: an operator changing their own machine is the sanctioned escape hatch
+# and affects only that machine, whereas a committed team file reaches every
+# clone and CI.
+REPO_POLICY_FLOOR = ('protected-paths.sh', 'block-dangerous.sh', 'agent-register.sh')
+
+HANDLER_NAME = r'[A-Za-z0-9_.-]+\.sh'
+HANDLER_ENTRY = HANDLER_NAME + r'(?: [A-Za-z0-9_.:/-]+)*'
+
+
+def _repo_surface(raw, where):
+    """Validate one surface block. Raises on anything not plainly admissible."""
+    if not isinstance(raw, dict) or not set(raw).issubset(
+            {'disabled', 'extensions', 'handlers', 'libraries', 'forks'}):
+        raise ValueError(f'{REPO_HOOK_POLICY}: {where} admits only disabled, extensions, '
+                         'handlers, libraries and forks')
+    parsed = {'disabled': {}, 'extensions': {}, 'handlers': {}, 'libraries': {}}
+    for event, values in (raw.get('disabled') or {}).items():
+        if event not in EVENTS or not isinstance(values, list) or any(
+                not isinstance(v, str) or not re.fullmatch(HANDLER_NAME, v) for v in values):
+            raise ValueError(f'{REPO_HOOK_POLICY}: {where}.disabled.{event} must be a list of handler names')
+        for value in values:
+            if value in REPO_POLICY_FLOOR:
+                raise ValueError(f'{REPO_HOOK_POLICY}: {where}.disabled.{event} may not disable '
+                                 f'{value}: it is on the repo-policy floor, the set of handlers that '
+                                 'keep this policy reviewable and its staleness observable')
+        parsed['disabled'][event] = list(values)
+    for event, extensions in (raw.get('extensions') or {}).items():
+        if event not in EVENTS or not isinstance(extensions, list):
+            raise ValueError(f'{REPO_HOOK_POLICY}: {where}.extensions.{event} must be a list')
+        entries = []
+        for extension in extensions:
+            if (not isinstance(extension, dict)
+                    or not set(extension).issubset({'handler', 'before', 'reason'})
+                    or not isinstance(extension.get('handler'), str)
+                    or not re.fullmatch(HANDLER_ENTRY, extension['handler'])
+                    or (extension.get('before') is not None
+                        and (not isinstance(extension['before'], str)
+                             or not re.fullmatch(HANDLER_NAME, extension['before'])))):
+                raise ValueError(f'{REPO_HOOK_POLICY}: {where}.extensions.{event} has a malformed entry')
+            # A reason is mandatory so "the guard plane was changed" is a
+            # reviewable artifact rather than an undocumented diff.
+            if not isinstance(extension.get('reason'), str) or len(extension['reason'].strip()) < 12:
+                raise ValueError(f'{REPO_HOOK_POLICY}: {where}.extensions.{event} requires a reason '
+                                 'of at least 12 characters')
+            entries.append({'handler': extension['handler'], 'before': extension.get('before')})
+        parsed['extensions'][event] = entries
+    for key in ('handlers', 'libraries'):
+        for name, relative in (raw.get(key) or {}).items():
+            if not re.fullmatch(HANDLER_NAME, name) or not isinstance(relative, str) or not relative:
+                raise ValueError(f'{REPO_HOOK_POLICY}: {where}.{key} has a malformed entry: {name}')
+            # Replace-with-a-stub is observationally equivalent to disable, so
+            # the floor gates BOTH keys; gating only `disabled` would leave the
+            # bypass one key away.
+            if key == 'handlers' and name in REPO_POLICY_FLOOR:
+                raise ValueError(f'{REPO_HOOK_POLICY}: {where}.handlers may not replace {name}: '
+                                 'it is on the repo-policy floor')
+            # agent-surface.sh and runtime-paths.sh ARE the mechanism that
+            # resolves an override, so overriding them is a bootstrap cycle.
+            if key == 'libraries' and name in ('agent-surface.sh', 'runtime-paths.sh'):
+                raise ValueError(f'{REPO_HOOK_POLICY}: {where}.libraries may not override {name} — '
+                                 'it is the mechanism that resolves overrides')
+            if relative.startswith('/') or '..' in relative.split('/') or re.search(r'[*?\[\]]', relative):
+                raise ValueError(f'{REPO_HOOK_POLICY}: {where}.{key}.{name} must be a contained, '
+                                 'repo-relative path without glob metacharacters')
+            parsed[key][name] = relative
+    return parsed
+
+
+def repo_configuration(canonical, surface):
+    """The committed repo tier: `.caws/hooks/hook-policy.json`, merged over `default`.
+
+    Absent file is the identity, never an error — a repo that never opts in must
+    resolve byte-identically to stock. Anything present but not plainly valid
+    RAISES: validation is all-or-nothing, because a partial application leaves a
+    repo believing a policy is in force while half of it was silently dropped.
+    Discarding is always the stricter direction here (every repo-tier key is
+    additive over a floor), so failing closed costs nothing in enforcement.
+    """
+    policy_file = confined(canonical, REPO_HOOK_POLICY)
+    empty = {'disabled': {}, 'extensions': {}, 'handlers': {}, 'libraries': {}}
+    if not policy_file.is_file():
+        return empty
+    try:
+        document = json.loads(policy_file.read_bytes())
+    except ValueError as error:
+        raise ValueError(f'{REPO_HOOK_POLICY} is not valid JSON: {error}')
+    if not isinstance(document, dict) or not set(document).issubset({'version', 'surfaces', 'guards'}):
+        raise ValueError(f'{REPO_HOOK_POLICY} admits only version, surfaces and guards')
+    if document.get('version') != 1:
+        raise ValueError(f'{REPO_HOOK_POLICY} version must be 1')
+    # `guards` is validated as a container but not consumed here. All three
+    # top-level keys are admitted in v1 deliberately: runtime validators assert
+    # exact key sets, so introducing `guards` later would hard-block every repo
+    # pinned to an older runtime.
+    if not isinstance(document.get('guards', {}), dict):
+        raise ValueError(f'{REPO_HOOK_POLICY} guards must be an object')
+    surfaces = document.get('surfaces') or {}
+    if not isinstance(surfaces, dict):
+        raise ValueError(f'{REPO_HOOK_POLICY} surfaces must be an object')
+    # Validate EVERY declared surface, not just the one in play: a document is
+    # accepted or rejected as a whole, so a repo cannot discover a malformed
+    # block only once someone runs the harness it belongs to.
+    parsed = {name: _repo_surface(block, f'surfaces.{name}') for name, block in surfaces.items()}
+    base, named = parsed.get('default', empty), parsed.get(surface, empty)
+    merged = {'disabled': {}, 'extensions': {}, 'handlers': {}, 'libraries': {}}
+    for key in ('disabled', 'extensions'):
+        for event in set(base[key]) | set(named[key]):
+            merged[key][event] = list(base[key].get(event, [])) + list(named[key].get(event, []))
+    for key in ('handlers', 'libraries'):
+        merged[key] = {**base[key], **named[key]}
+    return merged
+
+
+def apply_tier(handlers, tier_config, event, tier, tiers):
+    """Subtract `disabled` then splice `extensions`, recording each entry's tier."""
+    disabled = tier_config['disabled'].get(event, [])
+    handlers = [h for h in handlers if h.split(' ')[0] not in disabled]
+    for extension in tier_config['extensions'].get(event, []):
+        name = extension['handler'].split(' ')[0]
+        if any(h.split(' ')[0] == name for h in handlers):
+            # Fail closed rather than splice twice: a guard that runs twice
+            # returns two verdicts for one call.
+            raise ValueError(f'{tier} extension {name} is already in the chain for {event}')
+        before = extension['before']
+        index = next((i for i, h in enumerate(handlers) if h.split(' ')[0] == before),
+                     None) if before else len(handlers)
+        if index is None:
+            raise ValueError(f'{tier} extension anchor is absent: {before}')
+        handlers.insert(index, extension['handler'])
+        tiers[extension['handler']] = tier
+    return handlers
+
+
 def system_configuration(home, canonical, runtime, surface, event):
     """Machine settings contain extensions, never a frozen copy of stock policy."""
     settings = confined(home, f'surfaces/{surface}/settings.json')
@@ -147,30 +292,35 @@ def system_configuration(home, canonical, runtime, surface, event):
     for name, values in config['disabled'].items():
         if name not in EVENTS or not isinstance(values, list) or any(not isinstance(v, str) or not re.fullmatch(r'[A-Za-z0-9_.-]+\.sh', v) for v in values):
             raise ValueError('Malformed disabled system handlers')
-    disabled = config['disabled'].get(event, [])
-    handlers = [h for h in handlers if h.split(' ')[0] not in disabled]
     for name, extensions in config['extensions'].items():
         if name not in EVENTS or not isinstance(extensions, list):
             raise ValueError('Malformed system extensions')
         for extension in extensions:
             if not isinstance(extension, dict) or set(extension) != {'handler', 'before'} or not isinstance(extension['handler'], str) or not re.fullmatch(r'[A-Za-z0-9_.-]+\.sh(?: [A-Za-z0-9_.:/-]+)*', extension['handler']) or (extension['before'] is not None and (not isinstance(extension['before'], str) or not re.fullmatch(r'[A-Za-z0-9_.-]+\.sh', extension['before']))):
                 raise ValueError('Malformed system extension')
-            if name != event:
-                continue
-            before = extension['before']
-            index = next((i for i, h in enumerate(handlers) if h.split(' ')[0] == before), None) if before else len(handlers)
-            if index is None:
-                raise ValueError(f'System extension anchor is absent: {before}')
-            handlers.insert(index, extension['handler'])
+    # Tier order is the authority model, not a preference. The repo file is the
+    # TEAM's decision — committed, present in every clone and in CI — so it
+    # resolves first and forms the shared baseline. Machine state is THIS
+    # OPERATOR's decision and resolves second. The asymmetry is deliberate: an
+    # operator can locally silence a team extension, but a committed team file
+    # cannot reach into an operator's local additions.
+    repo = repo_configuration(canonical, surface)
+    tiers = {}
+    handlers = apply_tier(handlers, repo, event, 'repo-policy', tiers)
+    handlers = apply_tier(handlers, config, event, 'machine-policy', tiers)
     overrides = {}
-    for name, relative in config['handlers'].items():
-        if not re.fullmatch(r'[A-Za-z0-9_.-]+\.sh', name) or not isinstance(relative, str):
-            raise ValueError('Malformed system handler override')
-        target = confined(canonical, relative)
-        if not target.is_file() or not os.access(target, os.X_OK):
-            raise ValueError(f'Required extension missing or not executable: {target}')
-        overrides[name] = str(target)
-    return runtime, handlers, config['libraries'], overrides
+    # Machine overrides are applied last so they win on a shared basename,
+    # matching the tier order above.
+    for tier, table in (('repo-policy', repo['handlers']), ('machine-policy', config['handlers'])):
+        for name, relative in table.items():
+            if not re.fullmatch(r'[A-Za-z0-9_.-]+\.sh', name) or not isinstance(relative, str):
+                raise ValueError('Malformed system handler override')
+            target = confined(canonical, relative)
+            if not target.is_file() or not os.access(target, os.X_OK):
+                raise ValueError(f'Required extension missing or not executable: {target}')
+            overrides[name] = str(target)
+            tiers[name] = tier
+    return runtime, handlers, {**repo['libraries'], **config['libraries']}, overrides, tiers
 
 
 def legacy_native_registered(canonical, surface, event):
@@ -197,7 +347,8 @@ def legacy_native_registered(canonical, surface, event):
 
 
 def describe_selection(identity, canonical, runtime, home, surface, event, hooks,
-                       handlers, libraries, overrides, adapter, system, inspect_local=True):
+                       handlers, libraries, overrides, adapter, system, inspect_local=True,
+                       tiers=None):
     """Describe the same resolved selection execution uses, without invoking it.
 
     Digests witness bytes at inspection time. They do not prove execution or
@@ -218,6 +369,14 @@ def describe_selection(identity, canonical, runtime, home, surface, event, hooks
                         'path': str(target), 'sha256': selected_hash,
                         'kind': 'project-override' if name in overrides else
                                 ('stock' if hooks == runtime else 'project-policy'),
+                        # WHICH TIER put this handler here. `kind` answers "what
+                        # file is this"; `tier` answers "who decided it runs" —
+                        # the question a reader of a chain actually has, and the
+                        # one that distinguishes a committed team decision from
+                        # an operator's local one. Keyed on the full entry for a
+                        # spliced extension (which may carry arguments) and on
+                        # the basename for an override.
+                        'tier': (tiers or {}).get(entry) or (tiers or {}).get(name) or 'stock',
                         'unselected_local_difference': local_repair})
     library_dirs = [runtime / 'lib', runtime / 'surfaces' / surface / 'lib',
                     home / 'surfaces' / surface / 'lib']
@@ -374,10 +533,11 @@ def main():
     if system is not None:
         if not confined(canonical, '.caws/policy.yaml').is_file() or not confined(canonical, '.caws/specs').is_dir() or (canonical / '.caws/working-spec.yaml').exists():
             raise ValueError('Project governance requires migration before system hooks can run')
-        hooks, handlers, libraries, overrides = system
+        hooks, handlers, libraries, overrides, tiers = system
     else:
         hooks, handlers, libraries = project_configuration(canonical, surface, event)
         overrides = {}
+        tiers = {}
         if hooks is None:
             return inactive('project policy has no handler chain for this event')
     if not isinstance(handlers, list):
@@ -426,7 +586,7 @@ def main():
     selection = describe_selection(
         identity, canonical, runtime, home, surface, event, hooks, handlers,
         libraries, overrides, env['CAWS_SESSION_TRANSCRIPT_ADAPTER'], system is not None,
-        inspect_local=describe)
+        inspect_local=describe, tiers=tiers)
     if describe:
         print(json.dumps(selection, indent=2, sort_keys=True))
         return 0
