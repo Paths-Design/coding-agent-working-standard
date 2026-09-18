@@ -75,3 +75,10 @@ evidence:
     test_nodeid: packages/caws-cli/tests/init/repo-hook-policy.test.js
     exit_code: 0
     commit_sha: a513b365
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "jest tests/init/repo-hook-policy.test.js, describe 'A4: repo resolves before machine, and duplicates fail closed' — 7 arms. Repo disable plus repo extension plus machine extension compose to an exact 5-element sequence asserted with toEqual. An anchor arm proves matching is on the BASENAME, so the stock entry 'agent-register.sh --quiet' is still anchorable by 'agent-register.sh' — matching the whole entry would report 'anchor absent' for a handler plainly present. An absent anchor fails closed naming the anchor. A handler duplicated across the two tiers is REFUSED rather than spliced twice, because a guard that runs twice returns two verdicts for one call. Machine wins over repo on the same override basename. A policy keyed to a different event leaves this event untouched. Two arms prove default and a named surface merge PER KEY rather than replacing wholesale, which is what removes the duplication a repo hand-rolling this pattern ends up with."
+    recorded_at: "2026-09-18T21:39:13.363Z"
+    test_nodeid: packages/caws-cli/tests/init/repo-hook-policy.test.js
+    exit_code: 0
+    commit_sha: a513b365
