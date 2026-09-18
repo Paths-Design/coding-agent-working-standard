@@ -68,3 +68,10 @@ evidence:
     test_nodeid: packages/caws-cli/tests/init/repo-hook-policy.test.js
     exit_code: 0
     commit_sha: a513b365
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "jest tests/init/repo-hook-policy.test.js, describe 'A3: a malformed or over-authority document applies ZERO entries' — 13 arms. Unparseable JSON, unknown top-level key, wrong version, unknown per-surface key and unknown event name each fail closed. The load-bearing arm is 'ONE bad entry discards the whole document, not just that entry': a fixture pairing a VALID disabled entry with a floor-violating handlers entry asserts ok:false AND result.policy undefined, so no partial application survives. Containment arms reject absolute, ..-traversing and glob targets; a bootstrap-cycle arm rejects overriding agent-surface.sh / runtime-paths.sh (the libs that RESOLVE overrides); a reason-length arm and a fork-provenance arm reject a short reason and a non-64-hex sha256."
+    recorded_at: "2026-09-18T21:39:10.408Z"
+    test_nodeid: packages/caws-cli/tests/init/repo-hook-policy.test.js
+    exit_code: 0
+    commit_sha: a513b365
