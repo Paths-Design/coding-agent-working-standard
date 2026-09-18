@@ -72,3 +72,11 @@ evidence:
     command: npx jest tests/init/machine-handler-policy.test.js
     exit_code: 0
     commit_sha: "64763825"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "npx bats tests/hooks/bats/local-chain.bats -> 18/18 ok. E2E arm 14 'a compiled chain makes the dispatcher run the OVERRIDE target' drives the real shared dispatcher end to end: it writes .caws/hooks/ext/marker.sh, compiles dispatch/pre_tool_use.chain mapping marker.sh to that repo-relative target, pipes a genuine PreToolUse envelope into dispatch/pre_tool_use.sh, and asserts chain-marker.log EXISTS. That single assertion proves both halves at once — the compiled sequence replaced the stock HANDLERS array AND run-handlers resolved the repo-relative override to the file actually executed. Discrimination control: arm 15 is byte-identical except the .chain is removed, and asserts the marker log does NOT exist, so arm 14 cannot be passing because the dispatcher runs everything it can find. Parser-level support: arm 2 pins ORDER ('block-dangerous.sh scope-guard.sh protected-paths.sh' in sequence, because a guard spliced into the wrong position adjudicates against different state); arm 3 resolves an override target against the project dir; arm 4 is its control, asserting a handler with no override reports an EMPTY override rather than a stale one; arm 5 admits an entry carrying arguments ('session-log.sh stop'); arm 13 pins a header-only sidecar as a deliberate EMPTY chain rather than a fallback to stock."
+    recorded_at: "2026-09-18T22:43:05.680Z"
+    command: npx bats tests/hooks/bats/local-chain.bats
+    exit_code: 0
+    artifact_path: packages/caws-cli/tests/hooks/bats/local-chain.bats
+    commit_sha: "64763825"
