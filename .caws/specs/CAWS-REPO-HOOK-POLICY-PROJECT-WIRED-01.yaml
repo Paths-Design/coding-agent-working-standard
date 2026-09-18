@@ -13,7 +13,13 @@ blast_radius:
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/local-chain.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/run-handlers.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/dispatch'
+    - 'packages/caws-cli/src/init/machine-handler-policy.ts'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/hooks/bats/local-chain.bats'
   out: []
 invariants:
   - 'An absent .chain sidecar costs one stat and leaves the stock HANDLERS array in force, so a repo that never opts in is byte-identically unaffected.'
@@ -21,10 +27,30 @@ invariants:
   - 'The compiled sidecar is never sourced or evaluated as shell — it is parsed with builtins only, because sourcing a generated file would make the guard plane arbitrarily programmable from a committed artifact.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'a project-wired surface whose repo has no dispatch/<event>.chain sidecar'
+    when: 'the dispatcher runs'
+    then: 'it executes the stock HANDLERS array unchanged, and a missing local-chain.sh lib degrades to that same stock array rather than failing'
+  - id: A2
+    given: 'a committed dispatch/<event>.chain listing a handler sequence and an override target'
+    when: 'the dispatcher runs'
+    then: 'the compiled sequence replaces the stock array and the override target is the file actually executed'
+  - id: A3
+    given: 'a .chain file containing a malformed line, an absolute or traversing override target, or a non-.sh handler token'
+    when: 'the dispatcher runs'
+    then: 'it emits a block decision and exits 2, applying no part of the sidecar'
+  - id: A4
+    given: 'a dispatcher carrying the new local-chain trailer and an installed dispatcher predating it'
+    when: 'extractMachineHandlers parses either'
+    then: 'both are admitted as known scaffolding, so an upgrade does not make every installed dispatcher unreviewable'
+  - id: A5
+    given: 'a shared-template change in this slice'
+    when: 'the pack fingerprint guard runs'
+    then: 'SHARED_PACK_VERSION is bumped and the recorded shared fingerprint matches, so installed packs actually receive the change'
+non_functional:
+  reliability:
+    - 'Absent-sidecar cost is a single stat per dispatch; the sidecar is parsed with shell builtins only and never sourced.'
+  security:
+    - 'A compiled chain is data, not code: sourcing it would make the guard plane arbitrarily programmable from a committed artifact.'
 contracts:
   - name: 'compiled-chain-sidecar'
     type: schema
