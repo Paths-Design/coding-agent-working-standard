@@ -2,9 +2,11 @@ id: CAWS-LAUNCHER-READS-REPO-HOOK-POLICY-01
 title: 'Machine launcher honors the repo-local hook-policy tier'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'The machine launcher now reads .caws/hooks/hook-policy.json as a first tier, resolving repo (team, committed, in every clone and CI) before machine (this operator, local). REPO_POLICY_FLOOR gates disabled and handlers alike and binds the repo tier only, so the operator escape hatch survives. Validation is all-or-nothing and raises into the existing block-and-exit-2 path with the policy file named; every declared surface is validated, not just the one in play. describe_selection reports a tier per handler and the anchor-absent diagnostic names its tier, since with two tiers the old message could not say which document to fix. Proof: pytest 350 passed exit 0 (27 in the selection file, 12 new, driving a REAL installed runtime via bin/caws-hook --describe); jest 240 suites / 3036 tests exit 0; bats 301 ok / 0 not ok. Honest limit: caws specs evidence --verify re-derived only commit reachability, not test execution, for every criterion here — the executed proof is the pytest run cited above, not the verify verdict.'
 created_at: '2026-09-18T21:40:22.394Z'
-updated_at: '2026-09-18T21:40:45.668Z'
+updated_at: '2026-09-18T22:05:40.648Z'
 created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
 blast_radius:
   modules:
