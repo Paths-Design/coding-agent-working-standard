@@ -60,6 +60,9 @@ evidence:
     commit_sha: "136798d1"
   - criterion_id: A3
     status: pass
-    evidence_ref: KEEP
-    recorded_at: "2026-09-18T21:06:33.890Z"
+    evidence_ref: "Data payload: A6 asserts fork_count 2 and fork_paths listing exactly the upstream-moved files. Remediation: A6 asserts narrowRepair contains 'caws init port' AND matches /Do NOT run .caws init --overwrite --force./ -- the prohibition is asserted positively rather than by absence, because silence would leave the operator free to reach for the destructive refresh anyway. Verbatim from the live sterling run: 'repair: Discharge with a three-way port, never a refresh: caws init diff to read each delta, then caws init port <path> --from <staging-file> to land the upstream change on top of your growth and re-baseline. Do NOT run caws init --overwrite --force for these paths -- it discards the local growth instead of reconciling it.' AC AMENDED during implementation: it originally named the version-lag finding's data payload. Escalating that rule would have routed forks into its warning branch, whose remediation prescribes the destructive --overwrite --force; the obligation therefore got its own rule and the payload requirement moved with it. Rationale is recorded verbatim on the spec_body_amended event."
+    recorded_at: "2026-09-18T21:07:17.272Z"
     test_nodeid: packages/caws-cli/tests/kernel/unit/doctor-hook-growth-classification.test.ts
+    command: node dist/index.js doctor
+    exit_code: 0
+    commit_sha: "136798d1"
