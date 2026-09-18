@@ -2,9 +2,10 @@ id: CAWS-GOAL-AC-STOP-GATE-01
 title: 'Hold a session to its bound spec''s acceptance criteria with a blocking stop gate'
 risk_tier: 2
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-goal-ac-gate
 created_at: '2026-09-18T23:49:52.986Z'
-updated_at: '2026-09-18T23:49:52.986Z'
+updated_at: '2026-09-18T23:50:54.297Z'
 created_by_session: '34188473-6516-4d12-a4e5-df7ff5132232'
 blast_radius:
   modules:
