@@ -63,3 +63,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/store/evidence-rederive.test.js::a name absent from the run exits 0 with \"# pass 1\" and is still missing, never passed"
     artifact_path: packages/caws-cli/tests/store/evidence-rederive.test.js
     commit_sha: "0063b034"
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Four shapes in one test: a bare \"node --test tests/\" script detects node; \"node scripts/build.js --test\" does NOT (the flag belongs to the script); \"node --test-name-pattern=x foo.js\" does NOT (a reporter flag alone runs nothing); and \"npm run build && node --test tests/*.test.js\" DOES, which is how a real test script is written. Mutation M4 (replacing the structured regex with the substring /node[\\s\\S]*--test/) kills it on the second shape."
+    recorded_at: "2026-09-18T23:30:18.590Z"
+    test_nodeid: "packages/caws-cli/tests/store/evidence-rederive.test.js::a script invoking node --test is detected; a script merely passing --test to a program is not"
+    artifact_path: packages/caws-cli/tests/store/evidence-rederive.test.js
+    commit_sha: "6d6f37cc"
