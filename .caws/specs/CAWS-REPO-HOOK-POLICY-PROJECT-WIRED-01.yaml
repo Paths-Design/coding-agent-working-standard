@@ -2,9 +2,10 @@ id: CAWS-REPO-HOOK-POLICY-PROJECT-WIRED-01
 title: 'Project-wired surfaces honor a compiled repo hook-policy chain'
 risk_tier: 2
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-local-chain
 created_at: '2026-09-18T22:06:36.709Z'
-updated_at: '2026-09-18T22:06:36.709Z'
+updated_at: '2026-09-18T22:07:00.028Z'
 created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
 blast_radius:
   modules:
