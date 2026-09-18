@@ -80,3 +80,9 @@ evidence:
     recorded_at: "2026-09-18T23:26:13.909Z"
     artifact_path: packages/caws-cli/tests/shell/hooks-readonly.test.js
     commit_sha: "6a3eabfd"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "npx jest tests/shell/hooks-readonly.test.js -> 28/28 pass at 6a3eabfd. Every wiring arm spawns the BUILT dist CLI, never the handler function: 'caws hooks --help' lists list, validate and compile; each leaf's --help declares its flags; and an undeclared flag is REJECTED, which is the control that stops the --help assertions being vacuous against a CLI that accepted everything and forwarded nothing. This arm class earned its keep twice in this slice. (1) MUTATION-CHECKED: deleting the '--surface' forward from the list action leaves the CLI building and 26 of 28 arms green, and kills exactly the arm asserting parsed.surface === 'codex' — Expected 'codex', Received 'claude-code', i.e. the flag silently fell back to the default. That is the register.ts accept-and-discard defect class, demonstrated detectable. (2) The first draft of this group SHIPPED that defect: 'compile --surface' was declared in metadata and destructured in the action but never used. It cannot be honored — every project-wired surface execs the same dispatcher, so there is one chain per event, resolved from surfaces.default — so the flag was removed rather than forwarded, and a new arm pins that 'hooks compile --check --surface opencode' exits non-zero with 'unknown option'. NOT CLAIMED: these arms prove each DECLARED flag is reachable and each UNDECLARED flag is refused; they do not prove that every declared flag changes behavior — only --surface and --check have behavioral assertions, while --data and --event are covered by presence in --help plus their use in other arms."
+    recorded_at: "2026-09-18T23:26:30.756Z"
+    artifact_path: packages/caws-cli/src/shell/register.ts
+    commit_sha: "6a3eabfd"
