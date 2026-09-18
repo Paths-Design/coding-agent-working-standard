@@ -224,3 +224,59 @@ EOF
   assert_failure 2
   assert_output --partial '"decision":"block"'
 }
+
+@test "local-chain e2e: a dispatcher whose local-chain lib is ABSENT degrades to stock" {
+  # The other half of A1. A pack installed before v83 has dispatchers carrying
+  # the trailer only if it was re-installed; a pack that has the trailer but not
+  # the lib (partial install, retired row, interrupted upgrade) must fall through
+  # to the stock array. The `[[ -f ]]` + `declare -F` pair is what makes that
+  # true, and without this arm either could be deleted with every test green.
+  mkdir -p "$CAWS_TEST_REPO/.caws/hooks/ext"
+  cat > "$CAWS_TEST_REPO/.caws/hooks/ext/marker.sh" <<'EOF'
+#!/bin/bash
+printf 'marker-ran\n' >> "$CAWS_PROJECT_DIR/chain-marker.log"
+exit 0
+EOF
+  chmod 755 "$CAWS_TEST_REPO/.caws/hooks/ext/marker.sh"
+  rm -f "$CAWS_TEST_REPO/chain-marker.log"
+  # A chain that WOULD be honored is present, so the only variable is the lib.
+  write_chain pre_tool_use "$(printf 'marker.sh\t.caws/hooks/ext/marker.sh')"
+  mv "$CAWS_TEST_HOOKS_DIR/lib/local-chain.sh" "$CAWS_TEST_HOOKS_DIR/lib/local-chain.sh.away"
+
+  dispatch_pre_tool_use
+  local status_seen="$status"
+  mv "$CAWS_TEST_HOOKS_DIR/lib/local-chain.sh.away" "$CAWS_TEST_HOOKS_DIR/lib/local-chain.sh"
+
+  # Degraded, not failed: the call is admitted and the sidecar is simply unread.
+  [ "$status_seen" -eq 0 ]
+  [ ! -f "$CAWS_TEST_REPO/chain-marker.log" ]
+  # Silently, too. The `[[ -f ]]` guard is what makes this quiet: sourcing a
+  # missing file under `set -uo pipefail` continues, but prints
+  # "No such file or directory" to stderr on EVERY tool call, which a
+  # PreToolUse hook surfaces to the user.
+  refute_output --partial 'local-chain.sh: No such file'
+}
+
+@test "local-chain e2e: a chain with one VALID and one malformed line applies NEITHER" {
+  # A3 says "applying no part of the sidecar". A parser that blocked only after
+  # splicing the lines it had already accepted would satisfy every other arm:
+  # exit 2 is observed, and the good line ran. This is the arm that separates
+  # fail-closed from fail-partway.
+  mkdir -p "$CAWS_TEST_REPO/.caws/hooks/ext"
+  cat > "$CAWS_TEST_REPO/.caws/hooks/ext/marker.sh" <<'EOF'
+#!/bin/bash
+printf 'marker-ran\n' >> "$CAWS_PROJECT_DIR/chain-marker.log"
+exit 0
+EOF
+  chmod 755 "$CAWS_TEST_REPO/.caws/hooks/ext/marker.sh"
+  rm -f "$CAWS_TEST_REPO/chain-marker.log"
+  # Valid line FIRST so a fail-partway parser would have already run it.
+  write_chain pre_tool_use \
+    "$(printf 'marker.sh\t.caws/hooks/ext/marker.sh')" \
+    'not-a-shell-script'
+
+  dispatch_pre_tool_use
+  assert_failure 2
+  assert_output --partial '"decision":"block"'
+  [ ! -f "$CAWS_TEST_REPO/chain-marker.log" ]
+}
