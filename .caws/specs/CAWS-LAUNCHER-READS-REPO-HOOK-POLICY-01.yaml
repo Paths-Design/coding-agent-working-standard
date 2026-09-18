@@ -1,0 +1,28 @@
+id: CAWS-LAUNCHER-READS-REPO-HOOK-POLICY-01
+title: 'Machine launcher honors the repo-local hook-policy tier'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-09-18T21:40:22.394Z'
+updated_at: '2026-09-18T21:40:22.394Z'
+created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
+blast_radius:
+  modules:
+    - 'caws-cli/hook-packs/runtime/caws-hook'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'TODO: list the file(s) or directories this spec authorizes.'
+  out: []
+invariants:
+  - 'The repo tier resolves before the machine tier, so an operator can locally silence a team extension but a committed team file cannot reach into an operator''s local additions.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'repo-hook-policy-tier-1-selection'
+    type: behavior
