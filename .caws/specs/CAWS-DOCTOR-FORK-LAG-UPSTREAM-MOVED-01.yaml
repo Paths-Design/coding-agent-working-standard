@@ -44,12 +44,9 @@ contracts:
 evidence:
   - criterion_id: A1
     status: pass
-    evidence_ref: "A6 in doctor-hook-growth-classification.test.ts: three drift rows (two growth+upstreamChange, one growth-only) yield doctor.hooks.pack_fork_upstream_moved at severity warning with fork_count 2 and fork_paths naming exactly the two upstream-moved files, while doctor.hooks.installed_pack_version_lag stays info. Re-derived end-to-end against a REAL repo, not only synthetic rows: the built dist (node dist/index.js doctor) run at /Users/darianrosebrook/Desktop/Projects/sterling emitted '[WARN] doctor.hooks.pack_fork_upstream_moved: 9 locally grown CAWS hook file(s) were forked from a template that has since moved upstream: .caws/hooks/bash-write-guard.sh, .caws/hooks/classify_command.py, .caws/hooks/dispatch/pre_tool_use.sh, .caws/hooks/dispatch/session_start.sh, .caws/hooks/scope-guard.sh (+4 more)' -- naming scope-guard.sh, the file from the originating incident. Producer side confirmed independently: upstreamChange is computed at hook-install.ts:533 and tests/init/pack-body-drift-observation.test.js (7/7 pass) exercises the true case at line 98. SCOPED NON-CLAIM: proves the classifier fires on observed rows; it does not prove the observer's baseline comparison is itself correct."
-    recorded_at: "2026-09-18T21:05:49.009Z"
-    test_nodeid: tests/kernel/unit/doctor-hook-growth-classification.test.ts
-    command: npx jest tests/kernel/unit/doctor-hook-growth-classification.test.ts
-    exit_code: 0
-    commit_sha: "136798d1"
+    evidence_ref: KEEP
+    recorded_at: "2026-09-18T21:06:31.094Z"
+    test_nodeid: packages/caws-cli/tests/kernel/unit/doctor-hook-growth-classification.test.ts
   - criterion_id: A2
     status: pass
     evidence_ref: "A6b is the discrimination control: two growth rows with upstreamChange false produce NO pack_fork_upstream_moved finding and summary.warnings === 0. A6c separates the adjacent class: a row with upstreamChange true but localGrowth false (an un-edited stale copy) is reported as pack_body_drift warning and NOT as a fork. A3 (fixture corrected to pure growth) still pins that the version lag stays info at 0 warnings. PROOF THE CONTROL IS NOT VACUOUS: mutating the fire condition from 'upstreamAlso.length > 0' to 'growthPaths.length > 0' in inspect.ts was killed by exactly A6b and A3 (2 failed, 6 passed); the mutation was reverted and 99/99 across 12 doctor suites pass. Note A6b/A6c also passed BEFORE the rule existed, vacuously -- the mutation run is what establishes they now discriminate."
