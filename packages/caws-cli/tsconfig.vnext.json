@@ -37,5 +37,16 @@
     "rootDir": "src",
     "types": ["node"]
   },
-  "include": ["src/store/**/*.ts", "src/shell/**/*.ts", "src/kernel/**/*.ts"]
+  // src/init is included EXPLICITLY, not left to transitive reachability.
+  // tsc emits an init module only when something under store/shell/kernel
+  // imports it, so a module staged ahead of its consumers — the normal shape
+  // when a feature lands as validator-first, wiring-second — was silently never
+  // emitted to dist and could not be loaded or tested. Every other init module
+  // happened to have a consumer, which is why nothing noticed.
+  "include": [
+    "src/store/**/*.ts",
+    "src/shell/**/*.ts",
+    "src/kernel/**/*.ts",
+    "src/init/**/*.ts"
+  ]
 }
