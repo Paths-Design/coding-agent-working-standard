@@ -49,3 +49,11 @@ evidence:
     exit_code: 0
     artifact_path: packages/caws-cli/tests/hooks/bats/protected-paths.bats
     commit_sha: "1220c0cd"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "bats tests/hooks/bats/protected-paths.bats: 'a Bash mutation OUTSIDE every hooks dir is admitted' (echo x > src/index.ts) exits 0. This is the discrimination control for A1 — without it the A1 arms would pass even if the implementation blocked every Bash mutation regardless of path. Companion arm 'READING a guard script via Bash is admitted' (cat .claude/hooks/scope-guard.sh) pins that only mutations are protected; it was renamed from 'a non-Write/Edit tool is ignored' because after this change Bash no longer exits at the tool gate and the old name described behavior that no longer exists. A separate arm covers a tool that is neither Write, Edit nor Bash. Full run 17/17 ok, BATS_EXIT=0."
+    recorded_at: "2026-09-18T21:28:05.820Z"
+    command: npx bats tests/hooks/bats/protected-paths.bats
+    exit_code: 0
+    artifact_path: packages/caws-cli/tests/hooks/bats/protected-paths.bats
+    commit_sha: "1220c0cd"
