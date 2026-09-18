@@ -77,3 +77,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/store/evidence-rederive.test.js::a cited name that exists and passes -> passed"
     artifact_path: packages/caws-cli/tests/store/evidence-rederive.test.js
     commit_sha: "6d6f37cc"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "A real failing test in the fixture yields outcome failed with a detail containing \"node --test exit\", which the kernel maps to refuted rather than not_rederived — the distinction between \"the citation is wrong\" and \"I could not check\"."
+    recorded_at: "2026-09-18T23:30:27.592Z"
+    test_nodeid: "packages/caws-cli/tests/store/evidence-rederive.test.js::a cited name that exists and fails -> failed, so the criterion is refuted"
+    artifact_path: packages/caws-cli/tests/store/evidence-rederive.test.js
+    commit_sha: "6d6f37cc"
