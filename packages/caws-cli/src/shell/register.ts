@@ -24,6 +24,7 @@ import {
   DOCTOR_COMMAND_META,
   STATUS_COMMAND_META,
   CLAIM_COMMAND_META,
+  HOOKS_COMMAND_META,
   SCOPE_COMMAND_META,
   GATES_COMMAND_META,
   EVIDENCE_COMMAND_META,
@@ -75,6 +76,9 @@ import {
   runGatesRunCommand,
   runInitCommand,
   runScopeCommand,
+  runHooksCompileCheckCommand,
+  runHooksListCommand,
+  runHooksValidateCommand,
   runScopeContentionCommand,
   runScopePlanCommand,
   runSpecsActivateCommand,
@@ -557,6 +561,58 @@ export function registerShellCommands(
         showData: opts.data === true,
         repairPlan: opts.repairPlan === true,
         json: opts.json === true,
+      });
+      exit(code);
+    }
+  );
+
+  // -------------------------------------------------------------------
+  // caws hooks list | validate | compile --check
+  // The read-only half of the repo-local hook policy surface. `compile`
+  // without --check is refused here rather than silently writing: the
+  // mutating verb lands in its own slice, and a verb that half-exists is
+  // worse than one that is plainly not there yet.
+  // -------------------------------------------------------------------
+  const hooksCmd = program.command('hooks');
+  applyGroupMeta(hooksCmd, HOOKS_COMMAND_META);
+
+  defineLeaf(hooksCmd, leafMeta(HOOKS_COMMAND_META, 'list')).action(
+    (opts: { event?: string; surface?: string; json?: boolean; data?: boolean }) => {
+      const code = runHooksListCommand({
+        ...(opts.event !== undefined ? { event: opts.event } : {}),
+        ...(opts.surface !== undefined ? { surface: opts.surface } : {}),
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
+
+  defineLeaf(hooksCmd, leafMeta(HOOKS_COMMAND_META, 'validate')).action(
+    (opts: { json?: boolean; data?: boolean }) => {
+      const code = runHooksValidateCommand({
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
+      exit(code);
+    }
+  );
+
+  defineLeaf(hooksCmd, leafMeta(HOOKS_COMMAND_META, 'compile')).action(
+    (opts: { check?: boolean; event?: string; json?: boolean; data?: boolean }) => {
+      if (opts.check !== true) {
+        process.stdout.write(
+          'caws hooks compile: writing the chain sidecars is not available yet; only ' +
+            '`--check` (read-only) is implemented in this release.\n' +
+            '  Run: caws hooks compile --check\n'
+        );
+        exit(1);
+        return;
+      }
+      const code = runHooksCompileCheckCommand({
+        ...(opts.event !== undefined ? { event: opts.event } : {}),
+        json: opts.json === true,
+        showData: opts.data === true,
       });
       exit(code);
     }

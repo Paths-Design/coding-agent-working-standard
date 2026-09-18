@@ -58,6 +58,18 @@ export type {
 } from './commands/scope';
 
 export {
+  PROJECT_WIRED_SURFACES,
+  runHooksCompileCheckCommand,
+  runHooksListCommand,
+  runHooksValidateCommand,
+} from './commands/hooks';
+export type {
+  HooksCompileCheckOptions,
+  HooksListOptions,
+  HooksValidateOptions,
+} from './commands/hooks';
+
+export {
   evidenceRecordExampleCommand,
   runEvidenceListCommand,
   runEvidenceRecordCommand,
