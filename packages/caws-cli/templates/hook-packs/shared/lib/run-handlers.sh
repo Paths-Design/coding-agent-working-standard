@@ -475,6 +475,19 @@ run_handlers() {
       local system_override
       system_override="$(python3 -c 'import json,os,sys; print(json.loads(os.environ["CAWS_MACHINE_HANDLERS"]).get(sys.argv[1], ""))' "$handler")" || return 2
       [[ -z "$system_override" ]] || handler_path="$system_override"
+    elif declare -F caws_local_chain_override >/dev/null 2>&1; then
+      # CAWS-REPO-HOOK-POLICY-PROJECT-WIRED-01: the project-wired counterpart of
+      # the machine override above. The machine plane resolves overrides through
+      # the launcher; these surfaces resolve them from the compiled .chain
+      # sidecar the dispatcher already parsed, so both planes honor a repo's
+      # committed policy instead of only the two machine-routed harnesses.
+      #
+      # `declare -F` guarded, so a pack predating lib/local-chain.sh degrades to
+      # the stock path rather than erroring — an upgrade of one file must not
+      # require an upgrade of all of them.
+      local local_override
+      local_override="$(caws_local_chain_override "$handler")"
+      [[ -z "$local_override" ]] || handler_path="$local_override"
     fi
     if [[ ! -x "$handler_path" ]]; then
       _rh_record_execution "$handler" "$handler_path" missing null /dev/null ""
