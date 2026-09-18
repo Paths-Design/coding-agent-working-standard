@@ -40,3 +40,12 @@ non_functional: {}
 contracts:
   - name: 'protected-paths-tool-parity'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "bats tests/hooks/bats/protected-paths.bats, three arms, all written RED first and observed failing with 'command succeeded, but it was expected to fail' before the fix: 'a shell redirect into a guard script under .caws/hooks/ is BLOCKED' (echo x > .caws/hooks/protected-paths.sh), 'an in-place sed of a guard script under the vendor hooks dir is BLOCKED' (sed -i s/exit/return/ .claude/hooks/scope-guard.sh), 'rm of a shared lib under .caws/hooks/lib/ is BLOCKED'. Each asserts exact status 2 (the only status the PreToolUse protocol treats as a block), not bare non-zero. Two further arms pin the design: a multi-operand sed naming README.md then protected-paths.sh still blocks (candidate order verified README.md-first, so the .md branch returning rather than exiting is what makes this pass), and a missing lib/bash-mutation-targets.sh fails CLOSED with exit 2. Full run: 17/17 ok, BATS_EXIT=0; whole hooks plane 301 ok / 0 not ok."
+    recorded_at: "2026-09-18T21:27:51.808Z"
+    command: npx bats tests/hooks/bats/protected-paths.bats
+    exit_code: 0
+    artifact_path: packages/caws-cli/tests/hooks/bats/protected-paths.bats
+    commit_sha: "1220c0cd"
