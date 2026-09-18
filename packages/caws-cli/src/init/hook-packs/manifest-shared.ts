@@ -476,7 +476,16 @@ import { isAdapterCoveredSurface } from './types';
 // correct; only models carried the defect. The sealer now sorts the turn files
 // by name before concatenating them, matching the renderer's own
 // sorted(directory.glob("turn-*.json")).
-export const SHARED_PACK_VERSION = 81;
+// v82: protected-paths.sh keyed on the TOOL (Write|Edit) rather than on the
+// write, so the entire Bash channel was unguarded — `echo x >
+// .caws/hooks/protected-paths.sh`, `sed -i` over a guard and `rm
+// .caws/hooks/lib/write-allowlist.sh` were all admitted, and no other
+// pre_tool_use handler covered the gap (bash-write-guard delegates to
+// caws_is_write_allowlisted, which returns allow for `.caws/*`; block-dangerous
+// protects one filename under the vendor dir, not the pack's install dir). A
+// guard could therefore be disarmed by choosing a different tool. Both channels
+// now run one adjudication over one matcher, so they cannot diverge.
+export const SHARED_PACK_VERSION = 82;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
