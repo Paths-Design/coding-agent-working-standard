@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-reprieve-scope
 created_at: '2026-09-19T04:06:42.915Z'
-updated_at: '2026-09-19T04:06:51.806Z'
+updated_at: '2026-09-19T04:08:50.873Z'
 created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
 blast_radius:
   modules:
@@ -20,6 +20,8 @@ scope:
     - 'packages/caws-cli/tests/init/pack-fingerprints.json'
     - 'packages/caws-cli/tests/shell/reprieve-boundary-and-repo-scope.test.js'
     - 'packages/caws-cli/tests/hooks/bats/reprieve.bats'
+    - packages/caws-cli/src/shell/command-metadata.ts
+    - packages/caws-cli/src/shell/register.ts
   out: []
 invariants:
   - 'A grant that names some but not all handlers of a declared boundary set is REFUSED, and the refusal names the co-handlers and prints the completed command.'
