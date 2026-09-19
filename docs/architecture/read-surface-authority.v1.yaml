@@ -1,0 +1,307 @@
+schema_id: caws.read_surface_authority.v1
+status: active
+authority: contract
+owner: CAWS-READ-SURFACE-AUTHORITY-CONTRACT-01
+purpose: >-
+  Declare what each CAWS read surface may assert, which fact domain each
+  assertion belongs to, and which single artifact is authoritative for that
+  domain — so that two surfaces answering the same question cannot answer it
+  differently, and no surface can assert the absence of a fact it has no
+  writer for.
+
+  This contract governs ASSERTION. It is the read-side counterpart to
+  command-capability-taxonomy.md, which governs MUTATION. That document asks
+  "what may this command do?"; this one asks "what may this command claim?"
+
+relates_to:
+  docs:
+    - docs/architecture/caws-vnext-command-surface.md # command lifecycle + architectural invariants
+    - docs/architecture/command-capability-taxonomy.md # mutation capability lattice (complementary, not superseded)
+    - docs/architecture/session-ownership-metadata.md # lease-borne ownership metadata
+  specs:
+    - CAWS-READ-SURFACE-AUTHORITY-CONTRACT-01
+
+# ─────────────────────────────────────────────────────────────────────────
+# Authority tiers
+#
+# The tier is a property of the ARTIFACT a surface reads, never of the
+# surface's own confidence or prominence. A dashboard that joins four
+# sources does not thereby become authoritative for any of them.
+# ─────────────────────────────────────────────────────────────────────────
+authority_tiers:
+  authority:
+    denotes: the artifact a governed decision is adjudicated against
+    artifacts:
+      - .caws/specs/<id>.yaml # spec lifecycle, scope, acceptance, evidence
+      - .caws/worktrees.json # worktree registry, ownership, worktree→spec binding
+      - .caws/events.jsonl # append-only hash-chained audit
+    property: a disagreement between an authority artifact and any other surface is resolved in favor of the artifact
+  operational_cache:
+    denotes: observed liveness and convenience state, rebuilt from observation
+    artifacts:
+      - .caws/leases/<session_id>.json # per-session lease
+      - .caws/agents.json # last-active cache
+      - .caws/messages.jsonl # inter-agent messages (a body is an unverified claim)
+    property: >-
+      Never authority. Staleness may justify a louder warning or richer
+      context; it never authorizes a takeover, an ownership transition, or a
+      scope decision.
+  derived_advisory:
+    denotes: computed over authority and cache; owns no state of its own
+    surfaces: [doctor, working-tree check, status panels, scope contention]
+    property: a derived finding is reproducible from its inputs and is never cited as the origin of a fact
+
+# ─────────────────────────────────────────────────────────────────────────
+# Fact domains
+#
+# Every fact a read surface prints belongs to exactly one domain. Each domain
+# names exactly one authority. `is_not` is mandatory: the recurring defect in
+# this CLI is not a wrong value, it is a fact from one domain being rendered
+# in the vocabulary of another.
+# ─────────────────────────────────────────────────────────────────────────
+fact_domains:
+  session_identity:
+    denotes: which harness session is speaking
+    authority: the resolver (surface-pinned env → durable envelope → pid record)
+    written_by: [agents register, agents heartbeat]
+    is_not: ownership, authority to write, or evidence that any spec is bound
+  liveness_classification:
+    denotes: whether a session is active, stale, or stopped RIGHT NOW
+    authority: TTL applied to lease.last_active at read time
+    is_not: >-
+      the lease's persisted `status` field. The persisted field records what
+      the session last declared; the classification records what the clock
+      says. A session may carry status=active and classify as stale.
+    parameters: { default_ttl_ms: 1800000, flag: --stale-ttl-ms }
+  worktree_ownership:
+    denotes: which session holds write authority over a worktree
+    authority: .caws/worktrees.json:owner
+    is_not: >-
+      lease liveness. An owner with no live lease remains the owner; absence
+      of a lease is display context, never a transfer.
+  worktree_spec_binding:
+    denotes: which spec a worktree is bound to
+    authority: .caws/worktrees.json (worktree→spec) and the spec's `worktree` field (spec→worktree)
+    is_not: >-
+      spec authorship. `created_by_session` records who authored the spec and
+      is never evidence that the spec is bound to that session now.
+    note: >-
+      The spec-side field is absent while the spec is unbound AND after it is
+      closed. Absence therefore does not by itself distinguish "never bound"
+      from "no longer bound"; the registry and the event log distinguish them.
+  session_spec_binding:
+    denotes: the session↔spec authority used where no worktree exists
+    authority: the bridge binding (claim --spec / --release)
+    is_not: the current working directory
+  spec_lifecycle_state:
+    denotes: draft | active | closed | archived
+    authority: .caws/specs/<id>.yaml:lifecycle_state
+    is_not: whether work happened; a closed spec asserts a resolution, a deactivated one asserts nothing
+  scope_admission:
+    denotes: whether a path may be written from here, now
+    authority: the kernel scope decision (ADMIT | REFUSE | NO AUTHORITY)
+    is_not: >-
+      a two-valued permit. NO AUTHORITY means no binding exists to decide
+      against, and is not a refusal by any spec's scope.out.
+
+# ─────────────────────────────────────────────────────────────────────────
+# Read surfaces
+#
+# `asserts` lists the fact domains the surface may speak about. A surface
+# MUST NOT print a fact from a domain it does not declare here.
+# ─────────────────────────────────────────────────────────────────────────
+read_surfaces:
+  status:
+    subject: repository
+    tier: derived_advisory
+    asserts: [session_identity, liveness_classification, worktree_spec_binding, spec_lifecycle_state, scope_admission]
+    is_not: authoritative for anything it prints; it is a join over four sources
+  doctor:
+    subject: repository
+    tier: derived_advisory
+    asserts: [worktree_ownership, worktree_spec_binding, spec_lifecycle_state]
+    is_not: a mutation surface; a finding is a claim about drift, not a repair
+  agents list:
+    subject: session set
+    tier: operational_cache
+    asserts: [session_identity, liveness_classification]
+    is_not: >-
+      authority for ownership or binding. It has no access to worktrees.json
+      and therefore may not render worktree or spec columns at all unless it
+      joins that registry.
+  agents show:
+    subject: one session
+    tier: operational_cache
+    asserts: [session_identity]
+    is_not: >-
+      a liveness verdict. It returns the persisted record; the TTL
+      classification belongs to `agents list`.
+  specs list:
+    subject: spec set
+    tier: authority
+    asserts: [spec_lifecycle_state]
+    is_not: a binding or ownership surface
+  specs show:
+    subject: one spec
+    tier: authority
+    asserts: [spec_lifecycle_state, worktree_spec_binding]
+    is_not: >-
+      a session-binding surface. `created_by_session` is authorship history.
+  worktree list:
+    subject: worktree set
+    tier: authority
+    asserts: [worktree_ownership, worktree_spec_binding]
+    is_not: a liveness surface; an owner shown here may be long gone
+  claim:
+    subject: current working directory
+    tier: authority
+    asserts: [worktree_ownership, session_spec_binding]
+    is_not: repository-wide; it answers only about the cwd
+  goal show:
+    subject: current session
+    tier: operational_cache
+    asserts: [session_spec_binding]
+    is_not: >-
+      acceptance truth. Clearing a goal does not mean criteria were met, and
+      this surface can never mark a criterion passed.
+  working-tree check:
+    subject: current session
+    tier: derived_advisory
+    asserts: [session_identity]
+    is_not: a scope, claim, or ownership decision
+  scope show:
+    subject: one path
+    tier: authority
+    asserts: [scope_admission]
+    is_not: >-
+      a hypothetical unless --spec is passed; the bare form proves present
+      write authority, the --spec form answers a what-if
+  message:
+    subject: one message or one mailbox
+    tier: operational_cache
+    asserts: []
+    is_not: >-
+      a repository status surface. `message status` takes a message id and is
+      not the repo-wide `status` its name resembles.
+
+# ─────────────────────────────────────────────────────────────────────────
+# Rendering obligations
+# ─────────────────────────────────────────────────────────────────────────
+rendering_obligations:
+  unsourced_fact:
+    rule: >-
+      A surface MUST NOT assert the absence of a fact it cannot source. If no
+      writer populates the field, render `unknown`, or omit the column — never
+      a phrase that reads as a true negative.
+    rationale: >-
+      An asserted absence and an observed absence are indistinguishable to the
+      reader, so an unsourced field silently manufactures a false negative. A
+      reader who cannot tell "no worktree" from "this surface never asked"
+      will make the wrong decision and have no way to detect it.
+    worked_example:
+      prohibited: 'agents list printing `(no worktree)  (no spec)`'
+      why: >-
+        `bound_worktree` and `bound_spec_id` have no writer. buildLeaseContext
+        accepts a `bound` argument, but both call sites (agents register,
+        agents heartbeat) pass null and there is no third caller, so the
+        `?? '(no worktree)'` fallback fires for 100% of sessions
+        unconditionally, including sessions that demonstrably own worktrees.
+      permitted: >-
+        Omit the column (as `status` does for `wt=`), render a neutral
+        placeholder (as `status` does with `spec=-`), or join
+        .caws/worktrees.json and print the real binding.
+  completeness:
+    rule: >-
+      A surface that filters, buckets, or truncates MUST state what it
+      withheld and how to see it.
+    form: '<n> shown · <m> hidden (<flag>)'
+  parity:
+    rule: >-
+      The human and --json renderings of one surface MUST carry the same
+      facts. --json may add machine detail; it may never be the only place a
+      fact appears, and the human form may never assert something absent from
+      the JSON.
+  tier_disclosure:
+    rule: >-
+      A surface reading operational_cache MUST say so where a reader could
+      mistake it for authority. Ownership and binding decisions cite the
+      authority artifact by name.
+  refusal_consistency:
+    rule: >-
+      A surface that does not support an accepted flag MUST refuse and name
+      the supported form, never silently ignore it.
+    rationale: >-
+      Silent acceptance trains callers to believe a flag worked. `claim
+      --json` refusing with "only supported with --plan or --release-paths"
+      is the correct shape.
+
+# ─────────────────────────────────────────────────────────────────────────
+# Non-collapse relations
+# ─────────────────────────────────────────────────────────────────────────
+non_collapse_relations:
+  - A persisted `status` field is not a TTL liveness classification. A surface printing one MUST NOT label it as the other.
+  - Spec authorship (`created_by_session`) is not spec binding. Authorship never expires; binding does.
+  - Current working directory is not a binding. Being inside a worktree is not authority to write in it.
+  - Worktree ownership is not lease liveness. A dead lease does not vacate ownership, and a live lease does not confer it.
+  - An absent spec→worktree field does not distinguish "never bound" from "closed"; only the registry and event log do.
+  - Repository-wide `status` and per-entity `status` are different subjects and must not share an unqualified name.
+
+prohibited_renderings:
+  contains_none_of:
+    - an asserted absence for a field with no writer
+    - a liveness verdict derived from a persisted status field
+    - an ownership claim sourced from a lease
+    - a filtered list with no hidden-count disclosure
+    - a flag accepted and silently ignored
+    - a fact present in --json but absent from the human form of the same surface
+
+# ─────────────────────────────────────────────────────────────────────────
+# Known non-conformance
+#
+# Recorded so the contract states the bar AND names where the runtime fails
+# it. Verified against the CLI at the revision that introduced this file;
+# each entry is a defect to fix, never a permitted exception.
+# ─────────────────────────────────────────────────────────────────────────
+known_nonconformance:
+  - surface: agents list
+    violates: rendering_obligations.unsourced_fact
+    observed: '`(no worktree)  (no spec)` printed for every session, unconditionally'
+    evidence: src/shell/commands/agents.ts:635 renders `?? '(no worktree)'`; :247 reads `lease.bound_worktree ?? null`; the only producers (:286, :373) pass `bound = null`
+    contrast: status renders the same absent fields as an omitted `wt=` and a neutral `spec=-`
+  - surface: agents show
+    violates: non_collapse_relations (persisted status vs TTL classification)
+    observed: 'returns status=active for a session `agents list` buckets as stale'
+    evidence: session 1aa3f0bd — `agents show` reported status active with last_active ~9h old while `agents list` classified it stale
+  - surface: agents show
+    violates: rendering_obligations.parity
+    observed: emits raw JSON unconditionally; it has no human rendering, while its sibling `agents list` has no machine rendering gap
+  - surface: worktree list
+    violates: rendering_obligations.parity
+    observed: the authoritative ownership and binding surface accepts no options at all and has no --json
+  - surface: doctor
+    violates: rendering_obligations.refusal_consistency
+    observed: '--json is accepted and ignored unless --repair-plan is also passed; claim refuses the identical misuse with guidance'
+  - surface: agents list
+    violates: rendering_obligations.completeness
+    observed: prints the active bucket only; stale and stopped are flag-gated with no hidden-count hint
+  - surface: agents list
+    violates: rendering_obligations.tier_disclosure
+    observed: >-
+      `conjoined-unresolved` mixes two populations (overlap count vs classified
+      lease count) in one sentence and is the only warning class carrying no
+      repair line; `silent-platform: unknown` reads as missing knowledge when
+      `unknown` is the literal recorded platform value
+
+coherence:
+  - Every fact printed by any surface maps to exactly one fact_domain, and that domain names exactly one authority.
+  - A surface may narrow what it reports; it may never widen into a domain it does not declare.
+  - Adding a read surface requires adding its row here; adding a printed fact requires it to belong to a declared domain.
+  - The tiers are ordered for conflict resolution only: authority > operational_cache, and derived_advisory never wins over either.
+
+non_claims:
+  - Changes no runtime behavior. This contract names the bar; the renderers are conformed by separate governed slices.
+  - Grants no authority. Naming a surface `authority` describes the artifact it reads, and cannot make a cache authoritative.
+  - Does not define gate, hook, reprieve, or waiver behavior.
+  - Does not define the mutation capability lattice; that is command-capability-taxonomy.md.
+  - Does not settle whether a given fact SHOULD be surfaced — only what an assertion means once made.
+  - The known_nonconformance list is a snapshot of verified defects, not an exhaustive audit; absence from it is not evidence of conformance.
