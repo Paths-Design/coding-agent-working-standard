@@ -161,3 +161,8 @@ evidence:
     evidence_ref: "Proven by e2e describe [reprieve grant vocabulary (A9)] - three tests: the reserved caws-lifecycle token is accepted alongside .sh handler basenames, a token that is neither is still rejected, and granting the two file-write guards does NOT demand the lifecycle plane. That last test pins the design decision: caws-lifecycle is deliberately NOT a member of GUARD_BOUNDARY_SETS cross-repo-write. The boundary-set rule exists so that lifting one channel of a two-channel boundary cannot read as authorization for the other; the lifecycle plane governs a DIFFERENT capability, so joining them would force an operator granting one to grant both."
     recorded_at: "2026-09-19T07:05:42.710Z"
     commit_sha: "8485bf99"
+  - criterion_id: A10
+    status: pass
+    evidence_ref: "Proven by decision-layer suite [lifecycle containment - an unregistered repo cannot take the pin (A10)] in tests/shell/session-origin-record.test.js. This closes a real false-positive class rather than a hypothetical one: suites in this repo shell out to caws inside throwaway temp repos while inheriting the agent environment, so trust-on-first-use would have pinned the live session to a directory deleted seconds later. Registration governs where a pin may be TAKEN, never where one may be IGNORED, so the boundary is not widened. Live corroboration: after a full 252-suite run in this worktree, no origin.json exists under the machine state dir for this session."
+    recorded_at: "2026-09-19T07:05:45.164Z"
+    commit_sha: "8485bf99"
