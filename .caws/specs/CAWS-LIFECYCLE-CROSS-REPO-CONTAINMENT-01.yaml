@@ -8,7 +8,9 @@ updated_at: '2026-09-19T05:29:08.233Z'
 created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli shell lifecycle commands (specs, worktree)'
+    - 'machine session state (~/.caws/state/sessions/<id>/origin.json)'
+    - 'reprieve grant vocabulary'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -21,7 +23,11 @@ scope:
     - packages/caws-cli/tests/shell/session-origin-record.test.js
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A governed lifecycle mutation (specs create, specs close, worktree create, worktree merge) executes only against the repo the calling agent session is rooted in; a foreign repo is refused BEFORE any file write or event append.'
+  - 'The session root is recorded once, on first governed lifecycle use, and a later invocation from a different repo never silently rewrites it — the record is the authority, the current cwd is not.'
+  - 'Containment applies only to harness-identified agent sessions. A caller with no harness session identity (human terminal, CI) is never contained: a guard that cannot tell who is calling must not refuse everyone.'
+  - 'Root comparison is over CANONICAL roots (git --git-common-dir), so every linked worktree of a repo is the same root as its canonical checkout and is never read as foreign.'
+  - 'The only escape is a human-granted, expiring reprieve naming the lifecycle plane. No self-service CLI flag may lift it: the entity with the incentive to cross the boundary must not be able to author its own authorization.'
 acceptance:
   - id: A1
     given: 'TODO'
