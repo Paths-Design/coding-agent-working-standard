@@ -2,10 +2,19 @@ id: CAWS-READ-SURFACE-AUTHORITY-CONTRACT-01
 title: 'One contract declares what every CAWS read surface may assert about session, worktree, spec, ownership and liveness — and forbids asserting absence for a fact it has no writer for'
 risk_tier: 3
 mode: doc
-lifecycle_state: active
-worktree: wt-read-surface-contract
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Schema-first fix for read-surface disagreement. Adds caws.read_surface_authority.v1 (docs/architecture/read-surface-authority.v1.yaml) and registers it as command-surface invariant 6.18.
+
+WHAT IT ESTABLISHES. Seven fact domains, each naming exactly one authority artifact. Twelve read surfaces, each declaring subject, authority tier, the domains it may assert, and a mandatory is_not clause. Three authority tiers keyed to the ARTIFACT a surface reads, never to the surface''s prominence, so a dashboard that joins four sources does not become authoritative for any of them. The central rule: a surface may never assert the ABSENCE of a fact it has no writer for, because an asserted absence and an observed absence are indistinguishable to the reader.
+
+EVIDENCE. Seven verified non-conformances are recorded in the contract itself rather than an aspirational description. The worked example is code-verified: agents list prints (no worktree) (no spec) for 100 percent of sessions unconditionally, because agents.ts:635 renders the ?? fallback over :247''s lease.bound_worktree ?? null and the field has no writer at all -- both producers, :286 and :373, pass bound = null and there is no third caller. All four citations re-checked against the committed tree. The contrast that makes it a defect rather than a preference is that status renders the same absent fields honestly (omits wt=, prints neutral spec=-). Second finding observed live: agents show returned status=active for session 1aa3f0bd while agents list bucketed the same record as stale -- a persisted field rendered as a liveness verdict.
+
+METHOD NOTE. Two candidate findings were investigated and DISCARDED rather than reported: a suspected definitional split in the active count (actually my lease not yet registered when status ran; status.ts:324-331 renders every lease and tags self) and a suspected half-written spec-worktree binding (actually a live merge transition to closed). Sterling was too volatile for cross-command comparison, so every retained finding is anchored in source or in a single atomic document.
+
+WHAT THIS DOES NOT CLAIM. Changes no runtime behavior; no renderer was touched. Grants no authority. The known_nonconformance list is a verified snapshot, not an exhaustive audit, so absence from it is not evidence of conformance. Conforming the four named surfaces is separate governed work.'
 created_at: '2026-09-19T09:49:31.761Z'
-updated_at: '2026-09-19T09:49:41.944Z'
+updated_at: '2026-09-19T09:53:02.190Z'
 created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
 blast_radius:
   modules:
