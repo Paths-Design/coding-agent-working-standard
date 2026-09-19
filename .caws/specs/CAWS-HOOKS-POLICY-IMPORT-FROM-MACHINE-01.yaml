@@ -1,0 +1,51 @@
+id: CAWS-HOOKS-POLICY-IMPORT-FROM-MACHINE-01
+title: 'hooks import --from-machine: migrate machine-state overrides into the committed repo policy'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-09-19T02:12:37.992Z'
+updated_at: '2026-09-19T02:12:37.992Z'
+created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
+blast_radius:
+  modules:
+    - 'caws hooks command surface + repo-hook-policy mutation layer + machine project state'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/init/repo-hook-policy.ts'
+    - 'packages/caws-cli/src/shell/commands/hooks.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/tests/init/repo-hook-policy.test.js'
+    - 'packages/caws-cli/tests/shell/hooks-mutating.test.js'
+  out: []
+invariants:
+  - 'Import writes the repo policy FIRST and clears the migrated machine keys SECOND. The reverse order loses governance silently if step two fails; this order''s failure mode is both tiers populated, which resolveChain already refuses loudly (duplicate handler across tiers). A safe-but-loud intermediate state is the design, not an accident.'
+  - 'An extension imported from machine state carries a reason naming its provenance and stating that no justification was recorded, because machine state has no reason field and PolicyExtension requires one (>=12 chars). Synthesizing a plausible-sounding justification would fabricate review signal; the text must read as the absence it is.'
+  - 'A machine entry that disables or replaces a REPO_POLICY_FLOOR handler (protected-paths.sh, block-dangerous.sh, agent-register.sh) is REFUSED by name, never silently dropped. Machine tier may do this; repo tier may not, so import is not a faithful translation and must say so rather than quietly increasing enforcement.'
+  - 'Fork files are never relocated by import. Synthesizing a forks[] entry from .pristine records provenance; moving the file is a separate decision with its own blast radius.'
+acceptance:
+  - id: A1
+    given: 'a project whose machine state carries handler overrides and extensions across two surfaces with identical policy'
+    when: 'caws hooks import --from-machine runs'
+    then: 'the surfaces collapse to a single ''default'' entry in .caws/hooks/hook-policy.json rather than two byte-identical copies'
+  - id: A2
+    given: 'a successful import'
+    when: 'the machine project state file is read back'
+    then: 'the migrated keys are empty, and a resolveChain over the result splices each handler exactly once'
+  - id: A3
+    given: 'an import interrupted after the repo write but before the machine clear'
+    when: 'a chain is resolved'
+    then: 'it FAILS CLOSED naming the duplicated handler, rather than running that handler twice'
+  - id: A4
+    given: 'machine state disabling a REPO_POLICY_FLOOR handler'
+    when: 'import runs'
+    then: 'it refuses and names the handler, writing neither the repo policy nor any change to machine state'
+  - id: A5
+    given: '--plan'
+    when: 'import runs'
+    then: 'it prints what it would write and clear, and no file on disk changes'
+non_functional: {}
+contracts:
+  - name: 'hooks-import'
+    type: behavior
