@@ -39,5 +39,13 @@ acceptance:
     given: 'an unchanged tree whose suite has already passed once in this session'
     when: 'git push runs the pre-push hook'
     then: 'stage [5/5] completes by cache replay in seconds rather than re-running ~425s of jest'
+  - id: A5
+    given: >-
+      the test task routed through turbo, and a change to the repo-root .caws/hooks
+      pack that the package-relative inputs do not currently cover
+    when: 'the pre-push test stage runs'
+    then: >-
+      the cache MISSES and the suite actually re-runs, proven by a test that mutates
+      a hook file and asserts the miss, so a cache hit can never replay a stale pass
 non_functional: {}
 contracts: []
