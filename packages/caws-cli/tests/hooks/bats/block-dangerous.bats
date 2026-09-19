@@ -744,3 +744,121 @@ _edit_env() { jq -nc --arg s "$1" --arg f "$2" '{tool_name:"Edit",tool_input:{fi
   assert_output --partial 'THIS surface does not process-kill'
   refute_output --partial 'on surfaces with kill escalation enabled'
 }
+
+# --- cross-repo remediation consistency ------------------------------------
+# CAWS-GUARD-REMEDIATION-CROSS-REPO-CONSISTENCY-01.
+#
+# The opaque-exec refusal above offers "write the probe to a script file ...
+# and run it by path". For a payload whose write target is inside a DIFFERENT
+# git repository that sentence names a route bash-write-guard refuses, and in
+# session 1aa3f0bd it is the sentence the agent followed: blocked from a direct
+# cross-repo Bash write, it wrote a script to /tmp and ran it by path.
+#
+# A remediation that names a route a sibling guard refuses is worse than no
+# remediation: it reads as authorization, from the guard itself, at the exact
+# moment the agent is looking for a way through.
+
+# Run the guard with the envelope delivered on stdin from a FILE.
+#
+# run_guard interpolates the envelope into a `bash -c "... '$envelope' ..."`
+# string, which eats unescaped inner quotes. For these tests the payload's
+# quoting is load-bearing (the write-verb predicate reads quoted path literals
+# and quoted open() modes), so a fixture mangled in transit would exercise a
+# different payload than the one written here — and would pass or fail for a
+# reason unrelated to the behavior under test.
+run_guard_stdin() {
+  local guard="$1" envelope="$2" env_file
+  env_file="$(mktemp)"
+  printf '%s' "$envelope" >"$env_file"
+  run env CLAUDE_CODE_SESSION_ID="$CAWS_TEST_SESSION_ID" \
+    CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
+    CAWS_AGENT_SURFACE="claude-code" \
+    HOOK_CWD="$CAWS_TEST_REPO" \
+    bash "$CAWS_TEST_HOOKS_DIR/$guard" <"$env_file"
+  rm -f "$env_file"
+}
+
+# A throwaway git repository that is NOT $CAWS_TEST_REPO. Echoes its path.
+_sibling_repo() {
+  local dir
+  dir="$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-sibling-XXXXXX")"
+  git -C "$dir" init -q -b main
+  git -C "$dir" config user.name 'CAWS Test'
+  git -C "$dir" config user.email 'test@caws.invalid'
+  git -C "$dir" config commit.gpgsign false
+  git -C "$dir" commit -q --allow-empty -m 'root commit'
+  printf '%s\n' "$dir"
+}
+
+@test "block-dangerous: an opaque payload WRITING into a sibling repo does not get the script-file route (B1)" {
+  local sid="xrepo-b1-$$" sib
+  sib="$(_sibling_repo)"
+  # Opaque ($VAR present) AND a python write verb against an absolute path
+  # inside another repository. write_text is used rather than open(...,'w')
+  # because run_guard round-trips the envelope through `bash -c`, which eats
+  # unescaped inner quotes — the open() arm of the write-verb predicate
+  # requires a quoted mode string, so that fixture would fail the predicate
+  # for a quoting reason rather than the behavior under test.
+  run_guard_stdin block-dangerous.sh \
+    "$(_cmd_envelope_sid "$sid" "python3 -c 'import pathlib; pathlib.Path(\"$sib/src/patch.py\").write_text(\$BODY)'")"
+  rm -rf "$sib"
+  assert_output --partial '"decision": "block"'
+  # The route a sibling guard refuses must not be printed at all.
+  refute_output --partial 'write the probe to a script file'
+  # And the refusal must say WHICH repository, so the agent is not left to
+  # guess why the usual remediation is missing — the repo path itself, not
+  # just the category.
+  assert_output --partial 'DIFFERENT git repository'
+  assert_output --partial "$sib"
+  # The replacement route must be the governed one, not a rephrasing hint.
+  assert_output --partial 'make the change from a session rooted in'
+  refute _latch_exists_for "$sid"
+}
+
+@test "block-dangerous: an opaque payload writing only in-repo / to scratch KEEPS the script-file route (B2)" {
+  local sid="xrepo-b2-$$"
+  run_guard_stdin block-dangerous.sh \
+    "$(_cmd_envelope_sid "$sid" 'node -e "require(\"fs\").writeFileSync(\"/tmp/probe-out.txt\", $DATA)"')"
+  assert_output --partial '"decision": "block"'
+  # The narrowing is targeted: an ordinary opaque payload still gets the full
+  # remediation. Without this, B1 would also pass if the option were deleted
+  # unconditionally.
+  assert_output --partial 'write the probe to a script file'
+  refute _latch_exists_for "$sid"
+}
+
+@test "block-dangerous: an opaque payload only READING a sibling repo keeps the script-file route (B3)" {
+  local sid="xrepo-b3-$$" sib
+  sib="$(_sibling_repo)"
+  # A cross-repo READ is not a route any guard refuses, so suppressing the
+  # remediation here would be over-blocking dressed as safety.
+  run_guard_stdin block-dangerous.sh \
+    "$(_cmd_envelope_sid "$sid" "python3 -c 'print(open(\"$sib/README.md\").read(), \$N)'")"
+  rm -rf "$sib"
+  assert_output --partial '"decision": "block"'
+  assert_output --partial 'write the probe to a script file'
+  refute _latch_exists_for "$sid"
+}
+
+@test "block-dangerous: the general remediation states a script file's write targets are adjudicated identically (B4)" {
+  local sid="xrepo-b4-$$"
+  run_guard_stdin block-dangerous.sh "$(_cmd_envelope_sid "$sid" 'python3 -c "print($X)"')"
+  assert_output --partial '"decision": "block"'
+  # The detector cannot see a target computed at runtime, so the general text
+  # must be correct on its own: the script-file route is a way to make the
+  # payload INSPECTABLE, never a way to reach a target the direct write could
+  # not reach.
+  assert_output --partial 'adjudicated exactly as a direct write'
+}
+
+@test "block-dangerous: with the shared target lib missing, the script-file route is NOT printed (B5)" {
+  local sid="xrepo-b5-$$"
+  # Fail toward the conservative text. A guard that cannot run the cross-repo
+  # detector must not print the sentence the detector exists to suppress —
+  # otherwise removing a lib silently restores the defect.
+  run_guard_missing_lib block-dangerous.sh bash-mutation-targets.sh \
+    "$(_cmd_envelope_sid "$sid" 'python3 -c "print($X)"')"
+  # The block itself is unaffected; only the remediation narrows.
+  assert_output --partial '"decision": "block"'
+  refute_output --partial 'write the probe to a script file'
+}
