@@ -156,3 +156,8 @@ evidence:
     evidence_ref: "Proven by decision-layer suites [lifecycle containment - record validation, field by field (A8)] (a 16-row table mutating each field of the record in turn, asserting the refusal DETAIL is [record is structurally invalid or names a different session] rather than merely asserting some refusal) and [lifecycle containment - unreadable record fails CLOSED (A8)]. Fail direction is deliberate: an unreadable origin refuses rather than being treated as no origin, which would have admitted every repo. The symlink case asserts the REAL mechanism - assertMachinePath lstats every path component, so an earlier hand-written symlink branch was unreachable dead code and was removed rather than kept alive by a test written to its shape."
     recorded_at: "2026-09-19T07:05:40.590Z"
     commit_sha: "8485bf99"
+  - criterion_id: A9
+    status: pass
+    evidence_ref: "Proven by e2e describe [reprieve grant vocabulary (A9)] - three tests: the reserved caws-lifecycle token is accepted alongside .sh handler basenames, a token that is neither is still rejected, and granting the two file-write guards does NOT demand the lifecycle plane. That last test pins the design decision: caws-lifecycle is deliberately NOT a member of GUARD_BOUNDARY_SETS cross-repo-write. The boundary-set rule exists so that lifting one channel of a two-channel boundary cannot read as authorization for the other; the lifecycle plane governs a DIFFERENT capability, so joining them would force an operator granting one to grant both."
+    recorded_at: "2026-09-19T07:05:42.710Z"
+    commit_sha: "8485bf99"
