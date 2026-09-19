@@ -2,10 +2,11 @@ id: CAWS-ADAPTER-CONFIG-ERROR-TRAPS-SESSION-01
 title: 'Machine adapter config error must not trap the session: no block on stop, and a remediation that runs'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-adapter-stop-trap
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-adapter-stop-trap at 2e8720806cf78c984d358d5edb6f4d6e5904ca90'
 created_at: '2026-09-19T02:40:00.190Z'
-updated_at: '2026-09-19T02:42:38.734Z'
+updated_at: '2026-09-19T03:04:37.168Z'
 created_by_session: '34188473-6516-4d12-a4e5-df7ff5132232'
 blast_radius:
   modules:
