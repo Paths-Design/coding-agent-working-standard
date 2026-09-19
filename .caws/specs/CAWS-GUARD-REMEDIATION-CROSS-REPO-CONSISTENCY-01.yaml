@@ -80,3 +80,8 @@ evidence:
     evidence_ref: "bats B4: the general remediation now asserts 'adjudicated exactly as a direct write'. Asserted-failing baseline: B4 reported 'not ok' pre-fix and its diff printed the old sentence verbatim — '(1) write the probe to a script file in your scope (e.g. a .py or .js file) and run it by path' — with no adjudication clause, i.e. text that reads as a route with different reach. After the change B4 is 'ok 4'. The corrected clause states the route makes the payload reviewable and does not reach anywhere a direct write could not."
     recorded_at: "2026-09-19T05:24:21.433Z"
     commit_sha: "14d0ffe19126e71e83e9da68b4115a4d92f20de3"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "bats B5 (fail-direction test): with lib/bash-mutation-targets.sh removed from the installed pack copy, block-dangerous STILL blocks the opaque payload, prints that the detector could not load and that it will not suggest a rewrite that might reach across repos, and does NOT print the script-file option. B5 reported 'not ok' pre-fix (the old code printed the harmful sentence unconditionally) and is 'ok 5' after. Separately, bash-write-guard gained a per-function declare -F check so a lib that LOADS but predates caws_foreign_repo_root / caws_bash_interpreter_write_literals exits 2 with a block rather than silently losing its cross-repo arm."
+    recorded_at: "2026-09-19T05:24:31.860Z"
+    commit_sha: "14d0ffe19126e71e83e9da68b4115a4d92f20de3"
