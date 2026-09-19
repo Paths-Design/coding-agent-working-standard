@@ -2,9 +2,10 @@ id: CAWS-PREPUSH-AUDIT-CLASSIFY-01
 title: 'pre-push distinguishes an audit FINDING from an unreachable advisory service, so a registry outage stops manufacturing a --no-verify incentive'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-prepush-audit
 created_at: '2026-09-19T17:34:24.700Z'
-updated_at: '2026-09-19T17:34:24.700Z'
+updated_at: '2026-09-19T17:34:51.858Z'
 created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
 blast_radius:
   modules:
