@@ -53,12 +53,19 @@ STUB
 }
 
 @test "scope-guard: installed hook carries NO inline node -e / js-yaml spec re-parser" {
-  # The whole point of the slice: the parallel evaluator is gone.
+  # The whole point of the slice: the parallel evaluator is gone. The hook must
+  # contain no js-yaml re-parser and no `node -e` at all — not in code, and not
+  # in message prose either, because prose that names a Bash route is exactly
+  # what overclaimed the boundary before CAWS-BASH-GUARD-INTERPRETER-WRITE-01.
+  #
+  # This asserts on the captured OUTPUT, not via refute_line. Zero matches is
+  # the intended state, and an empty stream leaves `lines` unset, so a
+  # refute_line form errors ("parameter null or not set") instead of passing —
+  # it could only ever succeed while some match survived, which made the old
+  # assertion depend on the very sentence this slice deleted.
   run grep -nE "node -e|require\\('js-yaml'\\)|yaml\\.load" "$CAWS_TEST_HOOKS_DIR/scope-guard.sh"
-  # grep finds the only remaining mentions in the cross-repo block MESSAGE text
-  # ("...node -e / python write..."), never an actual `node -e` invocation.
-  refute_line --partial "yaml.load"
-  refute_line --partial "require('js-yaml')"
+  assert_failure # grep exit 1 == no matching lines
+  assert_output ""
 }
 
 @test "scope-guard: installed hook delegates the diagnostic to caws scope show --json" {

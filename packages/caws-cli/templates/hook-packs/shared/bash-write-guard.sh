@@ -28,6 +28,14 @@
 #   remove/move/copy rm FILE   mv SRC DST   cp SRC DST   dd of=FILE
 #   git path-restore git restore FILE   git checkout -- FILE
 #                    git reset -- FILE   git clean
+#   interpreter      python / node: write targets appearing as path literals in
+#                    inline -c/-e code, heredoc bodies, or the content of a
+#                    script file named on the command line (write-verb +
+#                    path-literal co-occurrence —
+#                    CAWS-BASH-GUARD-INTERPRETER-WRITE-01). These reach the
+#                    cross-repository check only; they never enter the
+#                    worktree-claim oracle, because a literal is evidence of a
+#                    target, not proof of one.
 
 set -euo pipefail
 
@@ -203,6 +211,109 @@ abspath() {
   esac
 }
 
+# --- interpreter write-target scan (NARROW) ----------------------------------
+# CAWS-BASH-GUARD-INTERPRETER-WRITE-01: a mutation performed INSIDE an
+# interpreter names no write target on the shell command line, so the
+# recognizer above extracts nothing and the guard adjudicates an empty
+# candidate set. Writing the scratch script is permitted by design (see the
+# /tmp rationale on foreign_repo_root); running it was never adjudicated at
+# all. That pair is a complete cross-repo write channel, and it is the one
+# session 1aa3f0bd used: `cat > /tmp/apply-fix.mjs` carrying a sibling-repo
+# path, then `node /tmp/apply-fix.mjs`, both exit 0.
+#
+# This scan closes the detectable half: write targets that appear as PATH
+# LITERALS inside the interpreter's payload — inline -c/-e code, quoted
+# arguments, heredoc bodies, or the content of a script file named on the
+# command line. It is a CO-OCCURRENCE predicate: a payload is a write payload
+# only when it holds BOTH a write verb of that interpreter's language AND a
+# slash-bearing path fragment. Co-occurrence is what keeps reads legal
+# (open("<sibling>/x").read() has no write verb), and "inside a DIFFERENT git
+# repository" is what keeps /tmp scratch legal.
+#
+# Interpreter candidates are adjudicated at the CROSS-REPOSITORY boundary ONLY
+# and never enter the worktree-claim oracle. A literal in a script body is
+# evidence that the script may write there, not proof that it will; feeding
+# that to the ownership oracle would turn any in-project path merely MENTIONED
+# in a script into a claim conflict. The spec's invariant is that existing
+# behavior is unchanged everywhere else, so the high-confidence predicate is
+# the only one that acts on this weaker evidence.
+#
+# What it cannot see: a target COMPUTED at runtime — concatenated from shell
+# variables, read out of a config file, or piped in via `python3 -`. That is a
+# real residual, named honestly in scope-guard's refusal rather than papered
+# over, and it is never an admitted route.
+#
+# The open() arm requires a literal first argument AND a literal mode string
+# containing w/a/x/+, so a read-only open does not register as a write verb.
+PY_WRITE_VERBS="\.write_text\(|\.write_bytes\(|os\.(replace|rename|remove|unlink)\(|shutil\.(copyfile|copy|move)\(|open\([^)]*['\"][^'\"]*['\"][[:space:]]*,[[:space:]]*['\"][rwa+bt]*[wax+][rwa+bt]*['\"]"
+NODE_WRITE_VERBS="(writeFileSync|appendFileSync|fs\.(writeFile|appendFile|copyFile)|createWriteStream)\(|fs\.(renameSync|unlinkSync|rmSync)\("
+
+scan_interpreter_payload() {
+  # Emit __INTERP__-prefixed path-literal candidates from one interpreter
+  # payload, when and only when that payload contains a write verb for the
+  # language. Candidates are slash-bearing FRAGMENTS rather than
+  # quote-delimited spans: when the code rides inside a quoted -c/-e argument,
+  # matching on quotes lets the outer "..." consume the inner '...' and the
+  # real path literal disappears. Fragments read the same in a script file, a
+  # heredoc body, and a nested inline quote.
+  local payload="$1" verbs_re="$2" frag
+  printf '%s' "$payload" | grep -qE "$verbs_re" || return 0
+  while IFS= read -r frag; do
+    [[ -z "$frag" ]] && continue
+    printf '__INTERP__%s\n' "$frag"
+  done < <(printf '%s' "$payload" | grep -oE "[A-Za-z0-9_./~-]*/[A-Za-z0-9_./~-]*" || true)
+}
+
+scan_interpreter_targets() {
+  local cmd="$1" verbs_re=""
+  # Detect an interpreter as a COMMAND TOKEN, tokenizing the way the verb
+  # extractors do, so `node` inside a path (./node_modules/.bin/tsc) never
+  # matches and a chained invocation still does.
+  local padded
+  padded="$(printf '%s' "$cmd" \
+    | sed -E 's/[0-9]*>&[0-9-]+/ /g; s/&>>?[0-9]*/ /g' \
+    | sed -E 's/>>/ __CAWS_APPEND__ /g; s/>/ > /g; s/__CAWS_APPEND__/>>/g; s/\|/ | /g; s/;/ ; /g; s/&&/ \&\& /g')"
+  # shellcheck disable=SC2206
+  local toks=( $padded )
+  local n=${#toks[@]} i t
+  for ((i=0; i<n; i++)); do
+    t="${toks[$i]}"
+    case "$t" in
+      python|python[0-9]*|python[0-9]*.*) verbs_re="$PY_WRITE_VERBS" ;;
+      node|nodejs) verbs_re="$NODE_WRITE_VERBS" ;;
+      *) continue ;;
+    esac
+    # Payload 1: the command text itself — inline -c/-e code, quoted path
+    # arguments, and interpreter heredoc bodies. extract_targets reads the
+    # heredoc-BLANKED text; this scanner deliberately reads the RAW command so
+    # an interpreter heredoc body stays visible.
+    scan_interpreter_payload "$cmd" "$verbs_re"
+    # Payload 2: the entry script FILE named on the command line (bounded read).
+    local j=$((i+1)) t2 script=""
+    while [[ $j -lt $n ]]; do
+      t2="${toks[$j]}"
+      case "$t2" in
+        -c|-e|-m) j=$((j+2)); continue ;;
+        -*) j=$((j+1)); continue ;;
+      esac
+      case "$t2" in
+        /*.py|/*.js|/*.mjs|/*.cjs) script="$t2" ;;
+        *.py|*.js|*.mjs|*.cjs) script="$AGENT_CWD/$t2" ;;
+      esac
+      if [[ -n "$script" ]]; then
+        [[ -f "$script" ]] || script=""
+        [[ -n "$script" ]] && break
+      fi
+      j=$((j+1))
+    done
+    if [[ -n "$script" ]]; then
+      local body=""
+      body="$(head -c 524288 "$script" 2>/dev/null || true)"
+      scan_interpreter_payload "$body" "$verbs_re"
+    fi
+  done
+}
+
 # --- decide -----------------------------------------------------------------
 WORST="pass"
 WORST_DETAIL=""
@@ -219,6 +330,15 @@ escalate() {
 
 while IFS= read -r cand; do
   [[ -z "$cand" ]] && continue
+  # CAWS-BASH-GUARD-INTERPRETER-WRITE-01: candidates from the interpreter scan
+  # carry a sentinel prefix. They are weaker evidence than a named operand — a
+  # path literal in a script body, not a target the shell will definitely write
+  # — so they are adjudicated at the cross-repository boundary only and are
+  # dropped before the allowlist and the claim oracle.
+  _INTERP=0
+  case "$cand" in
+    __INTERP__*) _INTERP=1; cand="${cand#__INTERP__}" ;;
+  esac
   # Candidates arrive byte-faithful. The recognizer's lexer consumes syntactic
   # quote delimiters as it scans and never introduces a sentinel, so a quoted
   # operand already reads as the path it names and `rm "harness/wire/some
@@ -238,11 +358,34 @@ while IFS= read -r cand; do
   # Cross-repo is adjudicated BEFORE the allowlist and the claim oracle: the
   # allowlist names paths relative to THIS project, so applying it to a sibling
   # repo's tree would admit its docs/, tests/ and .caws/ wholesale.
-  _FOREIGN_REPO="$(foreign_repo_root "$abs")"
+  # An interpreter literal may be composed relative to $HOME rather than the
+  # agent cwd — `Path.home() / "Desktop/Projects/<sibling>/..."` was the shape
+  # in the field — so a non-absolute interpreter candidate is resolved against
+  # BOTH roots and blocks if EITHER resolution lands in a different repository.
+  _FOREIGN_REPO=""
+  if [[ "$_INTERP" == "1" ]]; then
+    _RES_CANDS=("$abs")
+    case "$cand" in
+      /*) ;;
+      ~*) _RES_CANDS+=("${HOME:-/nonexistent-home}/${cand#\~}") ;;
+      *)  _RES_CANDS+=("${HOME:-/nonexistent-home}/$cand") ;;
+    esac
+    for _res in "${_RES_CANDS[@]}"; do
+      _FR="$(foreign_repo_root "$_res")"
+      [[ -n "$_FR" ]] && _FOREIGN_REPO="$_FR"
+    done
+  else
+    _FOREIGN_REPO="$(foreign_repo_root "$abs")"
+  fi
   if [[ -n "$_FOREIGN_REPO" ]]; then
     escalate block "$_FOREIGN_REPO" "block_foreign_repo"
     continue
   fi
+  # Interpreter candidates stop here: the ownership oracle answers a question
+  # ("does an active worktree claim this path?") that a mere literal cannot
+  # support, and running it would make any in-project path named in a script
+  # a claim conflict.
+  [[ "$_INTERP" == "1" ]] && continue
 
   _CAND_ALLOWLISTED=0
   if declare -F caws_is_write_allowlisted >/dev/null 2>&1; then
@@ -287,7 +430,7 @@ while IFS= read -r cand; do
       fi
       ;;
   esac
-done < <(extract_targets "$COMMAND")
+done < <(extract_targets "$COMMAND"; scan_interpreter_targets "$COMMAND")
 
 # --- DYNAMIC operands -------------------------------------------------------
 # A dynamic operand (rm core/*.py) names a file-scoped mutation whose target
