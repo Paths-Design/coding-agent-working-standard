@@ -66,3 +66,8 @@ evidence:
     evidence_ref: "A1/A1b pin the hidden-count line: default run prints 'visibility: 1 of 4 shown · 1 stale hidden (--include-stale) · 2 stopped hidden (--include-stopped)' and the rows prove the filtering really happened (old-1 and gone-a absent from stdout)."
     recorded_at: "2026-09-19T11:05:24.382Z"
     commit_sha: "3d6d2f92"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "A2 pins '--include-stale given; suppressed by --active' when --active defeats a passed flag; A2b is the discriminating counterweight -- without --active the same bucket prints the bare flag and must NOT contain 'suppressed', so the note is earned rather than always-on."
+    recorded_at: "2026-09-19T11:05:26.723Z"
+    commit_sha: "3d6d2f92"
