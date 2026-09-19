@@ -76,3 +76,8 @@ evidence:
     evidence_ref: "A3/A3b pin the unconditional line: 'visibility: 2 of 2 shown · nothing hidden' with a populated set, and '0 of 0 shown · nothing hidden' on an empty lease dir, so the line's absence never has to be interpreted."
     recorded_at: "2026-09-19T11:05:31.006Z"
     commit_sha: "3d6d2f92"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "A4 pins the tier-disclosure footer naming .caws/leases (operational cache) and .caws/worktrees.json (authority); A4b writes a corrupt registry and asserts the line says 'columns unavailable' AND explicitly does not contain 'joined from' -- the claim it must not make."
+    recorded_at: "2026-09-19T11:05:35.847Z"
+    commit_sha: "3d6d2f92"
