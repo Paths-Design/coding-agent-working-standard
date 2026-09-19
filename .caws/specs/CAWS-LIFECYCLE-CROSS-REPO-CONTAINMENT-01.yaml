@@ -41,6 +41,14 @@ acceptance:
     then: >-
       every one is admitted unchanged, proving containment is a cross-repo refusal
       and not a general lifecycle brake
+  - id: A3
+    given: 'the same session with recorded origin repo A'
+    when: >-
+      it runs a governed lifecycle command from inside a LINKED WORKTREE of repo A,
+      whose cwd is not the origin path
+    then: >-
+      it is admitted, because the comparison resolves both sides to the canonical
+      root via git --git-common-dir rather than comparing cwd strings
 non_functional: {}
 contracts:
   - name: 'session-origin-record'
