@@ -8,21 +8,53 @@ updated_at: '2026-09-19T00:04:01.850Z'
 created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli doctor (kernel classifier + store observation collector)'
+    - 'repo-local hook policy'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - 'TODO: list the file(s) or directories this spec authorizes.'
+    - 'packages/caws-cli/src/store/doctor-snapshot.ts'
+    - 'packages/caws-cli/src/kernel/doctor/rules.ts'
+    - 'packages/caws-cli/src/kernel/doctor/types.ts'
+    - 'packages/caws-cli/src/kernel/doctor/inspect.ts'
+    - 'packages/caws-cli/tests/kernel/unit/doctor-repo-hook-policy.test.ts'
+    - 'packages/caws-cli/tests/store/doctor-snapshot-repo-hook-policy.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The kernel classifies; the store observes. Every comparison needing filesystem or template access (the shipped pack version, the rendered template body, the compiled chain bytes) is computed in the store and passed to the kernel as plain data, so the kernel keeps no I/O and no dependency on src/init.'
+  - 'An absent hook-policy.json is silent, never a finding. A repo that has not opted in is not in a degraded state, and a doctor that complains about it trains its readers to ignore it.'
+  - 'A document doctor cannot parse is reported as invalid rather than treated as empty. Treating an unreadable policy as absent would report a repo as healthy at the exact moment its guard plane is failing closed on every tool call.'
+  - 'Fork lag is reported at the severity the evidence supports: a fork whose upstream has NOT moved is informational (a standing, discharged decision), and only a fork whose upstream HAS moved is a warning (an outstanding retrofit). Reporting every fork as a warning would make the signal unreadable, which is how the pre-existing inversion survived.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'a repo whose hook-policy.json records a fork of a shared-pack handler at a pack_version behind the shipping SHARED_PACK_VERSION'
+    when: 'caws doctor runs'
+    then: 'a doctor.hooks.repo_policy_fork_lag finding names the handler, the recorded pack version, the shipping version and the distance, and its data payload carries them as fields rather than only in prose'
+  - id: A2
+    given: 'a fork recorded at the CURRENT pack version whose shipped template body is unchanged since it was taken'
+    when: 'caws doctor runs'
+    then: 'the fork is reported at info severity, or not at all, and never as a warning — so the warning in A1 discriminates rather than firing on every recorded fork'
+  - id: A3
+    given: 'a repo with a compiled dispatch/<event>.chain whose bytes disagree with what the current policy and installed dispatcher would compile'
+    when: 'caws doctor runs'
+    then: 'a doctor.hooks.repo_policy_chain_stale finding names each stale event and prescribes caws hooks compile, and a repo whose chains are current produces no such finding'
+  - id: A4
+    given: 'a hook-policy.json that is unparseable, or valid JSON that the repo-policy validator rejects (an over-authority floor entry, an unknown key)'
+    when: 'caws doctor runs'
+    then: 'a doctor.hooks.repo_policy_invalid finding fires at error severity carrying the validator message, and doctor does NOT also report the repo as having no policy'
+  - id: A5
+    given: 'a repo still carrying the superseded .caws/hooks/adapter-policy.json'
+    when: 'caws doctor runs'
+    then: 'a doctor.hooks.legacy_adapter_policy finding names the file and points at the hook-policy.json replacement, and a repo without that file produces no such finding'
+  - id: A6
+    given: 'a repo with no .caws/hooks/hook-policy.json at all'
+    when: 'caws doctor runs'
+    then: 'none of the four rules fire, and the doctor findings are byte-identical to the same repo before this slice existed'
+non_functional:
+  reliability:
+    - 'Every new observation is optional in the snapshot type: an unreadable or absent input yields undefined (unobserved, silent) rather than a synthesized zero value, so a collection failure can never present as a clean verdict.'
+    - 'Collection is best-effort and never throws into doctor: a malformed policy, a missing dispatch directory or an unreadable template degrades that one observation, leaving the other doctor findings intact.'
 contracts:
   - name: 'doctor.hooks repo-policy finding ids and data payloads'
     type: schema
