@@ -1,0 +1,60 @@
+id: CAWS-GUARD-REMEDIATION-CROSS-REPO-CONSISTENCY-01
+title: 'A guard''s remediation may not name a route a sibling guard refuses: block-dangerous must not offer the script-file route for a cross-repo write'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-19T04:55:04.541Z'
+updated_at: '2026-09-19T04:55:04.541Z'
+created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
+blast_radius:
+  modules:
+    - 'hook pack shared guards (block-dangerous, bash-write-guard, lib/bash-mutation-targets)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/block-dangerous.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/bash-mutation-targets.sh'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/hooks/bats/block-dangerous.bats'
+    - 'packages/caws-cli/tests/hooks/bash-write-guard-interpreter-cross-repo.test.js'
+    - 'packages/caws-cli/tests/hooks/block-dangerous-cross-repo-remediation.test.js'
+  out: []
+invariants:
+  - 'A remediation printed by one guard must not name a route a sibling guard refuses; when the payload carries a detectable cross-repo write target, the script-file route is not printed at all.'
+  - 'The cross-repo predicate has ONE implementation shared by every guard that adjudicates it, so two guards cannot disagree about what is foreign.'
+  - 'The general remediation text is correct even when the detector is blind: routing a write through a script file never reaches a target the direct write could not.'
+  - 'A missing or unloadable shared lib must not cause the harmful sentence to print; the conservative remediation is the fallback, and the block still fires.'
+acceptance:
+  - id: A1
+    given: 'an opaque python3 -c payload whose write target is a path inside a SIBLING git repository'
+    when: 'block-dangerous refuses it'
+    then: 'the refusal names the sibling repo and does NOT contain the ''write the probe to a script file ... and run it by path'' option'
+  - id: A2
+    given: 'an opaque node -e payload whose only paths are inside THIS repo or /tmp'
+    when: 'block-dangerous refuses it'
+    then: 'the script-file option is still offered, so the narrowing is targeted rather than a blanket removal'
+  - id: A3
+    given: 'an opaque payload that only READS from a sibling repo (no write verb)'
+    when: 'block-dangerous refuses it for opacity'
+    then: 'the script-file option is still offered, because a cross-repo read is not a refused route'
+  - id: A4
+    given: 'the general (non-cross-repo) remediation'
+    when: 'it is printed'
+    then: 'it states that a script file''s write targets are adjudicated exactly as a direct write, so the route cannot reach a target the direct write could not'
+  - id: A5
+    given: 'lib/bash-mutation-targets.sh is missing or fails to load'
+    when: 'block-dangerous refuses an opaque payload'
+    then: 'the command is still blocked and the script-file option is NOT printed (fail toward the conservative text)'
+  - id: A6
+    given: 'the extracted shared detector'
+    when: 'bash-write-guard adjudicates the interpreter cross-repo cases it already covered'
+    then: 'every existing decision is unchanged, proving the extraction is behavior-preserving'
+non_functional: {}
+contracts:
+  - name: 'cross-repo-remediation-consistency'
+    type: behavior
+  - name: 'shared-cross-repo-detector'
+    type: behavior
