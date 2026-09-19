@@ -18,7 +18,11 @@ scope:
     - '.husky/tests/run.sh'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A real finding always refuses. The unreachable branch may never absorb a case where an advisory report was actually obtained; presence of the report is the discriminator, and when a report exists npm''s own exit code decides.'
+  - 'Classification falls toward refusing. Only positive evidence of a transport failure (no report AND an explicit endpoint/network error) selects the non-refusing branch; any other unclassifiable non-zero exit refuses. An unknown failure is not an outage.'
+  - 'The unreachable branch must state what it did NOT verify. Announcing ''the advisory service is unreachable'' while implying the dependency tree was checked would be a worse lie than the collapsed message it replaces.'
+  - 'Softening this one stage is what keeps the other four hard. A permanently-stuck audit leaves --no-verify as the only lever, and that disables typecheck, lint, build and the full test suite too. The trade is deliberate: an announced unverified audit beats a wholesale bypass of every gate.'
+  - 'The hook keeps its no-environment-variable-escape-hatch property. Classification is derived from what npm actually returned, never from a caller-supplied flag, because a gate that can be told to stand down is not a gate.'
 acceptance:
   - id: A1
     given: 'npm audit returns an advisory report containing at least one critical vulnerability'
