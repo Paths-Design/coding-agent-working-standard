@@ -55,3 +55,8 @@ evidence:
     evidence_ref: "tests/shell/agents-binding-join.test.js A1 + A1b + A1c, run at 2eb69a0a: a registry with wt-a(SPEC-A) and wt-b(SPEC-B) both owned by sess-two renders 'sess-two  wt-a,wt-b  SPEC-A,SPEC-B' -- both names, both spec ids, index-aligned columns. A1b proves the join keys on owner.session_id and does not cross-attribute between two owners; A1c proves a record without specId renders its name with (no spec) rather than being dropped. Baseline before the fix: these three failed, printing '(no worktree)  (no spec)'."
     recorded_at: "2026-09-19T10:16:49.036Z"
     commit_sha: "2eb69a0a"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "tests/shell/agents-binding-join.test.js A2 + A2b, run at 2eb69a0a: with worktrees.json readable and the session owning nothing, the line reads 'sess-none  (no worktree)  (no spec)' and contains no 'unknown'. The distinction is load-bearing: loadWorktrees returns ok({}) for a MISSING registry too, so an empty or absent registry is READ, and the absence is observed rather than asserted. Cross-check: the out-of-scope tests/shell/agents-work-state.test.js:140, which asserts exactly /sess-without\\s+\\(no worktree\\)\\s+\\(no spec\\)\\s*$/, stays green unmodified -- the join does not regress the case the old renderer got right by accident."
+    recorded_at: "2026-09-19T10:17:00.267Z"
+    commit_sha: "2eb69a0a"
