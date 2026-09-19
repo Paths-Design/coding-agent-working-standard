@@ -2,9 +2,10 @@ id: CAWS-HOOKS-POLICY-DOCTOR-RULES-01
 title: 'Doctor reports repo hook-policy drift: fork lag, stale chains, invalid documents, legacy adapter-policy'
 risk_tier: 2
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-policy-doctor
 created_at: '2026-09-19T00:04:01.850Z'
-updated_at: '2026-09-19T00:04:01.850Z'
+updated_at: '2026-09-19T00:05:04.686Z'
 created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
 blast_radius:
   modules:
