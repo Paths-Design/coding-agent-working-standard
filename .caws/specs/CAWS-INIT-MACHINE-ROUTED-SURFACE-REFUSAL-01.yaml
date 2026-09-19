@@ -1,0 +1,46 @@
+id: CAWS-INIT-MACHINE-ROUTED-SURFACE-REFUSAL-01
+title: 'caws init refuses to wire project-local hooks for a surface the machine runtime already serves, and names the back-out'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-19T07:32:53.648Z'
+updated_at: '2026-09-19T07:32:53.648Z'
+created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
+blast_radius:
+  modules:
+    - 'TODO: list one or more modules this spec touches.'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/init.ts'
+    - 'packages/caws-cli/src/init/system-runtime.ts'
+    - 'packages/caws-cli/tests/shell/init-machine-routed-refusal.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'a machine with a registered adapter for the requested agent surface whose system settings are absent or disabled'
+    when: 'caws init --agent-surface <that surface> runs in a repo'
+    then: 'it refuses before writing anything, naming that the machine runtime already serves the surface, and prints the back-out command'
+  - id: A2
+    given: 'a machine with NO registered adapter for the requested surface'
+    when: 'caws init --agent-surface <that surface> runs'
+    then: 'it proceeds and wires the project pack unchanged, because on a fresh machine project wiring is the only way to get guards and a refusal there would leave the repo ungoverned'
+  - id: A3
+    given: 'a machine where the requested surface is registered AND system settings are enabled'
+    when: 'caws init --agent-surface <that surface> runs'
+    then: 'behavior is unchanged from today - the hook-pack step is planned as none and init succeeds, so the documented shared-core refresh workflow keeps working'
+  - id: A4
+    given: 'the refusal above'
+    when: 'an operator reads it'
+    then: 'it names a command runnable from OUTSIDE the trapped session, because the whole point is that project hooks wired over machine routing can block every subsequent tool call including the exit'
+  - id: A5
+    given: 'caws init --plan --agent-surface <a machine-served surface>'
+    when: 'it runs'
+    then: 'it reports the refusal as a plan outcome and writes nothing, so the condition is discoverable before it lands rather than only after'
+non_functional: {}
+contracts:
+  - name: 'init-machine-routed-refusal'
+    type: behavior
