@@ -77,3 +77,9 @@ evidence:
     recorded_at: "2026-09-19T00:28:17.175Z"
     artifact_path: packages/caws-cli/tests/kernel/unit/doctor-repo-hook-policy.test.ts
     commit_sha: "18e80d74"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "A3 chain staleness names each stale event, prescribes caws hooks compile, and is silent when current. Measured through checkCompiledChains — the SAME comparator caws hooks compile and compile --check use, extracted into hook-chain.ts precisely so doctor cannot disagree with them. Store arms over REAL shipped dispatchers copied into a fixture: 'freshly compiled sidecars report NO stale chains' (the silence half); 'a policy with NO compiled sidecar at all reports every installed event stale' (reason 'no compiled chain on disk'); 'editing the policy after compiling makes the sidecar stale' (reason 'compiled against a different hook-policy.json'; every sidecar goes stale because the header records the whole-document digest); 'a HAND-EDITED sidecar whose header still matches is caught by the body comparison' (reason 'compiled chain body differs from the current policy' — the case a digest-only check would call fresh); 'an event with no installed dispatcher is not reported'. Kernel arms assert severity warning, narrowRepair contains 'caws hooks compile', data.stale_events carries event+reason, and the message names all five project-wired surfaces. Rendered live: the end-to-end arm asserts the real caws doctor binary prints 'doctor.hooks.repo_policy_chain_stale'. Run: npx jest tests/kernel/unit/doctor-repo-hook-policy.test.ts tests/store/doctor-snapshot-repo-hook-policy.test.js => 39 passed."
+    recorded_at: "2026-09-19T00:28:19.699Z"
+    artifact_path: packages/caws-cli/tests/store/doctor-snapshot-repo-hook-policy.test.js
+    commit_sha: "18e80d74"
