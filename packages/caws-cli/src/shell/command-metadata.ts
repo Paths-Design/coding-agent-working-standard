@@ -861,7 +861,14 @@ export const WORKTREE_COMMAND_META: GroupCommandMeta = {
       name: 'list',
       description:
         'List registered worktrees with branch, lane divergence from base (ahead/behind), spec binding, and owner.',
-      options: [DATA_OPTION],
+      options: [
+        {
+          flag: '--json',
+          description:
+            'Emit the same facts as machine-readable JSON, with full owner session ids and null divergence counts where a ref does not resolve',
+        },
+        DATA_OPTION,
+      ],
     },
     {
       kind: 'leaf',

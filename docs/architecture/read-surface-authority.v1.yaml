@@ -166,7 +166,21 @@ read_surfaces:
     subject: worktree set
     tier: authority
     asserts: [worktree_ownership, worktree_spec_binding]
-    is_not: a liveness surface; an owner shown here may be long gone
+    renderings:
+      human: >-
+        one padded row per worktree; the owner is abbreviated to eight
+        characters and an unbound spec prints as `(unbound)`
+      json: >-
+        --json emits the same facts from the same computed rows, adding the
+        full owner session id, the absolute path, and a computed_at stamp.
+        Abbreviation in the human form is allowed; omission from either form
+        is not.
+    is_not: >-
+      a liveness surface; an owner shown here may be long gone. Nor is it a
+      cached one: the divergence counts read LOCAL refs at the instant named
+      by computed_at, and a peer landing work moves them. An unresolvable ref
+      reports null counts with an unknown_reason and is never flattened to
+      `ahead=0 behind=0`, which would read as a current lane.
   claim:
     subject: current working directory
     tier: authority
@@ -297,9 +311,6 @@ known_nonconformance:
       session id, persisted status and derived classification are rendered as
       labelled lines, but every other lease field is only legible as JSON
     contrast: '`status` renders lease fields as a human row'
-  - surface: worktree list
-    violates: rendering_obligations.parity
-    observed: the authoritative ownership and binding surface accepts no options at all and has no --json
   - surface: doctor
     violates: rendering_obligations.refusal_consistency
     observed: '--json is accepted and ignored unless --repair-plan is also passed; claim refuses the identical misuse with guidance'

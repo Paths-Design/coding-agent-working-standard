@@ -365,10 +365,42 @@ export function runWorktreeCreateCommand(opts: WorktreeCreateOptions): number {
 
 // ─── caws worktree list ───────────────────────────────────────────────────
 
-export type WorktreeListOptions = BaseCommandOptions;
+export interface WorktreeListOptions extends BaseCommandOptions {
+  readonly json?: boolean;
+}
+
+/**
+ * One registry row joined with its lane divergence, computed ONCE and
+ * rendered twice.
+ *
+ * Both renderings read this same array rather than each deriving the facts
+ * themselves. That makes the parity obligation structural: a fact cannot
+ * appear in one form and be missing from the other, because there is only one
+ * place a fact comes from.
+ */
+interface WorktreeListRow {
+  readonly name: string;
+  readonly branch: string;
+  readonly base_branch: string;
+  readonly spec_id: string | null;
+  readonly owner: { readonly session_id: string; readonly platform?: string } | null;
+  /** Relative to the repo root — the form the human row prints. */
+  readonly path: string;
+  readonly absolute_path: string;
+  readonly divergence: {
+    readonly ahead: number | null;
+    readonly behind: number | null;
+    readonly contains_base: boolean | null;
+    /** Non-null means the counts could not be computed. Never flattened to
+     *  zero: `ahead=0 behind=0` reads as "this lane is current", which is the
+     *  one answer that is actively wrong for an unresolvable ref. */
+    readonly unknown_reason: string | null;
+  };
+}
 
 export function runWorktreeListCommand(opts: WorktreeListOptions = {}): number {
-  const { cwd, out, err, showData } = setupIO(opts);
+  const { cwd, nowFn, out, err, showData } = setupIO(opts);
+  const json = opts.json === true;
   const ctx = resolveCawsCtx(cwd, err, showData, 'list');
   if (ctx === null) return 2;
 
@@ -378,30 +410,93 @@ export function runWorktreeListCommand(opts: WorktreeListOptions = {}): number {
     err(renderDiagnostics(result.errors, { showData }));
     return 1;
   }
-  if (result.value.entries.length === 0) {
-    out('(no worktrees registered)');
-    return 0;
-  }
+
   // WORKTREE-LANE-DIVERGENCE-SURFACE-001: "what is this lane?" was already
   // answered here; "is it current?" was not, and agents dropped to raw
   // `git rev-list --left-right --count` to find out. Divergence is read-only
   // git plumbing over refs this process already shares, so it joins the row
   // rather than living in a second command.
-  let staleLanes = 0;
-  const unavailable: string[] = [];
-  for (const entry of result.value.entries) {
-    const rel = path.relative(ctx.repoRoot, entry.path);
-    const ownerStr = entry.owner ? entry.owner.session_id.slice(0, 8) : 'unowned';
-    const specStr = entry.specId ?? '(unbound)';
+  const rows: WorktreeListRow[] = result.value.entries.map((entry) => {
     const divergence = computeLaneDivergence(ctx.repoRoot, entry.branch, entry.baseBranch);
+    return {
+      name: entry.name,
+      branch: entry.branch,
+      base_branch: entry.baseBranch,
+      spec_id: entry.specId ?? null,
+      owner:
+        entry.owner === undefined || entry.owner === null
+          ? null
+          : {
+              session_id: entry.owner.session_id,
+              ...(entry.owner.platform !== undefined ? { platform: entry.owner.platform } : {}),
+            },
+      path: path.relative(ctx.repoRoot, entry.path),
+      absolute_path: entry.path,
+      divergence: {
+        ahead: divergence.ahead,
+        behind: divergence.behind,
+        contains_base: divergence.containsBase,
+        unknown_reason: divergence.unknownReason,
+      },
+    };
+  });
+
+  const staleLanes = rows.filter(
+    (r) =>
+      r.divergence.unknown_reason === null &&
+      r.divergence.behind !== null &&
+      r.divergence.behind > 0
+  ).length;
+  const unavailable = rows
+    .filter((r) => r.divergence.unknown_reason !== null)
+    .map((r) => `${r.name}: ${String(r.divergence.unknown_reason)}`);
+
+  if (json) {
     out(
-      `${entry.name.padEnd(28)} ${entry.branch.padEnd(20)} → ${entry.baseBranch.padEnd(12)} ${formatLaneCounts(divergence).padEnd(22)} spec=${specStr.padEnd(20)} owner=${ownerStr.padEnd(10)} ${rel}`
+      JSON.stringify(
+        {
+          ok: true,
+          // worktrees.json is the AUTHORITY for ownership and spec binding.
+          // Named here so a consumer does not have to infer it, and so this
+          // payload is never confused with a lease-derived one.
+          source: '.caws/worktrees.json',
+          // The divergence counts are a point-in-time read of LOCAL refs that
+          // a peer's next merge invalidates. Timestamped so a cached response
+          // cannot be mistaken for a current one.
+          computed_at: nowFn().toISOString(),
+          worktrees: rows,
+          counts: {
+            total: rows.length,
+            behind_base: staleLanes,
+            divergence_unavailable: unavailable.length,
+          },
+        },
+        null,
+        2
+      )
     );
-    if (divergence.unknownReason !== null) {
-      unavailable.push(`${entry.name}: ${divergence.unknownReason}`);
-    } else if (divergence.behind !== null && divergence.behind > 0) {
-      staleLanes += 1;
-    }
+    return 0;
+  }
+
+  if (rows.length === 0) {
+    out('(no worktrees registered)');
+    return 0;
+  }
+
+  for (const row of rows) {
+    const ownerStr = row.owner ? row.owner.session_id.slice(0, 8) : 'unowned';
+    const specStr = row.spec_id ?? '(unbound)';
+    const counts = formatLaneCounts({
+      branch: row.branch,
+      baseBranch: row.base_branch,
+      ahead: row.divergence.ahead,
+      behind: row.divergence.behind,
+      containsBase: row.divergence.contains_base,
+      unknownReason: row.divergence.unknown_reason,
+    });
+    out(
+      `${row.name.padEnd(28)} ${row.branch.padEnd(20)} → ${row.base_branch.padEnd(12)} ${counts.padEnd(22)} spec=${specStr.padEnd(20)} owner=${ownerStr.padEnd(10)} ${row.path}`
+    );
   }
 
   // An unresolvable ref is reported by name and reason rather than rendered as
@@ -423,7 +518,7 @@ export function runWorktreeListCommand(opts: WorktreeListOptions = {}): number {
   if (staleLanes > 0) {
     out('');
     out(
-      `${staleLanes} of ${result.value.entries.length} lane(s) are missing commits from their base (behind > 0 above).`
+      `${staleLanes} of ${rows.length} lane(s) are missing commits from their base (behind > 0 above).`
     );
     out('  Reconcile now: from inside the worktree, git merge <base>.');
     out(
