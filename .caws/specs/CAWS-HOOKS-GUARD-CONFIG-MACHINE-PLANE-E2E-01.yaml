@@ -1,0 +1,31 @@
+id: CAWS-HOOKS-GUARD-CONFIG-MACHINE-PLANE-E2E-01
+title: 'Prove the machine-routed plane honors tier-2 guard config end to end'
+risk_tier: 2
+mode: chore
+lifecycle_state: draft
+created_at: '2026-09-19T01:51:52.614Z'
+updated_at: '2026-09-19T01:51:52.614Z'
+created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
+blast_radius:
+  modules:
+    - 'machine-routed hook plane: bin/caws-hook launcher + shared run-handlers guard-config load'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/tests/adapter/system-runtime.test.js'
+  out: []
+invariants:
+  - 'The assertion must drive the REAL launcher (python3 $home/bin/caws-hook <surface> pre_tool_use --system) against an isolated CAWS_HOME, not a project-wired dispatcher — the project-wired half is already covered by tests/hooks/bats/guard-config-adopters.bats and proves nothing about caws_source_lib resolution.'
+  - 'The no-config baseline must be asserted and must FAIL to admit, or the configured arm passes vacuously — the same trap that made six project-wired arms vacuous before the oracle was corrected.'
+acceptance:
+  - id: A1
+    given: 'an isolated machine runtime installed from the current shared manifest, and a repo declaring guards.scope-guard.sh.additional_allow_prefixes'
+    when: 'the identical pre_tool_use envelope is driven through bin/caws-hook with and without the document'
+    then: 'the verdict differs — refused without, admitted with — proving caws_source_lib resolves guard-config.sh and its sibling parser on the machine plane'
+  - id: A2
+    given: 'the machine runtime install set built by runtimeFiles()'
+    when: 'it is enumerated'
+    then: 'it contains lib/guard-config.sh AND lib/guard-config.py, because run-handlers.sh does ''caws_source_lib guard-config.sh || return 2'' on the machine branch — a missing lib would abort the whole handler chain with exit 2 on every machine-routed tool call, not degrade'
+non_functional: {}
+contracts: []
