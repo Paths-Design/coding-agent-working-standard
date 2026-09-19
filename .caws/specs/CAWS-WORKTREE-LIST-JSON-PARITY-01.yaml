@@ -77,3 +77,8 @@ evidence:
     evidence_ref: "tests/shell/worktree-list-json.test.js C4 at 94d7c62a: an initialized repo with no registry yields exit 0, empty stderr, ok true, worktrees deep-equal [], and counts {total:0, behind_base:0, divergence_unavailable:0}. The empty case needed explicit handling because the pre-change code returned early with the '(no worktrees registered)' prose line before any rendering branch existed; emitting that string under --json would have produced unparseable output. Asserting err is exactly '' rules out the variant where the payload is correct but a diagnostic is also written."
     recorded_at: "2026-09-19T10:46:35.166Z"
     commit_sha: "94d7c62a"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "tests/shell/worktree-list-json.test.js C5 + C5b at 94d7c62a. C5 asserts the human footer prints '1 of 3 lane(s) are missing commits' for the three-lane fixture AND that counts deep-equals {total:3, behind_base:1, divergence_unavailable:1} -- the same signal reaching the machine reader, which is the parity direction that is easy to forget because the footer is prose. C5b is the must-stay-quiet counterweight: with a single lane at base tip the footer does not fire ('missing commits' absent) and behind_base is 0, so a counts field hardcoded to 1 fails. Note the two counters are disjoint by construction: an unavailable lane is excluded from behind_base rather than counted as stale, matching the pre-existing human-form logic."
+    recorded_at: "2026-09-19T10:46:36.425Z"
+    commit_sha: "94d7c62a"
