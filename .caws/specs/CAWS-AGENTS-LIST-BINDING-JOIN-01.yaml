@@ -1,0 +1,50 @@
+id: CAWS-AGENTS-LIST-BINDING-JOIN-01
+title: 'caws agents list joins the worktree registry instead of asserting (no worktree) for every session, and renders unknown when the registry cannot be read'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-19T10:04:32.439Z'
+updated_at: '2026-09-19T10:04:32.439Z'
+created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
+blast_radius:
+  modules:
+    - 'caws-cli agents list renderer and JSON view'
+    - 'docs/architecture read-surface authority contract'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/agents.ts'
+    - 'packages/caws-cli/tests/shell/agents-binding-join.test.js'
+    - 'docs/architecture/read-surface-authority.v1.yaml'
+  out: []
+invariants:
+  - 'The binding is JOINED from .caws/worktrees.json at render time and never copied into the lease. A lease is operational cache; writing authority into it creates a second copy that can disagree with the authority, which is the failure class the read-surface contract exists to prevent.'
+  - 'Three outcomes are distinguished and never collapsed: the registry could not be read (unknown), the registry was read and the session owns nothing (observed absence, honest to state), and the session owns one or more worktrees (name them).'
+  - 'A session may own MORE THAN ONE worktree. The rendering must not silently show only the first.'
+  - 'The contract file is updated in the same slice: agents list declares the joined domains it now asserts, and its known_nonconformance entry is removed only because the defect is gone, never to make the list look clean.'
+acceptance:
+  - id: A1
+    given: 'a session that owns two worktrees in .caws/worktrees.json'
+    when: 'caws agents list runs'
+    then: 'both worktree names and both bound spec ids are shown for that session, proving the join is by owner identity and is not truncated to the first match'
+  - id: A2
+    given: 'a readable registry in which a session owns no worktree'
+    when: 'caws agents list runs'
+    then: 'it states the absence plainly, because with the registry read the absence is OBSERVED rather than asserted from a field that has no writer'
+  - id: A3
+    given: 'an unreadable or malformed .caws/worktrees.json'
+    when: 'caws agents list runs'
+    then: 'the binding columns render unknown, the command still lists sessions and exits successfully, and it never prints an absence it could not source'
+  - id: A4
+    given: 'the JSON output of caws agents list'
+    when: 'it is compared with the human output for the same session'
+    then: 'both carry the same binding facts, satisfying the parity obligation, and no always-null field remains in the payload'
+  - id: A5
+    given: 'the read-surface authority contract'
+    when: 'it is read after this change'
+    then: 'agents list declares the joined fact domains with worktrees.json named as their authority, and the (no worktree) known_nonconformance entry is removed because the code no longer does it'
+non_functional: {}
+contracts:
+  - name: 'read-surface-unsourced-fact'
+    type: behavior
