@@ -408,6 +408,26 @@ run_handlers() {
     [[ -f "${HOOKS_DIR}/lib/reprieve.sh" ]] && source "${HOOKS_DIR}/lib/reprieve.sh" 2>/dev/null || true
   fi
 
+  # Tier-2 guard configuration: parse ONCE here, for the whole chain.
+  #
+  # Every adopting guard then reads plain exported variables and spawns
+  # nothing. Measured on an M-series mac a python3 start is ~31ms, so four
+  # guards parsing independently would add ~124ms to EVERY tool call while one
+  # shared parse stays inside the noise of a chain that already spawns python3
+  # a dozen-plus times. Called directly rather than in a subshell precisely so
+  # the exports survive into the handler loop.
+  if [[ "${CAWS_MACHINE_RUNTIME:-}" == 1 ]]; then
+    caws_source_lib guard-config.sh || return 2
+  else
+    [[ -f "${HOOKS_DIR}/lib/guard-config.sh" ]] \
+      && source "${HOOKS_DIR}/lib/guard-config.sh" 2>/dev/null || true
+  fi
+  # A pack predating this lib simply has no function to call, and every
+  # adopting guard falls back to its shipped table — degraded, never disarmed.
+  if declare -F caws_guard_config_load >/dev/null 2>&1; then
+    caws_guard_config_load "${CAWS_PROJECT_DIR:-.}" || true
+  fi
+
   # Accept both surface-neutral (CAWS_HOOK_*) and legacy (CLAUDE_HOOK_*)
   # env var names for dry-run / timing so that existing consumer configs
   # that set CLAUDE_HOOK_DRY_RUN keep working during the migration period.
