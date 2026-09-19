@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-goal-ac-gate
 created_at: '2026-09-18T23:49:52.986Z'
-updated_at: '2026-09-19T00:51:13.140Z'
+updated_at: '2026-09-19T01:31:17.588Z'
 created_by_session: '34188473-6516-4d12-a4e5-df7ff5132232'
 blast_radius:
   modules:
@@ -25,6 +25,13 @@ scope:
     - packages/caws-cli/src/init/hook-packs/manifest-shared.ts
     - packages/caws-cli/tests/init/pack-fingerprints.json
     - packages/caws-cli/templates/hook-packs/shared/lib/run-handlers.sh
+    - packages/caws-cli/src/shell/index.ts
+    - packages/caws-cli/mutation-policy.json
+    - packages/caws-cli/tests/adapter/machine-handler-policy.test.js
+    - packages/caws-cli/tests/ci/mutation-contract.test.js
+    - packages/caws-cli/templates/CLAUDE.md
+    - packages/caws-cli/templates/agents.md
+    - packages/caws-cli/tests/docs/cli-help-context.test.js
   out: []
 invariants:
   - 'The gate is opt-in: with no goal binding for the session it is a no-op, and the stock stop chain behaves exactly as it did before this feature'
@@ -57,3 +64,29 @@ non_functional: {}
 contracts:
   - name: 'stop-gate'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Unmet acceptance blocks the stop and names each criterion verbatim. Pinned by packages/caws-cli/tests/hooks/bats/goal-ac-gate.bats: 'A1: an unmet criterion blocks the stop and names its id and verdict' (asserts '\"decision\":\"block\"', 'A2=not_rederived', 'no_evidence', and refutes 'A1=verified'), plus 'not_rederived is treated as unmet, never as a pass' and 'a refuted criterion blocks'. Falsifiability shown by mutation: changing the verdict predicate to treat not_rederived as a pass kills 11 of 27 tests. Also demonstrated end to end against the REAL CLI (not a stub): 'caws goal set CAWS-GOAL-AC-STOP-GATE-01' then the real goal-ac-gate.sh invoking the real 'caws specs verify-acs --json' emitted {\"decision\":\"block\",\"reason\":\"...A1=not_rederived(no_evidence), A2=..., A5=not_rederived(no_evidence)...Block 1 of 3...\"}. Run: cd packages/caws-cli && npx bats tests/hooks/bats/goal-ac-gate.bats => 27/27."
+    recorded_at: "2026-09-19T01:36:05.755Z"
+    commit_sha: f4bc5d2e
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Fully verified acceptance releases the stop silently. Pinned by goal-ac-gate.bats 'A2: every criterion verified emits no control decision and exits 0' (assert_success + refute_output, so ANY stdout fails) and 'A2: a met goal resets the consecutive-block counter' (asserts the counter sidecar is absent afterwards, i.e. a later regression gets a full budget rather than a spent one). Also proven through the real Stop dispatcher: 'E2E: a met goal leaves the Stop dispatcher emitting no control decision'. Falsifiable: the verdict-predicate mutant that treats not_rederived as verified flips A2's counter-reset test to failing. Run: cd packages/caws-cli && npx bats tests/hooks/bats/goal-ac-gate.bats => 27/27."
+    recorded_at: "2026-09-19T01:36:26.089Z"
+    commit_sha: f4bc5d2e
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Opt-in: no binding means the stop chain is byte-identical to the pre-feature chain. Pinned by goal-ac-gate.bats 'A3: with no goal binding the gate is inert (exit 0, no stdout)' (assert_success + refute_output) and 'E2E: with no binding the Stop dispatcher is unchanged by this feature' (drives the real dispatch/stop.sh and refutes both a block decision and any goal-ac-gate output). Demonstrated live: after 'caws goal clear' the real hook produced stdout+stderr=[] exit=0. IMPORTANT SCOPE LIMIT ON THIS PROOF: inertness is asserted as empty stdout and exit 0, NOT as a byte-for-byte diff of the whole chain's observable behavior against the pre-feature build; a finalizer side effect that produces no stdout would not be caught. Commit fb23fbc4 is cited because it fixed a case where the gate was inert for the WRONG reason (binding resolved at the worktree root instead of canonical), which the 26 prior tests could not distinguish. Run: cd packages/caws-cli && npx bats tests/hooks/bats/goal-ac-gate.bats => 27/27."
+    recorded_at: "2026-09-19T01:36:46.845Z"
+    commit_sha: fb23fbc4
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "A gate that cannot evaluate must refuse, never pass the stop silently. Pinned by four goal-ac-gate.bats cases: 'verify-acs producing no report blocks and names the failure plus the escape', 'a malformed verify-acs report blocks rather than passing' (PARSE_ERROR), 'a report declaring no criteria blocks rather than passing vacuously' (NO_CRITERIA), 'a binding naming no spec_id blocks and says how to re-set it'. Each asserts the literal escape 'caws goal clear' is present. Commit 7651d448 closed five fail-OPEN paths this AC depends on, three found by review and two found by the new tests failing: emit_block itself required python3 (a present-but-broken interpreter emitted nothing and RELEASED the stop), and parse_hook_input reported a failed python3 extraction as session id 'unknown' which the old code treated as no-binding, disabling the gate upstream of every refusal path. Falsifiability shown by mutation: removing the bash fallback in emit_block kills exactly the 3 python3 tests; disabling budget validation kills exactly 2. Run: cd packages/caws-cli && npx bats tests/hooks/bats/goal-ac-gate.bats => 27/27."
+    recorded_at: "2026-09-19T01:37:07.349Z"
+    commit_sha: "7651d448"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "A goal can never trap a session. Pinned by goal-ac-gate.bats 'A5: after the block budget is exhausted the gate releases the stop with a warning' (blocks 3x then assert_success + refute_output block + asserts the warning still names the unmet criteria), 'the block counter reports its position so the agent can see the budget' (Block 1 of 3, Block 2 of 3), 'a CHANGED unmet set resets the budget so real progress is never punished', 'the budget is overridable'. Commit 7651d448 fixed the material gap: the budget originally bounded ONLY the unmet-criteria path, while every gate-FAILURE block (no report, PARSE_ERROR, NO_CRITERIA, unreadable binding, classifier failure) bypassed the counter entirely and would have blocked forever — the exact trap this invariant forbids. All seven block paths now route through one bounded helper whose counter is pure bash, so bounding still holds when python3 is the thing that broke; pinned by 'a persistent gate FAILURE is bounded', 'an unreadable binding blocks bounded', 'a missing python3 is still BOUNDED and releases after the budget'. Falsifiability: reverting one gate-failure path to an unbounded emit_block kills exactly 1 test. Run: cd packages/caws-cli && npx bats tests/hooks/bats/goal-ac-gate.bats => 27/27."
+    recorded_at: "2026-09-19T01:37:24.491Z"
+    commit_sha: "7651d448"

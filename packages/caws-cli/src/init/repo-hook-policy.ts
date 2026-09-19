@@ -125,10 +125,106 @@ export interface RepoSurfacePolicy {
   forks: Record<string, PolicyFork>;
 }
 
+/**
+ * TIER 2 — what data a running guard uses, as opposed to which guards run.
+ *
+ * The authority boundary here is NOT the `command-adapters` rule that no key
+ * may name a decision, because that rule does not transplant: adding `native/`
+ * to an allow table IS a verdict change for `native/`. The boundary is drawn
+ * on DIRECTION and FLOOR instead — every key is `additional_*` or a clamped
+ * threshold, so no repo-declared entry can remove, replace or reorder a
+ * shipped one. That is what makes fail-closed cheap: discarding the document
+ * is always the STRICTER direction, so a malformed config degrades toward
+ * refusal, never toward permission.
+ */
+export interface GuardPrefixEntry {
+  prefix: string;
+  /** Rendered by doctor and `hooks list`; "the guard is broken" becomes reviewable. */
+  reason: string;
+}
+
+export interface GuardConfig {
+  additional_allow_prefixes: GuardPrefixEntry[];
+  thresholds: Record<string, number>;
+}
+
+/**
+ * Which guards admit configuration, and what each one admits.
+ *
+ * A closed set on purpose. An unknown guard name would otherwise be a typo
+ * that silently configures nothing — the "reports success while doing
+ * nothing" class this repo treats as the most dangerous, and the one most
+ * likely to send an operator looking for a bypass when the setting they
+ * "already applied" has no effect.
+ *
+ * Deliberately ABSENT, because these tables ARE the floor:
+ * protected-paths.sh artifact classes, write-allowlist.sh's
+ * `.caws/worktrees/*` payload exclusion, scope-guard.sh foreign-repo
+ * containment, the guard-strikes 1/2/3 ramp and CAWS_TRAP_KILL.
+ */
+export interface GuardConfigSchema {
+  /** Whether this guard reads `additional_allow_prefixes`. */
+  prefixes: boolean;
+  /** Admitted threshold names with their clamps. */
+  thresholds: Record<string, { min: number; max: number }>;
+}
+
+export const GUARD_CONFIG_SURFACE: Readonly<Record<string, GuardConfigSchema>> = {
+  // Highest leverage first: one arm here fixes BOTH write guards, and they
+  // cannot desynchronize because they share the admission function.
+  'write-allowlist.sh': { prefixes: true, thresholds: {} },
+  'scope-guard.sh': { prefixes: true, thresholds: {} },
+  'god-object-check.sh': {
+    prefixes: false,
+    thresholds: { loc: { min: 100, max: 100000 }, delta: { min: 10, max: 100000 } },
+  },
+  'loc-delta-check.sh': { prefixes: false, thresholds: { delta: { min: 10, max: 100000 } } },
+};
+
+/**
+ * R2: keys that name a VERDICT rather than data, refused at any depth.
+ *
+ * Extends the `classify_command.py` denylist. A document may describe WHAT a
+ * guard looks at; it may never describe what the guard decides.
+ */
+export const GUARD_DECISION_KEYS: readonly string[] = [
+  'decision',
+  'allow',
+  'deny',
+  'ask',
+  'policy',
+  'outcome',
+  'severity',
+  'override',
+  'enforcement',
+  'exit_code',
+  'verdict',
+];
+
+/**
+ * R3: prefixes that may never be widened by configuration, because they are
+ * the governance plane that adjudicates the configuration.
+ */
+export const GUARD_RESERVED_PREFIXES: readonly string[] = [
+  '.caws',
+  '.git',
+  '.github/workflows',
+  '.claude',
+  '.codex',
+  '.qwen',
+  '.zcode',
+  '.opencode',
+  '.kimi',
+];
+
+/** Caps. A config is a few lines of intent, not a database. */
+const MAX_PREFIX_ENTRIES = 64;
+const MAX_PREFIX_LENGTH = 200;
+
 export interface RepoHookPolicy {
   version: number;
   surfaces: Record<string, RepoSurfacePolicy>;
-  guards: Record<string, unknown>;
+  guards: Record<string, GuardConfig>;
 }
 
 export type PolicyResult = { ok: true; policy: RepoHookPolicy } | { ok: false; error: string };
@@ -194,10 +290,9 @@ export function parseRepoHookPolicy(text: string | null): PolicyResult {
     };
   }
 
-  const guards = raw.guards === undefined ? {} : raw.guards;
-  if (!isPlainObject(guards)) {
-    return { ok: false, error: `${REPO_HOOK_POLICY_PATH} guards must be an object` };
-  }
+  const guardsResult = parseGuards(raw.guards);
+  if (!guardsResult.ok) return guardsResult;
+  const guards = guardsResult.guards;
 
   const surfacesRaw = raw.surfaces === undefined ? {} : raw.surfaces;
   if (!isPlainObject(surfacesRaw)) {
@@ -212,6 +307,200 @@ export function parseRepoHookPolicy(text: string | null): PolicyResult {
   }
 
   return { ok: true, policy: { version: HOOK_POLICY_VERSION, surfaces, guards } };
+}
+
+type GuardsResult =
+  | { ok: true; guards: Record<string, GuardConfig> }
+  | { ok: false; error: string };
+
+/**
+ * Validate the whole `guards` block, all-or-nothing.
+ *
+ * ONE bad entry rejects the WHOLE document rather than the offending entry.
+ * Applying the admissible subset would leave the repo running a configuration
+ * nobody authored and nobody can predict from reading the file — and because
+ * every key is append-only, discarding everything is the stricter direction,
+ * so the failure mode of being strict here is a guard that enforces MORE.
+ */
+function parseGuards(raw: unknown): GuardsResult {
+  if (raw === undefined) return { ok: true, guards: {} };
+  if (!isPlainObject(raw)) {
+    return { ok: false, error: `${REPO_HOOK_POLICY_PATH} guards must be an object` };
+  }
+
+  // R2 runs over the RAW subtree before any shape checking, so a decision key
+  // is refused even where it sits inside an otherwise-unknown structure.
+  const decision = findDecisionKey(raw, 'guards');
+  if (decision !== null) {
+    return {
+      ok: false,
+      error:
+        `${decision} names a decision, and guards may carry DATA only. A config may describe ` +
+        `what a guard looks at; it may never describe what the guard decides. Refused keys at ` +
+        `any depth: ${GUARD_DECISION_KEYS.join(', ')}.`,
+    };
+  }
+
+  const guards: Record<string, GuardConfig> = {};
+  for (const [guardName, guardRaw] of Object.entries(raw)) {
+    const where = `guards.${guardName}`;
+    const schema = GUARD_CONFIG_SURFACE[guardName];
+    if (schema === undefined) {
+      return {
+        ok: false,
+        error:
+          `${where} is not a configurable guard. Configurable today: ` +
+          `${Object.keys(GUARD_CONFIG_SURFACE).sort().join(', ')}. An unrecognized name is ` +
+          `refused rather than ignored, because a silently inert setting is indistinguishable ` +
+          `from one that worked.`,
+      };
+    }
+    if (!isPlainObject(guardRaw)) {
+      return { ok: false, error: `${where} must be an object` };
+    }
+
+    const admitted: string[] = [];
+    if (schema.prefixes) admitted.push('additional_allow_prefixes');
+    if (Object.keys(schema.thresholds).length > 0) admitted.push('thresholds');
+    if (!exactKeys(guardRaw, admitted)) {
+      return {
+        ok: false,
+        error:
+          `${where} admits only ${admitted.join(', ') || '(nothing — this guard takes no config)'}. ` +
+          `Only additional_* shapes exist by design: no key removes, replaces or reorders a ` +
+          `shipped entry, so a shipped protection can never be configured away.`,
+      };
+    }
+
+    const config: GuardConfig = { additional_allow_prefixes: [], thresholds: {} };
+
+    const prefixesRaw = guardRaw.additional_allow_prefixes;
+    if (prefixesRaw !== undefined) {
+      if (!Array.isArray(prefixesRaw)) {
+        return { ok: false, error: `${where}.additional_allow_prefixes must be an array` };
+      }
+      if (prefixesRaw.length > MAX_PREFIX_ENTRIES) {
+        return {
+          ok: false,
+          error: `${where}.additional_allow_prefixes admits at most ${MAX_PREFIX_ENTRIES} entries`,
+        };
+      }
+      const seen = new Set<string>();
+      for (const [index, entryRaw] of prefixesRaw.entries()) {
+        const at = `${where}.additional_allow_prefixes[${index}]`;
+        if (!isPlainObject(entryRaw) || !exactKeys(entryRaw, ['prefix', 'reason'])) {
+          return { ok: false, error: `${at} must be an object with exactly prefix and reason` };
+        }
+        const bad = invalidPrefix(entryRaw.prefix);
+        if (bad !== null) return { ok: false, error: `${at}: ${bad}` };
+        const prefix = entryRaw.prefix as string;
+        if (seen.has(prefix)) {
+          return { ok: false, error: `${at}: duplicate prefix ${prefix}` };
+        }
+        seen.add(prefix);
+        const reasonBad = invalidReason(entryRaw.reason, 'reason');
+        if (reasonBad !== null) return { ok: false, error: `${at}: ${reasonBad}` };
+        config.additional_allow_prefixes.push({
+          prefix,
+          reason: entryRaw.reason as string,
+        });
+      }
+    }
+
+    const thresholdsRaw = guardRaw.thresholds;
+    if (thresholdsRaw !== undefined) {
+      if (!isPlainObject(thresholdsRaw)) {
+        return { ok: false, error: `${where}.thresholds must be an object` };
+      }
+      for (const [name, value] of Object.entries(thresholdsRaw)) {
+        const clamp = schema.thresholds[name];
+        if (clamp === undefined) {
+          return {
+            ok: false,
+            error:
+              `${where}.thresholds.${name} is not a threshold this guard reads. ` +
+              `Admitted: ${Object.keys(schema.thresholds).sort().join(', ')}.`,
+          };
+        }
+        if (typeof value !== 'number' || !Number.isInteger(value)) {
+          return { ok: false, error: `${where}.thresholds.${name} must be an integer` };
+        }
+        if (value < clamp.min || value > clamp.max) {
+          return {
+            ok: false,
+            error:
+              `${where}.thresholds.${name} must be between ${clamp.min} and ${clamp.max}; ` +
+              `got ${value}. The clamp is the schema's, not the guard's — a value outside it ` +
+              `disables the check in all but name.`,
+          };
+        }
+        config.thresholds[name] = value;
+      }
+    }
+
+    guards[guardName] = config;
+  }
+
+  return { ok: true, guards };
+}
+
+/** The first decision-naming key path in the subtree, or null. Recursive by R2. */
+function findDecisionKey(value: unknown, path: string): string | null {
+  if (Array.isArray(value)) {
+    for (const [index, item] of value.entries()) {
+      const found = findDecisionKey(item, `${path}[${index}]`);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+  if (!isPlainObject(value)) return null;
+  for (const [key, child] of Object.entries(value)) {
+    if (GUARD_DECISION_KEYS.includes(key.toLowerCase())) return `${path}.${key}`;
+    const found = findDecisionKey(child, `${path}.${key}`);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
+/**
+ * R3: contained, bounded, repo-relative, trailing-slash prefix.
+ *
+ * The ABSOLUTE ban is load-bearing rather than tidiness: scope-guard.sh
+ * honors absolute allow-prefixes BEFORE its foreign-repo containment block,
+ * so a configured absolute prefix would punch a hole straight through
+ * cross-repo containment.
+ */
+function invalidPrefix(prefix: unknown): string | null {
+  if (typeof prefix !== 'string' || prefix.length === 0) {
+    return 'prefix must be a non-empty string';
+  }
+  if (prefix.length > MAX_PREFIX_LENGTH) {
+    return `prefix must be at most ${MAX_PREFIX_LENGTH} characters`;
+  }
+  if (prefix.startsWith('/') || /^[A-Za-z]:[\\/]/.test(prefix)) {
+    return (
+      'prefix must be repo-relative, not absolute. scope-guard.sh honors absolute ' +
+      'allow-prefixes before foreign-repo containment, so an absolute entry would be a ' +
+      'cross-repo containment hole.'
+    );
+  }
+  if (prefix.split('/').includes('..')) return 'prefix may not traverse with ..';
+  if (/[*?[\]]/.test(prefix)) return 'prefix may not contain glob metacharacters';
+  // The env transport is whitespace-delimited and line-oriented; a prefix
+  // carrying either would silently split into two entries downstream.
+  if (/\s/.test(prefix)) return 'prefix may not contain whitespace';
+  if (prefix.includes('=')) return 'prefix may not contain =';
+  if (!prefix.endsWith('/')) return `prefix must end with / (a directory prefix): ${prefix}/`;
+  const head = prefix.replace(/\/+$/, '');
+  for (const reserved of GUARD_RESERVED_PREFIXES) {
+    if (head === reserved || head.startsWith(`${reserved}/`)) {
+      return (
+        `${reserved} is reserved and may not be widened by configuration — it is part of the ` +
+        'governance plane that adjudicates this very document'
+      );
+    }
+  }
+  return null;
 }
 
 type SurfaceResult = { ok: true; surface: RepoSurfacePolicy } | { ok: false; error: string };
@@ -668,7 +957,21 @@ export function serializeRepoHookPolicy(policy: RepoHookPolicy): string {
   }
   const document: Record<string, unknown> = { version: policy.version };
   if (Object.keys(surfaces).length > 0) document.surfaces = surfaces;
-  if (Object.keys(policy.guards).length > 0) document.guards = policy.guards;
+  // Empty additive keys are dropped rather than written back as `[]` / `{}`.
+  // The parser normalizes a guard's absent keys into empty containers, so
+  // echoing them would grow the document a little on every governed write —
+  // and `settle` re-parses what it is about to persist, which would then make
+  // the growth permanent and silent.
+  const guards: Record<string, unknown> = {};
+  for (const [name, config] of sortedEntries(policy.guards)) {
+    const rendered: Record<string, unknown> = {};
+    if (config.additional_allow_prefixes.length > 0) {
+      rendered.additional_allow_prefixes = config.additional_allow_prefixes;
+    }
+    if (Object.keys(config.thresholds).length > 0) rendered.thresholds = config.thresholds;
+    if (Object.keys(rendered).length > 0) guards[name] = rendered;
+  }
+  if (Object.keys(guards).length > 0) document.guards = guards;
   return `${JSON.stringify(document, null, 2)}\n`;
 }
 

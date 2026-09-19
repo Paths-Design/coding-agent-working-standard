@@ -493,7 +493,28 @@ import { isAdapterCoveredSurface } from './types';
 // The stock array is left intact rather than regenerated: rewriting it would
 // hold the dispatcher permanently in managed_drift and make caws init refuse
 // every future upstream fix to it.
-export const SHARED_PACK_VERSION = 84;
+// v84 (CAWS-HOOKS-GUARD-CONFIG-TIER2-01): tier-2 guard configuration. A repo
+// may now declare DATA a shipped guard consults — additional allow prefixes,
+// clamped advisory thresholds — in the `guards` block of hook-policy.json,
+// without forking the guard. lib/guard-config.py parses it (and
+// policy.non_governed_zones, whose inline awk block moves here) exactly ONCE
+// per dispatch; lib/guard-config.sh exports the result so adopting guards read
+// plain variables and spawn nothing. Measured: a python3 start is ~31ms, so
+// four guards parsing independently would cost ~124ms on every tool call.
+//
+// v85 (CAWS-GOAL-AC-STOP-GATE-01): the acceptance stop gate. goal-ac-gate.sh
+// joins the Stop chain and is the first handler in this pack that may emit a
+// hard control decision from that event: given a `caws goal set <spec-id>`
+// binding it re-derives the spec's acceptance and refuses the stop while any
+// criterion is unproven. Inert without a binding.
+//
+// 85 rather than 84 because this and the tier-2 guard config were developed on
+// separate branches that BOTH bumped the shared pack to 84. Keeping either
+// side's 84 would publish two different pack contents under one version, and
+// every installed consumer decides whether to update by comparing that number
+// — so the collision would be invisible and permanent. The merged tree is new
+// content and takes a new number.
+export const SHARED_PACK_VERSION = 85;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
@@ -751,6 +772,29 @@ export const SHARED_PACK: HookPackV1 = {
       // handler array rather than failing.
       destPath: '.caws/hooks/lib/local-chain.sh',
       sourcePath: 'lib/local-chain.sh',
+      executable: false,
+      managed: true,
+    },
+    {
+      // CAWS-HOOKS-GUARD-CONFIG-TIER2-01: the tier-2 config parser. Run ONCE
+      // per dispatch by run-handlers.sh, never per guard. Reads both
+      // hook-policy.json `guards` and policy.non_governed_zones, so one parse
+      // serves every adopting guard and the two sources cannot disagree about
+      // what the allow table contains.
+      destPath: '.caws/hooks/lib/guard-config.py',
+      sourcePath: 'lib/guard-config.py',
+      executable: false,
+      managed: true,
+    },
+    {
+      // CAWS-HOOKS-GUARD-CONFIG-TIER2-01: the accessor half. Pure bash 3.2
+      // (macOS ships 3.2, which has no associative arrays), so the table is
+      // read back through `${!name}` indirection and every accessor spawns
+      // nothing. Sourced best-effort behind a `declare -F` guard, so a pack
+      // predating it leaves each adopting guard on its shipped table —
+      // degraded, never disarmed.
+      destPath: '.caws/hooks/lib/guard-config.sh',
+      sourcePath: 'lib/guard-config.sh',
       executable: false,
       managed: true,
     },

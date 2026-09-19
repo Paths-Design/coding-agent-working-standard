@@ -2,10 +2,11 @@ id: CAWS-HOOKS-GUARD-CONFIG-TIER2-01
 title: 'Tier 2 guard config: repo-declared, append-only data for shipped guard tables'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: wt-guard-config
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-guard-config at 0d3a484995311e25a7b19ce8aea98d29c4e0c198'
 created_at: '2026-09-19T00:32:01.490Z'
-updated_at: '2026-09-19T00:47:30.953Z'
+updated_at: '2026-09-19T01:33:31.395Z'
 created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
 blast_radius:
   modules:
@@ -28,7 +29,12 @@ scope:
     - 'packages/caws-cli/tests/init/repo-hook-policy.test.js'
     - 'packages/caws-cli/tests/hooks/bats/guard-config.bats'
     - packages/caws-cli/tests/hooks/bats/guard-config-adopters.bats
+    - docs/architecture/repo-local-hook-policy.md
+    - docs/architecture/hook-pack-shared-core.md
+    - docs/guides/hook-packs.md
   out: []
+  support:
+    - CLAUDE.md
 invariants:
   - 'APPEND-ONLY OVER A FLOOR (R1). The guards key admits only additional_* shapes. No repo-declared entry removes, replaces or reorders a shipped table entry, so a shipped protection can never be configured away. This is what makes fail-closed cheap: ignoring the config is always the STRICTER direction, so a parse failure degrades toward refusal, never toward permission.'
   - 'DATA, NEVER DECISIONS (R2). A document naming a verdict at any depth (decision/allow/deny/ask/policy/outcome/severity/override/enforcement/exit_code/verdict) is rejected. The command-adapters rule that no key may name a decision does not transplat verbatim, because adding a prefix IS a verdict change for that prefix; the boundary is drawn on direction and floor instead.'
@@ -83,3 +89,52 @@ contracts:
     type: schema
   - name: 'guard-config loader env transport'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "npx bats tests/hooks/bats/guard-config-adopters.bats -> 26/26 ok, 0 not ok. Arms 1-3 are the controlled comparison: 'baseline: with no config, a path the kernel refuses is refused' (native/core.rs REFUSED), then the IDENTICAL envelope ADMITTED once guards.scope-guard.sh.additional_allow_prefixes declares native/, then 'the declared prefix admits its subtree only' (src/unrelated.ts still refused) and 'the prefix boundary is respected' (native-adjacent/ still refused). caws scope check is stubbed to refuse unconditionally so ALLOW_PREFIXES is the only thing that can admit. The floor half is arm 'worktree payload still DENIES with a config present': caws_is_write_allowlisted returns 1 for .caws/worktrees/wt-a/payload.txt with the config present, because the payload exclusion sits BEFORE the config arm in write-allowlist.sh. NOTE the oracle: scope-guard exits 0 for a refusal too (block JSON on stdout), so these assert on OUTPUT, not status - six arms passed vacuously until that was corrected."
+    recorded_at: "2026-09-19T01:29:54.015Z"
+    artifact_path: packages/caws-cli/tests/hooks/bats/guard-config-adopters.bats
+    commit_sha: "1a339824"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "npx jest tests/init/repo-hook-policy.test.js (inside the full run: 246/246 suites, 3279/3279 tests). R3 arms refuse an absolute prefix, a .. traversal, a glob metacharacter, whitespace, a missing trailing slash, and each reserved prefix (.caws, .git, .github/workflows, vendor dirs), each naming the offending entry. The all-or-nothing half is the describe 'all-or-nothing: one bad entry applies ZERO entries' — a document with one GOOD and one BAD prefix parses to NEITHER. Confirmed at runtime through the real guard too: npx bats tests/hooks/bats/guard-config-adopters.bats arms 'an INVALID document applies zero prefixes, so the verdict reverts to refusal' and 'a config naming a reserved prefix is rejected whole, admitting nothing' (commit 1a339824) — the valid sibling entry is NOT honored, so the refusal is whole-document, not per-entry."
+    recorded_at: "2026-09-19T01:30:09.895Z"
+    artifact_path: packages/caws-cli/tests/init/repo-hook-policy.test.js
+    commit_sha: "58f78df9"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "npx jest tests/init/repo-hook-policy.test.js. The R2 describe refuses a document carrying decision/allow/deny/ask/policy/outcome/severity/override/enforcement/exit_code/verdict at any depth, via findDecisionKey which recurses through objects AND arrays (the keys sit BELOW the guard name, so depth is the whole point). The non-vacuity half is what makes this AC's 'discriminates on key name, not shape' clause real: a document with the SAME nesting depth carrying only additional_* data keys is ACCEPTED. Matching is case-insensitive on the key."
+    recorded_at: "2026-09-19T01:30:11.865Z"
+    artifact_path: packages/caws-cli/tests/init/repo-hook-policy.test.js
+    commit_sha: "58f78df9"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "TWO claims, proven separately. (1) VERDICTS UNCHANGED with no config: the full pre-existing bats suite — npx bats tests/hooks/bats/ -> 374 ok, 0 not ok — was authored before this slice and still passes with the loader wired into run-handlers.sh and four guards; scope-guard.bats, bash-write-guard.bats and worktree-write-guard.bats are the load-bearing members. guard-config.bats also pins that an absent policy reports status 'absent', distinct from 'invalid' and from 'unavailable'. (2) ONE python3 PER DISPATCH, NOT ONE PER GUARD: arm 'a whole pre_tool_use dispatch spawns the parser EXACTLY once' wraps lib/guard-config.py with a counting shim, drives a real .caws/hooks/dispatch/pre_tool_use.sh, and asserts the counter reads exactly 1 across a chain carrying THREE adopters (scope-guard.sh directly; worktree-write-guard.sh and bash-write-guard.sh via write-allowlist.sh) — per-guard parsing would read 3+. Non-vacuity: the same dispatch with the document removed flips from admitted to '\"decision\": \"block\"', so the single parse demonstrably served a real consult rather than nobody looking. Budget context: python3 spawn measured ~31ms; the pre_tool_use chain already carries 19+ spawns."
+    recorded_at: "2026-09-19T01:30:30.369Z"
+    artifact_path: packages/caws-cli/tests/hooks/bats/guard-config-adopters.bats
+    commit_sha: eb0dc3fb
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "The inline awk block is DELETED from scope-guard.sh (the 'Policy-declared non-governed zones' section now reads caws_guard_zones). Semantics preserved, proven at two layers: npx bats tests/hooks/bats/guard-config.bats arms 19-24 pin the normalization verbatim — shipped quote-strip, /** then /* trim, trailing-slash coercion, the zone list ENDING at the next top-level key exactly as the awk did, trailing-comment stripping, and a zone containing a SPACE surviving the transport intact (which is why the transport is INDEXED, not whitespace-delimited: a space-delimited one would split it, a scope change disguised as a refactor). npx bats tests/hooks/bats/guard-config-adopters.bats arms 13-15 then prove it through the real guard: a path under a declared zone is ADMITTED, a path outside it is still REFUSED, and zones compose with configured prefixes. Zones are read from policy.yaml INDEPENDENTLY of hook-policy.json, so a repo that never opts into the hook policy keeps its zones honored (arm 'zones are honored in a repo with NO hook-policy.json at all'). Key meaning unchanged: policy.yaml owns out-of-governance, hook-policy.json owns one guard's table."
+    recorded_at: "2026-09-19T01:30:32.879Z"
+    artifact_path: packages/caws-cli/templates/hook-packs/shared/scope-guard.sh
+    commit_sha: "1a339824"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "npx bats tests/hooks/bats/guard-config-adopters.bats, six arms, each driving the REAL guard and reading the threshold back out of the advisory text it prints. god-object: no config and no env -> silent on a 40-line file (shipped default 2000 in force); config loc:100 with NO env on a 150-line file -> 'threshold: 100' (config beat the default, and the env var is absent so the value can only have come from the document); config loc:100 PLUS env CAWS_GOD_OBJECT_LOC=10 -> 'threshold: 10' and NOT 'threshold: 100' (env beat config). loc-delta: config delta:20 -> 'threshold: 20'; plus env CAWS_LOC_DELTA_WARN_THRESHOLD=15 -> 'threshold: 15' and NOT 20. Clamping is schema-enforced per guard in GUARD_CONFIG_SURFACE (god-object loc 100-100000, delta 10-100000; loc-delta delta 10-100000) with the out-of-range and non-integer refusals pinned in tests/init/repo-hook-policy.test.js (bool is explicitly excluded, since bool subclasses int in the python mirror). The key was RENAMED loc->delta for loc-delta-check.sh in this slice: it bounds a per-edit delta, the same quantity god-object calls delta, and the guard's filename containing 'loc' is exactly what made the wrong name tempting. Arm 'the threshold key is delta; loc is refused and applies nothing' pins that a document using the old name does not half-work."
+    recorded_at: "2026-09-19T01:30:55.322Z"
+    artifact_path: packages/caws-cli/tests/hooks/bats/guard-config-adopters.bats
+    commit_sha: "1a339824"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "npx jest tests/init/pack-fingerprint.test.js -> 14/14, and tests/init/ -> 18 suites / 424 tests, all inside the full 246-suite / 3279-test run. SHARED_PACK_VERSION is 84 in src/init/hook-packs/manifest-shared.ts with a v84 changelog entry; lib/guard-config.py and lib/guard-config.sh are registered rows in the shared manifest install set (commit 5cbff511) so consumers actually receive them; tests/init/pack-fingerprints.json records the shared fingerprint recomputed from the live tree after the final template edit. The version stayed at 84 rather than moving to 85 across the three template commits because 84 was introduced within this same unreleased slice — no installed pack has ever observed an earlier 84 body, so a bump would be ceremony, not propagation. Also proven green: tests/init/init-hook-pack-render.test.js, including 'every managed file carries the growth-stance edit_stance marker', which caught both new libs shipping without it (commit 2c805aad)."
+    recorded_at: "2026-09-19T01:30:57.199Z"
+    artifact_path: packages/caws-cli/tests/init/pack-fingerprints.json
+    commit_sha: "1a339824"
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "npx bats tests/hooks/bats/guard-config.bats -> 25/25 ok. Arm 25 'the accessors work under /bin/bash 3.2, not merely under a modern bash' invokes them through the literal /bin/bash and asserts ${BASH_VERSION%%.*} == 3, so it cannot silently pass under a modern bash — that discharges the plan's open item on bash-3.2 transport. Degradation arms: 'a MISSING parser leaves the accessors working and reports unavailable', and \"'unavailable' is distinguishable from 'absent'\" (unparsed must never read to a caller as verified-empty). Through the real guards, npx bats tests/hooks/bats/guard-config-adopters.bats arms 24-25 use run_guard_missing_lib to delete guard-config.sh from an isolated hooks tree: scope-guard STILL refuses what the kernel refuses (emits '\"decision\": \"block\"', does not die empty, does not fail open) and write-allowlist STILL allowlists its SHIPPED paths (docs/) — degraded, never disarmed. This is safe by construction rather than by care: every key is append-only, so applying zero entries is strictly the STRICTER outcome, which is why the degraded path and the safe path are the same path. Sourcing uses [[ -f ]] && source, never 'source <missing> || true', per CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001."
+    recorded_at: "2026-09-19T01:30:58.979Z"
+    artifact_path: packages/caws-cli/tests/hooks/bats/guard-config.bats
+    commit_sha: "5cbff511"

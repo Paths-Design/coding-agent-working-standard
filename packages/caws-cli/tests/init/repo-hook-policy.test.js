@@ -25,6 +25,9 @@ const {
   REPO_POLICY_FLOOR,
   HOOK_POLICY_VERSION,
   REPO_HOOK_POLICY_PATH,
+  GUARD_CONFIG_SURFACE,
+  GUARD_DECISION_KEYS,
+  GUARD_RESERVED_PREFIXES,
 } = require('../../dist/init/repo-hook-policy');
 
 /** A minimal valid document; callers override one thing to make it hostile. */
@@ -432,21 +435,32 @@ describe('A4: repo resolves before machine, and duplicates fail closed', () => {
 // ── A5: forward compatibility of the key set ──────────────────────────────
 
 describe('A5: all three top-level keys are admitted in v1', () => {
-  test('a document declaring guards validates even though the resolver ignores it', () => {
+  test('a document declaring guards validates alongside surfaces', () => {
     // Runtime validators assert EXACT key sets. If `guards` were introduced
     // later, every repo pinned to this runtime would hard-block on a document
-    // using it. Admitting it now is the decision that cannot be deferred.
+    // using it. Admitting it in v1 is the decision that could not be deferred;
+    // the entry CONTENT is validated by the R1/R2/R3 arms below.
     const result = parseRepoHookPolicy(
-      doc({}, { 'scope-guard.sh': { additional_allow_prefixes: [{ prefix: 'native/' }] } })
+      doc(
+        {},
+        {
+          'scope-guard.sh': {
+            additional_allow_prefixes: [
+              { prefix: 'native/', reason: 'the Rust core lives here; this repo has no src/' },
+            ],
+          },
+        }
+      )
     );
     expect(result.ok).toBe(true);
     expect(result.policy.guards['scope-guard.sh']).toBeDefined();
   });
 
-  test('guards content does not leak into the resolved chain in this slice', () => {
+  test('guards content never leaks into the resolved chain: tier 2 is data, tier 1 is which guards run', () => {
     const result = parseRepoHookPolicy(
-      doc({}, { 'scope-guard.sh': { thresholds: { loc: 2500 } } })
+      doc({}, { 'god-object-check.sh': { thresholds: { loc: 2500 } } })
     );
+    expect(result.ok).toBe(true);
     const resolved = resolveChain({
       stock: STOCK,
       event: 'pre_tool_use',
@@ -1031,5 +1045,368 @@ describe('resolving for `default` must not layer `default` over itself', () => {
       'marker.sh',
       'codex-only.sh',
     ]);
+  });
+});
+
+// ─── Tier 2: the `guards` authority boundary ───────────────────────────────
+
+/** A document whose only interesting content is its guards block. */
+function guardsDoc(guards) {
+  return JSON.stringify({ version: HOOK_POLICY_VERSION, surfaces: {}, guards });
+}
+
+const GOOD_REASON = 'this repo keeps its Rust core in native/, which has no src/ directory';
+
+describe('R1 append-only: only additional_* shapes exist', () => {
+  test('a well-formed prefix entry parses and is carried through', () => {
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({
+        'scope-guard.sh': {
+          additional_allow_prefixes: [{ prefix: 'native/', reason: GOOD_REASON }],
+        },
+      })
+    );
+    expect(parsed.ok).toBe(true);
+    expect(parsed.policy.guards['scope-guard.sh'].additional_allow_prefixes).toEqual([
+      { prefix: 'native/', reason: GOOD_REASON },
+    ]);
+  });
+
+  test('the REPLACE form is refused by the exact-key check, so a shipped entry cannot be dropped', () => {
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({
+        'scope-guard.sh': { allow_prefixes: [{ prefix: 'native/', reason: GOOD_REASON }] },
+      })
+    );
+    expect(parsed.ok).toBe(false);
+    // `allow` is also a decision key, so R2 catches this one first — either
+    // refusal is correct; what must never happen is acceptance.
+    expect(parsed.error.length).toBeGreaterThan(0);
+  });
+
+  test('a remove-shaped key is refused even when it avoids every decision word', () => {
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({
+        'scope-guard.sh': { removed_prefixes: [{ prefix: 'src/', reason: GOOD_REASON }] },
+      })
+    );
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toContain('admits only');
+  });
+
+  test('an UNRECOGNIZED guard name is refused, not ignored — a silently inert setting is the worst outcome', () => {
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({ 'scope-gaurd.sh': { additional_allow_prefixes: [] } })
+    );
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toContain('not a configurable guard');
+    expect(parsed.error).toContain('scope-guard.sh');
+  });
+
+  test('the floor guards take no config at all: they are absent from the configurable surface', () => {
+    for (const floorHandler of REPO_POLICY_FLOOR) {
+      expect(GUARD_CONFIG_SURFACE[floorHandler]).toBeUndefined();
+    }
+  });
+
+  test('a floor guard named in guards is refused', () => {
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({ 'protected-paths.sh': { additional_allow_prefixes: [] } })
+    );
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toContain('not a configurable guard');
+  });
+
+  test('a threshold guard does not admit prefixes, and a prefix guard does not admit thresholds', () => {
+    const wrongPrefix = parseRepoHookPolicy(
+      guardsDoc({ 'god-object-check.sh': { additional_allow_prefixes: [] } })
+    );
+    expect(wrongPrefix.ok).toBe(false);
+    expect(wrongPrefix.error).toContain('admits only thresholds');
+
+    const wrongThreshold = parseRepoHookPolicy(
+      guardsDoc({ 'scope-guard.sh': { thresholds: { loc: 2500 } } })
+    );
+    expect(wrongThreshold.ok).toBe(false);
+    expect(wrongThreshold.error).toContain('admits only additional_allow_prefixes');
+  });
+});
+
+describe('R2 data-never-decisions: a key naming a verdict is refused at any depth', () => {
+  test.each(GUARD_DECISION_KEYS)('a top-level %s key is refused', (key) => {
+    const parsed = parseRepoHookPolicy(guardsDoc({ 'scope-guard.sh': { [key]: 'whatever' } }));
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toContain('names a decision');
+  });
+
+  test('a decision key NESTED three levels deep is still refused', () => {
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({
+        'scope-guard.sh': {
+          additional_allow_prefixes: [{ prefix: 'native/', reason: GOOD_REASON, verdict: 'allow' }],
+        },
+      })
+    );
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toContain('names a decision');
+    // The path must locate it, or the author cannot find the key.
+    expect(parsed.error).toContain('verdict');
+  });
+
+  test('the refusal is CASE-INSENSITIVE, so Decision and DENY do not slip past', () => {
+    for (const key of ['Decision', 'DENY', 'Exit_Code']) {
+      const parsed = parseRepoHookPolicy(guardsDoc({ 'scope-guard.sh': { [key]: 1 } }));
+      expect(parsed.ok).toBe(false);
+      expect(parsed.error).toContain('names a decision');
+    }
+  });
+
+  test('R2 discriminates on the KEY NAME, not the shape: identical nesting with data keys is accepted', () => {
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({
+        'scope-guard.sh': {
+          additional_allow_prefixes: [{ prefix: 'native/', reason: GOOD_REASON }],
+        },
+      })
+    );
+    expect(parsed.ok).toBe(true);
+  });
+});
+
+describe('R3 contained and bounded', () => {
+  const cases = [
+    ['/etc/passwd/', 'absolute'],
+    ['C:\\Windows\\', 'absolute (windows)'],
+    ['../escape/', 'parent traversal'],
+    ['native/../../etc/', 'embedded traversal'],
+    ['nat*/', 'glob metacharacter'],
+    ['nat[ab]/', 'glob class'],
+    ['two words/', 'whitespace'],
+    ['a=b/', 'equals sign'],
+    ['native', 'missing trailing slash'],
+    ['', 'empty'],
+  ];
+  test.each(cases)('%s is refused (%s)', (prefix) => {
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({
+        'scope-guard.sh': { additional_allow_prefixes: [{ prefix, reason: GOOD_REASON }] },
+      })
+    );
+    expect(parsed.ok).toBe(false);
+  });
+
+  test('the ABSOLUTE refusal states WHY: it would be a cross-repo containment hole', () => {
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({
+        'scope-guard.sh': { additional_allow_prefixes: [{ prefix: '/tmp/', reason: GOOD_REASON }] },
+      })
+    );
+    expect(parsed.error).toContain('foreign-repo containment');
+  });
+
+  test.each(GUARD_RESERVED_PREFIXES)('the reserved prefix %s may not be widened', (reserved) => {
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({
+        'scope-guard.sh': {
+          additional_allow_prefixes: [{ prefix: `${reserved}/`, reason: GOOD_REASON }],
+        },
+      })
+    );
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toContain('reserved');
+  });
+
+  test('a reserved prefix is refused by its SUBPATH too, not only exactly', () => {
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({
+        'scope-guard.sh': {
+          additional_allow_prefixes: [{ prefix: '.caws/hooks/', reason: GOOD_REASON }],
+        },
+      })
+    );
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toContain('reserved');
+  });
+
+  test('a prefix that merely SHARES a reserved name as a substring is still admitted', () => {
+    // `.cawsy/` is not `.caws/`. A prefix-match bug here would refuse a
+    // legitimate directory and send the author looking for a bypass.
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({
+        'scope-guard.sh': {
+          additional_allow_prefixes: [{ prefix: '.cawsy/', reason: GOOD_REASON }],
+        },
+      })
+    );
+    expect(parsed.ok).toBe(true);
+  });
+
+  test('every entry requires a reason long enough to say something', () => {
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({
+        'scope-guard.sh': { additional_allow_prefixes: [{ prefix: 'native/', reason: 'because' }] },
+      })
+    );
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toContain('at least');
+  });
+
+  test('a duplicate prefix is refused rather than silently deduplicated', () => {
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({
+        'scope-guard.sh': {
+          additional_allow_prefixes: [
+            { prefix: 'native/', reason: GOOD_REASON },
+            { prefix: 'native/', reason: GOOD_REASON },
+          ],
+        },
+      })
+    );
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toContain('duplicate');
+  });
+
+  test('the entry cap is enforced', () => {
+    const many = Array.from({ length: 65 }, (_, i) => ({
+      prefix: `dir${i}/`,
+      reason: GOOD_REASON,
+    }));
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({ 'scope-guard.sh': { additional_allow_prefixes: many } })
+    );
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toContain('at most');
+  });
+});
+
+describe('thresholds are clamped by the schema, not trusted', () => {
+  test('a value inside the clamp is accepted', () => {
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({ 'god-object-check.sh': { thresholds: { loc: 2500 } } })
+    );
+    expect(parsed.ok).toBe(true);
+    expect(parsed.policy.guards['god-object-check.sh'].thresholds).toEqual({ loc: 2500 });
+  });
+
+  test('a value that would disable the check in all but name is refused', () => {
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({ 'god-object-check.sh': { thresholds: { loc: 999999999 } } })
+    );
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toContain('disables the check in all but name');
+  });
+
+  test('a below-minimum value is refused too — the clamp is two-sided', () => {
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({ 'god-object-check.sh': { thresholds: { loc: 1 } } })
+    );
+    expect(parsed.ok).toBe(false);
+  });
+
+  test('a non-integer is refused', () => {
+    for (const value of [2500.5, '2500', null, true]) {
+      const parsed = parseRepoHookPolicy(
+        guardsDoc({ 'god-object-check.sh': { thresholds: { loc: value } } })
+      );
+      expect(parsed.ok).toBe(false);
+    }
+  });
+
+  test('a threshold name the guard does not read is refused', () => {
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({ 'loc-delta-check.sh': { thresholds: { max_lines: 500 } } })
+    );
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toContain('not a threshold this guard reads');
+  });
+
+  test('the threshold a guard DOES read is admitted, so the refusal above is not vacuous', () => {
+    // Non-vacuity anchor for the arm above: if every threshold name were
+    // refused, that test would pass while the surface was entirely dead.
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({ 'loc-delta-check.sh': { thresholds: { delta: 500 } } })
+    );
+    expect(parsed.ok).toBe(true);
+    expect(parsed.policy.guards['loc-delta-check.sh'].thresholds).toEqual({ delta: 500 });
+  });
+
+  test("loc-delta-check's threshold is named for the quantity it bounds, matching god-object's", () => {
+    // Both guards bound a per-edit line DELTA, so both spell it `delta`. The
+    // guard's filename contains "loc", which is what makes `loc` the tempting
+    // and wrong key here: it would read as a file-size bound and silently do
+    // something else. A config key that means one thing in one guard and
+    // another elsewhere is the shape consumers misconfigure.
+    const locOnLocDelta = parseRepoHookPolicy(
+      guardsDoc({ 'loc-delta-check.sh': { thresholds: { loc: 500 } } })
+    );
+    expect(locOnLocDelta.ok).toBe(false);
+    const deltaOnGodObject = parseRepoHookPolicy(
+      guardsDoc({ 'god-object-check.sh': { thresholds: { delta: 500 } } })
+    );
+    expect(deltaOnGodObject.ok).toBe(true);
+  });
+});
+
+describe('all-or-nothing: one bad entry applies ZERO entries', () => {
+  test('a document with one good and one bad prefix parses to NEITHER', () => {
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({
+        'scope-guard.sh': {
+          additional_allow_prefixes: [
+            { prefix: 'native/', reason: GOOD_REASON },
+            { prefix: '/absolute/', reason: GOOD_REASON },
+          ],
+        },
+      })
+    );
+    expect(parsed.ok).toBe(false);
+    expect(parsed.policy).toBeUndefined();
+  });
+
+  test('a bad entry in ONE guard rejects the whole document, including the other guard', () => {
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({
+        'scope-guard.sh': {
+          additional_allow_prefixes: [{ prefix: 'native/', reason: GOOD_REASON }],
+        },
+        'god-object-check.sh': { thresholds: { loc: 999999999 } },
+      })
+    );
+    expect(parsed.ok).toBe(false);
+  });
+});
+
+describe('the guards block round-trips through the serializer', () => {
+  test('a parsed document re-serializes to something that parses to the same guards', () => {
+    const text = guardsDoc({
+      'scope-guard.sh': {
+        additional_allow_prefixes: [{ prefix: 'native/', reason: GOOD_REASON }],
+      },
+      'god-object-check.sh': { thresholds: { loc: 2500, delta: 200 } },
+    });
+    const first = parseRepoHookPolicy(text);
+    expect(first.ok).toBe(true);
+    const second = parseRepoHookPolicy(serializeRepoHookPolicy(first.policy));
+    expect(second.ok).toBe(true);
+    expect(second.policy.guards).toEqual(first.policy.guards);
+  });
+
+  test('the parser-normalized EMPTY containers are not written back, so the document does not grow', () => {
+    const first = parseRepoHookPolicy(
+      guardsDoc({ 'god-object-check.sh': { thresholds: { loc: 2500 } } })
+    );
+    const serialized = serializeRepoHookPolicy(first.policy);
+    expect(serialized).not.toContain('additional_allow_prefixes');
+    // …and re-serializing the re-parse is a fixed point.
+    expect(serializeRepoHookPolicy(parseRepoHookPolicy(serialized).policy)).toBe(serialized);
+  });
+
+  test('an absent guards key stays absent — opting out writes nothing', () => {
+    const parsed = parseRepoHookPolicy(
+      JSON.stringify({ version: HOOK_POLICY_VERSION, surfaces: {} })
+    );
+    expect(parsed.ok).toBe(true);
+    expect(parsed.policy.guards).toEqual({});
+    expect(serializeRepoHookPolicy(parsed.policy)).not.toContain('guards');
   });
 });
