@@ -55,20 +55,59 @@ export function atomicMachineWrite(
   }
 }
 
-/** A stable bootstrap survives snapshot updates. Recognize the original
- * standalone layout by its verified manifest, but never replace local growth.
- * A matching bootstrap with no pointer is an interrupted first installation. */
+/** Did CAWS itself publish these launcher bytes at some point? Every runtime
+ * snapshot records the bootstrap it shipped with, and snapshots are retained
+ * for rollback, so the set of bootstraps this machine has ever been given is
+ * already on disk. Membership is what separates the two cases that a simple
+ * inequality conflates: upstream moved (replace it) versus the operator edited
+ * it (refuse). Without the distinction, the bootstrap is effectively frozen —
+ * shipping any fix to it refuses on every machine that already has the prior
+ * one, and blames the operator for local growth that does not exist.
+ *
+ * readManifest refuses a manifest whose bytes do not hash to its own directory
+ * name, so this reads only snapshots that are internally consistent. That is an
+ * integrity check, not an authorization boundary: anyone able to write under
+ * lib/runtimes/ could mint a self-consistent snapshot, but they could equally
+ * overwrite bin/caws-hook directly. Write access to the machine home was never
+ * what this refusal defends against. */
+function everShippedBootstrap(home: string, installed: string): boolean {
+  let digests: string[];
+  try {
+    digests = fs.readdirSync(path.join(home, 'lib/runtimes'));
+  } catch {
+    return false;
+  }
+  return digests.some((digest) => {
+    try {
+      return readManifest(home, digest)['bootstrap.py'] === installed;
+    } catch {
+      // A corrupt or partial snapshot vouches for nothing; it must not make
+      // the scan throw, or one bad directory would freeze the upgrade path.
+      return false;
+    }
+  });
+}
+
+/** A stable bootstrap survives snapshot updates. Recognize any bootstrap this
+ * machine was previously given, and the original standalone layout by its
+ * verified manifest, but never replace local growth. A matching bootstrap with
+ * no pointer is an interrupted first installation. */
 function needsBootstrap(home: string, pointer: RuntimePointer | null, bootstrap: Buffer): boolean {
   const launcher = path.join(home, 'bin/caws-hook');
   assertMachinePath(home, launcher);
   if (!fs.existsSync(launcher)) return true;
   const installed = sha(fs.readFileSync(launcher));
   if (installed === sha(bootstrap)) return false;
+  // Checked before the pointer branch on purpose: a bootstrap we shipped is
+  // ours to replace whether or not a pointer currently resolves, which is also
+  // the state an interrupted install or a rollback leaves behind.
+  if (everShippedBootstrap(home, installed)) return true;
   if (pointer) {
     const manifest = readManifest(home, pointer.digest);
     if (!manifest['bootstrap.py'] && installed === manifest['launcher.py']) return true;
     throw new Error(
-      'Machine launcher modified; reconcile local growth before updating or rollback'
+      'Machine launcher modified: bin/caws-hook matches no bootstrap CAWS has shipped, so it' +
+        ' carries local growth. Reconcile or remove it before updating, or rollback.'
     );
   }
   throw new Error('Unmanaged machine launcher exists; refusing to overwrite it');

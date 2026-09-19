@@ -750,3 +750,94 @@ test('quiet outside governed repositories; traversal, symlink policies and missi
   fs.unlinkSync(path.join(home, 'state/adapter-runtime.json'));
   expect(invoke(home, repo).status).toBe(2);
 });
+
+/** Break the bootstrap BEFORE it can hand off: an unreadable pointer means the
+ *  driver never runs, so nothing downstream has had a chance to form a
+ *  decision. This is the only error class the bootstrap itself can raise. */
+function unresolvableRuntime(home) {
+  fs.writeFileSync(
+    path.join(home, 'state/adapter-runtime.json'),
+    JSON.stringify({ version: 1, digest: 'not-a-digest' })
+  );
+}
+
+test('a bootstrap-scope fault refuses the tool call but never the session exit', () => {
+  const home = path.join(root, 'home');
+  installMachineRuntime({ home, templatesRoot });
+  const repo = repository('project', { 'guard.sh': 'exit 0\n' });
+  unresolvableRuntime(home);
+
+  // Anchor first: pre_tool_use must STILL refuse. Without this the stop
+  // assertion below would pass just as well against a bootstrap that had
+  // stopped enforcing altogether, which is the opposite of the fix.
+  const write = invoke(home, repo, 'trap-session', 'pre_tool_use');
+  expect(write.status).toBe(2);
+  expect(JSON.parse(write.stdout).decision).toBe('block');
+
+  // Refusing a write is answerable — the agent can stop writing. Refusing the
+  // exit is not: it leaves no move, which is the trap.
+  const stop = invoke(home, repo, 'trap-session', 'stop');
+  expect({ status: stop.status, stdout: stop.stdout }).toEqual({ status: 0, stdout: '' });
+  // Degraded, but never silently: the operator still gets told why.
+  expect(stop.stderr).toContain('CAWS machine adapter');
+});
+
+test.each(['stop', 'session_end', 'pre_compact'])(
+  '%s is an exit too, so a bootstrap-scope fault does not block it',
+  (event) => {
+    const home = path.join(root, 'home');
+    installMachineRuntime({ home, templatesRoot });
+    const repo = repository('project', { 'guard.sh': 'exit 0\n' });
+    unresolvableRuntime(home);
+    const result = invoke(home, repo, 'exit-session', event);
+    expect({ event, status: result.status, stdout: result.stdout }).toEqual({
+      event,
+      status: 0,
+      stdout: '',
+    });
+  }
+);
+
+test('the carve-out is by event, not by one error message', () => {
+  const home = path.join(root, 'home');
+  installMachineRuntime({ home, templatesRoot });
+  const repo = repository('project', { 'guard.sh': 'exit 0\n' });
+  // A different fault class entirely: the pointer is absent rather than
+  // malformed, so this raises an OSError, not the ValueError above.
+  fs.unlinkSync(path.join(home, 'state/adapter-runtime.json'));
+  expect(invoke(home, repo, 'other-fault', 'stop').status).toBe(0);
+  expect(invoke(home, repo, 'other-fault', 'pre_tool_use').status).toBe(2);
+});
+
+test('a bootstrap CAWS shipped is replaced when upstream moves, not refused as local growth', () => {
+  const home = path.join(root, 'home');
+  const sources = path.join(root, 'sources');
+  fs.cpSync(templatesRoot, sources, { recursive: true });
+  installMachineRuntime({ home, templatesRoot: sources });
+  const shipped = fs.readFileSync(path.join(home, 'bin/caws-hook'), 'utf8');
+
+  // Upstream publishes a bootstrap fix. The installed bytes now differ from
+  // the template, which is indistinguishable from a user edit by inequality
+  // alone — and that is exactly what used to refuse every machine.
+  fs.appendFileSync(path.join(sources, 'runtime/bootstrap.py'), '\n# upstream bootstrap fix\n');
+  installMachineRuntime({ home, templatesRoot: sources });
+
+  const after = fs.readFileSync(path.join(home, 'bin/caws-hook'), 'utf8');
+  expect(after).toContain('# upstream bootstrap fix');
+  expect(after).not.toBe(shipped);
+});
+
+test('a launcher the user actually edited is still refused, and the reason says which case it is', () => {
+  const home = path.join(root, 'home');
+  const sources = path.join(root, 'sources');
+  fs.cpSync(templatesRoot, sources, { recursive: true });
+  installMachineRuntime({ home, templatesRoot: sources });
+  fs.appendFileSync(path.join(home, 'bin/caws-hook'), '\n# local growth\n');
+  fs.appendFileSync(path.join(sources, 'runtime/bootstrap.py'), '\n# upstream bootstrap fix\n');
+
+  // These bytes match no bootstrap CAWS ever published, which is the whole
+  // discriminator — the message must say so rather than blame drift.
+  expect(() => installMachineRuntime({ home, templatesRoot: sources })).toThrow(
+    /matches no bootstrap CAWS has shipped/
+  );
+});
