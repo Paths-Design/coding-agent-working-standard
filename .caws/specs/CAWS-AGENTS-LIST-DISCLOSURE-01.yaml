@@ -60,3 +60,9 @@ non_functional: {}
 contracts:
   - name: 'read-surface-unsourced-fact'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "A1/A1b pin the hidden-count line: default run prints 'visibility: 1 of 4 shown · 1 stale hidden (--include-stale) · 2 stopped hidden (--include-stopped)' and the rows prove the filtering really happened (old-1 and gone-a absent from stdout)."
+    recorded_at: "2026-09-19T11:05:24.382Z"
+    commit_sha: "3d6d2f92"
