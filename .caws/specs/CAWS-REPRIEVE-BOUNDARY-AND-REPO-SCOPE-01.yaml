@@ -91,3 +91,8 @@ evidence:
     evidence_ref: "Handlers in no declared set are unaffected. npx jest ... describe 'A3' 4/4 pass: a grant for protected-paths.sh,scan-secrets.sh writes normally; partialBoundaryCoverage([]) and (['protected-paths.sh']) return []; a complete set returns []. Plus a structural guard - 'every declared boundary has at least two members' - because a one-member set would declare a rule no input can violate (a vacuous constraint). Runtime artifact: the record file exists at machine-home/state/sessions/<sid>/guard-reprieve-<sid>.json after the boundary-free grant."
     recorded_at: "2026-09-19T04:50:44.212Z"
     commit_sha: "8d7d3a26"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Default grant carries the repo root; show reports it. npx jest tests/shell/reprieve-boundary-and-repo-scope describe 'A4' 4/4 pass. Record on disk: repo_root == fs.realpathSync(repoRoot). Grant stdout (verbatim from the surface-detection run): 'reach:    this repo only - /private/var/folders/.../caws-surface-lZraKu' followed by 'A guard in any other repo ignores this grant. For machine-wide reach, re-grant with --all-repos.' show --json returns active:true with applies_here:false when only repo_root is rewritten to another real directory - active and applies_here kept separate so an unexpired foreign-repo grant cannot read as ACTIVE here. Also npx jest tests/shell/reprieve-command (record-shape) and tests/shell/reprieve-surface-detection: 82/82 after both oracles were updated from the old machine-wide shape. Unit-level path semantics in describe 'reprieveReachesRepo - path equality' 3/3: exact match only, symlink-resolved on both sides, and NOT a parent/child prefix match."
+    recorded_at: "2026-09-19T04:51:04.950Z"
+    commit_sha: "8d7d3a26"
