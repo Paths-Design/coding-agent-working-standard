@@ -77,6 +77,12 @@ acceptance:
     then: >-
       each of the three refuses with the same containment diagnostic, proving all
       four governed entry points are covered rather than specs create alone
+  - id: A8
+    given: 'an origin record that exists but is unparseable or structurally invalid'
+    when: 'a governed lifecycle command runs'
+    then: >-
+      it refuses with a repair instruction naming the record path, rather than
+      treating an unreadable origin as no origin and admitting every repo
 non_functional: {}
 contracts:
   - name: 'session-origin-record'
