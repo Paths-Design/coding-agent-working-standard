@@ -8,7 +8,8 @@ updated_at: '2026-09-19T07:32:53.648Z'
 created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'caws-cli init command (surface selection and hook-pack planning)'
+    - 'machine system runtime adapter registration (~/.caws)'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -18,7 +19,9 @@ scope:
     - 'packages/caws-cli/tests/shell/init-machine-routed-refusal.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'caws init never wires project-local hook commands for an agent surface that the machine runtime already serves on this machine; the two guard planes must not both be live for one surface in one repo.'
+  - 'Machine-routing is machine STATE, not a property of the surface name. The refusal is conditioned on a registered adapter for that surface, never on a hardcoded list of surface ids, so a fresh machine with no adapter is never refused and cannot be left ungoverned.'
+  - 'The refusal is emitted BEFORE any filesystem write, and names a remedy runnable from outside the affected session -- a guard that lands project hooks which then block every tool call, including the exit, is a trap rather than a guard.'
 acceptance:
   - id: A1
     given: 'a machine with a registered adapter for the requested agent surface whose system settings are absent or disabled'
