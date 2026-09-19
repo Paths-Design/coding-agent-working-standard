@@ -647,3 +647,7 @@ tmp/guard-strikes-*.json
 # Codex operational cache (never executable hook sources)
 .codex/hooks/state/
 .codex/logs/
+
+# dsh operational cache (never executable hook sources)
+.dsh/hooks/state/
+.dsh/hooks/locks/
