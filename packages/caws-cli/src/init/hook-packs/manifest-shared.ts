@@ -524,7 +524,16 @@ import { isAdapterCoveredSurface } from './types';
 // lib/reprieve.sh now honors a record's `repo_root`, so a grant issued in one
 // repo no longer lifts a guard in every other repo on the machine. An absent
 // field stays machine-wide, which is what keeps a pre-upgrade grant alive.
-export const SHARED_PACK_VERSION = 87;
+// 88 closes CAWS-GUARD-REMEDIATION-CROSS-REPO-CONSISTENCY-01. The cross-repo
+// predicate and the interpreter write-literal scan move from bash-write-guard
+// into lib/bash-mutation-targets.sh, and block-dangerous consults them before
+// choosing an opaque-exec remediation: it no longer offers "write the probe to
+// a script file and run it by path" when the payload's write target is in
+// another repository — the route its sibling guard refuses, and the sentence
+// session 1aa3f0bd followed out of the repo. bash-write-guard additionally
+// fails CLOSED on a lib that loads but predates those functions, because that
+// shape used to lose the cross-repo arm with nothing in the output to say so.
+export const SHARED_PACK_VERSION = 88;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
