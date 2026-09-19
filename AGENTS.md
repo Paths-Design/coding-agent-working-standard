@@ -347,8 +347,14 @@ caws reprieve list
   a hook script) without disabling the guard for every other session.
 
 A reprieve requires `--reason`, `--approved-by`, and exactly one of `--for` or
-`--expires-at`. New grants are session-global; `--surface` supplies harness
-provenance and legacy lookup context. The skip is logged to stderr
+`--expires-at`. A grant covers one session in one repo: the record carries the
+repo it was granted from, and a guard in any other repo ignores it unless the
+grant was made with `--all-repos`. A grant that names some but not all handlers
+of a set that jointly enforces one boundary (e.g. `scope-guard.sh` and
+`bash-write-guard.sh` both adjudicate the cross-repo write boundary, on
+different tool channels) is refused — lifting one does not narrow the exception,
+it redirects the write to the channel still guarded. `--surface` supplies
+harness provenance and legacy lookup context. The skip is logged to stderr
 (`[reprieve] <handler> skipped for session <id> (expires <ts>)`) so the audit
 trail shows when and why a guard was skipped. A foreign session is never covered
 — the state file is keyed to the resolved session id.

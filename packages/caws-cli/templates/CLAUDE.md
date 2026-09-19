@@ -11,7 +11,7 @@ and retire reviewed legacy project registrations with `adapters migrate`.
 Preview each operation with `--plan`; consult its dedicated `--help`.
 New projects inherit configured system behavior through `caws init --agent-surface`.
 Agents in each harness must verify native lifecycle, guards and session rendering.
-Reprieves are human-granted session-global exceptions; leases remain visibility.
+Reprieves are human-granted exceptions covering one session in one repo (`--all-repos` widens); leases remain visibility.
 
 ## Build & Test
 

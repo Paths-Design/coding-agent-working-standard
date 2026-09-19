@@ -242,7 +242,7 @@ describe('CAWS-REPRIEVE-SURFACE-DETECTION-001: env corroborates, never decides (
 });
 
 describe('CAWS-REPRIEVE-SURFACE-DETECTION-001: success names the surface (A7)', () => {
-  it('states the surface provenance and machine-wide session scope', () => {
+  it('states the surface provenance and the repo the grant reaches', () => {
     const repoRoot = makeRepoRoot(STERLING_DIRS, {
       session_id: SESSION,
       platform: 'codex',
@@ -250,9 +250,11 @@ describe('CAWS-REPRIEVE-SURFACE-DETECTION-001: success names the surface (A7)', 
     const r = grant(repoRoot);
 
     expect(r.out).toContain('surface:  .codex');
-    expect(r.out).toContain(
-      'scope: session-global; machine dispatchers consult this record across projects.'
-    );
+    // CAWS-REPRIEVE-BOUNDARY-AND-REPO-SCOPE-01 narrowed the default reach from
+    // machine-wide to this repo, so the success message must name the ONE repo
+    // the grant covers rather than assert it spans projects.
+    expect(r.out).toContain(`reach:    this repo only — ${fs.realpathSync(repoRoot)}`);
+    expect(r.out).toContain('A guard in any other repo ignores this grant.');
     // Provenance is what lets an operator audit a wrong-dir grant from the
     // success message alone — the sterling case went unnoticed for 7 minutes.
     expect(r.out).toContain('the lease for session');

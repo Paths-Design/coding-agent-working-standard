@@ -428,10 +428,15 @@ Three consequences:
   what it keeps and for whom — and as `telemetry_retirement` (`retire` /
   `retained` / `retainedFor`) in `--plan --json`.
 
-Reprieves are human-granted session-global exceptions in
-`~/.caws/state/sessions/<session>/`. `--surface` records harness identity and
-selects legacy lookup; it does not partition new grants. `caws reprieve grant`
-requires an explicit target, handlers, reason, approver and one expiry choice.
+Reprieves are human-granted exceptions stored in
+`~/.caws/state/sessions/<session>/`. Storage is machine-wide; **reach is not** —
+a grant covers one session in the repo it was granted from, and `--all-repos` is
+what widens it. `--surface` records harness identity and selects legacy lookup;
+it does not partition new grants. `caws reprieve grant` requires an explicit
+target, handlers, reason, approver and one expiry choice, and refuses a grant
+that covers part of a handler set jointly enforcing one boundary — naming the
+co-handlers, because lifting one channel of a two-channel boundary reads to an
+agent as authorization for the other.
 
 ### Extend the guards; do not fork them
 

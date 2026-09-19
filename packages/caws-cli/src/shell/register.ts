@@ -1168,6 +1168,7 @@ export function registerShellCommands(
       current?: boolean;
       session?: string;
       surface?: string;
+      allRepos?: boolean;
       dryRun?: boolean;
       json?: boolean;
       data?: boolean;
@@ -1184,6 +1185,7 @@ export function registerShellCommands(
         current: opts.current !== false,
         ...(opts.session !== undefined ? { session: opts.session } : {}),
         ...(opts.surface !== undefined ? { surface: opts.surface } : {}),
+        allRepos: opts.allRepos === true,
         dryRun: opts.dryRun === true,
         json: opts.json === true,
         showData: opts.data === true,
