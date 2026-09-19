@@ -94,6 +94,17 @@ acceptance:
       boundary set, because a partial grant there does not relocate one action to
       another channel: the guards and the lifecycle plane govern different
       capabilities
+  - id: A10
+    given: >-
+      a harness-identified session with no origin record, running a governed command
+      in a repo that holds NO lease for it (the shape a test harness produces when
+      it shells out to caws inside a throwaway repo while inheriting the agent
+      environment)
+    when: 'the command runs'
+    then: >-
+      it is admitted and NO origin record is written, so a repo that never
+      registered the session cannot claim it and strand the session's real work
+      against a directory that is about to be deleted
 non_functional: {}
 contracts:
   - name: 'session-origin-record'
