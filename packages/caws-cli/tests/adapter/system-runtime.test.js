@@ -423,3 +423,186 @@ test('system audit logs are machine-owned and do not dirty either project', () =
     expect(fs.existsSync(path.join(p, '.codex/logs'))).toBe(false);
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tier-2 guard configuration on the MACHINE-ROUTED plane
+// (CAWS-HOOKS-GUARD-CONFIG-MACHINE-PLANE-E2E-01)
+//
+// tests/hooks/bats/guard-config-adopters.bats drives the PROJECT-WIRED
+// dispatcher, which resolves libs by filesystem path. The machine plane does
+// not: run-handlers.sh takes the `CAWS_MACHINE_RUNTIME == 1` branch and calls
+// `caws_source_lib guard-config.sh`, whose resolution order is machine
+// overrides -> $CAWS_HOME/surfaces/<s>/lib -> adapter lib dir -> shared lib
+// dir. Nothing the project-wired arms prove says that chain finds the file.
+//
+// The stakes are asymmetric. A lib missing from the runtime install set does
+// NOT degrade to the shipped table the way an absent project-local copy does:
+// it takes down EVERY machine-routed tool call in every project on the machine.
+// Two mechanisms produce that, and the arms below establish which one runs —
+// the launcher's manifest check refuses first, by name (measured), ahead of the
+// silent `caws_source_lib guard-config.sh || return 2` at run-handlers.sh:420.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function writeGuardPolicy(p, guards) {
+  fs.mkdirSync(path.join(p, '.caws/hooks'), { recursive: true });
+  fs.writeFileSync(
+    path.join(p, '.caws/hooks/hook-policy.json'),
+    JSON.stringify({ version: 1, surfaces: {}, guards })
+  );
+}
+
+// A probe standing in for a real adopter: it reaches the config through the
+// same two accessors `scope-guard.sh` uses and reports what it saw on stderr.
+//
+// Its reachability is the oracle these arms need. `caws_source_lib
+// guard-config.sh || return 2` aborts run_handlers BEFORE any handler body
+// executes, so an abort is observable as the total ABSENCE of this marker --
+// which an exit code cannot distinguish, because the stock chain legitimately
+// exits 2 for its own reasons in a bare fixture repo.
+function installProbeGuard() {
+  fs.writeFileSync(
+    path.join(templates, 'shared/cwd-guard.sh'),
+    '#!/bin/bash\n' +
+      'source "${CAWS_SHARED_LIB_DIR}/guard-config.sh" 2>/dev/null || true\n' +
+      'if declare -F caws_guard_prefixes >/dev/null 2>&1; then\n' +
+      '  caws_guard_config_load "${CAWS_PROJECT_DIR:-.}" || true\n' +
+      '  printf "SAW:%s:%s\\n" "${CAWS_GUARD_CONFIG_STATUS:-none}" ' +
+      '"$(caws_guard_prefixes scope-guard.sh | tr "\\n" ",")" >&2\n' +
+      'else\n' +
+      '  printf "SAW:no-accessor:\\n" >&2\n' +
+      'fi\n' +
+      'exit 0\n'
+  );
+}
+const seen = (r) => `${r.stdout || ''}${r.stderr || ''}`;
+
+test('the runtime install set carries BOTH guard-config halves, so the machine chain cannot abort', () => {
+  const result = installMachineRuntime({ home, templatesRoot: templates, plan: true });
+  // Asserted as a pair on purpose: the accessor alone would source cleanly and
+  // then report `unavailable` forever, because it resolves the parser as its
+  // own sibling. Shipping one without the other is silent, not loud.
+  expect(result.files).toContain('lib/guard-config.sh');
+  expect(result.files).toContain('lib/guard-config.py');
+});
+
+test('both halves land on disk in the snapshot the launcher actually sources from', () => {
+  const installed = installMachineRuntime({ home, templatesRoot: templates });
+  const libDir = path.join(home, 'lib/runtimes', installed.digest, 'lib');
+  expect(fs.existsSync(path.join(libDir, 'guard-config.sh'))).toBe(true);
+  expect(fs.existsSync(path.join(libDir, 'guard-config.py'))).toBe(true);
+});
+
+test('the handler chain still runs to completion when the repo declares no policy', () => {
+  // The regression lock: every project on the machine takes this path. The
+  // claim is NOT about the final verdict (the stock chain owns that, and in a
+  // bare fixture repo other guards legitimately block) -- it is that
+  // run_handlers reached and ran a handler at all, which `|| return 2` would
+  // have prevented.
+  const p = repo('guard-config-none');
+  installProbeGuard();
+  installMachineRuntime({ home, templatesRoot: templates });
+  configure(p, { disabled: {}, extensions: {}, handlers: {}, libraries: {} });
+  const result = invoke(p, 'pre_tool_use', {}, { file_path: 'src/app.ts' });
+  expect(seen(result)).toContain('SAW:');
+  // `absent` and not `unavailable`: the parser was found and ran, and reported
+  // a verified-absent document. `unavailable` here would mean the lib resolved
+  // but its parser did not, which is the silent half of the same defect.
+  expect(seen(result)).toContain('SAW:absent:');
+  expect(seen(result)).not.toContain('SAW:no-accessor');
+});
+
+test('a runtime MISSING the accessor is refused by name, not degraded to the shipped table', () => {
+  // The contrast that makes the two "the chain ran" arms non-vacuous: without
+  // it, `toContain('SAW:')` could be passing for reasons unrelated to lib
+  // resolution, and nothing would show the absence has any consequence.
+  //
+  // It also pins WHICH mechanism catches it, which is not the one the inner
+  // code suggests. `run-handlers.sh:420` has `caws_source_lib guard-config.sh
+  // || return 2` -- a silent abort with no diagnostic. That line never fires
+  // here, because the launcher validates the snapshot against its manifest
+  // first and refuses with the absolute path named. The loud failure is the
+  // one that actually runs; `|| return 2` is the backstop behind it.
+  //
+  // Either way the behavior is total, not degrading: unlike an absent
+  // project-local copy, this does not fall back to the shipped table, so the
+  // manifest row is load-bearing rather than a nicety.
+  const p = repo('guard-config-missing-lib');
+  installProbeGuard();
+  const installed = installMachineRuntime({ home, templatesRoot: templates });
+  configure(p, { disabled: {}, extensions: {}, handlers: {}, libraries: {} });
+
+  const healthy = invoke(p, 'pre_tool_use', {}, { file_path: 'src/app.ts' });
+  expect(seen(healthy)).toContain('SAW:absent:');
+
+  fs.rmSync(path.join(home, 'lib/runtimes', installed.digest, 'lib/guard-config.sh'));
+  const broken = invoke(p, 'pre_tool_use', {}, { file_path: 'src/app.ts' });
+  // Same repo, same envelope, same policy state; the only variable is the lib.
+  expect(broken.status).toBe(2);
+  expect(JSON.parse(broken.stdout).decision).toBe('block');
+  // Named, so an operator can act on it. A bare exit 2 would be the silent
+  // variant this assertion exists to exclude.
+  expect(JSON.parse(broken.stdout).reason).toContain('guard-config.sh');
+  expect(seen(broken)).not.toContain('SAW:');
+});
+
+test('an unparseable policy is refused by the LAUNCHER, before any handler runs', () => {
+  // The two planes fail closed in different places, and this pins which.
+  //
+  // Project-wired: the chain is a baked HANDLERS array, so a bad document is
+  // only ever a tier-2 concern -- the guard runs and gets zero entries
+  // (guard-config-adopters.bats, "the threshold key is 'delta'").
+  //
+  // Machine-routed: the launcher must PARSE the document to build the chain at
+  // all, because the tier-1 `surfaces` half decides which handlers exist. It
+  // cannot defer that to a handler, so an unparseable document blocks the tool
+  // call outright. That is strictly stronger than "apply zero entries", so the
+  // tier-2 promise is preempted here, not violated.
+  const p = repo('guard-config-invalid');
+  installProbeGuard();
+  installMachineRuntime({ home, templatesRoot: templates });
+  configure(p, { disabled: {}, extensions: {}, handlers: {}, libraries: {} });
+  fs.mkdirSync(path.join(p, '.caws/hooks'), { recursive: true });
+  fs.writeFileSync(path.join(p, '.caws/hooks/hook-policy.json'), '{ this is not json');
+  const result = invoke(p, 'pre_tool_use', {}, { file_path: 'src/app.ts' });
+
+  expect(result.status).toBe(2);
+  expect(JSON.parse(result.stdout).decision).toBe('block');
+  // The refusal must NAME the file, or the operator cannot find what to fix.
+  expect(JSON.parse(result.stdout).reason).toContain('.caws/hooks/hook-policy.json');
+  // The block came from the launcher and not from some guard downstream: the
+  // probe never ran. This is the load-bearing half -- without it the arm would
+  // pass on any exit-2 for any reason.
+  expect(seen(result)).not.toContain('SAW:');
+});
+
+test('the tier-2 document reaches a guard through bin/caws-hook, changing what it sees', () => {
+  // The end-to-end claim, as a controlled pair: identical envelope, identical
+  // fixture, the document as the only variable. A fixture guard reads the
+  // config through the same accessors a real adopter uses and reports what it
+  // saw, so this asserts the TRANSPORT (launcher -> run-handlers -> shared lib
+  // -> accessor), which is the only part the project-wired arms cannot.
+  const p = repo('guard-config-e2e');
+  installProbeGuard();
+  installMachineRuntime({ home, templatesRoot: templates });
+  configure(p, { disabled: {}, extensions: {}, handlers: {}, libraries: {} });
+
+  const before = invoke(p, 'pre_tool_use', {}, { file_path: 'native/core.rs' });
+  writeGuardPolicy(p, {
+    'scope-guard.sh': {
+      additional_allow_prefixes: [
+        { prefix: 'native/', reason: 'Rust core lives here; this repo has no src directory.' },
+      ],
+    },
+  });
+  const after = invoke(p, 'pre_tool_use', {}, { file_path: 'native/core.rs' });
+
+  // Non-vacuity: the accessor must have been REACHABLE in both runs, so the
+  // difference is the document and not a failure to source the lib at all.
+  expect(seen(before)).not.toContain('SAW:no-accessor');
+  expect(seen(after)).not.toContain('SAW:no-accessor');
+  // Absent document -> `absent`, which is distinct from `invalid` and from
+  // `unavailable`; the prefix list is empty.
+  expect(seen(before)).toContain('SAW:absent:');
+  // Present document -> parsed, and the declared prefix arrived intact.
+  expect(seen(after)).toContain('SAW:ok:native/,');
+});
