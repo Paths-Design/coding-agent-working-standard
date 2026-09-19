@@ -50,3 +50,8 @@ evidence:
     evidence_ref: "T11b: with every stage stubbed to pass, the hook still exits 0 after the drain. T11-setup2 gates that the stubs reach the child shell, so the exit-0 is a real all-pass and not a harness artefact. This assertion survives the drain-removal mutation by design -- it asserts no verdict changed, it is not a drain detector."
     recorded_at: "2026-09-19T18:33:38.689Z"
     commit_sha: "9ecd0ee0"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "T11c: with CAWS_STAGE_FAIL='npx turbo' injecting a lint-stage failure, the hook still exits 1 after the drain, so draining stdin did not make the hook permissive."
+    recorded_at: "2026-09-19T18:33:41.144Z"
+    commit_sha: "9ecd0ee0"
