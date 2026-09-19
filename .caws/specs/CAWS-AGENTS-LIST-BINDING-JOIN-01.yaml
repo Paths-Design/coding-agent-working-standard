@@ -2,9 +2,10 @@ id: CAWS-AGENTS-LIST-BINDING-JOIN-01
 title: 'caws agents list joins the worktree registry instead of asserting (no worktree) for every session, and renders unknown when the registry cannot be read'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-agents-binding-join
 created_at: '2026-09-19T10:04:32.439Z'
-updated_at: '2026-09-19T10:04:32.439Z'
+updated_at: '2026-09-19T10:04:41.306Z'
 created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
 blast_radius:
   modules:
