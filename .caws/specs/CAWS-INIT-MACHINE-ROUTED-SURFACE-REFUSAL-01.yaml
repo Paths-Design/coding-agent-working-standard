@@ -2,9 +2,10 @@ id: CAWS-INIT-MACHINE-ROUTED-SURFACE-REFUSAL-01
 title: 'caws init refuses to wire project-local hooks for a surface the machine runtime already serves, and names the back-out'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-init-machine-routed
 created_at: '2026-09-19T07:32:53.648Z'
-updated_at: '2026-09-19T07:32:53.648Z'
+updated_at: '2026-09-19T07:33:54.761Z'
 created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
 blast_radius:
   modules:
