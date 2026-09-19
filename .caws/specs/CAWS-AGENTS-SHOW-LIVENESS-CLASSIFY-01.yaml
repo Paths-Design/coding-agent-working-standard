@@ -52,3 +52,9 @@ non_functional: {}
 contracts:
   - name: 'read-surface-unsourced-fact'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "tests/shell/agents-show-liveness.test.js B1/B1b/B1c/B1d/B1e at 95abe29a. B1: a lease with status=active aged 9h past a 30m TTL yields payload.lease.status='active' AND payload.liveness.classification='stale' with source='derived' and agrees_with_persisted_status=false. B1b: the human form matches /persisted status:\\s+active/ and /derived liveness:\\s+stale/ and contains 'not persisted', so a reader can tell which value is on disk. B1d pins stopped, B1e pins the 'stopping' case where the literal comparison reads false with nothing wrong. Live CLI artifact on a real lease (e1516fbe, dist via Commander): 'persisted status: active' / 'derived liveness: stale (ttl 1800000ms, last_active 24838973ms ago)'. Baseline before the fix: 11 of 12 failed; only the not-found path passed."
+    recorded_at: "2026-09-19T10:30:12.669Z"
+    commit_sha: "95abe29a"
