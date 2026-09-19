@@ -46,3 +46,9 @@ non_functional: {}
 contracts:
   - name: 'machine-adapter-refusal'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "caws-hook.py's top-level handler now consults ENFORCING_EVENTS={'pre_tool_use'} before emitting a decision, so a configuration error on stop exits 0 with the diagnostic on stderr. Pinned by tests/adapter/system-runtime.test.js 'the same configuration error does NOT block the session from stopping': status 0, stdout carries no decision key, stderr contains 'one-time system migration'. It failed first on the unfixed code with status 2. Mutants M1 (re-adding stop to ENFORCING_EVENTS) and M4 (suppressing the stderr print, which made stderr the empty string) each killed this arm. Run: cd packages/caws-cli && npx jest tests/adapter/system-runtime.test.js gives 21/21; full suite 3327/3327 across 247 suites."
+    recorded_at: "2026-09-19T03:02:58.071Z"
+    commit_sha: fa64d64b
