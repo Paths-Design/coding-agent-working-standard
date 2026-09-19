@@ -72,3 +72,8 @@ evidence:
     evidence_ref: "tests/shell/worktree-list-json.test.js C3 + C3b at 94d7c62a -- a discriminating PAIR, not a single case. C3: a registry row whose branch is 'no-such-branch' yields ahead null, behind null, a non-empty unknown_reason containing the branch name, and explicitly asserts ahead !== 0 and behind !== 0. C3b is the counterweight that makes C3 meaningful: a lane created at base tip reports REAL zeros (ahead 0, behind 0, unknown_reason null). Without C3b an implementation that returned null for every lane would satisfy C3 while destroying the surface's information; without C3 one that returned zeros everywhere would satisfy C3b while asserting 'this lane is current' about a lane whose ref does not resolve -- the one answer that is actively wrong."
     recorded_at: "2026-09-19T10:46:33.941Z"
     commit_sha: "94d7c62a"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "tests/shell/worktree-list-json.test.js C4 at 94d7c62a: an initialized repo with no registry yields exit 0, empty stderr, ok true, worktrees deep-equal [], and counts {total:0, behind_base:0, divergence_unavailable:0}. The empty case needed explicit handling because the pre-change code returned early with the '(no worktrees registered)' prose line before any rendering branch existed; emitting that string under --json would have produced unparseable output. Asserting err is exactly '' rules out the variant where the payload is correct but a diagnostic is also written."
+    recorded_at: "2026-09-19T10:46:35.166Z"
+    commit_sha: "94d7c62a"
