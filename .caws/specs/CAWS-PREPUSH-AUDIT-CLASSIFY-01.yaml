@@ -1,0 +1,46 @@
+id: CAWS-PREPUSH-AUDIT-CLASSIFY-01
+title: 'pre-push distinguishes an audit FINDING from an unreachable advisory service, so a registry outage stops manufacturing a --no-verify incentive'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-19T17:34:24.700Z'
+updated_at: '2026-09-19T17:34:24.700Z'
+created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
+blast_radius:
+  modules:
+    - 'repo-local git hooks (.husky/pre-push)'
+    - 'hook test harness (.husky/tests/run.sh)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - '.husky/pre-push'
+    - '.husky/tests/run.sh'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'npm audit returns an advisory report containing at least one critical vulnerability'
+    when: 'the pre-push audit stage runs'
+    then: 'the push is refused and the message names it as a security finding, because a real finding must always block'
+  - id: A2
+    given: 'npm audit cannot obtain a report at all and says so (the retired quick-audit endpoint returning 400, or any transport failure)'
+    when: 'the pre-push audit stage runs'
+    then: 'the stage reports the advisory service as unreachable, states explicitly that this is NOT a vulnerability finding and that nothing was verified, and does not refuse the push'
+  - id: A3
+    given: 'npm audit exits non-zero with neither an advisory report nor evidence of a transport failure'
+    when: 'the pre-push audit stage runs'
+    then: 'the push is refused, because an unclassifiable failure must fall toward refusing rather than be absorbed by the unreachable branch'
+  - id: A4
+    given: 'npm audit exits zero'
+    when: 'the pre-push audit stage runs'
+    then: 'the stage passes silently and the remaining stages still run, so the classification cannot have broken the ordinary path'
+  - id: A5
+    given: 'the four classification outcomes'
+    when: 'the hook test suite runs'
+    then: 'each is exercised against the real .husky/pre-push file with a stubbed npm, and the refusing cases are what stop the unreachable case from passing vacuously'
+non_functional: {}
+contracts:
+  - name: 'prepush-audit-classification'
+    type: behavior
