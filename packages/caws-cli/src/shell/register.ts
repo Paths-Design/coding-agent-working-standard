@@ -1803,8 +1803,11 @@ export function registerShellCommands(
   );
 
   defineLeaf(worktreeCmd, leafMeta(WORKTREE_COMMAND_META, 'list')).action(
-    (opts: { data?: boolean }) => {
-      const code = runWorktreeListCommand({ showData: opts.data === true });
+    (opts: { data?: boolean; json?: boolean }) => {
+      const code = runWorktreeListCommand({
+        json: opts.json === true,
+        showData: opts.data === true,
+      });
       exit(code);
     }
   );
