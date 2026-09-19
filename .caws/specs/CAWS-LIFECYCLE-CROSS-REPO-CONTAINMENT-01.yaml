@@ -57,12 +57,14 @@ acceptance:
       both are admitted and no origin record is written, because an unidentifiable
       caller must not be contained everywhere
   - id: A5
-    given: 'a harness-identified session with NO origin record yet'
-    when: 'its first governed lifecycle command runs in repo B'
+    given: >-
+      a harness-identified session with NO origin record yet, running in a repo that
+      already holds a lease for it
+    when: 'its first governed lifecycle command runs there'
     then: >-
-      the command is admitted and the origin record is written naming repo B; a
-      subsequent call in repo A is then refused, proving the pin is
-      trust-on-first-use and symmetric rather than privileging any particular repo
+      the command is admitted and the origin record is written naming that repo; a
+      subsequent call in a different repo is then refused, proving the pin is
+      symmetric rather than privileging any particular repo
   - id: A6
     given: >-
       a session pinned to repo A and an unexpired human-granted reprieve naming the
