@@ -49,3 +49,9 @@ non_functional: {}
 contracts:
   - name: 'prepush-audit-classification'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "T10b/T10b2: a stubbed advisory report carrying critical:1 makes pre-push exit 1 and print 'audit FOUND vulnerabilities at or above critical' plus 'This is a security finding, not an outage.' The assertion matches hook-authored text; an earlier version matched the fixture's own JSON and was vacuous."
+    recorded_at: "2026-09-19T17:40:09.341Z"
+    commit_sha: "104cb215"
