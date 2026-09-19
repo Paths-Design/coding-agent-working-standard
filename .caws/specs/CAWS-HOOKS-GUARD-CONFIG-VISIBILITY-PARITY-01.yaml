@@ -2,9 +2,10 @@ id: CAWS-HOOKS-GUARD-CONFIG-VISIBILITY-PARITY-01
 title: 'Make tier-2 guard config readable, and pin the two allow tables'' declared relationship'
 risk_tier: 2
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-guard-visibility
 created_at: '2026-09-19T02:41:51.054Z'
-updated_at: '2026-09-19T02:41:51.054Z'
+updated_at: '2026-09-19T02:42:00.129Z'
 created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
 blast_radius:
   modules:
