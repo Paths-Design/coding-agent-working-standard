@@ -131,3 +131,9 @@ evidence:
     recorded_at: "2026-09-19T01:30:57.199Z"
     artifact_path: packages/caws-cli/tests/init/pack-fingerprints.json
     commit_sha: "1a339824"
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "npx bats tests/hooks/bats/guard-config.bats -> 25/25 ok. Arm 25 'the accessors work under /bin/bash 3.2, not merely under a modern bash' invokes them through the literal /bin/bash and asserts ${BASH_VERSION%%.*} == 3, so it cannot silently pass under a modern bash — that discharges the plan's open item on bash-3.2 transport. Degradation arms: 'a MISSING parser leaves the accessors working and reports unavailable', and \"'unavailable' is distinguishable from 'absent'\" (unparsed must never read to a caller as verified-empty). Through the real guards, npx bats tests/hooks/bats/guard-config-adopters.bats arms 24-25 use run_guard_missing_lib to delete guard-config.sh from an isolated hooks tree: scope-guard STILL refuses what the kernel refuses (emits '\"decision\": \"block\"', does not die empty, does not fail open) and write-allowlist STILL allowlists its SHIPPED paths (docs/) — degraded, never disarmed. This is safe by construction rather than by care: every key is append-only, so applying zero entries is strictly the STRICTER outcome, which is why the degraded path and the safe path are the same path. Sourcing uses [[ -f ]] && source, never 'source <missing> || true', per CAWS-HOOK-SOURCE-GUARD-FAIL-SOFT-001."
+    recorded_at: "2026-09-19T01:30:58.979Z"
+    artifact_path: packages/caws-cli/tests/hooks/bats/guard-config.bats
+    commit_sha: "5cbff511"
