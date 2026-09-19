@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 85
+# hook_pack_version: 88
 # caws_min_major: 11
 # lineage_refs: 4,8,13,20,32
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -28,6 +28,14 @@
 #   remove/move/copy rm FILE   mv SRC DST   cp SRC DST   dd of=FILE
 #   git path-restore git restore FILE   git checkout -- FILE
 #                    git reset -- FILE   git clean
+#   interpreter      python / node: write targets appearing as path literals in
+#                    inline -c/-e code, heredoc bodies, or the content of a
+#                    script file named on the command line (write-verb +
+#                    path-literal co-occurrence —
+#                    CAWS-BASH-GUARD-INTERPRETER-WRITE-01). These reach the
+#                    cross-repository check only; they never enter the
+#                    worktree-claim oracle, because a literal is evidence of a
+#                    target, not proof of one.
 
 set -euo pipefail
 
@@ -140,25 +148,15 @@ AGENT_CWD="${HOOK_CWD:-${CAWS_PROJECT_DIR:-.}}"
 # actually names is mutating "files (especially executables) outside its
 # governing repo" — so the predicate here is "inside a DIFFERENT git
 # repository", which /tmp is not.
+# CAWS-GUARD-REMEDIATION-CROSS-REPO-CONSISTENCY-01 moved the predicate itself
+# into lib/bash-mutation-targets.sh (caws_foreign_repo_root) because
+# block-dangerous needs the SAME answer: its opaque-exec remediation used to
+# offer "write the probe to a script file and run it by path" even when the
+# payload's write target was in another repository — a route this guard
+# refuses. One guard recommending what another refuses is how an agent gets
+# walked out of the repo, so the two now read one implementation.
 foreign_repo_root() {
-  # Echo the root of the git repository owning $1 when that repository is not
-  # this project. Empty output means no other repository owns the path.
-  local target="$1" dir
-  case "$target" in
-    "$PROJECT_DIR"|"$PROJECT_DIR"/*) return 0 ;;
-    /*) ;;
-    *) return 0 ;;
-  esac
-  dir="$target"
-  [[ -d "$dir" ]] || dir="$(dirname "$dir")"
-  while [[ -n "$dir" && "$dir" != "/" ]]; do
-    if [[ -e "$dir/.git" ]]; then
-      [[ "$dir" != "$PROJECT_DIR" ]] && printf '%s' "$dir"
-      return 0
-    fi
-    dir="$(dirname "$dir")"
-  done
-  return 0
+  caws_foreign_repo_root "$1" "$PROJECT_DIR"
 }
 
 # --- target extraction (NARROW) --------------------------------------------
@@ -177,6 +175,17 @@ if ! declare -F caws_bash_mutation_candidates >/dev/null 2>&1; then
   printf '{"decision":"block","reason":"CAWS bash-write-guard: cannot load lib/bash-mutation-targets.sh, so Bash-mutation targets cannot be extracted. Failing closed. Restore the hook pack: caws init adapters install"}\n'
   exit 2
 fi
+# A lib PRESENT but older than this guard is the more dangerous shape: the
+# entry point above resolves, the guard runs, and the cross-repo arm silently
+# adjudicates nothing — a fail-OPEN that no output reports. Each function this
+# guard depends on is therefore checked by name, not inferred from one.
+for _fn in caws_foreign_repo_root caws_bash_interpreter_write_literals; do
+  if ! declare -F "$_fn" >/dev/null 2>&1; then
+    echo "[bash-write-guard] CAWS hook infrastructure incomplete: lib/bash-mutation-targets.sh loaded but does not provide $_fn — the cross-repository arm cannot run. Failing CLOSED. Update the shared hook libs with: caws init adapters install" >&2
+    printf '{"decision":"block","reason":"CAWS bash-write-guard: lib/bash-mutation-targets.sh is present but stale (missing %s), so the cross-repository boundary cannot be adjudicated. Failing closed. Update the hook pack: caws init adapters install"}\n' "$_fn"
+    exit 2
+  fi
+done
 
 extract_targets() {
   # Two channels, both consumed, because an ownership gate wants every path a
@@ -203,6 +212,44 @@ abspath() {
   esac
 }
 
+# --- interpreter write-target scan (NARROW) ----------------------------------
+# CAWS-BASH-GUARD-INTERPRETER-WRITE-01: a mutation performed INSIDE an
+# interpreter names no write target on the shell command line, so the
+# recognizer above extracts nothing and the guard adjudicates an empty
+# candidate set. Writing the scratch script is permitted by design (see the
+# /tmp rationale on caws_foreign_repo_root); running it was never adjudicated
+# at all. That pair is a complete cross-repo write channel, and it is the one
+# session 1aa3f0bd used: `cat > /tmp/apply-fix.mjs` carrying a sibling-repo
+# path, then `node /tmp/apply-fix.mjs`, both exit 0.
+#
+# The scan closes the detectable half: write targets that appear as PATH
+# LITERALS inside the interpreter's payload. It lives in
+# lib/bash-mutation-targets.sh (caws_bash_interpreter_write_literals, with the
+# co-occurrence rationale) so block-dangerous reads the SAME answer when it
+# chooses which remediation to print
+# (CAWS-GUARD-REMEDIATION-CROSS-REPO-CONSISTENCY-01). The wrapper below adds
+# only the sentinel the decide loop dispatches on.
+#
+# Interpreter candidates are adjudicated at the CROSS-REPOSITORY boundary ONLY
+# and never enter the worktree-claim oracle. A literal in a script body is
+# evidence that the script may write there, not proof that it will; feeding
+# that to the ownership oracle would turn any in-project path merely MENTIONED
+# in a script into a claim conflict. The spec's invariant is that existing
+# behavior is unchanged everywhere else, so the high-confidence predicate is
+# the only one that acts on this weaker evidence.
+#
+# What it cannot see: a target COMPUTED at runtime — concatenated from shell
+# variables, read out of a config file, or piped in via `python3 -`. That is a
+# real residual, named honestly in scope-guard's refusal rather than papered
+# over, and it is never an admitted route.
+scan_interpreter_targets() {
+  local frag
+  while IFS= read -r frag; do
+    [[ -z "$frag" ]] && continue
+    printf '__INTERP__%s\n' "$frag"
+  done < <(caws_bash_interpreter_write_literals "$1" "$AGENT_CWD")
+}
+
 # --- decide -----------------------------------------------------------------
 WORST="pass"
 WORST_DETAIL=""
@@ -219,6 +266,15 @@ escalate() {
 
 while IFS= read -r cand; do
   [[ -z "$cand" ]] && continue
+  # CAWS-BASH-GUARD-INTERPRETER-WRITE-01: candidates from the interpreter scan
+  # carry a sentinel prefix. They are weaker evidence than a named operand — a
+  # path literal in a script body, not a target the shell will definitely write
+  # — so they are adjudicated at the cross-repository boundary only and are
+  # dropped before the allowlist and the claim oracle.
+  _INTERP=0
+  case "$cand" in
+    __INTERP__*) _INTERP=1; cand="${cand#__INTERP__}" ;;
+  esac
   # Candidates arrive byte-faithful. The recognizer's lexer consumes syntactic
   # quote delimiters as it scans and never introduces a sentinel, so a quoted
   # operand already reads as the path it names and `rm "harness/wire/some
@@ -238,11 +294,34 @@ while IFS= read -r cand; do
   # Cross-repo is adjudicated BEFORE the allowlist and the claim oracle: the
   # allowlist names paths relative to THIS project, so applying it to a sibling
   # repo's tree would admit its docs/, tests/ and .caws/ wholesale.
-  _FOREIGN_REPO="$(foreign_repo_root "$abs")"
+  # An interpreter literal may be composed relative to $HOME rather than the
+  # agent cwd — `Path.home() / "Desktop/Projects/<sibling>/..."` was the shape
+  # in the field — so a non-absolute interpreter candidate is resolved against
+  # BOTH roots and blocks if EITHER resolution lands in a different repository.
+  _FOREIGN_REPO=""
+  if [[ "$_INTERP" == "1" ]]; then
+    _RES_CANDS=("$abs")
+    case "$cand" in
+      /*) ;;
+      ~*) _RES_CANDS+=("${HOME:-/nonexistent-home}/${cand#\~}") ;;
+      *)  _RES_CANDS+=("${HOME:-/nonexistent-home}/$cand") ;;
+    esac
+    for _res in "${_RES_CANDS[@]}"; do
+      _FR="$(foreign_repo_root "$_res")"
+      [[ -n "$_FR" ]] && _FOREIGN_REPO="$_FR"
+    done
+  else
+    _FOREIGN_REPO="$(foreign_repo_root "$abs")"
+  fi
   if [[ -n "$_FOREIGN_REPO" ]]; then
     escalate block "$_FOREIGN_REPO" "block_foreign_repo"
     continue
   fi
+  # Interpreter candidates stop here: the ownership oracle answers a question
+  # ("does an active worktree claim this path?") that a mere literal cannot
+  # support, and running it would make any in-project path named in a script
+  # a claim conflict.
+  [[ "$_INTERP" == "1" ]] && continue
 
   _CAND_ALLOWLISTED=0
   if declare -F caws_is_write_allowlisted >/dev/null 2>&1; then
@@ -287,7 +366,7 @@ while IFS= read -r cand; do
       fi
       ;;
   esac
-done < <(extract_targets "$COMMAND")
+done < <(extract_targets "$COMMAND"; scan_interpreter_targets "$COMMAND")
 
 # --- DYNAMIC operands -------------------------------------------------------
 # A dynamic operand (rm core/*.py) names a file-scoped mutation whose target
