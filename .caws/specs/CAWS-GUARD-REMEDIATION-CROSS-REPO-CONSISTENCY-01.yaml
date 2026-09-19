@@ -75,3 +75,8 @@ evidence:
     evidence_ref: "bats B3 (discriminating pair with B1): the SAME sibling-repo path, but the payload only READS it (open().read(), no write verb). Still refused for opacity, and the script-file option IS still printed, because a cross-repo read is not a route any sibling guard refuses. B3 was 'ok' pre-fix and stays 'ok'. Together B1/B3 prove the suppression keys on the write-verb co-occurrence predicate in caws_bash_interpreter_write_literals, not on the mere presence of a foreign path."
     recorded_at: "2026-09-19T05:24:10.987Z"
     commit_sha: "14d0ffe19126e71e83e9da68b4115a4d92f20de3"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "bats B4: the general remediation now asserts 'adjudicated exactly as a direct write'. Asserted-failing baseline: B4 reported 'not ok' pre-fix and its diff printed the old sentence verbatim — '(1) write the probe to a script file in your scope (e.g. a .py or .js file) and run it by path' — with no adjudication clause, i.e. text that reads as a route with different reach. After the change B4 is 'ok 4'. The corrected clause states the route makes the payload reviewable and does not reach anywhere a direct write could not."
+    recorded_at: "2026-09-19T05:24:21.433Z"
+    commit_sha: "14d0ffe19126e71e83e9da68b4115a4d92f20de3"
