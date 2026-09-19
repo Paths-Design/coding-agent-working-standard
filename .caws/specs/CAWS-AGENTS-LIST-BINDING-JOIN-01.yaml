@@ -60,3 +60,8 @@ evidence:
     evidence_ref: "tests/shell/agents-binding-join.test.js A2 + A2b, run at 2eb69a0a: with worktrees.json readable and the session owning nothing, the line reads 'sess-none  (no worktree)  (no spec)' and contains no 'unknown'. The distinction is load-bearing: loadWorktrees returns ok({}) for a MISSING registry too, so an empty or absent registry is READ, and the absence is observed rather than asserted. Cross-check: the out-of-scope tests/shell/agents-work-state.test.js:140, which asserts exactly /sess-without\\s+\\(no worktree\\)\\s+\\(no spec\\)\\s*$/, stays green unmodified -- the join does not regress the case the old renderer got right by accident."
     recorded_at: "2026-09-19T10:17:00.267Z"
     commit_sha: "2eb69a0a"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "tests/shell/agents-binding-join.test.js A3 + A3b, run at 2eb69a0a: worktrees.json containing '{ this is not json' (parse failure) and '[\"wt-a\"]' (valid JSON, wrong shape -> REGISTRY_NOT_OBJECT) both render 'unknown  unknown'; exit code is 0 and the session is still listed. The asserted negatives are the point: the line must NOT contain '(no worktree)' or '(no spec)', because with the registry unreadable that absence cannot be sourced."
+    recorded_at: "2026-09-19T10:17:01.600Z"
+    commit_sha: "2eb69a0a"
