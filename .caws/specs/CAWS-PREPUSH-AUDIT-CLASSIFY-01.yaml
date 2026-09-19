@@ -60,3 +60,8 @@ evidence:
     evidence_ref: "T10c/T10c2/T10c3/T10c4: the REAL 400 payload captured from the live retired quick-audit endpoint (message/uri/headers/statusCode, no auditReportVersion) plus npm's 'audit endpoint returned an error' stderr makes pre-push exit 0 and print 'audit SKIPPED', 'could not be reached', 'This is NOT a vulnerability finding', 'nothing was verified' and 'UNVERIFIED dependency tree'. Baseline failed all four."
     recorded_at: "2026-09-19T17:40:14.795Z"
     commit_sha: "104cb215"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "T10d: exit 1 with empty stdout and an unrecognised stderr refuses (exit 1). Mutation-verified: removing the transport-error guard so the unreachable branch became the catch-all killed T10d (49 -> 47 passed), so the assertion discriminates rather than passing inertly."
+    recorded_at: "2026-09-19T17:40:16.934Z"
+    commit_sha: "104cb215"
