@@ -77,3 +77,9 @@ evidence:
     recorded_at: "2026-09-19T02:26:28.936Z"
     artifact_path: packages/caws-cli/tests/shell/hooks-mutating.test.js
     commit_sha: "8ca16514"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "Arm 'it reports what it would write AND what it would clear': --plan exits 0, prints 'would write' and 'would then clear' naming both claude-code and codex, and BOTH stores are asserted byte-identical afterwards (treeHash of .caws, plus the machine state file compared as text) — a --plan on a two-store verb has two ways to lie, so checking one would be half a check. The stronger arm is '--plan --json names the same clear set the non-plan run performs': it runs --plan --json, then the real --json import over the same fixture, and asserts applied.cleared equals planned.wouldClear and applied.changed equals planned.changed, with planned.wrote false and applied.wrote true. A preview that names a different set than the real run is worse than no preview, and only comparing the two runs catches that. Both go through the built dist CLI, and --plan appears in the 'caws hooks import --help declares its flags' row — together these prove the flag is FORWARDED rather than declared-and-discarded, which is a defect class this repo has shipped before (handler tests bypass Commander). Run: npx jest tests/shell/hooks-mutating.test.js => 46/46; full suite => 247/247, 3320/3320, exit 0."
+    recorded_at: "2026-09-19T02:26:40.054Z"
+    artifact_path: packages/caws-cli/tests/shell/hooks-mutating.test.js
+    commit_sha: "8ca16514"
