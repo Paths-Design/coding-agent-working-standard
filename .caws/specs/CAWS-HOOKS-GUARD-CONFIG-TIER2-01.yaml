@@ -107,3 +107,9 @@ evidence:
     recorded_at: "2026-09-19T01:30:11.865Z"
     artifact_path: packages/caws-cli/tests/init/repo-hook-policy.test.js
     commit_sha: "58f78df9"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "TWO claims, proven separately. (1) VERDICTS UNCHANGED with no config: the full pre-existing bats suite — npx bats tests/hooks/bats/ -> 374 ok, 0 not ok — was authored before this slice and still passes with the loader wired into run-handlers.sh and four guards; scope-guard.bats, bash-write-guard.bats and worktree-write-guard.bats are the load-bearing members. guard-config.bats also pins that an absent policy reports status 'absent', distinct from 'invalid' and from 'unavailable'. (2) ONE python3 PER DISPATCH, NOT ONE PER GUARD: arm 'a whole pre_tool_use dispatch spawns the parser EXACTLY once' wraps lib/guard-config.py with a counting shim, drives a real .caws/hooks/dispatch/pre_tool_use.sh, and asserts the counter reads exactly 1 across a chain carrying THREE adopters (scope-guard.sh directly; worktree-write-guard.sh and bash-write-guard.sh via write-allowlist.sh) — per-guard parsing would read 3+. Non-vacuity: the same dispatch with the document removed flips from admitted to '\"decision\": \"block\"', so the single parse demonstrably served a real consult rather than nobody looking. Budget context: python3 spawn measured ~31ms; the pre_tool_use chain already carries 19+ spawns."
+    recorded_at: "2026-09-19T01:30:30.369Z"
+    artifact_path: packages/caws-cli/tests/hooks/bats/guard-config-adopters.bats
+    commit_sha: eb0dc3fb
