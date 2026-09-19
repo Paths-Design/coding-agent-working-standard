@@ -125,3 +125,9 @@ evidence:
     recorded_at: "2026-09-19T01:30:55.322Z"
     artifact_path: packages/caws-cli/tests/hooks/bats/guard-config-adopters.bats
     commit_sha: "1a339824"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "npx jest tests/init/pack-fingerprint.test.js -> 14/14, and tests/init/ -> 18 suites / 424 tests, all inside the full 246-suite / 3279-test run. SHARED_PACK_VERSION is 84 in src/init/hook-packs/manifest-shared.ts with a v84 changelog entry; lib/guard-config.py and lib/guard-config.sh are registered rows in the shared manifest install set (commit 5cbff511) so consumers actually receive them; tests/init/pack-fingerprints.json records the shared fingerprint recomputed from the live tree after the final template edit. The version stayed at 84 rather than moving to 85 across the three template commits because 84 was introduced within this same unreleased slice — no installed pack has ever observed an earlier 84 body, so a bump would be ceremony, not propagation. Also proven green: tests/init/init-hook-pack-render.test.js, including 'every managed file carries the growth-stance edit_stance marker', which caught both new libs shipping without it (commit 2c805aad)."
+    recorded_at: "2026-09-19T01:30:57.199Z"
+    artifact_path: packages/caws-cli/tests/init/pack-fingerprints.json
+    commit_sha: "1a339824"
