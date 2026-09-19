@@ -29,6 +29,7 @@ import {
   type Diagnostic,
   type DoctorInput,
   type GitWorktreeEntry,
+  type RepoHookPolicyObservation,
   type SharedPackDriftRow,
   type TemplateCheck,
 } from '../kernel';
@@ -52,7 +53,12 @@ import { loadWaivers } from './waivers-store';
 // site below is additionally guarded so a throw can never wedge doctor.
 import { parseManagedHeader } from '../init/hook-packs/managed-header';
 import { SHARED_PACK_VERSION, TELEMETRY_ROW_DEST_PATHS } from '../init/hook-packs/manifest-shared';
-import { observeSharedPackBodyDrift, observeTelemetryRowClaimants } from '../init/hook-install';
+import {
+  observeLegacyAdapterPolicy,
+  observeRepoHookPolicy,
+  observeSharedPackBodyDrift,
+  observeTelemetryRowClaimants,
+} from '../init/hook-install';
 import { listStrandedTmpSiblings } from './atomic-write';
 import { ADAPTER_COVERED_SURFACES } from '../init/hook-packs/types';
 import { observeSystemRuntime } from './system-runtime-observation';
@@ -396,6 +402,34 @@ function observeFilesystem(
         ...(installed !== undefined ? { installedSharedPackVersion: installed } : {}),
         shippingSharedPackVersion: SHARED_PACK_VERSION,
         ...(bodyDrift.length > 0 ? { installedSharedPackBodyDrift: bodyDrift } : {}),
+      };
+    })(),
+    // CAWS-HOOKS-POLICY-DOCTOR-RULES-01: the repo-local hook policy. Every
+    // comparison that needs the filesystem or a shipped template — the fork's
+    // upstream sha256, the compiled chain bytes — is resolved HERE, and the
+    // kernel receives plain rows. Absent policy yields undefined, which is
+    // silent; only an unreadable or invalid one becomes an observation.
+    ...((): {
+      repoHookPolicy?: RepoHookPolicyObservation;
+      legacyAdapterPolicyPresent?: boolean;
+    } => {
+      let observed: RepoHookPolicyObservation | undefined;
+      try {
+        observed = observeRepoHookPolicy(repoRoot);
+      } catch {
+        // Fail-open: a collection failure degrades THIS observation only and
+        // must never take the rest of doctor down with it.
+        observed = undefined;
+      }
+      let legacy = false;
+      try {
+        legacy = observeLegacyAdapterPolicy(repoRoot);
+      } catch {
+        legacy = false;
+      }
+      return {
+        ...(observed !== undefined ? { repoHookPolicy: observed } : {}),
+        ...(legacy ? { legacyAdapterPolicyPresent: true } : {}),
       };
     })(),
     // CAWS-GATED-SURFACE-SCOPE-GUARD-001: both sides of the dual-wiring

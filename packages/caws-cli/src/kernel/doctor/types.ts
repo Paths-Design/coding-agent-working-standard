@@ -307,6 +307,20 @@ export interface DoctorInput {
      */
     readonly installedSharedPackBodyDrift?: readonly SharedPackDriftRow[];
     /**
+     * CAWS-HOOKS-POLICY-DOCTOR-RULES-01: the repo-local hook policy
+     * (.caws/hooks/hook-policy.json) with its fork provenance and compiled
+     * chain freshness already measured by the store. UNDEFINED means the repo
+     * has no policy file — silent, never a finding.
+     */
+    readonly repoHookPolicy?: RepoHookPolicyObservation;
+    /**
+     * CAWS-HOOKS-POLICY-DOCTOR-RULES-01: the superseded
+     * .caws/hooks/adapter-policy.json is still on disk. Deliberately
+     * independent of `repoHookPolicy`: the legacy frozen-chain file is most
+     * worth naming in a repo that has NOT adopted the replacement.
+     */
+    readonly legacyAdapterPolicyPresent?: boolean;
+    /**
      * CAWS-DEFECT-LEASE-TMP-STRANDING-01: stranded atomic-write tmp files in
      * .caws/leases/ (names + ages, observed via the atomic-write lister).
      * Optional; undefined = unobserved (silent).
@@ -465,6 +479,53 @@ export interface SystemRuntimeObservation {
  * the store/init observer constructs (same pattern as GitWorktreeEntry) —
  * doctor judges, it never reads baselines itself.
  */
+/**
+ * CAWS-HOOKS-POLICY-DOCTOR-RULES-01: one `forks` record in the repo-local
+ * hook policy, measured against the pack the running CLI ships.
+ *
+ * The kernel never reads a template. The store computes the comparison and
+ * hands the verdict over as data — which is why `upstreamChange` is optional
+ * rather than boolean: absent means the shipped counterpart could not be
+ * measured (the pack ships nothing by that name, or its template is
+ * unreadable), and unobserved must never render as "current".
+ */
+export interface RepoPolicyForkRow {
+  /** Which `surfaces` key carries the fork (`default` or a named surface). */
+  readonly surface: string;
+  readonly handler: string;
+  readonly recordedPack: string;
+  readonly recordedPackVersion: number;
+  /** SHARED_PACK_VERSION of the CLI that produced this observation. */
+  readonly shippingPackVersion: number;
+  /** The justification the fork recorded; rendered so review sees it. */
+  readonly reason: string;
+  /** Shipped body differs from the sha256 recorded at fork time. */
+  readonly upstreamChange?: boolean;
+}
+
+/** One event whose compiled `.chain` sidecar disagrees with the policy. */
+export interface RepoPolicyChainRow {
+  readonly event: string;
+  /** The staleness reason from the shared comparator, verbatim. */
+  readonly reason: string;
+}
+
+/**
+ * CAWS-HOOKS-POLICY-DOCTOR-RULES-01: the repo-local hook policy as doctor
+ * sees it. ABSENT is modelled by the field being undefined on the snapshot,
+ * not by a variant here — a repo that never opted in has nothing to report,
+ * and `invalid` must stay distinguishable from it. Treating an unparseable
+ * policy as absent would report a repo healthy at the moment its guard plane
+ * is failing closed on every tool call.
+ */
+export type RepoHookPolicyObservation =
+  | { readonly kind: 'invalid'; readonly error: string }
+  | {
+      readonly kind: 'valid';
+      readonly forks: readonly RepoPolicyForkRow[];
+      readonly staleChains: readonly RepoPolicyChainRow[];
+    };
+
 export interface SharedPackDriftRow {
   readonly destPath: string;
   /** A pristine baseline was recorded for this file. False = unobserved. */

@@ -30,6 +30,7 @@
 // CAWS-owned entries are identified by the "/.claude/hooks/caws_dispatch/"
 // path segment in the hook command.
 
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -45,7 +46,18 @@ import type {
   InstallFileState,
   ManagedHeader,
 } from './hook-packs/types';
-import type { SharedPackDriftRow } from '../kernel/doctor/types';
+import type {
+  RepoHookPolicyObservation,
+  RepoPolicyChainRow,
+  RepoPolicyForkRow,
+  SharedPackDriftRow,
+} from '../kernel/doctor/types';
+import { checkCompiledChains, policyDigest } from './hook-chain';
+import {
+  REPO_HOOK_POLICY_PATH,
+  effectiveRepoSurfacePolicy,
+  parseRepoHookPolicy,
+} from './repo-hook-policy';
 import type { AgentSurface } from './hook-packs/types';
 import {
   SHARED_PACK,
@@ -56,8 +68,14 @@ import { KNOWN_SURFACES, resolveHookPack } from './hook-packs/register';
 
 /** Location of the pack templates relative to the caws-cli package root.
  *  Resolved at runtime from __dirname so it works both in dev (running
- *  ts-node against src/) and from the dist build. */
-function packTemplateRoot(packId: string): string {
+ *  ts-node against src/) and from the dist build.
+ *
+ *  Exported because more than one surface needs the shipped template bytes —
+ *  the installer, `caws hooks replace` (recording fork provenance) and doctor
+ *  (measuring fork lag). Each __dirname walk is a copy of a rule about package
+ *  layout, and a copy that is one `..` off resolves to nothing while every
+ *  caller degrades quietly. One resolver, several callers. */
+export function packTemplateRoot(packId: string): string {
   // The templates live alongside the built dist/ at the package root.
   // From dist/, walk up to the package root and down into templates.
   // From src/init/hook-install.ts ts-node mode, the same walk works.
@@ -490,6 +508,122 @@ function evaluateFileState(
  * comparisons use the same stripPackVersion normalization evaluateFileState
  * uses, so stamp-only differences never count as growth or upstream change.
  */
+/** Identity of a shipped shared-pack handler, as a fork records it. */
+export interface ShippedHandlerProvenance {
+  readonly pack: string;
+  readonly pack_version: number;
+  readonly sha256: string;
+}
+
+/**
+ * Provenance of the shared-pack file shipping under `handler`, or null when
+ * the pack ships nothing by that name.
+ *
+ * Two surfaces need this and MUST agree: `caws hooks replace` writes the
+ * digest into a fork record, and doctor later compares that digest against the
+ * shipping file to measure lag. If the two computed it differently — a
+ * different path resolution, a different hash input — every fork would read as
+ * drifted the moment it was recorded, and the lag signal would be noise.
+ */
+export function shippedHandlerProvenance(handler: string): ShippedHandlerProvenance | null {
+  const row = SHARED_PACK.installedFiles.find((file) => path.basename(file.destPath) === handler);
+  if (row === undefined) return null;
+  const bytes = readBytes(path.join(packTemplateRoot(SHARED_PACK.id), row.sourcePath));
+  if (bytes === null) return null;
+  return {
+    pack: SHARED_PACK.id,
+    pack_version: SHARED_PACK.packVersion,
+    sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+  };
+}
+
+/**
+ * Observe the repo-local hook policy for doctor.
+ *
+ * Returns undefined when the repo has NO `.caws/hooks/hook-policy.json` — a
+ * repo that has not opted in is not in a degraded state, and a doctor that
+ * complains about it trains its readers to ignore it. An unreadable or
+ * validator-rejected document is reported as `invalid`, never as absent:
+ * treating it as empty would report the repo healthy at the exact moment its
+ * guard plane is failing closed on every tool call.
+ *
+ * Every filesystem and template comparison happens here, so the kernel keeps
+ * no I/O — it receives plain rows and decides only severity and prose.
+ */
+export function observeRepoHookPolicy(repoRoot: string): RepoHookPolicyObservation | undefined {
+  const policyPath = path.join(repoRoot, REPO_HOOK_POLICY_PATH);
+  let text: string;
+  try {
+    text = fs.readFileSync(policyPath, 'utf8');
+  } catch (e) {
+    // ENOENT is "not opted in" (silent). Anything else — a permission error, a
+    // directory where the file should be — is a policy doctor cannot read, and
+    // the launcher cannot either, so it is reported rather than swallowed.
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    return {
+      kind: 'invalid',
+      error: `cannot read ${REPO_HOOK_POLICY_PATH}: ${(e as Error).message}`,
+    };
+  }
+
+  const parsed = parseRepoHookPolicy(text);
+  if (!parsed.ok) return { kind: 'invalid', error: parsed.error };
+
+  const forks: RepoPolicyForkRow[] = [];
+  for (const [surface, surfacePolicy] of Object.entries(parsed.policy.surfaces)) {
+    for (const [handler, fork] of Object.entries(surfacePolicy.forks)) {
+      const shipped = shippedHandlerProvenance(handler);
+      forks.push({
+        surface,
+        handler,
+        recordedPack: fork.forked_from.pack,
+        recordedPackVersion: fork.forked_from.pack_version,
+        shippingPackVersion: SHARED_PACK.packVersion,
+        reason: fork.reason,
+        // A handler the shared pack does not ship (or whose template cannot be
+        // read) has no measurable upstream. The key is OMITTED rather than set
+        // to false — unobserved, never "unchanged". Synthesizing false would
+        // report a fork as current on the strength of a comparison that never
+        // happened.
+        ...(shipped === null ? {} : { upstreamChange: shipped.sha256 !== fork.forked_from.sha256 }),
+      });
+    }
+  }
+
+  // Chain staleness is measured through the SAME resolver `caws hooks compile`
+  // writes with, so doctor can never report a chain current that compile would
+  // rewrite, nor stale one it would leave alone.
+  const dispatchDir = path.join(repoRoot, '.caws/hooks/dispatch');
+  let staleChains: RepoPolicyChainRow[] = [];
+  try {
+    staleChains = checkCompiledChains({
+      dispatchDir,
+      repo: effectiveRepoSurfacePolicy(parsed.policy, 'default'),
+      digest: policyDigest(text),
+      policyPresent: true,
+    })
+      .filter((check) => check.stale)
+      .map((check) => ({ event: check.event, reason: check.reason ?? 'stale' }));
+  } catch {
+    // Fail-open on the chain half only: an unreadable dispatch tree must not
+    // cost the fork rows we already computed.
+    staleChains = [];
+  }
+
+  return { kind: 'valid', forks, staleChains };
+}
+
+/**
+ * Whether the superseded `.caws/hooks/adapter-policy.json` is still present.
+ *
+ * Independent of hook-policy.json: the whole point is that a repo can carry
+ * the legacy frozen-chain file while having no modern policy at all, and that
+ * is the state most in need of naming.
+ */
+export function observeLegacyAdapterPolicy(repoRoot: string): boolean {
+  return fs.existsSync(path.join(repoRoot, '.caws/hooks/adapter-policy.json'));
+}
+
 export function observeSharedPackBodyDrift(repoRoot: string): readonly SharedPackDriftRow[] {
   const packRoot = packTemplateRoot(SHARED_PACK.id);
   const drifted: SharedPackDriftRow[] = [];
