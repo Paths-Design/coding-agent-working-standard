@@ -626,6 +626,153 @@ else
   bad "T9c the real repository config was never touched" "before='$T9REAL_BEFORE' after='$T9REAL_AFTER' — this test leaked into shared state"
 fi
 
+# ─────────────────────────────────────────────────────────────────────────
+# T10 pre-push audit stage classifies WHY npm audit exited non-zero.
+#     `npm audit` exits 1 both when it finds vulnerabilities and when it never
+#     obtained a report (the retired quick-audit endpoint answering 400, an
+#     offline machine, a registry 5xx). Collapsing those into one "audit
+#     failed" means an outage is indistinguishable from a security finding and
+#     the only remaining lever is --no-verify, which disables all five stages.
+#
+#     The stub emits a chosen stdout/stderr and exit code for the audit stage
+#     only; every other stage passes. The payloads are the real shapes: a
+#     successful run always carries auditReportVersion, and the observed 400
+#     carries message/uri/headers and no report at all.
+# ─────────────────────────────────────────────────────────────────────────
+T10GIT="$SCRATCH/gitdir-t10"
+mkdir -p "$T10GIT/objects" "$T10GIT/refs"
+printf 'ref: refs/heads/main\n' > "$T10GIT/HEAD"
+mkdir -p "$SCRATCH/t10"
+
+# A clean advisory report: obtained, nothing at or above critical.
+cat > "$SCRATCH/t10/clean.json" <<'T10CLEAN'
+{"auditReportVersion":2,"vulnerabilities":{},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":0,"total":0}}}
+T10CLEAN
+
+# An advisory report that WAS obtained and contains a critical finding.
+cat > "$SCRATCH/t10/critical.json" <<'T10CRIT'
+{"auditReportVersion":2,"vulnerabilities":{"evil-pkg":{"name":"evil-pkg","severity":"critical","via":["CVE-0000-0000"],"range":"<1.0.1","fixAvailable":true}},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":1,"total":1}}}
+T10CRIT
+
+# The real payload observed from the retired quick-audit endpoint: no report.
+cat > "$SCRATCH/t10/endpoint-error.json" <<'T10ERR'
+{"message":"400 Bad Request - POST https://registry.npmjs.org/-/npm/v1/security/audits/quick - Bad Request","method":"POST","uri":"https://registry.npmjs.org/-/npm/v1/security/audits/quick","headers":{"date":["Sat, 19 Sep 2026 17:34:01 GMT"]},"statusCode":400,"body":{}}
+T10ERR
+cat > "$SCRATCH/t10/endpoint-error.err" <<'T10ERRE'
+npm notice This endpoint is being retired. Use the bulk advisory endpoint instead.
+npm warn audit 400 Bad Request - POST https://registry.npmjs.org/-/npm/v1/security/audits/quick - Bad Request
+npm error audit endpoint returned an error
+T10ERRE
+
+# Neither a report nor any evidence of a transport failure.
+: > "$SCRATCH/t10/unknown.json"
+cat > "$SCRATCH/t10/unknown.err" <<'T10UNK'
+npm error something went sideways in a way this hook has never seen
+T10UNK
+
+_caws_t10_stub() {
+  case "$*" in
+    *audit*)
+      if [ -n "${CAWS_T10_AUDIT_STDOUT:-}" ] && [ -s "$CAWS_T10_AUDIT_STDOUT" ]; then
+        cat "$CAWS_T10_AUDIT_STDOUT"
+      fi
+      if [ -n "${CAWS_T10_AUDIT_STDERR:-}" ] && [ -s "$CAWS_T10_AUDIT_STDERR" ]; then
+        cat "$CAWS_T10_AUDIT_STDERR" >&2
+      fi
+      return "${CAWS_T10_AUDIT_EXIT:-0}"
+      ;;
+  esac
+  return 0
+}
+npm() { _caws_t10_stub "$@"; }
+npx() { _caws_t10_stub "$@"; }
+timeout() { shift; "$@"; }
+export -f _caws_t10_stub npm npx timeout
+
+# Same safety gate as T8: if the exported functions do not survive into the
+# hook's preamble, this would run a real 15-minute build and test suite.
+T10KINDS=$(bash -c '
+  export PATH="/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:$PATH"
+  if [ -s "$HOME/.nvm/nvm.sh" ]; then . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1; fi
+  printf "%s,%s,%s" "$(type -t npm)" "$(type -t npx)" "$(type -t timeout)"' 2>/dev/null)
+T10SKIP=""
+if [ "$T10KINDS" != "function,function,function" ]; then
+  T10SKIP=1
+  bad "T10 stubs resolve as exported functions inside pre-push's preamble" \
+      "got '$T10KINDS' (want function,function,function). Refusing to run pre-push: it would start a real build and a real test suite."
+fi
+
+run_t10() {  # $1 = stdout fixture, $2 = stderr fixture, $3 = exit; echoes "<exit>|<output>"
+  local out
+  out=$(GIT_DIR="$T10GIT" \
+    CAWS_T10_AUDIT_STDOUT="$1" CAWS_T10_AUDIT_STDERR="$2" CAWS_T10_AUDIT_EXIT="$3" \
+    bash .husky/pre-push origin https://example.invalid/repo.git 2>&1)
+  printf '%s|%s' "$?" "$(printf '%s' "$out" | tr '\n' '~')"
+}
+
+if [ -z "$T10SKIP" ]; then
+  # ── T10a a clean report passes, so classification did not break the ordinary path
+  t10a=$(run_t10 "$SCRATCH/t10/clean.json" "" 0)
+  if [ "${t10a%%|*}" = "0" ]; then
+    ok "T10a a clean advisory report lets the push through (exit 0)"
+  else
+    bad "T10a a clean advisory report lets the push through (exit 0)" "got: $t10a"
+  fi
+
+  # ── T10b A REAL FINDING STILL REFUSES. Counterweight: without this, making
+  #    the unreachable branch non-refusing could silently pass criticals too.
+  t10b=$(run_t10 "$SCRATCH/t10/critical.json" "" 1)
+  t10b_exit="${t10b%%|*}"; t10b_out="${t10b#*|}"
+  if [ "$t10b_exit" = "1" ]; then
+    ok "T10b an obtained report with a critical finding REFUSES the push (exit 1)"
+  else
+    bad "T10b an obtained report with a critical finding REFUSES the push (exit 1)" "got exit $t10b_exit; output: $t10b_out"
+  fi
+  # Match a HOOK-AUTHORED phrase, never a token the fixture itself contains.
+  # A bare grep for "vulnerab" passes on the stub's own JSON payload echoing
+  # through, which would assert nothing about the hook at all.
+  if printf '%s' "$t10b_out" | grep -q 'audit FOUND vulnerabilities'; then
+    ok "T10b2 the refusal names it as a vulnerability finding, not a generic failure"
+  else
+    bad "T10b2 the refusal names it as a vulnerability finding" "output: $t10b_out"
+  fi
+
+  # ── T10c the observed 400: reported as unreachable, and NOT a refusal
+  t10c=$(run_t10 "$SCRATCH/t10/endpoint-error.json" "$SCRATCH/t10/endpoint-error.err" 1)
+  t10c_exit="${t10c%%|*}"; t10c_out="${t10c#*|}"
+  if [ "$t10c_exit" = "0" ]; then
+    ok "T10c an unreachable advisory service does NOT refuse the push (exit 0)"
+  else
+    bad "T10c an unreachable advisory service does NOT refuse the push (exit 0)" "got exit $t10c_exit; output: $t10c_out"
+  fi
+  if printf '%s' "$t10c_out" | grep -qi 'unreachable\|could not be reached\|did not run'; then
+    ok "T10c2 the stage says the advisory service could not be reached"
+  else
+    bad "T10c2 the stage says the advisory service could not be reached" "output: $t10c_out"
+  fi
+  # The honesty requirement: it must disclaim, not merely proceed quietly.
+  if printf '%s' "$t10c_out" | grep -qi 'not a vulnerability finding\|NOT a finding'; then
+    ok "T10c3 the stage states this is NOT a vulnerability finding"
+  else
+    bad "T10c3 the stage states this is NOT a vulnerability finding" "output: $t10c_out"
+  fi
+  if printf '%s' "$t10c_out" | grep -qi 'nothing was verified\|no dependency was checked\|unverified'; then
+    ok "T10c4 the stage states that nothing was verified"
+  else
+    bad "T10c4 the stage states that nothing was verified" "output: $t10c_out"
+  fi
+
+  # ── T10d an unclassifiable failure falls toward REFUSING. Counterweight:
+  #    without this, "unreachable" would be a catch-all for every non-zero exit.
+  t10d=$(run_t10 "$SCRATCH/t10/unknown.json" "$SCRATCH/t10/unknown.err" 1)
+  t10d_exit="${t10d%%|*}"
+  if [ "$t10d_exit" = "1" ]; then
+    ok "T10d a non-zero exit with neither a report nor a transport error REFUSES (exit 1)"
+  else
+    bad "T10d a non-zero exit with neither a report nor a transport error REFUSES (exit 1)" "got exit $t10d_exit; output: ${t10d#*|}"
+  fi
+fi
+
 echo
 echo "hook tests: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
