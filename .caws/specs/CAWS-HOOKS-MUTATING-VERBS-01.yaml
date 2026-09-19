@@ -2,9 +2,11 @@ id: CAWS-HOOKS-MUTATING-VERBS-01
 title: 'caws hooks add | disable | replace | restore | compile (governed writes)'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Ships caws hooks add|disable|replace|restore and the writing form of compile, completing the repo-local hook policy surface. Six ACs recorded with pass evidence; verify-acs re-derives 6/6 in ''exists'' mode (commit reachable from main). Runtime proof: 244 jest suites / 3182 tests green on the merged content, plus 30 pytest arms against the launcher. Three mutations were run against live code to prove the new arms discriminate — the floor check over extracted-vs-raw names, the 12-char reason threshold, and the default-merge fix — each killed its arms and was reverted with a byte-level sha256 check. Two things beyond the slice as specified. (1) A schema extension was unavoidable: ''disabled'' admitted only bare strings, so a mandatory --reason had nowhere to persist; both validators now admit {handler, reason} while keeping the bare spelling valid. No pack bump — templates/hook-packs/runtime/ is not in the shared-pack fingerprint. (2) A defect in the landed resolver surfaced: effectiveRepoSurfacePolicy merged surfaces.default over surfaces[surface] unconditionally, so resolving for ''default'' layered default over itself, doubled every additive entry, and made resolveChain fail closed on the phantom duplicate. Since the project-wired plane has one dispatcher tree, compile always resolves for ''default'' — every policy declaring an extension was refused by the governed command. Fixed in both validators with three regression arms. KNOWN GAP, not covered by any AC: no test drives a real pre_tool_use envelope through a project-wired dispatcher end to end, so ''the compiled sidecar parses'' is proven but ''the added handler executes in the declared position'' is not. The plan lists that end-to-end arm; it belongs with the remaining steps.'
 created_at: '2026-09-18T23:29:05.819Z'
-updated_at: '2026-09-18T23:47:03.933Z'
+updated_at: '2026-09-19T00:02:04.436Z'
 created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
 blast_radius:
   modules:
