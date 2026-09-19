@@ -1,0 +1,37 @@
+id: CAWS-PREPUSH-TEST-BUDGET-MARGINAL-01
+title: 'pre-push stage [5/5] times out nondeterministically: a 900s budget over a suite that needs ~425s alone but exceeds it after stages 1-4'
+risk_tier: 3
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-19T21:19:50.541Z'
+updated_at: '2026-09-19T21:19:50.541Z'
+created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
+blast_radius:
+  modules:
+    - 'pre-push git hook stage budgeting (.husky/pre-push)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - '.husky/pre-push'
+    - '.husky/tests/run.sh'
+  out: []
+invariants:
+  - 'A quality gate must fail for a reason about the code, never about the machine. A stage that times out nondeterministically on an unchanged tree teaches the agent that red is noise, which is the precondition for waving through a real failure.'
+  - 'The remedy must not be raising the budget alone. An unbounded gate trades a flaky refusal for an unbounded push latency, and the measured cause is stage interaction, not suite size -- the suite is 425s against a 900s budget in isolation.'
+  - '--no-verify must never become the de facto remedy. git skips the WHOLE hook, so a stage-5 timeout would silently drop typecheck, lint, audit and build as well; the hook already documents this and the repo bans the flag.'
+acceptance:
+  - id: A1
+    given: 'an unchanged tree whose suite passes 3530/3530 in ~425s standalone'
+    when: 'the pre-push hook runs its five stages in order, repeatedly'
+    then: 'stage [5/5] completes within budget every time -- no run reports ''test suite timed out after 15m'''
+  - id: A2
+    given: 'the measured profile (sys 371s vs user 426s -- spawn/syscall bound)'
+    when: 'the cause of the post-stage-1-4 slowdown is isolated'
+    then: 'the fix addresses that cause (stage ordering, process/memory reclamation between stages, or a measured budget derived from observed worst case) rather than only enlarging the number'
+  - id: A3
+    given: 'three recorded runs of the same commit 27567642 -- two timeouts and one pass'
+    when: 'the fix is in place'
+    then: 'a repeat-run harness demonstrates the stage passing across consecutive invocations, so the evidence is repetition rather than a single green run'
+non_functional: {}
+contracts: []
