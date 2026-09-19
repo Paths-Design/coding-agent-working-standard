@@ -65,3 +65,9 @@ evidence:
     recorded_at: "2026-09-19T02:26:06.203Z"
     artifact_path: packages/caws-cli/tests/init/repo-hook-policy.test.js
     commit_sha: "8ca16514"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Arm 'when the machine clear did NOT happen, resolution REFUSES and names the handler' reconstructs the interrupted state exactly: policyImportFromMachine produces the repo policy, then resolveChain is called with the machine tier STILL carrying the same extensions and handlers. Observed resolved.ok === false with resolved.error containing both 'rg-replace-guard.sh' and 'already in the chain'. Its paired control is the A2 arm, which runs the identical fixture with the machine tier cleared and gets ok === true with exactly one occurrence — so the refusal is caused by the duplication and not by the fixture being unresolvable. NOT A NEW GUARD: resolveChain's cross-tier duplicate check already existed; this slice's contribution is CHOOSING the write order that fails into it. The repo policy is written first precisely because its failure mode is this loud refusal, whereas clearing machine state first would fail by dropping the override with nothing left to notice. The CLI's half-migrated message says the refusal is intended and names the file to finish by hand. NOT COVERED: no test injects a real mid-command filesystem failure between the two writes; the arm reconstructs the resulting state rather than producing it by interruption. Run: npx jest tests/init/repo-hook-policy.test.js => 131/131; full suite => 247/247, 3320/3320, exit 0."
+    recorded_at: "2026-09-19T02:26:17.627Z"
+    artifact_path: packages/caws-cli/tests/init/repo-hook-policy.test.js
+    commit_sha: "8ca16514"
