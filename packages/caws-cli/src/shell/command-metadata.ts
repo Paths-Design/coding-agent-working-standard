@@ -2273,7 +2273,7 @@ export const GOAL_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'goal',
   description:
-    "Hold this session's stop to a spec's acceptance criteria (CAWS-GOAL-AC-STOP-GATE-01). `set` binds the session to a spec; the Stop handler then re-derives that spec's acceptance with `caws specs verify-acs --json` and refuses the stop while any criterion is unproven, so the session keeps working instead of stopping on an unproven claim. Never authority: the spec owns the bar, `caws specs evidence` remains the only writer of acceptance truth, and this surface can neither mark a criterion passed nor change scope or lifecycle state. Opt-in — with no goal set the stop chain is unchanged.",
+    "Hold this session's stop to a spec's acceptance criteria (CAWS-GOAL-AC-STOP-GATE-01). `set` binds the session to a spec; the Stop handler then re-derives that spec's acceptance with `caws specs verify-acs --json` and refuses the stop while any criterion is unproven, so the session keeps working instead of stopping on an unproven claim. `show` reports the current binding and the gate's consecutive-block count, read-only. `clear` releases the session from its goal, which does NOT mean the criteria were met. Never authority: the spec owns the bar, `caws specs evidence` remains the only writer of acceptance truth, and this surface can neither mark a criterion passed nor change scope or lifecycle state. Opt-in — with no goal set the stop chain is unchanged.",
   subcommands: [
     {
       kind: 'leaf',

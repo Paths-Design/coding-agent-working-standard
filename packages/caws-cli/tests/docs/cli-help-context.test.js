@@ -164,6 +164,7 @@ describe('CLI help context metadata', () => {
       'events',
       'evidence',
       'gates',
+      'goal',
       'handoff',
       'init',
       'message',
