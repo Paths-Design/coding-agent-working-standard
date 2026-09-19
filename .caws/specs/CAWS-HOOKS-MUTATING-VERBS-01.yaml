@@ -60,3 +60,10 @@ non_functional: {}
 contracts:
   - name: 'hooks-policy-writer'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Verified by running 'npx jest tests/shell/hooks-mutating.test.js' from packages/caws-cli at merge commit 1365b83b. Arms 'a repo with no policy gets one, and the handler lands before its anchor' (asserts the created document byte-for-byte via toEqual, then runs caws hooks validate against it and requires exit 0) and 'the compiled chain puts the handler immediately before its anchor' (compiles, then asserts names[indexOf('marker.sh')+1] === 'scope-guard.sh', i.e. position rather than membership). Both spawn the built dist CLI, not the handler function."
+    recorded_at: "2026-09-19T00:01:07.978Z"
+    artifact_path: packages/caws-cli/tests/shell/hooks-mutating.test.js
+    commit_sha: "1365b83b59da556d159ad8be7856d191e9b275a6"
