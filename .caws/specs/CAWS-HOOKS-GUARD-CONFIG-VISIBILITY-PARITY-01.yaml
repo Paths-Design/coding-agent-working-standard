@@ -1,0 +1,44 @@
+id: CAWS-HOOKS-GUARD-CONFIG-VISIBILITY-PARITY-01
+title: 'Make tier-2 guard config readable, and pin the two allow tables'' declared relationship'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-09-19T02:41:51.054Z'
+updated_at: '2026-09-19T02:41:51.054Z'
+created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
+blast_radius:
+  modules:
+    - 'caws hooks list renderer + shared allow-table parity check'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/hooks.ts'
+    - 'packages/caws-cli/tests/shell/hooks-readonly.test.js'
+    - 'packages/caws-cli/tests/hooks/guard-table-parity.test.js'
+  out: []
+invariants:
+  - 'The tier-2 ''reason'' field is REQUIRED at authoring (>=12 chars, enforced by parseRepoHookPolicy) but is currently read by nothing — a required field with zero readers is theater, and it is the field the anti-abuse doctrine relies on a reviewer seeing. Rendering it is what makes the requirement load-bearing.'
+  - 'The parity check must pin a DECLARED RELATIONSHIP, not equality. scope-guard.sh answers ''is this path scope-exempt?'' and write-allowlist.sh answers ''may I write here outside my worktree?'' — so tests/ and scripts/ are correctly scope-only, and .github/, .githooks/ and .gitignore are correctly write-only. Asserting equality would encode a false invariant and force a wrong fix.'
+  - 'hooks list stays read-only and always exits 0: it is explanatory, never enforcing, and must remain usable against a repo the operator does not want to change.'
+acceptance:
+  - id: A1
+    given: 'a repo whose hook-policy.json declares guards.scope-guard.sh.additional_allow_prefixes with a reason'
+    when: 'caws hooks list runs'
+    then: 'the prefix AND its reason are rendered, so the justification the parser demands is visible to a reviewer'
+  - id: A2
+    given: 'the same repo'
+    when: 'caws hooks list --json runs'
+    then: 'the tier-2 guard config appears in the JSON contract alongside the chain, keyed so a consumer can tell a configured entry from a shipped one'
+  - id: A3
+    given: 'the shipped scope-guard.sh and write-allowlist.sh allow tables'
+    when: 'guard-table-parity.test.js runs'
+    then: 'it asserts the declared shared set and each side''s declared extras, and FAILS when either table gains or loses an entry that the declaration does not account for'
+  - id: A4
+    given: 'a repo with no guards block'
+    when: 'caws hooks list runs'
+    then: 'it renders the chain exactly as before and says nothing about tier-2 config — opting out costs no output'
+non_functional: {}
+contracts:
+  - name: 'hooks-list-guards'
+    type: behavior
