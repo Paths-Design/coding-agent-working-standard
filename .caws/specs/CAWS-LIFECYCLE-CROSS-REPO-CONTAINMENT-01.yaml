@@ -83,6 +83,14 @@ acceptance:
     then: >-
       it refuses with a repair instruction naming the record path, rather than
       treating an unreadable origin as no origin and admitting every repo
+  - id: A9
+    given: 'the reprieve grant vocabulary'
+    when: 'a grant names the lifecycle plane together with the file-write guards'
+    then: >-
+      it is accepted, and the lifecycle plane is NOT added to the cross-repo-write
+      boundary set, because a partial grant there does not relocate one action to
+      another channel: the guards and the lifecycle plane govern different
+      capabilities
 non_functional: {}
 contracts:
   - name: 'session-origin-record'
