@@ -49,3 +49,9 @@ non_functional: {}
 contracts:
   - name: 'read-surface-unsourced-fact'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "tests/shell/agents-binding-join.test.js A1 + A1b + A1c, run at 2eb69a0a: a registry with wt-a(SPEC-A) and wt-b(SPEC-B) both owned by sess-two renders 'sess-two  wt-a,wt-b  SPEC-A,SPEC-B' -- both names, both spec ids, index-aligned columns. A1b proves the join keys on owner.session_id and does not cross-attribute between two owners; A1c proves a record without specId renders its name with (no spec) rather than being dropped. Baseline before the fix: these three failed, printing '(no worktree)  (no spec)'."
+    recorded_at: "2026-09-19T10:16:49.036Z"
+    commit_sha: "2eb69a0a"
