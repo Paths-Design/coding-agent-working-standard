@@ -52,6 +52,7 @@ import {
 import {
   applyLeasePatch,
   loadLeases,
+  loadWorktrees,
   platformEngagement,
   pruneDeadLeases,
   pruneLeasesByStatus,
@@ -564,6 +565,92 @@ function silentPlatforms(
   return out.sort((a, b) => b.to - a.to);
 }
 
+// ─── worktree-binding join (CAWS-AGENTS-LIST-BINDING-JOIN-01) ─────────────
+//
+// `.caws/worktrees.json` is the AUTHORITY for worktree ownership; a lease is
+// operational cache. A lease does carry `bound_worktree` / `bound_spec_id`,
+// but their only writers are incidental — `caws status` and `caws claim`
+// populate them as a side effect, and the hook-driven register/heartbeat
+// path that creates most leases never does. Rendering those fields printed
+// `(no worktree)` for sessions that demonstrably owned one: an absence this
+// surface could not source.
+//
+// So the binding is JOINED from the registry at render time and never copied
+// back into the lease. A second copy of an authority fact is a copy that can
+// disagree with it, which is the failure class the read-surface authority
+// contract exists to prevent.
+
+interface OwnedWorktree {
+  readonly worktree: string;
+  readonly spec_id: string | null;
+}
+
+/**
+ * `resolved` means the registry was READ — so an empty owned-list is an
+ * observed absence and honest to state. `resolved: false` means it could not
+ * be read, and nothing about ownership may be asserted either way.
+ */
+type BindingIndex =
+  | { readonly resolved: true; readonly bySession: ReadonlyMap<string, readonly OwnedWorktree[]> }
+  | { readonly resolved: false };
+
+const BINDING_UNKNOWN = 'unknown';
+const BINDING_NO_WORKTREE = '(no worktree)';
+const BINDING_NO_SPEC = '(no spec)';
+const BINDING_SOURCE = '.caws/worktrees.json';
+
+function indexWorktreeBindings(cawsDir: string): BindingIndex {
+  const res = loadWorktrees(cawsDir);
+  if (!isOk(res)) return { resolved: false };
+
+  const bySession = new Map<string, OwnedWorktree[]>();
+  // Sorted by worktree name so a session owning several renders the same
+  // order on every run, and so the two text columns stay index-aligned.
+  for (const name of Object.keys(res.value).sort()) {
+    const record = res.value[name];
+    if (typeof record !== 'object' || record === null) continue;
+    const sessionId = record.owner?.session_id;
+    if (typeof sessionId !== 'string' || sessionId.length === 0) continue;
+    const specId =
+      typeof record.specId === 'string' && record.specId.length > 0 ? record.specId : null;
+    const entry: OwnedWorktree = { worktree: name, spec_id: specId };
+    const owned = bySession.get(sessionId);
+    if (owned === undefined) bySession.set(sessionId, [entry]);
+    else owned.push(entry);
+  }
+  return { resolved: true, bySession };
+}
+
+/**
+ * The worktree and spec columns for one session. Three outcomes that must
+ * never collapse into each other: registry unreadable → `unknown`; registry
+ * read and the session owns nothing → the placeholders; registry read and
+ * the session owns n ≥ 1 → every name, index-aligned with its spec column.
+ */
+function bindingColumns(index: BindingIndex, sessionId: string): [string, string] {
+  if (!index.resolved) return [BINDING_UNKNOWN, BINDING_UNKNOWN];
+  const owned = index.bySession.get(sessionId) ?? [];
+  if (owned.length === 0) return [BINDING_NO_WORKTREE, BINDING_NO_SPEC];
+  return [
+    owned.map((o) => o.worktree).join(','),
+    owned.map((o) => o.spec_id ?? BINDING_NO_SPEC).join(','),
+  ];
+}
+
+/**
+ * JSON parity for the same facts. When the registry is unreadable the map is
+ * OMITTED rather than emitted empty — an empty map would assert that every
+ * listed session owns nothing, which is exactly the claim we cannot source.
+ */
+function bindingsPayload(index: BindingIndex, sessionIds: readonly string[]) {
+  if (!index.resolved) return { source: BINDING_SOURCE, resolution: 'unreadable' as const };
+  const by_session: Record<string, readonly OwnedWorktree[]> = {};
+  for (const sessionId of sessionIds) {
+    by_session[sessionId] = index.bySession.get(sessionId) ?? [];
+  }
+  return { source: BINDING_SOURCE, resolution: 'resolved' as const, by_session };
+}
+
 export function runAgentsListCommand(opts: ListOpts = {}): number {
   const { cwd, nowFn, out, err, showData, json } = setupIO(opts);
 
@@ -605,11 +692,20 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
   const wantsStale = opts.includeStale === true && !(opts.activeOnly === true);
   const wantsStopped = opts.includeStopped === true && !(opts.activeOnly === true);
 
+  // Ownership is joined from authority, never read off the lease cache.
+  const bindings = indexWorktreeBindings(cawsDir);
+
   if (json) {
+    const emittedSessions = [
+      ...summary.active.map((l) => l.session_id),
+      ...(wantsStale ? summary.stale.map((l) => l.session_id) : []),
+      ...(wantsStopped ? summary.stopped.map((l) => l.session_id) : []),
+    ];
     emitJson(out, {
       ok: true,
       now: now.toISOString(),
       stale_ttl_ms: ttl,
+      worktree_bindings: bindingsPayload(bindings, emittedSessions),
       active: summary.active,
       ...(wantsStale ? { stale: summary.stale } : {}),
       ...(wantsStopped ? { stopped: summary.stopped } : {}),
@@ -631,9 +727,8 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
       // LEASE-WORK-STATE-001: append the visibility-only state tag when
       // declared; absent renders nothing extra.
       const stateTag = l.work_state !== undefined ? `  ${l.work_state}` : '';
-      out(
-        `  ${l.session_id}  ${l.bound_worktree ?? '(no worktree)'}  ${l.bound_spec_id ?? '(no spec)'}${stateTag}`
-      );
+      const [worktreeCol, specCol] = bindingColumns(bindings, l.session_id);
+      out(`  ${l.session_id}  ${worktreeCol}  ${specCol}${stateTag}`);
     }
     if (wantsStale) {
       out(`stale:  ${summary.stale.length}`);
