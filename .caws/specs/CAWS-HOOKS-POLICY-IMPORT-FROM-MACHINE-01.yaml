@@ -59,3 +59,9 @@ evidence:
     recorded_at: "2026-09-19T02:25:55.452Z"
     artifact_path: packages/caws-cli/tests/shell/hooks-mutating.test.js
     commit_sha: "8ca16514"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Two halves, deliberately at different layers. (a) The machine-state clear is asserted end-to-end in hooks-mutating.test.js 'two surfaces with identical policy collapse to one default entry': after the real CLI run, the state file is re-read and every migrated surface's disabled/extensions/handlers/libraries is {} — while the SURFACE ITSELF survives and root is unchanged, because emptying a surface's keys must not de-register the project from the machine runtime. (b) The splice-exactly-once claim is asserted in repo-hook-policy.test.js 'after a COMPLETE import the handler splices exactly once': resolveChain over the imported policy with a cleared machine tier yields exactly one occurrence of rg-replace-guard.sh, AND it sits immediately before its scope-guard.sh anchor — position, not mere membership, because a guard spliced elsewhere adjudicates against different state. A third arm pins that 'clear' lists only surfaces that actually carried overrides (a registered-but-empty codex surface is excluded), since the caller drives the second write off that list and a missing entry is a surface that stays populated and double-splices. Run: npx jest tests/shell/hooks-mutating.test.js tests/init/repo-hook-policy.test.js => 46/46 and 131/131; full suite => 247/247 suites, 3320/3320, exit 0."
+    recorded_at: "2026-09-19T02:26:06.203Z"
+    artifact_path: packages/caws-cli/tests/init/repo-hook-policy.test.js
+    commit_sha: "8ca16514"
