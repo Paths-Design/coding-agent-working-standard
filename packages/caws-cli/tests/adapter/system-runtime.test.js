@@ -695,3 +695,23 @@ test('the refusal names a remediation that terminates, not one that refuses next
   expect(reason).toContain('caws init adapters migrate --agent-surface codex');
   expect(reason).toContain('caws init adapters configure --agent-surface codex');
 });
+
+test('the carve-out is by error CLASS, not by one error message', () => {
+  // A second, unrelated configuration fault: a migrated project entry whose
+  // surface policy is not an object. It raises a different error from a
+  // different branch than the unmigrated case above. If only the legacy-hooks
+  // message had been special-cased, this would still trap the session -- and
+  // the next configuration fault anyone adds would trap it again.
+  const p = repo('trap-class');
+  installMachineRuntime({ home, templatesRoot: templates });
+  configure(p, 'not-a-surface-policy');
+
+  const blocked = invoke(p, 'pre_tool_use', {}, { file_path: 'src/app.ts' });
+  expect(blocked.status).toBe(2);
+  expect(JSON.parse(blocked.stdout).reason).toContain('Malformed system project surface');
+
+  const exit = invoke(p, 'stop', {}, { file_path: 'src/app.ts' });
+  expect(exit.status).toBe(0);
+  expect(exit.stdout).not.toContain('"decision"');
+  expect(exit.stderr).toContain('Malformed system project surface');
+});
