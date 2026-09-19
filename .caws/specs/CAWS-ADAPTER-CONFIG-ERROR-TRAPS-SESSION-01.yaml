@@ -20,7 +20,9 @@ scope:
     - 'packages/caws-cli/tests/adapter/system-registration.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A machine-adapter configuration error may refuse an action the agent can change; it may never refuse the agent''s exit. Blocking stop on a condition only the operator can fix leaves the session unable to act and unable to leave.'
+  - 'Every refusal prints a remediation that runs. If a prerequisite step exists, the refusal names the prerequisite, not the step that will itself refuse.'
+  - 'The top-level handler''s decision is event-dependent. The launcher already fails open loudly for an unresolvable git root; configuration errors get the same treatment on exit-class events.'
 acceptance:
   - id: A1
     given: 'a repo with legacy .caws/hooks and no migrated machine project entry'
