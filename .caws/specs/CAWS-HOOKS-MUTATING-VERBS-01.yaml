@@ -85,3 +85,9 @@ evidence:
     recorded_at: "2026-09-19T00:01:38.370Z"
     artifact_path: packages/caws-cli/tests/shell/hooks-mutating.test.js
     commit_sha: "1365b83b59da556d159ad8be7856d191e9b275a6"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "Verified by 'npx jest tests/shell/hooks-mutating.test.js' at 1365b83b. The oracle is treeHash(), a recursive sha256 over every file under .caws/, applied by expectNoWrite() around fifteen separate refusal arms. 'a populated repo survives a burst of refused invocations unchanged' is the strongest: it builds a repo WITH a policy and a compiled chain (so a partial write has something to damage), then runs seven distinct refusal shapes — floor handler, short reason, unknown event, duplicate extension, traversing --path, absolute --with, unknown restore target — asserting exit 1 on each and one unchanged hash across the whole burst. Two arms also cover an unreadable policy document: compile and disable both refuse rather than recompiling or starting from the identity policy. The control 'the tree hash can actually observe a change' fails if treeHash were constant."
+    recorded_at: "2026-09-19T00:01:39.706Z"
+    artifact_path: packages/caws-cli/tests/shell/hooks-mutating.test.js
+    commit_sha: "1365b83b59da556d159ad8be7856d191e9b275a6"
