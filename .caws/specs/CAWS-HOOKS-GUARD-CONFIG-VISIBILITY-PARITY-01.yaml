@@ -50,3 +50,9 @@ evidence:
     recorded_at: "2026-09-19T03:13:35.612Z"
     artifact_path: packages/caws-cli/tests/shell/hooks-readonly.test.js
     commit_sha: "6d1d092e"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "hooks-readonly.test.js arms 'A2: --json carries guards under its OWN key, not folded into the chain' and 'A2: the JSON ordering is deterministic, so a diff of two runs is signal'. Run: cd packages/caws-cli && npx jest tests/shell/hooks-readonly.test.js -> 37/37 pass. The first arm asserts the exact top-level guards array [{guard:'loc-delta-check.sh',prefixes:[],thresholds:[['delta',400]]},{guard:'scope-guard.sh',prefixes:[{prefix:'native/',reason:...}],thresholds:[]}] AND asserts the tier-1 views do NOT contain it: JSON.stringify(parsed.declared) and JSON.stringify(parsed.events) are both required not to contain 'native/', which is what pins the keying distinction between 'this guard was added or removed' (tier 1, surface-scoped) and 'this guard reads extra data' (tier 2, top-level). The second arm runs the CLI twice over one fixture and requires byte-identical stdout plus an explicitly sorted guard and threshold order, so a review diff of two runs is signal rather than JSON insertion-order noise."
+    recorded_at: "2026-09-19T03:13:46.762Z"
+    artifact_path: packages/caws-cli/tests/shell/hooks-readonly.test.js
+    commit_sha: "6d1d092e"
