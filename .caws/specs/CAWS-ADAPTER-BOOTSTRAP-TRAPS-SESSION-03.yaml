@@ -1,0 +1,42 @@
+id: CAWS-ADAPTER-BOOTSTRAP-TRAPS-SESSION-03
+title: 'Bootstrap-scope adapter faults trap the session, and the bootstrap cannot be upgraded to fix it'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-19T04:47:30.710Z'
+updated_at: '2026-09-19T04:47:30.710Z'
+created_by_session: '34188473-6516-4d12-a4e5-df7ff5132232'
+blast_radius:
+  modules:
+    - 'caws-cli machine adapter runtime'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/runtime/bootstrap.py'
+    - 'packages/caws-cli/src/init/machine-adapters.ts'
+    - 'packages/caws-cli/tests/adapter/runtime-bootstrap.test.js'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'the machine runtime pointer, manifest or driver fails integrity or cannot be read'
+    when: 'the bootstrap handles the resulting error on a non-enforcing event such as stop'
+    then: 'it exits 0 without emitting a block decision, so the session can still end'
+  - id: A2
+    given: 'the same bootstrap-scope fault'
+    when: 'the event is pre_tool_use'
+    then: 'it still emits a block decision and exits 2, because refusing a write is answerable while refusing an exit is not'
+  - id: A3
+    given: 'an installed bin/caws-hook that matches a previously shipped upstream bootstrap'
+    when: 'the template bootstrap changes and adapters install runs'
+    then: 'it is recognized as upstream drift and replaced, not refused as local growth'
+  - id: A4
+    given: 'an installed bin/caws-hook that a user genuinely modified'
+    when: 'adapters install runs'
+    then: 'it is still refused, and the message distinguishes that case from upstream drift'
+non_functional: {}
+contracts:
+  - name: 'machine-adapter-refusal'
+    type: behavior
