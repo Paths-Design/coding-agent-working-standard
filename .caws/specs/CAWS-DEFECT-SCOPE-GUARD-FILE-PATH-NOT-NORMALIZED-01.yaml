@@ -8,7 +8,7 @@ updated_at: '2026-09-19T01:15:51.883Z'
 created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
 blast_radius:
   modules:
-    - 'TODO: list one or more modules this spec touches.'
+    - 'shared hook pack: scope-guard.sh foreign-repo containment classifier'
   data_migration: false
 operational_rollback_slo: 5m
 scope:
@@ -19,7 +19,9 @@ scope:
     - 'packages/caws-cli/tests/init/pack-fingerprints.json'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'FILE_PATH is normalized the same way PROJECT_DIR already is before any containment comparison — the file''s own owned_worktree_root() states this ''compare like with like'' rule and applies it to the worktree-root candidate but not to FILE_PATH itself.'
+  - 'The fix may only NARROW the set of paths classified foreign. A path in a genuinely different repository must still take the containment hard block; no normalization may make a foreign path read as in-repo.'
+  - 'Normalization must not require the target file to exist: a Write creates a file that is not on disk yet, so a resolution strategy depending on the path existing would fail exactly on the tool it must govern.'
 acceptance:
   - id: A1
     given: 'a Write/Edit envelope whose file_path is inside the governed project but carries a redundant separator (e.g. a TMPDIR ending in a slash yielding /var/.../T//repo/native/core.rs)'
