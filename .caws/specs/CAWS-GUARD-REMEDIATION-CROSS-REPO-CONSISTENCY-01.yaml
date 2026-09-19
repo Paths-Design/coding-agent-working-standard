@@ -2,10 +2,11 @@ id: CAWS-GUARD-REMEDIATION-CROSS-REPO-CONSISTENCY-01
 title: 'A guard''s remediation may not name a route a sibling guard refuses: block-dangerous must not offer the script-file route for a cross-repo write'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-remediation-xrepo
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'block-dangerous no longer prints ''write it to a script file and run it by path'' when the opaque payload carries a cross-repo write target — the sentence that was the proximate cause of the cross-repo write finding. Structural fix rather than a text patch: caws_foreign_repo_root, the python/node write-verb tables, the write-verb-plus-slash-path co-occurrence extractor and caws_bash_interpreter_foreign_repo moved into shared/lib/bash-mutation-targets.sh, so block-dangerous and bash-write-guard now read ONE implementation of ''foreign'' and cannot disagree. The opaque-exec arm branches three ways (cross-repo detected -> name the repo, no script-file route; detector unavailable -> say so, no script-file route; otherwise -> full text with the corrected clause that a script file is adjudicated exactly as a direct write). bash-write-guard additionally fails CLOSED per-function when the lib loads but predates a needed function. Proof: bats B1/B4/B5 were asserted-failing before the change and pass after; B2/B3 are must-stay-legal counterweights that were green before and after, and B1/B3 form a discriminating pair proving the suppression keys on the write verb, not on the mere presence of a foreign path. Full runs at 14d0ffe1: jest 3381/3381 across 250 suites, bats 417 exit 0 with zero ''not ok''. SCOPED NON-CLAIM: this governs NO live session yet. The machine runtime under ~/.caws and this project''s .caws/hooks pack both still carry the older shared pack, so every Claude Code and codex session on this machine still executes the old block-dangerous. Activation requires, in order: node scripts/install-cli-snapshot.mjs --package packages/caws-cli --bin "$(command -v caws)", then caws init adapters install, then caws init --agent-surface <an-already-wired-surface>. That is a machine-wide change and is deliberately left to the maintainer.'
 created_at: '2026-09-19T04:55:04.541Z'
-updated_at: '2026-09-19T04:55:27.042Z'
+updated_at: '2026-09-19T05:25:29.299Z'
 created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
 blast_radius:
   modules:
