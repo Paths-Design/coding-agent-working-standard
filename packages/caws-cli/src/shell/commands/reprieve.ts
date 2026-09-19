@@ -106,6 +106,31 @@ export const GUARD_BOUNDARY_SETS: Readonly<Record<string, readonly string[]>> = 
 };
 
 /**
+ * The reserved reprieve target for the CLI's own lifecycle plane
+ * (CAWS-LIFECYCLE-CROSS-REPO-CONTAINMENT-01). Not a `.sh` handler: nothing
+ * under `.caws/hooks/` enforces it, the caws CLI does, in
+ * shell/session/session-origin.ts.
+ *
+ * It is NOT a member of the `cross-repo-write` set above, and the reasoning
+ * matters more than the omission. That set exists because one user-visible
+ * action — writing a file into another repository — is adjudicated on two
+ * channels, so lifting one channel relocates the write rather than narrowing
+ * the exception. The lifecycle plane governs a DIFFERENT capability: creating
+ * and closing governed records in another repo. A grant for the two file-write
+ * guards opens no route to `caws specs create`, and a grant for the lifecycle
+ * plane opens no route to a file write. Adding it to the set would force every
+ * operator authorizing a one-file cross-repo edit to also authorize governed
+ * writes into that repo's audit log — over-broad in exactly the way the
+ * membership rule above forbids.
+ *
+ * The shell reader (`lib/reprieve.sh`) matches its running handler basename
+ * against the `handlers` array by equality, so this token is inert there: no
+ * `.sh` handler can equal it. That is why admitting it needs no hook-pack
+ * change and no SHARED_PACK_VERSION bump.
+ */
+export const LIFECYCLE_PLANE_HANDLER = 'caws-lifecycle';
+
+/**
  * The boundary sets a handler list partially covers, with the handlers it is
  * missing. An empty result means the list is either boundary-free or complete,
  * and the grant proceeds.
@@ -153,6 +178,58 @@ export function reprieveReachesRepo(record: ReprieveRecord, repoRoot: string): b
     }
   };
   return resolve(record.repo_root) === resolve(repoRoot);
+}
+
+/**
+ * Read-only consult used by the CLI's own lifecycle-plane containment
+ * (CAWS-LIFECYCLE-CROSS-REPO-CONTAINMENT-01).
+ *
+ * Deliberately narrower than the guard-facing lookup in three ways:
+ *   - MACHINE STORE ONLY. The legacy per-repo vendor dirs are not searched.
+ *     A legacy record predates `LIFECYCLE_PLANE_HANDLER` and so can never
+ *     name it, and searching them from a FOREIGN repo would consult state
+ *     belonging to the repo the caller is being contained out of.
+ *   - Every failure is "not granted". A record that is missing, malformed,
+ *     symlinked, expired, revoked, out of repo reach, or that does not name
+ *     the handler produces the same answer. An authorization that cannot be
+ *     read is not an authorization.
+ *   - It never writes and never throws.
+ */
+export function consultLifecycleReprieve(args: {
+  readonly sessionId: string;
+  readonly repoRoot: string;
+  readonly handler: string;
+  readonly now: Date;
+  readonly env?: NodeJS.ProcessEnv;
+  readonly homeDir?: string;
+}): { granted: false } | { granted: true; record: ReprieveRecord } {
+  try {
+    const home = args.homeDir ?? machineHome(args.env ?? process.env);
+    const file = reprieveFileName(
+      path.join(home, 'state', 'sessions', sanitizeSession(args.sessionId)),
+      args.sessionId
+    );
+    assertMachinePath(home, file);
+    if (fs.lstatSync(file).isSymbolicLink()) return { granted: false };
+    const rec = JSON.parse(fs.readFileSync(file, 'utf8')) as ReprieveRecord;
+    if (
+      !rec ||
+      typeof rec !== 'object' ||
+      rec.session_id !== args.sessionId ||
+      typeof rec.expires_at !== 'string' ||
+      typeof rec.approved_by !== 'string' ||
+      !Array.isArray(rec.handlers) ||
+      rec.handlers.some((h) => typeof h !== 'string')
+    ) {
+      return { granted: false };
+    }
+    if (!rec.handlers.includes(args.handler)) return { granted: false };
+    if (!isActive(rec, args.now)) return { granted: false };
+    if (!reprieveReachesRepo(rec, args.repoRoot)) return { granted: false };
+    return { granted: true, record: rec };
+  } catch {
+    return { granted: false };
+  }
 }
 
 /** The vendor dirs a reprieve may live under. Mirrors agent-surface.sh's
@@ -558,6 +635,14 @@ function sanitizeSession(sessionId: string): string {
   return sessionId.replace(/[^A-Za-z0-9._-]/g, '_');
 }
 
+/** Public alias. The session-origin record lives in the same per-session
+ * directory as the reprieve record, so both must derive the directory name
+ * with the identical transform; re-implementing it would let them drift onto
+ * two different paths for one session. */
+export function sanitizeSessionId(sessionId: string): string {
+  return sanitizeSession(sessionId);
+}
+
 function reprieveFileName(stateDir: string, sessionId: string): string {
   return path.join(stateDir, `guard-reprieve-${sanitizeSession(sessionId)}.json`);
 }
@@ -721,8 +806,17 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
     .split(',')
     .map((h) => h.trim())
     .filter((h) => h.length > 0);
-  if (handlers.length === 0 || handlers.some((h) => !/^[A-Za-z0-9_.-]+\.sh$/.test(h))) {
-    err('caws reprieve grant: --handlers requires at least one handler basename.');
+  // A handler is a `.sh` basename, plus the one reserved non-script target:
+  // the CLI's own lifecycle plane, which no hook enforces
+  // (CAWS-LIFECYCLE-CROSS-REPO-CONTAINMENT-01). Kept as an explicit literal
+  // rather than a widened pattern so a typo'd script name still fails here
+  // instead of being stored as an unmatchable target.
+  const admissibleHandler = (h: string): boolean =>
+    /^[A-Za-z0-9_.-]+\.sh$/.test(h) || h === LIFECYCLE_PLANE_HANDLER;
+  if (handlers.length === 0 || handlers.some((h) => !admissibleHandler(h))) {
+    err(
+      `caws reprieve grant: --handlers requires at least one handler basename (a *.sh guard, or the reserved "${LIFECYCLE_PLANE_HANDLER}" for the CLI lifecycle plane).`
+    );
     return 1;
   }
 

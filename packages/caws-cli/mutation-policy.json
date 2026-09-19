@@ -27,6 +27,7 @@
         "src/shell/commands/agents-conjoining.ts",
         "src/shell/gates/disposition.ts",
         "src/shell/gates/waiver-filter.ts",
+        "src/shell/session/session-origin.ts",
         "src/store/apply-patch.ts",
         "src/store/atomic-write.ts",
         "src/store/events-store.ts",
@@ -247,7 +248,8 @@
         { "source": "src/shell/binding/resolve-binding.ts" },
         { "source": "src/shell/commands/agents-conjoining.ts" },
         { "source": "src/shell/gates/disposition.ts" },
-        { "source": "src/shell/gates/waiver-filter.ts" }
+        { "source": "src/shell/gates/waiver-filter.ts" },
+        { "source": "src/shell/session/session-origin.ts" }
       ],
       "tests": [
         "tests/shell/agents-fork-identity.test.js",
@@ -255,7 +257,8 @@
         "tests/shell/binding-resolve.test.js",
         "tests/shell/claim-bridge.test.js",
         "tests/shell/gates-disposition.test.js",
-        "tests/shell/gates-waiver-filter.test.js"
+        "tests/shell/gates-waiver-filter.test.js",
+        "tests/shell/session-origin-record.test.js"
       ]
     }
   }

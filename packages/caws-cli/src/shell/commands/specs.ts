@@ -76,6 +76,7 @@ import { EVIDENCE_STATUSES, SPEC_MODES, SPEC_RESOLUTIONS, type EvidenceStatus } 
 import * as fs from 'node:fs';
 import { buildActor } from '../session/actor';
 import { resolveSession } from '../session/resolve-session';
+import { lifecycleContainmentAdmits } from '../session/session-origin';
 import { renderDiagnostics } from '../render/diagnostic';
 import { emitPeerPresence } from '../render/peer-presence';
 
@@ -663,9 +664,27 @@ export function runSpecsCreateCommand(opts: SpecsCreateOptions): number {
   const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
 
   // CANONICAL-DRIFT-GUARDS-001: commit-target check BEFORE any write.
+  // CAWS-LIFECYCLE-CROSS-REPO-CONTAINMENT-01: and the cross-repo check with
+  // it — both adjudicate WHERE this mutation would land, so both run before
+  // argument validation has a chance to write anything.
   {
     const ctxProbe = resolveCawsCtx(cwd, err, showData, 'create');
     if (ctxProbe !== null && !lifecycleCommitTargetAdmits(ctxProbe, opts, err)) {
+      return 1;
+    }
+    if (
+      ctxProbe !== null &&
+      !lifecycleContainmentAdmits({
+        command: 'specs create',
+        repoRoot: ctxProbe.repoRoot,
+        cawsDir: ctxProbe.cawsDir,
+        cwd,
+        env,
+        now: nowFn,
+        out,
+        err,
+      })
+    ) {
       return 1;
     }
   }
@@ -2106,6 +2125,22 @@ export function runSpecsCloseCommand(opts: SpecsCloseOptions): number {
 
   // CANONICAL-DRIFT-GUARDS-001: commit-target check BEFORE any write.
   if (!lifecycleCommitTargetAdmits(ctx, opts, err)) return 1;
+
+  // CAWS-LIFECYCLE-CROSS-REPO-CONTAINMENT-01: cross-repo check BEFORE any write.
+  if (
+    !lifecycleContainmentAdmits({
+      command: 'specs close',
+      repoRoot: ctx.repoRoot,
+      cawsDir: ctx.cawsDir,
+      cwd,
+      env,
+      now: nowFn,
+      out,
+      err,
+    })
+  ) {
+    return 1;
+  }
 
   // CAWS-GUARD-ALLOWLIST-SYNC-001 (Defect 2): a spec must not close without
   // closure notes. The store-layer closeSpec enforces the same contract
