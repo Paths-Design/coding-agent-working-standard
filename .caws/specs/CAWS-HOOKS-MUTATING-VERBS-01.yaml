@@ -73,3 +73,9 @@ evidence:
     recorded_at: "2026-09-19T00:01:22.044Z"
     artifact_path: packages/caws-cli/tests/shell/hooks-mutating.test.js
     commit_sha: "1365b83b59da556d159ad8be7856d191e9b275a6"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Verified by 'npx jest tests/shell/hooks-mutating.test.js' at 1365b83b. Describe block 'A3: no verb can stop a floor handler from running' runs test.each over all three REPO_POLICY_FLOOR handlers for BOTH disable (with a valid --reason) and replace (with a valid --reason AND --approver), plus a third route the spec did not name: 'add --path may not install a floor NAME as a repo-local file'. All eight arms assert exit 1, 'repo-policy floor' in the output, and an unchanged .caws/ tree hash. The discrimination control 'a NON-floor guard is still disablable' fails if the build refuses every disable. Launcher parity: pytest test_the_object_spelling_cannot_smuggle_a_floor_handler_past_the_check, proven non-vacuous by mutating the floor loop to iterate raw values instead of extracted names (arm went red, file restored and sha256-verified)."
+    recorded_at: "2026-09-19T00:01:23.257Z"
+    artifact_path: packages/caws-cli/tests/shell/hooks-mutating.test.js
+    commit_sha: "1365b83b59da556d159ad8be7856d191e9b275a6"
