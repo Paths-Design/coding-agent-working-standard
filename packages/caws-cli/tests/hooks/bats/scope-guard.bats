@@ -202,3 +202,82 @@ process.stdout.write(String(globToRegExp(process.env.PATTERN).test(process.env.T
 @test "scope-glob shell copy: an all-slash entry claims nothing (CONTAIN A3)" {
   [ "$(_matcher_verdict '/' 'packages/dir/file.py')" = "false" ]
 }
+
+# ─── FILE_PATH normalization (CAWS-DEFECT-SCOPE-GUARD-FILE-PATH-NOT-NORMALIZED-01)
+#
+# PROJECT_DIR is `cd && pwd`-normalized at line 234; FILE_PATH was taken from
+# the envelope verbatim. Containment then compared a normalized prefix against
+# an unnormalized path, so an absolute path INSIDE the governed project could
+# fail `$FILE_PATH == $PROJECT_DIR/*` and take the foreign hard block — exit 2,
+# "There is no in-band override", for a file in the agent's own repo.
+#
+# The file already states the rule it failed to apply: owned_worktree_root()
+# says "Compare like with like" and normalizes its candidate. This applies the
+# same rule to FILE_PATH.
+#
+# The oracle is the BLOCK TEXT, not the exit status: an admitted Write exits 0
+# silently, and so does a guard that skipped the branch for an unrelated reason
+# — so every arm asserts on 'DIFFERENT repository' presence or absence.
+
+@test "scope-guard: an in-repo path with a REDUNDANT SEPARATOR is not foreign" {
+  # The reported reproduction: a TMPDIR ending in '/' yields '…/T//repo/x.ts'.
+  # Lexically that is the same file; to the unfixed prefix test it was another
+  # repository.
+  _run_scope_guard_with_stub "$CAWS_TEST_REPO//src/app.ts" 0 ""
+  refute_output --partial 'DIFFERENT repository'
+  assert_equal "$status" 0
+}
+
+@test "scope-guard: an in-repo path with '.' and '..' segments is not foreign" {
+  # Resolves back inside the project, so it must be adjudicated on its merits.
+  _run_scope_guard_with_stub "$CAWS_TEST_REPO/./src/../src/app.ts" 0 ""
+  refute_output --partial 'DIFFERENT repository'
+  assert_equal "$status" 0
+}
+
+@test "scope-guard: normalization does not require the target to EXIST" {
+  # A Write creates a file that is not on disk yet, and may create its parent
+  # too. A resolution strategy depending on the path existing would fail on
+  # exactly the tool this guard must govern.
+  _run_scope_guard_with_stub "$CAWS_TEST_REPO//does/not/exist/yet.ts" 0 ""
+  refute_output --partial 'DIFFERENT repository'
+  assert_equal "$status" 0
+}
+
+@test "scope-guard: a normalized in-repo path is still REFUSED when the kernel refuses" {
+  # Non-vacuity for the three arms above. They assert the foreign branch is
+  # skipped; this proves skipping it does not admit everything — the path still
+  # reaches the kernel decision and a refusal still refuses.
+  _run_scope_guard_with_stub "$CAWS_TEST_REPO//src/app.ts" 1 \
+    '{"decision":"refuse","reason":"not in the defined scope","spec":"TEST-001"}'
+  refute_output --partial 'DIFFERENT repository'
+  assert_output --partial 'not in the defined scope'
+}
+
+@test "scope-guard: '..' that ESCAPES the project is still foreign after normalization" {
+  # The containment half of the invariant: the fix may only NARROW the foreign
+  # set. A path that resolves outside must still take the hard block, and
+  # normalization is what makes this case DETECTABLE rather than a string
+  # comparison that happened to fail.
+  local outside
+  outside="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-outside-XXXXXX")" && pwd)"
+  mkdir -p "$outside/src"
+  _run_scope_guard_with_stub "$CAWS_TEST_REPO/../$(basename "$outside")/src/f.ts" 0 ""
+  rm -rf "$outside"
+  assert_equal "$status" 2
+  assert_output --partial 'DIFFERENT repository'
+}
+
+@test "scope-guard: a foreign path with a redundant separator is still foreign" {
+  # The other direction of the same invariant: normalization must not turn a
+  # genuinely foreign path into an in-repo one. This is the arm that would fail
+  # if the fix collapsed separators by, say, stripping the project prefix
+  # loosely instead of comparing normalized absolute paths.
+  local foreign
+  foreign="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/caws-bats-foreign2-XXXXXX")" && pwd)"
+  mkdir -p "$foreign/src"
+  _run_scope_guard_with_stub "$foreign//src/f.ts" 0 ""
+  rm -rf "$foreign"
+  assert_equal "$status" 2
+  assert_output --partial 'DIFFERENT repository'
+}
