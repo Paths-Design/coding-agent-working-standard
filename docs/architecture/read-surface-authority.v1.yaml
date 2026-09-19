@@ -124,11 +124,17 @@ read_surfaces:
   agents list:
     subject: session set
     tier: operational_cache
-    asserts: [session_identity, liveness_classification]
+    asserts: [session_identity, liveness_classification, worktree_ownership, worktree_spec_binding]
+    joins:
+      worktree_ownership: .caws/worktrees.json
+      worktree_spec_binding: .caws/worktrees.json
     is_not: >-
-      authority for ownership or binding. It has no access to worktrees.json
-      and therefore may not render worktree or spec columns at all unless it
-      joins that registry.
+      authority for ownership or binding. The worktree and spec columns are
+      joined from worktrees.json by owner session id at render time; they are
+      never read from the lease, which only caches them. Three outcomes stay
+      distinct: registry unreadable renders `unknown`, registry read with no
+      owned entry renders the absence (observed, so honest to state), and one
+      or more owned entries render every name — a session may own several.
   agents show:
     subject: one session
     tier: operational_cache
@@ -199,17 +205,20 @@ rendering_obligations:
       reader who cannot tell "no worktree" from "this surface never asked"
       will make the wrong decision and have no way to detect it.
     worked_example:
-      prohibited: 'agents list printing `(no worktree)  (no spec)`'
+      prohibited: 'rendering `(no worktree)  (no spec)` from the lease fields alone'
       why: >-
-        `bound_worktree` and `bound_spec_id` have no writer. buildLeaseContext
-        accepts a `bound` argument, but both call sites (agents register,
-        agents heartbeat) pass null and there is no third caller, so the
-        `?? '(no worktree)'` fallback fires for 100% of sessions
-        unconditionally, including sessions that demonstrably own worktrees.
+        `bound_worktree` and `bound_spec_id` are lease cache with only
+        incidental writers: `caws status` and `caws claim` populate them as a
+        side effect of doing something else, and the register/heartbeat path
+        that creates most leases never does. A `?? '(no worktree)'` fallback
+        over those fields therefore prints a true-sounding negative about
+        every session no incidental writer happened to touch — including
+        sessions that demonstrably own a worktree.
       permitted: >-
-        Omit the column (as `status` does for `wt=`), render a neutral
-        placeholder (as `status` does with `spec=-`), or join
-        .caws/worktrees.json and print the real binding.
+        Join .caws/worktrees.json by owner session id and print the real
+        binding, rendering `unknown` when that registry cannot be read; or
+        omit the column (as `status` does for `wt=`); or render a neutral
+        placeholder (as `status` does with `spec=-`).
   completeness:
     rule: >-
       A surface that filters, buckets, or truncates MUST state what it
@@ -263,11 +272,15 @@ prohibited_renderings:
 # each entry is a defect to fix, never a permitted exception.
 # ─────────────────────────────────────────────────────────────────────────
 known_nonconformance:
-  - surface: agents list
+  - surface: agents register / agents heartbeat --include-active-summary
     violates: rendering_obligations.unsourced_fact
-    observed: '`(no worktree)  (no spec)` printed for every session, unconditionally'
-    evidence: src/shell/commands/agents.ts:635 renders `?? '(no worktree)'`; :247 reads `lease.bound_worktree ?? null`; the only producers (:286, :373) pass `bound = null`
-    contrast: status renders the same absent fields as an omitted `wt=` and a neutral `spec=-`
+    observed: >-
+      every active_agents entry carries `bound_worktree` and `bound_spec_id`
+      coerced from the lease cache to null, so a session that owns a worktree
+      is reported as owning none unless an incidental writer populated its
+      lease first
+    evidence: computeActiveSummary in src/shell/commands/agents.ts reads `lease.bound_worktree ?? null`
+    contrast: '`agents list` joins .caws/worktrees.json for the same two fact domains'
   - surface: agents show
     violates: non_collapse_relations (persisted status vs TTL classification)
     observed: 'returns status=active for a session `agents list` buckets as stale'
