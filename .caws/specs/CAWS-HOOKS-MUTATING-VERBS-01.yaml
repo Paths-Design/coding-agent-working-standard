@@ -91,3 +91,9 @@ evidence:
     recorded_at: "2026-09-19T00:01:39.706Z"
     artifact_path: packages/caws-cli/tests/shell/hooks-mutating.test.js
     commit_sha: "1365b83b59da556d159ad8be7856d191e9b275a6"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "Verified by 'npx jest tests/shell/hooks-mutating.test.js' at 1365b83b. 'a disable then a restore is a round trip on the resolved chain' compiles the stock chain, disables a guard, recompiles and asserts it is gone, restores, recompiles, and asserts the chain BODY is byte-identical to the original — order included, not merely that the handler reappeared. SCOPED CLAIM: the header legitimately differs, because its policy-sha256 tracks the DOCUMENT (now present and declaring nothing) rather than the effective chain; the arm asserts that difference explicitly rather than hiding it. 'restore sweeps the extension and its override in one move' asserts the document returns to exactly {version:1}, and 'restoring a handler the document never named is refused, not confirmed' pins that restore cannot report success over an unchanged file."
+    recorded_at: "2026-09-19T00:01:40.985Z"
+    artifact_path: packages/caws-cli/tests/shell/hooks-mutating.test.js
+    commit_sha: "1365b83b59da556d159ad8be7856d191e9b275a6"
