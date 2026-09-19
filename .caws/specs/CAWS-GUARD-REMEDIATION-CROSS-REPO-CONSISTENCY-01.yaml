@@ -65,3 +65,8 @@ evidence:
     evidence_ref: "bats B1 in packages/caws-cli/tests/hooks/bats/block-dangerous.bats: a python3 -c payload writing to a path in a SIBLING git repo is refused, the refusal names that repo root, and asserts the absence of 'run it by path'. Asserted-failing baseline established before the fix: B1 reported 'not ok' against the pre-fix guard; after the change it reports 'ok 1'. Run: cd packages/caws-cli && npx bats tests/hooks/bats/block-dangerous.bats (exit 0, zero 'not ok' lines across the full 417-test bats sweep)."
     recorded_at: "2026-09-19T05:23:51.296Z"
     commit_sha: "14d0ffe19126e71e83e9da68b4115a4d92f20de3"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "bats B2 (must-stay-legal counterweight): a node -e payload whose only write paths are inside THIS repo and /tmp is still refused for opacity AND still prints the script-file option. B2 was 'ok' in the pre-fix baseline and stays 'ok' after, which is the point: it proves the change is a targeted narrowing, not a blanket removal of the remediation. Run: npx bats tests/hooks/bats/block-dangerous.bats."
+    recorded_at: "2026-09-19T05:24:01.205Z"
+    commit_sha: "14d0ffe19126e71e83e9da68b4115a4d92f20de3"
