@@ -146,3 +146,8 @@ evidence:
     evidence_ref: "Proven by e2e describe [the escape is a human grant, and it is honored end to end (A6)] - two tests: the foreign repo is admitted after a lifecycle-plane grant AND the admission is announced on stderr so a crossing is never silent, then refused again once the grant is revoked. Decision-layer negatives in [lifecycle containment - the reprieve escape (A6)] cover wrong repo, expired, wrong handler and wrong session. The grant in the e2e is issued through runCliAsHuman, which DELETES CLAUDE_CODE_SESSION_ID from the child env - the CLI refuses an agent granting its own reprieve, so the test models an operator granting from outside the session, which is the real authority shape."
     recorded_at: "2026-09-19T07:05:34.884Z"
     commit_sha: "8485bf99"
+  - criterion_id: A7
+    status: pass
+    evidence_ref: "Proven by three e2e tests covering the other governed entry points: [refuses worktree create in the sibling repo with no registry mutation (A7)], [refuses worktree merge in the sibling repo, including --dry-run (A7)] and [refuses specs close in the sibling repo (A7)]. All four entry points therefore refuse, not specs create alone. Two placement decisions are load-bearing and are asserted: the worktree create check runs BEFORE buildActorPair, which mints an identity and is itself a write; and --dry-run is contained too, because a dry run still reads and reports on a foreign repo governance state."
+    recorded_at: "2026-09-19T07:05:37.767Z"
+    commit_sha: "8485bf99"
