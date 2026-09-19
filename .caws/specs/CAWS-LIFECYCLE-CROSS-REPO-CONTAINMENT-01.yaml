@@ -62,6 +62,15 @@ acceptance:
       the command is admitted and the origin record is written naming repo B; a
       subsequent call in repo A is then refused, proving the pin is
       trust-on-first-use and symmetric rather than privileging any particular repo
+  - id: A6
+    given: >-
+      a session pinned to repo A and an unexpired human-granted reprieve naming the
+      lifecycle plane for that session
+    when: 'it runs a governed lifecycle command in repo B'
+    then: >-
+      the command is admitted AND announces the reprieve that admitted it, so a
+      crossing is never silent; the same grant scoped to another repo or expired
+      does not admit it
 non_functional: {}
 contracts:
   - name: 'session-origin-record'
