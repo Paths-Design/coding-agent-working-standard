@@ -76,3 +76,8 @@ evidence:
     evidence_ref: "rendering_obligations carries 5 entries including completeness (a filtering surface must state what it withheld and the flag to see it, with a required form) and parity (human and --json of one surface must carry the same facts; --json may add machine detail but may never be the sole location of a fact). Both are backed by recorded non-conformances: agents list prints only the active bucket of 12 records with no hidden-count hint, and worktree list is the authoritative ownership surface with no machine-readable output at all."
     recorded_at: "2026-09-19T09:52:46.637Z"
     commit_sha: "34211d38"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "non_claims carries 6 entries: changes no runtime behavior, grants no authority (naming a surface authority describes the artifact it reads and cannot make a cache authoritative), does not define gate/hook/reprieve/waiver behavior, does not define the mutation lattice (that is command-capability-taxonomy.md), does not settle whether a fact SHOULD be surfaced, and states that known_nonconformance is a verified snapshot rather than an exhaustive audit so absence from it is not evidence of conformance. This is what prevents the contract being cited as pre-approval for an unreviewed renderer change."
+    recorded_at: "2026-09-19T09:52:47.970Z"
+    commit_sha: "34211d38"
