@@ -128,6 +128,32 @@ read_surfaces:
     joins:
       worktree_ownership: .caws/worktrees.json
       worktree_spec_binding: .caws/worktrees.json
+    renderings:
+      visibility: >-
+        every run states how many sessions it showed of the total and names
+        each withheld bucket with the flag that reveals it. The line is
+        unconditional: printing it only when something is hidden would make
+        its absence load-bearing. When --active defeats a given
+        --include-stale / --include-stopped the line reports the suppression
+        rather than the bare flag, because a remediation the invocation
+        already blocks is a false instruction.
+      tier_disclosure: >-
+        a closing line names .caws/leases as the operational cache read for
+        liveness and .caws/worktrees.json as the authority joined for the
+        binding columns. When that registry is unreadable it says the columns
+        are unavailable instead of claiming a join that did not happen.
+      conjoining: >-
+        the unresolved warning counts lease PAIRS and is stated separately
+        from the identity coverage, which counts LEASES in the retention
+        window. Each names its own unit; in one sentence they read as a ratio
+        between unrelated populations. It carries a repair line naming
+        --session-kind and the CAWS_SESSION_KIND / CAWS_FORKED_FROM
+        passthrough, and states that existing leases are never rewritten,
+        because per-session-file ownership is what makes lease writes atomic.
+      silent_platform: >-
+        a badge for the literal platform value `unknown` marks it as recorded
+        on the lease, not as a field the surface failed to read. Badges for
+        every other platform keep their unannotated form.
     is_not: >-
       authority for ownership or binding. The worktree and spec columns are
       joined from worktrees.json by owner session id at render time; they are
@@ -314,16 +340,6 @@ known_nonconformance:
   - surface: doctor
     violates: rendering_obligations.refusal_consistency
     observed: '--json is accepted and ignored unless --repair-plan is also passed; claim refuses the identical misuse with guidance'
-  - surface: agents list
-    violates: rendering_obligations.completeness
-    observed: prints the active bucket only; stale and stopped are flag-gated with no hidden-count hint
-  - surface: agents list
-    violates: rendering_obligations.tier_disclosure
-    observed: >-
-      `conjoined-unresolved` mixes two populations (overlap count vs classified
-      lease count) in one sentence and is the only warning class carrying no
-      repair line; `silent-platform: unknown` reads as missing knowledge when
-      `unknown` is the literal recorded platform value
 
 coherence:
   - Every fact printed by any surface maps to exactly one fact_domain, and that domain names exactly one authority.
