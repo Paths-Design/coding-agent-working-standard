@@ -1474,7 +1474,7 @@ export const SCOPE_COMMAND_META: GroupCommandMeta = {
 export const HOOKS_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'hooks',
-  description: 'Inspect the effective hook chain and the repo-local hook policy',
+  description: 'Inspect and amend the effective hook chain and the repo-local hook policy',
   subcommands: [
     {
       kind: 'leaf',
@@ -1505,7 +1505,7 @@ export const HOOKS_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'compile',
       description:
-        'Compile the per-event chain sidecars read by project-wired surfaces. --check compares what is on disk against what would be compiled and WRITES NOTHING, exiting 1 when any event is stale.',
+        'Compile the per-event chain sidecars read by project-wired surfaces. Renders every chain before writing any, so a chain the dispatcher parser would refuse aborts the whole run. --check compares what is on disk against what would be compiled and WRITES NOTHING, exiting 1 when any event is stale.',
       options: [
         {
           flag: '--check',
@@ -1520,6 +1520,91 @@ export const HOOKS_COMMAND_META: GroupCommandMeta = {
         // this command surface exists to refuse.
         { flag: '--json', description: 'Emit the per-event result as JSON' },
         { flag: '--data', description: 'Show structured data block on diagnostics' },
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'add',
+      argument: { name: 'handler.sh', required: true, description: 'Handler entry to splice in' },
+      description:
+        'Splice a handler into one event chain from the repo policy. Additive: it removes nothing. Writes .caws/hooks/hook-policy.json; run `caws hooks compile` afterwards to reach project-wired surfaces.',
+      options: [
+        { flag: '--event <event>', description: 'Lifecycle event to splice into (required)' },
+        {
+          flag: '--before <handler.sh>',
+          description: 'Anchor to insert before; omit to append at the end of the chain',
+        },
+        {
+          flag: '--path <rel>',
+          description:
+            'Repo-relative path the handler lives at, for a handler the pack does not ship',
+        },
+        {
+          flag: '--reason <text>',
+          description: 'Why this repo extends the chain (required, >= 12 characters)',
+        },
+        {
+          flag: '--surface <surface>',
+          description:
+            'Narrow the decision to one surface (default: `default`, which every surface layers over)',
+        },
+        { flag: '--json', description: 'Emit the mutation result as JSON' },
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'disable',
+      argument: {
+        name: 'handler.sh',
+        required: true,
+        description: 'Handler to subtract from the chain',
+      },
+      description:
+        'Subtract a handler from one event chain. Enforcement-reducing and permanent across every clone, so --reason is mandatory and is recorded in the document. Handlers on the repo-policy floor are refused.',
+      options: [
+        { flag: '--event <event>', description: 'Lifecycle event to subtract from (required)' },
+        {
+          flag: '--reason <text>',
+          description: 'Why this guard does not run here (required, >= 12 characters)',
+        },
+        { flag: '--surface <surface>', description: 'Narrow the decision to one surface' },
+        { flag: '--json', description: 'Emit the mutation result as JSON' },
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'replace',
+      argument: {
+        name: 'handler.sh',
+        required: true,
+        description: 'Shipped handler to point at a repo-local file',
+      },
+      description:
+        'Point a shipped handler at a repo-local file, recording the forked pack version and sha256 so doctor can report the drift. Enforcement-reducing: --reason and --approver are mandatory. Floor handlers are refused.',
+      options: [
+        { flag: '--with <rel>', description: 'Repo-relative path of the replacement (required)' },
+        {
+          flag: '--reason <text>',
+          description: 'Why the shipped handler does not fit (required, >= 12 characters)',
+        },
+        { flag: '--approver <id>', description: 'Who accepted the fork (required)' },
+        { flag: '--surface <surface>', description: 'Narrow the decision to one surface' },
+        { flag: '--json', description: 'Emit the mutation result as JSON' },
+      ],
+    },
+    {
+      kind: 'leaf',
+      name: 'restore',
+      argument: { name: 'handler.sh', required: true, description: 'Handler to return to stock' },
+      description:
+        'Drop every repo-policy entry naming a handler, returning it to stock. Refuses when the document never named it rather than reporting success over an unchanged file.',
+      options: [
+        {
+          flag: '--event <event>',
+          description: 'Scope the removal to one event; omit to sweep every event',
+        },
+        { flag: '--surface <surface>', description: 'The surface to restore on' },
+        { flag: '--json', description: 'Emit the mutation result as JSON' },
       ],
     },
   ],

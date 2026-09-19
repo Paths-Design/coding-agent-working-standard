@@ -1481,6 +1481,135 @@ export function inspectProjectState(input: DoctorInput): DoctorReport {
     }
   }
 
+  // ── CAWS-HOOKS-POLICY-DOCTOR-RULES-01: the repo-local hook policy ────────
+  // Undefined = the repo carries no .caws/hooks/hook-policy.json. That is not
+  // a degraded state and produces nothing, so a repo that never opted in sees
+  // byte-identical findings to before this slice existed.
+  const repoPolicy = input.filesystem?.repoHookPolicy;
+  if (repoPolicy !== undefined && repoPolicy.kind === 'invalid') {
+    findings.push(
+      finding(
+        DOCTOR_RULES.HOOKS_REPO_POLICY_INVALID,
+        'error',
+        `.caws/hooks/hook-policy.json is present but not usable: ${repoPolicy.error}. The hook ` +
+          'launcher is fail-CLOSED on an invalid policy — it blocks with exit 2 rather than ' +
+          'guessing — so this is not a configuration nit, it is every routed tool call in this ' +
+          'repo being refused until the document parses.',
+        {
+          subject: '.caws/hooks/hook-policy.json',
+          narrowRepair:
+            'Run `caws hooks validate` — it names the offending key and, for a floor violation, ' +
+            'the handler that may not be disabled or replaced. Fix the document at that key; do ' +
+            'not delete the file to clear the error unless the repo genuinely intends to drop ' +
+            'every local hook extension it declares.',
+          data: { error: repoPolicy.error },
+        }
+      )
+    );
+  }
+  if (repoPolicy !== undefined && repoPolicy.kind === 'valid') {
+    // Severity is led by the evidence, not by the existence of a fork. A fork
+    // whose upstream has not moved is a standing decision with nothing owed;
+    // one that cannot be measured is unobserved. Only a MOVED upstream is an
+    // outstanding retrofit, and only that fires.
+    const movedForks = repoPolicy.forks.filter((row) => row.upstreamChange === true);
+    if (movedForks.length > 0) {
+      const MAX_NAMED = 5;
+      const described = movedForks.map(
+        (row) =>
+          `${row.handler} (forked from ${row.recordedPack}@${row.recordedPackVersion}, shipping ` +
+          `${row.shippingPackVersion}, ${row.shippingPackVersion - row.recordedPackVersion} behind)`
+      );
+      const named = described.slice(0, MAX_NAMED).join('; ');
+      const remainder =
+        described.length > MAX_NAMED ? ` (+${described.length - MAX_NAMED} more)` : '';
+      findings.push(
+        finding(
+          DOCTOR_RULES.HOOKS_REPO_POLICY_FORK_LAG,
+          'warning',
+          `${movedForks.length} hook fork(s) recorded in .caws/hooks/hook-policy.json were taken ` +
+            `from a template that has since changed: ${named}${remainder}. The fork is a ` +
+            'deliberate, reviewed decision — the lag is not. These guards are running without ' +
+            'upstream fixes made after the fork was recorded, and because a forked handler lives ' +
+            'outside .caws/hooks/ it has no pristine baseline, so nothing else in doctor can see ' +
+            'it age.',
+          {
+            subject: '.caws/hooks/hook-policy.json',
+            narrowRepair:
+              'For each handler, diff your fork against the shipped template and port the ' +
+              'upstream change onto it, then re-record the provenance with ' +
+              '`caws hooks replace <handler> --with <path> --reason "<why>"` so the new baseline ' +
+              'is the template you actually reconciled against. If the upstream change makes the ' +
+              'fork unnecessary, `caws hooks restore <handler> --event <event>` drops it entirely.',
+            data: {
+              fork_count: movedForks.length,
+              forks: movedForks.map((row) => ({
+                surface: row.surface,
+                handler: row.handler,
+                recorded_pack: row.recordedPack,
+                recorded_pack_version: row.recordedPackVersion,
+                shipping_pack_version: row.shippingPackVersion,
+                distance: row.shippingPackVersion - row.recordedPackVersion,
+                reason: row.reason,
+              })),
+            },
+          }
+        )
+      );
+    }
+
+    if (repoPolicy.staleChains.length > 0) {
+      const described = repoPolicy.staleChains.map((row) => `${row.event} (${row.reason})`);
+      findings.push(
+        finding(
+          DOCTOR_RULES.HOOKS_REPO_POLICY_CHAIN_STALE,
+          'warning',
+          `${repoPolicy.staleChains.length} compiled hook chain(s) disagree with ` +
+            `.caws/hooks/hook-policy.json: ${described.join('; ')}. The project-wired surfaces ` +
+            '(qwen-code, kimi-code, opencode, zcode, dsh) exec the dispatcher directly and read ' +
+            'these sidecars, so they are running a chain the committed policy no longer ' +
+            'describes. Machine-routed surfaces resolve the policy live and are unaffected — ' +
+            'which is why this cannot be noticed from a Claude Code session.',
+          {
+            subject: '.caws/hooks/dispatch',
+            narrowRepair:
+              'Run `caws hooks compile` to rewrite the sidecars from the current policy, then ' +
+              'commit them — they are git-tracked on purpose, so every clone and CI run gets the ' +
+              'same chain. `caws hooks compile --check` reports the same verdict without writing.',
+            data: {
+              stale_count: repoPolicy.staleChains.length,
+              stale_events: repoPolicy.staleChains.map((row) => ({
+                event: row.event,
+                reason: row.reason,
+              })),
+            },
+          }
+        )
+      );
+    }
+  }
+
+  if (input.filesystem?.legacyAdapterPolicyPresent === true) {
+    findings.push(
+      finding(
+        DOCTOR_RULES.HOOKS_LEGACY_ADAPTER_POLICY,
+        'info',
+        'This repo still carries .caws/hooks/adapter-policy.json, the superseded repo-local hook ' +
+          'policy. Its shape is a frozen full copy of the stock chain, so it does not age: a copy ' +
+          'taken before an event or a handler existed keeps pinning the old set, silently, for as ' +
+          'long as it is present. The replacement (.caws/hooks/hook-policy.json) is additive — it ' +
+          'records what this repo CHANGES, so upstream additions keep arriving.',
+        {
+          subject: '.caws/hooks/adapter-policy.json',
+          narrowRepair:
+            'Run `caws hooks import --from-machine --plan` to see what the additive policy would ' +
+            'carry, then import it and remove the legacy file. Nothing breaks while both exist; ' +
+            'the frozen copy is still read.',
+        }
+      )
+    );
+  }
+
   // CAWS-DEFECT-LEASE-TMP-STRANDING-01: a lease write crashed mid-rename and
   // left its sibling tmp behind. Visible-but-inert litter; the next write
   // self-heals. Undefined observation = silent (house convention).

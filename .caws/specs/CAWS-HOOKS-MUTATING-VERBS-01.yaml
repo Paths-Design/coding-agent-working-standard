@@ -2,10 +2,11 @@ id: CAWS-HOOKS-MUTATING-VERBS-01
 title: 'caws hooks add | disable | replace | restore | compile (governed writes)'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
-worktree: wt-hooks-write
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Ships caws hooks add|disable|replace|restore and the writing form of compile, completing the repo-local hook policy surface. Six ACs recorded with pass evidence; verify-acs re-derives 6/6 in ''exists'' mode (commit reachable from main). Runtime proof: 244 jest suites / 3182 tests green on the merged content, plus 30 pytest arms against the launcher. Three mutations were run against live code to prove the new arms discriminate — the floor check over extracted-vs-raw names, the 12-char reason threshold, and the default-merge fix — each killed its arms and was reverted with a byte-level sha256 check. Two things beyond the slice as specified. (1) A schema extension was unavoidable: ''disabled'' admitted only bare strings, so a mandatory --reason had nowhere to persist; both validators now admit {handler, reason} while keeping the bare spelling valid. No pack bump — templates/hook-packs/runtime/ is not in the shared-pack fingerprint. (2) A defect in the landed resolver surfaced: effectiveRepoSurfacePolicy merged surfaces.default over surfaces[surface] unconditionally, so resolving for ''default'' layered default over itself, doubled every additive entry, and made resolveChain fail closed on the phantom duplicate. Since the project-wired plane has one dispatcher tree, compile always resolves for ''default'' — every policy declaring an extension was refused by the governed command. Fixed in both validators with three regression arms. KNOWN GAP, not covered by any AC: no test drives a real pre_tool_use envelope through a project-wired dispatcher end to end, so ''the compiled sidecar parses'' is proven but ''the added handler executes in the declared position'' is not. The plan lists that end-to-end arm; it belongs with the remaining steps.'
 created_at: '2026-09-18T23:29:05.819Z'
-updated_at: '2026-09-18T23:47:03.933Z'
+updated_at: '2026-09-19T00:02:04.436Z'
 created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
 blast_radius:
   modules:
@@ -61,3 +62,40 @@ non_functional: {}
 contracts:
   - name: 'hooks-policy-writer'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Verified by running 'npx jest tests/shell/hooks-mutating.test.js' from packages/caws-cli at merge commit 1365b83b. Arms 'a repo with no policy gets one, and the handler lands before its anchor' (asserts the created document byte-for-byte via toEqual, then runs caws hooks validate against it and requires exit 0) and 'the compiled chain puts the handler immediately before its anchor' (compiles, then asserts names[indexOf('marker.sh')+1] === 'scope-guard.sh', i.e. position rather than membership). Both spawn the built dist CLI, not the handler function."
+    recorded_at: "2026-09-19T00:01:07.978Z"
+    artifact_path: packages/caws-cli/tests/shell/hooks-mutating.test.js
+    commit_sha: "1365b83b59da556d159ad8be7856d191e9b275a6"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Verified by 'npx jest tests/shell/hooks-mutating.test.js' at 1365b83b. Refusal half: the parameterised arm '%s without --reason refuses and writes nothing' covers disable and replace, each asserting exit 1, output naming --reason, and — via expectNoWrite — a sha256 of the whole .caws/ tree unchanged; it also asserts the policy file was never created. Persistence half: 'a supplied reason is persisted in the document and echoed by list' reads the written JSON (disabled.pre_tool_use === [{handler, reason}]) and then asserts both the human and --json output of caws hooks list carry that reason. The launcher side is pinned separately by pytest test_the_object_spelling_requires_a_substantive_reason. NOTE the schema change this required: 'disabled' previously admitted only bare strings and had nowhere to persist a reason, so both validators (repo-hook-policy.ts and caws-hook.py) were extended to admit {handler, reason}."
+    recorded_at: "2026-09-19T00:01:22.044Z"
+    artifact_path: packages/caws-cli/tests/shell/hooks-mutating.test.js
+    commit_sha: "1365b83b59da556d159ad8be7856d191e9b275a6"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Verified by 'npx jest tests/shell/hooks-mutating.test.js' at 1365b83b. Describe block 'A3: no verb can stop a floor handler from running' runs test.each over all three REPO_POLICY_FLOOR handlers for BOTH disable (with a valid --reason) and replace (with a valid --reason AND --approver), plus a third route the spec did not name: 'add --path may not install a floor NAME as a repo-local file'. All eight arms assert exit 1, 'repo-policy floor' in the output, and an unchanged .caws/ tree hash. The discrimination control 'a NON-floor guard is still disablable' fails if the build refuses every disable. Launcher parity: pytest test_the_object_spelling_cannot_smuggle_a_floor_handler_past_the_check, proven non-vacuous by mutating the floor loop to iterate raw values instead of extracted names (arm went red, file restored and sha256-verified)."
+    recorded_at: "2026-09-19T00:01:23.257Z"
+    artifact_path: packages/caws-cli/tests/shell/hooks-mutating.test.js
+    commit_sha: "1365b83b59da556d159ad8be7856d191e9b275a6"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Verified by 'npx jest tests/shell/hooks-mutating.test.js' at 1365b83b. 'compile then --check is a fixed point' asserts --check exits 1 before compiling, compile exits 0, the following --check exits 0 and says 'current', and a second compile leaves the .caws/ tree hash unchanged (idempotence). 'the compiled chain parses under the REAL local-chain.sh' copies the SHIPPED templates/hook-packs/shared/lib/local-chain.sh into the scratch repo, sources it in a real bash process, calls caws_local_chain pre_tool_use, and requires exit 0 with the handler present in CAWS_LOCAL_CHAIN — a bash parse, not a regex. Also 'the compiled chain puts the handler immediately before its anchor' asserts the tab-separated override line verbatim."
+    recorded_at: "2026-09-19T00:01:38.370Z"
+    artifact_path: packages/caws-cli/tests/shell/hooks-mutating.test.js
+    commit_sha: "1365b83b59da556d159ad8be7856d191e9b275a6"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "Verified by 'npx jest tests/shell/hooks-mutating.test.js' at 1365b83b. The oracle is treeHash(), a recursive sha256 over every file under .caws/, applied by expectNoWrite() around fifteen separate refusal arms. 'a populated repo survives a burst of refused invocations unchanged' is the strongest: it builds a repo WITH a policy and a compiled chain (so a partial write has something to damage), then runs seven distinct refusal shapes — floor handler, short reason, unknown event, duplicate extension, traversing --path, absolute --with, unknown restore target — asserting exit 1 on each and one unchanged hash across the whole burst. Two arms also cover an unreadable policy document: compile and disable both refuse rather than recompiling or starting from the identity policy. The control 'the tree hash can actually observe a change' fails if treeHash were constant."
+    recorded_at: "2026-09-19T00:01:39.706Z"
+    artifact_path: packages/caws-cli/tests/shell/hooks-mutating.test.js
+    commit_sha: "1365b83b59da556d159ad8be7856d191e9b275a6"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "Verified by 'npx jest tests/shell/hooks-mutating.test.js' at 1365b83b. 'a disable then a restore is a round trip on the resolved chain' compiles the stock chain, disables a guard, recompiles and asserts it is gone, restores, recompiles, and asserts the chain BODY is byte-identical to the original — order included, not merely that the handler reappeared. SCOPED CLAIM: the header legitimately differs, because its policy-sha256 tracks the DOCUMENT (now present and declaring nothing) rather than the effective chain; the arm asserts that difference explicitly rather than hiding it. 'restore sweeps the extension and its override in one move' asserts the document returns to exactly {version:1}, and 'restoring a handler the document never named is refused, not confirmed' pins that restore cannot report success over an unchanged file."
+    recorded_at: "2026-09-19T00:01:40.985Z"
+    artifact_path: packages/caws-cli/tests/shell/hooks-mutating.test.js
+    commit_sha: "1365b83b59da556d159ad8be7856d191e9b275a6"

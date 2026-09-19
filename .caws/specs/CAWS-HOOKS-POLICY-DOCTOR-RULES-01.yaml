@@ -1,0 +1,104 @@
+id: CAWS-HOOKS-POLICY-DOCTOR-RULES-01
+title: 'Doctor reports repo hook-policy drift: fork lag, stale chains, invalid documents, legacy adapter-policy'
+risk_tier: 2
+mode: feature
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-policy-doctor at a0cac5f56f9a4a4a9104e43b704a6b2b5883f5e5'
+created_at: '2026-09-19T00:04:01.850Z'
+updated_at: '2026-09-19T00:29:24.091Z'
+created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
+blast_radius:
+  modules:
+    - 'caws-cli doctor (kernel classifier + store observation collector)'
+    - 'repo-local hook policy'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/doctor-snapshot.ts'
+    - 'packages/caws-cli/src/kernel/doctor/rules.ts'
+    - 'packages/caws-cli/src/kernel/doctor/types.ts'
+    - 'packages/caws-cli/src/kernel/doctor/inspect.ts'
+    - 'packages/caws-cli/tests/kernel/unit/doctor-repo-hook-policy.test.ts'
+    - 'packages/caws-cli/tests/store/doctor-snapshot-repo-hook-policy.test.js'
+    - packages/caws-cli/src/init/hook-install.ts
+    - packages/caws-cli/src/shell/commands/hooks.ts
+    - packages/caws-cli/src/init/hook-chain.ts
+    - packages/caws-cli/src/store/types.ts
+    - packages/caws-cli/src/kernel/doctor/index.ts
+  out: []
+invariants:
+  - 'The kernel classifies; the store observes. Every comparison needing filesystem or template access (the shipped pack version, the rendered template body, the compiled chain bytes) is computed in the store and passed to the kernel as plain data, so the kernel keeps no I/O and no dependency on src/init.'
+  - 'An absent hook-policy.json is silent, never a finding. A repo that has not opted in is not in a degraded state, and a doctor that complains about it trains its readers to ignore it.'
+  - 'A document doctor cannot parse is reported as invalid rather than treated as empty. Treating an unreadable policy as absent would report a repo as healthy at the exact moment its guard plane is failing closed on every tool call.'
+  - 'Fork lag is reported at the severity the evidence supports: a fork whose upstream has NOT moved is informational (a standing, discharged decision), and only a fork whose upstream HAS moved is a warning (an outstanding retrofit). Reporting every fork as a warning would make the signal unreadable, which is how the pre-existing inversion survived.'
+acceptance:
+  - id: A1
+    given: 'a repo whose hook-policy.json records a fork of a shared-pack handler at a pack_version behind the shipping SHARED_PACK_VERSION'
+    when: 'caws doctor runs'
+    then: 'a doctor.hooks.repo_policy_fork_lag finding names the handler, the recorded pack version, the shipping version and the distance, and its data payload carries them as fields rather than only in prose'
+  - id: A2
+    given: 'a fork recorded at the CURRENT pack version whose shipped template body is unchanged since it was taken'
+    when: 'caws doctor runs'
+    then: 'the fork is reported at info severity, or not at all, and never as a warning — so the warning in A1 discriminates rather than firing on every recorded fork'
+  - id: A3
+    given: 'a repo with a compiled dispatch/<event>.chain whose bytes disagree with what the current policy and installed dispatcher would compile'
+    when: 'caws doctor runs'
+    then: 'a doctor.hooks.repo_policy_chain_stale finding names each stale event and prescribes caws hooks compile, and a repo whose chains are current produces no such finding'
+  - id: A4
+    given: 'a hook-policy.json that is unparseable, or valid JSON that the repo-policy validator rejects (an over-authority floor entry, an unknown key)'
+    when: 'caws doctor runs'
+    then: 'a doctor.hooks.repo_policy_invalid finding fires at error severity carrying the validator message, and doctor does NOT also report the repo as having no policy'
+  - id: A5
+    given: 'a repo still carrying the superseded .caws/hooks/adapter-policy.json'
+    when: 'caws doctor runs'
+    then: 'a doctor.hooks.legacy_adapter_policy finding names the file and points at the hook-policy.json replacement, and a repo without that file produces no such finding'
+  - id: A6
+    given: 'a repo with no .caws/hooks/hook-policy.json at all'
+    when: 'caws doctor runs'
+    then: 'none of the four rules fire, and the doctor findings are byte-identical to the same repo before this slice existed'
+non_functional:
+  reliability:
+    - 'Every new observation is optional in the snapshot type: an unreadable or absent input yields undefined (unobserved, silent) rather than a synthesized zero value, so a collection failure can never present as a clean verdict.'
+    - 'Collection is best-effort and never throws into doctor: a malformed policy, a missing dispatch directory or an unreadable template degrades that one observation, leaving the other doctor findings intact.'
+contracts:
+  - name: 'doctor.hooks repo-policy finding ids and data payloads'
+    type: schema
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "A1 fork lag names handler, recorded pack version, shipping version and distance, in DATA not only prose. Kernel arm 'A1: a fork behind the shipping pack with a moved upstream warns, naming versions and distance in DATA not only prose' asserts message contains 'shared@67' / 'shipping 83' / '16 behind' AND data.forks[0] carries recorded_pack_version:67, shipping_pack_version:83, distance:16. Store arm 'A1: a fork recording a STALE sha256 reports upstreamChange=true with the real shipping version' measures against the REAL shipped scope-guard.sh bytes via shippedHandlerProvenance. Rendered live: the end-to-end arm asserts the real caws doctor binary prints 'doctor.hooks.repo_policy_fork_lag' and 'shared@67'. Run: cd packages/caws-cli && npx jest tests/kernel/unit/doctor-repo-hook-policy.test.ts tests/store/doctor-snapshot-repo-hook-policy.test.js => 39 passed. Mutation: filtering on upstreamChange !== undefined broke 3 kernel arms; measuring by pack_version instead of sha256 broke the store discriminator arm."
+    recorded_at: "2026-09-19T00:27:55.836Z"
+    artifact_path: packages/caws-cli/tests/kernel/unit/doctor-repo-hook-policy.test.ts
+    commit_sha: "18e80d74"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "A2 a current fork is never a warning, so the A1 warning discriminates. inspect.ts filters movedForks on upstreamChange === true, so a fork whose upstream has not moved fires nothing at all (A2 permits 'info severity, or not at all'). Kernel arms: 'A2: a fork at the CURRENT pack whose upstream body is unchanged is NOT a warning'; 'A2: the discriminator is the MOVED BODY, not the version distance — a stale version with an unmoved body stays silent' (recorded at pack 67 vs shipping 83, still silent); 'mixed forks: only the moved ones are named' (3 forks in, fork_count 2 out); 'a fork whose shipped counterpart could not be measured is UNOBSERVED'. Store arm 'A2: the version number is NOT the discriminator' records the REAL current scope-guard.sh sha256 at pack_version 67 and asserts upstreamChange===false. Run: npx jest tests/kernel/unit/doctor-repo-hook-policy.test.ts tests/store/doctor-snapshot-repo-hook-policy.test.js => 39 passed."
+    recorded_at: "2026-09-19T00:28:17.175Z"
+    artifact_path: packages/caws-cli/tests/kernel/unit/doctor-repo-hook-policy.test.ts
+    commit_sha: "18e80d74"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "A3 chain staleness names each stale event, prescribes caws hooks compile, and is silent when current. Measured through checkCompiledChains — the SAME comparator caws hooks compile and compile --check use, extracted into hook-chain.ts precisely so doctor cannot disagree with them. Store arms over REAL shipped dispatchers copied into a fixture: 'freshly compiled sidecars report NO stale chains' (the silence half); 'a policy with NO compiled sidecar at all reports every installed event stale' (reason 'no compiled chain on disk'); 'editing the policy after compiling makes the sidecar stale' (reason 'compiled against a different hook-policy.json'; every sidecar goes stale because the header records the whole-document digest); 'a HAND-EDITED sidecar whose header still matches is caught by the body comparison' (reason 'compiled chain body differs from the current policy' — the case a digest-only check would call fresh); 'an event with no installed dispatcher is not reported'. Kernel arms assert severity warning, narrowRepair contains 'caws hooks compile', data.stale_events carries event+reason, and the message names all five project-wired surfaces. Rendered live: the end-to-end arm asserts the real caws doctor binary prints 'doctor.hooks.repo_policy_chain_stale'. Run: npx jest tests/kernel/unit/doctor-repo-hook-policy.test.ts tests/store/doctor-snapshot-repo-hook-policy.test.js => 39 passed."
+    recorded_at: "2026-09-19T00:28:19.699Z"
+    artifact_path: packages/caws-cli/tests/store/doctor-snapshot-repo-hook-policy.test.js
+    commit_sha: "18e80d74"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "A4 an invalid policy fires at ERROR carrying the validator message, and doctor does NOT also report the repo as policy-free. The observation type has no 'absent' variant by construction: absence is the snapshot field being undefined, invalidity is kind:'invalid'. Kernel arms: 'an invalid document is an ERROR carrying the validator message' (severity error, message and data.error carry the text, narrowRepair names caws hooks validate); 'an invalid document does NOT also report the repo as policy-free: no fork or chain finding rides along'; 'the message states the fail-closed consequence'. Store arms distinguish the two rejection routes: 'A4: unparseable JSON observes invalid' (truncated '{ \"version\": 1, ') and 'A4: valid JSON the VALIDATOR rejects is invalid too' (disabling protected-paths.sh, a REPO_POLICY_FLOOR handler — error names the handler). Mutation: making the ENOENT branch return an empty valid observation broke 'A6: a repo with no hook-policy.json observes UNDEFINED' and the A5 independence arm, proving absent and invalid are not collapsed. Consequence recorded: because doctor exits 1 when any error-severity finding exists (doctor.ts 'return hasErrors ? 1 : 0'), an unparseable hook-policy.json now makes caws doctor exit 1 — intended, since the launcher is fail-closed on the same file. Rendered live: the end-to-end arm flips one variable (policy becomes '{ oops') and asserts the real binary prints doctor.hooks.repo_policy_invalid while repo_policy_fork_lag and repo_policy_chain_stale disappear. Run: npx jest tests/kernel/unit/doctor-repo-hook-policy.test.ts tests/store/doctor-snapshot-repo-hook-policy.test.js => 39 passed."
+    recorded_at: "2026-09-19T00:28:39.739Z"
+    artifact_path: packages/caws-cli/src/kernel/doctor/inspect.ts
+    commit_sha: "18e80d74"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "A5 the legacy .caws/hooks/adapter-policy.json is named at info with the hook-policy.json replacement, and a repo without it produces nothing. Kernel arms: 'the superseded file is named at info with the migration path' (severity info, message names both files, narrowRepair names caws hooks import --from-machine); 'it fires independently of hook-policy.json' (the legacy file matters MOST where no replacement exists); 'a repo without the file produces no such finding' (both false and the key absent). Store arm 'present is true, absent is false, and it does not depend on hook-policy.json' drives observeLegacyAdapterPolicy over a real fixture and asserts observeRepoHookPolicy stays undefined alongside it. RUNTIME EVIDENCE against this repo: node .caws/worktrees/wt-policy-doctor/packages/caws-cli/dist/index.js doctor, run with cwd at the canonical checkout which carries .caws/hooks/adapter-policy.json (1515 bytes, untracked), printed: '[INFO   ] doctor.hooks.legacy_adapter_policy: This repo still carries .caws/hooks/adapter-policy.json, the superseded repo-local hook policy...' with subject .caws/hooks/adapter-policy.json and the import repair. Run: npx jest tests/kernel/unit/doctor-repo-hook-policy.test.ts tests/store/doctor-snapshot-repo-hook-policy.test.js => 39 passed."
+    recorded_at: "2026-09-19T00:28:42.889Z"
+    artifact_path: packages/caws-cli/src/kernel/doctor/rules.ts
+    commit_sha: "18e80d74"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "A6 a repo with no hook-policy.json fires none of the four rules and its findings are byte-identical to before this slice. Kernel arms: 'none of the four rules fire when the observation is undefined'; 'the findings are IDENTICAL with the key absent and with it explicitly undefined' — JSON.stringify(findings) compared for equality over a snapshot that DOES carry other hook observations, so the arm proves no adjacent rule shifted; 'an EMPTY valid policy is also silent'. Store arm 'A6: a repo with no hook-policy.json observes UNDEFINED, not an empty policy' proves the observer, not just the classifier, honors it. Whole-suite regression lock: 3220/3220 jest across 246 suites (cd packages/caws-cli && npx jest), which includes every pre-existing doctor suite over repos that have no hook-policy.json — none changed verdict. SCOPE LIMIT of this claim: byte-identity is proven for the inspectProjectState findings array, over snapshots differing only in the new keys. The snapshot object itself is NOT byte-identical — it gains legacyAdapterPolicyPresent when the legacy file is present — and any repo carrying .caws/hooks/adapter-policy.json now gains one INFO finding, which is A5's intended behavior, not a regression. Mutation: returning an empty valid observation for ENOENT broke this arm's store counterpart. Run: npx jest tests/kernel/unit/doctor-repo-hook-policy.test.ts tests/store/doctor-snapshot-repo-hook-policy.test.js => 39 passed."
+    recorded_at: "2026-09-19T00:28:59.296Z"
+    artifact_path: packages/caws-cli/tests/kernel/unit/doctor-repo-hook-policy.test.ts
+    commit_sha: "18e80d74"

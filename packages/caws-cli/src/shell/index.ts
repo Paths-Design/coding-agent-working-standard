@@ -59,13 +59,24 @@ export type {
 
 export {
   PROJECT_WIRED_SURFACES,
+  runHooksAddCommand,
   runHooksCompileCheckCommand,
+  runHooksCompileCommand,
+  runHooksDisableCommand,
   runHooksListCommand,
+  runHooksReplaceCommand,
+  runHooksRestoreCommand,
   runHooksValidateCommand,
 } from './commands/hooks';
 export type {
+  HooksAddOptions,
   HooksCompileCheckOptions,
+  HooksCompileOptions,
+  HooksDisableOptions,
   HooksListOptions,
+  HooksMutationOptions,
+  HooksReplaceOptions,
+  HooksRestoreOptions,
   HooksValidateOptions,
 } from './commands/hooks';
 
