@@ -28,13 +28,54 @@ scope:
     - 'packages/caws-cli/tests/hooks/bats/guard-config.bats'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'APPEND-ONLY OVER A FLOOR (R1). The guards key admits only additional_* shapes. No repo-declared entry removes, replaces or reorders a shipped table entry, so a shipped protection can never be configured away. This is what makes fail-closed cheap: ignoring the config is always the STRICTER direction, so a parse failure degrades toward refusal, never toward permission.'
+  - 'DATA, NEVER DECISIONS (R2). A document naming a verdict at any depth (decision/allow/deny/ask/policy/outcome/severity/override/enforcement/exit_code/verdict) is rejected. The command-adapters rule that no key may name a decision does not transplat verbatim, because adding a prefix IS a verdict change for that prefix; the boundary is drawn on direction and floor instead.'
+  - 'CONTAINED AND BOUNDED (R3). Prefixes are repo-relative, trailing-slash, no .., no absolute paths, no glob metacharacters, and reserved prefixes (.caws, .git, .github/workflows, every vendor dir) are refused. The absolute-path ban is load-bearing: scope-guard.sh honors ABSOLUTE allow-prefixes BEFORE the foreign-repo containment block, so an absolute config entry would punch a hole in cross-repo containment.'
+  - 'ALL-OR-NOTHING. A document with one bad entry applies ZERO entries. Partial application would leave a repo running a configuration nobody authored and nobody can predict from reading the file.'
+  - 'ONE PARSE PER DISPATCH. The config is parsed once in run-handlers.sh and transported to every handler through the environment. Measured on this machine, a python3 spawn costs ~31ms; four adopters parsing independently would add ~124ms to every tool call, which is the difference between in-the-noise and felt.'
+  - 'THE TABLES THAT ARE THE FLOOR STAY UNEXPOSED. protected-paths.sh artifact classes, write-allowlist.sh worktree payload exclusion, scope-guard.sh foreign-repo containment, the guard-strikes 1/2/3 ramp and CAWS_TRAP_KILL admit no configuration at all.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
-non_functional: {}
+    given: 'a repo whose .caws/hooks/hook-policy.json declares guards."scope-guard.sh".additional_allow_prefixes with an entry naming a real repo directory'
+    when: 'the identical pre_tool_use envelope for a path under that prefix is adjudicated with and without the config'
+    then: 'the path is REFUSED without the config and ADMITTED with it — config is the only variable — and with the config present .caws/worktrees/<wt>/payload.txt still DENIES, proving the floor survived the addition'
+  - id: A2
+    given: 'a guards document whose entry is absolute, traverses with .., carries a glob metacharacter, or names a reserved prefix (.caws, .git, .github/workflows, a vendor dir)'
+    when: 'the policy is validated and the guard runs'
+    then: 'the document is rejected with the offending entry named, and the guard applies ZERO entries rather than the admissible subset — one bad entry is not partially honored'
+  - id: A3
+    given: 'a guards document containing a decision-naming key (allow/deny/ask/decision/severity/exit_code/verdict) at any depth'
+    when: 'the policy is validated'
+    then: 'it is refused by the R2 authority boundary, and a document carrying only additional_* data keys with the same nesting depth is accepted — so the refusal discriminates on the key name, not on shape'
+  - id: A4
+    given: 'a repo with no guards key, or with no hook-policy.json at all'
+    when: 'the same envelopes that were adjudicated before this slice are re-adjudicated'
+    then: 'every verdict is unchanged, and the added per-dispatch cost is one python3 invocation measured against the pre-existing spawn budget, not one per adopting guard'
+  - id: A5
+    given: 'policy.yaml declaring non_governed_zones, whose entries scope-guard.sh reads today through an inline awk block'
+    when: 'the transport is swapped to the shared single-pass loader and the inline awk is deleted'
+    then: 'the same zones still reach ALLOW_PREFIXES with identical semantics, proven by an envelope that was admitted through a zone before the swap still being admitted after, and the key keeps its kernel meaning (policy.yaml owns out-of-governance, hook-policy.json owns one guard table needing to know)'
+  - id: A6
+    given: 'the advisory threshold guards god-object-check.sh and loc-delta-check.sh, which today read CAWS_GOD_OBJECT_LOC / CAWS_LOC_DELTA_WARN_THRESHOLD from the environment'
+    when: 'a guards.thresholds entry and an env var both supply a value'
+    then: 'precedence is env > config > shipped default, so an existing .claude/settings.json env block keeps working unchanged, and the schema clamps the configured value with minimum/maximum rather than trusting it'
+  - id: A7
+    given: 'any change to a file under templates/hook-packs/shared/ — here two new lib rows plus five edited guards'
+    when: 'the pack fingerprint guard runs'
+    then: 'SHARED_PACK_VERSION is bumped, the new lib rows are in the shared manifest install set, and tests/init/pack-fingerprints.json records the recomputed shared fingerprint — a template change that lands without a bump is the stale-installed-fix class this guard exists to catch'
+  - id: A8
+    given: 'the loader running under the real /bin/bash 3.2.57 on macOS, and a guard sourced through run_guard_missing_lib'
+    when: 'guard-config.sh is absent or the config is unreadable'
+    then: 'the guard degrades to its shipped table and keeps enforcing — it never fails OPEN and never fails to run, because a source-guard that silently disarms a guard is the banned fail-soft shape'
+non_functional:
+  reliability:
+    - 'Fail-closed on a malformed document: the guard applies zero configured entries and enforces its shipped table, because append-only means ignoring the config is always the stricter direction.'
+    - 'A missing or unreadable guard-config lib degrades the adopting guard to its shipped behavior; it never disarms the guard and never aborts the dispatch.'
+  performance:
+    - 'One python3 parse per dispatch, transported through the environment — measured at ~31ms against a pre_tool_use path that already carries 19 python3 call sites; per-adopter parsing (~124ms) is refused.'
+  security:
+    - 'Absolute allow-prefixes are refused because scope-guard.sh honors them BEFORE foreign-repo containment; a configured absolute prefix would be a cross-repo containment hole.'
+    - 'Reserved prefixes (.caws, .git, .github/workflows, vendor dirs) are refused so the config can never widen access to the governance plane that adjudicates it.'
 contracts:
   - name: 'hook-policy.guards append-only schema'
     type: schema
