@@ -119,3 +119,9 @@ evidence:
     recorded_at: "2026-09-19T01:30:32.879Z"
     artifact_path: packages/caws-cli/templates/hook-packs/shared/scope-guard.sh
     commit_sha: "1a339824"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "npx bats tests/hooks/bats/guard-config-adopters.bats, six arms, each driving the REAL guard and reading the threshold back out of the advisory text it prints. god-object: no config and no env -> silent on a 40-line file (shipped default 2000 in force); config loc:100 with NO env on a 150-line file -> 'threshold: 100' (config beat the default, and the env var is absent so the value can only have come from the document); config loc:100 PLUS env CAWS_GOD_OBJECT_LOC=10 -> 'threshold: 10' and NOT 'threshold: 100' (env beat config). loc-delta: config delta:20 -> 'threshold: 20'; plus env CAWS_LOC_DELTA_WARN_THRESHOLD=15 -> 'threshold: 15' and NOT 20. Clamping is schema-enforced per guard in GUARD_CONFIG_SURFACE (god-object loc 100-100000, delta 10-100000; loc-delta delta 10-100000) with the out-of-range and non-integer refusals pinned in tests/init/repo-hook-policy.test.js (bool is explicitly excluded, since bool subclasses int in the python mirror). The key was RENAMED loc->delta for loc-delta-check.sh in this slice: it bounds a per-edit delta, the same quantity god-object calls delta, and the guard's filename containing 'loc' is exactly what made the wrong name tempting. Arm 'the threshold key is delta; loc is refused and applies nothing' pins that a document using the old name does not half-work."
+    recorded_at: "2026-09-19T01:30:55.322Z"
+    artifact_path: packages/caws-cli/tests/hooks/bats/guard-config-adopters.bats
+    commit_sha: "1a339824"
