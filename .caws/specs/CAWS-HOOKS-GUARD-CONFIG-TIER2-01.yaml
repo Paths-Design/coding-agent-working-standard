@@ -1,0 +1,42 @@
+id: CAWS-HOOKS-GUARD-CONFIG-TIER2-01
+title: 'Tier 2 guard config: repo-declared, append-only data for shipped guard tables'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-09-19T00:32:01.490Z'
+updated_at: '2026-09-19T00:32:01.490Z'
+created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
+blast_radius:
+  modules:
+    - 'shared hook pack (guard runtime)'
+    - 'repo-local hook policy (guards key)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/guard-config.py'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/guard-config.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/run-handlers.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/write-allowlist.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/scope-guard.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/god-object-check.sh'
+    - 'packages/caws-cli/templates/hook-packs/shared/loc-delta-check.sh'
+    - 'packages/caws-cli/src/init/repo-hook-policy.ts'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/init/repo-hook-policy.test.js'
+    - 'packages/caws-cli/tests/hooks/bats/guard-config.bats'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'TODO'
+    when: 'TODO'
+    then: 'TODO'
+non_functional: {}
+contracts:
+  - name: 'hook-policy.guards append-only schema'
+    type: schema
+  - name: 'guard-config loader env transport'
+    type: behavior
