@@ -438,6 +438,8 @@ export function migrateSystemProject(options: SystemOptions): {
   if (!options.plan && configureSystemRuntime({ ...options, plan: true }).changed)
     throw new Error(
       'Configure system registration first: caws init adapters configure --agent-surface ' +
+        options.surface +
+        ', then re-run: caws init adapters migrate --agent-surface ' +
         options.surface
     );
   const vendor = vendorFor(options.surface);
@@ -532,17 +534,32 @@ export function migrateSystemProject(options: SystemOptions): {
 /** Filesystem configuration only; native trust and execution need native proof. */
 export function systemSurfaceEnabled(
   surface: string | null | undefined,
-  home: string = machineHome()
+  home: string = machineHome(),
+  // Every sibling in this module takes the user home through SystemOptions;
+  // this one resolved it implicitly via os.homedir(), which libuv caches per
+  // process. That made the refusal below unreachable from a test without
+  // touching the developer's own home, and it is why the message went
+  // unpinned long enough to start naming the wrong step.
+  userHome?: string
 ): boolean {
   if (!surface || surface === 'none') return false;
   const settings = readSystemSurfaceSettings(home, surface);
   if (!settings) return false;
   if (!settings.enabled) return false;
   requireRuntime(home);
-  if (configureSystemRuntime({ surface, home, plan: true }).changed)
+  // exactOptionalPropertyTypes: an explicit `userHome: undefined` is not the
+  // same as an absent key, so omit it rather than pass it through.
+  if (
+    configureSystemRuntime({ surface, home, ...(userHome ? { userHome } : {}), plan: true }).changed
+  )
     throw new Error(
       'System surface settings and native registration disagree; run caws init adapters configure --agent-surface ' +
-        surface
+        surface +
+        '. If that reports OK and this persists, configure was not the stale step: the caws on PATH is a pinned' +
+        ' snapshot, and it wires the events IT knows about. Refresh the CLI snapshot, then caws init adapters' +
+        ' install, then re-run configure --agent-surface ' +
+        surface +
+        ' -- that is the whole upgrade order, and each step is carried out by the step before it.'
     );
   return true;
 }
