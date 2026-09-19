@@ -642,6 +642,7 @@ describe('the mutating leaves are reachable through Commander on the built CLI',
     ['disable', ['--event', '--reason', '--surface', '--json']],
     ['replace', ['--with', '--reason', '--approver', '--surface', '--json']],
     ['restore', ['--event', '--surface', '--json']],
+    ['import', ['--from-machine', '--plan', '--json']],
   ])('caws hooks %s --help declares its flags', (leaf, flags) => {
     const { status, out } = runCli(['hooks', leaf, '--help']);
     expect(status).toBe(0);
@@ -726,5 +727,289 @@ describe('the mutating leaves are reachable through Commander on the built CLI',
     );
     expect(refused).toMatchObject({ verb: 'disable', wrote: false });
     expect(refused.error).toContain('repo-policy floor');
+  });
+});
+
+// ─── import --from-machine (CAWS-HOOKS-POLICY-IMPORT-FROM-MACHINE-01) ──────
+//
+// The migration verb, and the only one that writes two stores. The arms below
+// weight the seam between them over feature coverage, because that seam is
+// where the failure modes are: a half-migrated repo, or a "faithful" import
+// that quietly dropped the one entry the repo tier cannot express.
+
+/** An isolated machine home plus this project's state file inside it. */
+function machineState(repo, surfaces) {
+  const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-hooks-home-')));
+  const dir = path.join(home, 'state', 'projects');
+  fs.mkdirSync(dir, { recursive: true });
+  const key = crypto.createHash('sha256').update(fs.realpathSync(repo)).digest('hex');
+  const file = path.join(dir, `${key}.json`);
+  fs.writeFileSync(file, JSON.stringify({ version: 1, root: repo, surfaces }, null, 2) + '\n');
+  return { home, file };
+}
+
+function runCliWithHome(args, { cwd, home }) {
+  const result = spawnSync(process.execPath, [CLI, ...args], {
+    cwd,
+    encoding: 'utf8',
+    env: { ...process.env, CAWS_HOME: home },
+  });
+  return { status: result.status, out: `${result.stdout}${result.stderr}` };
+}
+
+/** The shape sterling actually carries: two surfaces, identical policy. */
+const TWO_IDENTICAL_SURFACES = {
+  'claude-code': {
+    disabled: {},
+    extensions: { pre_tool_use: [{ handler: 'rg-replace-guard.sh', before: 'scope-guard.sh' }] },
+    handlers: { 'rg-replace-guard.sh': '.caws/hooks/ext/rg-replace-guard.sh' },
+    libraries: {},
+  },
+  codex: {
+    disabled: {},
+    extensions: { pre_tool_use: [{ handler: 'rg-replace-guard.sh', before: 'scope-guard.sh' }] },
+    handlers: { 'rg-replace-guard.sh': '.caws/hooks/ext/rg-replace-guard.sh' },
+    libraries: {},
+  },
+};
+
+describe('import: machine overrides become committed repo policy', () => {
+  test('two surfaces with identical policy collapse to one default entry', () => {
+    const repo = makeRepo();
+    const { home, file } = machineState(repo, TWO_IDENTICAL_SURFACES);
+
+    const { status, out } = runCliWithHome(['hooks', 'import', '--from-machine'], {
+      cwd: repo,
+      home,
+    });
+    expect(status).toBe(0);
+    expect(out).toContain('collapsed 2 identical surfaces');
+
+    const policy = readPolicy(repo);
+    // The collapse is the point: carrying two byte-identical copies into a
+    // reviewed file would import the duplication along with the policy.
+    expect(Object.keys(policy.surfaces)).toEqual(['default']);
+    expect(policy.surfaces.default.extensions.pre_tool_use[0].handler).toBe('rg-replace-guard.sh');
+    expect(policy.surfaces.default.extensions.pre_tool_use[0].before).toBe('scope-guard.sh');
+    expect(policy.surfaces.default.handlers['rg-replace-guard.sh']).toBe(
+      '.caws/hooks/ext/rg-replace-guard.sh'
+    );
+
+    // And the machine keys are emptied, or the handler splices twice.
+    const cleared = JSON.parse(fs.readFileSync(file, 'utf8'));
+    for (const surface of ['claude-code', 'codex']) {
+      expect(cleared.surfaces[surface].extensions).toEqual({});
+      expect(cleared.surfaces[surface].handlers).toEqual({});
+    }
+    // The surface itself survives: emptying its keys is not de-registering the
+    // project from the machine runtime.
+    expect(Object.keys(cleared.surfaces).sort()).toEqual(['claude-code', 'codex']);
+    expect(cleared.root).toBe(repo);
+  });
+
+  test('surfaces that DIFFER are kept apart rather than collapsed onto one', () => {
+    // The control for the arm above. Collapsing unlike surfaces would silently
+    // apply one surface's policy to another.
+    const repo = makeRepo();
+    const { home } = machineState(repo, {
+      'claude-code': {
+        disabled: {},
+        extensions: { pre_tool_use: [{ handler: 'a.sh', before: null }] },
+        handlers: { 'a.sh': '.caws/hooks/ext/a.sh' },
+        libraries: {},
+      },
+      codex: {
+        disabled: {},
+        extensions: { pre_tool_use: [{ handler: 'b.sh', before: null }] },
+        handlers: { 'b.sh': '.caws/hooks/ext/b.sh' },
+        libraries: {},
+      },
+    });
+
+    expect(runCliWithHome(['hooks', 'import', '--from-machine'], { cwd: repo, home }).status).toBe(
+      0
+    );
+    const policy = readPolicy(repo);
+    expect(Object.keys(policy.surfaces).sort()).toEqual(['claude-code', 'codex']);
+    expect(policy.surfaces).not.toHaveProperty('default');
+  });
+
+  test('an imported extension records that machine state captured no reason', () => {
+    // PolicyExtension requires a reason; machine state has no such field. The
+    // text must read as the absence it is — a synthesized justification would
+    // be indistinguishable from one a human wrote.
+    const repo = makeRepo();
+    const { home } = machineState(repo, TWO_IDENTICAL_SURFACES);
+    runCliWithHome(['hooks', 'import', '--from-machine'], { cwd: repo, home });
+
+    const reason = readPolicy(repo).surfaces.default.extensions.pre_tool_use[0].reason;
+    expect(reason).toContain('Imported from machine state');
+    expect(reason).toContain('no justification was recorded');
+  });
+
+  test('a disabled entry imports WITHOUT inventing a reason (bare spelling)', () => {
+    const repo = makeRepo();
+    const { home } = machineState(repo, {
+      'claude-code': {
+        disabled: { pre_tool_use: ['god-object-check.sh'] },
+        extensions: {},
+        handlers: {},
+        libraries: {},
+      },
+    });
+    expect(runCliWithHome(['hooks', 'import', '--from-machine'], { cwd: repo, home }).status).toBe(
+      0
+    );
+    // The bare string, not {handler, reason: "..."} — machine state recorded
+    // no rationale and the import must not manufacture one.
+    expect(readPolicy(repo).surfaces.default.disabled.pre_tool_use).toEqual([
+      'god-object-check.sh',
+    ]);
+  });
+});
+
+describe('import: refusals write nothing to either store', () => {
+  test('a machine entry disabling a FLOOR handler refuses and names it', () => {
+    // Machine tier may disable protected-paths.sh; the repo tier may not.
+    // Dropping it silently would increase enforcement — safe, but it would
+    // make the import a lie about equivalence.
+    const repo = makeRepo();
+    const { home, file } = machineState(repo, {
+      'claude-code': {
+        disabled: { pre_tool_use: ['protected-paths.sh'] },
+        extensions: {},
+        handlers: {},
+        libraries: {},
+      },
+    });
+    const machineBefore = fs.readFileSync(file, 'utf8');
+    const cawsBefore = treeHash(path.join(repo, '.caws'));
+
+    const { status, out } = runCliWithHome(['hooks', 'import', '--from-machine'], {
+      cwd: repo,
+      home,
+    });
+    expect(status).toBe(1);
+    expect(out).toContain('protected-paths.sh');
+    expect(out).toContain('Nothing was written');
+    expect(treeHash(path.join(repo, '.caws'))).toBe(cawsBefore);
+    expect(fs.readFileSync(file, 'utf8')).toBe(machineBefore);
+  });
+
+  test('REPLACING a floor handler refuses too — a no-op replacement is a disable', () => {
+    // Gating only `disabled` would leave the bypass one key away.
+    const repo = makeRepo();
+    const { home } = machineState(repo, {
+      'claude-code': {
+        disabled: {},
+        extensions: {},
+        handlers: { 'block-dangerous.sh': '.caws/hooks/ext/noop.sh' },
+        libraries: {},
+      },
+    });
+    const before = treeHash(path.join(repo, '.caws'));
+    const { status, out } = runCliWithHome(['hooks', 'import', '--from-machine'], {
+      cwd: repo,
+      home,
+    });
+    expect(status).toBe(1);
+    expect(out).toContain('block-dangerous.sh');
+    expect(treeHash(path.join(repo, '.caws'))).toBe(before);
+  });
+
+  test('a policy that already declares the destination surface is not merged into', () => {
+    const repo = makeRepo({
+      policy: {
+        version: 1,
+        surfaces: {
+          default: {
+            extensions: {
+              pre_tool_use: [
+                { handler: 'existing.sh', before: null, reason: 'a decision a human already made' },
+              ],
+            },
+            handlers: { 'existing.sh': '.caws/hooks/ext/existing.sh' },
+          },
+        },
+      },
+    });
+    const { home } = machineState(repo, TWO_IDENTICAL_SURFACES);
+    const before = treeHash(path.join(repo, '.caws'));
+
+    const { status, out } = runCliWithHome(['hooks', 'import', '--from-machine'], {
+      cwd: repo,
+      home,
+    });
+    expect(status).toBe(1);
+    expect(out).toContain('already declares policy');
+    expect(treeHash(path.join(repo, '.caws'))).toBe(before);
+  });
+
+  test('--from-machine is required; a bare import writes nothing', () => {
+    const repo = makeRepo();
+    const { home } = machineState(repo, TWO_IDENTICAL_SURFACES);
+    const before = treeHash(path.join(repo, '.caws'));
+    const { status, out } = runCliWithHome(['hooks', 'import'], { cwd: repo, home });
+    expect(status).toBe(1);
+    expect(out).toContain('--from-machine is required');
+    expect(treeHash(path.join(repo, '.caws'))).toBe(before);
+  });
+
+  test('a project with no machine state says so instead of writing an empty policy', () => {
+    const repo = makeRepo();
+    const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-hooks-home-')));
+    const { status, out } = runCliWithHome(['hooks', 'import', '--from-machine'], {
+      cwd: repo,
+      home,
+    });
+    expect(status).toBe(1);
+    expect(out).toContain('nothing to migrate');
+    expect(fs.existsSync(path.join(repo, POLICY))).toBe(false);
+  });
+});
+
+describe('import: --plan writes nothing to either store', () => {
+  test('it reports what it would write AND what it would clear', () => {
+    const repo = makeRepo();
+    const { home, file } = machineState(repo, TWO_IDENTICAL_SURFACES);
+    const machineBefore = fs.readFileSync(file, 'utf8');
+    const cawsBefore = treeHash(path.join(repo, '.caws'));
+
+    const { status, out } = runCliWithHome(['hooks', 'import', '--from-machine', '--plan'], {
+      cwd: repo,
+      home,
+    });
+    expect(status).toBe(0);
+    expect(out).toContain('would write');
+    expect(out).toContain('would then clear');
+    // Named, so the operator can see which machine surfaces the plan touches.
+    expect(out).toContain('claude-code');
+    expect(out).toContain('codex');
+    // Both stores byte-identical: --plan on a two-store verb has two ways to lie.
+    expect(treeHash(path.join(repo, '.caws'))).toBe(cawsBefore);
+    expect(fs.readFileSync(file, 'utf8')).toBe(machineBefore);
+  });
+
+  test('--plan --json names the same clear set the non-plan run performs', () => {
+    // The control that keeps the preview honest: a plan naming a different set
+    // than the real run is worse than no plan.
+    const repo = makeRepo();
+    const { home } = machineState(repo, TWO_IDENTICAL_SURFACES);
+    const planned = JSON.parse(
+      runCliWithHome(['hooks', 'import', '--from-machine', '--plan', '--json'], {
+        cwd: repo,
+        home,
+      }).out.trim()
+    );
+    const applied = JSON.parse(
+      runCliWithHome(['hooks', 'import', '--from-machine', '--json'], {
+        cwd: repo,
+        home,
+      }).out.trim()
+    );
+    expect(planned.wrote).toBe(false);
+    expect(applied.wrote).toBe(true);
+    expect(applied.cleared).toEqual(planned.wouldClear);
+    expect(applied.changed).toEqual(planned.changed);
   });
 });

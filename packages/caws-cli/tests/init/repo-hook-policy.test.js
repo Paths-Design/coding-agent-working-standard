@@ -22,6 +22,7 @@ const {
   policyDisableHandler,
   policyReplaceHandler,
   policyRestoreHandler,
+  policyImportFromMachine,
   REPO_POLICY_FLOOR,
   HOOK_POLICY_VERSION,
   REPO_HOOK_POLICY_PATH,
@@ -1408,5 +1409,158 @@ describe('the guards block round-trips through the serializer', () => {
     expect(parsed.ok).toBe(true);
     expect(parsed.policy.guards).toEqual({});
     expect(serializeRepoHookPolicy(parsed.policy)).not.toContain('guards');
+  });
+});
+
+// ─── policyImportFromMachine (CAWS-HOOKS-POLICY-IMPORT-FROM-MACHINE-01) ────
+//
+// The seam between two stores that cannot be written atomically. These arms
+// are about WHICH partial state the design fails into, not about whether a
+// partial state can occur — it can, and pretending otherwise is the failure.
+
+describe('import: the half-migrated state fails CLOSED, by name', () => {
+  const MACHINE = {
+    'claude-code': {
+      disabled: {},
+      extensions: { pre_tool_use: [{ handler: 'rg-replace-guard.sh', before: 'scope-guard.sh' }] },
+      handlers: { 'rg-replace-guard.sh': '.caws/hooks/ext/rg-replace-guard.sh' },
+      libraries: {},
+    },
+  };
+
+  test('after a COMPLETE import the handler splices exactly once', () => {
+    const imported = policyImportFromMachine(emptyRepoHookPolicy(), { machine: MACHINE });
+    expect(imported.ok).toBe(true);
+
+    const resolved = resolveChain({
+      stock: STOCK,
+      event: 'pre_tool_use',
+      repo: effectiveRepoSurfacePolicy(imported.policy, 'claude-code'),
+      // Machine tier cleared, which is what `clear` instructs the caller to do.
+      machine: { disabled: {}, extensions: {}, handlers: {}, libraries: {} },
+    });
+    expect(resolved.ok).toBe(true);
+    const occurrences = resolved.handlers.filter((h) => h === 'rg-replace-guard.sh');
+    expect(occurrences).toHaveLength(1);
+    // And it landed at its declared anchor, not merely somewhere in the chain.
+    expect(resolved.handlers.indexOf('rg-replace-guard.sh')).toBe(
+      resolved.handlers.indexOf('scope-guard.sh') - 1
+    );
+  });
+
+  test('when the machine clear did NOT happen, resolution REFUSES and names the handler', () => {
+    // This is the interrupted-import state: repo policy written, machine keys
+    // still populated. It must never resolve to a chain that runs the guard
+    // twice — a guard that runs twice reports two verdicts for one call.
+    const imported = policyImportFromMachine(emptyRepoHookPolicy(), { machine: MACHINE });
+    expect(imported.ok).toBe(true);
+
+    const resolved = resolveChain({
+      stock: STOCK,
+      event: 'pre_tool_use',
+      repo: effectiveRepoSurfacePolicy(imported.policy, 'claude-code'),
+      machine: {
+        disabled: {},
+        extensions: MACHINE['claude-code'].extensions,
+        handlers: MACHINE['claude-code'].handlers,
+        libraries: {},
+      },
+    });
+    expect(resolved.ok).toBe(false);
+    expect(resolved.error).toContain('rg-replace-guard.sh');
+    expect(resolved.error).toContain('already in the chain');
+  });
+
+  test('`clear` names every surface the caller must empty, and nothing else', () => {
+    // The caller drives the second write off this list, so a surface missing
+    // from it is a surface that stays populated and silently double-splices.
+    const imported = policyImportFromMachine(emptyRepoHookPolicy(), {
+      machine: {
+        ...MACHINE,
+        // An untouched surface: registered, but declaring no overrides.
+        codex: { disabled: {}, extensions: {}, handlers: {}, libraries: {} },
+      },
+    });
+    expect(imported.ok).toBe(true);
+    expect(imported.clear).toEqual(['claude-code']);
+  });
+
+  test('machine state with no overrides at all refuses rather than writing an empty surface', () => {
+    const imported = policyImportFromMachine(emptyRepoHookPolicy(), {
+      machine: { codex: { disabled: {}, extensions: {}, handlers: {}, libraries: {} } },
+    });
+    expect(imported.ok).toBe(false);
+    expect(imported.error).toContain('nothing to import');
+  });
+
+  test('every floor handler is refused through BOTH the disable and the replace route', () => {
+    // Parameterised over the whole floor: gating one name leaves the others
+    // one keystroke away, and the floor is the reason the repo tier is safe.
+    for (const handler of REPO_POLICY_FLOOR) {
+      const viaDisable = policyImportFromMachine(emptyRepoHookPolicy(), {
+        machine: {
+          codex: {
+            disabled: { pre_tool_use: [handler] },
+            extensions: {},
+            handlers: {},
+            libraries: {},
+          },
+        },
+      });
+      expect(viaDisable.ok).toBe(false);
+      expect(viaDisable.error).toContain(handler);
+
+      const viaReplace = policyImportFromMachine(emptyRepoHookPolicy(), {
+        machine: {
+          codex: {
+            disabled: {},
+            extensions: {},
+            handlers: { [handler]: '.caws/hooks/ext/noop.sh' },
+            libraries: {},
+          },
+        },
+      });
+      expect(viaReplace.ok).toBe(false);
+      expect(viaReplace.error).toContain(handler);
+    }
+  });
+
+  test('a NON-floor handler is admitted through both routes, so the floor arm is not vacuous', () => {
+    const ok = policyImportFromMachine(emptyRepoHookPolicy(), {
+      machine: {
+        codex: {
+          disabled: { pre_tool_use: ['god-object-check.sh'] },
+          extensions: {},
+          handlers: { 'scope-guard.sh': '.caws/hooks/ext/scope-guard.local.sh' },
+          libraries: {},
+        },
+      },
+    });
+    expect(ok.ok).toBe(true);
+  });
+
+  test('an unknown event is refused rather than written into a document nothing reads', () => {
+    const bad = policyImportFromMachine(emptyRepoHookPolicy(), {
+      machine: {
+        codex: {
+          disabled: { not_an_event: ['god-object-check.sh'] },
+          extensions: {},
+          handlers: {},
+          libraries: {},
+        },
+      },
+    });
+    expect(bad.ok).toBe(false);
+    expect(bad.error).toContain('not_an_event');
+  });
+
+  test('the imported policy round-trips through the parser it will be read back by', () => {
+    // settle() already asserts this internally; pinning it here means a change
+    // to the serializer that the parser rejects fails on THIS import shape.
+    const imported = policyImportFromMachine(emptyRepoHookPolicy(), { machine: MACHINE });
+    expect(imported.ok).toBe(true);
+    const reparsed = parseRepoHookPolicy(serializeRepoHookPolicy(imported.policy));
+    expect(reparsed.ok).toBe(true);
+    expect(reparsed.policy).toEqual(imported.policy);
   });
 });

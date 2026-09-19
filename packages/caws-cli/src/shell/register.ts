@@ -81,6 +81,7 @@ import {
   runHooksCompileCheckCommand,
   runHooksCompileCommand,
   runHooksDisableCommand,
+  runHooksImportCommand,
   runHooksListCommand,
   runHooksReplaceCommand,
   runHooksRestoreCommand,
@@ -685,6 +686,16 @@ export function registerShellCommands(
       const code = runHooksRestoreCommand(handler, {
         ...(opts.event !== undefined ? { event: opts.event } : {}),
         ...(opts.surface !== undefined ? { surface: opts.surface } : {}),
+        json: opts.json === true,
+      });
+      exit(code);
+    }
+  );
+  defineLeaf(hooksCmd, leafMeta(HOOKS_COMMAND_META, 'import')).action(
+    (opts: { fromMachine?: boolean; plan?: boolean; json?: boolean }) => {
+      const code = runHooksImportCommand({
+        fromMachine: opts.fromMachine === true,
+        plan: opts.plan === true,
         json: opts.json === true,
       });
       exit(code);

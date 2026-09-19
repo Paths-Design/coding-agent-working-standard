@@ -1607,6 +1607,25 @@ export const HOOKS_COMMAND_META: GroupCommandMeta = {
         { flag: '--json', description: 'Emit the mutation result as JSON' },
       ],
     },
+    {
+      kind: 'leaf',
+      name: 'import',
+      description:
+        'Migrate this project\'s machine-state overrides into the committed repo policy, then clear the migrated machine keys. Surfaces with identical policy collapse to "default". Refuses, writing nothing, when machine state touches a floor handler the repo tier cannot express, or when the policy already declares the destination surface. Imported extensions record that machine state captured no justification rather than inventing one.',
+      options: [
+        {
+          flag: '--from-machine',
+          description:
+            'Required. The only source this verb reads; naming it keeps the command honest if another is ever added.',
+        },
+        {
+          flag: '--plan',
+          description:
+            'Show what would be written and which machine surfaces would be cleared. Writes nothing.',
+        },
+        { flag: '--json', description: 'Emit the import result as JSON' },
+      ],
+    },
   ],
 };
 
