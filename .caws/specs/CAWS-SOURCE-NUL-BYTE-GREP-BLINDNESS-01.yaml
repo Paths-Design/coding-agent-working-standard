@@ -44,3 +44,9 @@ non_functional: {}
 contracts:
   - name: 'source-text-integrity'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Observed failing against the unfixed tree BEFORE the fix was applied, which is the whole point of this AC. Running tests/ci/source-text-integrity.test.js with the raw NUL still present produced: violations = ['packages/caws-cli/src/kernel/worktree/leases.ts:628 (byte offset 25037)'] against an expected []. Byte offset 25037 and line 628 match the offset derived independently by direct byte inspection before the test existed, so the detector and the diagnosis agree rather than one being fitted to the other. The run was 2 failed / 6 passed; the second failure was my own bad assertion (the test asserted the scan contained the then-untracked test file itself) and was replaced with an extension-breadth check that is correct while uncommitted and does not rot on a rename."
+    recorded_at: "2026-09-19T10:37:46.295Z"
+    commit_sha: "821db384"
