@@ -330,16 +330,34 @@ describe('A3: compile --check', () => {
     expect(parsed).toMatchObject({ schema: 'caws.hooks_compile_check.v1', wrote: false, stale: 0 });
   });
 
-  test('compile WITHOUT --check refuses instead of writing', () => {
-    // The mutating verb lands in its own slice. A verb that half-exists —
-    // accepting the invocation and writing something approximate — is worse
-    // than one that is plainly not there yet.
-    const repo = makeRepo();
-    const before = treeHash(path.join(repo, '.caws'));
-    const { status, out } = runCli(['hooks', 'compile'], { cwd: repo });
-    expect(status).toBe(1);
-    expect(out).toContain('--check');
-    expect(treeHash(path.join(repo, '.caws'))).toBe(before);
+  test('--check is what makes compile read-only: the bare form DOES write', () => {
+    // The separability claim this whole suite rests on, asserted as a
+    // difference rather than as two independent facts. One repo, one policy,
+    // one flag as the only variable: `--check` must leave `.caws/` byte-
+    // identical, and dropping it must not. Without the second half, every
+    // read-only assertion here would also hold for a `compile` that had
+    // silently stopped working.
+    const policy = {
+      version: 1,
+      surfaces: {
+        default: {
+          disabled: {
+            pre_tool_use: [
+              { handler: 'cwd-guard.sh', reason: 'this repo has no tracked worktrees' },
+            ],
+          },
+        },
+      },
+    };
+    const checked = makeRepo({ policy });
+    const beforeCheck = treeHash(path.join(checked, '.caws'));
+    expect(runCli(['hooks', 'compile', '--check'], { cwd: checked }).status).toBe(1);
+    expect(treeHash(path.join(checked, '.caws'))).toBe(beforeCheck);
+
+    const compiled = makeRepo({ policy });
+    const beforeCompile = treeHash(path.join(compiled, '.caws'));
+    expect(runCli(['hooks', 'compile'], { cwd: compiled }).status).toBe(0);
+    expect(treeHash(path.join(compiled, '.caws'))).not.toBe(beforeCompile);
   });
 });
 
