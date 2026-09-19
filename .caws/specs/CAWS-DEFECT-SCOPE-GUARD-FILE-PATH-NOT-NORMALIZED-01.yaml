@@ -41,3 +41,10 @@ contracts:
   - name: 'scope-guard-path-normalization'
     type: behavior
     path: 'packages/caws-cli/tests/hooks/bats/scope-guard.bats'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Falsifying-first, and the pre-fix run captured the defect verbatim. Arms 'an in-repo path with a REDUNDANT SEPARATOR is not foreign', 'an in-repo path with . and .. segments is not foreign', and 'normalization does not require the target to EXIST' were written BEFORE the fix and all three failed, with the block text reading: CAWS scope-guard: BLOCKED — '/var/folders/.../T//caws-bats-Rypi8G/./src/../src/app.ts' is in a DIFFERENT repository than this session's project (/var/folders/.../T/caws-bats-Rypi8G). Those two paths are the same directory. Post-fix all three pass. ORACLE NOTE: the assertion is on the BLOCK TEXT (refute_output --partial 'DIFFERENT repository'), not on exit status — an admitted Write exits 0 SILENTLY and so does a guard that skipped the branch for an unrelated reason, so an exit-code oracle would pass vacuously (the same trap that made six arms vacuous earlier in this work). Non-vacuity is pinned by a fourth arm, 'a normalized in-repo path is still REFUSED when the kernel refuses', which drives the same normalized path with the stub returning exit 1 and asserts the refusal text still surfaces — so skipping the foreign branch does not admit everything. Run: cd packages/caws-cli && npx bats tests/hooks/bats/scope-guard.bats => 22/22; full bats tests/hooks/bats/ => 407 ok, 0 not ok; full jest => 247/247 suites, 3320/3320 tests, exit 0."
+    recorded_at: "2026-09-19T02:39:53.269Z"
+    artifact_path: packages/caws-cli/tests/hooks/bats/scope-guard.bats
+    commit_sha: "60460679"
