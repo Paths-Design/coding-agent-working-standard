@@ -425,6 +425,28 @@ fingerprinted as part of the vendor adapter, not the shared core.
 The goal is to shrink the override set over time by pushing differences into the
 surface resolver (injected context) wherever the difference is mechanical.
 
+## Repo-local extension (the alternative to an override)
+
+A vendor `overrides/` entry is for behavior that genuinely differs **by
+harness**. Behavior that differs **by repository** does not belong there, and it
+does not belong in a fork of a shared guard either — a fork owns an 800-line
+file whose upstream keeps moving, and it suppresses the very drift warning that
+would tell you so.
+
+A consumer repo declares its differences in `.caws/hooks/hook-policy.json`:
+which guards run (`surfaces`), and what data a running guard uses (`guards`).
+The document is committed, reviewable, scoped to that repo's git root, and read
+by both routing planes. `lib/guard-config.py` parses it once per dispatch from
+`lib/run-handlers.sh`; `lib/guard-config.sh` hands the result to adopting guards
+as plain environment variables, so no guard spawns a parser of its own.
+
+Four shared files adopt it today — `lib/write-allowlist.sh` (so both write
+guards inherit a configured prefix together and cannot desynchronize),
+`scope-guard.sh`, `god-object-check.sh` and `loc-delta-check.sh`.
+
+Full mechanism, precedence and safety floor:
+[`repo-local-hook-policy.md`](repo-local-hook-policy.md).
+
 ## Drift detection and the propagation guard
 
 - The shared core is a managed pack with its own identity (`hook_pack: shared`)

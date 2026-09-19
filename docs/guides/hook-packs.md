@@ -33,9 +33,9 @@ These hooks are an **edit-time advisory plane**, not a replacement for
   appends a `gate_evaluated` event per gate. It is the canonical disposition
   surface.
 - The four hooks below are **installed hook-pack utilities** that the repo tunes
-  locally (via env vars). They never write events, never block a gate, and have
-  **no runtime coupling** to an external quality package. They implement the
-  edit-time checks in self-contained bash.
+  locally (via env vars or `.caws/hooks/hook-policy.json`). They never write
+  events, never block a gate, and have **no runtime coupling** to an external
+  quality package. They implement the edit-time checks in self-contained bash.
 
 This is deliberate: `caws gates run` owns governed policy/event disposition,
 while the edit-time hooks start from the governance floor and are shaped
@@ -56,7 +56,9 @@ agent authored.
 - **Mode:** advisory (always exits 0; never blocks).
 - **What it flags:** a touched file whose source-lines-of-code (blank and
   whole-line `//`/`#`/`*` comments stripped) meets or exceeds the threshold.
-- **Threshold env:** `CAWS_GOD_OBJECT_LOC` (default `2000`).
+- **Threshold:** `CAWS_GOD_OBJECT_LOC` env, or
+  `guards.god-object-check.sh.thresholds.loc` in `.caws/hooks/hook-policy.json`
+  (default `2000`). See [Tuning](#tuning).
 - **Policy counterpart:** the `god_object` gate.
 - **Output:** a `hookSpecificOutput.additionalContext` warning naming the file,
   its SLOC, and the threshold.
@@ -105,7 +107,9 @@ agent authored.
   `new_string` vs `old_string` payload newline counts) exceeds the threshold. If
   the payload lacks `old_string`/`new_string`, the hook exits 0 silently — it
   never false-positives from missing data.
-- **Threshold env:** `CAWS_LOC_DELTA_WARN_THRESHOLD` (default `300`).
+- **Threshold:** `CAWS_LOC_DELTA_WARN_THRESHOLD` env, or
+  `guards.loc-delta-check.sh.thresholds.delta` in `.caws/hooks/hook-policy.json`
+  (default `300`). See [Tuning](#tuning).
 - **Doctrine:** the CAWS key rule "Ask first for risky changes — changes
   ... >300 LOC ... require discussion first."
 
@@ -124,11 +128,61 @@ agent) without editing the managed hook scripts:
 }
 ```
 
+Environment variables are per-session and per-operator. For a threshold the
+whole team should share, declare it in `.caws/hooks/hook-policy.json` instead —
+it is committed, reviewed, present in every clone and in CI, and checked by
+`caws hooks validate`:
+
+```jsonc
+{
+  "version": 1,
+  "surfaces": {},
+  "guards": {
+    "god-object-check.sh": { "thresholds": { "loc": 2500 } },
+    "loc-delta-check.sh": { "thresholds": { "delta": 400 } },
+  },
+}
+```
+
+`loc-delta-check.sh` spells its key `delta`, not `loc`: the value bounds a
+per-edit line delta, the same quantity `god-object-check.sh` calls `delta`.
+
+**Precedence is env > config > shipped default.** An existing `env` block keeps
+working untouched, and a per-session override stays a narrower, more current
+statement of intent than a committed file.
+
+The same document also grants a guard additional allow prefixes — the supported
+alternative to forking a guard when your repo's layout does not match the
+shipped table:
+
+```jsonc
+{
+  "guards": {
+    "scope-guard.sh": {
+      "additional_allow_prefixes": [
+        {
+          "prefix": "native/",
+          "reason": "Rust core lives here; this repo has no src/.",
+        },
+      ],
+    },
+  },
+}
+```
+
+Entries are append-only: no key removes, replaces or reorders a shipped entry,
+and a malformed document applies **zero** entries rather than a subset, so a
+mistake degrades toward refusal rather than toward permission. Prefixes must be
+repo-relative — an absolute one would bypass cross-repo containment and is
+refused at authoring time. The full mechanism, the safety floor and the
+config-versus-upstream-fix test are in
+[`docs/architecture/repo-local-hook-policy.md`](../architecture/repo-local-hook-policy.md).
+
 System hook scripts live in verified snapshots and are updated once with
-`caws init adapters install`. Tune thresholds through environment variables;
-preserve custom behavior through explicit extensions or overrides. Legacy
-project copies still use the pack retrofit commands until their native
-registration is migrated.
+`caws init adapters install`. Tune thresholds through the policy document or
+environment variables; preserve custom behavior through explicit extensions or
+overrides. Legacy project copies still use the pack retrofit commands until
+their native registration is migrated.
 
 System Codex registration lives in `~/.codex/hooks.json`. Native hook trust must
 be reviewed when definitions change. Legacy project hooks remain additive until

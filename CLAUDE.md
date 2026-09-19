@@ -433,6 +433,41 @@ Reprieves are human-granted session-global exceptions in
 selects legacy lookup; it does not partition new grants. `caws reprieve grant`
 requires an explicit target, handlers, reason, approver and one expiry choice.
 
+### Extend the guards; do not fork them
+
+A repo that needs a guard to behave differently declares that in
+`.caws/hooks/hook-policy.json` — committed, reviewable, scoped to this git root,
+honored by **both** routing planes. Copying a guard into `.caws/hooks/` to edit
+it is the thing this replaces: a fork owns a file whose upstream keeps moving,
+and because `installed_pack_version_lag` treats local growth as _explaining_ the
+drift, forking a guard suppresses the warning that says it has gone stale.
+
+Two tiers, both additive:
+
+- **`surfaces`** — which guards run (`disabled`, `extensions`, `handlers`,
+  `libraries`, `forks`). The repo tier is applied before machine state, and
+  `protected-paths.sh` / `block-dangerous.sh` / `agent-register.sh` cannot be
+  disabled or replaced from it: a policy that can authorize its own amendment is
+  not a policy.
+- **`guards`** — what data a running guard uses. Only `additional_*` keys and
+  clamped thresholds exist, so no shipped entry can be removed or reordered, and
+  a malformed document applies **zero** entries rather than a subset. Prefixes
+  must be repo-relative; an absolute one would bypass cross-repo containment and
+  is refused at authoring time.
+
+Threshold precedence is **env > config > shipped default**, so an existing
+`.claude/settings.json` env block keeps working unchanged.
+
+Before adding an entry, apply the test: _would this be correct in a repo with a
+different directory layout?_ Specific to this repo's names (`native/`,
+`workbench/`) → configuration. Correct in every repo → that is an **upstream
+defect**, and a config entry is a workaround that will rot.
+
+The location is the authority argument: `protected-paths.sh` admits only `*.md`
+under `.caws/hooks/`, so the `.json` there is agent-write-blocked — the entity
+with the incentive to paper over a block cannot author the paper. Doctrine:
+[`docs/architecture/repo-local-hook-policy.md`](docs/architecture/repo-local-hook-policy.md).
+
 ## Bash hook latches
 
 The hook pack includes a "danger latch" that fires on certain Bash patterns
