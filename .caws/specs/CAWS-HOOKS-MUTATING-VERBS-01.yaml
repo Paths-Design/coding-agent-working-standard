@@ -67,3 +67,9 @@ evidence:
     recorded_at: "2026-09-19T00:01:07.978Z"
     artifact_path: packages/caws-cli/tests/shell/hooks-mutating.test.js
     commit_sha: "1365b83b59da556d159ad8be7856d191e9b275a6"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Verified by 'npx jest tests/shell/hooks-mutating.test.js' at 1365b83b. Refusal half: the parameterised arm '%s without --reason refuses and writes nothing' covers disable and replace, each asserting exit 1, output naming --reason, and — via expectNoWrite — a sha256 of the whole .caws/ tree unchanged; it also asserts the policy file was never created. Persistence half: 'a supplied reason is persisted in the document and echoed by list' reads the written JSON (disabled.pre_tool_use === [{handler, reason}]) and then asserts both the human and --json output of caws hooks list carry that reason. The launcher side is pinned separately by pytest test_the_object_spelling_requires_a_substantive_reason. NOTE the schema change this required: 'disabled' previously admitted only bare strings and had nowhere to persist a reason, so both validators (repo-hook-policy.ts and caws-hook.py) were extended to admit {handler, reason}."
+    recorded_at: "2026-09-19T00:01:22.044Z"
+    artifact_path: packages/caws-cli/tests/shell/hooks-mutating.test.js
+    commit_sha: "1365b83b59da556d159ad8be7856d191e9b275a6"
