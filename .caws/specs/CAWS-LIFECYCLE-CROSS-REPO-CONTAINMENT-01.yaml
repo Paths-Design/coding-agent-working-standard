@@ -115,3 +115,9 @@ contracts:
     type: behavior
   - name: 'lifecycle-reprieve-escape'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Proven by e2e test [refuses specs create in the sibling repo and leaves it untouched (A1)] in packages/caws-cli/tests/shell/lifecycle-cross-repo-containment.test.js, which drives the built CLI as a real child process. ASSERTED-FAILING BASELINE: the same test run against the pre-change PATH snapshot via CAWS_E2E_CLI returned Expected 1 / Received 0 - specs create exited 0 and wrote a spec into the sibling repo. After the change it exits 1, stderr names both the recorded origin root and the target root, and the governanceFingerprint helper asserts the sibling repo gained no spec file and no events.jsonl entry, so the refusal precedes any write. Run: cd packages/caws-cli && npx jest tests/shell/lifecycle-cross-repo-containment.test.js"
+    recorded_at: "2026-09-19T07:05:24.708Z"
+    commit_sha: "8485bf99"
