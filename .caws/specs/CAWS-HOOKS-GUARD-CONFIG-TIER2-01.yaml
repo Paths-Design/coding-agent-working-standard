@@ -101,3 +101,9 @@ evidence:
     recorded_at: "2026-09-19T01:30:09.895Z"
     artifact_path: packages/caws-cli/tests/init/repo-hook-policy.test.js
     commit_sha: "58f78df9"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "npx jest tests/init/repo-hook-policy.test.js. The R2 describe refuses a document carrying decision/allow/deny/ask/policy/outcome/severity/override/enforcement/exit_code/verdict at any depth, via findDecisionKey which recurses through objects AND arrays (the keys sit BELOW the guard name, so depth is the whole point). The non-vacuity half is what makes this AC's 'discriminates on key name, not shape' clause real: a document with the SAME nesting depth carrying only additional_* data keys is ACCEPTED. Matching is case-insensitive on the key."
+    recorded_at: "2026-09-19T01:30:11.865Z"
+    artifact_path: packages/caws-cli/tests/init/repo-hook-policy.test.js
+    commit_sha: "58f78df9"
