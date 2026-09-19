@@ -66,3 +66,8 @@ evidence:
     evidence_ref: "rendering_obligations.unsourced_fact states the rule, the rationale (an asserted absence is indistinguishable from an observed one, so it manufactures an undetectable false negative), and the worked example. The example is code-verified, not illustrative: agents.ts:635 renders ?? '(no worktree)' over :247 lease.bound_worktree ?? null, and the field has no writer because both producers (:286 agents register, :373 agents heartbeat) pass bound = null with no third caller. All four line citations were re-checked against the committed tree. The permitted forms cite how status already handles the identical absence (omit wt=, neutral spec=-)."
     recorded_at: "2026-09-19T09:52:44.146Z"
     commit_sha: "34211d38"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "non_collapse_relations lists 6 relations. The four required by the acceptance criterion are present: persisted status vs TTL classification, authorship (created_by_session) vs binding, cwd vs binding, plus worktree ownership vs lease liveness. Each is also mirrored in the relevant domain's is_not field so a reader meets it wherever they enter the document. The status-vs-TTL relation is backed by an observation, not theory: agents show reported status=active for session 1aa3f0bd while agents list bucketed the same record as stale."
+    recorded_at: "2026-09-19T09:52:45.379Z"
+    commit_sha: "34211d38"
