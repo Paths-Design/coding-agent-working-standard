@@ -53,6 +53,27 @@ run_with_timeout() {
   return $?
 }
 
+# ── Consume the ref list git writes to our stdin ─────────────────────────
+#
+# git speaks the pre-push protocol on stdin: one line per ref being pushed,
+# "<local ref> <local sha> <remote ref> <remote sha>". This hook's verdict does
+# not depend on which refs are moving -- it mirrors CI over the whole tree --
+# but the bytes must still be read. Left unread, git is writing into a pipe
+# whose read end closes when this hook exits, so git takes SIGPIPE and dies
+# (exit 141) AFTER printing "all checks passed", having transferred nothing.
+# That failure is silent in the worst way: every gate reports green and the
+# remote ref never moves.
+#
+# Draining BEFORE the stages is the whole point. Doing it afterwards leaves
+# exactly the window this removes -- git's write has to land while a reader is
+# still there, not fifteen minutes later.
+#
+# The tty test is for a human running this hook by hand: with stdin on a
+# terminal there is no ref list coming and `cat` would block forever.
+if [ ! -t 0 ]; then
+  cat > /dev/null
+fi
+
 [ -f package.json ] && [ -f turbo.json ] || exit 0
 
 # ── Serialise the heavy stages across every worktree of this repository ───
