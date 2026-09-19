@@ -5,7 +5,7 @@ mode: fix
 lifecycle_state: active
 worktree: wt-adapter-stop-trap
 created_at: '2026-09-19T02:40:00.190Z'
-updated_at: '2026-09-19T02:40:23.896Z'
+updated_at: '2026-09-19T02:42:38.734Z'
 created_by_session: '34188473-6516-4d12-a4e5-df7ff5132232'
 blast_radius:
   modules:
@@ -19,6 +19,7 @@ scope:
     - 'packages/caws-cli/src/init/system-runtime.ts'
     - 'packages/caws-cli/tests/adapter/machine-adoption.test.js'
     - 'packages/caws-cli/tests/adapter/system-registration.test.js'
+    - packages/caws-cli/tests/adapter/system-runtime.test.js
   out: []
 invariants:
   - 'A machine-adapter configuration error may refuse an action the agent can change; it may never refuse the agent''s exit. Blocking stop on a condition only the operator can fix leaves the session unable to act and unable to leave.'
