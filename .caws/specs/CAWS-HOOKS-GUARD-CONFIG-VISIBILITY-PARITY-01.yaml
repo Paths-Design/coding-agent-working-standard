@@ -43,3 +43,10 @@ non_functional: {}
 contracts:
   - name: 'hooks-list-guards'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "hooks-readonly.test.js arms 'A1: the prefix AND the reason the parser demanded are both rendered' and 'A1: a threshold renders its value AND that env still outranks it'. Run: cd packages/caws-cli && npx jest tests/shell/hooks-readonly.test.js -> 37/37 pass. Live artifact captured by spawning the built dist CLI against a fixture repo declaring guards['scope-guard.sh'].additional_allow_prefixes=[{prefix:'native/',reason:'The Rust core lives in native/; this repo has no src/ at all.'}]; stdout contained the section 'guard configuration (tier 2 - data a guard reads, not which run)' then '  scope-guard.sh' then '    allow-prefix native/ - The Rust core lives in native/; this repo has no src/ at all.'. FALSIFICATION RUN: mutating the renderer from 'allow-prefix ${entry.prefix} - ${entry.reason}' to 'allow-prefix ${entry.prefix}' and rebuilding dist turned exactly one arm red with the diagnostic 'Expected substring: \"The Rust core lives in native/; this repo has no src/ at all.\"', proving the reason field itself is pinned and not merely the section heading."
+    recorded_at: "2026-09-19T03:13:35.612Z"
+    artifact_path: packages/caws-cli/tests/shell/hooks-readonly.test.js
+    commit_sha: "6d1d092e"
