@@ -65,3 +65,8 @@ evidence:
     evidence_ref: "T10d: exit 1 with empty stdout and an unrecognised stderr refuses (exit 1). Mutation-verified: removing the transport-error guard so the unreachable branch became the catch-all killed T10d (49 -> 47 passed), so the assertion discriminates rather than passing inertly."
     recorded_at: "2026-09-19T17:40:16.934Z"
     commit_sha: "104cb215"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "T10a: a clean report (auditReportVersion, critical:0, exit 0) leaves pre-push at exit 0, and T8c still asserts all five stages run in order 'npm run,npx turbo,npm audit,npm run,npm test' -- so the classification did not disturb stage sequencing."
+    recorded_at: "2026-09-19T17:40:20.873Z"
+    commit_sha: "104cb215"
