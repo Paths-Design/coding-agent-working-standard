@@ -71,3 +71,8 @@ evidence:
     evidence_ref: "A2 pins '--include-stale given; suppressed by --active' when --active defeats a passed flag; A2b is the discriminating counterweight -- without --active the same bucket prints the bare flag and must NOT contain 'suppressed', so the note is earned rather than always-on."
     recorded_at: "2026-09-19T11:05:26.723Z"
     commit_sha: "3d6d2f92"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "A3/A3b pin the unconditional line: 'visibility: 2 of 2 shown · nothing hidden' with a populated set, and '0 of 0 shown · nothing hidden' on an empty lease dir, so the line's absence never has to be interpreted."
+    recorded_at: "2026-09-19T11:05:31.006Z"
+    commit_sha: "3d6d2f92"
