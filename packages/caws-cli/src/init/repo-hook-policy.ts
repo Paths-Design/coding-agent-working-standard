@@ -178,7 +178,7 @@ export const GUARD_CONFIG_SURFACE: Readonly<Record<string, GuardConfigSchema>> =
     prefixes: false,
     thresholds: { loc: { min: 100, max: 100000 }, delta: { min: 10, max: 100000 } },
   },
-  'loc-delta-check.sh': { prefixes: false, thresholds: { loc: { min: 10, max: 100000 } } },
+  'loc-delta-check.sh': { prefixes: false, thresholds: { delta: { min: 10, max: 100000 } } },
 };
 
 /**

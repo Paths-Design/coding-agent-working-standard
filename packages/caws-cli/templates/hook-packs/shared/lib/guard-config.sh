@@ -32,6 +32,16 @@ if [[ -n "${_CAWS_GUARD_CONFIG_SH_SOURCED:-}" ]]; then
 fi
 _CAWS_GUARD_CONFIG_SH_SOURCED=1
 
+# The parser is this file's SIBLING, so resolve it from this file's own
+# location. HOOKS_DIR is set by run-handlers.sh and is therefore present only
+# when a guard runs inside the chain; a guard invoked directly — by bats, by a
+# harness that calls one hook, by a human debugging — would otherwise resolve
+# "${HOOKS_DIR:-}/lib/guard-config.py" to "/lib/guard-config.py", find nothing,
+# and report `unavailable` while the document sat right there. That failure is
+# invisible in the chain and total outside it, which is the worst combination:
+# it looks fine wherever anyone would notice.
+_CAWS_GUARD_CONFIG_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 _CAWS_GUARD_LOWER='abcdefghijklmnopqrstuvwxyz'
 _CAWS_GUARD_UPPER='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
@@ -69,7 +79,10 @@ caws_guard_config_load() {
   [[ -n "${CAWS_GUARD_CONFIG_STATUS:-}" ]] && return 0
 
   local project_dir="${1:-${CAWS_PROJECT_DIR:-.}}"
-  local script="${CAWS_GUARD_CONFIG_PY:-${HOOKS_DIR:-}/lib/guard-config.py}"
+  local script="${CAWS_GUARD_CONFIG_PY:-}"
+  if [[ -z "$script" ]]; then
+    script="${_CAWS_GUARD_CONFIG_LIB_DIR:-${HOOKS_DIR:-.}/lib}/guard-config.py"
+  fi
 
   if [[ ! -f "$script" ]] || ! command -v python3 >/dev/null 2>&1; then
     # Unparsed, not "empty": the distinction matters because `unparsed` must

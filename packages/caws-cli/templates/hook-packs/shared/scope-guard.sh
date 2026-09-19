@@ -64,6 +64,22 @@ else
   printf '{"decision":"block","reason":"CAWS scope-guard: cannot load lib/agent-surface.sh, so scope cannot be evaluated. Failing closed. Restore the hook pack: caws init --adopt"}\n'
   exit 2
 fi
+# shellcheck source=lib/guard-config.sh
+# Provides caws_guard_prefixes / caws_guard_zones — the repo's tier-2 guard
+# configuration, already parsed once for the whole chain by run-handlers.sh.
+# Sourcing here is what makes the ACCESSORS available in this process (the
+# parse's results arrive as exported env, but shell functions do not cross an
+# exec); caws_guard_config_load then returns immediately because the status
+# variable is already set, or parses for real when this guard runs standalone.
+#
+# A missing lib is NOT fail-closed here, unlike agent-surface.sh above: every
+# key this lib carries is APPEND-ONLY, so its absence means a SHORTER allow
+# list — strictly the stricter verdict. It refuses more, never less. The
+# diagnostic below makes the degradation loud rather than silent.
+[[ -f "$SCRIPT_DIR/lib/guard-config.sh" ]] && source "$SCRIPT_DIR/lib/guard-config.sh"
+if declare -F caws_guard_config_load >/dev/null 2>&1; then
+  caws_guard_config_load "${CAWS_PROJECT_DIR:-.}" || true
+fi
 parse_hook_input
 
 # Back-compat aliases kept to minimize diff in the scope-resolution logic below.
@@ -174,25 +190,43 @@ if [[ -n "${HOME:-}" ]]; then
 fi
 
 # Policy-declared non-governed zones (CAWSFIX-26 / ledger D9).
+#
+# The KEY and its meaning are unchanged — `policy.non_governed_zones` still
+# names paths outside CAWS scope governance entirely. Only the TRANSPORT moved:
+# the inline awk that used to live here now runs inside lib/guard-config.py, so
+# one parse per dispatch serves this guard and every other adopter instead of
+# each re-reading policy.yaml. The normalization (quote strip, /** and /* trim,
+# trailing-slash coercion) is reproduced there verbatim; the parity bats arm
+# pins that, because a transport swap that also changed normalization would be
+# a silent scope change.
 POLICY_FILE="${CAWS_PROJECT_DIR:-.}/.caws/policy.yaml"
-if [[ -f "$POLICY_FILE" ]]; then
+if declare -F caws_guard_zones >/dev/null 2>&1; then
   while IFS= read -r raw_zone; do
     [[ -z "$raw_zone" ]] && continue
-    raw_zone="${raw_zone%\"}"; raw_zone="${raw_zone#\"}"
-    raw_zone="${raw_zone%\'}"; raw_zone="${raw_zone#\'}"
-    raw_zone="${raw_zone%/\*\*}"
-    raw_zone="${raw_zone%/\*}"
-    [[ "$raw_zone" != */ ]] && raw_zone="${raw_zone}/"
     ALLOW_PREFIXES+=("$raw_zone")
-  done < <(awk '
-    /^non_governed_zones:[[:space:]]*$/ { in_zones = 1; next }
-    /^[^[:space:]#-]/ && in_zones { in_zones = 0 }
-    in_zones && /^[[:space:]]+-[[:space:]]+/ {
-      sub(/^[[:space:]]+-[[:space:]]+/, "")
-      sub(/[[:space:]]+#.*$/, "")
-      print
-    }
-  ' "$POLICY_FILE" 2>/dev/null)
+  done < <(caws_guard_zones)
+elif [[ -f "$POLICY_FILE" ]]; then
+  # The loader is absent but the repo DOES declare zones, so this guard is
+  # about to govern paths the repo declared ungoverned. Say so: unhonored
+  # zones refuse MORE than intended, which is safe but looks like a scope bug
+  # to whoever hits it, and a silent stricter-than-declared guard is how a
+  # team ends up forking the guard to "fix" it.
+  echo "[scope-guard] lib/guard-config.sh is missing, so .caws/policy.yaml non_governed_zones are NOT honored this run — declared non-governed paths will be scope-checked. Restore the shared hook libs: caws init --adopt" >&2
+fi
+
+# Repo-declared additional allow prefixes (tier-2 guard config).
+#
+# Append-only by construction: this can only ADD prefixes, so no shipped entry
+# (".caws/", the vendor dir, docs/) can be removed or reordered by a repo.
+# Every entry is validated repo-relative before it reaches here, which is
+# load-bearing rather than cosmetic — the foreign-repo containment block below
+# honors ABSOLUTE allow-prefixes ahead of the block, so an absolute entry here
+# would be a cross-repo write hole. A repo-relative entry cannot reach that loop.
+if declare -F caws_guard_prefixes >/dev/null 2>&1; then
+  while IFS= read -r _cfg_prefix; do
+    [[ -z "$_cfg_prefix" ]] && continue
+    ALLOW_PREFIXES+=("$_cfg_prefix")
+  done < <(caws_guard_prefixes scope-guard.sh)
 fi
 
 WORK_DIR="${HOOK_CWD:-${CAWS_PROJECT_DIR:-.}}"

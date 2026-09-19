@@ -50,7 +50,7 @@ GUARD_SURFACE = {
         'prefixes': False,
         'thresholds': {'loc': (100, 100000), 'delta': (10, 100000)},
     },
-    'loc-delta-check.sh': {'prefixes': False, 'thresholds': {'loc': (10, 100000)}},
+    'loc-delta-check.sh': {'prefixes': False, 'thresholds': {'delta': (10, 100000)}},
 }
 
 # Mirrors GUARD_DECISION_KEYS (R2).

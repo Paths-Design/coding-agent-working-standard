@@ -1314,10 +1314,36 @@ describe('thresholds are clamped by the schema, not trusted', () => {
 
   test('a threshold name the guard does not read is refused', () => {
     const parsed = parseRepoHookPolicy(
-      guardsDoc({ 'loc-delta-check.sh': { thresholds: { delta: 500 } } })
+      guardsDoc({ 'loc-delta-check.sh': { thresholds: { max_lines: 500 } } })
     );
     expect(parsed.ok).toBe(false);
     expect(parsed.error).toContain('not a threshold this guard reads');
+  });
+
+  test('the threshold a guard DOES read is admitted, so the refusal above is not vacuous', () => {
+    // Non-vacuity anchor for the arm above: if every threshold name were
+    // refused, that test would pass while the surface was entirely dead.
+    const parsed = parseRepoHookPolicy(
+      guardsDoc({ 'loc-delta-check.sh': { thresholds: { delta: 500 } } })
+    );
+    expect(parsed.ok).toBe(true);
+    expect(parsed.policy.guards['loc-delta-check.sh'].thresholds).toEqual({ delta: 500 });
+  });
+
+  test("loc-delta-check's threshold is named for the quantity it bounds, matching god-object's", () => {
+    // Both guards bound a per-edit line DELTA, so both spell it `delta`. The
+    // guard's filename contains "loc", which is what makes `loc` the tempting
+    // and wrong key here: it would read as a file-size bound and silently do
+    // something else. A config key that means one thing in one guard and
+    // another elsewhere is the shape consumers misconfigure.
+    const locOnLocDelta = parseRepoHookPolicy(
+      guardsDoc({ 'loc-delta-check.sh': { thresholds: { loc: 500 } } })
+    );
+    expect(locOnLocDelta.ok).toBe(false);
+    const deltaOnGodObject = parseRepoHookPolicy(
+      guardsDoc({ 'god-object-check.sh': { thresholds: { delta: 500 } } })
+    );
+    expect(deltaOnGodObject.ok).toBe(true);
   });
 });
 
