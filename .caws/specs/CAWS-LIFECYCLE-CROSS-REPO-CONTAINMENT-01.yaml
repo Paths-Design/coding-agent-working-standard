@@ -121,3 +121,8 @@ evidence:
     evidence_ref: "Proven by e2e test [refuses specs create in the sibling repo and leaves it untouched (A1)] in packages/caws-cli/tests/shell/lifecycle-cross-repo-containment.test.js, which drives the built CLI as a real child process. ASSERTED-FAILING BASELINE: the same test run against the pre-change PATH snapshot via CAWS_E2E_CLI returned Expected 1 / Received 0 - specs create exited 0 and wrote a spec into the sibling repo. After the change it exits 1, stderr names both the recorded origin root and the target root, and the governanceFingerprint helper asserts the sibling repo gained no spec file and no events.jsonl entry, so the refusal precedes any write. Run: cd packages/caws-cli && npx jest tests/shell/lifecycle-cross-repo-containment.test.js"
     recorded_at: "2026-09-19T07:05:24.708Z"
     commit_sha: "8485bf99"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Proven by two must-stay-legal counterweights: e2e [pins the session on its first governed command and admits it in repo A (A2, A5)] and [still admits the same four commands back in repo A (must stay legal)] in tests/shell/lifecycle-cross-repo-containment.test.js, plus decision-layer suite [lifecycle containment - in-repo and worktree admission (A2, A3)] in tests/shell/session-origin-record.test.js. These are the tests that fail if containment degenerates into a general lifecycle brake; both passed against the PRE-change snapshot too, which is why they isolate the 8 baseline failures to genuinely new behavior rather than to a broken build."
+    recorded_at: "2026-09-19T07:05:27.123Z"
+    commit_sha: "8485bf99"
