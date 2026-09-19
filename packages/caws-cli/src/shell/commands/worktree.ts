@@ -77,6 +77,7 @@ import {
   resolveCallerSession,
   resolveSessionCandidates,
 } from '../session/resolve-session';
+import { lifecycleContainmentAdmits } from '../session/session-origin';
 import { renderDiagnostics } from '../render/diagnostic';
 import { emitPeerPresence } from '../render/peer-presence';
 
@@ -294,6 +295,24 @@ export function runWorktreeCreateCommand(opts: WorktreeCreateOptions): number {
   const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
   const ctx = resolveCawsCtx(cwd, err, showData, 'create');
   if (ctx === null) return 2;
+
+  // CAWS-LIFECYCLE-CROSS-REPO-CONTAINMENT-01: before buildActorPair, which
+  // mints an identity on this path and is therefore itself a write.
+  if (
+    !lifecycleContainmentAdmits({
+      command: 'worktree create',
+      repoRoot: ctx.repoRoot,
+      cawsDir: ctx.cawsDir,
+      cwd,
+      env,
+      now: nowFn,
+      out,
+      err,
+    })
+  ) {
+    return 1;
+  }
+
   const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'create');
   if (id === null) return 2;
 
@@ -675,6 +694,26 @@ export function runWorktreeMergeCommand(opts: WorktreeMergeOptions): number {
   const { cwd, nowFn, env, out, err, showData } = setupIO(opts);
   const ctx = resolveCawsCtx(cwd, err, showData, 'merge');
   if (ctx === null) return 2;
+
+  // CAWS-LIFECYCLE-CROSS-REPO-CONTAINMENT-01. Applied to --dry-run too: the
+  // dry run reads the target repo's registry and spec state and reports them,
+  // so exempting it would leave a contained session able to enumerate a
+  // foreign repo's governance state through the command it is refused.
+  if (
+    !lifecycleContainmentAdmits({
+      command: 'worktree merge',
+      repoRoot: ctx.repoRoot,
+      cawsDir: ctx.cawsDir,
+      cwd,
+      env,
+      now: nowFn,
+      out,
+      err,
+    })
+  ) {
+    return 1;
+  }
+
   const id = buildActorPair(ctx.cawsDir, cwd, env, nowFn, opts.actorKind, err, showData, 'merge');
   if (id === null) return 2;
 
