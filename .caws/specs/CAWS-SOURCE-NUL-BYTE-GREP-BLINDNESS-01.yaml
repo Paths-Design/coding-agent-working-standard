@@ -2,10 +2,11 @@ id: CAWS-SOURCE-NUL-BYTE-GREP-BLINDNESS-01
 title: 'a raw NUL byte in kernel leases.ts makes the whole file invisible to grep; escape it and add a repo-wide gate so no source file can go unsearchable again'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-source-nul-gate
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-source-nul-gate at 1e9d3d05599c3c8831a4f2f877fd42f26fe03a37'
 created_at: '2026-09-19T10:28:48.680Z'
-updated_at: '2026-09-19T10:30:55.942Z'
+updated_at: '2026-09-19T10:38:16.383Z'
 created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
 blast_radius:
   modules:
