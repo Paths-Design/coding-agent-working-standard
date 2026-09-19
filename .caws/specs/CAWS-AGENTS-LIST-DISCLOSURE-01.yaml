@@ -81,3 +81,8 @@ evidence:
     evidence_ref: "A4 pins the tier-disclosure footer naming .caws/leases (operational cache) and .caws/worktrees.json (authority); A4b writes a corrupt registry and asserts the line says 'columns unavailable' AND explicitly does not contain 'joined from' -- the claim it must not make."
     recorded_at: "2026-09-19T11:05:35.847Z"
     commit_sha: "3d6d2f92"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "A5 constructs two overlapping same-platform leases (1 pair, 2 leases) so the two populations carry different numbers, pins 'conjoined-unresolved: 1 lease pair(s)...' and '  identity coverage: 0 of 2 recent lease(s)...' as separate lines, and asserts the old conflated sentence 'recent same-platform overlap(s) lack complete fork identity' is gone."
+    recorded_at: "2026-09-19T11:05:39.744Z"
+    commit_sha: "3d6d2f92"
