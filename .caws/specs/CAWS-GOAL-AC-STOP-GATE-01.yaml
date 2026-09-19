@@ -64,3 +64,9 @@ non_functional: {}
 contracts:
   - name: 'stop-gate'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Unmet acceptance blocks the stop and names each criterion verbatim. Pinned by packages/caws-cli/tests/hooks/bats/goal-ac-gate.bats: 'A1: an unmet criterion blocks the stop and names its id and verdict' (asserts '\"decision\":\"block\"', 'A2=not_rederived', 'no_evidence', and refutes 'A1=verified'), plus 'not_rederived is treated as unmet, never as a pass' and 'a refuted criterion blocks'. Falsifiability shown by mutation: changing the verdict predicate to treat not_rederived as a pass kills 11 of 27 tests. Also demonstrated end to end against the REAL CLI (not a stub): 'caws goal set CAWS-GOAL-AC-STOP-GATE-01' then the real goal-ac-gate.sh invoking the real 'caws specs verify-acs --json' emitted {\"decision\":\"block\",\"reason\":\"...A1=not_rederived(no_evidence), A2=..., A5=not_rederived(no_evidence)...Block 1 of 3...\"}. Run: cd packages/caws-cli && npx bats tests/hooks/bats/goal-ac-gate.bats => 27/27."
+    recorded_at: "2026-09-19T01:36:05.755Z"
+    commit_sha: f4bc5d2e
