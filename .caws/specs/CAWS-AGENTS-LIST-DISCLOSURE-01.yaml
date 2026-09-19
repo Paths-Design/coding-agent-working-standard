@@ -2,9 +2,10 @@ id: CAWS-AGENTS-LIST-DISCLOSURE-01
 title: 'caws agents list discloses what it withheld and which tier each column came from, and splits the conjoined-unresolved warning into its two populations with a repair line'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-agents-list-disclosure
 created_at: '2026-09-19T10:50:49.338Z'
-updated_at: '2026-09-19T10:50:49.338Z'
+updated_at: '2026-09-19T10:51:31.985Z'
 created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
 blast_radius:
   modules:
