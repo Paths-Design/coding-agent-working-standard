@@ -514,7 +514,13 @@ import { isAdapterCoveredSurface } from './types';
 // every installed consumer decides whether to update by comparing that number
 // — so the collision would be invisible and permanent. The merged tree is new
 // content and takes a new number.
-export const SHARED_PACK_VERSION = 85;
+// 86 closes CAWS-BASH-GUARD-INTERPRETER-WRITE-01: bash-write-guard now scans
+// python/node payloads for write targets that appear as path literals, and
+// scope-guard's cross-repo refusal states the residual instead of claiming the
+// Bash boundary was already complete. An installed consumer decides whether to
+// update by comparing this number, so a guard fix that does not bump it never
+// reaches a single installed hook.
+export const SHARED_PACK_VERSION = 86;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
