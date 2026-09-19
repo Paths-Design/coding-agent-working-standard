@@ -52,3 +52,8 @@ evidence:
     evidence_ref: "caws-hook.py's top-level handler now consults ENFORCING_EVENTS={'pre_tool_use'} before emitting a decision, so a configuration error on stop exits 0 with the diagnostic on stderr. Pinned by tests/adapter/system-runtime.test.js 'the same configuration error does NOT block the session from stopping': status 0, stdout carries no decision key, stderr contains 'one-time system migration'. It failed first on the unfixed code with status 2. Mutants M1 (re-adding stop to ENFORCING_EVENTS) and M4 (suppressing the stderr print, which made stderr the empty string) each killed this arm. Run: cd packages/caws-cli && npx jest tests/adapter/system-runtime.test.js gives 21/21; full suite 3327/3327 across 247 suites."
     recorded_at: "2026-09-19T03:02:58.071Z"
     commit_sha: fa64d64b
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Enforcement survived the fix: pre_tool_use still fails closed on the same fixture. Pinned by tests/adapter/system-runtime.test.js 'an unclassifiable machine configuration still refuses the tool call' (status 2, decision=block, reason names the migration) and by the PRE-EXISTING 'an unparseable policy is refused by the LAUNCHER, before any handler runs', which I did not author. That pre-existing test is the load-bearing one: mutant M3 (ENFORCING_EVENTS=set(), i.e. block nothing) killed BOTH, proving the change cannot be a disguised disabling of the guard. The enforcement arm also passed on the unfixed code, which is what makes the stop-arm failure attributable to the event rather than to a benign fixture. Run: cd packages/caws-cli && npx jest tests/adapter/system-runtime.test.js gives 21/21."
+    recorded_at: "2026-09-19T03:03:08.151Z"
+    commit_sha: fa64d64b
