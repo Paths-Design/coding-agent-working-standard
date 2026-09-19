@@ -52,3 +52,10 @@ non_functional: {}
 contracts:
   - name: 'hooks-import'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Arm 'two surfaces with identical policy collapse to one default entry' spawns the BUILT dist CLI (node dist/index.js hooks import --from-machine) against a scratch git repo plus an isolated CAWS_HOME holding the machine state file at state/projects/<sha256(realpath(repo))>.json. Fixture is the shape sterling actually carries: claude-code and codex with byte-identical extensions+handlers. Observed exit 0, stdout containing 'collapsed 2 identical surfaces', and Object.keys(policy.surfaces) === ['default'] with the extension's handler and before anchor intact. Control arm 'surfaces that DIFFER are kept apart rather than collapsed onto one' asserts the opposite for unlike surfaces (keys stay ['claude-code','codex'], no 'default'), so the collapse is not unconditional. This pair found a REAL defect during development: the provenance reason originally embedded the source surface name, which made two identical surfaces compare unequal and silently disabled the collapse; the fix stamps reasons after the destination is chosen and compares the machine input instead. Run: cd packages/caws-cli && npx jest tests/shell/hooks-mutating.test.js => 46/46; full suite at this sha => 247/247 suites, 3320/3320 tests, exit 0."
+    recorded_at: "2026-09-19T02:25:55.452Z"
+    artifact_path: packages/caws-cli/tests/shell/hooks-mutating.test.js
+    commit_sha: "8ca16514"
