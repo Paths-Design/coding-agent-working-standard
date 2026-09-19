@@ -1,0 +1,51 @@
+id: CAWS-READ-SURFACE-AUTHORITY-CONTRACT-01
+title: 'One contract declares what every CAWS read surface may assert about session, worktree, spec, ownership and liveness — and forbids asserting absence for a fact it has no writer for'
+risk_tier: 3
+mode: doc
+lifecycle_state: draft
+created_at: '2026-09-19T09:49:31.761Z'
+updated_at: '2026-09-19T09:49:31.761Z'
+created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
+blast_radius:
+  modules:
+    - 'caws-cli read surfaces (status, doctor, agents, specs, worktree, claim, goal, working-tree, message)'
+    - 'docs/architecture doctrine set'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'docs/architecture/read-surface-authority.v1.yaml'
+    - 'docs/architecture/caws-vnext-command-surface.md'
+  out: []
+invariants:
+  - 'Exactly one surface is named authoritative for each fact domain; every other surface that prints that fact is declared a derived reader of it. Two surfaces may not both claim authority over one fact.'
+  - 'A surface may never assert the ABSENCE of a fact it has no writer for. Unsourced renders as unknown or is omitted; (no worktree) style assertions are prohibited because they are indistinguishable from a true negative.'
+  - 'Identity domains do not collapse: a persisted status field is not a TTL classification, spec authorship is not spec binding, and current working directory is not a binding.'
+  - 'The contract governs what surfaces MAY ASSERT. It confers no authority, changes no renderer, and cannot make a cache authoritative.'
+acceptance:
+  - id: A1
+    given: 'the live command surface'
+    when: 'the contract is read'
+    then: 'every read surface is listed with its subject, authority_tier, and an explicit is_not clause, so no surface''s scope has to be inferred from its name'
+  - id: A2
+    given: 'a fact domain such as worktree ownership or liveness'
+    when: 'the contract is read'
+    then: 'exactly one surface is named authoritative for it and every other surface printing it is named a derived reader, with the authority source file identified'
+  - id: A3
+    given: 'a fact for which no writer exists, such as lease bound_worktree'
+    when: 'a surface renders it'
+    then: 'the contract requires unknown or omission and prohibits asserting absence, citing agents list (no worktree) as the worked example of the prohibited form'
+  - id: A4
+    given: 'the four non-collapse relations'
+    when: 'the contract is read'
+    then: 'persisted status versus TTL classification, authorship versus binding, and cwd versus binding are each stated as distinct domains that may not be conflated'
+  - id: A5
+    given: 'a surface that filters or paginates'
+    when: 'the contract is read'
+    then: 'it requires the surface to state what it withheld and how to see it, and requires human and --json output of one surface to carry the same facts'
+  - id: A6
+    given: 'the contract'
+    when: 'its non_claims are read'
+    then: 'it states that it changes no runtime behavior, grants no authority, and does not define gate or hook behavior, so it cannot be cited as permission for a renderer change that was never reviewed'
+non_functional: {}
+contracts: []
