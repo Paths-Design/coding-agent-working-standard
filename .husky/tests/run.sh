@@ -773,6 +773,119 @@ if [ -z "$T10SKIP" ]; then
   fi
 fi
 
+# ─────────────────────────────────────────────────────────────────────────
+# T11 pre-push consumes the ref list git writes to its stdin.
+#     git speaks the pre-push protocol by writing "<local ref> <local sha>
+#     <remote ref> <remote sha>" lines to the hook's stdin. A hook that never
+#     reads them leaves git writing into a pipe whose read end closes when the
+#     hook exits: git takes SIGPIPE and dies 141 AFTER printing "all checks
+#     passed", having transferred nothing. Observed against this repository —
+#     four consecutive pushes reported every stage green and left origin/main
+#     unmoved, reproducing with all output redirected to /dev/null, which rules
+#     out any output pipe and leaves the hook's stdin as the only one.
+#
+#     The payload is deliberately larger than any pipe buffer. A few hundred
+#     bytes would fit in the kernel buffer and the writer would succeed whether
+#     or not the hook ever read it — a test that passes on the broken hook.
+# ─────────────────────────────────────────────────────────────────────────
+T11GIT="$SCRATCH/gitdir-t11"
+mkdir -p "$T11GIT/objects" "$T11GIT/refs"
+printf 'ref: refs/heads/main\n' > "$T11GIT/HEAD"
+T11FIFO="$SCRATCH/t11.fifo"
+T11REFLINE='refs/heads/main 0000000000000000000000000000000000000000 refs/heads/main 1111111111111111111111111111111111111111'
+T11PAYLOAD="$SCRATCH/t11.payload"
+{ yes "$T11REFLINE" 2>/dev/null | head -c 262144; } > "$T11PAYLOAD" 2>/dev/null
+if [ "$(wc -c < "$T11PAYLOAD" | tr -d ' ')" = "262144" ]; then
+  ok "T11-setup the 256 KiB ref-list payload exceeds any pipe buffer (so an unread stdin cannot absorb it)"
+else
+  bad "T11-setup the 256 KiB ref-list payload was built" "got $(wc -c < "$T11PAYLOAD") bytes; T11a would prove nothing"
+fi
+
+# Re-point the stubs at T8's, which honours CAWS_STAGE_FAIL; T10's stub only
+# shapes the audit stage and would make the failing-stage counterweight vacuous.
+# Self-contained on purpose. Wrapping T8's _caws_stage_stub left the child
+# shell calling a function that did not reach it (npm and npx exported,
+# _caws_stage_stub did not), every stage exited 127, and the "a failing stage
+# refuses" counterweight passed for a reason unrelated to the behaviour under
+# test -- a refusal caused by a broken harness. One function, one export.
+_caws_t11_stub() {
+  if [ -n "${CAWS_STAGE_FAIL:-}" ]; then
+    case "$*" in
+      "$CAWS_STAGE_FAIL"*) return 1 ;;
+    esac
+  fi
+  return 0
+}
+# The command name is passed through: CAWS_STAGE_FAIL matches on the full
+# argument string, and typecheck and build are both "npm run", so matching on
+# the arguments alone could not single out a stage.
+npm() { _caws_t11_stub npm "$@"; }
+npx() { _caws_t11_stub npx "$@"; }
+export -f _caws_t11_stub npm npx
+
+# Same safety gate T8a applies: if the stubs do not reach the hook's child
+# shell, every stage exits 127 and T11's refusal assertions pass for a reason
+# that has nothing to do with the behaviour under test.
+T11KINDS=$(bash -c 'printf "%s,%s,%s" "$(type -t npm)" "$(type -t npx)" "$(type -t _caws_t11_stub)"' 2>/dev/null)
+if [ "$T11KINDS" = "function,function,function" ]; then
+  ok "T11-setup2 npm/npx/_caws_t11_stub all reach the child shell"
+else
+  bad "T11-setup2 npm/npx/_caws_t11_stub all reach the child shell" \
+      "got '$T11KINDS' (want function,function,function) — T11's stage outcomes would be harness artefacts"
+fi
+
+run_t11() {  # $1 = CAWS_STAGE_FAIL value (empty = all stages pass); echoes "<hook_exit>|<writer_exit>"
+  rm -f "$T11FIFO"; mkfifo "$T11FIFO"
+  : > "$SCRATCH/t11.writer"
+  # 256 KiB of ref lines: no pipe buffer absorbs this, so the writer can only
+  # finish if something on the other end actually reads.
+  # The payload is built into a file FIRST. Writing it as `yes | head -c` into
+  # the fifo would make the writer's status 141 under pipefail no matter what
+  # the hook did -- `yes` is always SIGPIPEd by `head` -- so the measurement
+  # would report the failure it is supposed to detect. `cat` of a ready file
+  # exits 0 on a completed write and 141 only on a genuine SIGPIPE.
+  (
+    cat "$T11PAYLOAD" > "$T11FIFO" 2>/dev/null
+    printf '%s' "$?" > "$SCRATCH/t11.writer"
+  ) &
+  local wpid=$!
+  GIT_DIR="$T11GIT" CAWS_STAGE_LOG="$SCRATCH/t11-stages.log" \
+    CAWS_STAGE_FAIL="$1" CAWS_T10_AUDIT_EXIT=0 \
+    bash .husky/pre-push origin https://example.invalid/repo.git \
+    < "$T11FIFO" > "$SCRATCH/t11-hook.out" 2>&1
+  local hexit=$?
+  wait "$wpid" 2>/dev/null
+  printf '%s|%s' "$hexit" "$(cat "$SCRATCH/t11.writer" 2>/dev/null)"
+}
+
+if [ -z "${T10SKIP:-}" ]; then
+  t11a=$(run_t11 "")
+  t11a_hook="${t11a%%|*}"; t11a_writer="${t11a#*|}"
+  if [ "$t11a_writer" = "0" ]; then
+    ok "T11a the hook drains stdin, so git's ref-list write completes (writer exit 0)"
+  else
+    bad "T11a the hook drains stdin, so git's ref-list write completes (writer exit 0)" \
+        "writer exited '$t11a_writer' (141 = SIGPIPE: nothing read the ref list). hook exit=$t11a_hook"
+  fi
+
+  # Plumbing, not policy: the verdicts on both sides must be unchanged.
+  if [ "$t11a_hook" = "0" ]; then
+    ok "T11b draining stdin leaves an all-pass run at exit 0"
+  else
+    bad "T11b draining stdin leaves an all-pass run at exit 0" \
+        "got exit $t11a_hook; hook said: $(tr '\n' '|' < "$SCRATCH/t11-hook.out" 2>/dev/null)"
+  fi
+
+  # Counterweight: if the drain had made the hook permissive, this would pass
+  # when it must not. A failing stage still refuses.
+  t11c=$(run_t11 "npx turbo")
+  if [ "${t11c%%|*}" = "1" ]; then
+    ok "T11c a failing stage still refuses after the drain (exit 1)"
+  else
+    bad "T11c a failing stage still refuses after the drain (exit 1)" "got exit ${t11c%%|*}"
+  fi
+fi
+
 echo
 echo "hook tests: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
