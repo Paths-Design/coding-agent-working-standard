@@ -30,9 +30,11 @@ invariants:
   - 'The only escape is a human-granted, expiring reprieve naming the lifecycle plane. No self-service CLI flag may lift it: the entity with the incentive to cross the boundary must not be able to author its own authorization.'
 acceptance:
   - id: A1
-    given: 'TODO'
-    when: 'TODO'
-    then: 'TODO'
+    given: 'a harness-identified agent session whose recorded origin is repo A'
+    when: 'it runs caws specs create from inside a SIBLING repo B'
+    then: >-
+      the command refuses before any write, names both the recorded origin and the
+      target root, and repo B gains no spec file and no event
 non_functional: {}
 contracts:
   - name: 'session-origin-record'
