@@ -1046,6 +1046,20 @@ explicit doctrine shift requiring an update to this document.
     governed behavior of this CLI requires the vendored rows on an
     adapter-covered surface.
 
+18. **A read surface may not assert a fact it cannot source.** Every fact a read
+    surface prints belongs to exactly one fact domain, and each domain names
+    exactly one authority artifact. Where a surface has no writer for a field it
+    renders `unknown` or omits the column; a phrase that reads as a true
+    negative (`(no worktree)`) is prohibited, because an asserted absence and an
+    observed absence are indistinguishable to the reader. Two surfaces answering
+    the same question must not answer it differently: a persisted `status` field
+    is not a TTL liveness classification, spec authorship is not spec binding,
+    and the current working directory is not a binding. The vocabulary, the
+    per-surface `is_not` clauses, and the verified non-conformance list are in
+    [`read-surface-authority.v1.yaml`](read-surface-authority.v1.yaml). That
+    contract governs assertion; `command-capability-taxonomy.md` governs
+    mutation.
+
 ---
 
 ## 7. Migration guidance for legacy users
@@ -1470,5 +1484,8 @@ land alongside cutover for coherence.
   deleted in v11.1 per Slice 8e)
 - `packages/caws-cli/src/index.js` — registration; subject to Slice 8a3 removals
 - `.caws/events.jsonl` schema: `packages/caws-cli/src/kernel/schemas/events/`
+- `docs/architecture/read-surface-authority.v1.yaml` — what each read surface
+  may assert (§6.18); the read-side counterpart to
+  `command-capability-taxonomy.md`
 - Slice closure notes: see commits `52d6165`, `2ed4a6f`, `4286c20`, `157df5a`,
   `7dfd865`, `8f8ac56`, `2ed7435`, `8f33580`
