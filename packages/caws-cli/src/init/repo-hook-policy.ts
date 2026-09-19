@@ -1242,3 +1242,236 @@ export function policyRestoreHandler(policy: RepoHookPolicy, input: RestoreInput
   }
   return settle(next, changed);
 }
+
+// ───────────────────────────────────────────────────────────────────────────
+// Importing machine state
+//
+// The migration path for a repo that already hand-rolled this feature in
+// machine state, which is where overrides had to live before the repo tier
+// existed. It is a TRANSLATION, not a copy, and the two shapes do not agree in
+// three places — each handled explicitly below rather than papered over:
+//
+//  1. **Machine extensions carry no reason; repo extensions require one.** The
+//     import cannot invent a justification, so it records provenance and says
+//     plainly that none was captured. A synthesized rationale would read to a
+//     reviewer exactly like one a human wrote, which is the one outcome worse
+//     than a blank.
+//
+//  2. **Machine tier may touch the floor; the repo tier may not.** A machine
+//     entry disabling or replacing protected-paths.sh has no repo-tier
+//     spelling. Dropping it silently would INCREASE enforcement — safe, but it
+//     would make the import a lie about equivalence — so it refuses by name.
+//
+//  3. **Machine state is per-surface; the repo tier has `default`.** Surfaces
+//     whose policy is identical collapse to one entry, because the duplication
+//     is an artifact of machine state having no shared tier, not a decision
+//     anyone made.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** The machine-state shape this reads, structurally equal to SystemSurfacePolicy. */
+export interface ImportableMachineSurface {
+  disabled?: Record<string, string[]>;
+  extensions?: Record<string, { handler: string; before: string | null }[]>;
+  handlers?: Record<string, string>;
+  libraries?: Record<string, string>;
+}
+
+export interface ImportFromMachineInput {
+  /** Machine state's `surfaces` map, keyed by surface name. */
+  machine: Record<string, ImportableMachineSurface>;
+}
+
+export type ImportMutation =
+  | {
+      ok: true;
+      policy: RepoHookPolicy;
+      changed: string[];
+      /** Surfaces whose machine keys the caller must now clear. */
+      clear: string[];
+    }
+  | { ok: false; error: string };
+
+/**
+ * The reason recorded for an imported extension.
+ *
+ * Deliberately not a justification. It names where the entry came from and
+ * states that no rationale was captured, so `hooks list` and doctor render the
+ * absence instead of hiding it behind plausible-sounding text.
+ *
+ * Stamped AFTER the collapse decision, never before. Naming the source surface
+ * inside the reason makes two otherwise-identical surfaces compare unequal, so
+ * generating it during translation would silently disable the collapse — the
+ * provenance string would defeat the feature it documents.
+ */
+function importedReason(sources: readonly string[]): string {
+  return `Imported from machine state (${sources.join(', ')}); no justification was recorded when it was set there.`;
+}
+
+/**
+ * True when two machine surfaces declare the same overrides.
+ *
+ * Compares the MACHINE input rather than the translated policy, because the
+ * question is whether the operator set identical policy on both surfaces —
+ * which is what makes collapsing them lossless.
+ */
+function sameMachineSurface(a: ImportableMachineSurface, b: ImportableMachineSurface): boolean {
+  const normalize = (s: ImportableMachineSurface): string =>
+    JSON.stringify([
+      sortedEntries(s.disabled ?? {}),
+      sortedEntries(s.extensions ?? {}),
+      sortedEntries(s.handlers ?? {}),
+      sortedEntries(s.libraries ?? {}),
+    ]);
+  return normalize(a) === normalize(b);
+}
+
+/**
+ * Translate machine-state overrides into repo policy entries.
+ *
+ * Returns the surfaces to clear rather than clearing them, because the two
+ * stores live on different filesystems and cannot be written atomically. The
+ * caller writes the repo policy FIRST: if the clear then fails, both tiers are
+ * populated and `resolveChain` refuses by name, which is loud. The reverse
+ * order fails by losing the override entirely, which is silent.
+ */
+export function policyImportFromMachine(
+  policy: RepoHookPolicy,
+  input: ImportFromMachineInput
+): ImportMutation {
+  const surfaceNames = Object.keys(input.machine).sort();
+  if (surfaceNames.length === 0) {
+    return { ok: false, error: 'machine state declares no surfaces; there is nothing to import' };
+  }
+
+  const translated: Record<string, RepoSurfacePolicy> = {};
+  const clear: string[] = [];
+
+  for (const name of surfaceNames) {
+    const from = input.machine[name];
+    if (!from) continue;
+    const into = emptyRepoSurfacePolicy();
+    let populated = false;
+
+    for (const [event, handlers] of Object.entries(from.disabled ?? {})) {
+      const eventError = unknownEvent(event);
+      if (eventError) return { ok: false, error: `surfaces.${name}.disabled: ${eventError}` };
+      for (const handler of handlers) {
+        if (REPO_POLICY_FLOOR.includes(handler)) {
+          return {
+            ok: false,
+            error:
+              `surfaces.${name}.disabled.${event} disables ${handler}, which the repo tier ` +
+              `cannot express: ${REPO_POLICY_FLOOR.join(', ')} are the floor, because a policy ` +
+              `that can authorize its own amendment is not a policy. Nothing was written. ` +
+              `Remove it from machine state (it stays effective there for this operator only), ` +
+              `or decide the guard should run and drop it.`,
+          };
+        }
+        if (!HANDLER_NAME.test(handler)) {
+          return { ok: false, error: `surfaces.${name}.disabled.${event}: malformed ${handler}` };
+        }
+        // reason: null — the bare spelling. Machine state recorded none, and
+        // this must not invent one.
+        (into.disabled[event] ??= []).push({ handler, reason: null });
+        populated = true;
+      }
+    }
+
+    for (const [event, entries] of Object.entries(from.extensions ?? {})) {
+      const eventError = unknownEvent(event);
+      if (eventError) return { ok: false, error: `surfaces.${name}.extensions: ${eventError}` };
+      for (const entry of entries) {
+        // reason is stamped after the collapse decision; see importedReason.
+        (into.extensions[event] ??= []).push({
+          handler: entry.handler,
+          before: entry.before,
+          reason: '',
+        });
+        populated = true;
+      }
+    }
+
+    for (const [handler, target] of Object.entries(from.handlers ?? {})) {
+      if (REPO_POLICY_FLOOR.includes(handler)) {
+        return {
+          ok: false,
+          error:
+            `surfaces.${name}.handlers replaces ${handler}, which the repo tier cannot ` +
+            `express: replacing a floor handler with another file is observationally ` +
+            `equivalent to disabling it. Nothing was written.`,
+        };
+      }
+      into.handlers[handler] = target;
+      populated = true;
+    }
+
+    for (const [name2, target] of Object.entries(from.libraries ?? {})) {
+      into.libraries[name2] = target;
+      populated = true;
+    }
+
+    if (populated) {
+      translated[name] = into;
+      clear.push(name);
+    }
+  }
+
+  if (clear.length === 0) {
+    return { ok: false, error: 'machine state declares no overrides; there is nothing to import' };
+  }
+
+  const next = clonePolicy(policy);
+  const changed: string[] = [];
+
+  // Collapse identical surfaces onto `default`. Two byte-identical per-surface
+  // copies are an artifact of machine state having no shared tier, so carrying
+  // that duplication into a reviewed file would import the problem too.
+  const names = Object.keys(translated).sort();
+  const firstMachine = input.machine[names[0] as string] as ImportableMachineSurface;
+  const allSame = names.every((n) =>
+    sameMachineSurface(input.machine[n] as ImportableMachineSurface, firstMachine)
+  );
+  const destinations: [string, RepoSurfacePolicy, string[]][] = allSame
+    ? [['default', translated[names[0] as string] as RepoSurfacePolicy, names]]
+    : names.map((n) => [n, translated[n] as RepoSurfacePolicy, [n]]);
+  if (allSame && names.length > 1) {
+    changed.push(`collapsed ${names.length} identical surfaces (${names.join(', ')}) to default`);
+  }
+
+  for (const [destination, imported, sources] of destinations) {
+    for (const entries of Object.values(imported.extensions)) {
+      for (const entry of entries) entry.reason = importedReason(sources);
+    }
+    const existing = next.surfaces[destination];
+    if (existing && renderSurface(existing) !== null) {
+      return {
+        ok: false,
+        error:
+          `surfaces.${destination} already declares policy in ${REPO_HOOK_POLICY_PATH}. Import ` +
+          `writes a surface, it does not merge into one — merging would silently reorder ` +
+          `decisions a human made. Nothing was written. Reconcile by hand, or import into a ` +
+          `repo whose policy does not yet declare ${destination}.`,
+      };
+    }
+    next.surfaces[destination] = imported;
+    for (const [event, entries] of sortedEntries(imported.disabled)) {
+      for (const entry of entries) {
+        changed.push(`imported surfaces.${destination}.disabled.${event}: ${entry.handler}`);
+      }
+    }
+    for (const [event, entries] of sortedEntries(imported.extensions)) {
+      for (const entry of entries) {
+        changed.push(`imported surfaces.${destination}.extensions.${event}: ${entry.handler}`);
+      }
+    }
+    for (const key of ['handlers', 'libraries'] as const) {
+      for (const [handler] of sortedEntries(imported[key])) {
+        changed.push(`imported surfaces.${destination}.${key}.${handler}`);
+      }
+    }
+  }
+
+  const settled = settle(next, changed);
+  if (!settled.ok) return settled;
+  return { ok: true, policy: settled.policy, changed: settled.changed, clear };
+}

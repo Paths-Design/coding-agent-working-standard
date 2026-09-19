@@ -25,7 +25,8 @@
 //     than letting it look effective.
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import * as nodePath from 'node:path';
 
 import { isOk } from '../../kernel';
@@ -34,6 +35,7 @@ import { machineHome } from '../../init/machine-adapters';
 import { SHARED_PACK_VERSION } from '../../init/hook-packs/manifest-shared';
 import { shippedHandlerProvenance } from '../../init/hook-install';
 import {
+  type ImportableMachineSurface,
   type PolicyMutation,
   type RepoHookPolicy,
   POLICY_EVENTS,
@@ -43,6 +45,7 @@ import {
   parseRepoHookPolicy,
   policyAddExtension,
   policyDisableHandler,
+  policyImportFromMachine,
   policyReplaceHandler,
   policyRestoreHandler,
   serializeRepoHookPolicy,
@@ -761,5 +764,192 @@ export function runHooksCompileCommand(options: HooksCompileOptions = {}): numbe
   for (const event of written) {
     process.stdout.write(`  .caws/hooks/dispatch/${event}.chain\n`);
   }
+  return 0;
+}
+
+// ─── hooks import --from-machine ───────────────────────────────────────────
+//
+// The one verb that writes TWO stores, and the only reason it is not a
+// `settleVerb` call like its siblings. Everything above changes one file in
+// the repo; this also has to empty the machine keys it just migrated, or the
+// entry exists in both tiers and gets spliced twice.
+//
+// Those stores cannot be written atomically — different filesystems, one of
+// them outside the repo entirely — so the question is not how to avoid a
+// partial state but which partial state to fail into. Repo-first is chosen
+// because its failure (both tiers populated) is refused by name at resolve
+// time, while machine-first fails by dropping the override with nothing left
+// to notice it.
+
+/** Machine project state, as much of it as import needs to read and rewrite. */
+interface MachineProjectSettings {
+  version: number;
+  root: string;
+  surfaces: Record<string, ImportableMachineSurface>;
+}
+
+export interface HooksImportOptions {
+  readonly cwd?: string;
+  readonly fromMachine?: boolean;
+  readonly plan?: boolean;
+  readonly json?: boolean;
+}
+
+function machineStatePath(repoRoot: string): string {
+  return nodePath.join(
+    machineHome(),
+    'state/projects',
+    createHash('sha256').update(realpathSync(repoRoot)).digest('hex') + '.json'
+  );
+}
+
+/**
+ * Empty the migrated surfaces' override keys, leaving the file and every other
+ * key intact.
+ *
+ * It rewrites rather than deletes: the file also records `root` and any
+ * surface the import did not touch, and a surface whose keys are all empty is
+ * still a surface the operator registered. Deleting it would silently
+ * de-register the project from the machine runtime.
+ */
+function clearMachineSurfaces(statePath: string, surfaces: readonly string[]): string | null {
+  try {
+    const raw = JSON.parse(readFileSync(statePath, 'utf8')) as MachineProjectSettings;
+    for (const name of surfaces) {
+      const surface = raw.surfaces?.[name];
+      if (!surface) continue;
+      surface.disabled = {};
+      surface.extensions = {};
+      surface.handlers = {};
+      surface.libraries = {};
+    }
+    writeFileSync(statePath, JSON.stringify(raw, null, 2) + '\n', 'utf8');
+    return null;
+  } catch (e) {
+    return (e as Error).message;
+  }
+}
+
+export function runHooksImportCommand(options: HooksImportOptions = {}): number {
+  if (options.fromMachine !== true) {
+    process.stdout.write(
+      'caws hooks import: --from-machine is required. It is the only source this verb reads, ' +
+        'and naming it keeps the command honest if another source is ever added.\n'
+    );
+    return 1;
+  }
+  const ctx = mutableContext(options.cwd ?? process.cwd());
+  if (isError(ctx)) {
+    process.stdout.write(`caws hooks import: ${ctx.error}\n`);
+    return 1;
+  }
+
+  const statePath = machineStatePath(ctx.repoRoot);
+  if (!existsSync(statePath)) {
+    process.stdout.write(
+      `caws hooks import: this project has no machine state at ${statePath}, so there is ` +
+        'nothing to migrate. A repo whose surfaces are all project-wired never had any.\n'
+    );
+    return 1;
+  }
+
+  let settings: MachineProjectSettings;
+  try {
+    settings = JSON.parse(readFileSync(statePath, 'utf8')) as MachineProjectSettings;
+  } catch (e) {
+    process.stdout.write(
+      `caws hooks import: could not read ${statePath}: ${(e as Error).message}\n`
+    );
+    return 1;
+  }
+
+  const mutation = policyImportFromMachine(ctx.policy, { machine: settings.surfaces ?? {} });
+  if (!mutation.ok) {
+    if (options.json === true) {
+      process.stdout.write(
+        `${JSON.stringify({
+          schema: 'caws.hooks_import.v1',
+          wrote: false,
+          cleared: [],
+          error: mutation.error,
+        })}\n`
+      );
+      return 1;
+    }
+    process.stdout.write(`caws hooks import: refused. Nothing was written.\n  ${mutation.error}\n`);
+    return 1;
+  }
+
+  if (options.plan === true) {
+    if (options.json === true) {
+      process.stdout.write(
+        `${JSON.stringify({
+          schema: 'caws.hooks_import.v1',
+          plan: true,
+          wrote: false,
+          path: REPO_HOOK_POLICY_PATH,
+          changed: mutation.changed,
+          wouldClear: mutation.clear,
+          machineState: statePath,
+        })}\n`
+      );
+      return 0;
+    }
+    process.stdout.write(`caws hooks import --plan: would write ${REPO_HOOK_POLICY_PATH}\n`);
+    for (const line of mutation.changed) process.stdout.write(`  ${line}\n`);
+    process.stdout.write(
+      `  would then clear these surfaces in ${statePath}: ${mutation.clear.join(', ')}\n` +
+        '  Nothing was written.\n'
+    );
+    return 0;
+  }
+
+  // Repo first. See the banner above for why this order and not the reverse.
+  const writeFailure = persist(ctx, mutation.policy);
+  if (writeFailure !== null) {
+    process.stdout.write(
+      `caws hooks import: could not write ${REPO_HOOK_POLICY_PATH}.\n  ${writeFailure}\n` +
+        '  Machine state is untouched, so the overrides are still in effect.\n'
+    );
+    return 1;
+  }
+
+  const clearFailure = clearMachineSurfaces(statePath, mutation.clear);
+  if (clearFailure !== null) {
+    // Half-migrated, and deliberately loud about it: both tiers now declare the
+    // same handlers, so resolveChain refuses by name until this is finished.
+    process.stdout.write(
+      `caws hooks import: wrote ${REPO_HOOK_POLICY_PATH}, but could NOT clear ${statePath}.\n` +
+        `  ${clearFailure}\n` +
+        '  Both tiers now declare these handlers, so hook dispatch will REFUSE by name until ' +
+        'the machine keys are emptied. That refusal is the intended failure: it is loud, and ' +
+        'it never runs a guard twice. Empty the surfaces in the file above, then run ' +
+        '`caws hooks list` to confirm.\n'
+    );
+    return 1;
+  }
+
+  if (options.json === true) {
+    process.stdout.write(
+      `${JSON.stringify({
+        schema: 'caws.hooks_import.v1',
+        wrote: true,
+        path: REPO_HOOK_POLICY_PATH,
+        changed: mutation.changed,
+        cleared: mutation.clear,
+        machineState: statePath,
+      })}\n`
+    );
+    return 0;
+  }
+  process.stdout.write(`caws hooks import: wrote ${REPO_HOOK_POLICY_PATH}\n`);
+  for (const line of mutation.changed) process.stdout.write(`  ${line}\n`);
+  process.stdout.write(
+    `  cleared migrated keys for ${mutation.clear.join(', ')} in ${statePath}\n` +
+      '  Imported extensions record that no justification was captured in machine state. ' +
+      'Replace those reasons with real ones — they propagate to every clone.\n' +
+      '  The project-wired dispatchers still run their previous chain until you run ' +
+      '`caws hooks compile`.\n'
+  );
   return 0;
 }
