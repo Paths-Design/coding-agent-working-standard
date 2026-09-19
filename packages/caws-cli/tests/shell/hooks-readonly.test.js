@@ -278,6 +278,176 @@ describe('A1: list resolves through the launcher', () => {
   });
 });
 
+describe('tier-2 guard configuration is visible in list (VISIBILITY-PARITY-01)', () => {
+  /** A policy whose only content is the tier-2 block under test. */
+  const withGuards = (guards) => ({ version: 1, surfaces: { default: {} }, guards });
+
+  const NATIVE_REASON = 'The Rust core lives in native/; this repo has no src/ at all.';
+
+  test('A1: the prefix AND the reason the parser demanded are both rendered', () => {
+    // The whole point of the slice. `parseRepoHookPolicy` refuses a prefix
+    // entry whose reason is shorter than 12 characters, and until now nothing
+    // read that field back — a required field with no readers is theater, and
+    // this is precisely the field the anti-abuse doctrine ("would this be
+    // correct in a repo with a different layout?") relies on a reviewer
+    // seeing. Asserting the reason TEXT, not merely that a guards section
+    // exists, is what makes the requirement load-bearing.
+    const repo = makeRepo({
+      policy: withGuards({
+        'scope-guard.sh': {
+          additional_allow_prefixes: [{ prefix: 'native/', reason: NATIVE_REASON }],
+        },
+      }),
+    });
+    const { status, out } = runCli(['hooks', 'list', '--event', 'pre_tool_use'], { cwd: repo });
+    expect(status).toBe(0);
+    expect(out).toContain('scope-guard.sh');
+    expect(out).toContain('allow-prefix native/');
+    expect(out).toContain(NATIVE_REASON);
+  });
+
+  test('A1: a threshold renders its value AND that env still outranks it', () => {
+    // Precedence is env > config > shipped default. A reader comparing this
+    // number against observed behavior and finding a mismatch would otherwise
+    // conclude the config was ignored, when an env var simply won — so the
+    // rendering has to carry the precedence, not just the number.
+    const repo = makeRepo({
+      policy: withGuards({ 'god-object-check.sh': { thresholds: { loc: 2500 } } }),
+    });
+    const { status, out } = runCli(['hooks', 'list', '--event', 'pre_tool_use'], { cwd: repo });
+    expect(status).toBe(0);
+    expect(out).toContain('threshold loc = 2500');
+    expect(out).toMatch(/env overrides/i);
+  });
+
+  test('A2: --json carries guards under its OWN key, not folded into the chain', () => {
+    // A consumer must be able to tell "this guard was added or removed"
+    // (tier 1, surface-scoped, changes the chain) from "this guard reads
+    // extra data" (tier 2, top-level, changes no handler's presence). Folding
+    // tier 2 into `declared` or into an event's handler list would erase that
+    // distinction, so the separation is asserted, not just the presence.
+    const repo = makeRepo({
+      policy: withGuards({
+        'scope-guard.sh': {
+          additional_allow_prefixes: [{ prefix: 'native/', reason: NATIVE_REASON }],
+        },
+        'loc-delta-check.sh': { thresholds: { delta: 400 } },
+      }),
+    });
+    const { status, out } = runCli(['hooks', 'list', '--event', 'pre_tool_use', '--json'], {
+      cwd: repo,
+    });
+    expect(status).toBe(0);
+    const parsed = JSON.parse(out.trim());
+    expect(parsed.guards).toEqual([
+      { guard: 'loc-delta-check.sh', prefixes: [], thresholds: [['delta', 400]] },
+      {
+        guard: 'scope-guard.sh',
+        prefixes: [{ prefix: 'native/', reason: NATIVE_REASON }],
+        thresholds: [],
+      },
+    ]);
+    // Tier 2 is NOT surface-scoped and must not leak into the tier-1 view.
+    expect(JSON.stringify(parsed.declared ?? {})).not.toContain('native/');
+    expect(JSON.stringify(parsed.events)).not.toContain('native/');
+  });
+
+  test('A2: the JSON ordering is deterministic, so a diff of two runs is signal', () => {
+    // These rows land in review diffs and in `--json` consumers. Object key
+    // order in JSON is insertion order, so without an explicit sort the same
+    // document could render two ways and produce a phantom diff.
+    const repo = makeRepo({
+      policy: withGuards({
+        'write-allowlist.sh': {
+          additional_allow_prefixes: [{ prefix: 'z/', reason: NATIVE_REASON }],
+        },
+        'god-object-check.sh': { thresholds: { loc: 2500, delta: 300 } },
+      }),
+    });
+    const first = runCli(['hooks', 'list', '--json'], { cwd: repo });
+    const second = runCli(['hooks', 'list', '--json'], { cwd: repo });
+    expect(first.out).toBe(second.out);
+    const parsed = JSON.parse(first.out.trim());
+    expect(parsed.guards.map((row) => row.guard)).toEqual([
+      'god-object-check.sh',
+      'write-allowlist.sh',
+    ]);
+    expect(parsed.guards[0].thresholds).toEqual([
+      ['delta', 300],
+      ['loc', 2500],
+    ]);
+  });
+
+  test('A4: opting out of tier 2 costs NO output — byte-identical to no guards key', () => {
+    // The strong form of "says nothing about tier-2 config": rather than
+    // asserting the absence of a marker string (which would pass against a
+    // renderer that emitted a differently-worded empty section), render the
+    // same repo with an empty `guards` object and with the key absent
+    // entirely, and require the two to be byte-identical.
+    const absent = makeRepo({ policy: { version: 1, surfaces: { default: {} } } });
+    const empty = makeRepo({ policy: withGuards({}) });
+    const a = runCli(['hooks', 'list', '--event', 'pre_tool_use'], { cwd: absent });
+    const b = runCli(['hooks', 'list', '--event', 'pre_tool_use'], { cwd: empty });
+    expect(a.status).toBe(0);
+    expect(a.out).toBe(b.out);
+    expect(a.out).not.toContain('guard configuration');
+    expect(a.out).not.toContain('allow-prefix');
+  });
+
+  test('A4: a guard entry declaring nothing is not rendered as an empty heading', () => {
+    // `guards: { 'scope-guard.sh': {} }` is a legal document that declares no
+    // data. Rendering a bare guard name under the tier-2 heading would tell a
+    // reader something is configured when nothing is.
+    const repo = makeRepo({ policy: withGuards({ 'scope-guard.sh': {} }) });
+    const { status, out } = runCli(['hooks', 'list', '--event', 'pre_tool_use'], { cwd: repo });
+    expect(status).toBe(0);
+    expect(out).not.toContain('guard configuration');
+  });
+
+  test('the section is not unconditional: it appears only when tier 2 has content', () => {
+    // Discrimination control for every A4 arm above. Without it they would
+    // all pass against a renderer that had stopped emitting the section at
+    // all — including in the A1 case where it is required.
+    const configured = makeRepo({
+      policy: withGuards({
+        'scope-guard.sh': {
+          additional_allow_prefixes: [{ prefix: 'native/', reason: NATIVE_REASON }],
+        },
+      }),
+    });
+    expect(runCli(['hooks', 'list'], { cwd: configured }).out).toContain('guard configuration');
+  });
+
+  test('an INVALID policy renders no tier-2 section and list still exits 0', () => {
+    // `list` is explanatory, never enforcing (invariant 3), so unlike
+    // `validate` it must not fail on a bad document. The risk is the other
+    // way: rendering tier-2 rows parsed out of a document the validator
+    // rejected would show a reader configuration that no guard will ever
+    // apply, since a malformed document applies ZERO entries.
+    const repo = makeRepo({
+      policy: '{ "version": 1, "guards": { "scope-guard.sh": { "thresholds": { "loc": 5 } } } }',
+    });
+    const { status, out } = runCli(['hooks', 'list', '--event', 'pre_tool_use'], { cwd: repo });
+    expect(status).toBe(0);
+    expect(out).not.toContain('guard configuration');
+    expect(runCli(['hooks', 'list', '--json'], { cwd: repo }).out).toContain('"guards":null');
+  });
+
+  test('list with a guards block is still READ-ONLY', () => {
+    // The tier-2 rendering reads a file the command must not touch.
+    const repo = makeRepo({
+      policy: withGuards({
+        'scope-guard.sh': {
+          additional_allow_prefixes: [{ prefix: 'native/', reason: NATIVE_REASON }],
+        },
+      }),
+    });
+    const before = treeHash(path.join(repo, '.caws'));
+    expect(runCli(['hooks', 'list'], { cwd: repo }).status).toBe(0);
+    expect(treeHash(path.join(repo, '.caws'))).toBe(before);
+  });
+});
+
 describe('A3: compile --check', () => {
   test('a repo with no policy and no sidecar is FRESH, not stale', () => {
     // Compiling a sidecar that merely restates the dispatcher's own stock
