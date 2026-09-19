@@ -768,10 +768,67 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
 
 export interface ShowOpts extends BaseAgentsOpts {
   readonly id: string;
+  readonly staleTtlMs?: number;
+}
+
+// ─── liveness classification (CAWS-AGENTS-SHOW-LIVENESS-CLASSIFY-01) ──────
+//
+// The on-disk `status` enum is exactly {active, stopping, stopped}. The
+// kernel never writes 'stale': materializing it would mean one session
+// writing another session's lease file, which breaks the per-session-file
+// ownership that makes atomic lease writes safe. Staleness is therefore a
+// read-time TTL classification, and a surface that returns only the
+// persisted field hands the reader one value that answers two questions.
+//
+// The classification is obtained by calling the kernel's
+// summarizeActiveAgents with a single-entry registry — never by re-deriving
+// `now - last_active > ttl` here. One rule, one implementation: a second
+// copy is a second thing to drift, and the boundary (`>` vs `>=`) is exactly
+// where such a copy would diverge silently.
+
+interface LivenessVerdict {
+  readonly classification: 'active' | 'stale' | 'stopped' | 'unknown';
+  readonly source: 'derived';
+  readonly derivation: string;
+  readonly ttl_ms: number;
+  /** null when last_active does not parse — no age can be computed, and
+   *  reporting a number would be fabricating one. */
+  readonly last_active_age_ms: number | null;
+  readonly persisted_status: string;
+  /**
+   * Literal value comparison, not a semantic one. A `stopping` lease that is
+   * within its TTL classifies `active`, so this reads false even though
+   * nothing is wrong — `stopping` is a lifecycle phase and has no
+   * counterpart among the liveness buckets.
+   */
+  readonly agrees_with_persisted_status: boolean;
+}
+
+function classifyLeaseLiveness(lease: AgentLease, now: Date, ttlMs: number): LivenessVerdict {
+  const summary = callSummarizeActiveAgentsSafe({ [lease.session_id]: lease }, now, ttlMs);
+  let classification: LivenessVerdict['classification'] = 'unknown';
+  if (summary !== null) {
+    if (summary.stopped.length > 0) classification = 'stopped';
+    else if (summary.stale.length > 0) classification = 'stale';
+    else if (summary.active.length > 0) classification = 'active';
+  }
+
+  const lastActiveMs = Date.parse(lease.last_active);
+  const age = Number.isNaN(lastActiveMs) ? null : Math.max(0, now.getTime() - lastActiveMs);
+
+  return {
+    classification,
+    source: 'derived',
+    derivation: 'kernel summarizeActiveAgents(last_active, now, ttl_ms)',
+    ttl_ms: ttlMs,
+    last_active_age_ms: age,
+    persisted_status: lease.status,
+    agrees_with_persisted_status: classification === lease.status,
+  };
 }
 
 export function runAgentsShowCommand(opts: ShowOpts): number {
-  const { cwd, out, err, showData, json } = setupIO(opts);
+  const { cwd, nowFn, out, err, showData, json } = setupIO(opts);
 
   const repoRootResult = resolveRepoRoot(cwd);
   if (!isOk(repoRootResult)) {
@@ -804,9 +861,25 @@ export function runAgentsShowCommand(opts: ShowOpts): number {
     }
     return 1;
   }
+  const liveness = classifyLeaseLiveness(lease, nowFn(), opts.staleTtlMs ?? DEFAULT_STALE_TTL_MS);
+
   if (json) {
-    emitJson(out, { ok: true, lease });
+    emitJson(out, { ok: true, lease, liveness });
   } else {
+    const age =
+      liveness.last_active_age_ms === null
+        ? 'age unknown (last_active does not parse)'
+        : `last_active ${liveness.last_active_age_ms}ms ago`;
+    out(`session: ${lease.session_id}`);
+    out(
+      `persisted status: ${liveness.persisted_status}  ` +
+        `(on disk in .caws/leases/; that enum is {active, stopping, stopped} and never holds "stale")`
+    );
+    out(
+      `derived liveness: ${liveness.classification}  ` +
+        `(computed now, not persisted; ${liveness.derivation}; ttl ${liveness.ttl_ms}ms, ${age})`
+    );
+    out('record:');
     out(JSON.stringify(lease, null, 2));
   }
   return 0;

@@ -2193,8 +2193,17 @@ export const AGENTS_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'show',
       argument: { name: 'id', required: true, description: 'Session id of the lease to show' },
-      description: 'Show one lease by session id. Read-only.',
-      options: [{ flag: '--json', description: 'Emit CAWS-native JSON to stdout' }, DATA_OPTION],
+      description:
+        'Show one lease by session id, with its derived TTL liveness classification. Read-only.',
+      options: [
+        {
+          flag: '--stale-ttl-ms <ms>',
+          description:
+            'TTL for the derived liveness classification (default: 1800000 = 30m); the persisted status is unaffected',
+        },
+        { flag: '--json', description: 'Emit CAWS-native JSON to stdout' },
+        DATA_OPTION,
+      ],
     },
     {
       kind: 'leaf',
