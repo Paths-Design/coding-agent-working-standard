@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 79
+# hook_pack_version: 85
 # caws_min_major: 11
 # lineage_refs: 8,11,17,19,22,23,24,26
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -133,6 +133,29 @@ HANDLERS=(
   # so non-matching tool calls are cheap exits.
   quiet-merge.sh
 )
+
+# CAWS-REPO-HOOK-POLICY-PROJECT-WIRED-01: a repo may commit a compiled chain
+# sidecar (dispatch/pre_tool_use.chain, written by `caws hooks compile` from
+# .caws/hooks/hook-policy.json) that REPLACES the array above. This is the
+# project-wired counterpart of the machine launcher's policy tier — without it
+# a repo's committed policy would govern only the two machine-routed surfaces
+# and silently not the five wired to this dispatcher.
+#
+# The array above is left INTACT rather than regenerated: rewriting it would
+# put this managed pack file permanently in `managed_drift`, so `caws init`
+# would refuse every future upstream dispatcher fix.
+#
+# Absent sidecar -> stock array, one stat. Absent lib -> stock array, via the
+# `declare -F` guard, so a partially upgraded pack still dispatches. A
+# MALFORMED sidecar is the one case that does not degrade: caws_local_chain
+# blocks and exits 2 rather than running a partial guard chain.
+if [[ -f "$HOOKS_DIR/lib/local-chain.sh" ]]; then
+  # shellcheck source=../lib/local-chain.sh
+  source "$HOOKS_DIR/lib/local-chain.sh"
+fi
+if declare -F caws_local_chain >/dev/null 2>&1 && caws_local_chain pre_tool_use; then
+  HANDLERS=(${CAWS_LOCAL_CHAIN[@]+"${CAWS_LOCAL_CHAIN[@]}"})
+fi
 
 # CAWS-HOOKPACK-DISPATCH-EMPTY-HANDLERS-CRASH-001: guard the count before
 # expanding "${HANDLERS[@]}" -- on bash 3.2 (macOS default /bin/bash),

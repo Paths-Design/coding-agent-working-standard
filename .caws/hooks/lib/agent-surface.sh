@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 79
+# hook_pack_version: 85
 # caws_min_major: 11
 # lineage_refs: (new in shared-core-001)
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -296,15 +296,81 @@ case "$CAWS_AGENT_SURFACE" in
     ;;
 esac
 
+# Every live agent process name any surface arm above can resolve to. The
+# test-harness attestation (3a) filters against this set, so a process serving
+# a real session can never become a kill target under test. Adding a surface
+# arm without extending this list silently re-opens
+# CAWS-DEFECT-BATS-TRAP-KILLS-LIVE-AGENT-01; tests/hooks/bats/agent-surface.bats
+# enumerates the arms and fails closed when one is missing here.
+CAWS_AGENT_LIVE_PROCESS_NAMES="claude codex cursor windsurf opencode dsh \
+zcode-cli zcode-host-local-1 zcode-host-local-2 zcode-host-local-3 \
+kimi-code kimi qwen qwen-code"
+
+# ---------------------------------------------------------------------------
+# 3a. CAWS-DEFECT-BATS-TRAP-KILLS-LIVE-AGENT-01: test-harness attestation.
+#
+# The guards are executed two ways. Under a real harness the hook env is
+# harness-owned and the guard's ancestors are the session's own processes —
+# which is exactly what makes the identity-verified SIGTERM sound. Under the
+# bats suite the guard is exec'd as a CHILD OF THE AGENT'S OWN BASH TOOL, so
+# both of those premises invert: the env is agent-reachable, and walking the
+# ancestry finds the live `claude` process running the tests. A latch armed in
+# one test plus a denied attempt in the next then escalates to a real SIGTERM
+# against the developer's session. Temp-dir isolation does not cover this: it
+# scopes where the sentinel FILE lands, not whose PID the walk resolves.
+#
+# The attestation is a marker inside the resolved project's .caws/hooks/. That
+# location is the gate, not the filename: protected-paths.sh refuses agent
+# Write/Edit under .caws/hooks/, and `caws init` never emits this file — so an
+# agent cannot mint the attestation in a governed repo, while a mktemp fixture
+# creates it freely. It grants exactly one thing (do not aim the kill at a live
+# agent), never a block, strike or latch bypass.
+# ---------------------------------------------------------------------------
+_CAWS_TEST_HARNESS=0
+if [[ -n "${CAWS_PROJECT_DIR:-}" && "$CAWS_PROJECT_DIR" != "." &&
+      -f "$CAWS_PROJECT_DIR/.caws/hooks/.test-harness" ]]; then
+  _CAWS_TEST_HARNESS=1
+fi
+export CAWS_TEST_HARNESS="$_CAWS_TEST_HARNESS"
+
 # Preserve an explicitly preset CAWS_AGENT_PROCESS_NAMES over the surface
-# default (DANGER-LATCH-QUARANTINE-TRAP-001): operators and the bats suite
-# steer ancestor-identity resolution this way. The hook env is harness-owned
-# (an agent's Bash-tool env cannot reach it), so this is an operator control,
-# not an agent-controllable kill-steer.
+# default (DANGER-LATCH-QUARANTINE-TRAP-001): operators steer ancestor-identity
+# resolution this way. Under a real harness the hook env is harness-owned (an
+# agent's Bash-tool env cannot reach it), so this is an operator control, not
+# an agent-controllable kill-steer.
 if [[ -n "${_CAWS_AGENT_PROCESS_NAMES_PRESET:-}" ]]; then
   CAWS_AGENT_PROCESS_NAMES="$_CAWS_AGENT_PROCESS_NAMES_PRESET"
 fi
-export CAWS_AGENT_PROCESS_NAMES
+
+# Under the attestation, no live agent-surface name may remain a kill target.
+# A test may aim the trap only at a sacrificial process it spawned itself;
+# trap_resolve_agent_identity treats an empty list as "identity unresolvable,
+# hold the kill".
+#
+# The two arms differ only in loudness, and deliberately. Clearing the SURFACE
+# DEFAULT is the ordinary attested case, so it is silent: guards emit their
+# decision envelope on stdout while bats merges stderr into the same capture,
+# and a chatty lib here corrupts every JSON assertion in the suite. Dropping a
+# name an explicit PRESET supplied is a caller being overruled, so it says so.
+if [[ "$_CAWS_TEST_HARNESS" == "1" ]]; then
+  if [[ -z "${_CAWS_AGENT_PROCESS_NAMES_PRESET:-}" ]]; then
+    CAWS_AGENT_PROCESS_NAMES=""
+  elif [[ -n "${CAWS_AGENT_PROCESS_NAMES:-}" ]]; then
+    _CAWS_SAFE_NAMES=""
+    for _caws_name in $CAWS_AGENT_PROCESS_NAMES; do
+      case " $CAWS_AGENT_LIVE_PROCESS_NAMES " in
+        *" $_caws_name "*)
+          printf '[agent-surface.sh] test harness: refusing live agent process name as trap target: %s\n' \
+            "$_caws_name" >&2
+          ;;
+        *) _CAWS_SAFE_NAMES="${_CAWS_SAFE_NAMES:+$_CAWS_SAFE_NAMES }$_caws_name" ;;
+      esac
+    done
+    CAWS_AGENT_PROCESS_NAMES="$_CAWS_SAFE_NAMES"
+    unset _CAWS_SAFE_NAMES _caws_name
+  fi
+fi
+export CAWS_AGENT_PROCESS_NAMES CAWS_AGENT_LIVE_PROCESS_NAMES
 
 # ---------------------------------------------------------------------------
 # 3b. DANGER-LATCH-QUARANTINE-TRAP-001: per-surface kill-escalation enablement.
@@ -321,6 +387,13 @@ case "$CAWS_AGENT_SURFACE" in
   claude-code|codex|zcode|kimi-code|qwen-code) _CAWS_TRAP_KILL_DEFAULT=1 ;;
   *) _CAWS_TRAP_KILL_DEFAULT=0 ;;
 esac
+# Under the test-harness attestation the DEFAULT flips off, so a test that
+# never mentions the trap cannot fire one. A test that is specifically
+# exercising escalation still presets CAWS_TRAP_KILL=1 and is still bounded by
+# the live-name filter in 3a — the two controls are independent on purpose.
+if [[ "$_CAWS_TEST_HARNESS" == "1" ]]; then
+  _CAWS_TRAP_KILL_DEFAULT=0
+fi
 : "${CAWS_TRAP_KILL:=$_CAWS_TRAP_KILL_DEFAULT}"
 export CAWS_TRAP_KILL
 

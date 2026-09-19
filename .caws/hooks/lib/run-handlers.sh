@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 79
+# hook_pack_version: 85
 # caws_min_major: 11
 # lineage_refs: 8,16
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -101,6 +101,29 @@ _rh_stdout_priority() {
   local payload="$1"
   local decision
   decision=$(printf '%s' "$payload" | jq -r '.decision // .hookSpecificOutput.permissionDecision // ""' 2>/dev/null || true)
+
+  # jq is not a declared dependency of this pack, and on a host without it the
+  # command above yields an empty decision for EVERY handler. That does not
+  # degrade gracefully: it flattens the ranking, so a guard's refusal ties with
+  # an advisory finalizer's stdout and whichever the loop happens to select is
+  # what reaches the harness. A dropped `block` is a guard that is not
+  # enforcing -- silently, and only on the thin hosts nobody tests on.
+  #
+  # Fall back to a literal scan. It is deliberately narrower than the jq path:
+  # it matches the exact serialization every guard in this pack emits
+  # (compact separators, no spaces), so it cannot invent a decision from prose
+  # that merely mentions one. A handler that emits a spaced or nested variant
+  # is ranked advisory here, same as before -- this only ever ADDS a refusal
+  # that would otherwise have been lost, and never manufactures one.
+  if [[ -z "$decision" ]] && ! command -v jq >/dev/null 2>&1; then
+    case "$payload" in
+      *'"decision":"block"'* | *'"decision":"deny"'* | *'"permissionDecision":"deny"'*)
+        decision="block" ;;
+      *'"decision":"ask"'* | *'"permissionDecision":"ask"'*)
+        decision="ask" ;;
+    esac
+  fi
+
   case "$decision" in
     block|deny) printf '3\n' ;;
     ask) printf '2\n' ;;
@@ -408,6 +431,26 @@ run_handlers() {
     [[ -f "${HOOKS_DIR}/lib/reprieve.sh" ]] && source "${HOOKS_DIR}/lib/reprieve.sh" 2>/dev/null || true
   fi
 
+  # Tier-2 guard configuration: parse ONCE here, for the whole chain.
+  #
+  # Every adopting guard then reads plain exported variables and spawns
+  # nothing. Measured on an M-series mac a python3 start is ~31ms, so four
+  # guards parsing independently would add ~124ms to EVERY tool call while one
+  # shared parse stays inside the noise of a chain that already spawns python3
+  # a dozen-plus times. Called directly rather than in a subshell precisely so
+  # the exports survive into the handler loop.
+  if [[ "${CAWS_MACHINE_RUNTIME:-}" == 1 ]]; then
+    caws_source_lib guard-config.sh || return 2
+  else
+    [[ -f "${HOOKS_DIR}/lib/guard-config.sh" ]] \
+      && source "${HOOKS_DIR}/lib/guard-config.sh" 2>/dev/null || true
+  fi
+  # A pack predating this lib simply has no function to call, and every
+  # adopting guard falls back to its shipped table — degraded, never disarmed.
+  if declare -F caws_guard_config_load >/dev/null 2>&1; then
+    caws_guard_config_load "${CAWS_PROJECT_DIR:-.}" || true
+  fi
+
   # Accept both surface-neutral (CAWS_HOOK_*) and legacy (CLAUDE_HOOK_*)
   # env var names for dry-run / timing so that existing consumer configs
   # that set CLAUDE_HOOK_DRY_RUN keep working during the migration period.
@@ -475,6 +518,19 @@ run_handlers() {
       local system_override
       system_override="$(python3 -c 'import json,os,sys; print(json.loads(os.environ["CAWS_MACHINE_HANDLERS"]).get(sys.argv[1], ""))' "$handler")" || return 2
       [[ -z "$system_override" ]] || handler_path="$system_override"
+    elif declare -F caws_local_chain_override >/dev/null 2>&1; then
+      # CAWS-REPO-HOOK-POLICY-PROJECT-WIRED-01: the project-wired counterpart of
+      # the machine override above. The machine plane resolves overrides through
+      # the launcher; these surfaces resolve them from the compiled .chain
+      # sidecar the dispatcher already parsed, so both planes honor a repo's
+      # committed policy instead of only the two machine-routed harnesses.
+      #
+      # `declare -F` guarded, so a pack predating lib/local-chain.sh degrades to
+      # the stock path rather than erroring — an upgrade of one file must not
+      # require an upgrade of all of them.
+      local local_override
+      local_override="$(caws_local_chain_override "$handler")"
+      [[ -z "$local_override" ]] || handler_path="$local_override"
     fi
     if [[ ! -x "$handler_path" ]]; then
       _rh_record_execution "$handler" "$handler_path" missing null /dev/null ""

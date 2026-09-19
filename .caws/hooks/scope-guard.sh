@@ -1,7 +1,7 @@
 #!/bin/bash
 # CAWS-MANAGED-HOOK
 # hook_pack: shared
-# hook_pack_version: 79
+# hook_pack_version: 85
 # caws_min_major: 11
 # lineage_refs: 8,11,12,16
 # edit_stance: YOURS TO EDIT. This is a starting hook, not a locked one — shape it
@@ -63,6 +63,22 @@ else
   echo "[scope-guard] CAWS hook infrastructure incomplete: lib/agent-surface.sh is missing — cannot resolve scope authority. Failing CLOSED (refusing the edit). Restore the shared hook libs with: caws init --adopt" >&2
   printf '{"decision":"block","reason":"CAWS scope-guard: cannot load lib/agent-surface.sh, so scope cannot be evaluated. Failing closed. Restore the hook pack: caws init --adopt"}\n'
   exit 2
+fi
+# shellcheck source=lib/guard-config.sh
+# Provides caws_guard_prefixes / caws_guard_zones — the repo's tier-2 guard
+# configuration, already parsed once for the whole chain by run-handlers.sh.
+# Sourcing here is what makes the ACCESSORS available in this process (the
+# parse's results arrive as exported env, but shell functions do not cross an
+# exec); caws_guard_config_load then returns immediately because the status
+# variable is already set, or parses for real when this guard runs standalone.
+#
+# A missing lib is NOT fail-closed here, unlike agent-surface.sh above: every
+# key this lib carries is APPEND-ONLY, so its absence means a SHORTER allow
+# list — strictly the stricter verdict. It refuses more, never less. The
+# diagnostic below makes the degradation loud rather than silent.
+[[ -f "$SCRIPT_DIR/lib/guard-config.sh" ]] && source "$SCRIPT_DIR/lib/guard-config.sh"
+if declare -F caws_guard_config_load >/dev/null 2>&1; then
+  caws_guard_config_load "${CAWS_PROJECT_DIR:-.}" || true
 fi
 parse_hook_input
 
@@ -174,30 +190,124 @@ if [[ -n "${HOME:-}" ]]; then
 fi
 
 # Policy-declared non-governed zones (CAWSFIX-26 / ledger D9).
+#
+# The KEY and its meaning are unchanged — `policy.non_governed_zones` still
+# names paths outside CAWS scope governance entirely. Only the TRANSPORT moved:
+# the inline awk that used to live here now runs inside lib/guard-config.py, so
+# one parse per dispatch serves this guard and every other adopter instead of
+# each re-reading policy.yaml. The normalization (quote strip, /** and /* trim,
+# trailing-slash coercion) is reproduced there verbatim; the parity bats arm
+# pins that, because a transport swap that also changed normalization would be
+# a silent scope change.
 POLICY_FILE="${CAWS_PROJECT_DIR:-.}/.caws/policy.yaml"
-if [[ -f "$POLICY_FILE" ]]; then
+if declare -F caws_guard_zones >/dev/null 2>&1; then
   while IFS= read -r raw_zone; do
     [[ -z "$raw_zone" ]] && continue
-    raw_zone="${raw_zone%\"}"; raw_zone="${raw_zone#\"}"
-    raw_zone="${raw_zone%\'}"; raw_zone="${raw_zone#\'}"
-    raw_zone="${raw_zone%/\*\*}"
-    raw_zone="${raw_zone%/\*}"
-    [[ "$raw_zone" != */ ]] && raw_zone="${raw_zone}/"
     ALLOW_PREFIXES+=("$raw_zone")
-  done < <(awk '
-    /^non_governed_zones:[[:space:]]*$/ { in_zones = 1; next }
-    /^[^[:space:]#-]/ && in_zones { in_zones = 0 }
-    in_zones && /^[[:space:]]+-[[:space:]]+/ {
-      sub(/^[[:space:]]+-[[:space:]]+/, "")
-      sub(/[[:space:]]+#.*$/, "")
-      print
-    }
-  ' "$POLICY_FILE" 2>/dev/null)
+  done < <(caws_guard_zones)
+elif [[ -f "$POLICY_FILE" ]]; then
+  # The loader is absent but the repo DOES declare zones, so this guard is
+  # about to govern paths the repo declared ungoverned. Say so: unhonored
+  # zones refuse MORE than intended, which is safe but looks like a scope bug
+  # to whoever hits it, and a silent stricter-than-declared guard is how a
+  # team ends up forking the guard to "fix" it.
+  echo "[scope-guard] lib/guard-config.sh is missing, so .caws/policy.yaml non_governed_zones are NOT honored this run — declared non-governed paths will be scope-checked. Restore the shared hook libs: caws init --adopt" >&2
+fi
+
+# Repo-declared additional allow prefixes (tier-2 guard config).
+#
+# Append-only by construction: this can only ADD prefixes, so no shipped entry
+# (".caws/", the vendor dir, docs/) can be removed or reordered by a repo.
+# Every entry is validated repo-relative before it reaches here, which is
+# load-bearing rather than cosmetic — the foreign-repo containment block below
+# honors ABSOLUTE allow-prefixes ahead of the block, so an absolute entry here
+# would be a cross-repo write hole. A repo-relative entry cannot reach that loop.
+if declare -F caws_guard_prefixes >/dev/null 2>&1; then
+  while IFS= read -r _cfg_prefix; do
+    [[ -z "$_cfg_prefix" ]] && continue
+    ALLOW_PREFIXES+=("$_cfg_prefix")
+  done < <(caws_guard_prefixes scope-guard.sh)
 fi
 
 WORK_DIR="${HOOK_CWD:-${CAWS_PROJECT_DIR:-.}}"
 PROJECT_DIR="${CAWS_PROJECT_DIR:-.}"
 PROJECT_DIR="$(cd "$PROJECT_DIR" 2>/dev/null && pwd || printf '%s\n' "$PROJECT_DIR")"
+
+# CAWS-DEFECT-SCOPE-GUARD-FILE-PATH-NOT-NORMALIZED-01: normalize FILE_PATH the
+# same way PROJECT_DIR just was, BEFORE any containment comparison.
+#
+# The containment test below is a string prefix match. PROJECT_DIR is
+# `cd && pwd`-physical; FILE_PATH arrived from the envelope verbatim. So an
+# absolute path INSIDE the governed project that merely spelled itself
+# differently — a doubled separator from a TMPDIR ending in '/', a './', a
+# '..' that resolves back inside, a /var vs /private/var symlink — failed the
+# prefix test and took the foreign hard block: exit 2, "There is no in-band
+# override", for a file in the agent's own repo. That is the worst shape of
+# false refusal, because the message explicitly tells the agent not to route
+# around it and offers no legitimate next step.
+#
+# owned_worktree_root() below already states this rule — "compare like with
+# like" — and applies it to the worktree-root candidate. It was never applied
+# to FILE_PATH itself.
+#
+# Two constraints shape the implementation:
+#
+#  1. **It must not require the target to exist.** Write CREATES the file, and
+#     may create its parent. So the PARENT is resolved physically where it
+#     exists, and the basename is re-appended untouched; a missing parent falls
+#     back to a purely lexical pass.
+#  2. **It may only NARROW the foreign set.** Physical resolution is what makes
+#     that true: a symlink inside the project that points outside resolves to
+#     its outside target and stays foreign, and a '..' that escapes resolves
+#     outside and stays foreign. Collapsing separators textually without
+#     resolving would have been the unsafe shortcut.
+_caws_lexical_path() {
+  local input="$1" seg joined=""
+  local -a parts=() out=()
+  local OLD_IFS="$IFS"
+  IFS='/'
+  # shellcheck disable=SC2206 # deliberate word-split on '/' to walk segments
+  parts=($input)
+  IFS="$OLD_IFS"
+  for seg in "${parts[@]}"; do
+    case "$seg" in
+      '' | '.') continue ;;
+      '..')
+        # bash 3.2 (macOS) has no negative array slicing that is safe at
+        # length 0, so the guard is explicit rather than arithmetic.
+        if [[ ${#out[@]} -gt 0 ]]; then
+          out=("${out[@]:0:$((${#out[@]} - 1))}")
+        fi
+        ;;
+      *) out+=("$seg") ;;
+    esac
+  done
+  for seg in "${out[@]}"; do joined="$joined/$seg"; done
+  printf '%s\n' "${joined:-/}"
+}
+
+_caws_normalize_target() {
+  local p="$1" dir base resolved
+  [[ -n "$p" ]] || { printf '%s\n' "$p"; return 0; }
+  # A relative target resolves against the cwd the tool call ran in, which is
+  # the same base the kernel uses.
+  [[ "$p" == /* ]] || p="${HOOK_CWD:-$PROJECT_DIR}/$p"
+  dir="${p%/*}"
+  base="${p##*/}"
+  [[ -n "$dir" ]] || dir="/"
+  if resolved="$(cd "$dir" 2>/dev/null && pwd)"; then
+    dir="$resolved"
+  else
+    dir="$(_caws_lexical_path "$dir")"
+  fi
+  if [[ "$dir" == "/" ]]; then
+    printf '/%s\n' "$base"
+  else
+    printf '%s/%s\n' "$dir" "$base"
+  fi
+}
+
+FILE_PATH="$(_caws_normalize_target "$FILE_PATH")"
 
 PROJECT_WORKTREE_ROOT="$(resolve_worktree_root "$PROJECT_DIR" || true)"
 
