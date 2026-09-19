@@ -2,9 +2,10 @@ id: CAWS-DEFECT-SCOPE-GUARD-FILE-PATH-NOT-NORMALIZED-01
 title: 'scope-guard misclassifies an in-repo path with a redundant separator as a foreign repository'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-scope-guard-norm
 created_at: '2026-09-19T01:15:51.883Z'
-updated_at: '2026-09-19T01:15:51.883Z'
+updated_at: '2026-09-19T02:27:24.973Z'
 created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
 blast_radius:
   modules:
