@@ -95,3 +95,9 @@ evidence:
     recorded_at: "2026-09-19T01:29:54.015Z"
     artifact_path: packages/caws-cli/tests/hooks/bats/guard-config-adopters.bats
     commit_sha: "1a339824"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "npx jest tests/init/repo-hook-policy.test.js (inside the full run: 246/246 suites, 3279/3279 tests). R3 arms refuse an absolute prefix, a .. traversal, a glob metacharacter, whitespace, a missing trailing slash, and each reserved prefix (.caws, .git, .github/workflows, vendor dirs), each naming the offending entry. The all-or-nothing half is the describe 'all-or-nothing: one bad entry applies ZERO entries' — a document with one GOOD and one BAD prefix parses to NEITHER. Confirmed at runtime through the real guard too: npx bats tests/hooks/bats/guard-config-adopters.bats arms 'an INVALID document applies zero prefixes, so the verdict reverts to refusal' and 'a config naming a reserved prefix is rejected whole, admitting nothing' (commit 1a339824) — the valid sibling entry is NOT honored, so the refusal is whole-document, not per-entry."
+    recorded_at: "2026-09-19T01:30:09.895Z"
+    artifact_path: packages/caws-cli/tests/init/repo-hook-policy.test.js
+    commit_sha: "58f78df9"
