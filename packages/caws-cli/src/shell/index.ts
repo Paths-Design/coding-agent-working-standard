@@ -285,6 +285,7 @@ export {
 } from './commands/message';
 export { runSessionPickupCommand, runSessionPruneCommand } from './commands/session';
 export { runWorkingTreeAckCommand, runWorkingTreeCheckCommand } from './commands/working-tree';
+export { runGoalClearCommand, runGoalSetCommand, runGoalShowCommand } from './commands/goal';
 export { runHandoffExportCommand, runHandoffImportCommand } from './commands/handoff';
 export type {
   MessageSendCommandOptions,

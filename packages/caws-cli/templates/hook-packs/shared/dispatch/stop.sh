@@ -19,9 +19,17 @@
 # Handlers here finalize session artifacts: audit log closeout, worktree
 # cleanup reminder, plan-transcript finalize, session-log handoff.
 #
-# Stop semantics: none of these handlers should block the user — the
-# session is already ending. All non-zero exits are treated as warnings;
-# max_exit is reported but no handler short-circuits the chain.
+# Stop semantics: EXIT CODES here are advisory. All non-zero exits are treated
+# as warnings; max_exit is reported but no handler short-circuits the chain,
+# because the finalizers must all get to run even when one of them fails.
+#
+# That is a statement about exit codes, NOT about stdout. A handler may still
+# emit a hard control decision ({"decision":"block"}) on stdout, which
+# run_handlers forwards with priority over any advisory context. Today exactly
+# one handler does: goal-ac-gate.sh (CAWS-GOAL-AC-STOP-GATE-01), which refuses
+# the stop while the session's bound spec has unproven acceptance criteria.
+# A blocking handler here does not end the session — it tells the agent to keep
+# working — so the finalizers still running afterwards is correct, not a leak.
 
 set -uo pipefail
 
@@ -46,6 +54,12 @@ caws_source_lib run-handlers.sh 2>/dev/null || exit 0
 HANDLERS=(
   # "audit.sh stop"
   # "stop-worktree-check.sh"
+  # CAWS-GOAL-AC-STOP-GATE-01: the one handler here that may emit a hard
+  # control decision. Inert unless `caws goal set <spec-id>` wrote a binding
+  # for this session; then it blocks the stop while any acceptance criterion
+  # of the bound spec is unmet. Runs first so its decision is on stdout
+  # before the finalizers append advisory context.
+  "goal-ac-gate.sh"
   "plan-transcript-finalize.sh"
   "session-log.sh"
   # MULTI-AGENT-ACTIVITY-REGISTRY-001: mark our lease as stopped so other

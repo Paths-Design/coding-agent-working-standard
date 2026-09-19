@@ -37,6 +37,7 @@ import {
   SESSION_COMMAND_META,
   SPECS_COMMAND_META,
   WORKING_TREE_COMMAND_META,
+  GOAL_COMMAND_META,
   WORKTREE_COMMAND_META,
   type GroupCommandMeta,
   type LeafCommandMeta,
@@ -120,6 +121,9 @@ import {
   runHandoffImportCommand,
   runSessionPickupCommand,
   runSessionPruneCommand,
+  runGoalClearCommand,
+  runGoalSetCommand,
+  runGoalShowCommand,
   runWorkingTreeAckCommand,
   runWorkingTreeCheckCommand,
   runWorktreeBindCommand,
@@ -2396,6 +2400,27 @@ export function registerShellCommands(
       exit(code);
     }
   );
+
+  // ─── caws goal (CAWS-GOAL-AC-STOP-GATE-01) ─────────────────────────────
+  const goalCmd = program.command(GOAL_COMMAND_META.name);
+  applyGroupMeta(goalCmd, GOAL_COMMAND_META);
+
+  defineLeaf(goalCmd, leafMeta(GOAL_COMMAND_META, 'set')).action(
+    (specId: string, opts: { data?: boolean }) => {
+      const code = runGoalSetCommand({ specId, showData: opts.data === true });
+      exit(code);
+    }
+  );
+
+  defineLeaf(goalCmd, leafMeta(GOAL_COMMAND_META, 'show')).action((opts: { data?: boolean }) => {
+    const code = runGoalShowCommand({ showData: opts.data === true });
+    exit(code);
+  });
+
+  defineLeaf(goalCmd, leafMeta(GOAL_COMMAND_META, 'clear')).action((opts: { data?: boolean }) => {
+    const code = runGoalClearCommand({ showData: opts.data === true });
+    exit(code);
+  });
 
   // ─── caws working-tree (WORKING-TREE-PROVENANCE-GUARD-001) ─────────────
   const workingTreeCmd = program.command(WORKING_TREE_COMMAND_META.name);

@@ -2269,6 +2269,41 @@ export const WORKING_TREE_COMMAND_META: GroupCommandMeta = {
   ],
 };
 
+export const GOAL_COMMAND_META: GroupCommandMeta = {
+  kind: 'group',
+  name: 'goal',
+  description:
+    "Hold this session's stop to a spec's acceptance criteria (CAWS-GOAL-AC-STOP-GATE-01). `set` binds the session to a spec; the Stop handler then re-derives that spec's acceptance with `caws specs verify-acs --json` and refuses the stop while any criterion is unproven, so the session keeps working instead of stopping on an unproven claim. `show` reports the current binding and the gate's consecutive-block count, read-only. `clear` releases the session from its goal, which does NOT mean the criteria were met. Never authority: the spec owns the bar, `caws specs evidence` remains the only writer of acceptance truth, and this surface can neither mark a criterion passed nor change scope or lifecycle state. Opt-in — with no goal set the stop chain is unchanged.",
+  subcommands: [
+    {
+      kind: 'leaf',
+      name: 'set',
+      argument: {
+        name: 'spec-id',
+        required: true,
+        description: 'The spec whose acceptance criteria become this session’s stop condition',
+      },
+      description:
+        "Bind this session to a spec's acceptance criteria. Refuses a spec that does not load or declares no criteria, because either would surface at stop time as an unactionable refusal. Only verdict=verified counts as met; not_rederived is narrative-only evidence and does not pass.",
+      options: [DATA_OPTION],
+    },
+    {
+      kind: 'leaf',
+      name: 'show',
+      description:
+        "Report this session's goal binding and the gate's consecutive-block count, read-only. Reports the counter; never edits it. Always exits 0.",
+      options: [DATA_OPTION],
+    },
+    {
+      kind: 'leaf',
+      name: 'clear',
+      description:
+        'Release this session from its goal. Allowed without human approval — the gate’s block budget already guarantees a goal can never trap a session, so the escape is not what makes it safe. Clearing does NOT mean the criteria were met: it prints a record naming the spec it dropped so the release is legible rather than silent. Recorded evidence is unchanged.',
+      options: [DATA_OPTION],
+    },
+  ],
+};
+
 export const HANDOFF_COMMAND_META: GroupCommandMeta = {
   kind: 'group',
   name: 'handoff',
@@ -2620,4 +2655,5 @@ export const COMMAND_SURFACE_METADATA: readonly CommandMeta[] = Object.freeze([
   MESSAGE_COMMAND_META,
   SESSION_COMMAND_META,
   WORKING_TREE_COMMAND_META,
+  GOAL_COMMAND_META,
 ]);

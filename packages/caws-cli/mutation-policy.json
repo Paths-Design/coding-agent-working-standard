@@ -113,6 +113,7 @@
         "src/shell/commands/events.ts",
         "src/shell/commands/evidence.ts",
         "src/shell/commands/gates.ts",
+        "src/shell/commands/goal.ts",
         "src/shell/commands/handoff.ts",
         "src/shell/commands/hooks.ts",
         "src/shell/commands/init.ts",

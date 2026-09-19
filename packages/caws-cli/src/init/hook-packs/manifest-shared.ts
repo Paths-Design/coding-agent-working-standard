@@ -501,7 +501,20 @@ import { isAdapterCoveredSurface } from './types';
 // per dispatch; lib/guard-config.sh exports the result so adopting guards read
 // plain variables and spawn nothing. Measured: a python3 start is ~31ms, so
 // four guards parsing independently would cost ~124ms on every tool call.
-export const SHARED_PACK_VERSION = 84;
+//
+// v85 (CAWS-GOAL-AC-STOP-GATE-01): the acceptance stop gate. goal-ac-gate.sh
+// joins the Stop chain and is the first handler in this pack that may emit a
+// hard control decision from that event: given a `caws goal set <spec-id>`
+// binding it re-derives the spec's acceptance and refuses the stop while any
+// criterion is unproven. Inert without a binding.
+//
+// 85 rather than 84 because this and the tier-2 guard config were developed on
+// separate branches that BOTH bumped the shared pack to 84. Keeping either
+// side's 84 would publish two different pack contents under one version, and
+// every installed consumer decides whether to update by comparing that number
+// — so the collision would be invisible and permanent. The merged tree is new
+// content and takes a new number.
+export const SHARED_PACK_VERSION = 85;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +
@@ -978,6 +991,15 @@ export const SHARED_PACK: HookPackV1 = {
     {
       destPath: '.caws/hooks/agent-register.sh',
       sourcePath: 'agent-register.sh',
+      executable: true,
+      managed: true,
+    },
+    // CAWS-GOAL-AC-STOP-GATE-01: policy plane, not telemetry. Opt-in via a
+    // per-session goal binding; inert with no binding, so every surface can
+    // carry it without changing stop behavior until a goal is set.
+    {
+      destPath: '.caws/hooks/goal-ac-gate.sh',
+      sourcePath: 'goal-ac-gate.sh',
       executable: true,
       managed: true,
     },
