@@ -56,3 +56,9 @@ non_functional: {}
 contracts:
   - name: 'read-surface-unsourced-fact'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "tests/shell/worktree-list-json.test.js C1 + C1b at 94d7c62a, over a three-lane fixture repo with real git branches. C1 asserts the payload parses, carries ok/source/computed_at (a parseable ISO date) and one entry per registry row, and that the wt-behind entry deep-equals divergence {ahead:1, behind:2, contains_base:false, unknown_reason:null} with branch, base_branch, spec_id, owner.session_id and path populated. It also asserts stdout contains no prose ('Reconcile now' absent) -- a stray footer line is the usual way a --json flag is half-implemented and would break every consumer. C1b pins that an unbound/unowned row emits spec_id null and owner null rather than the human form's '(unbound)'/'unowned' rendering strings. Live CLI artifact on this repo through Commander on dist: source '.caws/worktrees.json', computed_at 2026-09-19T10:42:13.400Z, two entries with full session ids and divergence ahead 0 behind 1968 / ahead 0 behind 1. Baseline before the change: 10 of 10 tests failed."
+    recorded_at: "2026-09-19T10:46:18.969Z"
+    commit_sha: "94d7c62a"
