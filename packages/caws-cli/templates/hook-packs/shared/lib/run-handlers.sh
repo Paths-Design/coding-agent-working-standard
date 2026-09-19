@@ -101,6 +101,29 @@ _rh_stdout_priority() {
   local payload="$1"
   local decision
   decision=$(printf '%s' "$payload" | jq -r '.decision // .hookSpecificOutput.permissionDecision // ""' 2>/dev/null || true)
+
+  # jq is not a declared dependency of this pack, and on a host without it the
+  # command above yields an empty decision for EVERY handler. That does not
+  # degrade gracefully: it flattens the ranking, so a guard's refusal ties with
+  # an advisory finalizer's stdout and whichever the loop happens to select is
+  # what reaches the harness. A dropped `block` is a guard that is not
+  # enforcing -- silently, and only on the thin hosts nobody tests on.
+  #
+  # Fall back to a literal scan. It is deliberately narrower than the jq path:
+  # it matches the exact serialization every guard in this pack emits
+  # (compact separators, no spaces), so it cannot invent a decision from prose
+  # that merely mentions one. A handler that emits a spaced or nested variant
+  # is ranked advisory here, same as before -- this only ever ADDS a refusal
+  # that would otherwise have been lost, and never manufactures one.
+  if [[ -z "$decision" ]] && ! command -v jq >/dev/null 2>&1; then
+    case "$payload" in
+      *'"decision":"block"'* | *'"decision":"deny"'* | *'"permissionDecision":"deny"'*)
+        decision="block" ;;
+      *'"decision":"ask"'* | *'"permissionDecision":"ask"'*)
+        decision="ask" ;;
+    esac
+  fi
+
   case "$decision" in
     block|deny) printf '3\n' ;;
     ask) printf '2\n' ;;

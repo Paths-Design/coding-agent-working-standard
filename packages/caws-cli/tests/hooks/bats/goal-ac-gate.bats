@@ -69,7 +69,7 @@ run_gate() {
 # that never reaches Claude Code, so the handler-level tests alone cannot show
 # the gate works end to end.
 run_gate_via_dispatcher() {
-  _run_target "$CAWS_TEST_HOOKS_DIR/dispatch/stop.sh" "${1:-3}" "$PATH"
+  _run_target "$CAWS_TEST_HOOKS_DIR/dispatch/stop.sh" "${1:-3}" "${2:-$PATH}"
 }
 
 # Same, but with a caller-supplied PATH (used to remove or shadow python3).
@@ -94,16 +94,20 @@ _run_target() {
 # binaries the gate needs) keeps the fixture honest: the gate and the libs it
 # sources still find everything else they actually use, so a block here is
 # attributable to the missing interpreter and not to a starved PATH.
-make_python3_free_path() {
-  local mirror entry bin base
-  mirror="$STUB_DIR/nopy"
+make_python3_free_path() { _make_path_without 'python3*' nopy; }
+make_jq_free_path() { _make_path_without 'jq' nojq; }
+
+_make_path_without() {
+  local exclude="$1" mirror entry bin base
+  mirror="$STUB_DIR/$2"
   mkdir -p "$mirror"
   while IFS= read -r entry; do
     [[ -d "$entry" ]] || continue
     for bin in "$entry"/*; do
       [[ -e "$bin" ]] || continue
       base="$(basename "$bin")"
-      case "$base" in python3*) continue ;; esac
+      # shellcheck disable=SC2254
+      case "$base" in $exclude) continue ;; esac
       [[ -e "$mirror/$base" ]] || ln -s "$bin" "$mirror/$base" 2>/dev/null
     done
   done < <(printf '%s' "$PATH" | tr ':' '\n')
@@ -391,6 +395,22 @@ report_all_verified() {
   make_caws_stub "$(report_all_verified)" 0
   run_gate_via_dispatcher
   refute_output --partial '"decision":"block"'
+}
+
+@test "E2E: the block survives the dispatcher on a host without jq" {
+  write_binding
+  make_caws_stub "$(report_unmet)" 0
+  # run_handlers ranks each handler's stdout with `jq -r '.decision ...'` to
+  # decide which control decision to forward. jq is not a declared dependency
+  # of the pack, so this pins what happens to a refusal when the ranker cannot
+  # read it: the gate's block must still reach the harness, because a guard
+  # that silently degrades to "no decision" on a thin host is a guard that is
+  # not enforcing anything there.
+  local nojq
+  nojq="$(make_jq_free_path)"
+  run_gate_via_dispatcher 3 "$nojq"
+  assert_output --partial '"decision":"block"'
+  assert_output --partial 'A2=not_rederived'
 }
 
 @test "E2E: with no binding the Stop dispatcher is unchanged by this feature" {
