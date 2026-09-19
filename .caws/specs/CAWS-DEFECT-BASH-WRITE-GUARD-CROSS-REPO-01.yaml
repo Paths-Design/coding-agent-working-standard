@@ -56,3 +56,9 @@ contracts:
     type: behavior
     path: 'packages/caws-cli/templates/hook-packs/shared/bash-write-guard.sh'
     description: 'Bash mutation targets that resolve inside a different git repository block with exit 2 and a DIFFERENT-repository message, for command-line-named and interpreter-payload targets alike.'
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "packages/caws-cli/tests/hooks/bash-write-guard-interpreter-cross-repo.test.js — 'the observed bypass blocks: node runs a scratch script whose body writes a sibling repo' and 'a python script composing its target from Path.home() blocks' and 'a python script writing a sibling repo via an absolute literal blocks'. Each spawns the real template guard (execFileSync bash bash-write-guard.sh) against a fixture with a real git repo under a fake $HOME, and asserts exit 2 AND that stderr matches /DIFFERENT repository/ AND contains the sibling path. Asserted-failing baseline before the fix: all three failed (guard exit 0). Run: cd packages/caws-cli && npx jest tests/hooks/bash-write-guard-interpreter-cross-repo.test.js => 16/16."
+    recorded_at: "2026-09-19T04:04:38.632Z"
+    commit_sha: "824d176d"
