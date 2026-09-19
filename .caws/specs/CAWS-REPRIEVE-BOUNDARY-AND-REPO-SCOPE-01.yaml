@@ -1,0 +1,61 @@
+id: CAWS-REPRIEVE-BOUNDARY-AND-REPO-SCOPE-01
+title: 'A reprieve names a boundary and a repo: no partial grant across handlers that jointly enforce one invariant, and no silent machine-wide reach'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-19T04:06:42.915Z'
+updated_at: '2026-09-19T04:06:42.915Z'
+created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
+blast_radius:
+  modules:
+    - 'reprieve control plane (writer + hook reader)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/reprieve.ts'
+    - 'packages/caws-cli/templates/hook-packs/shared/lib/reprieve.sh'
+    - 'packages/caws-cli/src/init/hook-packs/manifest-shared.ts'
+    - 'packages/caws-cli/tests/init/pack-fingerprints.json'
+    - 'packages/caws-cli/tests/shell/reprieve-boundary-and-repo-scope.test.js'
+    - 'packages/caws-cli/tests/hooks/bats/reprieve.bats'
+  out: []
+invariants:
+  - 'A grant that names some but not all handlers of a declared boundary set is REFUSED, and the refusal names the co-handlers and prints the completed command.'
+  - 'A reprieve record carries the repo it was granted for; the hook reader honors it only in that repo unless the grant was explicitly machine-wide.'
+  - 'Defaults move narrower, never wider: an omitted scope means this repo, and machine-wide reach requires an explicit flag.'
+acceptance:
+  - id: A1
+    given: 'a session in a repo with the shared guard pack'
+    when: 'caws reprieve grant names scope-guard.sh but not bash-write-guard.sh'
+    then: 'the grant is refused, the output names bash-write-guard.sh as a co-handler of the cross-repo-write boundary, and prints the completed --handlers command'
+  - id: A2
+    given: 'the same session'
+    when: 'the grant names every handler of the boundary'
+    then: 'it is written normally'
+  - id: A3
+    given: 'the same session'
+    when: 'the grant names only handlers that belong to no declared boundary set'
+    then: 'it is written normally (the completeness rule constrains declared sets only)'
+  - id: A4
+    given: 'a grant made without an explicit scope flag while inside repo A'
+    when: 'the record is written'
+    then: 'it carries repo A''s root, and caws reprieve show reports the grant as scoped to repo A'
+  - id: A5
+    given: 'a repo-scoped grant for repo A'
+    when: 'a guard in repo B consults the reader for a named handler'
+    then: 'no ADMIT is emitted and the guard refuses as if no reprieve existed'
+  - id: A6
+    given: 'a grant made with the explicit machine-wide flag'
+    when: 'a guard in any repo consults the reader'
+    then: 'ADMIT is emitted, and both grant and show state the reach is machine-wide'
+  - id: A7
+    given: 'a reprieve record written by an older CLI with no repo field'
+    when: 'the reader consults it'
+    then: 'it is honored machine-wide as before, so an in-flight grant is not silently voided by the upgrade'
+non_functional: {}
+contracts:
+  - name: 'reprieve-boundary-completeness'
+    type: behavior
+  - name: 'reprieve-repo-scope'
+    type: behavior
