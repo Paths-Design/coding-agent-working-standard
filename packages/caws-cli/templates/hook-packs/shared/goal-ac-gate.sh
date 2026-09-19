@@ -33,7 +33,7 @@
 #
 # The gate never writes evidence: `caws specs evidence` remains the single
 # writer of acceptance truth. It only ever reads verify-acs and writes its own
-# block counter back into the binding file.
+# block counter to a sidecar next to the binding.
 
 set -uo pipefail
 
@@ -43,11 +43,42 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/parse-input.sh" 2>/dev/null || exit 0
 # shellcheck source=lib/agent-surface.sh
 source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
-parse_hook_input || exit 0
+
+# NOT `parse_hook_input || exit 0`, which is the right idiom for every other
+# handler in this pack and the wrong one here.
+#
+# parse_hook_input extracts HOOK_SESSION_ID with python3 (lib/parse-input.sh).
+# So on a host where python3 is missing or broken, the parse fails and the
+# `|| exit 0` turns this gate off SILENTLY -- and it turns it off upstream of
+# every fail-closed path below, which would then be unreachable decoration.
+# For an advisory handler that is fine; for the one handler whose whole job is
+# to refuse, "the JSON parser broke" must not be a way to pass.
+#
+# The gate needs exactly one field: the session id, which identifies the
+# binding. The surface exports it too, so resolve it independently and let the
+# rest of the parse be best-effort.
+parse_hook_input >/dev/null 2>&1 || true
+HOOK_SESSION_ID="${HOOK_SESSION_ID:-}"
+if [[ -z "$HOOK_SESSION_ID" || "$HOOK_SESSION_ID" == "unknown" ]]; then
+  HOOK_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-${CAWS_SESSION_ID:-}}"
+fi
 
 # A1/A5 bound: after this many consecutive blocks with an unchanged unmet set,
 # the gate degrades to a warning. A goal must never trap a session.
-GOAL_MAX_CONSECUTIVE_BLOCKS="${CAWS_GOAL_MAX_CONSECUTIVE_BLOCKS:-3}"
+GOAL_MAX_CONSECUTIVE_BLOCKS_DEFAULT=3
+GOAL_MAX_CONSECUTIVE_BLOCKS="${CAWS_GOAL_MAX_CONSECUTIVE_BLOCKS:-$GOAL_MAX_CONSECUTIVE_BLOCKS_DEFAULT}"
+
+# Validate before ANY arithmetic. `(( COUNT > $notanumber ))` under `set -u` is
+# not a comparison that returns false -- bash resolves the bare word as a
+# variable name, finds it unset, and a non-interactive shell EXITS. That would
+# kill this handler before it could emit anything, silently releasing the stop:
+# a misconfigured budget would disable the gate in the fail-OPEN direction,
+# which is the one direction a guard must never fail.
+if ! [[ "$GOAL_MAX_CONSECUTIVE_BLOCKS" =~ ^[0-9]+$ ]] || [[ "$GOAL_MAX_CONSECUTIVE_BLOCKS" == "0" ]]; then
+  printf 'CAWS goal-ac-gate: CAWS_GOAL_MAX_CONSECUTIVE_BLOCKS=%s is not a positive integer; falling back to %s. The gate stays ACTIVE.\n' \
+    "$GOAL_MAX_CONSECUTIVE_BLOCKS" "$GOAL_MAX_CONSECUTIVE_BLOCKS_DEFAULT" >&2
+  GOAL_MAX_CONSECUTIVE_BLOCKS="$GOAL_MAX_CONSECUTIVE_BLOCKS_DEFAULT"
+fi
 
 ESCAPE_HINT='Clear it with: caws goal clear'
 
@@ -62,20 +93,84 @@ BINDING_FILE="$PROJECT_DIR/.caws/sessions/$HOOK_SESSION_ID/goal.json"
 # The opt-in switch. No binding -> byte-identical to the pre-feature chain. (A3)
 [[ -f "$BINDING_FILE" ]] || exit 0
 
-if ! command -v python3 >/dev/null 2>&1; then
-  # Fail LOUD, not closed: a missing interpreter is an operator problem, and
-  # trapping every stop in the repo behind it would be worse than the gap.
-  printf 'CAWS goal-ac-gate: python3 not found, so the acceptance gate cannot evaluate. Goal NOT enforced this stop. %s\n' "$ESCAPE_HINT" >&2
-  exit 0
-fi
+# Bash-only JSON string escaper. Our reason strings are built here and never
+# contain raw control characters, so escaping backslash and double-quote is
+# sufficient to produce a valid JSON string body.
+_goal_json_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  printf '%s' "$s"
+}
+
+# Bounded block. $1 = a key identifying WHY we are blocking; $2 = reason text.
+#
+# Every block path must go through here. A block that does not increment a
+# bounded counter can repeat forever, and "a goal can never trap a session" is
+# an invariant of this gate -- it has to hold for gate FAILURES too, not just
+# for unmet criteria. A persistently broken verify-acs is exactly the case
+# where an unbounded refusal would strand the session with no in-band exit.
+#
+# The counter lives in a plain-text sidecar and is maintained with pure bash so
+# that bounding still works when python3 is unavailable or broken. The key is
+# hashed to a filename-safe token; a CHANGED key restarts the budget, so real
+# progress (a different unmet set) is never punished.
+COUNT_FILE="${BINDING_FILE%/goal.json}/goal-blocks"
+_goal_bounded_block() {
+  local key="$1" reason="$2" prev_key="" n=0
+  # The sidecar is one TAB-separated line, so a tab or newline inside the key
+  # would desynchronize the parse on the next stop and silently reset the budget
+  # every time -- an unbounded block wearing a bounded one's clothes. An AC
+  # `reason` is free text from the spec and can contain either.
+  key="${key//$'\t'/ }"
+  key="${key//$'\n'/ }"
+  if [[ -n "$COUNT_FILE" && -f "$COUNT_FILE" ]]; then
+    IFS=$'\t' read -r prev_key n < "$COUNT_FILE" 2>/dev/null || { prev_key=""; n=0; }
+    [[ "$n" =~ ^[0-9]+$ ]] || n=0
+  fi
+  if [[ "$prev_key" == "$key" ]]; then
+    n=$(( n + 1 ))
+  else
+    n=1
+  fi
+  [[ -n "$COUNT_FILE" ]] && printf '%s\t%s\n' "$key" "$n" > "$COUNT_FILE" 2>/dev/null
+
+  if (( n > GOAL_MAX_CONSECUTIVE_BLOCKS )); then
+    printf 'CAWS goal-ac-gate: still blocking after %d consecutive stops with no change - releasing the stop rather than trapping the session.\n  Reason: %s\n  %s\n' \
+      "$GOAL_MAX_CONSECUTIVE_BLOCKS" "$reason" "$ESCAPE_HINT" >&2
+    return 1
+  fi
+  emit_block "$reason Block $n of $GOAL_MAX_CONSECUTIVE_BLOCKS before this gate releases the stop."
+  return 0
+}
 
 emit_block() {
   # $1 = reason text (already free of raw newlines).
   # Compact separators so the emitted decision is byte-identical in shape to
   # every other guard in this pack ({"decision":"block",...}); anything that
   # greps for that literal must match this handler too.
-  python3 -c 'import json,sys; print(json.dumps({"decision":"block","reason":sys.argv[1]},separators=(",",":"),ensure_ascii=False))' "$1"
+  #
+  # The bash fallback is load-bearing, not belt-and-braces: python3 can be
+  # PRESENT but non-functional (broken venv, missing stdlib, wrong arch). If
+  # emit_block depended on it alone, that case would produce no stdout at all
+  # and silently release the stop -- a guard failing open through its own
+  # error path. Blocking must not depend on the thing that might be broken.
+  if python3 -c 'import json,sys; print(json.dumps({"decision":"block","reason":sys.argv[1]},separators=(",",":"),ensure_ascii=False))' "$1" 2>/dev/null; then
+    return 0
+  fi
+  printf '{"decision":"block","reason":"%s"}\n' "$(_goal_json_escape "$1")"
 }
+
+# A missing interpreter is an operator problem, but "cannot evaluate" is never a
+# pass: the gate refuses rather than waving the stop through. It is safe to fail
+# CLOSED here precisely because the refusal is bounded and the counter above is
+# pure bash -- the session gets a loud, actionable message for a few stops and
+# is then released, so a broken environment degrades instead of trapping.
+if ! command -v python3 >/dev/null 2>&1; then
+  _goal_bounded_block "no-python3" \
+    "CAWS goal-ac-gate: python3 was not found, so this session's acceptance gate cannot evaluate its bound spec. Not evaluating is not the same as passing, so the stop is refused. Install python3 in the hook environment, or release the session with: caws goal clear."
+  exit 0
+fi
 
 SPEC_ID="$(python3 -c '
 import json,sys
@@ -87,13 +182,15 @@ if isinstance(v,str): print(v.strip())
 ' "$BINDING_FILE" 2>/dev/null)"
 
 if [[ -z "$SPEC_ID" ]]; then
-  emit_block "CAWS goal-ac-gate: the goal binding at .caws/sessions/$HOOK_SESSION_ID/goal.json is unreadable or names no spec_id, so the acceptance bar for this session cannot be determined. Re-set it with: caws goal set <spec-id>. $ESCAPE_HINT"
+  _goal_bounded_block "no-spec-id" \
+    "CAWS goal-ac-gate: the goal binding at .caws/sessions/$HOOK_SESSION_ID/goal.json is unreadable or names no spec_id, so the acceptance bar for this session cannot be determined. Re-set it with: caws goal set <spec-id>. $ESCAPE_HINT"
   exit 0
 fi
 
 CAWS_BIN="${CAWS_BIN:-caws}"
 if ! command -v "$CAWS_BIN" >/dev/null 2>&1; then
-  printf 'CAWS goal-ac-gate: %s not on PATH, so the acceptance gate cannot evaluate. Goal NOT enforced this stop. %s\n' "$CAWS_BIN" "$ESCAPE_HINT" >&2
+  _goal_bounded_block "no-caws-bin" \
+    "CAWS goal-ac-gate: '$CAWS_BIN' is not on PATH, so the acceptance criteria of $SPEC_ID cannot be re-derived. Not evaluating is not the same as passing, so the stop is refused. Put the caws CLI on PATH (or set CAWS_BIN), or release the session with: caws goal clear."
   exit 0
 fi
 
@@ -104,7 +201,8 @@ VERIFY_STATUS=$?
 # YAML, crash). Block and name the failure — never pass the stop silently on an
 # unreadable gate.
 if [[ -z "$REPORT" ]]; then
-  emit_block "CAWS goal-ac-gate: 'caws specs verify-acs $SPEC_ID --json' produced no report (exit $VERIFY_STATUS), so the acceptance bar for $SPEC_ID cannot be re-derived. This is a gate failure, not a pass. Investigate, then retry. $ESCAPE_HINT"
+  _goal_bounded_block "no-report" \
+    "CAWS goal-ac-gate: 'caws specs verify-acs $SPEC_ID --json' produced no report (exit $VERIFY_STATUS), so the acceptance bar for $SPEC_ID cannot be re-derived. This is a gate failure, not a pass. Investigate, then retry. $ESCAPE_HINT"
   exit 0
 fi
 
@@ -136,56 +234,33 @@ STATE="${SUMMARY%%$'\t'*}"
 UNMET_LIST="${SUMMARY#*$'\t'}"
 
 if [[ "$STATE" == "PARSE_ERROR" || "$STATE" == "NO_CRITERIA" ]]; then
-  emit_block "CAWS goal-ac-gate: the verify-acs report for $SPEC_ID was unreadable or declared no criteria ($STATE), so the acceptance bar cannot be evaluated. This is a gate failure, not a pass. $ESCAPE_HINT"
+  _goal_bounded_block "bad-report-$STATE" \
+    "CAWS goal-ac-gate: the verify-acs report for $SPEC_ID was unreadable or declared no criteria ($STATE), so the acceptance bar cannot be evaluated. This is a gate failure, not a pass. $ESCAPE_HINT"
   exit 0
 fi
 
-# A2: every criterion verified -> the goal is met. Reset the counter, stay silent.
+# A4: anything that is not one of the four states the classifier can emit means
+# the classifier itself failed (interpreter died, SIGPIPE, truncated output).
+# Dispatch on it EXPLICITLY. Falling through to the unmet branch would render a
+# gate failure as a legitimate "criteria not met" verdict with an empty criteria
+# list, and -- worse -- would spend the A5 budget on it, releasing the session
+# after N stops as though the bar had been fairly tested and missed.
+if [[ "$STATE" != "MET" && "$STATE" != "UNMET" ]]; then
+  _goal_bounded_block "classifier-failed" \
+    "CAWS goal-ac-gate: the acceptance classifier produced no usable verdict for $SPEC_ID (state='$STATE'), so the criteria were never evaluated. This is a gate failure, not an unmet-criteria result and not a pass. Check that python3 can run in the hook environment. $ESCAPE_HINT"
+  exit 0
+fi
+
+# A2: every criterion verified -> the goal is met. Clear the counter so a later
+# regression starts from a full budget rather than a spent one, and stay silent.
 if [[ "$STATE" == "MET" ]]; then
-  python3 -c '
-import json,sys
-p=sys.argv[1]
-try:
-    with open(p) as f: b=json.load(f)
-except Exception: sys.exit(0)
-b["consecutive_blocks"]=0
-b["last_unmet_digest"]=""
-try:
-    with open(p,"w") as f: json.dump(b,f,indent=2)
-except Exception: pass
-' "$BINDING_FILE" 2>/dev/null
+  rm -f "$COUNT_FILE" 2>/dev/null
   exit 0
 fi
 
-# A1/A5: unmet. Bump the counter, but only while the unmet set is unchanged —
-# recording new evidence resets the budget so real progress is never punished.
-COUNT="$(python3 -c '
-import json,sys,hashlib
-p,digest_src=sys.argv[1],sys.argv[2]
-digest=hashlib.sha256(digest_src.encode()).hexdigest()[:16]
-try:
-    with open(p) as f: b=json.load(f)
-except Exception:
-    b={}
-prev=b.get("last_unmet_digest")
-n=b.get("consecutive_blocks",0)
-n=(n+1) if prev==digest else 1
-b["consecutive_blocks"]=n
-b["last_unmet_digest"]=digest
-try:
-    with open(p,"w") as f: json.dump(b,f,indent=2)
-except Exception: pass
-print(n)
-' "$BINDING_FILE" "$UNMET_LIST" 2>/dev/null)"
-[[ -z "$COUNT" ]] && COUNT=1
-
-if (( COUNT > GOAL_MAX_CONSECUTIVE_BLOCKS )); then
-  # A5: budget exhausted with no new evidence. Degrade to a loud warning and
-  # let the session stop. A goal can never trap a session indefinitely.
-  printf 'CAWS goal-ac-gate: goal for %s still UNMET after %d consecutive stops with no new evidence — releasing the stop rather than trapping the session.\n  Unmet: %s\n  %s\n' \
-    "$SPEC_ID" "$GOAL_MAX_CONSECUTIVE_BLOCKS" "$UNMET_LIST" "$ESCAPE_HINT" >&2
-  exit 0
-fi
-
-emit_block "CAWS goal-ac-gate: goal for $SPEC_ID is not met — $UNMET_LIST. Only verdict=verified counts as met; not_rederived is narrative-only evidence, not proof. Record real proof with 'caws specs evidence' (cite a commit_sha/test_nodeid, then re-derive with 'caws specs verify-acs $SPEC_ID'). Block $COUNT of $GOAL_MAX_CONSECUTIVE_BLOCKS before this gate releases the stop. $ESCAPE_HINT"
+# A1/A5: unmet. The key IS the unmet set, so the budget only accumulates while
+# nothing changes — recording new evidence changes the key and restarts the
+# count, and real progress is never punished for taking more than N stops.
+_goal_bounded_block "unmet:$UNMET_LIST" \
+  "CAWS goal-ac-gate: goal for $SPEC_ID is not met — $UNMET_LIST. Only verdict=verified counts as met; not_rederived is narrative-only evidence, not proof. Record real proof with 'caws specs evidence' (cite a commit_sha/test_nodeid, then re-derive with 'caws specs verify-acs $SPEC_ID'). $ESCAPE_HINT"
 exit 0
