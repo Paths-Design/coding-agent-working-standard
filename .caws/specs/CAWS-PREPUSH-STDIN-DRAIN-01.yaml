@@ -39,3 +39,9 @@ non_functional: {}
 contracts:
   - name: 'prepush-stdin-protocol'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "T11a: a 256 KiB ref-list payload (larger than any pipe buffer, verified by T11-setup) is written into a fifo that the real .husky/pre-push reads as stdin; the writer exits 0. Mutation-verified: deleting the drain block makes the writer exit 141 (SIGPIPE) and kills T11a, 54 -> 53 passed."
+    recorded_at: "2026-09-19T18:33:35.904Z"
+    commit_sha: "9ecd0ee0"
