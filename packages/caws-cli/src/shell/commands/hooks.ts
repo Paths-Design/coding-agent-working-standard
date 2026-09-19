@@ -151,6 +151,41 @@ function describeSelection(
 }
 
 /** `caws hooks list` — always exits 0; it is explanatory, never enforcing. */
+/**
+ * Tier-2 rows for rendering, or null when the repo declares no `guards`.
+ *
+ * `reason` is REQUIRED at authoring — parseRepoHookPolicy refuses an entry
+ * under 12 characters — and until this existed, nothing read it back. A
+ * required field with no reader is theater, and this is the specific field
+ * the anti-abuse doctrine depends on a reviewer seeing: the test for "should
+ * this be config or an upstream fix?" is answered in the reason, and an
+ * answer nobody displays cannot be reviewed.
+ */
+function guardConfigRows(
+  policy: RepoHookPolicy
+):
+  | {
+      guard: string;
+      prefixes: { prefix: string; reason: string }[];
+      thresholds: [string, number][];
+    }[]
+  | null {
+  const rows = Object.keys(policy.guards)
+    .sort()
+    .map((guard) => {
+      const config = policy.guards[guard];
+      return {
+        guard,
+        prefixes: config?.additional_allow_prefixes ?? [],
+        thresholds: Object.entries(config?.thresholds ?? {}).sort(([a], [b]) =>
+          a < b ? -1 : a > b ? 1 : 0
+        ),
+      };
+    })
+    .filter((row) => row.prefixes.length > 0 || row.thresholds.length > 0);
+  return rows.length > 0 ? rows : null;
+}
+
 export function runHooksListCommand(options: HooksListOptions = {}): number {
   const ctx = repoContext(options.cwd ?? process.cwd());
   if (isError(ctx)) {
@@ -192,6 +227,12 @@ export function runHooksListCommand(options: HooksListOptions = {}): number {
                 ),
                 forks: declared.forks,
               },
+        // Tier 2 is NOT surface-scoped — `guards` is top-level on the
+        // document, because what data a guard reads does not vary by which
+        // harness invoked it. Emitted under its own key rather than folded
+        // into `declared` so a consumer can tell "this guard was added or
+        // removed" from "this guard reads extra data".
+        guards: parsedPolicy.ok ? guardConfigRows(parsedPolicy.policy) : null,
       })}\n`
     );
     return 0;
@@ -240,6 +281,27 @@ export function runHooksListCommand(options: HooksListOptions = {}): number {
             `(shipping ${SHARED_PACK_VERSION}${lag > 0 ? `, ${lag} behind` : ''}) ` +
             `approved by ${fork.approver} — ${fork.reason}\n`
         );
+      }
+    }
+  }
+  // Tier 2: what data a running guard reads, as opposed to which guards run.
+  // Rendered as its own section rather than beside the chain, because these
+  // entries change no handler's PRESENCE — a reader scanning the chain for
+  // "why did this guard decide that?" needs to see them, and would not find
+  // them on any chain row.
+  const guardRows = parsedPolicy.ok ? guardConfigRows(parsedPolicy.policy) : null;
+  if (guardRows !== null) {
+    process.stdout.write('\n  guard configuration (tier 2 — data a guard reads, not which run)\n');
+    for (const row of guardRows) {
+      process.stdout.write(`    ${row.guard}\n`);
+      for (const entry of row.prefixes) {
+        process.stdout.write(`      allow-prefix ${entry.prefix} — ${entry.reason}\n`);
+      }
+      for (const [name, value] of row.thresholds) {
+        // Named as overridable, because env still wins: the precedence is
+        // env > config > shipped default, so a reader comparing this number
+        // against observed behavior needs to know an env var can outrank it.
+        process.stdout.write(`      threshold ${name} = ${value} (env overrides this)\n`);
       }
     }
   }
