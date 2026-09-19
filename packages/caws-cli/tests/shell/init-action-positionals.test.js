@@ -42,6 +42,15 @@ function spawnCli(root, args) {
   return spawnSync(process.execPath, [CLI, ...args], {
     cwd: root,
     encoding: 'utf8',
+    // `init diff` against a repo with no installed pack prints the WHOLE shared
+    // pack as a diff, so this output grows with every file added to the pack.
+    // spawnSync's default maxBuffer is 1 MiB, and exceeding it does not surface
+    // as a readable failure: node SIGTERMs the child and returns status null
+    // with error ENOBUFS, so `expect(result.status).toBe(0)` reports a killed
+    // process as if the CLI had misbehaved. The pack crossed 1 MiB when
+    // goal-ac-gate.sh landed; without this the next file added would break it
+    // again, and the next reader would debug the CLI instead of the harness.
+    maxBuffer: 64 * 1024 * 1024,
     env: {
       ...process.env,
       CAWS_HOME: path.join(root, 'machine-home'),
