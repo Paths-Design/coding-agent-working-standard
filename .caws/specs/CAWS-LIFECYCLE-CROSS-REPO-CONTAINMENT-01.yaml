@@ -71,6 +71,12 @@ acceptance:
       the command is admitted AND announces the reprieve that admitted it, so a
       crossing is never silent; the same grant scoped to another repo or expired
       does not admit it
+  - id: A7
+    given: 'a session pinned to repo A'
+    when: 'it runs specs close, worktree create, and worktree merge from repo B'
+    then: >-
+      each of the three refuses with the same containment diagnostic, proving all
+      four governed entry points are covered rather than specs create alone
 non_functional: {}
 contracts:
   - name: 'session-origin-record'
