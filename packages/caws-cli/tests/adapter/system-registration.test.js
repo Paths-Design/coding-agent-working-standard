@@ -345,3 +345,34 @@ test('registration still SUCCEEDS for the supported surfaces (no over-refusal)',
     expect(fs.existsSync(path.join(home, `surfaces/${surface}`))).toBe(true);
   }
 });
+
+test('the registration-disagreement refusal names the step that is actually stale', () => {
+  // This message had no test at all, which is how it stayed unfollowable. It
+  // fires when a NEWER build finds registration written by an older one, so
+  // the thing it tells you to run is the thing that already ran and reported
+  // OK. Following it verbatim cannot resolve it -- the stale step is the CLI
+  // snapshot upstream, and the message has to say so or the operator loops.
+  const { systemSurfaceEnabled } = require('../../dist/init/system-runtime');
+  fs.mkdirSync(path.join(home, 'surfaces/codex'), { recursive: true });
+  fs.writeFileSync(
+    path.join(home, 'surfaces/codex/settings.json'),
+    JSON.stringify({ version: 1, enabled: true })
+  );
+
+  // The user home must be passed, not inherited: os.homedir() is cached by
+  // libuv, so swapping process.env.HOME does NOT isolate this call. The first
+  // draft of this test did exactly that and ran against the developer's own
+  // ~/.codex -- the non-vacuity assertion below is what caught it.
+  let thrown;
+  try {
+    systemSurfaceEnabled('codex', home, user);
+  } catch (error) {
+    thrown = error;
+  }
+  // Non-vacuity: this must actually be the disagreement path, not some other
+  // failure that happens to throw.
+  expect(thrown && thrown.message).toContain('native registration disagree');
+  expect(thrown.message).toContain('caws init adapters configure --agent-surface codex');
+  expect(thrown.message).toContain('caws init adapters install');
+  expect(thrown.message).toMatch(/caws on PATH is a pinned/);
+});
