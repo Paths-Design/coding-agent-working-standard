@@ -54,3 +54,9 @@ evidence:
     recorded_at: "2026-09-19T02:40:05.489Z"
     artifact_path: packages/caws-cli/tests/hooks/bats/scope-guard.bats
     commit_sha: "60460679"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Both directions of the dot-segment case, as a matched pair over one mechanism. INSIDE: 'an in-repo path with . and .. segments is not foreign' drives $CAWS_TEST_REPO/./src/../src/app.ts and asserts the foreign text is absent; it FAILED pre-fix with the block naming '.../T//caws-bats-Rypi8G/./src/../src/app.ts' as a different repository than '.../T/caws-bats-Rypi8G'. OUTSIDE: ''..' that ESCAPES the project is still foreign after normalization' drives $CAWS_TEST_REPO/../<other-tmpdir>/src/f.ts and asserts exit 2 plus 'DIFFERENT repository'. One mechanism decides both, which is the design claim: dot segments are not special-cased, they are resolved, and the resolved path is then compared — so whether a '..' is admissible follows from where it LANDS rather than from a syntactic rule about how many levels are allowed. IMPLEMENTATION DETAIL THAT MATTERS FOR THIS AC: resolution is done on the PARENT directory via 'cd && pwd' with the basename re-appended, never on the full path, because the target of a Write does not exist yet — a realpath-style call on the full path would fail precisely on the tool this guard governs. The missing-parent case falls back to a pure-bash lexical walk (_caws_lexical_path), which is bash 3.2 safe: it rebuilds the array with an explicit empty guard rather than negative slicing, since macOS ships bash 3.2. Run: npx bats tests/hooks/bats/scope-guard.bats => 22/22; full bats => 407 ok, 0 not ok; full jest => 247/247, 3320/3320, exit 0."
+    recorded_at: "2026-09-19T02:40:18.816Z"
+    artifact_path: packages/caws-cli/tests/hooks/bats/scope-guard.bats
+    commit_sha: "60460679"
