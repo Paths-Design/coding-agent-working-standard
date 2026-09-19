@@ -236,9 +236,13 @@ test('A5: overlap without fork identity is summarized as unresolved, never asser
   expect(text.status).toBe(0);
   expect(text.stdout).not.toContain('conjoined-hint:');
   expect(text.stdout).not.toContain('unknown-a <=> unknown-b');
+  // The pair count and the lease-classification coverage are separate
+  // statements naming their own units (CAWS-AGENTS-LIST-DISCLOSURE-01); one
+  // sentence carrying both read as a ratio between unrelated populations.
   expect(text.stdout).toContain(
-    'conjoined-unresolved: 1 recent same-platform overlap(s) lack complete fork identity'
+    'conjoined-unresolved: 1 lease pair(s) overlap on one platform without complete fork identity'
   );
+  expect(text.stdout).toContain('identity coverage: 0 of 2 recent lease(s) declare fork identity');
 
   const parsed = JSON.parse(spawnCli(root, ['agents', 'list', '--json']).stdout);
   expect(parsed.conjoined_pairs).toEqual([]);

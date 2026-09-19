@@ -651,6 +651,73 @@ function bindingsPayload(index: BindingIndex, sessionIds: readonly string[]) {
   return { source: BINDING_SOURCE, resolution: 'resolved' as const, by_session };
 }
 
+const LEASE_SOURCE = '.caws/leases';
+/**
+ * A platform literally recorded as `unknown` on the lease. Deliberately NOT
+ * `BINDING_UNKNOWN`: that one means "we could not read the registry", which
+ * is the exact reading this constant exists to rule out. Same characters,
+ * opposite meanings — collapsing them would make the clarifier a coincidence.
+ */
+const RECORDED_UNKNOWN_PLATFORM = 'unknown';
+const LIVENESS_DISCLOSURE = `${LEASE_SOURCE} (operational cache — liveness only)`;
+
+/**
+ * One withheld bucket, and how to reveal it.
+ *
+ * `suppressed_by` exists because `--active` overrides `--include-stale` /
+ * `--include-stopped`: printing the bare flag to a caller who already passed
+ * it would name a remediation their own invocation defeats. An unsourceable
+ * absence and an unusable repair are the same failure — the reader acts on a
+ * sentence the surface cannot honour.
+ */
+interface HiddenBucket {
+  readonly bucket: 'stale' | 'stopped';
+  readonly count: number;
+  readonly flag: string;
+  readonly suppressed_by: string | null;
+}
+
+function hiddenBucket(
+  bucket: 'stale' | 'stopped',
+  flag: string,
+  count: number,
+  shown: boolean,
+  flagGiven: boolean,
+  activeOnly: boolean
+): HiddenBucket | null {
+  if (shown || count === 0) return null;
+  return { bucket, count, flag, suppressed_by: flagGiven && activeOnly ? '--active' : null };
+}
+
+function hiddenPhrase(h: HiddenBucket): string {
+  const how =
+    h.suppressed_by === null ? h.flag : `${h.flag} given; suppressed by ${h.suppressed_by}`;
+  return `${h.count} ${h.bucket} hidden (${how})`;
+}
+
+/**
+ * Printed on every run, including when nothing is withheld. A line that
+ * appears only when something is hidden makes its own absence load-bearing:
+ * the reader would have to know the rule to read silence as completeness.
+ */
+function visibilityLine(shown: number, total: number, hidden: readonly HiddenBucket[]): string {
+  const tail = hidden.length === 0 ? 'nothing hidden' : hidden.map(hiddenPhrase).join(' · ');
+  return `visibility: ${shown} of ${total} shown · ${tail}`;
+}
+
+/**
+ * Tier disclosure. The rows are lease-derived (operational cache); the
+ * worktree and spec columns are a join over the authority registry. When that
+ * registry could not be read the line says the columns are unavailable — it
+ * must not claim a join that did not happen.
+ */
+function sourceDisclosureLine(index: BindingIndex): string {
+  const binding = index.resolved
+    ? `worktree/spec columns joined from ${BINDING_SOURCE} (authority)`
+    : `worktree/spec columns unavailable: ${BINDING_SOURCE} unreadable`;
+  return `source: ${LIVENESS_DISCLOSURE} · ${binding}`;
+}
+
 export function runAgentsListCommand(opts: ListOpts = {}): number {
   const { cwd, nowFn, out, err, showData, json } = setupIO(opts);
 
@@ -695,6 +762,29 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
   // Ownership is joined from authority, never read off the lease cache.
   const bindings = indexWorktreeBindings(cawsDir);
 
+  const hidden = [
+    hiddenBucket(
+      'stale',
+      '--include-stale',
+      summary.stale.length,
+      wantsStale,
+      opts.includeStale === true,
+      opts.activeOnly === true
+    ),
+    hiddenBucket(
+      'stopped',
+      '--include-stopped',
+      summary.stopped.length,
+      wantsStopped,
+      opts.includeStopped === true,
+      opts.activeOnly === true
+    ),
+  ].filter((h): h is HiddenBucket => h !== null);
+  const shownCount =
+    summary.active.length +
+    (wantsStale ? summary.stale.length : 0) +
+    (wantsStopped ? summary.stopped.length : 0);
+
   if (json) {
     const emittedSessions = [
       ...summary.active.map((l) => l.session_id),
@@ -705,6 +795,13 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
       ok: true,
       now: now.toISOString(),
       stale_ttl_ms: ttl,
+      // Same two facts the text form discloses, structured: what was withheld,
+      // and which artifact each column came from.
+      visibility: { shown: shownCount, total: summary.total, hidden },
+      sources: {
+        liveness: LEASE_SOURCE,
+        worktree_binding: bindings.resolved ? BINDING_SOURCE : null,
+      },
       worktree_bindings: bindingsPayload(bindings, emittedSessions),
       active: summary.active,
       ...(wantsStale ? { stale: summary.stale } : {}),
@@ -738,6 +835,7 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
       out(`stopped: ${summary.stopped.length}`);
       for (const l of summary.stopped) out(`  ${l.session_id}`);
     }
+    out(visibilityLine(shownCount, summary.total, hidden));
     for (const pair of conjoining.confirmed.slice(0, CONJOINED_TEXT_DETAIL_LIMIT)) {
       out(`conjoined-confirmed: ${pair.child} -> ${pair.parent} (explicit fork identity)`);
     }
@@ -748,15 +846,38 @@ export function runAgentsListCommand(opts: ListOpts = {}): number {
       );
     }
     if (conjoining.unresolved.length > 0) {
+      // Two populations, two statements. The first counts lease PAIRS that
+      // overlap; the second counts LEASES in the retention window that
+      // declare identity. Stated in one sentence they read as a ratio, and
+      // dividing one by the other yields a number that means nothing.
       out(
-        `conjoined-unresolved: ${conjoining.unresolved.length} recent same-platform overlap(s) ` +
-          `lack complete fork identity (${conjoining.identity.classified_leases}/` +
-          `${conjoining.identity.recent_leases} recent lease(s) classified; 7d window; use --json for details)`
+        `conjoined-unresolved: ${conjoining.unresolved.length} lease pair(s) overlap on one ` +
+          'platform without complete fork identity (7d window; use --json for details)'
+      );
+      out(
+        `  identity coverage: ${conjoining.identity.classified_leases} of ` +
+          `${conjoining.identity.recent_leases} recent lease(s) declare fork identity`
+      );
+      // Forward-only by construction: a lease is written only by the session
+      // that owns it, which is what makes the write atomic. A repair line
+      // implying retroactive fixup would invite that invariant's violation.
+      out(
+        '  repair: a session declares its own identity with caws agents heartbeat ' +
+          '--session-kind <main|fork|subagent> (hook env CAWS_SESSION_KIND / ' +
+          'CAWS_FORKED_FROM); existing leases are never rewritten, because one session ' +
+          "must not write another session's lease file"
       );
     }
     for (const s of silent) {
-      out(`silent-platform: ${s.platform} (${s.to} to, ${s.from} from)`);
+      // `unknown` is a recorded platform value, not a sentinel for a field we
+      // failed to read. Undisambiguated it reads as the second.
+      const recorded =
+        s.platform === RECORDED_UNKNOWN_PLATFORM
+          ? ' — `unknown` is the platform value recorded on those leases, not a missing field'
+          : '';
+      out(`silent-platform: ${s.platform} (${s.to} to, ${s.from} from)${recorded}`);
     }
+    out(sourceDisclosureLine(bindings));
   }
   if (loadRes.value.diagnostics.length > 0 && showData) {
     err(renderDiagnostics(loadRes.value.diagnostics, { showData }));
