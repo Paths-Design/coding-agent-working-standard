@@ -62,3 +62,9 @@ evidence:
     recorded_at: "2026-09-19T03:13:58.398Z"
     artifact_path: packages/caws-cli/tests/hooks/guard-table-parity.test.js
     commit_sha: "6d1d092e"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "hooks-readonly.test.js arms 'A4: opting out of tier 2 costs NO output - byte-identical to no guards key', 'A4: a guard entry declaring nothing is not rendered as an empty heading', and the control 'the section is not unconditional: it appears only when tier 2 has content'. Run: cd packages/caws-cli && npx jest tests/shell/hooks-readonly.test.js -> 37/37 pass. The A4 claim is asserted as a DIFFERENCE, not as the absence of a marker string: the same fixture is rendered with the guards key absent entirely and with guards:{} and the two stdouts are required to be byte-identical, which a renderer emitting a differently-worded empty section would fail. FALSIFICATION RUN: mutating guardConfigRows to 'return null' unconditionally and rebuilding dist turned 5 arms red (both A1 arms, both A2 arms, and the non-vacuity control) while BOTH A4 arms stayed green - correctly, since they assert absence and a dead renderer also satisfies absence. That asymmetry is exactly why the 'not unconditional' control exists and is the only thing separating 'opting out costs no output' from 'the feature silently stopped working'. A related arm pins that an INVALID policy also renders no tier-2 rows and list still exits 0, because a malformed document applies zero entries and displaying its contents would advertise configuration no guard will apply."
+    recorded_at: "2026-09-19T03:14:08.842Z"
+    artifact_path: packages/caws-cli/tests/shell/hooks-readonly.test.js
+    commit_sha: "6d1d092e"
