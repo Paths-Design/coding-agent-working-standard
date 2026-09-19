@@ -86,3 +86,8 @@ evidence:
     evidence_ref: "A5 constructs two overlapping same-platform leases (1 pair, 2 leases) so the two populations carry different numbers, pins 'conjoined-unresolved: 1 lease pair(s)...' and '  identity coverage: 0 of 2 recent lease(s)...' as separate lines, and asserts the old conflated sentence 'recent same-platform overlap(s) lack complete fork identity' is gone."
     recorded_at: "2026-09-19T11:05:39.744Z"
     commit_sha: "3d6d2f92"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "A6 pins the repair line containing --session-kind, CAWS_SESSION_KIND, 'existing leases are never rewritten' and \"must not write another session's lease file\"; A6b is the counterweight -- with no unresolved pairs neither the coverage nor the repair line prints."
+    recorded_at: "2026-09-19T11:05:41.740Z"
+    commit_sha: "3d6d2f92"
