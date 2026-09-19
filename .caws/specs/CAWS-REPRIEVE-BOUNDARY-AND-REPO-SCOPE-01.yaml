@@ -81,3 +81,8 @@ evidence:
     evidence_ref: "Partial-boundary refusal. reprieve.ts partialBoundaryCoverage + the refusal block; GUARD_BOUNDARY_SETS declares cross-repo-write = [scope-guard.sh, bash-write-guard.sh]. Proof: npx jest tests/shell/reprieve-boundary-and-repo-scope -- describe 'A1' 3/3 pass. Runtime artifact (stderr, verbatim): \"caws reprieve grant: refused - this grant covers part of a guard boundary, not all of it.\" / \"boundary 'cross-repo-write' is enforced jointly by: scope-guard.sh, bash-write-guard.sh\" / \"your --handlers omits: bash-write-guard.sh\" / \"Grant the whole boundary:  --handlers scope-guard.sh,bash-write-guard.sh\". Exit code 1 and the record file is absent (asserted). Also proven end-to-end against the BUILT binary: 'the real CLI refuses a partial boundary grant (exit 1, co-handler named)' spawns node dist/index.js and asserts status 1 + no record written, so the refusal is not a handler-only artifact."
     recorded_at: "2026-09-19T04:50:21.040Z"
     commit_sha: "8d7d3a26"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "Complete boundary grant is written. npx jest tests/shell/reprieve-boundary-and-repo-scope describe 'A2' 2/2 pass: --handlers scope-guard.sh,bash-write-guard.sh returns 0 with EMPTY stderr (asserted exactly, so a warning would fail it) and the record on disk has handlers == [scope-guard.sh, bash-write-guard.sh]; the reverse order also passes, so membership is set-based not positional. Falsifiability: the A1 cases share this fixture and differ only in the handler list, so A2 cannot pass by the refusal being unreachable."
+    recorded_at: "2026-09-19T04:50:41.074Z"
+    commit_sha: "8d7d3a26"
