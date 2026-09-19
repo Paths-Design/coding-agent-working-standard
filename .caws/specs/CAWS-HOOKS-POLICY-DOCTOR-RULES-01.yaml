@@ -89,3 +89,9 @@ evidence:
     recorded_at: "2026-09-19T00:28:39.739Z"
     artifact_path: packages/caws-cli/src/kernel/doctor/inspect.ts
     commit_sha: "18e80d74"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "A5 the legacy .caws/hooks/adapter-policy.json is named at info with the hook-policy.json replacement, and a repo without it produces nothing. Kernel arms: 'the superseded file is named at info with the migration path' (severity info, message names both files, narrowRepair names caws hooks import --from-machine); 'it fires independently of hook-policy.json' (the legacy file matters MOST where no replacement exists); 'a repo without the file produces no such finding' (both false and the key absent). Store arm 'present is true, absent is false, and it does not depend on hook-policy.json' drives observeLegacyAdapterPolicy over a real fixture and asserts observeRepoHookPolicy stays undefined alongside it. RUNTIME EVIDENCE against this repo: node .caws/worktrees/wt-policy-doctor/packages/caws-cli/dist/index.js doctor, run with cwd at the canonical checkout which carries .caws/hooks/adapter-policy.json (1515 bytes, untracked), printed: '[INFO   ] doctor.hooks.legacy_adapter_policy: This repo still carries .caws/hooks/adapter-policy.json, the superseded repo-local hook policy...' with subject .caws/hooks/adapter-policy.json and the import repair. Run: npx jest tests/kernel/unit/doctor-repo-hook-policy.test.ts tests/store/doctor-snapshot-repo-hook-policy.test.js => 39 passed."
+    recorded_at: "2026-09-19T00:28:42.889Z"
+    artifact_path: packages/caws-cli/src/kernel/doctor/rules.ts
+    commit_sha: "18e80d74"
