@@ -21,7 +21,11 @@ scope:
     - 'docs/architecture/read-surface-authority.v1.yaml'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A surface must not assert the absence of a fact it cannot source, and must not offer a remediation the current invocation defeats. The hidden-count hint therefore reports the flag AND the suppression when --active is what is hiding the bucket.'
+  - 'Pairs and leases are different populations. The conjoined-unresolved warning counts lease PAIRS; the identity-coverage figure counts LEASES in the retention window. Each statement names its own unit, because a reader who divides one by the other gets a number that means nothing.'
+  - 'The repair line must be forward-only and say so. Fork identity is declared by the session that owns the lease; no command rewrites another session''s lease file, because per-session-file ownership is what makes lease writes atomic. A repair line implying retroactive fixup would invite exactly that violation.'
+  - 'agents list is operational_cache for liveness and a JOIN over authority for binding. The disclosure names both artifacts by path, and when worktrees.json is unreadable it says the binding columns are unavailable rather than printing an absence it did not observe.'
+  - 'The literal string ''unknown'' is a recorded platform value, not a sentinel for missing knowledge. Any rendering that could be read either way must disambiguate at the point of print, not in documentation the reader does not have open.'
 acceptance:
   - id: A1
     given: 'a repository whose leases include stale and stopped sessions'
