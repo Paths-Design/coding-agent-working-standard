@@ -2,9 +2,10 @@ id: CAWS-READ-SURFACE-AUTHORITY-CONTRACT-01
 title: 'One contract declares what every CAWS read surface may assert about session, worktree, spec, ownership and liveness — and forbids asserting absence for a fact it has no writer for'
 risk_tier: 3
 mode: doc
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-read-surface-contract
 created_at: '2026-09-19T09:49:31.761Z'
-updated_at: '2026-09-19T09:49:31.761Z'
+updated_at: '2026-09-19T09:49:41.944Z'
 created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
 blast_radius:
   modules:
