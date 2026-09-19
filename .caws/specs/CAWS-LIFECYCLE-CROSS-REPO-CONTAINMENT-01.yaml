@@ -49,6 +49,12 @@ acceptance:
     then: >-
       it is admitted, because the comparison resolves both sides to the canonical
       root via git --git-common-dir rather than comparing cwd strings
+  - id: A4
+    given: 'a caller with no harness session identity in its environment (human terminal or CI)'
+    when: 'it runs governed lifecycle commands in two different repos'
+    then: >-
+      both are admitted and no origin record is written, because an unidentifiable
+      caller must not be contained everywhere
 non_functional: {}
 contracts:
   - name: 'session-origin-record'
