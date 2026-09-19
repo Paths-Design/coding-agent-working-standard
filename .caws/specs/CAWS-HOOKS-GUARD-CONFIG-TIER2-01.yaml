@@ -113,3 +113,9 @@ evidence:
     recorded_at: "2026-09-19T01:30:30.369Z"
     artifact_path: packages/caws-cli/tests/hooks/bats/guard-config-adopters.bats
     commit_sha: eb0dc3fb
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "The inline awk block is DELETED from scope-guard.sh (the 'Policy-declared non-governed zones' section now reads caws_guard_zones). Semantics preserved, proven at two layers: npx bats tests/hooks/bats/guard-config.bats arms 19-24 pin the normalization verbatim — shipped quote-strip, /** then /* trim, trailing-slash coercion, the zone list ENDING at the next top-level key exactly as the awk did, trailing-comment stripping, and a zone containing a SPACE surviving the transport intact (which is why the transport is INDEXED, not whitespace-delimited: a space-delimited one would split it, a scope change disguised as a refactor). npx bats tests/hooks/bats/guard-config-adopters.bats arms 13-15 then prove it through the real guard: a path under a declared zone is ADMITTED, a path outside it is still REFUSED, and zones compose with configured prefixes. Zones are read from policy.yaml INDEPENDENTLY of hook-policy.json, so a repo that never opts into the hook policy keeps its zones honored (arm 'zones are honored in a repo with NO hook-policy.json at all'). Key meaning unchanged: policy.yaml owns out-of-governance, hook-policy.json owns one guard's table."
+    recorded_at: "2026-09-19T01:30:32.879Z"
+    artifact_path: packages/caws-cli/templates/hook-packs/shared/scope-guard.sh
+    commit_sha: "1a339824"
