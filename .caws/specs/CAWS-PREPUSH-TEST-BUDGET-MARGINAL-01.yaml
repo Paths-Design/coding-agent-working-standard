@@ -35,5 +35,9 @@ acceptance:
     given: 'three recorded runs of the same commit 27567642 -- two timeouts and one pass'
     when: 'the fix is in place'
     then: 'a repeat-run harness demonstrates the stage passing across consecutive invocations, so the evidence is repetition rather than a single green run'
+  - id: A4
+    given: 'an unchanged tree whose suite has already passed once in this session'
+    when: 'git push runs the pre-push hook'
+    then: 'stage [5/5] completes by cache replay in seconds rather than re-running ~425s of jest'
 non_functional: {}
 contracts: []
