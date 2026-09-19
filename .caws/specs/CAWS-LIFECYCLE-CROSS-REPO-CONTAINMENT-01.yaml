@@ -136,3 +136,8 @@ evidence:
     evidence_ref: "Proven by decision-layer suites [lifecycle containment - who is contained (A4)] and [lifecycle containment - every contained identity source (A4)] in tests/shell/session-origin-record.test.js. The second is a table over all twelve SessionSource variants asserting isContainedSource membership (9 contained, 3 not) AND asserting which resolver tier each row actually exercised via pinned.record.source, so a row cannot pass by resolving through a different tier than intended - that assertion is what caught a fixture citing CLAUDE_CODE_SESSION_ID for a surface that pins CLAUDE_SESSION_ID. A caller with no harness identity yields kind not_applicable and writes no record."
     recorded_at: "2026-09-19T07:05:30.618Z"
     commit_sha: "8485bf99"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "Proven by e2e [pins the session on its first governed command and admits it in repo A (A2, A5)] and decision-layer suite [lifecycle containment - trust on first use (A5)] in tests/shell/session-origin-record.test.js. The pin is symmetric: the fixture registers a lease in whichever repo runs first, and the SUBSEQUENT call in the other repo is refused, so no repo is privileged by the implementation. Narrowed from true trust-on-first-use to lease-backed pinning, which A10 covers."
+    recorded_at: "2026-09-19T07:05:32.710Z"
+    commit_sha: "8485bf99"
