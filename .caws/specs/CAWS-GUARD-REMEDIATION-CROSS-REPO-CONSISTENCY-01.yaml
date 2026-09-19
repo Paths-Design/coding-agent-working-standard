@@ -85,3 +85,8 @@ evidence:
     evidence_ref: "bats B5 (fail-direction test): with lib/bash-mutation-targets.sh removed from the installed pack copy, block-dangerous STILL blocks the opaque payload, prints that the detector could not load and that it will not suggest a rewrite that might reach across repos, and does NOT print the script-file option. B5 reported 'not ok' pre-fix (the old code printed the harmful sentence unconditionally) and is 'ok 5' after. Separately, bash-write-guard gained a per-function declare -F check so a lib that LOADS but predates caws_foreign_repo_root / caws_bash_interpreter_write_literals exits 2 with a block rather than silently losing its cross-repo arm."
     recorded_at: "2026-09-19T05:24:31.860Z"
     commit_sha: "14d0ffe19126e71e83e9da68b4115a4d92f20de3"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "Extraction is behavior-preserving: the pre-existing suite that pins bash-write-guard's interpreter cross-repo decisions (tests/hooks/bash-write-guard-interpreter-cross-repo.test.js, 16 cases) passes unchanged after foreign_repo_root, the write-verb tables and the literal extractor moved verbatim into shared/lib/bash-mutation-targets.sh and bash-write-guard became a delegating caller. Wider runs at this commit: npx jest tests/init/pack-fingerprint tests/hooks => 96/96 across 7 suites; full npx jest => 250 suites, 3381/3381, 299.79s; full npx bats tests/hooks/bats/ => exit 0, 417 tests, zero 'not ok'. SHARED_PACK_VERSION 87->88 with fingerprint 9e86539e6a7aa849e2e08ffe505bf9f0d01db621bc8c709a12868d90ed11ea20 recomputed, so the change actually reaches an installed pack on upgrade."
+    recorded_at: "2026-09-19T05:24:43.372Z"
+    commit_sha: "14d0ffe19126e71e83e9da68b4115a4d92f20de3"
