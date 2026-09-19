@@ -615,3 +615,83 @@ test('the tier-2 document reaches a guard through bin/caws-hook, changing what i
   // Present document -> parsed, and the declared prefix arrived intact.
   expect(seen(after)).toContain('SAW:ok:native/,');
 });
+
+// ---------------------------------------------------------------------------
+// A machine-adapter configuration error must not trap the session.
+//
+// These four arms are one claim split by event. The launcher's top-level
+// handler turns ANY error into {"decision":"block"} regardless of which event
+// it was dispatching, and `stop` is in the event map. That produces a session
+// that cannot act (pre_tool_use blocks every tool) AND cannot leave (stop
+// blocks the exit) over a condition only the machine's operator can fix.
+//
+// The dividing line is whether the blocked party can respond. `pre_tool_use`
+// is the enforcement point and MUST keep failing closed -- refusing a write
+// under unresolved governance is the guard doing its job, and the agent can
+// stop writing. Every other event is lifecycle or observation: refusing there
+// removes an exit without withholding a single ungoverned write, because the
+// enforcement event already withheld it.
+// ---------------------------------------------------------------------------
+
+/** A repo the machine adapter cannot classify: legacy .caws/hooks present, no
+ *  migrated machine project entry, so system_configuration() raises. */
+function unmigrated(name) {
+  const p = repo(name);
+  installMachineRuntime({ home, templatesRoot: templates });
+  fs.mkdirSync(path.join(p, '.caws/hooks'), { recursive: true });
+  return p;
+}
+
+test('an unclassifiable machine configuration still refuses the tool call', () => {
+  // The enforcement arm, and the non-vacuity anchor for the three arms below:
+  // it proves this fixture really does reach the error path, so a later
+  // "did not block" assertion means the EVENT changed the disposition rather
+  // than the fixture quietly becoming benign.
+  const p = unmigrated('trap-enforcement');
+  const result = invoke(p, 'pre_tool_use', {}, { file_path: 'src/app.ts' });
+
+  expect(result.status).toBe(2);
+  expect(JSON.parse(result.stdout).decision).toBe('block');
+  expect(JSON.parse(result.stdout).reason).toContain('one-time system migration');
+});
+
+test('the same configuration error does NOT block the session from stopping', () => {
+  // The trap. A blocking Stop hook with no budget leaves the agent unable to
+  // end its turn; with pre_tool_use also blocking it cannot run the remedy
+  // either. Nothing releases it from inside the session.
+  const p = unmigrated('trap-stop');
+  const result = invoke(p, 'stop', {}, { file_path: 'src/app.ts' });
+
+  expect(result.status).toBe(0);
+  expect(result.stdout).not.toContain('"decision"');
+  // Silence would be its own defect: the operator needs to see that governance
+  // did not apply, and needs it on the stream a Stop hook can still reach.
+  expect(result.stderr).toContain('one-time system migration');
+});
+
+test('session teardown and compaction are exits too, and are not blocked', () => {
+  // session_end and pre_compact share stop's property: refusing them withholds
+  // no ungoverned write, because pre_tool_use already refused it.
+  for (const event of ['session_end', 'pre_compact']) {
+    const result = invoke(unmigrated(`trap-${event}`), event, {}, { file_path: 'src/app.ts' });
+    expect({ event, status: result.status }).toEqual({ event, status: 0 });
+    expect({ event, stdout: result.stdout }).toEqual({
+      event,
+      stdout: expect.not.stringContaining('"decision"'),
+    });
+  }
+});
+
+test('the refusal names a remediation that terminates, not one that refuses next', () => {
+  // `migrate` has its own precondition: it refuses when system registration is
+  // not current, naming `configure`. An operator who runs exactly what the
+  // block printed then hits a SECOND refusal naming a different command. A
+  // remediation the operator cannot follow to completion is not a remediation.
+  const p = unmigrated('trap-remediation');
+  const reason = JSON.parse(
+    invoke(p, 'pre_tool_use', {}, { file_path: 'src/app.ts' }).stdout
+  ).reason;
+
+  expect(reason).toContain('caws init adapters migrate --agent-surface codex');
+  expect(reason).toContain('caws init adapters configure --agent-surface codex');
+});

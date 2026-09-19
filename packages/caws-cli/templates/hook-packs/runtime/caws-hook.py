@@ -17,6 +17,28 @@ EVENTS = {
     'session_end': 'SessionEnd',
 }
 SURFACES = {'codex', 'claude-code', 'kimi-code', 'qwen-code', 'zcode', 'opencode', 'dsh'}
+# The only event where an adapter CONFIGURATION error may refuse. A
+# configuration fault is the operator's to fix, not the agent's, so the
+# question is not "how bad is this?" but "can the blocked party answer it?".
+# On pre_tool_use it can: the refusal withholds an ungoverned write and the
+# agent can stop writing. On every other event the refusal withholds nothing --
+# the write was already withheld here -- while a refusal on stop or session_end
+# removes the agent's exit. Blocking both planes at once leaves a session that
+# can neither act nor leave, and no CAWS-side budget releases it.
+ENFORCING_EVENTS = {'pre_tool_use'}
+# Set once the handler chain has actually run. This partitions the two error
+# classes that share one top-level handler, and the partition is the reason
+# ENFORCING_EVENTS can be this narrow without weakening anything:
+#
+#   before dispatch -- the adapter could not resolve its own configuration.
+#     Nothing ran, so refusing withholds no guard's verdict.
+#   after dispatch  -- a handler ANSWERED and the answer could not be read.
+#     Converting that to success would silently drop a refusal a guard
+#     intended, which is the fail-open this file exists to prevent.
+#
+# So the carve-out applies to the first class only; the second keeps its prior
+# blocking behavior on every event.
+_DISPATCHED = False
 
 
 def digest(data):
@@ -307,7 +329,15 @@ def system_configuration(home, canonical, runtime, surface, event):
             return None  # Existing adapter-only entry stays in charge until migration.
         # Existing executable customizations must be classified once. Globally
         # installing CAWS never implicitly discards an existing guard chain.
-        raise ValueError('Legacy project hooks require one-time system migration: caws init adapters migrate --agent-surface ' + surface)
+        # Both steps, in order. `migrate` carries its own precondition and
+        # refuses when system registration is not current -- an operator who
+        # runs only what this line names can land on a second refusal naming a
+        # command this one never mentioned. A remediation has to terminate.
+        raise ValueError(
+            'Legacy project hooks require one-time system migration: '
+            'caws init adapters migrate --agent-surface ' + surface +
+            ' (if that refuses, run its prerequisite first: '
+            'caws init adapters configure --agent-surface ' + surface + ')')
     if not isinstance(config, dict) or set(config) != {'disabled', 'extensions', 'handlers', 'libraries'} or any(not isinstance(value, dict) for value in config.values()):
         raise ValueError('Malformed system project surface')
     defaults = json.loads(confined(runtime, 'system-policy.json').read_bytes())
@@ -627,6 +657,8 @@ def main():
     payload['hook_event_name'] = EVENTS[event]
     result = None
     adapter_handoff = False
+    global _DISPATCHED
+    _DISPATCHED = True
     try:
         result = subprocess.run(['/bin/bash', str(runtime / 'dispatch.sh'), surface, event, str(hooks), *handlers],
                                 cwd=root, env=env, input=json.dumps(payload).encode(),
@@ -685,6 +717,13 @@ if __name__ == '__main__':
         sys.exit(main())
     except (ValueError, OSError, KeyError, TypeError, AttributeError) as error:
         message = 'CAWS machine adapter: ' + str(error)
+        # stderr carries the diagnostic on every event, including the ones that
+        # do not block: an operator must still be able to see that governance
+        # was not applied. Silence would trade one defect for another.
         print('[caws machine adapter] ' + message, file=sys.stderr)
+        # argv may itself be what failed, so read the event defensively rather
+        # than trusting the parse that raised.
+        if not _DISPATCHED and (sys.argv[2] if len(sys.argv) > 2 else '') not in ENFORCING_EVENTS:
+            sys.exit(0)
         print(json.dumps({'decision': 'block', 'reason': message}))
         sys.exit(2)

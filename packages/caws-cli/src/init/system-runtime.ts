@@ -438,6 +438,8 @@ export function migrateSystemProject(options: SystemOptions): {
   if (!options.plan && configureSystemRuntime({ ...options, plan: true }).changed)
     throw new Error(
       'Configure system registration first: caws init adapters configure --agent-surface ' +
+        options.surface +
+        ', then re-run: caws init adapters migrate --agent-surface ' +
         options.surface
     );
   const vendor = vendorFor(options.surface);

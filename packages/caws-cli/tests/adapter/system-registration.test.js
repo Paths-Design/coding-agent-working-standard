@@ -204,6 +204,16 @@ test('migration cannot remove project guards before system registration exists',
   expect(fs.readFileSync(path.join(repo, '.codex/hooks.json'), 'utf8')).toBe(prior);
 });
 
+test('the prerequisite refusal also names the step that finishes the migration', () => {
+  // This refusal is the SECOND one an operator meets: the adapter's block sent
+  // them to `migrate`, and `migrate` sends them here. If it names only the
+  // prerequisite, the chain dead-ends at a command that was never the goal --
+  // the operator is left holding a configured machine and the original block.
+  expect(() => migrateSystemProject(options)).toThrow(
+    /then re-run: caws init adapters migrate --agent-surface codex/
+  );
+});
+
 test('new project init inherits user registration without recreating project hook code or native wiring', () => {
   configureSystemRuntime(options);
   const fresh = path.join(root, 'fresh');
