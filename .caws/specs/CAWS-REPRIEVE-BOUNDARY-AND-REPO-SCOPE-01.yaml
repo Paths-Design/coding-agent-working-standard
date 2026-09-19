@@ -86,3 +86,8 @@ evidence:
     evidence_ref: "Complete boundary grant is written. npx jest tests/shell/reprieve-boundary-and-repo-scope describe 'A2' 2/2 pass: --handlers scope-guard.sh,bash-write-guard.sh returns 0 with EMPTY stderr (asserted exactly, so a warning would fail it) and the record on disk has handlers == [scope-guard.sh, bash-write-guard.sh]; the reverse order also passes, so membership is set-based not positional. Falsifiability: the A1 cases share this fixture and differ only in the handler list, so A2 cannot pass by the refusal being unreachable."
     recorded_at: "2026-09-19T04:50:41.074Z"
     commit_sha: "8d7d3a26"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Handlers in no declared set are unaffected. npx jest ... describe 'A3' 4/4 pass: a grant for protected-paths.sh,scan-secrets.sh writes normally; partialBoundaryCoverage([]) and (['protected-paths.sh']) return []; a complete set returns []. Plus a structural guard - 'every declared boundary has at least two members' - because a one-member set would declare a rule no input can violate (a vacuous constraint). Runtime artifact: the record file exists at machine-home/state/sessions/<sid>/guard-reprieve-<sid>.json after the boundary-free grant."
+    recorded_at: "2026-09-19T04:50:44.212Z"
+    commit_sha: "8d7d3a26"
