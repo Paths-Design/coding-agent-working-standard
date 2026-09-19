@@ -138,10 +138,19 @@ read_surfaces:
   agents show:
     subject: one session
     tier: operational_cache
-    asserts: [session_identity]
+    asserts: [session_identity, liveness_classification]
+    derives:
+      liveness_classification: >-
+        kernel summarizeActiveAgents(last_active, now, ttl_ms), the same call
+        `agents list` buckets with — one rule, one implementation. The TTL is
+        selectable with --stale-ttl-ms and is disclosed in both renderings.
     is_not: >-
-      a liveness verdict. It returns the persisted record; the TTL
-      classification belongs to `agents list`.
+      a surface where the persisted status and the liveness verdict are one
+      field. It returns both, separately labelled with their sources: the
+      on-disk enum is exactly {active, stopping, stopped} and never holds
+      'stale', so the derived classification is computed at read time and is
+      never written back. `stopping` has no counterpart among the buckets, so
+      a fresh `stopping` lease reads as derived-active without fault.
   specs list:
     subject: spec set
     tier: authority
@@ -282,12 +291,12 @@ known_nonconformance:
     evidence: computeActiveSummary in src/shell/commands/agents.ts reads `lease.bound_worktree ?? null`
     contrast: '`agents list` joins .caws/worktrees.json for the same two fact domains'
   - surface: agents show
-    violates: non_collapse_relations (persisted status vs TTL classification)
-    observed: 'returns status=active for a session `agents list` buckets as stale'
-    evidence: session 1aa3f0bd — `agents show` reported status active with last_active ~9h old while `agents list` classified it stale
-  - surface: agents show
     violates: rendering_obligations.parity
-    observed: emits raw JSON unconditionally; it has no human rendering, while its sibling `agents list` has no machine rendering gap
+    observed: >-
+      the record body is still a raw JSON dump in the human rendering. The
+      session id, persisted status and derived classification are rendered as
+      labelled lines, but every other lease field is only legible as JSON
+    contrast: '`status` renders lease fields as a human row'
   - surface: worktree list
     violates: rendering_obligations.parity
     observed: the authoritative ownership and binding surface accepts no options at all and has no --json

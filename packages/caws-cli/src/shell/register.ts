@@ -2086,9 +2086,11 @@ export function registerShellCommands(
   );
 
   defineLeaf(agentsCmd, leafMeta(AGENTS_COMMAND_META, 'show')).action(
-    (id: string, opts: { json?: boolean; data?: boolean }) => {
+    (id: string, opts: { json?: boolean; data?: boolean; staleTtlMs?: string }) => {
+      const ttl = opts.staleTtlMs !== undefined ? Number(opts.staleTtlMs) : undefined;
       const code = runAgentsShowCommand({
         id,
+        ...(ttl !== undefined && Number.isFinite(ttl) ? { staleTtlMs: ttl } : {}),
         json: opts.json === true,
         showData: opts.data === true,
       });
