@@ -1,0 +1,53 @@
+id: CAWS-AGENTS-SHOW-LIVENESS-CLASSIFY-01
+title: 'caws agents show distinguishes the persisted lease status from the derived TTL liveness classification instead of returning one field that reads as both'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-19T10:21:36.640Z'
+updated_at: '2026-09-19T10:21:36.640Z'
+created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
+blast_radius:
+  modules:
+    - 'caws-cli agents show rendering and JSON view'
+    - 'caws-cli agents command registration and metadata'
+    - 'docs/architecture read-surface authority contract'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/agents.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/tests/shell/agents-show-liveness.test.js'
+    - 'docs/architecture/read-surface-authority.v1.yaml'
+  out: []
+invariants:
+  - 'The TTL rule has exactly ONE implementation. agents show classifies by calling the kernel summarizeActiveAgents, never by re-deriving now - last_active > ttl locally; a second implementation is a second thing to drift.'
+  - 'The persisted status and the derived classification are rendered as separate, separately-labelled facts with their sources named. Neither is rewritten to match the other: the on-disk enum is exactly {active, stopping, stopped} and ''stale'' is NEVER written to disk, because materializing it would mean one session writing another session''s lease file.'
+  - 'When the classification cannot be computed, agents show says so rather than falling back to the persisted status. A surface may not assert a liveness verdict it could not derive.'
+  - 'agents show and agents list answer the TTL question identically for the same lease at the same instant and under the same --stale-ttl-ms; a disagreement between the two IS the defect.'
+acceptance:
+  - id: A1
+    given: 'a lease whose persisted status is active but whose last_active is older than the TTL'
+    when: 'caws agents show runs'
+    then: 'it reports the persisted status as active AND the derived classification as stale, each labelled with its source, so the two facts cannot be read as one'
+  - id: A2
+    given: 'the same lease at the same instant'
+    when: 'caws agents show and caws agents list are compared'
+    then: 'both place it in the stale bucket, proving the single-implementation invariant rather than two rules that happen to agree today'
+  - id: A3
+    given: 'an explicit --stale-ttl-ms'
+    when: 'caws agents show runs'
+    then: 'the classification honours it and the TTL used is disclosed in the output, so the reader can tell which threshold produced the verdict'
+  - id: A4
+    given: 'the human and --json renderings of caws agents show'
+    when: 'the two are compared for the same lease'
+    then: 'both carry the persisted status, the derived classification, the TTL and the age, satisfying the parity obligation'
+  - id: A5
+    given: 'the read-surface authority contract'
+    when: 'it is read after this change'
+    then: 'agents show declares liveness_classification among its asserted domains with the derivation named, and the persisted-status-vs-TTL known_nonconformance entry is removed because the code no longer collapses them'
+non_functional: {}
+contracts:
+  - name: 'read-surface-unsourced-fact'
+    type: behavior
