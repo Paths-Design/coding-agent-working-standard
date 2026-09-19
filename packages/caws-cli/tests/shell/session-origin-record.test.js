@@ -601,6 +601,48 @@ describe('lifecycle containment — environment and IO failure directions', () =
     expect(decision.kind).toBe('admit');
   });
 
+  it('keeps two DIFFERENT unresolvable roots apart instead of collapsing them', () => {
+    // The must-stay-refused counterweight to the test above. When realpath
+    // fails on BOTH sides, the fallback still has to compare the two paths.
+    // A fallback that yielded one indistinguishable value for every
+    // unresolvable path would make them all compare equal — and an equal
+    // comparison here ADMITS, so the failure direction is a foreign repo
+    // silently admitted, not a refusal.
+    const sid = 'sess-resolve-fallback-distinct';
+    const home = makeHome();
+    const vanishedA = path.join(os.tmpdir(), 'caws-origin-vanished-a');
+    const vanishedB = path.join(os.tmpdir(), 'caws-origin-vanished-b');
+    expect(fs.existsSync(vanishedA)).toBe(false);
+    expect(fs.existsSync(vanishedB)).toBe(false);
+
+    const file = originRecordPath(home, sid);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        session_id: sid,
+        repo_root: vanishedA,
+        recorded_at: '2026-09-19T00:00:00Z',
+        recorded_by: 'specs create',
+        source: 'claude_code_env',
+      })
+    );
+
+    const decision = evaluateLifecycleContainment({
+      command: 'specs create',
+      now: () => new Date('2026-09-19T00:00:00Z'),
+      repoRoot: vanishedB,
+      cawsDir: path.join(vanishedB, '.caws'),
+      cwd: os.tmpdir(),
+      env: agentEnv(sid),
+      homeDir: home,
+    });
+
+    expect(decision.kind).toBe('refuse_foreign');
+    expect(decision.record.repo_root).toBe(vanishedA);
+    expect(decision.targetRoot).toBe(vanishedB);
+  });
+
   it('compares a recorded root that no longer exists by its resolved path', () => {
     // A pinned repo can be deleted. The comparison must still produce a
     // decision rather than throwing out of realpath.
