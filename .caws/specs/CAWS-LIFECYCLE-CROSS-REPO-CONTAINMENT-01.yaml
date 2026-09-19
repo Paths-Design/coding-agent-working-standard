@@ -151,3 +151,8 @@ evidence:
     evidence_ref: "Proven by three e2e tests covering the other governed entry points: [refuses worktree create in the sibling repo with no registry mutation (A7)], [refuses worktree merge in the sibling repo, including --dry-run (A7)] and [refuses specs close in the sibling repo (A7)]. All four entry points therefore refuse, not specs create alone. Two placement decisions are load-bearing and are asserted: the worktree create check runs BEFORE buildActorPair, which mints an identity and is itself a write; and --dry-run is contained too, because a dry run still reads and reports on a foreign repo governance state."
     recorded_at: "2026-09-19T07:05:37.767Z"
     commit_sha: "8485bf99"
+  - criterion_id: A8
+    status: pass
+    evidence_ref: "Proven by decision-layer suites [lifecycle containment - record validation, field by field (A8)] (a 16-row table mutating each field of the record in turn, asserting the refusal DETAIL is [record is structurally invalid or names a different session] rather than merely asserting some refusal) and [lifecycle containment - unreadable record fails CLOSED (A8)]. Fail direction is deliberate: an unreadable origin refuses rather than being treated as no origin, which would have admitted every repo. The symlink case asserts the REAL mechanism - assertMachinePath lstats every path component, so an earlier hand-written symlink branch was unreachable dead code and was removed rather than kept alive by a test written to its shape."
+    recorded_at: "2026-09-19T07:05:40.590Z"
+    commit_sha: "8485bf99"
