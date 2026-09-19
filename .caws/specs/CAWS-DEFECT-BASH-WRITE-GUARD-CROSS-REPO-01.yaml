@@ -67,3 +67,8 @@ evidence:
     evidence_ref: "Same suite, describe block 'what the interpreter scan must keep legal': 'a python script writing only in-project scratch is permitted' (exit 0), 'a python script writing /tmp is permitted: no enclosing git repository' (exit 0), 'a python heredoc writing /tmp is permitted' (exit 0), 'a python -c with a slash-bearing string but no write verb is permitted' (exit 0), and '`node` appearing inside a path is not an interpreter invocation' (./node_modules/.bin/tsc, exit 0). These four passed BEFORE the fix too (the guard saw nothing), so their value is as a no-regression bar on the new scan rather than as new behavior; all still pass after it."
     recorded_at: "2026-09-19T04:04:49.263Z"
     commit_sha: "824d176d"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Same suite: 'sed -i into a sibling repo blocks and names that repository' (exit 2, stderr names the repo — regression cover for the already-landed named-target half), 'node -e writeFileSync into a sibling repo blocks' (exit 2) and 'a python heredoc body writing a sibling repo blocks' (exit 2). node -e and the heredoc both failed on the asserted-failing baseline and flip with this commit. Live cross-check outside the fixture: HOOK_COMMAND=\"node -e ...writeFileSync('~/Desktop/Projects/sterling/PWNED.md')\" against the real sibling repo returns exit 2 naming /Users/darianrosebrook/Desktop/Projects/sterling; the readFileSync form returns exit 0."
+    recorded_at: "2026-09-19T04:04:50.349Z"
+    commit_sha: "824d176d"
