@@ -73,19 +73,43 @@ function grantFixture(extra = {}) {
   });
 }
 
-test('CLI grant is consumed by actual dispatch in two repos; exact session and handler stay enforced', () => {
+test('CLI grant is consumed by actual dispatch in the granting repo; exact session, handler and repo stay enforced', () => {
+  // Granted from repo `a` (options() defaults to it).
   expect(grantFixture()).toBe(0);
   expect(fs.existsSync(recordPath('fixture-session'))).toBe(true);
+
+  const allowed = dispatch(a);
+  expect(allowed.status).toBe(0);
+  expect(allowed.stderr).toContain('[reprieve] guard.sh skipped for session fixture-session');
+
+  // CAWS-REPRIEVE-BOUNDARY-AND-REPO-SCOPE-01: repo `b` is a different
+  // repository, so the same record does not lift its guard. The three
+  // dimensions are independent and each is checked against the same record.
+  const elsewhere = dispatch(b);
+  expect(elsewhere.status).toBe(2);
+  expect(JSON.parse(elsewhere.stdout).reason).toBe('fixture guard');
+
   for (const repo of [a, b]) {
-    const allowed = dispatch(repo);
-    expect(allowed.status).toBe(0);
-    expect(allowed.stderr).toContain('[reprieve] guard.sh skipped for session fixture-session');
     const foreign = dispatch(repo, 'foreign-session');
     expect(foreign.status).toBe(2);
     expect(JSON.parse(foreign.stdout).reason).toBe('fixture guard');
   }
   expect(grantFixture({ handlers: 'another-guard.sh' })).toBe(0);
   expect(dispatch(a).status).toBe(2);
+});
+
+test('an --all-repos grant is consumed by dispatch in BOTH repos', () => {
+  // The reach narrowing must be the flag's doing, not a dispatch regression:
+  // the same fixture with --all-repos restores the cross-repo skip.
+  expect(grantFixture({ allRepos: true })).toBe(0);
+  expect('repo_root' in JSON.parse(fs.readFileSync(recordPath('fixture-session'), 'utf8'))).toBe(
+    false
+  );
+  for (const repo of [a, b]) {
+    const allowed = dispatch(repo);
+    expect(allowed.status).toBe(0);
+    expect(allowed.stderr).toContain('[reprieve] guard.sh skipped for session fixture-session');
+  }
 });
 
 test('revocation shadows a legacy grant and is inactive in show and list', () => {

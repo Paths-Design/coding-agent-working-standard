@@ -71,9 +71,11 @@ harness adapters under `surfaces/<surface>/lib/`; preserve project extensions
 through reviewed machine policy. Specs, project policy, scope, claims and audit
 history remain in the canonical project's `.caws/` directory.
 
-A reprieve is a human-granted, expiring, session-global hook exception. New grants
-live under `~/.caws/state/sessions/<session>/`; `--surface` identifies the harness
-and legacy lookup context, not a separate grant store. A waiver affects policy
+A reprieve is a human-granted, expiring hook exception covering one session in one
+repo. Records live under `~/.caws/state/sessions/<session>/`; that store is
+machine-wide but the grant's reach is not — `--all-repos` is what widens it.
+`--surface` identifies the harness and legacy lookup context, not a separate grant
+store. A waiver affects policy
 quality gates and never lifts a hook guard.
 
 Legacy `init diff`, `init port`, `--overwrite`, and `--adopt` remain available for

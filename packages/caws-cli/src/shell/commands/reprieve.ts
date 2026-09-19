@@ -63,7 +63,96 @@ export interface ReprieveRecord {
   readonly approved_by: string;
   readonly reason: string;
   readonly handlers: readonly string[];
+  /**
+   * The repo root this grant reaches. Absent means machine-wide — either an
+   * explicit `--all-repos`, or a record written by a CLI older than
+   * CAWS-REPRIEVE-BOUNDARY-AND-REPO-SCOPE-01. The reader treats absent as
+   * machine-wide so an upgrade cannot silently void an in-flight grant.
+   */
+  readonly repo_root?: string;
   readonly revoked_at?: string;
+}
+
+/**
+ * Handlers that jointly enforce ONE invariant
+ * (CAWS-REPRIEVE-BOUNDARY-AND-REPO-SCOPE-01).
+ *
+ * A reprieve is granted per handler, but an invariant is not enforced per
+ * handler: the cross-repository write boundary is adjudicated by scope-guard
+ * on the Write/Edit channel and by bash-write-guard on the Bash channel. Lift
+ * one and the boundary is not weakened — it becomes a routing puzzle, and an
+ * agent that reads the guard output can see which channel is still open.
+ *
+ * Observed in session 1aa3f0bd (2026-09-18T21:39:58Z), after a grant naming
+ * scope-guard.sh but not bash-write-guard.sh. The agent's own words:
+ *
+ *   "The reprieve covers scope-guard.sh but not bash-write-guard.sh — so Bash
+ *    heredocs into the sibling repo are blocked while the Write/Edit tools
+ *    (which I used for the last slice) are not."
+ *
+ * It then used the Write tool for what Bash had just refused. That is a
+ * CORRECT reading of what a per-handler grant literally means, and the exact
+ * opposite of what the grantor meant. So a partial grant over a declared set
+ * is refused rather than honored: the operator is asked to name the whole
+ * boundary or none of it.
+ *
+ * Membership rule: two handlers belong in one set only when a single
+ * user-visible rule is what both are refusing. Handlers enforcing merely
+ * RELATED concerns stay separate — an over-broad set would force operators to
+ * lift more than they need, which is the failure this exists to prevent.
+ */
+export const GUARD_BOUNDARY_SETS: Readonly<Record<string, readonly string[]>> = {
+  'cross-repo-write': ['scope-guard.sh', 'bash-write-guard.sh'],
+};
+
+/**
+ * The boundary sets a handler list partially covers, with the handlers it is
+ * missing. An empty result means the list is either boundary-free or complete,
+ * and the grant proceeds.
+ */
+export function partialBoundaryCoverage(
+  handlers: readonly string[]
+): { boundary: string; members: readonly string[]; missing: string[] }[] {
+  const named = new Set(handlers);
+  const gaps: { boundary: string; members: readonly string[]; missing: string[] }[] = [];
+  for (const [boundary, members] of Object.entries(GUARD_BOUNDARY_SETS)) {
+    const touches = members.some((m) => named.has(m));
+    if (!touches) continue;
+    const missing = members.filter((m) => !named.has(m));
+    if (missing.length > 0) gaps.push({ boundary, members, missing });
+  }
+  return gaps;
+}
+
+/**
+ * Whether a grant reaches the repo rooted at `repoRoot`
+ * (CAWS-REPRIEVE-BOUNDARY-AND-REPO-SCOPE-01).
+ *
+ * Absent `repo_root` is machine-wide, so a record written before this field
+ * existed keeps working everywhere — an upgrade must not void an in-flight
+ * grant a human approved.
+ *
+ * Both sides are resolved through `realpath` before comparison because the
+ * granting cwd and the reading cwd can name the same directory differently
+ * (`/tmp` vs `/private/tmp` on macOS, any symlinked checkout). A string
+ * mismatch there would fail CLOSED — the guard refuses despite a valid grant —
+ * which is the safe direction but produces a refusal no output explains.
+ *
+ * Match is exact on the resolved root, never a prefix: a prefix test would let
+ * a grant in `~/Projects/caws` cover `~/Projects/caws-fork`. Linked worktrees
+ * need no prefix rule because `resolveRepoRoot` derives the root from
+ * `--git-common-dir`, so every worktree of a repo resolves to the same root.
+ */
+export function reprieveReachesRepo(record: ReprieveRecord, repoRoot: string): boolean {
+  if (record.repo_root === undefined) return true;
+  const resolve = (p: string): string => {
+    try {
+      return fs.realpathSync(p);
+    } catch {
+      return path.resolve(p);
+    }
+  };
+  return resolve(record.repo_root) === resolve(repoRoot);
 }
 
 /** The vendor dirs a reprieve may live under. Mirrors agent-surface.sh's
@@ -563,6 +652,15 @@ export interface ReprieveGrantOptions extends ReprieveCommandBase {
   /** Validate + report only; do not write. */
   readonly dryRun?: boolean;
   readonly json?: boolean;
+  /**
+   * Grant machine-wide reach instead of scoping to the current repo
+   * (CAWS-REPRIEVE-BOUNDARY-AND-REPO-SCOPE-01). Default is this repo only:
+   * a grant that reaches too FAR fails open silently in repos nobody was
+   * thinking about, while one that reaches too NARROW fails closed and loudly
+   * in the one repo the operator is looking at. Only the second is
+   * recoverable from the output, so narrow is the default.
+   */
+  readonly allRepos?: boolean;
 }
 
 export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
@@ -625,6 +723,33 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
     .filter((h) => h.length > 0);
   if (handlers.length === 0 || handlers.some((h) => !/^[A-Za-z0-9_.-]+\.sh$/.test(h))) {
     err('caws reprieve grant: --handlers requires at least one handler basename.');
+    return 1;
+  }
+
+  // CAWS-REPRIEVE-BOUNDARY-AND-REPO-SCOPE-01: refuse a partial grant across a
+  // declared boundary set. Lifting one of two handlers that enforce the same
+  // invariant does not narrow the exception — it redirects it to whichever
+  // channel is still guarded, which reads to an agent as "that route is
+  // authorized." The refusal names the co-handlers and prints the completed
+  // command, so the operator's next keystroke is a whole-boundary decision
+  // rather than a rediscovery of which handler they forgot.
+  const gaps = partialBoundaryCoverage(handlers);
+  if (gaps.length > 0) {
+    err(
+      'caws reprieve grant: refused — this grant covers part of a guard boundary, not all of it.'
+    );
+    for (const gap of gaps) {
+      err(`  boundary '${gap.boundary}' is enforced jointly by: ${gap.members.join(', ')}`);
+      err(`  your --handlers omits: ${gap.missing.join(', ')}`);
+    }
+    err(
+      '  Lifting some handlers of a boundary does not narrow the exception; it moves the write to the channel still guarded, which an agent reads as authorization for that route.'
+    );
+    const complete = Array.from(new Set([...handlers, ...gaps.flatMap((g) => g.missing)])).join(
+      ','
+    );
+    err(`  Grant the whole boundary:  --handlers ${complete}`);
+    err('  Or grant none of it, and have the change made from a session rooted in that repo.');
     return 1;
   }
 
@@ -770,6 +895,11 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
   );
   if (state === null) return 2;
 
+  // Absent repo_root is the machine-wide signal on the wire, so --all-repos
+  // omits the field rather than writing a sentinel: that keeps the explicit
+  // grant and a pre-upgrade record indistinguishable to the reader, which is
+  // exactly the back-compat behavior we want (both are honored everywhere).
+  const repoScoped = opts.allRepos !== true;
   const record: ReprieveRecord = {
     session_id: sessionId,
     created_at: now.toISOString(),
@@ -777,6 +907,7 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
     approved_by: opts.approvedBy,
     reason: opts.reason,
     handlers,
+    ...(repoScoped ? { repo_root: state.repoRoot } : {}),
   };
   const filePath = reprieveFileName(state.stateDir, sessionId);
 
@@ -842,7 +973,17 @@ export function runReprieveGrantCommand(opts: ReprieveGrantOptions): number {
     // no way to notice that from a success message.
     out(`  surface:  ${state.vendorDir} (from ${state.source})`);
     out(`  file:     ${filePath}`);
-    out(`  scope: session-global; machine dispatchers consult this record across projects.`);
+    if (repoScoped) {
+      out(`  reach:    this repo only — ${state.repoRoot}`);
+      out(
+        `  A guard in any other repo ignores this grant. For machine-wide reach, re-grant with --all-repos.`
+      );
+    } else {
+      out(`  reach:    MACHINE-WIDE — every repo on this machine, for this session.`);
+      out(
+        `  Dispatchers consult this record across projects; nothing narrows it to the repo you granted it from.`
+      );
+    }
   }
   return 0;
 }
@@ -906,10 +1047,22 @@ export function runReprieveShowCommand(opts: ReprieveShowOptions): number {
     return 1;
   }
   const active = isActive(record, now);
+  // Expiry and reach are independent reasons a grant does nothing here, and
+  // collapsing them would make an unexpired grant issued in another repo read
+  // as ACTIVE in this one. `active` keeps its existing expiry-only meaning;
+  // `applies_here` is the question a caller standing in a repo is asking.
+  const appliesHere = reprieveReachesRepo(record, state.repoRoot);
   if (opts.json === true) {
     out(
       JSON.stringify(
-        { ok: true, session_id: sessionId, active, reprieve: record, file: filePath },
+        {
+          ok: true,
+          session_id: sessionId,
+          active,
+          applies_here: appliesHere,
+          reprieve: record,
+          file: filePath,
+        },
         null,
         2
       )
@@ -920,6 +1073,14 @@ export function runReprieveShowCommand(opts: ReprieveShowOptions): number {
     out(`  expires:  ${record.expires_at}`);
     out(`  reason:   ${record.reason}`);
     out(`  approved: ${record.approved_by}`);
+    if (record.repo_root === undefined) {
+      out(`  reach:    MACHINE-WIDE — every repo on this machine.`);
+    } else if (appliesHere) {
+      out(`  reach:    this repo only — ${record.repo_root}`);
+    } else {
+      out(`  reach:    ${record.repo_root}`);
+      out(`  NOT this repo (${state.repoRoot}) — guards here ignore this grant.`);
+    }
     out(`  file:     ${filePath}`);
   }
   return 0;

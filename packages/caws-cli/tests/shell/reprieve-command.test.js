@@ -133,6 +133,10 @@ describe('CAWS-GUARD-REPRIEVE-SESSION-SCOPED-001 — caws reprieve CLI', () => {
         approved_by: 'darian',
         reason: 'editing hooks under CASR-001',
         handlers: ['protected-paths.sh', 'scan-secrets.sh'],
+        // CAWS-REPRIEVE-BOUNDARY-AND-REPO-SCOPE-01: a grant with no explicit
+        // reach flag is stamped with the repo it was made in, and the hook
+        // reader honors it only there.
+        repo_root: fs.realpathSync(repoRoot),
       });
       expect(lines.join('\n')).toContain('granted reprieve');
     });

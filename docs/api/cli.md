@@ -91,11 +91,11 @@ preview. Do not assume one command's defaults apply to another.
 Project specs and bindings own authority. Leases and directed messages report
 activity, not permission. Record AC closure with `caws specs evidence`; typed
 `evidence record` supports tests, gates, and human decisions. Gates use project
-policy and waivers. Hook exceptions use human-granted session-global reprieves,
-under `~/.caws/state/sessions/<id>/`; `--surface` supplies harness provenance
-and legacy lookup, not a new per-vendor grant directory. See
-`caws reprieve grant --help` for required identity, handler, reason, approver,
-and expiry flags.
+policy and waivers. Hook exceptions use human-granted reprieves stored under
+`~/.caws/state/sessions/<id>/` and reaching one session in one repo unless
+granted `--all-repos`; `--surface` supplies harness provenance and legacy
+lookup, not a new per-vendor grant directory. See `caws reprieve grant --help`
+for required identity, handler, reason, approver, and expiry flags.
 
 Most commands use exit 0 for success, 1 for domain failure, and 2 for
 composition or usage errors. Some integrity gates have additional codes; consult

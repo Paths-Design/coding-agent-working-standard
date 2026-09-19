@@ -1994,7 +1994,7 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
       kind: 'leaf',
       name: 'grant',
       description:
-        'Human-terminal operation: grant a session-global reprieve under CAWS_HOME/state/sessions for the named handlers until expiry. Agents cannot grant their own reprieves. Replaces commenting a guard out of the dispatcher HANDLERS array (which disables it for every agent forever). The reprieve is recorded with a reason, approver, and expiry; the skip is logged to stderr when it fires; foreign sessions are never covered.',
+        'Human-terminal operation: grant a reprieve under CAWS_HOME/state/sessions for the named handlers until expiry. Agents cannot grant their own reprieves. Replaces commenting a guard out of the dispatcher HANDLERS array (which disables it for every agent forever). One session, one repo by default: the record is stamped with the repo it was granted from and guards elsewhere ignore it unless --all-repos was given. A grant covering part of a handler set that jointly enforces one boundary is refused. The reprieve is recorded with a reason, approver, and expiry; the skip is logged to stderr when it fires; foreign sessions are never covered.',
       options: [
         {
           flag: '--handlers <list>',
@@ -2023,6 +2023,11 @@ export const REPRIEVE_COMMAND_META: GroupCommandMeta = {
           flag: '--surface <name>',
           description:
             'Harness provenance and legacy lookup context (default: detect); new grants use the machine session store',
+        },
+        {
+          flag: '--all-repos',
+          description:
+            'Reach every repo on this machine instead of only the repo the grant is issued from. Default is repo-scoped: a guard in any other repo ignores the grant. Use only when the work legitimately spans repos, and state that in --reason.',
         },
         { flag: '--dry-run', description: 'Validate and report without writing the state file' },
         { flag: '--json', description: 'Emit the result as JSON.' },

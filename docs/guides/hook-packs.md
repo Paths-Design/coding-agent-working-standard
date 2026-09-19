@@ -360,7 +360,8 @@ Rollback refuses to overwrite a concurrent edit.
 
 From the canonical project checkout, a human can run the reset helper from the
 active verified runtime. This is separate from reprieve grants: latches remain
-project/harness state, while new reprieves are session-global. Do not edit a
+project/harness state, while reprieve records live in the machine session store
+and reach one session in one repo (`--all-repos` widens that). Do not edit a
 snapshot or infer the project root from its installation directory.
 
 ```bash

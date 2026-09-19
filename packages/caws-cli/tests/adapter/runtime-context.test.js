@@ -6,7 +6,7 @@ const { spawnSync } = require('node:child_process');
 const { installMachineRuntime } = require('../../dist/init/machine-adapters');
 const cli = path.resolve(__dirname, '../../dist/index.js');
 
-test('real CLI grant crosses repositories and a linked worktree; the real ownership guard still refuses a foreign session', () => {
+test('real CLI grant reaches the granting repo and its linked worktree but not another repo (--all-repos restores that); the real ownership guard still refuses a foreign session', () => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caws-context-')));
   const repo = path.join(root, 'project');
   const home = path.join(root, 'machine');
@@ -135,6 +135,37 @@ test('real CLI grant crosses repositories and a linked worktree; the real owners
     );
     policy.surfaces.codex.events.pre_tool_use.handlers = ['worktree-write-guard.sh'];
     fs.writeFileSync(path.join(second, '.caws/hooks/adapter-policy.json'), JSON.stringify(policy));
+    // CAWS-REPRIEVE-BOUNDARY-AND-REPO-SCOPE-01: a grant made in `repo` reaches
+    // `repo` and its linked worktree (asserted above — same repository) but
+    // NOT an unrelated repository. The linked-worktree case is what makes this
+    // a reach rule rather than a cwd rule.
+    expect(dispatch(second, 'fixture-foreign').status).toBe(2);
+    expect(dispatch(second, 'another-session').status).toBe(2);
+    // Re-granting with the explicit machine-wide flag restores the old reach,
+    // so the difference is the flag and not the dispatch plumbing.
+    run(
+      process.execPath,
+      [
+        cli,
+        'reprieve',
+        'grant',
+        '--session',
+        'fixture-foreign',
+        '--surface',
+        'codex',
+        '--handlers',
+        'worktree-write-guard.sh',
+        '--reason',
+        'isolated fixture grant, machine-wide',
+        '--approved-by',
+        'fixture-human',
+        '--for',
+        '5m',
+        '--all-repos',
+      ],
+      repo,
+      human
+    );
     expect(dispatch(second, 'fixture-foreign').status).toBe(0);
     expect(dispatch(second, 'another-session').status).toBe(2);
   } finally {

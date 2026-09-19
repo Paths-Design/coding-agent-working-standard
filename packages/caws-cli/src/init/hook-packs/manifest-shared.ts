@@ -520,7 +520,11 @@ import { isAdapterCoveredSurface } from './types';
 // Bash boundary was already complete. An installed consumer decides whether to
 // update by comparing this number, so a guard fix that does not bump it never
 // reaches a single installed hook.
-export const SHARED_PACK_VERSION = 86;
+// 87 closes CAWS-REPRIEVE-BOUNDARY-AND-REPO-SCOPE-01 on the reader side:
+// lib/reprieve.sh now honors a record's `repo_root`, so a grant issued in one
+// repo no longer lifts a guard in every other repo on the machine. An absent
+// field stays machine-wide, which is what keeps a pre-upgrade grant alive.
+export const SHARED_PACK_VERSION = 87;
 
 /**
  * The vendored TELEMETRY rows: the turn-log fold (session-log.sh +

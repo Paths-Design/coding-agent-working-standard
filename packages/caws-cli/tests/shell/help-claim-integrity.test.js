@@ -186,12 +186,17 @@ describe('claimed exit codes', () => {
     // decisions include refusals." Exit 0 alone would pass vacuously on a plan
     // where every path was admitted, so the counts must show a non-admit.
     //
-    // Which non-admit appears depends on where this runs: a bound worktree
-    // rejects an out-of-scope path, an unbound checkout reports no_authority
-    // for every path. Both are the claim's case -- a decision the caller did
-    // not get -- so assert on the union rather than pinning one environment
-    // and going red in the other.
-    const r = runCli(['scope', 'plan', '--path', '.caws/policy.yaml', '--path', 'AGENTS.md'], REPO);
+    // The non-admit path must be one NO spec can admit. An ordinary repo path
+    // (this test used AGENTS.md) couples the oracle to whichever spec happens
+    // to be bound here: the moment an agent amends that path into scope, the
+    // plan returns all-admits and this goes red for a reason that has nothing
+    // to do with the claim. A parent-traversal path is classified
+    // invalid_path by the kernel before scope is consulted at all, so it is
+    // stable in a bound worktree, an unbound checkout, and CI alike.
+    const r = runCli(
+      ['scope', 'plan', '--path', '.caws/policy.yaml', '--path', '../../../../etc/passwd'],
+      REPO
+    );
     expect(r.status).toBe(0);
 
     const counts = /admit=(\d+) reject=(\d+) no_authority=(\d+) invalid_path=(\d+)/.exec(r.stdout);
