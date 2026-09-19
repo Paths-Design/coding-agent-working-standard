@@ -71,3 +71,9 @@ evidence:
     recorded_at: "2026-09-19T02:26:17.627Z"
     artifact_path: packages/caws-cli/tests/init/repo-hook-policy.test.js
     commit_sha: "8ca16514"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Both stores proven untouched, and the floor proven whole. End-to-end (hooks-mutating.test.js 'a machine entry disabling a FLOOR handler refuses and names it'): exit 1, stdout naming protected-paths.sh and 'Nothing was written', treeHash of .caws byte-identical before/after AND the machine state file byte-identical — the two-store check, because a verb that writes two places has two ways to leave residue. A sibling arm does the same for the REPLACE route ('a no-op replacement is a disable'), since gating only disabled leaves the bypass one key away. At the mutation layer (repo-hook-policy.test.js) the check is parameterised over EVERY name in REPO_POLICY_FLOOR through both routes, so adding a name to the floor cannot leave it ungated. Non-vacuity: 'a NON-floor handler is admitted through both routes' passes the same shapes with god-object-check.sh/scope-guard.sh and asserts ok === true, so the refusals are caused by floor membership rather than by the fixture being rejected for some other reason. WHY REFUSE RATHER THAN DROP: dropping would increase enforcement (safe) but would make the import a false claim of equivalence. Run: npx jest tests/shell/hooks-mutating.test.js tests/init/repo-hook-policy.test.js => 46/46 and 131/131; full suite => 247/247, 3320/3320, exit 0."
+    recorded_at: "2026-09-19T02:26:28.936Z"
+    artifact_path: packages/caws-cli/tests/shell/hooks-mutating.test.js
+    commit_sha: "8ca16514"
