@@ -70,8 +70,11 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 
 emit_block() {
-  # $1 = reason text (already free of raw newlines)
-  python3 -c 'import json,sys; print(json.dumps({"decision":"block","reason":sys.argv[1]}))' "$1"
+  # $1 = reason text (already free of raw newlines).
+  # Compact separators so the emitted decision is byte-identical in shape to
+  # every other guard in this pack ({"decision":"block",...}); anything that
+  # greps for that literal must match this handler too.
+  python3 -c 'import json,sys; print(json.dumps({"decision":"block","reason":sys.argv[1]},separators=(",",":"),ensure_ascii=False))' "$1"
 }
 
 SPEC_ID="$(python3 -c '
@@ -101,7 +104,7 @@ VERIFY_STATUS=$?
 # YAML, crash). Block and name the failure — never pass the stop silently on an
 # unreadable gate.
 if [[ -z "$REPORT" ]]; then
-  emit_block "CAWS goal-ac-gate: 'caws specs verify-acs $SPEC_ID --json' produced no report (exit $VERIFY_STATUS), so the acceptance bar for $SPEC_ID cannot be re-derived. This is a gate failure, not a pass. Investigate, then retry or $ESCAPE_HINT"
+  emit_block "CAWS goal-ac-gate: 'caws specs verify-acs $SPEC_ID --json' produced no report (exit $VERIFY_STATUS), so the acceptance bar for $SPEC_ID cannot be re-derived. This is a gate failure, not a pass. Investigate, then retry. $ESCAPE_HINT"
   exit 0
 fi
 
