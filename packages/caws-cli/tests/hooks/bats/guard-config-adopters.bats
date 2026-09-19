@@ -398,9 +398,12 @@ _god_object_threshold() {
 # ─────────────────────────────────────────────────────────────────────────────
 
 @test "scope-guard without the loader still refuses what the kernel refuses" {
+  # A REPO-RELATIVE path, deliberately: an absolute one is adjudicated by the
+  # foreign-repo containment block first, which refuses for its own reasons
+  # and would let this arm pass without the scope path running at all.
   write_policy "$(scope_prefix_policy 'native/')"
-  run_guard_missing_lib scope-guard.sh guard-config.sh "$(hook_envelope Edit "$CAWS_TEST_REPO/native/core.rs")"
-  [[ -n "$output" ]]
+  run_guard_missing_lib scope-guard.sh guard-config.sh "$(hook_envelope Edit "native/core.rs")"
+  [[ "$output" == *'"decision": "block"'* ]]
 }
 
 @test "write-allowlist without the loader still allowlists its SHIPPED paths" {
@@ -418,4 +421,78 @@ _god_object_threshold() {
     caws_is_write_allowlisted "$1/docs/readme.md" "$1"
   ' _ "$CAWS_TEST_REPO" "$CAWS_TEST_HOOKS_DIR"
   [ "$status" -eq 0 ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The single-parse claim, driven through the real dispatcher
+# ─────────────────────────────────────────────────────────────────────────────
+
+@test "a whole pre_tool_use dispatch spawns the parser EXACTLY once" {
+  # This is the measurement the entire design rests on and the one thing the
+  # accessors cannot tell you: caws_guard_config_load is idempotent WITHIN a
+  # process, but each guard is its own process, so per-process idempotence
+  # would still mean one spawn per adopting guard. The claim is that
+  # run-handlers.sh parses once and the guards inherit it through exported
+  # env — cross-process, which only a real dispatch can show.
+  #
+  # If this ever reads 4 instead of 1, the feature still WORKS and only the
+  # cost regresses, which is exactly why it would otherwise go unnoticed:
+  # nothing else in the suite would turn red.
+  local counter="$CAWS_TEST_REPO/.parse-count"
+  local real="$CAWS_TEST_HOOKS_DIR/lib/guard-config.py"
+  local saved="$CAWS_TEST_REPO/.guard-config.py.real"
+  write_policy "$(scope_prefix_policy 'native/')"
+  cp "$real" "$saved"
+  : > "$counter"
+  # The wrapper must be PYTHON, not bash: guard-config.sh invokes the parser as
+  # `python3 "$script"`, so the shebang is never consulted. A bash stub here
+  # fails to parse, the loader reports `unavailable` with stderr suppressed,
+  # and the counter reads 0 -- indistinguishable from "the chain never ran".
+  cat > "$real" <<COUNTER
+import os, sys
+open("$counter", "a").write("x")
+os.execv(sys.executable, [sys.executable, "$saved"] + sys.argv[1:])
+COUNTER
+
+  run env \
+    CLAUDE_CODE_SESSION_ID="$CAWS_TEST_SESSION_ID" \
+    CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
+    CAWS_AGENT_SURFACE="claude-code" \
+    HOOK_CWD="$CAWS_TEST_REPO" \
+    bash -c "printf '%s' '$(hook_envelope Edit "native/core.rs")' | bash '$CAWS_TEST_HOOKS_DIR/dispatch/pre_tool_use.sh'"
+
+  local spawns dispatch_output
+  spawns="$(wc -c < "$counter" | tr -d ' ')"
+  dispatch_output="$output"
+
+  # Control: the SAME dispatch with the configuration removed. This is what
+  # makes the count meaningful rather than merely small -- it shows the chain
+  # reaches a guard that CONSULTS the document, so "1" is one shared parse and
+  # not "nobody looked".
+  clear_policy
+  : > "$counter"
+  run env \
+    CLAUDE_CODE_SESSION_ID="$CAWS_TEST_SESSION_ID" \
+    CAWS_PROJECT_DIR="$CAWS_TEST_REPO" \
+    CAWS_AGENT_SURFACE="claude-code" \
+    HOOK_CWD="$CAWS_TEST_REPO" \
+    bash -c "printf '%s' '$(hook_envelope Edit "native/core.rs")' | bash '$CAWS_TEST_HOOKS_DIR/dispatch/pre_tool_use.sh'"
+  local unconfigured_output="$output"
+
+  cp "$saved" "$real"
+  rm -f "$counter" "$saved"
+
+  # pre_tool_use runs THREE adopting guards -- scope-guard.sh directly, plus
+  # worktree-write-guard.sh and bash-write-guard.sh through write-allowlist.sh.
+  # Per-guard parsing would read 3 or more here.
+  [ "$spawns" = "1" ]
+  # And the config demonstrably reached a guard inside that single parse: the
+  # same envelope through the same chain flips from blocked to admitted.
+  #
+  # The oracle is the DECISION, not the refusal prose. Which refusal text the
+  # unconfigured run produces depends on fixture state the earlier arms leave
+  # behind (whether `caws scope show --json` can render a diagnostic for this
+  # repo at all), so asserting the wording made this arm order-dependent.
+  [[ "$dispatch_output" != *'"decision": "block"'* ]]
+  [[ "$unconfigured_output" == *'"decision": "block"'* ]]
 }
