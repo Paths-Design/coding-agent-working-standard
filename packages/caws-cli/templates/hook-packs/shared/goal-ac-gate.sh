@@ -96,7 +96,33 @@ if [[ -z "${HOOK_SESSION_ID:-}" || "$HOOK_SESSION_ID" == "unknown" ]]; then
 fi
 
 PROJECT_DIR="${CAWS_PROJECT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
-BINDING_FILE="$PROJECT_DIR/.caws/sessions/$HOOK_SESSION_ID/goal.json"
+
+# Session state is CANONICAL-only, so the binding must be looked up there and
+# not under PROJECT_DIR.
+#
+# agent-surface.sh resolves CAWS_PROJECT_DIR with `git rev-parse
+# --show-toplevel`, which inside a linked worktree returns the WORKTREE root.
+# That tree has its own `.caws/`, and its `sessions/` is empty -- every session
+# dir is written to the canonical checkout. Looking for the binding under the
+# worktree therefore finds nothing and the gate goes inert down the A3
+# no-binding path: not an error, no diagnostic, just a goal that silently
+# stops enforcing for exactly the multi-agent case CAWS is built around.
+#
+# `--git-common-dir` is the one that points at canonical from either place (it
+# is `<canonical>/.git` in a worktree and in the main checkout alike), so its
+# parent is the canonical root in both. Fall back to PROJECT_DIR when git
+# cannot answer, which is also what makes the bats fixture (a plain repo, where
+# the two roots coincide) exercise the same code path.
+SESSIONS_ROOT="$PROJECT_DIR"
+_goal_common_dir="$(cd "$PROJECT_DIR" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null || true)"
+if [[ -n "$_goal_common_dir" ]]; then
+  # --git-common-dir may be relative to PROJECT_DIR; resolve from there.
+  _goal_canonical="$(cd "$PROJECT_DIR" 2>/dev/null && cd "$_goal_common_dir/.." 2>/dev/null && pwd || true)"
+  [[ -n "$_goal_canonical" ]] && SESSIONS_ROOT="$_goal_canonical"
+fi
+unset _goal_common_dir _goal_canonical
+
+BINDING_FILE="$SESSIONS_ROOT/.caws/sessions/$HOOK_SESSION_ID/goal.json"
 
 # The opt-in switch. No binding -> byte-identical to the pre-feature chain. (A3)
 [[ -f "$BINDING_FILE" ]] || exit 0

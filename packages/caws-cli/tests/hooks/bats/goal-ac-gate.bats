@@ -413,6 +413,37 @@ report_all_verified() {
   assert_output --partial 'A2=not_rederived'
 }
 
+@test "the binding is found from inside a LINKED WORKTREE, where it lives at canonical" {
+  write_binding
+  make_caws_stub "$(report_unmet)" 0
+  # Every other test in this file runs against a plain repo, where the worktree
+  # root and the canonical root are the same directory -- so they pass whether
+  # the gate looks under CAWS_PROJECT_DIR or under canonical, and cannot tell
+  # the two apart. This one makes them different.
+  #
+  # agent-surface.sh sets CAWS_PROJECT_DIR from `git rev-parse --show-toplevel`,
+  # which inside a linked worktree is the WORKTREE. Session dirs are written
+  # only to canonical, so a gate that trusts CAWS_PROJECT_DIR finds no binding
+  # and goes inert down the A3 path -- silently, in exactly the multi-agent
+  # setup this feature is for.
+  local wt="$CAWS_TEST_REPO/../caws-bats-linked-$$"
+  git -C "$CAWS_TEST_REPO" worktree add -q -b goal-gate-probe "$wt" 2>/dev/null
+
+  run env CLAUDE_CODE_SESSION_ID="$CAWS_TEST_SESSION_ID" \
+    CAWS_PROJECT_DIR="$wt" \
+    CAWS_AGENT_SURFACE="claude-code" \
+    HOOK_CWD="$wt" \
+    CAWS_BIN="$STUB_DIR/caws" \
+    CAWS_GOAL_MAX_CONSECUTIVE_BLOCKS=3 \
+    bash -c "printf '%s' '{\"session_id\":\"$CAWS_TEST_SESSION_ID\"}' | bash '$CAWS_TEST_HOOKS_DIR/goal-ac-gate.sh'"
+
+  git -C "$CAWS_TEST_REPO" worktree remove --force "$wt" 2>/dev/null || true
+  git -C "$CAWS_TEST_REPO" branch -D goal-gate-probe 2>/dev/null || true
+
+  assert_output --partial '"decision":"block"'
+  assert_output --partial 'A2=not_rederived'
+}
+
 @test "E2E: with no binding the Stop dispatcher is unchanged by this feature" {
   make_caws_stub "$(report_unmet)" 0
   run_gate_via_dispatcher
