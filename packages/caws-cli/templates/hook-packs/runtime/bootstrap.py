@@ -12,6 +12,14 @@ import re
 import runpy
 import sys
 
+# The only event where a bootstrap-scope failure may refuse. A refusal is
+# legitimate only when the blocked party can answer it: withholding a write
+# leaves the agent able to stop writing, while withholding the session's exit
+# leaves it no move at all -- it cannot act and cannot leave, and no CAWS-side
+# release exists. The driver draws the same line, but it cannot help here: by
+# the time anything below fails, the driver has not been reached.
+ENFORCING_EVENTS = {'pre_tool_use'}
+
 
 def confined(root, relative):
     parts = Path(relative).parts
@@ -54,6 +62,17 @@ if __name__ == '__main__':
         main()
     except (ValueError, OSError, KeyError, TypeError, AttributeError) as error:
         message = 'CAWS machine adapter: ' + str(error)
+        # Always loud on stderr. Degrading is not the same as going quiet, and
+        # an operator who never hears about a broken pointer cannot repair it.
         print('[caws machine adapter] ' + message, file=sys.stderr)
+        # Nothing here is a handler's verdict. Either the runtime could not be
+        # resolved, or the driver failed before it could answer for itself --
+        # a driver that DID answer exits through SystemExit, which this clause
+        # does not catch. So there is no decision to preserve, only a
+        # configuration fault to report.
+        #
+        # Read the event defensively: argv may itself be what went wrong.
+        if (sys.argv[2] if len(sys.argv) > 2 else '') not in ENFORCING_EVENTS:
+            sys.exit(0)
         print(json.dumps({'decision': 'block', 'reason': message}))
         sys.exit(2)
