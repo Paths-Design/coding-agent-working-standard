@@ -64,3 +64,10 @@ non_functional:
 contracts:
   - name: 'doctor.hooks repo-policy finding ids and data payloads'
     type: schema
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "A1 fork lag names handler, recorded pack version, shipping version and distance, in DATA not only prose. Kernel arm 'A1: a fork behind the shipping pack with a moved upstream warns, naming versions and distance in DATA not only prose' asserts message contains 'shared@67' / 'shipping 83' / '16 behind' AND data.forks[0] carries recorded_pack_version:67, shipping_pack_version:83, distance:16. Store arm 'A1: a fork recording a STALE sha256 reports upstreamChange=true with the real shipping version' measures against the REAL shipped scope-guard.sh bytes via shippedHandlerProvenance. Rendered live: the end-to-end arm asserts the real caws doctor binary prints 'doctor.hooks.repo_policy_fork_lag' and 'shared@67'. Run: cd packages/caws-cli && npx jest tests/kernel/unit/doctor-repo-hook-policy.test.ts tests/store/doctor-snapshot-repo-hook-policy.test.js => 39 passed. Mutation: filtering on upstreamChange !== undefined broke 3 kernel arms; measuring by pack_version instead of sha256 broke the store discriminator arm."
+    recorded_at: "2026-09-19T00:27:55.836Z"
+    artifact_path: packages/caws-cli/tests/kernel/unit/doctor-repo-hook-policy.test.ts
+    commit_sha: "18e80d74"
