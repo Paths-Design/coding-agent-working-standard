@@ -45,3 +45,8 @@ evidence:
     evidence_ref: "T11a: a 256 KiB ref-list payload (larger than any pipe buffer, verified by T11-setup) is written into a fifo that the real .husky/pre-push reads as stdin; the writer exits 0. Mutation-verified: deleting the drain block makes the writer exit 141 (SIGPIPE) and kills T11a, 54 -> 53 passed."
     recorded_at: "2026-09-19T18:33:35.904Z"
     commit_sha: "9ecd0ee0"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "T11b: with every stage stubbed to pass, the hook still exits 0 after the drain. T11-setup2 gates that the stubs reach the child shell, so the exit-0 is a real all-pass and not a harness artefact. This assertion survives the drain-removal mutation by design -- it asserts no verdict changed, it is not a drain detector."
+    recorded_at: "2026-09-19T18:33:38.689Z"
+    commit_sha: "9ecd0ee0"
