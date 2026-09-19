@@ -65,3 +65,8 @@ evidence:
     evidence_ref: "tests/shell/agents-binding-join.test.js A3 + A3b, run at 2eb69a0a: worktrees.json containing '{ this is not json' (parse failure) and '[\"wt-a\"]' (valid JSON, wrong shape -> REGISTRY_NOT_OBJECT) both render 'unknown  unknown'; exit code is 0 and the session is still listed. The asserted negatives are the point: the line must NOT contain '(no worktree)' or '(no spec)', because with the registry unreadable that absence cannot be sourced."
     recorded_at: "2026-09-19T10:17:01.600Z"
     commit_sha: "2eb69a0a"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "tests/shell/agents-binding-join.test.js A4 + A4b + A4c, run at 2eb69a0a: --json emits worktree_bindings {source: '.caws/worktrees.json', resolution, by_session}. A4 asserts by_session['sess-json'] deep-equals [{worktree:'wt-j1',spec_id:'SPEC-J1'},{worktree:'wt-j2',spec_id:null}] -- the same two facts the text columns carry -- and that a session owning nothing gets an explicit [] rather than a missing key. A4b asserts resolution:'unreadable' with by_session UNDEFINED, not {}: an empty map would assert that every listed session owns nothing, the exact claim the unreadable registry denies us. A4c pins that by_session keys track the sessions actually emitted. No always-null field remains in the agents list payload; the join replaced the '?? null' read. Live runtime artifact on this repo at the same instant: new build printed 'wt-agents-binding-join  CAWS-AGENTS-LIST-BINDING-JOIN-01' while the installed PATH snapshot printed '(no worktree)  (no spec)' for the same session."
+    recorded_at: "2026-09-19T10:17:14.452Z"
+    commit_sha: "2eb69a0a"
