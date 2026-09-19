@@ -126,3 +126,8 @@ evidence:
     evidence_ref: "Proven by two must-stay-legal counterweights: e2e [pins the session on its first governed command and admits it in repo A (A2, A5)] and [still admits the same four commands back in repo A (must stay legal)] in tests/shell/lifecycle-cross-repo-containment.test.js, plus decision-layer suite [lifecycle containment - in-repo and worktree admission (A2, A3)] in tests/shell/session-origin-record.test.js. These are the tests that fail if containment degenerates into a general lifecycle brake; both passed against the PRE-change snapshot too, which is why they isolate the 8 baseline failures to genuinely new behavior rather than to a broken build."
     recorded_at: "2026-09-19T07:05:27.123Z"
     commit_sha: "8485bf99"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "Proven by decision-layer suite [lifecycle containment - in-repo and worktree admission (A2, A3)] in tests/shell/session-origin-record.test.js. The mechanism is resolveRepoRoot resolving through git rev-parse --path-format=absolute --git-common-dir, so a linked worktree and its canonical checkout map to the SAME root string and the comparison is never a cwd string compare. Live corroboration: this very session is pinned to the caws canonical root while working from the linked worktree at .caws/worktrees/wt-lifecycle-containment, and every governed command in this lane was admitted."
+    recorded_at: "2026-09-19T07:05:28.731Z"
+    commit_sha: "8485bf99"
