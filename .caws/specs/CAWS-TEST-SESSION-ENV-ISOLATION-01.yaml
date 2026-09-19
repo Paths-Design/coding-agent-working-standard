@@ -1,0 +1,42 @@
+id: CAWS-TEST-SESSION-ENV-ISOLATION-01
+title: 'Test suites must not inherit the runner''s session identity; isolation belongs in setup, not per call site'
+risk_tier: 3
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-19T19:41:45.131Z'
+updated_at: '2026-09-19T19:41:45.131Z'
+created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
+blast_radius:
+  modules:
+    - 'caws-cli jest test harness (jest.config.js projects, tests/helpers)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/jest.config.js'
+    - 'packages/caws-cli/tests/helpers/session-env-isolation.js'
+    - 'packages/caws-cli/tests/shell/session-env-isolation.test.js'
+  out: []
+invariants:
+  - 'A test''s verdict never depends on the identity of the session that runs it. No governed CLI invocation in the suite -- spawned or in-process -- reaches the cross-repo containment boundary carrying the developer''s or agent''s real session id.'
+  - 'Session-identity isolation is applied once in shared setup, not per call site. A new test that spawns or invokes the CLI inherits isolation by default and cannot silently opt out by forgetting an env override.'
+  - 'The isolation must be PROVEN to execute in every jest project, not inferred from where it sits in the config. jest silently drops some keys nested under projects[], so a config-placement argument is not evidence.'
+acceptance:
+  - id: A1
+    given: 'a session with a recorded origin.json for this repo (the ordinary agent case)'
+    when: 'the full caws-cli suite runs with the harness environment intact'
+    then: '0 suites fail with ''refusing -- this session is rooted in another repository'''
+  - id: A2
+    given: 'the same suite'
+    when: 'it runs with env -u CLAUDE_CODE_SESSION_ID'
+    then: 'the pass/fail verdict is byte-identical to the run with the variable set -- the discriminator no longer discriminates'
+  - id: A3
+    given: 'a test that deliberately asserts session-provenance behavior (specs-create-session-provenance.test.js)'
+    when: 'shared isolation is in place'
+    then: 'it still passes, because an explicit per-test session id overrides the shared default rather than being overridden by it'
+  - id: A4
+    given: 'the shared isolation setup'
+    when: 'a test in the kernel project and a test in the caws-cli project each read the isolated variable'
+    then: 'both observe the isolated value, proving setupFiles ran in both projects'
+non_functional: {}
+contracts: []
