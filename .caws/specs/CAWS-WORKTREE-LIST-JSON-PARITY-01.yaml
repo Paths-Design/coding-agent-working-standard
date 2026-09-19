@@ -1,0 +1,57 @@
+id: CAWS-WORKTREE-LIST-JSON-PARITY-01
+title: 'caws worktree list gains --json so the authoritative ownership and binding surface is machine-readable, at parity with its human rendering'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-19T10:39:20.061Z'
+updated_at: '2026-09-19T10:39:20.061Z'
+created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
+blast_radius:
+  modules:
+    - 'caws-cli worktree list rendering and JSON view'
+    - 'caws-cli worktree command registration and metadata'
+    - 'docs/architecture read-surface authority contract'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/worktree.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/tests/shell/worktree-list-json.test.js'
+    - 'docs/architecture/read-surface-authority.v1.yaml'
+  out: []
+invariants:
+  - 'Parity is bidirectional. Every fact the human rendering states must appear in --json for the same entry, and the JSON must not be the only place a fact lives. --json may add machine detail the human form abbreviates (the full owner session id where the row prints an eight-character prefix), but abbreviation is not omission.'
+  - 'An unresolvable ref must never serialize as ahead=0 behind=0. That reads as ''this lane is current'' -- the one answer that is actively wrong -- so it carries null counts and an explicit unknown_reason, matching what the human rendering already refuses to flatten.'
+  - 'worktree list is the AUTHORITY surface for worktree ownership and spec binding. Its payload is sourced from worktrees.json alone and must not blend in lease-derived liveness, because a lease is operational cache and cannot confer or vacate ownership.'
+  - 'Divergence counts are a point-in-time read of LOCAL refs that a peer landing work invalidates. The payload timestamps them so a consumer cannot mistake a cached response for a current one.'
+acceptance:
+  - id: A1
+    given: 'a registry with worktrees bound to specs and owned by sessions'
+    when: 'caws worktree list --json runs'
+    then: 'each entry carries name, branch, base_branch, spec_id, owner, path and a divergence object, and the payload parses as JSON with no human prose mixed into stdout'
+  - id: A2
+    given: 'the same registry rendered both ways'
+    when: 'the human rows and the JSON entries are compared field by field'
+    then: 'every fact on a row is present in that entry, and the row''s eight-character owner is a prefix of the JSON''s full session id rather than a fact the JSON lacks'
+  - id: A3
+    given: 'a worktree whose branch or base ref does not resolve'
+    when: 'caws worktree list --json runs'
+    then: 'that entry reports ahead and behind as null with a non-empty unknown_reason, and never reports zero counts that would read as an up-to-date lane'
+  - id: A4
+    given: 'a repository with no registered worktrees'
+    when: 'caws worktree list --json runs'
+    then: 'it emits an empty worktrees array with zero counts and exits 0, because an empty registry is a successful read and not an error'
+  - id: A5
+    given: 'the footer guidance the human form prints when lanes are behind base'
+    when: 'the JSON payload is inspected'
+    then: 'it carries the same behind-base count so a machine reader receives the signal the human reader is given, satisfying parity in the direction that is easy to forget'
+  - id: A6
+    given: 'the read-surface authority contract'
+    when: 'it is read after this change'
+    then: 'worktree list declares its --json rendering and the parity known_nonconformance entry naming its missing machine surface is removed because the gap is closed'
+non_functional: {}
+contracts:
+  - name: 'read-surface-unsourced-fact'
+    type: behavior
