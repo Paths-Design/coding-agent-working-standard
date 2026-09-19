@@ -48,3 +48,9 @@ evidence:
     recorded_at: "2026-09-19T02:39:53.269Z"
     artifact_path: packages/caws-cli/tests/hooks/bats/scope-guard.bats
     commit_sha: "60460679"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "The containment half — the fix may only NARROW the foreign set. Arm 'a foreign path with a redundant separator is still foreign' drives a path in a genuinely different temp repository, spelled with the SAME doubled separator that A1 proves is now tolerated in-repo, and asserts exit 2 plus 'DIFFERENT repository'. That pairing is the point: it discriminates a fix that compares normalized absolute paths from one that merely collapsed separators or loosened the prefix match, which would have admitted this path too. The pre-existing arm 'a write into ANOTHER repository's linked worktree is hard-blocked as foreign (no strike ramp)' also still passes, with its 'linked worktree of <repo>' attribution and its refute of 'strike 1 of 3' intact. WHAT MAKES THESE NON-VACUOUS: both containment arms passed BEFORE the fix as well as after, so they are genuine regression locks rather than arms that only became reachable with the change. WHY PHYSICAL RESOLUTION IS THE SAFE DIRECTION: 'cd $dir && pwd' resolves symlinks to their targets, so a symlinked directory inside the project pointing outside resolves to the outside physical path and remains foreign — normalization cannot manufacture in-repo membership. Run: npx bats tests/hooks/bats/scope-guard.bats => 22/22; full bats => 407 ok, 0 not ok; full jest => 247/247, 3320/3320, exit 0."
+    recorded_at: "2026-09-19T02:40:05.489Z"
+    artifact_path: packages/caws-cli/tests/hooks/bats/scope-guard.bats
+    commit_sha: "60460679"
