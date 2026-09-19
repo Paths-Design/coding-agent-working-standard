@@ -2,9 +2,10 @@ id: CAWS-HOOKS-POLICY-IMPORT-FROM-MACHINE-01
 title: 'hooks import --from-machine: migrate machine-state overrides into the committed repo policy'
 risk_tier: 2
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-hooks-import
 created_at: '2026-09-19T02:12:37.992Z'
-updated_at: '2026-09-19T02:12:37.992Z'
+updated_at: '2026-09-19T02:12:46.656Z'
 created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
 blast_radius:
   modules:
