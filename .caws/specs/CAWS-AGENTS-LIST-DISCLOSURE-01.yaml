@@ -1,0 +1,57 @@
+id: CAWS-AGENTS-LIST-DISCLOSURE-01
+title: 'caws agents list discloses what it withheld and which tier each column came from, and splits the conjoined-unresolved warning into its two populations with a repair line'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-19T10:50:49.338Z'
+updated_at: '2026-09-19T10:50:49.338Z'
+created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
+blast_radius:
+  modules:
+    - 'caws-cli agents list rendering'
+    - 'conjoining telemetry disclosure'
+    - 'docs/architecture read-surface authority contract'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/commands/agents.ts'
+    - 'packages/caws-cli/tests/shell/agents-list-disclosure.test.js'
+    - 'packages/caws-cli/tests/shell/agents-fork-identity.test.js'
+    - 'docs/architecture/read-surface-authority.v1.yaml'
+  out: []
+invariants:
+  - 'TODO: describe one invariant this spec guarantees.'
+acceptance:
+  - id: A1
+    given: 'a repository whose leases include stale and stopped sessions'
+    when: 'caws agents list runs with no flags'
+    then: 'it prints how many sessions it showed out of the total and names each withheld bucket with the exact flag that reveals it, so a default run can never read as the whole population'
+  - id: A2
+    given: 'a run that passes --active together with --include-stale'
+    when: 'the hidden-count line is rendered'
+    then: 'it reports stale as hidden and states that the flag was given but suppressed by --active, because naming a remediation the invocation already defeats is worse than naming none'
+  - id: A3
+    given: 'nothing is withheld because every bucket is empty or shown'
+    when: 'caws agents list runs'
+    then: 'it still states the visibility line with no hidden buckets, so the absence of the line never has to be interpreted'
+  - id: A4
+    given: 'the worktree and spec columns joined from worktrees.json'
+    when: 'any rendering of agents list completes'
+    then: 'it names .caws/leases as the operational cache it read for liveness and .caws/worktrees.json as the authority it joined for binding, and says so differently when that registry could not be read'
+  - id: A5
+    given: 'recent same-platform overlapping leases that lack complete fork identity'
+    when: 'the conjoined-unresolved warning is printed'
+    then: 'the pair count and the lease-classification coverage appear as separate statements naming their own units, rather than one sentence mixing pairs and leases'
+  - id: A6
+    given: 'that same warning'
+    when: 'it is printed'
+    then: 'it carries a repair line naming --session-kind and the CAWS_SESSION_KIND passthrough, and states that existing leases are never rewritten because one session must not write another session lease file'
+  - id: A7
+    given: 'a silent platform whose recorded platform value is the literal string unknown'
+    when: 'the silent-platform badge is printed'
+    then: 'it marks that value as the recorded platform rather than an unresolved field, and the badge for any other platform keeps its existing form'
+non_functional: {}
+contracts:
+  - name: 'read-surface-unsourced-fact'
+    type: behavior
