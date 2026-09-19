@@ -70,3 +70,8 @@ evidence:
     evidence_ref: "bats B2 (must-stay-legal counterweight): a node -e payload whose only write paths are inside THIS repo and /tmp is still refused for opacity AND still prints the script-file option. B2 was 'ok' in the pre-fix baseline and stays 'ok' after, which is the point: it proves the change is a targeted narrowing, not a blanket removal of the remediation. Run: npx bats tests/hooks/bats/block-dangerous.bats."
     recorded_at: "2026-09-19T05:24:01.205Z"
     commit_sha: "14d0ffe19126e71e83e9da68b4115a4d92f20de3"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "bats B3 (discriminating pair with B1): the SAME sibling-repo path, but the payload only READS it (open().read(), no write verb). Still refused for opacity, and the script-file option IS still printed, because a cross-repo read is not a route any sibling guard refuses. B3 was 'ok' pre-fix and stays 'ok'. Together B1/B3 prove the suppression keys on the write-verb co-occurrence predicate in caws_bash_interpreter_write_literals, not on the mere presence of a foreign path."
+    recorded_at: "2026-09-19T05:24:10.987Z"
+    commit_sha: "14d0ffe19126e71e83e9da68b4115a4d92f20de3"
