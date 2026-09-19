@@ -131,3 +131,8 @@ evidence:
     evidence_ref: "Proven by decision-layer suite [lifecycle containment - in-repo and worktree admission (A2, A3)] in tests/shell/session-origin-record.test.js. The mechanism is resolveRepoRoot resolving through git rev-parse --path-format=absolute --git-common-dir, so a linked worktree and its canonical checkout map to the SAME root string and the comparison is never a cwd string compare. Live corroboration: this very session is pinned to the caws canonical root while working from the linked worktree at .caws/worktrees/wt-lifecycle-containment, and every governed command in this lane was admitted."
     recorded_at: "2026-09-19T07:05:28.731Z"
     commit_sha: "8485bf99"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Proven by decision-layer suites [lifecycle containment - who is contained (A4)] and [lifecycle containment - every contained identity source (A4)] in tests/shell/session-origin-record.test.js. The second is a table over all twelve SessionSource variants asserting isContainedSource membership (9 contained, 3 not) AND asserting which resolver tier each row actually exercised via pinned.record.source, so a row cannot pass by resolving through a different tier than intended - that assertion is what caught a fixture citing CLAUDE_CODE_SESSION_ID for a surface that pins CLAUDE_SESSION_ID. A caller with no harness identity yields kind not_applicable and writes no record."
+    recorded_at: "2026-09-19T07:05:30.618Z"
+    commit_sha: "8485bf99"
