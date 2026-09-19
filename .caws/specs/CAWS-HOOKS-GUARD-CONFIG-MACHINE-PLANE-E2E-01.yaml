@@ -2,10 +2,11 @@ id: CAWS-HOOKS-GUARD-CONFIG-MACHINE-PLANE-E2E-01
 title: 'Prove the machine-routed plane honors tier-2 guard config end to end'
 risk_tier: 2
 mode: chore
-lifecycle_state: active
-worktree: wt-machine-plane-e2e
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-machine-plane-e2e at 96ed3b0f5e61dfc2a582f57636550a478face132'
 created_at: '2026-09-19T01:51:52.614Z'
-updated_at: '2026-09-19T01:52:03.127Z'
+updated_at: '2026-09-19T02:09:21.412Z'
 created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
 blast_radius:
   modules:
