@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-policy-doctor
 created_at: '2026-09-19T00:04:01.850Z'
-updated_at: '2026-09-19T00:06:29.371Z'
+updated_at: '2026-09-19T00:11:41.136Z'
 created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
 blast_radius:
   modules:
@@ -23,6 +23,9 @@ scope:
     - 'packages/caws-cli/tests/store/doctor-snapshot-repo-hook-policy.test.js'
     - packages/caws-cli/src/init/hook-install.ts
     - packages/caws-cli/src/shell/commands/hooks.ts
+    - packages/caws-cli/src/init/hook-chain.ts
+    - packages/caws-cli/src/store/types.ts
+    - packages/caws-cli/src/kernel/doctor/index.ts
   out: []
 invariants:
   - 'The kernel classifies; the store observes. Every comparison needing filesystem or template access (the shipped pack version, the rendered template body, the compiled chain bytes) is computed in the store and passed to the kernel as plain data, so the kernel keeps no I/O and no dependency on src/init.'
