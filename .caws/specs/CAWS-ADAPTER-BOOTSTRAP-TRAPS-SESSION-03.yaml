@@ -18,7 +18,9 @@ scope:
     - 'packages/caws-cli/tests/adapter/runtime-bootstrap.test.js'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'A refusal is legitimate only when the blocked party can answer it: withholding a write is answerable, withholding the session''s exit is not.'
+  - 'The partition is pre- versus post-dispatch, not event alone: an error raised before any handler ran is a configuration fault and must not be reported as a handler''s decision.'
+  - 'An upgrade path that cannot distinguish upstream drift from local modification will refuse correct fixes; the two cases must be told apart by content, not by inequality alone.'
 acceptance:
   - id: A1
     given: 'the machine runtime pointer, manifest or driver fails integrity or cannot be read'
