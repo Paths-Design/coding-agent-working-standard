@@ -56,3 +56,8 @@ evidence:
     evidence_ref: "read_surfaces enumerates 12 surfaces (status, doctor, agents list, agents show, specs list, specs show, worktree list, claim, goal show, working-tree check, scope show, message), each with subject, tier, asserts and a mandatory is_not clause. Structurally verified: every surface has is_not = True, and no asserts entry references a domain outside fact_domains. Surfaces were enumerated from the live caws --help groups, not from memory."
     recorded_at: "2026-09-19T09:52:41.769Z"
     commit_sha: "34211d38"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "fact_domains declares 7 domains, each naming exactly one authority (verified: every domain has an authority key). authority_tiers separates authority (.caws/specs, .caws/worktrees.json, .caws/events.jsonl) from operational_cache (.caws/leases, agents.json, messages.jsonl) from derived_advisory (doctor, status panels, working-tree, scope contention). Each read surface then declares which tier it reads, so a joining dashboard cannot be mistaken for an origin of fact."
+    recorded_at: "2026-09-19T09:52:42.984Z"
+    commit_sha: "34211d38"
