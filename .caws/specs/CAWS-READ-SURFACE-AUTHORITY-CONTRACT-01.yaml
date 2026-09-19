@@ -71,3 +71,8 @@ evidence:
     evidence_ref: "non_collapse_relations lists 6 relations. The four required by the acceptance criterion are present: persisted status vs TTL classification, authorship (created_by_session) vs binding, cwd vs binding, plus worktree ownership vs lease liveness. Each is also mirrored in the relevant domain's is_not field so a reader meets it wherever they enter the document. The status-vs-TTL relation is backed by an observation, not theory: agents show reported status=active for session 1aa3f0bd while agents list bucketed the same record as stale."
     recorded_at: "2026-09-19T09:52:45.379Z"
     commit_sha: "34211d38"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "rendering_obligations carries 5 entries including completeness (a filtering surface must state what it withheld and the flag to see it, with a required form) and parity (human and --json of one surface must carry the same facts; --json may add machine detail but may never be the sole location of a fact). Both are backed by recorded non-conformances: agents list prints only the active bucket of 12 records with no hidden-count hint, and worktree list is the authoritative ownership surface with no machine-readable output at all."
+    recorded_at: "2026-09-19T09:52:46.637Z"
+    commit_sha: "34211d38"
