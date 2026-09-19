@@ -18,7 +18,9 @@ scope:
     - '.husky/tests/run.sh'
   out: []
 invariants:
-  - 'TODO: describe one invariant this spec guarantees.'
+  - 'The drain reads to EOF and discards. It must never branch on the ref list: a hook that decides what to check based on which refs are being pushed is a hook whose coverage varies per invocation.'
+  - 'The drain happens before the long stages, not after. Its whole purpose is that git''s write completes while the writer is still alive; draining at the end preserves exactly the race it is meant to remove.'
+  - 'This is plumbing, not policy. Exit 0 on all-pass and exit 1 on any-fail must be byte-for-byte unchanged, and the no-environment-variable-escape-hatch property is untouched.'
 acceptance:
   - id: A1
     given: 'git invoking the pre-push hook and writing one ref line to its stdin per the pre-push protocol'
