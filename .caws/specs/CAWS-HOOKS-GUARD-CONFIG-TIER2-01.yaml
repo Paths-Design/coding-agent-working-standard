@@ -88,3 +88,10 @@ contracts:
     type: schema
   - name: 'guard-config loader env transport'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "npx bats tests/hooks/bats/guard-config-adopters.bats -> 26/26 ok, 0 not ok. Arms 1-3 are the controlled comparison: 'baseline: with no config, a path the kernel refuses is refused' (native/core.rs REFUSED), then the IDENTICAL envelope ADMITTED once guards.scope-guard.sh.additional_allow_prefixes declares native/, then 'the declared prefix admits its subtree only' (src/unrelated.ts still refused) and 'the prefix boundary is respected' (native-adjacent/ still refused). caws scope check is stubbed to refuse unconditionally so ALLOW_PREFIXES is the only thing that can admit. The floor half is arm 'worktree payload still DENIES with a config present': caws_is_write_allowlisted returns 1 for .caws/worktrees/wt-a/payload.txt with the config present, because the payload exclusion sits BEFORE the config arm in write-allowlist.sh. NOTE the oracle: scope-guard exits 0 for a refusal too (block JSON on stdout), so these assert on OUTPUT, not status - six arms passed vacuously until that was corrected."
+    recorded_at: "2026-09-19T01:29:54.015Z"
+    artifact_path: packages/caws-cli/tests/hooks/bats/guard-config-adopters.bats
+    commit_sha: "1a339824"
