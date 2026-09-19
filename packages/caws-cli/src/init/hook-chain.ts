@@ -14,6 +14,12 @@
  */
 
 import { createHash } from 'node:crypto';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import * as path from 'node:path';
+
+import { SHARED_PACK_VERSION } from './hook-packs/manifest-shared';
+import { extractMachineHandlers } from './machine-handler-policy';
+import { POLICY_EVENTS, resolveChain, type RepoSurfacePolicy } from './repo-hook-policy';
 
 /** Mirrors the parser's header test: `'# caws hook chain v1 '*`. */
 export const CHAIN_HEADER_PREFIX = '# caws hook chain v1 ';
@@ -142,4 +148,132 @@ export function chainStaleness(onDisk: string | null, expected: string): ChainSt
   }
   if (!diskHeader) return { stale: true, reason: 'compiled chain has no recognizable header' };
   return { stale: true, reason: 'compiled chain body differs from the current policy' };
+}
+
+// ─── the expected chain ────────────────────────────────────────────────────
+
+/**
+ * Read the stock handler sequence out of an installed dispatcher.
+ *
+ * The dispatcher's `HANDLERS=(...)` literal is the stock chain, and
+ * `extractMachineHandlers` is the parser that already refuses a shape it does
+ * not recognize — so the sequence is read through it rather than re-derived.
+ */
+function stockChain(dispatchDir: string, event: string): string[] | { error: string } {
+  const file = path.join(dispatchDir, `${event}.sh`);
+  if (!existsSync(file)) return { error: 'no dispatcher installed for this event' };
+  const text = readFileSync(file, 'utf8');
+  try {
+    return extractMachineHandlers(text, text);
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/**
+ * The chain one event SHOULD have, given the policy and the installed stock.
+ *
+ * `hooks compile`, `hooks compile --check` and doctor's staleness rule all
+ * resolve through here. A second copy would be a second thing to keep in
+ * sync, and the failure mode is the worst one this surface has: a `--check`
+ * (or a doctor) that reports fresh against bytes `compile` would not write, or
+ * the reverse — a repo told it is current while its dispatchers run something
+ * else.
+ */
+export function expectedChain(
+  dispatchDir: string,
+  event: string,
+  repo: RepoSurfacePolicy,
+  digest: string
+): { text: string } | { error: string } {
+  const stock = stockChain(dispatchDir, event);
+  if ('error' in stock) return stock;
+  const resolved = resolveChain({ stock, event, repo });
+  if (!resolved.ok) return { error: resolved.error };
+  try {
+    return {
+      text: renderChainFile({
+        // The compiled sidecar serves every project-wired surface at once, so
+        // it always resolves from `default`.
+        surface: 'default',
+        event,
+        policySha256: digest,
+        pack: SHARED_PACK_VERSION,
+        handlers: resolved.handlers,
+        overrides: resolved.handlerOverrides,
+      }),
+    };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** Events whose dispatcher is actually installed, in POLICY_EVENTS order. */
+export function installedDispatcherEvents(dispatchDir: string): string[] {
+  let names: string[];
+  try {
+    names = readdirSync(dispatchDir);
+  } catch {
+    return [];
+  }
+  const installed = new Set(
+    names.filter((name) => name.endsWith('.sh')).map((name) => name.slice(0, -3))
+  );
+  return POLICY_EVENTS.filter((event) => installed.has(event));
+}
+
+export interface EventChainCheck {
+  event: string;
+  stale: boolean;
+  reason?: string;
+}
+
+export interface CompiledChainCheckInput {
+  dispatchDir: string;
+  /** The `default` surface policy, already merged. */
+  repo: RepoSurfacePolicy;
+  /** `policyDigest(policyText)` — the value that goes in the header. */
+  digest: string;
+  /** False when the repo has no hook-policy.json at all. */
+  policyPresent: boolean;
+  /** Restrict to these events; defaults to every installed dispatcher. */
+  events?: readonly string[];
+}
+
+/**
+ * Compare every installed event's sidecar against what would be compiled now.
+ *
+ * Shared by `hooks compile --check` and doctor so the CLI's verdict and the
+ * doctor's finding cannot disagree — two answers to "is this chain current?"
+ * is the split-brain this whole sidecar design exists to avoid.
+ */
+export function checkCompiledChains(input: CompiledChainCheckInput): EventChainCheck[] {
+  const installed = installedDispatcherEvents(input.dispatchDir);
+  // An event the caller named but which has no dispatcher is not stale — there
+  // is nothing installed for a sidecar to be stale against.
+  const events =
+    input.events === undefined ? installed : input.events.filter((e) => installed.includes(e));
+  const checks: EventChainCheck[] = [];
+  for (const event of events) {
+    const computed = expectedChain(input.dispatchDir, event, input.repo, input.digest);
+    if ('error' in computed) {
+      checks.push({ event, stale: true, reason: computed.error });
+      continue;
+    }
+    const chainPath = path.join(input.dispatchDir, `${event}.chain`);
+    const onDisk = existsSync(chainPath) ? readFileSync(chainPath, 'utf8') : null;
+    // A repo with no policy and no sidecar is FRESH, not stale: the stock
+    // array in the dispatcher already is the whole chain, and compiling a
+    // sidecar that merely restates it would add a file to keep in sync for no
+    // behavioral gain.
+    if (onDisk === null && !input.policyPresent) {
+      checks.push({ event, stale: false });
+      continue;
+    }
+    const staleness = chainStaleness(onDisk, computed.text);
+    checks.push(
+      staleness.stale ? { event, stale: true, reason: staleness.reason } : { event, stale: false }
+    );
+  }
+  return checks;
 }

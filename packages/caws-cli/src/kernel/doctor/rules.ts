@@ -326,6 +326,70 @@ export const DOCTOR_RULES = {
   HOOKS_PACK_FORK_UPSTREAM_MOVED: 'doctor.hooks.pack_fork_upstream_moved',
 
   /**
+   * CAWS-HOOKS-POLICY-DOCTOR-RULES-01: a handler the repo-local hook policy
+   * records as a FORK (`surfaces.<s>.forks`) whose shipped counterpart has
+   * moved since the fork was taken — the recorded sha256 no longer matches
+   * the template the running CLI ships.
+   *
+   * Distinct from HOOKS_PACK_FORK_UPSTREAM_MOVED even though the obligation
+   * rhymes. That rule reads `.pristine` baselines, so it can only see a fork
+   * that stayed at its installed path. The whole point of `hooks replace` is
+   * that a fork moves to `.caws/hooks/ext/`, where no baseline exists and the
+   * baseline observer is structurally blind — the `forks` record IS the
+   * provenance, and this rule is the only thing that reads it.
+   *
+   * Severity is evidence-led, not fork-led: a fork whose upstream has NOT
+   * moved is a standing, discharged decision and stays SILENT, because
+   * warning on every recorded fork is how the original inversion survived —
+   * an unreadable signal gets ignored. Only a moved upstream is an
+   * outstanding retrofit. A fork whose shipped counterpart cannot be measured
+   * at all is unobserved, and unobserved never fires.
+   */
+  HOOKS_REPO_POLICY_FORK_LAG: 'doctor.hooks.repo_policy_fork_lag',
+
+  /**
+   * CAWS-HOOKS-POLICY-DOCTOR-RULES-01: a compiled chain sidecar
+   * (.caws/hooks/dispatch/<event>.chain) disagrees with what the current
+   * policy and installed dispatcher would compile.
+   *
+   * This is the project-wired plane's entire honoring mechanism: the five
+   * project-wired surfaces exec the dispatcher directly and read the sidecar,
+   * so a stale sidecar means those harnesses are running a chain the
+   * committed policy no longer describes — silently, because nothing else
+   * reports it. Machine-routed surfaces resolve the policy live and are
+   * unaffected, which is exactly why this cannot be noticed from a Claude
+   * Code session. Severity: warning. Repair: `caws hooks compile`.
+   */
+  HOOKS_REPO_POLICY_CHAIN_STALE: 'doctor.hooks.repo_policy_chain_stale',
+
+  /**
+   * CAWS-HOOKS-POLICY-DOCTOR-RULES-01: `.caws/hooks/hook-policy.json` exists
+   * but does not parse, or the validator rejects it (an over-authority floor
+   * entry, an unknown key, a malformed extension anchor).
+   *
+   * ERROR, not warning, and never silence. The launcher is fail-CLOSED on a
+   * bad policy: it raises and the handler emits a block with exit 2 — so an
+   * invalid document is not a config nit, it is an outage on every tool call
+   * for every routed surface. Reporting it as "no policy" would show a repo
+   * as healthy at the precise moment its guard plane is refusing everything.
+   * Repair: `caws hooks validate` names the offending key.
+   */
+  HOOKS_REPO_POLICY_INVALID: 'doctor.hooks.repo_policy_invalid',
+
+  /**
+   * CAWS-HOOKS-POLICY-DOCTOR-RULES-01: the superseded
+   * `.caws/hooks/adapter-policy.json` is still present.
+   *
+   * Its shape is a FROZEN FULL COPY of the stock chain
+   * (`{events: {<event>: {hooks_dir, handlers[]}}}`), so it does not age
+   * gracefully: a copy taken before an event or a handler existed silently
+   * pins the old set. Severity INFO — it is still read, so this is a
+   * migration prompt, not a break. Repair: `caws hooks import --from-machine`
+   * and the additive `hook-policy.json` keys.
+   */
+  HOOKS_LEGACY_ADAPTER_POLICY: 'doctor.hooks.legacy_adapter_policy',
+
+  /**
    * CAWS-DEFECT-LEASE-TMP-STRANDING-01: stranded atomic-write tmp files in
    * .caws/leases/ — a lease write crashed between tmp creation and rename,
    * littering the directory invisibly (the loader already ignores non-.json

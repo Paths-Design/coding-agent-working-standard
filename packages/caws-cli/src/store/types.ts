@@ -18,6 +18,7 @@ import type {
   GitWorktreeEntry,
   LeaseRegistry,
   Policy,
+  RepoHookPolicyObservation,
   SharedPackDriftRow,
   Spec,
   Waiver,
@@ -220,6 +221,15 @@ export interface StoreSnapshot {
      * upstream / unobserved). Absent/empty is silent.
      */
     readonly installedSharedPackBodyDrift?: readonly SharedPackDriftRow[];
+    /**
+     * CAWS-HOOKS-POLICY-DOCTOR-RULES-01: the repo-local hook policy, with
+     * fork provenance and compiled-chain freshness measured by the observer
+     * (hook-install.ts). Mirrors the kernel-side field. Undefined = the repo
+     * has no `.caws/hooks/hook-policy.json` — silent, never a finding.
+     */
+    readonly repoHookPolicy?: RepoHookPolicyObservation;
+    /** The superseded `.caws/hooks/adapter-policy.json` is still on disk. */
+    readonly legacyAdapterPolicyPresent?: boolean;
     /** CAWS-DEFECT-LEASE-TMP-STRANDING-01: stranded lease tmp files. */
     /** CAWS-DESIGN-GLOBAL-IDENTITY-HOME-001 A4: global home observation. */
     readonly globalHomeObservation?: GlobalHomeObservation;

@@ -6,6 +6,9 @@ export type {
   DoctorReport,
   FindingSeverity,
   GitWorktreeEntry,
+  RepoHookPolicyObservation,
+  RepoPolicyChainRow,
+  RepoPolicyForkRow,
   SharedPackDriftRow,
   TemplateCheck,
 } from './types';

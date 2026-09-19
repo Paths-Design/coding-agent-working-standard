@@ -25,19 +25,17 @@
 //     than letting it look effective.
 
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import * as nodePath from 'node:path';
 
 import { isOk } from '../../kernel';
 import { resolveRepoRoot } from '../../store';
 import { machineHome } from '../../init/machine-adapters';
-import { extractMachineHandlers } from '../../init/machine-handler-policy';
-import { SHARED_PACK, SHARED_PACK_VERSION } from '../../init/hook-packs/manifest-shared';
+import { SHARED_PACK_VERSION } from '../../init/hook-packs/manifest-shared';
+import { shippedHandlerProvenance } from '../../init/hook-install';
 import {
   type PolicyMutation,
   type RepoHookPolicy,
-  type RepoSurfacePolicy,
   POLICY_EVENTS,
   REPO_HOOK_POLICY_PATH,
   REPO_POLICY_FLOOR,
@@ -47,10 +45,14 @@ import {
   policyDisableHandler,
   policyReplaceHandler,
   policyRestoreHandler,
-  resolveChain,
   serializeRepoHookPolicy,
 } from '../../init/repo-hook-policy';
-import { chainStaleness, policyDigest, renderChainFile } from '../../init/hook-chain';
+import {
+  checkCompiledChains,
+  expectedChain,
+  installedDispatcherEvents,
+  policyDigest,
+} from '../../init/hook-chain';
 
 /**
  * Surfaces that exec `.caws/hooks/dispatch/<event>.sh` directly rather than
@@ -327,64 +329,6 @@ export interface HooksCompileCheckOptions {
   readonly showData?: boolean;
 }
 
-interface EventCheck {
-  event: string;
-  stale: boolean;
-  reason?: string;
-}
-
-/**
- * Read the stock chain out of the installed dispatcher rather than keeping a
- * second copy of it here. `extractMachineHandlers` already refuses anything
- * that is not known scaffolding, so a hand-modified dispatcher surfaces as an
- * explicit failure instead of being silently compiled against.
- */
-function stockChain(dispatchDir: string, event: string): string[] | { error: string } {
-  const file = nodePath.join(dispatchDir, `${event}.sh`);
-  if (!existsSync(file)) return { error: 'no dispatcher installed for this event' };
-  const text = readFileSync(file, 'utf8');
-  try {
-    return extractMachineHandlers(text, text);
-  } catch (e) {
-    return { error: (e as Error).message };
-  }
-}
-
-/**
- * The chain one event SHOULD have, given the policy and the installed stock.
- *
- * `--check` and `compile` both resolve through here. A second copy would be a
- * second thing to keep in sync, and the failure mode is the worst one this
- * surface has: a `--check` that reports fresh against bytes `compile` would
- * not write, or the reverse — a repo told it is current while its dispatchers
- * run something else.
- */
-function expectedChain(
-  dispatchDir: string,
-  event: string,
-  repo: RepoSurfacePolicy,
-  digest: string
-): { text: string } | { error: string } {
-  const stock = stockChain(dispatchDir, event);
-  if ('error' in stock) return stock;
-  const resolved = resolveChain({ stock, event, repo });
-  if (!resolved.ok) return { error: resolved.error };
-  try {
-    return {
-      text: renderChainFile({
-        surface: 'default',
-        event,
-        policySha256: digest,
-        pack: SHARED_PACK_VERSION,
-        handlers: resolved.handlers,
-        overrides: resolved.handlerOverrides,
-      }),
-    };
-  } catch (e) {
-    return { error: (e as Error).message };
-  }
-}
-
 /** `caws hooks compile --check` — 0 when every event agrees, 1 when any is stale. */
 export function runHooksCompileCheckCommand(options: HooksCompileCheckOptions = {}): number {
   const ctx = repoContext(options.cwd ?? process.cwd());
@@ -408,42 +352,17 @@ export function runHooksCompileCheckCommand(options: HooksCompileCheckOptions = 
     );
     return 0;
   }
-  const installed = new Set(
-    readdirSync(dispatchDir)
-      .filter((name) => name.endsWith('.sh'))
-      .map((name) => name.slice(0, -3))
-  );
-  const events = (options.event ? [options.event] : [...POLICY_EVENTS]).filter((e) =>
-    installed.has(e)
-  );
   // The compiled sidecar serves every project-wired surface at once, so it
-  // resolves from `default` — see the header note.
-  const repo = effectiveRepoSurfacePolicy(parsed.policy, 'default');
-  const digest = policyDigest(ctx.policyText);
-
-  const checks: EventCheck[] = [];
-  for (const event of events) {
-    const computed = expectedChain(dispatchDir, event, repo, digest);
-    if ('error' in computed) {
-      checks.push({ event, stale: true, reason: computed.error });
-      continue;
-    }
-    const expected = computed.text;
-    const chainPath = nodePath.join(dispatchDir, `${event}.chain`);
-    const onDisk = existsSync(chainPath) ? readFileSync(chainPath, 'utf8') : null;
-    // A repo with no policy and no sidecar is FRESH, not stale: the stock
-    // array in the dispatcher already is the whole chain, and compiling a
-    // sidecar that merely restates it would add a file to keep in sync for no
-    // behavioral gain.
-    if (onDisk === null && ctx.policyText === null) {
-      checks.push({ event, stale: false });
-      continue;
-    }
-    const staleness = chainStaleness(onDisk, expected);
-    checks.push(
-      staleness.stale ? { event, stale: true, reason: staleness.reason } : { event, stale: false }
-    );
-  }
+  // resolves from `default` — see the header note. The comparison itself is
+  // `checkCompiledChains`, shared with `compile` and with doctor so the three
+  // cannot disagree about whether a chain is current.
+  const checks = checkCompiledChains({
+    dispatchDir,
+    repo: effectiveRepoSurfacePolicy(parsed.policy, 'default'),
+    digest: policyDigest(ctx.policyText),
+    policyPresent: ctx.policyText !== null,
+    ...(options.event ? { events: [options.event] } : {}),
+  });
 
   const stale = checks.filter((c) => c.stale);
   if (options.json === true) {
@@ -679,39 +598,26 @@ export function runHooksDisableCommand(handler: string, options: HooksDisableOpt
  * would later compare against.
  */
 function shippedProvenance(
-  handler: string,
-  templatesRoot: string
+  handler: string
 ): { pack: string; pack_version: number; sha256: string } | { error: string } {
-  const row = SHARED_PACK.installedFiles.find(
-    (file) => nodePath.basename(file.destPath) === handler
-  );
-  if (row === undefined) {
+  // Deliberately the SAME function doctor uses to measure fork lag. Two
+  // implementations of "what does the pack ship under this name" would make
+  // every fork read as drifted the instant it was recorded.
+  const provenance = shippedHandlerProvenance(handler);
+  if (provenance === null) {
     return {
       error:
-        `the shared pack ships no ${handler}, so there is nothing to fork from. ` +
+        `the shared pack ships no readable ${handler}, so there is nothing to fork from. ` +
         `Use \`caws hooks add ${handler} --event <e> --path <rel>\` to add a new handler instead.`,
     };
   }
-  const source = nodePath.join(templatesRoot, 'shared', row.sourcePath);
-  try {
-    return {
-      pack: SHARED_PACK.id,
-      pack_version: SHARED_PACK.packVersion,
-      sha256: createHash('sha256').update(readFileSync(source)).digest('hex'),
-    };
-  } catch (e) {
-    return {
-      error: `cannot read the shipped ${handler} to record its provenance: ${(e as Error).message}`,
-    };
-  }
+  return { ...provenance };
 }
 
 export interface HooksReplaceOptions extends HooksMutationOptions {
   readonly with?: string;
   readonly reason?: string;
   readonly approver?: string;
-  /** Overridable for tests; defaults to the templates shipped with this CLI. */
-  readonly templatesRoot?: string;
 }
 
 export function runHooksReplaceCommand(handler: string, options: HooksReplaceOptions = {}): number {
@@ -724,9 +630,7 @@ export function runHooksReplaceCommand(handler: string, options: HooksReplaceOpt
     process.stdout.write('caws hooks replace: --with <repo-relative-path> is required.\n');
     return 1;
   }
-  const templatesRoot =
-    options.templatesRoot ?? nodePath.resolve(__dirname, '../../../templates/hook-packs');
-  const provenance = shippedProvenance(handler, templatesRoot);
+  const provenance = shippedProvenance(handler);
   if ('error' in provenance) {
     process.stdout.write(
       `caws hooks replace: refused. Nothing was written.\n  ${provenance.error}\n`
@@ -807,14 +711,8 @@ export function runHooksCompileCommand(options: HooksCompileOptions = {}): numbe
     );
     return 0;
   }
-  const installed = new Set(
-    readdirSync(dispatchDir)
-      .filter((name) => name.endsWith('.sh'))
-      .map((name) => name.slice(0, -3))
-  );
-  const events = (options.event ? [options.event] : [...POLICY_EVENTS]).filter((e) =>
-    installed.has(e)
-  );
+  const installed = installedDispatcherEvents(dispatchDir);
+  const events = options.event ? installed.filter((e) => e === options.event) : installed;
   const repo = effectiveRepoSurfacePolicy(parsed.policy, 'default');
   const digest = policyDigest(ctx.policyText);
 
