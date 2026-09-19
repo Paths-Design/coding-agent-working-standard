@@ -118,10 +118,59 @@ elif [ $LINT_EXIT -ne 0 ]; then
   echo "  lint failed (exit $LINT_EXIT) — reproduce with: npx turbo run lint" >&2; FAILED=true
 fi
 
-# 3. Security audit (critical only; high has unfixable transitive deps)
+# 3. Security audit (critical only; high has unfixable transitive deps).
+#
+# `npm audit` exits non-zero for two unrelated reasons, and collapsing them is
+# what makes this stage dangerous:
+#
+#   (a) it obtained an advisory report and that report contains findings at or
+#       above --audit-level;
+#   (b) it never obtained a report at all — the retired quick-audit endpoint
+#       answering 400, a registry 5xx, an offline machine, DNS failure.
+#
+# Reporting (b) as "audit failed" tells the reader a vulnerability was found
+# when nothing was checked, blocks every push in the repository for as long as
+# the outage lasts, and leaves exactly one lever: --no-verify. That flag does
+# not skip this stage; git skips the WHOLE HOOK, so typecheck, lint, build and
+# the full test suite go with it. A gate whose outage manufactures a
+# total-bypass incentive is the failure mode this repo's release stance names
+# outright, so the stage classifies instead.
+#
+# The discriminator is whether a report came back. npm emits
+# auditReportVersion/metadata on every real report and neither on a transport
+# failure, so its own exit code decides (a) and cannot decide (b).
+#
+# Classification falls toward REFUSING: only positive evidence of a transport
+# failure selects the non-refusing branch. An unrecognised non-zero exit is not
+# an outage and is treated as a finding. There is deliberately no
+# environment-variable override — a gate that can be told to stand down is not
+# a gate.
 echo "  [3/5] audit"
-if ! npm audit --audit-level=critical; then
-  echo "  audit failed — reproduce with: npm audit --audit-level=critical" >&2; FAILED=true
+AUDIT_OUT=$(npm audit --audit-level=critical --json 2>&1)
+AUDIT_EXIT=$?
+if [ "$AUDIT_EXIT" -eq 0 ]; then
+  : # report obtained, nothing at or above critical
+elif printf '%s' "$AUDIT_OUT" | grep -q '"auditReportVersion"\|"metadata"'; then
+  # (a) A report came back and npm rejected it. This always refuses.
+  echo "  audit FOUND vulnerabilities at or above critical (npm audit exit $AUDIT_EXIT)." >&2
+  echo "  This is a security finding, not an outage. Reproduce with:" >&2
+  echo "    npm audit --audit-level=critical" >&2
+  FAILED=true
+elif printf '%s' "$AUDIT_OUT" | grep -qE 'audit endpoint returned an error|ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|network|registry error|"statusCode": ?(4[0-9][0-9]|5[0-9][0-9])'; then
+  # (b) No report. Say so in the words the reader needs, and do not refuse.
+  echo "  audit SKIPPED — the npm advisory service could not be reached, so the" >&2
+  echo "  audit did not run. This is NOT a vulnerability finding: nothing was" >&2
+  echo "  verified, and this push carries an UNVERIFIED dependency tree." >&2
+  echo "  npm said:" >&2
+  printf '%s\n' "$AUDIT_OUT" | grep -E '^npm (error|warn|notice)' | head -3 | sed 's/^/    /' >&2
+  echo "  Re-run \`npm audit --audit-level=critical\` once the service is back." >&2
+else
+  # Neither shape. Unknown failures are findings, not outages.
+  echo "  audit failed in an unrecognised way (exit $AUDIT_EXIT) — refusing, because" >&2
+  echo "  a failure this hook cannot classify must not be assumed to be an outage." >&2
+  printf '%s\n' "$AUDIT_OUT" | head -5 | sed 's/^/    /' >&2
+  echo "  Reproduce with: npm audit --audit-level=critical" >&2
+  FAILED=true
 fi
 
 # 4. Build
