@@ -70,3 +70,8 @@ evidence:
     evidence_ref: "T10a: a clean report (auditReportVersion, critical:0, exit 0) leaves pre-push at exit 0, and T8c still asserts all five stages run in order 'npm run,npx turbo,npm audit,npm run,npm test' -- so the classification did not disturb stage sequencing."
     recorded_at: "2026-09-19T17:40:20.873Z"
     commit_sha: "104cb215"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "bash .husky/tests/run.sh executes all four outcomes against the real .husky/pre-push file with npm/npx stubbed as exported shell functions; 45 passed / 4 failed at baseline, 49 passed / 0 failed after. The refusing cases (T10b, T10d) are what prevent T10c from passing vacuously."
+    recorded_at: "2026-09-19T17:40:23.600Z"
+    commit_sha: "104cb215"
