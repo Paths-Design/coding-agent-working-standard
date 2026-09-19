@@ -35,6 +35,12 @@ acceptance:
     then: >-
       the command refuses before any write, names both the recorded origin and the
       target root, and repo B gains no spec file and no event
+  - id: A2
+    given: 'the same session with recorded origin repo A'
+    when: 'it runs the same governed lifecycle commands from inside repo A'
+    then: >-
+      every one is admitted unchanged, proving containment is a cross-repo refusal
+      and not a general lifecycle brake
 non_functional: {}
 contracts:
   - name: 'session-origin-record'
