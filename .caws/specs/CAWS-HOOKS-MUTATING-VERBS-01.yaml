@@ -79,3 +79,9 @@ evidence:
     recorded_at: "2026-09-19T00:01:23.257Z"
     artifact_path: packages/caws-cli/tests/shell/hooks-mutating.test.js
     commit_sha: "1365b83b59da556d159ad8be7856d191e9b275a6"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Verified by 'npx jest tests/shell/hooks-mutating.test.js' at 1365b83b. 'compile then --check is a fixed point' asserts --check exits 1 before compiling, compile exits 0, the following --check exits 0 and says 'current', and a second compile leaves the .caws/ tree hash unchanged (idempotence). 'the compiled chain parses under the REAL local-chain.sh' copies the SHIPPED templates/hook-packs/shared/lib/local-chain.sh into the scratch repo, sources it in a real bash process, calls caws_local_chain pre_tool_use, and requires exit 0 with the handler present in CAWS_LOCAL_CHAIN — a bash parse, not a regex. Also 'the compiled chain puts the handler immediately before its anchor' asserts the tab-separated override line verbatim."
+    recorded_at: "2026-09-19T00:01:38.370Z"
+    artifact_path: packages/caws-cli/tests/shell/hooks-mutating.test.js
+    commit_sha: "1365b83b59da556d159ad8be7856d191e9b275a6"
