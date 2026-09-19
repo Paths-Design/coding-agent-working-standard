@@ -2,9 +2,10 @@ id: CAWS-GUARD-REMEDIATION-CROSS-REPO-CONSISTENCY-01
 title: 'A guard''s remediation may not name a route a sibling guard refuses: block-dangerous must not offer the script-file route for a cross-repo write'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-remediation-xrepo
 created_at: '2026-09-19T04:55:04.541Z'
-updated_at: '2026-09-19T04:55:04.541Z'
+updated_at: '2026-09-19T04:55:27.042Z'
 created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
 blast_radius:
   modules:
