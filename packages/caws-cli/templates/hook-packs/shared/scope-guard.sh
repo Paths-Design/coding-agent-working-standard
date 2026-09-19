@@ -233,6 +233,82 @@ WORK_DIR="${HOOK_CWD:-${CAWS_PROJECT_DIR:-.}}"
 PROJECT_DIR="${CAWS_PROJECT_DIR:-.}"
 PROJECT_DIR="$(cd "$PROJECT_DIR" 2>/dev/null && pwd || printf '%s\n' "$PROJECT_DIR")"
 
+# CAWS-DEFECT-SCOPE-GUARD-FILE-PATH-NOT-NORMALIZED-01: normalize FILE_PATH the
+# same way PROJECT_DIR just was, BEFORE any containment comparison.
+#
+# The containment test below is a string prefix match. PROJECT_DIR is
+# `cd && pwd`-physical; FILE_PATH arrived from the envelope verbatim. So an
+# absolute path INSIDE the governed project that merely spelled itself
+# differently — a doubled separator from a TMPDIR ending in '/', a './', a
+# '..' that resolves back inside, a /var vs /private/var symlink — failed the
+# prefix test and took the foreign hard block: exit 2, "There is no in-band
+# override", for a file in the agent's own repo. That is the worst shape of
+# false refusal, because the message explicitly tells the agent not to route
+# around it and offers no legitimate next step.
+#
+# owned_worktree_root() below already states this rule — "compare like with
+# like" — and applies it to the worktree-root candidate. It was never applied
+# to FILE_PATH itself.
+#
+# Two constraints shape the implementation:
+#
+#  1. **It must not require the target to exist.** Write CREATES the file, and
+#     may create its parent. So the PARENT is resolved physically where it
+#     exists, and the basename is re-appended untouched; a missing parent falls
+#     back to a purely lexical pass.
+#  2. **It may only NARROW the foreign set.** Physical resolution is what makes
+#     that true: a symlink inside the project that points outside resolves to
+#     its outside target and stays foreign, and a '..' that escapes resolves
+#     outside and stays foreign. Collapsing separators textually without
+#     resolving would have been the unsafe shortcut.
+_caws_lexical_path() {
+  local input="$1" seg joined=""
+  local -a parts=() out=()
+  local OLD_IFS="$IFS"
+  IFS='/'
+  # shellcheck disable=SC2206 # deliberate word-split on '/' to walk segments
+  parts=($input)
+  IFS="$OLD_IFS"
+  for seg in "${parts[@]}"; do
+    case "$seg" in
+      '' | '.') continue ;;
+      '..')
+        # bash 3.2 (macOS) has no negative array slicing that is safe at
+        # length 0, so the guard is explicit rather than arithmetic.
+        if [[ ${#out[@]} -gt 0 ]]; then
+          out=("${out[@]:0:$((${#out[@]} - 1))}")
+        fi
+        ;;
+      *) out+=("$seg") ;;
+    esac
+  done
+  for seg in "${out[@]}"; do joined="$joined/$seg"; done
+  printf '%s\n' "${joined:-/}"
+}
+
+_caws_normalize_target() {
+  local p="$1" dir base resolved
+  [[ -n "$p" ]] || { printf '%s\n' "$p"; return 0; }
+  # A relative target resolves against the cwd the tool call ran in, which is
+  # the same base the kernel uses.
+  [[ "$p" == /* ]] || p="${HOOK_CWD:-$PROJECT_DIR}/$p"
+  dir="${p%/*}"
+  base="${p##*/}"
+  [[ -n "$dir" ]] || dir="/"
+  if resolved="$(cd "$dir" 2>/dev/null && pwd)"; then
+    dir="$resolved"
+  else
+    dir="$(_caws_lexical_path "$dir")"
+  fi
+  if [[ "$dir" == "/" ]]; then
+    printf '/%s\n' "$base"
+  else
+    printf '%s/%s\n' "$dir" "$base"
+  fi
+}
+
+FILE_PATH="$(_caws_normalize_target "$FILE_PATH")"
+
 PROJECT_WORKTREE_ROOT="$(resolve_worktree_root "$PROJECT_DIR" || true)"
 
 # CAWS-DEFECT-SCOPE-GUARD-FOREIGN-WORKTREE-CONTAINMENT-BYPASS-01: the repository
