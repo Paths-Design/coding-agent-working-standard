@@ -44,20 +44,28 @@ source "$SCRIPT_DIR/lib/parse-input.sh" 2>/dev/null || exit 0
 # shellcheck source=lib/agent-surface.sh
 source "$SCRIPT_DIR/lib/agent-surface.sh" 2>/dev/null || true
 
-# NOT `parse_hook_input || exit 0`, which is the right idiom for every other
-# handler in this pack and the wrong one here.
-#
-# parse_hook_input extracts HOOK_SESSION_ID with python3 (lib/parse-input.sh).
-# So on a host where python3 is missing or broken, the parse fails and the
-# `|| exit 0` turns this gate off SILENTLY -- and it turns it off upstream of
-# every fail-closed path below, which would then be unreachable decoration.
-# For an advisory handler that is fine; for the one handler whose whole job is
-# to refuse, "the JSON parser broke" must not be a way to pass.
-#
-# The gate needs exactly one field: the session id, which identifies the
-# binding. The surface exports it too, so resolve it independently and let the
-# rest of the parse be best-effort.
+# `|| true`, not the pack's usual `|| exit 0`. Today those are identical: every
+# return inside parse_hook_input is `return 0`, so the other handlers' `|| exit 0`
+# is unreachable (parse-input.sh's one non-zero return is a file-level sourcing
+# guard, already caught by the `source ... || exit 0` above). Mutation testing
+# confirms it -- swapping this line back changes no test. The difference only
+# appears if parse_hook_input ever gains a failure path: for an advisory handler
+# exiting then is right; for the one handler whose job is to refuse, it would put
+# an off-switch upstream of every fail-closed path below. Keep refusal reachable.
 parse_hook_input >/dev/null 2>&1 || true
+
+# THIS is the line that keeps the gate alive on a host with no working python3,
+# and it is a different mechanism from the one above.
+#
+# parse_hook_input extracts HOOK_SESSION_ID with python3, and reports a failed
+# extraction as the literal "unknown" rather than as an error. Treating
+# "unknown" as "no identity, stay inert" is right for a genuinely unidentified
+# session -- but it would also silently disable the gate for a merely broken
+# interpreter, BEFORE any of the fail-closed paths below could run.
+#
+# The gate needs exactly one field, and the surface exports it too, so resolve
+# it independently. Still inert when no source has an id: no identity really
+# does mean there is no binding to enforce. (A3)
 HOOK_SESSION_ID="${HOOK_SESSION_ID:-}"
 if [[ -z "$HOOK_SESSION_ID" || "$HOOK_SESSION_ID" == "unknown" ]]; then
   HOOK_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-${CAWS_SESSION_ID:-}}"
