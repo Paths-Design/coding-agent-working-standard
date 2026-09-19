@@ -2,10 +2,11 @@ id: CAWS-DEFECT-BASH-WRITE-GUARD-CROSS-REPO-01
 title: 'Close the Bash-mediated cross-repo write hole in the shared guard pack'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-bash-guard-interp
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-bash-guard-interp at 14b73422cc7b4c65fecf8aabb9b0ec88a6bf1347'
 created_at: '2026-09-06T03:02:55.800Z'
-updated_at: '2026-09-19T04:01:24.026Z'
+updated_at: '2026-09-19T04:05:36.028Z'
 created_by_session: 'session-a040cb04-424d-41ba-9922-df97fcd66394'
 blast_radius:
   modules:
