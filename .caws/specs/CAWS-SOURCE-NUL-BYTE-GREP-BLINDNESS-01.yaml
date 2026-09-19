@@ -1,0 +1,45 @@
+id: CAWS-SOURCE-NUL-BYTE-GREP-BLINDNESS-01
+title: 'a raw NUL byte in kernel leases.ts makes the whole file invisible to grep; escape it and add a repo-wide gate so no source file can go unsearchable again'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-19T10:28:48.680Z'
+updated_at: '2026-09-19T10:28:48.680Z'
+created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
+blast_radius:
+  modules:
+    - 'caws-cli kernel lease path validation'
+    - 'caws-cli repo-wide source integrity gate'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/kernel/worktree/leases.ts'
+    - 'packages/caws-cli/tests/ci/source-text-integrity.test.js'
+  out: []
+invariants:
+  - 'The edit is semantically identity-preserving: in a JavaScript string literal ''\u0000'' and a raw U+0000 byte denote the same one-character string, so the LEASE_PATH_NULL_BYTE guard must behave identically afterwards. Proving the file still compiles is not proving the guard still refuses.'
+  - 'The deliverable is the gate, not the one-character edit. The defect class is ''a tracked source file that grep silently cannot read''; fixing the single instance without a repo-wide gate leaves the class open and the next occurrence just as invisible.'
+  - 'The gate reads bytes directly and never shells out to grep. grep is the tool this defect defeats, so a grep-based detector would be blind to exactly the files it is meant to find.'
+  - 'The gate must be observed failing against the unfixed file before the fix lands. A hygiene assertion that has never failed is indistinguishable from one that cannot.'
+acceptance:
+  - id: A1
+    given: 'the repository with the raw NUL still present in kernel leases.ts'
+    when: 'the new source-text-integrity gate runs'
+    then: 'it fails and names that file with the byte offset, demonstrating the gate can fail for the right reason rather than passing vacuously'
+  - id: A2
+    given: 'kernel leases.ts after the escape is applied'
+    when: 'its bytes are inspected and grep is run against it'
+    then: 'it contains zero U+0000 bytes and grep returns the symbol matches it previously reported as absent with exit 1'
+  - id: A3
+    given: 'the LEASE_PATH_NULL_BYTE validator after the change'
+    when: 'a lease path containing an actual NUL character is validated'
+    then: 'it is still refused with the same diagnostic rule, proving the escape preserved the guard rather than disarming it'
+  - id: A4
+    given: 'any tracked source file that acquires a raw NUL byte in future'
+    when: 'the gate runs'
+    then: 'it fails and names that file, so the class is closed and not merely this one instance'
+non_functional: {}
+contracts:
+  - name: 'source-text-integrity'
+    type: behavior
