@@ -55,3 +55,8 @@ evidence:
     evidence_ref: "T10b/T10b2: a stubbed advisory report carrying critical:1 makes pre-push exit 1 and print 'audit FOUND vulnerabilities at or above critical' plus 'This is a security finding, not an outage.' The assertion matches hook-authored text; an earlier version matched the fixture's own JSON and was vacuous."
     recorded_at: "2026-09-19T17:40:09.341Z"
     commit_sha: "104cb215"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "T10c/T10c2/T10c3/T10c4: the REAL 400 payload captured from the live retired quick-audit endpoint (message/uri/headers/statusCode, no auditReportVersion) plus npm's 'audit endpoint returned an error' stderr makes pre-push exit 0 and print 'audit SKIPPED', 'could not be reached', 'This is NOT a vulnerability finding', 'nothing was verified' and 'UNVERIFIED dependency tree'. Baseline failed all four."
+    recorded_at: "2026-09-19T17:40:14.795Z"
+    commit_sha: "104cb215"
