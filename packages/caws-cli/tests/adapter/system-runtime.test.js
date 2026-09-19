@@ -463,7 +463,16 @@ function installProbeGuard() {
   fs.writeFileSync(
     path.join(templates, 'shared/cwd-guard.sh'),
     '#!/bin/bash\n' +
-      'source "${CAWS_SHARED_LIB_DIR}/guard-config.sh" 2>/dev/null || true\n' +
+      // Sourced exactly the way the three real adopters do it --
+      // `$SCRIPT_DIR/lib/guard-config.sh` (scope-guard.sh:79,
+      // god-object-check.sh:47, loc-delta-check.sh:35) -- NOT via
+      // CAWS_SHARED_LIB_DIR. The idiom is the thing under test: a guard and its
+      // lib are siblings-with-a-lib-subdir in the project-wired pack, and this
+      // asserts runtimeFiles() reproduces that same relative layout in the
+      // machine snapshot. Probing with CAWS_SHARED_LIB_DIR would pass while
+      // every real adopter silently found nothing.
+      'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\n' +
+      '[[ -f "$SCRIPT_DIR/lib/guard-config.sh" ]] && source "$SCRIPT_DIR/lib/guard-config.sh"\n' +
       'if declare -F caws_guard_prefixes >/dev/null 2>&1; then\n' +
       '  caws_guard_config_load "${CAWS_PROJECT_DIR:-.}" || true\n' +
       '  printf "SAW:%s:%s\\n" "${CAWS_GUARD_CONFIG_STATUS:-none}" ' +
