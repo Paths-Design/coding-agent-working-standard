@@ -2,10 +2,11 @@ id: CAWS-AGENTS-SHOW-LIVENESS-CLASSIFY-01
 title: 'caws agents show distinguishes the persisted lease status from the derived TTL liveness classification instead of returning one field that reads as both'
 risk_tier: 2
 mode: fix
-lifecycle_state: active
-worktree: wt-agents-show-liveness
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Auto-closed by caws worktree merge wt-agents-show-liveness at dea5c570a3f8d7ae8f3245dc98c64826ab83738d'
 created_at: '2026-09-19T10:21:36.640Z'
-updated_at: '2026-09-19T10:21:47.545Z'
+updated_at: '2026-09-19T10:30:44.566Z'
 created_by_session: 'f0fde851-5559-4465-8c54-1bf5b268ded0'
 blast_radius:
   modules:
