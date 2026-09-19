@@ -625,7 +625,7 @@ function validatePathArray(
       );
       continue;
     }
-    if (entry.indexOf(' ') !== -1) {
+    if (entry.indexOf('\u0000') !== -1) {
       errors.push(
         diagnostic({
           rule: LEASE_RULES.LEASE_PATH_NULL_BYTE,
