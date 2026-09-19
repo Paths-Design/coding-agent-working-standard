@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-guard-config
 created_at: '2026-09-19T00:32:01.490Z'
-updated_at: '2026-09-19T01:12:20.603Z'
+updated_at: '2026-09-19T01:12:31.997Z'
 created_by_session: 'e625532a-0d29-4254-9cde-8e8c07b6db8d'
 blast_radius:
   modules:
@@ -28,11 +28,12 @@ scope:
     - 'packages/caws-cli/tests/init/repo-hook-policy.test.js'
     - 'packages/caws-cli/tests/hooks/bats/guard-config.bats'
     - packages/caws-cli/tests/hooks/bats/guard-config-adopters.bats
-    - CLAUDE.md
     - docs/architecture/repo-local-hook-policy.md
     - docs/architecture/hook-pack-shared-core.md
     - docs/guides/hook-packs.md
   out: []
+  support:
+    - CLAUDE.md
 invariants:
   - 'APPEND-ONLY OVER A FLOOR (R1). The guards key admits only additional_* shapes. No repo-declared entry removes, replaces or reorders a shipped table entry, so a shipped protection can never be configured away. This is what makes fail-closed cheap: ignoring the config is always the STRICTER direction, so a parse failure degrades toward refusal, never toward permission.'
   - 'DATA, NEVER DECISIONS (R2). A document naming a verdict at any depth (decision/allow/deny/ask/policy/outcome/severity/override/enforcement/exit_code/verdict) is rejected. The command-adapters rule that no key may name a decision does not transplat verbatim, because adding a prefix IS a verdict change for that prefix; the boundary is drawn on direction and floor instead.'
