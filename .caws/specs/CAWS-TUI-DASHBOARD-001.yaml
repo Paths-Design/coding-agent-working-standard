@@ -2,9 +2,11 @@ id: CAWS-TUI-DASHBOARD-001
 title: 'Read-only TUI dashboard: full-screen terminal panels over shared status selectors'
 risk_tier: 2
 mode: feature
-lifecycle_state: active
+lifecycle_state: closed
+resolution: completed
+closure_notes: 'Read-only TUI dashboard shipped: caws tui with --once one-shot mode and non-TTY fallback, panel data single-sourced through shell/panel-data.ts shared with status --json. Gates 5/5 PASS; suite 8/8 at landed revision 61de000b (canonical, rebuilt dist); full shell suite shows zero regressions vs canonical baseline (29 pre-existing environmental failures in both). Evidence recorded for A1-A6; verify-acs marks records not_rederived/self-reported because CAWS does not execute recorded commands and its nodeid runner did not resolve jest in this monorepo - the executed proof is the captured jest runs at the cited revisions.'
 created_at: '2026-09-21T16:21:57.653Z'
-updated_at: '2026-09-21T16:46:25.731Z'
+updated_at: '2026-09-21T17:07:44.604Z'
 created_by_session: 'session-d5f05829-a6ed-4208-9b77-22b94a3a27cd'
 blast_radius:
   modules:
