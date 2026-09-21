@@ -1,0 +1,65 @@
+id: CAWS-TUI-DASHBOARD-001
+title: 'Read-only TUI dashboard: full-screen terminal panels over shared status selectors'
+risk_tier: 2
+mode: feature
+lifecycle_state: draft
+created_at: '2026-09-21T16:21:57.653Z'
+updated_at: '2026-09-21T16:21:57.653Z'
+created_by_session: 'session-d5f05829-a6ed-4208-9b77-22b94a3a27cd'
+blast_radius:
+  modules:
+    - 'caws-cli/shell'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/shell/tui'
+    - 'packages/caws-cli/src/shell/panel-data.ts'
+    - 'packages/caws-cli/src/shell/commands/tui.ts'
+    - 'packages/caws-cli/src/shell/commands/status.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/src/shell/register.ts'
+    - 'packages/caws-cli/src/shell/registered-command-groups.js'
+    - 'packages/caws-cli/tests/shell/tui-dashboard.test.js'
+    - 'docs/architecture/caws-vnext-command-surface.md'
+  out: []
+invariants:
+  - 'caws tui performs no governance mutation: the status-is-observability invariant (command-surface doctrine §6.7) extends to the TUI surface'
+  - 'status --json output shape and rendered status output are unchanged by the selector extraction (pure refactor of the assembly site)'
+  - 'panel data assembly has a single source: status --json and tui read the same exported selector module, not parallel derivations'
+acceptance:
+  - id: A1
+    given: 'a fixture repository with known .caws state'
+    when: 'caws tui --once runs with stdout not a TTY'
+    then: 'stdout renders all six dashboard sections (project/binding header, specs, worktrees, agents, doctor, gates) and the process exits 0'
+  - id: A2
+    given: 'the same fixture repository state'
+    when: 'caws status --json output is compared with the panel models assembled by the shared selector module for the same state'
+    then: 'every overlapping panel field matches exactly (single-source selectors; no duplicated derivation)'
+  - id: A3
+    given: 'a fixture repository with governance state on disk'
+    when: 'caws tui --once runs twice'
+    then: 'specs, policy, waivers, worktrees.json, bridge claims, and events.jsonl are byte-identical before and after each run (mutation-negative; lease carve-out per the status observability invariant)'
+  - id: A4
+    given: 'a non-TTY environment'
+    when: 'caws tui runs without --once'
+    then: 'a typed guidance notice goes to stderr, a one-shot frame goes to stdout, and the exit code is 0'
+  - id: A5
+    given: 'an injected fake timer and keypress source'
+    when: 'the refresh loop runs'
+    then: 'it repaints at the configured interval and exits on q or Ctrl-C'
+  - id: A6
+    given: 'the compiled dist surface'
+    when: 'caws --help runs'
+    then: 'the tui command appears with its registered description (surface registration integrity)'
+observability:
+  - 'non-TTY fallback emits a typed stderr guidance notice; interactive tui sessions emit no governance events (read-only surface)'
+rollback:
+  - 'git revert of the feature commit; the surface writes no governance state, so no state migration or data backfill is required'
+non_functional: {}
+contracts:
+  - name: 'panel-selectors'
+    type: behavior
+    path: 'packages/caws-cli/src/shell/panel-data.ts'
+  - name: 'tui-readonly'
+    type: behavior
