@@ -73,3 +73,11 @@ evidence:
     command: "cd packages/caws-cli && npx jest tests/shell/tui-dashboard.test.js"
     exit_code: 0
     commit_sha: "61de000b"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "caws status --json and the TUI buildStatusPanelPayload output are JSON-identical for specs, worktrees, agents, and doctor panels on identical fixture state and env — one selector module, no parallel derivation"
+    recorded_at: "2026-09-21T17:05:30.483Z"
+    test_nodeid: "packages/caws-cli/tests/shell/tui-dashboard.test.js::A2: status --json panels and the TUI payload are identical (single-source selectors)"
+    command: "cd packages/caws-cli && npx jest tests/shell/tui-dashboard.test.js"
+    exit_code: 0
+    commit_sha: "61de000b"
