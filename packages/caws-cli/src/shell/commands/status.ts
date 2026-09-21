@@ -64,11 +64,9 @@ import {
 import { resolveBinding } from '../binding/resolve-binding';
 import { renderDiagnostics } from '../render/diagnostic';
 import { renderShortStatus, renderStatus, type StatusPanel } from '../render/status';
-import {
-  emitStaleTelemetryAdvisory,
-  renderStaleTelemetryAdvisory,
-} from '../render/stale-telemetry-advisory';
+import { emitStaleTelemetryAdvisory } from '../render/stale-telemetry-advisory';
 import { resolveCallerSession } from '../session/resolve-session';
+import { buildStatusPanelPayload } from '../panel-data';
 
 const DEFAULT_LEASE_STALE_TTL_MS = 30 * 60 * 1000; // 30m
 
@@ -157,30 +155,6 @@ function selectedPanels(opts: StatusCommandOptions): readonly StatusPanel[] | un
   if (opts.agents === true) panels.push('agents');
   if (opts.doctor === true) panels.push('doctor');
   return panels.length > 0 ? panels : undefined;
-}
-
-function countByLifecycle(
-  specs: readonly { readonly lifecycle_state: string }[]
-): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const spec of specs) counts[spec.lifecycle_state] = (counts[spec.lifecycle_state] ?? 0) + 1;
-  return counts;
-}
-
-function countDoctorFindings(findings: readonly { readonly severity: string }[]): {
-  readonly errors: number;
-  readonly warnings: number;
-  readonly infos: number;
-} {
-  let errors = 0;
-  let warnings = 0;
-  let infos = 0;
-  for (const finding of findings) {
-    if (finding.severity === 'error') errors++;
-    else if (finding.severity === 'warning') warnings++;
-    else infos++;
-  }
-  return { errors, warnings, infos };
 }
 
 // ─── git path normalization ──────────────────────────────────────────────
@@ -412,78 +386,22 @@ export function runStatusCommand(opts: StatusCommandOptions = {}): number {
 
   if (opts.json === true) {
     const jsonPanels = panels ?? (['specs', 'worktrees', 'agents', 'doctor'] as const);
-    const payload: Record<string, unknown> = {
-      ok: true,
-      read_only: !wantsHeartbeat,
-      panels: jsonPanels,
-    };
-    if (jsonPanels.includes('specs')) {
-      payload.specs = {
-        count: snapshot.specs.length,
-        by_lifecycle: countByLifecycle(snapshot.specs),
-        items: snapshot.specs.map((spec) => ({
-          id: spec.id,
-          title: spec.title,
-          lifecycle_state: spec.lifecycle_state,
-          ...(spec.worktree !== undefined ? { worktree: spec.worktree } : {}),
-        })),
-      };
-    }
-    if (jsonPanels.includes('worktrees')) {
-      payload.worktrees = {
-        count: Object.keys(snapshot.worktrees).length,
-        items: Object.entries(snapshot.worktrees).map(([name, record]) => ({
-          name,
-          spec_id: record.specId,
-          path: record.path,
-          ...(record.owner !== undefined ? { owner: record.owner } : {}),
-        })),
-      };
-    }
-    if (jsonPanels.includes('agents')) {
-      payload.agents = {
-        leases: {
-          total: effectiveLeaseSummary.total,
-          active: effectiveLeaseSummary.active,
-          stale: effectiveLeaseSummary.stale,
-          stopped: effectiveLeaseSummary.stopped,
-        },
-        self_session_id: sessionIdentity?.session_id ?? null,
-      };
-    }
-    // Mirrors the text path: Current context (and therefore the lane) renders
-    // only in default mode, never under a focused-panel selection.
-    if (panels === undefined && lane !== undefined) {
-      payload.lane = {
-        worktree: binding.worktreeName ?? null,
-        branch: lane.branch,
-        base_branch: lane.baseBranch,
-        ahead: lane.ahead,
-        behind: lane.behind,
-        contains_base: lane.containsBase,
-        unknown_reason: lane.unknownReason,
-      };
-    }
-    if (jsonPanels.includes('doctor')) {
-      payload.doctor = {
-        counts: countDoctorFindings(report.findings),
-        findings: report.findings,
-      };
-    }
-    // CAWS-TELEMETRY-REPAIR-RESILIENCE-001: JSON consumers get the same
-    // advisory the human path renders, as plain text under a stable field —
-    // additive-only: the field appears exactly when a stale-telemetry
-    // advisory exists, so the payload is byte-identical otherwise.
-    const advisoryBlock = renderStaleTelemetryAdvisory(report.findings);
-    if (advisoryBlock.length > 0) {
-      payload.stale_telemetry_advisory = advisoryBlock;
-    }
-    if (mailSummary.count > 0) {
-      payload.messages = {
-        undelivered: mailSummary.count,
-        ...(mailSummary.oldestAgeMs !== null ? { oldest_age_ms: mailSummary.oldestAgeMs } : {}),
-      };
-    }
+    // CAWS-TUI-DASHBOARD-001: payload assembly moved verbatim to
+    // shell/panel-data.ts (single source shared with the TUI dashboard).
+    // Shape invariant pinned by tests/shell/tui-dashboard.test.js.
+    const payload = buildStatusPanelPayload({
+      jsonPanels,
+      specs: snapshot.specs,
+      worktrees: snapshot.worktrees,
+      leaseSummary: effectiveLeaseSummary,
+      selfSessionId: sessionIdentity?.session_id ?? null,
+      wantsHeartbeat,
+      defaultMode: panels === undefined,
+      lane,
+      laneWorktree: binding.worktreeName ?? null,
+      doctorFindings: report.findings,
+      mailSummary,
+    });
     out(JSON.stringify(payload, null, 2));
     return 0;
   }

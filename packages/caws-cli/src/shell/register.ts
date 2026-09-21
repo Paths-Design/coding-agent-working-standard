@@ -23,6 +23,7 @@ import {
   INIT_COMMAND_META,
   DOCTOR_COMMAND_META,
   STATUS_COMMAND_META,
+  TUI_COMMAND_META,
   CLAIM_COMMAND_META,
   HOOKS_COMMAND_META,
   SCOPE_COMMAND_META,
@@ -109,6 +110,7 @@ import {
   runSpecsVerifyAcsCommand,
   runSpecsValidateCommand,
   runStatusCommand,
+  runTuiCommand,
   runWaiverCreateCommand,
   runWaiverListCommand,
   runWaiverPruneCommand,
@@ -789,6 +791,31 @@ export function registerShellCommands(
       exit(code);
     }
   );
+
+  // -------------------------------------------------------------------
+  // caws tui — read-only full-screen terminal dashboard
+  // (CAWS-TUI-DASHBOARD-001). Same panel data source as status --json
+  // (shell/panel-data.ts); never mutates governance state.
+  // -------------------------------------------------------------------
+  defineFlat(program, TUI_COMMAND_META).action((opts: { once?: boolean; interval?: string }) => {
+    const parsedInterval =
+      opts.interval !== undefined ? Number.parseInt(opts.interval, 10) : undefined;
+    if (
+      opts.interval !== undefined &&
+      (parsedInterval === undefined || Number.isNaN(parsedInterval))
+    ) {
+      process.stderr.write(
+        `caws tui: --interval must be an integer number of milliseconds, got "${opts.interval}"\n`
+      );
+      exit(1);
+      return;
+    }
+    const code = runTuiCommand({
+      once: opts.once === true,
+      ...(parsedInterval !== undefined ? { intervalMs: parsedInterval } : {}),
+    });
+    exit(code);
+  });
 
   // -------------------------------------------------------------------
   // caws claim [--takeover] [--paths <path>...]

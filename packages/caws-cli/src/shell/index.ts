@@ -121,6 +121,9 @@ export type { ClaimPanelInput, OwnershipRelation } from './render/claim';
 export { runStatusCommand } from './commands/status';
 export type { StatusCommandOptions } from './commands/status';
 
+export { runTuiCommand } from './commands/tui';
+export type { TuiCommandOptions } from './commands/tui';
+
 export { renderStatus } from './render/status';
 export type { StatusRenderInput } from './render/status';
 
