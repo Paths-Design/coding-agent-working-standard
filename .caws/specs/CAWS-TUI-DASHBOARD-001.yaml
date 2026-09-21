@@ -5,7 +5,7 @@ mode: feature
 lifecycle_state: active
 worktree: wt-tui-dashboard
 created_at: '2026-09-21T16:21:57.653Z'
-updated_at: '2026-09-21T16:22:35.241Z'
+updated_at: '2026-09-21T16:46:25.731Z'
 created_by_session: 'session-d5f05829-a6ed-4208-9b77-22b94a3a27cd'
 blast_radius:
   modules:
@@ -23,6 +23,7 @@ scope:
     - 'packages/caws-cli/src/shell/registered-command-groups.js'
     - 'packages/caws-cli/tests/shell/tui-dashboard.test.js'
     - 'docs/architecture/caws-vnext-command-surface.md'
+    - packages/caws-cli/src/shell/index.ts
   out: []
 invariants:
   - 'caws tui performs no governance mutation: the status-is-observability invariant (command-surface doctrine §6.7) extends to the TUI surface'
