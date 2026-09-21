@@ -81,3 +81,11 @@ evidence:
     command: "cd packages/caws-cli && npx jest tests/shell/tui-dashboard.test.js"
     exit_code: 0
     commit_sha: "61de000b"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: SHA-256 tree hash over the fixture .caws governance directory is byte-identical before and after each of two caws tui --once runs — the TUI writes no governance state (observability invariant)
+    recorded_at: "2026-09-21T17:05:35.440Z"
+    test_nodeid: "packages/caws-cli/tests/shell/tui-dashboard.test.js::A3: running the TUI twice leaves the .caws governance tree byte-identical"
+    command: "cd packages/caws-cli && npx jest tests/shell/tui-dashboard.test.js"
+    exit_code: 0
+    commit_sha: "61de000b"
