@@ -2,9 +2,10 @@ id: CAWS-TUI-DASHBOARD-001
 title: 'Read-only TUI dashboard: full-screen terminal panels over shared status selectors'
 risk_tier: 2
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-tui-dashboard
 created_at: '2026-09-21T16:21:57.653Z'
-updated_at: '2026-09-21T16:21:57.653Z'
+updated_at: '2026-09-21T16:22:35.241Z'
 created_by_session: 'session-d5f05829-a6ed-4208-9b77-22b94a3a27cd'
 blast_radius:
   modules:
