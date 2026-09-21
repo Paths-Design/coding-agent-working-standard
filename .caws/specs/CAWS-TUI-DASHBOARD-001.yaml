@@ -64,3 +64,12 @@ contracts:
     path: 'packages/caws-cli/src/shell/panel-data.ts'
   - name: 'tui-readonly'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "Spawned caws tui --once in a temp fixture repo renders all six sections (CAWS Dashboard/Specs/Worktrees/Agents/Doctor/Gates), carries the fixture spec id and lane name, and contains zero ANSI escape bytes; the Gates panel surfaces the policy-declared budget_limit gate"
+    recorded_at: "2026-09-21T17:05:27.090Z"
+    test_nodeid: "packages/caws-cli/tests/shell/tui-dashboard.test.js::A1: --once renders all six dashboard sections to non-TTY stdout and exits 0"
+    command: "cd packages/caws-cli && npx jest tests/shell/tui-dashboard.test.js"
+    exit_code: 0
+    commit_sha: "61de000b"
