@@ -105,3 +105,11 @@ evidence:
     command: "cd packages/caws-cli && npx jest tests/shell/tui-dashboard.test.js"
     exit_code: 0
     commit_sha: "61de000b"
+  - criterion_id: A6
+    status: pass
+    evidence_ref: "caws --help from the compiled dist lists the tui command (surface registration through TUI_COMMAND_META, register.ts, and registered-command-groups.js)"
+    recorded_at: "2026-09-21T17:06:16.376Z"
+    test_nodeid: "packages/caws-cli/tests/shell/tui-dashboard.test.js::A6: caws --help lists the tui command"
+    command: "cd packages/caws-cli && npx jest tests/shell/tui-dashboard.test.js"
+    exit_code: 0
+    commit_sha: "61de000b"
