@@ -97,3 +97,11 @@ evidence:
     command: "cd packages/caws-cli && npx jest tests/shell/tui-dashboard.test.js"
     exit_code: 0
     commit_sha: "61de000b"
+  - criterion_id: A5
+    status: pass
+    evidence_ref: "With injected fake timers, startDashboardSession paints on start, registers the 3000ms interval, repaints on each tick (fresh gather per paint), classifies q and Ctrl-C as exit and other keys as continue, restores the alt screen exactly once on stop"
+    recorded_at: "2026-09-21T17:06:08.093Z"
+    test_nodeid: "packages/caws-cli/tests/shell/tui-dashboard.test.js::A5: session repaints at the configured interval and exits on q / Ctrl-C"
+    command: "cd packages/caws-cli && npx jest tests/shell/tui-dashboard.test.js"
+    exit_code: 0
+    commit_sha: "61de000b"
