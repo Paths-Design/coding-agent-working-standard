@@ -487,6 +487,12 @@ former package-backed code-quality checks move to hook-pack advisory surfaces
 until a later doctrine slice decides whether hook-emitted events become the
 target Option A.
 
+### Added in 12.2 (read-only TUI dashboard)
+
+| Command    | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `caws tui` | Read-only full-screen terminal dashboard (CAWS-TUI-DASHBOARD-001): project/binding header, specs, worktrees, agents, doctor, and gates panels. Panel data is assembled by `src/shell/panel-data.ts` — the SAME selector module that builds `caws status --json` (single-source contract; the two surfaces cannot drift). `--once` renders one deterministic frame to stdout (no control sequences; safe to pipe/diff). A non-TTY session attempt degrades to a typed stderr notice plus a one-shot frame, exit 0. The status-is-observability invariant (§6.7) extends to this surface: `caws tui` never mutates governance state (pinned by a mutation-negative test). |
+
 ### Machine adapter runtime
 
 `CAWS-MACHINE-ADAPTER-RUNTIME-001`: `caws init adapters install|rollback|adopt`

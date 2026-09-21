@@ -32,6 +32,7 @@ const REGISTERED_COMMAND_GROUPS = Object.freeze([
   'doctor',
   'scope',
   'status',
+  'tui',
   'claim',
   'gates',
   'evidence',

@@ -1328,6 +1328,24 @@ export const STATUS_COMMAND_META: LeafCommandMeta = {
   ],
 };
 
+export const TUI_COMMAND_META: LeafCommandMeta = {
+  kind: 'leaf',
+  name: 'tui',
+  description:
+    'Read-only full-screen terminal dashboard over the same panel data as status (project/binding, specs, worktrees, agents, doctor, gates); refreshes live, q/Ctrl-C exits',
+  options: [
+    {
+      flag: '--once',
+      description: 'Render one frame to stdout and exit 0 (deterministic text, safe to pipe/diff)',
+    },
+    {
+      flag: '--interval <ms>',
+      description:
+        'Refresh interval for the live session in milliseconds (default 3000, clamped 250-60000)',
+    },
+  ],
+};
+
 export const CLAIM_COMMAND_META: LeafCommandMeta = {
   kind: 'leaf',
   name: 'claim',
@@ -2680,6 +2698,7 @@ export const COMMAND_SURFACE_METADATA: readonly CommandMeta[] = Object.freeze([
   INIT_COMMAND_META,
   DOCTOR_COMMAND_META,
   STATUS_COMMAND_META,
+  TUI_COMMAND_META,
   SCOPE_COMMAND_META,
   HOOKS_COMMAND_META,
   CLAIM_COMMAND_META,
