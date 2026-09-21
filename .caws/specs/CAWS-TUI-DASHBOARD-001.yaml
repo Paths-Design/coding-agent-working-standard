@@ -89,3 +89,11 @@ evidence:
     command: "cd packages/caws-cli && npx jest tests/shell/tui-dashboard.test.js"
     exit_code: 0
     commit_sha: "61de000b"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "Non-TTY caws tui without --once writes a typed guidance notice naming --once to stderr, still renders the one-shot frame (CAWS Dashboard + Specs sections) to stdout, and exits 0"
+    recorded_at: "2026-09-21T17:06:00.584Z"
+    test_nodeid: "packages/caws-cli/tests/shell/tui-dashboard.test.js::A4: non-TTY caws tui without --once prints guidance to stderr, frame to stdout, exits 0"
+    command: "cd packages/caws-cli && npx jest tests/shell/tui-dashboard.test.js"
+    exit_code: 0
+    commit_sha: "61de000b"
