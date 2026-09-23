@@ -875,6 +875,74 @@ function runCheck(
   }
 }
 
+// ─── which tree to re-derive against ─────────────────────────────────────────
+
+export interface VerificationTree {
+  /** Absolute root of the tree cited tests and artifacts resolve against. */
+  readonly root: string;
+  /** True when `root` is a linked worktree rather than the canonical checkout. */
+  readonly linked: boolean;
+  /** HEAD of `root`, or null when git could not report it. */
+  readonly head: string | null;
+  /** `git status --porcelain` lines of a linked tree; always empty for canonical. */
+  readonly dirty: readonly string[];
+}
+
+function realpathOr(p: string): string {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return path.resolve(p);
+  }
+}
+
+/**
+ * The tree a re-derivation invoked from `cwd` runs against.
+ *
+ * Specs are canonical-only, so the repo root the CLI resolves is always the
+ * canonical checkout. Re-deriving there made a test that exists only on a
+ * slice branch `test_not_found`, and agents routed the proof through
+ * `worktree merge --no-close` to get it onto the canonical tree. From inside a
+ * linked worktree the cited code is the worktree's, so that is the tree to run.
+ *
+ * Only a linked tree reports `dirty`: canonical behaviour is unchanged.
+ */
+export function resolveVerificationTree(
+  repoRoot: string,
+  cwd: string,
+  opts: { readonly execFile?: ExecFileSyncLike; readonly timeout?: number } = {}
+): VerificationTree {
+  const exec: ExecFileSyncLike = opts.execFile ?? (execFileSync as unknown as ExecFileSyncLike);
+  const timeout = opts.timeout ?? DEFAULT_TIMEOUTS.git;
+  const canonical = realpathOr(repoRoot);
+  const top = spawnBounded(
+    exec,
+    resolveGitBinary(),
+    ['rev-parse', '--show-toplevel'],
+    cwd,
+    timeout
+  );
+  const root = top.kind === 'ok' ? realpathOr(top.stdout.trim()) : canonical;
+  const linked = root !== canonical;
+  const headRun = spawnBounded(exec, resolveGitBinary(), ['rev-parse', 'HEAD'], root, timeout);
+  const head = headRun.kind === 'ok' ? headRun.stdout.trim() : null;
+  if (!linked) return { root: canonical, linked, head, dirty: [] };
+  const status = spawnBounded(
+    exec,
+    resolveGitBinary(),
+    ['status', '--porcelain', '--untracked-files=all'],
+    root,
+    timeout
+  );
+  // An unreadable status is not a clean one: report it as a dirty line so the
+  // record-time gate refuses rather than trusting an unknown tree.
+  const dirty =
+    status.kind === 'ok'
+      ? status.stdout.split('\n').filter((l) => l.trim().length > 0)
+      : ['(git status could not be read for this worktree)'];
+  return { root, linked, head, dirty };
+}
+
 // ─── convenience ─────────────────────────────────────────────────────────────
 
 export interface RederivationResult {

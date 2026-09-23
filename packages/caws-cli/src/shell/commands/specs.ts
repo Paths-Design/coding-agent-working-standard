@@ -69,6 +69,8 @@ import {
   AGENT_CITED_LEGEND,
   describeVerdict,
   rederiveSpecEvidence,
+  resolveVerificationTree,
+  type VerificationTree,
   SELECTABLE_TEST_RUNNERS,
   type TestRunner,
 } from '../../store/evidence-rederive';
@@ -1752,12 +1754,30 @@ type VerifyGate =
   | { readonly kind: 'verified'; readonly lines: readonly string[] }
   | { readonly kind: 'unverifiable'; readonly lines: readonly string[] };
 
-function verifyPendingEvidence(repoRoot: string, spec: Spec, pending: PendingEvidence): VerifyGate {
+function treeLine(tree: VerificationTree): string {
+  return `worktree ${tree.root} at ${tree.head ?? '(HEAD unreadable)'}`;
+}
+
+function verifyPendingEvidence(
+  tree: VerificationTree,
+  spec: Spec,
+  pending: PendingEvidence
+): VerifyGate {
+  if (tree.linked && tree.dirty.length > 0) {
+    return {
+      kind: 'refuse',
+      lines: [
+        `caws specs evidence --verify: refusing to verify from worktree ${tree.root} — it has uncommitted changes, so a verified result would not name committed code:`,
+        ...tree.dirty.map((l) => `  ${l}`),
+        '  Nothing was written. Commit the work in the worktree, then record again.',
+      ],
+    };
+  }
   // Project the entry being recorded over the spec as it will be after the
   // write, so re-derivation targets exactly this claim.
   const others = (spec.evidence ?? []).filter((e) => e.criterion_id !== pending.criterion_id);
   const projected: Spec = { ...spec, evidence: [...others, pending] };
-  const result = rederiveSpecEvidence(repoRoot, projected, {
+  const result = rederiveSpecEvidence(tree.root, projected, {
     classes: ['citation', 'artifact', 'test'],
     runTests: true,
   });
@@ -1782,7 +1802,14 @@ function verifyPendingEvidence(repoRoot: string, spec: Spec, pending: PendingEvi
     };
   }
   if (verdict.verdict === 'verified') {
-    return { kind: 'verified', lines: ['verified before recording:', line] };
+    return {
+      kind: 'verified',
+      lines: [
+        'verified before recording:',
+        line,
+        ...(tree.linked ? [`  re-derived against ${treeLine(tree)}`] : []),
+      ],
+    };
   }
   return {
     kind: 'unverifiable',
@@ -1849,7 +1876,11 @@ export function runSpecsEvidenceCommand(opts: SpecsEvidenceOptions): number {
       ...(opts.artifactPath !== undefined ? { artifact_path: opts.artifactPath } : {}),
       ...(opts.commitSha !== undefined ? { commit_sha: opts.commitSha } : {}),
     };
-    const gate = verifyPendingEvidence(ctx.repoRoot, shown.value.spec, pending);
+    const gate = verifyPendingEvidence(
+      resolveVerificationTree(ctx.repoRoot, cwd),
+      shown.value.spec,
+      pending
+    );
     if (gate.kind === 'refuse') {
       for (const l of gate.lines) err(l);
       return 1;
@@ -1963,7 +1994,8 @@ export function runSpecsVerifyAcsCommand(opts: SpecsVerifyAcsOptions): number {
 
   const run = opts.run === true;
   const strict = opts.strict === true;
-  const result = rederiveSpecEvidence(ctx.repoRoot, shown.value.spec, {
+  const tree = resolveVerificationTree(ctx.repoRoot, cwd);
+  const result = rederiveSpecEvidence(tree.root, shown.value.spec, {
     classes: ['citation', 'artifact', 'test'],
     runTests: run,
     ...(opts.runner !== undefined && isSelectableRunner(opts.runner)
@@ -1992,6 +2024,14 @@ export function runSpecsVerifyAcsCommand(opts: SpecsVerifyAcsOptions): number {
         : 'exists — cited tests located, not executed; pass --run to execute'
     })`
   );
+  if (tree.linked) {
+    out(
+      `tree: ${treeLine(tree)}` +
+        (tree.dirty.length > 0
+          ? ` (uncommitted changes in ${tree.dirty.length} path(s): this reflects the working tree, not HEAD)`
+          : '')
+    );
+  }
   for (const v of result.verdicts) out(`  ${describeVerdict(v)}`);
   const s = result.summary;
   out(
