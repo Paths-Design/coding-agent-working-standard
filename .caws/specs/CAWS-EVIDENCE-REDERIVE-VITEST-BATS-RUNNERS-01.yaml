@@ -33,3 +33,11 @@ non_functional: {}
 contracts:
   - name: 'evidence-rederive-executes-vitest-and-bats'
     type: behavior
+evidence:
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "9 bats cases run the repo's real bats 1.13 on a fixture: pass -> passed (1 test executed); fail -> failed 'bats exit 1: not ok 1 fails on purpose'; bats itself exits 0 with plan 1..0 on a zero-match filter and that is missing; a named skip and an all-skipped file are missing; a prefix name does not select (anchored ^name$); argv is --tap --filter ^name$ <file> with no shell; ENOENT -> unavailable. vitest split to CAWS-EVIDENCE-REDERIVE-VITEST-RUNNER-01 (no vitest dependency in this repo)."
+    recorded_at: "2026-09-23T20:10:20.410Z"
+    test_nodeid: packages/caws-cli/tests/store/evidence-rederive.test.js
+    commit_sha: "8894ae24"
+    test_verified_at: "8894ae249dfafb40874cdc91ce57fa1973219a9f"
