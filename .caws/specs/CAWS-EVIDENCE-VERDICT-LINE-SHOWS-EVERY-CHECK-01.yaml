@@ -1,0 +1,52 @@
+id: CAWS-EVIDENCE-VERDICT-LINE-SHOWS-EVERY-CHECK-01
+title: 'verify-acs, evidence --verify and the close advisory print one check per criterion and a [self-reported] tag on every row, so an executed test reads as a commit-only check'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-23T19:09:04.062Z'
+updated_at: '2026-09-23T19:09:04.062Z'
+created_by_session: '24846b74-e4d2-4ea1-9974-a1f681aaad88'
+blast_radius:
+  modules:
+    - 'caws-cli/store (evidence-rederive)'
+    - 'caws-cli/shell (specs verify-acs, evidence)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/store/evidence-rederive.ts'
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/src/store/specs-writer.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+    - 'packages/caws-cli/tests/store/evidence-rederive.test.js'
+    - 'packages/caws-cli/tests/shell/specs-verify-acs.test.js'
+    - 'packages/caws-cli/tests/shell/specs-evidence-verify.test.js'
+    - 'packages/caws-cli/tests/shell/specs-close-rederive.test.js'
+    - 'packages/caws-cli/tests/shell/worktree-merge-evidence-warning.test.js'
+    - 'packages/caws-cli/tests/store/specs-evidence.test.js'
+    - 'docs/command-reference.md'
+  out: []
+invariants:
+  - 'A criterion verdict line names every declared check with its own verdict and detail; no executed check is hidden behind a sibling that decided a tie.'
+  - 'The JSON contract (verify-acs.v1 verdict fields and summary keys, including self_reported) is unchanged; only human-readable text changes.'
+acceptance:
+  - id: A1
+    given: 'a criterion citing a reachable commit and a jest test that executes and passes'
+    when: 'caws specs verify-acs <id> --run prints its line'
+    then: 'the line names both checks - the commit reachability detail and the jest run - not the commit alone (observed 2026-09-23 across 28 sessions: agents read ''verified - commit X exists'' as a commit-only check)'
+  - id: A2
+    given: 'a criterion with exactly one check'
+    when: 'its verdict line is printed'
+    then: 'the line keeps the single-check shape ''<id>: <verdict> (<reason>) - <detail>'' so existing one-check output is not reworded beyond the tag'
+  - id: A3
+    given: 'any criterion whose checks derive from agent-supplied fields'
+    when: 'its line is printed by verify-acs, evidence --verify or the close advisory'
+    then: 'the tag reads [agent-cited], and the verify-acs summary and close advisory state once that agent-cited means the citation was chosen by the agent and its relevance is not checked - never that the check did not run'
+  - id: A4
+    given: 'verify-acs --json'
+    when: 'it runs on the same spec'
+    then: 'the verify-acs.v1 fields (verdict, reason, self_reported, checks, summary.self_reported) are unchanged'
+non_functional: {}
+contracts:
+  - name: 'evidence-verdict-line-names-every-check'
+    type: behavior
