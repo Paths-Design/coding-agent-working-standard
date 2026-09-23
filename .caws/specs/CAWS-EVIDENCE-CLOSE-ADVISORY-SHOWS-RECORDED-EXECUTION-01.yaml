@@ -54,3 +54,11 @@ non_functional: {}
 contracts:
   - name: 'evidence-records-executed-verdict'
     type: schema
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "close advisory prints 'recorded execution: 1 of the not_rederived criteria ...' and '  - A1: js/tests/sample.test.js::adds passed at <head>'; runner log shows close spawned no test; summary still counts it not_rederived"
+    recorded_at: "2026-09-23T19:59:02.401Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-close-rederive.test.js::a test verified at record time is reported as executed then, at its commit, apart from the unexplained not_rederived"
+    commit_sha: f48705f4
+    test_verified_at: f48705f4eccb3b2439fdfb563951745760d6c0b9
