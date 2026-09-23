@@ -45,3 +45,10 @@ non_functional: {}
 contracts:
   - name: 'evidence-command-is-informational'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "classifier: passing citation + command -> verified (passed); checks list the command as command_not_executed"
+    recorded_at: "2026-09-23T19:42:54.922Z"
+    test_nodeid: "packages/caws-cli/tests/kernel/unit/evidence-rederive.test.ts::a passing citation beside a command is verified; the command is still listed, unexecuted"
+    commit_sha: "4fa88358"
