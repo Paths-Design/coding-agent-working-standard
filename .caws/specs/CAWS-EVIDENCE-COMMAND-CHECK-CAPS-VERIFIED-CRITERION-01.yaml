@@ -1,0 +1,47 @@
+id: CAWS-EVIDENCE-COMMAND-CHECK-CAPS-VERIFIED-CRITERION-01
+title: 'a recorded --command caps an otherwise-verified criterion at not_rederived, so disclosing the command run makes the verdict worse'
+risk_tier: 2
+mode: fix
+lifecycle_state: draft
+created_at: '2026-09-23T19:09:30.379Z'
+updated_at: '2026-09-23T19:09:30.379Z'
+created_by_session: '24846b74-e4d2-4ea1-9974-a1f681aaad88'
+blast_radius:
+  modules:
+    - 'caws-cli/kernel (evidence/rederive)'
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - 'packages/caws-cli/src/kernel/evidence/rederive.ts'
+    - 'packages/caws-cli/tests/kernel/unit/evidence-rederive.test.ts'
+    - 'packages/caws-cli/tests/store/evidence-rederive.test.js'
+    - 'packages/caws-cli/tests/shell/specs-verify-acs.test.js'
+    - 'packages/caws-cli/tests/shell/specs-evidence-verify.test.js'
+    - 'packages/caws-cli/src/shell/commands/specs.ts'
+    - 'packages/caws-cli/src/shell/command-metadata.ts'
+  out: []
+invariants:
+  - 'No code path executes evidence[].command or acceptance[].test_command; each command check still resolves to not_rederived with reason command_not_executed.'
+  - 'A command check never raises a criterion verdict: a criterion whose only checks are commands stays not_rederived (command_not_executed), and a refuted or unrun executable check still decides.'
+acceptance:
+  - id: A1
+    given: 'a criterion citing a reachable commit (passed) and a --command'
+    when: 'it is classified'
+    then: 'the verdict is verified (passed), and the command check is still listed with command_not_executed (observed: agents rediscovered this cap independently in six sessions and learned to withhold --command)'
+  - id: A2
+    given: 'a criterion whose only checks are a --command and an acceptance test_command'
+    when: 'it is classified'
+    then: 'the verdict is not_rederived with reason command_not_executed'
+  - id: A3
+    given: 'a criterion citing a commit that is missing plus a --command'
+    when: 'it is classified'
+    then: 'the verdict is refuted (object_missing), not masked by the command'
+  - id: A4
+    given: 'caws specs evidence --verify with --commit-sha of a reachable commit and --command'
+    when: 'it runs against a real repo'
+    then: 'it prints verified before recording and records the command in the evidence entry, and no file named by the command exists afterwards'
+non_functional: {}
+contracts:
+  - name: 'evidence-command-is-informational'
+    type: behavior
