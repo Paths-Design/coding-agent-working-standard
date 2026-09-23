@@ -366,3 +366,55 @@ describe('close and merge never execute a recorded command and never spawn a run
     expect(warnings.join('\n')).toContain(`Evidence at close for "${id}"`);
   });
 });
+
+// ─── an execution recorded by --verify is named at close ─────────────────────
+
+describe('the close advisory names a test execution recorded by evidence --verify', () => {
+  test('a test verified at record time is reported as executed then, at its commit, apart from the unexplained not_rederived', () => {
+    const id = 'CLOSE-RECORDED-EXEC-001';
+    const { root, head, log } = mkProject(id, ['payload.txt']);
+    record(root, id, 'A1', { testNodeid: 'js/tests/sample.test.js::adds', verify: true });
+    const callsAfterRecord = runnerCalls(log).length;
+    expect(callsAfterRecord).toBe(1);
+
+    const r = runClose(root, id);
+    expect(r.code).toBe(0);
+    // Close still runs no test: the only runner call is the one at record time.
+    expect(runnerCalls(log)).toHaveLength(callsAfterRecord);
+    expect(r.err).toContain(
+      `Evidence at close for "${id}": 1 criteria — verified 0, refuted 0, not_rederived 1 (agent-cited 1, narrative-only 0, command declared 0)`
+    );
+    expect(r.err).toContain(
+      'recorded execution: 1 of the not_rederived criteria cite a test that `caws specs evidence --verify` ' +
+        'executed and passed when it was recorded; close does not re-run tests, so this is the recorded result, not a new one:'
+    );
+    expect(r.err).toContain(`  - A1: js/tests/sample.test.js::adds passed at ${head}`);
+  }, 60000);
+
+  test('a recorded execution never vouches for a criterion whose other citation no longer re-derives', () => {
+    const id = 'CLOSE-RECORDED-EXEC-003';
+    const { root } = mkProject(id, ['payload.txt']);
+    record(root, id, 'A1', {
+      testNodeid: 'js/tests/sample.test.js::adds',
+      artifactPath: 'docs/report.md',
+      verify: true,
+    });
+    fs.rmSync(path.join(root, 'docs/report.md'));
+    commitAll(root, 'drop the cited artifact');
+
+    const r = runClose(root, id);
+    expect(r.code).toBe(0);
+    expect(r.err).toContain('refuted 1');
+    expect(r.err).not.toContain('recorded execution:');
+  }, 60000);
+
+  test('a criterion recorded without --verify gets no recorded-execution line', () => {
+    const id = 'CLOSE-RECORDED-EXEC-002';
+    const { root } = mkProject(id, ['payload.txt']);
+    record(root, id, 'A1', { testNodeid: 'js/tests/sample.test.js::adds' });
+    const r = runClose(root, id);
+    expect(r.code).toBe(0);
+    expect(r.err).toContain('not_rederived 1');
+    expect(r.err).not.toContain('recorded execution:');
+  });
+});

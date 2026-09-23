@@ -265,6 +265,40 @@ describe('caws specs evidence --verify (A4 record-time, A14)', () => {
     expect(events[0].data.commit_sha).toBe(head);
   });
 
+  test('--verify that executes and passes the cited test records test_verified_at = the HEAD it ran at', () => {
+    const { root, cawsDir, head } = mkProject();
+    const r = runEvidence(root, { testNodeid: 'js/tests/sample.test.js::adds', verify: true });
+    expect(r.code).toBe(0);
+    expect(readSpec(cawsDir)).toMatch(new RegExp(`test_verified_at: ['"]?${head}['"]?`));
+    const events = acRecordedEvents(cawsDir);
+    expect(events).toHaveLength(1);
+    expect(events[0].data.test_verified_at).toBe(head);
+  }, 60000);
+
+  test('test_verified_at is written only when a cited test executed: a commit-only --verify and a plain record carry none', () => {
+    const { root, cawsDir, head } = mkProject();
+    const commitOnly = runEvidence(root, { commitSha: head, verify: true });
+    expect(commitOnly.code).toBe(0);
+    expect(readSpec(cawsDir)).not.toContain('test_verified_at');
+    const plain = runEvidence(root, { ac: 'A2', testNodeid: 'js/tests/sample.test.js::adds' });
+    expect(plain.code).toBe(0);
+    expect(readSpec(cawsDir)).not.toContain('test_verified_at');
+    expect(acRecordedEvents(cawsDir).map((e) => e.data.test_verified_at)).toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+
+  test('re-recording a criterion without --verify drops its earlier test_verified_at', () => {
+    const { root, cawsDir } = mkProject();
+    const first = runEvidence(root, { testNodeid: 'js/tests/sample.test.js::adds', verify: true });
+    expect(first.code).toBe(0);
+    expect(readSpec(cawsDir)).toContain('test_verified_at');
+    const again = runEvidence(root, { testNodeid: 'js/tests/sample.test.js::adds' });
+    expect(again.code).toBe(0);
+    expect(readSpec(cawsDir)).not.toContain('test_verified_at');
+  }, 60000);
+
   test('a nodeid naming a test that does not exist is refused with test_not_found', () => {
     const { root, cawsDir } = mkProject();
     const r = runEvidence(root, {

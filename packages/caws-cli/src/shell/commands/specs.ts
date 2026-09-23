@@ -1751,7 +1751,12 @@ type PendingEvidence = NonNullable<Spec['evidence']>[number];
 
 type VerifyGate =
   | { readonly kind: 'refuse'; readonly lines: readonly string[] }
-  | { readonly kind: 'verified'; readonly lines: readonly string[] }
+  | {
+      readonly kind: 'verified';
+      readonly lines: readonly string[];
+      /** HEAD the cited test executed and passed at; absent when no test ran. */
+      readonly testVerifiedAt?: string;
+    }
   | { readonly kind: 'unverifiable'; readonly lines: readonly string[] };
 
 function treeLine(tree: VerificationTree): string {
@@ -1802,8 +1807,12 @@ function verifyPendingEvidence(
     };
   }
   if (verdict.verdict === 'verified') {
+    // Close never runs tests, so this is the only moment the test's result is
+    // observed; keep the revision it was observed at for the close advisory.
+    const testRan = verdict.checks.some((c) => c.class === 'test' && c.verdict === 'verified');
     return {
       kind: 'verified',
+      ...(testRan && tree.head !== null ? { testVerifiedAt: tree.head } : {}),
       lines: [
         'verified before recording:',
         line,
@@ -1847,6 +1856,7 @@ export function runSpecsEvidenceCommand(opts: SpecsEvidenceOptions): number {
   );
   if (actor === null) return 2;
 
+  let testVerifiedAt: string | undefined;
   if (opts.verify === true) {
     if (
       opts.testNodeid === undefined &&
@@ -1886,6 +1896,7 @@ export function runSpecsEvidenceCommand(opts: SpecsEvidenceOptions): number {
       return 1;
     }
     for (const l of gate.lines) (gate.kind === 'verified' ? out : err)(l);
+    if (gate.kind === 'verified') testVerifiedAt = gate.testVerifiedAt;
   }
 
   const result = recordSpecEvidence(ctx.cawsDir, {
@@ -1899,6 +1910,7 @@ export function runSpecsEvidenceCommand(opts: SpecsEvidenceOptions): number {
     ...(opts.exitCode !== undefined ? { exitCode: opts.exitCode } : {}),
     ...(opts.artifactPath !== undefined ? { artifactPath: opts.artifactPath } : {}),
     ...(opts.commitSha !== undefined ? { commitSha: opts.commitSha } : {}),
+    ...(testVerifiedAt !== undefined ? { testVerifiedAt } : {}),
     now: nowFn,
     actor,
   });

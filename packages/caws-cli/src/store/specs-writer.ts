@@ -44,6 +44,7 @@ import {
   projectSuccessorsForEvent,
   type SpecCorpusEntry,
   type UnresolvedObligation,
+  type CriterionVerdict,
 } from '../kernel';
 
 import { appendEvent, loadEvents } from './events-store';
@@ -370,6 +371,12 @@ export interface RecordSpecEvidenceInput {
   readonly exitCode?: number;
   readonly artifactPath?: string;
   readonly commitSha?: string;
+  /**
+   * The HEAD at which `caws specs evidence --verify` executed the cited test
+   * and saw it pass. Set only by that path; a record without --verify never
+   * carries it, so a re-record drops a stale one with the rest of the entry.
+   */
+  readonly testVerifiedAt?: string;
   readonly now?: () => Date;
   readonly actor: EventBody['actor'];
 }
@@ -1291,6 +1298,41 @@ export function activateSpec(cawsDir: string, input: ActivateSpecInput): Result<
 // ─── acceptance-criteria evidence gap ────────────────────────────────────
 
 /** An acceptance criterion whose evidence does not satisfy closure. */
+/**
+ * The close advisory's recorded-execution section.
+ *
+ * Close never runs tests, so a criterion whose cited test `caws specs evidence
+ * --verify` executed and saw pass still counts as not_rederived here. Without
+ * this section the advisory reads the same for that criterion as for one whose
+ * test nobody ever ran. Named separately — never counted as verified — because
+ * it is the result recorded at `test_verified_at`, not a re-derivation now.
+ *
+ * A criterion qualifies only when every executable check that close could run
+ * re-derived, and every remaining one is a cited test close did not run. A
+ * refuted or missing citation beside it keeps the criterion out.
+ */
+function recordedExecutionNote(spec: Spec, verdicts: readonly CriterionVerdict[]): string {
+  const lines: string[] = [];
+  for (const v of verdicts) {
+    if (v.verdict !== 'not_rederived') continue;
+    const entry = (spec.evidence ?? []).find((e) => e.criterion_id === v.id);
+    if (entry?.test_verified_at === undefined) continue;
+    const executable = v.checks.filter((c) => c.class !== 'command');
+    const unrunTests = executable.filter((c) => c.class === 'test' && c.reason === 'not_run');
+    if (unrunTests.length === 0) continue;
+    if (!executable.every((c) => c.verdict === 'verified' || unrunTests.includes(c))) continue;
+    const targets = unrunTests.map((c) => c.target).join(', ');
+    lines.push(`  - ${v.id}: ${targets} passed at ${entry.test_verified_at}`);
+  }
+  if (lines.length === 0) return '';
+  return (
+    `\nrecorded execution: ${lines.length} of the not_rederived criteria cite a test that ` +
+    '`caws specs evidence --verify` executed and passed when it was recorded; close does not ' +
+    're-run tests, so this is the recorded result, not a new one:\n' +
+    lines.join('\n')
+  );
+}
+
 export interface UnsatisfiedCriterion {
   readonly id: string;
   /** `missing` — no entry at all; `fail`/`unchecked` — an entry that does not satisfy. */
@@ -1524,7 +1566,8 @@ export function closeSpec(cawsDir: string, input: CloseSpecInput): Result<SpecWr
         `(agent-cited ${s.self_reported}, narrative-only ${s.narrative_only}, command declared ${s.command_declared}). ` +
         `Verified here means the cited commit/artifact re-derives; cited tests are not executed at close — ` +
         `record with \`caws specs evidence --verify\` or inspect with \`caws specs verify-acs ${input.id} --run\`.` +
-        (s.self_reported > 0 ? `\nnote: ${AGENT_CITED_LEGEND}` : '')
+        (s.self_reported > 0 ? `\nnote: ${AGENT_CITED_LEGEND}` : '') +
+        recordedExecutionNote(spec, rederived.verdicts)
     );
   }
   if (unsatisfied.length > 0) {
@@ -3714,6 +3757,7 @@ export function patchEvidenceBlock(
     exit_code?: number;
     artifact_path?: string;
     commit_sha?: string;
+    test_verified_at?: string;
   }
 ): string | null {
   const lines = source.split('\n');
@@ -3835,6 +3879,7 @@ function renderEvidenceEntry(
     exit_code?: number;
     artifact_path?: string;
     commit_sha?: string;
+    test_verified_at?: string;
   },
   baseIndent: number
 ): string {
@@ -3855,6 +3900,7 @@ function renderEvidenceEntry(
   if (entry.exit_code !== undefined) fields.push(`exit_code: ${entry.exit_code}`);
   pushStr('artifact_path', entry.artifact_path);
   pushStr('commit_sha', entry.commit_sha);
+  pushStr('test_verified_at', entry.test_verified_at);
   return fields.map((f, i) => `${i === 0 ? dash : cont}${f}`).join('\n');
 }
 
@@ -3976,6 +4022,7 @@ export function recordSpecEvidence(
     ...(input.exitCode !== undefined ? { exit_code: input.exitCode } : {}),
     ...(input.artifactPath !== undefined ? { artifact_path: input.artifactPath } : {}),
     ...(input.commitSha !== undefined ? { commit_sha: input.commitSha } : {}),
+    ...(input.testVerifiedAt !== undefined ? { test_verified_at: input.testVerifiedAt } : {}),
   };
 
   const patched = patchEvidenceBlock(originalBytes, entryRecord);
@@ -4015,6 +4062,7 @@ export function recordSpecEvidence(
       ...(input.exitCode !== undefined ? { exit_code: input.exitCode } : {}),
       ...(input.artifactPath !== undefined ? { artifact_path: input.artifactPath } : {}),
       ...(input.commitSha !== undefined ? { commit_sha: input.commitSha } : {}),
+      ...(input.testVerifiedAt !== undefined ? { test_verified_at: input.testVerifiedAt } : {}),
     },
   } as unknown as EventBody;
 
