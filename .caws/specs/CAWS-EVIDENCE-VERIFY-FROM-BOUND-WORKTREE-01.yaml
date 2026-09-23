@@ -61,3 +61,9 @@ evidence:
     recorded_at: "2026-09-23T19:40:29.765Z"
     test_nodeid: "packages/caws-cli/tests/shell/specs-evidence-verify-worktree.test.js::a worktree with an uncommitted edit is refused before anything runs; nothing is written"
     commit_sha: "1c3f4a31"
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "from canonical the branch-only citation is still test_not_found and no worktree line prints; the full shell+store suites (180 suites, 1995 tests) pass unchanged for canonical"
+    recorded_at: "2026-09-23T19:40:35.899Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-evidence-verify-worktree.test.js::the same citation from the canonical checkout is still refused: the test is not on main"
+    commit_sha: "1c3f4a31"
