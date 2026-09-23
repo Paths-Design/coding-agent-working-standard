@@ -48,3 +48,10 @@ non_functional: {}
 contracts:
   - name: 'evidence-verify-runs-in-invoking-worktree'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "fixture: linked worktree whose branch adds a committed jest test absent from main; evidence --verify from inside it verifies and names the tree+HEAD. Recorded from inside wt-verify-from-worktree itself, before merge."
+    recorded_at: "2026-09-23T19:40:08.420Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-evidence-verify-worktree.test.js::a committed test that exists only on the worktree branch verifies from inside the worktree, naming the tree and HEAD"
+    commit_sha: "1c3f4a31"
