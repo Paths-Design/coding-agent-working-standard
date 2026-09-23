@@ -69,3 +69,10 @@ evidence:
     test_nodeid: "packages/caws-cli/tests/shell/specs-close-rederive.test.js::a criterion recorded without --verify gets no recorded-execution line"
     commit_sha: f48705f4
     test_verified_at: f48705f4eccb3b2439fdfb563951745760d6c0b9
+  - criterion_id: A3
+    status: pass
+    evidence_ref: "artifact deleted after --verify record: close reports refuted 1 and no recorded-execution line; re-record drop is pinned by specs-evidence-verify.test.js 're-recording a criterion without --verify drops its earlier test_verified_at'"
+    recorded_at: "2026-09-23T20:00:37.769Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-close-rederive.test.js::a recorded execution never vouches for a criterion whose other citation no longer re-derives"
+    commit_sha: f48705f4
+    test_verified_at: f48705f4eccb3b2439fdfb563951745760d6c0b9
