@@ -5,7 +5,7 @@
  * A4 (staleness caught at close), A5 (a recorded command never executes on
  * close or merge), A9 (close/merge spawn no test runner), A10 (warn-mode is
  * actually warn), A11 (the report reaches both renderers), A12 (the close
- * summary prints self-reported and narrative-only counts).
+ * summary prints agent-cited and narrative-only counts).
  *
  * Boundary made explicit: close re-derives the NON-EXECUTING classes only
  * (cited commit, cited artifact). A stale TEST citation is therefore caught by
@@ -185,7 +185,11 @@ describe('close re-derives citations in warn-mode (A10, A12)', () => {
     expect(r.out).toContain(`closed ${id}`);
     expect(r.err).not.toContain('does NOT re-derive');
     expect(r.err).toContain(
-      `Evidence at close for "${id}": 1 criteria — verified 1, refuted 0, not_rederived 0 (self-reported 1, narrative-only 0, command declared 0)`
+      `Evidence at close for "${id}": 1 criteria — verified 1, refuted 0, not_rederived 0 (agent-cited 1, narrative-only 0, command declared 0)`
+    );
+    expect(r.err).toContain(
+      'note: agent-cited means the agent chose which commit, artifact or test to cite; ' +
+        'it marks the citation’s relevance as unchecked, not the check as unrun.'
     );
   });
 
@@ -201,12 +205,12 @@ describe('close re-derives citations in warn-mode (A10, A12)', () => {
       'recorded as pass whose cited evidence does NOT re-derive [warn-mode: close proceeded]'
     );
     expect(r.err).toContain(
-      'A1: refuted (artifact_missing) — docs/nope.md not found at HEAD [self-reported]'
+      'A1: refuted (artifact_missing) — docs/nope.md not found at HEAD [agent-cited]'
     );
     expect(r.err).toContain(`caws specs reopen ${id} --reason`);
     expect(r.err).toContain('--verify');
     expect(r.err).toContain(
-      'verified 0, refuted 1, not_rederived 0 (self-reported 1, narrative-only 0'
+      'verified 0, refuted 1, not_rederived 0 (agent-cited 1, narrative-only 0'
     );
   });
 
@@ -227,7 +231,7 @@ describe('close re-derives citations in warn-mode (A10, A12)', () => {
     expect(r.code).toBe(0);
     expect(r.err).not.toContain('does NOT re-derive');
     expect(r.err).toContain(
-      'verified 0, refuted 0, not_rederived 1 (self-reported 0, narrative-only 1'
+      'verified 0, refuted 0, not_rederived 1 (agent-cited 0, narrative-only 1'
     );
   });
 
@@ -256,7 +260,7 @@ describe('staleness is caught at close (A4)', () => {
     const r = runClose(root, id);
     expect(r.code).toBe(0);
     expect(r.err).toContain(
-      'A1: refuted (artifact_missing) — docs/report.md not found at HEAD [self-reported]'
+      'A1: refuted (artifact_missing) — docs/report.md not found at HEAD [agent-cited]'
     );
   });
 
@@ -283,7 +287,7 @@ describe('staleness is caught at close (A4)', () => {
     // The now-red test is NOT named refuted at close: the test class is not
     // re-derived there. The summary says so and counts it as not_rederived.
     expect(r.err).not.toContain('refuted (test_failed)');
-    expect(r.err).toContain('verified 0, refuted 0, not_rederived 1 (self-reported 1');
+    expect(r.err).toContain('verified 0, refuted 0, not_rederived 1 (agent-cited 1');
     expect(r.err).toContain('cited tests are not executed at close');
     expect(runnerCalls(log)).toHaveLength(2);
   }, 60000);
@@ -327,8 +331,12 @@ describe('close and merge never execute a recorded command and never spawn a run
     expect(runnerCalls(log)).toEqual([]);
     // The same criterion line the direct close prints, on the merge renderer.
     expect(m.err).toContain('caws advisory (non-blocking)');
+    // Every check is named: the unrun test and the unexecuted command are
+    // visible beside the refuted artifact, not hidden behind it.
     expect(m.err).toContain(
-      'A1: refuted (artifact_missing) — docs/nope.md not found at HEAD [self-reported]'
+      'A1: refuted (artifact_missing) — artifact refuted: docs/nope.md not found at HEAD; ' +
+        'test not_rederived: not selected at this stage; ' +
+        `command not_rederived: recorded, never executed: touch ${probe} [agent-cited]`
     );
     expect(m.err).toContain(`Evidence at close for "${id}"`);
     expect(m.err).toContain('command declared 1');

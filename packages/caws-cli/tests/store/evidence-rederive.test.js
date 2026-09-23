@@ -23,6 +23,7 @@ const {
   rederiveSpecEvidence,
   detectTestRunner,
   describeVerdict,
+  AGENT_CITED_LEGEND,
 } = require('../../dist/store/evidence-rederive');
 const { resolveGitBinary, resetGitBinaryCache } = require('../../dist/store/git-binary');
 const { planRederivation } = require('../../dist/kernel');
@@ -815,7 +816,7 @@ describe('infrastructure failure never reads as clean (A13)', () => {
 // ─── end to end (A2, store half) + describeVerdict (A12) ─────────────────────
 
 describe('rederiveSpecEvidence', () => {
-  test('one verified, one refuted, one narrative -> 1/1/1, and the lines read as self-reported', () => {
+  test('one verified, one refuted, one narrative -> 1/1/1, and the lines carry the agent-cited tag', () => {
     const { root, c2 } = mkFixtureRepo();
     const r = rederiveSpecEvidence(
       root,
@@ -837,11 +838,55 @@ describe('rederiveSpecEvidence', () => {
     });
     const lines = r.verdicts.map(describeVerdict);
     expect(lines[0]).toMatch(
-      /^A1: verified \(passed\) — commit .* reachable from refs\/heads\/main \[self-reported\]$/
+      /^A1: verified \(passed\) — commit .* reachable from refs\/heads\/main \[agent-cited\]$/
     );
     expect(lines[1]).toBe(
-      'A2: refuted (artifact_missing) — docs/nope.md not found at HEAD [self-reported]'
+      'A2: refuted (artifact_missing) — docs/nope.md not found at HEAD [agent-cited]'
     );
     expect(lines[2]).toBe('A3: not_rederived (no_mechanical_field)');
+  });
+
+  test('a criterion with a commit and an executed test names both checks, not the commit alone', () => {
+    const { root, c2 } = mkFixtureRepo();
+    const r = rederiveSpecEvidence(
+      root,
+      spec({ A1: { commit_sha: c2, test_nodeid: 'js/tests/sample.test.js::adds' } }),
+      { classes: ALL, runTests: true }
+    );
+    expect(describeVerdict(r.verdicts[0])).toBe(
+      `A1: verified (passed) — citation verified: commit ${c2} exists and is reachable from refs/heads/main; ` +
+        'test verified: jest js/tests/sample.test.js::adds passed (1 test executed) [agent-cited]'
+    );
+  });
+
+  test('a refuted check beside a verified one is named with its own verdict', () => {
+    const { root, c2 } = mkFixtureRepo();
+    const r = rederiveSpecEvidence(
+      root,
+      spec({ A1: { commit_sha: c2, artifact_path: 'docs/nope.md' } }),
+      { classes: ALL, runTests: false }
+    );
+    expect(describeVerdict(r.verdicts[0])).toBe(
+      `A1: refuted (artifact_missing) — citation verified: commit ${c2} exists and is reachable from refs/heads/main; ` +
+        `artifact refuted: docs/nope.md not found at ${c2} [agent-cited]`
+    );
+  });
+
+  test('a command check, which carries no outcome detail, is named as recorded and never executed', () => {
+    const { root } = mkFixtureRepo();
+    const r = rederiveSpecEvidence(root, spec({ A1: { command: 'make check' } }), {
+      classes: ALL,
+      runTests: false,
+    });
+    expect(describeVerdict(r.verdicts[0])).toBe(
+      'A1: not_rederived (command_not_executed) — command recorded, never executed: make check [agent-cited]'
+    );
+  });
+
+  test('the agent-cited legend says relevance is unchecked, never that the check did not run', () => {
+    expect(AGENT_CITED_LEGEND).toBe(
+      'agent-cited means the agent chose which commit, artifact or test to cite; ' +
+        'it marks the citation’s relevance as unchecked, not the check as unrun.'
+    );
   });
 });

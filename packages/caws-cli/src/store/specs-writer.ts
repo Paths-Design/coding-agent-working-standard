@@ -52,7 +52,7 @@ import { autoCommit, isPathDirty, type AutoCommitOutcome } from './git-autocommi
 import { runLifecycleTransaction, type LifecycleTransactionResult } from './lifecycle-transaction';
 import { withLifecycleLock } from './lifecycle-lock';
 import { repoRootFromCawsDir, storeDiagnostic, validateSpecId } from './repo-root';
-import { describeVerdict, rederiveSpecEvidence } from './evidence-rederive';
+import { AGENT_CITED_LEGEND, describeVerdict, rederiveSpecEvidence } from './evidence-rederive';
 import { STORE_RULES } from './rules';
 import { insertTopLevelScalarAfter, removeTopLevelScalar, setTopLevelScalar } from './yaml-patch';
 import { readYamlSource } from './yaml-store';
@@ -1521,9 +1521,10 @@ export function closeSpec(cawsDir: string, input: CloseSpecInput): Result<SpecWr
     const s = rederived.summary;
     evidenceWarnings.push(
       `Evidence at close for "${input.id}": ${s.total} criteria — verified ${s.verified}, refuted ${s.refuted}, not_rederived ${s.not_rederived} ` +
-        `(self-reported ${s.self_reported}, narrative-only ${s.narrative_only}, command declared ${s.command_declared}). ` +
+        `(agent-cited ${s.self_reported}, narrative-only ${s.narrative_only}, command declared ${s.command_declared}). ` +
         `Verified here means the cited commit/artifact re-derives; cited tests are not executed at close — ` +
-        `record with \`caws specs evidence --verify\` or inspect with \`caws specs verify-acs ${input.id} --run\`.`
+        `record with \`caws specs evidence --verify\` or inspect with \`caws specs verify-acs ${input.id} --run\`.` +
+        (s.self_reported > 0 ? `\nnote: ${AGENT_CITED_LEGEND}` : '')
     );
   }
   if (unsatisfied.length > 0) {

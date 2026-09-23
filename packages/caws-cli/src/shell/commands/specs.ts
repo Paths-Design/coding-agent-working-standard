@@ -66,6 +66,7 @@ import {
   isMigratableSourceVersion,
 } from '../../store/migration-versions';
 import {
+  AGENT_CITED_LEGEND,
   describeVerdict,
   rederiveSpecEvidence,
   SELECTABLE_TEST_RUNNERS,
@@ -1995,9 +1996,10 @@ export function runSpecsVerifyAcsCommand(opts: SpecsVerifyAcsOptions): number {
   const s = result.summary;
   out(
     `summary: ${s.total} criteria — verified ${s.verified}, refuted ${s.refuted}, not_rederived ${s.not_rederived} ` +
-      `(narrative-only ${s.narrative_only}, self-reported ${s.self_reported}, command declared ${s.command_declared})`
+      `(narrative-only ${s.narrative_only}, agent-cited ${s.self_reported}, command declared ${s.command_declared})`
   );
   out(verifyAcsVerdictLine(s));
+  if (s.self_reported > 0) out(`note: ${AGENT_CITED_LEGEND}`);
   if (strict && s.not_rederived > 0) {
     out(`strict: ${s.not_rederived} not_rederived criterion/criteria → exit 1`);
   }

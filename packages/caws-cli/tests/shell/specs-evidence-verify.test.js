@@ -201,7 +201,7 @@ describe('caws specs evidence --verify (A4 record-time, A14)', () => {
     expect(r.status).toBe(0);
     expect(r.stdout).toContain('verified before recording:');
     expect(r.stdout).toContain(
-      `A1: verified (passed) — commit ${head} exists and is reachable from refs/heads/main [self-reported]`
+      `A1: verified (passed) — commit ${head} exists and is reachable from refs/heads/main [agent-cited]`
     );
     expect(r.stdout).toContain(
       'recorded evidence for EVIDENCE-VERIFY-FIXTURE-001 AC A1 (status: pass)'
@@ -217,7 +217,7 @@ describe('caws specs evidence --verify (A4 record-time, A14)', () => {
     const green = runEvidence(root, { testNodeid: 'js/tests/sample.test.js::adds', verify: true });
     expect(green.code).toBe(0);
     expect(green.out).toContain(
-      'A1: verified (passed) — jest js/tests/sample.test.js::adds passed (1 test executed) [self-reported]'
+      'A1: verified (passed) — jest js/tests/sample.test.js::adds passed (1 test executed) [agent-cited]'
     );
     // The writer quotes values containing '::'.
     expect(readSpec(cawsDir)).toMatch(/test_nodeid: "?js\/tests\/sample\.test\.js::adds"?/);
