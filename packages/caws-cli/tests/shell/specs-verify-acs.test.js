@@ -104,6 +104,11 @@ function mkProject() {
       '',
     ].join('\n')
   );
+  write(
+    root,
+    'js/tests/each.test.js',
+    "test.each(['a', 'b'])('%s: x', (v) => { expect(v).toBeTruthy(); });\n"
+  );
   write(root, 'plain/tests/orphan.test.js', "test('x', () => {});\n");
   write(root, 'docs/report.md', '# report\n');
   git(root, ['add', '-A']);
@@ -297,6 +302,23 @@ describe('existence is not execution (A1)', () => {
     expect(payload.summary.verified).toBe(1);
     expect(payload.summary.refuted).toBe(1);
     expect(payload.summary.not_rederived).toBe(1);
+  }, 60000);
+
+  test('--run through dist: a name selecting zero tests is refuted, and the passing test names how many ran', () => {
+    const { root, cawsDir } = mkProject();
+    record(cawsDir, 'A1', { testNodeid: 'js/tests/each.test.js::%s: x' });
+    record(cawsDir, 'A2', { testNodeid: 'js/tests/sample.test.js::adds' });
+
+    const r = spawnCli(root, ['specs', 'verify-acs', SPEC_ID, '--run', '--json']);
+    expect(r.status).toBe(1);
+    const byId = Object.fromEntries(JSON.parse(r.stdout).criteria.map((c) => [c.id, c]));
+    expect(byId.A1.verdict).toBe('refuted');
+    expect(byId.A1.reason).toBe('test_not_found');
+    expect(byId.A1.checks[0].detail).toMatch(/^jest selected zero tests for "%s: x"/);
+    expect(byId.A2.verdict).toBe('verified');
+    expect(byId.A2.checks[0].detail).toBe(
+      'jest js/tests/sample.test.js::adds passed (1 test executed)'
+    );
   }, 60000);
 
   test('--run with only passing citations prints the honest qualifier with the unverifiable count beside it', () => {

@@ -76,6 +76,20 @@ function mkFixtureRepo() {
     ].join('\n')
   );
   write(root, 'js/tests/hang.test.js', "test('hangs', () => { for (;;) {} });\n");
+  // Zero-selection fixtures: jest exits 0 with every test skipped when a
+  // name pattern selects nothing, so exit status alone cannot tell a pass
+  // from a run that executed no test.
+  write(
+    root,
+    'js/tests/each.test.js',
+    [
+      '// ghost title appears only in this comment',
+      "test.each(['a', 'b'])('%s: x', (v) => { expect(v).toBeTruthy(); });",
+      '',
+    ].join('\n')
+  );
+  write(root, 'js/tests/skipped.test.js', "test.skip('later', () => { expect(1).toBe(2); });\n");
+  write(root, 'js/tests/broken.test.js', "test('loads', () => { expect(1).toBe(1);\n");
   write(root, 'py/conftest.py', '');
   write(
     root,
@@ -278,8 +292,66 @@ describe('jest re-derivation', () => {
       { runTests: true }
     );
     expect(o.A1[0].outcome).toBe('passed');
+    expect(o.A1[0].detail).toBe('jest js/tests/sample.test.js::adds passed (1 test executed)');
     expect(o.A2[0].outcome).toBe('failed');
     expect(o.A2[0].detail).toMatch(/^jest exit 1:/);
+  });
+
+  test('--run: a test.each template name selects zero tests -> missing, never passed', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(root, spec({ A1: { test_nodeid: 'js/tests/each.test.js::%s: x' } }), {
+      runTests: true,
+    });
+    expect(o.A1[0].outcome).toBe('missing');
+    expect(o.A1[0].detail).toBe(
+      'jest selected zero tests for "%s: x" in js/tests/each.test.js (jest exits 0 when a name pattern matches nothing); ' +
+        'a test.each title is a template — cite the file alone, or a name without format specifiers'
+    );
+  });
+
+  test('--run: a name found in the file but belonging to no test -> missing, never passed', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(
+      root,
+      spec({ A1: { test_nodeid: 'js/tests/each.test.js::ghost title' } }),
+      {
+        runTests: true,
+      }
+    );
+    expect(o.A1[0].outcome).toBe('missing');
+    expect(o.A1[0].detail).toMatch(
+      /^jest selected zero tests for "ghost title" in js\/tests\/each\.test\.js/
+    );
+  });
+
+  test('--run: a file-level citation whose only test is skipped -> missing, never passed', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(root, spec({ A1: { test_nodeid: 'js/tests/skipped.test.js' } }), {
+      runTests: true,
+    });
+    expect(o.A1[0].outcome).toBe('missing');
+    expect(o.A1[0].detail).toMatch(/^jest ran no test in js\/tests\/skipped\.test\.js/);
+  });
+
+  test('--run: a cited file that fails to load executes zero tests and is failed, not missing', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(root, spec({ A1: { test_nodeid: 'js/tests/broken.test.js::loads' } }), {
+      runTests: true,
+    });
+    expect(o.A1[0].outcome).toBe('failed');
+    expect(o.A1[0].detail).toMatch(/^jest exit 1:/);
+  });
+
+  test('--run: a jest exit 0 whose result cannot be read is unavailable, never passed', () => {
+    const { root } = mkFixtureRepo();
+    const o = outcomesFor(root, spec({ A1: { test_nodeid: 'js/tests/sample.test.js::adds' } }), {
+      runTests: true,
+      execFile: () => 'not json',
+    });
+    expect(o.A1[0].outcome).toBe('unavailable');
+    expect(o.A1[0].detail).toBe(
+      'jest exited 0 but its --json result could not be read, so which tests ran is unknown'
+    );
   });
 
   test('unknown test name or missing file -> missing, without spawning', () => {

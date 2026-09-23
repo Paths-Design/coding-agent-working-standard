@@ -589,16 +589,90 @@ function jestOutcome(
     };
   }
   const relFile = path.relative(ctx.cwd, absFile);
-  const args = ['--runInBand', '--runTestsByPath'];
+  // --json: the exit status cannot distinguish a pass from a run that executed
+  // nothing. A --testNamePattern matching no test exits 0 with every test in
+  // the file skipped, so the counts are what decide. Test console output goes
+  // to stderr under --json, leaving stdout as the result document.
+  const args = ['--runInBand', '--runTestsByPath', '--json'];
   if (testName !== undefined) args.push(`--testNamePattern=${escapeRegex(testName)}`);
   args.push('--', relFile);
   const run = spawnBounded(exec, bin, args, ctx.cwd, t.run);
-  return spawnToOutcome(
-    base,
-    run,
-    (status, out) => ({ ...base, outcome: 'failed', detail: `jest exit ${status}: ${tail(out)}` }),
-    `jest ${nodeid}`
-  );
+  if (run.kind !== 'ok' && run.kind !== 'exit') {
+    return spawnToOutcome(base, run, () => ({ ...base, outcome: 'failed' }), `jest ${nodeid}`);
+  }
+
+  const counts = jestCounts(run.stdout);
+  const executed = counts === null ? 0 : counts.passed + counts.failed;
+  // A suite that fails to load also executes zero tests; that is a failure of
+  // the cited file, not a citation that names nothing.
+  if (counts !== null && executed === 0 && counts.failedSuites === 0) {
+    return {
+      ...base,
+      outcome: 'missing',
+      detail:
+        testName !== undefined
+          ? `jest selected zero tests for ${JSON.stringify(testName)} in ${file} (jest exits 0 when a name pattern matches nothing)` +
+            (/%[sdifjop#%]/.test(testName)
+              ? '; a test.each title is a template — cite the file alone, or a name without format specifiers'
+              : '')
+          : `jest ran no test in ${file}; every test in it was skipped or none exists`,
+    };
+  }
+  if (run.kind === 'exit') {
+    return {
+      ...base,
+      outcome: 'failed',
+      detail: `jest exit ${run.status}: ${tail(`${run.stdout}\n${run.stderr}`)}`,
+    };
+  }
+  if (counts === null) {
+    return {
+      ...base,
+      outcome: 'unavailable',
+      detail:
+        'jest exited 0 but its --json result could not be read, so which tests ran is unknown',
+    };
+  }
+  return {
+    ...base,
+    outcome: 'passed',
+    detail: `jest ${nodeid} passed (${executed} test${executed === 1 ? '' : 's'} executed)`,
+  };
+}
+
+/**
+ * Executed-test counts from jest's --json result, or null when stdout is not
+ * that document. Null never reads as a pass: the caller treats an unreadable
+ * result on exit 0 as unavailable.
+ */
+function jestCounts(
+  stdout: string
+): { passed: number; failed: number; failedSuites: number } | null {
+  const start = stdout.indexOf('{');
+  if (start < 0) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stdout.slice(start));
+  } catch {
+    return null;
+  }
+  const r = parsed as {
+    numPassedTests?: unknown;
+    numFailedTests?: unknown;
+    numFailedTestSuites?: unknown;
+  };
+  if (
+    typeof r.numPassedTests !== 'number' ||
+    typeof r.numFailedTests !== 'number' ||
+    typeof r.numFailedTestSuites !== 'number'
+  ) {
+    return null;
+  }
+  return {
+    passed: r.numPassedTests,
+    failed: r.numFailedTests,
+    failedSuites: r.numFailedTestSuites,
+  };
 }
 
 /**

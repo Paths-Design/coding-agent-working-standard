@@ -81,6 +81,11 @@ function mkProject() {
       '',
     ].join('\n')
   );
+  write(
+    root,
+    'js/tests/each.test.js',
+    "test.each(['a', 'b'])('%s: x', (v) => { expect(v).toBeTruthy(); });\n"
+  );
   write(root, 'plain/tests/orphan.test.js', "test('x', () => {});\n");
   write(root, 'docs/report.md', '# report\n');
   git(root, ['add', '-A']);
@@ -212,7 +217,7 @@ describe('caws specs evidence --verify (A4 record-time, A14)', () => {
     const green = runEvidence(root, { testNodeid: 'js/tests/sample.test.js::adds', verify: true });
     expect(green.code).toBe(0);
     expect(green.out).toContain(
-      'A1: verified (passed) — jest js/tests/sample.test.js::adds passed [self-reported]'
+      'A1: verified (passed) — jest js/tests/sample.test.js::adds passed (1 test executed) [self-reported]'
     );
     // The writer quotes values containing '::'.
     expect(readSpec(cawsDir)).toMatch(/test_nodeid: "?js\/tests\/sample\.test\.js::adds"?/);
@@ -227,6 +232,19 @@ describe('caws specs evidence --verify (A4 record-time, A14)', () => {
     expect(red.err).toMatch(/A2: refuted \(test_failed\) — jest exit 1:/);
     expect(readSpec(cawsDir)).not.toContain('criterion_id: A2');
     expect(acRecordedEvents(cawsDir)).toHaveLength(1);
+  }, 60000);
+
+  test('a cited name that selects zero tests is refused, not recorded as verified (the test.each template case)', () => {
+    const { root, cawsDir } = mkProject();
+    const r = runEvidence(root, { testNodeid: 'js/tests/each.test.js::%s: x', verify: true });
+    expect(r.code).toBe(1);
+    expect(r.err).toContain('refusing to record status pass for A1');
+    expect(r.err).toContain(
+      'A1: refuted (test_not_found) — jest selected zero tests for "%s: x" in js/tests/each.test.js'
+    );
+    expect(r.out).not.toContain('verified before recording');
+    expect(readSpec(cawsDir)).not.toContain('criterion_id: A1');
+    expect(acRecordedEvents(cawsDir)).toEqual([]);
   }, 60000);
 
   test('a nodeid naming a test that does not exist is refused with test_not_found', () => {
