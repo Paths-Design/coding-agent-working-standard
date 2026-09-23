@@ -63,3 +63,9 @@ evidence:
     recorded_at: "2026-09-23T19:42:42.665Z"
     test_nodeid: "packages/caws-cli/tests/store/evidence-rederive.test.js::one verified, one refuted, one narrative -> 1/1/1, and the lines carry the agent-cited tag"
     commit_sha: "8fa172b2"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "verify-acs --json through dist: summary keys incl. self_reported and per-criterion self_reported unchanged"
+    recorded_at: "2026-09-23T19:42:52.847Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-verify-acs.test.js::one verified, one refuted, one narrative -> 1/1/1 in --json through dist, exit 1"
+    commit_sha: "8fa172b2"
