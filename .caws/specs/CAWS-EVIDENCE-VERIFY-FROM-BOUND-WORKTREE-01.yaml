@@ -67,3 +67,9 @@ evidence:
     recorded_at: "2026-09-23T19:40:35.899Z"
     test_nodeid: "packages/caws-cli/tests/shell/specs-evidence-verify-worktree.test.js::the same citation from the canonical checkout is still refused: the test is not on main"
     commit_sha: "1c3f4a31"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "verify-acs --run from inside the worktree verifies the branch-only test and prints tree: worktree <root> at <HEAD>"
+    recorded_at: "2026-09-23T19:40:43.971Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-evidence-verify-worktree.test.js::from the worktree the branch-only test verifies and the header names the tree and HEAD"
+    commit_sha: "1c3f4a31"
