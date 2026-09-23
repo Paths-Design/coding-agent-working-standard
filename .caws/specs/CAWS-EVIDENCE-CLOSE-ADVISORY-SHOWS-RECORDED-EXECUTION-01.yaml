@@ -32,7 +32,12 @@ acceptance:
   - id: A1
     given: 'a criterion recorded with evidence --verify citing a jest test that executed and passed'
     when: 'the spec is closed or auto-closed by merge'
-    then: 'the advisory line for it says the test was executed and passed at record time at <sha>, and the summary counts it separately from not_rederived (observed in 11 sessions: agents reconciled ''not_rederived N'' at close against ''verified N'' from --run)'
+    then: >-
+      the close advisory adds a recorded-execution section naming the criterion, its
+      test target and the <sha> it passed at record time (test_verified_at), as a
+      named subset of not_rederived — never counted as verified, because close did
+      not re-run it (observed in 11 sessions: agents reconciled 'not_rederived N' at
+      close against 'verified N' from --run)
   - id: A2
     given: 'a criterion recorded without --verify'
     when: 'the spec closes'
