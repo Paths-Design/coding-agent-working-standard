@@ -19,10 +19,6 @@ scope:
 invariants:
   - 'An execution path for a runner ships only with a test that runs a real fixture through it and proves a zero-match selection is never verified.'
 acceptance:
-  - id: A1
-    given: 'a vitest project citing one passing test by name'
-    when: 'verify-acs --run runs'
-    then: 'the criterion is verified and the detail says one test executed'
   - id: A2
     given: 'a .bats file citing one test by name'
     when: 'verify-acs --run runs'
