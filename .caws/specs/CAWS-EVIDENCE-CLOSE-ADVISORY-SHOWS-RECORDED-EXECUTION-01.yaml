@@ -4,7 +4,7 @@ risk_tier: 2
 mode: fix
 lifecycle_state: draft
 created_at: '2026-09-23T19:10:25.631Z'
-updated_at: '2026-09-23T19:10:25.631Z'
+updated_at: '2026-09-23T19:45:50.244Z'
 created_by_session: '24846b74-e4d2-4ea1-9974-a1f681aaad88'
 blast_radius:
   modules:
@@ -18,6 +18,11 @@ scope:
     - 'packages/caws-cli/src/shell/commands/specs.ts'
     - 'packages/caws-cli/src/kernel/schemas/events/ac_recorded.v1.json'
     - 'packages/caws-cli/src/kernel/schemas/spec.v1.json'
+    - packages/caws-cli/src/kernel/spec/types.ts
+    - packages/caws-cli/tests/shell/specs-close-rederive.test.js
+    - packages/caws-cli/tests/shell/specs-evidence-verify.test.js
+    - packages/caws-cli/tests/shell/evidence-schema.test.js
+    - packages/caws-cli/src/shell/command-metadata.ts
   out: []
 invariants:
   - 'Close and merge still spawn no test runner; the advisory reports what was executed at record time as a recorded fact with its revision, never as a fresh execution.'
