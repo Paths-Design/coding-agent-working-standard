@@ -2,9 +2,10 @@ id: CAWS-EVIDENCE-REDERIVE-VITEST-BATS-RUNNERS-01
 title: 're-derivation detects vitest and cannot run bats, so criteria cited by those tests are runner_unavailable in every repo that uses them'
 risk_tier: 2
 mode: feature
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-bats-runner
 created_at: '2026-09-23T19:10:27.070Z'
-updated_at: '2026-09-23T20:02:47.091Z'
+updated_at: '2026-09-23T20:03:01.550Z'
 created_by_session: '24846b74-e4d2-4ea1-9974-a1f681aaad88'
 blast_radius:
   modules:
