@@ -64,3 +64,9 @@ evidence:
     recorded_at: "2026-09-23T19:43:00.081Z"
     test_nodeid: "packages/caws-cli/tests/kernel/unit/evidence-rederive.test.ts::a command never masks a refuted check beside it"
     commit_sha: "4fa88358"
+  - criterion_id: A4
+    status: pass
+    evidence_ref: "evidence --verify with a reachable commit and --command 'touch <probe>': verified before recording, command recorded in the ac_recorded event, probe file absent"
+    recorded_at: "2026-09-23T19:43:04.172Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-evidence-verify.test.js::a verified commit recorded with the command that was run stays verified; the command is recorded, never run"
+    commit_sha: "4fa88358"
