@@ -50,3 +50,10 @@ non_functional: {}
 contracts:
   - name: 'evidence-verdict-line-names-every-check'
     type: behavior
+evidence:
+  - criterion_id: A1
+    status: pass
+    evidence_ref: "verify-acs --run: a criterion citing a commit and an executed jest test prints both checks with their own verdict and detail"
+    recorded_at: "2026-09-23T19:42:38.731Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-verify-acs.test.js::--run: a commit and an executed test on one criterion print as two named checks"
+    commit_sha: "8fa172b2"
