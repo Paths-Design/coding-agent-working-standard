@@ -2,9 +2,10 @@ id: CAWS-EVIDENCE-COMMAND-CHECK-CAPS-VERIFIED-CRITERION-01
 title: 'a recorded --command caps an otherwise-verified criterion at not_rederived, so disclosing the command run makes the verdict worse'
 risk_tier: 2
 mode: fix
-lifecycle_state: draft
+lifecycle_state: active
+worktree: wt-command-informational
 created_at: '2026-09-23T19:09:30.379Z'
-updated_at: '2026-09-23T19:09:30.379Z'
+updated_at: '2026-09-23T19:28:11.339Z'
 created_by_session: '24846b74-e4d2-4ea1-9974-a1f681aaad88'
 blast_radius:
   modules:
