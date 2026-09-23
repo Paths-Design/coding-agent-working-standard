@@ -57,9 +57,9 @@ contracts:
 evidence:
   - criterion_id: A5
     status: pass
-    evidence_ref: "packages/caws-cli/tests/shell/scope-remediation-verified-safety.test.js A5 block (5 tests: rebound/reopened/reactivated/auto-closed/has-worktree) green; mutant dropping spec_reopened turned it red"
-    recorded_at: "2026-09-23T18:08:34.725Z"
-    test_nodeid: "packages/caws-cli/tests/shell/scope-remediation-verified-safety.test.js::%s: offered the normal verified handoff"
+    evidence_ref: "packages/caws-cli/tests/shell/scope-remediation-verified-safety.test.js A5: verifier-executed citation is the auto-closed case. The rebound/reopened/reactivated resume cases are a test.each the verifier cannot cite (template name runs 0 tests); run manually at 3bc06471: -t 'reopened after the merge: offered the normal verified handoff' => 1 passed, 14 skipped; full file 15/15 green. Supersedes the earlier A5 record, whose %s citation ran 0 tests."
+    recorded_at: "2026-09-23T18:10:08.022Z"
+    test_nodeid: "packages/caws-cli/tests/shell/scope-remediation-verified-safety.test.js::a merge that auto-closed the spec is not a --no-close landing"
     commit_sha: "3bc06471"
   - criterion_id: A6
     status: pass
