@@ -45,3 +45,9 @@ evidence:
     recorded_at: "2026-09-23T19:42:03.972Z"
     test_nodeid: "packages/caws-cli/tests/shell/specs-evidence-verify.test.js::a cited name that selects zero tests is refused, not recorded as verified (the test.each template case)"
     commit_sha: "55d6852a"
+  - criterion_id: A2
+    status: pass
+    evidence_ref: "verify-acs --run through dist: passing 'adds' is verified with detail 'passed (1 test executed)'; the zero-match citation beside it is refuted"
+    recorded_at: "2026-09-23T19:42:09.705Z"
+    test_nodeid: "packages/caws-cli/tests/shell/specs-verify-acs.test.js::--run through dist: a name selecting zero tests is refuted, and the passing test names how many ran"
+    commit_sha: "55d6852a"
