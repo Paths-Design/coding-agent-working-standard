@@ -39,7 +39,7 @@ import { composeStoreSnapshot, loadBridges, resolveRepoRoot } from '../../store'
 import { resolveCallerSession } from '../session/resolve-session';
 import type { StoreSnapshot } from '../../store/types';
 import { resolveBinding } from '../binding/resolve-binding';
-import type { AuthorityContextCandidate, ResolvedBinding } from '../binding/types';
+import type { AuthorityContextCandidate, LandedOpenSpec, ResolvedBinding } from '../binding/types';
 import {
   buildScopeDecisionJson,
   renderDecision,
@@ -172,10 +172,21 @@ function scopeInAdmits(entry: string, target: string): boolean {
  * *some* authority to choose from, and an empty list would degrade the handoff
  * to "replace <spec-id>". The note attached in render/decision.ts says which
  * case they are looking at, so a fallback list is never mistaken for a claim.
+ *
+ * CLAIMANTS ARE VERIFIED, NOT JUST MATCHED
+ * (CAWS-SCOPE-REMEDIATION-STATES-VERIFIED-SAFETY-01). A handoff that says
+ * "this spec claims the path — go check whether it is the right context"
+ * leaves the caller to redo a check the CLI can do itself, and the hedge reads
+ * as a warning; agents stall on it. Each claimant therefore carries the
+ * kernel's verdict under its own binding and, when the event log shows its
+ * lane already landed under `--no-close`, that fact — so the renderer can say
+ * what is verified and why the offered action is safe, and can decline to
+ * route new work into a spec whose work is already on the base branch.
  */
 function buildAuthorityContextCandidates(
   specs: readonly Spec[],
-  targetPath?: string
+  targetPath: string | undefined,
+  verification: CandidateVerification
 ): AuthorityContextCandidate[] {
   const toCandidate = (spec: Spec): AuthorityContextCandidate => {
     const matched =
@@ -193,15 +204,113 @@ function buildAuthorityContextCandidates(
   const bindable = specs.filter(
     (spec) => spec.lifecycle_state === 'active' || spec.lifecycle_state === 'draft'
   );
-  const claiming = bindable.map(toCandidate).filter((c) => c.matchedScopeInEntry !== undefined);
-  if (claiming.length > 0) {
-    return claiming.sort((a, b) => a.specId.localeCompare(b.specId));
+  const claimingSpecs = bindable.filter(
+    (spec) => toCandidate(spec).matchedScopeInEntry !== undefined
+  );
+  if (claimingSpecs.length > 0 && targetPath !== undefined) {
+    const landed = landedOpenBySpec(verification.events);
+    return claimingSpecs
+      .map((spec) => verifyClaimant(spec, toCandidate(spec), targetPath, verification, landed))
+      .sort((a, b) => a.specId.localeCompare(b.specId));
   }
 
   return specs
     .filter((spec) => spec.lifecycle_state === 'active')
     .map(toCandidate)
     .sort((a, b) => a.specId.localeCompare(b.specId));
+}
+
+/**
+ * What the candidate builder needs to turn a scope.in match into verified
+ * facts (CAWS-SCOPE-REMEDIATION-STATES-VERIFIED-SAFETY-01): the policy the
+ * kernel evaluates under, and the event log that records how a spec's last
+ * lane ended. Both come from the snapshot the command already loaded.
+ */
+interface CandidateVerification {
+  readonly policy: Policy | undefined;
+  readonly events: StoreSnapshot['events'];
+}
+
+/**
+ * Events that change whether a spec is (re)entering a lane. A spec whose most
+ * recent one of these is a `worktree_merged` has had its lane landed and torn
+ * down; a later bind, activation or reopen means someone deliberately resumed
+ * it. `worktree_created` is absent because it carries no spec_id — the bind
+ * that follows it does.
+ */
+const BINDING_LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
+  'worktree_merged',
+  'worktree_bound',
+  'spec_activated',
+  'spec_reopened',
+]);
+
+/**
+ * Specs whose latest binding-lifecycle event is a merge that left them open
+ * (`--no-close`). The event log is in seq order, so the last event seen per
+ * spec is the latest.
+ */
+function landedOpenBySpec(events: StoreSnapshot['events']): ReadonlyMap<string, LandedOpenSpec> {
+  const latest = new Map<string, StoreSnapshot['events'][number]>();
+  for (const ev of events) {
+    if (typeof ev.spec_id !== 'string' || !BINDING_LIFECYCLE_EVENTS.has(ev.event)) continue;
+    latest.set(ev.spec_id, ev);
+  }
+  const landed = new Map<string, LandedOpenSpec>();
+  for (const [specId, ev] of latest) {
+    if (ev.event !== 'worktree_merged') continue;
+    const data = ev.data as Readonly<Record<string, unknown>>;
+    if (data['auto_closed_spec'] !== false || data['spec_already_closed'] === true) continue;
+    const mergeCommit = data['merge_commit'];
+    const worktreeName = data['worktree_name'];
+    if (typeof mergeCommit !== 'string' || typeof worktreeName !== 'string') continue;
+    const session = ev.actor?.session_id;
+    landed.set(specId, {
+      mergeCommit,
+      mergedAt: ev.ts,
+      worktreeName,
+      ...(typeof session === 'string' && session.length > 0 ? { mergedBySession: session } : {}),
+    });
+  }
+  return landed;
+}
+
+/**
+ * Attach the facts the remediation will assert about a claimant. The kernel's
+ * verdict under the claimant's own binding is computed with the same
+ * evaluatePath the write path uses, so "binding this spec admits the path" is
+ * the kernel's answer, never an inference from the scope.in match alone.
+ */
+function verifyClaimant(
+  spec: Spec,
+  candidate: AuthorityContextCandidate,
+  targetPath: string,
+  verification: CandidateVerification,
+  landed: ReadonlyMap<string, LandedOpenSpec>
+): AuthorityContextCandidate {
+  let verified: AuthorityContextCandidate = candidate;
+  const landedOpen = landed.get(spec.id);
+  if (
+    landedOpen !== undefined &&
+    spec.lifecycle_state === 'active' &&
+    spec.worktree === undefined
+  ) {
+    verified = { ...verified, landedOpen };
+  }
+  if (verification.policy === undefined) return verified;
+  try {
+    const decision = evaluatePath(
+      targetPath,
+      { kind: 'bound', spec, worktreeName: spec.worktree ?? `(spec:${spec.id})` },
+      verification.policy
+    );
+    return decision.kind === 'admit'
+      ? { ...verified, bindingAdmits: true }
+      : { ...verified, bindingAdmits: false, bindingRefusalRule: decision.rule };
+  } catch {
+    // Unevaluated, not refused: the renderer falls back to the read-only check.
+    return verified;
+  }
 }
 
 function withAuthorityContext(
@@ -270,7 +379,10 @@ export function runScopeCommand(opts: ScopeCommandOptions): number {
   //    resolveBinding fall back to the path's owning worktree / claiming
   //    spec when cwd is the main checkout, so `caws scope check <path>` is
   //    cwd-independent and matches what the bound author sees.
-  const authorityCandidates = buildAuthorityContextCandidates(snapshot.specs, opts.path);
+  const authorityCandidates = buildAuthorityContextCandidates(snapshot.specs, opts.path, {
+    policy: snapshot.policy,
+    events: snapshot.events,
+  });
   const bctx = explicitSpec === undefined ? bridgeContext(cawsDir, cwd, env) : {};
   const bound = withAuthorityContext(
     explicitSpec?.binding ??
@@ -647,7 +759,7 @@ export function runScopePlanCommand(opts: ScopePlanOptions): number {
           ...(bctxPlan.bridges !== undefined ? { bridges: bctxPlan.bridges } : {}),
           ...(bctxPlan.sessionId !== undefined ? { sessionId: bctxPlan.sessionId } : {}),
         }),
-      buildAuthorityContextCandidates(snapshot.specs, p)
+      buildAuthorityContextCandidates(snapshot.specs, p, { policy, events: snapshot.events })
     );
     if (bound.ambiguous !== undefined) {
       results.push(ambiguousPlanPayload(bound.ambiguous.targetPath, bound.ambiguous.claimants));

@@ -109,6 +109,7 @@ describe('scope authority-context handoff', () => {
         specId: 'ZZZ-OWNER-003',
         lifecycleState: 'active',
         matchedScopeInEntry: 'packages/owned',
+        bindingAdmits: true,
       },
     ]);
     // The alphabetically-first specs are gone, not merely demoted.
@@ -116,7 +117,7 @@ describe('scope authority-context handoff', () => {
     expect(commands).not.toContain('AAA-UNRELATED-001');
     expect(commands).toContain('ZZZ-OWNER-003');
     expect(result.json.remediation.notes[0]).toBe(
-      'ZZZ-OWNER-003 claims this path via scope.in "packages/owned".'
+      'Verified: ZZZ-OWNER-003 (active, no worktree) claims this path via scope.in "packages/owned", and the kernel admits the path under its binding.'
     );
   });
 
@@ -179,6 +180,7 @@ describe('scope authority-context handoff', () => {
         specId: 'ZZZ-DRAFT-OWNER-002',
         lifecycleState: 'draft',
         matchedScopeInEntry: 'packages/owned',
+        bindingAdmits: true,
       },
     ]);
     // The command that resolves it must be the one that ALSO activates.
@@ -230,6 +232,7 @@ describe('scope authority-context handoff', () => {
         specId: 'GLOB-OWNER-001',
         lifecycleState: 'active',
         matchedScopeInEntry: 'packages/*/src/index.ts',
+        bindingAdmits: true,
       },
     ]);
   });
@@ -257,6 +260,7 @@ describe('scope authority-context handoff', () => {
         specId: 'GLOBSTAR-OWNER-001',
         lifecycleState: 'active',
         matchedScopeInEntry: 'packages/caws-cli/tests/hooks/**',
+        bindingAdmits: true,
       },
     ]);
   });
@@ -287,6 +291,7 @@ describe('scope authority-context handoff', () => {
         specId: 'BRACE-OWNER-001',
         lifecycleState: 'active',
         matchedScopeInEntry: 'docs/{api,agents}/cli.md',
+        bindingAdmits: true,
       },
     ]);
     expect(runScopeJson(root, 'src/a/x.ts').json.remediation.authorityCandidates).toEqual([
@@ -294,6 +299,7 @@ describe('scope authority-context handoff', () => {
         specId: 'BRACKET-OWNER-002',
         lifecycleState: 'active',
         matchedScopeInEntry: 'src/[abc]/x.ts',
+        bindingAdmits: true,
       },
     ]);
   });

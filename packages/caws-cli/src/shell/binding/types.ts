@@ -105,6 +105,34 @@ export interface AuthorityContextCandidate {
    * set as a fallback, which the accompanying note says explicitly.
    */
   readonly matchedScopeInEntry?: string;
+  /**
+   * The kernel's own answer for the queried path under THIS spec's binding
+   * (evaluatePath with the spec bound), computed only for a claimant
+   * (CAWS-SCOPE-REMEDIATION-STATES-VERIFIED-SAFETY-01). `true` is what lets
+   * the remediation state "binding this spec admits the path" as a verified
+   * fact instead of telling the caller to go check. `false` means scope.in
+   * matched but the kernel still refuses (a scope.out exclusion, an infra
+   * prefix); `bindingRefusalRule` carries the kernel rule. Absent means it was
+   * not evaluated (non-claimant, or no policy loaded).
+   */
+  readonly bindingAdmits?: boolean;
+  readonly bindingRefusalRule?: string;
+  /**
+   * Present when this spec is active, has no worktree, and its latest
+   * binding-lifecycle event is a `worktree_merged` that left it open
+   * (`auto_closed_spec: false` — `caws worktree merge --no-close`). Its work
+   * already landed; it is awaiting evidence and close, not a lane for new
+   * edits, so the remediation must not route new work into it.
+   */
+  readonly landedOpen?: LandedOpenSpec;
+}
+
+/** The `worktree_merged` event that left a spec open, as the event log records it. */
+export interface LandedOpenSpec {
+  readonly mergeCommit: string;
+  readonly mergedAt: string;
+  readonly worktreeName: string;
+  readonly mergedBySession?: string;
 }
 
 export interface ResolvedBinding {
